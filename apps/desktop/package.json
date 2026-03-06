@@ -1,0 +1,29 @@
+{
+  "name": "@filetrail/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "build": "bun run ./scripts/build.ts",
+    "prestart": "bun run build",
+    "start": "electron .",
+    "start:verbose": "electron . --verbose",
+    "make:mac": "electron-forge make --platform darwin"
+  },
+  "dependencies": {
+    "@filetrail/contracts": "workspace:*",
+    "@fontsource/inter": "^5.2.8",
+    "@fontsource/jetbrains-mono": "^5.2.8",
+    "@fontsource/plus-jakarta-sans": "^5.2.8",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "^7.8.1",
+    "@electron-forge/maker-dmg": "^7.8.1",
+    "@electron-forge/maker-zip": "^7.8.1",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.8.1",
+    "electron": "35.0.0"
+  }
+}
