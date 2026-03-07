@@ -161,10 +161,8 @@ export async function getPathSuggestions(
   limit = 12,
   fileSystem: ExplorerFileSystem = DEFAULT_FILE_SYSTEM,
 ): Promise<IpcResponse<"path:getSuggestions">> {
-  const trimmedInput = inputPath.trim();
-  const normalizedInput = trimmedInput.length === 0 ? "/" : trimmedInput;
-  const baseMatch = await findSuggestionBase(normalizedInput, fileSystem);
-  if (!baseMatch) {
+  const query = await resolvePathSuggestionQuery(inputPath, fileSystem);
+  if (!query) {
     return {
       inputPath,
       basePath: null,
@@ -172,22 +170,16 @@ export async function getPathSuggestions(
     };
   }
 
-  const dirents = await fileSystem.readdir(baseMatch.basePath, { withFileTypes: true });
+  const dirents = await fileSystem.readdir(query.basePath, { withFileTypes: true });
   const matches = await Promise.all(
     dirents.map((dirent) =>
-      buildPathSuggestionEntry(
-        dirent,
-        baseMatch.basePath,
-        baseMatch.typedName,
-        includeHidden,
-        fileSystem,
-      ),
+      buildPathSuggestionEntry(dirent, query.basePath, query.typedName, includeHidden, fileSystem),
     ),
   );
 
   return {
     inputPath,
-    basePath: baseMatch.basePath,
+    basePath: query.basePath,
     suggestions: matches
       .filter((value) => value !== null)
       .sort(compareEntriesByName)
@@ -306,44 +298,56 @@ async function resolveDirectoryPath(path: string, fileSystem: ExplorerFileSystem
   }
 }
 
-async function findSuggestionBase(
+async function resolvePathSuggestionQuery(
   inputPath: string,
   fileSystem: ExplorerFileSystem,
 ): Promise<{ basePath: string; typedName: string } | null> {
-  const normalizedPath = resolve(inputPath);
-  if (normalizedPath === "/") {
-    return {
-      basePath: "/",
-      typedName: "",
-    };
+  const trimmedInput = inputPath.trim();
+  const normalizedPath = normalizeSuggestionInput(trimmedInput.length === 0 ? "/" : trimmedInput);
+  const trailingSlash = hasTrailingSlash(trimmedInput);
+  const parts = splitPathParts(normalizedPath);
+
+  if (trailingSlash) {
+    const exactDirectoryPath = await tryResolveDirectoryPath(normalizedPath, fileSystem);
+    if (exactDirectoryPath) {
+      return {
+        basePath: exactDirectoryPath,
+        typedName: "",
+      };
+    }
   }
-  const trailingSlash = /[\\/]$/.test(inputPath);
-  const parts = normalizedPath.split("/").filter((part) => part.length > 0);
 
   for (let index = parts.length; index >= 0; index -= 1) {
-    const candidatePath = index === 0 ? "/" : `/${parts.slice(0, index).join("/")}`;
-    try {
-      const resolvedCandidatePath = await resolveDirectoryPath(candidatePath, fileSystem);
-      if (trailingSlash && index === parts.length) {
-        return {
-          basePath: resolvedCandidatePath,
-          typedName: "",
-        };
-      }
-      if (index === parts.length) {
-        return {
-          basePath: dirname(resolvedCandidatePath),
-          typedName: basename(resolvedCandidatePath),
-        };
-      }
+    const candidatePath = buildPathFromParts(parts.slice(0, index));
+    const resolvedCandidatePath = await tryResolveDirectoryPath(candidatePath, fileSystem);
+    if (!resolvedCandidatePath) {
+      continue;
+    }
+    if (index === parts.length) {
+      const typedName = parts.at(-1) ?? "";
       return {
-        basePath: resolvedCandidatePath,
-        typedName: parts[index] ?? "",
+        basePath: parentDirectoryPath(resolvedCandidatePath),
+        typedName,
       };
-    } catch {}
+    }
+    return {
+      basePath: resolvedCandidatePath,
+      typedName: parts[index] ?? "",
+    };
   }
 
   return null;
+}
+
+async function tryResolveDirectoryPath(
+  path: string,
+  fileSystem: ExplorerFileSystem,
+): Promise<string | null> {
+  try {
+    return await resolveDirectoryPath(path, fileSystem);
+  } catch {
+    return null;
+  }
 }
 
 async function safeLstat(
@@ -433,6 +437,35 @@ function isDirectoryKind(kind: EntryKind): boolean {
 
 function isHiddenName(name: string): boolean {
   return name.startsWith(".");
+}
+
+function normalizeSuggestionInput(inputPath: string): string {
+  const resolvedPath = resolve(inputPath);
+  if (resolvedPath === "/") {
+    return "/";
+  }
+  return buildPathFromParts(splitPathParts(resolvedPath));
+}
+
+function hasTrailingSlash(inputPath: string): boolean {
+  return /[\\/]$/.test(inputPath);
+}
+
+function splitPathParts(path: string): string[] {
+  return path.split("/").filter((part) => part.length > 0);
+}
+
+function buildPathFromParts(parts: string[]): string {
+  return parts.length === 0 ? "/" : `/${parts.join("/")}`;
+}
+
+function parentDirectoryPath(path: string): string {
+  const resolvedPath = resolve(path);
+  if (resolvedPath === "/") {
+    return "/";
+  }
+  const parts = splitPathParts(resolvedPath);
+  return buildPathFromParts(parts.slice(0, -1));
 }
 
 function getKindLabel(kind: EntryKind, path: string): string {

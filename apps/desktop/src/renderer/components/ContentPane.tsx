@@ -17,6 +17,7 @@ const FLOW_ITEM_WIDTH = 292;
 
 export function ContentPane({
   paneRef,
+  isFocused,
   currentPath,
   entries,
   viewMode,
@@ -37,6 +38,7 @@ export function ContentPane({
   onFocusChange,
 }: {
   paneRef?: React.RefObject<HTMLElement | null>;
+  isFocused: boolean;
   currentPath: string;
   entries: DirectoryEntry[];
   viewMode: "list" | "details";
@@ -124,7 +126,7 @@ export function ContentPane({
         }
       }}
     >
-      <div className="pane-header content-header">
+      <div className={`pane-header content-header${isFocused ? " pane-header-focused" : ""}`}>
         {pathEditorOpen ? (
           <form
             className="pathbar-editor-form"
@@ -248,6 +250,7 @@ export function ContentPane({
         <FlowListView
           key={currentPath}
           entries={entries}
+          isFocused={isFocused}
           loading={loading}
           error={error}
           includeHidden={includeHidden}
@@ -261,6 +264,7 @@ export function ContentPane({
         <DetailsView
           key={currentPath}
           entries={entries}
+          isFocused={isFocused}
           loading={loading}
           error={error}
           includeHidden={includeHidden}
@@ -298,6 +302,7 @@ function buildPathSegments(path: string): Array<{ label: string; path: string }>
 
 function FlowListView({
   entries,
+  isFocused,
   loading,
   error,
   includeHidden,
@@ -308,6 +313,7 @@ function FlowListView({
   onVisiblePathsChange,
 }: {
   entries: DirectoryEntry[];
+  isFocused: boolean;
   loading: boolean;
   error: string | null;
   includeHidden: boolean;
@@ -386,7 +392,9 @@ function FlowListView({
               <button
                 key={entry.path}
                 type="button"
-                className={`flow-item${entry.path === selectedPath ? " active" : ""}`}
+                className={`flow-item${entry.path === selectedPath ? " active" : ""}${
+                  entry.path === selectedPath && !isFocused ? " inactive" : ""
+                }`}
                 onClick={() => {
                   onSelectPath(entry.path);
                   containerRef.current?.focus();
@@ -411,6 +419,7 @@ function FlowListView({
 
 function DetailsView({
   entries,
+  isFocused,
   loading,
   error,
   includeHidden,
@@ -425,6 +434,7 @@ function DetailsView({
   onVisiblePathsChange,
 }: {
   entries: DirectoryEntry[];
+  isFocused: boolean;
   loading: boolean;
   error: string | null;
   includeHidden: boolean;
@@ -509,7 +519,9 @@ function DetailsView({
               <button
                 key={entry.path}
                 type="button"
-                className={`details-row${entry.path === selectedPath ? " active" : ""}`}
+                className={`details-row${entry.path === selectedPath ? " active" : ""}${
+                  entry.path === selectedPath && !isFocused ? " inactive" : ""
+                }`}
                 onClick={() => onSelectPath(entry.path)}
                 onDoubleClick={() => onActivateEntry(entry)}
                 title={entry.path}

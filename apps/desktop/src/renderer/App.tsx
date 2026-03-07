@@ -23,7 +23,6 @@ import {
 } from "./lib/explorerNavigation";
 import { useFiletrailClient } from "./lib/filetrailClient";
 import { createRendererLogger } from "./lib/logging";
-import { getLocalPathSuggestions, mergePathSuggestions } from "./lib/pathSuggestions";
 import { type ThemeMode, applyTheme, persistTheme, resolveInitialTheme } from "./lib/theme";
 import { getTreeKeyboardAction } from "./lib/treeView";
 import { persistUiState, readStoredUiState } from "./lib/uiState";
@@ -1063,6 +1062,7 @@ export function App() {
         >
           <TreePane
             paneRef={treePaneRef}
+            isFocused={focusedPane === "tree"}
             currentPath={currentPath}
             nodes={treeNodes}
             rootPath={treeRootPath}
@@ -1082,6 +1082,7 @@ export function App() {
           />
           <ContentPane
             paneRef={contentPaneRef}
+            isFocused={focusedPane === "content"}
             currentPath={currentPath}
             entries={currentEntries}
             loading={directoryLoading}
@@ -1106,7 +1107,6 @@ export function App() {
                 client,
                 includeHidden,
                 inputPath,
-                treeNodes: treeNodesRef.current,
               })
             }
           />
@@ -1192,38 +1192,20 @@ async function requestPathSuggestions(args: {
   client: ReturnType<typeof useFiletrailClient>;
   includeHidden: boolean;
   inputPath: string;
-  treeNodes: Record<string, TreeNodeState>;
 }): Promise<IpcResponse<"path:getSuggestions">> {
-  const { client, includeHidden, inputPath, treeNodes } = args;
+  const { client, includeHidden, inputPath } = args;
   const limit = 12;
-  const localSuggestions = getLocalPathSuggestions({
-    inputPath,
-    includeHidden,
-    limit,
-    treeNodes,
-  });
-
-  const remoteSuggestions = await client
-    .invoke("path:getSuggestions", {
-      inputPath,
-      includeHidden,
-      limit,
-    })
-    .catch(() => null);
-
-  if (!remoteSuggestions) {
-    return (
-      localSuggestions ?? {
+  return (
+    (await client
+      .invoke("path:getSuggestions", {
         inputPath,
-        basePath: null,
-        suggestions: [],
-      }
-    );
-  }
-
-  return mergePathSuggestions({
-    limit,
-    primary: localSuggestions,
-    secondary: remoteSuggestions,
-  });
+        includeHidden,
+        limit,
+      })
+      .catch(() => null)) ?? {
+      inputPath,
+      basePath: null,
+      suggestions: [],
+    }
+  );
 }

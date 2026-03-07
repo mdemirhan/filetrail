@@ -8,6 +8,7 @@ describe("TreePane", () => {
   it("renders alias folders as non-expandable", () => {
     render(
       <TreePane
+        isFocused
         rootPath="/Users/demo"
         currentPath="/Users/demo"
         nodes={{
@@ -54,6 +55,7 @@ describe("TreePane", () => {
     const handleNavigate = vi.fn();
     render(
       <TreePane
+        isFocused
         rootPath="/Users/demo"
         currentPath="/Users/demo"
         nodes={{

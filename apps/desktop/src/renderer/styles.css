@@ -6,8 +6,10 @@
   --bg-hover: #eaeaef;
   --bg-active: rgba(37, 99, 235, 0.1);
   --bg-active-strong: rgba(37, 99, 235, 0.16);
+  --bg-active-inactive: rgba(92, 95, 114, 0.12);
   --border: rgba(0, 0, 0, 0.07);
   --border-active: rgba(0, 0, 0, 0.13);
+  --border-inactive: rgba(92, 95, 114, 0.14);
   --text-primary: #1a1c24;
   --text-secondary: #5c5f72;
   --text-tertiary: #9295a5;
@@ -57,8 +59,10 @@
   --bg-hover: #33363f;
   --bg-active: rgba(109, 160, 247, 0.14);
   --bg-active-strong: rgba(109, 160, 247, 0.2);
+  --bg-active-inactive: rgba(157, 161, 179, 0.12);
   --border: rgba(255, 255, 255, 0.08);
   --border-active: rgba(255, 255, 255, 0.14);
+  --border-inactive: rgba(157, 161, 179, 0.18);
   --text-primary: #dcdee4;
   --text-secondary: #9da1b3;
   --text-tertiary: #6e7283;
@@ -514,6 +518,15 @@ body.resizing-panels * {
   color: var(--text-secondary);
   text-transform: uppercase;
   overflow: visible;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.pane-header-focused {
+  background: color-mix(in srgb, var(--bg-surface) 88%, var(--bg-hover));
+}
+
+.pane-header-focused > span {
+  color: var(--text-primary);
 }
 
 .content-header {
@@ -524,6 +537,14 @@ body.resizing-panels * {
   letter-spacing: 0;
   text-transform: none;
   z-index: 6;
+}
+
+.content-header.pane-header-focused .pathbar-segment {
+  color: var(--text-primary);
+}
+
+.content-header.pane-header-focused .pathbar-segment.active {
+  color: #ffffff;
 }
 
 .pathbar,
@@ -709,6 +730,11 @@ body.resizing-panels * {
   box-shadow: inset 0 0 0 1px var(--accent-blue-border);
 }
 
+.tree-row.active.inactive {
+  background: var(--bg-active-inactive);
+  box-shadow: inset 0 0 0 1px var(--border-inactive);
+}
+
 .tree-expand,
 .tree-label {
   border: 0;
@@ -815,6 +841,12 @@ body.resizing-panels * {
 .details-row.active {
   border-color: var(--accent-blue-border);
   background: var(--bg-active);
+}
+
+.flow-item.active.inactive,
+.details-row.active.inactive {
+  border-color: var(--border-inactive);
+  background: var(--bg-active-inactive);
 }
 
 .flow-item-label {

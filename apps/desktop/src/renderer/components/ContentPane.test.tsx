@@ -8,6 +8,7 @@ describe("ContentPane", () => {
   it("renders the empty state for an empty directory", () => {
     render(
       <ContentPane
+        isFocused
         currentPath="/Users/demo"
         entries={[]}
         viewMode="list"
@@ -39,6 +40,7 @@ describe("ContentPane", () => {
   it("surfaces directory errors inline", () => {
     render(
       <ContentPane
+        isFocused
         currentPath="/Users/demo"
         entries={[]}
         viewMode="list"
@@ -72,6 +74,7 @@ describe("ContentPane", () => {
     const handleSortChange = vi.fn();
     render(
       <ContentPane
+        isFocused
         currentPath="/Users/demo"
         entries={[
           {
@@ -116,6 +119,7 @@ describe("ContentPane", () => {
 
     render(
       <ContentPane
+        isFocused
         currentPath="/Users/demo/projects"
         entries={[]}
         viewMode="list"
@@ -155,6 +159,7 @@ describe("ContentPane", () => {
 
     render(
       <ContentPane
+        isFocused
         currentPath="/Users/demo/projects"
         entries={[]}
         viewMode="list"
@@ -200,6 +205,7 @@ describe("ContentPane", () => {
 
     render(
       <ContentPane
+        isFocused
         currentPath="/Users/demo/projects"
         entries={[]}
         viewMode="list"
@@ -248,6 +254,7 @@ describe("ContentPane", () => {
   it("shows live path suggestions while editing", async () => {
     render(
       <ContentPane
+        isFocused
         currentPath="/Users/demo/projects"
         entries={[]}
         viewMode="list"
@@ -289,6 +296,7 @@ describe("ContentPane", () => {
   it("shows the shorter empty-state copy when hidden files are visible", () => {
     render(
       <ContentPane
+        isFocused
         currentPath="/Users/demo"
         entries={[]}
         viewMode="list"

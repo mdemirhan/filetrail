@@ -18,6 +18,7 @@ export type TreeNodeState = {
 
 export function TreePane({
   paneRef,
+  isFocused,
   rootPath,
   nodes,
   currentPath,
@@ -27,6 +28,7 @@ export function TreePane({
   onNavigate,
 }: {
   paneRef?: React.RefObject<HTMLElement | null>;
+  isFocused: boolean;
   rootPath: string;
   nodes: Record<string, TreeNodeState>;
   currentPath: string;
@@ -48,6 +50,16 @@ export function TreePane({
     [],
   );
 
+  useEffect(() => {
+    const currentRow = rowRefs.current[currentPath];
+    if (!currentRow || typeof currentRow.scrollIntoView !== "function") {
+      return;
+    }
+    currentRow.scrollIntoView({
+      block: "nearest",
+    });
+  }, [currentPath]);
+
   if (!root) {
     return (
       <aside
@@ -62,7 +74,7 @@ export function TreePane({
           }
         }}
       >
-        <div className="pane-header">
+        <div className={`pane-header${isFocused ? " pane-header-focused" : ""}`}>
           <span>Folders</span>
         </div>
       </aside>
@@ -82,7 +94,7 @@ export function TreePane({
         }
       }}
     >
-      <div className="pane-header">
+      <div className={`pane-header${isFocused ? " pane-header-focused" : ""}`}>
         <span>Folders</span>
       </div>
       <div className="tree-scroll">
@@ -90,6 +102,7 @@ export function TreePane({
           <TreeNodeRow
             currentPath={currentPath}
             depth={0}
+            isPaneFocused={isFocused}
             node={root}
             nodes={nodes}
             clickTimeoutRef={clickTimeoutRef}
@@ -98,11 +111,6 @@ export function TreePane({
             onNavigate={onNavigate}
             registerRowRef={(path, element) => {
               rowRefs.current[path] = element;
-              if (path === currentPath && element && typeof element.scrollIntoView === "function") {
-                element.scrollIntoView({
-                  block: "nearest",
-                });
-              }
             }}
           />
         </div>
@@ -116,6 +124,7 @@ function TreeNodeRow({
   nodes,
   currentPath,
   depth,
+  isPaneFocused,
   clickTimeoutRef,
   onOpenNode,
   onToggleExpand,
@@ -126,6 +135,7 @@ function TreeNodeRow({
   nodes: Record<string, TreeNodeState>;
   currentPath: string;
   depth: number;
+  isPaneFocused: boolean;
   clickTimeoutRef: React.RefObject<number | null>;
   onOpenNode: (path: string) => void;
   onToggleExpand: (path: string) => void;
@@ -139,7 +149,7 @@ function TreeNodeRow({
     <div className="tree-branch">
       <div
         ref={(element) => registerRowRef(node.path, element)}
-        className={`tree-row${isCurrent ? " active" : ""}`}
+        className={`tree-row${isCurrent ? " active" : ""}${isCurrent && !isPaneFocused ? " inactive" : ""}`}
         data-tree-path={node.path}
         style={{ paddingLeft: `${12 + depth * 16}px` }}
       >
@@ -202,6 +212,7 @@ function TreeNodeRow({
                 key={child.path}
                 currentPath={currentPath}
                 depth={depth + 1}
+                isPaneFocused={isPaneFocused}
                 node={child}
                 nodes={nodes}
                 clickTimeoutRef={clickTimeoutRef}

@@ -196,6 +196,74 @@ describe("explorerService", () => {
     ]);
   });
 
+  it("returns all immediate child directories for an existing trailing-slash path", async () => {
+    const fakeFileSystem = createSuggestionFileSystem({
+      "/Users/demo": ["Applications", "Desktop", "Pictures"],
+    });
+
+    const response = await getPathSuggestions("/Users/demo/", false, 12, fakeFileSystem);
+
+    expect(response.basePath).toBe("/Users/demo");
+    expect(response.suggestions.map((item) => item.path)).toEqual([
+      "/Users/demo/Applications",
+      "/Users/demo/Desktop",
+      "/Users/demo/Pictures",
+    ]);
+  });
+
+  it("returns an exact directory suggestion when the full directory path exists without a trailing slash", async () => {
+    const fakeFileSystem = createSuggestionFileSystem({
+      "/Users/demo": ["Desktop", "Pictures"],
+      "/Users/demo/Pictures": ["Photos Library.photoslibrary", "Screenshots"],
+    });
+
+    const response = await getPathSuggestions(
+      "/Users/demo/Pictures/Photos Library.photoslibrary",
+      false,
+      12,
+      fakeFileSystem,
+    );
+
+    expect(response.basePath).toBe("/Users/demo/Pictures");
+    expect(response.suggestions.map((item) => item.path)).toEqual([
+      "/Users/demo/Pictures/Photos Library.photoslibrary",
+    ]);
+  });
+
+  it("filters against immediate children of the nearest existing parent when the final segment is partial", async () => {
+    const fakeFileSystem = createSuggestionFileSystem({
+      "/Users/demo/src/pythonproj": ["cch", "dux", "lotus123", "OutlookMcp_AppleScript"],
+    });
+
+    const response = await getPathSuggestions(
+      "/Users/demo/src/pythonproj/lotu",
+      false,
+      12,
+      fakeFileSystem,
+    );
+
+    expect(response.basePath).toBe("/Users/demo/src/pythonproj");
+    expect(response.suggestions.map((item) => item.path)).toEqual([
+      "/Users/demo/src/pythonproj/lotus123",
+    ]);
+  });
+
+  it("falls back to the nearest existing parent instead of a broader loaded ancestor", async () => {
+    const fakeFileSystem = createSuggestionFileSystem({
+      "/Users/demo": ["Applications", "Desktop", "src"],
+      "/Users/demo/src": ["dotnet", "pythonproj", "tsproj"],
+    });
+
+    const response = await getPathSuggestions("/Users/demo/src/", false, 12, fakeFileSystem);
+
+    expect(response.basePath).toBe("/Users/demo/src");
+    expect(response.suggestions.map((item) => item.path)).toEqual([
+      "/Users/demo/src/dotnet",
+      "/Users/demo/src/pythonproj",
+      "/Users/demo/src/tsproj",
+    ]);
+  });
+
   it("filters hidden directory suggestions unless hidden items are enabled", async () => {
     const fakeFileSystem = {
       readdir: vi.fn(async () => [
@@ -217,35 +285,10 @@ describe("explorerService", () => {
   });
 
   it("uses the nearest existing parent for path suggestions", async () => {
-    const fakeFileSystem = {
-      readdir: vi.fn(async (path: string) => {
-        if (path === "/Users/demo") {
-          return [
-            fakeDirent("dotfiles", { directory: true }),
-            fakeDirent("Documents", { directory: true }),
-          ];
-        }
-        if (path === "/Users/demo/dotfiles") {
-          return [
-            fakeDirent("scripts", { directory: true }),
-            fakeDirent("shell", { directory: true }),
-          ];
-        }
-        return [];
-      }),
-      stat: vi.fn(async (path: string) =>
-        fakeStats(
-          path === "/" ||
-            path === "/Users" ||
-            path === "/Users/demo" ||
-            path === "/Users/demo/dotfiles",
-          false,
-          0,
-        ),
-      ),
-      lstat: vi.fn(async () => fakeStats(false, false, 0, false)),
-      realpath: vi.fn(async (path: string) => path),
-    };
+    const fakeFileSystem = createSuggestionFileSystem({
+      "/Users/demo": ["Documents", "dotfiles"],
+      "/Users/demo/dotfiles": ["scripts", "shell"],
+    });
 
     const parentMatches = await getPathSuggestions(
       "/Users/demo/dotfiles",
@@ -310,5 +353,24 @@ function fakeStats(
     birthtime: new Date("2024-01-01T00:00:00.000Z"),
     mtime,
     size,
+  };
+}
+
+function createSuggestionFileSystem(tree: Record<string, string[]>) {
+  const directories = new Set<string>(["/"]);
+  for (const [directoryPath, childNames] of Object.entries(tree)) {
+    directories.add(directoryPath);
+    for (const childName of childNames) {
+      directories.add(join(directoryPath, childName));
+    }
+  }
+
+  return {
+    readdir: vi.fn(async (path: string) =>
+      (tree[path] ?? []).map((name) => fakeDirent(name, { directory: true })),
+    ),
+    stat: vi.fn(async (path: string) => fakeStats(directories.has(path), false, 0)),
+    lstat: vi.fn(async () => fakeStats(false, false, 0, false)),
+    realpath: vi.fn(async (path: string) => path),
   };
 }

@@ -5,6 +5,7 @@ import { createExplorerFixture } from "../testing/createExplorerFixture";
 import {
   getDirectoryMetadataBatch,
   getItemProperties,
+  getPathSuggestions,
   listDirectorySnapshot,
   listTreeChildren,
 } from "./explorerService";
@@ -75,5 +76,43 @@ describe("explorerService integration fixtures", () => {
     expect(folderProps.item.sizeStatus).toBe("deferred");
     expect(fileProps.item.sizeStatus).toBe("ready");
     expect(fileProps.item.sizeBytes).toBe(11);
+  });
+
+  it("returns immediate child directory suggestions for existing and partial paths on the real filesystem", async () => {
+    const fixture = await createExplorerFixture({
+      lotus123: {
+        type: "directory",
+        children: {
+          screenshots: { type: "directory", children: {} },
+          specs: { type: "directory", children: {} },
+          "main.py": { type: "file", text: "print('hi')" },
+        },
+      },
+      dux: { type: "directory", children: {} },
+      tmp: { type: "directory", children: {} },
+    });
+    const resolvedRootPath = await realpath(fixture.rootPath);
+
+    const trailingSlash = await getPathSuggestions(`${fixture.rootPath}/`, false, 12);
+    expect(trailingSlash.suggestions.map((item) => item.path)).toEqual([
+      join(resolvedRootPath, "dux"),
+      join(resolvedRootPath, "lotus123"),
+      join(resolvedRootPath, "tmp"),
+    ]);
+
+    const partialChild = await getPathSuggestions(`${fixture.rootPath}/lotu`, false, 12);
+    expect(partialChild.suggestions.map((item) => item.path)).toEqual([
+      join(resolvedRootPath, "lotus123"),
+    ]);
+
+    const nestedTrailingSlash = await getPathSuggestions(
+      `${join(fixture.rootPath, "lotus123")}/`,
+      false,
+      12,
+    );
+    expect(nestedTrailingSlash.suggestions.map((item) => item.path)).toEqual([
+      join(resolvedRootPath, "lotus123", "screenshots"),
+      join(resolvedRootPath, "lotus123", "specs"),
+    ]);
   });
 });
