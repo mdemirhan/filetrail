@@ -1,19 +1,9 @@
-import type {
-  MonoFontFamily,
-  MonoFontWeight,
-  ThemeMode,
-  UiFontFamily,
-  UiFontWeight,
-} from "../../shared/appPreferences";
+import type { ThemeMode, UiFontFamily, UiFontWeight } from "../../shared/appPreferences";
 
 const UI_FONT_STACKS: Record<UiFontFamily, string> = {
   "dm-sans": '"DM Sans", "Inter", -apple-system, BlinkMacSystemFont, sans-serif',
   lexend: '"Lexend", "DM Sans", "Inter", -apple-system, BlinkMacSystemFont, sans-serif',
-};
-
-const MONO_FONT_STACKS: Record<MonoFontFamily, string> = {
-  "jetbrains-mono": '"JetBrains Mono", "SFMono-Regular", ui-monospace, monospace',
-  "fira-code": '"Fira Code", "JetBrains Mono", "SFMono-Regular", ui-monospace, monospace',
+  "fira-code": '"Fira Code", "SFMono-Regular", ui-monospace, monospace',
 };
 
 const THEME_DEFAULT_TEXT_COLORS: Record<
@@ -50,9 +40,6 @@ export function applyAppearance({
   uiFontFamily,
   uiFontSize,
   uiFontWeight,
-  monoFontFamily,
-  monoFontSize,
-  monoFontWeight,
   textPrimaryOverride,
   textSecondaryOverride,
   textMutedOverride,
@@ -61,9 +48,6 @@ export function applyAppearance({
   uiFontFamily: UiFontFamily;
   uiFontSize: number;
   uiFontWeight: UiFontWeight;
-  monoFontFamily: MonoFontFamily;
-  monoFontSize: number;
-  monoFontWeight: MonoFontWeight;
   textPrimaryOverride: string | null;
   textSecondaryOverride: string | null;
   textMutedOverride: string | null;
@@ -73,11 +57,14 @@ export function applyAppearance({
   }
   document.documentElement.dataset.theme = theme;
   document.documentElement.style.setProperty("--font-sans", UI_FONT_STACKS[uiFontFamily]);
-  document.documentElement.style.setProperty("--font-mono", MONO_FONT_STACKS[monoFontFamily]);
+  document.documentElement.style.setProperty(
+    "--font-mono",
+    '"Fira Code", "SFMono-Regular", ui-monospace, monospace',
+  );
   document.documentElement.style.setProperty("--ui-font-size", `${uiFontSize}px`);
   document.documentElement.style.setProperty("--ui-font-weight", String(uiFontWeight));
-  document.documentElement.style.setProperty("--mono-font-size", `${monoFontSize}px`);
-  document.documentElement.style.setProperty("--mono-font-weight", String(monoFontWeight));
+  document.documentElement.style.setProperty("--mono-font-size", "12px");
+  document.documentElement.style.setProperty("--mono-font-weight", "500");
   applyOptionalColor("--text-primary", textPrimaryOverride);
   applyOptionalColor("--text-secondary", textSecondaryOverride);
   applyOptionalColor("--text-tertiary", textMutedOverride);

@@ -31,7 +31,6 @@ export function TreePane({
   onOpenSettings,
   includeHidden,
   onToggleHidden,
-  onOpenNode,
   onToggleExpand,
   onNavigate,
 }: {
@@ -49,7 +48,6 @@ export function TreePane({
   onOpenSettings: () => void;
   includeHidden: boolean;
   onToggleHidden: () => void;
-  onOpenNode: (path: string) => void;
   onToggleExpand: (path: string) => void;
   onNavigate: (path: string) => void;
 }) {
@@ -91,20 +89,10 @@ export function TreePane({
         }}
       >
         <div className="sidebar-shell">
-          <aside className="sidebar-rail">
-            <button
-              type="button"
-              className="sidebar-rail-logo"
-              onClick={onGoHome}
-              title="Home"
-              aria-label="Quick access Home"
-            >
-              <SidebarLogoMark />
-            </button>
-          </aside>
+          <aside className="sidebar-rail" />
           <div className="sidebar-main">
             <div className="sidebar-header">
-              <span className="sidebar-title">Folders</span>
+              <span className="sidebar-title">File Trail</span>
             </div>
           </div>
         </div>
@@ -127,15 +115,6 @@ export function TreePane({
     >
       <div className="sidebar-shell">
         <aside className="sidebar-rail">
-          <button
-            type="button"
-            className="sidebar-rail-logo"
-            onClick={onGoHome}
-            title="Home"
-            aria-label="Quick access Home"
-          >
-            <SidebarLogoMark />
-          </button>
           <button
             type="button"
             className="sidebar-rail-button"
@@ -213,7 +192,7 @@ export function TreePane({
         </aside>
         <div className="sidebar-main">
           <div className="sidebar-header">
-            <span className="sidebar-title">Folders</span>
+            <span className="sidebar-title">File Trail</span>
           </div>
           <div className="sidebar-tree">
             <div className="tree-scroll">
@@ -225,7 +204,6 @@ export function TreePane({
                   node={root}
                   nodes={nodes}
                   clickTimeoutRef={clickTimeoutRef}
-                  onOpenNode={onOpenNode}
                   onToggleExpand={onToggleExpand}
                   onNavigate={onNavigate}
                   registerRowRef={(path, element) => {
@@ -235,24 +213,9 @@ export function TreePane({
               </div>
             </div>
           </div>
-          <div className="sidebar-footer">
-            <div className="sidebar-avatar">M</div>
-            <div>
-              <div className="sidebar-footer-name">tcmudemirhan</div>
-              <div className="sidebar-footer-volume">Macintosh HD</div>
-            </div>
-          </div>
         </div>
       </div>
     </aside>
-  );
-}
-
-function SidebarLogoMark() {
-  return (
-    <svg className="sidebar-logo-mark" viewBox="0 0 24 24" aria-hidden="true" role="presentation">
-      <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6.93a2 2 0 0 1-1.66-.88l-.82-1.24A2 2 0 0 0 7.93 4H5a2 2 0 0 0-2 2v1z" />
-    </svg>
   );
 }
 
@@ -263,7 +226,6 @@ function TreeNodeRow({
   depth,
   isPaneFocused,
   clickTimeoutRef,
-  onOpenNode,
   onToggleExpand,
   onNavigate,
   registerRowRef,
@@ -274,7 +236,6 @@ function TreeNodeRow({
   depth: number;
   isPaneFocused: boolean;
   clickTimeoutRef: React.RefObject<number | null>;
-  onOpenNode: (path: string) => void;
   onToggleExpand: (path: string) => void;
   onNavigate: (path: string) => void;
   registerRowRef: (path: string, element: HTMLDivElement | null) => void;
@@ -319,7 +280,7 @@ function TreeNodeRow({
               window.clearTimeout(clickTimeoutRef.current);
               clickTimeoutRef.current = null;
             }
-            onOpenNode(node.path);
+            onToggleExpand(node.path);
           }}
           title={node.path}
         >
@@ -353,7 +314,6 @@ function TreeNodeRow({
                 node={child}
                 nodes={nodes}
                 clickTimeoutRef={clickTimeoutRef}
-                onOpenNode={onOpenNode}
                 onToggleExpand={onToggleExpand}
                 onNavigate={onNavigate}
                 registerRowRef={registerRowRef}

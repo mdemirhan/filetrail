@@ -11,11 +11,6 @@ import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 import {
   DEFAULT_APP_PREFERENCES,
   type ExplorerViewMode,
-  MONO_FONT_OPTIONS,
-  MONO_FONT_SIZE_OPTIONS,
-  MONO_FONT_WEIGHT_OPTIONS,
-  type MonoFontFamily,
-  type MonoFontWeight,
   THEME_OPTIONS,
   type ThemeMode,
   UI_FONT_OPTIONS,
@@ -118,13 +113,6 @@ export function App() {
   const [uiFontWeight, setUiFontWeight] = useState<UiFontWeight>(
     DEFAULT_APP_PREFERENCES.uiFontWeight,
   );
-  const [monoFontFamily, setMonoFontFamily] = useState<MonoFontFamily>(
-    DEFAULT_APP_PREFERENCES.monoFontFamily,
-  );
-  const [monoFontSize, setMonoFontSize] = useState(DEFAULT_APP_PREFERENCES.monoFontSize);
-  const [monoFontWeight, setMonoFontWeight] = useState<MonoFontWeight>(
-    DEFAULT_APP_PREFERENCES.monoFontWeight,
-  );
   const [textPrimaryOverride, setTextPrimaryOverride] = useState(
     DEFAULT_APP_PREFERENCES.textPrimaryOverride,
   );
@@ -167,6 +155,10 @@ export function App() {
   const [locationError, setLocationError] = useState<string | null>(null);
   const [focusedPane, setFocusedPane] = useState<"tree" | "content" | null>(null);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
+  const [restoredPaneWidths, setRestoredPaneWidths] = useState<{
+    treeWidth: number;
+    inspectorWidth: number;
+  } | null>(null);
   const treePaneRef = useRef<HTMLElement | null>(null);
   const contentPaneRef = useRef<HTMLElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -204,17 +196,11 @@ export function App() {
       uiFontFamily,
       uiFontSize,
       uiFontWeight,
-      monoFontFamily,
-      monoFontSize,
-      monoFontWeight,
       textPrimaryOverride,
       textSecondaryOverride,
       textMutedOverride,
     });
   }, [
-    monoFontFamily,
-    monoFontSize,
-    monoFontWeight,
     textMutedOverride,
     textPrimaryOverride,
     textSecondaryOverride,
@@ -234,9 +220,6 @@ export function App() {
         uiFontFamily,
         uiFontSize,
         uiFontWeight,
-        monoFontFamily,
-        monoFontSize,
-        monoFontWeight,
         textPrimaryOverride,
         textSecondaryOverride,
         textMutedOverride,
@@ -262,9 +245,6 @@ export function App() {
     theme,
     uiFontFamily,
     uiFontSize,
-    monoFontFamily,
-    monoFontSize,
-    monoFontWeight,
     textMutedOverride,
     textPrimaryOverride,
     textSecondaryOverride,
@@ -288,9 +268,6 @@ export function App() {
         setUiFontFamily(preferences.uiFontFamily);
         setUiFontSize(preferences.uiFontSize);
         setUiFontWeight(preferences.uiFontWeight);
-        setMonoFontFamily(preferences.monoFontFamily);
-        setMonoFontSize(preferences.monoFontSize);
-        setMonoFontWeight(preferences.monoFontWeight);
         setTextPrimaryOverride(preferences.textPrimaryOverride);
         setTextSecondaryOverride(preferences.textSecondaryOverride);
         setTextMutedOverride(preferences.textMutedOverride);
@@ -300,6 +277,10 @@ export function App() {
         setRestoreLastVisitedFolderOnStartup(preferences.restoreLastVisitedFolderOnStartup);
         panes.setTreeWidth(preferences.treeWidth);
         panes.setInspectorWidth(preferences.inspectorWidth);
+        setRestoredPaneWidths({
+          treeWidth: preferences.treeWidth,
+          inspectorWidth: preferences.inspectorWidth,
+        });
         setHomePath(homeResponse.path);
         const startupPath =
           preferences.restoreLastVisitedFolderOnStartup && preferences.lastVisitedPath
@@ -642,9 +623,6 @@ export function App() {
     setUiFontFamily(DEFAULT_APP_PREFERENCES.uiFontFamily);
     setUiFontSize(DEFAULT_APP_PREFERENCES.uiFontSize);
     setUiFontWeight(DEFAULT_APP_PREFERENCES.uiFontWeight);
-    setMonoFontFamily(DEFAULT_APP_PREFERENCES.monoFontFamily);
-    setMonoFontSize(DEFAULT_APP_PREFERENCES.monoFontSize);
-    setMonoFontWeight(DEFAULT_APP_PREFERENCES.monoFontWeight);
     setTextPrimaryOverride(null);
     setTextSecondaryOverride(null);
     setTextMutedOverride(null);
@@ -853,7 +831,7 @@ export function App() {
         const existingNode = current[path] ?? createTreeNode(path, true);
         next[path] = {
           ...existingNode,
-          expanded: response.children.length > 0 ? existingNode.expanded || expandOnSuccess : false,
+          expanded: existingNode.expanded || expandOnSuccess,
           loading: false,
           loaded: true,
           childPaths: response.children.map((child) => child.path),
@@ -928,9 +906,6 @@ export function App() {
       }
       return;
     }
-    if (node.childPaths.length === 0) {
-      return;
-    }
     const nextExpanded = !node.expanded;
     setTreeNodes((current) => ({
       ...current,
@@ -950,15 +925,7 @@ export function App() {
       await loadTreeChildren(path, includeHidden, true);
       return;
     }
-    if (!node.expanded && node.childPaths.length > 0) {
-      setTreeNodes((current) => ({
-        ...current,
-        [path]: {
-          ...node,
-          expanded: true,
-        },
-      }));
-    }
+    toggleTreeNode(path);
   }
 
   async function resolveTargetPath(path: string): Promise<string | null> {
@@ -1078,7 +1045,10 @@ export function App() {
   return (
     <main className="app-shell">
       {mainView === "explorer" ? (
-        !preferencesReady ? (
+        !preferencesReady ||
+        (restoredPaneWidths !== null &&
+          (panes.treeWidth !== restoredPaneWidths.treeWidth ||
+            panes.inspectorWidth !== restoredPaneWidths.inspectorWidth)) ? (
           <section className="workspace workspace-loading" />
         ) : (
           <section
@@ -1104,7 +1074,6 @@ export function App() {
               onOpenSettings={() => setMainView("settings")}
               includeHidden={includeHidden}
               onToggleHidden={toggleHiddenFiles}
-              onOpenNode={(path) => void openTreeNode(path)}
               onNavigate={(path) => void navigateTo(path, "push")}
               onToggleExpand={toggleTreeNode}
             />
@@ -1335,13 +1304,8 @@ export function App() {
                   open={propertiesOpen}
                   loading={propertiesLoading}
                   item={propertiesItem}
+                  itemCount={propertiesItem?.path === currentPath ? currentEntries.length : null}
                   onClose={() => setPropertiesOpen(false)}
-                  onOpenExternally={() => {
-                    const targetPath = selectedEntry?.path ?? currentPath;
-                    if (targetPath) {
-                      void openExternally(targetPath);
-                    }
-                  }}
                 />
               </>
             ) : null}
@@ -1358,9 +1322,6 @@ export function App() {
                 uiFontFamily={uiFontFamily}
                 uiFontSize={uiFontSize}
                 uiFontWeight={uiFontWeight}
-                monoFontFamily={monoFontFamily}
-                monoFontSize={monoFontSize}
-                monoFontWeight={monoFontWeight}
                 effectiveTextPrimaryColor={effectiveThemeColors.primary}
                 effectiveTextSecondaryColor={effectiveThemeColors.secondary}
                 effectiveTextMutedColor={effectiveThemeColors.muted}
@@ -1369,16 +1330,10 @@ export function App() {
                 uiFontOptions={[...UI_FONT_OPTIONS]}
                 uiFontSizeOptions={[...UI_FONT_SIZE_OPTIONS]}
                 uiFontWeightOptions={[...UI_FONT_WEIGHT_OPTIONS]}
-                monoFontOptions={[...MONO_FONT_OPTIONS]}
-                monoFontSizeOptions={[...MONO_FONT_SIZE_OPTIONS]}
-                monoFontWeightOptions={[...MONO_FONT_WEIGHT_OPTIONS]}
                 onThemeChange={setTheme}
                 onUiFontFamilyChange={setUiFontFamily}
                 onUiFontSizeChange={setUiFontSize}
                 onUiFontWeightChange={setUiFontWeight}
-                onMonoFontFamilyChange={setMonoFontFamily}
-                onMonoFontSizeChange={setMonoFontSize}
-                onMonoFontWeightChange={setMonoFontWeight}
                 onTextPrimaryColorChange={setTextPrimaryOverride}
                 onTextSecondaryColorChange={setTextSecondaryOverride}
                 onTextMutedColorChange={setTextMutedOverride}

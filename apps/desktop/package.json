@@ -13,8 +13,10 @@
   },
   "dependencies": {
     "@filetrail/contracts": "workspace:*",
+    "@fontsource/dm-sans": "^5.2.8",
+    "@fontsource/fira-code": "latest",
     "@fontsource/inter": "^5.2.8",
-    "@fontsource/jetbrains-mono": "^5.2.8",
+    "@fontsource/lexend": "^5.2.8",
     "@fontsource/plus-jakarta-sans": "^5.2.8",
     "react": "19.0.0",
     "react-dom": "19.0.0"

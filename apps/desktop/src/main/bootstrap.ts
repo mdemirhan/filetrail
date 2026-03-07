@@ -175,15 +175,6 @@ function toPreferencePatch(
   if (value.uiFontWeight !== undefined) {
     patch.uiFontWeight = value.uiFontWeight;
   }
-  if (value.monoFontFamily !== undefined) {
-    patch.monoFontFamily = value.monoFontFamily;
-  }
-  if (value.monoFontSize !== undefined) {
-    patch.monoFontSize = value.monoFontSize;
-  }
-  if (value.monoFontWeight !== undefined) {
-    patch.monoFontWeight = value.monoFontWeight;
-  }
   if (value.textPrimaryOverride !== undefined) {
     patch.textPrimaryOverride = value.textPrimaryOverride;
   }

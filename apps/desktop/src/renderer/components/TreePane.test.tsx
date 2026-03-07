@@ -46,7 +46,6 @@ describe("TreePane", () => {
         onOpenSettings={() => undefined}
         includeHidden={false}
         onToggleHidden={() => undefined}
-        onOpenNode={() => undefined}
         onToggleExpand={() => undefined}
         onNavigate={() => undefined}
       />,
@@ -101,7 +100,6 @@ describe("TreePane", () => {
         onOpenSettings={() => undefined}
         includeHidden={false}
         onToggleHidden={() => undefined}
-        onOpenNode={() => undefined}
         onToggleExpand={() => undefined}
         onNavigate={handleNavigate}
       />,

@@ -2,20 +2,19 @@ import type { IpcResponse } from "@filetrail/contracts";
 
 import { FileIcon } from "../lib/fileIcons";
 import { compactPath, formatDateTime, formatSize } from "../lib/formatting";
-import { ToolbarIcon } from "./ToolbarIcon";
 
 export function PropertiesDrawer({
   open,
   loading,
   item,
+  itemCount,
   onClose,
-  onOpenExternally,
 }: {
   open: boolean;
   loading: boolean;
   item: IpcResponse<"item:getProperties">["item"] | null;
+  itemCount: number | null;
   onClose: () => void;
-  onOpenExternally: () => void;
 }) {
   return (
     <aside className={`properties-drawer${open ? " open" : ""}`}>
@@ -50,14 +49,13 @@ export function PropertiesDrawer({
             <div className="drawer-title">{item.name}</div>
             <div className="drawer-kind-badge">{item.kindLabel}</div>
           </div>
-          <button type="button" className="drawer-open-button" onClick={onOpenExternally}>
-            <ToolbarIcon name="open" /> Open in macOS
-          </button>
           <dl className="property-grid">
-            <div>
-              <dt>Kind</dt>
-              <dd>{item.kindLabel}</dd>
-            </div>
+            {item.kind === "directory" ? (
+              <div>
+                <dt>Items</dt>
+                <dd>{itemCount === null ? "—" : `${itemCount} items`}</dd>
+              </div>
+            ) : null}
             <div>
               <dt>Size</dt>
               <dd>{formatSize(item.sizeBytes, item.sizeStatus)}</dd>
@@ -67,19 +65,7 @@ export function PropertiesDrawer({
               <dd>{formatDateTime(item.modifiedAt)}</dd>
             </div>
             <div>
-              <dt>Created</dt>
-              <dd>{formatDateTime(item.createdAt)}</dd>
-            </div>
-            <div>
-              <dt>Hidden</dt>
-              <dd>{item.isHidden ? "Yes" : "No"}</dd>
-            </div>
-            <div>
-              <dt>Symlink</dt>
-              <dd>{item.isSymlink ? "Yes" : "No"}</dd>
-            </div>
-            <div>
-              <dt>Location</dt>
+              <dt>Path</dt>
               <dd className="property-path" title={item.path}>
                 {compactPath(item.path)}
               </dd>

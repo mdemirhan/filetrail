@@ -16,9 +16,6 @@ describe("appStateStore", () => {
       uiFontFamily: "dm-sans",
       uiFontSize: 13,
       uiFontWeight: 400,
-      monoFontFamily: "jetbrains-mono",
-      monoFontSize: 12,
-      monoFontWeight: 500,
       textPrimaryOverride: null,
       textSecondaryOverride: null,
       textMutedOverride: null,
@@ -49,9 +46,6 @@ describe("appStateStore", () => {
       uiFontFamily: "lexend",
       uiFontSize: 14,
       uiFontWeight: 500,
-      monoFontFamily: "fira-code",
-      monoFontSize: 13,
-      monoFontWeight: 600,
       textPrimaryOverride: "#ffffff",
       textSecondaryOverride: "#cccccc",
       textMutedOverride: "#999999",
@@ -81,9 +75,6 @@ describe("appStateStore", () => {
       uiFontFamily: "lexend",
       uiFontSize: 14,
       uiFontWeight: 500,
-      monoFontFamily: "fira-code",
-      monoFontSize: 13,
-      monoFontWeight: 600,
       textPrimaryOverride: "#ffffff",
       textSecondaryOverride: "#cccccc",
       textMutedOverride: "#999999",
@@ -115,9 +106,6 @@ describe("appStateStore", () => {
       uiFontFamily: "bad-font" as never,
       uiFontSize: 999,
       uiFontWeight: 123 as never,
-      monoFontFamily: "bad-mono" as never,
-      monoFontSize: 1,
-      monoFontWeight: 900 as never,
       textPrimaryOverride: "oops" as never,
       treeWidth: 1,
       inspectorWidth: 9999,
@@ -134,9 +122,6 @@ describe("appStateStore", () => {
     expect(reloaded.getPreferences().uiFontFamily).toBe("dm-sans");
     expect(reloaded.getPreferences().uiFontSize).toBe(15);
     expect(reloaded.getPreferences().uiFontWeight).toBe(400);
-    expect(reloaded.getPreferences().monoFontFamily).toBe("jetbrains-mono");
-    expect(reloaded.getPreferences().monoFontSize).toBe(11);
-    expect(reloaded.getPreferences().monoFontWeight).toBe(400);
     expect(reloaded.getPreferences().textPrimaryOverride).toBeNull();
     expect(reloaded.getPreferences().treeRootPath).toBeNull();
     expect(reloaded.getPreferences().lastVisitedPath).toBeNull();
