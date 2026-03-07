@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+
 import { FolderIcon } from "../lib/fileIcons";
 import { ToolbarIcon } from "./ToolbarIcon";
 
@@ -20,6 +22,7 @@ export function TreePane({
   nodes,
   currentPath,
   onFocusChange,
+  onOpenNode,
   onToggleExpand,
   onNavigate,
 }: {
@@ -28,10 +31,23 @@ export function TreePane({
   nodes: Record<string, TreeNodeState>;
   currentPath: string;
   onFocusChange: (focused: boolean) => void;
+  onOpenNode: (path: string) => void;
   onToggleExpand: (path: string) => void;
   onNavigate: (path: string) => void;
 }) {
   const root = nodes[rootPath];
+  const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const clickTimeoutRef = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (clickTimeoutRef.current !== null) {
+        window.clearTimeout(clickTimeoutRef.current);
+      }
+    },
+    [],
+  );
+
   if (!root) {
     return (
       <aside
@@ -68,7 +84,6 @@ export function TreePane({
     >
       <div className="pane-header">
         <span>Folders</span>
-        <span className="pane-header-count">{nodesCount(nodes)}</span>
       </div>
       <div className="tree-scroll">
         <div className="tree-list">
@@ -77,8 +92,18 @@ export function TreePane({
             depth={0}
             node={root}
             nodes={nodes}
+            clickTimeoutRef={clickTimeoutRef}
+            onOpenNode={onOpenNode}
             onToggleExpand={onToggleExpand}
             onNavigate={onNavigate}
+            registerRowRef={(path, element) => {
+              rowRefs.current[path] = element;
+              if (path === currentPath && element && typeof element.scrollIntoView === "function") {
+                element.scrollIntoView({
+                  block: "nearest",
+                });
+              }
+            }}
           />
         </div>
       </div>
@@ -91,15 +116,21 @@ function TreeNodeRow({
   nodes,
   currentPath,
   depth,
+  clickTimeoutRef,
+  onOpenNode,
   onToggleExpand,
   onNavigate,
+  registerRowRef,
 }: {
   node: TreeNodeState;
   nodes: Record<string, TreeNodeState>;
   currentPath: string;
   depth: number;
+  clickTimeoutRef: React.RefObject<number | null>;
+  onOpenNode: (path: string) => void;
   onToggleExpand: (path: string) => void;
   onNavigate: (path: string) => void;
+  registerRowRef: (path: string, element: HTMLDivElement | null) => void;
 }) {
   const isCurrent = currentPath === node.path;
   const canExpand = !node.isSymlink;
@@ -107,7 +138,9 @@ function TreeNodeRow({
   return (
     <div className="tree-branch">
       <div
+        ref={(element) => registerRowRef(node.path, element)}
         className={`tree-row${isCurrent ? " active" : ""}`}
+        data-tree-path={node.path}
         style={{ paddingLeft: `${12 + depth * 16}px` }}
       >
         <button
@@ -125,7 +158,22 @@ function TreeNodeRow({
         <button
           type="button"
           className="tree-label"
-          onClick={() => onNavigate(node.path)}
+          onClick={() => {
+            if (clickTimeoutRef.current !== null) {
+              window.clearTimeout(clickTimeoutRef.current);
+            }
+            clickTimeoutRef.current = window.setTimeout(() => {
+              clickTimeoutRef.current = null;
+              onNavigate(node.path);
+            }, 180);
+          }}
+          onDoubleClick={() => {
+            if (clickTimeoutRef.current !== null) {
+              window.clearTimeout(clickTimeoutRef.current);
+              clickTimeoutRef.current = null;
+            }
+            onOpenNode(node.path);
+          }}
           title={node.path}
         >
           <FolderIcon alias={node.isSymlink} />
@@ -156,16 +204,15 @@ function TreeNodeRow({
                 depth={depth + 1}
                 node={child}
                 nodes={nodes}
+                clickTimeoutRef={clickTimeoutRef}
+                onOpenNode={onOpenNode}
                 onToggleExpand={onToggleExpand}
                 onNavigate={onNavigate}
+                registerRowRef={registerRowRef}
               />
             );
           })
         : null}
     </div>
   );
-}
-
-function nodesCount(nodes: Record<string, TreeNodeState>): number {
-  return Object.keys(nodes).length;
 }

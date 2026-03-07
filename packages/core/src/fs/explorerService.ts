@@ -48,7 +48,7 @@ export async function listTreeChildren(
       }
       const entryPath = resolve(directoryPath, dirent.name);
       const kind = await classifyEntry(dirent, entryPath, fileSystem);
-      if (kind !== "directory" && kind !== "symlink_directory") {
+      if (kind !== "directory") {
         return null;
       }
       return {
@@ -56,7 +56,7 @@ export async function listTreeChildren(
         name: dirent.name,
         kind,
         isHidden: isHiddenName(dirent.name),
-        isSymlink: kind === "symlink_directory",
+        isSymlink: false,
       };
     }),
   );
@@ -163,14 +163,8 @@ export async function getPathSuggestions(
 ): Promise<IpcResponse<"path:getSuggestions">> {
   const trimmedInput = inputPath.trim();
   const normalizedInput = trimmedInput.length === 0 ? "/" : trimmedInput;
-  const trailingSlash = /[\\/]$/.test(normalizedInput);
-  const basePath = trailingSlash ? normalizedInput : dirname(normalizedInput);
-  const typedName = trailingSlash ? "" : basename(normalizedInput);
-
-  let resolvedBasePath: string;
-  try {
-    resolvedBasePath = await resolveDirectoryPath(basePath, fileSystem);
-  } catch {
+  const baseMatch = await findSuggestionBase(normalizedInput, fileSystem);
+  if (!baseMatch) {
     return {
       inputPath,
       basePath: null,
@@ -178,36 +172,76 @@ export async function getPathSuggestions(
     };
   }
 
-  const dirents = await fileSystem.readdir(resolvedBasePath, { withFileTypes: true });
+  const dirents = await fileSystem.readdir(baseMatch.basePath, { withFileTypes: true });
   const matches = await Promise.all(
-    dirents.map(async (dirent) => {
-      if (!includeHidden && isHiddenName(dirent.name)) {
-        return null;
-      }
-      const entryPath = resolve(resolvedBasePath, dirent.name);
-      const kind = await classifyEntry(dirent, entryPath, fileSystem);
-      if (kind !== "directory" && kind !== "symlink_directory") {
-        return null;
-      }
-      if (typedName.length > 0 && !dirent.name.toLowerCase().startsWith(typedName.toLowerCase())) {
-        return null;
-      }
-      return {
-        path: entryPath,
-        name: dirent.name,
-        isDirectory: true,
-      };
-    }),
+    dirents.map((dirent) =>
+      buildPathSuggestionEntry(
+        dirent,
+        baseMatch.basePath,
+        baseMatch.typedName,
+        includeHidden,
+        fileSystem,
+      ),
+    ),
   );
 
   return {
     inputPath,
-    basePath: resolvedBasePath,
+    basePath: baseMatch.basePath,
     suggestions: matches
       .filter((value) => value !== null)
       .sort(compareEntriesByName)
       .slice(0, limit),
   };
+}
+
+async function buildPathSuggestionEntry(
+  dirent: FileSystemDirent,
+  basePath: string,
+  typedName: string,
+  includeHidden: boolean,
+  fileSystem: ExplorerFileSystem,
+): Promise<IpcResponse<"path:getSuggestions">["suggestions"][number] | null> {
+  if (!includeHidden && isHiddenName(dirent.name)) {
+    return null;
+  }
+  if (typedName.length > 0 && !dirent.name.toLowerCase().startsWith(typedName.toLowerCase())) {
+    return null;
+  }
+
+  const entryPath = resolve(basePath, dirent.name);
+  try {
+    const kind = await classifyEntry(dirent, entryPath, fileSystem);
+    if (kind !== "directory" && kind !== "symlink_directory") {
+      return null;
+    }
+    return {
+      path: entryPath,
+      name: dirent.name,
+      isDirectory: true,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function resolvePathTarget(
+  path: string,
+  fileSystem: ExplorerFileSystem = DEFAULT_FILE_SYSTEM,
+): Promise<IpcResponse<"path:resolve">> {
+  const resolvedInputPath = resolve(path);
+  try {
+    const resolvedPath = await fileSystem.realpath(resolvedInputPath);
+    return {
+      inputPath: resolvedInputPath,
+      resolvedPath,
+    };
+  } catch {
+    return {
+      inputPath: resolvedInputPath,
+      resolvedPath: null,
+    };
+  }
 }
 
 async function readDirectoryEntryMetadata(
@@ -270,6 +304,46 @@ async function resolveDirectoryPath(path: string, fileSystem: ExplorerFileSystem
   } catch {
     return resolvedPath;
   }
+}
+
+async function findSuggestionBase(
+  inputPath: string,
+  fileSystem: ExplorerFileSystem,
+): Promise<{ basePath: string; typedName: string } | null> {
+  const normalizedPath = resolve(inputPath);
+  if (normalizedPath === "/") {
+    return {
+      basePath: "/",
+      typedName: "",
+    };
+  }
+  const trailingSlash = /[\\/]$/.test(inputPath);
+  const parts = normalizedPath.split("/").filter((part) => part.length > 0);
+
+  for (let index = parts.length; index >= 0; index -= 1) {
+    const candidatePath = index === 0 ? "/" : `/${parts.slice(0, index).join("/")}`;
+    try {
+      const resolvedCandidatePath = await resolveDirectoryPath(candidatePath, fileSystem);
+      if (trailingSlash && index === parts.length) {
+        return {
+          basePath: resolvedCandidatePath,
+          typedName: "",
+        };
+      }
+      if (index === parts.length) {
+        return {
+          basePath: dirname(resolvedCandidatePath),
+          typedName: basename(resolvedCandidatePath),
+        };
+      }
+      return {
+        basePath: resolvedCandidatePath,
+        typedName: parts[index] ?? "",
+      };
+    } catch {}
+  }
+
+  return null;
 }
 
 async function safeLstat(

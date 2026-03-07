@@ -56,6 +56,8 @@ export async function bootstrapMainProcess(): Promise<void> {
       withTiming("path:getSuggestions", payload.inputPath, () =>
         workerClient.request("path:getSuggestions", payload),
       ),
+    "path:resolve": (payload) =>
+      withTiming("path:resolve", payload.path, () => workerClient.request("path:resolve", payload)),
     "folderSize:start": (payload) => {
       const jobId = `folder-size-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
       folderSizeJobs.set(jobId, {

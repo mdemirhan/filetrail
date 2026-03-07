@@ -22,6 +22,7 @@ export function ContentPane({
   viewMode,
   loading,
   error,
+  includeHidden,
   selectedPath,
   metadataByPath,
   sortBy,
@@ -41,6 +42,7 @@ export function ContentPane({
   viewMode: "list" | "details";
   loading: boolean;
   error: string | null;
+  includeHidden: boolean;
   selectedPath: string;
   metadataByPath: Record<string, DirectoryEntryMetadata>;
   sortBy: IpcRequest<"directory:getSnapshot">["sortBy"];
@@ -248,6 +250,7 @@ export function ContentPane({
           entries={entries}
           loading={loading}
           error={error}
+          includeHidden={includeHidden}
           selectedPath={selectedPath}
           onActivateEntry={onActivateEntry}
           onLayoutColumnsChange={onLayoutColumnsChange}
@@ -260,6 +263,7 @@ export function ContentPane({
           entries={entries}
           loading={loading}
           error={error}
+          includeHidden={includeHidden}
           metadataByPath={metadataByPath}
           selectedPath={selectedPath}
           sortBy={sortBy}
@@ -296,6 +300,7 @@ function FlowListView({
   entries,
   loading,
   error,
+  includeHidden,
   selectedPath,
   onSelectPath,
   onActivateEntry,
@@ -305,6 +310,7 @@ function FlowListView({
   entries: DirectoryEntry[];
   loading: boolean;
   error: string | null;
+  includeHidden: boolean;
   selectedPath: string;
   onSelectPath: (path: string) => void;
   onActivateEntry: (entry: DirectoryEntry) => void;
@@ -345,8 +351,23 @@ function FlowListView({
       ref={containerRef}
       className="content-scroll flow-list"
       onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+      onWheel={(event) => {
+        if (event.ctrlKey || !containerRef.current) {
+          return;
+        }
+        if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) {
+          return;
+        }
+        event.preventDefault();
+        containerRef.current.scrollLeft += event.deltaY;
+      }}
     >
-      <ContentState loading={loading} error={error} entriesLength={entries.length} />
+      <ContentState
+        loading={loading}
+        error={error}
+        entriesLength={entries.length}
+        includeHidden={includeHidden}
+      />
       <div
         className="flow-grid-rows"
         style={{
@@ -392,6 +413,7 @@ function DetailsView({
   entries,
   loading,
   error,
+  includeHidden,
   metadataByPath,
   selectedPath,
   sortBy,
@@ -405,6 +427,7 @@ function DetailsView({
   entries: DirectoryEntry[];
   loading: boolean;
   error: string | null;
+  includeHidden: boolean;
   metadataByPath: Record<string, DirectoryEntryMetadata>;
   selectedPath: string;
   sortBy: IpcRequest<"directory:getSnapshot">["sortBy"];
@@ -468,7 +491,12 @@ function DetailsView({
         className="content-scroll details-scroll"
         onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
       >
-        <ContentState loading={loading} error={error} entriesLength={entries.length} />
+        <ContentState
+          loading={loading}
+          error={error}
+          entriesLength={entries.length}
+          includeHidden={includeHidden}
+        />
         <div
           style={{
             paddingTop: `${range.startIndex * DETAILS_ROW_HEIGHT}px`,
@@ -537,10 +565,12 @@ function ContentState({
   loading,
   error,
   entriesLength,
+  includeHidden,
 }: {
   loading: boolean;
   error: string | null;
   entriesLength: number;
+  includeHidden: boolean;
 }) {
   if (loading && entriesLength === 0) {
     return (
@@ -559,7 +589,7 @@ function ContentState({
     );
   }
   if (entriesLength === 0) {
-    return <EmptyState />;
+    return <EmptyState includeHidden={includeHidden} />;
   }
   return null;
 }
@@ -582,11 +612,15 @@ function FileNameLabel({
   );
 }
 
-function EmptyState() {
+function EmptyState({ includeHidden }: { includeHidden: boolean }) {
   return (
     <div className="content-state content-empty">
       <strong>Nothing here yet</strong>
-      <span>This directory is empty, or hidden files are currently filtered out.</span>
+      <span>
+        {includeHidden
+          ? "This directory is empty."
+          : "This directory is empty, or hidden files are currently filtered out."}
+      </span>
     </div>
   );
 }

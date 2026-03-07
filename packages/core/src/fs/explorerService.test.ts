@@ -8,6 +8,7 @@ import {
   getPathSuggestions,
   listDirectorySnapshot,
   listTreeChildren,
+  resolvePathTarget,
 } from "./explorerService";
 
 describe("explorerService", () => {
@@ -146,7 +147,7 @@ describe("explorerService", () => {
     expect(snapshot.entries.map((entry) => entry.name)).toEqual(["large.txt", "small.txt"]);
   });
 
-  it("returns alias kind metadata for symlinked directories", async () => {
+  it("does not include symlinked directories in tree children", async () => {
     const fakeFileSystem = {
       readdir: vi.fn(async () => [fakeDirent("Alias", { symbolicLink: true })]),
       stat: vi.fn(async () => fakeStats(true, false, 0)),
@@ -155,13 +156,7 @@ describe("explorerService", () => {
     };
 
     const tree = await listTreeChildren("/workspace", true, fakeFileSystem);
-    expect(tree.children).toEqual([
-      expect.objectContaining({
-        name: "Alias",
-        kind: "symlink_directory",
-        isSymlink: true,
-      }),
-    ]);
+    expect(tree.children).toEqual([]);
   });
 
   it("rejects metadata requests for paths outside the requested directory", async () => {
@@ -219,6 +214,73 @@ describe("explorerService", () => {
 
     expect(hiddenOff.suggestions.map((item) => item.name)).toEqual(["Desktop"]);
     expect(hiddenOn.suggestions.map((item) => item.name)).toEqual([".config", "Desktop"]);
+  });
+
+  it("uses the nearest existing parent for path suggestions", async () => {
+    const fakeFileSystem = {
+      readdir: vi.fn(async (path: string) => {
+        if (path === "/Users/demo") {
+          return [
+            fakeDirent("dotfiles", { directory: true }),
+            fakeDirent("Documents", { directory: true }),
+          ];
+        }
+        if (path === "/Users/demo/dotfiles") {
+          return [
+            fakeDirent("scripts", { directory: true }),
+            fakeDirent("shell", { directory: true }),
+          ];
+        }
+        return [];
+      }),
+      stat: vi.fn(async (path: string) =>
+        fakeStats(
+          path === "/" ||
+            path === "/Users" ||
+            path === "/Users/demo" ||
+            path === "/Users/demo/dotfiles",
+          false,
+          0,
+        ),
+      ),
+      lstat: vi.fn(async () => fakeStats(false, false, 0, false)),
+      realpath: vi.fn(async (path: string) => path),
+    };
+
+    const parentMatches = await getPathSuggestions(
+      "/Users/demo/dotfiles",
+      false,
+      12,
+      fakeFileSystem,
+    );
+    expect(parentMatches.basePath).toBe("/Users/demo");
+    expect(parentMatches.suggestions.map((item) => item.path)).toEqual(["/Users/demo/dotfiles"]);
+
+    const childMatches = await getPathSuggestions(
+      "/Users/demo/dotfiles/",
+      false,
+      12,
+      fakeFileSystem,
+    );
+    expect(childMatches.basePath).toBe("/Users/demo/dotfiles");
+    expect(childMatches.suggestions.map((item) => item.path)).toEqual([
+      "/Users/demo/dotfiles/scripts",
+      "/Users/demo/dotfiles/shell",
+    ]);
+  });
+
+  it("resolves symlink targets for activation", async () => {
+    const fakeFileSystem = {
+      readdir: vi.fn(),
+      stat: vi.fn(),
+      lstat: vi.fn(),
+      realpath: vi.fn(async () => "/resolved/path"),
+    };
+
+    await expect(resolvePathTarget("/input/path", fakeFileSystem)).resolves.toEqual({
+      inputPath: "/input/path",
+      resolvedPath: "/resolved/path",
+    });
   });
 });
 

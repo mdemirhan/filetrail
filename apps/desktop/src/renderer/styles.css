@@ -174,11 +174,8 @@ body.platform-macos .titlebar-left {
 }
 
 .titlebar-center {
-  display: flex;
-  justify-content: center;
   flex: 1 1 auto;
   min-width: 0;
-  -webkit-app-region: no-drag;
 }
 
 .titlebar-actions {
@@ -433,6 +430,13 @@ body.platform-macos .titlebar-left {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.single-panel-pane {
+  display: block;
+  min-height: 0;
+  border-right: 0;
+  background: var(--bg-base);
+}
+
 .pane {
   min-width: 0;
   min-height: 0;
@@ -495,6 +499,8 @@ body.resizing-panels * {
 }
 
 .pane-header {
+  position: relative;
+  z-index: 4;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -507,6 +513,7 @@ body.resizing-panels * {
   letter-spacing: 0.08em;
   color: var(--text-secondary);
   text-transform: uppercase;
+  overflow: visible;
 }
 
 .content-header {
@@ -516,6 +523,7 @@ body.resizing-panels * {
   font-weight: 500;
   letter-spacing: 0;
   text-transform: none;
+  z-index: 6;
 }
 
 .pathbar,
@@ -611,12 +619,13 @@ body.resizing-panels * {
   top: calc(100% + 6px);
   left: 0;
   right: 0;
-  z-index: 5;
+  z-index: 12;
+  max-height: min(360px, calc(100vh - 180px));
   border: 1px solid var(--border-active);
   border-radius: var(--radius-md);
   background: var(--bg-surface);
   box-shadow: var(--shadow-lg);
-  overflow: hidden;
+  overflow: auto;
 }
 
 .pathbar-suggestion {

@@ -16,9 +16,14 @@ import { SettingsView } from "./components/SettingsView";
 import { ToolbarIcon } from "./components/ToolbarIcon";
 import { type TreeNodeState, TreePane } from "./components/TreePane";
 import { useExplorerPaneLayout } from "./hooks/useExplorerPaneLayout";
-import { getAncestorChain, getNextSelectionIndex } from "./lib/explorerNavigation";
+import {
+  getAncestorChain,
+  getNextSelectionIndex,
+  parentDirectoryPath,
+} from "./lib/explorerNavigation";
 import { useFiletrailClient } from "./lib/filetrailClient";
 import { createRendererLogger } from "./lib/logging";
+import { getLocalPathSuggestions, mergePathSuggestions } from "./lib/pathSuggestions";
 import { type ThemeMode, applyTheme, persistTheme, resolveInitialTheme } from "./lib/theme";
 import { getTreeKeyboardAction } from "./lib/treeView";
 import { persistUiState, readStoredUiState } from "./lib/uiState";
@@ -30,11 +35,16 @@ const logger = createRendererLogger("filetrail.renderer");
 const SHORTCUT_ITEMS = [
   { group: "Navigation", shortcut: "Cmd+Left", description: "Go back to the previous folder" },
   { group: "Navigation", shortcut: "Cmd+Right", description: "Go forward to the next folder" },
-  { group: "Navigation", shortcut: "Cmd+Up", description: "Open the parent folder from list view" },
+  {
+    group: "Navigation",
+    shortcut: "Cmd+Up",
+    description: "Open the parent folder from the file list",
+  },
   {
     group: "Navigation",
     shortcut: "Cmd+Down",
-    description: "Open the selected folder or open the selected file from list view",
+    description:
+      "Open the selected item from the file list, or expand the current folder in the tree",
   },
   { group: "Navigation", shortcut: "Cmd+L", description: "Open Go to Folder" },
   { group: "Navigation", shortcut: "Cmd+R", description: "Refresh the current folder" },
@@ -117,10 +127,27 @@ export function App() {
   const metadataRequestRef = useRef(0);
   const propertiesRequestRef = useRef(0);
   const treeRequestRef = useRef<Record<string, number>>({});
+  const treeNodesRef = useRef<Record<string, TreeNodeState>>({});
   const panes = useExplorerPaneLayout({
     initialTreeWidth: initialUiState.treeWidth,
     initialInspectorWidth: initialUiState.inspectorWidth,
   });
+
+  useEffect(() => {
+    treeNodesRef.current = treeNodes;
+  }, [treeNodes]);
+
+  useEffect(() => {
+    if (mainView !== "explorer" || focusedPane !== null) {
+      return;
+    }
+    const treePane = treePaneRef.current;
+    if (!treePane) {
+      return;
+    }
+    treePane.focus({ preventScroll: true });
+    setFocusedPane("tree");
+  }, [focusedPane, mainView]);
 
   useEffect(() => {
     applyTheme(theme);
@@ -268,8 +295,7 @@ export function App() {
       }
       if (event.metaKey && event.key === "ArrowUp" && focusedPane === "content") {
         event.preventDefault();
-        const nextPath =
-          currentPath === "/" ? null : currentPath.split("/").slice(0, -1).join("/") || "/";
+        const nextPath = parentDirectoryPath(currentPath);
         if (nextPath) {
           void navigateTo(nextPath, "push");
         }
@@ -282,13 +308,12 @@ export function App() {
         currentSelectedEntry
       ) {
         event.preventDefault();
-        if (currentSelectedEntry.kind === "directory") {
-          void navigateTo(currentSelectedEntry.path, "push");
-          return;
-        }
-        if (currentSelectedEntry.kind !== "symlink_directory") {
-          void openExternally(currentSelectedEntry.path);
-        }
+        void activateEntry(currentSelectedEntry);
+        return;
+      }
+      if (event.metaKey && event.key === "ArrowDown" && focusedPane === "tree") {
+        event.preventDefault();
+        void openTreeNode(currentPath);
         return;
       }
       if (event.metaKey && event.shiftKey && event.key === ".") {
@@ -320,6 +345,9 @@ export function App() {
         event.key === "Home" ||
         event.key === "End"
       ) {
+        if (event.metaKey || event.ctrlKey || event.altKey) {
+          return;
+        }
         if (focusedPane === "tree") {
           const action = getTreeKeyboardAction({
             key: event.key,
@@ -363,15 +391,14 @@ export function App() {
         }
         return;
       }
+      if (event.key === "Enter" && focusedPane === "tree") {
+        event.preventDefault();
+        void openTreeNode(currentPath);
+        return;
+      }
       if (event.key === "Enter" && focusedPane === "content" && currentSelectedEntry) {
         event.preventDefault();
-        if (currentSelectedEntry.kind === "directory") {
-          void navigateTo(currentSelectedEntry.path, "push");
-          return;
-        }
-        if (currentSelectedEntry.kind !== "symlink_directory") {
-          void openExternally(currentSelectedEntry.path);
-        }
+        void activateEntry(currentSelectedEntry);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -415,13 +442,35 @@ export function App() {
     void navigateTo(nextPath, "skip");
   }
 
+  function goHome() {
+    if (homePath) {
+      void navigateTo(homePath, "push");
+    }
+  }
+
+  function navigateToParentFolder() {
+    const nextPath = parentDirectoryPath(currentPath);
+    if (nextPath) {
+      void navigateTo(nextPath, "push");
+    }
+  }
+
+  function navigateDownAction() {
+    if (focusedPane === "tree") {
+      void openTreeNode(currentPath);
+      return;
+    }
+    if (selectedEntry) {
+      void activateEntry(selectedEntry);
+    }
+  }
+
   function initializeTree(path: string) {
     treeRequestRef.current = {};
     setTreeRootPath(path);
     setTreeNodes({
       [path]: createTreeNode(path, true),
     });
-    void loadTreeChildren(path);
   }
 
   function reinitializeTree(rootPath: string, focusPath: string) {
@@ -431,7 +480,6 @@ export function App() {
       [rootPath]: createTreeNode(rootPath, true),
       ...(focusPath !== rootPath ? { [focusPath]: createTreeNode(focusPath, true) } : {}),
     });
-    void loadTreeChildren(rootPath);
   }
 
   async function navigateTo(
@@ -495,20 +543,23 @@ export function App() {
     }
   }
 
-  function ensureTreeNode(path: string) {
+  function ensureTreeNode(path: string, expanded = false) {
     setTreeNodes((current) => {
       if (current[path]) {
+        if (!expanded || current[path].expanded) {
+          return current;
+        }
         return {
           ...current,
           [path]: {
             ...current[path],
-            expanded: true,
+            expanded,
           },
         };
       }
       return {
         ...current,
-        [path]: createTreeNode(path, true),
+        [path]: createTreeNode(path, expanded),
       };
     });
   }
@@ -518,6 +569,23 @@ export function App() {
     includeHiddenOverride = includeHidden,
     expandOnSuccess = false,
   ) {
+    const currentNode = treeNodesRef.current[path];
+    if (currentNode?.loading) {
+      return;
+    }
+    if (currentNode?.loaded) {
+      if (expandOnSuccess && !currentNode.expanded) {
+        setTreeNodes((current) => ({
+          ...current,
+          [path]: {
+            ...currentNode,
+            expanded: true,
+          },
+        }));
+      }
+      return;
+    }
+
     const requestId = (treeRequestRef.current[path] ?? 0) + 1;
     treeRequestRef.current[path] = requestId;
 
@@ -590,12 +658,19 @@ export function App() {
         [nextRootPath]: createTreeNode(nextRootPath, true),
       });
     } else {
-      ensureTreeNode(nextRootPath);
+      ensureTreeNode(nextRootPath, true);
     }
 
-    for (const ancestorPath of getAncestorChain(nextRootPath, path)) {
-      ensureTreeNode(ancestorPath);
-      await loadTreeChildren(ancestorPath, includeHiddenOverride);
+    await loadTreeChildren(nextRootPath, includeHiddenOverride);
+
+    if (path === nextRootPath) {
+      return;
+    }
+
+    const ancestorChain = getAncestorChain(nextRootPath, path).slice(1, -1);
+    for (const ancestorPath of ancestorChain) {
+      ensureTreeNode(ancestorPath, true);
+      await loadTreeChildren(ancestorPath, includeHiddenOverride, true);
     }
   }
 
@@ -621,6 +696,60 @@ export function App() {
         expanded: nextExpanded,
       },
     }));
+  }
+
+  async function openTreeNode(path: string) {
+    const node = treeNodes[path];
+    if (!node) {
+      return;
+    }
+    if (!node.loaded) {
+      await loadTreeChildren(path, includeHidden, true);
+      return;
+    }
+    if (!node.expanded && node.childPaths.length > 0) {
+      setTreeNodes((current) => ({
+        ...current,
+        [path]: {
+          ...node,
+          expanded: true,
+        },
+      }));
+    }
+  }
+
+  async function resolveTargetPath(path: string): Promise<string | null> {
+    try {
+      const response = await client.invoke("path:resolve", { path });
+      return response.resolvedPath;
+    } catch (error) {
+      logger.error("resolve target path failed", error);
+      return null;
+    }
+  }
+
+  async function activateEntry(entry: DirectoryEntry) {
+    if (entry.kind === "directory") {
+      await navigateTo(entry.path, "push");
+      return;
+    }
+    if (entry.kind === "symlink_directory") {
+      const targetPath = await resolveTargetPath(entry.path);
+      if (targetPath) {
+        await navigateTo(targetPath, "push");
+      }
+      return;
+    }
+    if (entry.kind === "symlink_file") {
+      const targetPath = await resolveTargetPath(entry.path);
+      if (targetPath) {
+        await openExternally(targetPath);
+      }
+      return;
+    }
+    if (entry.kind === "file") {
+      await openExternally(entry.path);
+    }
   }
 
   async function openExternally(path: string) {
@@ -718,7 +847,7 @@ export function App() {
                 className="tb-btn tb-btn-icon"
                 disabled={!canGoBack}
                 onClick={goBack}
-                title="Back (Cmd+Left)"
+                title="Go back to the previous folder (Cmd+Left)"
                 aria-label="Back"
               >
                 <ToolbarIcon name="back" />
@@ -728,10 +857,33 @@ export function App() {
                 className="tb-btn tb-btn-icon"
                 disabled={!canGoForward}
                 onClick={goForward}
-                title="Forward (Cmd+Right)"
+                title="Go forward to the next folder (Cmd+Right)"
                 aria-label="Forward"
               >
                 <ToolbarIcon name="forward" />
+              </button>
+            </fieldset>
+            <fieldset className="toolbar-segmented">
+              <legend className="sr-only">Up and down navigation</legend>
+              <button
+                type="button"
+                className="tb-btn tb-btn-icon"
+                disabled={!parentDirectoryPath(currentPath)}
+                onClick={navigateToParentFolder}
+                title="Open the parent folder (Cmd+Up)"
+                aria-label="Open the parent folder"
+              >
+                <ToolbarIcon name="up" />
+              </button>
+              <button
+                type="button"
+                className="tb-btn tb-btn-icon"
+                disabled={focusedPane !== "tree" && !selectedEntry}
+                onClick={navigateDownAction}
+                title="Open the selected item, or expand the current tree folder (Cmd+Down)"
+                aria-label="Open the selected item"
+              >
+                <ToolbarIcon name="down" />
               </button>
             </fieldset>
             <fieldset className="toolbar-segmented">
@@ -740,15 +892,11 @@ export function App() {
                 type="button"
                 className="tb-btn tb-btn-icon"
                 disabled={homePath.length === 0 || currentPath === homePath}
-                onClick={() => {
-                  if (homePath) {
-                    void navigateTo(homePath, "push");
-                  }
-                }}
-                title="Home"
+                onClick={goHome}
+                title="Go to the home folder"
                 aria-label="Home"
               >
-                <ToolbarIcon name="up" />
+                <ToolbarIcon name="home" />
               </button>
               <button
                 type="button"
@@ -757,7 +905,7 @@ export function App() {
                   setLocationError(null);
                   setLocationSheetOpen(true);
                 }}
-                title="Go to Folder (Cmd+L)"
+                title="Open Go to Folder (Cmd+L)"
                 aria-label="Go to Folder"
               >
                 <ToolbarIcon name="location" />
@@ -767,7 +915,7 @@ export function App() {
               type="button"
               className="tb-btn tb-btn-icon"
               onClick={() => void refreshDirectory()}
-              title="Refresh (Cmd+R)"
+              title="Refresh the current folder and rebuild the visible tree (Cmd+R)"
               aria-label="Refresh"
             >
               <ToolbarIcon name="refresh" />
@@ -775,19 +923,14 @@ export function App() {
           </div>
         </div>
 
-        <div className="titlebar-center">
-          <div className="toolbar-search" title="Search placeholder">
-            <ToolbarIcon name="search" />
-            <span>Search coming soon</span>
-          </div>
-        </div>
+        <div className="titlebar-center" />
 
         <div className="titlebar-actions">
           <button
             type="button"
             className={includeHidden ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
             onClick={toggleHiddenFiles}
-            title="Toggle hidden files (Cmd+Shift+.)"
+            title="Toggle hidden files in the explorer (Cmd+Shift+.)"
             aria-label="Toggle hidden files"
           >
             <ToolbarIcon name="hidden" />
@@ -798,7 +941,7 @@ export function App() {
               type="button"
               className={viewMode === "list" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
               onClick={() => setViewMode("list")}
-              title="List view"
+              title="Switch to list view"
               aria-label="List view"
             >
               <ToolbarIcon name="list" />
@@ -809,7 +952,7 @@ export function App() {
                 viewMode === "details" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"
               }
               onClick={() => setViewMode("details")}
-              title="Details view"
+              title="Switch to details view"
               aria-label="Details view"
             >
               <ToolbarIcon name="details" />
@@ -819,7 +962,7 @@ export function App() {
             type="button"
             className={propertiesOpen ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
             onClick={() => setPropertiesOpen((value) => !value)}
-            title="Toggle inspector (Cmd+I)"
+            title="Toggle the inspector drawer (Cmd+I)"
             aria-label="Toggle inspector"
           >
             <ToolbarIcon name="drawer" />
@@ -831,7 +974,11 @@ export function App() {
               type="button"
               className="tb-btn tb-btn-icon"
               onClick={() => handleSortChange(sortBy)}
-              title={sortDirection === "asc" ? "Ascending sort" : "Descending sort"}
+              title={
+                sortDirection === "asc"
+                  ? "Sort ascending by the current field"
+                  : "Sort descending by the current field"
+              }
               aria-label={sortDirection === "asc" ? "Ascending sort" : "Descending sort"}
             >
               <ToolbarIcon name={sortDirection === "asc" ? "sortAsc" : "sortDesc"} />
@@ -840,7 +987,7 @@ export function App() {
               className="toolbar-select"
               value={sortBy}
               onChange={(event) => handleSortChange(event.currentTarget.value as SortBy)}
-              title="Sort by"
+              title="Choose the active sort field"
               aria-label="Sort by"
             >
               <option value="name">Name</option>
@@ -851,13 +998,12 @@ export function App() {
           </fieldset>
           <button
             type="button"
-            className={mainView === "help" ? "tb-btn active" : "tb-btn"}
+            className={mainView === "help" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
             onClick={() => setMainView((value) => (value === "help" ? "explorer" : "help"))}
             title={mainView === "help" ? "Return to explorer (Esc)" : "Open help (?)"}
             aria-label={mainView === "help" ? "Return to explorer" : "Open help"}
           >
             <ToolbarIcon name="help" />
-            Help
           </button>
           <div className="theme-toggle" aria-label="Theme toggle">
             <svg
@@ -921,6 +1067,7 @@ export function App() {
             nodes={treeNodes}
             rootPath={treeRootPath}
             onFocusChange={(focused) => setFocusedPane(focused ? "tree" : null)}
+            onOpenNode={(path) => void openTreeNode(path)}
             onNavigate={(path) => void navigateTo(path, "push")}
             onToggleExpand={toggleTreeNode}
           />
@@ -939,19 +1086,13 @@ export function App() {
             entries={currentEntries}
             loading={directoryLoading}
             error={directoryError}
+            includeHidden={includeHidden}
             metadataByPath={metadataByPath}
             selectedPath={selectedPath}
             viewMode={viewMode}
             onSelectPath={setSelectedPath}
             onActivateEntry={(entry) => {
-              if (entry.kind === "directory") {
-                void navigateTo(entry.path, "push");
-                return;
-              }
-              if (entry.kind === "symlink_directory") {
-                return;
-              }
-              void openExternally(entry.path);
+              void activateEntry(entry);
             }}
             onFocusChange={(focused) => setFocusedPane(focused ? "content" : null)}
             sortBy={sortBy}
@@ -961,10 +1102,11 @@ export function App() {
             onVisiblePathsChange={setVisiblePaths}
             onNavigatePath={(path) => void navigateTo(path, "push")}
             onRequestPathSuggestions={(inputPath) =>
-              client.invoke("path:getSuggestions", {
-                inputPath,
+              requestPathSuggestions({
+                client,
                 includeHidden,
-                limit: 12,
+                inputPath,
+                treeNodes: treeNodesRef.current,
               })
             }
           />
@@ -996,7 +1138,7 @@ export function App() {
         </section>
       ) : (
         <section className="workspace single-panel-layout">
-          <section className="pane content-pane">
+          <section className="pane single-panel-pane">
             {mainView === "help" ? (
               <HelpView shortcutItems={[...SHORTCUT_ITEMS]} referenceItems={[...REFERENCE_ITEMS]} />
             ) : (
@@ -1044,4 +1186,44 @@ function isPathWithinRoot(path: string, rootPath: string): boolean {
     return true;
   }
   return path === rootPath || path.startsWith(`${rootPath}/`);
+}
+
+async function requestPathSuggestions(args: {
+  client: ReturnType<typeof useFiletrailClient>;
+  includeHidden: boolean;
+  inputPath: string;
+  treeNodes: Record<string, TreeNodeState>;
+}): Promise<IpcResponse<"path:getSuggestions">> {
+  const { client, includeHidden, inputPath, treeNodes } = args;
+  const limit = 12;
+  const localSuggestions = getLocalPathSuggestions({
+    inputPath,
+    includeHidden,
+    limit,
+    treeNodes,
+  });
+
+  const remoteSuggestions = await client
+    .invoke("path:getSuggestions", {
+      inputPath,
+      includeHidden,
+      limit,
+    })
+    .catch(() => null);
+
+  if (!remoteSuggestions) {
+    return (
+      localSuggestions ?? {
+        inputPath,
+        basePath: null,
+        suggestions: [],
+      }
+    );
+  }
+
+  return mergePathSuggestions({
+    limit,
+    primary: localSuggestions,
+    secondary: remoteSuggestions,
+  });
 }

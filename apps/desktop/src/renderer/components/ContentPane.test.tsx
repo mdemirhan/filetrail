@@ -13,6 +13,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error={null}
+        includeHidden={false}
         selectedPath=""
         metadataByPath={{}}
         sortBy="name"
@@ -43,6 +44,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error="Permission denied"
+        includeHidden={false}
         selectedPath=""
         metadataByPath={{}}
         sortBy="name"
@@ -84,6 +86,7 @@ describe("ContentPane", () => {
         viewMode="details"
         loading={false}
         error={null}
+        includeHidden={false}
         selectedPath=""
         metadataByPath={{}}
         sortBy="name"
@@ -118,6 +121,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error={null}
+        includeHidden={false}
         selectedPath=""
         metadataByPath={{}}
         sortBy="name"
@@ -156,6 +160,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error={null}
+        includeHidden={false}
         selectedPath=""
         metadataByPath={{}}
         sortBy="name"
@@ -200,6 +205,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error={null}
+        includeHidden={false}
         selectedPath=""
         metadataByPath={{}}
         sortBy="name"
@@ -247,6 +253,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error={null}
+        includeHidden={false}
         selectedPath=""
         metadataByPath={{}}
         sortBy="name"
@@ -277,5 +284,36 @@ describe("ContentPane", () => {
 
     expect(await screen.findByText("Documents")).toBeInTheDocument();
     expect(screen.getByText("/Users/demo/Documents")).toBeInTheDocument();
+  });
+
+  it("shows the shorter empty-state copy when hidden files are visible", () => {
+    render(
+      <ContentPane
+        currentPath="/Users/demo"
+        entries={[]}
+        viewMode="list"
+        loading={false}
+        error={null}
+        includeHidden
+        selectedPath=""
+        metadataByPath={{}}
+        sortBy="name"
+        sortDirection="asc"
+        onSelectPath={() => undefined}
+        onActivateEntry={() => undefined}
+        onSortChange={() => undefined}
+        onLayoutColumnsChange={() => undefined}
+        onVisiblePathsChange={() => undefined}
+        onNavigatePath={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+        onFocusChange={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("This directory is empty.")).toBeInTheDocument();
   });
 });

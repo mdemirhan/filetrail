@@ -4,9 +4,10 @@ export function ToolbarIcon({
   name:
     | "back"
     | "forward"
+    | "home"
     | "up"
+    | "down"
     | "location"
-    | "search"
     | "hidden"
     | "refresh"
     | "list"
@@ -23,7 +24,6 @@ export function ToolbarIcon({
     | "help"
     | "settings";
 }) {
-  const title = name.charAt(0).toUpperCase() + name.slice(1);
   const path = (() => {
     if (name === "back") {
       return "M15 5l-7 7 7 7";
@@ -31,14 +31,17 @@ export function ToolbarIcon({
     if (name === "forward") {
       return "M9 5l7 7-7 7";
     }
+    if (name === "home") {
+      return "M4 11.5L12 5l8 6.5V20h-5.5v-5h-5v5H4z";
+    }
     if (name === "up") {
-      return "M12 5l-7 7h4v7h6v-7h4z";
+      return "M12 5l-5 5h3v8h4v-8h3z";
+    }
+    if (name === "down") {
+      return "M12 19l5-5h-3V6h-4v8H7z";
     }
     if (name === "location") {
       return "M12 20s6-5.2 6-10a6 6 0 1 0-12 0c0 4.8 6 10 6 10m0-8a2 2 0 1 1 0-4a2 2 0 0 1 0 4";
-    }
-    if (name === "search") {
-      return "M10 4a6 6 0 1 0 0 12a6 6 0 0 0 0-12m0 2a4 4 0 1 1 0 8a4 4 0 0 1 0-8m5.8 8.4l1.4-1.4L21 18.8l-1.4 1.4z";
     }
     if (name === "hidden") {
       return "M3 12s3.5-5 9-5s9 5 9 5s-3.5 5-9 5s-9-5-9-5m9-2.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 0 0 0-5";
@@ -86,8 +89,7 @@ export function ToolbarIcon({
   })();
 
   return (
-    <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden>
-      <title>{title}</title>
+    <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" role="presentation">
       <path d={path} />
     </svg>
   );

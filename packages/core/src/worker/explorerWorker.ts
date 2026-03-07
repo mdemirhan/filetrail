@@ -7,6 +7,7 @@ import {
   getPathSuggestions,
   listDirectorySnapshot,
   listTreeChildren,
+  resolvePathTarget,
 } from "../fs/explorerService";
 
 type WorkerRequest = {
@@ -18,6 +19,7 @@ type WorkerRequest = {
     | "directory:getMetadataBatch"
     | "item:getProperties"
     | "path:getSuggestions"
+    | "path:resolve"
   >;
   payload: unknown;
 };
@@ -113,6 +115,14 @@ async function handleWorkerRequest(message: WorkerRequest): Promise<WorkerRespon
       id: message.id,
       ok: true,
       payload: await getPathSuggestions(payload.inputPath, payload.includeHidden, payload.limit),
+    };
+  }
+  if (message.channel === "path:resolve") {
+    const payload = ipcContractSchemas["path:resolve"].request.parse(message.payload);
+    return {
+      id: message.id,
+      ok: true,
+      payload: await resolvePathTarget(payload.path),
     };
   }
   throw new Error(`Unsupported worker channel: ${message.channel}`);

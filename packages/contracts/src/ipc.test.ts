@@ -43,4 +43,16 @@ describe("ipc contracts", () => {
       suggestions: [{ path: "/Users/demo/Documents", name: "Documents", isDirectory: true }],
     });
   });
+
+  it("validates resolved path responses", () => {
+    expect(
+      ipcContractSchemas["path:resolve"].response.parse({
+        inputPath: "/tmp/link",
+        resolvedPath: "/tmp/target",
+      }),
+    ).toEqual({
+      inputPath: "/tmp/link",
+      resolvedPath: "/tmp/target",
+    });
+  });
 });

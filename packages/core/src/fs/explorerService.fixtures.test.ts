@@ -10,7 +10,7 @@ import {
 } from "./explorerService";
 
 describe("explorerService integration fixtures", () => {
-  it("lists visible children and recognizes symlink folders on the real filesystem", async () => {
+  it("lists only real subfolders in tree children on the real filesystem", async () => {
     const fixture = await createExplorerFixture({
       Documents: {
         type: "directory",
@@ -31,7 +31,6 @@ describe("explorerService integration fixtures", () => {
     const tree = await listTreeChildren(fixture.rootPath, false);
     expect(tree.children.map((child) => [child.name, child.kind])).toEqual([
       ["Documents", "directory"],
-      ["Documents Alias", "symlink_directory"],
     ]);
   });
 

@@ -56,6 +56,11 @@ export const pathSuggestionSchema = z.object({
   isDirectory: z.boolean(),
 });
 
+export const resolvedPathSchema = z.object({
+  inputPath: z.string().min(1),
+  resolvedPath: z.string().nullable(),
+});
+
 export const folderSizeJobStatusSchema = z.enum([
   "queued",
   "running",
@@ -130,6 +135,12 @@ export const ipcContractSchemas = {
       basePath: z.string().nullable(),
       suggestions: z.array(pathSuggestionSchema),
     }),
+  },
+  "path:resolve": {
+    request: z.object({
+      path: z.string().min(1),
+    }),
+    response: resolvedPathSchema,
   },
   "folderSize:start": {
     request: z.object({

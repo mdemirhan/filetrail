@@ -37,6 +37,7 @@ describe("TreePane", () => {
           },
         }}
         onFocusChange={() => undefined}
+        onOpenNode={() => undefined}
         onToggleExpand={() => undefined}
         onNavigate={() => undefined}
       />,
@@ -49,6 +50,7 @@ describe("TreePane", () => {
   });
 
   it("navigates when a folder row is clicked", () => {
+    vi.useFakeTimers();
     const handleNavigate = vi.fn();
     render(
       <TreePane
@@ -81,12 +83,15 @@ describe("TreePane", () => {
           },
         }}
         onFocusChange={() => undefined}
+        onOpenNode={() => undefined}
         onToggleExpand={() => undefined}
         onNavigate={handleNavigate}
       />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Documents" }));
+    vi.runAllTimers();
     expect(handleNavigate).toHaveBeenCalledWith("/Users/demo/Documents");
+    vi.useRealTimers();
   });
 });

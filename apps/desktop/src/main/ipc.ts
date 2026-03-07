@@ -16,22 +16,70 @@ type IpcHandlerMap = {
   ) => Promise<IpcResponse<K>> | IpcResponse<K>;
 };
 
+type IpcEnvelope =
+  | {
+      ok: true;
+      payload: unknown;
+    }
+  | {
+      ok: false;
+      error: string;
+    };
+
+const debugIpcErrorsEnabled = process.env.FILETRAIL_DEBUG === "1";
+
 export function registerIpcHandlers(
   ipcMain: Pick<IpcMain, "handle">,
   handlers: IpcHandlerMap,
 ): void {
   for (const channel of ipcChannels) {
     ipcMain.handle(channel, async (event, payload) => {
-      const request = ipcContractSchemas[channel].request.safeParse(payload ?? {});
-      if (!request.success) {
-        throw new IpcValidationError(`Invalid payload for ${channel}: ${request.error.message}`);
+      try {
+        const request = ipcContractSchemas[channel].request.safeParse(payload ?? {});
+        if (!request.success) {
+          throw new IpcValidationError(`Invalid payload for ${channel}: ${request.error.message}`);
+        }
+        const responsePayload = await handlers[channel](request.data as never, event);
+        const response = ipcContractSchemas[channel].response.safeParse(responsePayload);
+        if (!response.success) {
+          throw new IpcValidationError(
+            `Invalid response for ${channel}: ${response.error.message}`,
+          );
+        }
+        return {
+          ok: true,
+          payload: response.data,
+        } satisfies IpcEnvelope;
+      } catch (error) {
+        if (!isExpectedAccessError(error) || debugIpcErrorsEnabled) {
+          console.error(`[filetrail] ipc ${channel} failed`, error);
+        }
+        return {
+          ok: false,
+          error: toErrorMessage(error),
+        } satisfies IpcEnvelope;
       }
-      const responsePayload = await handlers[channel](request.data as never, event);
-      const response = ipcContractSchemas[channel].response.safeParse(responsePayload);
-      if (!response.success) {
-        throw new IpcValidationError(`Invalid response for ${channel}: ${response.error.message}`);
-      }
-      return response.data;
     });
   }
+}
+
+function isExpectedAccessError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  const message = error.message.toLowerCase();
+  const nodeError = error as NodeJS.ErrnoException;
+  return (
+    nodeError.code === "EACCES" ||
+    nodeError.code === "EPERM" ||
+    message.includes("permission denied") ||
+    message.includes("operation not permitted")
+  );
+}
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
 }

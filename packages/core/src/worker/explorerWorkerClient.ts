@@ -9,6 +9,7 @@ type WorkerSupportedChannel = Extract<
   | "directory:getMetadataBatch"
   | "item:getProperties"
   | "path:getSuggestions"
+  | "path:resolve"
 >;
 
 type WorkerRequest<C extends WorkerSupportedChannel> = {
