@@ -30,9 +30,6 @@ if (typeof window !== "undefined" && !("matchMedia" in window)) {
 }
 
 beforeEach(() => {
-  if (typeof window !== "undefined") {
-    window.localStorage.clear();
-  }
   if (typeof document !== "undefined") {
     document.documentElement.removeAttribute("data-theme");
   }

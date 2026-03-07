@@ -14,6 +14,7 @@ type PathSuggestion = IpcResponse<"path:getSuggestions">["suggestions"][number];
 const FLOW_ROW_HEIGHT = 44;
 const DETAILS_ROW_HEIGHT = 38;
 const FLOW_ITEM_WIDTH = 292;
+const PATH_SUGGESTION_DEBOUNCE_MS = 350;
 
 export function ContentPane({
   paneRef,
@@ -60,58 +61,133 @@ export function ContentPane({
 }) {
   const [pathEditorOpen, setPathEditorOpen] = useState(false);
   const [draftPath, setDraftPath] = useState(currentPath);
+  const [previewPath, setPreviewPath] = useState<string | null>(null);
   const pathInputRef = useRef<HTMLInputElement | null>(null);
+  const pathEditorShellRef = useRef<HTMLDivElement | null>(null);
   const suggestionsRef = useRef<HTMLDivElement | null>(null);
   const segmentClickTimeoutRef = useRef<number | null>(null);
+  const suggestionDebounceTimeoutRef = useRef<number | null>(null);
   const suggestionRequestRef = useRef(0);
+  const pathEditorOpenRef = useRef(false);
+  const pendingSuggestionInputRef = useRef("");
   const [pathSuggestions, setPathSuggestions] = useState<PathSuggestion[]>([]);
+  const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState(-1);
   const pathSegments = useMemo(() => buildPathSegments(currentPath), [currentPath]);
+  const displayedPath = previewPath ?? draftPath;
 
   useEffect(() => {
     if (segmentClickTimeoutRef.current !== null) {
       window.clearTimeout(segmentClickTimeoutRef.current);
       segmentClickTimeoutRef.current = null;
     }
+    if (suggestionDebounceTimeoutRef.current !== null) {
+      window.clearTimeout(suggestionDebounceTimeoutRef.current);
+      suggestionDebounceTimeoutRef.current = null;
+    }
     setPathEditorOpen(false);
     setDraftPath(currentPath);
+    setPreviewPath(null);
     setPathSuggestions([]);
+    setHighlightedSuggestionIndex(-1);
+    pendingSuggestionInputRef.current = "";
   }, [currentPath]);
 
   useEffect(() => {
+    pathEditorOpenRef.current = pathEditorOpen;
     if (pathEditorOpen) {
       pathInputRef.current?.focus();
-      pathInputRef.current?.select();
-    }
-  }, [pathEditorOpen]);
-
-  useEffect(() => {
-    if (!pathEditorOpen) {
+      const input = pathInputRef.current;
+      if (input) {
+        const caretPosition = currentPath.length;
+        input.setSelectionRange(caretPosition, caretPosition);
+      }
+      scheduleSuggestionsRequest(currentPath);
       return;
     }
-    const requestId = ++suggestionRequestRef.current;
-    void onRequestPathSuggestions(draftPath)
-      .then((response) => {
-        if (suggestionRequestRef.current !== requestId) {
-          return;
-        }
-        setPathSuggestions(response.suggestions);
-      })
-      .catch(() => {
-        if (suggestionRequestRef.current !== requestId) {
-          return;
-        }
-        setPathSuggestions([]);
-      });
-  }, [draftPath, onRequestPathSuggestions, pathEditorOpen]);
+    if (suggestionDebounceTimeoutRef.current !== null) {
+      window.clearTimeout(suggestionDebounceTimeoutRef.current);
+      suggestionDebounceTimeoutRef.current = null;
+    }
+  }, [currentPath, pathEditorOpen]);
+
+  useEffect(() => {
+    if (!pathEditorOpen || previewPath === null) {
+      return;
+    }
+    const input = pathInputRef.current;
+    if (!input) {
+      return;
+    }
+    const selectionStart = getSharedPrefixLength(draftPath, previewPath);
+    const selectionEnd = previewPath.length;
+    window.requestAnimationFrame(() => {
+      if (document.activeElement !== input) {
+        return;
+      }
+      input.setSelectionRange(selectionStart, selectionEnd);
+    });
+  }, [draftPath, pathEditorOpen, previewPath]);
 
   useEffect(
     () => () => {
       if (segmentClickTimeoutRef.current !== null) {
         window.clearTimeout(segmentClickTimeoutRef.current);
       }
+      if (suggestionDebounceTimeoutRef.current !== null) {
+        window.clearTimeout(suggestionDebounceTimeoutRef.current);
+      }
     },
     [],
   );
+
+  function scheduleSuggestionsRequest(inputPath: string): void {
+    if (suggestionDebounceTimeoutRef.current !== null) {
+      window.clearTimeout(suggestionDebounceTimeoutRef.current);
+    }
+    suggestionDebounceTimeoutRef.current = window.setTimeout(() => {
+      suggestionDebounceTimeoutRef.current = null;
+      void requestSuggestionsForInput(inputPath);
+    }, PATH_SUGGESTION_DEBOUNCE_MS);
+  }
+
+  async function requestSuggestionsForInput(inputPath: string): Promise<void> {
+    const requestedInput = inputPath;
+    pendingSuggestionInputRef.current = requestedInput;
+    const requestId = ++suggestionRequestRef.current;
+    const response = await onRequestPathSuggestions(requestedInput).catch(() => null);
+    if (!pathEditorOpenRef.current) {
+      return;
+    }
+    if (suggestionRequestRef.current !== requestId) {
+      return;
+    }
+    if (pendingSuggestionInputRef.current !== requestedInput) {
+      return;
+    }
+    setPreviewPath(null);
+    setHighlightedSuggestionIndex(-1);
+    setPathSuggestions(response?.suggestions ?? []);
+  }
+
+  function acceptSuggestion(suggestion: PathSuggestion): void {
+    const acceptedPath = suggestion.path.endsWith("/") ? suggestion.path : `${suggestion.path}/`;
+    pendingSuggestionInputRef.current = acceptedPath;
+    setDraftPath(acceptedPath);
+    setPreviewPath(null);
+    setPathSuggestions([]);
+    setHighlightedSuggestionIndex(-1);
+    scheduleSuggestionsRequest(acceptedPath);
+  }
+
+  function previewSuggestion(index: number): void {
+    const suggestion = pathSuggestions[index];
+    if (!suggestion) {
+      return;
+    }
+    const previewPath = suggestion.path.endsWith("/") ? suggestion.path : `${suggestion.path}/`;
+    setHighlightedSuggestionIndex(index);
+    setPreviewPath(previewPath);
+  }
 
   return (
     <section
@@ -132,22 +208,29 @@ export function ContentPane({
             className="pathbar-editor-form"
             onSubmit={(event) => {
               event.preventDefault();
-              const nextPath = draftPath.trim();
+              const nextPath =
+                highlightedSuggestionIndex >= 0 && pathSuggestions[highlightedSuggestionIndex]
+                  ? pathSuggestions[highlightedSuggestionIndex].path
+                  : draftPath.trim();
               if (nextPath.length === 0) {
                 return;
               }
               setPathEditorOpen(false);
+              setPreviewPath(null);
               setPathSuggestions([]);
+              setHighlightedSuggestionIndex(-1);
+              pendingSuggestionInputRef.current = "";
               onNavigatePath(nextPath);
             }}
           >
-            <div className="pathbar-editor-shell">
+            <div ref={pathEditorShellRef} className="pathbar-editor-shell">
               <input
                 ref={pathInputRef}
                 className="pathbar-input"
                 aria-label="Current folder path"
+                autoComplete="off"
                 spellCheck={false}
-                value={draftPath}
+                value={displayedPath}
                 onBlur={(event) => {
                   const nextTarget = event.relatedTarget;
                   if (
@@ -158,23 +241,57 @@ export function ContentPane({
                     return;
                   }
                   setDraftPath(currentPath);
+                  setPreviewPath(null);
                   setPathSuggestions([]);
+                  setHighlightedSuggestionIndex(-1);
+                  pendingSuggestionInputRef.current = "";
                   setPathEditorOpen(false);
                 }}
-                onChange={(event) => setDraftPath(event.currentTarget.value)}
+                onChange={(event) => {
+                  const nextValue = event.currentTarget.value;
+                  pendingSuggestionInputRef.current = nextValue;
+                  setPreviewPath(null);
+                  setPathSuggestions([]);
+                  setHighlightedSuggestionIndex(-1);
+                  setDraftPath(nextValue);
+                  scheduleSuggestionsRequest(nextValue);
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Escape") {
                     event.preventDefault();
                     setDraftPath(currentPath);
+                    setPreviewPath(null);
                     setPathSuggestions([]);
+                    setHighlightedSuggestionIndex(-1);
+                    pendingSuggestionInputRef.current = "";
                     setPathEditorOpen(false);
                     return;
                   }
-                  if (event.key === "ArrowDown" && pathSuggestions.length > 0) {
+                  if (
+                    (event.key === "ArrowDown" || event.key === "ArrowUp") &&
+                    pathSuggestions.length > 0
+                  ) {
                     event.preventDefault();
-                    const nextSuggestion = pathSuggestions[0];
-                    if (nextSuggestion) {
-                      setDraftPath(nextSuggestion.path);
+                    const nextIndex =
+                      highlightedSuggestionIndex < 0
+                        ? event.key === "ArrowDown"
+                          ? 0
+                          : pathSuggestions.length - 1
+                        : event.key === "ArrowDown"
+                          ? (highlightedSuggestionIndex + 1) % pathSuggestions.length
+                          : (highlightedSuggestionIndex - 1 + pathSuggestions.length) %
+                            pathSuggestions.length;
+                    previewSuggestion(nextIndex);
+                    return;
+                  }
+                  if (event.key === "Tab" && pathSuggestions.length > 0) {
+                    const highlightedSuggestion =
+                      highlightedSuggestionIndex >= 0
+                        ? pathSuggestions[highlightedSuggestionIndex]
+                        : null;
+                    if (highlightedSuggestion) {
+                      event.preventDefault();
+                      acceptSuggestion(highlightedSuggestion);
                     }
                   }
                 }}
@@ -189,13 +306,22 @@ export function ContentPane({
                     <button
                       key={suggestion.path}
                       type="button"
-                      className="pathbar-suggestion"
+                      className={`pathbar-suggestion${
+                        pathSuggestions[highlightedSuggestionIndex]?.path === suggestion.path
+                          ? " active"
+                          : ""
+                      }`}
+                      onMouseEnter={() => {
+                        const index = pathSuggestions.findIndex(
+                          (item) => item.path === suggestion.path,
+                        );
+                        if (index >= 0) {
+                          previewSuggestion(index);
+                        }
+                      }}
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => {
-                        setDraftPath(suggestion.path);
-                        setPathSuggestions([]);
-                        setPathEditorOpen(false);
-                        onNavigatePath(suggestion.path);
+                        acceptSuggestion(suggestion);
                       }}
                       title={suggestion.path}
                     >
@@ -239,7 +365,7 @@ export function ContentPane({
                   }}
                   title={segment.path}
                 >
-                  {segment.label}
+                  <span className="pathbar-segment-label">{segment.label}</span>
                 </button>
               </div>
             ))}
@@ -651,4 +777,13 @@ function kindFallbackLabel(kind: DirectoryEntry["kind"]): string {
     return "File";
   }
   return "Item";
+}
+
+function getSharedPrefixLength(left: string, right: string): number {
+  const maxLength = Math.min(left.length, right.length);
+  let index = 0;
+  while (index < maxLength && left[index] === right[index]) {
+    index += 1;
+  }
+  return index;
 }

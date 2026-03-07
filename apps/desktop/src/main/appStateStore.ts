@@ -1,0 +1,260 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+
+import {
+  type AppPreferences,
+  DEFAULT_APP_PREFERENCES,
+  type ThemeMode,
+  clampPaneWidth,
+} from "../shared/appPreferences";
+
+export type StoredWindowState = {
+  x?: number;
+  y?: number;
+  width: number;
+  height: number;
+  maximized: boolean;
+};
+
+type AppState = {
+  preferences?: AppPreferences;
+  window?: StoredWindowState;
+};
+
+type AppStateStoreFileSystem = {
+  existsSync: (path: string) => boolean;
+  mkdirSync: (path: string, options: { recursive: true }) => void;
+  readFileSync: (path: string, encoding: "utf8") => string;
+  writeFileSync: (path: string, data: string, encoding: "utf8") => void;
+};
+
+type AppStateStoreTimer = {
+  setTimeout: (callback: () => void, delayMs: number) => ReturnType<typeof setTimeout>;
+  clearTimeout: (timer: ReturnType<typeof setTimeout>) => void;
+};
+
+export type AppStateStoreDependencies = {
+  defaultTheme?: ThemeMode;
+  fs?: AppStateStoreFileSystem;
+  timer?: AppStateStoreTimer;
+  onPersistError?: (error: unknown) => void;
+};
+
+const DEFAULT_WINDOW_STATE: StoredWindowState = {
+  width: 1480,
+  height: 920,
+  maximized: false,
+};
+
+const DEFAULT_FILE_SYSTEM: AppStateStoreFileSystem = {
+  existsSync: (path) => existsSync(path),
+  mkdirSync: (path, options) => mkdirSync(path, options),
+  readFileSync: (path, encoding) => readFileSync(path, encoding),
+  writeFileSync: (path, data, encoding) => writeFileSync(path, data, encoding),
+};
+
+const DEFAULT_TIMER: AppStateStoreTimer = {
+  setTimeout,
+  clearTimeout,
+};
+
+export class AppStateStore {
+  private readonly filePath: string;
+  private readonly defaultTheme: ThemeMode;
+  private readonly fileSystem: AppStateStoreFileSystem;
+  private readonly timer: AppStateStoreTimer;
+  private readonly onPersistError: (error: unknown) => void;
+  private state: AppState;
+  private persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(filePath: string, dependencies: AppStateStoreDependencies = {}) {
+    this.filePath = filePath;
+    this.defaultTheme = dependencies.defaultTheme ?? DEFAULT_APP_PREFERENCES.theme;
+    this.fileSystem = dependencies.fs ?? DEFAULT_FILE_SYSTEM;
+    this.timer = dependencies.timer ?? DEFAULT_TIMER;
+    this.onPersistError =
+      dependencies.onPersistError ??
+      ((error) => {
+        console.error("[filetrail] failed persisting app state", error);
+      });
+    this.state = readState(filePath, this.fileSystem, this.defaultTheme);
+  }
+
+  getFilePath(): string {
+    return this.filePath;
+  }
+
+  getPreferences(): AppPreferences {
+    return this.state.preferences ?? withDefaultTheme(DEFAULT_APP_PREFERENCES, this.defaultTheme);
+  }
+
+  updatePreferences(value: Partial<AppPreferences>): AppPreferences {
+    const current = this.getPreferences();
+    const next = sanitizePreferences(
+      {
+        ...current,
+        ...value,
+      },
+      this.defaultTheme,
+    );
+    this.state = {
+      ...this.state,
+      preferences: next,
+    };
+    this.schedulePersist();
+    return next;
+  }
+
+  getWindowState(): StoredWindowState {
+    return this.state.window ?? DEFAULT_WINDOW_STATE;
+  }
+
+  setWindowState(value: StoredWindowState): void {
+    const window = sanitizeWindowState(value);
+    this.state = {
+      ...this.state,
+      window,
+    };
+    this.schedulePersist();
+  }
+
+  flush(): void {
+    if (this.persistTimer) {
+      this.timer.clearTimeout(this.persistTimer);
+      this.persistTimer = null;
+    }
+    persistState(this.filePath, this.state, this.fileSystem, this.onPersistError);
+  }
+
+  private schedulePersist(): void {
+    if (this.persistTimer) {
+      this.timer.clearTimeout(this.persistTimer);
+    }
+    this.persistTimer = this.timer.setTimeout(() => {
+      this.persistTimer = null;
+      persistState(this.filePath, this.state, this.fileSystem, this.onPersistError);
+    }, 150);
+  }
+}
+
+export function createAppStateStore(
+  filePath: string,
+  dependencies: AppStateStoreDependencies = {},
+): AppStateStore {
+  return new AppStateStore(filePath, dependencies);
+}
+
+export function resolveAppStatePath(userDataPath: string): string {
+  return join(userDataPath, "app-state.json");
+}
+
+function readState(
+  filePath: string,
+  fileSystem: AppStateStoreFileSystem,
+  defaultTheme: ThemeMode,
+): AppState {
+  if (!fileSystem.existsSync(filePath)) {
+    return {};
+  }
+  try {
+    const raw = fileSystem.readFileSync(filePath, "utf8");
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+    const record = parsed as Record<string, unknown>;
+    const preferences = sanitizePreferences(record.preferences, defaultTheme);
+    const window = sanitizeWindowState(record.window);
+    return {
+      preferences,
+      window,
+    };
+  } catch {
+    return {};
+  }
+}
+
+function persistState(
+  filePath: string,
+  state: AppState,
+  fileSystem: AppStateStoreFileSystem,
+  onPersistError: (error: unknown) => void,
+): void {
+  try {
+    fileSystem.mkdirSync(dirname(filePath), { recursive: true });
+    fileSystem.writeFileSync(filePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  } catch (error) {
+    onPersistError(error);
+  }
+}
+
+function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPreferences {
+  const currentDefaults = withDefaultTheme(DEFAULT_APP_PREFERENCES, defaultTheme);
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return currentDefaults;
+  }
+  const record = value as Record<string, unknown>;
+  return {
+    theme: record.theme === "dark" ? "dark" : record.theme === "light" ? "light" : defaultTheme,
+    viewMode: record.viewMode === "details" ? "details" : "list",
+    propertiesOpen:
+      typeof record.propertiesOpen === "boolean"
+        ? record.propertiesOpen
+        : currentDefaults.propertiesOpen,
+    includeHidden:
+      typeof record.includeHidden === "boolean"
+        ? record.includeHidden
+        : currentDefaults.includeHidden,
+    treeWidth: clampPaneWidth(
+      typeof record.treeWidth === "number" ? record.treeWidth : currentDefaults.treeWidth,
+      220,
+      520,
+    ),
+    inspectorWidth: clampPaneWidth(
+      typeof record.inspectorWidth === "number"
+        ? record.inspectorWidth
+        : currentDefaults.inspectorWidth,
+      260,
+      480,
+    ),
+    restoreLastVisitedFolderOnStartup:
+      typeof record.restoreLastVisitedFolderOnStartup === "boolean"
+        ? record.restoreLastVisitedFolderOnStartup
+        : currentDefaults.restoreLastVisitedFolderOnStartup,
+    treeRootPath:
+      typeof record.treeRootPath === "string" && record.treeRootPath.length > 0
+        ? record.treeRootPath
+        : null,
+    lastVisitedPath:
+      typeof record.lastVisitedPath === "string" && record.lastVisitedPath.length > 0
+        ? record.lastVisitedPath
+        : null,
+  };
+}
+
+function sanitizeWindowState(value: unknown): StoredWindowState {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return DEFAULT_WINDOW_STATE;
+  }
+  const record = value as Record<string, unknown>;
+  return {
+    width:
+      typeof record.width === "number" && record.width >= 320 && record.width <= 6000
+        ? record.width
+        : DEFAULT_WINDOW_STATE.width,
+    height:
+      typeof record.height === "number" && record.height >= 320 && record.height <= 6000
+        ? record.height
+        : DEFAULT_WINDOW_STATE.height,
+    maximized: record.maximized === true,
+    ...(typeof record.x === "number" ? { x: record.x } : {}),
+    ...(typeof record.y === "number" ? { y: record.y } : {}),
+  };
+}
+
+function withDefaultTheme(preferences: AppPreferences, defaultTheme: ThemeMode): AppPreferences {
+  return {
+    ...preferences,
+    theme: defaultTheme,
+  };
+}

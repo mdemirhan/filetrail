@@ -1,7 +1,9 @@
 import { app, ipcMain, shell } from "electron";
 
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
-import { ExplorerWorkerClient } from "@filetrail/core";
+import { ExplorerWorkerClient, getPathSuggestions } from "@filetrail/core";
+import type { AppPreferences } from "../shared/appPreferences";
+import type { AppStateStore } from "./appStateStore";
 import { registerIpcHandlers } from "./ipc";
 
 let activeWorkerClient: ExplorerWorkerClient | null = null;
@@ -20,13 +22,19 @@ const folderSizeJobs = new Map<
 >();
 const debugTimingsEnabled = process.env.FILETRAIL_DEBUG_TIMINGS === "1";
 
-export async function bootstrapMainProcess(): Promise<void> {
+export async function bootstrapMainProcess(appStateStore: AppStateStore): Promise<void> {
   const workerClient = new ExplorerWorkerClient(resolveExplorerWorkerUrl());
   activeWorkerClient = workerClient;
 
   registerIpcHandlers(ipcMain, {
     "app:getHomeDirectory": () => ({
       path: app.getPath("home"),
+    }),
+    "app:getPreferences": () => ({
+      preferences: appStateStore.getPreferences(),
+    }),
+    "app:updatePreferences": (payload) => ({
+      preferences: appStateStore.updatePreferences(toPreferencePatch(payload.preferences)),
     }),
     "app:clearCaches": () => {
       clearCaches();
@@ -54,7 +62,7 @@ export async function bootstrapMainProcess(): Promise<void> {
       ),
     "path:getSuggestions": (payload) =>
       withTiming("path:getSuggestions", payload.inputPath, () =>
-        workerClient.request("path:getSuggestions", payload),
+        getPathSuggestions(payload.inputPath, payload.includeHidden, payload.limit),
       ),
     "path:resolve": (payload) =>
       withTiming("path:resolve", payload.path, () => workerClient.request("path:resolve", payload)),
@@ -149,4 +157,38 @@ async function withTiming<T>(label: string, path: string, load: () => Promise<T>
     console.log(`[filetrail] ${label} ${path} ${Math.round(elapsedMs)}ms`);
   }
   return value;
+}
+
+function toPreferencePatch(
+  value: IpcRequest<"app:updatePreferences">["preferences"],
+): Partial<AppPreferences> {
+  const patch: Partial<AppPreferences> = {};
+  if (value.theme !== undefined) {
+    patch.theme = value.theme;
+  }
+  if (value.viewMode !== undefined) {
+    patch.viewMode = value.viewMode;
+  }
+  if (value.propertiesOpen !== undefined) {
+    patch.propertiesOpen = value.propertiesOpen;
+  }
+  if (value.includeHidden !== undefined) {
+    patch.includeHidden = value.includeHidden;
+  }
+  if (value.treeWidth !== undefined) {
+    patch.treeWidth = value.treeWidth;
+  }
+  if (value.inspectorWidth !== undefined) {
+    patch.inspectorWidth = value.inspectorWidth;
+  }
+  if (value.restoreLastVisitedFolderOnStartup !== undefined) {
+    patch.restoreLastVisitedFolderOnStartup = value.restoreLastVisitedFolderOnStartup;
+  }
+  if (value.treeRootPath !== undefined) {
+    patch.treeRootPath = value.treeRootPath;
+  }
+  if (value.lastVisitedPath !== undefined) {
+    patch.lastVisitedPath = value.lastVisitedPath;
+  }
+  return patch;
 }

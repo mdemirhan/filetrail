@@ -49,6 +49,12 @@
   --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06);
   --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.1);
   --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(0, 0, 0, 0.03);
+  --crumb-row-bg: #f1f1f3;
+  --crumb-bg: #ececef;
+  --crumb-hover-bg: #e5e5ea;
+  --crumb-active-bg: #2563eb;
+  --crumb-separator-bg: #f8f8fa;
+  --crumb-border: rgba(0, 0, 0, 0.08);
 }
 
 :root[data-theme="dark"] {
@@ -97,6 +103,12 @@
   --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.32);
   --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.34);
   --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --crumb-row-bg: #23262f;
+  --crumb-bg: #2c303a;
+  --crumb-hover-bg: #353945;
+  --crumb-active-bg: #6da0f7;
+  --crumb-separator-bg: #f8f8fa;
+  --crumb-border: rgba(255, 255, 255, 0.09);
 }
 
 * {
@@ -492,13 +504,18 @@ body.resizing-panels * {
 }
 
 .tree-pane,
-.content-pane,
 .properties-drawer {
   display: grid;
   grid-template-rows: 44px minmax(0, 1fr);
 }
 
+:root {
+  --pane-header-height: 27px;
+}
+
 .content-pane {
+  display: grid;
+  grid-template-rows: var(--pane-header-height) minmax(0, 1fr);
   background: var(--bg-base);
 }
 
@@ -508,11 +525,13 @@ body.resizing-panels * {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 0 18px;
+  gap: 8px;
+  height: var(--pane-header-height);
+  min-height: var(--pane-header-height);
+  padding: 0 12px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-surface);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.08em;
   color: var(--text-secondary);
@@ -531,8 +550,10 @@ body.resizing-panels * {
 
 .content-header {
   align-items: center;
-  padding: 0 12px;
-  font-size: 12px;
+  height: var(--pane-header-height);
+  min-height: var(--pane-header-height);
+  padding: 0;
+  font-size: 10px;
   font-weight: 500;
   letter-spacing: 0;
   text-transform: none;
@@ -551,6 +572,7 @@ body.resizing-panels * {
 .pathbar-editor-form {
   display: flex;
   align-items: center;
+  align-self: stretch;
   min-width: 0;
   width: 100%;
   height: 100%;
@@ -559,52 +581,84 @@ body.resizing-panels * {
 .pathbar-editor-shell {
   position: relative;
   width: 100%;
+  height: 100%;
 }
 
 .pathbar {
   gap: 0;
-  overflow: hidden;
+  overflow: auto hidden;
   white-space: nowrap;
+  padding: 0;
+  background: var(--bg-surface);
 }
 
 .pathbar-item {
+  position: relative;
   display: inline-flex;
   align-items: center;
+  height: 100%;
   min-width: 0;
+  margin-right: -8px;
+  z-index: 0;
 }
 
 .pathbar-separator {
-  color: var(--text-tertiary);
-  margin: 0 1px;
-  font-size: 13px;
+  display: none;
 }
 
 .pathbar-segment {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  max-width: 220px;
+  height: 100%;
+  max-width: 224px;
   min-width: 0;
-  padding: 5px 10px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 12px;
+  padding: 0 16px 0 18px;
+  border: 1px solid var(--border);
+  border-right: 0;
+  border-radius: 0;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 11px;
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%, 12px 50%);
+}
+
+.pathbar-item:not(:first-child) .pathbar-segment {
+  border-left: 0;
+}
+
+.pathbar-item:first-child {
+  margin-right: -6px;
+}
+
+.pathbar-item:first-child .pathbar-segment {
+  padding-left: 12px;
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%);
+}
+
+.pathbar-item:last-child {
+  margin-right: 0;
+}
+
+.pathbar-item:hover,
+.pathbar-item:focus-within {
+  z-index: 1;
 }
 
 .pathbar-segment:hover {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--bg-elevated) 78%, var(--bg-hover));
   color: var(--text-primary);
 }
 
 .pathbar-segment.active {
   background: var(--accent-blue);
   color: #ffffff;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-blue) 72%, white);
+  border-color: color-mix(in srgb, var(--accent-blue) 78%, black);
+  box-shadow: none;
 }
 
 .pathbar-segment:focus-visible {
@@ -615,13 +669,13 @@ body.resizing-panels * {
 .pathbar-input {
   width: 100%;
   min-width: 0;
-  height: 32px;
-  padding: 0 10px;
+  height: 100%;
+  padding: 0 8px;
   border: 1px solid var(--border-active);
   border-radius: var(--radius-sm);
   background: var(--bg-base);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
 }
 
@@ -637,7 +691,7 @@ body.resizing-panels * {
 
 .pathbar-suggestions {
   position: absolute;
-  top: calc(100% + 6px);
+  top: calc(100% + 4px);
   left: 0;
   right: 0;
   z-index: 12;
@@ -653,9 +707,9 @@ body.resizing-panels * {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 6px 8px;
   border: 0;
   border-bottom: 1px solid var(--border);
   background: transparent;
@@ -670,8 +724,12 @@ body.resizing-panels * {
   background: var(--bg-hover);
 }
 
+.pathbar-suggestion.active {
+  background: var(--bg-active);
+}
+
 .pathbar-suggestion-name {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--text-primary);
 }
@@ -681,7 +739,7 @@ body.resizing-panels * {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-tertiary);
 }
 
@@ -1488,8 +1546,46 @@ body.resizing-panels * {
   font-weight: 650;
 }
 
-.settings-status-card .settings-section-body {
-  padding: 18px 16px 18px;
+.settings-section-body {
+  padding: 12px 16px 16px;
+}
+
+.settings-checkbox-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  padding: 10px 12px;
+}
+
+.settings-checkbox-card-input {
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  accent-color: var(--accent-blue);
+}
+
+.settings-checkbox-card-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-checkbox-card-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.settings-checkbox-card-description {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-secondary);
 }
 
 @media (max-width: 1100px) {

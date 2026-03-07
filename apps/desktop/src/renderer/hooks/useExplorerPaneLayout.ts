@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
-import { clampPaneWidth } from "../lib/uiState";
+import { clampPaneWidth } from "../../shared/appPreferences";
 
 type Pane = "tree" | "inspector";
 
@@ -32,6 +32,14 @@ export function useExplorerPaneLayout(args: {
     },
     [inspectorWidth, treeWidth],
   );
+
+  useEffect(() => {
+    setTreeWidth(initialTreeWidth);
+  }, [initialTreeWidth]);
+
+  useEffect(() => {
+    setInspectorWidth(initialInspectorWidth);
+  }, [initialInspectorWidth]);
 
   useEffect(() => {
     const onPointerMove = (event: PointerEvent) => {

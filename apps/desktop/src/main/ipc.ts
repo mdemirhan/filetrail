@@ -72,8 +72,12 @@ function isExpectedAccessError(error: unknown): boolean {
   return (
     nodeError.code === "EACCES" ||
     nodeError.code === "EPERM" ||
+    nodeError.code === "ENOENT" ||
+    nodeError.code === "ENOTDIR" ||
     message.includes("permission denied") ||
-    message.includes("operation not permitted")
+    message.includes("operation not permitted") ||
+    message.includes("no such file or directory") ||
+    message.includes("not a directory")
   );
 }
 

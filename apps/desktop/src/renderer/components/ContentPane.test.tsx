@@ -293,6 +293,172 @@ describe("ContentPane", () => {
     expect(screen.getByText("/Users/demo/Documents")).toBeInTheDocument();
   });
 
+  it("previews the highlighted suggestion in the input when using arrow keys", async () => {
+    render(
+      <ContentPane
+        isFocused
+        currentPath="/Users/demo/projects"
+        entries={[]}
+        viewMode="list"
+        loading={false}
+        error={null}
+        includeHidden={false}
+        selectedPath=""
+        metadataByPath={{}}
+        sortBy="name"
+        sortDirection="asc"
+        onSelectPath={() => undefined}
+        onActivateEntry={() => undefined}
+        onSortChange={() => undefined}
+        onLayoutColumnsChange={() => undefined}
+        onVisiblePathsChange={() => undefined}
+        onNavigatePath={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "/Users/demo/Do",
+          basePath: "/Users/demo",
+          suggestions: [
+            { path: "/Users/demo/Documents", name: "Documents", isDirectory: true },
+            { path: "/Users/demo/Downloads", name: "Downloads", isDirectory: true },
+          ],
+        })}
+        onFocusChange={() => undefined}
+      />,
+    );
+
+    act(() => {
+      fireEvent.doubleClick(screen.getByRole("navigation", { name: "Folder path" }));
+    });
+    const input = screen.getByLabelText("Current folder path");
+    fireEvent.change(input, { target: { value: "/Users/demo/Do" } });
+
+    await screen.findByText("Documents");
+
+    act(() => {
+      fireEvent.keyDown(input, { key: "ArrowDown" });
+    });
+    expect(input).toHaveValue("/Users/demo/Documents/");
+
+    act(() => {
+      fireEvent.keyDown(input, { key: "ArrowDown" });
+    });
+    expect(input).toHaveValue("/Users/demo/Downloads/");
+  });
+
+  it("navigates to the previewed suggestion on enter", async () => {
+    const handleNavigatePath = vi.fn();
+
+    render(
+      <ContentPane
+        isFocused
+        currentPath="/Users/demo/projects"
+        entries={[]}
+        viewMode="list"
+        loading={false}
+        error={null}
+        includeHidden={false}
+        selectedPath=""
+        metadataByPath={{}}
+        sortBy="name"
+        sortDirection="asc"
+        onSelectPath={() => undefined}
+        onActivateEntry={() => undefined}
+        onSortChange={() => undefined}
+        onLayoutColumnsChange={() => undefined}
+        onVisiblePathsChange={() => undefined}
+        onNavigatePath={handleNavigatePath}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "/Users/demo/Do",
+          basePath: "/Users/demo",
+          suggestions: [
+            { path: "/Users/demo/Documents", name: "Documents", isDirectory: true },
+            { path: "/Users/demo/Downloads", name: "Downloads", isDirectory: true },
+          ],
+        })}
+        onFocusChange={() => undefined}
+      />,
+    );
+
+    act(() => {
+      fireEvent.doubleClick(screen.getByRole("navigation", { name: "Folder path" }));
+    });
+    const input = screen.getByLabelText("Current folder path");
+    fireEvent.change(input, { target: { value: "/Users/demo/Do" } });
+
+    await screen.findByText("Documents");
+
+    act(() => {
+      fireEvent.keyDown(input, { key: "ArrowDown" });
+    });
+    expect(input).toHaveValue("/Users/demo/Documents/");
+
+    const form = input.closest("form");
+    expect(form).not.toBeNull();
+    if (!form) {
+      throw new Error("Missing path bar editor form.");
+    }
+
+    act(() => {
+      fireEvent.submit(form);
+    });
+
+    expect(handleNavigatePath).toHaveBeenCalledWith("/Users/demo/Documents");
+  });
+
+  it("clears the highlighted suggestion when a refreshed list arrives", async () => {
+    render(
+      <ContentPane
+        isFocused
+        currentPath="/Users/demo/projects"
+        entries={[]}
+        viewMode="list"
+        loading={false}
+        error={null}
+        includeHidden={false}
+        selectedPath=""
+        metadataByPath={{}}
+        sortBy="name"
+        sortDirection="asc"
+        onSelectPath={() => undefined}
+        onActivateEntry={() => undefined}
+        onSortChange={() => undefined}
+        onLayoutColumnsChange={() => undefined}
+        onVisiblePathsChange={() => undefined}
+        onNavigatePath={() => undefined}
+        onRequestPathSuggestions={async (inputPath) => ({
+          inputPath,
+          basePath: "/Users/demo",
+          suggestions:
+            inputPath === "/Users/demo/Do"
+              ? [
+                  { path: "/Users/demo/Documents", name: "Documents", isDirectory: true },
+                  { path: "/Users/demo/Downloads", name: "Downloads", isDirectory: true },
+                ]
+              : [{ path: "/Users/demo/Desktop", name: "Desktop", isDirectory: true }],
+        })}
+        onFocusChange={() => undefined}
+      />,
+    );
+
+    act(() => {
+      fireEvent.doubleClick(screen.getByRole("navigation", { name: "Folder path" }));
+    });
+    const input = screen.getByLabelText("Current folder path");
+    fireEvent.change(input, { target: { value: "/Users/demo/Do" } });
+
+    await screen.findByText("Documents");
+
+    act(() => {
+      fireEvent.keyDown(input, { key: "ArrowDown" });
+    });
+    expect(input).toHaveValue("/Users/demo/Documents/");
+
+    fireEvent.change(input, { target: { value: "/Users/demo/De" } });
+    await screen.findByText("Desktop");
+
+    expect(input).toHaveValue("/Users/demo/De");
+    expect(document.querySelector(".pathbar-suggestion.active")).toBeNull();
+  });
+
   it("shows the shorter empty-state copy when hidden files are visible", () => {
     render(
       <ContentPane

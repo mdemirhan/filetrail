@@ -6,8 +6,7 @@ export function toErrorMessage(error: unknown): string {
 }
 
 export function createRendererLogger(namespace: string) {
-  const debugEnabled =
-    typeof window !== "undefined" && window.localStorage.getItem("filetrail.debug") === "1";
+  const debugEnabled = false;
   return {
     debug(message: string, details?: unknown) {
       if (!debugEnabled) {

@@ -30,6 +30,50 @@ describe("ipc contracts", () => {
     expect(parsed.sortDirection).toBe("asc");
   });
 
+  it("validates app preference payloads", () => {
+    expect(
+      ipcContractSchemas["app:getPreferences"].response.parse({
+        preferences: {
+          theme: "dark",
+          viewMode: "list",
+          propertiesOpen: true,
+          includeHidden: false,
+          treeWidth: 280,
+          inspectorWidth: 320,
+          restoreLastVisitedFolderOnStartup: false,
+          treeRootPath: null,
+          lastVisitedPath: null,
+        },
+      }),
+    ).toEqual({
+      preferences: {
+        theme: "dark",
+        viewMode: "list",
+        propertiesOpen: true,
+        includeHidden: false,
+        treeWidth: 280,
+        inspectorWidth: 320,
+        restoreLastVisitedFolderOnStartup: false,
+        treeRootPath: null,
+        lastVisitedPath: null,
+      },
+    });
+
+    expect(
+      ipcContractSchemas["app:updatePreferences"].request.parse({
+        preferences: {
+          theme: "light",
+          includeHidden: true,
+        },
+      }),
+    ).toEqual({
+      preferences: {
+        theme: "light",
+        includeHidden: true,
+      },
+    });
+  });
+
   it("validates path suggestion responses", () => {
     expect(
       ipcContractSchemas["path:getSuggestions"].response.parse({

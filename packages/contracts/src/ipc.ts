@@ -8,6 +8,8 @@ export const explorerEntryKindSchema = z.enum([
   "other",
 ]);
 
+export const themeModeSchema = z.enum(["light", "dark"]);
+export const explorerViewModeSchema = z.enum(["list", "details"]);
 export const directorySortBySchema = z.enum(["name", "modified", "kind", "size"]);
 export const sortDirectionSchema = z.enum(["asc", "desc"]);
 
@@ -61,6 +63,18 @@ export const resolvedPathSchema = z.object({
   resolvedPath: z.string().nullable(),
 });
 
+export const appPreferencesSchema = z.object({
+  theme: themeModeSchema,
+  viewMode: explorerViewModeSchema,
+  propertiesOpen: z.boolean(),
+  includeHidden: z.boolean(),
+  treeWidth: z.number().int().min(220).max(520),
+  inspectorWidth: z.number().int().min(260).max(480),
+  restoreLastVisitedFolderOnStartup: z.boolean(),
+  treeRootPath: z.string().min(1).nullable(),
+  lastVisitedPath: z.string().min(1).nullable(),
+});
+
 export const folderSizeJobStatusSchema = z.enum([
   "queued",
   "running",
@@ -75,6 +89,20 @@ export const ipcContractSchemas = {
     request: z.object({}),
     response: z.object({
       path: z.string().min(1),
+    }),
+  },
+  "app:getPreferences": {
+    request: z.object({}),
+    response: z.object({
+      preferences: appPreferencesSchema,
+    }),
+  },
+  "app:updatePreferences": {
+    request: z.object({
+      preferences: appPreferencesSchema.partial(),
+    }),
+    response: z.object({
+      preferences: appPreferencesSchema,
     }),
   },
   "app:clearCaches": {

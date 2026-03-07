@@ -8,6 +8,11 @@ import {
 
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 
+import {
+  DEFAULT_APP_PREFERENCES,
+  type ExplorerViewMode,
+  type ThemeMode,
+} from "../shared/appPreferences";
 import { ContentPane } from "./components/ContentPane";
 import { HelpView } from "./components/HelpView";
 import { LocationSheet } from "./components/LocationSheet";
@@ -23,9 +28,8 @@ import {
 } from "./lib/explorerNavigation";
 import { useFiletrailClient } from "./lib/filetrailClient";
 import { createRendererLogger } from "./lib/logging";
-import { type ThemeMode, applyTheme, persistTheme, resolveInitialTheme } from "./lib/theme";
+import { applyTheme } from "./lib/theme";
 import { getTreeKeyboardAction } from "./lib/treeView";
-import { persistUiState, readStoredUiState } from "./lib/uiState";
 
 type DirectoryEntry = IpcResponse<"directory:getSnapshot">["entries"][number];
 type DirectoryEntryMetadata = IpcResponse<"directory:getMetadataBatch">["items"][number];
@@ -91,8 +95,8 @@ export function App() {
   type SortDirection = IpcRequest<"directory:getSnapshot">["sortDirection"];
 
   const client = useFiletrailClient();
-  const initialUiState = useMemo(() => readStoredUiState(), []);
-  const [theme, setTheme] = useState<ThemeMode>(() => resolveInitialTheme());
+  const [preferencesReady, setPreferencesReady] = useState(false);
+  const [theme, setTheme] = useState<ThemeMode>(DEFAULT_APP_PREFERENCES.theme);
   const [mainView, setMainView] = useState<"explorer" | "help" | "settings">("explorer");
   const [treeRootPath, setTreeRootPath] = useState("");
   const [homePath, setHomePath] = useState("");
@@ -102,11 +106,14 @@ export function App() {
   const [metadataByPath, setMetadataByPath] = useState<Record<string, DirectoryEntryMetadata>>({});
   const [directoryLoading, setDirectoryLoading] = useState(false);
   const [directoryError, setDirectoryError] = useState<string | null>(null);
-  const [includeHidden, setIncludeHidden] = useState(initialUiState.includeHidden);
-  const [viewMode, setViewMode] = useState<"list" | "details">(initialUiState.viewMode);
+  const [includeHidden, setIncludeHidden] = useState(DEFAULT_APP_PREFERENCES.includeHidden);
+  const [viewMode, setViewMode] = useState<ExplorerViewMode>(DEFAULT_APP_PREFERENCES.viewMode);
+  const [restoreLastVisitedFolderOnStartup, setRestoreLastVisitedFolderOnStartup] = useState(
+    DEFAULT_APP_PREFERENCES.restoreLastVisitedFolderOnStartup,
+  );
   const [sortBy, setSortBy] = useState<SortBy>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
-  const [propertiesOpen, setPropertiesOpen] = useState(initialUiState.propertiesOpen);
+  const [propertiesOpen, setPropertiesOpen] = useState(DEFAULT_APP_PREFERENCES.propertiesOpen);
   const [selectedPath, setSelectedPath] = useState("");
   const [historyPaths, setHistoryPaths] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -128,8 +135,8 @@ export function App() {
   const treeRequestRef = useRef<Record<string, number>>({});
   const treeNodesRef = useRef<Record<string, TreeNodeState>>({});
   const panes = useExplorerPaneLayout({
-    initialTreeWidth: initialUiState.treeWidth,
-    initialInspectorWidth: initialUiState.inspectorWidth,
+    initialTreeWidth: DEFAULT_APP_PREFERENCES.treeWidth,
+    initialInspectorWidth: DEFAULT_APP_PREFERENCES.inspectorWidth,
   });
 
   useEffect(() => {
@@ -150,27 +157,92 @@ export function App() {
 
   useEffect(() => {
     applyTheme(theme);
-    persistTheme(theme);
   }, [theme]);
 
   useEffect(() => {
-    persistUiState({
-      viewMode,
-      treeOpen: true,
-      propertiesOpen,
-      includeHidden,
-      treeWidth: panes.treeWidth,
-      inspectorWidth: panes.inspectorWidth,
+    if (!preferencesReady) {
+      return;
+    }
+    void client.invoke("app:updatePreferences", {
+      preferences: {
+        theme,
+        viewMode,
+        propertiesOpen,
+        includeHidden,
+        treeWidth: panes.treeWidth,
+        inspectorWidth: panes.inspectorWidth,
+        restoreLastVisitedFolderOnStartup,
+        treeRootPath: treeRootPath || null,
+        lastVisitedPath: currentPath || null,
+      },
     });
-  }, [includeHidden, panes.inspectorWidth, panes.treeWidth, propertiesOpen, viewMode]);
+  }, [
+    client,
+    currentPath,
+    includeHidden,
+    panes.inspectorWidth,
+    panes.treeWidth,
+    preferencesReady,
+    propertiesOpen,
+    restoreLastVisitedFolderOnStartup,
+    theme,
+    treeRootPath,
+    viewMode,
+  ]);
 
   useEffect(() => {
-    void client.invoke("app:getHomeDirectory", {}).then((response) => {
-      setHomePath(response.path);
-      initializeTree(response.path);
-      void navigateTo(response.path, "replace");
-    });
-  }, [client]);
+    let cancelled = false;
+    void Promise.all([
+      client.invoke("app:getPreferences", {}),
+      client.invoke("app:getHomeDirectory", {}),
+    ])
+      .then(([preferencesResponse, homeResponse]) => {
+        if (cancelled) {
+          return;
+        }
+        const preferences = preferencesResponse.preferences;
+        setTheme(preferences.theme);
+        setIncludeHidden(preferences.includeHidden);
+        setViewMode(preferences.viewMode);
+        setPropertiesOpen(preferences.propertiesOpen);
+        setRestoreLastVisitedFolderOnStartup(preferences.restoreLastVisitedFolderOnStartup);
+        panes.setTreeWidth(preferences.treeWidth);
+        panes.setInspectorWidth(preferences.inspectorWidth);
+        setHomePath(homeResponse.path);
+        const startupPath =
+          preferences.restoreLastVisitedFolderOnStartup && preferences.lastVisitedPath
+            ? preferences.lastVisitedPath
+            : homeResponse.path;
+        const startupRootPath =
+          preferences.restoreLastVisitedFolderOnStartup &&
+          preferences.treeRootPath &&
+          isPathWithinRoot(startupPath, preferences.treeRootPath)
+            ? preferences.treeRootPath
+            : startupPath;
+        initializeTree(startupRootPath);
+        void navigateTo(startupPath, "replace", preferences.includeHidden).then((didNavigate) => {
+          if (cancelled || didNavigate || startupPath === homeResponse.path) {
+            setPreferencesReady(true);
+            return;
+          }
+          initializeTree(homeResponse.path);
+          void navigateTo(homeResponse.path, "replace", preferences.includeHidden).finally(() => {
+            if (!cancelled) {
+              setPreferencesReady(true);
+            }
+          });
+        });
+      })
+      .catch((error) => {
+        logger.error("initial preferences load failed", error);
+        if (!cancelled) {
+          setPreferencesReady(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, panes.setInspectorWidth, panes.setTreeWidth]);
 
   useEffect(() => {
     if (viewMode !== "details" || currentPath.length === 0) {
@@ -333,7 +405,7 @@ export function App() {
       }
       if (event.metaKey && event.key.toLowerCase() === "i") {
         event.preventDefault();
-        setPropertiesOpen((value) => !value);
+        setPropertiesOpen((value: boolean) => !value);
         return;
       }
       if (
@@ -960,7 +1032,7 @@ export function App() {
           <button
             type="button"
             className={propertiesOpen ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
-            onClick={() => setPropertiesOpen((value) => !value)}
+            onClick={() => setPropertiesOpen((value: boolean) => !value)}
             title="Toggle the inspector drawer (Cmd+I)"
             aria-label="Toggle inspector"
           >
@@ -998,7 +1070,11 @@ export function App() {
           <button
             type="button"
             className={mainView === "help" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
-            onClick={() => setMainView((value) => (value === "help" ? "explorer" : "help"))}
+            onClick={() =>
+              setMainView((value: "explorer" | "help" | "settings") =>
+                value === "help" ? "explorer" : "help",
+              )
+            }
             title={mainView === "help" ? "Return to explorer (Esc)" : "Open help (?)"}
             aria-label={mainView === "help" ? "Return to explorer" : "Open help"}
           >
@@ -1019,7 +1095,7 @@ export function App() {
             <button
               type="button"
               className="toggle-track"
-              onClick={() => setTheme((value) => (value === "dark" ? "light" : "dark"))}
+              onClick={() => setTheme((value: ThemeMode) => (value === "dark" ? "light" : "dark"))}
               aria-label={`Switch to ${theme === "dark" ? "Light" : "Dark"} theme`}
               title={`Switch to ${theme === "dark" ? "Light" : "Dark"} theme`}
             >
@@ -1042,7 +1118,11 @@ export function App() {
           <button
             type="button"
             className={mainView === "settings" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
-            onClick={() => setMainView((value) => (value === "settings" ? "explorer" : "settings"))}
+            onClick={() =>
+              setMainView((value: "explorer" | "help" | "settings") =>
+                value === "settings" ? "explorer" : "settings",
+              )
+            }
             title={mainView === "settings" ? "Return to explorer (Esc)" : "Open settings"}
             aria-label={mainView === "settings" ? "Return to explorer" : "Open settings"}
           >
@@ -1142,7 +1222,10 @@ export function App() {
             {mainView === "help" ? (
               <HelpView shortcutItems={[...SHORTCUT_ITEMS]} referenceItems={[...REFERENCE_ITEMS]} />
             ) : (
-              <SettingsView />
+              <SettingsView
+                restoreLastVisitedFolderOnStartup={restoreLastVisitedFolderOnStartup}
+                onRestoreLastVisitedFolderOnStartupChange={setRestoreLastVisitedFolderOnStartup}
+              />
             )}
           </section>
         </section>

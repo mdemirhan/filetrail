@@ -1,10 +1,11 @@
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { BrowserWindow, app, shell } from "electron";
+import { BrowserWindow, app, nativeTheme, shell } from "electron";
 
+import { type AppStateStore, createAppStateStore, resolveAppStatePath } from "./appStateStore";
 import { bootstrapMainProcess, shutdownMainProcess } from "./bootstrap";
-import { readWindowState, resolveWindowStatePath, writeWindowState } from "./windowState";
 
 let mainWindowRef: BrowserWindow | null = null;
+let appStateStoreRef: AppStateStore | null = null;
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 const WINDOW_STATE_SAVE_DELAY_MS = 160;
 
@@ -14,7 +15,11 @@ if (!hasSingleInstanceLock) {
 
 if (hasSingleInstanceLock) {
   app.whenReady().then(async () => {
-    await bootstrapMainProcess();
+    const appStateStore = createAppStateStore(resolveAppStatePath(app.getPath("userData")), {
+      defaultTheme: nativeTheme.shouldUseDarkColors ? "dark" : "light",
+    });
+    appStateStoreRef = appStateStore;
+    await bootstrapMainProcess(appStateStore);
     mainWindowRef = createWindow();
 
     app.on("activate", () => {
@@ -25,7 +30,12 @@ if (hasSingleInstanceLock) {
   });
 
   app.on("before-quit", () => {
+    appStateStoreRef?.flush();
     void shutdownMainProcess();
+  });
+
+  app.on("window-all-closed", () => {
+    app.quit();
   });
 
   app.on("second-instance", () => {
@@ -41,7 +51,11 @@ if (hasSingleInstanceLock) {
 }
 
 function createWindow(): BrowserWindow {
-  const storedWindowState = readWindowState(resolveWindowStatePath(app.getPath("userData")));
+  const appStateStore = appStateStoreRef;
+  if (!appStateStore) {
+    throw new Error("App state store was not initialized before creating the window.");
+  }
+  const storedWindowState = appStateStore.getWindowState();
   const mainWindow = new BrowserWindow({
     show: false,
     width: storedWindowState.width,
@@ -60,7 +74,6 @@ function createWindow(): BrowserWindow {
       nodeIntegration: false,
     },
   });
-  const windowStatePath = resolveWindowStatePath(app.getPath("userData"));
   let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 
   const persistWindowState = () => {
@@ -70,7 +83,7 @@ function createWindow(): BrowserWindow {
     const normalBounds = mainWindow.isMaximized()
       ? mainWindow.getNormalBounds()
       : mainWindow.getBounds();
-    writeWindowState(windowStatePath, {
+    appStateStore.setWindowState({
       x: normalBounds.x,
       y: normalBounds.y,
       width: normalBounds.width,
