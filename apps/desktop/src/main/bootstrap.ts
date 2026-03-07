@@ -190,6 +190,9 @@ function toPreferencePatch(
   if (value.propertiesOpen !== undefined) {
     patch.propertiesOpen = value.propertiesOpen;
   }
+  if (value.detailRowOpen !== undefined) {
+    patch.detailRowOpen = value.detailRowOpen;
+  }
   if (value.includeHidden !== undefined) {
     patch.includeHidden = value.includeHidden;
   }

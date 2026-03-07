@@ -229,6 +229,10 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
       typeof record.propertiesOpen === "boolean"
         ? record.propertiesOpen
         : currentDefaults.propertiesOpen,
+    detailRowOpen:
+      typeof record.detailRowOpen === "boolean"
+        ? record.detailRowOpen
+        : currentDefaults.detailRowOpen,
     includeHidden:
       typeof record.includeHidden === "boolean"
         ? record.includeHidden

@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen } from "@testing-library/react";
+import { createRef } from "react";
 
 import { TreePane } from "./TreePane";
+
+const themeButtonRef = createRef<HTMLButtonElement>();
+const themeMenuRef = createRef<HTMLDivElement>();
 
 describe("TreePane", () => {
   it("renders alias folders as non-expandable", () => {
@@ -43,6 +47,12 @@ describe("TreePane", () => {
         onQuickAccess={() => undefined}
         detailRowOpen
         onToggleDetailRow={() => undefined}
+        theme="tomorrow-night"
+        themeMenuOpen={false}
+        themeButtonRef={themeButtonRef}
+        themeMenuRef={themeMenuRef}
+        onToggleThemeMenu={() => undefined}
+        onSelectTheme={() => undefined}
         onOpenSettings={() => undefined}
         includeHidden={false}
         onToggleHidden={() => undefined}
@@ -97,6 +107,12 @@ describe("TreePane", () => {
         onQuickAccess={() => undefined}
         detailRowOpen
         onToggleDetailRow={() => undefined}
+        theme="tomorrow-night"
+        themeMenuOpen={false}
+        themeButtonRef={themeButtonRef}
+        themeMenuRef={themeMenuRef}
+        onToggleThemeMenu={() => undefined}
+        onSelectTheme={() => undefined}
         onOpenSettings={() => undefined}
         includeHidden={false}
         onToggleHidden={() => undefined}

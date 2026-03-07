@@ -9,7 +9,7 @@ export const explorerEntryKindSchema = z.enum([
 ]);
 
 export const themeModeSchema = z.enum(["light", "tomorrow-night", "catppuccin-mocha"]);
-export const uiFontFamilySchema = z.enum(["dm-sans", "lexend", "fira-code"]);
+export const uiFontFamilySchema = z.enum(["dm-sans", "lexend", "fira-code", "jetbrains-mono"]);
 export const colorOverrideSchema = z
   .string()
   .regex(/^#[0-9a-fA-F]{6}$/)
@@ -78,6 +78,7 @@ export const appPreferencesSchema = z.object({
   textMutedOverride: colorOverrideSchema,
   viewMode: explorerViewModeSchema,
   propertiesOpen: z.boolean(),
+  detailRowOpen: z.boolean(),
   includeHidden: z.boolean(),
   treeWidth: z.number().int().min(220).max(520),
   inspectorWidth: z.number().int().min(260).max(480),

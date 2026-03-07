@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 
+import { THEME_OPTIONS, type ThemeMode, getThemeLabel } from "../../shared/appPreferences";
 import { TreeFolderIcon } from "../lib/fileIcons";
 import { ToolbarIcon } from "./ToolbarIcon";
 
@@ -28,6 +29,12 @@ export function TreePane({
   onQuickAccess,
   onToggleDetailRow,
   detailRowOpen,
+  theme,
+  themeMenuOpen,
+  themeButtonRef,
+  themeMenuRef,
+  onToggleThemeMenu,
+  onSelectTheme,
   onOpenSettings,
   includeHidden,
   onToggleHidden,
@@ -45,6 +52,12 @@ export function TreePane({
   onQuickAccess: (location: "desktop" | "downloads" | "documents" | "source") => void;
   onToggleDetailRow: () => void;
   detailRowOpen: boolean;
+  theme: ThemeMode;
+  themeMenuOpen: boolean;
+  themeButtonRef: React.RefObject<HTMLButtonElement | null>;
+  themeMenuRef: React.RefObject<HTMLDivElement | null>;
+  onToggleThemeMenu: () => void;
+  onSelectTheme: (theme: ThemeMode) => void;
   onOpenSettings: () => void;
   includeHidden: boolean;
   onToggleHidden: () => void;
@@ -92,7 +105,7 @@ export function TreePane({
           <aside className="sidebar-rail" />
           <div className="sidebar-main">
             <div className="sidebar-header">
-              <span className="sidebar-title">File Trail</span>
+              <span className="sidebar-title">Folders</span>
             </div>
           </div>
         </div>
@@ -180,6 +193,38 @@ export function TreePane({
             <ToolbarIcon name="detailRow" />
           </button>
           <div className="sidebar-rail-spacer" />
+          <div className="sidebar-rail-menu-anchor">
+            <button
+              ref={themeButtonRef}
+              type="button"
+              className={`sidebar-rail-button${themeMenuOpen ? " active" : ""}`}
+              onClick={onToggleThemeMenu}
+              title={`Theme: ${getThemeLabel(theme)}`}
+              aria-label="Choose theme"
+              aria-haspopup="listbox"
+              aria-expanded={themeMenuOpen}
+            >
+              <ToolbarIcon name="theme" />
+            </button>
+            {themeMenuOpen ? (
+              <div ref={themeMenuRef} className="sidebar-rail-menu" tabIndex={-1}>
+                {THEME_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`sidebar-rail-menu-item${theme === option.value ? " active" : ""}`}
+                    onClick={() => onSelectTheme(option.value)}
+                    aria-pressed={theme === option.value}
+                  >
+                    <span>{option.label}</span>
+                    {theme === option.value ? (
+                      <span className="sidebar-rail-menu-check">✓</span>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
           <button
             type="button"
             className="sidebar-rail-button"
@@ -192,7 +237,7 @@ export function TreePane({
         </aside>
         <div className="sidebar-main">
           <div className="sidebar-header">
-            <span className="sidebar-title">File Trail</span>
+            <span className="sidebar-title">Folders</span>
           </div>
           <div className="sidebar-tree">
             <div className="tree-scroll">

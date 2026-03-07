@@ -4,6 +4,7 @@ const UI_FONT_STACKS: Record<UiFontFamily, string> = {
   "dm-sans": '"DM Sans", "Inter", -apple-system, BlinkMacSystemFont, sans-serif',
   lexend: '"Lexend", "DM Sans", "Inter", -apple-system, BlinkMacSystemFont, sans-serif',
   "fira-code": '"Fira Code", "SFMono-Regular", ui-monospace, monospace',
+  "jetbrains-mono": '"JetBrains Mono", "SFMono-Regular", ui-monospace, monospace',
 };
 
 const THEME_DEFAULT_TEXT_COLORS: Record<

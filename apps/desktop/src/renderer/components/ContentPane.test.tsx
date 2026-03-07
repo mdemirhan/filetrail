@@ -34,7 +34,7 @@ describe("ContentPane", () => {
       />,
     );
 
-    expect(screen.getByText("Nothing here yet")).toBeInTheDocument();
+    expect(screen.getByText("This folder is empty")).toBeInTheDocument();
   });
 
   it("surfaces directory errors inline", () => {

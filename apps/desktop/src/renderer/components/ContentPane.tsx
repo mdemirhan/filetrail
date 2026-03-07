@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 
 import { useElementSize } from "../hooks/useElementSize";
-import { FileIcon } from "../lib/fileIcons";
+import { FileIcon, FolderIcon } from "../lib/fileIcons";
 import { formatDateTime, formatSize, splitDisplayName } from "../lib/formatting";
 import { buildColumnMajorRows, getVirtualRange } from "../lib/virtualization";
 
@@ -777,8 +777,13 @@ function EmptyState({
 
   return (
     <div className="content-state content-empty">
-      <strong>{hasSearchQuery ? "No results found" : "Nothing here yet"}</strong>
-      <span>
+      <div className="empty-state-icon" aria-hidden="true">
+        <FolderIcon />
+      </div>
+      <strong className="empty-state-title">
+        {hasSearchQuery ? "No results found" : "This folder is empty"}
+      </strong>
+      <span className="empty-state-message">
         {hasSearchQuery
           ? "Try a different search term in the current folder."
           : includeHidden

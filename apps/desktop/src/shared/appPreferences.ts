@@ -1,6 +1,6 @@
 export type ThemeMode = "light" | "tomorrow-night" | "catppuccin-mocha";
 export type ExplorerViewMode = "list" | "details";
-export type UiFontFamily = "dm-sans" | "lexend" | "fira-code";
+export type UiFontFamily = "dm-sans" | "lexend" | "fira-code" | "jetbrains-mono";
 export type UiFontWeight = 400 | 500 | 600;
 
 export const THEME_OPTIONS = [
@@ -13,6 +13,7 @@ export const UI_FONT_OPTIONS = [
   { value: "dm-sans", label: "DM Sans" },
   { value: "lexend", label: "Lexend" },
   { value: "fira-code", label: "Fira Code" },
+  { value: "jetbrains-mono", label: "JetBrains Mono" },
 ] as const;
 export const UI_FONT_SIZE_OPTIONS = [12, 13, 14, 15] as const;
 export const UI_FONT_WEIGHT_OPTIONS = [400, 500, 600] as const;
@@ -27,6 +28,7 @@ export type AppPreferences = {
   textMutedOverride: string | null;
   viewMode: ExplorerViewMode;
   propertiesOpen: boolean;
+  detailRowOpen: boolean;
   includeHidden: boolean;
   treeWidth: number;
   inspectorWidth: number;
@@ -45,6 +47,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   textMutedOverride: null,
   viewMode: "list",
   propertiesOpen: true,
+  detailRowOpen: true,
   includeHidden: false,
   treeWidth: 280,
   inspectorWidth: 320,

@@ -18,7 +18,6 @@ import {
   UI_FONT_WEIGHT_OPTIONS,
   type UiFontFamily,
   type UiFontWeight,
-  getThemeLabel,
 } from "../shared/appPreferences";
 import { ContentPane } from "./components/ContentPane";
 import { HelpView } from "./components/HelpView";
@@ -140,7 +139,7 @@ export function App() {
   const [sortBy, setSortBy] = useState<SortBy>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [propertiesOpen, setPropertiesOpen] = useState(DEFAULT_APP_PREFERENCES.propertiesOpen);
-  const [detailRowOpen, setDetailRowOpen] = useState(true);
+  const [detailRowOpen, setDetailRowOpen] = useState(DEFAULT_APP_PREFERENCES.detailRowOpen);
   const [selectedPath, setSelectedPath] = useState("");
   const [historyPaths, setHistoryPaths] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -225,6 +224,7 @@ export function App() {
         textMutedOverride,
         viewMode,
         propertiesOpen,
+        detailRowOpen,
         includeHidden,
         treeWidth: panes.treeWidth,
         inspectorWidth: panes.inspectorWidth,
@@ -241,6 +241,7 @@ export function App() {
     panes.treeWidth,
     preferencesReady,
     propertiesOpen,
+    detailRowOpen,
     restoreLastVisitedFolderOnStartup,
     theme,
     uiFontFamily,
@@ -274,6 +275,7 @@ export function App() {
         setIncludeHidden(preferences.includeHidden);
         setViewMode(preferences.viewMode);
         setPropertiesOpen(preferences.propertiesOpen);
+        setDetailRowOpen(preferences.detailRowOpen);
         setRestoreLastVisitedFolderOnStartup(preferences.restoreLastVisitedFolderOnStartup);
         panes.setTreeWidth(preferences.treeWidth);
         panes.setInspectorWidth(preferences.inspectorWidth);
@@ -1045,272 +1047,246 @@ export function App() {
   return (
     <main className="app-shell">
       {mainView === "explorer" ? (
-        !preferencesReady ||
-        (restoredPaneWidths !== null &&
-          (panes.treeWidth !== restoredPaneWidths.treeWidth ||
-            panes.inspectorWidth !== restoredPaneWidths.inspectorWidth)) ? (
-          <section className="workspace workspace-loading" />
-        ) : (
-          <section
-            className="workspace tomorrow-night-layout"
-            style={{
-              gridTemplateColumns: `${panes.treeWidth}px 8px minmax(0, 1fr)${
-                propertiesOpen ? ` 8px ${panes.inspectorWidth}px` : ""
-              }`,
-            }}
-          >
-            <TreePane
-              paneRef={treePaneRef}
-              isFocused={focusedPane === "tree"}
-              homePath={homePath}
-              currentPath={currentPath}
-              nodes={treeNodes}
-              rootPath={treeRootPath}
-              onFocusChange={(focused) => setFocusedPane(focused ? "tree" : null)}
-              onGoHome={goHome}
-              onQuickAccess={goQuickAccess}
-              detailRowOpen={detailRowOpen}
-              onToggleDetailRow={() => setDetailRowOpen((value) => !value)}
-              onOpenSettings={() => setMainView("settings")}
-              includeHidden={includeHidden}
-              onToggleHidden={toggleHiddenFiles}
-              onNavigate={(path) => void navigateTo(path, "push")}
-              onToggleExpand={toggleTreeNode}
-            />
-            <div
-              className="pane-resizer"
-              onPointerDown={panes.beginResize("tree")}
-              role="separator"
-              tabIndex={0}
-              aria-orientation="vertical"
-              aria-label="Resize folders pane"
-              onKeyDown={(event) => handlePaneResizeKey("tree", event)}
-            />
-            <section className="main-shell">
-              <header className="titlebar">
-                <div className="titlebar-actions">
-                  <button
-                    type="button"
-                    className="tb-btn tb-btn-icon"
-                    disabled={!canGoBack}
-                    onClick={goBack}
-                    title="Back (Cmd+Left)"
-                    aria-label="Back"
-                  >
-                    <ToolbarIcon name="back" />
-                  </button>
-                  <button
-                    type="button"
-                    className="tb-btn tb-btn-icon"
-                    disabled={!canGoForward}
-                    onClick={goForward}
-                    title="Forward (Cmd+Right)"
-                    aria-label="Forward"
-                  >
-                    <ToolbarIcon name="forward" />
-                  </button>
-                  <button
-                    type="button"
-                    className="tb-btn tb-btn-icon"
-                    disabled={!parentDirectoryPath(currentPath)}
-                    onClick={navigateToParentFolder}
-                    title="Enclosing Folder (Cmd+Up)"
-                    aria-label="Enclosing Folder"
-                  >
-                    <ToolbarIcon name="up" />
-                  </button>
-                  <button
-                    type="button"
-                    className="tb-btn tb-btn-icon"
-                    disabled={focusedPane !== "tree" && !selectedEntry}
-                    onClick={navigateDownAction}
-                    title="Open selected item (Cmd+Down)"
-                    aria-label="Open selected item"
-                  >
-                    <ToolbarIcon name="down" />
-                  </button>
-                  <span className="titlebar-divider" aria-hidden />
-                  <button
-                    type="button"
-                    className={propertiesOpen ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
-                    onClick={() => setPropertiesOpen((value: boolean) => !value)}
-                    title="Inspector (Cmd+I)"
-                    aria-label="Inspector"
-                  >
-                    <ToolbarIcon name="drawer" />
-                  </button>
-                  <span className="titlebar-divider" aria-hidden />
-                  <fieldset className="toolbar-segmented">
-                    <legend className="sr-only">View mode</legend>
-                    <button
-                      type="button"
-                      className={
-                        viewMode === "list" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"
-                      }
-                      onClick={() => setViewMode("list")}
-                      title="List view"
-                      aria-label="List view"
-                    >
-                      <ToolbarIcon name="list" />
-                    </button>
-                    <button
-                      type="button"
-                      className={
-                        viewMode === "details" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"
-                      }
-                      onClick={() => setViewMode("details")}
-                      title="Details view"
-                      aria-label="Details view"
-                    >
-                      <ToolbarIcon name="details" />
-                    </button>
-                  </fieldset>
-                  <span className="titlebar-divider" aria-hidden />
-                  <fieldset className="toolbar-select-group">
-                    <legend className="sr-only">Sorting controls</legend>
-                    <button
-                      type="button"
-                      className="tb-btn tb-btn-icon"
-                      onClick={() => handleSortChange(sortBy)}
-                      title={sortDirection === "asc" ? "Ascending sort" : "Descending sort"}
-                      aria-label={sortDirection === "asc" ? "Ascending sort" : "Descending sort"}
-                    >
-                      <ToolbarIcon name={sortDirection === "asc" ? "sortAsc" : "sortDesc"} />
-                    </button>
-                    <select
-                      className="toolbar-select"
-                      value={sortBy}
-                      onChange={(event) => handleSortChange(event.currentTarget.value as SortBy)}
-                      title="Sort by"
-                      aria-label="Sort by"
-                    >
-                      <option value="name">Name</option>
-                      <option value="size">Size</option>
-                      <option value="modified">Date Modified</option>
-                      <option value="kind">Kind</option>
-                    </select>
-                  </fieldset>
-                  <div className="toolbar-spacer" />
-                  <label className="toolbar-search" aria-label="Search current folder">
-                    <span className="toolbar-search-icon">
-                      <ToolbarIcon name="search" />
-                    </span>
-                    <input
-                      ref={searchInputRef}
-                      className="toolbar-search-input"
-                      type="text"
-                      value={searchQuery}
-                      onChange={(event) => setSearchQuery(event.currentTarget.value)}
-                      placeholder="Search... ⌘F"
-                    />
-                  </label>
-                  <span className="titlebar-divider" aria-hidden />
-                  <div className="toolbar-menu-anchor">
-                    <button
-                      ref={themeButtonRef}
-                      type="button"
-                      className={`theme-button${themeMenuOpen ? " active" : ""}`}
-                      onClick={() => setThemeMenuOpen((value) => !value)}
-                      title={`Theme: ${getThemeLabel(theme)}`}
-                      aria-label="Choose theme"
-                      aria-haspopup="listbox"
-                      aria-expanded={themeMenuOpen}
-                    >
-                      <span className="theme-button-label">
-                        <ToolbarIcon name="theme" />
-                        <span>{getThemeLabel(theme)}</span>
-                      </span>
-                      <ToolbarIcon name="chevron" />
-                    </button>
-                    {themeMenuOpen ? (
-                      <div ref={themeMenuRef} className="toolbar-menu" aria-label="Themes">
-                        {THEME_OPTIONS.map((option) => (
-                          <button
-                            key={option.value}
-                            type="button"
-                            className={`toolbar-menu-item${theme === option.value ? " active" : ""}`}
-                            onClick={() => {
-                              setTheme(option.value);
-                              setThemeMenuOpen(false);
-                            }}
-                            aria-pressed={theme === option.value}
-                          >
-                            <span>{option.label}</span>
-                            {theme === option.value ? (
-                              <span className="toolbar-menu-check">✓</span>
-                            ) : null}
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              </header>
-              <ContentPane
-                paneRef={contentPaneRef}
-                isFocused={focusedPane === "content"}
+        <section className="workspace explorer-workspace">
+          <header className="window-toolbar">
+            <div className="window-toolbar-brand">
+              <span className="window-toolbar-title">File Trail</span>
+            </div>
+            <div className="titlebar-actions">
+              <button
+                type="button"
+                className="tb-btn tb-btn-icon"
+                disabled={!canGoBack}
+                onClick={goBack}
+                title="Back (Cmd+Left)"
+                aria-label="Back"
+              >
+                <ToolbarIcon name="back" />
+              </button>
+              <button
+                type="button"
+                className="tb-btn tb-btn-icon"
+                disabled={!canGoForward}
+                onClick={goForward}
+                title="Forward (Cmd+Right)"
+                aria-label="Forward"
+              >
+                <ToolbarIcon name="forward" />
+              </button>
+              <button
+                type="button"
+                className="tb-btn tb-btn-icon"
+                disabled={!parentDirectoryPath(currentPath)}
+                onClick={navigateToParentFolder}
+                title="Enclosing Folder (Cmd+Up)"
+                aria-label="Enclosing Folder"
+              >
+                <ToolbarIcon name="up" />
+              </button>
+              <button
+                type="button"
+                className="tb-btn tb-btn-icon"
+                disabled={focusedPane !== "tree" && !selectedEntry}
+                onClick={navigateDownAction}
+                title="Open selected item (Cmd+Down)"
+                aria-label="Open selected item"
+              >
+                <ToolbarIcon name="down" />
+              </button>
+              <span className="titlebar-divider" aria-hidden />
+              <button
+                type="button"
+                className={propertiesOpen ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
+                onClick={() => setPropertiesOpen((value: boolean) => !value)}
+                title="Inspector (Cmd+I)"
+                aria-label="Inspector"
+              >
+                <ToolbarIcon name="drawer" />
+              </button>
+              <span className="titlebar-divider" aria-hidden />
+              <fieldset className="toolbar-segmented">
+                <legend className="sr-only">View mode</legend>
+                <button
+                  type="button"
+                  className={
+                    viewMode === "list" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"
+                  }
+                  onClick={() => setViewMode("list")}
+                  title="List view"
+                  aria-label="List view"
+                >
+                  <ToolbarIcon name="list" />
+                </button>
+                <button
+                  type="button"
+                  className={
+                    viewMode === "details" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"
+                  }
+                  onClick={() => setViewMode("details")}
+                  title="Details view"
+                  aria-label="Details view"
+                >
+                  <ToolbarIcon name="details" />
+                </button>
+              </fieldset>
+              <span className="titlebar-divider" aria-hidden />
+              <fieldset className="toolbar-select-group">
+                <legend className="sr-only">Sorting controls</legend>
+                <button
+                  type="button"
+                  className="tb-btn tb-btn-icon"
+                  onClick={() => handleSortChange(sortBy)}
+                  title={sortDirection === "asc" ? "Ascending sort" : "Descending sort"}
+                  aria-label={sortDirection === "asc" ? "Ascending sort" : "Descending sort"}
+                >
+                  <ToolbarIcon name={sortDirection === "asc" ? "sortAsc" : "sortDesc"} />
+                </button>
+                <select
+                  className="toolbar-select"
+                  value={sortBy}
+                  onChange={(event) => handleSortChange(event.currentTarget.value as SortBy)}
+                  title="Sort by"
+                  aria-label="Sort by"
+                >
+                  <option value="name">Name</option>
+                  <option value="size">Size</option>
+                  <option value="modified">Date Modified</option>
+                  <option value="kind">Kind</option>
+                </select>
+              </fieldset>
+              <div className="toolbar-spacer" />
+              <label className="toolbar-search" aria-label="Search current folder">
+                <span className="toolbar-search-icon">
+                  <ToolbarIcon name="search" />
+                </span>
+                <input
+                  ref={searchInputRef}
+                  className="toolbar-search-input"
+                  type="text"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.currentTarget.value)}
+                  placeholder="Search... ⌘F"
+                />
+              </label>
+            </div>
+          </header>
+          {!preferencesReady ||
+          (restoredPaneWidths !== null &&
+            (panes.treeWidth !== restoredPaneWidths.treeWidth ||
+              panes.inspectorWidth !== restoredPaneWidths.inspectorWidth)) ? (
+            <section className="workspace-body workspace-loading" />
+          ) : (
+            <section
+              className="workspace-body tomorrow-night-layout"
+              style={{
+                gridTemplateColumns: `${panes.treeWidth}px 8px minmax(0, 1fr)${
+                  propertiesOpen ? ` 8px ${panes.inspectorWidth}px` : ""
+                }`,
+              }}
+            >
+              <TreePane
+                paneRef={treePaneRef}
+                isFocused={focusedPane === "tree"}
+                homePath={homePath}
                 currentPath={currentPath}
-                entries={currentEntries}
-                loading={directoryLoading}
-                error={directoryError}
-                includeHidden={includeHidden}
-                metadataByPath={metadataByPath}
-                selectedPath={selectedPath}
-                viewMode={viewMode}
-                onSelectPath={setSelectedPath}
-                onActivateEntry={(entry) => {
-                  void activateEntry(entry);
+                nodes={treeNodes}
+                rootPath={treeRootPath}
+                onFocusChange={(focused) => setFocusedPane(focused ? "tree" : null)}
+                onGoHome={goHome}
+                onQuickAccess={goQuickAccess}
+                detailRowOpen={detailRowOpen}
+                onToggleDetailRow={() => setDetailRowOpen((value) => !value)}
+                theme={theme}
+                themeMenuOpen={themeMenuOpen}
+                themeButtonRef={themeButtonRef}
+                themeMenuRef={themeMenuRef}
+                onToggleThemeMenu={() => setThemeMenuOpen((value) => !value)}
+                onSelectTheme={(nextTheme) => {
+                  setTheme(nextTheme);
+                  setThemeMenuOpen(false);
                 }}
-                onFocusChange={(focused) => setFocusedPane(focused ? "content" : null)}
-                sortBy={sortBy}
-                sortDirection={sortDirection}
-                onSortChange={handleSortChange}
-                onLayoutColumnsChange={setContentColumns}
-                onVisiblePathsChange={setVisiblePaths}
-                onNavigatePath={(path) => void navigateTo(path, "push")}
-                onRequestPathSuggestions={(inputPath) =>
-                  requestPathSuggestions({
-                    client,
-                    includeHidden,
-                    inputPath,
-                  })
-                }
-                searchQuery={searchQuery}
+                onOpenSettings={() => setMainView("settings")}
+                includeHidden={includeHidden}
+                onToggleHidden={toggleHiddenFiles}
+                onNavigate={(path) => void navigateTo(path, "push")}
+                onToggleExpand={toggleTreeNode}
               />
-              <DetailRow
-                open={detailRowOpen}
-                currentPath={currentPath}
-                currentEntries={currentEntries}
-                selectedEntry={selectedEntry}
-                metadataByPath={metadataByPath}
+              <div
+                className="pane-resizer"
+                onPointerDown={panes.beginResize("tree")}
+                role="separator"
+                tabIndex={0}
+                aria-orientation="vertical"
+                aria-label="Resize folders pane"
+                onKeyDown={(event) => handlePaneResizeKey("tree", event)}
               />
-              <footer className="status-bar">
-                <span>{currentEntries.length} items</span>
-                <span className="status-path">{currentPath}</span>
-              </footer>
+              <section className="main-shell">
+                <ContentPane
+                  paneRef={contentPaneRef}
+                  isFocused={focusedPane === "content"}
+                  currentPath={currentPath}
+                  entries={currentEntries}
+                  loading={directoryLoading}
+                  error={directoryError}
+                  includeHidden={includeHidden}
+                  metadataByPath={metadataByPath}
+                  selectedPath={selectedPath}
+                  viewMode={viewMode}
+                  onSelectPath={setSelectedPath}
+                  onActivateEntry={(entry) => {
+                    void activateEntry(entry);
+                  }}
+                  onFocusChange={(focused) => setFocusedPane(focused ? "content" : null)}
+                  sortBy={sortBy}
+                  sortDirection={sortDirection}
+                  onSortChange={handleSortChange}
+                  onLayoutColumnsChange={setContentColumns}
+                  onVisiblePathsChange={setVisiblePaths}
+                  onNavigatePath={(path) => void navigateTo(path, "push")}
+                  onRequestPathSuggestions={(inputPath) =>
+                    requestPathSuggestions({
+                      client,
+                      includeHidden,
+                      inputPath,
+                    })
+                  }
+                  searchQuery={searchQuery}
+                />
+                <DetailRow
+                  open={detailRowOpen}
+                  currentPath={currentPath}
+                  currentEntries={currentEntries}
+                  selectedEntry={selectedEntry}
+                  metadataByPath={metadataByPath}
+                />
+                <footer className="status-bar">
+                  <span>{currentEntries.length} items</span>
+                  <span className="status-path">{currentPath}</span>
+                </footer>
+              </section>
+              {propertiesOpen ? (
+                <>
+                  <div
+                    className="pane-resizer"
+                    onPointerDown={panes.beginResize("inspector")}
+                    role="separator"
+                    tabIndex={0}
+                    aria-orientation="vertical"
+                    aria-label="Resize inspector pane"
+                    onKeyDown={(event) => handlePaneResizeKey("inspector", event)}
+                  />
+                  <PropertiesDrawer
+                    open={propertiesOpen}
+                    loading={propertiesLoading}
+                    item={propertiesItem}
+                    itemCount={propertiesItem?.path === currentPath ? currentEntries.length : null}
+                    onClose={() => setPropertiesOpen(false)}
+                  />
+                </>
+              ) : null}
             </section>
-            {propertiesOpen ? (
-              <>
-                <div
-                  className="pane-resizer"
-                  onPointerDown={panes.beginResize("inspector")}
-                  role="separator"
-                  tabIndex={0}
-                  aria-orientation="vertical"
-                  aria-label="Resize inspector pane"
-                  onKeyDown={(event) => handlePaneResizeKey("inspector", event)}
-                />
-                <PropertiesDrawer
-                  open={propertiesOpen}
-                  loading={propertiesLoading}
-                  item={propertiesItem}
-                  itemCount={propertiesItem?.path === currentPath ? currentEntries.length : null}
-                  onClose={() => setPropertiesOpen(false)}
-                />
-              </>
-            ) : null}
-          </section>
-        )
+          )}
+        </section>
       ) : (
         <section className="workspace single-panel-layout">
           <section className="pane single-panel-pane">
