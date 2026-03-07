@@ -37,6 +37,7 @@ export function ContentPane({
   onNavigatePath,
   onRequestPathSuggestions,
   onFocusChange,
+  searchQuery = "",
 }: {
   paneRef?: React.RefObject<HTMLElement | null>;
   isFocused: boolean;
@@ -58,6 +59,7 @@ export function ContentPane({
   onNavigatePath: (path: string) => void;
   onRequestPathSuggestions: (inputPath: string) => Promise<IpcResponse<"path:getSuggestions">>;
   onFocusChange: (focused: boolean) => void;
+  searchQuery?: string;
 }) {
   const [pathEditorOpen, setPathEditorOpen] = useState(false);
   const [draftPath, setDraftPath] = useState(currentPath);
@@ -74,6 +76,13 @@ export function ContentPane({
   const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState(-1);
   const pathSegments = useMemo(() => buildPathSegments(currentPath), [currentPath]);
   const displayedPath = previewPath ?? draftPath;
+  const filteredEntries = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    if (normalizedQuery.length === 0) {
+      return entries;
+    }
+    return entries.filter((entry) => entry.name.toLowerCase().includes(normalizedQuery));
+  }, [entries, searchQuery]);
 
   useEffect(() => {
     if (segmentClickTimeoutRef.current !== null) {
@@ -375,11 +384,12 @@ export function ContentPane({
       {viewMode === "list" ? (
         <FlowListView
           key={currentPath}
-          entries={entries}
+          entries={filteredEntries}
           isFocused={isFocused}
           loading={loading}
           error={error}
           includeHidden={includeHidden}
+          searchQuery={searchQuery}
           selectedPath={selectedPath}
           onActivateEntry={onActivateEntry}
           onLayoutColumnsChange={onLayoutColumnsChange}
@@ -389,11 +399,12 @@ export function ContentPane({
       ) : (
         <DetailsView
           key={currentPath}
-          entries={entries}
+          entries={filteredEntries}
           isFocused={isFocused}
           loading={loading}
           error={error}
           includeHidden={includeHidden}
+          searchQuery={searchQuery}
           metadataByPath={metadataByPath}
           selectedPath={selectedPath}
           sortBy={sortBy}
@@ -432,6 +443,7 @@ function FlowListView({
   loading,
   error,
   includeHidden,
+  searchQuery,
   selectedPath,
   onSelectPath,
   onActivateEntry,
@@ -443,6 +455,7 @@ function FlowListView({
   loading: boolean;
   error: string | null;
   includeHidden: boolean;
+  searchQuery: string;
   selectedPath: string;
   onSelectPath: (path: string) => void;
   onActivateEntry: (entry: DirectoryEntry) => void;
@@ -499,6 +512,7 @@ function FlowListView({
         error={error}
         entriesLength={entries.length}
         includeHidden={includeHidden}
+        searchQuery={searchQuery}
       />
       <div
         className="flow-grid-rows"
@@ -549,6 +563,7 @@ function DetailsView({
   loading,
   error,
   includeHidden,
+  searchQuery,
   metadataByPath,
   selectedPath,
   sortBy,
@@ -564,6 +579,7 @@ function DetailsView({
   loading: boolean;
   error: string | null;
   includeHidden: boolean;
+  searchQuery: string;
   metadataByPath: Record<string, DirectoryEntryMetadata>;
   selectedPath: string;
   sortBy: IpcRequest<"directory:getSnapshot">["sortBy"];
@@ -604,22 +620,17 @@ function DetailsView({
           onClick={() => onSortChange("name")}
         />
         <SortButton
-          label="Date Modified"
-          active={sortBy === "modified"}
-          direction={sortDirection}
-          onClick={() => onSortChange("modified")}
-        />
-        <SortButton
-          label="Kind"
-          active={sortBy === "kind"}
-          direction={sortDirection}
-          onClick={() => onSortChange("kind")}
-        />
-        <SortButton
           label="Size"
           active={sortBy === "size"}
           direction={sortDirection}
           onClick={() => onSortChange("size")}
+        />
+        <SortButton
+          label="Modified"
+          accessibleLabel="Date Modified"
+          active={sortBy === "modified"}
+          direction={sortDirection}
+          onClick={() => onSortChange("modified")}
         />
       </div>
       <div
@@ -632,6 +643,7 @@ function DetailsView({
           error={error}
           entriesLength={entries.length}
           includeHidden={includeHidden}
+          searchQuery={searchQuery}
         />
         <div
           style={{
@@ -660,11 +672,10 @@ function DetailsView({
                     extension={entry.extension}
                   />
                 </span>
-                <span>{formatDateTime(metadata?.modifiedAt ?? null)}</span>
-                <span>{metadata?.kindLabel ?? kindFallbackLabel(entry.kind)}</span>
                 <span>
                   {formatSize(metadata?.sizeBytes ?? null, metadata?.sizeStatus ?? "deferred")}
                 </span>
+                <span>{formatDateTime(metadata?.modifiedAt ?? null)}</span>
               </button>
             );
           })}
@@ -676,11 +687,13 @@ function DetailsView({
 
 function SortButton({
   label,
+  accessibleLabel,
   active,
   direction,
   onClick,
 }: {
   label: string;
+  accessibleLabel?: string;
   active: boolean;
   direction: "asc" | "desc";
   onClick: () => void;
@@ -690,6 +703,7 @@ function SortButton({
       type="button"
       className={`details-header-button${active ? " active" : ""}`}
       onClick={onClick}
+      aria-label={accessibleLabel ?? label}
     >
       <span>{label}</span>
       {active ? (
@@ -704,11 +718,13 @@ function ContentState({
   error,
   entriesLength,
   includeHidden,
+  searchQuery,
 }: {
   loading: boolean;
   error: string | null;
   entriesLength: number;
   includeHidden: boolean;
+  searchQuery: string;
 }) {
   if (loading && entriesLength === 0) {
     return (
@@ -727,7 +743,7 @@ function ContentState({
     );
   }
   if (entriesLength === 0) {
-    return <EmptyState includeHidden={includeHidden} />;
+    return <EmptyState includeHidden={includeHidden} searchQuery={searchQuery} />;
   }
   return null;
 }
@@ -750,33 +766,27 @@ function FileNameLabel({
   );
 }
 
-function EmptyState({ includeHidden }: { includeHidden: boolean }) {
+function EmptyState({
+  includeHidden,
+  searchQuery,
+}: {
+  includeHidden: boolean;
+  searchQuery: string;
+}) {
+  const hasSearchQuery = searchQuery.trim().length > 0;
+
   return (
     <div className="content-state content-empty">
-      <strong>Nothing here yet</strong>
+      <strong>{hasSearchQuery ? "No results found" : "Nothing here yet"}</strong>
       <span>
-        {includeHidden
-          ? "This directory is empty."
-          : "This directory is empty, or hidden files are currently filtered out."}
+        {hasSearchQuery
+          ? "Try a different search term in the current folder."
+          : includeHidden
+            ? "This directory is empty."
+            : "This directory is empty, or hidden files are currently filtered out."}
       </span>
     </div>
   );
-}
-
-function kindFallbackLabel(kind: DirectoryEntry["kind"]): string {
-  if (kind === "directory") {
-    return "Folder";
-  }
-  if (kind === "symlink_directory") {
-    return "Alias Folder";
-  }
-  if (kind === "symlink_file") {
-    return "Alias File";
-  }
-  if (kind === "file") {
-    return "File";
-  }
-  return "Item";
 }
 
 function getSharedPrefixLength(left: string, right: string): number {

@@ -8,7 +8,13 @@ export const explorerEntryKindSchema = z.enum([
   "other",
 ]);
 
-export const themeModeSchema = z.enum(["light", "dark"]);
+export const themeModeSchema = z.enum(["light", "tomorrow-night"]);
+export const uiFontFamilySchema = z.enum(["dm-sans", "lexend"]);
+export const monoFontFamilySchema = z.enum(["jetbrains-mono", "fira-code"]);
+export const colorOverrideSchema = z
+  .string()
+  .regex(/^#[0-9a-fA-F]{6}$/)
+  .nullable();
 export const explorerViewModeSchema = z.enum(["list", "details"]);
 export const directorySortBySchema = z.enum(["name", "modified", "kind", "size"]);
 export const sortDirectionSchema = z.enum(["asc", "desc"]);
@@ -65,6 +71,15 @@ export const resolvedPathSchema = z.object({
 
 export const appPreferencesSchema = z.object({
   theme: themeModeSchema,
+  uiFontFamily: uiFontFamilySchema,
+  uiFontSize: z.number().int().min(12).max(15),
+  uiFontWeight: z.union([z.literal(400), z.literal(500), z.literal(600)]),
+  monoFontFamily: monoFontFamilySchema,
+  monoFontSize: z.number().int().min(11).max(14),
+  monoFontWeight: z.union([z.literal(400), z.literal(500), z.literal(600)]),
+  textPrimaryOverride: colorOverrideSchema,
+  textSecondaryOverride: colorOverrideSchema,
+  textMutedOverride: colorOverrideSchema,
   viewMode: explorerViewModeSchema,
   propertiesOpen: z.boolean(),
   includeHidden: z.boolean(),

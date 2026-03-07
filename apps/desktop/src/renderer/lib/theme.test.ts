@@ -1,10 +1,29 @@
 // @vitest-environment jsdom
 
-import { applyTheme } from "./theme";
+import { applyAppearance } from "./theme";
 
 describe("theme helpers", () => {
-  it("applies the theme to the document root", () => {
-    applyTheme("dark");
-    expect(document.documentElement.dataset.theme).toBe("dark");
+  it("applies theme and typography variables to the document root", () => {
+    applyAppearance({
+      theme: "tomorrow-night",
+      uiFontFamily: "lexend",
+      uiFontSize: 14,
+      uiFontWeight: 500,
+      monoFontFamily: "fira-code",
+      monoFontSize: 13,
+      monoFontWeight: 600,
+      textPrimaryOverride: "#ffffff",
+      textSecondaryOverride: "#cccccc",
+      textMutedOverride: "#999999",
+    });
+
+    expect(document.documentElement.dataset.theme).toBe("tomorrow-night");
+    expect(document.documentElement.style.getPropertyValue("--font-sans")).toContain("Lexend");
+    expect(document.documentElement.style.getPropertyValue("--font-mono")).toContain("Fira Code");
+    expect(document.documentElement.style.getPropertyValue("--ui-font-size")).toBe("14px");
+    expect(document.documentElement.style.getPropertyValue("--ui-font-weight")).toBe("500");
+    expect(document.documentElement.style.getPropertyValue("--mono-font-size")).toBe("13px");
+    expect(document.documentElement.style.getPropertyValue("--mono-font-weight")).toBe("600");
+    expect(document.documentElement.style.getPropertyValue("--text-primary")).toBe("#ffffff");
   });
 });

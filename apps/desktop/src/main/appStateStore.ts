@@ -4,7 +4,13 @@ import { dirname, join } from "node:path";
 import {
   type AppPreferences,
   DEFAULT_APP_PREFERENCES,
+  MONO_FONT_OPTIONS,
+  MONO_FONT_WEIGHT_OPTIONS,
   type ThemeMode,
+  UI_FONT_OPTIONS,
+  UI_FONT_WEIGHT_OPTIONS,
+  clampFontSize,
+  clampFontWeight,
   clampPaneWidth,
 } from "../shared/appPreferences";
 
@@ -195,7 +201,45 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
   }
   const record = value as Record<string, unknown>;
   return {
-    theme: record.theme === "dark" ? "dark" : record.theme === "light" ? "light" : defaultTheme,
+    theme:
+      record.theme === "light"
+        ? "light"
+        : record.theme === "dark" || record.theme === "tomorrow-night"
+          ? "tomorrow-night"
+          : defaultTheme,
+    uiFontFamily:
+      typeof record.uiFontFamily === "string" &&
+      UI_FONT_OPTIONS.some((option) => option.value === record.uiFontFamily)
+        ? (record.uiFontFamily as AppPreferences["uiFontFamily"])
+        : currentDefaults.uiFontFamily,
+    uiFontSize: clampFontSize(
+      typeof record.uiFontSize === "number" ? record.uiFontSize : currentDefaults.uiFontSize,
+      12,
+      15,
+    ),
+    uiFontWeight: clampFontWeight(
+      typeof record.uiFontWeight === "number" ? record.uiFontWeight : currentDefaults.uiFontWeight,
+      UI_FONT_WEIGHT_OPTIONS,
+    ) as AppPreferences["uiFontWeight"],
+    monoFontFamily:
+      typeof record.monoFontFamily === "string" &&
+      MONO_FONT_OPTIONS.some((option) => option.value === record.monoFontFamily)
+        ? (record.monoFontFamily as AppPreferences["monoFontFamily"])
+        : currentDefaults.monoFontFamily,
+    monoFontSize: clampFontSize(
+      typeof record.monoFontSize === "number" ? record.monoFontSize : currentDefaults.monoFontSize,
+      11,
+      14,
+    ),
+    monoFontWeight: clampFontWeight(
+      typeof record.monoFontWeight === "number"
+        ? record.monoFontWeight
+        : currentDefaults.monoFontWeight,
+      MONO_FONT_WEIGHT_OPTIONS,
+    ) as AppPreferences["monoFontWeight"],
+    textPrimaryOverride: normalizeColorOverride(record.textPrimaryOverride),
+    textSecondaryOverride: normalizeColorOverride(record.textSecondaryOverride),
+    textMutedOverride: normalizeColorOverride(record.textMutedOverride),
     viewMode: record.viewMode === "details" ? "details" : "list",
     propertiesOpen:
       typeof record.propertiesOpen === "boolean"
@@ -230,6 +274,14 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
         ? record.lastVisitedPath
         : null,
   };
+}
+
+function normalizeColorOverride(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim();
+  return /^#[0-9a-fA-F]{6}$/.test(normalized) ? normalized.toLowerCase() : null;
 }
 
 function sanitizeWindowState(value: unknown): StoredWindowState {

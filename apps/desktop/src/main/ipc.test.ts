@@ -5,7 +5,16 @@ function createHandlersThatFailOnSnapshot() {
     "app:getHomeDirectory": async () => ({ path: "/Users/demo" }),
     "app:getPreferences": async () => ({
       preferences: {
-        theme: "dark" as const,
+        theme: "tomorrow-night" as const,
+        uiFontFamily: "dm-sans" as const,
+        uiFontSize: 13,
+        uiFontWeight: 400 as const,
+        monoFontFamily: "jetbrains-mono" as const,
+        monoFontSize: 12,
+        monoFontWeight: 500 as const,
+        textPrimaryOverride: null,
+        textSecondaryOverride: null,
+        textMutedOverride: null,
         viewMode: "list" as const,
         propertiesOpen: true,
         includeHidden: false,
@@ -18,7 +27,16 @@ function createHandlersThatFailOnSnapshot() {
     }),
     "app:updatePreferences": async () => ({
       preferences: {
-        theme: "dark" as const,
+        theme: "tomorrow-night" as const,
+        uiFontFamily: "dm-sans" as const,
+        uiFontSize: 13,
+        uiFontWeight: 400 as const,
+        monoFontFamily: "jetbrains-mono" as const,
+        monoFontSize: 12,
+        monoFontWeight: 500 as const,
+        textPrimaryOverride: null,
+        textSecondaryOverride: null,
+        textMutedOverride: null,
         viewMode: "list" as const,
         propertiesOpen: true,
         includeHidden: false,
@@ -72,6 +90,15 @@ function createHandlersThatFailOnSnapshot() {
       inputPath: "/tmp/link",
       resolvedPath: "/tmp/target",
     }),
+  } as const;
+}
+
+function createHandlersThatFailOnMetadataOutside() {
+  return {
+    ...createHandlersThatFailOnSnapshot(),
+    "directory:getMetadataBatch": async () => {
+      throw new Error("Path /Users/demo/Desktop is outside /Users/demo/Documents");
+    },
   } as const;
 }
 
@@ -132,5 +159,33 @@ describe("registerIpcHandlers", () => {
     expect(consoleErrorSpy.mock.calls[0]?.[0]).toContain(
       "[filetrail] ipc directory:getSnapshot failed",
     );
+  });
+
+  it("suppresses outside-directory metadata errors unless debug mode is enabled", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const handle = vi.fn();
+    const { registerIpcHandlers } = await import("./ipc");
+
+    registerIpcHandlers({ handle }, createHandlersThatFailOnMetadataOutside());
+
+    const metadataHandler = handle.mock.calls.find(
+      (call) => call[0] === "directory:getMetadataBatch",
+    )?.[1];
+
+    expect(metadataHandler).toBeTypeOf("function");
+
+    const response = await metadataHandler?.(
+      {},
+      {
+        directoryPath: "/Users/demo/Documents",
+        paths: ["/Users/demo/Desktop"],
+      },
+    );
+
+    expect(response).toEqual({
+      ok: false,
+      error: "Path /Users/demo/Desktop is outside /Users/demo/Documents",
+    });
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
 });

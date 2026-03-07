@@ -166,6 +166,33 @@ function toPreferencePatch(
   if (value.theme !== undefined) {
     patch.theme = value.theme;
   }
+  if (value.uiFontFamily !== undefined) {
+    patch.uiFontFamily = value.uiFontFamily;
+  }
+  if (value.uiFontSize !== undefined) {
+    patch.uiFontSize = value.uiFontSize;
+  }
+  if (value.uiFontWeight !== undefined) {
+    patch.uiFontWeight = value.uiFontWeight;
+  }
+  if (value.monoFontFamily !== undefined) {
+    patch.monoFontFamily = value.monoFontFamily;
+  }
+  if (value.monoFontSize !== undefined) {
+    patch.monoFontSize = value.monoFontSize;
+  }
+  if (value.monoFontWeight !== undefined) {
+    patch.monoFontWeight = value.monoFontWeight;
+  }
+  if (value.textPrimaryOverride !== undefined) {
+    patch.textPrimaryOverride = value.textPrimaryOverride;
+  }
+  if (value.textSecondaryOverride !== undefined) {
+    patch.textSecondaryOverride = value.textSecondaryOverride;
+  }
+  if (value.textMutedOverride !== undefined) {
+    patch.textMutedOverride = value.textMutedOverride;
+  }
   if (value.viewMode !== undefined) {
     patch.viewMode = value.viewMode;
   }

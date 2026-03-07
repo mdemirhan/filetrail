@@ -10,6 +10,7 @@ describe("TreePane", () => {
       <TreePane
         isFocused
         rootPath="/Users/demo"
+        homePath="/Users/demo"
         currentPath="/Users/demo"
         nodes={{
           "/Users/demo": {
@@ -38,6 +39,7 @@ describe("TreePane", () => {
           },
         }}
         onFocusChange={() => undefined}
+        onGoHome={() => undefined}
         onOpenNode={() => undefined}
         onToggleExpand={() => undefined}
         onNavigate={() => undefined}
@@ -57,6 +59,7 @@ describe("TreePane", () => {
       <TreePane
         isFocused
         rootPath="/Users/demo"
+        homePath="/Users/demo"
         currentPath="/Users/demo"
         nodes={{
           "/Users/demo": {
@@ -85,6 +88,7 @@ describe("TreePane", () => {
           },
         }}
         onFocusChange={() => undefined}
+        onGoHome={() => undefined}
         onOpenNode={() => undefined}
         onToggleExpand={() => undefined}
         onNavigate={handleNavigate}

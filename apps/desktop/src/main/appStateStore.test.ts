@@ -8,11 +8,20 @@ describe("appStateStore", () => {
   it("returns defaults when no state file exists", () => {
     const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
     const store = createAppStateStore(resolveAppStatePath(userDataPath), {
-      defaultTheme: "dark",
+      defaultTheme: "tomorrow-night",
     });
 
     expect(store.getPreferences()).toEqual({
-      theme: "dark",
+      theme: "tomorrow-night",
+      uiFontFamily: "dm-sans",
+      uiFontSize: 13,
+      uiFontWeight: 400,
+      monoFontFamily: "jetbrains-mono",
+      monoFontSize: 12,
+      monoFontWeight: 500,
+      textPrimaryOverride: null,
+      textSecondaryOverride: null,
+      textMutedOverride: null,
       viewMode: "list",
       propertiesOpen: true,
       includeHidden: false,
@@ -36,7 +45,16 @@ describe("appStateStore", () => {
     });
 
     store.updatePreferences({
-      theme: "dark",
+      theme: "tomorrow-night",
+      uiFontFamily: "lexend",
+      uiFontSize: 14,
+      uiFontWeight: 500,
+      monoFontFamily: "fira-code",
+      monoFontSize: 13,
+      monoFontWeight: 600,
+      textPrimaryOverride: "#ffffff",
+      textSecondaryOverride: "#cccccc",
+      textMutedOverride: "#999999",
       viewMode: "details",
       includeHidden: true,
       propertiesOpen: false,
@@ -59,7 +77,16 @@ describe("appStateStore", () => {
       defaultTheme: "light",
     });
     expect(reloaded.getPreferences()).toEqual({
-      theme: "dark",
+      theme: "tomorrow-night",
+      uiFontFamily: "lexend",
+      uiFontSize: 14,
+      uiFontWeight: 500,
+      monoFontFamily: "fira-code",
+      monoFontSize: 13,
+      monoFontWeight: 600,
+      textPrimaryOverride: "#ffffff",
+      textSecondaryOverride: "#cccccc",
+      textMutedOverride: "#999999",
       viewMode: "details",
       includeHidden: true,
       propertiesOpen: false,
@@ -85,6 +112,13 @@ describe("appStateStore", () => {
       defaultTheme: "light",
     });
     store.updatePreferences({
+      uiFontFamily: "bad-font" as never,
+      uiFontSize: 999,
+      uiFontWeight: 123 as never,
+      monoFontFamily: "bad-mono" as never,
+      monoFontSize: 1,
+      monoFontWeight: 900 as never,
+      textPrimaryOverride: "oops" as never,
       treeWidth: 1,
       inspectorWidth: 9999,
       treeRootPath: "",
@@ -97,6 +131,13 @@ describe("appStateStore", () => {
     });
     expect(reloaded.getPreferences().treeWidth).toBe(220);
     expect(reloaded.getPreferences().inspectorWidth).toBe(480);
+    expect(reloaded.getPreferences().uiFontFamily).toBe("dm-sans");
+    expect(reloaded.getPreferences().uiFontSize).toBe(15);
+    expect(reloaded.getPreferences().uiFontWeight).toBe(400);
+    expect(reloaded.getPreferences().monoFontFamily).toBe("jetbrains-mono");
+    expect(reloaded.getPreferences().monoFontSize).toBe(11);
+    expect(reloaded.getPreferences().monoFontWeight).toBe(400);
+    expect(reloaded.getPreferences().textPrimaryOverride).toBeNull();
     expect(reloaded.getPreferences().treeRootPath).toBeNull();
     expect(reloaded.getPreferences().lastVisitedPath).toBeNull();
   });

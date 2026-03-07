@@ -16,7 +16,7 @@ if (!hasSingleInstanceLock) {
 if (hasSingleInstanceLock) {
   app.whenReady().then(async () => {
     const appStateStore = createAppStateStore(resolveAppStatePath(app.getPath("userData")), {
-      defaultTheme: nativeTheme.shouldUseDarkColors ? "dark" : "light",
+      defaultTheme: nativeTheme.shouldUseDarkColors ? "tomorrow-night" : "light",
     });
     appStateStoreRef = appStateStore;
     await bootstrapMainProcess(appStateStore);

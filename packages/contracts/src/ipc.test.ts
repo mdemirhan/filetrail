@@ -34,7 +34,16 @@ describe("ipc contracts", () => {
     expect(
       ipcContractSchemas["app:getPreferences"].response.parse({
         preferences: {
-          theme: "dark",
+          theme: "tomorrow-night",
+          uiFontFamily: "lexend",
+          uiFontSize: 13,
+          uiFontWeight: 500,
+          monoFontFamily: "fira-code",
+          monoFontSize: 12,
+          monoFontWeight: 600,
+          textPrimaryOverride: "#ffffff",
+          textSecondaryOverride: "#cccccc",
+          textMutedOverride: "#999999",
           viewMode: "list",
           propertiesOpen: true,
           includeHidden: false,
@@ -47,7 +56,16 @@ describe("ipc contracts", () => {
       }),
     ).toEqual({
       preferences: {
-        theme: "dark",
+        theme: "tomorrow-night",
+        uiFontFamily: "lexend",
+        uiFontSize: 13,
+        uiFontWeight: 500,
+        monoFontFamily: "fira-code",
+        monoFontSize: 12,
+        monoFontWeight: 600,
+        textPrimaryOverride: "#ffffff",
+        textSecondaryOverride: "#cccccc",
+        textMutedOverride: "#999999",
         viewMode: "list",
         propertiesOpen: true,
         includeHidden: false,
@@ -63,12 +81,24 @@ describe("ipc contracts", () => {
       ipcContractSchemas["app:updatePreferences"].request.parse({
         preferences: {
           theme: "light",
+          uiFontFamily: "dm-sans",
+          uiFontSize: 14,
+          uiFontWeight: 400,
+          monoFontFamily: "jetbrains-mono",
+          monoFontWeight: 500,
+          textPrimaryOverride: null,
           includeHidden: true,
         },
       }),
     ).toEqual({
       preferences: {
         theme: "light",
+        uiFontFamily: "dm-sans",
+        uiFontSize: 14,
+        uiFontWeight: 400,
+        monoFontFamily: "jetbrains-mono",
+        monoFontWeight: 500,
+        textPrimaryOverride: null,
         includeHidden: true,
       },
     });

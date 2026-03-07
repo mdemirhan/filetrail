@@ -74,6 +74,7 @@ function isExpectedAccessError(error: unknown): boolean {
     nodeError.code === "EPERM" ||
     nodeError.code === "ENOENT" ||
     nodeError.code === "ENOTDIR" ||
+    message.includes(" is outside ") ||
     message.includes("permission denied") ||
     message.includes("operation not permitted") ||
     message.includes("no such file or directory") ||

@@ -20,9 +20,11 @@ export function TreePane({
   paneRef,
   isFocused,
   rootPath,
+  homePath,
   nodes,
   currentPath,
   onFocusChange,
+  onGoHome,
   onOpenNode,
   onToggleExpand,
   onNavigate,
@@ -30,9 +32,11 @@ export function TreePane({
   paneRef?: React.RefObject<HTMLElement | null>;
   isFocused: boolean;
   rootPath: string;
+  homePath: string;
   nodes: Record<string, TreeNodeState>;
   currentPath: string;
   onFocusChange: (focused: boolean) => void;
+  onGoHome: () => void;
   onOpenNode: (path: string) => void;
   onToggleExpand: (path: string) => void;
   onNavigate: (path: string) => void;
@@ -64,7 +68,7 @@ export function TreePane({
     return (
       <aside
         ref={paneRef}
-        className="tree-pane pane pane-focus-target"
+        className="tree-pane sidebar pane pane-focus-target"
         tabIndex={-1}
         onFocusCapture={() => onFocusChange(true)}
         onBlurCapture={(event) => {
@@ -74,8 +78,14 @@ export function TreePane({
           }
         }}
       >
-        <div className={`pane-header${isFocused ? " pane-header-focused" : ""}`}>
-          <span>Folders</span>
+        <div className="sidebar-header">
+          <div className="sidebar-logo">
+            <SidebarLogoMark />
+          </div>
+          <div>
+            <div className="sidebar-title">File Trail</div>
+            <div className="sidebar-subtitle">Explorer</div>
+          </div>
         </div>
       </aside>
     );
@@ -84,7 +94,7 @@ export function TreePane({
   return (
     <aside
       ref={paneRef}
-      className="tree-pane pane pane-focus-target"
+      className="tree-pane sidebar pane pane-focus-target"
       tabIndex={-1}
       onFocusCapture={() => onFocusChange(true)}
       onBlurCapture={(event) => {
@@ -94,28 +104,61 @@ export function TreePane({
         }
       }}
     >
-      <div className={`pane-header${isFocused ? " pane-header-focused" : ""}`}>
-        <span>Folders</span>
+      <div className="sidebar-header">
+        <div className="sidebar-logo">
+          <SidebarLogoMark />
+        </div>
+        <div>
+          <div className="sidebar-title">File Trail</div>
+          <div className="sidebar-subtitle">Explorer</div>
+        </div>
       </div>
-      <div className="tree-scroll">
-        <div className="tree-list">
-          <TreeNodeRow
-            currentPath={currentPath}
-            depth={0}
-            isPaneFocused={isFocused}
-            node={root}
-            nodes={nodes}
-            clickTimeoutRef={clickTimeoutRef}
-            onOpenNode={onOpenNode}
-            onToggleExpand={onToggleExpand}
-            onNavigate={onNavigate}
-            registerRowRef={(path, element) => {
-              rowRefs.current[path] = element;
-            }}
-          />
+      <button
+        type="button"
+        className={`sidebar-home${currentPath === homePath ? " active" : ""}`}
+        onClick={onGoHome}
+        title="Go to home folder"
+      >
+        <ToolbarIcon name="home" />
+        <span>Home</span>
+      </button>
+      <div className="sidebar-label">Folders</div>
+      <div className="sidebar-tree">
+        <div className="tree-scroll">
+          <div className="tree-list">
+            <TreeNodeRow
+              currentPath={currentPath}
+              depth={0}
+              isPaneFocused={isFocused}
+              node={root}
+              nodes={nodes}
+              clickTimeoutRef={clickTimeoutRef}
+              onOpenNode={onOpenNode}
+              onToggleExpand={onToggleExpand}
+              onNavigate={onNavigate}
+              registerRowRef={(path, element) => {
+                rowRefs.current[path] = element;
+              }}
+            />
+          </div>
+        </div>
+      </div>
+      <div className="sidebar-footer">
+        <div className="sidebar-avatar">M</div>
+        <div>
+          <div className="sidebar-footer-name">tcmudemirhan</div>
+          <div className="sidebar-footer-volume">Macintosh HD</div>
         </div>
       </div>
     </aside>
+  );
+}
+
+function SidebarLogoMark() {
+  return (
+    <svg className="sidebar-logo-mark" viewBox="0 0 24 24" aria-hidden="true" role="presentation">
+      <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6.93a2 2 0 0 1-1.66-.88l-.82-1.24A2 2 0 0 0 7.93 4H5a2 2 0 0 0-2 2v1z" />
+    </svg>
   );
 }
 
