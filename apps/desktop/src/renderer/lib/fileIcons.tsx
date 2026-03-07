@@ -42,6 +42,25 @@ export function FolderIcon({ alias = false }: { alias?: boolean }) {
   );
 }
 
+export function TreeFolderIcon({
+  open = false,
+  alias = false,
+}: { open?: boolean; alias?: boolean }) {
+  if (alias) {
+    return (
+      <span className="file-icon folder alias" aria-hidden>
+        <FolderSvg open />
+        <span className="alias-badge">↗</span>
+      </span>
+    );
+  }
+  return (
+    <span className="file-icon folder" aria-hidden>
+      <FolderSvg open={open} />
+    </span>
+  );
+}
+
 function FolderSvg({ open = false }: { open?: boolean }) {
   if (open) {
     return (

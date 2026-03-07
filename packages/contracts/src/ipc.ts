@@ -8,7 +8,7 @@ export const explorerEntryKindSchema = z.enum([
   "other",
 ]);
 
-export const themeModeSchema = z.enum(["light", "tomorrow-night"]);
+export const themeModeSchema = z.enum(["light", "tomorrow-night", "catppuccin-mocha"]);
 export const uiFontFamilySchema = z.enum(["dm-sans", "lexend"]);
 export const monoFontFamilySchema = z.enum(["jetbrains-mono", "fira-code"]);
 export const colorOverrideSchema = z

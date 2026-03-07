@@ -1,5 +1,6 @@
 import type { IpcResponse } from "@filetrail/contracts";
 
+import { FileIcon } from "../lib/fileIcons";
 import { compactPath, formatDateTime, formatSize } from "../lib/formatting";
 import { ToolbarIcon } from "./ToolbarIcon";
 
@@ -19,27 +20,38 @@ export function PropertiesDrawer({
   return (
     <aside className={`properties-drawer${open ? " open" : ""}`}>
       <div className="drawer-header">
-        <strong>Properties</strong>
-        <button type="button" className="tb-btn" onClick={onClose}>
-          Close
+        <strong>Inspector</strong>
+        <button
+          type="button"
+          className="drawer-close"
+          onClick={onClose}
+          aria-label="Close inspector"
+        >
+          ×
         </button>
       </div>
       {!open ? null : loading ? (
         <div className="drawer-loading">Loading properties...</div>
       ) : item ? (
         <div className="drawer-content">
-          <div className="drawer-title">{item.name}</div>
-          <div className="drawer-path" title={item.path}>
-            {compactPath(item.path)}
+          <div className="drawer-hero">
+            <div className="drawer-hero-icon">
+              <FileIcon
+                entry={{
+                  path: item.path,
+                  name: item.name,
+                  extension: item.extension,
+                  kind: item.kind,
+                  isHidden: item.isHidden,
+                  isSymlink: item.isSymlink,
+                }}
+              />
+            </div>
+            <div className="drawer-title">{item.name}</div>
+            <div className="drawer-kind-badge">{item.kindLabel}</div>
           </div>
-          <button
-            type="button"
-            className="drawer-open-button"
-            onClick={onOpenExternally}
-            title={`Open ${item.name} in macOS`}
-          >
-            <ToolbarIcon name="open" />
-            Open in macOS
+          <button type="button" className="drawer-open-button" onClick={onOpenExternally}>
+            <ToolbarIcon name="open" /> Open in macOS
           </button>
           <dl className="property-grid">
             <div>
@@ -68,7 +80,9 @@ export function PropertiesDrawer({
             </div>
             <div>
               <dt>Location</dt>
-              <dd title={item.path}>{item.path}</dd>
+              <dd className="property-path" title={item.path}>
+                {compactPath(item.path)}
+              </dd>
             </div>
           </dl>
         </div>

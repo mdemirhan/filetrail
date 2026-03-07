@@ -206,7 +206,9 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
         ? "light"
         : record.theme === "dark" || record.theme === "tomorrow-night"
           ? "tomorrow-night"
-          : defaultTheme,
+          : record.theme === "catppuccin-mocha"
+            ? "catppuccin-mocha"
+            : defaultTheme,
     uiFontFamily:
       typeof record.uiFontFamily === "string" &&
       UI_FONT_OPTIONS.some((option) => option.value === record.uiFontFamily)

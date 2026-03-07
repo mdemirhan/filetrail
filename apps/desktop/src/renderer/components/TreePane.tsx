@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-import { FolderIcon } from "../lib/fileIcons";
+import { TreeFolderIcon } from "../lib/fileIcons";
 import { ToolbarIcon } from "./ToolbarIcon";
 
 export type TreeNodeState = {
@@ -25,6 +25,12 @@ export function TreePane({
   currentPath,
   onFocusChange,
   onGoHome,
+  onQuickAccess,
+  onToggleDetailRow,
+  detailRowOpen,
+  onOpenSettings,
+  includeHidden,
+  onToggleHidden,
   onOpenNode,
   onToggleExpand,
   onNavigate,
@@ -37,6 +43,12 @@ export function TreePane({
   currentPath: string;
   onFocusChange: (focused: boolean) => void;
   onGoHome: () => void;
+  onQuickAccess: (location: "desktop" | "downloads" | "documents" | "source") => void;
+  onToggleDetailRow: () => void;
+  detailRowOpen: boolean;
+  onOpenSettings: () => void;
+  includeHidden: boolean;
+  onToggleHidden: () => void;
   onOpenNode: (path: string) => void;
   onToggleExpand: (path: string) => void;
   onNavigate: (path: string) => void;
@@ -78,13 +90,22 @@ export function TreePane({
           }
         }}
       >
-        <div className="sidebar-header">
-          <div className="sidebar-logo">
-            <SidebarLogoMark />
-          </div>
-          <div>
-            <div className="sidebar-title">File Trail</div>
-            <div className="sidebar-subtitle">Explorer</div>
+        <div className="sidebar-shell">
+          <aside className="sidebar-rail">
+            <button
+              type="button"
+              className="sidebar-rail-logo"
+              onClick={onGoHome}
+              title="Home"
+              aria-label="Quick access Home"
+            >
+              <SidebarLogoMark />
+            </button>
+          </aside>
+          <div className="sidebar-main">
+            <div className="sidebar-header">
+              <span className="sidebar-title">Folders</span>
+            </div>
           </div>
         </div>
       </aside>
@@ -104,50 +125,123 @@ export function TreePane({
         }
       }}
     >
-      <div className="sidebar-header">
-        <div className="sidebar-logo">
-          <SidebarLogoMark />
-        </div>
-        <div>
-          <div className="sidebar-title">File Trail</div>
-          <div className="sidebar-subtitle">Explorer</div>
-        </div>
-      </div>
-      <button
-        type="button"
-        className={`sidebar-home${currentPath === homePath ? " active" : ""}`}
-        onClick={onGoHome}
-        title="Go to home folder"
-      >
-        <ToolbarIcon name="home" />
-        <span>Home</span>
-      </button>
-      <div className="sidebar-label">Folders</div>
-      <div className="sidebar-tree">
-        <div className="tree-scroll">
-          <div className="tree-list">
-            <TreeNodeRow
-              currentPath={currentPath}
-              depth={0}
-              isPaneFocused={isFocused}
-              node={root}
-              nodes={nodes}
-              clickTimeoutRef={clickTimeoutRef}
-              onOpenNode={onOpenNode}
-              onToggleExpand={onToggleExpand}
-              onNavigate={onNavigate}
-              registerRowRef={(path, element) => {
-                rowRefs.current[path] = element;
-              }}
-            />
+      <div className="sidebar-shell">
+        <aside className="sidebar-rail">
+          <button
+            type="button"
+            className="sidebar-rail-logo"
+            onClick={onGoHome}
+            title="Home"
+            aria-label="Quick access Home"
+          >
+            <SidebarLogoMark />
+          </button>
+          <button
+            type="button"
+            className="sidebar-rail-button"
+            onClick={onGoHome}
+            title="Home"
+            aria-label="Quick access Home"
+          >
+            <ToolbarIcon name="home" />
+          </button>
+          <button
+            type="button"
+            className="sidebar-rail-button"
+            onClick={() => onQuickAccess("desktop")}
+            title="Desktop"
+            aria-label="Quick access Desktop"
+          >
+            <ToolbarIcon name="desktop" />
+          </button>
+          <button
+            type="button"
+            className="sidebar-rail-button"
+            onClick={() => onQuickAccess("downloads")}
+            title="Downloads"
+            aria-label="Quick access Downloads"
+          >
+            <ToolbarIcon name="downloads" />
+          </button>
+          <button
+            type="button"
+            className="sidebar-rail-button"
+            onClick={() => onQuickAccess("documents")}
+            title="Documents"
+            aria-label="Quick access Documents"
+          >
+            <ToolbarIcon name="documents" />
+          </button>
+          <button
+            type="button"
+            className="sidebar-rail-button"
+            onClick={() => onQuickAccess("source")}
+            title="Source"
+            aria-label="Quick access Source"
+          >
+            <ToolbarIcon name="source" />
+          </button>
+          <span className="sidebar-rail-separator" />
+          <button
+            type="button"
+            className={`sidebar-rail-button${includeHidden ? " active" : ""}`}
+            onClick={onToggleHidden}
+            title="Toggle hidden files"
+            aria-label="Toggle hidden files"
+          >
+            <ToolbarIcon name="hidden" />
+          </button>
+          <button
+            type="button"
+            className={`sidebar-rail-button${detailRowOpen ? " active" : ""}`}
+            onClick={onToggleDetailRow}
+            title="Toggle detail row"
+            aria-label="Toggle detail row"
+          >
+            <ToolbarIcon name="detailRow" />
+          </button>
+          <div className="sidebar-rail-spacer" />
+          <button
+            type="button"
+            className="sidebar-rail-button"
+            onClick={onOpenSettings}
+            title="Settings"
+            aria-label="Open settings"
+          >
+            <ToolbarIcon name="settings" />
+          </button>
+        </aside>
+        <div className="sidebar-main">
+          <div className="sidebar-header">
+            <span className="sidebar-title">Folders</span>
           </div>
-        </div>
-      </div>
-      <div className="sidebar-footer">
-        <div className="sidebar-avatar">M</div>
-        <div>
-          <div className="sidebar-footer-name">tcmudemirhan</div>
-          <div className="sidebar-footer-volume">Macintosh HD</div>
+          <div className="sidebar-tree">
+            <div className="tree-scroll">
+              <div className="tree-list">
+                <TreeNodeRow
+                  currentPath={currentPath}
+                  depth={0}
+                  isPaneFocused={isFocused}
+                  node={root}
+                  nodes={nodes}
+                  clickTimeoutRef={clickTimeoutRef}
+                  onOpenNode={onOpenNode}
+                  onToggleExpand={onToggleExpand}
+                  onNavigate={onNavigate}
+                  registerRowRef={(path, element) => {
+                    rowRefs.current[path] = element;
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="sidebar-footer">
+            <div className="sidebar-avatar">M</div>
+            <div>
+              <div className="sidebar-footer-name">tcmudemirhan</div>
+              <div className="sidebar-footer-volume">Macintosh HD</div>
+            </div>
+          </div>
         </div>
       </div>
     </aside>
@@ -229,7 +323,7 @@ function TreeNodeRow({
           }}
           title={node.path}
         >
-          <FolderIcon alias={node.isSymlink} />
+          <TreeFolderIcon open={node.expanded} alias={node.isSymlink} />
           <span className="tree-label-text">{node.name}</span>
           {node.isSymlink ? <span className="tree-label-badge">Alias</span> : null}
         </button>

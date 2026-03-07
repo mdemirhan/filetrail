@@ -23,7 +23,12 @@ export function ToolbarIcon({
     | "sortDesc"
     | "help"
     | "settings"
-    | "search";
+    | "search"
+    | "desktop"
+    | "downloads"
+    | "documents"
+    | "source"
+    | "detailRow";
 }) {
   if (name === "list") {
     return (
@@ -72,6 +77,21 @@ export function ToolbarIcon({
       return "M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1zM12 15a3 3 0 1 1 0-6 3 3 0 0 1 0 6z";
     }
     if (name === "search") return "M11 11a7 7 0 1 0 0-14 7 7 0 0 0 0 14zm10 10l-4.35-4.35";
+    if (name === "desktop") {
+      return "M2 3h20v14H2zM8 21h8M12 17v4";
+    }
+    if (name === "downloads") {
+      return "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3";
+    }
+    if (name === "documents") {
+      return "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6M14 2v6h6";
+    }
+    if (name === "source") {
+      return "M16 18l6-6-6-6M8 6l-6 6 6 6";
+    }
+    if (name === "detailRow") {
+      return "M3 15h18M3 19h18M4 5h16v6H4z";
+    }
     return "M5 12h14M12 5l7 7-7 7";
   })();
 

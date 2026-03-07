@@ -40,6 +40,12 @@ describe("TreePane", () => {
         }}
         onFocusChange={() => undefined}
         onGoHome={() => undefined}
+        onQuickAccess={() => undefined}
+        detailRowOpen
+        onToggleDetailRow={() => undefined}
+        onOpenSettings={() => undefined}
+        includeHidden={false}
+        onToggleHidden={() => undefined}
         onOpenNode={() => undefined}
         onToggleExpand={() => undefined}
         onNavigate={() => undefined}
@@ -89,6 +95,12 @@ describe("TreePane", () => {
         }}
         onFocusChange={() => undefined}
         onGoHome={() => undefined}
+        onQuickAccess={() => undefined}
+        detailRowOpen
+        onToggleDetailRow={() => undefined}
+        onOpenSettings={() => undefined}
+        includeHidden={false}
+        onToggleHidden={() => undefined}
         onOpenNode={() => undefined}
         onToggleExpand={() => undefined}
         onNavigate={handleNavigate}

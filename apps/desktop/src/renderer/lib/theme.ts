@@ -30,6 +30,11 @@ const THEME_DEFAULT_TEXT_COLORS: Record<
     secondary: "#c5c8c6",
     muted: "#969896",
   },
+  "catppuccin-mocha": {
+    primary: "#cdd6f4",
+    secondary: "#bac2de",
+    muted: "#6c7086",
+  },
 };
 
 export function getThemeAppearanceDefaults(theme: ThemeMode): {

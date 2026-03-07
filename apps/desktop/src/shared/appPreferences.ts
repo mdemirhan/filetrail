@@ -1,4 +1,4 @@
-export type ThemeMode = "light" | "tomorrow-night";
+export type ThemeMode = "light" | "tomorrow-night" | "catppuccin-mocha";
 export type ExplorerViewMode = "list" | "details";
 export type UiFontFamily = "dm-sans" | "lexend";
 export type MonoFontFamily = "jetbrains-mono" | "fira-code";
@@ -7,6 +7,7 @@ export type MonoFontWeight = 400 | 500 | 600;
 
 export const THEME_OPTIONS = [
   { value: "tomorrow-night", label: "Tomorrow Night" },
+  { value: "catppuccin-mocha", label: "Catppuccin Mocha" },
   { value: "light", label: "Light" },
 ] as const;
 
