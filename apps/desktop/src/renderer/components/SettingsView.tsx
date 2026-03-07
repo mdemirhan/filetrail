@@ -35,6 +35,7 @@ export function SettingsView({
   onTextPrimaryColorChange,
   onTextSecondaryColorChange,
   onTextMutedColorChange,
+  onResetAppearance,
   onRestoreLastVisitedFolderOnStartupChange,
 }: {
   theme: ThemeMode;
@@ -65,6 +66,7 @@ export function SettingsView({
   onTextPrimaryColorChange: (value: string | null) => void;
   onTextSecondaryColorChange: (value: string | null) => void;
   onTextMutedColorChange: (value: string | null) => void;
+  onResetAppearance: () => void;
   onRestoreLastVisitedFolderOnStartupChange: (value: boolean) => void;
 }) {
   return (
@@ -78,20 +80,23 @@ export function SettingsView({
           </div>
         </header>
 
-        <section className="settings-section">
-          <div className="settings-section-header">
-            <div className="settings-section-icon settings-section-icon-storage" aria-hidden>
-              Aa
+        <section className="settings-panel">
+          <div className="settings-panel-header">
+            <div className="settings-panel-title">
+              <span className="settings-panel-icon settings-section-icon-storage" aria-hidden>
+                Aa
+              </span>
+              <span>Appearance</span>
             </div>
-            <div>
-              <h3>Appearance</h3>
-              <p>Theme and typography used throughout the explorer UI.</p>
-            </div>
+            <button type="button" className="settings-section-action" onClick={onResetAppearance}>
+              Reset
+            </button>
           </div>
-          <div className="settings-section-body">
-            <div className="settings-form-grid">
-              <label className="settings-field">
-                <span className="settings-field-label">Theme</span>
+
+          <div className="settings-panel-body">
+            <div className="settings-field-row">
+              <div className="settings-field-row-label">Theme</div>
+              <div className="settings-field-row-control">
                 <select
                   className="settings-select"
                   value={theme}
@@ -103,171 +108,190 @@ export function SettingsView({
                     </option>
                   ))}
                 </select>
-              </label>
-              <label className="settings-field">
-                <span className="settings-field-label">UI font</span>
-                <select
-                  className="settings-select"
-                  value={uiFontFamily}
-                  onChange={(event) =>
-                    onUiFontFamilyChange(event.currentTarget.value as UiFontFamily)
-                  }
-                >
-                  {uiFontOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="settings-field">
-                <span className="settings-field-label">UI size</span>
-                <select
-                  className="settings-select"
-                  value={uiFontSize}
-                  onChange={(event) => onUiFontSizeChange(Number(event.currentTarget.value))}
-                >
-                  {uiFontSizeOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}px
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="settings-field">
-                <span className="settings-field-label">UI weight</span>
-                <select
-                  className="settings-select"
-                  value={uiFontWeight}
-                  onChange={(event) =>
-                    onUiFontWeightChange(Number(event.currentTarget.value) as UiFontWeight)
-                  }
-                >
-                  {uiFontWeightOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="settings-field">
-                <span className="settings-field-label">Monospaced font</span>
-                <select
-                  className="settings-select"
-                  value={monoFontFamily}
-                  onChange={(event) =>
-                    onMonoFontFamilyChange(event.currentTarget.value as MonoFontFamily)
-                  }
-                >
-                  {monoFontOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="settings-field">
-                <span className="settings-field-label">Monospaced size</span>
-                <select
-                  className="settings-select"
-                  value={monoFontSize}
-                  onChange={(event) => onMonoFontSizeChange(Number(event.currentTarget.value))}
-                >
-                  {monoFontSizeOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}px
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="settings-field">
-                <span className="settings-field-label">Monospaced weight</span>
-                <select
-                  className="settings-select"
-                  value={monoFontWeight}
-                  onChange={(event) =>
-                    onMonoFontWeightChange(Number(event.currentTarget.value) as MonoFontWeight)
-                  }
-                >
-                  {monoFontWeightOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="settings-field">
-                <span className="settings-field-label">Primary text color</span>
-                <span className="settings-color-control">
-                  <input
-                    type="color"
-                    className="settings-color-input"
-                    value={effectiveTextPrimaryColor}
-                    onChange={(event) => onTextPrimaryColorChange(event.currentTarget.value)}
-                  />
-                  <span className="settings-color-value">{effectiveTextPrimaryColor}</span>
-                </span>
-              </label>
-              <label className="settings-field">
-                <span className="settings-field-label">Secondary metadata color</span>
-                <span className="settings-color-control">
-                  <input
-                    type="color"
-                    className="settings-color-input"
-                    value={effectiveTextSecondaryColor}
-                    onChange={(event) => onTextSecondaryColorChange(event.currentTarget.value)}
-                  />
-                  <span className="settings-color-value">{effectiveTextSecondaryColor}</span>
-                </span>
-              </label>
-              <label className="settings-field">
-                <span className="settings-field-label">Muted label color</span>
-                <span className="settings-color-control">
-                  <input
-                    type="color"
-                    className="settings-color-input"
-                    value={effectiveTextMutedColor}
-                    onChange={(event) => onTextMutedColorChange(event.currentTarget.value)}
-                  />
-                  <span className="settings-color-value">{effectiveTextMutedColor}</span>
-                </span>
-              </label>
+              </div>
+            </div>
+
+            <div className="settings-subsection">
+              <div className="settings-subsection-title">UI Typography</div>
+              <div className="settings-inline-grid">
+                <label className="settings-field settings-field-wide">
+                  <span className="settings-field-label">Font</span>
+                  <select
+                    className="settings-select"
+                    value={uiFontFamily}
+                    onChange={(event) =>
+                      onUiFontFamilyChange(event.currentTarget.value as UiFontFamily)
+                    }
+                  >
+                    {uiFontOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="settings-field">
+                  <span className="settings-field-label">Size</span>
+                  <select
+                    className="settings-select"
+                    value={uiFontSize}
+                    onChange={(event) => onUiFontSizeChange(Number(event.currentTarget.value))}
+                  >
+                    {uiFontSizeOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}px
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="settings-field">
+                  <span className="settings-field-label">Weight</span>
+                  <select
+                    className="settings-select"
+                    value={uiFontWeight}
+                    onChange={(event) =>
+                      onUiFontWeightChange(Number(event.currentTarget.value) as UiFontWeight)
+                    }
+                  >
+                    {uiFontWeightOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div className="settings-subsection">
+              <div className="settings-subsection-title">Monospaced Typography</div>
+              <div className="settings-inline-grid">
+                <label className="settings-field settings-field-wide">
+                  <span className="settings-field-label">Font</span>
+                  <select
+                    className="settings-select"
+                    value={monoFontFamily}
+                    onChange={(event) =>
+                      onMonoFontFamilyChange(event.currentTarget.value as MonoFontFamily)
+                    }
+                  >
+                    {monoFontOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="settings-field">
+                  <span className="settings-field-label">Size</span>
+                  <select
+                    className="settings-select"
+                    value={monoFontSize}
+                    onChange={(event) => onMonoFontSizeChange(Number(event.currentTarget.value))}
+                  >
+                    {monoFontSizeOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}px
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="settings-field">
+                  <span className="settings-field-label">Weight</span>
+                  <select
+                    className="settings-select"
+                    value={monoFontWeight}
+                    onChange={(event) =>
+                      onMonoFontWeightChange(Number(event.currentTarget.value) as MonoFontWeight)
+                    }
+                  >
+                    {monoFontWeightOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div className="settings-subsection">
+              <div className="settings-subsection-title">Colors</div>
+              <div className="settings-color-stack">
+                <label className="settings-field-row">
+                  <span className="settings-field-row-label">Primary text</span>
+                  <span className="settings-field-row-control settings-color-control">
+                    <input
+                      type="color"
+                      className="settings-color-input"
+                      value={effectiveTextPrimaryColor}
+                      onChange={(event) => onTextPrimaryColorChange(event.currentTarget.value)}
+                    />
+                    <span className="settings-color-value">{effectiveTextPrimaryColor}</span>
+                  </span>
+                </label>
+                <label className="settings-field-row">
+                  <span className="settings-field-row-label">Secondary</span>
+                  <span className="settings-field-row-control settings-color-control">
+                    <input
+                      type="color"
+                      className="settings-color-input"
+                      value={effectiveTextSecondaryColor}
+                      onChange={(event) => onTextSecondaryColorChange(event.currentTarget.value)}
+                    />
+                    <span className="settings-color-value">{effectiveTextSecondaryColor}</span>
+                  </span>
+                </label>
+                <label className="settings-field-row">
+                  <span className="settings-field-row-label">Muted</span>
+                  <span className="settings-field-row-control settings-color-control">
+                    <input
+                      type="color"
+                      className="settings-color-input"
+                      value={effectiveTextMutedColor}
+                      onChange={(event) => onTextMutedColorChange(event.currentTarget.value)}
+                    />
+                    <span className="settings-color-value">{effectiveTextMutedColor}</span>
+                  </span>
+                </label>
+              </div>
             </div>
           </div>
         </section>
 
-        <section className="settings-section">
-          <div className="settings-section-header">
-            <div className="settings-section-icon settings-section-icon-storage" aria-hidden>
-              ::
-            </div>
-            <div>
-              <h3>Startup</h3>
-              <p>Restore explorer context and behavior when File Trail launches.</p>
+        <section className="settings-panel settings-panel-startup">
+          <div className="settings-panel-header">
+            <div className="settings-panel-title">
+              <span className="settings-panel-icon settings-panel-icon-startup" aria-hidden>
+                ⚡
+              </span>
+              <span>Startup</span>
             </div>
           </div>
-          <div className="settings-section-body">
-            <label className="settings-checkbox-card">
-              <input
-                type="checkbox"
-                className="settings-checkbox-card-input"
-                checked={restoreLastVisitedFolderOnStartup}
-                onChange={(event) =>
-                  onRestoreLastVisitedFolderOnStartupChange(event.currentTarget.checked)
-                }
-              />
-              <span className="settings-checkbox-card-copy">
-                <span className="settings-checkbox-card-title">
-                  Restore last visited folder on startup
+          <div className="settings-panel-body">
+            <label className="settings-toggle-row">
+              <span className="settings-toggle-copy">
+                <span className="settings-toggle-title">Restore last visited folder</span>
+                <span className="settings-toggle-description">
+                  Reopen the last folder instead of starting at home.
                 </span>
-                <span className="settings-checkbox-card-description">
-                  Reopen the last folder you navigated to instead of always starting at your home
-                  folder.
-                </span>
+              </span>
+              <span className="settings-toggle-control">
+                <input
+                  type="checkbox"
+                  className="settings-toggle-input"
+                  checked={restoreLastVisitedFolderOnStartup}
+                  onChange={(event) =>
+                    onRestoreLastVisitedFolderOnStartupChange(event.currentTarget.checked)
+                  }
+                />
+                <span className="settings-toggle-track" aria-hidden />
               </span>
             </label>
           </div>
         </section>
+
+        <div className="settings-footer-note">Changes are saved automatically</div>
       </div>
     </div>
   );

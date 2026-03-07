@@ -635,6 +635,18 @@ export function App() {
   const canGoBack = historyIndex > 0;
   const canGoForward = historyIndex >= 0 && historyIndex < historyPaths.length - 1;
 
+  function resetAppearanceSettings() {
+    setUiFontFamily(DEFAULT_APP_PREFERENCES.uiFontFamily);
+    setUiFontSize(DEFAULT_APP_PREFERENCES.uiFontSize);
+    setUiFontWeight(DEFAULT_APP_PREFERENCES.uiFontWeight);
+    setMonoFontFamily(DEFAULT_APP_PREFERENCES.monoFontFamily);
+    setMonoFontSize(DEFAULT_APP_PREFERENCES.monoFontSize);
+    setMonoFontWeight(DEFAULT_APP_PREFERENCES.monoFontWeight);
+    setTextPrimaryOverride(null);
+    setTextSecondaryOverride(null);
+    setTextMutedOverride(null);
+  }
+
   function goBack() {
     const nextPath = historyPaths[historyIndex - 1];
     if (!nextPath) {
@@ -1353,6 +1365,7 @@ export function App() {
                 onTextPrimaryColorChange={setTextPrimaryOverride}
                 onTextSecondaryColorChange={setTextSecondaryOverride}
                 onTextMutedColorChange={setTextMutedOverride}
+                onResetAppearance={resetAppearanceSettings}
                 onRestoreLastVisitedFolderOnStartupChange={setRestoreLastVisitedFolderOnStartup}
               />
             )}
