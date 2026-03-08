@@ -39,6 +39,16 @@ import { type TreeNodeState, TreePane } from "./components/TreePane";
 import { useElementSize } from "./hooks/useElementSize";
 import { useExplorerPaneLayout } from "./hooks/useExplorerPaneLayout";
 import {
+  EMPTY_CONTENT_SELECTION,
+  extendContentSelectionToPath as extendSelectionStateToPath,
+  mergeSelectionPathsInEntryOrder,
+  sanitizeContentSelection,
+  selectAllContentEntries as selectAllSelectionStateEntries,
+  setSingleContentSelection as createSingleContentSelection,
+  toggleContentSelection as toggleSelectionState,
+  type ContentSelectionState,
+} from "./lib/contentSelection";
+import {
   getAncestorChain,
   getForcedVisibleHiddenChildPath,
   getNextSelectionIndex,
@@ -67,11 +77,6 @@ type SearchResultItem = IpcResponse<"search:getUpdate">["items"][number];
 type SearchPatternMode = IpcRequest<"search:start">["patternMode"];
 type SearchMatchScope = IpcRequest<"search:start">["matchScope"];
 type SearchJobStatus = IpcResponse<"search:getUpdate">["status"];
-type ContentSelectionState = {
-  paths: string[];
-  anchorPath: string | null;
-  leadPath: string | null;
-};
 type ContextMenuState = {
   x: number;
   y: number;
@@ -86,11 +91,6 @@ const CONTEXT_MENU_WIDTH = 240;
 const CONTEXT_SUBMENU_WIDTH = 180;
 const CONTEXT_MENU_SAFE_MARGIN = 12;
 const CONTEXT_MENU_MAX_HEIGHT = 420;
-const EMPTY_CONTENT_SELECTION: ContentSelectionState = {
-  paths: [],
-  anchorPath: null,
-  leadPath: null,
-};
 const SHORTCUT_ITEMS = [
   { group: "Navigation", shortcut: "Cmd+Left", description: "Go back to the previous folder" },
   { group: "Navigation", shortcut: "Cmd+Right", description: "Go forward to the next folder" },
@@ -1213,48 +1213,16 @@ export function App() {
   }
 
   function setSingleContentSelection(path: string) {
-    setContentSelection({
-      paths: [path],
-      anchorPath: path,
-      leadPath: path,
-    });
+    setContentSelection(createSingleContentSelection(path));
   }
 
   function toggleContentSelection(path: string) {
-    setContentSelection((current) => {
-      if (current.paths.includes(path)) {
-        const nextPaths = current.paths.filter((currentPath) => currentPath !== path);
-        if (nextPaths.length === 0) {
-          return EMPTY_CONTENT_SELECTION;
-        }
-        const nextLeadPath =
-          current.leadPath === path ? nextPaths.at(-1) ?? null : current.leadPath;
-        return {
-          paths: nextPaths,
-          anchorPath:
-            current.anchorPath === path ? nextLeadPath : current.anchorPath ?? nextLeadPath,
-          leadPath: nextLeadPath,
-        };
-      }
-      return {
-        paths: mergeSelectionPathsInEntryOrder(activeContentEntries, current.paths, [path]),
-        anchorPath: path,
-        leadPath: path,
-      };
-    });
+    setContentSelection((current) => toggleSelectionState(current, activeContentEntries, path));
   }
 
   function extendContentSelectionToPath(path: string, additive = false) {
     setContentSelection((current) => {
-      const anchorPath = current.anchorPath ?? current.leadPath ?? path;
-      const rangePaths = getSelectionRangePaths(activeContentEntries, anchorPath, path);
-      return {
-        paths: additive
-          ? mergeSelectionPathsInEntryOrder(activeContentEntries, current.paths, rangePaths)
-          : rangePaths,
-        anchorPath,
-        leadPath: path,
-      };
+      return extendSelectionStateToPath(current, activeContentEntries, path, additive);
     });
   }
 
@@ -1278,14 +1246,7 @@ export function App() {
   }
 
   function selectAllContentEntries() {
-    if (activeContentEntries.length === 0) {
-      return;
-    }
-    setContentSelection({
-      paths: activeContentEntries.map((entry) => entry.path),
-      anchorPath: activeContentEntries[0]?.path ?? null,
-      leadPath: activeContentEntries.at(-1)?.path ?? null,
-    });
+    setContentSelection(selectAllSelectionStateEntries(activeContentEntries));
   }
 
   function openItemContextMenu(
@@ -2807,54 +2768,6 @@ export function App() {
       ) : null}
     </main>
   );
-}
-
-function sanitizeContentSelection(
-  selection: ContentSelectionState,
-  entries: DirectoryEntry[],
-): ContentSelectionState {
-  const availablePaths = new Set(entries.map((entry) => entry.path));
-  const nextPaths = selection.paths.filter((path) => availablePaths.has(path));
-  if (nextPaths.length === 0) {
-    return EMPTY_CONTENT_SELECTION;
-  }
-  const leadPath =
-    selection.leadPath && availablePaths.has(selection.leadPath)
-      ? selection.leadPath
-      : nextPaths.at(-1) ?? null;
-  const anchorPath =
-    selection.anchorPath && availablePaths.has(selection.anchorPath)
-      ? selection.anchorPath
-      : leadPath;
-  return {
-    paths: nextPaths,
-    anchorPath,
-    leadPath,
-  };
-}
-
-function getSelectionRangePaths(
-  entries: DirectoryEntry[],
-  anchorPath: string,
-  targetPath: string,
-): string[] {
-  const anchorIndex = entries.findIndex((entry) => entry.path === anchorPath);
-  const targetIndex = entries.findIndex((entry) => entry.path === targetPath);
-  if (anchorIndex < 0 || targetIndex < 0) {
-    return targetPath ? [targetPath] : [];
-  }
-  const [startIndex, endIndex] =
-    anchorIndex <= targetIndex ? [anchorIndex, targetIndex] : [targetIndex, anchorIndex];
-  return entries.slice(startIndex, endIndex + 1).map((entry) => entry.path);
-}
-
-function mergeSelectionPathsInEntryOrder(
-  entries: DirectoryEntry[],
-  currentPaths: string[],
-  nextPaths: string[],
-): string[] {
-  const mergedPaths = new Set([...currentPaths, ...nextPaths]);
-  return entries.filter((entry) => mergedPaths.has(entry.path)).map((entry) => entry.path);
 }
 
 function formatPathForShell(path: string): string {

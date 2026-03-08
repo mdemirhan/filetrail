@@ -2,20 +2,10 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export function useElementSize<T extends HTMLElement>(ref: React.RefObject<T | null>) {
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const observedElementRef = useRef<T | null>(null);
-  const observerRef = useRef<ResizeObserver | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const element = ref.current;
 
   useLayoutEffect(() => {
-    const element = ref.current;
-    if (element === observedElementRef.current) {
-      return;
-    }
-    if (observerRef.current) {
-      observerRef.current.disconnect();
-      observerRef.current = null;
-    }
-    observedElementRef.current = element;
     if (!element) {
       setSize({ width: 0, height: 0 });
       return;
@@ -49,11 +39,11 @@ export function useElementSize<T extends HTMLElement>(ref: React.RefObject<T | n
     if (element.parentElement) {
       observer.observe(element.parentElement);
     }
-    observerRef.current = observer;
     window.addEventListener("resize", scheduleUpdate);
     window.visualViewport?.addEventListener("resize", scheduleUpdate);
 
     return () => {
+      observer.disconnect();
       window.removeEventListener("resize", scheduleUpdate);
       window.visualViewport?.removeEventListener("resize", scheduleUpdate);
       if (animationFrameRef.current !== null) {
@@ -61,14 +51,13 @@ export function useElementSize<T extends HTMLElement>(ref: React.RefObject<T | n
         animationFrameRef.current = null;
       }
     };
-  });
+  }, [element]);
 
   useEffect(
     () => () => {
       if (animationFrameRef.current !== null) {
         window.cancelAnimationFrame(animationFrameRef.current);
       }
-      observerRef.current?.disconnect();
     },
     [],
   );
