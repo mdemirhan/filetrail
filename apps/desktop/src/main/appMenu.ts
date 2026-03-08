@@ -1,6 +1,6 @@
 import type { MenuItemConstructorOptions, WebContents } from "electron";
 
-export type RendererCommand = "focusFileSearch";
+export type RendererCommand = "focusFileSearch" | "copyPath";
 
 export function createApplicationMenuTemplate(
   webContents: Pick<WebContents, "send">,
@@ -31,6 +31,15 @@ export function createApplicationMenuTemplate(
           click: () => {
             webContents.send("filetrail:command", {
               type: "focusFileSearch" satisfies RendererCommand,
+            });
+          },
+        },
+        {
+          label: "Copy Path",
+          accelerator: "Alt+CommandOrControl+C",
+          click: () => {
+            webContents.send("filetrail:command", {
+              type: "copyPath" satisfies RendererCommand,
             });
           },
         },

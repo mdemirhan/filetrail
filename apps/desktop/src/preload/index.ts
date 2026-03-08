@@ -3,7 +3,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { IpcChannel, IpcRequestInput, IpcResponse } from "@filetrail/contracts";
 
 type RendererCommand = {
-  type: "focusFileSearch";
+  type: "focusFileSearch" | "copyPath";
 };
 
 type IpcEnvelope =

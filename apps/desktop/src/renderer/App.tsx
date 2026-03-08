@@ -90,6 +90,11 @@ const SHORTCUT_ITEMS = [
   { group: "Navigation", shortcut: "Cmd+R", description: "Refresh the current folder" },
   {
     group: "Navigation",
+    shortcut: "Cmd+Option+C",
+    description: "Copy the selected item path, or the current folder if nothing is selected",
+  },
+  {
+    group: "Navigation",
     shortcut: "Cmd+Shift+.",
     description: "Toggle hidden files",
   },
@@ -643,6 +648,13 @@ export function App() {
 
   useEffect(() => {
     const unsubscribe = client.onCommand((command) => {
+      if (command.type === "copyPath") {
+        const pathToCopy = contextMenuState?.path ?? selectedEntry?.path ?? currentPath;
+        if (pathToCopy) {
+          void runCopyPathAction(pathToCopy);
+        }
+        return;
+      }
       if (command.type !== "focusFileSearch") {
         return;
       }
@@ -666,7 +678,7 @@ export function App() {
       });
     });
     return unsubscribe;
-  }, [client]);
+  }, [client, contextMenuState, currentPath, selectedEntry]);
 
   useEffect(() => {
     if (!searchPopoverOpen) {
@@ -918,6 +930,20 @@ export function App() {
         void refreshDirectory();
         return;
       }
+      if (
+        event.metaKey &&
+        event.altKey &&
+        !event.ctrlKey &&
+        !event.shiftKey &&
+        event.code === "KeyC"
+      ) {
+        const pathToCopy = contextMenuState?.path ?? currentSelectedEntry?.path ?? currentPath;
+        if (pathToCopy) {
+          event.preventDefault();
+          void runCopyPathAction(pathToCopy);
+        }
+        return;
+      }
       if (event.metaKey && event.key.toLowerCase() === "l") {
         event.preventDefault();
         setLocationError(null);
@@ -1157,6 +1183,18 @@ export function App() {
     await client.invoke("system:copyText", { text: formatPathForShell(path) });
   }
 
+  async function runCopyPathAction(path: string) {
+    try {
+      await copyPathToClipboard(path);
+    } catch (error) {
+      logger.error("copy path failed", error);
+      setActionNotice({
+        title: "Copy Path",
+        message: "Unable to copy the selected path to the clipboard.",
+      });
+    }
+  }
+
   async function revealSearchResultInFolder(path: string) {
     const folderPath = parentDirectoryPath(path);
     if (!folderPath) {
@@ -1182,15 +1220,7 @@ export function App() {
       return;
     }
     if (actionId === "copyPath") {
-      try {
-        await copyPathToClipboard(path);
-      } catch (error) {
-        logger.error("copy path failed", error);
-        setActionNotice({
-          title: "Copy Path",
-          message: "Unable to copy the selected path to the clipboard.",
-        });
-      }
+      await runCopyPathAction(path);
       return;
     }
     const title =

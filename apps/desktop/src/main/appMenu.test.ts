@@ -16,4 +16,20 @@ describe("createApplicationMenuTemplate", () => {
 
     expect(send).toHaveBeenCalledWith("filetrail:command", { type: "focusFileSearch" });
   });
+
+  it("wires Copy Path to the renderer command channel", () => {
+    const send = vi.fn();
+    const template = createApplicationMenuTemplate({ send } as never);
+    const editMenu = template.find((item) => item.label === "Edit");
+    const submenu = Array.isArray(editMenu?.submenu) ? editMenu.submenu : [];
+    const copyPathItem = submenu.find((item) => "label" in item && item.label === "Copy Path");
+
+    expect(copyPathItem).toBeTruthy();
+    if (!copyPathItem || !("click" in copyPathItem) || typeof copyPathItem.click !== "function") {
+      throw new Error("Copy Path menu item missing.");
+    }
+    copyPathItem.click(undefined as never, undefined as never, undefined as never);
+
+    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "copyPath" });
+  });
 });
