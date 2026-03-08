@@ -2,14 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 
 import { clampPaneWidth } from "../../shared/appPreferences";
+import { EXPLORER_LAYOUT } from "../lib/layoutTokens";
 
 type Pane = "tree" | "inspector";
-
-const TREE_MIN_WIDTH = 220;
-const TREE_MAX_WIDTH = 520;
-const INSPECTOR_MIN_WIDTH = 260;
-const INSPECTOR_MAX_WIDTH = 480;
-const RESIZER_WIDTH = 8;
 
 export function useExplorerPaneLayout(args: {
   initialTreeWidth: number;
@@ -72,26 +67,26 @@ export function useExplorerPaneLayout(args: {
       const delta = event.clientX - active.startX;
       if (active.pane === "tree") {
         const maxTreeWidth = inspectorVisible
-          ? Math.max(TREE_MIN_WIDTH, availableSideWidth - inspectorWidthRef.current)
-          : Math.max(TREE_MIN_WIDTH, availableSideWidth);
+          ? Math.max(EXPLORER_LAYOUT.treeMinWidth, availableSideWidth - inspectorWidthRef.current)
+          : Math.max(EXPLORER_LAYOUT.treeMinWidth, availableSideWidth);
         setTreeWidth(
           clampPaneWidth(
             active.treeWidth + delta,
-            TREE_MIN_WIDTH,
-            Math.min(TREE_MAX_WIDTH, maxTreeWidth),
+            EXPLORER_LAYOUT.treeMinWidth,
+            Math.min(EXPLORER_LAYOUT.treeMaxWidth, maxTreeWidth),
           ),
         );
         return;
       }
       const maxInspectorWidth = Math.max(
-        INSPECTOR_MIN_WIDTH,
+        EXPLORER_LAYOUT.inspectorMinWidth,
         availableSideWidth - treeWidthRef.current,
       );
       setInspectorWidth(
         clampPaneWidth(
           active.inspectorWidth - delta,
-          INSPECTOR_MIN_WIDTH,
-          Math.min(INSPECTOR_MAX_WIDTH, maxInspectorWidth),
+          EXPLORER_LAYOUT.inspectorMinWidth,
+          Math.min(EXPLORER_LAYOUT.inspectorMaxWidth, maxInspectorWidth),
         ),
       );
     };
@@ -116,24 +111,31 @@ export function useExplorerPaneLayout(args: {
         minContentWidth,
       });
 
-      let nextTreeWidth = clampPaneWidth(treeWidthRef.current, TREE_MIN_WIDTH, TREE_MAX_WIDTH);
+      let nextTreeWidth = clampPaneWidth(
+        treeWidthRef.current,
+        EXPLORER_LAYOUT.treeMinWidth,
+        EXPLORER_LAYOUT.treeMaxWidth,
+      );
       let nextInspectorWidth = clampPaneWidth(
         inspectorWidthRef.current,
-        INSPECTOR_MIN_WIDTH,
-        INSPECTOR_MAX_WIDTH,
+        EXPLORER_LAYOUT.inspectorMinWidth,
+        EXPLORER_LAYOUT.inspectorMaxWidth,
       );
 
       if (inspectorVisible) {
         nextInspectorWidth = Math.min(
           nextInspectorWidth,
-          Math.max(INSPECTOR_MIN_WIDTH, availableSideWidth - nextTreeWidth),
+          Math.max(EXPLORER_LAYOUT.inspectorMinWidth, availableSideWidth - nextTreeWidth),
         );
         nextTreeWidth = Math.min(
           nextTreeWidth,
-          Math.max(TREE_MIN_WIDTH, availableSideWidth - nextInspectorWidth),
+          Math.max(EXPLORER_LAYOUT.treeMinWidth, availableSideWidth - nextInspectorWidth),
         );
       } else {
-        nextTreeWidth = Math.min(nextTreeWidth, Math.max(TREE_MIN_WIDTH, availableSideWidth));
+        nextTreeWidth = Math.min(
+          nextTreeWidth,
+          Math.max(EXPLORER_LAYOUT.treeMinWidth, availableSideWidth),
+        );
       }
 
       if (nextTreeWidth !== treeWidthRef.current) {
@@ -169,7 +171,8 @@ function getAvailableSideWidth(
   const { inspectorVisible, minContentWidth } = args;
   const resizerCount = inspectorVisible ? 2 : 1;
   return Math.max(
-    TREE_MIN_WIDTH + (inspectorVisible ? INSPECTOR_MIN_WIDTH : 0),
-    viewportWidth - minContentWidth - resizerCount * RESIZER_WIDTH,
+    EXPLORER_LAYOUT.treeMinWidth +
+      (inspectorVisible ? EXPLORER_LAYOUT.inspectorMinWidth : 0),
+    viewportWidth - minContentWidth - resizerCount * EXPLORER_LAYOUT.resizerWidth,
   );
 }

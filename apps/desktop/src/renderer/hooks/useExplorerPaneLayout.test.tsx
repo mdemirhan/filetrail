@@ -2,6 +2,7 @@
 
 import { act, fireEvent, render, screen } from "@testing-library/react";
 
+import { EXPLORER_LAYOUT } from "../lib/layoutTokens";
 import { useExplorerPaneLayout } from "./useExplorerPaneLayout";
 
 function Harness({
@@ -17,7 +18,7 @@ function Harness({
     initialTreeWidth,
     initialInspectorWidth,
     inspectorVisible,
-    minContentWidth: 420,
+    minContentWidth: EXPLORER_LAYOUT.minContentWidth,
   });
 
   return (

@@ -37,6 +37,7 @@ import { FileIcon } from "./lib/fileIcons";
 import { useFiletrailClient } from "./lib/filetrailClient";
 import { formatDateTime, formatPermissionMode, formatSize } from "./lib/formatting";
 import { createRendererLogger } from "./lib/logging";
+import { EXPLORER_LAYOUT } from "./lib/layoutTokens";
 import { resolveStartupNavigation } from "./lib/startupNavigation";
 import { applyAppearance, getThemeAppearanceDefaults } from "./lib/theme";
 import {
@@ -192,7 +193,7 @@ export function App() {
     initialTreeWidth: DEFAULT_APP_PREFERENCES.treeWidth,
     initialInspectorWidth: DEFAULT_APP_PREFERENCES.inspectorWidth,
     inspectorVisible: propertiesOpen,
-    minContentWidth: 420,
+    minContentWidth: EXPLORER_LAYOUT.minContentWidth,
   });
 
   useEffect(() => {
@@ -1212,19 +1213,33 @@ export function App() {
     pane: "tree" | "inspector",
     event: ReactKeyboardEvent<HTMLDivElement>,
   ) {
-    const step = event.shiftKey ? 24 : 12;
+    const step = event.shiftKey
+      ? EXPLORER_LAYOUT.paneResizeStepLarge
+      : EXPLORER_LAYOUT.paneResizeStep;
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
       return;
     }
     event.preventDefault();
     if (pane === "tree") {
       panes.setTreeWidth((current) =>
-        Math.max(220, Math.min(520, current + (event.key === "ArrowRight" ? step : -step))),
+        Math.max(
+          EXPLORER_LAYOUT.treeMinWidth,
+          Math.min(
+            EXPLORER_LAYOUT.treeMaxWidth,
+            current + (event.key === "ArrowRight" ? step : -step),
+          ),
+        ),
       );
       return;
     }
     panes.setInspectorWidth((current) =>
-      Math.max(260, Math.min(480, current + (event.key === "ArrowLeft" ? step : -step))),
+      Math.max(
+        EXPLORER_LAYOUT.inspectorMinWidth,
+        Math.min(
+          EXPLORER_LAYOUT.inspectorMaxWidth,
+          current + (event.key === "ArrowLeft" ? step : -step),
+        ),
+      ),
     );
   }
 
@@ -1373,8 +1388,10 @@ export function App() {
             <section
               className="workspace-body tomorrow-night-layout"
               style={{
-                gridTemplateColumns: `${panes.treeWidth}px 8px minmax(0, 1fr)${
-                  propertiesOpen ? ` 8px ${panes.inspectorWidth}px` : ""
+                gridTemplateColumns: `${panes.treeWidth}px ${EXPLORER_LAYOUT.resizerWidth}px minmax(0, 1fr)${
+                  propertiesOpen
+                    ? ` ${EXPLORER_LAYOUT.resizerWidth}px ${panes.inspectorWidth}px`
+                    : ""
                 }`,
               }}
             >

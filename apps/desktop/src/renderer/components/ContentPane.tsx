@@ -11,10 +11,18 @@ type DirectoryEntry = IpcResponse<"directory:getSnapshot">["entries"][number];
 type DirectoryEntryMetadata = IpcResponse<"directory:getMetadataBatch">["items"][number];
 type PathSuggestion = IpcResponse<"path:getSuggestions">["suggestions"][number];
 
-const FLOW_ROW_HEIGHT = 44;
-const DETAILS_ROW_HEIGHT = 38;
-const FLOW_ITEM_WIDTH = 292;
 const PATH_SUGGESTION_DEBOUNCE_MS = 350;
+const FLOW_LIST_LAYOUT = {
+  rowHeight: 44,
+  rowGap: 4,
+  itemWidth: 292,
+  columnGap: 18,
+  paddingTop: 10,
+  paddingBottom: 10,
+} as const;
+const DETAILS_LIST_LAYOUT = {
+  rowHeight: 38,
+} as const;
 
 export function ContentPane({
   paneRef,
@@ -473,7 +481,15 @@ function FlowListView({
   const [scrollTop, setScrollTop] = useState(0);
   const rowsPerColumn = Math.max(
     1,
-    Math.floor(Math.max(height - 24, FLOW_ROW_HEIGHT) / FLOW_ROW_HEIGHT),
+    Math.floor(
+      Math.max(
+        height -
+          (FLOW_LIST_LAYOUT.paddingTop +
+            FLOW_LIST_LAYOUT.paddingBottom -
+            FLOW_LIST_LAYOUT.rowGap),
+        FLOW_LIST_LAYOUT.rowHeight,
+      ) / FLOW_LIST_LAYOUT.rowHeight,
+    ),
   );
   const rows = useMemo(
     () => buildColumnMajorRows(entries, rowsPerColumn),
@@ -482,7 +498,7 @@ function FlowListView({
   const columnCount = Math.max(1, Math.ceil(entries.length / rowsPerColumn));
   const range = getVirtualRange({
     itemCount: rows.length,
-    itemSize: FLOW_ROW_HEIGHT,
+    itemSize: FLOW_LIST_LAYOUT.rowHeight,
     viewportSize: height,
     scrollOffset: scrollTop,
     overscan: 6,
@@ -529,16 +545,23 @@ function FlowListView({
       <div
         className="flow-grid-rows"
         style={{
-          paddingTop: `${range.startIndex * FLOW_ROW_HEIGHT}px`,
-          paddingBottom: `${Math.max(0, rows.length - range.endIndex) * FLOW_ROW_HEIGHT}px`,
-          minWidth: `${columnCount * FLOW_ITEM_WIDTH + Math.max(0, columnCount - 1) * 18}px`,
+          paddingTop: `${range.startIndex * FLOW_LIST_LAYOUT.rowHeight}px`,
+          paddingBottom: `${
+            Math.max(0, rows.length - range.endIndex) * FLOW_LIST_LAYOUT.rowHeight
+          }px`,
+          minWidth: `${
+            columnCount * FLOW_LIST_LAYOUT.itemWidth +
+            Math.max(0, columnCount - 1) * FLOW_LIST_LAYOUT.columnGap
+          }px`,
         }}
       >
         {visibleRows.map((row, rowIndex) => (
           <div
             key={`${range.startIndex + rowIndex}-${row.at(0)?.path ?? "empty"}`}
             className="flow-grid"
-            style={{ gridTemplateColumns: `repeat(${columnCount}, ${FLOW_ITEM_WIDTH}px)` }}
+            style={{
+              gridTemplateColumns: `repeat(${columnCount}, ${FLOW_LIST_LAYOUT.itemWidth}px)`,
+            }}
           >
             {row.map((entry) => (
               <button
@@ -609,7 +632,7 @@ function DetailsView({
   const [scrollTop, setScrollTop] = useState(0);
   const range = getVirtualRange({
     itemCount: entries.length,
-    itemSize: DETAILS_ROW_HEIGHT,
+    itemSize: DETAILS_LIST_LAYOUT.rowHeight,
     viewportSize: height,
     scrollOffset: scrollTop,
     overscan: 10,
@@ -667,8 +690,10 @@ function DetailsView({
         />
         <div
           style={{
-            paddingTop: `${range.startIndex * DETAILS_ROW_HEIGHT}px`,
-            paddingBottom: `${Math.max(0, entries.length - range.endIndex) * DETAILS_ROW_HEIGHT}px`,
+            paddingTop: `${range.startIndex * DETAILS_LIST_LAYOUT.rowHeight}px`,
+            paddingBottom: `${
+              Math.max(0, entries.length - range.endIndex) * DETAILS_LIST_LAYOUT.rowHeight
+            }px`,
           }}
         >
           {visibleEntries.map((entry) => {
