@@ -32,4 +32,38 @@ describe("startup navigation", () => {
       startupRootPath: "/",
     });
   });
+
+  it("uses the explicit startup folder instead of the last visited folder", () => {
+    expect(
+      resolveStartupNavigation(
+        {
+          restoreLastVisitedFolderOnStartup: true,
+          lastVisitedPath: "/Users/demo/projects/filetrail",
+          treeRootPath: "/Users/demo/projects",
+        },
+        "/Users/demo",
+        "/Applications",
+      ),
+    ).toEqual({
+      startupPath: "/Applications",
+      startupRootPath: "/",
+    });
+  });
+
+  it("uses home as the tree root when the explicit startup folder is inside home", () => {
+    expect(
+      resolveStartupNavigation(
+        {
+          restoreLastVisitedFolderOnStartup: false,
+          lastVisitedPath: null,
+          treeRootPath: "/Users/demo/projects",
+        },
+        "/Users/demo",
+        "/Users/demo/src/filetrail",
+      ),
+    ).toEqual({
+      startupPath: "/Users/demo/src/filetrail",
+      startupRootPath: "/Users/demo",
+    });
+  });
 });

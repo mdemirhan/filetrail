@@ -453,8 +453,9 @@ export function App() {
     void Promise.all([
       client.invoke("app:getPreferences", {}),
       client.invoke("app:getHomeDirectory", {}),
+      client.invoke("app:getLaunchContext", {}),
     ])
-      .then(([preferencesResponse, homeResponse]) => {
+      .then(([preferencesResponse, homeResponse, launchContextResponse]) => {
         if (cancelled) {
           return;
         }
@@ -491,6 +492,7 @@ export function App() {
         const { startupPath, startupRootPath } = resolveStartupNavigation(
           preferences,
           homeResponse.path,
+          launchContextResponse.startupFolderPath,
         );
         initializeTree(startupRootPath);
         void navigateTo(

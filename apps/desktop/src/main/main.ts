@@ -1,11 +1,12 @@
 import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BrowserWindow, Menu, app, nativeImage, nativeTheme, shell } from "electron";
 
 import { createApplicationMenuTemplate } from "./appMenu";
 import { type AppStateStore, createAppStateStore, resolveAppStatePath } from "./appStateStore";
 import { bootstrapMainProcess, shutdownMainProcess } from "./bootstrap";
+import { resolveStartupFolderPath } from "./launchContext";
 
 let mainWindowRef: BrowserWindow | null = null;
 let appStateStoreRef: AppStateStore | null = null;
@@ -29,7 +30,11 @@ if (hasSingleInstanceLock) {
       }
     }
     appStateStoreRef = appStateStore;
-    await bootstrapMainProcess(appStateStore);
+    await bootstrapMainProcess(appStateStore, {
+      startupFolderPath: resolveStartupFolderPath(process.argv, resolveLaunchWorkingDirectory(), {
+        argvOffset: process.defaultApp ? 2 : 1,
+      }),
+    });
     mainWindowRef = createWindow();
 
     app.on("activate", () => {
@@ -179,4 +184,12 @@ function resolveAppIconPath(): string | null {
   }
 
   return null;
+}
+
+function resolveLaunchWorkingDirectory(): string {
+  const envPwd = process.env.PWD;
+  if (envPwd && isAbsolute(envPwd)) {
+    return envPwd;
+  }
+  return process.cwd();
 }

@@ -33,6 +33,9 @@ function createHandlersThatFailOnSnapshot() {
         lastVisitedPath: null,
       },
     }),
+    "app:getLaunchContext": async () => ({
+      startupFolderPath: null,
+    }),
     "app:updatePreferences": async () => ({
       preferences: {
         theme: "tomorrow-night" as const,

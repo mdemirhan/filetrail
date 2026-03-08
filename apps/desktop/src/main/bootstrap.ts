@@ -23,7 +23,10 @@ const folderSizeJobs = new Map<
 >();
 const debugTimingsEnabled = process.env.FILETRAIL_DEBUG_TIMINGS === "1";
 
-export async function bootstrapMainProcess(appStateStore: AppStateStore): Promise<void> {
+export async function bootstrapMainProcess(
+  appStateStore: AppStateStore,
+  launchContext: { startupFolderPath: string | null } = { startupFolderPath: null },
+): Promise<void> {
   const workerClient = new ExplorerWorkerClient(resolveExplorerWorkerUrl(), {
     fdBinaryPath: resolveBundledFdBinaryPath(),
   });
@@ -36,6 +39,7 @@ export async function bootstrapMainProcess(appStateStore: AppStateStore): Promis
     "app:getPreferences": () => ({
       preferences: appStateStore.getPreferences(),
     }),
+    "app:getLaunchContext": () => launchContext,
     "app:updatePreferences": (payload) => ({
       preferences: appStateStore.updatePreferences(toPreferencePatch(payload.preferences)),
     }),

@@ -89,6 +89,10 @@ export const resolvedPathSchema = z.object({
   resolvedPath: z.string().nullable(),
 });
 
+export const launchContextSchema = z.object({
+  startupFolderPath: z.string().min(1).nullable(),
+});
+
 export const appPreferencesSchema = z.object({
   theme: themeModeSchema,
   uiFontFamily: uiFontFamilySchema,
@@ -139,6 +143,10 @@ export const ipcContractSchemas = {
     response: z.object({
       preferences: appPreferencesSchema,
     }),
+  },
+  "app:getLaunchContext": {
+    request: z.object({}),
+    response: launchContextSchema,
   },
   "app:updatePreferences": {
     request: z.object({

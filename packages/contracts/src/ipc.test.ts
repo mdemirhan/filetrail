@@ -137,6 +137,24 @@ describe("ipc contracts", () => {
     });
   });
 
+  it("validates launch context payloads", () => {
+    expect(
+      ipcContractSchemas["app:getLaunchContext"].response.parse({
+        startupFolderPath: "/Users/demo/project",
+      }),
+    ).toEqual({
+      startupFolderPath: "/Users/demo/project",
+    });
+
+    expect(
+      ipcContractSchemas["app:getLaunchContext"].response.parse({
+        startupFolderPath: null,
+      }),
+    ).toEqual({
+      startupFolderPath: null,
+    });
+  });
+
   it("validates path suggestion responses", () => {
     expect(
       ipcContractSchemas["path:getSuggestions"].response.parse({

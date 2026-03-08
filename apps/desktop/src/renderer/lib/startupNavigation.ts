@@ -6,7 +6,15 @@ export function resolveStartupNavigation(
     "restoreLastVisitedFolderOnStartup" | "lastVisitedPath" | "treeRootPath"
   >,
   homePath: string,
+  startupFolderPath: string | null = null,
 ): { startupPath: string; startupRootPath: string } {
+  if (startupFolderPath) {
+    return {
+      startupPath: startupFolderPath,
+      startupRootPath: isPathWithinRoot(startupFolderPath, homePath) ? homePath : "/",
+    };
+  }
+
   const startupPath =
     preferences.restoreLastVisitedFolderOnStartup && preferences.lastVisitedPath
       ? preferences.lastVisitedPath
