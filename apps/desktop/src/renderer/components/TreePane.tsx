@@ -35,6 +35,7 @@ export function TreePane({
   themeMenuRef,
   onToggleThemeMenu,
   onSelectTheme,
+  onOpenHelp,
   onOpenSettings,
   includeHidden,
   onToggleHidden,
@@ -59,6 +60,7 @@ export function TreePane({
   themeMenuRef: React.RefObject<HTMLDivElement | null>;
   onToggleThemeMenu: () => void;
   onSelectTheme: (theme: ThemeMode) => void;
+  onOpenHelp: () => void;
   onOpenSettings: () => void;
   includeHidden: boolean;
   onToggleHidden: () => void;
@@ -195,6 +197,15 @@ export function TreePane({
             <ToolbarIcon name="detailRow" />
           </button>
           <div className="sidebar-rail-spacer" />
+          <button
+            type="button"
+            className="sidebar-rail-button"
+            onClick={onOpenHelp}
+            title="Help"
+            aria-label="Open help"
+          >
+            <ToolbarIcon name="help" />
+          </button>
           <div className="sidebar-rail-menu-anchor">
             <button
               ref={themeButtonRef}

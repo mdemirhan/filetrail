@@ -31,7 +31,7 @@ export function HelpView({
         </header>
 
         <div className="help-grid">
-          <section className="help-card">
+          <section className="help-card help-card-shortcuts">
             <div className="help-card-header">
               <div className="help-card-icon success" aria-hidden>
                 ⌨
@@ -45,7 +45,7 @@ export function HelpView({
             </div>
             <div className="help-shortcut-list">
               {shortcutGroups.map((group) => (
-                <div key={group.name}>
+                <div key={group.name} className="help-shortcut-group">
                   <div className="help-group-label">{group.name}</div>
                   {group.items.map((item) => (
                     <div
@@ -68,7 +68,7 @@ export function HelpView({
             </div>
           </section>
 
-          <section className="help-card">
+          <section className="help-card help-card-reference">
             <div className="help-card-header">
               <div className="help-card-icon info" aria-hidden>
                 i

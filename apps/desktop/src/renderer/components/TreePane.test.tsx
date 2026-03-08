@@ -53,6 +53,7 @@ describe("TreePane", () => {
         themeMenuRef={themeMenuRef}
         onToggleThemeMenu={() => undefined}
         onSelectTheme={() => undefined}
+        onOpenHelp={() => undefined}
         onOpenSettings={() => undefined}
         includeHidden={false}
         onToggleHidden={() => undefined}
@@ -114,6 +115,7 @@ describe("TreePane", () => {
         themeMenuRef={themeMenuRef}
         onToggleThemeMenu={() => undefined}
         onSelectTheme={() => undefined}
+        onOpenHelp={() => undefined}
         onOpenSettings={() => undefined}
         includeHidden={false}
         onToggleHidden={() => undefined}
@@ -161,6 +163,7 @@ describe("TreePane", () => {
         themeMenuRef={themeMenuRef}
         onToggleThemeMenu={() => undefined}
         onSelectTheme={() => undefined}
+        onOpenHelp={() => undefined}
         onOpenSettings={() => undefined}
         includeHidden={false}
         onToggleHidden={() => undefined}
@@ -208,6 +211,7 @@ describe("TreePane", () => {
         themeMenuRef={themeMenuRef}
         onToggleThemeMenu={() => undefined}
         onSelectTheme={() => undefined}
+        onOpenHelp={() => undefined}
         onOpenSettings={() => undefined}
         includeHidden={false}
         onToggleHidden={() => undefined}
@@ -219,5 +223,52 @@ describe("TreePane", () => {
 
     expect(screen.getByText("Jump to")).toBeInTheDocument();
     expect(screen.getByText("doc")).toBeInTheDocument();
+  });
+
+  it("opens help from the rail button", () => {
+    const handleOpenHelp = vi.fn();
+    render(
+      <TreePane
+        isFocused
+        rootPath="/Users/demo"
+        homePath="/Users/demo"
+        currentPath="/Users/demo"
+        nodes={{
+          "/Users/demo": {
+            path: "/Users/demo",
+            name: "demo",
+            kind: "directory",
+            isHidden: false,
+            isSymlink: false,
+            expanded: true,
+            loading: false,
+            loaded: true,
+            error: null,
+            childPaths: [],
+          },
+        }}
+        onFocusChange={() => undefined}
+        onGoHome={() => undefined}
+        onQuickAccess={() => undefined}
+        detailRowOpen
+        onToggleDetailRow={() => undefined}
+        theme="dark"
+        themeMenuOpen={false}
+        themeButtonRef={themeButtonRef}
+        themeMenuRef={themeMenuRef}
+        onToggleThemeMenu={() => undefined}
+        onSelectTheme={() => undefined}
+        onOpenHelp={handleOpenHelp}
+        onOpenSettings={() => undefined}
+        includeHidden={false}
+        onToggleHidden={() => undefined}
+        onToggleExpand={() => undefined}
+        onNavigate={() => undefined}
+        typeaheadQuery=""
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /open help/i }));
+    expect(handleOpenHelp).toHaveBeenCalledTimes(1);
   });
 });

@@ -1399,6 +1399,7 @@ export function App() {
                   setTheme(nextTheme);
                   setThemeMenuOpen(false);
                 }}
+                onOpenHelp={() => setMainView("help")}
                 onOpenSettings={() => setMainView("settings")}
                 includeHidden={includeHidden}
                 onToggleHidden={toggleHiddenFiles}
