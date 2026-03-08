@@ -5,10 +5,14 @@ import { flattenVisibleTree } from "./treeView";
 
 type DirectoryEntry = IpcResponse<"directory:getSnapshot">["entries"][number];
 
+// Printable, non-whitespace characters participate in file-selection typeahead.
+// Navigation and modifier shortcuts are handled elsewhere.
 export function isTypeaheadCharacterKey(key: string): boolean {
   return key.length === 1 && key.trim().length > 0;
 }
 
+// Content-pane typeahead is deliberately simple and predictable: prefix-match against the
+// rendered entry names in their current order.
 export function findContentTypeaheadMatch(
   entries: DirectoryEntry[],
   query: string,
@@ -22,6 +26,8 @@ export function findContentTypeaheadMatch(
   );
 }
 
+// Tree typeahead only searches visible nodes. Collapsed descendants are excluded so
+// results always map to something the user can immediately see and select.
 export function findTreeTypeaheadMatch(args: {
   rootPath: string;
   nodes: Record<string, TreeNodeState>;

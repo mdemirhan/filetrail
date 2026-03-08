@@ -1359,6 +1359,9 @@ export function App() {
     axis: "horizontal" | "vertical";
     element: HTMLElement;
   } | null {
+    // Tree, details, search, and flow-list views each scroll a different inner element.
+    // Centralizing that lookup keeps paging shortcuts and selection reveal logic pointed
+    // at the same DOM node the user is actually scrolling.
     if (focusedPane === "tree") {
       const element = treePaneRef.current?.querySelector<HTMLElement>(".tree-scroll");
       return element ? { axis: "vertical", element } : null;
@@ -1390,6 +1393,8 @@ export function App() {
       if (orderedPaths.length === 0) {
         return didScroll;
       }
+      // Tree page movement scrolls the viewport and advances selection by roughly one
+      // visible page with a single-row overlap, mirroring terminal-style Ctrl+U / Ctrl+D.
       const currentIndex = orderedPaths.findIndex((path) => path === currentPath);
       const stepItems = getPageStepItemCount(
         target.element.clientHeight,
@@ -1435,6 +1440,8 @@ export function App() {
         return false;
       }
 
+      // List view pages horizontally by one rendered column because the list layout flows
+      // top-to-bottom before creating the next column.
       return scrollElementByAmount(
         target.element,
         "horizontal",
@@ -1452,6 +1459,9 @@ export function App() {
         return didScroll;
       }
 
+      // Details and search both use vertical row paging. Search must use the shared
+      // `SEARCH_RESULT_ROW_HEIGHT` contract so physical scrolling and logical selection
+      // movement stay aligned when row density changes.
       const stepItems = getPageStepItemCount(
         target.element.clientHeight,
         isSearchMode ? SEARCH_RESULT_ROW_HEIGHT : getDetailsRowHeight(compactDetailsView),
@@ -1734,6 +1744,8 @@ export function App() {
   }
 
   function showCachedSearchResults(options?: { focusPane?: boolean }) {
+    // Search results can be hidden temporarily while keeping the last result set and its
+    // selection around. This lets Cmd+Shift+F reopen the pane without rerunning fd.
     if (!hasCachedSearch) {
       return;
     }
@@ -1804,6 +1816,8 @@ export function App() {
   }
 
   function pollSearch(jobId: string, cursor: number, sessionId: number): void {
+    // `sessionId` guards against older async polls mutating state after the user has
+    // started a newer search or cleared the current one.
     void client
       .invoke("search:getUpdate", { jobId, cursor })
       .then((response) => {
@@ -1846,6 +1860,8 @@ export function App() {
       rootPath: string;
     }> = {},
   ) {
+    // Starting a search snapshots the current browse selection so hiding the search pane
+    // later can restore the pre-search browsing context.
     const trimmedQuery = query.trim();
     const rootPath = overrides.rootPath ?? currentPath;
     if (trimmedQuery.length === 0) {
@@ -1901,6 +1917,8 @@ export function App() {
 
   function updateSearchPatternMode(nextValue: SearchPatternMode) {
     setSearchPatternMode(nextValue);
+    // Search option changes re-run the committed search immediately so the pane behaves
+    // like a live search session once results already exist.
     if (hasCachedSearch) {
       void startSearch(searchCommittedQuery, {
         patternMode: nextValue,
@@ -1992,6 +2010,8 @@ export function App() {
     if (typeaheadTimeoutRef.current) {
       clearTimeout(typeaheadTimeoutRef.current);
     }
+    // Typeahead is shared across panes, but the accumulated query expires quickly so stale
+    // keystrokes do not affect later navigation.
     typeaheadTimeoutRef.current = setTimeout(() => {
       typeaheadTimeoutRef.current = null;
       typeaheadQueryRef.current = "";
@@ -2002,6 +2022,8 @@ export function App() {
   }
 
   function handleTypeaheadInput(key: string, pane: "tree" | "content") {
+    // The active pane owns the query buffer. Switching panes starts a fresh prefix instead
+    // of concatenating unrelated keystrokes across tree/content contexts.
     const baseQuery = typeaheadPaneRef.current === pane ? typeaheadQueryRef.current : "";
     const nextQuery = `${baseQuery}${key}`;
     typeaheadQueryRef.current = nextQuery;
@@ -2094,6 +2116,8 @@ export function App() {
   }
 
   function initializeTree(path: string) {
+    // Tree initialization starts with only the root node. Descendants are loaded lazily
+    // as navigation and expansion demand them.
     treeRequestRef.current = {};
     treeRootPathRef.current = path;
     setTreeRootPath(path);
@@ -2103,6 +2127,8 @@ export function App() {
   }
 
   function reinitializeTree(rootPath: string, focusPath: string) {
+    // Re-rooting seeds just the ancestor chain to the focused path so the tree can render
+    // a meaningful branch immediately before the async child loads complete.
     treeRequestRef.current = {};
     treeRootPathRef.current = rootPath;
     setTreeRootPath(rootPath);
@@ -2129,6 +2155,8 @@ export function App() {
     sortDirectionOverride = sortDirection,
     foldersFirstOverride = foldersFirst,
   ): Promise<boolean> {
+    // `directoryRequestRef` is a monotonic request token so slower snapshots cannot win
+    // over a newer navigation and roll the UI back to an older folder.
     const requestId = ++directoryRequestRef.current;
     setDirectoryLoading(true);
     setDirectoryError(null);
@@ -2150,6 +2178,8 @@ export function App() {
           return cached ? [[entry.path, cached] as const] : [];
         }),
       );
+      // Keep only metadata for currently visible entries; metadata is cheap to rehydrate
+      // and pruning here prevents unbounded growth as the user navigates.
       metadataCacheRef.current = new Map(Object.entries(cachedMetadata));
       metadataInflightRef.current.clear();
       setCurrentPath(response.path);
@@ -2223,6 +2253,9 @@ export function App() {
     expandOnSuccess = false,
     activePath = currentPath,
   ) {
+    // Tree loading must account for the case where hidden files are globally disabled but
+    // the active path still lives under a hidden child. In that case we keep just the
+    // active hidden branch visible so navigation remains coherent.
     const currentNode = treeNodesRef.current[path];
     const rootPath = treeRootPathRef.current;
     const forcedVisibleHiddenChildPath =
@@ -2270,6 +2303,7 @@ export function App() {
         path,
         includeHidden: effectiveIncludeHidden,
       });
+      // Ignore stale responses for the same node if a newer request was started.
       if (treeRequestRef.current[path] !== requestId) {
         return;
       }
@@ -2326,6 +2360,8 @@ export function App() {
   }
 
   async function syncTreeToPath(path: string, includeHiddenOverride: boolean) {
+    // If navigation escapes the current tree root, the tree is re-rooted to the new path
+    // and then expanded along the ancestor chain needed to reveal the active location.
     const currentRootPath = treeRootPathRef.current;
     const nextRootPath =
       currentRootPath.length === 0 || !isPathWithinRoot(path, currentRootPath)
@@ -2361,6 +2397,8 @@ export function App() {
     path: string,
     activePath: string,
   ): boolean {
+    // Hidden mode can be forced per request when a hidden descendant must remain visible
+    // to represent the current path in the tree.
     if (includeHiddenOverride) {
       return true;
     }
@@ -2457,6 +2495,8 @@ export function App() {
   }
 
   async function refreshDirectory() {
+    // Refresh clears only main-process caches; the next navigation repopulates renderer
+    // metadata caches from the freshly fetched snapshot.
     await client.invoke("app:clearCaches", {});
     if (!currentPath) {
       return;

@@ -3,6 +3,9 @@ export type VirtualRange = {
   endIndex: number;
 };
 
+// Returns a half-open [startIndex, endIndex) window of items to mount.
+// The calculation is intentionally tolerant of bad inputs so callers can use live DOM
+// measurements without needing to sanitize every transient zero/negative state first.
 export function getVirtualRange(args: {
   itemCount: number;
   itemSize: number;
@@ -37,6 +40,7 @@ export function getVirtualRange(args: {
   };
 }
 
+// Standard row-major chunking used by simple fixed-column grids.
 export function chunkItemsIntoRows<T>(items: T[], columns: number): T[][] {
   const safeColumns = Math.max(1, columns);
   const rows: T[][] = [];
@@ -73,6 +77,8 @@ export function computeRowsPerColumn(
   return Math.max(1, Math.floor(Math.max(contentHeight, layout.rowHeight) / layout.rowHeight));
 }
 
+// Converts a flat item list into the visual structure used by list view, where entries fill
+// top-to-bottom first and only then continue in the next column to the right.
 export function buildColumnMajorRows<T>(items: T[], rowsPerColumn: number): T[][] {
   const safeRowsPerColumn = Math.max(1, rowsPerColumn);
   const columnCount = Math.max(1, Math.ceil(items.length / safeRowsPerColumn));

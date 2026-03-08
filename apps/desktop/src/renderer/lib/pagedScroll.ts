@@ -7,6 +7,8 @@ type ScrollableElement = Pick<
 > &
   EventTarget;
 
+// Scroll by exactly one viewport in the given axis and synthesize a `scroll` event so
+// controlled React state that mirrors the DOM scroll offset stays in sync immediately.
 export function pageScrollElement(
   element: ScrollableElement,
   axis: PagedScrollAxis,
@@ -38,6 +40,9 @@ export function pageScrollElement(
   return true;
 }
 
+// Used when the logical unit is not "one full page" but a fixed layout step such as one
+// flow-list column. Like `pageScrollElement`, this emits a synthetic `scroll` event for
+// code paths that depend on the event rather than polling DOM state.
 export function scrollElementByAmount(
   element: ScrollableElement,
   axis: PagedScrollAxis,

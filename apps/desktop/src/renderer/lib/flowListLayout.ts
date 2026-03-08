@@ -1,5 +1,7 @@
 import type { FlowListLayout } from "./virtualization";
 
+// These layout tokens must stay aligned with the corresponding CSS row sizing. Navigation,
+// reveal-into-view, and virtualization all read from this module rather than measuring DOM.
 export const FLOW_LIST_LAYOUT = {
   rowHeight: 36,
   rowGap: 2,
@@ -24,11 +26,15 @@ export function getFlowListLayout(compact: boolean) {
   return compact ? COMPACT_FLOW_LIST_LAYOUT : FLOW_LIST_LAYOUT;
 }
 
+// One horizontal "page step" in flow-list view is exactly one rendered column.
 export function getFlowListColumnStep(compact: boolean): number {
   const layout = getFlowListLayout(compact);
   return layout.itemWidth + layout.columnGap;
 }
 
+// Computes the horizontal scroll offset needed to make a given item fully visible.
+// Because flow-list view is column-major, item index -> column index depends on the
+// current rows-per-column count, not just the viewport width.
 export function getFlowListRevealScrollLeft(args: {
   currentScrollLeft: number;
   viewportWidth: number;
@@ -44,6 +50,7 @@ export function getFlowListRevealScrollLeft(args: {
   const columnIndex = Math.max(0, Math.floor(Math.max(0, itemIndex) / safeRowsPerColumn));
   const itemLeft = columnIndex * getFlowListColumnStep(compact);
   const itemRight = itemLeft + layout.itemWidth;
+  // The visible content width excludes side padding baked into the layout tokens.
   const availableWidth = Math.max(1, viewportWidth - layout.paddingInline * 2);
 
   let nextScrollLeft = currentScrollLeft;

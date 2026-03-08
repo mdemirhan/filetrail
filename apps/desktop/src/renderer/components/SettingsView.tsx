@@ -5,6 +5,8 @@ import type {
   UiFontWeight,
 } from "../../shared/appPreferences";
 
+// SettingsView is a fully controlled form. Every field reflects the current preference
+// snapshot and forwards edits upward immediately instead of maintaining local drafts.
 export function SettingsView({
   theme,
   uiFontFamily,

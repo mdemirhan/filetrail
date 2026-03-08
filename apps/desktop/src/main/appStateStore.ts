@@ -69,6 +69,8 @@ const DEFAULT_TIMER: AppStateStoreTimer = {
   clearTimeout,
 };
 
+// The persisted store intentionally contains only restart-worthy UI state. Directory data,
+// caches, and other ephemeral runtime state should stay out of this file.
 export class AppStateStore {
   private readonly filePath: string;
   private readonly defaultTheme: ThemeMode;
@@ -141,6 +143,7 @@ export class AppStateStore {
     if (this.persistTimer) {
       this.timer.clearTimeout(this.persistTimer);
     }
+    // Debounce writes so resize drags and repeated toggles do not hammer the filesystem.
     this.persistTimer = this.timer.setTimeout(() => {
       this.persistTimer = null;
       persistState(this.filePath, this.state, this.fileSystem, this.onPersistError);
@@ -159,6 +162,7 @@ export function resolveAppStatePath(userDataPath: string): string {
   return join(userDataPath, "app-state.json");
 }
 
+// Loading is best-effort. Corrupt or old state should never block startup.
 function readState(
   filePath: string,
   fileSystem: AppStateStoreFileSystem,
@@ -191,6 +195,7 @@ function persistState(
   fileSystem: AppStateStoreFileSystem,
   onPersistError: (error: unknown) => void,
 ): void {
+  // JSON rewrite is good enough here and keeps the persisted format easy to inspect manually.
   try {
     fileSystem.mkdirSync(dirname(filePath), { recursive: true });
     fileSystem.writeFileSync(filePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
@@ -199,6 +204,8 @@ function persistState(
   }
 }
 
+// This is the migration boundary for persisted preferences. When keys are renamed or
+// removed, normalize legacy shapes here instead of letting stale values leak outward.
 function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPreferences {
   const currentDefaults = withDefaultTheme(DEFAULT_APP_PREFERENCES, defaultTheme);
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -348,6 +355,7 @@ function sanitizeDetailColumns(
   value: unknown,
   defaults = DEFAULT_DETAIL_COLUMN_VISIBILITY,
 ): AppPreferences["detailColumns"] {
+  // Optional detail columns are stored as booleans, but the runtime expects a full record.
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return defaults;
   }
@@ -364,6 +372,7 @@ function sanitizeDetailColumnWidths(
   value: unknown,
   defaults = DEFAULT_DETAIL_COLUMN_WIDTHS,
 ): AppPreferences["detailColumnWidths"] {
+  // Widths are clamped per column so a bad saved value cannot collapse or explode the table.
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return defaults;
   }
@@ -377,6 +386,7 @@ function sanitizeDetailColumnWidths(
 }
 
 function sanitizeWindowState(value: unknown): StoredWindowState {
+  // Window position is optional, but dimensions are always normalized into a safe range.
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return DEFAULT_WINDOW_STATE;
   }
@@ -397,6 +407,8 @@ function sanitizeWindowState(value: unknown): StoredWindowState {
 }
 
 function withDefaultTheme(preferences: AppPreferences, defaultTheme: ThemeMode): AppPreferences {
+  // The first-launch theme can be injected by the platform, but persisted preferences should
+  // otherwise carry the entire state.
   return {
     ...preferences,
     theme: defaultTheme,

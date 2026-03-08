@@ -35,6 +35,7 @@ const DEFAULT_FILE_SYSTEM: ExplorerFileSystem = {
 
 type EntryKind = IpcResponse<"directory:getSnapshot">["entries"][number]["kind"];
 
+// Tree loading only returns navigable folders, not every entry in the directory.
 export async function listTreeChildren(
   path: string,
   includeHidden: boolean,
@@ -68,6 +69,8 @@ export async function listTreeChildren(
   };
 }
 
+// Snapshot listing fetches extra stat data only for sort modes that require it so the
+// common name-sorted path stays as cheap as possible.
 export async function listDirectorySnapshot(
   path: string,
   includeHidden: boolean,
@@ -110,6 +113,8 @@ export async function listDirectorySnapshot(
   };
 }
 
+// Metadata batches are constrained to a single parent directory so the renderer cannot use
+// this as a generic arbitrary-path stat API.
 export async function getDirectoryMetadataBatch(
   directoryPath: string,
   paths: string[],
@@ -131,6 +136,8 @@ export async function getDirectoryMetadataBatch(
   };
 }
 
+// The info panel uses this richer single-item shape rather than stitching fields together
+// from snapshot + metadata batch responses.
 export async function getItemProperties(
   path: string,
   fileSystem: ExplorerFileSystem = DEFAULT_FILE_SYSTEM,
@@ -158,6 +165,8 @@ export async function getItemProperties(
   };
 }
 
+// Suggestions resolve the deepest existing directory prefix, then match only directory-like
+// children under that base path.
 export async function getPathSuggestions(
   inputPath: string,
   includeHidden: boolean,
@@ -224,6 +233,7 @@ export async function resolvePathTarget(
   path: string,
   fileSystem: ExplorerFileSystem = DEFAULT_FILE_SYSTEM,
 ): Promise<IpcResponse<"path:resolve">> {
+  // Failure is represented as `resolvedPath: null` so callers can fall back gracefully.
   const resolvedInputPath = resolve(path);
   try {
     const resolvedPath = await fileSystem.realpath(resolvedInputPath);
@@ -243,6 +253,7 @@ async function readDirectoryEntryMetadata(
   path: string,
   fileSystem: ExplorerFileSystem,
 ): Promise<IpcResponse<"directory:getMetadataBatch">["items"][number]> {
+  // Directory sizes are intentionally deferred; everything else is cheap enough for bulk reads.
   const stats = await fileSystem.stat(path);
   const symlinkStats = await safeLstat(path, fileSystem);
   const isSymlink = symlinkStats?.isSymbolicLink?.() ?? false;
@@ -262,6 +273,7 @@ async function classifyEntry(
   path: string,
   fileSystem: ExplorerFileSystem,
 ): Promise<EntryKind> {
+  // Symlinks need a follow-up stat to determine whether the target behaves like a file or folder.
   if (dirent.isDirectory()) {
     return "directory";
   }
@@ -290,6 +302,7 @@ function deriveKindFromStats(stats: FileSystemStats, isSymlink: boolean): EntryK
 }
 
 async function resolveDirectoryPath(path: string, fileSystem: ExplorerFileSystem): Promise<string> {
+  // Normalize through realpath when possible so aliased directories do not fork history/tree state.
   const resolvedPath = resolve(path);
   const stats = await fileSystem.stat(resolvedPath);
   if (!stats.isDirectory()) {
@@ -306,6 +319,9 @@ async function resolvePathSuggestionQuery(
   inputPath: string,
   fileSystem: ExplorerFileSystem,
 ): Promise<{ basePath: string; typedName: string } | null> {
+  // Example:
+  // `/Users/al/Doc` => basePath `/Users/al`, typedName `Doc`
+  // `/Users/al/Documents/` => basePath `/Users/al/Documents`, typedName ``
   const trimmedInput = inputPath.trim();
   const normalizedPath = normalizeSuggestionInput(trimmedInput.length === 0 ? "/" : trimmedInput);
   const trailingSlash = hasTrailingSlash(trimmedInput);
@@ -390,6 +406,7 @@ function compareEntries(
   sortDirection: IpcRequest<"directory:getSnapshot">["sortDirection"],
   foldersFirst: boolean,
 ): number {
+  // `foldersFirst` is applied before the requested sort mode, matching Finder-style behavior.
   if (foldersFirst) {
     const leftRank = isDirectoryKind(left.kind) ? 0 : 1;
     const rightRank = isDirectoryKind(right.kind) ? 0 : 1;
@@ -426,6 +443,7 @@ function compareEntriesByName(left: { name: string }, right: { name: string }): 
 }
 
 function compareNullableNumbers(left: number | null, right: number | null): number {
+  // Nulls sort last so missing metadata does not float directories/unknown values to the top.
   if (left === right) {
     return 0;
   }
@@ -476,6 +494,7 @@ function parentDirectoryPath(path: string): string {
 }
 
 function getKindLabel(kind: EntryKind, path: string): string {
+  // Human-readable labels are used directly in details/info UI and intentionally stay simple.
   if (kind === "directory") {
     return "Folder";
   }

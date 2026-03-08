@@ -2,6 +2,8 @@ import type { IpcResponse } from "@filetrail/contracts";
 
 type Entry = IpcResponse<"directory:getSnapshot">["entries"][number];
 
+// Icon rendering is intentionally lightweight and CSS-driven. We classify entries into a
+// small visual vocabulary here and let theme styles handle the final appearance.
 export function FileIcon({ entry }: { entry: Entry }) {
   const type = resolveIconType(entry);
   if (type === "folder") {
@@ -107,6 +109,8 @@ function FolderSvg({ open = false }: { open?: boolean }) {
   );
 }
 
+// Documents render a short in-icon label based on extension/category rather than unique
+// per-type artwork. This keeps icon rendering cheap in heavily virtualized views.
 function DocumentSvg({ label }: { label: string }) {
   return (
     <svg
@@ -130,6 +134,8 @@ function DocumentSvg({ label }: { label: string }) {
 }
 
 function resolveDocumentLabel(entry: Entry): string {
+  // Symlinked files are called out explicitly because their extension may not reveal that
+  // following the item leaves the current directory context.
   if (entry.kind === "symlink_file") {
     return "AL";
   }
@@ -141,6 +147,8 @@ function resolveDocumentLabel(entry: Entry): string {
 }
 
 function resolveIconType(entry: Entry): string {
+  // The classification is intentionally coarse. It exists to provide enough visual grouping
+  // for common file types without introducing a large per-extension icon registry.
   if (entry.kind === "directory") {
     return "folder";
   }

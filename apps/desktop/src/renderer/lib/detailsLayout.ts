@@ -4,6 +4,8 @@ import type {
   DetailColumnWidths,
 } from "../../shared/appPreferences";
 
+// Shared details-view sizing contract. The renderer uses these values for sticky header
+// alignment, virtualization, keyboard paging, and compact-mode switching.
 export const DETAILS_LAYOUT = {
   headerHeight: 31,
   regularRowHeight: 36,
@@ -16,6 +18,7 @@ export function getDetailsRowHeight(compact: boolean): number {
   return compact ? DETAILS_LAYOUT.compactRowHeight : DETAILS_LAYOUT.regularRowHeight;
 }
 
+// `name` is always present; the remaining columns are optional and preserve a stable order.
 export function getVisibleDetailColumns(
   visibility: DetailColumnVisibility,
 ): ReadonlyArray<DetailColumnKey> {
@@ -27,6 +30,8 @@ export function getVisibleDetailColumns(
   ];
 }
 
+// The details table has a minimum width even when very few columns are visible so the
+// sticky header and body still read as a table instead of collapsing too aggressively.
 export function getDetailsTableWidth(
   widths: DetailColumnWidths,
   visibleColumns: ReadonlyArray<DetailColumnKey>,

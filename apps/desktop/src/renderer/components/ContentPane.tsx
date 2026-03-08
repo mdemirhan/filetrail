@@ -60,6 +60,9 @@ type SelectionGestureModifiers = {
   shiftKey: boolean;
 };
 
+// `ContentPane` is the shared shell for list and details view. It owns path navigation,
+// path suggestions, pane focus, and typeahead forwarding, then delegates actual entry
+// rendering to the active layout implementation.
 export function ContentPane({
   paneRef,
   isFocused,
@@ -155,6 +158,9 @@ export function ContentPane({
     [pathSegments, pathbarWidth, pathbarExpanded],
   );
   const displayedPath = previewPath ?? draftPath;
+
+  // Navigating to a new folder resets all transient editor state so previews, expanded
+  // breadcrumbs, and highlighted suggestions do not leak across locations.
   useEffect(() => {
     if (segmentClickTimeoutRef.current !== null) {
       window.clearTimeout(segmentClickTimeoutRef.current);
@@ -191,6 +197,8 @@ export function ContentPane({
     }
   }, [currentPath, pathEditorOpen]);
 
+  // Suggestion previews temporarily replace the input text while selecting the autocompleted
+  // suffix, which keeps keyboard acceptance behavior predictable.
   useEffect(() => {
     if (!pathEditorOpen || previewPath === null) {
       return;
@@ -277,6 +285,8 @@ export function ContentPane({
     };
   }, [pathbarExpanded]);
 
+  // Suggestions are debounced because they can hit the filesystem on every keystroke.
+  // Request IDs and the pending-input ref prevent older responses from winning races.
   function scheduleSuggestionsRequest(inputPath: string): void {
     if (suggestionDebounceTimeoutRef.current !== null) {
       window.clearTimeout(suggestionDebounceTimeoutRef.current);
@@ -306,6 +316,8 @@ export function ContentPane({
     setPathSuggestions(response?.suggestions ?? []);
   }
 
+  // Accepted suggestions normalize directory-style paths with a trailing slash so follow-up
+  // suggestions continue from the accepted folder.
   function acceptSuggestion(suggestion: PathSuggestion): void {
     const acceptedPath = suggestion.path.endsWith("/") ? suggestion.path : `${suggestion.path}/`;
     pendingSuggestionInputRef.current = acceptedPath;
@@ -354,6 +366,8 @@ export function ContentPane({
           onFocusChange(false);
         }
       }}
+      // This keeps content-pane typeahead working even when focus is inside nested controls,
+      // while still excluding inputs and resize handles that have their own keyboard model.
       onKeyDownCapture={(event) => {
         if (!onTypeaheadInput) {
           return;
@@ -558,6 +572,8 @@ export function ContentPane({
               setPathEditorOpen(true);
             }}
           >
+            {/* The pathbar may collapse middle segments to fit current width, but the full
+                path remains reachable either by expansion or by opening the editor. */}
             {visiblePathItems.map((item, index) => (
               <div
                 key={item.kind === "segment" ? item.segment.path : item.key}
@@ -672,6 +688,8 @@ export function ContentPane({
 }
 
 function buildPathSegments(path: string): Array<PathbarSegment> {
+  // The UI presents `/` as "Macintosh HD" to match the rest of the macOS-facing chrome,
+  // but navigation still uses real absolute paths underneath.
   if (path === "/") {
     return [{ label: "Macintosh HD", path: "/" }];
   }
@@ -693,6 +711,8 @@ function resolveVisiblePathbarItems(
   availableWidth: number,
   expanded: boolean,
 ): PathbarDisplayItem[] {
+  // Collapse logic prefers keeping the tail visible because those segments are usually the
+  // most actionable part of the current location.
   const fullItems = segments.map<PathbarDisplayItem>((segment, index) => ({
     kind: "segment",
     segment,
@@ -736,6 +756,7 @@ function buildCollapsedPathbarItems(
   segments: PathbarSegment[],
   options: { includeRoot: boolean; tailCount: number },
 ): PathbarDisplayItem[] {
+  // Hidden middle segments are represented by a single synthetic "collapsed" item.
   const items: PathbarDisplayItem[] = [];
   const hiddenStartIndex = options.includeRoot ? 1 : 0;
   const tailStartIndex = Math.max(hiddenStartIndex, segments.length - options.tailCount);
@@ -789,6 +810,7 @@ function estimatePathbarWidth(items: PathbarDisplayItem[]): number {
 let pathbarMeasureHost: HTMLDivElement | null = null;
 
 function estimatePathbarSegmentWidth(label: string, isActive: boolean): number {
+  // Measure with real DOM styles so collapse decisions stay accurate across font/theme changes.
   if (typeof document === "undefined") {
     return PATHBAR_SEGMENT_HORIZONTAL_PADDING + label.length * 8;
   }
@@ -893,6 +915,8 @@ function FlowListView({
     [entries, rowsPerColumn],
   );
   const columnCount = Math.max(1, Math.ceil(entries.length / rowsPerColumn));
+  // Virtualization operates on rendered rows, not items, because each row can contain
+  // one entry per visible column in this column-major layout.
   const range = getVirtualRange({
     itemCount: rows.length,
     itemSize: listLayout.rowHeight,
@@ -910,6 +934,8 @@ function FlowListView({
     onLayoutColumnsChange(rowsPerColumn);
   }, [onLayoutColumnsChange, rowsPerColumn]);
 
+  // Selection reveal is horizontal in list view because vertical movement stays within
+  // the current column while additional columns live off-screen to the right.
   useEffect(() => {
     const container = containerRef.current;
     if (!container || !selectionLeadPath) {
@@ -964,6 +990,8 @@ function FlowListView({
         });
       }}
       onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+      // Vertical wheel delta is mapped to horizontal travel because the visual list grows
+      // sideways once the current column is full.
       onWheel={(event) => {
         if (event.ctrlKey || !containerRef.current) {
           return;
@@ -984,6 +1012,8 @@ function FlowListView({
       <div
         className="flow-grid-rows"
         style={{
+          // The full horizontal scroll range depends on the total column count even though
+          // only a slice of rows is mounted at any given time.
           paddingTop: `${range.startIndex * listLayout.rowHeight}px`,
           paddingBottom: `${Math.max(0, rows.length - range.endIndex) * listLayout.rowHeight}px`,
           minWidth: `${
@@ -1107,6 +1137,8 @@ function DetailsView({
     () => visibleColumns.map((key) => `${detailColumnWidths[key]}px`).join(" "),
     [detailColumnWidths, visibleColumns],
   );
+  // Header and body widths must come from the same visible-column set so the sticky
+  // header remains aligned with the scrollable body.
   const tableWidth = useMemo(
     () => getDetailsTableWidth(detailColumnWidths, visibleColumns),
     [detailColumnWidths, visibleColumns],
@@ -1137,6 +1169,7 @@ function DetailsView({
     [],
   );
 
+  // Keep the lead selection visible using the same row height contract virtualization uses.
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container || !selectionLeadPath) {
@@ -1160,6 +1193,8 @@ function DetailsView({
     }
   }, [entries, rowHeight, selectionLeadPath, viewportHeight, viewportWidth]);
 
+  // Resizing uses global pointer listeners so the drag continues even if the pointer
+  // leaves the resize handle while the user is dragging quickly.
   function startColumnResize(event: React.PointerEvent<HTMLSpanElement>, key: DetailColumnKey) {
     if (event.button !== 0) {
       return;
@@ -1227,6 +1262,8 @@ function DetailsView({
         <div
           className={`details-header${compactDetailsView ? " compact" : ""}`}
           style={{
+            // The header is translated by body scroll rather than scrolled directly so it
+            // stays sticky while still matching the body's horizontal position.
             width: `${tableWidth}px`,
             minWidth: "100%",
             gridTemplateColumns,
@@ -1287,6 +1324,7 @@ function DetailsView({
           style={{
             width: `${tableWidth}px`,
             minWidth: "100%",
+            // Virtualization pads the unmounted rows above and below the visible slice.
             paddingTop: `${range.startIndex * rowHeight}px`,
             paddingBottom: `${Math.max(0, entries.length - range.endIndex) * rowHeight}px`,
           }}
@@ -1456,6 +1494,7 @@ function SortButton({
   direction: "asc" | "desc";
   onClick: () => void;
 }) {
+  // Only snapshot-backed columns are sortable; permissions depend on lazy metadata loading.
   return (
     <button
       type="button"
@@ -1475,6 +1514,7 @@ function formatDetailSize(
   entry: DirectoryEntry,
   metadata: DirectoryEntryMetadata | undefined,
 ): string {
+  // Directories show `-` by design. Empty string is reserved for metadata that is still loading.
   if (entry.kind === "directory" || entry.kind === "symlink_directory") {
     return "-";
   }

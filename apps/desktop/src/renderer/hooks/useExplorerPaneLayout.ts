@@ -6,6 +6,7 @@ import { EXPLORER_LAYOUT } from "../lib/layoutTokens";
 
 type Pane = "tree" | "inspector";
 
+// Coordinates the draggable tree/info panel widths while respecting a minimum center content area.
 export function useExplorerPaneLayout(args: {
   initialTreeWidth: number;
   initialInspectorWidth: number;
@@ -31,8 +32,9 @@ export function useExplorerPaneLayout(args: {
         pane,
         startX: event.clientX,
         treeWidth,
-        inspectorWidth,
+      inspectorWidth,
       };
+      // Global class lets CSS disable selection and show the resize cursor consistently.
       document.body.classList.add("resizing-panels");
     },
     [inspectorWidth, treeWidth],
@@ -60,6 +62,7 @@ export function useExplorerPaneLayout(args: {
       if (!active) {
         return;
       }
+      // Both side panes share the same horizontal budget once minimum content width is reserved.
       const availableSideWidth = getAvailableSideWidth(window.innerWidth, {
         inspectorVisible,
         minContentWidth,
@@ -106,6 +109,7 @@ export function useExplorerPaneLayout(args: {
 
   useEffect(() => {
     const syncToViewport = () => {
+      // Window resizes and inspector toggles can make previously valid widths illegal.
       const availableSideWidth = getAvailableSideWidth(window.innerWidth, {
         inspectorVisible,
         minContentWidth,
@@ -168,6 +172,7 @@ function getAvailableSideWidth(
   viewportWidth: number,
   args: { inspectorVisible: boolean; minContentWidth: number },
 ): number {
+  // Total side-pane budget after reserving the center content area and resizer gutters.
   const { inspectorVisible, minContentWidth } = args;
   const resizerCount = inspectorVisible ? 2 : 1;
   return Math.max(

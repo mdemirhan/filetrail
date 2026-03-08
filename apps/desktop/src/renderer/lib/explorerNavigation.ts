@@ -1,3 +1,4 @@
+// Returns the parent directory, treating `/` as the root sentinel with no parent.
 export function parentDirectoryPath(path: string): string | null {
   if (path === "/") {
     return null;
@@ -9,6 +10,8 @@ export function parentDirectoryPath(path: string): string | null {
   return `/${parts.slice(0, -1).join("/")}`;
 }
 
+// Builds the ancestor chain from the active root down to the target path. If the target
+// sits outside the root, callers get a safe fallback chain containing just the root.
 export function getAncestorChain(rootPath: string, path: string): string[] {
   if (!isPathWithinRoot(path, rootPath)) {
     return [rootPath];
@@ -27,6 +30,9 @@ export function getAncestorChain(rootPath: string, path: string): string[] {
   return ancestors.reverse();
 }
 
+// Tree bootstrapping needs both each ancestor and the immediate child that should be
+// opened under it. This shape lets the loader eagerly expand just the branch leading
+// to the focused path.
 export function getTreeSeedChain(
   rootPath: string,
   focusPath: string,
@@ -38,6 +44,9 @@ export function getTreeSeedChain(
   }));
 }
 
+// Hidden-file mode can be off while the current selection still lives under a hidden
+// segment. This helper detects that case so the tree/content views can keep the active
+// branch visible instead of making the current path disappear.
 export function pathHasHiddenSegmentWithinRoot(path: string, rootPath: string): boolean {
   if (!isPathWithinRoot(path, rootPath)) {
     return false;
@@ -54,6 +63,8 @@ export function pathHasHiddenSegmentWithinRoot(path: string, rootPath: string): 
     .some((segment) => segment.startsWith("."));
 }
 
+// Returns only the first hidden child that must remain visible under `parentPath` in
+// order to preserve the active path while hidden-file filtering is disabled.
 export function getForcedVisibleHiddenChildPath(parentPath: string, activePath: string): string | null {
   if (!isPathWithinRoot(activePath, parentPath) || activePath === parentPath) {
     return null;
@@ -69,6 +80,8 @@ export function getForcedVisibleHiddenChildPath(parentPath: string, activePath: 
   return parentPath === "/" ? `/${nextSegment}` : `${parentPath}/${nextSegment}`;
 }
 
+// Arrow-key movement differs by view mode: list view uses columns for left/right jumps,
+// while details/search behave as a single vertical sequence regardless of visual columns.
 export function getNextSelectionIndex(args: {
   itemCount: number;
   currentIndex: number;
@@ -116,12 +129,16 @@ export function getNextSelectionIndex(args: {
   return clampIndex(safeIndex + step, itemCount);
 }
 
+// Page-wise selection intentionally overlaps by one visible item so Ctrl+U / Ctrl+D
+// preserve orientation instead of jumping to a completely disjoint set of entries.
 export function getPageStepItemCount(viewportSize: number, itemExtent: number): number {
   const safeExtent = Math.max(1, itemExtent);
   const visibleItems = Math.max(1, Math.floor(Math.max(0, viewportSize) / safeExtent));
   return Math.max(1, visibleItems - 1);
 }
 
+// Mirrors the page-step math used for scrolling so selection movement and viewport
+// movement stay aligned.
 export function getPagedSelectionIndex(args: {
   itemCount: number;
   currentIndex: number;
@@ -140,6 +157,8 @@ export function getPagedSelectionIndex(args: {
   );
 }
 
+// Flattens the expanded tree into the same visual order the user sees on screen.
+// Keyboard navigation and paged movement depend on this pre-order traversal.
 export function flattenVisibleTreePaths(
   rootPath: string,
   nodes: Record<

@@ -32,6 +32,8 @@ export function registerIpcHandlers(
   ipcMain: Pick<IpcMain, "handle">,
   handlers: IpcHandlerMap,
 ): void {
+  // Every IPC channel is validated on both ingress and egress so renderer/main drift is
+  // caught at runtime even when TypeScript boundaries are bypassed.
   for (const channel of ipcChannels) {
     ipcMain.handle(channel, async (event, payload) => {
       try {
@@ -51,6 +53,8 @@ export function registerIpcHandlers(
           payload: response.data,
         } satisfies IpcEnvelope;
       } catch (error) {
+        // Filesystem access failures are expected when the user navigates into protected or
+        // disappearing locations, so we keep those quiet unless explicit debug logging is on.
         if (!isExpectedAccessError(error) || debugIpcErrorsEnabled) {
           console.error(`[filetrail] ipc ${channel} failed`, error);
         }

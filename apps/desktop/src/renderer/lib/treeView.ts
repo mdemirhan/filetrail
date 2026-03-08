@@ -12,6 +12,8 @@ export type TreeKeyboardAction =
   | { type: "load"; path: string }
   | { type: "none" };
 
+// Produces the exact visual order of the expanded tree, including depth, for keyboard
+// navigation and typeahead. Collapsed descendants are intentionally excluded.
 export function flattenVisibleTree(args: {
   rootPath: string;
   nodes: Record<string, TreeNodeState>;
@@ -41,6 +43,8 @@ export function flattenVisibleTree(args: {
   return flattened;
 }
 
+// Maps arrow/home/end keys to high-level tree actions instead of mutating state directly.
+// The caller decides how to execute `load`, `expand`, `collapse`, or `navigate`.
 export function getTreeKeyboardAction(args: {
   key: "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight" | "Home" | "End";
   currentPath: string;
@@ -84,6 +88,7 @@ export function getTreeKeyboardAction(args: {
     if (currentNode.isSymlink) {
       return { type: "none" };
     }
+    // Right arrow lazily loads directories before trying to expand or enter them.
     if (!currentNode.loaded) {
       return { type: "load", path: currentNode.path };
     }
@@ -97,6 +102,7 @@ export function getTreeKeyboardAction(args: {
     return { type: "none" };
   }
 
+  // Left arrow collapses first; only once already collapsed does it move to the parent.
   if (currentNode.expanded && currentNode.childPaths.length > 0) {
     return { type: "collapse", path: currentNode.path };
   }

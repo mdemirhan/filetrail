@@ -1,5 +1,7 @@
 import type { ThemeMode, UiFontFamily, UiFontWeight } from "../../shared/appPreferences";
 
+// CSS files own the full palettes; this module applies the user-selected theme identity,
+// font stack, and optional text color overrides at runtime.
 const UI_FONT_STACKS: Record<UiFontFamily, string> = {
   "dm-sans": '"DM Sans", "Inter", -apple-system, BlinkMacSystemFont, sans-serif',
   lexend: '"Lexend", "DM Sans", "Inter", -apple-system, BlinkMacSystemFont, sans-serif',
@@ -58,6 +60,8 @@ export function applyAppearance({
   textSecondaryOverride: string | null;
   textMutedOverride: string | null;
 }): void {
+  // Write to `documentElement` so every mounted view observes the same token updates
+  // immediately without any component-level plumbing.
   if (typeof document === "undefined") {
     return;
   }

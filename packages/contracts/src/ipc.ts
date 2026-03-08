@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+// These schemas are the single source of truth for renderer <-> main IPC payloads.
+// Keep the runtime validators and the inferred TypeScript types aligned here so the
+// transport contract cannot silently drift between processes.
 export const explorerEntryKindSchema = z.enum([
   "directory",
   "file",
@@ -62,6 +65,9 @@ export const directoryEntryMetadataSchema = z.object({
   kindLabel: z.string().min(1),
   modifiedAt: z.string().nullable(),
   sizeBytes: z.number().int().nonnegative().nullable(),
+  // Directories intentionally report `deferred` while folder size calculation is skipped
+  // or backgrounded; the renderer maps that to `-` or an empty loading state instead of
+  // implying the data is unavailable forever.
   sizeStatus: z.enum(["ready", "deferred", "unavailable"]),
   permissionMode: z.number().int().nonnegative().nullable(),
 });
@@ -94,6 +100,9 @@ export const searchResultItemSchema = z.object({
   kind: explorerEntryKindSchema,
   isHidden: z.boolean(),
   isSymlink: z.boolean(),
+  // `parentPath` is the absolute parent directory. `relativeParentPath` is precomputed
+  // relative to the search root so the renderer can render dense rows without repeatedly
+  // re-slicing long absolute paths during virtualization.
   parentPath: z.string().min(1),
   relativeParentPath: z.string(),
 });
@@ -151,6 +160,8 @@ export const folderSizeJobStatusSchema = z.enum([
   "error",
 ]);
 
+// Each channel entry defines both request and response validation.
+// The renderer-side generic helpers derive their compile-time types directly from this map.
 export const ipcContractSchemas = {
   "app:getHomeDirectory": {
     request: z.object({}),
@@ -342,6 +353,8 @@ export type IpcRequest<C extends IpcChannel> = z.output<IpcContractSchemas[C]["r
 export type IpcRequestInput<C extends IpcChannel> = z.input<IpcContractSchemas[C]["request"]>;
 export type IpcResponse<C extends IpcChannel> = z.output<IpcContractSchemas[C]["response"]>;
 
+// Validation failures are surfaced with a dedicated error type so transport bugs can be
+// distinguished from domain failures such as "path not found" or "search cancelled".
 export class IpcValidationError extends Error {
   constructor(message: string) {
     super(message);

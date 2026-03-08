@@ -8,6 +8,8 @@ export type RendererCommand =
   | "toggleInfoPanel"
   | "toggleInfoRow";
 
+// The native menu emits high-level renderer commands; the renderer owns the actual UI
+// transitions so shortcuts, toolbar buttons, and menu items stay behaviorally aligned.
 export function createApplicationMenuTemplate(
   webContents: Pick<WebContents, "send">,
 ): MenuItemConstructorOptions[] {

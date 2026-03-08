@@ -12,6 +12,8 @@ export type OptionalDetailColumnKey = Exclude<DetailColumnKey, "name">;
 export type DetailColumnVisibility = Record<OptionalDetailColumnKey, boolean>;
 export type DetailColumnWidths = Record<DetailColumnKey, number>;
 
+// These option lists are used for both UI rendering and validation-like lookups.
+// Keep them stable unless the corresponding persisted preference values are migrated.
 export const THEME_OPTIONS = [
   { value: "dark", label: "Dark" },
   { value: "tomorrow-night", label: "Tomorrow Night" },
@@ -32,11 +34,13 @@ export const TYPEAHEAD_DEBOUNCE_MIN_MS = 250;
 export const TYPEAHEAD_DEBOUNCE_MAX_MS = 1500;
 export const DETAIL_COLUMN_KEYS = ["name", "size", "modified", "permissions"] as const;
 export const OPTIONAL_DETAIL_COLUMN_KEYS = ["size", "modified", "permissions"] as const;
+// `name` is always visible, so only optional columns are persisted as booleans.
 export const DEFAULT_DETAIL_COLUMN_VISIBILITY: DetailColumnVisibility = {
   size: true,
   modified: true,
   permissions: true,
 };
+// Widths are persisted in pixels and are shared by renderer layout and IPC validation.
 export const DEFAULT_DETAIL_COLUMN_WIDTHS: DetailColumnWidths = {
   name: 320,
   size: 108,
@@ -50,6 +54,9 @@ export const DETAIL_COLUMN_WIDTH_LIMITS = {
   permissions: { min: 132, max: 260 },
 } as const satisfies Record<DetailColumnKey, { min: number; max: number }>;
 
+// This is the durable shape written by the main-process state store.
+// Adding or renaming keys here requires corresponding migration handling in the loader,
+// otherwise older saved preferences will either be dropped or fail validation.
 export type AppPreferences = {
   theme: ThemeMode;
   uiFontFamily: UiFontFamily;
@@ -120,6 +127,8 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   lastVisitedPath: null,
 };
 
+// Pane widths are rounded before persistence so restored layouts remain stable and do not
+// drift from repeated floating-point resize calculations.
 export function clampPaneWidth(value: number, min: number, max: number): number {
   return Math.round(Math.max(min, Math.min(max, value)));
 }
@@ -136,6 +145,8 @@ export function clampFontWeight(
   return options.includes(value) ? value : fallback;
 }
 
+// Typeahead timing is user-tunable but is kept inside a narrow, predictable range so
+// the shared debounce logic behaves consistently across tree, list, details, and search.
 export function clampTypeaheadDebounceMs(value: number, min: number, max: number): number {
   return Math.round(Math.max(min, Math.min(max, value)));
 }

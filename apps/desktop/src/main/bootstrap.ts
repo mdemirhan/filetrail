@@ -13,6 +13,8 @@ import { registerIpcHandlers } from "./ipc";
 
 let activeWorkerClient: ExplorerWorkerClient | null = null;
 const execFileAsync = promisify(execFile);
+// These caches are short-lived UI accelerators, not durable state. They smooth repeated
+// reads while navigating without hiding filesystem changes for long.
 const CACHE_TTL_MS = 3_000;
 const directorySnapshotCache = new Map<string, { expiresAt: number; value: unknown }>();
 const directoryMetadataCache = new Map<string, { expiresAt: number; value: unknown }>();
@@ -33,6 +35,7 @@ export async function bootstrapMainProcess(
   appStateStore: AppStateStore,
   launchContext: { startupFolderPath: string | null } = { startupFolderPath: null },
 ): Promise<void> {
+  // Main owns the worker client so the renderer only ever talks through the IPC contract.
   const workerClient = new ExplorerWorkerClient(resolveExplorerWorkerUrl(), {
     fdBinaryPath: resolveBundledFdBinaryPath(),
   });
@@ -86,6 +89,8 @@ export async function bootstrapMainProcess(
     "search:getUpdate": (payload) => workerClient.request("search:getUpdate", payload),
     "search:cancel": (payload) => workerClient.request("search:cancel", payload),
     "folderSize:start": (payload) => {
+      // Folder sizes are deferred for now because recursive sizing is much more expensive
+      // than the rest of the metadata path and should not block basic inspection UI.
       const jobId = `folder-size-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
       folderSizeJobs.set(jobId, {
         jobId,
@@ -153,6 +158,7 @@ async function openInTerminal(
   payload: IpcRequest<"system:openInTerminal">,
 ): Promise<IpcResponse<"system:openInTerminal">> {
   try {
+    // Files open Terminal in their containing directory; directories open directly.
     const targetPath = await resolveTerminalTargetPath(payload.path);
     await execFileAsync("open", ["-a", "Terminal", targetPath]);
     return {
@@ -187,6 +193,7 @@ async function withCachedResponse<TPayload extends object, TResponse>(
   payload: TPayload,
   load: () => Promise<TResponse>,
 ): Promise<TResponse> {
+  // Payload serialization keeps variants like includeHidden/sort mode isolated in cache.
   const cacheKey = JSON.stringify(payload);
   const now = Date.now();
   const cached = cache.get(cacheKey);
@@ -205,6 +212,8 @@ async function getCachedMetadataBatch(
   workerClient: ExplorerWorkerClient,
   payload: IpcRequest<"directory:getMetadataBatch">,
 ): Promise<IpcResponse<"directory:getMetadataBatch">> {
+  // Metadata is cached per path instead of per request because the renderer asks for
+  // overlapping visible ranges as the user scrolls and changes layouts.
   const now = Date.now();
   const cachedItemsByPath = new Map<
     string,
@@ -225,6 +234,7 @@ async function getCachedMetadataBatch(
   }
 
   if (missingPaths.length > 0) {
+    // Only fetch misses so preloaded metadata and visible-row requests compose cheaply.
     const response = await workerClient.request("directory:getMetadataBatch", {
       ...payload,
       paths: missingPaths,
@@ -248,6 +258,7 @@ async function getCachedMetadataBatch(
 }
 
 async function withTiming<T>(label: string, path: string, load: () => Promise<T>): Promise<T> {
+  // Slow-path logging is enough for production debugging without flooding the console.
   const start = performance.now();
   const value = await load();
   const elapsedMs = performance.now() - start;
@@ -260,6 +271,8 @@ async function withTiming<T>(label: string, path: string, load: () => Promise<T>
 export function toPreferencePatch(
   value: IpcRequest<"app:updatePreferences">["preferences"],
 ): Partial<AppPreferences> {
+  // Map fields explicitly so new preference keys are added intentionally rather than
+  // silently flowing through as unchecked transport payload.
   const patch: Partial<AppPreferences> = {};
   if (value.theme !== undefined) {
     patch.theme = value.theme;

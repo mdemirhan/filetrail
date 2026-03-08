@@ -4,6 +4,8 @@ export type ContentSelectionState = {
   leadPath: string | null;
 };
 
+// `anchorPath` is the fixed origin for shift-range extension.
+// `leadPath` is the most recent focus target and the row that reveal/activation logic uses.
 export const EMPTY_CONTENT_SELECTION: ContentSelectionState = {
   paths: [],
   anchorPath: null,
@@ -14,6 +16,8 @@ type PathEntry = {
   path: string;
 };
 
+// Selection is stored independently from directory contents, so it must be sanitized each
+// time the visible entry set changes due to navigation, sorting, filtering, or search.
 export function sanitizeContentSelection<T extends PathEntry>(
   selection: ContentSelectionState,
   entries: T[],
@@ -38,6 +42,7 @@ export function sanitizeContentSelection<T extends PathEntry>(
   };
 }
 
+// Shift-range selection is based on visual order, not lexical path ordering.
 export function getSelectionRangePaths<T extends PathEntry>(
   entries: T[],
   anchorPath: string,
@@ -53,6 +58,8 @@ export function getSelectionRangePaths<T extends PathEntry>(
   return entries.slice(startIndex, endIndex + 1).map((entry) => entry.path);
 }
 
+// Multi-selection merges are normalized back into current entry order so keyboard
+// navigation, clipboard actions, and context menus all see a stable ordering.
 export function mergeSelectionPathsInEntryOrder<T extends PathEntry>(
   entries: T[],
   currentPaths: string[],
@@ -70,6 +77,8 @@ export function setSingleContentSelection(path: string): ContentSelectionState {
   };
 }
 
+// Cmd-click style toggling preserves the existing anchor when possible so a subsequent
+// shift-range still behaves like desktop file managers.
 export function toggleContentSelection<T extends PathEntry>(
   current: ContentSelectionState,
   entries: T[],
@@ -95,6 +104,8 @@ export function toggleContentSelection<T extends PathEntry>(
   };
 }
 
+// Range extension can either replace the existing selection or add to it, matching the
+// difference between plain Shift-click and additive selection gestures.
 export function extendContentSelectionToPath<T extends PathEntry>(
   current: ContentSelectionState,
   entries: T[],

@@ -20,6 +20,9 @@ type SelectionGestureModifiers = {
   shiftKey: boolean;
 };
 
+// This constant is shared with App-level paged navigation. Any row-density change must
+// update this value so virtualization, reveal-into-view, and Ctrl+U / Ctrl+D selection
+// movement continue to agree on the same physical row extent.
 export const SEARCH_RESULT_ROW_HEIGHT = 50;
 
 export function SearchResultsPane({
@@ -98,6 +101,9 @@ export function SearchResultsPane({
   const [internalScrollTop, setInternalScrollTop] = useState(scrollTop);
   const selectedPathSet = useMemo(() => new Set(selectedPaths), [selectedPaths]);
 
+  // `scrollTop` is controlled by App so search results can preserve/restore position when
+  // the pane is hidden and shown again. We still mirror the DOM value locally because
+  // virtualization needs an immediate number on every scroll frame.
   useEffect(() => {
     if (scrollRef.current) {
       if (Math.abs(scrollRef.current.scrollTop - scrollTop) > 1) {
@@ -109,6 +115,8 @@ export function SearchResultsPane({
     setInternalScrollTop(scrollTop);
   }, [scrollTop]);
 
+  // Keep the lead selection visible when keyboard navigation or typeahead changes it.
+  // This uses the same fixed row extent as virtualization and paged navigation.
   useEffect(() => {
     const container = scrollRef.current;
     if (!container || !selectionLeadPath) {
@@ -163,6 +171,9 @@ export function SearchResultsPane({
           onFocusChange(false);
         }
       }}
+      // Search mode reuses the same app-level typeahead state as list/details view.
+      // Capture printable keys here so focusable controls inside the pane do not swallow
+      // them before selection typeahead sees them.
       onKeyDownCapture={(event) => {
         if (!onTypeaheadInput) {
           return;
@@ -414,6 +425,7 @@ export function SearchResultsPane({
           {results.length > 0 ? (
             <div
               style={{
+                // Virtualization pads out the hidden rows above/below the visible slice.
                 paddingTop: `${range.startIndex * SEARCH_RESULT_ROW_HEIGHT}px`,
                 paddingBottom: `${Math.max(0, results.length - range.endIndex) * SEARCH_RESULT_ROW_HEIGHT}px`,
               }}

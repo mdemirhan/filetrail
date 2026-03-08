@@ -19,6 +19,8 @@ export type TreeNodeState = {
   childPaths: string[];
 };
 
+// TreePane is largely controlled by App. It renders the current tree model and emits user
+// intents, while App owns async loading, expansion state, and path synchronization.
 export function TreePane({
   paneRef,
   isFocused,
@@ -108,6 +110,8 @@ export function TreePane({
     if (!currentRow || typeof currentRow.scrollIntoView !== "function") {
       return;
     }
+    // Selection can move because of keyboard navigation, typeahead, or external path sync.
+    // Keep the active row visible without repeatedly re-scrolling the same element.
     if (lastScrolledPathRef.current === currentPath && lastScrolledRowRef.current === currentRow) {
       return;
     }
@@ -182,6 +186,8 @@ export function TreePane({
     >
       <div className="sidebar-shell">
         <aside className="sidebar-rail">
+          {/* The rail keeps navigation, visibility toggles, and global app controls in a
+              stable order so icon muscle memory holds across themes and layouts. */}
           <button
             type="button"
             className="sidebar-rail-button"

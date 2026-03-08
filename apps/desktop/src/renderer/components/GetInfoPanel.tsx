@@ -7,6 +7,8 @@ import { formatDateTime, formatSize, pathSegments, splitPermissionMode } from ".
 
 type ItemProperties = IpcResponse<"item:getProperties">["item"];
 
+// The info panel is display-only. It reflects the selected item and exposes a small action
+// set, but it does not own filesystem state itself.
 export function InfoPanel({
   open,
   loading,
@@ -97,6 +99,9 @@ function GetInfoPanelContent({
   onOpenInTerminal: () => void;
 }) {
   const directoryLike = item.kind === "directory" || item.kind === "symlink_directory";
+  // Display rules:
+  // - folders show `-` for size because recursive folder sizing is deferred
+  // - missing timestamps/permissions stay visually muted to distinguish them from real values
   const metadataRows = [
     {
       label: "Size",
@@ -174,6 +179,7 @@ function GetInfoPanelContent({
           <span>Path</span>
         </div>
         <div className="get-info-breadcrumbs">
+          {/* Ancestor segments remain clickable; the current segment is plain text. */}
           {segments.map((segment, index) => {
             const isCurrent = index === segments.length - 1;
             return (
@@ -223,6 +229,7 @@ function InfoPanelGlyph({
 }: {
   name: "open" | "terminal" | "copy" | "check" | "close";
 }) {
+  // Inline glyphs keep the panel self-contained and visually consistent with its custom chrome.
   if (name === "open") {
     return (
       <svg className="get-info-icon" viewBox="0 0 24 24" aria-hidden="true">

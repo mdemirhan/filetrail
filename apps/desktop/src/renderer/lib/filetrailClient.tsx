@@ -20,6 +20,7 @@ export type FiletrailClient = {
 const MISSING_PRELOAD_ERROR =
   "File Trail preload bridge is unavailable. Ensure the preload script exposed window.filetrail.";
 
+// Safe fallback used during tests or when the desktop preload bridge is missing.
 const MISSING_CLIENT: FiletrailClient = {
   invoke: async () => {
     throw new Error(MISSING_PRELOAD_ERROR);
@@ -38,6 +39,8 @@ function isFiletrailClient(value: unknown): value is FiletrailClient {
   );
 }
 
+// Prefer an injected provider client first, but fall back to the real preload bridge when
+// mounted inside the desktop shell.
 function getDefaultClient(): FiletrailClient {
   if (typeof window === "undefined") {
     return MISSING_CLIENT;
@@ -67,6 +70,8 @@ export function FiletrailClientProvider({
 export function useFiletrailClient(): FiletrailClient {
   const value = useContext(FiletrailClientContext);
   const fallbackRef = useRef<FiletrailClient | null>(null);
+  // Keep the fallback instance stable so hooks/components do not see a new client identity
+  // on every render.
   if (value) {
     return value;
   }

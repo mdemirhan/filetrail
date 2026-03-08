@@ -8,6 +8,7 @@ import type {
 
 type SearchResultItem = IpcResponse<"search:getUpdate">["items"][number];
 
+// Search updates arrive incrementally from fd-backed polling, so appending is the common path.
 export function appendSearchResults(
   current: SearchResultItem[],
   next: SearchResultItem[],
@@ -15,6 +16,8 @@ export function appendSearchResults(
   return next.length === 0 ? current : [...current, ...next];
 }
 
+// Sorting is pure and stable-by-tiebreaker so the Apply Sort action can safely reorder
+// already-fetched results without mutating the original array.
 export function sortSearchResults(
   items: SearchResultItem[],
   sortBy: SearchResultsSortByPreference,
@@ -24,6 +27,8 @@ export function sortSearchResults(
   return [...items].sort((left, right) => compareSearchResults(left, right, sortBy) * direction);
 }
 
+// Filtering only affects the in-memory result set currently loaded into the renderer; it
+// does not re-run the underlying filesystem search.
 export function filterSearchResults(
   items: SearchResultItem[],
   query: string,
@@ -40,6 +45,7 @@ export function filterSearchResults(
   });
 }
 
+// Path is the deterministic tie-breaker so sort output remains stable across repeated runs.
 export function compareSearchResults(
   left: SearchResultItem,
   right: SearchResultItem,

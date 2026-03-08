@@ -1,3 +1,5 @@
+// Help content is intentionally maintained as static data so wording can be tuned without
+// chasing implementation details through multiple components.
 export const SHORTCUT_ITEMS = [
   { group: "Navigation", shortcut: "Cmd+Left", description: "Go back to the previous folder" },
   { group: "Navigation", shortcut: "Cmd+Right", description: "Go forward to the next folder" },
@@ -74,6 +76,7 @@ export const SHORTCUT_ITEMS = [
   { group: "Views", shortcut: "Esc", description: "Return from Help or Settings to Explorer" },
 ] as const;
 
+// These reference notes cover UI behaviors that are not obvious from shortcut listings alone.
 export const REFERENCE_ITEMS = [
   {
     label: "Single click path segment",

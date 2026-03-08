@@ -5,6 +5,8 @@ export function compactPath(path: string): string {
   return `${path.slice(0, 24)}...${path.slice(-44)}`;
 }
 
+// Used in contexts that still want a human-readable fallback string.
+// Table/detail views that need an empty loading state should check raw metadata first.
 export function formatDateTime(value: string | null): string {
   if (!value) {
     return "Not available";
@@ -23,6 +25,8 @@ export function formatSize(
   sizeBytes: number | null,
   sizeStatus: "ready" | "deferred" | "unavailable",
 ): string {
+  // Callers that need `-` for directories or an empty loading state should layer that
+  // behavior outside this generic formatter.
   if (sizeStatus === "deferred") {
     return "Not yet available";
   }
@@ -50,6 +54,8 @@ export function formatPermissionMode(permissionMode: number | null): string {
   return `${parts.symbolic} (${parts.octal})`;
 }
 
+// Exposes the symbolic/octal split so views can choose whether they want one combined
+// string or separate permission parts.
 export function splitPermissionMode(
   permissionMode: number | null,
 ): { symbolic: string; octal: string } | null {
@@ -73,6 +79,7 @@ export function splitPermissionMode(
   };
 }
 
+// Root is represented explicitly so breadcrumb-like UIs can render `/` as a real segment.
 export function pathSegments(path: string): Array<{ label: string; path: string }> {
   const parts = path.split("/").filter((part) => part.length > 0);
   if (parts.length === 0) {
@@ -87,6 +94,8 @@ export function pathSegments(path: string): Array<{ label: string; path: string 
   return segments;
 }
 
+// Splits the visible filename into stem + extension suffix without assuming the stored
+// `extension` is always trustworthy or even present in the display name.
 export function splitDisplayName(
   name: string,
   extension: string,
