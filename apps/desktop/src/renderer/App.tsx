@@ -2404,56 +2404,39 @@ export function App() {
                   {searchPopoverOpen ? (
                     <div className="toolbar-search-popover">
                       <div className="toolbar-search-options">
-                        <div className="toolbar-search-option-row">
-                          <div className="toolbar-search-option-group">
-                            <button
-                              type="button"
-                              className={
-                                searchPatternMode === "regex"
-                                  ? "toolbar-search-pill active"
-                                  : "toolbar-search-pill"
+                        <div className="toolbar-search-option-row toolbar-search-option-row-primary">
+                          <label className="toolbar-search-listbox">
+                            <span className="toolbar-search-listbox-label">Pattern</span>
+                            <select
+                              className="toolbar-search-select"
+                              value={searchPatternMode}
+                              onChange={(event) =>
+                                updateSearchPatternMode(
+                                  event.currentTarget.value as SearchPatternMode,
+                                )
                               }
-                              onClick={() => updateSearchPatternMode("regex")}
+                              aria-label="Search pattern mode"
                             >
-                              Regex
-                            </button>
-                            <button
-                              type="button"
-                              className={
-                                searchPatternMode === "glob"
-                                  ? "toolbar-search-pill active"
-                                  : "toolbar-search-pill"
+                              <option value="regex">Regex</option>
+                              <option value="glob">Glob</option>
+                            </select>
+                          </label>
+                          <label className="toolbar-search-listbox">
+                            <span className="toolbar-search-listbox-label">Match</span>
+                            <select
+                              className="toolbar-search-select"
+                              value={searchMatchScope}
+                              onChange={(event) =>
+                                updateSearchMatchScope(
+                                  event.currentTarget.value as SearchMatchScope,
+                                )
                               }
-                              onClick={() => updateSearchPatternMode("glob")}
+                              aria-label="Search match scope"
                             >
-                              Glob
-                            </button>
-                          </div>
-                          <span className="toolbar-search-divider" aria-hidden />
-                          <div className="toolbar-search-option-group">
-                            <button
-                              type="button"
-                              className={
-                                searchMatchScope === "name"
-                                  ? "toolbar-search-pill active"
-                                  : "toolbar-search-pill"
-                              }
-                              onClick={() => updateSearchMatchScope("name")}
-                            >
-                              Name
-                            </button>
-                            <button
-                              type="button"
-                              className={
-                                searchMatchScope === "path"
-                                  ? "toolbar-search-pill active"
-                                  : "toolbar-search-pill"
-                              }
-                              onClick={() => updateSearchMatchScope("path")}
-                            >
-                              Path
-                            </button>
-                          </div>
+                              <option value="name">Name</option>
+                              <option value="path">Path</option>
+                            </select>
+                          </label>
                         </div>
                         <div className="toolbar-search-option-row toolbar-search-option-row-secondary">
                           <div className="toolbar-search-option-group">
@@ -2492,9 +2475,7 @@ export function App() {
                             ? "Press Enter to search"
                             : searchStatus === "running"
                               ? "Searching…"
-                              : searchIncludeHidden
-                                ? "Hidden files included"
-                                : ""}
+                              : ""}
                         </span>
                       </div>
                     </div>

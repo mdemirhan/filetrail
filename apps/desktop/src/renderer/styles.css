@@ -1025,6 +1025,12 @@ body.platform-macos .window-toolbar-brand {
   min-width: 0;
 }
 
+.toolbar-search-option-row-primary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .toolbar-search-option-row-secondary {
   justify-content: flex-start;
 }
@@ -1041,6 +1047,62 @@ body.platform-macos .window-toolbar-brand {
   height: 18px;
   background: var(--search-divider);
   flex: 0 0 auto;
+}
+
+.toolbar-search-listbox {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.toolbar-search-listbox-label {
+  min-width: 0;
+  color: var(--search-meta-fg);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.toolbar-search-select {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 0 28px 0 10px;
+  border: 1px solid var(--search-pill-border);
+  border-radius: 7px;
+  background-color: var(--search-pill-bg);
+  color: var(--search-text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  appearance: none;
+  outline: none;
+  box-shadow: none;
+  -webkit-appearance: none;
+  -webkit-app-region: no-drag;
+  background-image: linear-gradient(45deg, transparent 50%, var(--search-shortcut-fg) 50%),
+    linear-gradient(135deg, var(--search-shortcut-fg) 50%, transparent 50%);
+  background-position: calc(100% - 14px) calc(50% - 2px), calc(100% - 9px) calc(50% - 2px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.toolbar-search-select:hover {
+  border-color: var(--search-pill-hover-border);
+  background-color: var(--search-pill-hover-bg);
+  color: var(--search-pill-hover-fg);
+}
+
+.toolbar-search-select:focus,
+.toolbar-search-select:focus-visible {
+  outline: none;
+  border-color: var(--search-pill-active-border);
+  background-color: var(--search-pill-active-bg);
+  color: var(--search-pill-active-fg);
+  box-shadow: none;
 }
 
 .toolbar-search-pill {
@@ -1079,6 +1141,7 @@ body.platform-macos .window-toolbar-brand {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
   padding: 0 10px 8px;
   color: var(--search-meta-fg);
   font-family: var(--font-mono);
@@ -1087,7 +1150,9 @@ body.platform-macos .window-toolbar-brand {
 }
 
 .toolbar-search-root {
+  flex: 1 1 auto;
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2270,11 +2335,14 @@ body.resizing-panels * {
 }
 
 .search-results-title {
+  flex: 0 0 auto;
   color: var(--text-primary);
   font-weight: 600;
 }
 
 .search-results-query {
+  flex: 0 1 auto;
+  min-width: 0;
   padding: 2px 8px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
@@ -2283,7 +2351,9 @@ body.resizing-panels * {
 }
 
 .search-results-root {
+  flex: 1 1 auto;
   min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2377,6 +2447,7 @@ body.resizing-panels * {
   display: grid;
   gap: 2px;
   min-width: 0;
+  overflow: hidden;
 }
 
 .search-result-name {
@@ -2389,6 +2460,10 @@ body.resizing-panels * {
 }
 
 .search-result-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-secondary);
   font-size: 12px;
 }
