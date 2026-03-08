@@ -54,6 +54,11 @@ const DETAILS_LIST_LAYOUT = {
   rowHeight: 38,
 } as const;
 
+type SelectionGestureModifiers = {
+  metaKey: boolean;
+  shiftKey: boolean;
+};
+
 export function ContentPane({
   paneRef,
   isFocused,
@@ -63,11 +68,15 @@ export function ContentPane({
   loading,
   error,
   includeHidden,
-  selectedPath,
+  selectedPath = "",
+  selectedPaths = selectedPath ? [selectedPath] : [],
+  selectionLeadPath = selectedPath || null,
   metadataByPath,
   sortBy,
   sortDirection,
   onSelectPath,
+  onSelectionGesture = (path) => onSelectPath?.(path),
+  onClearSelection = () => undefined,
   onActivateEntry,
   onSortChange,
   onLayoutColumnsChange,
@@ -89,11 +98,15 @@ export function ContentPane({
   loading: boolean;
   error: string | null;
   includeHidden: boolean;
-  selectedPath: string;
+  selectedPath?: string;
+  selectedPaths?: string[];
+  selectionLeadPath?: string | null;
   metadataByPath: Record<string, DirectoryEntryMetadata>;
   sortBy: IpcRequest<"directory:getSnapshot">["sortBy"];
   sortDirection: IpcRequest<"directory:getSnapshot">["sortDirection"];
-  onSelectPath: (path: string) => void;
+  onSelectPath?: (path: string) => void;
+  onSelectionGesture?: (path: string, modifiers: SelectionGestureModifiers) => void;
+  onClearSelection?: () => void;
   onActivateEntry: (entry: DirectoryEntry) => void;
   onSortChange: (sortBy: IpcRequest<"directory:getSnapshot">["sortBy"]) => void;
   onLayoutColumnsChange: (columns: number) => void;
@@ -101,7 +114,7 @@ export function ContentPane({
   onNavigatePath: (path: string) => void;
   onRequestPathSuggestions: (inputPath: string) => Promise<IpcResponse<"path:getSuggestions">>;
   onFocusChange: (focused: boolean) => void;
-  onItemContextMenu?: (entry: DirectoryEntry, position: { x: number; y: number }) => void;
+  onItemContextMenu?: (path: string | null, position: { x: number; y: number }) => void;
   compactListView?: boolean;
   tabSwitchesExplorerPanes?: boolean;
   searchQuery?: string;
@@ -124,6 +137,8 @@ export function ContentPane({
   const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState(-1);
   const pathSegments = useMemo(() => buildPathSegments(currentPath), [currentPath]);
   const { width: pathbarWidth } = useElementSize(pathbarRef);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const { width: viewportWidth, height: viewportHeight } = useElementSize(viewportRef);
   const visiblePathItems = useMemo(
     () => resolveVisiblePathbarItems(pathSegments, pathbarWidth, pathbarExpanded),
     [pathSegments, pathbarWidth, pathbarExpanded],
@@ -550,46 +565,55 @@ export function ContentPane({
           </nav>
         )}
       </div>
-      {viewMode === "list" ? (
-        <FlowListView
-          key={currentPath}
-          entries={entries}
-          isFocused={isFocused}
-          loading={loading}
-          error={error}
-          includeHidden={includeHidden}
-          searchQuery={searchQuery}
-          selectedPath={selectedPath}
-          onActivateEntry={onActivateEntry}
-          onLayoutColumnsChange={onLayoutColumnsChange}
-          onSelectPath={onSelectPath}
-          onVisiblePathsChange={onVisiblePathsChange}
-          onItemContextMenu={onItemContextMenu}
-          compactListView={compactListView}
-          typeaheadQuery={typeaheadQuery ?? ""}
-        />
-      ) : (
-        <DetailsView
-          key={currentPath}
-          entries={entries}
-          isFocused={isFocused}
-          loading={loading}
-          error={error}
-          includeHidden={includeHidden}
-          searchQuery={searchQuery}
-          metadataByPath={metadataByPath}
-          selectedPath={selectedPath}
-          sortBy={sortBy}
-          sortDirection={sortDirection}
-          onActivateEntry={onActivateEntry}
-          onSortChange={onSortChange}
-          onLayoutColumnsChange={onLayoutColumnsChange}
-          onSelectPath={onSelectPath}
-          onVisiblePathsChange={onVisiblePathsChange}
-          onItemContextMenu={onItemContextMenu}
-          typeaheadQuery={typeaheadQuery ?? ""}
-        />
-      )}
+      <div ref={viewportRef} className="content-viewport">
+        {viewMode === "list" ? (
+          <FlowListView
+            key={currentPath}
+            entries={entries}
+            isFocused={isFocused}
+            loading={loading}
+            error={error}
+            includeHidden={includeHidden}
+            searchQuery={searchQuery}
+            selectedPaths={selectedPaths}
+            selectionLeadPath={selectionLeadPath}
+            viewportWidth={viewportWidth}
+            viewportHeight={viewportHeight}
+            onActivateEntry={onActivateEntry}
+            onLayoutColumnsChange={onLayoutColumnsChange}
+            onSelectionGesture={onSelectionGesture}
+            onClearSelection={onClearSelection}
+            onVisiblePathsChange={onVisiblePathsChange}
+            onItemContextMenu={onItemContextMenu}
+            compactListView={compactListView}
+            typeaheadQuery={typeaheadQuery ?? ""}
+          />
+        ) : (
+          <DetailsView
+            key={currentPath}
+            entries={entries}
+            isFocused={isFocused}
+            loading={loading}
+            error={error}
+            includeHidden={includeHidden}
+            searchQuery={searchQuery}
+            metadataByPath={metadataByPath}
+            selectedPaths={selectedPaths}
+            selectionLeadPath={selectionLeadPath}
+            sortBy={sortBy}
+            sortDirection={sortDirection}
+            viewportHeight={viewportHeight}
+            onActivateEntry={onActivateEntry}
+            onSortChange={onSortChange}
+            onLayoutColumnsChange={onLayoutColumnsChange}
+            onSelectionGesture={onSelectionGesture}
+            onClearSelection={onClearSelection}
+            onVisiblePathsChange={onVisiblePathsChange}
+            onItemContextMenu={onItemContextMenu}
+            typeaheadQuery={typeaheadQuery ?? ""}
+          />
+        )}
+      </div>
     </section>
   );
 }
@@ -745,8 +769,12 @@ function FlowListView({
   error,
   includeHidden,
   searchQuery,
-  selectedPath,
-  onSelectPath,
+  selectedPaths,
+  selectionLeadPath,
+  viewportWidth,
+  viewportHeight,
+  onSelectionGesture,
+  onClearSelection,
   onActivateEntry,
   onLayoutColumnsChange,
   onVisiblePathsChange,
@@ -760,18 +788,23 @@ function FlowListView({
   error: string | null;
   includeHidden: boolean;
   searchQuery: string;
-  selectedPath: string;
-  onSelectPath: (path: string) => void;
+  selectedPaths: string[];
+  selectionLeadPath: string | null;
+  viewportWidth: number;
+  viewportHeight: number;
+  onSelectionGesture: (path: string, modifiers: SelectionGestureModifiers) => void;
+  onClearSelection: () => void;
   onActivateEntry: (entry: DirectoryEntry) => void;
   onLayoutColumnsChange: (columns: number) => void;
   onVisiblePathsChange: (paths: string[]) => void;
-  onItemContextMenu?: (entry: DirectoryEntry, position: { x: number; y: number }) => void;
+  onItemContextMenu?: (path: string | null, position: { x: number; y: number }) => void;
   compactListView?: boolean;
   typeaheadQuery?: string;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [containerHeight, setContainerHeight] = useState(0);
   const [scrollTop, setScrollTop] = useState(0);
+  const selectedPathSet = useMemo(() => new Set(selectedPaths), [selectedPaths]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -829,6 +862,27 @@ function FlowListView({
       ref={containerRef}
       className={`content-scroll flow-list${compactListView ? " compact" : ""}`}
       tabIndex={-1}
+      onMouseDown={(event) => {
+        const target = event.target;
+        if (target instanceof Element && target.closest("[data-selectable-entry-path]")) {
+          return;
+        }
+        onClearSelection();
+        containerRef.current?.focus();
+      }}
+      onContextMenu={(event) => {
+        const target = event.target;
+        if (target instanceof Element && target.closest("[data-selectable-entry-path]")) {
+          return;
+        }
+        event.preventDefault();
+        onClearSelection();
+        containerRef.current?.focus();
+        onItemContextMenu(null, {
+          x: event.clientX,
+          y: event.clientY,
+        });
+      }}
       onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
       onWheel={(event) => {
         if (event.ctrlKey || !containerRef.current) {
@@ -862,6 +916,7 @@ function FlowListView({
             columnCount * listLayout.itemWidth + Math.max(0, columnCount - 1) * listLayout.columnGap
           }px`,
         }}
+        data-viewport-width={viewportWidth}
       >
         {visibleRows.map((row, rowIndex) => (
           <div
@@ -875,25 +930,29 @@ function FlowListView({
               <button
                 key={entry.path}
                 type="button"
-                className={`flow-item${entry.path === selectedPath ? " active" : ""}${
-                  entry.path === selectedPath && !isFocused ? " inactive" : ""
+                className={`flow-item${selectedPathSet.has(entry.path) ? " active" : ""}${
+                  selectedPathSet.has(entry.path) && !isFocused ? " inactive" : ""
                 }`}
-                data-context-entry-path={entry.path}
-                onClick={() => {
-                  onSelectPath(entry.path);
+                data-selectable-entry-path={entry.path}
+                draggable={false}
+                onClick={(event) => {
+                  onSelectionGesture(entry.path, {
+                    metaKey: event.metaKey,
+                    shiftKey: event.shiftKey,
+                  });
                   containerRef.current?.focus();
                 }}
                 onContextMenu={(event) => {
                   event.preventDefault();
-                  onSelectPath(entry.path);
                   containerRef.current?.focus();
-                  onItemContextMenu(entry, {
+                  onItemContextMenu(entry.path, {
                     x: event.clientX,
                     y: event.clientY,
                   });
                 }}
                 onDoubleClick={() => onActivateEntry(entry)}
                 title={entry.name}
+                aria-selected={selectedPathSet.has(entry.path)}
               >
                 <FileIcon entry={entry} />
                 <FileNameLabel
@@ -918,10 +977,13 @@ function DetailsView({
   includeHidden,
   searchQuery,
   metadataByPath,
-  selectedPath,
+  selectedPaths,
+  selectionLeadPath,
   sortBy,
   sortDirection,
-  onSelectPath,
+  viewportHeight,
+  onSelectionGesture,
+  onClearSelection,
   onActivateEntry,
   onSortChange,
   onLayoutColumnsChange,
@@ -936,24 +998,27 @@ function DetailsView({
   includeHidden: boolean;
   searchQuery: string;
   metadataByPath: Record<string, DirectoryEntryMetadata>;
-  selectedPath: string;
+  selectedPaths: string[];
+  selectionLeadPath: string | null;
   sortBy: IpcRequest<"directory:getSnapshot">["sortBy"];
   sortDirection: IpcRequest<"directory:getSnapshot">["sortDirection"];
-  onSelectPath: (path: string) => void;
+  viewportHeight: number;
+  onSelectionGesture: (path: string, modifiers: SelectionGestureModifiers) => void;
+  onClearSelection: () => void;
   onActivateEntry: (entry: DirectoryEntry) => void;
   onSortChange: (sortBy: IpcRequest<"directory:getSnapshot">["sortBy"]) => void;
   onLayoutColumnsChange: (columns: number) => void;
   onVisiblePathsChange: (paths: string[]) => void;
-  onItemContextMenu?: (entry: DirectoryEntry, position: { x: number; y: number }) => void;
+  onItemContextMenu?: (path: string | null, position: { x: number; y: number }) => void;
   typeaheadQuery?: string;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const { height } = useElementSize(containerRef);
   const [scrollTop, setScrollTop] = useState(0);
+  const selectedPathSet = useMemo(() => new Set(selectedPaths), [selectedPaths]);
   const range = getVirtualRange({
     itemCount: entries.length,
     itemSize: DETAILS_LIST_LAYOUT.rowHeight,
-    viewportSize: height,
+    viewportSize: viewportHeight,
     scrollOffset: scrollTop,
     overscan: 10,
   });
@@ -994,6 +1059,27 @@ function DetailsView({
         ref={containerRef}
         className="content-scroll details-scroll"
         tabIndex={-1}
+        onMouseDown={(event) => {
+          const target = event.target;
+          if (target instanceof Element && target.closest("[data-selectable-entry-path]")) {
+            return;
+          }
+          onClearSelection();
+          containerRef.current?.focus();
+        }}
+        onContextMenu={(event) => {
+          const target = event.target;
+          if (target instanceof Element && target.closest("[data-selectable-entry-path]")) {
+            return;
+          }
+          event.preventDefault();
+          onClearSelection();
+          containerRef.current?.focus();
+          onItemContextMenu(null, {
+            x: event.clientX,
+            y: event.clientY,
+          });
+        }}
         onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
       >
         {typeaheadQuery ? (
@@ -1022,25 +1108,29 @@ function DetailsView({
               <button
                 key={entry.path}
                 type="button"
-                className={`details-row${entry.path === selectedPath ? " active" : ""}${
-                  entry.path === selectedPath && !isFocused ? " inactive" : ""
+                className={`details-row${selectedPathSet.has(entry.path) ? " active" : ""}${
+                  selectedPathSet.has(entry.path) && !isFocused ? " inactive" : ""
                 }`}
-                data-context-entry-path={entry.path}
-                onClick={() => {
-                  onSelectPath(entry.path);
+                data-selectable-entry-path={entry.path}
+                draggable={false}
+                onClick={(event) => {
+                  onSelectionGesture(entry.path, {
+                    metaKey: event.metaKey,
+                    shiftKey: event.shiftKey,
+                  });
                   containerRef.current?.focus();
                 }}
                 onContextMenu={(event) => {
                   event.preventDefault();
-                  onSelectPath(entry.path);
                   containerRef.current?.focus();
-                  onItemContextMenu(entry, {
+                  onItemContextMenu(entry.path, {
                     x: event.clientX,
                     y: event.clientY,
                   });
                 }}
                 onDoubleClick={() => onActivateEntry(entry)}
                 title={entry.path}
+                aria-selected={selectedPathSet.has(entry.path)}
               >
                 <span className="details-name">
                   <FileIcon entry={entry} />

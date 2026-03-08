@@ -10,6 +10,10 @@ import { ToolbarIcon } from "./ToolbarIcon";
 
 type SearchResultItem = IpcResponse<"search:getUpdate">["items"][number];
 type SearchStatus = IpcResponse<"search:getUpdate">["status"] | "idle";
+type SelectionGestureModifiers = {
+  metaKey: boolean;
+  shiftKey: boolean;
+};
 
 const SEARCH_RESULT_ROW_HEIGHT = 52;
 
@@ -20,13 +24,17 @@ export function SearchResultsPane({
   query,
   status,
   results,
-  selectedPath,
+  selectedPath = "",
+  selectedPaths = selectedPath ? [selectedPath] : [],
+  selectionLeadPath = selectedPath || null,
   error,
   truncated,
   onStopSearch,
   onClearResults,
   onCloseResults,
   onSelectPath,
+  onSelectionGesture = (path) => onSelectPath?.(path),
+  onClearSelection = () => undefined,
   onActivateResult,
   onItemContextMenu = () => undefined,
   onFocusChange,
@@ -38,21 +46,26 @@ export function SearchResultsPane({
   query: string;
   status: SearchStatus;
   results: SearchResultItem[];
-  selectedPath: string;
+  selectedPath?: string;
+  selectedPaths?: string[];
+  selectionLeadPath?: string | null;
   error: string | null;
   truncated: boolean;
   onStopSearch: () => void;
   onClearResults: () => void;
   onCloseResults: () => void;
-  onSelectPath: (path: string) => void;
+  onSelectPath?: (path: string) => void;
+  onSelectionGesture?: (path: string, modifiers: SelectionGestureModifiers) => void;
+  onClearSelection?: () => void;
   onActivateResult: (item: SearchResultItem) => void;
-  onItemContextMenu?: (item: SearchResultItem, position: { x: number; y: number }) => void;
+  onItemContextMenu?: (path: string | null, position: { x: number; y: number }) => void;
   onFocusChange: (focused: boolean) => void;
   typeaheadQuery?: string;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const { height } = useElementSize(scrollRef);
   const [scrollTop, setScrollTop] = useState(0);
+  const selectedPathSet = useMemo(() => new Set(selectedPaths), [selectedPaths]);
 
   const range = useMemo(
     () =>
@@ -95,6 +108,35 @@ export function SearchResultsPane({
         ref={scrollRef}
         className="content-scroll search-results-scroll"
         tabIndex={-1}
+        onMouseDown={(event) => {
+          const target = event.target;
+          if (
+            target instanceof Element &&
+            (target.closest("[data-selectable-entry-path]") ||
+              target.closest(".search-results-actions"))
+          ) {
+            return;
+          }
+          onClearSelection();
+          scrollRef.current?.focus();
+        }}
+        onContextMenu={(event) => {
+          const target = event.target;
+          if (
+            target instanceof Element &&
+            (target.closest("[data-selectable-entry-path]") ||
+              target.closest(".search-results-actions"))
+          ) {
+            return;
+          }
+          event.preventDefault();
+          onClearSelection();
+          scrollRef.current?.focus();
+          onItemContextMenu(null, {
+            x: event.clientX,
+            y: event.clientY,
+          });
+        }}
         onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
       >
         <div className="search-results-actions">
@@ -155,25 +197,29 @@ export function SearchResultsPane({
               <button
                 key={result.path}
                 type="button"
-                className={`search-result-row${result.path === selectedPath ? " active" : ""}${
-                  result.path === selectedPath && !isFocused ? " inactive" : ""
+                className={`search-result-row${selectedPathSet.has(result.path) ? " active" : ""}${
+                  selectedPathSet.has(result.path) && !isFocused ? " inactive" : ""
                 }`}
-                data-context-entry-path={result.path}
-                onClick={() => {
-                  onSelectPath(result.path);
+                data-selectable-entry-path={result.path}
+                draggable={false}
+                onClick={(event) => {
+                  onSelectionGesture(result.path, {
+                    metaKey: event.metaKey,
+                    shiftKey: event.shiftKey,
+                  });
                   scrollRef.current?.focus();
                 }}
                 onContextMenu={(event) => {
                   event.preventDefault();
-                  onSelectPath(result.path);
                   scrollRef.current?.focus();
-                  onItemContextMenu(result, {
+                  onItemContextMenu(result.path, {
                     x: event.clientX,
                     y: event.clientY,
                   });
                 }}
                 onDoubleClick={() => onActivateResult(result)}
                 title={result.path}
+                aria-selected={selectedPathSet.has(result.path)}
               >
                 <FileIcon
                   entry={{

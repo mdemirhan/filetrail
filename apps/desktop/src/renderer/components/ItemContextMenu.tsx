@@ -97,6 +97,7 @@ export function ItemContextMenu({
   anchorX,
   anchorY,
   variant = "browse",
+  disabledActionIds = [],
   open,
   onAction,
   onSubmenuAction,
@@ -104,19 +105,27 @@ export function ItemContextMenu({
   anchorX: number;
   anchorY: number;
   variant?: "browse" | "search";
+  disabledActionIds?: ContextMenuActionId[];
   open: boolean;
   onAction: (actionId: ContextMenuActionId) => void;
   onSubmenuAction: (actionId: ContextMenuSubmenuActionId) => void;
 }) {
   const [activeItemId, setActiveItemId] = useState<ContextMenuActionId | null>(null);
+  const disabledActionIdSet = useMemo(() => new Set(disabledActionIds), [disabledActionIds]);
+  const items = variant === "search" ? SEARCH_CONTEXT_MENU_ITEMS : BROWSE_CONTEXT_MENU_ITEMS;
 
   useEffect(() => {
     if (!open) {
       setActiveItemId(null);
       return;
     }
-    setActiveItemId("open");
-  }, [open]);
+    const firstEnabledItem = items.find(
+      (item) =>
+        item.type !== "separator" &&
+        !disabledActionIdSet.has(item.id),
+    );
+    setActiveItemId(firstEnabledItem?.type !== "separator" ? firstEnabledItem?.id ?? null : null);
+  }, [disabledActionIdSet, items, open]);
 
   const submenuOpen = activeItemId === "openWith";
   const menuStyle = useMemo(
@@ -127,8 +136,6 @@ export function ItemContextMenu({
       }) satisfies CSSProperties,
     [anchorX, anchorY],
   );
-  const items = variant === "search" ? SEARCH_CONTEXT_MENU_ITEMS : BROWSE_CONTEXT_MENU_ITEMS;
-
   if (!open) {
     return null;
   }
@@ -141,16 +148,22 @@ export function ItemContextMenu({
             return <div key={item.key} className="context-menu-separator" />;
           }
           const isActive = activeItemId === item.id;
+          const isDisabled = disabledActionIdSet.has(item.id);
           return (
             <button
               key={item.id}
               type="button"
+              disabled={isDisabled}
               className={`context-menu-item${isActive ? " active" : ""}${
                 item.destructive ? " destructive" : ""
               }`}
-              onMouseEnter={() => setActiveItemId(item.id)}
+              onMouseEnter={() => {
+                if (!isDisabled) {
+                  setActiveItemId(item.id);
+                }
+              }}
               onClick={() => {
-                if (item.hasSubmenu) {
+                if (item.hasSubmenu || isDisabled) {
                   return;
                 }
                 onAction(item.id);
@@ -167,7 +180,7 @@ export function ItemContextMenu({
               ) : item.shortcut ? (
                 <span className="context-menu-item-shortcut">{item.shortcut}</span>
               ) : null}
-              {item.hasSubmenu && submenuOpen ? (
+              {item.hasSubmenu && submenuOpen && !isDisabled ? (
                 <div className="context-submenu">
                   {CONTEXT_MENU_SUBMENU_ITEMS.map((submenuItem) => {
                     if (submenuItem.type === "separator") {

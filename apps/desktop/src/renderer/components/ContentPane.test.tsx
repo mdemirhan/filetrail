@@ -116,6 +116,57 @@ describe("ContentPane", () => {
     expect(handleSortChange).toHaveBeenCalledWith("modified");
   });
 
+  it("forwards modifier selection gestures in details mode", () => {
+    const handleSelectionGesture = vi.fn();
+
+    render(
+      <ContentPane
+        isFocused
+        currentPath="/Users/demo"
+        entries={[
+          {
+            path: "/Users/demo/alpha.txt",
+            name: "alpha.txt",
+            extension: "txt",
+            kind: "file",
+            isHidden: false,
+            isSymlink: false,
+          },
+        ]}
+        viewMode="details"
+        loading={false}
+        error={null}
+        includeHidden={false}
+        selectedPaths={[]}
+        selectionLeadPath={null}
+        metadataByPath={{}}
+        sortBy="name"
+        sortDirection="asc"
+        onSelectionGesture={handleSelectionGesture}
+        onClearSelection={() => undefined}
+        onActivateEntry={() => undefined}
+        onSortChange={() => undefined}
+        onLayoutColumnsChange={() => undefined}
+        onVisiblePathsChange={() => undefined}
+        onNavigatePath={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+        onFocusChange={() => undefined}
+        typeaheadQuery=""
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /alpha\.txt/i }), { metaKey: true });
+
+    expect(handleSelectionGesture).toHaveBeenCalledWith("/Users/demo/alpha.txt", {
+      metaKey: true,
+      shiftKey: false,
+    });
+  });
+
   it("navigates when a path segment is clicked", () => {
     vi.useFakeTimers();
     const handleNavigatePath = vi.fn();
@@ -586,5 +637,78 @@ describe("ContentPane", () => {
 
     expect(screen.getByText("Select")).toBeInTheDocument();
     expect(screen.getByText("doc")).toBeInTheDocument();
+  });
+
+  it("forwards modifier selection and background context-menu events in list view", () => {
+    const handleSelectionGesture = vi.fn();
+    const handleClearSelection = vi.fn();
+    const handleContextMenu = vi.fn();
+
+    render(
+      <ContentPane
+        isFocused
+        currentPath="/Users/demo"
+        entries={[
+          {
+            path: "/Users/demo/alpha.txt",
+            name: "alpha.txt",
+            extension: "txt",
+            kind: "file",
+            isHidden: false,
+            isSymlink: false,
+          },
+          {
+            path: "/Users/demo/beta.txt",
+            name: "beta.txt",
+            extension: "txt",
+            kind: "file",
+            isHidden: false,
+            isSymlink: false,
+          },
+        ]}
+        viewMode="list"
+        loading={false}
+        error={null}
+        includeHidden={false}
+        selectedPaths={[]}
+        selectionLeadPath={null}
+        metadataByPath={{}}
+        sortBy="name"
+        sortDirection="asc"
+        onSelectionGesture={handleSelectionGesture}
+        onClearSelection={handleClearSelection}
+        onActivateEntry={() => undefined}
+        onSortChange={() => undefined}
+        onLayoutColumnsChange={() => undefined}
+        onVisiblePathsChange={() => undefined}
+        onNavigatePath={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+        onFocusChange={() => undefined}
+        onItemContextMenu={handleContextMenu}
+        typeaheadQuery=""
+      />,
+    );
+
+    const row = screen.getByRole("button", { name: /beta\.txt/i });
+    const list = row.closest(".flow-list");
+    expect(list).not.toBeNull();
+    if (!list) {
+      throw new Error("Missing flow list container.");
+    }
+
+    fireEvent.click(row, { shiftKey: true });
+    fireEvent.mouseDown(list);
+    fireEvent.contextMenu(list, { clientX: 12, clientY: 18 });
+
+    expect(handleSelectionGesture).toHaveBeenCalledWith("/Users/demo/beta.txt", {
+      metaKey: false,
+      shiftKey: true,
+    });
+    expect(handleClearSelection).toHaveBeenCalledTimes(2);
+    expect(handleContextMenu).toHaveBeenCalledWith(null, { x: 12, y: 18 });
   });
 });

@@ -4,7 +4,7 @@ export function useElementSize<T extends HTMLElement>(ref: React.RefObject<T | n
   const [size, setSize] = useState({ width: 0, height: 0 });
   const observedElementRef = useRef<T | null>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
-  const resizeListenerRef = useRef<(() => void) | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
 
   useLayoutEffect(() => {
     const element = ref.current;
@@ -15,34 +15,60 @@ export function useElementSize<T extends HTMLElement>(ref: React.RefObject<T | n
       observerRef.current.disconnect();
       observerRef.current = null;
     }
-    if (resizeListenerRef.current) {
-      window.removeEventListener("resize", resizeListenerRef.current);
-      resizeListenerRef.current = null;
-    }
     observedElementRef.current = element;
     if (!element) {
       setSize({ width: 0, height: 0 });
       return;
     }
     const update = () => {
-      const w = element.clientWidth;
-      const h = element.clientHeight;
-      setSize((prev) => (prev.width === w && prev.height === h ? prev : { width: w, height: h }));
+      const rect = element.getBoundingClientRect();
+      const nextSize = {
+        width: Math.round(rect.width || element.clientWidth),
+        height: Math.round(rect.height || element.clientHeight),
+      };
+      setSize((currentSize) =>
+        currentSize.width === nextSize.width && currentSize.height === nextSize.height
+          ? currentSize
+          : nextSize,
+      );
+    };
+    const scheduleUpdate = () => {
+      if (animationFrameRef.current !== null) {
+        window.cancelAnimationFrame(animationFrameRef.current);
+      }
+      animationFrameRef.current = window.requestAnimationFrame(() => {
+        animationFrameRef.current = null;
+        update();
+      });
     };
     update();
-    const observer = new ResizeObserver(update);
+    const observer = new ResizeObserver(() => {
+      scheduleUpdate();
+    });
     observer.observe(element);
+    if (element.parentElement) {
+      observer.observe(element.parentElement);
+    }
     observerRef.current = observer;
-    window.addEventListener("resize", update);
-    resizeListenerRef.current = update;
+    window.addEventListener("resize", scheduleUpdate);
+    window.visualViewport?.addEventListener("resize", scheduleUpdate);
+
+    return () => {
+      window.removeEventListener("resize", scheduleUpdate);
+      window.visualViewport?.removeEventListener("resize", scheduleUpdate);
+      if (animationFrameRef.current !== null) {
+        window.cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+    };
   });
 
   useEffect(
     () => () => {
-      observerRef.current?.disconnect();
-      if (resizeListenerRef.current) {
-        window.removeEventListener("resize", resizeListenerRef.current);
+      if (animationFrameRef.current !== null) {
+        window.cancelAnimationFrame(animationFrameRef.current);
       }
+      observerRef.current?.disconnect();
     },
     [],
   );

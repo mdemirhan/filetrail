@@ -24,9 +24,11 @@ import { ActionNoticeDialog } from "./components/ActionNoticeDialog";
 import { ContentPane } from "./components/ContentPane";
 import { HelpView } from "./components/HelpView";
 import {
+  BROWSE_CONTEXT_MENU_ITEMS,
   type ContextMenuActionId,
   type ContextMenuSubmenuActionId,
   ItemContextMenu,
+  SEARCH_CONTEXT_MENU_ITEMS,
 } from "./components/ItemContextMenu";
 import { LocationSheet } from "./components/LocationSheet";
 import { PropertiesDrawer } from "./components/PropertiesDrawer";
@@ -65,6 +67,18 @@ type SearchResultItem = IpcResponse<"search:getUpdate">["items"][number];
 type SearchPatternMode = IpcRequest<"search:start">["patternMode"];
 type SearchMatchScope = IpcRequest<"search:start">["matchScope"];
 type SearchJobStatus = IpcResponse<"search:getUpdate">["status"];
+type ContentSelectionState = {
+  paths: string[];
+  anchorPath: string | null;
+  leadPath: string | null;
+};
+type ContextMenuState = {
+  x: number;
+  y: number;
+  paths: string[];
+  source: "browse" | "search";
+  scope: "selection" | "background";
+};
 
 const logger = createRendererLogger("filetrail.renderer");
 const SEARCH_POLL_INTERVAL_MS = 120;
@@ -72,6 +86,11 @@ const CONTEXT_MENU_WIDTH = 240;
 const CONTEXT_SUBMENU_WIDTH = 180;
 const CONTEXT_MENU_SAFE_MARGIN = 12;
 const CONTEXT_MENU_MAX_HEIGHT = 420;
+const EMPTY_CONTENT_SELECTION: ContentSelectionState = {
+  paths: [],
+  anchorPath: null,
+  leadPath: null,
+};
 const SHORTCUT_ITEMS = [
   { group: "Navigation", shortcut: "Cmd+Left", description: "Go back to the previous folder" },
   { group: "Navigation", shortcut: "Cmd+Right", description: "Go forward to the next folder" },
@@ -217,7 +236,8 @@ export function App() {
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [propertiesOpen, setPropertiesOpen] = useState(DEFAULT_APP_PREFERENCES.propertiesOpen);
   const [detailRowOpen, setDetailRowOpen] = useState(DEFAULT_APP_PREFERENCES.detailRowOpen);
-  const [selectedPath, setSelectedPath] = useState("");
+  const [contentSelection, setContentSelection] =
+    useState<ContentSelectionState>(EMPTY_CONTENT_SELECTION);
   const [historyPaths, setHistoryPaths] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [visiblePaths, setVisiblePaths] = useState<string[]>([]);
@@ -233,12 +253,7 @@ export function App() {
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [typeaheadQuery, setTypeaheadQuery] = useState("");
   const [typeaheadPane, setTypeaheadPane] = useState<"tree" | "content" | null>(null);
-  const [contextMenuState, setContextMenuState] = useState<{
-    x: number;
-    y: number;
-    path: string;
-    source: "browse" | "search";
-  } | null>(null);
+  const [contextMenuState, setContextMenuState] = useState<ContextMenuState | null>(null);
   const [actionNotice, setActionNotice] = useState<{
     title: string;
     message: string;
@@ -265,8 +280,8 @@ export function App() {
   const searchCommittedQueryRef = useRef("");
   const searchResultsRef = useRef<SearchResultItem[]>([]);
   const searchResultsVisibleRef = useRef(false);
-  const browseSelectedPathRef = useRef("");
-  const cachedSearchSelectedPathRef = useRef("");
+  const browseSelectionRef = useRef<ContentSelectionState>(EMPTY_CONTENT_SELECTION);
+  const cachedSearchSelectionRef = useRef<ContentSelectionState>(EMPTY_CONTENT_SELECTION);
   const treeRequestRef = useRef<Record<string, number>>({});
   const treeNodesRef = useRef<Record<string, TreeNodeState>>({});
   const treeRootPathRef = useRef(treeRootPath);
@@ -293,17 +308,43 @@ export function App() {
     () => (isSearchMode ? searchResultEntries : currentEntries),
     [currentEntries, isSearchMode, searchResultEntries],
   );
-  const selectedEntry = useMemo(
-    () => activeContentEntries.find((entry) => entry.path === selectedPath) ?? null,
-    [activeContentEntries, selectedPath],
+  const selectedPathSet = useMemo(() => new Set(contentSelection.paths), [contentSelection.paths]);
+  const selectedPathsInViewOrder = useMemo(
+    () =>
+      activeContentEntries
+        .filter((entry) => selectedPathSet.has(entry.path))
+        .map((entry) => entry.path),
+    [activeContentEntries, selectedPathSet],
   );
-  const contextMenuTargetEntry = useMemo(
+  const selectedEntry = useMemo(
+    () =>
+      activeContentEntries.find((entry) => entry.path === contentSelection.leadPath) ??
+      activeContentEntries.find((entry) => selectedPathSet.has(entry.path)) ??
+      null,
+    [activeContentEntries, contentSelection.leadPath, selectedPathSet],
+  );
+  const contextMenuTargetEntries = useMemo(
     () =>
       contextMenuState
-        ? (activeContentEntries.find((entry) => entry.path === contextMenuState.path) ?? null)
-        : null,
+        ? contextMenuState.paths
+            .map((path) => activeContentEntries.find((entry) => entry.path === path) ?? null)
+            .filter((entry): entry is DirectoryEntry => entry !== null)
+        : [],
     [activeContentEntries, contextMenuState],
   );
+  const contextMenuDisabledActionIds = useMemo(() => {
+    if (!contextMenuState || contextMenuTargetEntries.length > 0) {
+      return [] as ContextMenuActionId[];
+    }
+    const items =
+      contextMenuState.source === "search" ? SEARCH_CONTEXT_MENU_ITEMS : BROWSE_CONTEXT_MENU_ITEMS;
+    return items.flatMap((item) => {
+      if (item.type === "separator" || item.id === "newFolder") {
+        return [];
+      }
+      return [item.id];
+    });
+  }, [contextMenuState, contextMenuTargetEntries.length]);
 
   useEffect(() => {
     treeNodesRef.current = treeNodes;
@@ -322,14 +363,16 @@ export function App() {
   }, [searchResults]);
 
   useEffect(() => {
+    setContentSelection((current) => sanitizeContentSelection(current, activeContentEntries));
+  }, [activeContentEntries]);
+
+  useEffect(() => {
     if (isSearchMode) {
-      cachedSearchSelectedPathRef.current = selectedPath;
+      cachedSearchSelectionRef.current = contentSelection;
       return;
     }
-    if (!searchResultsVisibleRef.current) {
-      browseSelectedPathRef.current = selectedPath;
-    }
-  }, [isSearchMode, selectedPath]);
+    browseSelectionRef.current = contentSelection;
+  }, [contentSelection, isSearchMode]);
 
   useEffect(() => {
     treeRootPathRef.current = treeRootPath;
@@ -347,7 +390,11 @@ export function App() {
     if (!contextMenuState) {
       return;
     }
-    if (!activeContentEntries.some((entry) => entry.path === contextMenuState.path)) {
+    if (
+      contextMenuState.paths.some(
+        (path) => !activeContentEntries.some((entry) => entry.path === path),
+      )
+    ) {
       setContextMenuState(null);
     }
   }, [activeContentEntries, contextMenuState]);
@@ -649,9 +696,16 @@ export function App() {
   useEffect(() => {
     const unsubscribe = client.onCommand((command) => {
       if (command.type === "copyPath") {
-        const pathToCopy = contextMenuState?.path ?? selectedEntry?.path ?? currentPath;
-        if (pathToCopy) {
-          void runCopyPathAction(pathToCopy);
+        const pathsToCopy =
+          (contextMenuState?.paths.length ?? 0) > 0
+            ? contextMenuState?.paths ?? []
+            : selectedPathsInViewOrder.length > 0
+              ? selectedPathsInViewOrder
+              : currentPath
+                ? [currentPath]
+                : [];
+        if (pathsToCopy.length > 0) {
+          void runCopyPathAction(pathsToCopy);
         }
         return;
       }
@@ -666,8 +720,8 @@ export function App() {
         setSearchPopoverOpen(true);
         if (searchCommittedQueryRef.current.trim().length > 0) {
           setSearchResultsVisible(true);
-          setSelectedPath(
-            cachedSearchSelectedPathRef.current || searchResultsRef.current[0]?.path || "",
+          setContentSelection(
+            sanitizeContentSelection(cachedSearchSelectionRef.current, searchResultEntries),
           );
         }
         window.requestAnimationFrame(() => {
@@ -678,7 +732,7 @@ export function App() {
       });
     });
     return unsubscribe;
-  }, [client, contextMenuState, currentPath, selectedEntry]);
+  }, [client, contextMenuState, currentPath, searchResultEntries, selectedPathsInViewOrder]);
 
   useEffect(() => {
     if (!searchPopoverOpen) {
@@ -744,7 +798,7 @@ export function App() {
     if ((!propertiesOpen && !detailRowOpen) || currentPath.length === 0) {
       return;
     }
-    const targetPath = selectedPath || currentPath;
+    const targetPath = contentSelection.leadPath || currentPath;
     const requestId = ++propertiesRequestRef.current;
     setPropertiesLoading(true);
     void client
@@ -767,7 +821,7 @@ export function App() {
           setPropertiesLoading(false);
         }
       });
-  }, [client, currentPath, detailRowOpen, propertiesOpen, selectedPath]);
+  }, [client, contentSelection.leadPath, currentPath, detailRowOpen, propertiesOpen]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -802,8 +856,7 @@ export function App() {
         setMainView("explorer");
         return;
       }
-      const currentSelectedEntry =
-        activeContentEntries.find((entry) => entry.path === selectedPath) ?? null;
+      const currentSelectedEntry = selectedEntry;
       if (
         target instanceof HTMLInputElement ||
         target instanceof HTMLTextAreaElement ||
@@ -855,6 +908,11 @@ export function App() {
         return;
       }
       if (mainView !== "explorer") {
+        return;
+      }
+      if (event.metaKey && event.key.toLowerCase() === "a" && focusedPane === "content") {
+        event.preventDefault();
+        selectAllContentEntries();
         return;
       }
       if (event.metaKey && event.key === "1") {
@@ -937,10 +995,17 @@ export function App() {
         !event.shiftKey &&
         event.code === "KeyC"
       ) {
-        const pathToCopy = contextMenuState?.path ?? currentSelectedEntry?.path ?? currentPath;
-        if (pathToCopy) {
+        const pathsToCopy =
+          contextMenuState && contextMenuState.paths.length > 0
+            ? contextMenuState.paths
+            : selectedPathsInViewOrder.length > 0
+              ? selectedPathsInViewOrder
+              : currentPath
+                ? [currentPath]
+                : [];
+        if (pathsToCopy.length > 0) {
           event.preventDefault();
-          void runCopyPathAction(pathToCopy);
+          void runCopyPathAction(pathsToCopy);
         }
         return;
       }
@@ -1013,7 +1078,9 @@ export function App() {
           return;
         }
         event.preventDefault();
-        const currentIndex = activeContentEntries.findIndex((entry) => entry.path === selectedPath);
+        const currentIndex = activeContentEntries.findIndex(
+          (entry) => entry.path === contentSelection.leadPath,
+        );
         const nextIndex = getNextSelectionIndex({
           itemCount: activeContentEntries.length,
           currentIndex,
@@ -1023,10 +1090,10 @@ export function App() {
         });
         const nextEntry = activeContentEntries[nextIndex];
         if (nextEntry) {
-          if (isSearchMode) {
-            selectSearchResultPath(nextEntry.path);
+          if (event.shiftKey) {
+            extendContentSelectionToPath(nextEntry.path);
           } else {
-            setSelectedPath(nextEntry.path);
+            setSingleContentSelection(nextEntry.path);
           }
         }
         return;
@@ -1045,6 +1112,7 @@ export function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
     activeContentEntries,
+    contentSelection.leadPath,
     contentColumns,
     currentPath,
     focusedPane,
@@ -1055,7 +1123,8 @@ export function App() {
     contextMenuState,
     locationSheetOpen,
     mainView,
-    selectedPath,
+    selectedEntry,
+    selectedPathsInViewOrder,
     treeNodes,
     treeRootPath,
     tabSwitchesExplorerPanes,
@@ -1139,21 +1208,112 @@ export function App() {
     };
   }
 
-  function openItemContextMenu(
+  function clearContentSelection() {
+    setContentSelection(EMPTY_CONTENT_SELECTION);
+  }
+
+  function setSingleContentSelection(path: string) {
+    setContentSelection({
+      paths: [path],
+      anchorPath: path,
+      leadPath: path,
+    });
+  }
+
+  function toggleContentSelection(path: string) {
+    setContentSelection((current) => {
+      if (current.paths.includes(path)) {
+        const nextPaths = current.paths.filter((currentPath) => currentPath !== path);
+        if (nextPaths.length === 0) {
+          return EMPTY_CONTENT_SELECTION;
+        }
+        const nextLeadPath =
+          current.leadPath === path ? nextPaths.at(-1) ?? null : current.leadPath;
+        return {
+          paths: nextPaths,
+          anchorPath:
+            current.anchorPath === path ? nextLeadPath : current.anchorPath ?? nextLeadPath,
+          leadPath: nextLeadPath,
+        };
+      }
+      return {
+        paths: mergeSelectionPathsInEntryOrder(activeContentEntries, current.paths, [path]),
+        anchorPath: path,
+        leadPath: path,
+      };
+    });
+  }
+
+  function extendContentSelectionToPath(path: string, additive = false) {
+    setContentSelection((current) => {
+      const anchorPath = current.anchorPath ?? current.leadPath ?? path;
+      const rangePaths = getSelectionRangePaths(activeContentEntries, anchorPath, path);
+      return {
+        paths: additive
+          ? mergeSelectionPathsInEntryOrder(activeContentEntries, current.paths, rangePaths)
+          : rangePaths,
+        anchorPath,
+        leadPath: path,
+      };
+    });
+  }
+
+  function handleContentSelectionGesture(
     path: string,
+    modifiers: { metaKey: boolean; shiftKey: boolean },
+  ) {
+    if (modifiers.metaKey && modifiers.shiftKey) {
+      extendContentSelectionToPath(path, true);
+      return;
+    }
+    if (modifiers.shiftKey) {
+      extendContentSelectionToPath(path);
+      return;
+    }
+    if (modifiers.metaKey) {
+      toggleContentSelection(path);
+      return;
+    }
+    setSingleContentSelection(path);
+  }
+
+  function selectAllContentEntries() {
+    if (activeContentEntries.length === 0) {
+      return;
+    }
+    setContentSelection({
+      paths: activeContentEntries.map((entry) => entry.path),
+      anchorPath: activeContentEntries[0]?.path ?? null,
+      leadPath: activeContentEntries.at(-1)?.path ?? null,
+    });
+  }
+
+  function openItemContextMenu(
+    path: string | null,
     position: { x: number; y: number },
     source: "browse" | "search" = "browse",
   ) {
     const resolvedPosition = resolveContextMenuPosition(position.x, position.y);
-    setSelectedPath(path);
+    let contextPaths: string[] = [];
+    if (path) {
+      if (selectedPathSet.has(path)) {
+        contextPaths = selectedPathsInViewOrder;
+      } else {
+        contextPaths = [path];
+        setSingleContentSelection(path);
+      }
+    } else {
+      clearContentSelection();
+    }
     setFocusedPane("content");
     window.requestAnimationFrame(() => {
       contentPaneRef.current?.focus({ preventScroll: true });
     });
     setContextMenuState({
       ...resolvedPosition,
-      path,
+      paths: contextPaths,
       source,
+      scope: contextPaths.length > 0 ? "selection" : "background",
     });
   }
 
@@ -1179,18 +1339,20 @@ export function App() {
     }
   }
 
-  async function copyPathToClipboard(path: string) {
-    await client.invoke("system:copyText", { text: formatPathForShell(path) });
+  async function copyPathsToClipboard(paths: string[]) {
+    await client.invoke("system:copyText", {
+      text: paths.map((path) => formatPathForShell(path)).join("\n"),
+    });
   }
 
-  async function runCopyPathAction(path: string) {
+  async function runCopyPathAction(paths: string[]) {
     try {
-      await copyPathToClipboard(path);
+      await copyPathsToClipboard(paths);
     } catch (error) {
       logger.error("copy path failed", error);
       setActionNotice({
         title: "Copy Path",
-        message: "Unable to copy the selected path to the clipboard.",
+        message: "Unable to copy the selected paths to the clipboard.",
       });
     }
   }
@@ -1209,18 +1371,23 @@ export function App() {
     if (!didNavigate) {
       return;
     }
-    setSelectedPath(path);
+    setSingleContentSelection(path);
     focusContentPane();
   }
 
-  async function runContextMenuAction(actionId: ContextMenuActionId, path: string) {
+  async function runContextMenuAction(actionId: ContextMenuActionId, paths: string[]) {
     closeContextMenu();
     if (actionId === "revealInFolder") {
-      await revealSearchResultInFolder(path);
+      const firstPath = paths[0];
+      if (firstPath) {
+        await revealSearchResultInFolder(firstPath);
+      }
       return;
     }
     if (actionId === "copyPath") {
-      await runCopyPathAction(path);
+      if (paths.length > 0) {
+        await runCopyPathAction(paths);
+      }
       return;
     }
     const title =
@@ -1268,7 +1435,7 @@ export function App() {
       return;
     }
     setSearchResultsVisible(true);
-    setSelectedPath(cachedSearchSelectedPathRef.current || searchResults[0]?.path || "");
+    setContentSelection(sanitizeContentSelection(cachedSearchSelectionRef.current, searchResultEntries));
     if (options?.focusPane) {
       focusContentPane();
     }
@@ -1276,14 +1443,7 @@ export function App() {
 
   function hideSearchResults() {
     setSearchResultsVisible(false);
-    setSelectedPath(browseSelectedPathRef.current || currentEntries[0]?.path || "");
-  }
-
-  function selectSearchResultPath(path: string) {
-    cachedSearchSelectedPathRef.current = path;
-    if (searchResultsVisibleRef.current) {
-      setSelectedPath(path);
-    }
+    setContentSelection(sanitizeContentSelection(browseSelectionRef.current, currentEntries));
   }
 
   function dismissFileSearch(options?: { focusBelow?: boolean }) {
@@ -1330,8 +1490,8 @@ export function App() {
     setSearchError(null);
     setSearchTruncated(false);
     setSearchResultsVisible(false);
-    cachedSearchSelectedPathRef.current = "";
-    setSelectedPath(browseSelectedPathRef.current || currentEntries[0]?.path || "");
+    cachedSearchSelectionRef.current = EMPTY_CONTENT_SELECTION;
+    setContentSelection(sanitizeContentSelection(browseSelectionRef.current, currentEntries));
   }
 
   function mergeSearchResults(
@@ -1348,17 +1508,9 @@ export function App() {
         if (searchSessionRef.current !== sessionId || searchJobIdRef.current !== jobId) {
           return;
         }
-        setSearchResults((current) => {
-          const merged =
-            response.items.length > 0 ? mergeSearchResults(current, response.items) : current;
-          if (cachedSearchSelectedPathRef.current.length === 0 && merged[0]) {
-            cachedSearchSelectedPathRef.current = merged[0].path;
-            if (searchResultsVisibleRef.current) {
-              setSelectedPath(merged[0].path);
-            }
-          }
-          return merged;
-        });
+        setSearchResults((current) =>
+          response.items.length > 0 ? mergeSearchResults(current, response.items) : current,
+        );
         setSearchStatus(response.status);
         setSearchError(response.error);
         setSearchTruncated(response.truncated);
@@ -1401,7 +1553,7 @@ export function App() {
       return;
     }
     await cancelActiveSearch();
-    browseSelectedPathRef.current = selectedPath;
+    browseSelectionRef.current = contentSelection;
     const sessionId = searchSessionRef.current + 1;
     searchSessionRef.current = sessionId;
     setSearchCommittedQuery(trimmedQuery);
@@ -1410,8 +1562,8 @@ export function App() {
     setSearchStatus("running");
     setSearchError(null);
     setSearchTruncated(false);
-    cachedSearchSelectedPathRef.current = "";
-    setSelectedPath("");
+    cachedSearchSelectionRef.current = EMPTY_CONTENT_SELECTION;
+    setContentSelection(EMPTY_CONTENT_SELECTION);
 
     try {
       const response = await client.invoke("search:start", {
@@ -1513,7 +1665,7 @@ export function App() {
     if (pane === "content") {
       const match = findContentTypeaheadMatch(activeContentEntries, nextQuery);
       if (match) {
-        setSelectedPath(match.path);
+        setSingleContentSelection(match.path);
       }
       return;
     }
@@ -1652,7 +1804,7 @@ export function App() {
       if (searchResultsVisibleRef.current) {
         setSearchResultsVisible(false);
       }
-      setSelectedPath(response.entries[0]?.path ?? "");
+      setContentSelection(EMPTY_CONTENT_SELECTION);
       setPropertiesItem(null);
       await syncTreeToPath(response.path, includeHiddenOverride);
       if (historyMode === "push") {
@@ -2458,7 +2610,8 @@ export function App() {
                     query={searchCommittedQuery}
                     status={searchStatus}
                     results={searchResults}
-                    selectedPath={selectedPath}
+                    selectedPaths={contentSelection.paths}
+                    selectionLeadPath={contentSelection.leadPath}
                     error={searchError}
                     truncated={searchTruncated}
                     onStopSearch={() => {
@@ -2475,12 +2628,13 @@ export function App() {
                       hideSearchResults();
                       focusContentPane();
                     }}
-                    onSelectPath={selectSearchResultPath}
+                    onSelectionGesture={handleContentSelectionGesture}
+                    onClearSelection={clearContentSelection}
                     onActivateResult={(item) => {
                       void activateEntry(toDirectoryEntryFromSearchResult(item));
                     }}
-                    onItemContextMenu={(item, position) => {
-                      openItemContextMenu(item.path, position, "search");
+                    onItemContextMenu={(path, position) => {
+                      openItemContextMenu(path, position, "search");
                     }}
                     onFocusChange={(focused) => setFocusedPane(focused ? "content" : null)}
                     typeaheadQuery={focusedPane === "content" ? typeaheadQuery : ""}
@@ -2495,9 +2649,11 @@ export function App() {
                     error={directoryError}
                     includeHidden={includeHidden}
                     metadataByPath={metadataByPath}
-                    selectedPath={selectedPath}
+                    selectedPaths={contentSelection.paths}
+                    selectionLeadPath={contentSelection.leadPath}
                     viewMode={viewMode}
-                    onSelectPath={setSelectedPath}
+                    onSelectionGesture={handleContentSelectionGesture}
+                    onClearSelection={clearContentSelection}
                     onActivateEntry={(entry) => {
                       void activateEntry(entry);
                     }}
@@ -2515,8 +2671,8 @@ export function App() {
                         inputPath,
                       })
                     }
-                    onItemContextMenu={(entry, position) => {
-                      openItemContextMenu(entry.path, position, "browse");
+                    onItemContextMenu={(path, position) => {
+                      openItemContextMenu(path, position, "browse");
                     }}
                     compactListView={compactListView}
                     tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
@@ -2629,14 +2785,15 @@ export function App() {
         onClose={() => setLocationSheetOpen(false)}
         onSubmit={(path) => void submitLocationPath(path)}
       />
-      {contextMenuState && contextMenuTargetEntry ? (
+      {contextMenuState ? (
         <ItemContextMenu
           anchorX={contextMenuState.x}
           anchorY={contextMenuState.y}
           variant={contextMenuState.source}
+          disabledActionIds={contextMenuDisabledActionIds}
           open
           onAction={(actionId) => {
-            void runContextMenuAction(actionId, contextMenuTargetEntry.path);
+            void runContextMenuAction(actionId, contextMenuState.paths);
           }}
           onSubmenuAction={runContextSubmenuAction}
         />
@@ -2650,6 +2807,54 @@ export function App() {
       ) : null}
     </main>
   );
+}
+
+function sanitizeContentSelection(
+  selection: ContentSelectionState,
+  entries: DirectoryEntry[],
+): ContentSelectionState {
+  const availablePaths = new Set(entries.map((entry) => entry.path));
+  const nextPaths = selection.paths.filter((path) => availablePaths.has(path));
+  if (nextPaths.length === 0) {
+    return EMPTY_CONTENT_SELECTION;
+  }
+  const leadPath =
+    selection.leadPath && availablePaths.has(selection.leadPath)
+      ? selection.leadPath
+      : nextPaths.at(-1) ?? null;
+  const anchorPath =
+    selection.anchorPath && availablePaths.has(selection.anchorPath)
+      ? selection.anchorPath
+      : leadPath;
+  return {
+    paths: nextPaths,
+    anchorPath,
+    leadPath,
+  };
+}
+
+function getSelectionRangePaths(
+  entries: DirectoryEntry[],
+  anchorPath: string,
+  targetPath: string,
+): string[] {
+  const anchorIndex = entries.findIndex((entry) => entry.path === anchorPath);
+  const targetIndex = entries.findIndex((entry) => entry.path === targetPath);
+  if (anchorIndex < 0 || targetIndex < 0) {
+    return targetPath ? [targetPath] : [];
+  }
+  const [startIndex, endIndex] =
+    anchorIndex <= targetIndex ? [anchorIndex, targetIndex] : [targetIndex, anchorIndex];
+  return entries.slice(startIndex, endIndex + 1).map((entry) => entry.path);
+}
+
+function mergeSelectionPathsInEntryOrder(
+  entries: DirectoryEntry[],
+  currentPaths: string[],
+  nextPaths: string[],
+): string[] {
+  const mergedPaths = new Set([...currentPaths, ...nextPaths]);
+  return entries.filter((entry) => mergedPaths.has(entry.path)).map((entry) => entry.path);
 }
 
 function formatPathForShell(path: string): string {

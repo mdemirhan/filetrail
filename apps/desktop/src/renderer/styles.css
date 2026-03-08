@@ -980,19 +980,19 @@ body.platform-macos .window-toolbar-brand {
   display: flex;
   min-width: 0;
   margin-left: auto;
-  flex: 0 1 320px;
+  flex: 0 1 256px;
 }
 
 .titlebar-actions[data-layout="condensed"] .toolbar-search-slot {
-  flex-basis: 292px;
+  flex-basis: 234px;
 }
 
 .titlebar-actions[data-layout="narrow"] .toolbar-search-slot {
-  flex-basis: 250px;
+  flex-basis: 200px;
 }
 
 .titlebar-actions[data-layout="minimal"] .toolbar-search-slot {
-  flex-basis: 212px;
+  flex-basis: 170px;
 }
 
 .toolbar-search-popover {
@@ -1431,6 +1431,14 @@ body.platform-macos .window-toolbar-brand {
 
 .content-pane {
   position: relative;
+}
+
+.content-viewport {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
 }
 
 .pane-typeahead {
@@ -2064,6 +2072,8 @@ body.resizing-panels * {
   background: transparent;
   text-align: left;
   transition: background 0.15s ease, color 0.15s ease;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .flow-list.compact .flow-item {
@@ -2179,6 +2189,8 @@ body.resizing-panels * {
   color: var(--text-secondary);
   border-radius: 8px;
   font-size: var(--ui-font-size-sm);
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .details-name {
@@ -2212,6 +2224,13 @@ body.resizing-panels * {
 .flow-list,
 .details-scroll {
   position: relative;
+  height: 100%;
+  min-height: 0;
+}
+
+.search-results-scroll {
+  height: 100%;
+  min-height: 0;
 }
 
 .content-state strong {
@@ -2338,6 +2357,8 @@ body.resizing-panels * {
   border-radius: 10px;
   background: transparent;
   text-align: left;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .search-result-row:hover {
