@@ -227,6 +227,10 @@ export function ContentPane({
 
   useLayoutEffect(() => {
     if (!pathbarExpanded) {
+      const pathbar = pathbarRef.current;
+      if (pathbar) {
+        pathbar.scrollLeft = 0;
+      }
       return;
     }
     const pathbar = pathbarRef.current;
@@ -614,8 +618,11 @@ function resolveVisiblePathbarItems(
     isActive: index === segments.length - 1,
   }));
   const effectiveWidth = Math.max(0, availableWidth - PATHBAR_WIDTH_SAFETY_MARGIN);
-  if (expanded || segments.length <= 4 || effectiveWidth <= 0) {
+  if (expanded || segments.length <= 4) {
     return fullItems;
+  }
+  if (effectiveWidth <= 0) {
+    return buildCollapsedPathbarItems(segments, { includeRoot: false, tailCount: 1 });
   }
   if (estimatePathbarWidth(fullItems) <= effectiveWidth) {
     return fullItems;
