@@ -43,8 +43,18 @@ export function formatSize(
 }
 
 export function formatPermissionMode(permissionMode: number | null): string {
-  if (permissionMode === null || !Number.isFinite(permissionMode) || permissionMode < 0) {
+  const parts = splitPermissionMode(permissionMode);
+  if (!parts) {
     return "Unavailable";
+  }
+  return `${parts.symbolic} (${parts.octal})`;
+}
+
+export function splitPermissionMode(
+  permissionMode: number | null,
+): { symbolic: string; octal: string } | null {
+  if (permissionMode === null || !Number.isFinite(permissionMode) || permissionMode < 0) {
+    return null;
   }
 
   const normalized = permissionMode & 0o777;
@@ -57,7 +67,10 @@ export function formatPermissionMode(permissionMode: number | null): string {
   const symbolic = segments
     .map((group) => group.map((bit, index) => (normalized & bit ? symbols[index] : "-")).join(""))
     .join("");
-  return `${symbolic} (${normalized.toString(8).padStart(3, "0")})`;
+  return {
+    symbolic,
+    octal: normalized.toString(8).padStart(3, "0"),
+  };
 }
 
 export function pathSegments(path: string): Array<{ label: string; path: string }> {

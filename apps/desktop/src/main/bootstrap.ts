@@ -1,3 +1,7 @@
+import { execFile } from "node:child_process";
+import { stat } from "node:fs/promises";
+import { dirname } from "node:path";
+import { promisify } from "node:util";
 import { app, clipboard, ipcMain, shell } from "electron";
 
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
@@ -8,6 +12,7 @@ import { resolveBundledFdBinaryPath } from "./fdBinary";
 import { registerIpcHandlers } from "./ipc";
 
 let activeWorkerClient: ExplorerWorkerClient | null = null;
+const execFileAsync = promisify(execFile);
 const CACHE_TTL_MS = 3_000;
 const directorySnapshotCache = new Map<string, { expiresAt: number; value: unknown }>();
 const treeChildrenCache = new Map<string, { expiresAt: number; value: unknown }>();
@@ -110,6 +115,7 @@ export async function bootstrapMainProcess(
       return { ok: true };
     },
     "system:openPath": (payload) => openPath(payload),
+    "system:openInTerminal": (payload) => openInTerminal(payload),
     "system:copyText": (payload) => {
       clipboard.writeText(payload.text);
       return { ok: true };
@@ -142,9 +148,36 @@ async function openPath(
   };
 }
 
+async function openInTerminal(
+  payload: IpcRequest<"system:openInTerminal">,
+): Promise<IpcResponse<"system:openInTerminal">> {
+  try {
+    const targetPath = await resolveTerminalTargetPath(payload.path);
+    await execFileAsync("open", ["-a", "Terminal", targetPath]);
+    return {
+      ok: true,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: toErrorMessage(error),
+    };
+  }
+}
+
 function clearCaches(): void {
   directorySnapshotCache.clear();
   treeChildrenCache.clear();
+}
+
+async function resolveTerminalTargetPath(path: string): Promise<string> {
+  try {
+    const stats = await stat(path);
+    return stats.isDirectory() ? path : dirname(path);
+  } catch {
+    return dirname(path);
+  }
 }
 
 async function withCachedResponse<TPayload extends object, TResponse>(
@@ -268,4 +301,11 @@ export function toPreferencePatch(
     patch.lastVisitedPath = value.lastVisitedPath;
   }
   return patch;
+}
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
 }

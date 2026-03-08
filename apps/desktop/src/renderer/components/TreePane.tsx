@@ -34,8 +34,10 @@ export function TreePane({
   onQuickAccess,
   foldersFirst,
   onToggleFoldersFirst,
-  onToggleDetailRow,
-  detailRowOpen,
+  onToggleInfoPanel,
+  infoPanelOpen,
+  onToggleInfoRow,
+  infoRowOpen,
   theme,
   themeMenuOpen,
   themeButtonRef,
@@ -64,8 +66,10 @@ export function TreePane({
   onQuickAccess: (location: "desktop" | "downloads" | "documents" | "source") => void;
   foldersFirst: boolean;
   onToggleFoldersFirst: () => void;
-  onToggleDetailRow: () => void;
-  detailRowOpen: boolean;
+  onToggleInfoPanel: () => void;
+  infoPanelOpen: boolean;
+  onToggleInfoRow: () => void;
+  infoRowOpen: boolean;
   theme: ThemeMode;
   themeMenuOpen: boolean;
   themeButtonRef: React.RefObject<HTMLButtonElement | null>;
@@ -265,12 +269,21 @@ export function TreePane({
           </button>
           <button
             type="button"
-            className={`sidebar-rail-button${detailRowOpen ? " active" : ""}`}
-            onClick={onToggleDetailRow}
-            title="Toggle detail row"
-            aria-label="Toggle detail row"
+            className={`sidebar-rail-button${infoPanelOpen ? " active" : ""}`}
+            onClick={onToggleInfoPanel}
+            title="Toggle Info Panel (Cmd+I)"
+            aria-label="Toggle Info Panel"
           >
-            <ToolbarIcon name="detailRow" />
+            <ToolbarIcon name="drawer" />
+          </button>
+          <button
+            type="button"
+            className={`sidebar-rail-button${infoRowOpen ? " active" : ""}`}
+            onClick={onToggleInfoRow}
+            title="Toggle Info Row (Cmd+Shift+I)"
+            aria-label="Toggle Info Row"
+          >
+            <ToolbarIcon name="infoRow" />
           </button>
           <div className="sidebar-rail-spacer" />
           <button

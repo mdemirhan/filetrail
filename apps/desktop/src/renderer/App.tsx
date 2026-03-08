@@ -33,8 +33,8 @@ import {
   ItemContextMenu,
   SEARCH_CONTEXT_MENU_ITEMS,
 } from "./components/ItemContextMenu";
+import { InfoPanel } from "./components/GetInfoPanel";
 import { LocationSheet } from "./components/LocationSheet";
-import { PropertiesDrawer } from "./components/PropertiesDrawer";
 import { SearchResultsPane } from "./components/SearchResultsPane";
 import { SettingsView } from "./components/SettingsView";
 import { ToolbarIcon } from "./components/ToolbarIcon";
@@ -185,18 +185,18 @@ export function App() {
   );
   const [sortBy, setSortBy] = useState<SortBy>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
-  const [propertiesOpen, setPropertiesOpen] = useState(DEFAULT_APP_PREFERENCES.propertiesOpen);
-  const [detailRowOpen, setDetailRowOpen] = useState(DEFAULT_APP_PREFERENCES.detailRowOpen);
+  const [infoPanelOpen, setInfoPanelOpen] = useState(DEFAULT_APP_PREFERENCES.propertiesOpen);
+  const [infoRowOpen, setInfoRowOpen] = useState(DEFAULT_APP_PREFERENCES.detailRowOpen);
   const [contentSelection, setContentSelection] =
     useState<ContentSelectionState>(EMPTY_CONTENT_SELECTION);
   const [historyPaths, setHistoryPaths] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [visiblePaths, setVisiblePaths] = useState<string[]>([]);
   const [contentColumns, setContentColumns] = useState(1);
-  const [propertiesLoading, setPropertiesLoading] = useState(false);
-  const [propertiesItem, setPropertiesItem] = useState<
-    IpcResponse<"item:getProperties">["item"] | null
-  >(null);
+  const [getInfoLoading, setGetInfoLoading] = useState(false);
+  const [getInfoItem, setGetInfoItem] = useState<IpcResponse<"item:getProperties">["item"] | null>(
+    null,
+  );
   const [locationSheetOpen, setLocationSheetOpen] = useState(false);
   const [locationSubmitting, setLocationSubmitting] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
@@ -223,7 +223,7 @@ export function App() {
   const themeButtonRef = useRef<HTMLButtonElement | null>(null);
   const directoryRequestRef = useRef(0);
   const metadataRequestRef = useRef(0);
-  const propertiesRequestRef = useRef(0);
+  const getInfoRequestRef = useRef(0);
   const searchPollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchSessionRef = useRef(0);
   const searchJobIdRef = useRef<string | null>(null);
@@ -250,7 +250,7 @@ export function App() {
   const panes = useExplorerPaneLayout({
     initialTreeWidth: DEFAULT_APP_PREFERENCES.treeWidth,
     initialInspectorWidth: DEFAULT_APP_PREFERENCES.inspectorWidth,
-    inspectorVisible: propertiesOpen,
+    inspectorVisible: infoPanelOpen,
     minContentWidth: EXPLORER_LAYOUT.minContentWidth,
   });
   const { width: toolbarWidth } = useElementSize(toolbarRef);
@@ -527,8 +527,8 @@ export function App() {
         tabSwitchesExplorerPanes,
         typeaheadEnabled,
         typeaheadDebounceMs,
-        propertiesOpen,
-        detailRowOpen,
+        propertiesOpen: infoPanelOpen,
+        detailRowOpen: infoRowOpen,
         includeHidden,
         searchPatternMode,
         searchMatchScope,
@@ -551,8 +551,8 @@ export function App() {
     panes.inspectorWidth,
     panes.treeWidth,
     preferencesReady,
-    propertiesOpen,
-    detailRowOpen,
+    infoPanelOpen,
+    infoRowOpen,
     foldersFirst,
     compactListView,
     compactTreeView,
@@ -614,8 +614,8 @@ export function App() {
         setTabSwitchesExplorerPanes(preferences.tabSwitchesExplorerPanes);
         setTypeaheadEnabled(preferences.typeaheadEnabled);
         setTypeaheadDebounceMs(preferences.typeaheadDebounceMs);
-        setPropertiesOpen(preferences.propertiesOpen);
-        setDetailRowOpen(preferences.detailRowOpen);
+        setInfoPanelOpen(preferences.propertiesOpen);
+        setInfoRowOpen(preferences.detailRowOpen);
         setRestoreLastVisitedFolderOnStartup(preferences.restoreLastVisitedFolderOnStartup);
         panes.setTreeWidth(preferences.treeWidth);
         panes.setInspectorWidth(preferences.inspectorWidth);
@@ -669,6 +669,17 @@ export function App() {
   }, [client, panes.setInspectorWidth, panes.setTreeWidth]);
 
   useEffect(() => {
+    if (
+      restoredPaneWidths === null ||
+      panes.treeWidth !== restoredPaneWidths.treeWidth ||
+      panes.inspectorWidth !== restoredPaneWidths.inspectorWidth
+    ) {
+      return;
+    }
+    setRestoredPaneWidths(null);
+  }, [panes.inspectorWidth, panes.treeWidth, restoredPaneWidths]);
+
+  useEffect(() => {
     if (!themeMenuOpen) {
       return;
     }
@@ -704,7 +715,7 @@ export function App() {
       if (command.type === "copyPath") {
         const pathsToCopy =
           (contextMenuState?.paths.length ?? 0) > 0
-            ? contextMenuState?.paths ?? []
+            ? (contextMenuState?.paths ?? [])
             : selectedPathsInViewOrder.length > 0
               ? selectedPathsInViewOrder
               : currentPath
@@ -721,6 +732,14 @@ export function App() {
           return;
         }
         void refreshDirectory();
+        return;
+      }
+      if (command.type === "toggleInfoPanel") {
+        setInfoPanelOpen((value: boolean) => !value);
+        return;
+      }
+      if (command.type === "toggleInfoRow") {
+        setInfoRowOpen((value: boolean) => !value);
         return;
       }
       if (command.type !== "focusFileSearch") {
@@ -817,33 +836,33 @@ export function App() {
   ]);
 
   useEffect(() => {
-    if ((!propertiesOpen && !detailRowOpen) || currentPath.length === 0) {
+    if ((!infoPanelOpen && !infoRowOpen) || currentPath.length === 0) {
       return;
     }
     const targetPath = contentSelection.leadPath || currentPath;
-    const requestId = ++propertiesRequestRef.current;
-    setPropertiesLoading(true);
+    const requestId = ++getInfoRequestRef.current;
+    setGetInfoLoading(true);
     void client
       .invoke("item:getProperties", { path: targetPath })
       .then((response) => {
-        if (propertiesRequestRef.current !== requestId) {
+        if (getInfoRequestRef.current !== requestId) {
           return;
         }
-        setPropertiesItem(response.item);
+        setGetInfoItem(response.item);
       })
       .catch((error) => {
-        if (propertiesRequestRef.current !== requestId) {
+        if (getInfoRequestRef.current !== requestId) {
           return;
         }
-        setPropertiesItem(null);
-        logger.error("properties load failed", error);
+        setGetInfoItem(null);
+        logger.error("Info Panel load failed", error);
       })
       .finally(() => {
-        if (propertiesRequestRef.current === requestId) {
-          setPropertiesLoading(false);
+        if (getInfoRequestRef.current === requestId) {
+          setGetInfoLoading(false);
         }
       });
-  }, [client, contentSelection.leadPath, currentPath, detailRowOpen, propertiesOpen]);
+  }, [client, contentSelection.leadPath, currentPath, infoPanelOpen, infoRowOpen]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1046,9 +1065,20 @@ export function App() {
         openLocationSheet();
         return;
       }
+      if (
+        event.metaKey &&
+        event.shiftKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === "i"
+      ) {
+        event.preventDefault();
+        setInfoRowOpen((value: boolean) => !value);
+        return;
+      }
       if (event.metaKey && event.key.toLowerCase() === "i") {
         event.preventDefault();
-        setPropertiesOpen((value: boolean) => !value);
+        setInfoPanelOpen((value: boolean) => !value);
         return;
       }
       if (event.key === "Escape" && focusedPane === "content" && isSearchMode) {
@@ -1201,8 +1231,6 @@ export function App() {
   const showUpButton = explorerToolbarLayout !== "minimal";
   const showDownButton = explorerToolbarLayout !== "minimal";
   const showRefreshButton = explorerToolbarLayout !== "minimal";
-  const showInspectorButton =
-    explorerToolbarLayout === "full" || explorerToolbarLayout === "condensed";
   const showSortControls = explorerToolbarLayout !== "minimal";
 
   function focusFileSearch(selectContents = false) {
@@ -1248,9 +1276,10 @@ export function App() {
     });
   }
 
-  function getFocusedScrollTarget():
-    | { axis: "horizontal" | "vertical"; element: HTMLElement }
-    | null {
+  function getFocusedScrollTarget(): {
+    axis: "horizontal" | "vertical";
+    element: HTMLElement;
+  } | null {
     if (focusedPane === "tree") {
       const element = treePaneRef.current?.querySelector<HTMLElement>(".tree-scroll");
       return element ? { axis: "vertical", element } : null;
@@ -1283,7 +1312,10 @@ export function App() {
         return didScroll;
       }
       const currentIndex = orderedPaths.findIndex((path) => path === currentPath);
-      const stepItems = getPageStepItemCount(target.element.clientHeight, compactTreeView ? 25 : 32);
+      const stepItems = getPageStepItemCount(
+        target.element.clientHeight,
+        compactTreeView ? 25 : 32,
+      );
       const nextIndex = getPagedSelectionIndex({
         itemCount: orderedPaths.length,
         currentIndex,
@@ -1482,6 +1514,35 @@ export function App() {
     }
   }
 
+  async function copyGetInfoPath(path: string): Promise<boolean> {
+    try {
+      await client.invoke("system:copyText", { text: path });
+      return true;
+    } catch (error) {
+      logger.error("Info Panel copy path failed", error);
+      setActionNotice({
+        title: "Copy Path",
+        message: "Unable to copy this path to the clipboard.",
+      });
+      return false;
+    }
+  }
+
+  async function openPathInTerminal(path: string) {
+    try {
+      const response = await client.invoke("system:openInTerminal", { path });
+      if (!response.ok) {
+        throw new Error(response.error ?? "Unable to open Terminal for the selected path.");
+      }
+    } catch (error) {
+      logger.error("open in Terminal failed", error);
+      setActionNotice({
+        title: "Terminal",
+        message: "Unable to open Terminal for this location.",
+      });
+    }
+  }
+
   async function revealSearchResultInFolder(path: string) {
     const folderPath = parentDirectoryPath(path);
     if (!folderPath) {
@@ -1545,28 +1606,33 @@ export function App() {
       }
       return;
     }
-    if (actionId === "info") {
-      setPropertiesOpen((value: boolean) => !value);
+    if (actionId === "toggleInfoPanel") {
+      setInfoPanelOpen(true);
+      return;
+    }
+    if (actionId === "terminal") {
+      const firstPath = paths[0];
+      if (firstPath) {
+        await openPathInTerminal(firstPath);
+      }
       return;
     }
     const title =
       actionId === "copy"
-            ? "Copy"
-            : actionId === "move"
-              ? "Move To…"
-              : actionId === "rename"
-                ? "Rename"
-                : actionId === "duplicate"
-                  ? "Duplicate"
-                  : actionId === "compress"
-                    ? "Compress"
-                    : actionId === "newFolder"
-                      ? "New Folder"
-                      : actionId === "terminal"
-                        ? "Open in Terminal"
-                        : actionId === "trash"
-                          ? "Move to Trash"
-                          : "Open With";
+        ? "Copy"
+        : actionId === "move"
+          ? "Move To…"
+          : actionId === "rename"
+            ? "Rename"
+            : actionId === "duplicate"
+              ? "Duplicate"
+              : actionId === "compress"
+                ? "Compress"
+                : actionId === "newFolder"
+                  ? "New Folder"
+                  : actionId === "trash"
+                    ? "Move to Trash"
+                    : "Open With";
     showNotImplementedNotice(title);
   }
 
@@ -1590,7 +1656,9 @@ export function App() {
       return;
     }
     setSearchResultsVisible(true);
-    setContentSelection(sanitizeContentSelection(cachedSearchSelectionRef.current, searchResultEntries));
+    setContentSelection(
+      sanitizeContentSelection(cachedSearchSelectionRef.current, searchResultEntries),
+    );
     if (options?.focusPane) {
       focusContentPane();
     }
@@ -1782,9 +1850,7 @@ export function App() {
   function applySearchResultsSort() {
     const sortBy = searchResultsSortByRef.current;
     const sortDirection = searchResultsSortDirectionRef.current;
-    setSearchResults((current) =>
-      sortSearchResults(current, sortBy, sortDirection),
-    );
+    setSearchResults((current) => sortSearchResults(current, sortBy, sortDirection));
   }
 
   function updateSearchResultsSortBy(nextValue: SearchResultsSortBy) {
@@ -2005,7 +2071,7 @@ export function App() {
         setSearchResultsVisible(false);
       }
       setContentSelection(EMPTY_CONTENT_SELECTION);
-      setPropertiesItem(null);
+      setGetInfoItem(null);
       await syncTreeToPath(response.path, includeHiddenOverride);
       if (historyMode === "push") {
         setHistoryPaths((current) => {
@@ -2464,24 +2530,6 @@ export function App() {
                   </div>
                 </>
               ) : null}
-              {showInspectorButton ? (
-                <>
-                  <span className="titlebar-divider" aria-hidden />
-                  <div className="toolbar-group">
-                    <button
-                      type="button"
-                      className={
-                        propertiesOpen ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"
-                      }
-                      onClick={() => setPropertiesOpen((value: boolean) => !value)}
-                      title="Inspector (Cmd+I)"
-                      aria-label="Inspector"
-                    >
-                      <ToolbarIcon name="drawer" />
-                    </button>
-                  </div>
-                </>
-              ) : null}
               <span className="titlebar-divider" aria-hidden />
               <div className="toolbar-group toolbar-group-view">
                 <fieldset className="toolbar-segmented">
@@ -2732,7 +2780,7 @@ export function App() {
               className="workspace-body tomorrow-night-layout"
               style={{
                 gridTemplateColumns: `${panes.treeWidth}px ${EXPLORER_LAYOUT.resizerWidth}px minmax(0, 1fr)${
-                  propertiesOpen
+                  infoPanelOpen
                     ? ` ${EXPLORER_LAYOUT.resizerWidth}px ${panes.inspectorWidth}px`
                     : ""
                 }`,
@@ -2753,8 +2801,10 @@ export function App() {
                 onQuickAccess={goQuickAccess}
                 foldersFirst={foldersFirst}
                 onToggleFoldersFirst={toggleFoldersFirst}
-                detailRowOpen={detailRowOpen}
-                onToggleDetailRow={() => setDetailRowOpen((value) => !value)}
+                infoPanelOpen={infoPanelOpen}
+                onToggleInfoPanel={() => setInfoPanelOpen((value) => !value)}
+                infoRowOpen={infoRowOpen}
+                onToggleInfoRow={() => setInfoRowOpen((value) => !value)}
                 theme={theme}
                 themeMenuOpen={themeMenuOpen}
                 themeButtonRef={themeButtonRef}
@@ -2872,12 +2922,12 @@ export function App() {
                     typeaheadQuery={focusedPane === "content" ? typeaheadQuery : ""}
                   />
                 )}
-                <DetailRow
-                  open={detailRowOpen}
+                <InfoRow
+                  open={infoRowOpen}
                   currentPath={currentPath}
                   currentEntries={currentEntries}
                   selectedEntry={selectedEntry}
-                  item={propertiesItem}
+                  item={getInfoItem}
                 />
                 <footer className="status-bar">
                   <span>
@@ -2892,7 +2942,7 @@ export function App() {
                   </span>
                 </footer>
               </section>
-              {propertiesOpen ? (
+              {infoPanelOpen ? (
                 <>
                   <div
                     className="pane-resizer"
@@ -2900,15 +2950,28 @@ export function App() {
                     role="separator"
                     tabIndex={0}
                     aria-orientation="vertical"
-                    aria-label="Resize inspector pane"
+                    aria-label="Resize Info Panel pane"
                     onKeyDown={(event) => handlePaneResizeKey("inspector", event)}
                   />
-                  <PropertiesDrawer
-                    open={propertiesOpen}
-                    loading={propertiesLoading}
-                    item={propertiesItem}
-                    itemCount={propertiesItem?.path === currentPath ? currentEntries.length : null}
-                    onClose={() => setPropertiesOpen(false)}
+                  <InfoPanel
+                    open={infoPanelOpen}
+                    loading={getInfoLoading}
+                    item={getInfoItem}
+                    onClose={() => setInfoPanelOpen(false)}
+                    onNavigateToPath={(path) => {
+                      void navigateTo(path, path === currentPath ? "replace" : "push");
+                    }}
+                    onOpen={() => {
+                      if (getInfoItem) {
+                        void openExternally(getInfoItem.path);
+                      }
+                    }}
+                    onOpenInTerminal={() => {
+                      if (getInfoItem) {
+                        void openPathInTerminal(getInfoItem.path);
+                      }
+                    }}
+                    onCopyPath={() => (getInfoItem ? copyGetInfoPath(getInfoItem.path) : false)}
                   />
                 </>
               ) : null}
@@ -3008,7 +3071,7 @@ function formatPathForShell(path: string): string {
   return `'${path.replaceAll("'", "'\\''")}'`;
 }
 
-function DetailRow({
+function InfoRow({
   open,
   currentPath,
   currentEntries,
@@ -3035,7 +3098,7 @@ function DetailRow({
       : null);
 
   if (!activeEntry) {
-    return <div className={`detail-row${open ? " open" : ""}`} />;
+    return <div className={`info-row${open ? " open" : ""}`} />;
   }
 
   const activeItem = item?.path === activeEntry.path ? item : null;
@@ -3061,7 +3124,7 @@ function DetailRow({
   const permissionsLabel = activeItem ? formatPermissionMode(activeItem.permissionMode) : "—";
 
   return (
-    <div className={`detail-row${open ? " open" : ""}`}>
+    <div className={`info-row${open ? " open" : ""}`}>
       <div className="detail-inner">
         <div className="dt-hero">
           <div>

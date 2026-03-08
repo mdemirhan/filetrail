@@ -301,6 +301,15 @@ export const ipcContractSchemas = {
       error: z.string().nullable(),
     }),
   },
+  "system:openInTerminal": {
+    request: z.object({
+      path: z.string().min(1),
+    }),
+    response: z.object({
+      ok: z.boolean(),
+      error: z.string().nullable(),
+    }),
+  },
   "system:copyText": {
     request: z.object({
       text: z.string(),

@@ -66,6 +66,8 @@ export const SHORTCUT_ITEMS = [
     description:
       "Move focus back between the file list and folder tree when pane tab switching is enabled",
   },
+  { group: "Panels", shortcut: "Cmd+I", description: "Toggle Info Panel" },
+  { group: "Panels", shortcut: "Cmd+Shift+I", description: "Toggle Info Row" },
   { group: "Panels", shortcut: "Cmd+1", description: "Focus the folder tree" },
   { group: "Panels", shortcut: "Cmd+2", description: "Focus the file list" },
   { group: "Views", shortcut: "?", description: "Open help" },

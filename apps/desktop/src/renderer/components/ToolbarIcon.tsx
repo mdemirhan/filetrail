@@ -29,7 +29,7 @@ export function ToolbarIcon({
     | "documents"
     | "source"
     | "rerootHome"
-    | "detailRow"
+    | "infoRow"
     | "foldersFirst"
     | "clear"
     | "stop";
@@ -120,7 +120,7 @@ export function ToolbarIcon({
     if (name === "rerootHome") {
       return "M10 9.5l7-5.5 7 5.5V20a2 2 0 0 1-2 2h-4v-6h-4v6h-4a2 2 0 0 1-2-2V9.5M2 12h7M2 12l3-3M2 12l3 3";
     }
-    if (name === "detailRow") {
+    if (name === "infoRow") {
       return "M3 15h18M3 19h18M4 5h16v6H4z";
     }
     if (name === "foldersFirst") {

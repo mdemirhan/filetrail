@@ -8,6 +8,8 @@ export type FiletrailClient = {
     listener: (command: {
       type:
         | "focusFileSearch"
+        | "toggleInfoPanel"
+        | "toggleInfoRow"
         | "openLocationSheet"
         | "copyPath"
         | "refreshOrApplySearchSort";

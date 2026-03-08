@@ -4,6 +4,7 @@ import {
   formatPermissionMode,
   formatSize,
   pathSegments,
+  splitPermissionMode,
   splitDisplayName,
 } from "./formatting";
 
@@ -28,6 +29,14 @@ describe("formatting helpers", () => {
   it("formats Unix permission modes", () => {
     expect(formatPermissionMode(0o755)).toBe("rwxr-xr-x (755)");
     expect(formatPermissionMode(null)).toBe("Unavailable");
+  });
+
+  it("splits Unix permission modes into symbolic and octal parts", () => {
+    expect(splitPermissionMode(0o644)).toEqual({
+      symbolic: "rw-r--r--",
+      octal: "644",
+    });
+    expect(splitPermissionMode(null)).toBeNull();
   });
 
   it("splits path segments including root", () => {

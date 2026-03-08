@@ -11,6 +11,8 @@ declare global {
         listener: (command: {
           type:
             | "focusFileSearch"
+            | "toggleInfoPanel"
+            | "toggleInfoRow"
             | "openLocationSheet"
             | "copyPath"
             | "refreshOrApplySearchSort";

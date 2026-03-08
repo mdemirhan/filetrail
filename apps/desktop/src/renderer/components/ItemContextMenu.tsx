@@ -4,7 +4,7 @@ export type ContextMenuActionId =
   | "revealInFolder"
   | "open"
   | "openWith"
-  | "info"
+  | "toggleInfoPanel"
   | "copy"
   | "move"
   | "rename"
@@ -47,7 +47,7 @@ type ContextMenuIconName =
   | "revealInFolder"
   | "open"
   | "openWith"
-  | "info"
+  | "toggleInfoPanel"
   | "copy"
   | "move"
   | "rename"
@@ -62,7 +62,7 @@ export const BROWSE_CONTEXT_MENU_ITEMS: readonly ContextMenuItem[] = [
   { id: "open", label: "Open", icon: "open", shortcut: "⏎" },
   { id: "openWith", label: "Open With", icon: "openWith", hasSubmenu: true },
   { type: "separator", key: "separator-open" },
-  { id: "info", label: "Get Info", icon: "info", shortcut: "⌘I" },
+  { id: "toggleInfoPanel", label: "Toggle Info Panel", icon: "toggleInfoPanel", shortcut: "⌘I" },
   { type: "separator", key: "separator-info" },
   { id: "copy", label: "Copy", icon: "copy", shortcut: "⌘C" },
   { id: "move", label: "Move To…", icon: "move", shortcut: "⌘M" },
@@ -226,7 +226,7 @@ function ContextMenuIcon({ name }: { name: ContextMenuIconName }) {
       </svg>
     );
   }
-  if (name === "info") {
+  if (name === "toggleInfoPanel") {
     return (
       <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
         <circle cx="12" cy="12" r="10" />

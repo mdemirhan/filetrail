@@ -48,8 +48,10 @@ describe("TreePane", () => {
         onQuickAccess={() => undefined}
         foldersFirst
         onToggleFoldersFirst={() => undefined}
-        detailRowOpen
-        onToggleDetailRow={() => undefined}
+        infoPanelOpen
+        onToggleInfoPanel={() => undefined}
+        infoRowOpen
+        onToggleInfoRow={() => undefined}
         theme="tomorrow-night"
         themeMenuOpen={false}
         themeButtonRef={themeButtonRef}
@@ -113,8 +115,10 @@ describe("TreePane", () => {
         onQuickAccess={() => undefined}
         foldersFirst
         onToggleFoldersFirst={() => undefined}
-        detailRowOpen
-        onToggleDetailRow={() => undefined}
+        infoPanelOpen
+        onToggleInfoPanel={() => undefined}
+        infoRowOpen
+        onToggleInfoRow={() => undefined}
         theme="tomorrow-night"
         themeMenuOpen={false}
         themeButtonRef={themeButtonRef}
@@ -164,8 +168,10 @@ describe("TreePane", () => {
         onQuickAccess={() => undefined}
         foldersFirst
         onToggleFoldersFirst={() => undefined}
-        detailRowOpen
-        onToggleDetailRow={() => undefined}
+        infoPanelOpen
+        onToggleInfoPanel={() => undefined}
+        infoRowOpen
+        onToggleInfoRow={() => undefined}
         theme="dark"
         themeMenuOpen
         themeButtonRef={themeButtonRef}
@@ -215,8 +221,10 @@ describe("TreePane", () => {
         onQuickAccess={() => undefined}
         foldersFirst
         onToggleFoldersFirst={() => undefined}
-        detailRowOpen
-        onToggleDetailRow={() => undefined}
+        infoPanelOpen
+        onToggleInfoPanel={() => undefined}
+        infoRowOpen
+        onToggleInfoRow={() => undefined}
         theme="dark"
         themeMenuOpen={false}
         themeButtonRef={themeButtonRef}
@@ -265,8 +273,10 @@ describe("TreePane", () => {
         onQuickAccess={() => undefined}
         foldersFirst
         onToggleFoldersFirst={() => undefined}
-        detailRowOpen
-        onToggleDetailRow={() => undefined}
+        infoPanelOpen
+        onToggleInfoPanel={() => undefined}
+        infoRowOpen
+        onToggleInfoRow={() => undefined}
         theme="dark"
         themeMenuOpen={false}
         themeButtonRef={themeButtonRef}
@@ -315,8 +325,10 @@ describe("TreePane", () => {
         onQuickAccess={() => undefined}
         foldersFirst
         onToggleFoldersFirst={() => undefined}
-        detailRowOpen
-        onToggleDetailRow={() => undefined}
+        infoPanelOpen
+        onToggleInfoPanel={() => undefined}
+        infoRowOpen
+        onToggleInfoRow={() => undefined}
         theme="dark"
         themeMenuOpen={false}
         themeButtonRef={themeButtonRef}

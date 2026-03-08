@@ -29,7 +29,7 @@ describe("ItemContextMenu", () => {
         disabledActionIds={[
           "open",
           "openWith",
-          "info",
+          "toggleInfoPanel",
           "copy",
           "move",
           "rename",

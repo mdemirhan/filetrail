@@ -4,7 +4,9 @@ export type RendererCommand =
   | "focusFileSearch"
   | "openLocationSheet"
   | "copyPath"
-  | "refreshOrApplySearchSort";
+  | "refreshOrApplySearchSort"
+  | "toggleInfoPanel"
+  | "toggleInfoRow";
 
 export function createApplicationMenuTemplate(
   webContents: Pick<WebContents, "send">,
@@ -61,6 +63,25 @@ export function createApplicationMenuTemplate(
     {
       label: "View",
       submenu: [
+        {
+          label: "Toggle Info Panel",
+          accelerator: "CommandOrControl+I",
+          click: () => {
+            webContents.send("filetrail:command", {
+              type: "toggleInfoPanel" satisfies RendererCommand,
+            });
+          },
+        },
+        {
+          label: "Toggle Info Row",
+          accelerator: "CommandOrControl+Shift+I",
+          click: () => {
+            webContents.send("filetrail:command", {
+              type: "toggleInfoRow" satisfies RendererCommand,
+            });
+          },
+        },
+        { type: "separator" },
         {
           label: "Refresh",
           accelerator: "CommandOrControl+R",
