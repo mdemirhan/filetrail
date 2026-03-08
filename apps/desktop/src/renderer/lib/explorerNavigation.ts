@@ -43,6 +43,21 @@ export function pathHasHiddenSegmentWithinRoot(path: string, rootPath: string): 
     .some((segment) => segment.startsWith("."));
 }
 
+export function getForcedVisibleHiddenChildPath(parentPath: string, activePath: string): string | null {
+  if (!isPathWithinRoot(activePath, parentPath) || activePath === parentPath) {
+    return null;
+  }
+
+  const relativePath =
+    parentPath === "/" ? activePath.slice(1) : activePath.slice(parentPath.length + 1);
+  const [nextSegment] = relativePath.split("/").filter((segment) => segment.length > 0);
+  if (!nextSegment || !nextSegment.startsWith(".")) {
+    return null;
+  }
+
+  return parentPath === "/" ? `/${nextSegment}` : `${parentPath}/${nextSegment}`;
+}
+
 export function getNextSelectionIndex(args: {
   itemCount: number;
   currentIndex: number;

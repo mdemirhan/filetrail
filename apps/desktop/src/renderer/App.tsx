@@ -29,6 +29,7 @@ import { ToolbarIcon } from "./components/ToolbarIcon";
 import { type TreeNodeState, TreePane } from "./components/TreePane";
 import { useExplorerPaneLayout } from "./hooks/useExplorerPaneLayout";
 import {
+  getForcedVisibleHiddenChildPath,
   getAncestorChain,
   getNextSelectionIndex,
   pathHasHiddenSegmentWithinRoot,
@@ -522,12 +523,16 @@ export function App() {
       const currentSelectedEntry =
         currentEntries.find((entry) => entry.path === selectedPath) ?? null;
       const target = event.target;
+      const targetElement = target instanceof HTMLElement ? target : null;
       if (
         target instanceof HTMLInputElement ||
         target instanceof HTMLTextAreaElement ||
         target instanceof HTMLSelectElement ||
         (target instanceof HTMLElement && target.isContentEditable)
       ) {
+        return;
+      }
+      if (targetElement?.closest(".pathbar-editor-shell")) {
         return;
       }
       if (locationSheetOpen) {
@@ -539,7 +544,6 @@ export function App() {
         mainView === "explorer" &&
         !locationSheetOpen
       ) {
-        const targetElement = target instanceof HTMLElement ? target : null;
         const isAutocompleteContext =
           targetElement?.closest(".pathbar-editor-shell, .location-sheet-input-shell") !== null;
         if (isAutocompleteContext) {
@@ -998,10 +1002,19 @@ export function App() {
     activePath = currentPath,
   ) {
     const currentNode = treeNodesRef.current[path];
+    const rootPath = treeRootPathRef.current;
+    const forcedVisibleHiddenChildPath =
+      includeHiddenOverride || rootPath.length === 0
+        ? null
+        : getForcedVisibleHiddenChildPath(path, activePath);
     if (currentNode?.loading) {
       return;
     }
-    if (currentNode?.loaded) {
+    if (
+      currentNode?.loaded &&
+      currentNode.loadedIncludeHidden === includeHiddenOverride &&
+      (currentNode.forcedVisibleHiddenChildPath ?? null) === forcedVisibleHiddenChildPath
+    ) {
       if (expandOnSuccess && !currentNode.expanded) {
         setTreeNodes((current) => ({
           ...current,
@@ -1041,14 +1054,22 @@ export function App() {
       setTreeNodes((current) => {
         const next = { ...current };
         const existingNode = current[path] ?? createTreeNode(path, true);
+        const visibleChildren =
+          forcedVisibleHiddenChildPath === null
+            ? response.children.filter((child) => includeHiddenOverride || !child.isHidden)
+            : response.children.filter(
+                (child) => !child.isHidden || child.path === forcedVisibleHiddenChildPath,
+              );
         next[path] = {
           ...existingNode,
           expanded: existingNode.expanded || expandOnSuccess,
           loading: false,
           loaded: true,
-          childPaths: response.children.map((child) => child.path),
+          loadedIncludeHidden: includeHiddenOverride,
+          forcedVisibleHiddenChildPath,
+          childPaths: visibleChildren.map((child) => child.path),
         };
-        for (const child of response.children) {
+        for (const child of visibleChildren) {
           next[child.path] = {
             path: child.path,
             name: child.name,
@@ -1058,6 +1079,8 @@ export function App() {
             expanded: current[child.path]?.expanded ?? false,
             loading: false,
             loaded: current[child.path]?.loaded ?? false,
+            loadedIncludeHidden: current[child.path]?.loadedIncludeHidden ?? false,
+            forcedVisibleHiddenChildPath: current[child.path]?.forcedVisibleHiddenChildPath ?? null,
             error: null,
             childPaths: current[child.path]?.childPaths ?? [],
           };
@@ -1123,10 +1146,7 @@ export function App() {
     if (rootPath.length === 0) {
       return pathHasHiddenSegmentWithinRoot(path, path);
     }
-    return (
-      pathHasHiddenSegmentWithinRoot(activePath, rootPath) ||
-      pathHasHiddenSegmentWithinRoot(path, rootPath)
-    );
+    return getForcedVisibleHiddenChildPath(path, activePath) !== null;
   }
 
   function toggleTreeNode(path: string) {
@@ -1719,6 +1739,8 @@ function createTreeNode(path: string, expanded: boolean): TreeNodeState {
     expanded,
     loading: false,
     loaded: false,
+    loadedIncludeHidden: false,
+    forcedVisibleHiddenChildPath: null,
     error: null,
     childPaths: [],
   };

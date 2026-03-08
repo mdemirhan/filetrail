@@ -13,6 +13,8 @@ export type TreeNodeState = {
   expanded: boolean;
   loading: boolean;
   loaded: boolean;
+  loadedIncludeHidden?: boolean;
+  forcedVisibleHiddenChildPath?: string | null;
   error: string | null;
   childPaths: string[];
 };

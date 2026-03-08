@@ -1,4 +1,5 @@
 import {
+  getForcedVisibleHiddenChildPath,
   getAncestorChain,
   getNextSelectionIndex,
   parentDirectoryPath,
@@ -28,6 +29,16 @@ describe("explorerNavigation", () => {
     expect(pathHasHiddenSegmentWithinRoot("/Users/demo/.config/ghostty", "/Users/demo")).toBe(true);
     expect(pathHasHiddenSegmentWithinRoot("/Users/demo/projects", "/Users/demo")).toBe(false);
     expect(pathHasHiddenSegmentWithinRoot("/tmp/.cache", "/Users/demo")).toBe(false);
+  });
+
+  it("returns only the hidden child on the active path chain", () => {
+    expect(getForcedVisibleHiddenChildPath("/Users/demo", "/Users/demo/.config/ghostty")).toBe(
+      "/Users/demo/.config",
+    );
+    expect(
+      getForcedVisibleHiddenChildPath("/Users/demo/dotfiles", "/Users/demo/dotfiles/.config"),
+    ).toBe("/Users/demo/dotfiles/.config");
+    expect(getForcedVisibleHiddenChildPath("/Users/demo", "/Users/demo/Documents")).toBeNull();
   });
 
   it("moves selection by visual columns in list view and single rows in details view", () => {
