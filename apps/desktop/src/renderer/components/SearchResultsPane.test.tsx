@@ -12,6 +12,13 @@ describe("SearchResultsPane", () => {
     onSortDirectionToggle: () => undefined,
     onApplySort: () => undefined,
   };
+  const defaultFilterProps = {
+    filterQuery: "",
+    filterScope: "name" as const,
+    totalCount: 0,
+    onFilterQueryChange: () => undefined,
+    onFilterScopeChange: () => undefined,
+  };
 
   it("renders empty-state copy after a completed search with no matches", () => {
     render(
@@ -24,6 +31,7 @@ describe("SearchResultsPane", () => {
         selectedPath=""
         error={null}
         truncated={false}
+        {...defaultFilterProps}
         {...defaultSortProps}
         onStopSearch={() => undefined}
         onClearResults={() => undefined}
@@ -62,6 +70,7 @@ describe("SearchResultsPane", () => {
         selectedPath=""
         error={null}
         truncated={false}
+        {...defaultFilterProps}
         {...defaultSortProps}
         onStopSearch={() => undefined}
         onClearResults={() => undefined}
@@ -95,6 +104,7 @@ describe("SearchResultsPane", () => {
         selectedPath=""
         error={null}
         truncated={false}
+        {...defaultFilterProps}
         {...defaultSortProps}
         onStopSearch={handleStop}
         onClearResults={() => undefined}
@@ -146,6 +156,7 @@ describe("SearchResultsPane", () => {
         selectionLeadPath={null}
         error={null}
         truncated={false}
+        {...defaultFilterProps}
         {...defaultSortProps}
         onStopSearch={() => undefined}
         onClearResults={() => undefined}
@@ -182,6 +193,8 @@ describe("SearchResultsPane", () => {
     const handleSortDirectionToggle = vi.fn();
     const handleApplySort = vi.fn();
     const handleScrollTopChange = vi.fn();
+    const handleFilterQueryChange = vi.fn();
+    const handleFilterScopeChange = vi.fn();
 
     render(
       <SearchResultsPane
@@ -205,11 +218,16 @@ describe("SearchResultsPane", () => {
         selectionLeadPath={null}
         error={null}
         truncated={false}
+        filterQuery="App"
+        filterScope="name"
+        totalCount={4}
         sortBy="path"
         sortDirection="asc"
         onStopSearch={() => undefined}
         onClearResults={() => undefined}
         onCloseResults={() => undefined}
+        onFilterQueryChange={handleFilterQueryChange}
+        onFilterScopeChange={handleFilterScopeChange}
         onSortByChange={handleSortByChange}
         onSortDirectionToggle={handleSortDirectionToggle}
         onApplySort={handleApplySort}
@@ -224,6 +242,8 @@ describe("SearchResultsPane", () => {
     );
 
     const sortSelect = screen.getByLabelText("Sort search results by");
+    const filterInput = screen.getByLabelText("Filter search results");
+    const filterScopeSelect = screen.getByLabelText("Filter search results by");
     const directionButton = screen.getByRole("button", { name: "Ascending sort" });
     const applySortButton = screen.getByRole("button", {
       name: "Apply the selected sort to the current search results",
@@ -233,6 +253,8 @@ describe("SearchResultsPane", () => {
     expect(scroll).toHaveProperty("scrollTop", 42);
 
     fireEvent.change(sortSelect, { target: { value: "name" } });
+    fireEvent.change(filterInput, { target: { value: "main" } });
+    fireEvent.change(filterScopeSelect, { target: { value: "path" } });
     fireEvent.click(directionButton);
     fireEvent.click(applySortButton);
     if (!scroll) {
@@ -241,6 +263,8 @@ describe("SearchResultsPane", () => {
     fireEvent.scroll(scroll, { target: { scrollTop: 96 } });
 
     expect(handleSortByChange).toHaveBeenCalledWith("name");
+    expect(handleFilterQueryChange).toHaveBeenCalledWith("main");
+    expect(handleFilterScopeChange).toHaveBeenCalledWith("path");
     expect(handleSortDirectionToggle).toHaveBeenCalledTimes(1);
     expect(handleApplySort).toHaveBeenCalledTimes(1);
     expect(handleScrollTopChange).toHaveBeenCalledWith(96);
@@ -248,5 +272,143 @@ describe("SearchResultsPane", () => {
       "title",
       "Apply the selected sort to the current search results (Cmd+R)",
     );
+    expect(screen.getByRole("button", { name: "Close search results" })).toHaveAttribute(
+      "title",
+      "Close search results",
+    );
+    expect(screen.getByRole("button", { name: "Clear search results" })).toHaveAttribute(
+      "title",
+      "Clear search results",
+    );
+  });
+
+  it("scrolls the selected lead result into view", () => {
+    const handleScrollTopChange = vi.fn();
+    const results = Array.from({ length: 5 }, (_, index) => ({
+      path: `/Users/demo/project/src/item-${index}.tsx`,
+      name: `item-${index}.tsx`,
+      extension: "tsx",
+      kind: "file" as const,
+      isHidden: false,
+      isSymlink: false,
+      parentPath: "/Users/demo/project/src",
+      relativeParentPath: "src",
+    }));
+
+    const { rerender } = render(
+      <SearchResultsPane
+        isFocused
+        rootPath="/Users/demo/project"
+        query="app"
+        status="complete"
+        results={results}
+        selectedPaths={[]}
+        selectionLeadPath={null}
+        error={null}
+        truncated={false}
+        {...defaultFilterProps}
+        {...defaultSortProps}
+        onStopSearch={() => undefined}
+        onClearResults={() => undefined}
+        onCloseResults={() => undefined}
+        onSelectionGesture={() => undefined}
+        onClearSelection={() => undefined}
+        onActivateResult={() => undefined}
+        onItemContextMenu={() => undefined}
+        onFocusChange={() => undefined}
+        scrollTop={0}
+        onScrollTopChange={handleScrollTopChange}
+      />,
+    );
+
+    const scroll = document.querySelector(".search-results-scroll");
+    if (!(scroll instanceof HTMLDivElement)) {
+      throw new Error("Missing search results scroll container.");
+    }
+    Object.defineProperty(scroll, "clientHeight", {
+      value: 104,
+      configurable: true,
+    });
+
+    rerender(
+      <SearchResultsPane
+        isFocused
+        rootPath="/Users/demo/project"
+        query="app"
+        status="complete"
+        results={results}
+        selectedPaths={["/Users/demo/project/src/item-3.tsx"]}
+        selectionLeadPath="/Users/demo/project/src/item-3.tsx"
+        error={null}
+        truncated={false}
+        {...defaultFilterProps}
+        {...defaultSortProps}
+        onStopSearch={() => undefined}
+        onClearResults={() => undefined}
+        onCloseResults={() => undefined}
+        onSelectionGesture={() => undefined}
+        onClearSelection={() => undefined}
+        onActivateResult={() => undefined}
+        onItemContextMenu={() => undefined}
+        onFocusChange={() => undefined}
+        scrollTop={0}
+        onScrollTopChange={handleScrollTopChange}
+      />,
+    );
+
+    expect(scroll.scrollTop).toBe(120);
+    expect(handleScrollTopChange).toHaveBeenCalledWith(120);
+  });
+
+  it("returns focus to search results when escape is pressed in the filter input", () => {
+    render(
+      <SearchResultsPane
+        isFocused
+        rootPath="/Users/demo/project"
+        query="app"
+        status="complete"
+        results={[
+          {
+            path: "/Users/demo/project/src/App.tsx",
+            name: "App.tsx",
+            extension: "tsx",
+            kind: "file",
+            isHidden: false,
+            isSymlink: false,
+            parentPath: "/Users/demo/project/src",
+            relativeParentPath: "src",
+          },
+        ]}
+        selectedPaths={[]}
+        selectionLeadPath={null}
+        error={null}
+        truncated={false}
+        filterQuery="app"
+        filterScope="name"
+        totalCount={1}
+        {...defaultSortProps}
+        onStopSearch={() => undefined}
+        onClearResults={() => undefined}
+        onCloseResults={() => undefined}
+        onFilterQueryChange={() => undefined}
+        onFilterScopeChange={() => undefined}
+        onSelectionGesture={() => undefined}
+        onClearSelection={() => undefined}
+        onActivateResult={() => undefined}
+        onItemContextMenu={() => undefined}
+        onFocusChange={() => undefined}
+      />,
+    );
+
+    const filterInput = screen.getByLabelText("Filter search results");
+    const scroll = document.querySelector(".search-results-scroll");
+    if (!(scroll instanceof HTMLDivElement)) {
+      throw new Error("Missing search results scroll container.");
+    }
+
+    filterInput.focus();
+    fireEvent.keyDown(filterInput, { key: "Escape" });
+
+    expect(document.activeElement).toBe(scroll);
   });
 });

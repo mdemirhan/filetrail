@@ -20,6 +20,7 @@ export const sortDirectionSchema = z.enum(["asc", "desc"]);
 export const searchPatternModeSchema = z.enum(["glob", "regex"]);
 export const searchMatchScopeSchema = z.enum(["name", "path"]);
 export const searchResultsSortBySchema = z.enum(["name", "path"]);
+export const searchResultsFilterScopeSchema = z.enum(["name", "path"]);
 export const searchJobStatusSchema = z.enum([
   "running",
   "complete",
@@ -118,6 +119,7 @@ export const appPreferencesSchema = z.object({
   searchIncludeHidden: z.boolean(),
   searchResultsSortBy: searchResultsSortBySchema,
   searchResultsSortDirection: sortDirectionSchema,
+  searchResultsFilterScope: searchResultsFilterScopeSchema,
   treeWidth: z.number().int().min(220).max(520),
   inspectorWidth: z.number().int().min(260).max(480),
   restoreLastVisitedFolderOnStartup: z.boolean(),

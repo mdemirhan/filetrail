@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { IpcResponse } from "@filetrail/contracts";
 import type {
+  SearchResultsFilterScopePreference,
   SearchResultsSortByPreference,
   SearchResultsSortDirectionPreference,
 } from "../../shared/appPreferences";
@@ -11,7 +12,6 @@ import { FileIcon } from "../lib/fileIcons";
 import { splitDisplayName } from "../lib/formatting";
 import { getVirtualRange } from "../lib/virtualization";
 import { ToolbarIcon } from "./ToolbarIcon";
-
 type SearchResultItem = IpcResponse<"search:getUpdate">["items"][number];
 type SearchStatus = IpcResponse<"search:getUpdate">["status"] | "idle";
 type SelectionGestureModifiers = {
@@ -19,7 +19,7 @@ type SelectionGestureModifiers = {
   shiftKey: boolean;
 };
 
-const SEARCH_RESULT_ROW_HEIGHT = 52;
+const SEARCH_RESULT_ROW_HEIGHT = 56;
 
 export function SearchResultsPane({
   paneRef,
@@ -33,11 +33,16 @@ export function SearchResultsPane({
   selectionLeadPath = selectedPath || null,
   error,
   truncated,
+  filterQuery,
+  filterScope,
+  totalCount,
   sortBy,
   sortDirection,
   onStopSearch,
   onClearResults,
   onCloseResults,
+  onFilterQueryChange,
+  onFilterScopeChange,
   onSortByChange,
   onSortDirectionToggle,
   onApplySort,
@@ -49,7 +54,6 @@ export function SearchResultsPane({
   onFocusChange,
   scrollTop = 0,
   onScrollTopChange = () => undefined,
-  typeaheadQuery,
 }: {
   paneRef?: React.RefObject<HTMLElement | null>;
   isFocused: boolean;
@@ -62,11 +66,16 @@ export function SearchResultsPane({
   selectionLeadPath?: string | null;
   error: string | null;
   truncated: boolean;
+  filterQuery: string;
+  filterScope: SearchResultsFilterScopePreference;
+  totalCount: number;
   sortBy: SearchResultsSortByPreference;
   sortDirection: SearchResultsSortDirectionPreference;
   onStopSearch: () => void;
   onClearResults: () => void;
   onCloseResults: () => void;
+  onFilterQueryChange: (value: string) => void;
+  onFilterScopeChange: (value: SearchResultsFilterScopePreference) => void;
   onSortByChange: (value: SearchResultsSortByPreference) => void;
   onSortDirectionToggle: () => void;
   onApplySort: () => void;
@@ -78,7 +87,6 @@ export function SearchResultsPane({
   onFocusChange: (focused: boolean) => void;
   scrollTop?: number;
   onScrollTopChange?: (value: number) => void;
-  typeaheadQuery?: string;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const { height } = useElementSize(scrollRef);
@@ -96,6 +104,33 @@ export function SearchResultsPane({
     setInternalScrollTop(scrollTop);
   }, [scrollTop]);
 
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container || !selectionLeadPath) {
+      return;
+    }
+    const selectedIndex = results.findIndex((result) => result.path === selectionLeadPath);
+    if (selectedIndex < 0) {
+      return;
+    }
+    const viewportSize = Math.max(SEARCH_RESULT_ROW_HEIGHT, container.clientHeight || height);
+    const currentScrollTop = container.scrollTop;
+    const itemTop = selectedIndex * SEARCH_RESULT_ROW_HEIGHT;
+    const itemBottom = itemTop + SEARCH_RESULT_ROW_HEIGHT;
+    let nextScrollTop = currentScrollTop;
+    if (itemTop < currentScrollTop) {
+      nextScrollTop = itemTop;
+    } else if (itemBottom > currentScrollTop + viewportSize) {
+      nextScrollTop = itemBottom - viewportSize;
+    }
+    if (Math.abs(nextScrollTop - currentScrollTop) <= 1) {
+      return;
+    }
+    container.scrollTop = nextScrollTop;
+    setInternalScrollTop(nextScrollTop);
+    onScrollTopChange(nextScrollTop);
+  }, [height, onScrollTopChange, results, selectionLeadPath]);
+
   const range = useMemo(
     () =>
       getVirtualRange({
@@ -108,11 +143,13 @@ export function SearchResultsPane({
     [height, internalScrollTop, results.length],
   );
   const visibleResults = results.slice(range.startIndex, range.endIndex);
+  const isSearching = status === "running";
 
   return (
     <section
       ref={paneRef}
       className="content-pane pane pane-focus-target search-results-pane"
+      data-searching={isSearching ? "true" : "false"}
       tabIndex={-1}
       onFocusCapture={() => onFocusChange(true)}
       onBlurCapture={(event) => {
@@ -122,15 +159,161 @@ export function SearchResultsPane({
         }
       }}
     >
-      <div className={`pane-header content-header${isFocused ? " pane-header-focused" : ""}`}>
-        <div className="search-results-titlebar">
-          <span className="search-results-title">Search Results</span>
-          <span className="search-results-query" title={query}>
+      <div
+        className={`pane-header content-header search-results-header${
+          isFocused ? " pane-header-focused" : ""
+        }`}
+        onMouseDownCapture={(event) => {
+          const target = event.target;
+          if (
+            target instanceof HTMLElement &&
+            target.closest("button, input, select, textarea, a, [role='button']")
+          ) {
+            return;
+          }
+          event.preventDefault();
+          scrollRef.current?.focus({ preventScroll: true });
+        }}
+      >
+        <div className="search-results-bar search-results-bar-primary">
+          <button
+            type="button"
+            className="search-results-close-button"
+            onClick={onCloseResults}
+            aria-label="Close search results"
+            title="Close search results"
+          >
+            <CloseGlyph />
+            Close
+          </button>
+          <button
+            type="button"
+            className="search-results-clear-button"
+            onClick={onClearResults}
+            aria-label="Clear search results"
+            title="Clear search results"
+          >
+            <ClearGlyph />
+            Clear
+          </button>
+          {isSearching ? (
+            <button
+              type="button"
+              className="search-results-stop-button"
+              onClick={onStopSearch}
+              aria-label="Stop search"
+              title="Stop current search"
+            >
+              <StopGlyph />
+              Stop
+            </button>
+          ) : null}
+          <div className="search-results-status-block">
+            {isSearching ? <span className="search-results-spinner" aria-hidden="true" /> : null}
+            <span
+              className={`search-results-status-label${
+                isSearching ? " search-results-status-label-searching" : ""
+              }`}
+            >
+              {isSearching ? "Searching" : "Results"}
+            </span>
+          </div>
+          <span className="search-results-query-badge" title={query}>
             {query}
           </span>
           <span className="search-results-root" title={rootPath}>
             {rootPath}
           </span>
+        </div>
+        <div className="search-results-bar search-results-bar-secondary">
+          <div className="search-results-sort-group">
+            <button
+              type="button"
+              className="search-results-sort-toggle"
+              onClick={onSortDirectionToggle}
+              title={sortDirection === "asc" ? "Ascending sort" : "Descending sort"}
+              aria-label={sortDirection === "asc" ? "Ascending sort" : "Descending sort"}
+            >
+              <ToolbarIcon name={sortDirection === "asc" ? "sortAsc" : "sortDesc"} />
+            </button>
+            <span className="search-results-group-separator" aria-hidden="true" />
+            <select
+              className="search-results-compact-select"
+              value={sortBy}
+              onChange={(event) =>
+                onSortByChange(event.currentTarget.value as SearchResultsSortByPreference)
+              }
+              title="Sort search results by"
+              aria-label="Sort search results by"
+            >
+              <option value="path">Path</option>
+              <option value="name">Name</option>
+            </select>
+            <span className="search-results-group-separator" aria-hidden="true" />
+            <button
+              type="button"
+              className="search-results-apply-button"
+              onClick={onApplySort}
+              title="Apply the selected sort to the current search results (Cmd+R)"
+              aria-label="Apply the selected sort to the current search results"
+            >
+              <RefreshGlyph />
+              Apply Sort
+            </button>
+          </div>
+          <div className="search-results-filter-group">
+            <div className="search-results-filter-input-region">
+              <span className="search-results-filter-icon" aria-hidden="true">
+                <SearchGlyph />
+              </span>
+              <input
+                type="text"
+                className="search-results-filter-input"
+                value={filterQuery}
+                onChange={(event) => onFilterQueryChange(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Escape") {
+                    return;
+                  }
+                  event.preventDefault();
+                  event.stopPropagation();
+                  scrollRef.current?.focus({ preventScroll: true });
+                }}
+                placeholder="Filter results…"
+                spellCheck={false}
+                aria-label="Filter search results"
+              />
+              {filterQuery.length > 0 ? (
+                <button
+                  type="button"
+                  className="search-results-filter-clear"
+                  aria-label="Clear result filter"
+                  title="Clear result filter"
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                  }}
+                  onClick={() => onFilterQueryChange("")}
+                >
+                  <CloseGlyph />
+                </button>
+              ) : null}
+            </div>
+            <span className="search-results-group-separator" aria-hidden="true" />
+            <select
+              className="search-results-compact-select"
+              value={filterScope}
+              onChange={(event) =>
+                onFilterScopeChange(
+                  event.currentTarget.value as SearchResultsFilterScopePreference,
+                )
+              }
+              title="Filter search results by"
+              aria-label="Filter search results by"
+            >
+              <option value="name">Name</option>
+              <option value="path">Path</option>
+            </select>
+          </div>
         </div>
       </div>
       <div
@@ -139,11 +322,7 @@ export function SearchResultsPane({
         tabIndex={-1}
         onMouseDown={(event) => {
           const target = event.target;
-          if (
-            target instanceof Element &&
-            (target.closest("[data-selectable-entry-path]") ||
-              target.closest(".search-results-actions"))
-          ) {
+          if (target instanceof Element && target.closest("[data-selectable-entry-path]")) {
             return;
           }
           onClearSelection();
@@ -151,11 +330,7 @@ export function SearchResultsPane({
         }}
         onContextMenu={(event) => {
           const target = event.target;
-          if (
-            target instanceof Element &&
-            (target.closest("[data-selectable-entry-path]") ||
-              target.closest(".search-results-actions"))
-          ) {
+          if (target instanceof Element && target.closest("[data-selectable-entry-path]")) {
             return;
           }
           event.preventDefault();
@@ -172,66 +347,6 @@ export function SearchResultsPane({
           onScrollTopChange(nextScrollTop);
         }}
       >
-        <div className="search-results-actions">
-          <div className="search-results-actions-buttons">
-            {status === "running" ? (
-              <button type="button" className="search-results-action-button" onClick={onStopSearch}>
-                <ToolbarIcon name="stop" />
-                Stop
-              </button>
-            ) : null}
-            <button type="button" className="search-results-action-button" onClick={onCloseResults}>
-              <ToolbarIcon name="close" />
-              Close
-            </button>
-            <button type="button" className="search-results-action-button" onClick={onClearResults}>
-              <ToolbarIcon name="clear" />
-              Clear
-            </button>
-          </div>
-          <div className="search-results-actions-tools">
-            <fieldset className="toolbar-select-group search-results-sort-controls">
-              <legend className="sr-only">Search result sorting</legend>
-              <button
-                type="button"
-                className="tb-btn tb-btn-icon"
-                onClick={onSortDirectionToggle}
-                title={sortDirection === "asc" ? "Ascending sort" : "Descending sort"}
-                aria-label={sortDirection === "asc" ? "Ascending sort" : "Descending sort"}
-              >
-                <ToolbarIcon name={sortDirection === "asc" ? "sortAsc" : "sortDesc"} />
-              </button>
-              <select
-                className="toolbar-select"
-                value={sortBy}
-                onChange={(event) =>
-                  onSortByChange(event.currentTarget.value as SearchResultsSortByPreference)
-                }
-                title="Sort search results by"
-                aria-label="Sort search results by"
-              >
-                <option value="path">Path</option>
-                <option value="name">Name</option>
-              </select>
-            </fieldset>
-            <button
-              type="button"
-              className="search-results-action-button"
-              onClick={onApplySort}
-              title="Apply the selected sort to the current search results (Cmd+R)"
-              aria-label="Apply the selected sort to the current search results"
-            >
-              <ToolbarIcon name="refresh" />
-              Apply Sort
-            </button>
-          </div>
-        </div>
-        {typeaheadQuery ? (
-          <div className="pane-typeahead pane-typeahead-center" aria-live="polite">
-            <span className="pane-typeahead-label">Select</span>
-            <span className="pane-typeahead-value">{typeaheadQuery}</span>
-          </div>
-        ) : null}
         {truncated ? (
           <div className="search-results-banner">Showing the first 20,000 matches.</div>
         ) : null}
@@ -247,7 +362,13 @@ export function SearchResultsPane({
             <span>Running bundled fd in the current folder…</span>
           </div>
         ) : null}
-        {status !== "running" && results.length === 0 && !error ? (
+        {status !== "running" && results.length === 0 && totalCount > 0 && !error ? (
+          <div className="content-state content-empty">
+            <strong className="empty-state-title">No matching filtered results</strong>
+            <span className="empty-state-message">Try a different filter or clear it.</span>
+          </div>
+        ) : null}
+        {status !== "running" && results.length === 0 && totalCount === 0 && !error ? (
           <div className="content-state content-empty">
             <strong className="empty-state-title">No matching files</strong>
             <span className="empty-state-message">
@@ -316,6 +437,51 @@ export function SearchResultsPane({
         ) : null}
       </div>
     </section>
+  );
+}
+
+function CloseGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="search-results-control-icon">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
+
+function StopGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="search-results-stop-icon">
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+    </svg>
+  );
+}
+
+function SearchGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="search-results-search-icon">
+      <circle cx="11" cy="11" r="7" />
+      <line x1="16.5" y1="16.5" x2="21" y2="21" />
+    </svg>
+  );
+}
+
+function ClearGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="search-results-control-icon">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="15" y1="9" x2="9" y2="15" />
+      <line x1="9" y1="9" x2="15" y2="15" />
+    </svg>
+  );
+}
+
+function RefreshGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="search-results-refresh-icon">
+      <path d="M1 4v6h6" />
+      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+    </svg>
   );
 }
 

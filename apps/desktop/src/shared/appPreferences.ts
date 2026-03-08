@@ -6,6 +6,7 @@ export type SearchPatternModePreference = "glob" | "regex";
 export type SearchMatchScopePreference = "name" | "path";
 export type SearchResultsSortByPreference = "name" | "path";
 export type SearchResultsSortDirectionPreference = "asc" | "desc";
+export type SearchResultsFilterScopePreference = "name" | "path";
 
 export const THEME_OPTIONS = [
   { value: "dark", label: "Dark" },
@@ -50,6 +51,7 @@ export type AppPreferences = {
   searchIncludeHidden: boolean;
   searchResultsSortBy: SearchResultsSortByPreference;
   searchResultsSortDirection: SearchResultsSortDirectionPreference;
+  searchResultsFilterScope: SearchResultsFilterScopePreference;
   treeWidth: number;
   inspectorWidth: number;
   restoreLastVisitedFolderOnStartup: boolean;
@@ -81,6 +83,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   searchIncludeHidden: false,
   searchResultsSortBy: "path",
   searchResultsSortDirection: "asc",
+  searchResultsFilterScope: "name",
   treeWidth: 280,
   inspectorWidth: 320,
   restoreLastVisitedFolderOnStartup: false,

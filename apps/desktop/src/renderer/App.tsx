@@ -11,6 +11,7 @@ import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 import {
   DEFAULT_APP_PREFERENCES,
   type ExplorerViewMode,
+  type SearchResultsFilterScopePreference,
   type SearchResultsSortByPreference,
   type SearchResultsSortDirectionPreference,
   THEME_OPTIONS,
@@ -64,7 +65,7 @@ import { formatDateTime, formatPermissionMode, formatSize } from "./lib/formatti
 import { EXPLORER_LAYOUT } from "./lib/layoutTokens";
 import { createRendererLogger } from "./lib/logging";
 import { resolveExplorerToolbarLayout, resolveSinglePanelLayout } from "./lib/responsiveLayout";
-import { appendSearchResults, sortSearchResults } from "./lib/searchResults";
+import { appendSearchResults, filterSearchResults, sortSearchResults } from "./lib/searchResults";
 import { resolveStartupNavigation } from "./lib/startupNavigation";
 import { applyAppearance, getThemeAppearanceDefaults } from "./lib/theme";
 import { getTreeKeyboardAction } from "./lib/treeView";
@@ -80,6 +81,7 @@ type SearchResultItem = IpcResponse<"search:getUpdate">["items"][number];
 type SearchPatternMode = IpcRequest<"search:start">["patternMode"];
 type SearchMatchScope = IpcRequest<"search:start">["matchScope"];
 type SearchJobStatus = IpcResponse<"search:getUpdate">["status"];
+type SearchResultsFilterScope = SearchResultsFilterScopePreference;
 type SearchResultsSortBy = SearchResultsSortByPreference;
 type SearchResultsSortDirection = SearchResultsSortDirectionPreference;
 type ContextMenuState = {
@@ -233,6 +235,10 @@ export function App() {
   const [searchResultsVisible, setSearchResultsVisible] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
   const [searchResultsScrollTop, setSearchResultsScrollTop] = useState(0);
+  const [searchResultsFilterQuery, setSearchResultsFilterQuery] = useState("");
+  const [debouncedSearchResultsFilterQuery, setDebouncedSearchResultsFilterQuery] = useState("");
+  const [searchResultsFilterScope, setSearchResultsFilterScope] =
+    useState<SearchResultsFilterScope>(DEFAULT_APP_PREFERENCES.searchResultsFilterScope);
   const [searchStatus, setSearchStatus] = useState<SearchJobStatus | "idle">("idle");
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchTruncated, setSearchTruncated] = useState(false);
@@ -325,9 +331,18 @@ export function App() {
   });
   const { width: toolbarWidth } = useElementSize(toolbarRef);
   const { width: singlePanelWidth } = useElementSize(singlePanelRef);
+  const filteredSearchResults = useMemo(
+    () =>
+      filterSearchResults(
+        searchResults,
+        debouncedSearchResultsFilterQuery,
+        searchResultsFilterScope,
+      ),
+    [debouncedSearchResultsFilterQuery, searchResults, searchResultsFilterScope],
+  );
   const searchResultEntries = useMemo(
-    () => searchResults.map((result) => toDirectoryEntryFromSearchResult(result)),
-    [searchResults],
+    () => filteredSearchResults.map((result) => toDirectoryEntryFromSearchResult(result)),
+    [filteredSearchResults],
   );
   const hasCachedSearch = searchCommittedQuery.trim().length > 0;
   const isSearchMode = searchResultsVisible && hasCachedSearch;
@@ -388,6 +403,15 @@ export function App() {
   useEffect(() => {
     searchResultsRef.current = searchResults;
   }, [searchResults]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearchResultsFilterQuery(searchResultsFilterQuery);
+    }, 500);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [searchResultsFilterQuery]);
 
   useEffect(() => {
     searchResultsSortByRef.current = searchResultsSortBy;
@@ -523,13 +547,21 @@ export function App() {
     ) {
       return;
     }
-    const treePane = treePaneRef.current;
-    if (!treePane) {
+    const nextPane = contentPaneRef.current ?? treePaneRef.current;
+    if (!nextPane) {
       return;
     }
-    treePane.focus({ preventScroll: true });
-    setFocusedPane("tree");
-  }, [actionNotice, contextMenuState, focusedPane, locationSheetOpen, mainView, preferencesReady]);
+    nextPane.focus({ preventScroll: true });
+    setFocusedPane(contentPaneRef.current ? "content" : "tree");
+  }, [
+    actionNotice,
+    contextMenuState,
+    focusedPane,
+    isSearchMode,
+    locationSheetOpen,
+    mainView,
+    preferencesReady,
+  ]);
 
   useEffect(() => {
     applyAppearance({
@@ -580,6 +612,7 @@ export function App() {
         searchIncludeHidden,
         searchResultsSortBy,
         searchResultsSortDirection,
+        searchResultsFilterScope,
         treeWidth: panes.treeWidth,
         inspectorWidth: panes.inspectorWidth,
         restoreLastVisitedFolderOnStartup,
@@ -602,6 +635,7 @@ export function App() {
     searchIncludeHidden,
     searchResultsSortBy,
     searchResultsSortDirection,
+    searchResultsFilterScope,
     searchMatchScope,
     searchPatternMode,
     searchRecursive,
@@ -648,6 +682,7 @@ export function App() {
         searchResultsSortDirectionRef.current = preferences.searchResultsSortDirection;
         setSearchResultsSortBy(preferences.searchResultsSortBy);
         setSearchResultsSortDirection(preferences.searchResultsSortDirection);
+        setSearchResultsFilterScope(preferences.searchResultsFilterScope);
         setViewMode(preferences.viewMode);
         setFoldersFirst(preferences.foldersFirst);
         setCompactListView(preferences.compactListView);
@@ -1094,6 +1129,7 @@ export function App() {
         !event.metaKey &&
         !event.ctrlKey &&
         !event.altKey &&
+        !isSearchMode &&
         (focusedPane === "tree" || focusedPane === "content") &&
         isTypeaheadCharacterKey(event.key)
       ) {
@@ -1512,6 +1548,8 @@ export function App() {
     setSearchRootPath("");
     setSearchResults([]);
     setSearchResultsScrollTop(0);
+    setSearchResultsFilterQuery("");
+    setDebouncedSearchResultsFilterQuery("");
     setSearchStatus("idle");
     setSearchError(null);
     setSearchTruncated(false);
@@ -1581,6 +1619,8 @@ export function App() {
     setSearchResultsVisible(true);
     setSearchResults([]);
     setSearchResultsScrollTop(0);
+    setSearchResultsFilterQuery("");
+    setDebouncedSearchResultsFilterQuery("");
     setSearchStatus("running");
     setSearchError(null);
     setSearchTruncated(false);
@@ -1655,6 +1695,16 @@ export function App() {
   function updateSearchResultsSortBy(nextValue: SearchResultsSortBy) {
     searchResultsSortByRef.current = nextValue;
     setSearchResultsSortBy(nextValue);
+  }
+
+  function updateSearchResultsFilterQuery(nextValue: string) {
+    setSearchResultsFilterQuery(nextValue);
+    setSearchResultsScrollTop(0);
+  }
+
+  function updateSearchResultsFilterScope(nextValue: SearchResultsFilterScope) {
+    setSearchResultsFilterScope(nextValue);
+    setSearchResultsScrollTop(0);
   }
 
   function toggleSearchResultsSortDirection() {
@@ -2562,7 +2612,6 @@ export function App() {
                         </div>
                       </div>
                       <div className="toolbar-search-meta">
-                        <span className="toolbar-search-root">{currentPath || "Loading…"}</span>
                         <span className="toolbar-search-status">
                           {searchDraftQuery.trim().length > 0 &&
                           searchDraftQuery.trim() !== searchCommittedQuery
@@ -2645,11 +2694,14 @@ export function App() {
                     rootPath={searchRootPath}
                     query={searchCommittedQuery}
                     status={searchStatus}
-                    results={searchResults}
+                    results={filteredSearchResults}
                     selectedPaths={contentSelection.paths}
                     selectionLeadPath={contentSelection.leadPath}
                     error={searchError}
                     truncated={searchTruncated}
+                    filterQuery={searchResultsFilterQuery}
+                    filterScope={searchResultsFilterScope}
+                    totalCount={searchResults.length}
                     sortBy={searchResultsSortBy}
                     sortDirection={searchResultsSortDirection}
                     onStopSearch={() => {
@@ -2666,6 +2718,8 @@ export function App() {
                       hideSearchResults();
                       focusContentPane();
                     }}
+                    onFilterQueryChange={updateSearchResultsFilterQuery}
+                    onFilterScopeChange={updateSearchResultsFilterScope}
                     onSortByChange={updateSearchResultsSortBy}
                     onSortDirectionToggle={toggleSearchResultsSortDirection}
                     onApplySort={applySearchResultsSort}
@@ -2680,7 +2734,6 @@ export function App() {
                     onFocusChange={(focused) => setFocusedPane(focused ? "content" : null)}
                     scrollTop={searchResultsScrollTop}
                     onScrollTopChange={setSearchResultsScrollTop}
-                    typeaheadQuery={focusedPane === "content" ? typeaheadQuery : ""}
                   />
                 ) : (
                   <ContentPane
@@ -2734,12 +2787,12 @@ export function App() {
                   <span>
                     {isSearchMode
                       ? searchStatus === "running"
-                        ? `${searchResults.length} matches so far`
-                        : `${searchResults.length} matches`
+                        ? `${filteredSearchResults.length} / ${searchResults.length} matches so far`
+                        : `${filteredSearchResults.length} / ${searchResults.length} matches`
                       : `${currentEntries.length} items`}
                   </span>
                   <span className="status-path">
-                    {isSearchMode ? `Search root: ${currentPath}` : currentPath}
+                    {isSearchMode ? `Search root: ${searchRootPath}` : currentPath}
                   </span>
                 </footer>
               </section>

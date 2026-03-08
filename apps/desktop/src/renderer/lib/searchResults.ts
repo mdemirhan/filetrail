@@ -1,6 +1,7 @@
 import type { IpcResponse } from "@filetrail/contracts";
 
 import type {
+  SearchResultsFilterScopePreference,
   SearchResultsSortByPreference,
   SearchResultsSortDirectionPreference,
 } from "../../shared/appPreferences";
@@ -21,6 +22,22 @@ export function sortSearchResults(
 ): SearchResultItem[] {
   const direction = sortDirection === "asc" ? 1 : -1;
   return [...items].sort((left, right) => compareSearchResults(left, right, sortBy) * direction);
+}
+
+export function filterSearchResults(
+  items: SearchResultItem[],
+  query: string,
+  scope: SearchResultsFilterScopePreference,
+): SearchResultItem[] {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  if (normalizedQuery.length === 0) {
+    return items;
+  }
+
+  return items.filter((item) => {
+    const haystack = scope === "path" ? item.path : item.name;
+    return haystack.toLocaleLowerCase().includes(normalizedQuery);
+  });
 }
 
 export function compareSearchResults(
