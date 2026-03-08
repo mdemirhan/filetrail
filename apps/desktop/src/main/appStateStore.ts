@@ -232,6 +232,10 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
     viewMode: record.viewMode === "details" ? "details" : "list",
     foldersFirst:
       typeof record.foldersFirst === "boolean" ? record.foldersFirst : currentDefaults.foldersFirst,
+    tabSwitchesExplorerPanes:
+      typeof record.tabSwitchesExplorerPanes === "boolean"
+        ? record.tabSwitchesExplorerPanes
+        : currentDefaults.tabSwitchesExplorerPanes,
     typeaheadEnabled:
       typeof record.typeaheadEnabled === "boolean"
         ? record.typeaheadEnabled

@@ -32,6 +32,7 @@ export type AppPreferences = {
   textMutedOverride: string | null;
   viewMode: ExplorerViewMode;
   foldersFirst: boolean;
+  tabSwitchesExplorerPanes: boolean;
   typeaheadEnabled: boolean;
   typeaheadDebounceMs: number;
   propertiesOpen: boolean;
@@ -54,6 +55,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   textMutedOverride: null,
   viewMode: "list",
   foldersFirst: true,
+  tabSwitchesExplorerPanes: true,
   typeaheadEnabled: true,
   typeaheadDebounceMs: 750,
   propertiesOpen: true,

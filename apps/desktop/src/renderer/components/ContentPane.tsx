@@ -45,6 +45,7 @@ export function ContentPane({
   onNavigatePath,
   onRequestPathSuggestions,
   onFocusChange,
+  tabSwitchesExplorerPanes = false,
   searchQuery = "",
   typeaheadQuery,
 }: {
@@ -68,6 +69,7 @@ export function ContentPane({
   onNavigatePath: (path: string) => void;
   onRequestPathSuggestions: (inputPath: string) => Promise<IpcResponse<"path:getSuggestions">>;
   onFocusChange: (focused: boolean) => void;
+  tabSwitchesExplorerPanes?: boolean;
   searchQuery?: string;
   typeaheadQuery?: string;
 }) {
@@ -208,6 +210,23 @@ export function ContentPane({
     setPreviewPath(previewPath);
   }
 
+  function clearPathSuggestions(): void {
+    setPreviewPath(null);
+    setPathSuggestions([]);
+    setHighlightedSuggestionIndex(-1);
+  }
+
+  function focusPathSuggestion(index: number): void {
+    const button = suggestionsRef.current?.querySelectorAll<HTMLButtonElement>(".pathbar-suggestion")[
+      index
+    ];
+    if (!button) {
+      return;
+    }
+    previewSuggestion(index);
+    button.focus();
+  }
+
   return (
     <section
       ref={paneRef}
@@ -260,28 +279,26 @@ export function ContentPane({
                     return;
                   }
                   setDraftPath(currentPath);
-                  setPreviewPath(null);
-                  setPathSuggestions([]);
-                  setHighlightedSuggestionIndex(-1);
+                  clearPathSuggestions();
                   pendingSuggestionInputRef.current = "";
                   setPathEditorOpen(false);
                 }}
                 onChange={(event) => {
                   const nextValue = event.currentTarget.value;
                   pendingSuggestionInputRef.current = nextValue;
-                  setPreviewPath(null);
-                  setPathSuggestions([]);
-                  setHighlightedSuggestionIndex(-1);
+                  clearPathSuggestions();
                   setDraftPath(nextValue);
                   scheduleSuggestionsRequest(nextValue);
                 }}
                 onKeyDown={(event) => {
                   if (event.key === "Escape") {
                     event.preventDefault();
+                    if (pathSuggestions.length > 0 || previewPath !== null) {
+                      clearPathSuggestions();
+                      return;
+                    }
                     setDraftPath(currentPath);
-                    setPreviewPath(null);
-                    setPathSuggestions([]);
-                    setHighlightedSuggestionIndex(-1);
+                    clearPathSuggestions();
                     pendingSuggestionInputRef.current = "";
                     setPathEditorOpen(false);
                     return;
@@ -303,15 +320,9 @@ export function ContentPane({
                     previewSuggestion(nextIndex);
                     return;
                   }
-                  if (event.key === "Tab" && pathSuggestions.length > 0) {
-                    const highlightedSuggestion =
-                      highlightedSuggestionIndex >= 0
-                        ? pathSuggestions[highlightedSuggestionIndex]
-                        : null;
-                    if (highlightedSuggestion) {
-                      event.preventDefault();
-                      acceptSuggestion(highlightedSuggestion);
-                    }
+                  if (tabSwitchesExplorerPanes && event.key === "Tab" && pathSuggestions.length > 0) {
+                    event.preventDefault();
+                    focusPathSuggestion(event.shiftKey ? pathSuggestions.length - 1 : 0);
                   }
                 }}
               />
@@ -336,6 +347,41 @@ export function ContentPane({
                         );
                         if (index >= 0) {
                           previewSuggestion(index);
+                        }
+                      }}
+                      onFocus={() => {
+                        const index = pathSuggestions.findIndex(
+                          (item) => item.path === suggestion.path,
+                        );
+                        if (index >= 0) {
+                          previewSuggestion(index);
+                        }
+                      }}
+                      onKeyDown={(event) => {
+                        const index = pathSuggestions.findIndex(
+                          (item) => item.path === suggestion.path,
+                        );
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          clearPathSuggestions();
+                          pathInputRef.current?.focus();
+                          return;
+                        }
+                        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                          event.preventDefault();
+                          if (pathSuggestions.length === 0 || index < 0) {
+                            return;
+                          }
+                          const nextIndex =
+                            event.key === "ArrowDown"
+                              ? (index + 1) % pathSuggestions.length
+                              : (index - 1 + pathSuggestions.length) % pathSuggestions.length;
+                          focusPathSuggestion(nextIndex);
+                          return;
+                        }
+                        if (tabSwitchesExplorerPanes && event.key === "Tab") {
+                          event.preventDefault();
+                          pathInputRef.current?.focus();
                         }
                       }}
                       onMouseDown={(event) => event.preventDefault()}

@@ -8,6 +8,7 @@ export function SettingsView({
   effectiveTextPrimaryColor,
   effectiveTextSecondaryColor,
   effectiveTextMutedColor,
+  tabSwitchesExplorerPanes,
   typeaheadEnabled,
   typeaheadDebounceMs,
   restoreLastVisitedFolderOnStartup,
@@ -24,6 +25,7 @@ export function SettingsView({
   onTextSecondaryColorChange,
   onTextMutedColorChange,
   onResetAppearance,
+  onTabSwitchesExplorerPanesChange,
   onTypeaheadEnabledChange,
   onTypeaheadDebounceMsChange,
   onRestoreLastVisitedFolderOnStartupChange,
@@ -35,6 +37,7 @@ export function SettingsView({
   effectiveTextPrimaryColor: string;
   effectiveTextSecondaryColor: string;
   effectiveTextMutedColor: string;
+  tabSwitchesExplorerPanes: boolean;
   typeaheadEnabled: boolean;
   typeaheadDebounceMs: number;
   restoreLastVisitedFolderOnStartup: boolean;
@@ -51,6 +54,7 @@ export function SettingsView({
   onTextSecondaryColorChange: (value: string | null) => void;
   onTextMutedColorChange: (value: string | null) => void;
   onResetAppearance: () => void;
+  onTabSwitchesExplorerPanesChange: (value: boolean) => void;
   onTypeaheadEnabledChange: (value: boolean) => void;
   onTypeaheadDebounceMsChange: (value: number) => void;
   onRestoreLastVisitedFolderOnStartupChange: (value: boolean) => void;
@@ -203,6 +207,27 @@ export function SettingsView({
             </div>
           </div>
           <div className="settings-panel-body">
+            <label className="settings-toggle-row">
+              <span className="settings-toggle-copy">
+                <span className="settings-toggle-title">Tab switches between panes</span>
+                <span className="settings-toggle-description">
+                  Use Tab and Shift+Tab to move between the folder tree and file list while keeping
+                  native Tab behavior in dialogs and standard controls.
+                </span>
+              </span>
+              <span className="settings-toggle-control">
+                <input
+                  type="checkbox"
+                  className="settings-toggle-input"
+                  checked={tabSwitchesExplorerPanes}
+                  onChange={(event) =>
+                    onTabSwitchesExplorerPanesChange(event.currentTarget.checked)
+                  }
+                />
+                <span className="settings-toggle-track" aria-hidden />
+              </span>
+            </label>
+
             <label className="settings-toggle-row">
               <span className="settings-toggle-copy">
                 <span className="settings-toggle-title">Type to select</span>

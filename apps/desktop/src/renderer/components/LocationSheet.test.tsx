@@ -13,6 +13,7 @@ describe("LocationSheet", () => {
         currentPath="/Users/demo"
         submitting={false}
         error={null}
+        tabSwitchesExplorerPanes={false}
         onClose={() => undefined}
         onSubmit={handleSubmit}
         onRequestPathSuggestions={async () => ({
@@ -44,6 +45,7 @@ describe("LocationSheet", () => {
         currentPath="/Users/demo"
         submitting={false}
         error={null}
+        tabSwitchesExplorerPanes={false}
         onClose={() => undefined}
         onSubmit={() => undefined}
         onRequestPathSuggestions={async () => ({
@@ -77,6 +79,7 @@ describe("LocationSheet", () => {
         currentPath="/Users/demo"
         submitting={false}
         error={null}
+        tabSwitchesExplorerPanes={false}
         onClose={() => undefined}
         onSubmit={handleSubmit}
         onRequestPathSuggestions={handleRequestPathSuggestions}
@@ -100,6 +103,132 @@ describe("LocationSheet", () => {
     });
 
     expect(handleSubmit).toHaveBeenCalledWith("/Users/demo");
+    vi.useRealTimers();
+  });
+
+  it("moves Tab focus between the location input and suggestions when pane tab switching is enabled", async () => {
+    vi.useFakeTimers();
+    const handleRequestPathSuggestions = vi.fn().mockResolvedValue({
+      inputPath: "/Users/de",
+      basePath: "/Users",
+      suggestions: [
+        { name: "demo", path: "/Users/demo" },
+        { name: "desktop", path: "/Users/desktop" },
+      ],
+    });
+
+    render(
+      <LocationSheet
+        open
+        currentPath="/Users/demo"
+        submitting={false}
+        error={null}
+        tabSwitchesExplorerPanes
+        onClose={() => undefined}
+        onSubmit={() => undefined}
+        onRequestPathSuggestions={handleRequestPathSuggestions}
+      />,
+    );
+
+    const input = screen.getByLabelText("Absolute path");
+    fireEvent.change(input, { target: { value: "/Users/de" } });
+
+    await act(async () => {
+      vi.advanceTimersByTime(350);
+    });
+    await act(async () => {});
+
+    const suggestion = screen.getByRole("button", { name: /demo/i });
+    act(() => {
+      fireEvent.keyDown(input, { key: "Tab" });
+    });
+    expect(suggestion).toHaveFocus();
+
+    act(() => {
+      fireEvent.keyDown(suggestion, { key: "Tab", shiftKey: true });
+    });
+    expect(input).toHaveFocus();
+    vi.useRealTimers();
+  });
+
+  it("traps focus inside the dialog when pane tab switching is enabled", async () => {
+    render(
+      <LocationSheet
+        open
+        currentPath="/Users/demo"
+        submitting={false}
+        error={null}
+        tabSwitchesExplorerPanes
+        onClose={() => undefined}
+        onSubmit={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+      />,
+    );
+
+    const closeButton = screen.getByRole("button", { name: "Close" });
+    const cancelButton = screen.getByRole("button", { name: "Cancel" });
+    const openButton = screen.getByRole("button", { name: "Open Folder" });
+
+    act(() => {
+      cancelButton.focus();
+    });
+    act(() => {
+      fireEvent.keyDown(cancelButton, { key: "Tab" });
+    });
+    expect(openButton).toHaveFocus();
+
+    act(() => {
+      fireEvent.keyDown(openButton, { key: "Tab" });
+    });
+    expect(closeButton).toHaveFocus();
+  });
+
+  it("closes suggestions before closing the dialog on escape", async () => {
+    vi.useFakeTimers();
+    const handleClose = vi.fn();
+    const handleRequestPathSuggestions = vi.fn().mockResolvedValue({
+      inputPath: "/Users/de",
+      basePath: "/Users",
+      suggestions: [{ name: "demo", path: "/Users/demo" }],
+    });
+
+    render(
+      <LocationSheet
+        open
+        currentPath="/Users/demo"
+        submitting={false}
+        error={null}
+        tabSwitchesExplorerPanes
+        onClose={handleClose}
+        onSubmit={() => undefined}
+        onRequestPathSuggestions={handleRequestPathSuggestions}
+      />,
+    );
+
+    const input = screen.getByLabelText("Absolute path");
+    fireEvent.change(input, { target: { value: "/Users/de" } });
+
+    await act(async () => {
+      vi.advanceTimersByTime(350);
+    });
+    await act(async () => {});
+
+    expect(screen.getByRole("button", { name: /demo/i })).toBeInTheDocument();
+
+    act(() => {
+      fireEvent.keyDown(input, { key: "Escape" });
+    });
+    expect(screen.queryByRole("button", { name: /demo/i })).not.toBeInTheDocument();
+    expect(handleClose).not.toHaveBeenCalled();
+
+    act(() => {
+      fireEvent.keyDown(input, { key: "Escape" });
+    });
+    expect(handleClose).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
   });
 });

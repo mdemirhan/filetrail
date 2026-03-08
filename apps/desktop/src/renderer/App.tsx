@@ -77,13 +77,15 @@ const SHORTCUT_ITEMS = [
   {
     group: "Panels",
     shortcut: "Tab",
-    description: "Move focus between the folder tree and file list",
+    description: "Move focus between the folder tree and file list when pane tab switching is enabled",
   },
   {
     group: "Panels",
     shortcut: "Shift+Tab",
-    description: "Move focus back between the file list and folder tree",
+    description: "Move focus back between the file list and folder tree when pane tab switching is enabled",
   },
+  { group: "Panels", shortcut: "Cmd+1", description: "Focus the folder tree" },
+  { group: "Panels", shortcut: "Cmd+2", description: "Focus the file list" },
   { group: "Views", shortcut: "?", description: "Open help" },
   { group: "Views", shortcut: "Esc", description: "Return from Help or Settings to Explorer" },
 ] as const;
@@ -143,6 +145,9 @@ export function App() {
   const [includeHidden, setIncludeHidden] = useState(DEFAULT_APP_PREFERENCES.includeHidden);
   const [viewMode, setViewMode] = useState<ExplorerViewMode>(DEFAULT_APP_PREFERENCES.viewMode);
   const [foldersFirst, setFoldersFirst] = useState(DEFAULT_APP_PREFERENCES.foldersFirst);
+  const [tabSwitchesExplorerPanes, setTabSwitchesExplorerPanes] = useState(
+    DEFAULT_APP_PREFERENCES.tabSwitchesExplorerPanes,
+  );
   const [typeaheadEnabled, setTypeaheadEnabled] = useState(
     DEFAULT_APP_PREFERENCES.typeaheadEnabled,
   );
@@ -291,6 +296,7 @@ export function App() {
         textMutedOverride,
         viewMode,
         foldersFirst,
+        tabSwitchesExplorerPanes,
         typeaheadEnabled,
         typeaheadDebounceMs,
         propertiesOpen,
@@ -313,6 +319,7 @@ export function App() {
     propertiesOpen,
     detailRowOpen,
     foldersFirst,
+    tabSwitchesExplorerPanes,
     typeaheadDebounceMs,
     typeaheadEnabled,
     restoreLastVisitedFolderOnStartup,
@@ -348,6 +355,7 @@ export function App() {
         setIncludeHidden(preferences.includeHidden);
         setViewMode(preferences.viewMode);
         setFoldersFirst(preferences.foldersFirst);
+        setTabSwitchesExplorerPanes(preferences.tabSwitchesExplorerPanes);
         setTypeaheadEnabled(preferences.typeaheadEnabled);
         setTypeaheadDebounceMs(preferences.typeaheadDebounceMs);
         setPropertiesOpen(preferences.propertiesOpen);
@@ -517,6 +525,7 @@ export function App() {
       if (
         target instanceof HTMLInputElement ||
         target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
         (target instanceof HTMLElement && target.isContentEditable)
       ) {
         return;
@@ -524,29 +533,37 @@ export function App() {
       if (locationSheetOpen) {
         return;
       }
-      if (event.key === "Tab" && mainView === "explorer" && !locationSheetOpen) {
+      if (
+        tabSwitchesExplorerPanes &&
+        event.key === "Tab" &&
+        mainView === "explorer" &&
+        !locationSheetOpen
+      ) {
+        const targetElement = target instanceof HTMLElement ? target : null;
+        const isAutocompleteContext =
+          targetElement?.closest(".pathbar-editor-shell, .location-sheet-input-shell") !== null;
+        if (isAutocompleteContext) {
+          return;
+        }
+        const isTreeFocusTarget =
+          target instanceof Node && !!treePaneRef.current?.contains(target);
+        const isContentFocusTarget =
+          target instanceof Node && !!contentPaneRef.current?.contains(target);
+        const shouldHandlePaneTab =
+          isTreeFocusTarget ||
+          isContentFocusTarget ||
+          (document.activeElement === document.body && focusedPane !== null);
+        if (!shouldHandlePaneTab) {
+          return;
+        }
         event.preventDefault();
-        const treePane = treePaneRef.current;
-        const contentPane = contentPaneRef.current;
-        if (!treePane || !contentPane) {
+        if (isTreeFocusTarget || focusedPane === "tree") {
+          contentPaneRef.current?.focus({ preventScroll: true });
+          setFocusedPane("content");
           return;
         }
-        const activeElement = document.activeElement;
-        const focusTree = () => treePane.focus({ preventScroll: true });
-        const focusContent = () => contentPane.focus({ preventScroll: true });
-        if (activeElement instanceof Node && treePane.contains(activeElement)) {
-          focusContent();
-          return;
-        }
-        if (activeElement instanceof Node && contentPane.contains(activeElement)) {
-          focusTree();
-          return;
-        }
-        if (event.shiftKey) {
-          focusTree();
-        } else {
-          focusContent();
-        }
+        treePaneRef.current?.focus({ preventScroll: true });
+        setFocusedPane("tree");
         return;
       }
       if (event.key === "?") {
@@ -555,6 +572,18 @@ export function App() {
         return;
       }
       if (mainView !== "explorer") {
+        return;
+      }
+      if (event.metaKey && event.key === "1") {
+        event.preventDefault();
+        treePaneRef.current?.focus({ preventScroll: true });
+        setFocusedPane("tree");
+        return;
+      }
+      if (event.metaKey && event.key === "2") {
+        event.preventDefault();
+        contentPaneRef.current?.focus({ preventScroll: true });
+        setFocusedPane("content");
         return;
       }
       if (event.metaKey && event.key.toLowerCase() === "f") {
@@ -713,6 +742,7 @@ export function App() {
     selectedPath,
     treeNodes,
     treeRootPath,
+    tabSwitchesExplorerPanes,
     typeaheadEnabled,
     viewMode,
     locationSheetOpen,
@@ -1496,6 +1526,7 @@ export function App() {
                       inputPath,
                     })
                   }
+                  tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
                   searchQuery={searchQuery}
                   typeaheadQuery={focusedPane === "content" ? typeaheadQuery : ""}
                 />
@@ -1548,6 +1579,7 @@ export function App() {
                 effectiveTextPrimaryColor={effectiveThemeColors.primary}
                 effectiveTextSecondaryColor={effectiveThemeColors.secondary}
                 effectiveTextMutedColor={effectiveThemeColors.muted}
+                tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
                 typeaheadEnabled={typeaheadEnabled}
                 typeaheadDebounceMs={typeaheadDebounceMs}
                 restoreLastVisitedFolderOnStartup={restoreLastVisitedFolderOnStartup}
@@ -1564,6 +1596,7 @@ export function App() {
                 onTextSecondaryColorChange={setTextSecondaryOverride}
                 onTextMutedColorChange={setTextMutedOverride}
                 onResetAppearance={resetAppearanceSettings}
+                onTabSwitchesExplorerPanesChange={setTabSwitchesExplorerPanes}
                 onTypeaheadEnabledChange={setTypeaheadEnabled}
                 onTypeaheadDebounceMsChange={setTypeaheadDebounceMs}
                 onRestoreLastVisitedFolderOnStartupChange={setRestoreLastVisitedFolderOnStartup}
@@ -1578,6 +1611,7 @@ export function App() {
         currentPath={currentPath}
         submitting={locationSubmitting}
         error={locationError}
+        tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
         onRequestPathSuggestions={(inputPath) =>
           requestPathSuggestions({ client, includeHidden, inputPath })
         }

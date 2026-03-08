@@ -413,6 +413,58 @@ describe("ContentPane", () => {
     expect(handleNavigatePath).toHaveBeenCalledWith("/Users/demo/Documents");
   });
 
+  it("moves Tab focus between the path input and suggestions when pane tab switching is enabled", async () => {
+    render(
+      <ContentPane
+        isFocused
+        currentPath="/Users/demo/projects"
+        entries={[]}
+        viewMode="list"
+        loading={false}
+        error={null}
+        includeHidden={false}
+        selectedPath=""
+        metadataByPath={{}}
+        sortBy="name"
+        sortDirection="asc"
+        onSelectPath={() => undefined}
+        onActivateEntry={() => undefined}
+        onSortChange={() => undefined}
+        onLayoutColumnsChange={() => undefined}
+        onVisiblePathsChange={() => undefined}
+        onNavigatePath={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "/Users/demo/Do",
+          basePath: "/Users/demo",
+          suggestions: [
+            { path: "/Users/demo/Documents", name: "Documents", isDirectory: true },
+            { path: "/Users/demo/Downloads", name: "Downloads", isDirectory: true },
+          ],
+        })}
+        onFocusChange={() => undefined}
+        tabSwitchesExplorerPanes
+        typeaheadQuery=""
+      />,
+    );
+
+    act(() => {
+      fireEvent.doubleClick(screen.getByRole("navigation", { name: "Folder path" }));
+    });
+    const input = screen.getByLabelText("Current folder path");
+    fireEvent.change(input, { target: { value: "/Users/demo/Do" } });
+
+    const suggestion = await screen.findByRole("button", { name: /Documents/i });
+    act(() => {
+      fireEvent.keyDown(input, { key: "Tab" });
+    });
+    expect(suggestion).toHaveFocus();
+
+    act(() => {
+      fireEvent.keyDown(suggestion, { key: "Tab", shiftKey: true });
+    });
+    expect(input).toHaveFocus();
+  });
+
   it("clears the highlighted suggestion when a refreshed list arrives", async () => {
     render(
       <ContentPane

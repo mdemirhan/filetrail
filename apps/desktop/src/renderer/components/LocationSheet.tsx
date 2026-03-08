@@ -12,6 +12,7 @@ export function LocationSheet({
   currentPath,
   submitting,
   error,
+  tabSwitchesExplorerPanes = false,
   onClose,
   onSubmit,
   onRequestPathSuggestions,
@@ -20,6 +21,7 @@ export function LocationSheet({
   currentPath: string;
   submitting: boolean;
   error: string | null;
+  tabSwitchesExplorerPanes?: boolean;
   onClose: () => void;
   onSubmit: (path: string) => void;
   onRequestPathSuggestions: (inputPath: string) => Promise<IpcResponse<"path:getSuggestions">>;
@@ -28,6 +30,7 @@ export function LocationSheet({
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [pathSuggestions, setPathSuggestions] = useState<PathSuggestion[]>([]);
   const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState(-1);
+  const dialogRef = useRef<HTMLElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const suggestionsRef = useRef<HTMLDivElement | null>(null);
   const suggestionDebounceTimeoutRef = useRef<number | null>(null);
@@ -74,6 +77,9 @@ export function LocationSheet({
       return;
     }
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
       if (event.key === "Escape") {
         event.preventDefault();
         onClose();
@@ -159,13 +165,61 @@ export function LocationSheet({
     setPreviewPath(nextPreviewPath);
   }
 
+  function clearPathSuggestions(): void {
+    setPreviewPath(null);
+    setPathSuggestions([]);
+    setHighlightedSuggestionIndex(-1);
+  }
+
+  function focusPathSuggestion(index: number): void {
+    const button = suggestionsRef.current?.querySelectorAll<HTMLButtonElement>(".pathbar-suggestion")[
+      index
+    ];
+    if (!button) {
+      return;
+    }
+    previewSuggestion(index);
+    button.focus();
+  }
+
   if (!open) {
     return null;
   }
 
   return (
     <div className="location-sheet-backdrop" role="presentation">
-      <section className="location-sheet" role="dialog" aria-modal="true" aria-label="Go to folder">
+      <section
+        ref={dialogRef}
+        className="location-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Go to folder"
+        onKeyDown={(event) => {
+          if (event.defaultPrevented || event.key !== "Tab" || !tabSwitchesExplorerPanes) {
+            return;
+          }
+          const dialog = dialogRef.current;
+          if (!dialog) {
+            return;
+          }
+          const focusableElements = getFocusableElements(dialog);
+          if (focusableElements.length === 0) {
+            return;
+          }
+          const activeElement = document.activeElement;
+          const currentIndex =
+            activeElement instanceof HTMLElement ? focusableElements.indexOf(activeElement) : -1;
+          const nextIndex = event.shiftKey
+            ? currentIndex <= 0
+              ? focusableElements.length - 1
+              : currentIndex - 1
+            : currentIndex < 0 || currentIndex >= focusableElements.length - 1
+              ? 0
+              : currentIndex + 1;
+          event.preventDefault();
+          focusableElements[nextIndex]?.focus();
+        }}
+      >
         <div className="location-sheet-header">
           <div>
             <div className="location-sheet-eyebrow">Location</div>
@@ -216,15 +270,17 @@ export function LocationSheet({
               onChange={(event) => {
                 const nextValue = event.currentTarget.value;
                 pendingSuggestionInputRef.current = nextValue;
-                setPreviewPath(null);
-                setPathSuggestions([]);
-                setHighlightedSuggestionIndex(-1);
+                clearPathSuggestions();
                 setDraftPath(nextValue);
                 scheduleSuggestionsRequest(nextValue);
               }}
               onKeyDown={(event) => {
                 if (event.key === "Escape") {
                   event.preventDefault();
+                  if (pathSuggestions.length > 0 || previewPath !== null) {
+                    clearPathSuggestions();
+                    return;
+                  }
                   onClose();
                   return;
                 }
@@ -245,15 +301,9 @@ export function LocationSheet({
                   previewSuggestion(nextIndex);
                   return;
                 }
-                if (event.key === "Tab" && pathSuggestions.length > 0) {
-                  const highlightedSuggestion =
-                    highlightedSuggestionIndex >= 0
-                      ? pathSuggestions[highlightedSuggestionIndex]
-                      : null;
-                  if (highlightedSuggestion) {
-                    event.preventDefault();
-                    acceptSuggestion(highlightedSuggestion);
-                  }
+                if (tabSwitchesExplorerPanes && event.key === "Tab" && pathSuggestions.length > 0) {
+                  event.preventDefault();
+                  focusPathSuggestion(event.shiftKey ? pathSuggestions.length - 1 : 0);
                 }
               }}
               placeholder="/Users/you"
@@ -277,6 +327,37 @@ export function LocationSheet({
                       const index = pathSuggestions.findIndex((item) => item.path === suggestion.path);
                       if (index >= 0) {
                         previewSuggestion(index);
+                      }
+                    }}
+                    onFocus={() => {
+                      const index = pathSuggestions.findIndex((item) => item.path === suggestion.path);
+                      if (index >= 0) {
+                        previewSuggestion(index);
+                      }
+                    }}
+                    onKeyDown={(event) => {
+                      const index = pathSuggestions.findIndex((item) => item.path === suggestion.path);
+                      if (event.key === "Escape") {
+                        event.preventDefault();
+                        clearPathSuggestions();
+                        inputRef.current?.focus();
+                        return;
+                      }
+                      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                        event.preventDefault();
+                        if (pathSuggestions.length === 0 || index < 0) {
+                          return;
+                        }
+                        const nextIndex =
+                          event.key === "ArrowDown"
+                            ? (index + 1) % pathSuggestions.length
+                            : (index - 1 + pathSuggestions.length) % pathSuggestions.length;
+                        focusPathSuggestion(nextIndex);
+                        return;
+                      }
+                      if (tabSwitchesExplorerPanes && event.key === "Tab") {
+                        event.preventDefault();
+                        inputRef.current?.focus();
                       }
                     }}
                     onMouseDown={(event) => event.preventDefault()}
@@ -319,4 +400,12 @@ function getSharedPrefixLength(basePath: string, nextPath: string): number {
     index += 1;
   }
   return index;
+}
+
+function getFocusableElements(root: HTMLElement): HTMLElement[] {
+  return Array.from(
+    root.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
+  ).filter((element) => !element.hasAttribute("disabled"));
 }
