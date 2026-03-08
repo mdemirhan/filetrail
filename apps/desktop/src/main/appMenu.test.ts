@@ -32,4 +32,22 @@ describe("createApplicationMenuTemplate", () => {
 
     expect(send).toHaveBeenCalledWith("filetrail:command", { type: "copyPath" });
   });
+
+  it("wires Refresh to the renderer command channel", () => {
+    const send = vi.fn();
+    const template = createApplicationMenuTemplate({ send } as never);
+    const viewMenu = template.find((item) => item.label === "View");
+    const submenu = Array.isArray(viewMenu?.submenu) ? viewMenu.submenu : [];
+    const refreshItem = submenu.find((item) => "label" in item && item.label === "Refresh");
+
+    expect(refreshItem).toBeTruthy();
+    if (!refreshItem || !("click" in refreshItem) || typeof refreshItem.click !== "function") {
+      throw new Error("Refresh menu item missing.");
+    }
+    refreshItem.click(undefined as never, undefined as never, undefined as never);
+
+    expect(send).toHaveBeenCalledWith("filetrail:command", {
+      type: "refreshOrApplySearchSort",
+    });
+  });
 });

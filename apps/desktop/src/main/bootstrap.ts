@@ -176,7 +176,7 @@ async function withTiming<T>(label: string, path: string, load: () => Promise<T>
   return value;
 }
 
-function toPreferencePatch(
+export function toPreferencePatch(
   value: IpcRequest<"app:updatePreferences">["preferences"],
 ): Partial<AppPreferences> {
   const patch: Partial<AppPreferences> = {};
@@ -213,6 +213,9 @@ function toPreferencePatch(
   if (value.compactTreeView !== undefined) {
     patch.compactTreeView = value.compactTreeView;
   }
+  if (value.tabSwitchesExplorerPanes !== undefined) {
+    patch.tabSwitchesExplorerPanes = value.tabSwitchesExplorerPanes;
+  }
   if (value.typeaheadEnabled !== undefined) {
     patch.typeaheadEnabled = value.typeaheadEnabled;
   }
@@ -239,6 +242,12 @@ function toPreferencePatch(
   }
   if (value.searchIncludeHidden !== undefined) {
     patch.searchIncludeHidden = value.searchIncludeHidden;
+  }
+  if (value.searchResultsSortBy !== undefined) {
+    patch.searchResultsSortBy = value.searchResultsSortBy;
+  }
+  if (value.searchResultsSortDirection !== undefined) {
+    patch.searchResultsSortDirection = value.searchResultsSortDirection;
   }
   if (value.treeWidth !== undefined) {
     patch.treeWidth = value.treeWidth;

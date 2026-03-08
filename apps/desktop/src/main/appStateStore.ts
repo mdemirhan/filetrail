@@ -284,6 +284,14 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
       typeof record.searchIncludeHidden === "boolean"
         ? record.searchIncludeHidden
         : currentDefaults.searchIncludeHidden,
+    searchResultsSortBy:
+      record.searchResultsSortBy === "name" || record.searchResultsSortBy === "path"
+        ? record.searchResultsSortBy
+        : currentDefaults.searchResultsSortBy,
+    searchResultsSortDirection:
+      record.searchResultsSortDirection === "desc" || record.searchResultsSortDirection === "asc"
+        ? record.searchResultsSortDirection
+        : currentDefaults.searchResultsSortDirection,
     treeWidth: clampPaneWidth(
       typeof record.treeWidth === "number" ? record.treeWidth : currentDefaults.treeWidth,
       220,

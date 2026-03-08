@@ -4,6 +4,8 @@ export type UiFontFamily = "dm-sans" | "lexend" | "fira-code" | "jetbrains-mono"
 export type UiFontWeight = 400 | 500 | 600;
 export type SearchPatternModePreference = "glob" | "regex";
 export type SearchMatchScopePreference = "name" | "path";
+export type SearchResultsSortByPreference = "name" | "path";
+export type SearchResultsSortDirectionPreference = "asc" | "desc";
 
 export const THEME_OPTIONS = [
   { value: "dark", label: "Dark" },
@@ -46,6 +48,8 @@ export type AppPreferences = {
   searchMatchScope: SearchMatchScopePreference;
   searchRecursive: boolean;
   searchIncludeHidden: boolean;
+  searchResultsSortBy: SearchResultsSortByPreference;
+  searchResultsSortDirection: SearchResultsSortDirectionPreference;
   treeWidth: number;
   inspectorWidth: number;
   restoreLastVisitedFolderOnStartup: boolean;
@@ -75,6 +79,8 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   searchMatchScope: "name",
   searchRecursive: true,
   searchIncludeHidden: false,
+  searchResultsSortBy: "path",
+  searchResultsSortDirection: "asc",
   treeWidth: 280,
   inspectorWidth: 320,
   restoreLastVisitedFolderOnStartup: false,

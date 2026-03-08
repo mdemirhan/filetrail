@@ -2367,7 +2367,8 @@ body.resizing-panels * {
 .search-results-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
   gap: 8px;
   margin: 0 6px 10px;
   padding: 0;
@@ -2376,7 +2377,34 @@ body.resizing-panels * {
 .search-results-actions-buttons {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 7px;
+}
+
+.search-results-actions-tools {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+  min-width: 0;
+}
+
+.search-results-sort-controls {
+  min-height: 29px;
+  border-radius: 7px;
+}
+
+.search-results-sort-controls .tb-btn {
+  min-width: 29px;
+  width: 29px;
+  height: 29px;
+}
+
+.search-results-sort-controls .toolbar-select {
+  min-width: 108px;
+  height: 29px;
+  padding-right: 30px;
 }
 
 .search-results-action-button {

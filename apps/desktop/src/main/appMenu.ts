@@ -1,6 +1,6 @@
 import type { MenuItemConstructorOptions, WebContents } from "electron";
 
-export type RendererCommand = "focusFileSearch" | "copyPath";
+export type RendererCommand = "focusFileSearch" | "copyPath" | "refreshOrApplySearchSort";
 
 export function createApplicationMenuTemplate(
   webContents: Pick<WebContents, "send">,
@@ -47,7 +47,18 @@ export function createApplicationMenuTemplate(
     },
     {
       label: "View",
-      submenu: [{ role: "reload" }, { role: "toggleDevTools" }],
+      submenu: [
+        {
+          label: "Refresh",
+          accelerator: "CommandOrControl+R",
+          click: () => {
+            webContents.send("filetrail:command", {
+              type: "refreshOrApplySearchSort" satisfies RendererCommand,
+            });
+          },
+        },
+        { role: "toggleDevTools" },
+      ],
     },
     {
       label: "Window",

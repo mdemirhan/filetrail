@@ -5,6 +5,14 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { SearchResultsPane } from "./SearchResultsPane";
 
 describe("SearchResultsPane", () => {
+  const defaultSortProps = {
+    sortBy: "path" as const,
+    sortDirection: "asc" as const,
+    onSortByChange: () => undefined,
+    onSortDirectionToggle: () => undefined,
+    onApplySort: () => undefined,
+  };
+
   it("renders empty-state copy after a completed search with no matches", () => {
     render(
       <SearchResultsPane
@@ -16,6 +24,7 @@ describe("SearchResultsPane", () => {
         selectedPath=""
         error={null}
         truncated={false}
+        {...defaultSortProps}
         onStopSearch={() => undefined}
         onClearResults={() => undefined}
         onCloseResults={() => undefined}
@@ -53,6 +62,7 @@ describe("SearchResultsPane", () => {
         selectedPath=""
         error={null}
         truncated={false}
+        {...defaultSortProps}
         onStopSearch={() => undefined}
         onClearResults={() => undefined}
         onCloseResults={() => undefined}
@@ -85,6 +95,7 @@ describe("SearchResultsPane", () => {
         selectedPath=""
         error={null}
         truncated={false}
+        {...defaultSortProps}
         onStopSearch={handleStop}
         onClearResults={() => undefined}
         onCloseResults={() => undefined}
@@ -135,6 +146,7 @@ describe("SearchResultsPane", () => {
         selectionLeadPath={null}
         error={null}
         truncated={false}
+        {...defaultSortProps}
         onStopSearch={() => undefined}
         onClearResults={() => undefined}
         onCloseResults={() => undefined}
@@ -163,5 +175,78 @@ describe("SearchResultsPane", () => {
     });
     expect(handleClearSelection).toHaveBeenCalledTimes(2);
     expect(handleContextMenu).toHaveBeenCalledWith(null, { x: 24, y: 36 });
+  });
+
+  it("forwards manual sort controls and restores scroll position", () => {
+    const handleSortByChange = vi.fn();
+    const handleSortDirectionToggle = vi.fn();
+    const handleApplySort = vi.fn();
+    const handleScrollTopChange = vi.fn();
+
+    render(
+      <SearchResultsPane
+        isFocused
+        rootPath="/Users/demo/project"
+        query="app"
+        status="running"
+        results={[
+          {
+            path: "/Users/demo/project/src/App.tsx",
+            name: "App.tsx",
+            extension: "tsx",
+            kind: "file",
+            isHidden: false,
+            isSymlink: false,
+            parentPath: "/Users/demo/project/src",
+            relativeParentPath: "src",
+          },
+        ]}
+        selectedPaths={[]}
+        selectionLeadPath={null}
+        error={null}
+        truncated={false}
+        sortBy="path"
+        sortDirection="asc"
+        onStopSearch={() => undefined}
+        onClearResults={() => undefined}
+        onCloseResults={() => undefined}
+        onSortByChange={handleSortByChange}
+        onSortDirectionToggle={handleSortDirectionToggle}
+        onApplySort={handleApplySort}
+        onSelectionGesture={() => undefined}
+        onClearSelection={() => undefined}
+        onActivateResult={() => undefined}
+        onItemContextMenu={() => undefined}
+        onFocusChange={() => undefined}
+        scrollTop={42}
+        onScrollTopChange={handleScrollTopChange}
+      />,
+    );
+
+    const sortSelect = screen.getByLabelText("Sort search results by");
+    const directionButton = screen.getByRole("button", { name: "Ascending sort" });
+    const applySortButton = screen.getByRole("button", {
+      name: "Apply the selected sort to the current search results",
+    });
+    const scroll = document.querySelector(".search-results-scroll");
+
+    expect(scroll).toHaveProperty("scrollTop", 42);
+
+    fireEvent.change(sortSelect, { target: { value: "name" } });
+    fireEvent.click(directionButton);
+    fireEvent.click(applySortButton);
+    if (!scroll) {
+      throw new Error("Missing search results scroll container.");
+    }
+    fireEvent.scroll(scroll, { target: { scrollTop: 96 } });
+
+    expect(handleSortByChange).toHaveBeenCalledWith("name");
+    expect(handleSortDirectionToggle).toHaveBeenCalledTimes(1);
+    expect(handleApplySort).toHaveBeenCalledTimes(1);
+    expect(handleScrollTopChange).toHaveBeenCalledWith(96);
+    expect(applySortButton).toHaveAttribute(
+      "title",
+      "Apply the selected sort to the current search results (Cmd+R)",
+    );
   });
 });

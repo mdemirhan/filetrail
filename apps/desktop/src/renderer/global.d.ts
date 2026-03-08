@@ -7,7 +7,11 @@ declare global {
         channel: C,
         payload: IpcRequestInput<C>,
       ): Promise<IpcResponse<C>>;
-      onCommand(listener: (command: { type: "focusFileSearch" | "copyPath" }) => void): () => void;
+      onCommand(
+        listener: (command: {
+          type: "focusFileSearch" | "copyPath" | "refreshOrApplySearchSort";
+        }) => void,
+      ): () => void;
     };
   }
 }

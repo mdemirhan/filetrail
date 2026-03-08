@@ -11,6 +11,8 @@ import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 import {
   DEFAULT_APP_PREFERENCES,
   type ExplorerViewMode,
+  type SearchResultsSortByPreference,
+  type SearchResultsSortDirectionPreference,
   THEME_OPTIONS,
   TYPEAHEAD_DEBOUNCE_OPTIONS,
   type ThemeMode,
@@ -62,6 +64,7 @@ import { formatDateTime, formatPermissionMode, formatSize } from "./lib/formatti
 import { EXPLORER_LAYOUT } from "./lib/layoutTokens";
 import { createRendererLogger } from "./lib/logging";
 import { resolveExplorerToolbarLayout, resolveSinglePanelLayout } from "./lib/responsiveLayout";
+import { appendSearchResults, sortSearchResults } from "./lib/searchResults";
 import { resolveStartupNavigation } from "./lib/startupNavigation";
 import { applyAppearance, getThemeAppearanceDefaults } from "./lib/theme";
 import { getTreeKeyboardAction } from "./lib/treeView";
@@ -77,6 +80,8 @@ type SearchResultItem = IpcResponse<"search:getUpdate">["items"][number];
 type SearchPatternMode = IpcRequest<"search:start">["patternMode"];
 type SearchMatchScope = IpcRequest<"search:start">["matchScope"];
 type SearchJobStatus = IpcResponse<"search:getUpdate">["status"];
+type SearchResultsSortBy = SearchResultsSortByPreference;
+type SearchResultsSortDirection = SearchResultsSortDirectionPreference;
 type ContextMenuState = {
   x: number;
   y: number;
@@ -106,7 +111,11 @@ const SHORTCUT_ITEMS = [
       "Open the selected item from the file list, or expand the current folder in the tree",
   },
   { group: "Navigation", shortcut: "Cmd+L", description: "Open Go to Folder" },
-  { group: "Navigation", shortcut: "Cmd+R", description: "Refresh the current folder" },
+  {
+    group: "Navigation",
+    shortcut: "Cmd+R",
+    description: "Refresh the current folder when search results are not visible",
+  },
   {
     group: "Navigation",
     shortcut: "Cmd+Option+C",
@@ -122,6 +131,11 @@ const SHORTCUT_ITEMS = [
     group: "Search",
     shortcut: "Cmd+Shift+F",
     description: "Show cached search results without opening the search box",
+  },
+  {
+    group: "Search",
+    shortcut: "Cmd+R",
+    description: "Apply the selected sort to the current search results",
   },
   {
     group: "Search",
@@ -199,6 +213,7 @@ export function App() {
   const [directoryError, setDirectoryError] = useState<string | null>(null);
   const [searchDraftQuery, setSearchDraftQuery] = useState("");
   const [searchCommittedQuery, setSearchCommittedQuery] = useState("");
+  const [searchRootPath, setSearchRootPath] = useState("");
   const [searchPatternMode, setSearchPatternMode] = useState<SearchPatternMode>(
     DEFAULT_APP_PREFERENCES.searchPatternMode,
   );
@@ -209,9 +224,15 @@ export function App() {
   const [searchIncludeHidden, setSearchIncludeHidden] = useState(
     DEFAULT_APP_PREFERENCES.searchIncludeHidden,
   );
+  const [searchResultsSortBy, setSearchResultsSortBy] = useState<SearchResultsSortBy>(
+    DEFAULT_APP_PREFERENCES.searchResultsSortBy,
+  );
+  const [searchResultsSortDirection, setSearchResultsSortDirection] =
+    useState<SearchResultsSortDirection>(DEFAULT_APP_PREFERENCES.searchResultsSortDirection);
   const [searchPopoverOpen, setSearchPopoverOpen] = useState(false);
   const [searchResultsVisible, setSearchResultsVisible] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
+  const [searchResultsScrollTop, setSearchResultsScrollTop] = useState(0);
   const [searchStatus, setSearchStatus] = useState<SearchJobStatus | "idle">("idle");
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchTruncated, setSearchTruncated] = useState(false);
@@ -280,6 +301,12 @@ export function App() {
   const searchCommittedQueryRef = useRef("");
   const searchResultsRef = useRef<SearchResultItem[]>([]);
   const searchResultsVisibleRef = useRef(false);
+  const searchResultsSortByRef = useRef<SearchResultsSortBy>(
+    DEFAULT_APP_PREFERENCES.searchResultsSortBy,
+  );
+  const searchResultsSortDirectionRef = useRef<SearchResultsSortDirection>(
+    DEFAULT_APP_PREFERENCES.searchResultsSortDirection,
+  );
   const browseSelectionRef = useRef<ContentSelectionState>(EMPTY_CONTENT_SELECTION);
   const cachedSearchSelectionRef = useRef<ContentSelectionState>(EMPTY_CONTENT_SELECTION);
   const treeRequestRef = useRef<Record<string, number>>({});
@@ -361,6 +388,14 @@ export function App() {
   useEffect(() => {
     searchResultsRef.current = searchResults;
   }, [searchResults]);
+
+  useEffect(() => {
+    searchResultsSortByRef.current = searchResultsSortBy;
+  }, [searchResultsSortBy]);
+
+  useEffect(() => {
+    searchResultsSortDirectionRef.current = searchResultsSortDirection;
+  }, [searchResultsSortDirection]);
 
   useEffect(() => {
     setContentSelection((current) => sanitizeContentSelection(current, activeContentEntries));
@@ -543,6 +578,8 @@ export function App() {
         searchMatchScope,
         searchRecursive,
         searchIncludeHidden,
+        searchResultsSortBy,
+        searchResultsSortDirection,
         treeWidth: panes.treeWidth,
         inspectorWidth: panes.inspectorWidth,
         restoreLastVisitedFolderOnStartup,
@@ -563,6 +600,8 @@ export function App() {
     compactListView,
     compactTreeView,
     searchIncludeHidden,
+    searchResultsSortBy,
+    searchResultsSortDirection,
     searchMatchScope,
     searchPatternMode,
     searchRecursive,
@@ -605,6 +644,10 @@ export function App() {
         setSearchMatchScope(preferences.searchMatchScope);
         setSearchRecursive(preferences.searchRecursive);
         setSearchIncludeHidden(preferences.searchIncludeHidden);
+        searchResultsSortByRef.current = preferences.searchResultsSortBy;
+        searchResultsSortDirectionRef.current = preferences.searchResultsSortDirection;
+        setSearchResultsSortBy(preferences.searchResultsSortBy);
+        setSearchResultsSortDirection(preferences.searchResultsSortDirection);
         setViewMode(preferences.viewMode);
         setFoldersFirst(preferences.foldersFirst);
         setCompactListView(preferences.compactListView);
@@ -709,6 +752,14 @@ export function App() {
         }
         return;
       }
+      if (command.type === "refreshOrApplySearchSort") {
+        if (isSearchMode) {
+          applySearchResultsSort();
+          return;
+        }
+        void refreshDirectory();
+        return;
+      }
       if (command.type !== "focusFileSearch") {
         return;
       }
@@ -732,7 +783,15 @@ export function App() {
       });
     });
     return unsubscribe;
-  }, [client, contextMenuState, currentPath, searchResultEntries, selectedPathsInViewOrder]);
+  }, [
+    applySearchResultsSort,
+    client,
+    contextMenuState,
+    currentPath,
+    isSearchMode,
+    searchResultEntries,
+    selectedPathsInViewOrder,
+  ]);
 
   useEffect(() => {
     if (!searchPopoverOpen) {
@@ -985,6 +1044,10 @@ export function App() {
       }
       if (event.metaKey && event.key.toLowerCase() === "r") {
         event.preventDefault();
+        if (isSearchMode) {
+          applySearchResultsSort();
+          return;
+        }
         void refreshDirectory();
         return;
       }
@@ -1446,20 +1509,15 @@ export function App() {
     await cancelActiveSearch();
     searchSessionRef.current += 1;
     setSearchCommittedQuery("");
+    setSearchRootPath("");
     setSearchResults([]);
+    setSearchResultsScrollTop(0);
     setSearchStatus("idle");
     setSearchError(null);
     setSearchTruncated(false);
     setSearchResultsVisible(false);
     cachedSearchSelectionRef.current = EMPTY_CONTENT_SELECTION;
     setContentSelection(sanitizeContentSelection(browseSelectionRef.current, currentEntries));
-  }
-
-  function mergeSearchResults(
-    current: SearchResultItem[],
-    next: SearchResultItem[],
-  ): SearchResultItem[] {
-    return [...current, ...next].sort(compareSearchResults);
   }
 
   function pollSearch(jobId: string, cursor: number, sessionId: number): void {
@@ -1470,7 +1528,7 @@ export function App() {
           return;
         }
         setSearchResults((current) =>
-          response.items.length > 0 ? mergeSearchResults(current, response.items) : current,
+          response.items.length > 0 ? appendSearchResults(current, response.items) : current,
         );
         setSearchStatus(response.status);
         setSearchError(response.error);
@@ -1506,11 +1564,12 @@ export function App() {
     }> = {},
   ) {
     const trimmedQuery = query.trim();
+    const rootPath = overrides.rootPath ?? currentPath;
     if (trimmedQuery.length === 0) {
       await clearCommittedSearch();
       return;
     }
-    if (currentPath.length === 0) {
+    if (rootPath.length === 0) {
       return;
     }
     await cancelActiveSearch();
@@ -1518,8 +1577,10 @@ export function App() {
     const sessionId = searchSessionRef.current + 1;
     searchSessionRef.current = sessionId;
     setSearchCommittedQuery(trimmedQuery);
+    setSearchRootPath(rootPath);
     setSearchResultsVisible(true);
     setSearchResults([]);
+    setSearchResultsScrollTop(0);
     setSearchStatus("running");
     setSearchError(null);
     setSearchTruncated(false);
@@ -1528,7 +1589,7 @@ export function App() {
 
     try {
       const response = await client.invoke("search:start", {
-        rootPath: overrides.rootPath ?? currentPath,
+        rootPath,
         query: trimmedQuery,
         patternMode: overrides.patternMode ?? searchPatternMode,
         matchScope: overrides.matchScope ?? searchMatchScope,
@@ -1556,28 +1617,61 @@ export function App() {
   function updateSearchPatternMode(nextValue: SearchPatternMode) {
     setSearchPatternMode(nextValue);
     if (hasCachedSearch) {
-      void startSearch(searchCommittedQuery, { patternMode: nextValue });
+      void startSearch(searchCommittedQuery, {
+        patternMode: nextValue,
+        rootPath: searchRootPath || currentPath,
+      });
     }
   }
 
   function updateSearchMatchScope(nextValue: SearchMatchScope) {
     setSearchMatchScope(nextValue);
     if (hasCachedSearch) {
-      void startSearch(searchCommittedQuery, { matchScope: nextValue });
+      void startSearch(searchCommittedQuery, {
+        matchScope: nextValue,
+        rootPath: searchRootPath || currentPath,
+      });
     }
   }
 
   function updateSearchRecursive(nextValue: boolean) {
     setSearchRecursive(nextValue);
     if (hasCachedSearch) {
-      void startSearch(searchCommittedQuery, { recursive: nextValue });
+      void startSearch(searchCommittedQuery, {
+        recursive: nextValue,
+        rootPath: searchRootPath || currentPath,
+      });
     }
+  }
+
+  function applySearchResultsSort() {
+    const sortBy = searchResultsSortByRef.current;
+    const sortDirection = searchResultsSortDirectionRef.current;
+    setSearchResults((current) =>
+      sortSearchResults(current, sortBy, sortDirection),
+    );
+  }
+
+  function updateSearchResultsSortBy(nextValue: SearchResultsSortBy) {
+    searchResultsSortByRef.current = nextValue;
+    setSearchResultsSortBy(nextValue);
+  }
+
+  function toggleSearchResultsSortDirection() {
+    setSearchResultsSortDirection((current) => {
+      const nextValue = current === "asc" ? "desc" : "asc";
+      searchResultsSortDirectionRef.current = nextValue;
+      return nextValue;
+    });
   }
 
   function updateSearchIncludeHidden(nextValue: boolean) {
     setSearchIncludeHidden(nextValue);
     if (hasCachedSearch) {
-      void startSearch(searchCommittedQuery, { includeHidden: nextValue });
+      void startSearch(searchCommittedQuery, {
+        includeHidden: nextValue,
+        rootPath: searchRootPath || currentPath,
+      });
     }
   }
 
@@ -2545,10 +2639,10 @@ export function App() {
               <section className="main-shell">
                 {isSearchMode ? (
                   <SearchResultsPane
-                    key={`${currentPath}:${searchCommittedQuery}`}
+                    key={`${searchRootPath}:${searchCommittedQuery}`}
                     paneRef={contentPaneRef}
                     isFocused={focusedPane === "content"}
-                    rootPath={currentPath}
+                    rootPath={searchRootPath}
                     query={searchCommittedQuery}
                     status={searchStatus}
                     results={searchResults}
@@ -2556,6 +2650,8 @@ export function App() {
                     selectionLeadPath={contentSelection.leadPath}
                     error={searchError}
                     truncated={searchTruncated}
+                    sortBy={searchResultsSortBy}
+                    sortDirection={searchResultsSortDirection}
                     onStopSearch={() => {
                       void stopSearch();
                     }}
@@ -2570,6 +2666,9 @@ export function App() {
                       hideSearchResults();
                       focusContentPane();
                     }}
+                    onSortByChange={updateSearchResultsSortBy}
+                    onSortDirectionToggle={toggleSearchResultsSortDirection}
+                    onApplySort={applySearchResultsSort}
                     onSelectionGesture={handleContentSelectionGesture}
                     onClearSelection={clearContentSelection}
                     onActivateResult={(item) => {
@@ -2579,6 +2678,8 @@ export function App() {
                       openItemContextMenu(path, position, "search");
                     }}
                     onFocusChange={(focused) => setFocusedPane(focused ? "content" : null)}
+                    scrollTop={searchResultsScrollTop}
+                    onScrollTopChange={setSearchResultsScrollTop}
                     typeaheadQuery={focusedPane === "content" ? typeaheadQuery : ""}
                   />
                 ) : (
@@ -2854,13 +2955,6 @@ function toDirectoryEntryFromSearchResult(result: SearchResultItem): DirectoryEn
     isHidden: result.isHidden,
     isSymlink: result.isSymlink,
   };
-}
-
-function compareSearchResults(left: SearchResultItem, right: SearchResultItem): number {
-  return (
-    left.name.localeCompare(right.name, undefined, { sensitivity: "base" }) ||
-    left.path.localeCompare(right.path, undefined, { sensitivity: "base" })
-  );
 }
 
 function createTreeNode(path: string, expanded: boolean): TreeNodeState {

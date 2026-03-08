@@ -1,6 +1,10 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { IpcResponse } from "@filetrail/contracts";
+import type {
+  SearchResultsSortByPreference,
+  SearchResultsSortDirectionPreference,
+} from "../../shared/appPreferences";
 
 import { useElementSize } from "../hooks/useElementSize";
 import { FileIcon } from "../lib/fileIcons";
@@ -29,15 +33,22 @@ export function SearchResultsPane({
   selectionLeadPath = selectedPath || null,
   error,
   truncated,
+  sortBy,
+  sortDirection,
   onStopSearch,
   onClearResults,
   onCloseResults,
+  onSortByChange,
+  onSortDirectionToggle,
+  onApplySort,
   onSelectPath,
   onSelectionGesture = (path) => onSelectPath?.(path),
   onClearSelection = () => undefined,
   onActivateResult,
   onItemContextMenu = () => undefined,
   onFocusChange,
+  scrollTop = 0,
+  onScrollTopChange = () => undefined,
   typeaheadQuery,
 }: {
   paneRef?: React.RefObject<HTMLElement | null>;
@@ -51,21 +62,39 @@ export function SearchResultsPane({
   selectionLeadPath?: string | null;
   error: string | null;
   truncated: boolean;
+  sortBy: SearchResultsSortByPreference;
+  sortDirection: SearchResultsSortDirectionPreference;
   onStopSearch: () => void;
   onClearResults: () => void;
   onCloseResults: () => void;
+  onSortByChange: (value: SearchResultsSortByPreference) => void;
+  onSortDirectionToggle: () => void;
+  onApplySort: () => void;
   onSelectPath?: (path: string) => void;
   onSelectionGesture?: (path: string, modifiers: SelectionGestureModifiers) => void;
   onClearSelection?: () => void;
   onActivateResult: (item: SearchResultItem) => void;
   onItemContextMenu?: (path: string | null, position: { x: number; y: number }) => void;
   onFocusChange: (focused: boolean) => void;
+  scrollTop?: number;
+  onScrollTopChange?: (value: number) => void;
   typeaheadQuery?: string;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const { height } = useElementSize(scrollRef);
-  const [scrollTop, setScrollTop] = useState(0);
+  const [internalScrollTop, setInternalScrollTop] = useState(scrollTop);
   const selectedPathSet = useMemo(() => new Set(selectedPaths), [selectedPaths]);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      if (Math.abs(scrollRef.current.scrollTop - scrollTop) > 1) {
+        scrollRef.current.scrollTop = scrollTop;
+      }
+      setInternalScrollTop(scrollRef.current.scrollTop);
+      return;
+    }
+    setInternalScrollTop(scrollTop);
+  }, [scrollTop]);
 
   const range = useMemo(
     () =>
@@ -73,10 +102,10 @@ export function SearchResultsPane({
         itemCount: results.length,
         itemSize: SEARCH_RESULT_ROW_HEIGHT,
         viewportSize: height,
-        scrollOffset: scrollTop,
+        scrollOffset: internalScrollTop,
         overscan: 8,
       }),
-    [height, results.length, scrollTop],
+    [height, internalScrollTop, results.length],
   );
   const visibleResults = results.slice(range.startIndex, range.endIndex);
 
@@ -137,7 +166,11 @@ export function SearchResultsPane({
             y: event.clientY,
           });
         }}
-        onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+        onScroll={(event) => {
+          const nextScrollTop = event.currentTarget.scrollTop;
+          setInternalScrollTop(nextScrollTop);
+          onScrollTopChange(nextScrollTop);
+        }}
       >
         <div className="search-results-actions">
           <div className="search-results-actions-buttons">
@@ -154,6 +187,42 @@ export function SearchResultsPane({
             <button type="button" className="search-results-action-button" onClick={onClearResults}>
               <ToolbarIcon name="clear" />
               Clear
+            </button>
+          </div>
+          <div className="search-results-actions-tools">
+            <fieldset className="toolbar-select-group search-results-sort-controls">
+              <legend className="sr-only">Search result sorting</legend>
+              <button
+                type="button"
+                className="tb-btn tb-btn-icon"
+                onClick={onSortDirectionToggle}
+                title={sortDirection === "asc" ? "Ascending sort" : "Descending sort"}
+                aria-label={sortDirection === "asc" ? "Ascending sort" : "Descending sort"}
+              >
+                <ToolbarIcon name={sortDirection === "asc" ? "sortAsc" : "sortDesc"} />
+              </button>
+              <select
+                className="toolbar-select"
+                value={sortBy}
+                onChange={(event) =>
+                  onSortByChange(event.currentTarget.value as SearchResultsSortByPreference)
+                }
+                title="Sort search results by"
+                aria-label="Sort search results by"
+              >
+                <option value="path">Path</option>
+                <option value="name">Name</option>
+              </select>
+            </fieldset>
+            <button
+              type="button"
+              className="search-results-action-button"
+              onClick={onApplySort}
+              title="Apply the selected sort to the current search results (Cmd+R)"
+              aria-label="Apply the selected sort to the current search results"
+            >
+              <ToolbarIcon name="refresh" />
+              Apply Sort
             </button>
           </div>
         </div>

@@ -4,7 +4,11 @@ import type { IpcChannel, IpcRequestInput, IpcResponse } from "@filetrail/contra
 
 export type FiletrailClient = {
   invoke<C extends IpcChannel>(channel: C, payload: IpcRequestInput<C>): Promise<IpcResponse<C>>;
-  onCommand(listener: (command: { type: "focusFileSearch" | "copyPath" }) => void): () => void;
+  onCommand(
+    listener: (command: {
+      type: "focusFileSearch" | "copyPath" | "refreshOrApplySearchSort";
+    }) => void,
+  ): () => void;
 };
 
 const MISSING_PRELOAD_ERROR =
