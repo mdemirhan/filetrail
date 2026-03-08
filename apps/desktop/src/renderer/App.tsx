@@ -39,7 +39,7 @@ import {
 } from "./components/ItemContextMenu";
 import { InfoPanel } from "./components/GetInfoPanel";
 import { LocationSheet } from "./components/LocationSheet";
-import { SearchResultsPane } from "./components/SearchResultsPane";
+import { SEARCH_RESULT_ROW_HEIGHT, SearchResultsPane } from "./components/SearchResultsPane";
 import { SettingsView } from "./components/SettingsView";
 import { ToolbarIcon } from "./components/ToolbarIcon";
 import { type TreeNodeState, TreePane } from "./components/TreePane";
@@ -1454,7 +1454,7 @@ export function App() {
 
       const stepItems = getPageStepItemCount(
         target.element.clientHeight,
-        isSearchMode ? 56 : getDetailsRowHeight(compactDetailsView),
+        isSearchMode ? SEARCH_RESULT_ROW_HEIGHT : getDetailsRowHeight(compactDetailsView),
       );
       const nextIndex = getPagedSelectionIndex({
         itemCount: activeContentEntries.length,

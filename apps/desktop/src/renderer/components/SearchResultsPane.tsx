@@ -20,7 +20,7 @@ type SelectionGestureModifiers = {
   shiftKey: boolean;
 };
 
-const SEARCH_RESULT_ROW_HEIGHT = 56;
+export const SEARCH_RESULT_ROW_HEIGHT = 50;
 
 export function SearchResultsPane({
   paneRef,
