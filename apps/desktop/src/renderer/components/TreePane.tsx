@@ -81,11 +81,17 @@ export function TreePane({
   const root = nodes[rootPath];
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const clickTimeoutRef = useRef<number | null>(null);
+  const scrollFrameRef = useRef<number | null>(null);
+  const lastScrolledPathRef = useRef<string | null>(null);
+  const lastScrolledRowRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(
     () => () => {
       if (clickTimeoutRef.current !== null) {
         window.clearTimeout(clickTimeoutRef.current);
+      }
+      if (scrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollFrameRef.current);
       }
     },
     [],
@@ -96,10 +102,24 @@ export function TreePane({
     if (!currentRow || typeof currentRow.scrollIntoView !== "function") {
       return;
     }
-    currentRow.scrollIntoView({
-      block: "nearest",
+    if (lastScrolledPathRef.current === currentPath && lastScrolledRowRef.current === currentRow) {
+      return;
+    }
+    scrollFrameRef.current = window.requestAnimationFrame(() => {
+      currentRow.scrollIntoView({
+        block: "nearest",
+      });
+      lastScrolledPathRef.current = currentPath;
+      lastScrolledRowRef.current = currentRow;
+      scrollFrameRef.current = null;
     });
-  }, [currentPath]);
+    return () => {
+      if (scrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollFrameRef.current);
+        scrollFrameRef.current = null;
+      }
+    };
+  });
 
   if (!root) {
     return (

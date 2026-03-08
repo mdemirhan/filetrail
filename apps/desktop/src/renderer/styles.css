@@ -1586,15 +1586,23 @@ body.resizing-panels * {
 }
 
 .pathbar {
+  justify-content: flex-start;
   gap: 2px;
-  overflow: auto hidden;
+  overflow: hidden;
   white-space: nowrap;
   padding: 0;
   background: transparent;
 }
 
+.pathbar.pathbar-expanded {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
 .pathbar-item {
   display: inline-flex;
+  flex: 0 1 auto;
   align-items: center;
   gap: 2px;
   height: auto;
@@ -1611,9 +1619,10 @@ body.resizing-panels * {
 
 .pathbar-segment {
   display: inline-flex;
+  flex: 0 1 auto;
   align-items: center;
   height: 22px;
-  max-width: 240px;
+  max-width: 220px;
   min-width: 0;
   padding: 0 8px;
   border: 0;
@@ -1638,9 +1647,18 @@ body.resizing-panels * {
 }
 
 .pathbar-segment.active {
+  max-width: 320px;
   background: var(--crumb-active-bg);
   color: var(--fg-bright, var(--text-primary));
   font-weight: 600;
+}
+
+.pathbar-segment-collapsed {
+  flex: 0 0 auto;
+  justify-content: center;
+  max-width: none;
+  min-width: 30px;
+  padding: 0 6px;
 }
 
 .pathbar-segment:focus-visible {
@@ -1859,16 +1877,28 @@ body.resizing-panels * {
 .sidebar-tree {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
 }
 
 .tree-scroll {
+  width: 100%;
   height: 100%;
+  overflow-x: scroll;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .tree-list {
+  min-width: 100%;
+  width: max-content;
   padding: 6px 0 16px;
   background: transparent;
+}
+
+.tree-branch {
+  min-width: 100%;
+  width: max-content;
 }
 
 .compact-tree-view .tree-list {
@@ -1895,6 +1925,8 @@ body.resizing-panels * {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: calc(100% - 12px);
+  width: max-content;
   min-height: 30px;
   margin: 1px 6px;
   padding-right: 8px;
@@ -1949,8 +1981,8 @@ body.resizing-panels * {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-width: 0;
-  flex: 1;
+  min-width: max-content;
+  flex: 0 0 auto;
   padding: 4px 0;
   text-align: left;
   font-size: 13px;
@@ -1966,9 +1998,7 @@ body.resizing-panels * {
 }
 
 .tree-label-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
   white-space: nowrap;
 }
 

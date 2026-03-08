@@ -1,6 +1,7 @@
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
 
 export type ContextMenuActionId =
+  | "revealInFolder"
   | "open"
   | "openWith"
   | "info"
@@ -43,6 +44,7 @@ type ContextMenuSubmenuItem =
     };
 
 type ContextMenuIconName =
+  | "revealInFolder"
   | "open"
   | "openWith"
   | "info"
@@ -56,7 +58,7 @@ type ContextMenuIconName =
   | "copyPath"
   | "trash";
 
-export const CONTEXT_MENU_ITEMS: readonly ContextMenuItem[] = [
+export const BROWSE_CONTEXT_MENU_ITEMS: readonly ContextMenuItem[] = [
   { id: "open", label: "Open", icon: "open", shortcut: "⏎" },
   { id: "openWith", label: "Open With", icon: "openWith", hasSubmenu: true },
   { type: "separator", key: "separator-open" },
@@ -76,6 +78,12 @@ export const CONTEXT_MENU_ITEMS: readonly ContextMenuItem[] = [
   { id: "trash", label: "Move to Trash", icon: "trash", shortcut: "⌘⌫", destructive: true },
 ] as const;
 
+export const SEARCH_CONTEXT_MENU_ITEMS: readonly ContextMenuItem[] = [
+  { id: "revealInFolder", label: "Reveal in Folder", icon: "revealInFolder" },
+  { type: "separator", key: "separator-reveal" },
+  ...BROWSE_CONTEXT_MENU_ITEMS,
+] as const;
+
 export const CONTEXT_MENU_SUBMENU_ITEMS: readonly ContextMenuSubmenuItem[] = [
   { id: "vscode", label: "Visual Studio Code" },
   { id: "sublime", label: "Sublime Text" },
@@ -88,12 +96,14 @@ export const CONTEXT_MENU_SUBMENU_ITEMS: readonly ContextMenuSubmenuItem[] = [
 export function ItemContextMenu({
   anchorX,
   anchorY,
+  variant = "browse",
   open,
   onAction,
   onSubmenuAction,
 }: {
   anchorX: number;
   anchorY: number;
+  variant?: "browse" | "search";
   open: boolean;
   onAction: (actionId: ContextMenuActionId) => void;
   onSubmenuAction: (actionId: ContextMenuSubmenuActionId) => void;
@@ -117,6 +127,7 @@ export function ItemContextMenu({
       }) satisfies CSSProperties,
     [anchorX, anchorY],
   );
+  const items = variant === "search" ? SEARCH_CONTEXT_MENU_ITEMS : BROWSE_CONTEXT_MENU_ITEMS;
 
   if (!open) {
     return null;
@@ -125,7 +136,7 @@ export function ItemContextMenu({
   return (
     <div className="context-menu-layer" style={menuStyle}>
       <div className="context-menu">
-        {CONTEXT_MENU_ITEMS.map((item) => {
+        {items.map((item) => {
           if (item.type === "separator") {
             return <div key={item.key} className="context-menu-separator" />;
           }
@@ -184,6 +195,15 @@ export function ItemContextMenu({
 }
 
 function ContextMenuIcon({ name }: { name: ContextMenuIconName }) {
+  if (name === "revealInFolder") {
+    return (
+      <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+        <path d="M12 10h6" />
+        <path d="M15 7l3 3-3 3" />
+      </svg>
+    );
+  }
   if (name === "open") {
     return (
       <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">

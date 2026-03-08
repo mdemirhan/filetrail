@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 
@@ -10,8 +10,26 @@ import { buildColumnMajorRows, getVirtualRange } from "../lib/virtualization";
 type DirectoryEntry = IpcResponse<"directory:getSnapshot">["entries"][number];
 type DirectoryEntryMetadata = IpcResponse<"directory:getMetadataBatch">["items"][number];
 type PathSuggestion = IpcResponse<"path:getSuggestions">["suggestions"][number];
+type PathbarSegment = { label: string; path: string };
+type PathbarDisplayItem =
+  | {
+      kind: "segment";
+      segment: PathbarSegment;
+      isActive: boolean;
+    }
+  | {
+      kind: "collapsed";
+      key: string;
+      hiddenCount: number;
+    };
 
 const PATH_SUGGESTION_DEBOUNCE_MS = 350;
+const PATHBAR_WIDTH_SAFETY_MARGIN = 12;
+const PATHBAR_SEPARATOR_WIDTH = 16;
+const PATHBAR_COLLAPSED_WIDTH = 34;
+const PATHBAR_SEGMENT_HORIZONTAL_PADDING = 18;
+const PATHBAR_MAX_SEGMENT_WIDTH = 220;
+const PATHBAR_MAX_ACTIVE_SEGMENT_WIDTH = 320;
 const FLOW_LIST_LAYOUT = {
   rowHeight: 44,
   rowGap: 4,
@@ -86,9 +104,11 @@ export function ContentPane({
   typeaheadQuery?: string;
 }) {
   const [pathEditorOpen, setPathEditorOpen] = useState(false);
+  const [pathbarExpanded, setPathbarExpanded] = useState(false);
   const [draftPath, setDraftPath] = useState(currentPath);
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const pathInputRef = useRef<HTMLInputElement | null>(null);
+  const pathbarRef = useRef<HTMLElement | null>(null);
   const pathEditorShellRef = useRef<HTMLDivElement | null>(null);
   const suggestionsRef = useRef<HTMLDivElement | null>(null);
   const segmentClickTimeoutRef = useRef<number | null>(null);
@@ -99,6 +119,11 @@ export function ContentPane({
   const [pathSuggestions, setPathSuggestions] = useState<PathSuggestion[]>([]);
   const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState(-1);
   const pathSegments = useMemo(() => buildPathSegments(currentPath), [currentPath]);
+  const { width: pathbarWidth } = useElementSize(pathbarRef);
+  const visiblePathItems = useMemo(() => {
+    const fonts = getPathbarFonts();
+    return resolveVisiblePathbarItems(pathSegments, pathbarWidth, fonts, pathbarExpanded);
+  }, [pathSegments, pathbarWidth, pathbarExpanded]);
   const displayedPath = previewPath ?? draftPath;
   useEffect(() => {
     if (segmentClickTimeoutRef.current !== null) {
@@ -114,6 +139,7 @@ export function ContentPane({
     setPreviewPath(null);
     setPathSuggestions([]);
     setHighlightedSuggestionIndex(-1);
+    setPathbarExpanded(false);
     pendingSuggestionInputRef.current = "";
   }, [currentPath]);
 
@@ -164,6 +190,58 @@ export function ContentPane({
     },
     [],
   );
+
+  useEffect(() => {
+    if (!pathbarExpanded) {
+      return;
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && pathbarRef.current?.contains(target)) {
+        return;
+      }
+      setPathbarExpanded(false);
+    };
+    window.addEventListener("pointerdown", handlePointerDown, true);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown, true);
+    };
+  }, [pathbarExpanded]);
+
+  useEffect(() => {
+    if (!pathbarExpanded) {
+      return;
+    }
+    const handleMouseMove = (event: MouseEvent) => {
+      const target = event.target;
+      if (target instanceof Node && pathbarRef.current?.contains(target)) {
+        return;
+      }
+      setPathbarExpanded(false);
+    };
+    window.addEventListener("mousemove", handleMouseMove, true);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove, true);
+    };
+  }, [pathbarExpanded]);
+
+  useLayoutEffect(() => {
+    if (!pathbarExpanded) {
+      return;
+    }
+    const pathbar = pathbarRef.current;
+    if (!pathbar) {
+      return;
+    }
+    const syncScroll = () => {
+      pathbar.scrollLeft = Math.max(0, pathbar.scrollWidth - pathbar.clientWidth);
+    };
+    syncScroll();
+    const frameId = window.requestAnimationFrame(syncScroll);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [pathbarExpanded]);
 
   function scheduleSuggestionsRequest(inputPath: string): void {
     if (suggestionDebounceTimeoutRef.current !== null) {
@@ -407,38 +485,58 @@ export function ContentPane({
           </form>
         ) : (
           <nav
-            className="pathbar"
+            ref={pathbarRef}
+            className={`pathbar${pathbarExpanded ? " pathbar-expanded" : ""}`}
             aria-label="Folder path"
-            onDoubleClick={() => setPathEditorOpen(true)}
+            onDoubleClick={() => {
+              setPathbarExpanded(false);
+              setPathEditorOpen(true);
+            }}
           >
-            {pathSegments.map((segment, index) => (
-              <div key={segment.path} className="pathbar-item">
+            {visiblePathItems.map((item, index) => (
+              <div
+                key={item.kind === "segment" ? item.segment.path : item.key}
+                className="pathbar-item"
+              >
                 {index > 0 ? <span className="pathbar-separator">›</span> : null}
-                <button
-                  type="button"
-                  className={`pathbar-segment${index === pathSegments.length - 1 ? " active" : ""}`}
-                  onClick={() => {
-                    if (segmentClickTimeoutRef.current !== null) {
-                      window.clearTimeout(segmentClickTimeoutRef.current);
-                    }
-                    segmentClickTimeoutRef.current = window.setTimeout(() => {
-                      segmentClickTimeoutRef.current = null;
-                      onNavigatePath(segment.path);
-                    }, 180);
-                  }}
-                  onDoubleClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    if (segmentClickTimeoutRef.current !== null) {
-                      window.clearTimeout(segmentClickTimeoutRef.current);
-                      segmentClickTimeoutRef.current = null;
-                    }
-                    setPathEditorOpen(true);
-                  }}
-                  title={segment.path}
-                >
-                  <span className="pathbar-segment-label">{segment.label}</span>
-                </button>
+                {item.kind === "segment" ? (
+                  <button
+                    type="button"
+                    className={`pathbar-segment${item.isActive ? " active" : ""}`}
+                    onClick={() => {
+                      if (segmentClickTimeoutRef.current !== null) {
+                        window.clearTimeout(segmentClickTimeoutRef.current);
+                      }
+                      segmentClickTimeoutRef.current = window.setTimeout(() => {
+                        segmentClickTimeoutRef.current = null;
+                        setPathbarExpanded(false);
+                        onNavigatePath(item.segment.path);
+                      }, 180);
+                    }}
+                    onDoubleClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (segmentClickTimeoutRef.current !== null) {
+                        window.clearTimeout(segmentClickTimeoutRef.current);
+                        segmentClickTimeoutRef.current = null;
+                      }
+                      setPathbarExpanded(false);
+                      setPathEditorOpen(true);
+                    }}
+                    title={item.segment.path}
+                  >
+                    <span className="pathbar-segment-label">{item.segment.label}</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="pathbar-segment pathbar-segment-collapsed"
+                    onClick={() => setPathbarExpanded(true)}
+                    title={`Show hidden path segments (${item.hiddenCount})`}
+                  >
+                    <span className="pathbar-segment-label">…</span>
+                  </button>
+                )}
               </div>
             ))}
           </nav>
@@ -488,7 +586,7 @@ export function ContentPane({
   );
 }
 
-function buildPathSegments(path: string): Array<{ label: string; path: string }> {
+function buildPathSegments(path: string): Array<PathbarSegment> {
   if (path === "/") {
     return [{ label: "Macintosh HD", path: "/" }];
   }
@@ -503,6 +601,155 @@ function buildPathSegments(path: string): Array<{ label: string; path: string }>
     });
   }
   return segments;
+}
+
+function resolveVisiblePathbarItems(
+  segments: PathbarSegment[],
+  availableWidth: number,
+  fonts: { normal: string; active: string },
+  expanded: boolean,
+): PathbarDisplayItem[] {
+  const fullItems = segments.map<PathbarDisplayItem>((segment, index) => ({
+    kind: "segment",
+    segment,
+    isActive: index === segments.length - 1,
+  }));
+  const effectiveWidth = Math.max(0, availableWidth - PATHBAR_WIDTH_SAFETY_MARGIN);
+  if (expanded || segments.length <= 4 || effectiveWidth <= 0) {
+    return fullItems;
+  }
+  if (estimatePathbarWidth(fullItems, fonts) <= effectiveWidth) {
+    return fullItems;
+  }
+
+  for (let tailCount = segments.length - 2; tailCount >= 1; tailCount -= 1) {
+    const candidate = buildCollapsedPathbarItems(segments, {
+      includeRoot: true,
+      tailCount,
+    });
+    if (estimatePathbarWidth(candidate, fonts) <= effectiveWidth) {
+      return candidate;
+    }
+  }
+
+  for (let tailCount = segments.length - 1; tailCount >= 1; tailCount -= 1) {
+    const candidate = buildCollapsedPathbarItems(segments, {
+      includeRoot: false,
+      tailCount,
+    });
+    if (estimatePathbarWidth(candidate, fonts) <= effectiveWidth) {
+      return candidate;
+    }
+  }
+
+  return buildCollapsedPathbarItems(segments, { includeRoot: false, tailCount: 1 });
+}
+
+function buildCollapsedPathbarItems(
+  segments: PathbarSegment[],
+  options: { includeRoot: boolean; tailCount: number },
+): PathbarDisplayItem[] {
+  const items: PathbarDisplayItem[] = [];
+  const hiddenStartIndex = options.includeRoot ? 1 : 0;
+  const tailStartIndex = Math.max(hiddenStartIndex, segments.length - options.tailCount);
+  const hiddenCount = Math.max(0, tailStartIndex - hiddenStartIndex);
+
+  if (options.includeRoot) {
+    const rootSegment = segments[0];
+    if (!rootSegment) {
+      return items;
+    }
+    items.push({
+      kind: "segment",
+      segment: rootSegment,
+      isActive: false,
+    });
+  }
+
+  if (hiddenCount > 0) {
+    items.push({
+      kind: "collapsed",
+      key: `collapsed:${options.includeRoot ? "root" : "no-root"}:${options.tailCount}`,
+      hiddenCount,
+    });
+  }
+
+  for (let index = tailStartIndex; index < segments.length; index += 1) {
+    const segment = segments[index];
+    if (!segment) {
+      continue;
+    }
+    items.push({
+      kind: "segment",
+      segment,
+      isActive: index === segments.length - 1,
+    });
+  }
+
+  return items;
+}
+
+function estimatePathbarWidth(
+  items: PathbarDisplayItem[],
+  fonts: { normal: string; active: string },
+): number {
+  return items.reduce((width, item, index) => {
+    const separatorWidth = index > 0 ? PATHBAR_SEPARATOR_WIDTH : 0;
+    if (item.kind === "collapsed") {
+      return width + separatorWidth + PATHBAR_COLLAPSED_WIDTH;
+    }
+    return (
+      width +
+      separatorWidth +
+      estimatePathbarSegmentWidth(
+        item.segment.label,
+        item.isActive,
+        item.isActive ? fonts.active : fonts.normal,
+      )
+    );
+  }, 0);
+}
+
+function estimatePathbarSegmentWidth(label: string, isActive: boolean, font: string): number {
+  const estimatedWidth = PATHBAR_SEGMENT_HORIZONTAL_PADDING + measureTextWidth(label, font);
+  return Math.min(
+    isActive ? PATHBAR_MAX_ACTIVE_SEGMENT_WIDTH : PATHBAR_MAX_SEGMENT_WIDTH,
+    Math.max(48, estimatedWidth),
+  );
+}
+
+function getPathbarFonts(): { normal: string; active: string } {
+  if (typeof document === "undefined") {
+    return {
+      normal: "500 15px system-ui",
+      active: "600 15px system-ui",
+    };
+  }
+  const rootStyle = window.getComputedStyle(document.documentElement);
+  const fontSize = rootStyle.getPropertyValue("--ui-font-size-md").trim() || "15px";
+  const fontFamily = rootStyle.getPropertyValue("--font-sans").trim() || "system-ui";
+  const normalWeight = rootStyle.getPropertyValue("--ui-font-weight").trim() || "500";
+  return {
+    normal: `${normalWeight} ${fontSize} ${fontFamily}`,
+    active: `600 ${fontSize} ${fontFamily}`,
+  };
+}
+
+let textMeasureContext: CanvasRenderingContext2D | null = null;
+
+function measureTextWidth(text: string, font: string): number {
+  if (typeof document === "undefined") {
+    return text.length * 8;
+  }
+  if (!textMeasureContext) {
+    const canvas = document.createElement("canvas");
+    textMeasureContext = canvas.getContext("2d");
+  }
+  if (!textMeasureContext) {
+    return text.length * 8;
+  }
+  textMeasureContext.font = font;
+  return Math.ceil(textMeasureContext.measureText(text).width);
 }
 
 function FlowListView({

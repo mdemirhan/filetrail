@@ -232,6 +232,7 @@ export function App() {
     x: number;
     y: number;
     path: string;
+    source: "browse" | "search";
   } | null>(null);
   const [actionNotice, setActionNotice] = useState<{
     title: string;
@@ -1112,7 +1113,11 @@ export function App() {
     };
   }
 
-  function openItemContextMenu(path: string, position: { x: number; y: number }) {
+  function openItemContextMenu(
+    path: string,
+    position: { x: number; y: number },
+    source: "browse" | "search" = "browse",
+  ) {
     const resolvedPosition = resolveContextMenuPosition(position.x, position.y);
     setSelectedPath(path);
     setFocusedPane("content");
@@ -1122,6 +1127,7 @@ export function App() {
     setContextMenuState({
       ...resolvedPosition,
       path,
+      source,
     });
   }
 
@@ -1148,11 +1154,33 @@ export function App() {
   }
 
   async function copyPathToClipboard(path: string) {
-    await client.invoke("system:copyText", { text: path });
+    await client.invoke("system:copyText", { text: formatPathForShell(path) });
+  }
+
+  async function revealSearchResultInFolder(path: string) {
+    const folderPath = parentDirectoryPath(path);
+    if (!folderPath) {
+      return;
+    }
+    setSearchPopoverOpen(false);
+    searchInputRef.current?.blur();
+    const didNavigate = await navigateTo(
+      folderPath,
+      folderPath === currentPath ? "replace" : "push",
+    );
+    if (!didNavigate) {
+      return;
+    }
+    setSelectedPath(path);
+    focusContentPane();
   }
 
   async function runContextMenuAction(actionId: ContextMenuActionId, path: string) {
     closeContextMenu();
+    if (actionId === "revealInFolder") {
+      await revealSearchResultInFolder(path);
+      return;
+    }
     if (actionId === "copyPath") {
       try {
         await copyPathToClipboard(path);
@@ -2422,7 +2450,7 @@ export function App() {
                       void activateEntry(toDirectoryEntryFromSearchResult(item));
                     }}
                     onItemContextMenu={(item, position) => {
-                      openItemContextMenu(item.path, position);
+                      openItemContextMenu(item.path, position, "search");
                     }}
                     onFocusChange={(focused) => setFocusedPane(focused ? "content" : null)}
                     typeaheadQuery={focusedPane === "content" ? typeaheadQuery : ""}
@@ -2458,7 +2486,7 @@ export function App() {
                       })
                     }
                     onItemContextMenu={(entry, position) => {
-                      openItemContextMenu(entry.path, position);
+                      openItemContextMenu(entry.path, position, "browse");
                     }}
                     compactListView={compactListView}
                     tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
@@ -2575,6 +2603,7 @@ export function App() {
         <ItemContextMenu
           anchorX={contextMenuState.x}
           anchorY={contextMenuState.y}
+          variant={contextMenuState.source}
           open
           onAction={(actionId) => {
             void runContextMenuAction(actionId, contextMenuTargetEntry.path);
@@ -2591,6 +2620,13 @@ export function App() {
       ) : null}
     </main>
   );
+}
+
+function formatPathForShell(path: string): string {
+  if (!/\s/.test(path)) {
+    return path;
+  }
+  return `'${path.replaceAll("'", "'\\''")}'`;
 }
 
 function DetailRow({
