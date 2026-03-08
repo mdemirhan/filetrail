@@ -36,6 +36,7 @@ describe("explorerService", () => {
       false,
       "name",
       "asc",
+      true,
       fakeFileSystem,
     );
     expect(snapshot.entries.map((entry) => entry.name)).toEqual(["Alpha", "beta", "zeta.txt"]);
@@ -54,6 +55,7 @@ describe("explorerService", () => {
     expect(response.item.kind).toBe("file");
     expect(response.item.sizeBytes).toBe(11);
     expect(response.item.kindLabel).toBe("TXT File");
+    expect(response.item.permissionMode).not.toBeNull();
   });
 
   it("sorts files by modified time when requested", async () => {
@@ -82,6 +84,7 @@ describe("explorerService", () => {
       false,
       "modified",
       "desc",
+      true,
       fakeFileSystem,
     );
 
@@ -111,6 +114,7 @@ describe("explorerService", () => {
       false,
       "kind",
       "asc",
+      true,
       fakeFileSystem,
     );
     expect(snapshot.entries.map((entry) => entry.name)).toEqual([
@@ -142,9 +146,35 @@ describe("explorerService", () => {
       false,
       "size",
       "desc",
+      true,
       fakeFileSystem,
     );
     expect(snapshot.entries.map((entry) => entry.name)).toEqual(["large.txt", "small.txt"]);
+  });
+
+  it("combines folders and files when folders-first sorting is disabled", async () => {
+    const fakeFileSystem = {
+      readdir: vi.fn(async () => [
+        fakeDirent("zeta", { directory: true }),
+        fakeDirent("alpha.txt", { file: true }),
+      ]),
+      stat: vi.fn(async (path: string) =>
+        fakeStats(path === "/workspace" || path.endsWith("zeta"), path.endsWith("alpha.txt"), 12),
+      ),
+      lstat: vi.fn(async () => fakeStats(false, true, 12, false)),
+      realpath: vi.fn(async (path: string) => path),
+    };
+
+    const snapshot = await listDirectorySnapshot(
+      "/workspace",
+      false,
+      "name",
+      "asc",
+      false,
+      fakeFileSystem,
+    );
+
+    expect(snapshot.entries.map((entry) => entry.name)).toEqual(["alpha.txt", "zeta"]);
   });
 
   it("does not include symlinked directories in tree children", async () => {
@@ -353,6 +383,7 @@ function fakeStats(
     birthtime: new Date("2024-01-01T00:00:00.000Z"),
     mtime,
     size,
+    mode: directory ? 0o755 : 0o644,
   };
 }
 

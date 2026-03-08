@@ -13,6 +13,7 @@ import {
   type ExplorerViewMode,
   THEME_OPTIONS,
   type ThemeMode,
+  TYPEAHEAD_DEBOUNCE_OPTIONS,
   UI_FONT_OPTIONS,
   UI_FONT_SIZE_OPTIONS,
   UI_FONT_WEIGHT_OPTIONS,
@@ -34,9 +35,15 @@ import {
 } from "./lib/explorerNavigation";
 import { FileIcon } from "./lib/fileIcons";
 import { useFiletrailClient } from "./lib/filetrailClient";
-import { formatDateTime, formatSize } from "./lib/formatting";
+import { formatDateTime, formatPermissionMode, formatSize } from "./lib/formatting";
 import { createRendererLogger } from "./lib/logging";
+import { resolveStartupNavigation } from "./lib/startupNavigation";
 import { applyAppearance, getThemeAppearanceDefaults } from "./lib/theme";
+import {
+  findContentTypeaheadMatch,
+  findTreeTypeaheadMatch,
+  isTypeaheadCharacterKey,
+} from "./lib/typeahead";
 import { getTreeKeyboardAction } from "./lib/treeView";
 
 type DirectoryEntry = IpcResponse<"directory:getSnapshot">["entries"][number];
@@ -133,6 +140,13 @@ export function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [includeHidden, setIncludeHidden] = useState(DEFAULT_APP_PREFERENCES.includeHidden);
   const [viewMode, setViewMode] = useState<ExplorerViewMode>(DEFAULT_APP_PREFERENCES.viewMode);
+  const [foldersFirst, setFoldersFirst] = useState(DEFAULT_APP_PREFERENCES.foldersFirst);
+  const [typeaheadEnabled, setTypeaheadEnabled] = useState(
+    DEFAULT_APP_PREFERENCES.typeaheadEnabled,
+  );
+  const [typeaheadDebounceMs, setTypeaheadDebounceMs] = useState(
+    DEFAULT_APP_PREFERENCES.typeaheadDebounceMs,
+  );
   const [restoreLastVisitedFolderOnStartup, setRestoreLastVisitedFolderOnStartup] = useState(
     DEFAULT_APP_PREFERENCES.restoreLastVisitedFolderOnStartup,
   );
@@ -154,6 +168,8 @@ export function App() {
   const [locationError, setLocationError] = useState<string | null>(null);
   const [focusedPane, setFocusedPane] = useState<"tree" | "content" | null>(null);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
+  const [typeaheadQuery, setTypeaheadQuery] = useState("");
+  const [typeaheadPane, setTypeaheadPane] = useState<"tree" | "content" | null>(null);
   const [restoredPaneWidths, setRestoredPaneWidths] = useState<{
     treeWidth: number;
     inspectorWidth: number;
@@ -168,9 +184,15 @@ export function App() {
   const propertiesRequestRef = useRef(0);
   const treeRequestRef = useRef<Record<string, number>>({});
   const treeNodesRef = useRef<Record<string, TreeNodeState>>({});
+  const treeRootPathRef = useRef(treeRootPath);
+  const typeaheadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typeaheadQueryRef = useRef("");
+  const typeaheadPaneRef = useRef<"tree" | "content" | null>(null);
   const panes = useExplorerPaneLayout({
     initialTreeWidth: DEFAULT_APP_PREFERENCES.treeWidth,
     initialInspectorWidth: DEFAULT_APP_PREFERENCES.inspectorWidth,
+    inspectorVisible: propertiesOpen,
+    minContentWidth: 420,
   });
 
   useEffect(() => {
@@ -178,7 +200,45 @@ export function App() {
   }, [treeNodes]);
 
   useEffect(() => {
-    if (mainView !== "explorer" || focusedPane !== null) {
+    treeRootPathRef.current = treeRootPath;
+  }, [treeRootPath]);
+
+  useEffect(() => {
+    typeaheadQueryRef.current = typeaheadQuery;
+  }, [typeaheadQuery]);
+
+  useEffect(() => {
+    typeaheadPaneRef.current = typeaheadPane;
+  }, [typeaheadPane]);
+
+  useEffect(
+    () => () => {
+      if (typeaheadTimeoutRef.current) {
+        clearTimeout(typeaheadTimeoutRef.current);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (focusedPane === null) {
+      clearTypeahead();
+      return;
+    }
+    if (typeaheadPane && focusedPane !== typeaheadPane) {
+      clearTypeahead();
+    }
+  }, [focusedPane, typeaheadPane]);
+
+  useEffect(() => {
+    if (typeaheadEnabled) {
+      return;
+    }
+    clearTypeahead();
+  }, [typeaheadEnabled]);
+
+  useEffect(() => {
+    if (!preferencesReady || mainView !== "explorer" || focusedPane !== null) {
       return;
     }
     const treePane = treePaneRef.current;
@@ -187,7 +247,7 @@ export function App() {
     }
     treePane.focus({ preventScroll: true });
     setFocusedPane("tree");
-  }, [focusedPane, mainView]);
+  }, [focusedPane, mainView, preferencesReady]);
 
   useEffect(() => {
     applyAppearance({
@@ -223,6 +283,9 @@ export function App() {
         textSecondaryOverride,
         textMutedOverride,
         viewMode,
+        foldersFirst,
+        typeaheadEnabled,
+        typeaheadDebounceMs,
         propertiesOpen,
         detailRowOpen,
         includeHidden,
@@ -242,6 +305,9 @@ export function App() {
     preferencesReady,
     propertiesOpen,
     detailRowOpen,
+    foldersFirst,
+    typeaheadDebounceMs,
+    typeaheadEnabled,
     restoreLastVisitedFolderOnStartup,
     theme,
     uiFontFamily,
@@ -274,6 +340,9 @@ export function App() {
         setTextMutedOverride(preferences.textMutedOverride);
         setIncludeHidden(preferences.includeHidden);
         setViewMode(preferences.viewMode);
+        setFoldersFirst(preferences.foldersFirst);
+        setTypeaheadEnabled(preferences.typeaheadEnabled);
+        setTypeaheadDebounceMs(preferences.typeaheadDebounceMs);
         setPropertiesOpen(preferences.propertiesOpen);
         setDetailRowOpen(preferences.detailRowOpen);
         setRestoreLastVisitedFolderOnStartup(preferences.restoreLastVisitedFolderOnStartup);
@@ -284,24 +353,32 @@ export function App() {
           inspectorWidth: preferences.inspectorWidth,
         });
         setHomePath(homeResponse.path);
-        const startupPath =
-          preferences.restoreLastVisitedFolderOnStartup && preferences.lastVisitedPath
-            ? preferences.lastVisitedPath
-            : homeResponse.path;
-        const startupRootPath =
-          preferences.restoreLastVisitedFolderOnStartup &&
-          preferences.treeRootPath &&
-          isPathWithinRoot(startupPath, preferences.treeRootPath)
-            ? preferences.treeRootPath
-            : startupPath;
+        const { startupPath, startupRootPath } = resolveStartupNavigation(
+          preferences,
+          homeResponse.path,
+        );
         initializeTree(startupRootPath);
-        void navigateTo(startupPath, "replace", preferences.includeHidden).then((didNavigate) => {
+        void navigateTo(
+          startupPath,
+          "replace",
+          preferences.includeHidden,
+          undefined,
+          undefined,
+          preferences.foldersFirst,
+        ).then((didNavigate) => {
           if (cancelled || didNavigate || startupPath === homeResponse.path) {
             setPreferencesReady(true);
             return;
           }
           initializeTree(homeResponse.path);
-          void navigateTo(homeResponse.path, "replace", preferences.includeHidden).finally(() => {
+          void navigateTo(
+            homeResponse.path,
+            "replace",
+            preferences.includeHidden,
+            undefined,
+            undefined,
+            preferences.foldersFirst,
+          ).finally(() => {
             if (!cancelled) {
               setPreferencesReady(true);
             }
@@ -389,7 +466,7 @@ export function App() {
   ]);
 
   useEffect(() => {
-    if (!propertiesOpen || currentPath.length === 0) {
+    if ((!propertiesOpen && !detailRowOpen) || currentPath.length === 0) {
       return;
     }
     const targetPath = selectedPath || currentPath;
@@ -415,10 +492,18 @@ export function App() {
           setPropertiesLoading(false);
         }
       });
-  }, [client, currentPath, propertiesOpen, selectedPath]);
+  }, [client, currentPath, detailRowOpen, propertiesOpen, selectedPath]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && locationSheetOpen) {
+        return;
+      }
+      if (event.key === "Escape" && mainView !== "explorer") {
+        event.preventDefault();
+        setMainView("explorer");
+        return;
+      }
       const currentSelectedEntry =
         currentEntries.find((entry) => entry.path === selectedPath) ?? null;
       const target = event.target;
@@ -454,11 +539,6 @@ export function App() {
         }
         return;
       }
-      if (event.key === "Escape" && mainView !== "explorer") {
-        event.preventDefault();
-        setMainView("explorer");
-        return;
-      }
       if (event.key === "?") {
         event.preventDefault();
         setMainView((value) => (value === "help" ? "explorer" : "help"));
@@ -480,6 +560,14 @@ export function App() {
       if (event.metaKey && event.key === "ArrowRight") {
         event.preventDefault();
         goForward();
+        return;
+      }
+      if (event.metaKey && event.key === "ArrowUp" && focusedPane === "tree") {
+        event.preventDefault();
+        const nextPath = parentDirectoryPath(currentPath);
+        if (nextPath && nextPath !== currentPath) {
+          void navigateTo(nextPath, "push");
+        }
         return;
       }
       if (event.metaKey && event.key === "ArrowUp" && focusedPane === "content") {
@@ -524,6 +612,18 @@ export function App() {
       if (event.metaKey && event.key.toLowerCase() === "i") {
         event.preventDefault();
         setPropertiesOpen((value: boolean) => !value);
+        return;
+      }
+      if (
+        typeaheadEnabled &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        (focusedPane === "tree" || focusedPane === "content") &&
+        isTypeaheadCharacterKey(event.key)
+      ) {
+        event.preventDefault();
+        handleTypeaheadInput(event.key, focusedPane);
         return;
       }
       if (
@@ -603,7 +703,9 @@ export function App() {
     selectedPath,
     treeNodes,
     treeRootPath,
+    typeaheadEnabled,
     viewMode,
+    locationSheetOpen,
   ]);
 
   const selectedEntry = useMemo(
@@ -628,6 +730,64 @@ export function App() {
     setTextPrimaryOverride(null);
     setTextSecondaryOverride(null);
     setTextMutedOverride(null);
+  }
+
+  function clearTypeahead() {
+    if (typeaheadTimeoutRef.current) {
+      clearTimeout(typeaheadTimeoutRef.current);
+      typeaheadTimeoutRef.current = null;
+    }
+    typeaheadQueryRef.current = "";
+    typeaheadPaneRef.current = null;
+    setTypeaheadQuery("");
+    setTypeaheadPane(null);
+  }
+
+  function scheduleTypeaheadClear() {
+    if (typeaheadTimeoutRef.current) {
+      clearTimeout(typeaheadTimeoutRef.current);
+    }
+    typeaheadTimeoutRef.current = setTimeout(() => {
+      typeaheadTimeoutRef.current = null;
+      typeaheadQueryRef.current = "";
+      typeaheadPaneRef.current = null;
+      setTypeaheadQuery("");
+      setTypeaheadPane(null);
+    }, typeaheadDebounceMs);
+  }
+
+  function handleTypeaheadInput(key: string, pane: "tree" | "content") {
+    const baseQuery = typeaheadPaneRef.current === pane ? typeaheadQueryRef.current : "";
+    const nextQuery = `${baseQuery}${key}`;
+    typeaheadQueryRef.current = nextQuery;
+    typeaheadPaneRef.current = pane;
+    setTypeaheadQuery(nextQuery);
+    setTypeaheadPane(pane);
+    scheduleTypeaheadClear();
+
+    if (pane === "content") {
+      const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase();
+      const typeaheadEntries =
+        normalizedSearchQuery.length === 0
+          ? currentEntries
+          : currentEntries.filter((entry) =>
+              entry.name.toLocaleLowerCase().includes(normalizedSearchQuery),
+            );
+      const match = findContentTypeaheadMatch(typeaheadEntries, nextQuery);
+      if (match) {
+        setSelectedPath(match.path);
+      }
+      return;
+    }
+
+    const match = findTreeTypeaheadMatch({
+      rootPath: treeRootPathRef.current,
+      nodes: treeNodesRef.current,
+      query: nextQuery,
+    });
+    if (match) {
+      void navigateTo(match.path, "push");
+    }
   }
 
   function goBack() {
@@ -688,6 +848,7 @@ export function App() {
 
   function initializeTree(path: string) {
     treeRequestRef.current = {};
+    treeRootPathRef.current = path;
     setTreeRootPath(path);
     setTreeNodes({
       [path]: createTreeNode(path, true),
@@ -696,6 +857,7 @@ export function App() {
 
   function reinitializeTree(rootPath: string, focusPath: string) {
     treeRequestRef.current = {};
+    treeRootPathRef.current = rootPath;
     setTreeRootPath(rootPath);
     setTreeNodes({
       [rootPath]: createTreeNode(rootPath, true),
@@ -709,6 +871,7 @@ export function App() {
     includeHiddenOverride = includeHidden,
     sortByOverride = sortBy,
     sortDirectionOverride = sortDirection,
+    foldersFirstOverride = foldersFirst,
   ): Promise<boolean> {
     const requestId = ++directoryRequestRef.current;
     setDirectoryLoading(true);
@@ -720,6 +883,7 @@ export function App() {
         includeHidden: includeHiddenOverride,
         sortBy: sortByOverride,
         sortDirection: sortDirectionOverride,
+        foldersFirst: foldersFirstOverride,
       });
       if (directoryRequestRef.current !== requestId) {
         return false;
@@ -871,11 +1035,15 @@ export function App() {
   }
 
   async function syncTreeToPath(path: string, includeHiddenOverride: boolean) {
+    const currentRootPath = treeRootPathRef.current;
     const nextRootPath =
-      treeRootPath.length === 0 || !isPathWithinRoot(path, treeRootPath) ? path : treeRootPath;
+      currentRootPath.length === 0 || !isPathWithinRoot(path, currentRootPath)
+        ? path
+        : currentRootPath;
 
-    if (nextRootPath !== treeRootPath) {
+    if (nextRootPath !== currentRootPath) {
       treeRequestRef.current = {};
+      treeRootPathRef.current = nextRootPath;
       setTreeRootPath(nextRootPath);
       setTreeNodes({
         [nextRootPath]: createTreeNode(nextRootPath, true),
@@ -1009,7 +1177,23 @@ export function App() {
     if (!currentPath) {
       return;
     }
-    void navigateTo(currentPath, "replace", includeHidden, nextSortBy, nextSortDirection);
+    void navigateTo(
+      currentPath,
+      "replace",
+      includeHidden,
+      nextSortBy,
+      nextSortDirection,
+      foldersFirst,
+    );
+  }
+
+  function toggleFoldersFirst() {
+    const nextValue = !foldersFirst;
+    setFoldersFirst(nextValue);
+    if (!currentPath) {
+      return;
+    }
+    void navigateTo(currentPath, "replace", includeHidden, sortBy, sortDirection, nextValue);
   }
 
   async function submitLocationPath(path: string) {
@@ -1129,6 +1313,16 @@ export function App() {
                   <ToolbarIcon name="details" />
                 </button>
               </fieldset>
+              <button
+                type="button"
+                className={foldersFirst ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
+                onClick={toggleFoldersFirst}
+                title={foldersFirst ? "Folders first" : "Mixed file and folder order"}
+                aria-label="Toggle folders first"
+                aria-pressed={foldersFirst}
+              >
+                <ToolbarIcon name="foldersFirst" />
+              </button>
               <span className="titlebar-divider" aria-hidden />
               <fieldset className="toolbar-select-group">
                 <legend className="sr-only">Sorting controls</legend>
@@ -1210,6 +1404,7 @@ export function App() {
                 onToggleHidden={toggleHiddenFiles}
                 onNavigate={(path) => void navigateTo(path, "push")}
                 onToggleExpand={toggleTreeNode}
+                typeaheadQuery={focusedPane === "tree" ? typeaheadQuery : ""}
               />
               <div
                 className="pane-resizer"
@@ -1251,13 +1446,14 @@ export function App() {
                     })
                   }
                   searchQuery={searchQuery}
+                  typeaheadQuery={focusedPane === "content" ? typeaheadQuery : ""}
                 />
                 <DetailRow
                   open={detailRowOpen}
                   currentPath={currentPath}
                   currentEntries={currentEntries}
                   selectedEntry={selectedEntry}
-                  metadataByPath={metadataByPath}
+                  item={propertiesItem}
                 />
                 <footer className="status-bar">
                   <span>{currentEntries.length} items</span>
@@ -1301,11 +1497,14 @@ export function App() {
                 effectiveTextPrimaryColor={effectiveThemeColors.primary}
                 effectiveTextSecondaryColor={effectiveThemeColors.secondary}
                 effectiveTextMutedColor={effectiveThemeColors.muted}
+                typeaheadEnabled={typeaheadEnabled}
+                typeaheadDebounceMs={typeaheadDebounceMs}
                 restoreLastVisitedFolderOnStartup={restoreLastVisitedFolderOnStartup}
                 themeOptions={[...THEME_OPTIONS]}
                 uiFontOptions={[...UI_FONT_OPTIONS]}
                 uiFontSizeOptions={[...UI_FONT_SIZE_OPTIONS]}
                 uiFontWeightOptions={[...UI_FONT_WEIGHT_OPTIONS]}
+                typeaheadDebounceOptions={[...TYPEAHEAD_DEBOUNCE_OPTIONS]}
                 onThemeChange={setTheme}
                 onUiFontFamilyChange={setUiFontFamily}
                 onUiFontSizeChange={setUiFontSize}
@@ -1314,6 +1513,8 @@ export function App() {
                 onTextSecondaryColorChange={setTextSecondaryOverride}
                 onTextMutedColorChange={setTextMutedOverride}
                 onResetAppearance={resetAppearanceSettings}
+                onTypeaheadEnabledChange={setTypeaheadEnabled}
+                onTypeaheadDebounceMsChange={setTypeaheadDebounceMs}
                 onRestoreLastVisitedFolderOnStartupChange={setRestoreLastVisitedFolderOnStartup}
               />
             )}
@@ -1338,13 +1539,13 @@ function DetailRow({
   currentPath,
   currentEntries,
   selectedEntry,
-  metadataByPath,
+  item,
 }: {
   open: boolean;
   currentPath: string;
   currentEntries: DirectoryEntry[];
   selectedEntry: DirectoryEntry | null;
-  metadataByPath: Record<string, DirectoryEntryMetadata>;
+  item: IpcResponse<"item:getProperties">["item"] | null;
 }) {
   const activeEntry =
     selectedEntry ??
@@ -1363,22 +1564,27 @@ function DetailRow({
     return <div className={`detail-row${open ? " open" : ""}`} />;
   }
 
-  const metadata = metadataByPath[activeEntry.path];
+  const activeItem = item?.path === activeEntry.path ? item : null;
+  const isDirectoryLike =
+    activeEntry.kind === "directory" || activeEntry.kind === "symlink_directory";
   const kindLabel =
-    activeEntry.kind === "directory"
+    activeItem?.kindLabel ??
+    (activeEntry.kind === "directory"
       ? "Folder"
       : activeEntry.kind === "symlink_directory"
         ? "Alias Folder"
         : activeEntry.extension
           ? `${activeEntry.extension.toUpperCase()} File`
-          : "File";
-  const sizeLabel =
-    activeEntry.kind === "directory"
+          : "File");
+  const sizeLabel = isDirectoryLike
+    ? activeEntry.path === currentPath
       ? `${currentEntries.length} items`
-      : metadata
-        ? formatSize(metadata.sizeBytes, metadata.sizeStatus)
-        : "—";
-  const modifiedLabel = metadata ? formatDateTime(metadata.modifiedAt) : "—";
+      : "—"
+    : activeItem
+      ? formatSize(activeItem.sizeBytes, activeItem.sizeStatus)
+      : "—";
+  const modifiedLabel = activeItem ? formatDateTime(activeItem.modifiedAt) : "—";
+  const permissionsLabel = activeItem ? formatPermissionMode(activeItem.permissionMode) : "—";
 
   return (
     <div className={`detail-row${open ? " open" : ""}`}>
@@ -1402,6 +1608,10 @@ function DetailRow({
             <div className="dt-val">{modifiedLabel}</div>
           </div>
           <div className="dt-pair">
+            <div className="dt-lbl">Permissions</div>
+            <div className="dt-val">{permissionsLabel}</div>
+          </div>
+          <div className="dt-pair dt-pair-path">
             <div className="dt-lbl">Path</div>
             <div className="dt-val pth">{activeEntry.path}</div>
           </div>

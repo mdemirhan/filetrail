@@ -157,6 +157,79 @@
   --scroll-thumb: rgba(197, 200, 198, 0.1);
 }
 
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-base: #1e2028;
+  --bg-surface: #252830;
+  --bg-elevated: #2c2f3a;
+  --bg-hover: #33363f;
+  --bg-input: #33363f;
+  --bg-active: #3a3e4a;
+  --bg-active-strong: rgba(109, 160, 247, 0.16);
+  --bg-active-inactive: #2a2d36;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-active: rgba(255, 255, 255, 0.14);
+  --border-inactive: rgba(255, 255, 255, 0.08);
+  --border-light: rgba(255, 255, 255, 0.05);
+  --text-primary: #dcdee4;
+  --text-secondary: #9da1b3;
+  --text-tertiary: #6e7283;
+  --text-dim: #555b6d;
+  --accent-blue: #6da0f7;
+  --accent-blue-dim: rgba(109, 160, 247, 0.14);
+  --accent-blue-mid: rgba(109, 160, 247, 0.22);
+  --accent-blue-border: rgba(109, 160, 247, 0.22);
+  --accent-gold: #f0b050;
+  --accent-gold-dim: rgba(240, 176, 80, 0.14);
+  --icon-neutral: #a8b0c0;
+  --icon-blue: #6da0f7;
+  --icon-green: #5dd8a8;
+  --icon-peach: #f0b050;
+  --danger: #f08080;
+  --sidebar-bg: #20232b;
+  --toolbar-bg: #1c1f27;
+  --dropdown-bg: #2c2f3a;
+  --bg-raised: #20232b;
+  --fg: #9da1b3;
+  --fg-bright: #dcdee4;
+  --fg-muted: #6e7283;
+  --fg-dim: #555b6d;
+  --accent: #6da0f7;
+  --accent-soft: rgba(109, 160, 247, 0.14);
+  --accent-text: #a9c6ff;
+  --help-surface: var(--bg-surface);
+  --help-elevated: var(--bg-elevated);
+  --help-hover: var(--bg-hover);
+  --help-border: var(--border);
+  --help-border-subtle: var(--border);
+  --help-muted: var(--text-tertiary);
+  --help-key-bg: var(--bg-elevated);
+  --help-key-border: var(--border-active);
+  --help-key-shadow: rgba(0, 0, 0, 0.34);
+  --help-accent: var(--accent-blue);
+  --help-accent-dim: rgba(109, 160, 247, 0.14);
+  --help-success: #5dd8a8;
+  --help-success-dim: rgba(93, 216, 168, 0.14);
+  --help-warn: #f0b050;
+  --help-warn-dim: rgba(240, 176, 80, 0.14);
+  --tb-primary-bg: var(--accent-blue-dim);
+  --tb-primary-fg: var(--accent-blue);
+  --tb-primary-hover-bg: rgba(109, 160, 247, 0.22);
+  --tb-primary-shadow: none;
+  --tb-primary-hover-shadow: none;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 8px 30px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 18px 44px rgba(0, 0, 0, 0.34);
+  --shadow-card: none;
+  --crumb-row-bg: var(--toolbar-bg);
+  --crumb-bg: transparent;
+  --crumb-hover-bg: var(--bg-hover);
+  --crumb-active-bg: rgba(109, 160, 247, 0.14);
+  --crumb-separator-bg: transparent;
+  --crumb-border: transparent;
+  --scroll-thumb: rgba(255, 255, 255, 0.1);
+}
+
 :root[data-theme="catppuccin-mocha"] {
   color-scheme: dark;
   --bg-base: #1e1e2e;
@@ -649,6 +722,57 @@ body.platform-macos .window-toolbar-brand {
   box-shadow: none;
 }
 
+.tree-pane {
+  overflow: visible;
+}
+
+.content-pane {
+  position: relative;
+}
+
+.pane-typeahead {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: calc(100% - 24px);
+  padding: 6px 10px;
+  border: 1px solid var(--accent-blue-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-secondary);
+  pointer-events: none;
+  backdrop-filter: blur(10px);
+}
+
+.pane-typeahead-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 14;
+  transform: translate(-50%, -50%);
+}
+
+.pane-typeahead-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.pane-typeahead-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent-text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: var(--mono-font-weight);
+}
+
 .tree-expand:focus-visible,
 .tree-label:focus-visible,
 .flow-item:focus-visible,
@@ -902,6 +1026,7 @@ body.resizing-panels * {
 
 .tree-scroll,
 .content-scroll {
+  position: relative;
   min-height: 0;
   overflow: auto;
 }
@@ -909,6 +1034,7 @@ body.resizing-panels * {
 .sidebar {
   background: var(--sidebar-bg);
   border-right: 1px solid var(--border);
+  overflow: visible;
 }
 
 .sidebar-shell {
@@ -916,13 +1042,17 @@ body.resizing-panels * {
   grid-template-columns: 52px minmax(0, 1fr);
   min-height: 0;
   height: 100%;
+  overflow: visible;
 }
 
 .sidebar-rail {
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 2px;
+  overflow: visible;
   padding: 10px 0;
   background: color-mix(in srgb, var(--toolbar-bg) 88%, black);
   border-right: 1px solid var(--border);
@@ -959,11 +1089,12 @@ body.resizing-panels * {
 
 .sidebar-rail-menu-anchor {
   position: relative;
+  overflow: visible;
 }
 
 .sidebar-rail-menu {
   position: absolute;
-  right: calc(100% + 10px);
+  left: calc(100% + 10px);
   bottom: 0;
   z-index: 30;
   min-width: 176px;
@@ -1004,6 +1135,7 @@ body.resizing-panels * {
   min-width: 0;
   min-height: 0;
   background: var(--sidebar-bg);
+  position: relative;
 }
 
 .sidebar-header {
@@ -1025,6 +1157,10 @@ body.resizing-panels * {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+
+.tree-scroll {
+  height: 100%;
 }
 
 .tree-list {
@@ -1669,9 +1805,12 @@ body.resizing-panels * {
 }
 
 .dt-meta {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, max-content) minmax(0, 1fr);
+  align-items: start;
   gap: 24px;
-  flex-wrap: wrap;
+  min-width: 0;
+  flex: 1;
 }
 
 .dt-pair {
@@ -1696,9 +1835,15 @@ body.resizing-panels * {
 }
 
 .dt-val.pth {
+  min-width: 0;
   font-size: 10px;
-  max-width: 280px;
-  word-break: break-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dt-pair-path {
+  min-width: 0;
 }
 
 .location-sheet-backdrop {
@@ -1849,6 +1994,29 @@ body.resizing-panels * {
 .settings-view .settings-page-header {
   border-bottom: none;
   padding-bottom: 0;
+}
+
+@media (max-width: 980px) {
+  .detail-inner {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .dt-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    gap: 14px 20px;
+  }
+
+  .dt-pair-path {
+    grid-column: 1 / -1;
+  }
+
+  .dt-val.pth {
+    white-space: normal;
+    word-break: break-all;
+  }
 }
 
 .settings-panel {

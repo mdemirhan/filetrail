@@ -31,6 +31,7 @@ describe("ContentPane", () => {
           suggestions: [],
         })}
         onFocusChange={() => undefined}
+        typeaheadQuery=""
       />,
     );
 
@@ -63,6 +64,7 @@ describe("ContentPane", () => {
           suggestions: [],
         })}
         onFocusChange={() => undefined}
+        typeaheadQuery=""
       />,
     );
 
@@ -106,6 +108,7 @@ describe("ContentPane", () => {
           suggestions: [],
         })}
         onFocusChange={() => undefined}
+        typeaheadQuery=""
       />,
     );
 
@@ -142,6 +145,7 @@ describe("ContentPane", () => {
           suggestions: [],
         })}
         onFocusChange={() => undefined}
+        typeaheadQuery=""
       />,
     );
 
@@ -182,6 +186,7 @@ describe("ContentPane", () => {
           suggestions: [],
         })}
         onFocusChange={() => undefined}
+        typeaheadQuery=""
       />,
     );
 
@@ -228,6 +233,7 @@ describe("ContentPane", () => {
           suggestions: [],
         })}
         onFocusChange={() => undefined}
+        typeaheadQuery=""
       />,
     );
 
@@ -280,6 +286,7 @@ describe("ContentPane", () => {
           ],
         })}
         onFocusChange={() => undefined}
+        typeaheadQuery=""
       />,
     );
 
@@ -322,6 +329,7 @@ describe("ContentPane", () => {
           ],
         })}
         onFocusChange={() => undefined}
+        typeaheadQuery=""
       />,
     );
 
@@ -375,6 +383,7 @@ describe("ContentPane", () => {
           ],
         })}
         onFocusChange={() => undefined}
+        typeaheadQuery=""
       />,
     );
 
@@ -436,6 +445,7 @@ describe("ContentPane", () => {
               : [{ path: "/Users/demo/Desktop", name: "Desktop", isDirectory: true }],
         })}
         onFocusChange={() => undefined}
+        typeaheadQuery=""
       />,
     );
 
@@ -485,9 +495,44 @@ describe("ContentPane", () => {
           suggestions: [],
         })}
         onFocusChange={() => undefined}
+        typeaheadQuery=""
       />,
     );
 
     expect(screen.getByText("This directory is empty.")).toBeInTheDocument();
+  });
+
+  it("shows the transient typeahead query", () => {
+    render(
+      <ContentPane
+        isFocused
+        currentPath="/Users/demo"
+        entries={[]}
+        viewMode="list"
+        loading={false}
+        error={null}
+        includeHidden={false}
+        selectedPath=""
+        metadataByPath={{}}
+        sortBy="name"
+        sortDirection="asc"
+        onSelectPath={() => undefined}
+        onActivateEntry={() => undefined}
+        onSortChange={() => undefined}
+        onLayoutColumnsChange={() => undefined}
+        onVisiblePathsChange={() => undefined}
+        onNavigatePath={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+        onFocusChange={() => undefined}
+        typeaheadQuery="doc"
+      />,
+    );
+
+    expect(screen.getByText("Select")).toBeInTheDocument();
+    expect(screen.getByText("doc")).toBeInTheDocument();
   });
 });

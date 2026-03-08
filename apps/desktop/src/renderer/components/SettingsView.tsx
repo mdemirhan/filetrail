@@ -8,11 +8,14 @@ export function SettingsView({
   effectiveTextPrimaryColor,
   effectiveTextSecondaryColor,
   effectiveTextMutedColor,
+  typeaheadEnabled,
+  typeaheadDebounceMs,
   restoreLastVisitedFolderOnStartup,
   themeOptions,
   uiFontOptions,
   uiFontSizeOptions,
   uiFontWeightOptions,
+  typeaheadDebounceOptions,
   onThemeChange,
   onUiFontFamilyChange,
   onUiFontSizeChange,
@@ -21,6 +24,8 @@ export function SettingsView({
   onTextSecondaryColorChange,
   onTextMutedColorChange,
   onResetAppearance,
+  onTypeaheadEnabledChange,
+  onTypeaheadDebounceMsChange,
   onRestoreLastVisitedFolderOnStartupChange,
 }: {
   theme: ThemeMode;
@@ -30,11 +35,14 @@ export function SettingsView({
   effectiveTextPrimaryColor: string;
   effectiveTextSecondaryColor: string;
   effectiveTextMutedColor: string;
+  typeaheadEnabled: boolean;
+  typeaheadDebounceMs: number;
   restoreLastVisitedFolderOnStartup: boolean;
   themeOptions: ReadonlyArray<{ value: ThemeMode; label: string }>;
   uiFontOptions: ReadonlyArray<{ value: UiFontFamily; label: string }>;
   uiFontSizeOptions: ReadonlyArray<number>;
   uiFontWeightOptions: ReadonlyArray<number>;
+  typeaheadDebounceOptions: ReadonlyArray<number>;
   onThemeChange: (value: ThemeMode) => void;
   onUiFontFamilyChange: (value: UiFontFamily) => void;
   onUiFontSizeChange: (value: number) => void;
@@ -43,6 +51,8 @@ export function SettingsView({
   onTextSecondaryColorChange: (value: string | null) => void;
   onTextMutedColorChange: (value: string | null) => void;
   onResetAppearance: () => void;
+  onTypeaheadEnabledChange: (value: boolean) => void;
+  onTypeaheadDebounceMsChange: (value: number) => void;
   onRestoreLastVisitedFolderOnStartupChange: (value: boolean) => void;
 }) {
   return (
@@ -178,6 +188,54 @@ export function SettingsView({
                     <span className="settings-color-value">{effectiveTextMutedColor}</span>
                   </span>
                 </label>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="settings-panel">
+          <div className="settings-panel-header">
+            <div className="settings-panel-title">
+              <span className="settings-panel-icon settings-panel-icon-startup" aria-hidden>
+                ⌨
+              </span>
+              <span>Keyboard</span>
+            </div>
+          </div>
+          <div className="settings-panel-body">
+            <label className="settings-toggle-row">
+              <span className="settings-toggle-copy">
+                <span className="settings-toggle-title">Type to select</span>
+                <span className="settings-toggle-description">
+                  Jump to the first visible matching item while typing in the tree or file list.
+                </span>
+              </span>
+              <span className="settings-toggle-control">
+                <input
+                  type="checkbox"
+                  className="settings-toggle-input"
+                  checked={typeaheadEnabled}
+                  onChange={(event) => onTypeaheadEnabledChange(event.currentTarget.checked)}
+                />
+                <span className="settings-toggle-track" aria-hidden />
+              </span>
+            </label>
+
+            <div className="settings-field-row">
+              <div className="settings-field-row-label">Reset delay</div>
+              <div className="settings-field-row-control">
+                <select
+                  className="settings-select"
+                  value={typeaheadDebounceMs}
+                  disabled={!typeaheadEnabled}
+                  onChange={(event) => onTypeaheadDebounceMsChange(Number(event.currentTarget.value))}
+                >
+                  {typeaheadDebounceOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option} ms
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>

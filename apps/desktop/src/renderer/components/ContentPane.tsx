@@ -38,6 +38,7 @@ export function ContentPane({
   onRequestPathSuggestions,
   onFocusChange,
   searchQuery = "",
+  typeaheadQuery,
 }: {
   paneRef?: React.RefObject<HTMLElement | null>;
   isFocused: boolean;
@@ -60,6 +61,7 @@ export function ContentPane({
   onRequestPathSuggestions: (inputPath: string) => Promise<IpcResponse<"path:getSuggestions">>;
   onFocusChange: (focused: boolean) => void;
   searchQuery?: string;
+  typeaheadQuery?: string;
 }) {
   const [pathEditorOpen, setPathEditorOpen] = useState(false);
   const [draftPath, setDraftPath] = useState(currentPath);
@@ -395,6 +397,7 @@ export function ContentPane({
           onLayoutColumnsChange={onLayoutColumnsChange}
           onSelectPath={onSelectPath}
           onVisiblePathsChange={onVisiblePathsChange}
+          typeaheadQuery={typeaheadQuery ?? ""}
         />
       ) : (
         <DetailsView
@@ -414,6 +417,7 @@ export function ContentPane({
           onLayoutColumnsChange={onLayoutColumnsChange}
           onSelectPath={onSelectPath}
           onVisiblePathsChange={onVisiblePathsChange}
+          typeaheadQuery={typeaheadQuery ?? ""}
         />
       )}
     </section>
@@ -449,6 +453,7 @@ function FlowListView({
   onActivateEntry,
   onLayoutColumnsChange,
   onVisiblePathsChange,
+  typeaheadQuery,
 }: {
   entries: DirectoryEntry[];
   isFocused: boolean;
@@ -461,6 +466,7 @@ function FlowListView({
   onActivateEntry: (entry: DirectoryEntry) => void;
   onLayoutColumnsChange: (columns: number) => void;
   onVisiblePathsChange: (paths: string[]) => void;
+  typeaheadQuery?: string;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const { height } = useElementSize(containerRef);
@@ -507,6 +513,12 @@ function FlowListView({
         containerRef.current.scrollLeft += event.deltaY;
       }}
     >
+      {typeaheadQuery ? (
+        <div className="pane-typeahead pane-typeahead-center" aria-live="polite">
+          <span className="pane-typeahead-label">Select</span>
+          <span className="pane-typeahead-value">{typeaheadQuery}</span>
+        </div>
+      ) : null}
       <ContentState
         loading={loading}
         error={error}
@@ -573,6 +585,7 @@ function DetailsView({
   onSortChange,
   onLayoutColumnsChange,
   onVisiblePathsChange,
+  typeaheadQuery,
 }: {
   entries: DirectoryEntry[];
   isFocused: boolean;
@@ -589,6 +602,7 @@ function DetailsView({
   onSortChange: (sortBy: IpcRequest<"directory:getSnapshot">["sortBy"]) => void;
   onLayoutColumnsChange: (columns: number) => void;
   onVisiblePathsChange: (paths: string[]) => void;
+  typeaheadQuery?: string;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const { height } = useElementSize(containerRef);
@@ -638,6 +652,12 @@ function DetailsView({
         className="content-scroll details-scroll"
         onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
       >
+        {typeaheadQuery ? (
+          <div className="pane-typeahead pane-typeahead-center" aria-live="polite">
+            <span className="pane-typeahead-label">Select</span>
+            <span className="pane-typeahead-value">{typeaheadQuery}</span>
+          </div>
+        ) : null}
         <ContentState
           loading={loading}
           error={error}

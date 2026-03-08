@@ -1,6 +1,7 @@
 import {
   compactPath,
   formatDateTime,
+  formatPermissionMode,
   formatSize,
   pathSegments,
   splitDisplayName,
@@ -22,6 +23,11 @@ describe("formatting helpers", () => {
   it("formats bytes and deferred states", () => {
     expect(formatSize(2048, "ready")).toBe("2.0 KB");
     expect(formatSize(null, "deferred")).toBe("Not yet available");
+  });
+
+  it("formats Unix permission modes", () => {
+    expect(formatPermissionMode(0o755)).toBe("rwxr-xr-x (755)");
+    expect(formatPermissionMode(null)).toBe("Unavailable");
   });
 
   it("splits path segments including root", () => {

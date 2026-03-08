@@ -20,6 +20,9 @@ describe("appStateStore", () => {
       textSecondaryOverride: null,
       textMutedOverride: null,
       viewMode: "list",
+      foldersFirst: true,
+      typeaheadEnabled: true,
+      typeaheadDebounceMs: 750,
       propertiesOpen: true,
       detailRowOpen: true,
       includeHidden: false,
@@ -39,11 +42,11 @@ describe("appStateStore", () => {
   it("persists preferences and window state in one file", () => {
     const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
     const store = createAppStateStore(resolveAppStatePath(userDataPath), {
-      defaultTheme: "light",
+      defaultTheme: "dark",
     });
 
     store.updatePreferences({
-      theme: "tomorrow-night",
+      theme: "dark",
       uiFontFamily: "lexend",
       uiFontSize: 14,
       uiFontWeight: 500,
@@ -51,6 +54,9 @@ describe("appStateStore", () => {
       textSecondaryOverride: "#cccccc",
       textMutedOverride: "#999999",
       viewMode: "details",
+      foldersFirst: false,
+      typeaheadEnabled: false,
+      typeaheadDebounceMs: 1000,
       includeHidden: true,
       propertiesOpen: false,
       detailRowOpen: true,
@@ -70,10 +76,10 @@ describe("appStateStore", () => {
     store.flush();
 
     const reloaded = createAppStateStore(resolveAppStatePath(userDataPath), {
-      defaultTheme: "light",
+      defaultTheme: "dark",
     });
     expect(reloaded.getPreferences()).toEqual({
-      theme: "tomorrow-night",
+      theme: "dark",
       uiFontFamily: "lexend",
       uiFontSize: 14,
       uiFontWeight: 500,
@@ -81,6 +87,9 @@ describe("appStateStore", () => {
       textSecondaryOverride: "#cccccc",
       textMutedOverride: "#999999",
       viewMode: "details",
+      foldersFirst: false,
+      typeaheadEnabled: false,
+      typeaheadDebounceMs: 1000,
       includeHidden: true,
       propertiesOpen: false,
       detailRowOpen: true,
@@ -103,13 +112,14 @@ describe("appStateStore", () => {
     const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
     const filePath = resolveAppStatePath(userDataPath);
     const store = createAppStateStore(filePath, {
-      defaultTheme: "light",
+      defaultTheme: "dark",
     });
     store.updatePreferences({
       uiFontFamily: "bad-font" as never,
       uiFontSize: 999,
       uiFontWeight: 123 as never,
       textPrimaryOverride: "oops" as never,
+      typeaheadDebounceMs: 9999,
       treeWidth: 1,
       inspectorWidth: 9999,
       treeRootPath: "",
@@ -118,7 +128,7 @@ describe("appStateStore", () => {
     store.flush();
 
     const reloaded = createAppStateStore(filePath, {
-      defaultTheme: "light",
+      defaultTheme: "dark",
     });
     expect(reloaded.getPreferences().treeWidth).toBe(220);
     expect(reloaded.getPreferences().inspectorWidth).toBe(480);
@@ -126,6 +136,7 @@ describe("appStateStore", () => {
     expect(reloaded.getPreferences().uiFontSize).toBe(15);
     expect(reloaded.getPreferences().uiFontWeight).toBe(400);
     expect(reloaded.getPreferences().textPrimaryOverride).toBeNull();
+    expect(reloaded.getPreferences().typeaheadDebounceMs).toBe(1500);
     expect(reloaded.getPreferences().treeRootPath).toBeNull();
     expect(reloaded.getPreferences().lastVisitedPath).toBeNull();
   });

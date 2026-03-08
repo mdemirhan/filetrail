@@ -28,7 +28,8 @@ export function ToolbarIcon({
     | "downloads"
     | "documents"
     | "source"
-    | "detailRow";
+    | "detailRow"
+    | "foldersFirst";
 }) {
   if (name === "list") {
     return (
@@ -91,6 +92,9 @@ export function ToolbarIcon({
     }
     if (name === "detailRow") {
       return "M3 15h18M3 19h18M4 5h16v6H4z";
+    }
+    if (name === "foldersFirst") {
+      return "M3 6h8M3 12h18M3 18h18M14 4h7v4h-7z";
     }
     return "M5 12h14M12 5l7 7-7 7";
   })();

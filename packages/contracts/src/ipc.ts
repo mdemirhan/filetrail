@@ -8,7 +8,7 @@ export const explorerEntryKindSchema = z.enum([
   "other",
 ]);
 
-export const themeModeSchema = z.enum(["light", "tomorrow-night", "catppuccin-mocha"]);
+export const themeModeSchema = z.enum(["light", "dark", "tomorrow-night", "catppuccin-mocha"]);
 export const uiFontFamilySchema = z.enum(["dm-sans", "lexend", "fira-code", "jetbrains-mono"]);
 export const colorOverrideSchema = z
   .string()
@@ -55,6 +55,7 @@ export const itemPropertiesSchema = z.object({
   modifiedAt: z.string().nullable(),
   sizeBytes: z.number().int().nonnegative().nullable(),
   sizeStatus: z.enum(["ready", "deferred", "unavailable"]),
+  permissionMode: z.number().int().nonnegative().nullable(),
 });
 
 export const pathSuggestionSchema = z.object({
@@ -77,6 +78,9 @@ export const appPreferencesSchema = z.object({
   textSecondaryOverride: colorOverrideSchema,
   textMutedOverride: colorOverrideSchema,
   viewMode: explorerViewModeSchema,
+  foldersFirst: z.boolean(),
+  typeaheadEnabled: z.boolean(),
+  typeaheadDebounceMs: z.number().int().min(250).max(1500),
   propertiesOpen: z.boolean(),
   detailRowOpen: z.boolean(),
   includeHidden: z.boolean(),
@@ -139,6 +143,7 @@ export const ipcContractSchemas = {
       includeHidden: z.boolean().default(false),
       sortBy: directorySortBySchema.default("name"),
       sortDirection: sortDirectionSchema.default("asc"),
+      foldersFirst: z.boolean().default(true),
     }),
     response: z.object({
       path: z.string().min(1),

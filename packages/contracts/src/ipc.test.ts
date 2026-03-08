@@ -28,6 +28,7 @@ describe("ipc contracts", () => {
     });
     expect(parsed.sortBy).toBe("name");
     expect(parsed.sortDirection).toBe("asc");
+    expect(parsed.foldersFirst).toBe(true);
   });
 
   it("validates app preference payloads", () => {
@@ -42,6 +43,9 @@ describe("ipc contracts", () => {
           textSecondaryOverride: "#cccccc",
           textMutedOverride: "#999999",
           viewMode: "list",
+          foldersFirst: true,
+          typeaheadEnabled: true,
+          typeaheadDebounceMs: 750,
           propertiesOpen: true,
           detailRowOpen: true,
           includeHidden: false,
@@ -62,6 +66,9 @@ describe("ipc contracts", () => {
         textSecondaryOverride: "#cccccc",
         textMutedOverride: "#999999",
         viewMode: "list",
+        foldersFirst: true,
+        typeaheadEnabled: true,
+        typeaheadDebounceMs: 750,
         propertiesOpen: true,
         detailRowOpen: true,
         includeHidden: false,
@@ -76,22 +83,28 @@ describe("ipc contracts", () => {
     expect(
       ipcContractSchemas["app:updatePreferences"].request.parse({
         preferences: {
-          theme: "light",
+          theme: "dark",
           uiFontFamily: "fira-code",
           uiFontSize: 14,
           uiFontWeight: 400,
           textPrimaryOverride: null,
           includeHidden: true,
+          foldersFirst: false,
+          typeaheadEnabled: false,
+          typeaheadDebounceMs: 1000,
         },
       }),
     ).toEqual({
       preferences: {
-        theme: "light",
+        theme: "dark",
         uiFontFamily: "fira-code",
         uiFontSize: 14,
         uiFontWeight: 400,
         textPrimaryOverride: null,
         includeHidden: true,
+        foldersFirst: false,
+        typeaheadEnabled: false,
+        typeaheadDebounceMs: 1000,
       },
     });
   });

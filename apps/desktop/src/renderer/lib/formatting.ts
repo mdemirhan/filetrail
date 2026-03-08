@@ -42,6 +42,24 @@ export function formatSize(
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
+export function formatPermissionMode(permissionMode: number | null): string {
+  if (permissionMode === null || !Number.isFinite(permissionMode) || permissionMode < 0) {
+    return "Unavailable";
+  }
+
+  const normalized = permissionMode & 0o777;
+  const segments = [
+    [0o400, 0o200, 0o100],
+    [0o040, 0o020, 0o010],
+    [0o004, 0o002, 0o001],
+  ];
+  const symbols = ["r", "w", "x"];
+  const symbolic = segments
+    .map((group) => group.map((bit, index) => (normalized & bit ? symbols[index] : "-")).join(""))
+    .join("");
+  return `${symbolic} (${normalized.toString(8).padStart(3, "0")})`;
+}
+
 export function pathSegments(path: string): Array<{ label: string; path: string }> {
   const parts = path.split("/").filter((part) => part.length > 0);
   if (parts.length === 0) {

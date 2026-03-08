@@ -5,7 +5,7 @@ import { applyAppearance } from "./theme";
 describe("theme helpers", () => {
   it("applies theme and typography variables to the document root", () => {
     applyAppearance({
-      theme: "tomorrow-night",
+      theme: "dark",
       uiFontFamily: "lexend",
       uiFontSize: 14,
       uiFontWeight: 500,
@@ -14,7 +14,7 @@ describe("theme helpers", () => {
       textMutedOverride: "#999999",
     });
 
-    expect(document.documentElement.dataset.theme).toBe("tomorrow-night");
+    expect(document.documentElement.dataset.theme).toBe("dark");
     expect(document.documentElement.style.getPropertyValue("--font-sans")).toContain("Lexend");
     expect(document.documentElement.style.getPropertyValue("--font-mono")).toContain("Fira Code");
     expect(document.documentElement.style.getPropertyValue("--ui-font-size")).toBe("14px");

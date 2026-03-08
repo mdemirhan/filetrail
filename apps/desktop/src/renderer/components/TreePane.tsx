@@ -40,6 +40,7 @@ export function TreePane({
   onToggleHidden,
   onToggleExpand,
   onNavigate,
+  typeaheadQuery,
 }: {
   paneRef?: React.RefObject<HTMLElement | null>;
   isFocused: boolean;
@@ -63,6 +64,7 @@ export function TreePane({
   onToggleHidden: () => void;
   onToggleExpand: (path: string) => void;
   onNavigate: (path: string) => void;
+  typeaheadQuery?: string;
 }) {
   const root = nodes[rootPath];
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -239,6 +241,12 @@ export function TreePane({
           <div className="sidebar-header">
             <span className="sidebar-title">Folders</span>
           </div>
+          {typeaheadQuery ? (
+            <div className="pane-typeahead pane-typeahead-center" aria-live="polite">
+              <span className="pane-typeahead-label">Jump to</span>
+              <span className="pane-typeahead-value">{typeaheadQuery}</span>
+            </div>
+          ) : null}
           <div className="sidebar-tree">
             <div className="tree-scroll">
               <div className="tree-list">

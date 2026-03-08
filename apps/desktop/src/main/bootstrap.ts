@@ -187,6 +187,15 @@ function toPreferencePatch(
   if (value.viewMode !== undefined) {
     patch.viewMode = value.viewMode;
   }
+  if (value.foldersFirst !== undefined) {
+    patch.foldersFirst = value.foldersFirst;
+  }
+  if (value.typeaheadEnabled !== undefined) {
+    patch.typeaheadEnabled = value.typeaheadEnabled;
+  }
+  if (value.typeaheadDebounceMs !== undefined) {
+    patch.typeaheadDebounceMs = value.typeaheadDebounceMs;
+  }
   if (value.propertiesOpen !== undefined) {
     patch.propertiesOpen = value.propertiesOpen;
   }

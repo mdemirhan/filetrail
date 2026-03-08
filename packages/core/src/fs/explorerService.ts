@@ -16,6 +16,7 @@ export type FileSystemStats = {
   birthtime: Date;
   mtime: Date;
   size: number;
+  mode: number;
 };
 
 export type ExplorerFileSystem = {
@@ -72,6 +73,7 @@ export async function listDirectorySnapshot(
   includeHidden: boolean,
   sortBy: IpcRequest<"directory:getSnapshot">["sortBy"] = "name",
   sortDirection: IpcRequest<"directory:getSnapshot">["sortDirection"] = "asc",
+  foldersFirst = true,
   fileSystem: ExplorerFileSystem = DEFAULT_FILE_SYSTEM,
 ): Promise<IpcResponse<"directory:getSnapshot">> {
   const directoryPath = await resolveDirectoryPath(path, fileSystem);
@@ -103,7 +105,7 @@ export async function listDirectorySnapshot(
     parentPath: directoryPath === dirname(directoryPath) ? null : dirname(directoryPath),
     entries: entries
       .filter((value) => value !== null)
-      .sort((left, right) => compareEntries(left, right, sortBy, sortDirection))
+      .sort((left, right) => compareEntries(left, right, sortBy, sortDirection, foldersFirst))
       .map(({ sortModifiedAt: _sortModifiedAt, sortSizeBytes: _sortSizeBytes, ...entry }) => entry),
   };
 }
@@ -151,6 +153,7 @@ export async function getItemProperties(
       modifiedAt: toIsoStringOrNull(stats.mtime),
       sizeBytes: stats.isDirectory() ? null : stats.size,
       sizeStatus: stats.isDirectory() ? "deferred" : "ready",
+      permissionMode: normalizePermissionMode(stats.mode),
     },
   };
 }
@@ -384,11 +387,14 @@ function compareEntries(
   },
   sortBy: IpcRequest<"directory:getSnapshot">["sortBy"],
   sortDirection: IpcRequest<"directory:getSnapshot">["sortDirection"],
+  foldersFirst: boolean,
 ): number {
-  const leftRank = isDirectoryKind(left.kind) ? 0 : 1;
-  const rightRank = isDirectoryKind(right.kind) ? 0 : 1;
-  if (leftRank !== rightRank) {
-    return leftRank - rightRank;
+  if (foldersFirst) {
+    const leftRank = isDirectoryKind(left.kind) ? 0 : 1;
+    const rightRank = isDirectoryKind(right.kind) ? 0 : 1;
+    if (leftRank !== rightRank) {
+      return leftRank - rightRank;
+    }
   }
 
   let compared = 0;
@@ -490,4 +496,11 @@ function toIsoStringOrNull(value: Date | null | undefined): string | null {
     return null;
   }
   return value.toISOString();
+}
+
+function normalizePermissionMode(mode: number | null | undefined): number | null {
+  if (typeof mode !== "number" || !Number.isFinite(mode) || mode < 0) {
+    return null;
+  }
+  return mode & 0o777;
 }

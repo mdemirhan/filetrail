@@ -58,6 +58,7 @@ describe("TreePane", () => {
         onToggleHidden={() => undefined}
         onToggleExpand={() => undefined}
         onNavigate={() => undefined}
+        typeaheadQuery=""
       />,
     );
 
@@ -118,6 +119,7 @@ describe("TreePane", () => {
         onToggleHidden={() => undefined}
         onToggleExpand={() => undefined}
         onNavigate={handleNavigate}
+        typeaheadQuery=""
       />,
     );
 
@@ -125,5 +127,97 @@ describe("TreePane", () => {
     vi.runAllTimers();
     expect(handleNavigate).toHaveBeenCalledWith("/Users/demo/Documents");
     vi.useRealTimers();
+  });
+
+  it("renders theme options when the rail menu is open", () => {
+    render(
+      <TreePane
+        isFocused
+        rootPath="/Users/demo"
+        homePath="/Users/demo"
+        currentPath="/Users/demo"
+        nodes={{
+          "/Users/demo": {
+            path: "/Users/demo",
+            name: "demo",
+            kind: "directory",
+            isHidden: false,
+            isSymlink: false,
+            expanded: true,
+            loading: false,
+            loaded: true,
+            error: null,
+            childPaths: [],
+          },
+        }}
+        onFocusChange={() => undefined}
+        onGoHome={() => undefined}
+        onQuickAccess={() => undefined}
+        detailRowOpen
+        onToggleDetailRow={() => undefined}
+        theme="dark"
+        themeMenuOpen
+        themeButtonRef={themeButtonRef}
+        themeMenuRef={themeMenuRef}
+        onToggleThemeMenu={() => undefined}
+        onSelectTheme={() => undefined}
+        onOpenSettings={() => undefined}
+        includeHidden={false}
+        onToggleHidden={() => undefined}
+        onToggleExpand={() => undefined}
+        onNavigate={() => undefined}
+        typeaheadQuery=""
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /Dark/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Tomorrow Night/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Catppuccin Mocha/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Light/i })).toBeInTheDocument();
+  });
+
+  it("shows the transient typeahead query", () => {
+    render(
+      <TreePane
+        isFocused
+        rootPath="/Users/demo"
+        homePath="/Users/demo"
+        currentPath="/Users/demo"
+        nodes={{
+          "/Users/demo": {
+            path: "/Users/demo",
+            name: "demo",
+            kind: "directory",
+            isHidden: false,
+            isSymlink: false,
+            expanded: true,
+            loading: false,
+            loaded: true,
+            error: null,
+            childPaths: [],
+          },
+        }}
+        onFocusChange={() => undefined}
+        onGoHome={() => undefined}
+        onQuickAccess={() => undefined}
+        detailRowOpen
+        onToggleDetailRow={() => undefined}
+        theme="dark"
+        themeMenuOpen={false}
+        themeButtonRef={themeButtonRef}
+        themeMenuRef={themeMenuRef}
+        onToggleThemeMenu={() => undefined}
+        onSelectTheme={() => undefined}
+        onOpenSettings={() => undefined}
+        includeHidden={false}
+        onToggleHidden={() => undefined}
+        onToggleExpand={() => undefined}
+        onNavigate={() => undefined}
+        typeaheadQuery="doc"
+      />,
+    );
+
+    expect(screen.getByText("Jump to")).toBeInTheDocument();
+    expect(screen.getByText("doc")).toBeInTheDocument();
   });
 });

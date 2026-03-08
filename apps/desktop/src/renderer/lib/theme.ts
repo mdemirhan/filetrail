@@ -16,6 +16,11 @@ const THEME_DEFAULT_TEXT_COLORS: Record<
     secondary: "#3c3f56",
     muted: "#8b8da3",
   },
+  dark: {
+    primary: "#dcdee4",
+    secondary: "#9da1b3",
+    muted: "#6e7283",
+  },
   "tomorrow-night": {
     primary: "#e0e0e0",
     secondary: "#c5c8c6",

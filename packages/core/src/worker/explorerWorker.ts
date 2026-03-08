@@ -90,6 +90,7 @@ async function handleWorkerRequest(message: WorkerRequest): Promise<WorkerRespon
         payload.includeHidden,
         payload.sortBy,
         payload.sortDirection,
+        payload.foldersFirst,
       ),
     };
   }

@@ -5,11 +5,14 @@ import {
   type AppPreferences,
   DEFAULT_APP_PREFERENCES,
   type ThemeMode,
+  TYPEAHEAD_DEBOUNCE_MAX_MS,
+  TYPEAHEAD_DEBOUNCE_MIN_MS,
   UI_FONT_OPTIONS,
   UI_FONT_WEIGHT_OPTIONS,
   clampFontSize,
   clampFontWeight,
   clampPaneWidth,
+  clampTypeaheadDebounceMs,
 } from "../shared/appPreferences";
 
 export type StoredWindowState = {
@@ -202,11 +205,13 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
     theme:
       record.theme === "light"
         ? "light"
-        : record.theme === "dark" || record.theme === "tomorrow-night"
-          ? "tomorrow-night"
-          : record.theme === "catppuccin-mocha"
-            ? "catppuccin-mocha"
-            : defaultTheme,
+        : record.theme === "dark"
+          ? "dark"
+          : record.theme === "tomorrow-night"
+            ? "tomorrow-night"
+            : record.theme === "catppuccin-mocha"
+              ? "catppuccin-mocha"
+              : defaultTheme,
     uiFontFamily:
       typeof record.uiFontFamily === "string" &&
       UI_FONT_OPTIONS.some((option) => option.value === record.uiFontFamily)
@@ -225,6 +230,19 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
     textSecondaryOverride: normalizeColorOverride(record.textSecondaryOverride),
     textMutedOverride: normalizeColorOverride(record.textMutedOverride),
     viewMode: record.viewMode === "details" ? "details" : "list",
+    foldersFirst:
+      typeof record.foldersFirst === "boolean" ? record.foldersFirst : currentDefaults.foldersFirst,
+    typeaheadEnabled:
+      typeof record.typeaheadEnabled === "boolean"
+        ? record.typeaheadEnabled
+        : currentDefaults.typeaheadEnabled,
+    typeaheadDebounceMs: clampTypeaheadDebounceMs(
+      typeof record.typeaheadDebounceMs === "number"
+        ? record.typeaheadDebounceMs
+        : currentDefaults.typeaheadDebounceMs,
+      TYPEAHEAD_DEBOUNCE_MIN_MS,
+      TYPEAHEAD_DEBOUNCE_MAX_MS,
+    ),
     propertiesOpen:
       typeof record.propertiesOpen === "boolean"
         ? record.propertiesOpen
