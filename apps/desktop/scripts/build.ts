@@ -21,7 +21,8 @@ mkdirSync(outDir, { recursive: true });
 await buildMainAndPreload();
 await buildRenderer();
 copyRendererHtml();
-copyAssets();
+copyRendererAssets();
+copyAppAssets();
 
 console.log(`Desktop build completed at ${outDir}`);
 
@@ -86,12 +87,20 @@ function copyRendererHtml(): void {
   writeFileSync(join(rendererOutDir, "index.html"), html);
 }
 
-function copyAssets(): void {
+function copyRendererAssets(): void {
   const sourceAssetsDir = join(desktopSrcDir, "renderer", "assets");
   if (!existsSync(sourceAssetsDir)) {
     return;
   }
   cpSync(sourceAssetsDir, join(outDir, "renderer", "assets"), { recursive: true });
+}
+
+function copyAppAssets(): void {
+  const sourceAssetsDir = join(appDir, "assets");
+  if (!existsSync(sourceAssetsDir)) {
+    return;
+  }
+  cpSync(sourceAssetsDir, join(outDir, "assets"), { recursive: true });
 }
 
 function ensureBuildSuccess(

@@ -1,5 +1,7 @@
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { BrowserWindow, app, nativeTheme, shell } from "electron";
+import { BrowserWindow, app, nativeImage, nativeTheme, shell } from "electron";
 
 import { type AppStateStore, createAppStateStore, resolveAppStatePath } from "./appStateStore";
 import { bootstrapMainProcess, shutdownMainProcess } from "./bootstrap";
@@ -18,6 +20,13 @@ if (hasSingleInstanceLock) {
     const appStateStore = createAppStateStore(resolveAppStatePath(app.getPath("userData")), {
       defaultTheme: nativeTheme.shouldUseDarkColors ? "tomorrow-night" : "light",
     });
+    const iconPath = resolveAppIconPath();
+    if (iconPath && process.platform === "darwin") {
+      const icon = nativeImage.createFromPath(iconPath);
+      if (!icon.isEmpty()) {
+        app.dock.setIcon(icon);
+      }
+    }
     appStateStoreRef = appStateStore;
     await bootstrapMainProcess(appStateStore);
     mainWindowRef = createWindow();
@@ -56,6 +65,7 @@ function createWindow(): BrowserWindow {
     throw new Error("App state store was not initialized before creating the window.");
   }
   const storedWindowState = appStateStore.getWindowState();
+  const iconPath = resolveAppIconPath();
   const mainWindow = new BrowserWindow({
     show: false,
     width: storedWindowState.width,
@@ -73,6 +83,7 @@ function createWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
     },
+    ...(iconPath ? { icon: iconPath } : {}),
   });
   let saveTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -142,4 +153,26 @@ function createWindow(): BrowserWindow {
   mainWindow.on("close", persistWindowState);
 
   return mainWindow;
+}
+
+function resolveAppIconPath(): string | null {
+  const moduleDir = dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    join(moduleDir, "..", "assets", "icons", "build", "filetrail-1024.png"),
+    join(moduleDir, "..", "assets", "icons", "filetrail.svg"),
+    join(process.resourcesPath, "app", "dist", "assets", "icons", "build", "filetrail-1024.png"),
+    join(process.resourcesPath, "app", "dist", "assets", "icons", "filetrail.svg"),
+    join(process.cwd(), "dist", "assets", "icons", "build", "filetrail-1024.png"),
+    join(process.cwd(), "dist", "assets", "icons", "filetrail.svg"),
+    join(process.cwd(), "assets", "icons", "build", "filetrail-1024.png"),
+    join(process.cwd(), "assets", "icons", "filetrail.svg"),
+  ];
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
 }
