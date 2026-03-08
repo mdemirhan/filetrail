@@ -1333,14 +1333,9 @@ body.platform-macos .window-toolbar-brand {
 }
 
 .toolbar-search-option-row-secondary {
-  justify-content: flex-start;
-}
-
-.toolbar-search-option-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .toolbar-search-divider {
@@ -1359,7 +1354,7 @@ body.platform-macos .window-toolbar-brand {
 .toolbar-search-listbox-label {
   min-width: 0;
   color: var(--search-meta-fg);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1368,15 +1363,15 @@ body.platform-macos .window-toolbar-brand {
 .toolbar-search-select {
   width: 100%;
   min-width: 0;
-  height: 28px;
-  padding: 0 28px 0 10px;
+  height: 31px;
+  padding: 0 32px 0 12px;
   border: 1px solid var(--search-pill-border);
   border-radius: 7px;
   background-color: var(--search-pill-bg);
   color: var(--search-text);
   font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
   line-height: 1;
   appearance: none;
   outline: none;
@@ -1385,8 +1380,8 @@ body.platform-macos .window-toolbar-brand {
   -webkit-app-region: no-drag;
   background-image: linear-gradient(45deg, transparent 50%, var(--search-shortcut-fg) 50%),
     linear-gradient(135deg, var(--search-shortcut-fg) 50%, transparent 50%);
-  background-position: calc(100% - 14px) calc(50% - 2px), calc(100% - 9px) calc(50% - 2px);
-  background-size: 5px 5px, 5px 5px;
+  background-position: calc(100% - 16px) calc(50% - 2px), calc(100% - 10px) calc(50% - 2px);
+  background-size: 6px 6px, 6px 6px;
   background-repeat: no-repeat;
   transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
 }
@@ -1410,15 +1405,16 @@ body.platform-macos .window-toolbar-brand {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 24px;
-  padding: 0 12px;
+  width: 100%;
+  height: 31px;
+  padding: 0 14px;
   border: 1px solid var(--search-pill-border);
   border-radius: 7px;
   background: var(--search-pill-bg);
   color: var(--search-pill-fg);
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-weight: 500;
+  font-size: 12.5px;
+  font-weight: 600;
   letter-spacing: 0.02em;
   white-space: nowrap;
   transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
@@ -1434,7 +1430,7 @@ body.platform-macos .window-toolbar-brand {
   border-color: var(--search-pill-active-border);
   background: var(--search-pill-active-bg);
   color: var(--search-pill-active-fg);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .toolbar-search-meta {
@@ -1445,7 +1441,7 @@ body.platform-macos .window-toolbar-brand {
   padding: 0 10px 8px;
   color: var(--search-meta-fg);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -3019,7 +3015,7 @@ body.resizing-panels * {
 .search-results-compact-select {
   flex: 0 0 auto;
   width: 76px;
-  height: 29px;
+  height: 100%;
   padding: 0 18px 0 10px;
   border: 0;
   background: var(--srbar-select-bg);

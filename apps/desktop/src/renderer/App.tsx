@@ -2815,43 +2815,32 @@ export function App() {
                           </label>
                         </div>
                         <div className="toolbar-search-option-row toolbar-search-option-row-secondary">
-                          <div className="toolbar-search-option-group">
-                            <button
-                              type="button"
-                              className={
-                                searchRecursive
-                                  ? "toolbar-search-pill active"
-                                  : "toolbar-search-pill"
-                              }
-                              onClick={() => updateSearchRecursive(!searchRecursive)}
-                              aria-pressed={searchRecursive}
-                            >
-                              Recursive
-                            </button>
-                            <button
-                              type="button"
-                              className={
-                                searchIncludeHidden
-                                  ? "toolbar-search-pill active"
-                                  : "toolbar-search-pill"
-                              }
-                              onClick={() => updateSearchIncludeHidden(!searchIncludeHidden)}
-                              aria-pressed={searchIncludeHidden}
-                            >
-                              Hidden
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            className={
+                              searchRecursive ? "toolbar-search-pill active" : "toolbar-search-pill"
+                            }
+                            onClick={() => updateSearchRecursive(!searchRecursive)}
+                            aria-pressed={searchRecursive}
+                          >
+                            Recursive
+                          </button>
+                          <button
+                            type="button"
+                            className={
+                              searchIncludeHidden
+                                ? "toolbar-search-pill active"
+                                : "toolbar-search-pill"
+                            }
+                            onClick={() => updateSearchIncludeHidden(!searchIncludeHidden)}
+                            aria-pressed={searchIncludeHidden}
+                          >
+                            Hidden
+                          </button>
                         </div>
                       </div>
                       <div className="toolbar-search-meta">
-                        <span className="toolbar-search-status">
-                          {searchDraftQuery.trim().length > 0 &&
-                          searchDraftQuery.trim() !== searchCommittedQuery
-                            ? "Press Enter to search"
-                            : searchStatus === "running"
-                              ? "Searching…"
-                              : ""}
-                        </span>
+                        <span className="toolbar-search-status">Press Enter to search</span>
                       </div>
                     </div>
                   ) : null}
