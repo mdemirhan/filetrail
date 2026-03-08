@@ -116,6 +116,65 @@ export function getNextSelectionIndex(args: {
   return clampIndex(safeIndex + step, itemCount);
 }
 
+export function getPageStepItemCount(viewportSize: number, itemExtent: number): number {
+  const safeExtent = Math.max(1, itemExtent);
+  const visibleItems = Math.max(1, Math.floor(Math.max(0, viewportSize) / safeExtent));
+  return Math.max(1, visibleItems - 1);
+}
+
+export function getPagedSelectionIndex(args: {
+  itemCount: number;
+  currentIndex: number;
+  stepItems: number;
+  direction: "backward" | "forward";
+}): number {
+  const { itemCount, currentIndex, stepItems, direction } = args;
+  if (itemCount <= 0) {
+    return -1;
+  }
+  const safeIndex = currentIndex < 0 ? 0 : currentIndex;
+  const safeStep = Math.max(1, stepItems);
+  return clampIndex(
+    direction === "forward" ? safeIndex + safeStep : safeIndex - safeStep,
+    itemCount,
+  );
+}
+
+export function flattenVisibleTreePaths(
+  rootPath: string,
+  nodes: Record<
+    string,
+    {
+      path: string;
+      expanded: boolean;
+      childPaths: string[];
+    }
+  >,
+): string[] {
+  const root = nodes[rootPath];
+  if (!root) {
+    return [];
+  }
+
+  const ordered: string[] = [];
+  const visit = (path: string) => {
+    const node = nodes[path];
+    if (!node) {
+      return;
+    }
+    ordered.push(path);
+    if (!node.expanded) {
+      return;
+    }
+    for (const childPath of node.childPaths) {
+      visit(childPath);
+    }
+  };
+
+  visit(rootPath);
+  return ordered;
+}
+
 function clampIndex(index: number, itemCount: number): number {
   return Math.max(0, Math.min(itemCount - 1, index));
 }

@@ -4,6 +4,11 @@ import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 
 import { useElementSize } from "../hooks/useElementSize";
 import { FileIcon, FolderIcon } from "../lib/fileIcons";
+import {
+  COMPACT_FLOW_LIST_LAYOUT,
+  FLOW_LIST_LAYOUT,
+  getFlowListRevealScrollLeft,
+} from "../lib/flowListLayout";
 import { formatDateTime, formatSize, splitDisplayName } from "../lib/formatting";
 import {
   buildColumnMajorRows,
@@ -34,22 +39,6 @@ const PATHBAR_COLLAPSED_WIDTH = 34;
 const PATHBAR_SEGMENT_HORIZONTAL_PADDING = 18;
 const PATHBAR_MAX_SEGMENT_WIDTH = 220;
 const PATHBAR_MAX_ACTIVE_SEGMENT_WIDTH = 320;
-const FLOW_LIST_LAYOUT = {
-  rowHeight: 44,
-  rowGap: 4,
-  itemWidth: 292,
-  columnGap: 18,
-  paddingTop: 10,
-  paddingBottom: 4,
-} as const;
-const COMPACT_FLOW_LIST_LAYOUT = {
-  rowHeight: 36,
-  rowGap: 2,
-  itemWidth: 292,
-  columnGap: 18,
-  paddingTop: 8,
-  paddingBottom: 4,
-} as const;
 const DETAILS_LIST_LAYOUT = {
   rowHeight: 38,
 } as const;
@@ -856,6 +845,33 @@ function FlowListView({
   useEffect(() => {
     onLayoutColumnsChange(rowsPerColumn);
   }, [onLayoutColumnsChange, rowsPerColumn]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !selectionLeadPath) {
+      return;
+    }
+
+    const selectedIndex = entries.findIndex((entry) => entry.path === selectionLeadPath);
+    if (selectedIndex < 0) {
+      return;
+    }
+
+    const nextScrollLeft = getFlowListRevealScrollLeft({
+      currentScrollLeft: container.scrollLeft,
+      viewportWidth: container.clientWidth,
+      itemIndex: selectedIndex,
+      rowsPerColumn,
+      compact: compactListView,
+      maxScrollLeft: Math.max(0, container.scrollWidth - container.clientWidth),
+    });
+
+    if (Math.abs(nextScrollLeft - container.scrollLeft) <= 1) {
+      return;
+    }
+
+    container.scrollLeft = nextScrollLeft;
+  }, [compactListView, entries, rowsPerColumn, selectionLeadPath, viewportWidth]);
 
   return (
     <div

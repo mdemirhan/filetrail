@@ -127,6 +127,13 @@ export function TreePane({
         ref={paneRef}
         className={`tree-pane sidebar pane pane-focus-target${compactTreeView ? " compact-tree-view" : ""}`}
         tabIndex={-1}
+        onMouseDownCapture={(event) => {
+          const target = event.target;
+          if (!(target instanceof Element) || !target.closest(".tree-scroll, .tree-row")) {
+            return;
+          }
+          paneRef?.current?.focus({ preventScroll: true });
+        }}
         onFocusCapture={() => onFocusChange(true)}
         onBlurCapture={(event) => {
           const nextTarget = event.relatedTarget;
@@ -152,6 +159,13 @@ export function TreePane({
       ref={paneRef}
       className={`tree-pane sidebar pane pane-focus-target${compactTreeView ? " compact-tree-view" : ""}`}
       tabIndex={-1}
+      onMouseDownCapture={(event) => {
+        const target = event.target;
+        if (!(target instanceof Element) || !target.closest(".tree-scroll, .tree-row")) {
+          return;
+        }
+        paneRef?.current?.focus({ preventScroll: true });
+      }}
       onFocusCapture={() => onFocusChange(true)}
       onBlurCapture={(event) => {
         const nextTarget = event.relatedTarget;

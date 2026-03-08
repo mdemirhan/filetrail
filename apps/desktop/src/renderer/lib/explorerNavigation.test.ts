@@ -1,4 +1,7 @@
 import {
+  flattenVisibleTreePaths,
+  getPageStepItemCount,
+  getPagedSelectionIndex,
   getForcedVisibleHiddenChildPath,
   getAncestorChain,
   getNextSelectionIndex,
@@ -80,5 +83,75 @@ describe("explorerNavigation", () => {
         viewMode: "details",
       }),
     ).toBe(7);
+  });
+
+  it("computes paged step counts with one-item overlap", () => {
+    expect(getPageStepItemCount(400, 56)).toBe(6);
+    expect(getPageStepItemCount(120, 38)).toBe(2);
+    expect(getPageStepItemCount(20, 38)).toBe(1);
+  });
+
+  it("computes paged selection indices", () => {
+    expect(
+      getPagedSelectionIndex({
+        itemCount: 100,
+        currentIndex: 10,
+        stepItems: 6,
+        direction: "forward",
+      }),
+    ).toBe(16);
+    expect(
+      getPagedSelectionIndex({
+        itemCount: 100,
+        currentIndex: 10,
+        stepItems: 6,
+        direction: "backward",
+      }),
+    ).toBe(4);
+    expect(
+      getPagedSelectionIndex({
+        itemCount: 12,
+        currentIndex: 10,
+        stepItems: 6,
+        direction: "forward",
+      }),
+    ).toBe(11);
+  });
+
+  it("flattens visible tree paths in expanded order", () => {
+    expect(
+      flattenVisibleTreePaths("/Users/demo", {
+        "/Users/demo": {
+          path: "/Users/demo",
+          expanded: true,
+          childPaths: ["/Users/demo/Documents", "/Users/demo/Downloads"],
+        },
+        "/Users/demo/Documents": {
+          path: "/Users/demo/Documents",
+          expanded: true,
+          childPaths: ["/Users/demo/Documents/Notes"],
+        },
+        "/Users/demo/Documents/Notes": {
+          path: "/Users/demo/Documents/Notes",
+          expanded: false,
+          childPaths: [],
+        },
+        "/Users/demo/Downloads": {
+          path: "/Users/demo/Downloads",
+          expanded: false,
+          childPaths: ["/Users/demo/Downloads/Archive"],
+        },
+        "/Users/demo/Downloads/Archive": {
+          path: "/Users/demo/Downloads/Archive",
+          expanded: false,
+          childPaths: [],
+        },
+      }),
+    ).toEqual([
+      "/Users/demo",
+      "/Users/demo/Documents",
+      "/Users/demo/Documents/Notes",
+      "/Users/demo/Downloads",
+    ]);
   });
 });

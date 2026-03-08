@@ -711,4 +711,91 @@ describe("ContentPane", () => {
     expect(handleClearSelection).toHaveBeenCalledTimes(2);
     expect(handleContextMenu).toHaveBeenCalledWith(null, { x: 12, y: 18 });
   });
+
+  it("keeps the selected list item horizontally visible when the lead selection changes", () => {
+    const entries = Array.from({ length: 6 }, (_, index) => ({
+      path: `/Users/demo/item-${index}.txt`,
+      name: `item-${index}.txt`,
+      extension: "txt",
+      kind: "file" as const,
+      isHidden: false,
+      isSymlink: false,
+    }));
+
+    const { container, rerender } = render(
+      <ContentPane
+        isFocused
+        currentPath="/Users/demo"
+        entries={entries}
+        viewMode="list"
+        loading={false}
+        error={null}
+        includeHidden={false}
+        selectedPaths={[]}
+        selectionLeadPath={null}
+        metadataByPath={{}}
+        sortBy="name"
+        sortDirection="asc"
+        onSelectionGesture={() => undefined}
+        onClearSelection={() => undefined}
+        onActivateEntry={() => undefined}
+        onSortChange={() => undefined}
+        onLayoutColumnsChange={() => undefined}
+        onVisiblePathsChange={() => undefined}
+        onNavigatePath={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+        onFocusChange={() => undefined}
+        typeaheadQuery=""
+      />,
+    );
+
+    const list = container.querySelector(".flow-list");
+    expect(list).not.toBeNull();
+    if (!list) {
+      throw new Error("Missing flow list container.");
+    }
+
+    Object.defineProperties(list, {
+      clientWidth: { value: 980, configurable: true },
+      scrollWidth: { value: 2400, configurable: true },
+    });
+    list.scrollLeft = 0;
+
+    rerender(
+      <ContentPane
+        isFocused
+        currentPath="/Users/demo"
+        entries={entries}
+        viewMode="list"
+        loading={false}
+        error={null}
+        includeHidden={false}
+        selectedPaths={["/Users/demo/item-3.txt"]}
+        selectionLeadPath="/Users/demo/item-3.txt"
+        metadataByPath={{}}
+        sortBy="name"
+        sortDirection="asc"
+        onSelectionGesture={() => undefined}
+        onClearSelection={() => undefined}
+        onActivateEntry={() => undefined}
+        onSortChange={() => undefined}
+        onLayoutColumnsChange={() => undefined}
+        onVisiblePathsChange={() => undefined}
+        onNavigatePath={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+        onFocusChange={() => undefined}
+        typeaheadQuery=""
+      />,
+    );
+
+    expect(list.scrollLeft).toBe(282);
+  });
 });

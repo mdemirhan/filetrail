@@ -52,6 +52,9 @@ import {
   type ContentSelectionState,
 } from "./lib/contentSelection";
 import {
+  flattenVisibleTreePaths,
+  getPageStepItemCount,
+  getPagedSelectionIndex,
   getAncestorChain,
   getForcedVisibleHiddenChildPath,
   getNextSelectionIndex,
@@ -61,9 +64,12 @@ import {
 } from "./lib/explorerNavigation";
 import { FileIcon } from "./lib/fileIcons";
 import { useFiletrailClient } from "./lib/filetrailClient";
+import { getFlowListColumnStep } from "./lib/flowListLayout";
 import { formatDateTime, formatPermissionMode, formatSize } from "./lib/formatting";
+import { REFERENCE_ITEMS, SHORTCUT_ITEMS } from "./lib/helpContent";
 import { EXPLORER_LAYOUT } from "./lib/layoutTokens";
 import { createRendererLogger } from "./lib/logging";
+import { pageScrollElement, scrollElementByAmount } from "./lib/pagedScroll";
 import { resolveExplorerToolbarLayout, resolveSinglePanelLayout } from "./lib/responsiveLayout";
 import { appendSearchResults, filterSearchResults, sortSearchResults } from "./lib/searchResults";
 import { resolveStartupNavigation } from "./lib/startupNavigation";
@@ -98,88 +104,6 @@ const CONTEXT_MENU_WIDTH = 240;
 const CONTEXT_SUBMENU_WIDTH = 180;
 const CONTEXT_MENU_SAFE_MARGIN = 12;
 const CONTEXT_MENU_MAX_HEIGHT = 420;
-const SHORTCUT_ITEMS = [
-  { group: "Navigation", shortcut: "Cmd+Left", description: "Go back to the previous folder" },
-  { group: "Navigation", shortcut: "Cmd+Right", description: "Go forward to the next folder" },
-  {
-    group: "Navigation",
-    shortcut: "Cmd+Up",
-    description: "Open the parent folder",
-  },
-  {
-    group: "Navigation",
-    shortcut: "Cmd+Down",
-    description:
-      "Open the selected item from the file list, or expand the current folder in the tree",
-  },
-  { group: "Navigation", shortcut: "Cmd+L", description: "Open Go to Folder" },
-  {
-    group: "Navigation",
-    shortcut: "Cmd+R",
-    description: "Refresh the current folder when search results are not visible",
-  },
-  {
-    group: "Navigation",
-    shortcut: "Cmd+Option+C",
-    description: "Copy the selected item path, or the current folder if nothing is selected",
-  },
-  {
-    group: "Navigation",
-    shortcut: "Cmd+Shift+.",
-    description: "Toggle hidden files",
-  },
-  { group: "Search", shortcut: "Cmd+F", description: "Focus file search" },
-  {
-    group: "Search",
-    shortcut: "Cmd+Shift+F",
-    description: "Show cached search results without opening the search box",
-  },
-  {
-    group: "Search",
-    shortcut: "Cmd+R",
-    description: "Apply the selected sort to the current search results",
-  },
-  {
-    group: "Search",
-    shortcut: "Esc",
-    description: "Close visible search results and return to normal browsing",
-  },
-  {
-    group: "Panels",
-    shortcut: "Tab",
-    description:
-      "Move focus between the folder tree and file list when pane tab switching is enabled",
-  },
-  {
-    group: "Panels",
-    shortcut: "Shift+Tab",
-    description:
-      "Move focus back between the file list and folder tree when pane tab switching is enabled",
-  },
-  { group: "Panels", shortcut: "Cmd+1", description: "Focus the folder tree" },
-  { group: "Panels", shortcut: "Cmd+2", description: "Focus the file list" },
-  { group: "Views", shortcut: "?", description: "Open help" },
-  { group: "Views", shortcut: "Esc", description: "Return from Help or Settings to Explorer" },
-] as const;
-
-const REFERENCE_ITEMS = [
-  {
-    label: "Single click path segment",
-    description: "Navigate directly to that folder in the current browsing history.",
-  },
-  {
-    label: "Double click path bar",
-    description: "Switch the path bar into editable mode without opening a separate dialog.",
-  },
-  {
-    label: "Inline path suggestions",
-    description: "Autocomplete shows real directory names under the typed parent folder.",
-  },
-  {
-    label: "List view activation",
-    description: "Double click a folder to enter it, or double click a file to open it in macOS.",
-  },
-] as const;
 
 export function App() {
   type SortBy = IpcRequest<"directory:getSnapshot">["sortBy"];
@@ -1125,6 +1049,21 @@ export function App() {
         return;
       }
       if (
+        event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        (event.key.toLowerCase() === "u" || event.key.toLowerCase() === "d")
+      ) {
+        const didHandle = handlePagedPaneScroll(
+          event.key.toLowerCase() === "d" ? "forward" : "backward",
+        );
+        if (!didHandle) {
+          return;
+        }
+        event.preventDefault();
+        return;
+      }
+      if (
         typeaheadEnabled &&
         !event.metaKey &&
         !event.ctrlKey &&
@@ -1229,6 +1168,7 @@ export function App() {
     tabSwitchesExplorerPanes,
     typeaheadEnabled,
     viewMode,
+    compactTreeView,
   ]);
 
   const effectiveThemeColors = useMemo(() => {
@@ -1291,6 +1231,116 @@ export function App() {
         treePaneRef.current?.focus({ preventScroll: true });
       });
     });
+  }
+
+  function getFocusedScrollTarget():
+    | { axis: "horizontal" | "vertical"; element: HTMLElement }
+    | null {
+    if (focusedPane === "tree") {
+      const element = treePaneRef.current?.querySelector<HTMLElement>(".tree-scroll");
+      return element ? { axis: "vertical", element } : null;
+    }
+    if (focusedPane !== "content") {
+      return null;
+    }
+    if (isSearchMode) {
+      const element = contentPaneRef.current?.querySelector<HTMLElement>(".search-results-scroll");
+      return element ? { axis: "vertical", element } : null;
+    }
+    if (viewMode === "details") {
+      const element = contentPaneRef.current?.querySelector<HTMLElement>(".details-scroll");
+      return element ? { axis: "vertical", element } : null;
+    }
+    const element = contentPaneRef.current?.querySelector<HTMLElement>(".flow-list");
+    return element ? { axis: "horizontal", element } : null;
+  }
+
+  function handlePagedPaneScroll(direction: "backward" | "forward") {
+    const target = getFocusedScrollTarget();
+    if (!target) {
+      return false;
+    }
+
+    if (focusedPane === "tree") {
+      const didScroll = pageScrollElement(target.element, target.axis, direction);
+      const orderedPaths = flattenVisibleTreePaths(treeRootPath, treeNodes);
+      if (orderedPaths.length === 0) {
+        return didScroll;
+      }
+      const currentIndex = orderedPaths.findIndex((path) => path === currentPath);
+      const stepItems = getPageStepItemCount(target.element.clientHeight, compactTreeView ? 25 : 32);
+      const nextIndex = getPagedSelectionIndex({
+        itemCount: orderedPaths.length,
+        currentIndex,
+        stepItems,
+        direction,
+      });
+      const nextPath = orderedPaths[nextIndex];
+      if (nextPath && nextPath !== currentPath) {
+        void navigateTo(nextPath, "push");
+      }
+      return didScroll || nextPath !== undefined;
+    }
+
+    if (focusedPane !== "content") {
+      return false;
+    }
+
+    if (!isSearchMode && viewMode === "list") {
+      if (contentSelection.paths.length === 1) {
+        const currentIndex = activeContentEntries.findIndex(
+          (entry) => entry.path === contentSelection.leadPath,
+        );
+        if (currentIndex < 0) {
+          return false;
+        }
+
+        const nextIndex = getPagedSelectionIndex({
+          itemCount: activeContentEntries.length,
+          currentIndex,
+          stepItems: Math.max(1, contentColumns),
+          direction,
+        });
+        const nextEntry = activeContentEntries[nextIndex];
+        if (nextEntry && nextEntry.path !== contentSelection.leadPath) {
+          setSingleContentSelection(nextEntry.path);
+          return true;
+        }
+        return false;
+      }
+
+      return scrollElementByAmount(
+        target.element,
+        "horizontal",
+        (direction === "forward" ? 1 : -1) * getFlowListColumnStep(compactListView),
+      );
+    }
+
+    const didScroll = pageScrollElement(target.element, target.axis, direction);
+
+    if (contentSelection.paths.length === 1) {
+      const currentIndex = activeContentEntries.findIndex(
+        (entry) => entry.path === contentSelection.leadPath,
+      );
+      if (currentIndex < 0) {
+        return didScroll;
+      }
+
+      const stepItems = getPageStepItemCount(target.element.clientHeight, isSearchMode ? 56 : 38);
+      const nextIndex = getPagedSelectionIndex({
+        itemCount: activeContentEntries.length,
+        currentIndex,
+        stepItems,
+        direction,
+      });
+      const nextEntry = activeContentEntries[nextIndex];
+      if (nextEntry && nextEntry.path !== contentSelection.leadPath) {
+        setSingleContentSelection(nextEntry.path);
+        return true;
+      }
+    }
+
+    return didScroll;
   }
 
   function closeContextMenu() {

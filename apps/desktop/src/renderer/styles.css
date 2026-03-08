@@ -796,7 +796,6 @@ body.platform-macos .window-toolbar-brand {
   gap: 4px;
   flex: 1;
   justify-content: flex-start;
-  -webkit-app-region: no-drag;
   min-width: 0;
   overflow: visible;
 }
@@ -1973,6 +1972,14 @@ body.resizing-panels * {
   position: relative;
   min-height: 0;
   overflow: auto;
+}
+
+.tree-scroll:focus,
+.tree-scroll:focus-visible,
+.content-scroll:focus,
+.content-scroll:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 .sidebar {
