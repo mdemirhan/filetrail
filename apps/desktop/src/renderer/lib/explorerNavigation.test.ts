@@ -1,4 +1,9 @@
-import { getAncestorChain, getNextSelectionIndex, parentDirectoryPath } from "./explorerNavigation";
+import {
+  getAncestorChain,
+  getNextSelectionIndex,
+  parentDirectoryPath,
+  pathHasHiddenSegmentWithinRoot,
+} from "./explorerNavigation";
 
 describe("explorerNavigation", () => {
   it("builds ancestor chains inside the active root", () => {
@@ -17,6 +22,12 @@ describe("explorerNavigation", () => {
     expect(parentDirectoryPath("/Users/demo/Documents")).toBe("/Users/demo");
     expect(parentDirectoryPath("/Users")).toBe("/");
     expect(parentDirectoryPath("/")).toBeNull();
+  });
+
+  it("detects hidden segments under the active root", () => {
+    expect(pathHasHiddenSegmentWithinRoot("/Users/demo/.config/ghostty", "/Users/demo")).toBe(true);
+    expect(pathHasHiddenSegmentWithinRoot("/Users/demo/projects", "/Users/demo")).toBe(false);
+    expect(pathHasHiddenSegmentWithinRoot("/tmp/.cache", "/Users/demo")).toBe(false);
   });
 
   it("moves selection by visual columns in list view and single rows in details view", () => {

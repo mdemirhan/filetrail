@@ -27,6 +27,22 @@ export function getAncestorChain(rootPath: string, path: string): string[] {
   return ancestors.reverse();
 }
 
+export function pathHasHiddenSegmentWithinRoot(path: string, rootPath: string): boolean {
+  if (!isPathWithinRoot(path, rootPath)) {
+    return false;
+  }
+  if (rootPath === path) {
+    return pathSegmentName(path).startsWith(".");
+  }
+
+  const relativePath =
+    rootPath === "/" ? path.slice(1) : path.slice(rootPath.length + (path === rootPath ? 0 : 1));
+  return relativePath
+    .split("/")
+    .filter((segment) => segment.length > 0)
+    .some((segment) => segment.startsWith("."));
+}
+
 export function getNextSelectionIndex(args: {
   itemCount: number;
   currentIndex: number;
@@ -76,6 +92,14 @@ export function getNextSelectionIndex(args: {
 
 function clampIndex(index: number, itemCount: number): number {
   return Math.max(0, Math.min(itemCount - 1, index));
+}
+
+function pathSegmentName(path: string): string {
+  if (path === "/") {
+    return "/";
+  }
+  const parts = path.split("/").filter((part) => part.length > 0);
+  return parts.at(-1) ?? path;
 }
 
 function isPathWithinRoot(path: string, rootPath: string): boolean {

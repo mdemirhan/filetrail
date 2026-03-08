@@ -1862,6 +1862,7 @@ body.resizing-panels * {
   border-radius: var(--radius-lg);
   background: var(--bg-surface);
   box-shadow: var(--shadow-lg);
+  overflow: visible;
 }
 
 .help-view,
@@ -2549,6 +2550,10 @@ body.resizing-panels * {
   padding: 16px 18px 18px;
 }
 
+.location-sheet-input-shell {
+  position: relative;
+}
+
 .location-sheet-label {
   font-size: 12px;
   color: var(--text-secondary);
@@ -2560,6 +2565,17 @@ body.resizing-panels * {
   border-radius: var(--radius-md);
   background: var(--bg-elevated);
   padding: 11px 12px;
+  color: var(--text-primary);
+}
+
+.location-sheet-input:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px var(--accent-blue-dim);
+}
+
+.location-sheet-suggestions {
+  top: calc(100% + 6px);
 }
 
 .location-sheet-actions {

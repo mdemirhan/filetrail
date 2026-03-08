@@ -31,6 +31,7 @@ import { useExplorerPaneLayout } from "./hooks/useExplorerPaneLayout";
 import {
   getAncestorChain,
   getNextSelectionIndex,
+  pathHasHiddenSegmentWithinRoot,
   parentDirectoryPath,
 } from "./lib/explorerNavigation";
 import { FileIcon } from "./lib/fileIcons";
@@ -239,7 +240,12 @@ export function App() {
   }, [typeaheadEnabled]);
 
   useEffect(() => {
-    if (!preferencesReady || mainView !== "explorer" || focusedPane !== null) {
+    if (
+      !preferencesReady ||
+      mainView !== "explorer" ||
+      locationSheetOpen ||
+      focusedPane !== null
+    ) {
       return;
     }
     const treePane = treePaneRef.current;
@@ -248,7 +254,7 @@ export function App() {
     }
     treePane.focus({ preventScroll: true });
     setFocusedPane("tree");
-  }, [focusedPane, mainView, preferencesReady]);
+  }, [focusedPane, locationSheetOpen, mainView, preferencesReady]);
 
   useEffect(() => {
     applyAppearance({
@@ -513,6 +519,9 @@ export function App() {
         target instanceof HTMLTextAreaElement ||
         (target instanceof HTMLElement && target.isContentEditable)
       ) {
+        return;
+      }
+      if (locationSheetOpen) {
         return;
       }
       if (event.key === "Tab" && mainView === "explorer" && !locationSheetOpen) {
@@ -956,6 +965,7 @@ export function App() {
     path: string,
     includeHiddenOverride = includeHidden,
     expandOnSuccess = false,
+    activePath = currentPath,
   ) {
     const currentNode = treeNodesRef.current[path];
     if (currentNode?.loading) {
@@ -986,9 +996,14 @@ export function App() {
       },
     }));
     try {
+      const effectiveIncludeHidden = getEffectiveTreeIncludeHidden(
+        includeHiddenOverride,
+        path,
+        activePath,
+      );
       const response = await client.invoke("tree:getChildren", {
         path,
-        includeHidden: includeHiddenOverride,
+        includeHidden: effectiveIncludeHidden,
       });
       if (treeRequestRef.current[path] !== requestId) {
         return;
@@ -1053,7 +1068,7 @@ export function App() {
       ensureTreeNode(nextRootPath, true);
     }
 
-    await loadTreeChildren(nextRootPath, includeHiddenOverride);
+    await loadTreeChildren(nextRootPath, includeHiddenOverride, false, path);
 
     if (path === nextRootPath) {
       return;
@@ -1062,8 +1077,26 @@ export function App() {
     const ancestorChain = getAncestorChain(nextRootPath, path).slice(1, -1);
     for (const ancestorPath of ancestorChain) {
       ensureTreeNode(ancestorPath, true);
-      await loadTreeChildren(ancestorPath, includeHiddenOverride, true);
+      await loadTreeChildren(ancestorPath, includeHiddenOverride, true, path);
     }
+  }
+
+  function getEffectiveTreeIncludeHidden(
+    includeHiddenOverride: boolean,
+    path: string,
+    activePath: string,
+  ): boolean {
+    if (includeHiddenOverride) {
+      return true;
+    }
+    const rootPath = treeRootPathRef.current;
+    if (rootPath.length === 0) {
+      return pathHasHiddenSegmentWithinRoot(path, path);
+    }
+    return (
+      pathHasHiddenSegmentWithinRoot(activePath, rootPath) ||
+      pathHasHiddenSegmentWithinRoot(path, rootPath)
+    );
   }
 
   function toggleTreeNode(path: string) {
@@ -1545,6 +1578,9 @@ export function App() {
         currentPath={currentPath}
         submitting={locationSubmitting}
         error={locationError}
+        onRequestPathSuggestions={(inputPath) =>
+          requestPathSuggestions({ client, includeHidden, inputPath })
+        }
         onClose={() => setLocationSheetOpen(false)}
         onSubmit={(path) => void submitLocationPath(path)}
       />
