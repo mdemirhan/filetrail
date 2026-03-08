@@ -187,6 +187,11 @@ export function SearchResultsPane({
         ) {
           return;
         }
+        // `?` is reserved as the global Help shortcut and should not be consumed by search
+        // result typeahead when focus is in the pane body.
+        if (event.key === "?") {
+          return;
+        }
         if (
           event.defaultPrevented ||
           event.metaKey ||

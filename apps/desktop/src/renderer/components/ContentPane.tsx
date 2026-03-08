@@ -387,6 +387,11 @@ export function ContentPane({
         ) {
           return;
         }
+        // `?` is reserved as the global Help shortcut and should not be consumed by content
+        // typeahead when focus is otherwise in the pane.
+        if (event.key === "?") {
+          return;
+        }
         if (
           event.defaultPrevented ||
           event.metaKey ||

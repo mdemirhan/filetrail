@@ -2189,7 +2189,11 @@ export function App() {
       if (searchResultsVisibleRef.current) {
         setSearchResultsVisible(false);
       }
-      setContentSelection(EMPTY_CONTENT_SELECTION);
+      setContentSelection(
+        response.entries[0]
+          ? createSingleContentSelection(response.entries[0].path)
+          : EMPTY_CONTENT_SELECTION,
+      );
       setGetInfoItem(null);
       await syncTreeToPath(response.path, includeHiddenOverride);
       if (historyMode === "push") {
