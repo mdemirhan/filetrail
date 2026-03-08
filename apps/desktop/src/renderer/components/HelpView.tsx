@@ -12,14 +12,16 @@ type ReferenceItem = {
 export function HelpView({
   shortcutItems,
   referenceItems,
+  layoutMode = "wide",
 }: {
   shortcutItems: ShortcutItem[];
   referenceItems: ReferenceItem[];
+  layoutMode?: "wide" | "narrow" | "compact";
 }) {
   const shortcutGroups = groupShortcuts(shortcutItems);
 
   return (
-    <div className="help-view">
+    <div className="help-view" data-layout={layoutMode}>
       <div className="help-page">
         <header className="help-header">
           <div className="help-header-left">

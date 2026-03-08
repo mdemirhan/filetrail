@@ -24,6 +24,7 @@ export function TreePane({
   isFocused,
   rootPath,
   homePath,
+  compactTreeView = false,
   nodes,
   currentPath,
   onFocusChange,
@@ -50,6 +51,7 @@ export function TreePane({
   isFocused: boolean;
   rootPath: string;
   homePath: string;
+  compactTreeView?: boolean;
   nodes: Record<string, TreeNodeState>;
   currentPath: string;
   onFocusChange: (focused: boolean) => void;
@@ -99,7 +101,7 @@ export function TreePane({
     return (
       <aside
         ref={paneRef}
-        className="tree-pane sidebar pane pane-focus-target"
+        className={`tree-pane sidebar pane pane-focus-target${compactTreeView ? " compact-tree-view" : ""}`}
         tabIndex={-1}
         onFocusCapture={() => onFocusChange(true)}
         onBlurCapture={(event) => {
@@ -124,7 +126,7 @@ export function TreePane({
   return (
     <aside
       ref={paneRef}
-      className="tree-pane sidebar pane pane-focus-target"
+      className={`tree-pane sidebar pane pane-focus-target${compactTreeView ? " compact-tree-view" : ""}`}
       tabIndex={-1}
       onFocusCapture={() => onFocusChange(true)}
       onBlurCapture={(event) => {
@@ -181,6 +183,7 @@ export function TreePane({
           >
             <ToolbarIcon name="source" />
           </button>
+          <span className="sidebar-rail-separator" />
           <button
             type="button"
             className="sidebar-rail-button"
@@ -188,7 +191,7 @@ export function TreePane({
             title="Root tree at Home"
             aria-label="Root tree at Home"
           >
-            <ToolbarIcon name="refresh" />
+            <ToolbarIcon name="rerootHome" />
           </button>
           <span className="sidebar-rail-separator" />
           <button

@@ -2,6 +2,7 @@ import {
   getForcedVisibleHiddenChildPath,
   getAncestorChain,
   getNextSelectionIndex,
+  getTreeSeedChain,
   parentDirectoryPath,
   pathHasHiddenSegmentWithinRoot,
 } from "./explorerNavigation";
@@ -39,6 +40,14 @@ describe("explorerNavigation", () => {
       getForcedVisibleHiddenChildPath("/Users/demo/dotfiles", "/Users/demo/dotfiles/.config"),
     ).toBe("/Users/demo/dotfiles/.config");
     expect(getForcedVisibleHiddenChildPath("/Users/demo", "/Users/demo/Documents")).toBeNull();
+  });
+
+  it("builds a seeded tree chain that keeps ancestors expanded to the focused path", () => {
+    expect(getTreeSeedChain("/Users/demo", "/Users/demo/Documents/Notes")).toEqual([
+      { path: "/Users/demo", childPath: "/Users/demo/Documents" },
+      { path: "/Users/demo/Documents", childPath: "/Users/demo/Documents/Notes" },
+      { path: "/Users/demo/Documents/Notes", childPath: null },
+    ]);
   });
 
   it("moves selection by visual columns in list view and single rows in details view", () => {

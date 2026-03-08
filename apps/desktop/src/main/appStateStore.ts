@@ -237,6 +237,10 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
       typeof record.compactListView === "boolean"
         ? record.compactListView
         : currentDefaults.compactListView,
+    compactTreeView:
+      typeof record.compactTreeView === "boolean"
+        ? record.compactTreeView
+        : currentDefaults.compactTreeView,
     tabSwitchesExplorerPanes:
       typeof record.tabSwitchesExplorerPanes === "boolean"
         ? record.tabSwitchesExplorerPanes

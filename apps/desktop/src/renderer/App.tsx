@@ -27,11 +27,13 @@ import { PropertiesDrawer } from "./components/PropertiesDrawer";
 import { SettingsView } from "./components/SettingsView";
 import { ToolbarIcon } from "./components/ToolbarIcon";
 import { type TreeNodeState, TreePane } from "./components/TreePane";
+import { useElementSize } from "./hooks/useElementSize";
 import { useExplorerPaneLayout } from "./hooks/useExplorerPaneLayout";
 import {
   getForcedVisibleHiddenChildPath,
   getAncestorChain,
   getNextSelectionIndex,
+  getTreeSeedChain,
   pathHasHiddenSegmentWithinRoot,
   parentDirectoryPath,
 } from "./lib/explorerNavigation";
@@ -40,6 +42,10 @@ import { useFiletrailClient } from "./lib/filetrailClient";
 import { formatDateTime, formatPermissionMode, formatSize } from "./lib/formatting";
 import { createRendererLogger } from "./lib/logging";
 import { EXPLORER_LAYOUT } from "./lib/layoutTokens";
+import {
+  resolveExplorerToolbarLayout,
+  resolveSinglePanelLayout,
+} from "./lib/responsiveLayout";
 import { resolveStartupNavigation } from "./lib/startupNavigation";
 import { applyAppearance, getThemeAppearanceDefaults } from "./lib/theme";
 import {
@@ -149,6 +155,9 @@ export function App() {
   const [compactListView, setCompactListView] = useState(
     DEFAULT_APP_PREFERENCES.compactListView,
   );
+  const [compactTreeView, setCompactTreeView] = useState(
+    DEFAULT_APP_PREFERENCES.compactTreeView,
+  );
   const [tabSwitchesExplorerPanes, setTabSwitchesExplorerPanes] = useState(
     DEFAULT_APP_PREFERENCES.tabSwitchesExplorerPanes,
   );
@@ -187,6 +196,8 @@ export function App() {
   } | null>(null);
   const treePaneRef = useRef<HTMLElement | null>(null);
   const contentPaneRef = useRef<HTMLElement | null>(null);
+  const toolbarRef = useRef<HTMLElement | null>(null);
+  const singlePanelRef = useRef<HTMLElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const themeMenuRef = useRef<HTMLDivElement | null>(null);
   const themeButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -205,6 +216,8 @@ export function App() {
     inspectorVisible: propertiesOpen,
     minContentWidth: EXPLORER_LAYOUT.minContentWidth,
   });
+  const { width: toolbarWidth } = useElementSize(toolbarRef);
+  const { width: singlePanelWidth } = useElementSize(singlePanelRef);
 
   useEffect(() => {
     treeNodesRef.current = treeNodes;
@@ -301,6 +314,7 @@ export function App() {
         viewMode,
         foldersFirst,
         compactListView,
+        compactTreeView,
         tabSwitchesExplorerPanes,
         typeaheadEnabled,
         typeaheadDebounceMs,
@@ -325,6 +339,7 @@ export function App() {
     detailRowOpen,
     foldersFirst,
     compactListView,
+    compactTreeView,
     tabSwitchesExplorerPanes,
     typeaheadDebounceMs,
     typeaheadEnabled,
@@ -362,6 +377,7 @@ export function App() {
         setViewMode(preferences.viewMode);
         setFoldersFirst(preferences.foldersFirst);
         setCompactListView(preferences.compactListView);
+        setCompactTreeView(preferences.compactTreeView);
         setTabSwitchesExplorerPanes(preferences.tabSwitchesExplorerPanes);
         setTypeaheadEnabled(preferences.typeaheadEnabled);
         setTypeaheadDebounceMs(preferences.typeaheadDebounceMs);
@@ -770,8 +786,23 @@ export function App() {
       muted: textMutedOverride ?? defaults.muted,
     };
   }, [textMutedOverride, textPrimaryOverride, textSecondaryOverride, theme]);
+  const explorerToolbarLayout = useMemo(
+    () => (toolbarWidth > 0 ? resolveExplorerToolbarLayout(toolbarWidth) : "full"),
+    [toolbarWidth],
+  );
+  const singlePanelLayout = useMemo(
+    () => (singlePanelWidth > 0 ? resolveSinglePanelLayout(singlePanelWidth) : "wide"),
+    [singlePanelWidth],
+  );
   const canGoBack = historyIndex > 0;
   const canGoForward = historyIndex >= 0 && historyIndex < historyPaths.length - 1;
+  const showUpButton = explorerToolbarLayout !== "minimal";
+  const showDownButton = explorerToolbarLayout !== "minimal";
+  const showRefreshButton = explorerToolbarLayout !== "minimal";
+  const showInspectorButton =
+    explorerToolbarLayout === "full" || explorerToolbarLayout === "condensed";
+  const showFoldersFirstButton = explorerToolbarLayout !== "minimal";
+  const showSortControls = explorerToolbarLayout !== "minimal";
 
   function resetAppearanceSettings() {
     setUiFontFamily(DEFAULT_APP_PREFERENCES.uiFontFamily);
@@ -918,10 +949,19 @@ export function App() {
     treeRequestRef.current = {};
     treeRootPathRef.current = rootPath;
     setTreeRootPath(rootPath);
-    setTreeNodes({
-      [rootPath]: createTreeNode(rootPath, true),
-      ...(focusPath !== rootPath ? { [focusPath]: createTreeNode(focusPath, true) } : {}),
-    });
+    const seededNodes = Object.fromEntries(
+      getTreeSeedChain(rootPath, focusPath).map(({ path, childPath }) => {
+        const node = createTreeNode(path, true);
+        return [
+          path,
+          {
+            ...node,
+            childPaths: childPath ? [childPath] : [],
+          },
+        ];
+      }),
+    );
+    setTreeNodes(seededNodes);
   }
 
   async function navigateTo(
@@ -1345,124 +1385,162 @@ export function App() {
     <main className="app-shell">
       {mainView === "explorer" ? (
         <section className="workspace explorer-workspace">
-          <header className="window-toolbar">
+          <header ref={toolbarRef} className="window-toolbar">
             <div className="window-toolbar-brand">
               <span className="window-toolbar-title">File Trail</span>
             </div>
-            <div className="titlebar-actions">
-              <button
-                type="button"
-                className="tb-btn tb-btn-icon"
-                disabled={!canGoBack}
-                onClick={goBack}
-                title="Back (Cmd+Left)"
-                aria-label="Back"
-              >
-                <ToolbarIcon name="back" />
-              </button>
-              <button
-                type="button"
-                className="tb-btn tb-btn-icon"
-                disabled={!canGoForward}
-                onClick={goForward}
-                title="Forward (Cmd+Right)"
-                aria-label="Forward"
-              >
-                <ToolbarIcon name="forward" />
-              </button>
-              <button
-                type="button"
-                className="tb-btn tb-btn-icon"
-                disabled={!parentDirectoryPath(currentPath)}
-                onClick={navigateToParentFolder}
-                title="Enclosing Folder (Cmd+Up)"
-                aria-label="Enclosing Folder"
-              >
-                <ToolbarIcon name="up" />
-              </button>
-              <button
-                type="button"
-                className="tb-btn tb-btn-icon"
-                disabled={focusedPane !== "tree" && !selectedEntry}
-                onClick={navigateDownAction}
-                title="Open selected item (Cmd+Down)"
-                aria-label="Open selected item"
-              >
-                <ToolbarIcon name="down" />
-              </button>
-              <span className="titlebar-divider" aria-hidden />
-              <button
-                type="button"
-                className={propertiesOpen ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
-                onClick={() => setPropertiesOpen((value: boolean) => !value)}
-                title="Inspector (Cmd+I)"
-                aria-label="Inspector"
-              >
-                <ToolbarIcon name="drawer" />
-              </button>
-              <span className="titlebar-divider" aria-hidden />
-              <fieldset className="toolbar-segmented">
-                <legend className="sr-only">View mode</legend>
-                <button
-                  type="button"
-                  className={
-                    viewMode === "list" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"
-                  }
-                  onClick={() => setViewMode("list")}
-                  title="List view"
-                  aria-label="List view"
-                >
-                  <ToolbarIcon name="list" />
-                </button>
-                <button
-                  type="button"
-                  className={
-                    viewMode === "details" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"
-                  }
-                  onClick={() => setViewMode("details")}
-                  title="Details view"
-                  aria-label="Details view"
-                >
-                  <ToolbarIcon name="details" />
-                </button>
-              </fieldset>
-              <button
-                type="button"
-                className={foldersFirst ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
-                onClick={toggleFoldersFirst}
-                title={foldersFirst ? "Folders first" : "Mixed file and folder order"}
-                aria-label="Toggle folders first"
-                aria-pressed={foldersFirst}
-              >
-                <ToolbarIcon name="foldersFirst" />
-              </button>
-              <span className="titlebar-divider" aria-hidden />
-              <fieldset className="toolbar-select-group">
-                <legend className="sr-only">Sorting controls</legend>
+            <div className="titlebar-actions" data-layout={explorerToolbarLayout}>
+              <div className="toolbar-group toolbar-group-nav">
                 <button
                   type="button"
                   className="tb-btn tb-btn-icon"
-                  onClick={() => handleSortChange(sortBy)}
-                  title={sortDirection === "asc" ? "Ascending sort" : "Descending sort"}
-                  aria-label={sortDirection === "asc" ? "Ascending sort" : "Descending sort"}
+                  disabled={!canGoBack}
+                  onClick={goBack}
+                  title="Back (Cmd+Left)"
+                  aria-label="Back"
                 >
-                  <ToolbarIcon name={sortDirection === "asc" ? "sortAsc" : "sortDesc"} />
+                  <ToolbarIcon name="back" />
                 </button>
-                <select
-                  className="toolbar-select"
-                  value={sortBy}
-                  onChange={(event) => handleSortChange(event.currentTarget.value as SortBy)}
-                  title="Sort by"
-                  aria-label="Sort by"
+                <button
+                  type="button"
+                  className="tb-btn tb-btn-icon"
+                  disabled={!canGoForward}
+                  onClick={goForward}
+                  title="Forward (Cmd+Right)"
+                  aria-label="Forward"
                 >
-                  <option value="name">Name</option>
-                  <option value="size">Size</option>
-                  <option value="modified">Date Modified</option>
-                  <option value="kind">Kind</option>
-                </select>
-              </fieldset>
-              <div className="toolbar-spacer" />
-              <label className="toolbar-search" aria-label="Search current folder">
+                  <ToolbarIcon name="forward" />
+                </button>
+                {showUpButton ? (
+                  <button
+                    type="button"
+                    className="tb-btn tb-btn-icon"
+                    disabled={!parentDirectoryPath(currentPath)}
+                    onClick={navigateToParentFolder}
+                    title="Enclosing Folder (Cmd+Up)"
+                    aria-label="Enclosing Folder"
+                  >
+                    <ToolbarIcon name="up" />
+                  </button>
+                ) : null}
+                {showDownButton ? (
+                  <button
+                    type="button"
+                    className="tb-btn tb-btn-icon"
+                    disabled={focusedPane !== "tree" && !selectedEntry}
+                    onClick={navigateDownAction}
+                    title="Open selected item (Cmd+Down)"
+                    aria-label="Open selected item"
+                  >
+                    <ToolbarIcon name="down" />
+                  </button>
+                ) : null}
+              </div>
+              {showRefreshButton ? (
+                <>
+                  <span className="titlebar-divider" aria-hidden />
+                  <div className="toolbar-group">
+                    <button
+                      type="button"
+                      className="tb-btn tb-btn-icon"
+                      onClick={() => void refreshDirectory()}
+                      title="Refresh current folder (Cmd+R)"
+                      aria-label="Refresh current folder"
+                    >
+                      <ToolbarIcon name="refresh" />
+                    </button>
+                  </div>
+                </>
+              ) : null}
+              {showInspectorButton ? (
+                <>
+                  <span className="titlebar-divider" aria-hidden />
+                  <div className="toolbar-group">
+                    <button
+                      type="button"
+                      className={propertiesOpen ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
+                      onClick={() => setPropertiesOpen((value: boolean) => !value)}
+                      title="Inspector (Cmd+I)"
+                      aria-label="Inspector"
+                    >
+                      <ToolbarIcon name="drawer" />
+                    </button>
+                  </div>
+                </>
+              ) : null}
+              <span className="titlebar-divider" aria-hidden />
+              <div className="toolbar-group toolbar-group-view">
+                <fieldset className="toolbar-segmented">
+                  <legend className="sr-only">View mode</legend>
+                  <button
+                    type="button"
+                    className={
+                      viewMode === "list" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"
+                    }
+                    onClick={() => setViewMode("list")}
+                    title="List view"
+                    aria-label="List view"
+                  >
+                    <ToolbarIcon name="list" />
+                  </button>
+                  <button
+                    type="button"
+                    className={
+                      viewMode === "details" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"
+                    }
+                    onClick={() => setViewMode("details")}
+                    title="Details view"
+                    aria-label="Details view"
+                  >
+                    <ToolbarIcon name="details" />
+                  </button>
+                </fieldset>
+                {showFoldersFirstButton ? (
+                  <button
+                    type="button"
+                    className={foldersFirst ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
+                    onClick={toggleFoldersFirst}
+                    title={foldersFirst ? "Folders first" : "Mixed file and folder order"}
+                    aria-label="Toggle folders first"
+                    aria-pressed={foldersFirst}
+                  >
+                    <ToolbarIcon name="foldersFirst" />
+                  </button>
+                ) : null}
+              </div>
+              {showSortControls ? (
+                <>
+                  <span className="titlebar-divider" aria-hidden />
+                  <div className="toolbar-group">
+                    <fieldset className="toolbar-select-group">
+                      <legend className="sr-only">Sorting controls</legend>
+                      <button
+                        type="button"
+                        className="tb-btn tb-btn-icon"
+                        onClick={() => handleSortChange(sortBy)}
+                        title={sortDirection === "asc" ? "Ascending sort" : "Descending sort"}
+                        aria-label={sortDirection === "asc" ? "Ascending sort" : "Descending sort"}
+                      >
+                        <ToolbarIcon name={sortDirection === "asc" ? "sortAsc" : "sortDesc"} />
+                      </button>
+                      <select
+                        className="toolbar-select"
+                        value={sortBy}
+                        onChange={(event) => handleSortChange(event.currentTarget.value as SortBy)}
+                        title="Sort by"
+                        aria-label="Sort by"
+                      >
+                        <option value="name">Name</option>
+                        <option value="size">Size</option>
+                        <option value="modified">Date Modified</option>
+                        <option value="kind">Kind</option>
+                      </select>
+                    </fieldset>
+                  </div>
+                </>
+              ) : null}
+              <div className="toolbar-search-slot">
+                <label className="toolbar-search" aria-label="Search current folder">
                 <span className="toolbar-search-icon">
                   <ToolbarIcon name="search" />
                 </span>
@@ -1474,7 +1552,8 @@ export function App() {
                   onChange={(event) => setSearchQuery(event.currentTarget.value)}
                   placeholder="Search... ⌘F"
                 />
-              </label>
+                </label>
+              </div>
             </div>
           </header>
           {!preferencesReady ||
@@ -1498,6 +1577,7 @@ export function App() {
                 isFocused={focusedPane === "tree"}
                 homePath={homePath}
                 currentPath={currentPath}
+                compactTreeView={compactTreeView}
                 nodes={treeNodes}
                 rootPath={treeRootPath}
                 onFocusChange={(focused) => setFocusedPane(focused ? "tree" : null)}
@@ -1604,9 +1684,13 @@ export function App() {
         </section>
       ) : (
         <section className="workspace single-panel-layout">
-          <section className="pane single-panel-pane">
+          <section ref={singlePanelRef} className="pane single-panel-pane">
             {mainView === "help" ? (
-              <HelpView shortcutItems={[...SHORTCUT_ITEMS]} referenceItems={[...REFERENCE_ITEMS]} />
+              <HelpView
+                shortcutItems={[...SHORTCUT_ITEMS]}
+                referenceItems={[...REFERENCE_ITEMS]}
+                layoutMode={singlePanelLayout}
+              />
             ) : (
               <SettingsView
                 theme={theme}
@@ -1617,6 +1701,8 @@ export function App() {
                 effectiveTextSecondaryColor={effectiveThemeColors.secondary}
                 effectiveTextMutedColor={effectiveThemeColors.muted}
                 compactListView={compactListView}
+                compactTreeView={compactTreeView}
+                layoutMode={singlePanelLayout}
                 tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
                 typeaheadEnabled={typeaheadEnabled}
                 typeaheadDebounceMs={typeaheadDebounceMs}
@@ -1635,6 +1721,7 @@ export function App() {
                 onTextMutedColorChange={setTextMutedOverride}
                 onResetAppearance={resetAppearanceSettings}
                 onCompactListViewChange={setCompactListView}
+                onCompactTreeViewChange={setCompactTreeView}
                 onTabSwitchesExplorerPanesChange={setTabSwitchesExplorerPanes}
                 onTypeaheadEnabledChange={setTypeaheadEnabled}
                 onTypeaheadDebounceMsChange={setTypeaheadDebounceMs}

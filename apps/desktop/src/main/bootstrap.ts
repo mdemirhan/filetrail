@@ -193,6 +193,9 @@ function toPreferencePatch(
   if (value.compactListView !== undefined) {
     patch.compactListView = value.compactListView;
   }
+  if (value.compactTreeView !== undefined) {
+    patch.compactTreeView = value.compactTreeView;
+  }
   if (value.typeaheadEnabled !== undefined) {
     patch.typeaheadEnabled = value.typeaheadEnabled;
   }

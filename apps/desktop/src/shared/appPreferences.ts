@@ -33,6 +33,7 @@ export type AppPreferences = {
   viewMode: ExplorerViewMode;
   foldersFirst: boolean;
   compactListView: boolean;
+  compactTreeView: boolean;
   tabSwitchesExplorerPanes: boolean;
   typeaheadEnabled: boolean;
   typeaheadDebounceMs: number;
@@ -57,6 +58,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   viewMode: "list",
   foldersFirst: true,
   compactListView: false,
+  compactTreeView: false,
   tabSwitchesExplorerPanes: true,
   typeaheadEnabled: true,
   typeaheadDebounceMs: 750,

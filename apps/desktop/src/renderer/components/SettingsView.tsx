@@ -9,6 +9,8 @@ export function SettingsView({
   effectiveTextSecondaryColor,
   effectiveTextMutedColor,
   compactListView,
+  compactTreeView,
+  layoutMode = "wide",
   tabSwitchesExplorerPanes,
   typeaheadEnabled,
   typeaheadDebounceMs,
@@ -27,6 +29,7 @@ export function SettingsView({
   onTextMutedColorChange,
   onResetAppearance,
   onCompactListViewChange,
+  onCompactTreeViewChange,
   onTabSwitchesExplorerPanesChange,
   onTypeaheadEnabledChange,
   onTypeaheadDebounceMsChange,
@@ -40,6 +43,8 @@ export function SettingsView({
   effectiveTextSecondaryColor: string;
   effectiveTextMutedColor: string;
   compactListView: boolean;
+  compactTreeView: boolean;
+  layoutMode?: "wide" | "narrow" | "compact";
   tabSwitchesExplorerPanes: boolean;
   typeaheadEnabled: boolean;
   typeaheadDebounceMs: number;
@@ -58,13 +63,14 @@ export function SettingsView({
   onTextMutedColorChange: (value: string | null) => void;
   onResetAppearance: () => void;
   onCompactListViewChange: (value: boolean) => void;
+  onCompactTreeViewChange: (value: boolean) => void;
   onTabSwitchesExplorerPanesChange: (value: boolean) => void;
   onTypeaheadEnabledChange: (value: boolean) => void;
   onTypeaheadDebounceMsChange: (value: number) => void;
   onRestoreLastVisitedFolderOnStartupChange: (value: boolean) => void;
 }) {
   return (
-    <div className="settings-view">
+    <div className="settings-view" data-layout={layoutMode}>
       <div className="settings-page">
         <header className="settings-page-header">
           <div className="settings-page-header-left">
@@ -224,6 +230,23 @@ export function SettingsView({
                   className="settings-toggle-input"
                   checked={compactListView}
                   onChange={(event) => onCompactListViewChange(event.currentTarget.checked)}
+                />
+                <span className="settings-toggle-track" aria-hidden />
+              </span>
+            </label>
+            <label className="settings-toggle-row">
+              <span className="settings-toggle-copy">
+                <span className="settings-toggle-title">Compact tree view</span>
+                <span className="settings-toggle-description">
+                  Reduce tree row height and spacing in the folders pane.
+                </span>
+              </span>
+              <span className="settings-toggle-control">
+                <input
+                  type="checkbox"
+                  className="settings-toggle-input"
+                  checked={compactTreeView}
+                  onChange={(event) => onCompactTreeViewChange(event.currentTarget.checked)}
                 />
                 <span className="settings-toggle-track" aria-hidden />
               </span>

@@ -27,6 +27,17 @@ export function getAncestorChain(rootPath: string, path: string): string[] {
   return ancestors.reverse();
 }
 
+export function getTreeSeedChain(
+  rootPath: string,
+  focusPath: string,
+): Array<{ path: string; childPath: string | null }> {
+  const chain = getAncestorChain(rootPath, focusPath);
+  return chain.map((path, index) => ({
+    path,
+    childPath: chain[index + 1] ?? null,
+  }));
+}
+
 export function pathHasHiddenSegmentWithinRoot(path: string, rootPath: string): boolean {
   if (!isPathWithinRoot(path, rootPath)) {
     return false;
