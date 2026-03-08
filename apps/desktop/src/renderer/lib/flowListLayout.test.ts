@@ -7,7 +7,9 @@ import {
 
 describe("flowListLayout", () => {
   it("returns the correct column step for regular and compact layouts", () => {
-    expect(getFlowListColumnStep(false)).toBe(FLOW_LIST_LAYOUT.itemWidth + FLOW_LIST_LAYOUT.columnGap);
+    expect(getFlowListColumnStep(false)).toBe(
+      FLOW_LIST_LAYOUT.itemWidth + FLOW_LIST_LAYOUT.columnGap,
+    );
     expect(getFlowListColumnStep(true)).toBe(
       COMPACT_FLOW_LIST_LAYOUT.itemWidth + COMPACT_FLOW_LIST_LAYOUT.columnGap,
     );
@@ -50,6 +52,19 @@ describe("flowListLayout", () => {
         maxScrollLeft: 3000,
       }),
     ).toBe(282);
+  });
+
+  it("uses the compact column width when revealing compact list items", () => {
+    expect(
+      getFlowListRevealScrollLeft({
+        currentScrollLeft: 0,
+        viewportWidth: 980,
+        itemIndex: 36,
+        rowsPerColumn: 12,
+        compact: true,
+        maxScrollLeft: 3000,
+      }),
+    ).toBe(122);
   });
 
   it("clamps the reveal scroll offset to the available bounds", () => {

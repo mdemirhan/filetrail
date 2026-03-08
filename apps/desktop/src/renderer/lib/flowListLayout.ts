@@ -1,21 +1,21 @@
 import type { FlowListLayout } from "./virtualization";
 
 export const FLOW_LIST_LAYOUT = {
-  rowHeight: 44,
-  rowGap: 4,
-  itemWidth: 292,
-  columnGap: 18,
-  paddingTop: 10,
-  paddingBottom: 4,
-  paddingInline: 20,
-} as const satisfies FlowListLayout & { paddingInline: number };
-
-export const COMPACT_FLOW_LIST_LAYOUT = {
   rowHeight: 36,
   rowGap: 2,
   itemWidth: 292,
   columnGap: 18,
   paddingTop: 8,
+  paddingBottom: 4,
+  paddingInline: 20,
+} as const satisfies FlowListLayout & { paddingInline: number };
+
+export const COMPACT_FLOW_LIST_LAYOUT = {
+  rowHeight: 28,
+  rowGap: 1,
+  itemWidth: 252,
+  columnGap: 18,
+  paddingTop: 6,
   paddingBottom: 4,
   paddingInline: 20,
 } as const satisfies FlowListLayout & { paddingInline: number };
@@ -37,7 +37,8 @@ export function getFlowListRevealScrollLeft(args: {
   compact: boolean;
   maxScrollLeft?: number;
 }): number {
-  const { currentScrollLeft, viewportWidth, itemIndex, rowsPerColumn, compact, maxScrollLeft } = args;
+  const { currentScrollLeft, viewportWidth, itemIndex, rowsPerColumn, compact, maxScrollLeft } =
+    args;
   const layout = getFlowListLayout(compact);
   const safeRowsPerColumn = Math.max(1, rowsPerColumn);
   const columnIndex = Math.max(0, Math.floor(Math.max(0, itemIndex) / safeRowsPerColumn));

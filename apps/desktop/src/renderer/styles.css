@@ -2426,41 +2426,41 @@ body.resizing-panels * {
 }
 
 .flow-list {
-  padding: 10px 20px 4px;
+  padding: 8px 20px 4px;
   overflow-y: hidden;
   overflow-x: auto;
 }
 
 .flow-list.compact {
-  padding: 8px 20px 4px;
+  padding: 6px 20px 4px;
 }
 
 .flow-grid-rows {
   display: grid;
-  gap: 4px;
+  gap: 2px;
 }
 
 .flow-list.compact .flow-grid-rows {
-  gap: 2px;
+  gap: 1px;
 }
 
 .flow-grid {
   display: grid;
   align-items: start;
-  gap: 6px 18px;
+  gap: 2px 18px;
 }
 
 .flow-list.compact .flow-grid {
-  gap: 2px 18px;
+  gap: 1px 18px;
 }
 
 .flow-item {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
-  height: 40px;
-  padding: 0 12px;
+  height: 34px;
+  padding: 0 10px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -2471,9 +2471,9 @@ body.resizing-panels * {
 }
 
 .flow-list.compact .flow-item {
-  height: 34px;
-  gap: 8px;
-  padding: 0 10px;
+  height: 27px;
+  gap: 6px;
+  padding: 0 8px;
 }
 
 .flow-item:hover,
@@ -2501,6 +2501,10 @@ body.resizing-panels * {
   font-size: var(--ui-font-size-md);
   color: var(--text-primary);
   font-weight: var(--ui-font-weight);
+}
+
+.flow-list.compact .flow-item-label {
+  font-size: 12px;
 }
 
 .truncated-name-stem {
