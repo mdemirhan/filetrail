@@ -120,10 +120,10 @@ export function ContentPane({
   const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState(-1);
   const pathSegments = useMemo(() => buildPathSegments(currentPath), [currentPath]);
   const { width: pathbarWidth } = useElementSize(pathbarRef);
-  const visiblePathItems = useMemo(() => {
-    const fonts = getPathbarFonts();
-    return resolveVisiblePathbarItems(pathSegments, pathbarWidth, fonts, pathbarExpanded);
-  }, [pathSegments, pathbarWidth, pathbarExpanded]);
+  const visiblePathItems = useMemo(
+    () => resolveVisiblePathbarItems(pathSegments, pathbarWidth, pathbarExpanded),
+    [pathSegments, pathbarWidth, pathbarExpanded],
+  );
   const displayedPath = previewPath ?? draftPath;
   useEffect(() => {
     if (segmentClickTimeoutRef.current !== null) {
@@ -606,7 +606,6 @@ function buildPathSegments(path: string): Array<PathbarSegment> {
 function resolveVisiblePathbarItems(
   segments: PathbarSegment[],
   availableWidth: number,
-  fonts: { normal: string; active: string },
   expanded: boolean,
 ): PathbarDisplayItem[] {
   const fullItems = segments.map<PathbarDisplayItem>((segment, index) => ({
@@ -618,7 +617,7 @@ function resolveVisiblePathbarItems(
   if (expanded || segments.length <= 4 || effectiveWidth <= 0) {
     return fullItems;
   }
-  if (estimatePathbarWidth(fullItems, fonts) <= effectiveWidth) {
+  if (estimatePathbarWidth(fullItems) <= effectiveWidth) {
     return fullItems;
   }
 
@@ -627,7 +626,7 @@ function resolveVisiblePathbarItems(
       includeRoot: true,
       tailCount,
     });
-    if (estimatePathbarWidth(candidate, fonts) <= effectiveWidth) {
+    if (estimatePathbarWidth(candidate) <= effectiveWidth) {
       return candidate;
     }
   }
@@ -637,7 +636,7 @@ function resolveVisiblePathbarItems(
       includeRoot: false,
       tailCount,
     });
-    if (estimatePathbarWidth(candidate, fonts) <= effectiveWidth) {
+    if (estimatePathbarWidth(candidate) <= effectiveWidth) {
       return candidate;
     }
   }
@@ -689,67 +688,43 @@ function buildCollapsedPathbarItems(
   return items;
 }
 
-function estimatePathbarWidth(
-  items: PathbarDisplayItem[],
-  fonts: { normal: string; active: string },
-): number {
+function estimatePathbarWidth(items: PathbarDisplayItem[]): number {
   return items.reduce((width, item, index) => {
     const separatorWidth = index > 0 ? PATHBAR_SEPARATOR_WIDTH : 0;
     if (item.kind === "collapsed") {
       return width + separatorWidth + PATHBAR_COLLAPSED_WIDTH;
     }
-    return (
-      width +
-      separatorWidth +
-      estimatePathbarSegmentWidth(
-        item.segment.label,
-        item.isActive,
-        item.isActive ? fonts.active : fonts.normal,
-      )
-    );
+    return width + separatorWidth + estimatePathbarSegmentWidth(item.segment.label, item.isActive);
   }, 0);
 }
 
-function estimatePathbarSegmentWidth(label: string, isActive: boolean, font: string): number {
-  const estimatedWidth = PATHBAR_SEGMENT_HORIZONTAL_PADDING + measureTextWidth(label, font);
-  return Math.min(
-    isActive ? PATHBAR_MAX_ACTIVE_SEGMENT_WIDTH : PATHBAR_MAX_SEGMENT_WIDTH,
-    Math.max(48, estimatedWidth),
-  );
-}
+let pathbarMeasureHost: HTMLDivElement | null = null;
 
-function getPathbarFonts(): { normal: string; active: string } {
+function estimatePathbarSegmentWidth(label: string, isActive: boolean): number {
   if (typeof document === "undefined") {
-    return {
-      normal: "500 15px system-ui",
-      active: "600 15px system-ui",
-    };
+    return PATHBAR_SEGMENT_HORIZONTAL_PADDING + label.length * 8;
   }
-  const rootStyle = window.getComputedStyle(document.documentElement);
-  const fontSize = rootStyle.getPropertyValue("--ui-font-size-md").trim() || "15px";
-  const fontFamily = rootStyle.getPropertyValue("--font-sans").trim() || "system-ui";
-  const normalWeight = rootStyle.getPropertyValue("--ui-font-weight").trim() || "500";
-  return {
-    normal: `${normalWeight} ${fontSize} ${fontFamily}`,
-    active: `600 ${fontSize} ${fontFamily}`,
-  };
-}
 
-let textMeasureContext: CanvasRenderingContext2D | null = null;
+  if (!pathbarMeasureHost) {
+    pathbarMeasureHost = document.createElement("div");
+    pathbarMeasureHost.setAttribute("aria-hidden", "true");
+    pathbarMeasureHost.style.position = "fixed";
+    pathbarMeasureHost.style.left = "-10000px";
+    pathbarMeasureHost.style.top = "0";
+    pathbarMeasureHost.style.visibility = "hidden";
+    pathbarMeasureHost.style.pointerEvents = "none";
+    pathbarMeasureHost.style.whiteSpace = "nowrap";
+    document.body.appendChild(pathbarMeasureHost);
+  }
 
-function measureTextWidth(text: string, font: string): number {
-  if (typeof document === "undefined") {
-    return text.length * 8;
-  }
-  if (!textMeasureContext) {
-    const canvas = document.createElement("canvas");
-    textMeasureContext = canvas.getContext("2d");
-  }
-  if (!textMeasureContext) {
-    return text.length * 8;
-  }
-  textMeasureContext.font = font;
-  return Math.ceil(textMeasureContext.measureText(text).width);
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `pathbar-segment${isActive ? " active" : ""}`;
+  button.textContent = label;
+  pathbarMeasureHost.appendChild(button);
+  const width = Math.ceil(button.getBoundingClientRect().width);
+  pathbarMeasureHost.removeChild(button);
+  return width;
 }
 
 function FlowListView({
