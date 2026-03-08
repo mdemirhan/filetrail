@@ -167,6 +167,114 @@ describe("ContentPane", () => {
     });
   });
 
+  it("shows directory size as a dash and keeps unloaded metadata cells empty in details mode", () => {
+    render(
+      <ContentPane
+        isFocused
+        currentPath="/Users/demo"
+        entries={[
+          {
+            path: "/Users/demo/Folder",
+            name: "Folder",
+            extension: "",
+            kind: "directory",
+            isHidden: false,
+            isSymlink: false,
+          },
+          {
+            path: "/Users/demo/alpha.txt",
+            name: "alpha.txt",
+            extension: "txt",
+            kind: "file",
+            isHidden: false,
+            isSymlink: false,
+          },
+        ]}
+        viewMode="details"
+        loading={false}
+        error={null}
+        includeHidden={false}
+        selectedPaths={[]}
+        selectionLeadPath={null}
+        metadataByPath={{}}
+        detailColumns={{
+          size: true,
+          modified: true,
+          permissions: false,
+        }}
+        sortBy="name"
+        sortDirection="asc"
+        onSelectionGesture={() => undefined}
+        onClearSelection={() => undefined}
+        onActivateEntry={() => undefined}
+        onSortChange={() => undefined}
+        onLayoutColumnsChange={() => undefined}
+        onVisiblePathsChange={() => undefined}
+        onNavigatePath={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+        onFocusChange={() => undefined}
+        typeaheadQuery=""
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /Folder/ })).toHaveTextContent("-");
+    expect(screen.queryByText("Not yet available")).not.toBeInTheDocument();
+    expect(screen.queryByText("Not available")).not.toBeInTheDocument();
+  });
+
+  it("forwards typeahead keys from details view through the shared content handler", () => {
+    const handleTypeaheadInput = vi.fn();
+
+    render(
+      <ContentPane
+        isFocused
+        currentPath="/Users/demo"
+        entries={[
+          {
+            path: "/Users/demo/alpha.txt",
+            name: "alpha.txt",
+            extension: "txt",
+            kind: "file",
+            isHidden: false,
+            isSymlink: false,
+          },
+        ]}
+        viewMode="details"
+        loading={false}
+        error={null}
+        includeHidden={false}
+        selectedPaths={[]}
+        selectionLeadPath={null}
+        metadataByPath={{}}
+        sortBy="name"
+        sortDirection="asc"
+        onSelectionGesture={() => undefined}
+        onClearSelection={() => undefined}
+        onActivateEntry={() => undefined}
+        onSortChange={() => undefined}
+        onLayoutColumnsChange={() => undefined}
+        onVisiblePathsChange={() => undefined}
+        onNavigatePath={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+        onFocusChange={() => undefined}
+        onTypeaheadInput={handleTypeaheadInput}
+        typeaheadQuery=""
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByRole("button", { name: /alpha\.txt/i }), { key: "a" });
+
+    expect(handleTypeaheadInput).toHaveBeenCalledWith("a");
+  });
+
   it("navigates when a path segment is clicked", () => {
     vi.useFakeTimers();
     const handleNavigatePath = vi.fn();

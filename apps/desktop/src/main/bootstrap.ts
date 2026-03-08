@@ -15,6 +15,7 @@ let activeWorkerClient: ExplorerWorkerClient | null = null;
 const execFileAsync = promisify(execFile);
 const CACHE_TTL_MS = 3_000;
 const directorySnapshotCache = new Map<string, { expiresAt: number; value: unknown }>();
+const directoryMetadataCache = new Map<string, { expiresAt: number; value: unknown }>();
 const treeChildrenCache = new Map<string, { expiresAt: number; value: unknown }>();
 const folderSizeJobs = new Map<
   string,
@@ -66,7 +67,7 @@ export async function bootstrapMainProcess(
       ),
     "directory:getMetadataBatch": (payload) =>
       withTiming("directory:getMetadataBatch", payload.directoryPath, () =>
-        workerClient.request("directory:getMetadataBatch", payload),
+        getCachedMetadataBatch(workerClient, payload),
       ),
     "item:getProperties": (payload) =>
       withTiming("item:getProperties", payload.path, () =>
@@ -168,6 +169,7 @@ async function openInTerminal(
 
 function clearCaches(): void {
   directorySnapshotCache.clear();
+  directoryMetadataCache.clear();
   treeChildrenCache.clear();
 }
 
@@ -197,6 +199,52 @@ async function withCachedResponse<TPayload extends object, TResponse>(
     value,
   });
   return value;
+}
+
+async function getCachedMetadataBatch(
+  workerClient: ExplorerWorkerClient,
+  payload: IpcRequest<"directory:getMetadataBatch">,
+): Promise<IpcResponse<"directory:getMetadataBatch">> {
+  const now = Date.now();
+  const cachedItemsByPath = new Map<
+    string,
+    IpcResponse<"directory:getMetadataBatch">["items"][number]
+  >();
+  const missingPaths: string[] = [];
+
+  for (const path of payload.paths) {
+    const cached = directoryMetadataCache.get(path);
+    if (cached && cached.expiresAt > now) {
+      cachedItemsByPath.set(
+        path,
+        cached.value as IpcResponse<"directory:getMetadataBatch">["items"][number],
+      );
+      continue;
+    }
+    missingPaths.push(path);
+  }
+
+  if (missingPaths.length > 0) {
+    const response = await workerClient.request("directory:getMetadataBatch", {
+      ...payload,
+      paths: missingPaths,
+    });
+    for (const item of response.items) {
+      directoryMetadataCache.set(item.path, {
+        expiresAt: now + CACHE_TTL_MS,
+        value: item,
+      });
+      cachedItemsByPath.set(item.path, item);
+    }
+  }
+
+  return {
+    directoryPath: payload.directoryPath,
+    items: payload.paths.flatMap((path) => {
+      const item = cachedItemsByPath.get(path);
+      return item ? [item] : [];
+    }),
+  };
 }
 
 async function withTiming<T>(label: string, path: string, load: () => Promise<T>): Promise<T> {
@@ -243,8 +291,17 @@ export function toPreferencePatch(
   if (value.compactListView !== undefined) {
     patch.compactListView = value.compactListView;
   }
+  if (value.compactDetailsView !== undefined) {
+    patch.compactDetailsView = value.compactDetailsView;
+  }
   if (value.compactTreeView !== undefined) {
     patch.compactTreeView = value.compactTreeView;
+  }
+  if (value.detailColumns !== undefined) {
+    patch.detailColumns = value.detailColumns;
+  }
+  if (value.detailColumnWidths !== undefined) {
+    patch.detailColumnWidths = value.detailColumnWidths;
   }
   if (value.tabSwitchesExplorerPanes !== undefined) {
     patch.tabSwitchesExplorerPanes = value.tabSwitchesExplorerPanes;

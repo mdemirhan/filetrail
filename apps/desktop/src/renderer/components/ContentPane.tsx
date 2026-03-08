@@ -2,19 +2,35 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 
+import {
+  type DetailColumnKey,
+  type DetailColumnVisibility,
+  type DetailColumnWidths,
+  DEFAULT_DETAIL_COLUMN_VISIBILITY,
+  DEFAULT_DETAIL_COLUMN_WIDTHS,
+  clampDetailColumnWidth,
+} from "../../shared/appPreferences";
 import { useElementSize } from "../hooks/useElementSize";
 import { FileIcon, FolderIcon } from "../lib/fileIcons";
+import {
+  DETAILS_LAYOUT,
+  getDetailsRowHeight,
+  getDetailsTableWidth,
+  getVisibleDetailColumns,
+} from "../lib/detailsLayout";
 import {
   COMPACT_FLOW_LIST_LAYOUT,
   FLOW_LIST_LAYOUT,
   getFlowListRevealScrollLeft,
 } from "../lib/flowListLayout";
-import { formatDateTime, formatSize, splitDisplayName } from "../lib/formatting";
 import {
-  buildColumnMajorRows,
-  computeRowsPerColumn,
-  getVirtualRange,
-} from "../lib/virtualization";
+  formatDateTime,
+  formatPermissionMode,
+  formatSize,
+  splitDisplayName,
+} from "../lib/formatting";
+import { isTypeaheadCharacterKey } from "../lib/typeahead";
+import { buildColumnMajorRows, computeRowsPerColumn, getVirtualRange } from "../lib/virtualization";
 
 type DirectoryEntry = IpcResponse<"directory:getSnapshot">["entries"][number];
 type DirectoryEntryMetadata = IpcResponse<"directory:getMetadataBatch">["items"][number];
@@ -39,10 +55,6 @@ const PATHBAR_COLLAPSED_WIDTH = 34;
 const PATHBAR_SEGMENT_HORIZONTAL_PADDING = 18;
 const PATHBAR_MAX_SEGMENT_WIDTH = 220;
 const PATHBAR_MAX_ACTIVE_SEGMENT_WIDTH = 320;
-const DETAILS_LIST_LAYOUT = {
-  rowHeight: 38,
-} as const;
-
 type SelectionGestureModifiers = {
   metaKey: boolean;
   shiftKey: boolean;
@@ -73,8 +85,13 @@ export function ContentPane({
   onNavigatePath,
   onRequestPathSuggestions,
   onFocusChange,
+  onTypeaheadInput,
   onItemContextMenu = () => undefined,
   compactListView = false,
+  compactDetailsView = false,
+  detailColumns = DEFAULT_DETAIL_COLUMN_VISIBILITY,
+  detailColumnWidths = DEFAULT_DETAIL_COLUMN_WIDTHS,
+  onDetailColumnWidthsChange = () => undefined,
   tabSwitchesExplorerPanes = false,
   searchQuery = "",
   typeaheadQuery,
@@ -103,8 +120,13 @@ export function ContentPane({
   onNavigatePath: (path: string) => void;
   onRequestPathSuggestions: (inputPath: string) => Promise<IpcResponse<"path:getSuggestions">>;
   onFocusChange: (focused: boolean) => void;
+  onTypeaheadInput?: (key: string) => void;
   onItemContextMenu?: (path: string | null, position: { x: number; y: number }) => void;
   compactListView?: boolean;
+  compactDetailsView?: boolean;
+  detailColumns?: DetailColumnVisibility;
+  detailColumnWidths?: DetailColumnWidths;
+  onDetailColumnWidthsChange?: (value: DetailColumnWidths) => void;
   tabSwitchesExplorerPanes?: boolean;
   searchQuery?: string;
   typeaheadQuery?: string;
@@ -332,6 +354,37 @@ export function ContentPane({
           onFocusChange(false);
         }
       }}
+      onKeyDownCapture={(event) => {
+        if (!onTypeaheadInput) {
+          return;
+        }
+        const target = event.target;
+        if (
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement ||
+          target instanceof HTMLSelectElement ||
+          (target instanceof HTMLElement && target.isContentEditable)
+        ) {
+          return;
+        }
+        if (
+          target instanceof HTMLElement &&
+          target.closest(".pathbar-editor-shell, .details-column-resizer")
+        ) {
+          return;
+        }
+        if (
+          event.defaultPrevented ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.altKey ||
+          !isTypeaheadCharacterKey(event.key)
+        ) {
+          return;
+        }
+        event.preventDefault();
+        onTypeaheadInput(event.key);
+      }}
     >
       <div className={`pane-header content-header${isFocused ? " pane-header-focused" : ""}`}>
         {pathEditorOpen ? (
@@ -555,6 +608,12 @@ export function ContentPane({
         )}
       </div>
       <div ref={viewportRef} className="content-viewport">
+        {viewMode === "list" && typeaheadQuery ? (
+          <div className="pane-typeahead pane-typeahead-center" aria-live="polite">
+            <span className="pane-typeahead-label">Select</span>
+            <span className="pane-typeahead-value">{typeaheadQuery}</span>
+          </div>
+        ) : null}
         {viewMode === "list" ? (
           <FlowListView
             key={currentPath}
@@ -591,6 +650,7 @@ export function ContentPane({
             selectionLeadPath={selectionLeadPath}
             sortBy={sortBy}
             sortDirection={sortDirection}
+            viewportWidth={viewportWidth}
             viewportHeight={viewportHeight}
             onActivateEntry={onActivateEntry}
             onSortChange={onSortChange}
@@ -599,6 +659,10 @@ export function ContentPane({
             onClearSelection={onClearSelection}
             onVisiblePathsChange={onVisiblePathsChange}
             onItemContextMenu={onItemContextMenu}
+            compactDetailsView={compactDetailsView}
+            detailColumns={detailColumns}
+            detailColumnWidths={detailColumnWidths}
+            onDetailColumnWidthsChange={onDetailColumnWidthsChange}
             typeaheadQuery={typeaheadQuery ?? ""}
           />
         )}
@@ -911,12 +975,6 @@ function FlowListView({
         containerRef.current.scrollLeft += event.deltaY;
       }}
     >
-      {typeaheadQuery ? (
-        <div className="pane-typeahead pane-typeahead-center" aria-live="polite">
-          <span className="pane-typeahead-label">Select</span>
-          <span className="pane-typeahead-value">{typeaheadQuery}</span>
-        </div>
-      ) : null}
       <ContentState
         loading={loading}
         error={error}
@@ -997,6 +1055,7 @@ function DetailsView({
   selectionLeadPath,
   sortBy,
   sortDirection,
+  viewportWidth,
   viewportHeight,
   onSelectionGesture,
   onClearSelection,
@@ -1005,6 +1064,10 @@ function DetailsView({
   onLayoutColumnsChange,
   onVisiblePathsChange,
   onItemContextMenu = () => undefined,
+  compactDetailsView = false,
+  detailColumns = DEFAULT_DETAIL_COLUMN_VISIBILITY,
+  detailColumnWidths = DEFAULT_DETAIL_COLUMN_WIDTHS,
+  onDetailColumnWidthsChange = () => undefined,
   typeaheadQuery,
 }: {
   entries: DirectoryEntry[];
@@ -1018,6 +1081,7 @@ function DetailsView({
   selectionLeadPath: string | null;
   sortBy: IpcRequest<"directory:getSnapshot">["sortBy"];
   sortDirection: IpcRequest<"directory:getSnapshot">["sortDirection"];
+  viewportWidth: number;
   viewportHeight: number;
   onSelectionGesture: (path: string, modifiers: SelectionGestureModifiers) => void;
   onClearSelection: () => void;
@@ -1026,14 +1090,30 @@ function DetailsView({
   onLayoutColumnsChange: (columns: number) => void;
   onVisiblePathsChange: (paths: string[]) => void;
   onItemContextMenu?: (path: string | null, position: { x: number; y: number }) => void;
+  compactDetailsView?: boolean;
+  detailColumns?: DetailColumnVisibility;
+  detailColumnWidths?: DetailColumnWidths;
+  onDetailColumnWidthsChange?: (value: DetailColumnWidths) => void;
   typeaheadQuery?: string;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const resizeCleanupRef = useRef<(() => void) | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
   const selectedPathSet = useMemo(() => new Set(selectedPaths), [selectedPaths]);
+  const visibleColumns = useMemo(() => getVisibleDetailColumns(detailColumns), [detailColumns]);
+  const rowHeight = getDetailsRowHeight(compactDetailsView);
+  const gridTemplateColumns = useMemo(
+    () => visibleColumns.map((key) => `${detailColumnWidths[key]}px`).join(" "),
+    [detailColumnWidths, visibleColumns],
+  );
+  const tableWidth = useMemo(
+    () => getDetailsTableWidth(detailColumnWidths, visibleColumns),
+    [detailColumnWidths, visibleColumns],
+  );
   const range = getVirtualRange({
     itemCount: entries.length,
-    itemSize: DETAILS_LIST_LAYOUT.rowHeight,
+    itemSize: rowHeight,
     viewportSize: viewportHeight,
     scrollOffset: scrollTop,
     overscan: 10,
@@ -1048,32 +1128,127 @@ function DetailsView({
     onLayoutColumnsChange(1);
   }, [onLayoutColumnsChange]);
 
+  useEffect(
+    () => () => {
+      resizeCleanupRef.current?.();
+      resizeCleanupRef.current = null;
+      document.body.classList.remove("column-resize-active");
+    },
+    [],
+  );
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container || !selectionLeadPath) {
+      return;
+    }
+    const selectedIndex = entries.findIndex((entry) => entry.path === selectionLeadPath);
+    if (selectedIndex < 0) {
+      return;
+    }
+    const itemTop = selectedIndex * rowHeight;
+    const itemBottom = itemTop + rowHeight;
+    const viewTop = container.scrollTop;
+    const viewBottom = viewTop + container.clientHeight;
+
+    if (itemTop < viewTop) {
+      container.scrollTop = itemTop;
+      return;
+    }
+    if (itemBottom > viewBottom) {
+      container.scrollTop = itemBottom - container.clientHeight;
+    }
+  }, [entries, rowHeight, selectionLeadPath, viewportHeight, viewportWidth]);
+
+  function startColumnResize(event: React.PointerEvent<HTMLSpanElement>, key: DetailColumnKey) {
+    if (event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const pointerId = event.pointerId;
+    const startX = event.clientX;
+    const startWidth = detailColumnWidths[key];
+    const startWidths = detailColumnWidths;
+    const finishResize = () => {
+      resizeCleanupRef.current = null;
+      document.body.classList.remove("column-resize-active");
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+    };
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      if (moveEvent.pointerId !== pointerId) {
+        return;
+      }
+      const width = clampDetailColumnWidth(key, startWidth + (moveEvent.clientX - startX));
+      if (width === startWidths[key]) {
+        return;
+      }
+      onDetailColumnWidthsChange({
+        ...startWidths,
+        [key]: width,
+      });
+    };
+    const handlePointerUp = (moveEvent: PointerEvent) => {
+      if (moveEvent.pointerId !== pointerId) {
+        return;
+      }
+      finishResize();
+    };
+    resizeCleanupRef.current?.();
+    document.body.classList.add("column-resize-active");
+    resizeCleanupRef.current = finishResize;
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+  }
+
+  function nudgeColumnWidth(key: DetailColumnKey, direction: -1 | 1) {
+    const width = clampDetailColumnWidth(key, detailColumnWidths[key] + direction * 12);
+    if (width === detailColumnWidths[key]) {
+      return;
+    }
+    onDetailColumnWidthsChange({
+      ...detailColumnWidths,
+      [key]: width,
+    });
+  }
+
   return (
     <div className="details-wrapper">
-      <div className="details-header">
-        <SortButton
-          label="Name"
-          active={sortBy === "name"}
-          direction={sortDirection}
-          onClick={() => onSortChange("name")}
-        />
-        <SortButton
-          label="Size"
-          active={sortBy === "size"}
-          direction={sortDirection}
-          onClick={() => onSortChange("size")}
-        />
-        <SortButton
-          label="Modified"
-          accessibleLabel="Date Modified"
-          active={sortBy === "modified"}
-          direction={sortDirection}
-          onClick={() => onSortChange("modified")}
-        />
+      {typeaheadQuery ? (
+        <div className="pane-typeahead pane-typeahead-center" aria-live="polite">
+          <span className="pane-typeahead-label">Select</span>
+          <span className="pane-typeahead-value">{typeaheadQuery}</span>
+        </div>
+      ) : null}
+      <div className="details-header-shell">
+        <div
+          className={`details-header${compactDetailsView ? " compact" : ""}`}
+          style={{
+            width: `${tableWidth}px`,
+            minWidth: "100%",
+            gridTemplateColumns,
+            transform: `translateX(-${scrollLeft}px)`,
+          }}
+        >
+          {visibleColumns.map((columnKey) => (
+            <DetailsHeaderCell
+              key={columnKey}
+              columnKey={columnKey}
+              active={sortBy === columnKey}
+              direction={sortDirection}
+              onSortChange={onSortChange}
+              onResizeStart={startColumnResize}
+              onResizeNudge={nudgeColumnWidth}
+            />
+          ))}
+        </div>
       </div>
       <div
         ref={containerRef}
-        className="content-scroll details-scroll"
+        className={`content-scroll details-scroll${compactDetailsView ? " compact" : ""}`}
         tabIndex={-1}
         onMouseDown={(event) => {
           const target = event.target;
@@ -1096,14 +1271,11 @@ function DetailsView({
             y: event.clientY,
           });
         }}
-        onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+        onScroll={(event) => {
+          setScrollTop(event.currentTarget.scrollTop);
+          setScrollLeft(event.currentTarget.scrollLeft);
+        }}
       >
-        {typeaheadQuery ? (
-          <div className="pane-typeahead pane-typeahead-center" aria-live="polite">
-            <span className="pane-typeahead-label">Select</span>
-            <span className="pane-typeahead-value">{typeaheadQuery}</span>
-          </div>
-        ) : null}
         <ContentState
           loading={loading}
           error={error}
@@ -1111,11 +1283,12 @@ function DetailsView({
           includeHidden={includeHidden}
         />
         <div
+          className="details-table"
           style={{
-            paddingTop: `${range.startIndex * DETAILS_LIST_LAYOUT.rowHeight}px`,
-            paddingBottom: `${
-              Math.max(0, entries.length - range.endIndex) * DETAILS_LIST_LAYOUT.rowHeight
-            }px`,
+            width: `${tableWidth}px`,
+            minWidth: "100%",
+            paddingTop: `${range.startIndex * rowHeight}px`,
+            paddingBottom: `${Math.max(0, entries.length - range.endIndex) * rowHeight}px`,
           }}
         >
           {visibleEntries.map((entry) => {
@@ -1147,19 +1320,20 @@ function DetailsView({
                 onDoubleClick={() => onActivateEntry(entry)}
                 title={entry.path}
                 aria-selected={selectedPathSet.has(entry.path)}
+                style={{
+                  width: `${tableWidth}px`,
+                  minWidth: "100%",
+                  gridTemplateColumns,
+                }}
               >
-                <span className="details-name">
-                  <FileIcon entry={entry} />
-                  <FileNameLabel
-                    className="details-name-label"
-                    name={entry.name}
-                    extension={entry.extension}
+                {visibleColumns.map((columnKey) => (
+                  <DetailsCell
+                    key={columnKey}
+                    columnKey={columnKey}
+                    entry={entry}
+                    metadata={metadata}
                   />
-                </span>
-                <span>
-                  {formatSize(metadata?.sizeBytes ?? null, metadata?.sizeStatus ?? "deferred")}
-                </span>
-                <span>{formatDateTime(metadata?.modifiedAt ?? null)}</span>
+                ))}
               </button>
             );
           })}
@@ -1167,6 +1341,106 @@ function DetailsView({
       </div>
     </div>
   );
+}
+
+function DetailsHeaderCell({
+  columnKey,
+  active,
+  direction,
+  onSortChange,
+  onResizeStart,
+  onResizeNudge,
+}: {
+  columnKey: DetailColumnKey;
+  active: boolean;
+  direction: "asc" | "desc";
+  onSortChange: (sortBy: IpcRequest<"directory:getSnapshot">["sortBy"]) => void;
+  onResizeStart: (event: React.PointerEvent<HTMLSpanElement>, key: DetailColumnKey) => void;
+  onResizeNudge: (key: DetailColumnKey, direction: -1 | 1) => void;
+}) {
+  const label =
+    columnKey === "name"
+      ? "Name"
+      : columnKey === "size"
+        ? "Size"
+        : columnKey === "modified"
+          ? "Modified"
+          : "Permissions";
+  const accessibleLabel = columnKey === "modified" ? "Date Modified" : label;
+  const sortKey =
+    columnKey === "name" || columnKey === "size" || columnKey === "modified" ? columnKey : null;
+  const sortable = sortKey !== null;
+
+  return (
+    <div className="details-header-cell">
+      {sortable ? (
+        <SortButton
+          label={label}
+          accessibleLabel={accessibleLabel}
+          active={active}
+          direction={direction}
+          onClick={() => {
+            if (sortKey) {
+              onSortChange(sortKey);
+            }
+          }}
+        />
+      ) : (
+        <span className="details-header-label">{label}</span>
+      )}
+      <span
+        className="details-column-resizer"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label={`Resize ${label} column`}
+        tabIndex={0}
+        onPointerDown={(event) => onResizeStart(event, columnKey)}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowLeft") {
+            event.preventDefault();
+            onResizeNudge(columnKey, -1);
+          }
+          if (event.key === "ArrowRight") {
+            event.preventDefault();
+            onResizeNudge(columnKey, 1);
+          }
+        }}
+      />
+    </div>
+  );
+}
+
+function DetailsCell({
+  columnKey,
+  entry,
+  metadata,
+}: {
+  columnKey: DetailColumnKey;
+  entry: DirectoryEntry;
+  metadata: DirectoryEntryMetadata | undefined;
+}) {
+  if (columnKey === "name") {
+    return (
+      <span className="details-name">
+        <FileIcon entry={entry} />
+        <FileNameLabel
+          className="details-name-label"
+          name={entry.name}
+          extension={entry.extension}
+        />
+      </span>
+    );
+  }
+  if (columnKey === "size") {
+    return <span>{formatDetailSize(entry, metadata)}</span>;
+  }
+  if (columnKey === "modified") {
+    return <span>{formatDetailModifiedAt(metadata)}</span>;
+  }
+  if (columnKey === "permissions") {
+    return <span>{formatDetailPermissions(metadata)}</span>;
+  }
+  return <span>{formatDetailPermissions(metadata)}</span>;
 }
 
 function SortButton({
@@ -1195,6 +1469,33 @@ function SortButton({
       ) : null}
     </button>
   );
+}
+
+function formatDetailSize(
+  entry: DirectoryEntry,
+  metadata: DirectoryEntryMetadata | undefined,
+): string {
+  if (entry.kind === "directory" || entry.kind === "symlink_directory") {
+    return "-";
+  }
+  if (!metadata || metadata.sizeStatus !== "ready" || metadata.sizeBytes === null) {
+    return "";
+  }
+  return formatSize(metadata.sizeBytes, metadata.sizeStatus);
+}
+
+function formatDetailModifiedAt(metadata: DirectoryEntryMetadata | undefined): string {
+  if (!metadata?.modifiedAt) {
+    return "";
+  }
+  return formatDateTime(metadata.modifiedAt);
+}
+
+function formatDetailPermissions(metadata: DirectoryEntryMetadata | undefined): string {
+  if (metadata?.permissionMode === null || metadata?.permissionMode === undefined) {
+    return "";
+  }
+  return formatPermissionMode(metadata.permissionMode);
 }
 
 function ContentState({

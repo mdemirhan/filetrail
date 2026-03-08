@@ -3,12 +3,16 @@ import { dirname, join } from "node:path";
 
 import {
   type AppPreferences,
+  DETAIL_COLUMN_KEYS,
+  DEFAULT_DETAIL_COLUMN_VISIBILITY,
+  DEFAULT_DETAIL_COLUMN_WIDTHS,
   DEFAULT_APP_PREFERENCES,
   TYPEAHEAD_DEBOUNCE_MAX_MS,
   TYPEAHEAD_DEBOUNCE_MIN_MS,
   type ThemeMode,
   UI_FONT_OPTIONS,
   UI_FONT_WEIGHT_OPTIONS,
+  clampDetailColumnWidth,
   clampFontSize,
   clampFontWeight,
   clampPaneWidth,
@@ -237,10 +241,19 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
       typeof record.compactListView === "boolean"
         ? record.compactListView
         : currentDefaults.compactListView,
+    compactDetailsView:
+      typeof record.compactDetailsView === "boolean"
+        ? record.compactDetailsView
+        : currentDefaults.compactDetailsView,
     compactTreeView:
       typeof record.compactTreeView === "boolean"
         ? record.compactTreeView
         : currentDefaults.compactTreeView,
+    detailColumns: sanitizeDetailColumns(record.detailColumns, currentDefaults.detailColumns),
+    detailColumnWidths: sanitizeDetailColumnWidths(
+      record.detailColumnWidths,
+      currentDefaults.detailColumnWidths,
+    ),
     tabSwitchesExplorerPanes:
       typeof record.tabSwitchesExplorerPanes === "boolean"
         ? record.tabSwitchesExplorerPanes
@@ -329,6 +342,38 @@ function normalizeColorOverride(value: unknown): string | null {
   }
   const normalized = value.trim();
   return /^#[0-9a-fA-F]{6}$/.test(normalized) ? normalized.toLowerCase() : null;
+}
+
+function sanitizeDetailColumns(
+  value: unknown,
+  defaults = DEFAULT_DETAIL_COLUMN_VISIBILITY,
+): AppPreferences["detailColumns"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return defaults;
+  }
+  const record = value as Record<string, unknown>;
+  return {
+    size: typeof record.size === "boolean" ? record.size : defaults.size,
+    modified: typeof record.modified === "boolean" ? record.modified : defaults.modified,
+    permissions:
+      typeof record.permissions === "boolean" ? record.permissions : defaults.permissions,
+  };
+}
+
+function sanitizeDetailColumnWidths(
+  value: unknown,
+  defaults = DEFAULT_DETAIL_COLUMN_WIDTHS,
+): AppPreferences["detailColumnWidths"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return defaults;
+  }
+  const record = value as Record<string, unknown>;
+  return Object.fromEntries(
+    DETAIL_COLUMN_KEYS.map((key) => [
+      key,
+      clampDetailColumnWidth(key, typeof record[key] === "number" ? record[key] : defaults[key]),
+    ]),
+  ) as AppPreferences["detailColumnWidths"];
 }
 
 function sanitizeWindowState(value: unknown): StoredWindowState {

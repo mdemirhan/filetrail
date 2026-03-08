@@ -55,11 +55,13 @@ describe("explorerService integration fixtures", () => {
         path: join(resolvedRootPath, "alpha"),
         sizeBytes: 1,
         sizeStatus: "ready",
+        permissionMode: expect.any(Number),
       }),
       expect.objectContaining({
         path: join(resolvedRootPath, "Folder"),
         sizeBytes: null,
         sizeStatus: "deferred",
+        permissionMode: expect.any(Number),
       }),
     ]);
   });

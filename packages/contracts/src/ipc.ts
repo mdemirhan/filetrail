@@ -21,6 +21,17 @@ export const searchPatternModeSchema = z.enum(["glob", "regex"]);
 export const searchMatchScopeSchema = z.enum(["name", "path"]);
 export const searchResultsSortBySchema = z.enum(["name", "path"]);
 export const searchResultsFilterScopeSchema = z.enum(["name", "path"]);
+export const detailColumnVisibilitySchema = z.object({
+  size: z.boolean(),
+  modified: z.boolean(),
+  permissions: z.boolean(),
+});
+export const detailColumnWidthsSchema = z.object({
+  name: z.number().int().min(220).max(720),
+  size: z.number().int().min(84).max(240),
+  modified: z.number().int().min(132).max(280),
+  permissions: z.number().int().min(132).max(260),
+});
 export const searchJobStatusSchema = z.enum([
   "running",
   "complete",
@@ -52,6 +63,7 @@ export const directoryEntryMetadataSchema = z.object({
   modifiedAt: z.string().nullable(),
   sizeBytes: z.number().int().nonnegative().nullable(),
   sizeStatus: z.enum(["ready", "deferred", "unavailable"]),
+  permissionMode: z.number().int().nonnegative().nullable(),
 });
 
 export const itemPropertiesSchema = z.object({
@@ -106,7 +118,10 @@ export const appPreferencesSchema = z.object({
   viewMode: explorerViewModeSchema,
   foldersFirst: z.boolean(),
   compactListView: z.boolean(),
+  compactDetailsView: z.boolean(),
   compactTreeView: z.boolean(),
+  detailColumns: detailColumnVisibilitySchema,
+  detailColumnWidths: detailColumnWidthsSchema,
   tabSwitchesExplorerPanes: z.boolean(),
   typeaheadEnabled: z.boolean(),
   typeaheadDebounceMs: z.number().int().min(250).max(1500),

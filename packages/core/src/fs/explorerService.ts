@@ -253,6 +253,7 @@ async function readDirectoryEntryMetadata(
     modifiedAt: toIsoStringOrNull(stats.mtime),
     sizeBytes: stats.isDirectory() ? null : stats.size,
     sizeStatus: stats.isDirectory() ? "deferred" : "ready",
+    permissionMode: normalizePermissionMode(stats.mode),
   };
 }
 

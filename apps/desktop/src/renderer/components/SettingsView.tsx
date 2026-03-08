@@ -1,4 +1,9 @@
-import type { ThemeMode, UiFontFamily, UiFontWeight } from "../../shared/appPreferences";
+import type {
+  DetailColumnVisibility,
+  ThemeMode,
+  UiFontFamily,
+  UiFontWeight,
+} from "../../shared/appPreferences";
 
 export function SettingsView({
   theme,
@@ -9,7 +14,9 @@ export function SettingsView({
   effectiveTextSecondaryColor,
   effectiveTextMutedColor,
   compactListView,
+  compactDetailsView,
   compactTreeView,
+  detailColumns,
   layoutMode = "wide",
   tabSwitchesExplorerPanes,
   typeaheadEnabled,
@@ -29,7 +36,9 @@ export function SettingsView({
   onTextMutedColorChange,
   onResetAppearance,
   onCompactListViewChange,
+  onCompactDetailsViewChange,
   onCompactTreeViewChange,
+  onDetailColumnsChange,
   onTabSwitchesExplorerPanesChange,
   onTypeaheadEnabledChange,
   onTypeaheadDebounceMsChange,
@@ -43,7 +52,9 @@ export function SettingsView({
   effectiveTextSecondaryColor: string;
   effectiveTextMutedColor: string;
   compactListView: boolean;
+  compactDetailsView: boolean;
   compactTreeView: boolean;
+  detailColumns: DetailColumnVisibility;
   layoutMode?: "wide" | "narrow" | "compact";
   tabSwitchesExplorerPanes: boolean;
   typeaheadEnabled: boolean;
@@ -63,7 +74,9 @@ export function SettingsView({
   onTextMutedColorChange: (value: string | null) => void;
   onResetAppearance: () => void;
   onCompactListViewChange: (value: boolean) => void;
+  onCompactDetailsViewChange: (value: boolean) => void;
   onCompactTreeViewChange: (value: boolean) => void;
+  onDetailColumnsChange: (value: DetailColumnVisibility) => void;
   onTabSwitchesExplorerPanesChange: (value: boolean) => void;
   onTypeaheadEnabledChange: (value: boolean) => void;
   onTypeaheadDebounceMsChange: (value: number) => void;
@@ -251,6 +264,49 @@ export function SettingsView({
                 <span className="settings-toggle-track" aria-hidden />
               </span>
             </label>
+            <label className="settings-toggle-row">
+              <span className="settings-toggle-copy">
+                <span className="settings-toggle-title">Compact detail view</span>
+                <span className="settings-toggle-description">
+                  Use the same denser row height as compact list view in detail mode.
+                </span>
+              </span>
+              <span className="settings-toggle-control">
+                <input
+                  type="checkbox"
+                  className="settings-toggle-input"
+                  checked={compactDetailsView}
+                  onChange={(event) => onCompactDetailsViewChange(event.currentTarget.checked)}
+                />
+                <span className="settings-toggle-track" aria-hidden />
+              </span>
+            </label>
+            <div className="settings-subsection">
+              <div className="settings-subsection-title">Detail view columns</div>
+              <div className="settings-check-grid">
+                {(
+                  [
+                    ["size", "Size"],
+                    ["modified", "Modified"],
+                    ["permissions", "Permissions"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <label key={key} className="settings-check-chip">
+                    <input
+                      type="checkbox"
+                      checked={detailColumns[key]}
+                      onChange={(event) =>
+                        onDetailColumnsChange({
+                          ...detailColumns,
+                          [key]: event.currentTarget.checked,
+                        })
+                      }
+                    />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
           </div>
         </section>
 
@@ -289,7 +345,8 @@ export function SettingsView({
               <span className="settings-toggle-copy">
                 <span className="settings-toggle-title">Type to select</span>
                 <span className="settings-toggle-description">
-                  Jump to the first visible matching item while typing in the tree or file list.
+                  Jump to the first visible matching item while typing in the tree, list view, or
+                  detail view.
                 </span>
               </span>
               <span className="settings-toggle-control">
@@ -310,7 +367,9 @@ export function SettingsView({
                   className="settings-select"
                   value={typeaheadDebounceMs}
                   disabled={!typeaheadEnabled}
-                  onChange={(event) => onTypeaheadDebounceMsChange(Number(event.currentTarget.value))}
+                  onChange={(event) =>
+                    onTypeaheadDebounceMsChange(Number(event.currentTarget.value))
+                  }
                 >
                   {typeaheadDebounceOptions.map((option) => (
                     <option key={option} value={option}>

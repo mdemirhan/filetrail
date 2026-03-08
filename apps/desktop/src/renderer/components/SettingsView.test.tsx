@@ -16,7 +16,13 @@ describe("SettingsView", () => {
         effectiveTextSecondaryColor="#cccccc"
         effectiveTextMutedColor="#999999"
         compactListView={false}
+        compactDetailsView={false}
         compactTreeView={false}
+        detailColumns={{
+          size: true,
+          modified: true,
+          permissions: true,
+        }}
         layoutMode="compact"
         tabSwitchesExplorerPanes={true}
         typeaheadEnabled={true}
@@ -36,7 +42,9 @@ describe("SettingsView", () => {
         onTextMutedColorChange={() => undefined}
         onResetAppearance={() => undefined}
         onCompactListViewChange={() => undefined}
+        onCompactDetailsViewChange={() => undefined}
         onCompactTreeViewChange={() => undefined}
+        onDetailColumnsChange={() => undefined}
         onTabSwitchesExplorerPanesChange={() => undefined}
         onTypeaheadEnabledChange={() => undefined}
         onTypeaheadDebounceMsChange={() => undefined}

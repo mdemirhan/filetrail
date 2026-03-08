@@ -45,7 +45,19 @@ describe("ipc contracts", () => {
           viewMode: "list",
           foldersFirst: true,
           compactListView: false,
+          compactDetailsView: false,
           compactTreeView: false,
+          detailColumns: {
+            size: true,
+            modified: true,
+            permissions: true,
+          },
+          detailColumnWidths: {
+            name: 320,
+            size: 108,
+            modified: 168,
+            permissions: 148,
+          },
           tabSwitchesExplorerPanes: true,
           typeaheadEnabled: true,
           typeaheadDebounceMs: 750,
@@ -78,7 +90,19 @@ describe("ipc contracts", () => {
         viewMode: "list",
         foldersFirst: true,
         compactListView: false,
+        compactDetailsView: false,
         compactTreeView: false,
+        detailColumns: {
+          size: true,
+          modified: true,
+          permissions: true,
+        },
+        detailColumnWidths: {
+          name: 320,
+          size: 108,
+          modified: 168,
+          permissions: 148,
+        },
         tabSwitchesExplorerPanes: true,
         typeaheadEnabled: true,
         typeaheadDebounceMs: 750,
@@ -118,7 +142,19 @@ describe("ipc contracts", () => {
           searchResultsFilterScope: "path",
           foldersFirst: false,
           compactListView: true,
+          compactDetailsView: true,
           compactTreeView: true,
+          detailColumns: {
+            size: true,
+            modified: false,
+            permissions: true,
+          },
+          detailColumnWidths: {
+            name: 360,
+            size: 120,
+            modified: 180,
+            permissions: 160,
+          },
           tabSwitchesExplorerPanes: false,
           typeaheadEnabled: false,
           typeaheadDebounceMs: 1000,
@@ -141,7 +177,19 @@ describe("ipc contracts", () => {
         searchResultsFilterScope: "path",
         foldersFirst: false,
         compactListView: true,
+        compactDetailsView: true,
         compactTreeView: true,
+        detailColumns: {
+          size: true,
+          modified: false,
+          permissions: true,
+        },
+        detailColumnWidths: {
+          name: 360,
+          size: 120,
+          modified: 180,
+          permissions: 160,
+        },
         tabSwitchesExplorerPanes: false,
         typeaheadEnabled: false,
         typeaheadDebounceMs: 1000,
@@ -164,6 +212,36 @@ describe("ipc contracts", () => {
       }),
     ).toEqual({
       startupFolderPath: null,
+    });
+  });
+
+  it("validates directory metadata rows with permissions", () => {
+    expect(
+      ipcContractSchemas["directory:getMetadataBatch"].response.parse({
+        directoryPath: "/Users/demo",
+        items: [
+          {
+            path: "/Users/demo/file.txt",
+            kindLabel: "TXT File",
+            modifiedAt: "2026-03-09T00:00:00.000Z",
+            sizeBytes: 42,
+            sizeStatus: "ready",
+            permissionMode: 0o644,
+          },
+        ],
+      }),
+    ).toEqual({
+      directoryPath: "/Users/demo",
+      items: [
+        {
+          path: "/Users/demo/file.txt",
+          kindLabel: "TXT File",
+          modifiedAt: "2026-03-09T00:00:00.000Z",
+          sizeBytes: 42,
+          sizeStatus: "ready",
+          permissionMode: 0o644,
+        },
+      ],
     });
   });
 

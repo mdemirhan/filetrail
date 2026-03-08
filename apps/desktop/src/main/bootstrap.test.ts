@@ -24,4 +24,36 @@ describe("toPreferencePatch", () => {
       tabSwitchesExplorerPanes: false,
     });
   });
+
+  it("preserves detail view preference fields", () => {
+    expect(
+      toPreferencePatch({
+        compactDetailsView: true,
+        detailColumns: {
+          size: true,
+          modified: false,
+          permissions: true,
+        },
+        detailColumnWidths: {
+          name: 360,
+          size: 120,
+          modified: 180,
+          permissions: 160,
+        },
+      }),
+    ).toEqual({
+      compactDetailsView: true,
+      detailColumns: {
+        size: true,
+        modified: false,
+        permissions: true,
+      },
+      detailColumnWidths: {
+        name: 360,
+        size: 120,
+        modified: 180,
+        permissions: 160,
+      },
+    });
+  });
 });

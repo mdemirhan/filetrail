@@ -7,6 +7,10 @@ export type SearchMatchScopePreference = "name" | "path";
 export type SearchResultsSortByPreference = "name" | "path";
 export type SearchResultsSortDirectionPreference = "asc" | "desc";
 export type SearchResultsFilterScopePreference = "name" | "path";
+export type DetailColumnKey = "name" | "size" | "modified" | "permissions";
+export type OptionalDetailColumnKey = Exclude<DetailColumnKey, "name">;
+export type DetailColumnVisibility = Record<OptionalDetailColumnKey, boolean>;
+export type DetailColumnWidths = Record<DetailColumnKey, number>;
 
 export const THEME_OPTIONS = [
   { value: "dark", label: "Dark" },
@@ -26,6 +30,25 @@ export const UI_FONT_WEIGHT_OPTIONS = [400, 500, 600] as const;
 export const TYPEAHEAD_DEBOUNCE_OPTIONS = [250, 500, 750, 1000, 1500] as const;
 export const TYPEAHEAD_DEBOUNCE_MIN_MS = 250;
 export const TYPEAHEAD_DEBOUNCE_MAX_MS = 1500;
+export const DETAIL_COLUMN_KEYS = ["name", "size", "modified", "permissions"] as const;
+export const OPTIONAL_DETAIL_COLUMN_KEYS = ["size", "modified", "permissions"] as const;
+export const DEFAULT_DETAIL_COLUMN_VISIBILITY: DetailColumnVisibility = {
+  size: true,
+  modified: true,
+  permissions: true,
+};
+export const DEFAULT_DETAIL_COLUMN_WIDTHS: DetailColumnWidths = {
+  name: 320,
+  size: 108,
+  modified: 168,
+  permissions: 148,
+};
+export const DETAIL_COLUMN_WIDTH_LIMITS = {
+  name: { min: 220, max: 720 },
+  size: { min: 84, max: 240 },
+  modified: { min: 132, max: 280 },
+  permissions: { min: 132, max: 260 },
+} as const satisfies Record<DetailColumnKey, { min: number; max: number }>;
 
 export type AppPreferences = {
   theme: ThemeMode;
@@ -38,7 +61,10 @@ export type AppPreferences = {
   viewMode: ExplorerViewMode;
   foldersFirst: boolean;
   compactListView: boolean;
+  compactDetailsView: boolean;
   compactTreeView: boolean;
+  detailColumns: DetailColumnVisibility;
+  detailColumnWidths: DetailColumnWidths;
   tabSwitchesExplorerPanes: boolean;
   typeaheadEnabled: boolean;
   typeaheadDebounceMs: number;
@@ -70,7 +96,10 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   viewMode: "list",
   foldersFirst: true,
   compactListView: false,
+  compactDetailsView: false,
   compactTreeView: false,
+  detailColumns: DEFAULT_DETAIL_COLUMN_VISIBILITY,
+  detailColumnWidths: DEFAULT_DETAIL_COLUMN_WIDTHS,
   tabSwitchesExplorerPanes: true,
   typeaheadEnabled: true,
   typeaheadDebounceMs: 750,
@@ -109,6 +138,11 @@ export function clampFontWeight(
 
 export function clampTypeaheadDebounceMs(value: number, min: number, max: number): number {
   return Math.round(Math.max(min, Math.min(max, value)));
+}
+
+export function clampDetailColumnWidth(key: DetailColumnKey, value: number): number {
+  const limits = DETAIL_COLUMN_WIDTH_LIMITS[key];
+  return Math.round(Math.max(limits.min, Math.min(limits.max, value)));
 }
 
 export function getThemeLabel(theme: ThemeMode): string {

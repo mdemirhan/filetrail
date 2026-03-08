@@ -22,7 +22,19 @@ describe("appStateStore", () => {
       viewMode: "list",
       foldersFirst: true,
       compactListView: false,
+      compactDetailsView: false,
       compactTreeView: false,
+      detailColumns: {
+        size: true,
+        modified: true,
+        permissions: true,
+      },
+      detailColumnWidths: {
+        name: 320,
+        size: 108,
+        modified: 168,
+        permissions: 148,
+      },
       tabSwitchesExplorerPanes: true,
       typeaheadEnabled: true,
       typeaheadDebounceMs: 750,
@@ -66,7 +78,19 @@ describe("appStateStore", () => {
       viewMode: "details",
       foldersFirst: false,
       compactListView: true,
+      compactDetailsView: true,
       compactTreeView: true,
+      detailColumns: {
+        size: true,
+        modified: false,
+        permissions: true,
+      },
+      detailColumnWidths: {
+        name: 360,
+        size: 120,
+        modified: 180,
+        permissions: 160,
+      },
       tabSwitchesExplorerPanes: false,
       typeaheadEnabled: false,
       typeaheadDebounceMs: 1000,
@@ -109,7 +133,19 @@ describe("appStateStore", () => {
       viewMode: "details",
       foldersFirst: false,
       compactListView: true,
+      compactDetailsView: true,
       compactTreeView: true,
+      detailColumns: {
+        size: true,
+        modified: false,
+        permissions: true,
+      },
+      detailColumnWidths: {
+        name: 360,
+        size: 120,
+        modified: 180,
+        permissions: 160,
+      },
       tabSwitchesExplorerPanes: false,
       typeaheadEnabled: false,
       typeaheadDebounceMs: 1000,
@@ -150,6 +186,18 @@ describe("appStateStore", () => {
       uiFontWeight: 123 as never,
       textPrimaryOverride: "oops" as never,
       typeaheadDebounceMs: 9999,
+      compactDetailsView: "yes" as never,
+      detailColumns: {
+        size: "nope",
+        modified: false,
+        permissions: true,
+      } as never,
+      detailColumnWidths: {
+        name: 9999,
+        size: 1,
+        modified: 180,
+        permissions: 100,
+      } as never,
       treeWidth: 1,
       inspectorWidth: 9999,
       treeRootPath: "",
@@ -167,6 +215,18 @@ describe("appStateStore", () => {
     expect(reloaded.getPreferences().uiFontWeight).toBe(500);
     expect(reloaded.getPreferences().textPrimaryOverride).toBeNull();
     expect(reloaded.getPreferences().typeaheadDebounceMs).toBe(1500);
+    expect(reloaded.getPreferences().compactDetailsView).toBe(false);
+    expect(reloaded.getPreferences().detailColumns).toEqual({
+      size: true,
+      modified: false,
+      permissions: true,
+    });
+    expect(reloaded.getPreferences().detailColumnWidths).toEqual({
+      name: 720,
+      size: 84,
+      modified: 180,
+      permissions: 132,
+    });
     expect(reloaded.getPreferences().treeRootPath).toBeNull();
     expect(reloaded.getPreferences().lastVisitedPath).toBeNull();
   });

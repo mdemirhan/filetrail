@@ -188,6 +188,48 @@ describe("SearchResultsPane", () => {
     expect(handleContextMenu).toHaveBeenCalledWith(null, { x: 24, y: 36 });
   });
 
+  it("forwards typeahead keys from search results through the shared content handler", () => {
+    const handleTypeaheadInput = vi.fn();
+
+    render(
+      <SearchResultsPane
+        isFocused
+        rootPath="/Users/demo/project"
+        query="*.tsx"
+        status="complete"
+        results={[
+          {
+            path: "/Users/demo/project/src/App.tsx",
+            name: "App.tsx",
+            extension: "tsx",
+            kind: "file",
+            isHidden: false,
+            isSymlink: false,
+            parentPath: "/Users/demo/project/src",
+            relativeParentPath: "src",
+          },
+        ]}
+        selectedPath=""
+        error={null}
+        truncated={false}
+        {...defaultFilterProps}
+        {...defaultSortProps}
+        onStopSearch={() => undefined}
+        onClearResults={() => undefined}
+        onCloseResults={() => undefined}
+        onSelectPath={() => undefined}
+        onActivateResult={() => undefined}
+        onFocusChange={() => undefined}
+        onTypeaheadInput={handleTypeaheadInput}
+        typeaheadQuery=""
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByRole("button", { name: /App\.tsx/i }), { key: "a" });
+
+    expect(handleTypeaheadInput).toHaveBeenCalledWith("a");
+  });
+
   it("forwards manual sort controls and restores scroll position", () => {
     const handleSortByChange = vi.fn();
     const handleSortDirectionToggle = vi.fn();

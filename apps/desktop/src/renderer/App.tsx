@@ -9,7 +9,11 @@ import {
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 
 import {
+  DEFAULT_DETAIL_COLUMN_VISIBILITY,
+  DEFAULT_DETAIL_COLUMN_WIDTHS,
   DEFAULT_APP_PREFERENCES,
+  type DetailColumnVisibility,
+  type DetailColumnWidths,
   type ExplorerViewMode,
   type SearchResultsFilterScopePreference,
   type SearchResultsSortByPreference,
@@ -64,6 +68,7 @@ import {
 } from "./lib/explorerNavigation";
 import { FileIcon } from "./lib/fileIcons";
 import { useFiletrailClient } from "./lib/filetrailClient";
+import { getDetailsRowHeight } from "./lib/detailsLayout";
 import { getFlowListColumnStep } from "./lib/flowListLayout";
 import { formatDateTime, formatPermissionMode, formatSize } from "./lib/formatting";
 import { REFERENCE_ITEMS, SHORTCUT_ITEMS } from "./lib/helpContent";
@@ -170,7 +175,16 @@ export function App() {
   const [viewMode, setViewMode] = useState<ExplorerViewMode>(DEFAULT_APP_PREFERENCES.viewMode);
   const [foldersFirst, setFoldersFirst] = useState(DEFAULT_APP_PREFERENCES.foldersFirst);
   const [compactListView, setCompactListView] = useState(DEFAULT_APP_PREFERENCES.compactListView);
+  const [compactDetailsView, setCompactDetailsView] = useState(
+    DEFAULT_APP_PREFERENCES.compactDetailsView,
+  );
   const [compactTreeView, setCompactTreeView] = useState(DEFAULT_APP_PREFERENCES.compactTreeView);
+  const [detailColumns, setDetailColumns] = useState<DetailColumnVisibility>(
+    DEFAULT_DETAIL_COLUMN_VISIBILITY,
+  );
+  const [detailColumnWidths, setDetailColumnWidths] = useState<DetailColumnWidths>(
+    DEFAULT_DETAIL_COLUMN_WIDTHS,
+  );
   const [tabSwitchesExplorerPanes, setTabSwitchesExplorerPanes] = useState(
     DEFAULT_APP_PREFERENCES.tabSwitchesExplorerPanes,
   );
@@ -222,7 +236,6 @@ export function App() {
   const themeMenuRef = useRef<HTMLDivElement | null>(null);
   const themeButtonRef = useRef<HTMLButtonElement | null>(null);
   const directoryRequestRef = useRef(0);
-  const metadataRequestRef = useRef(0);
   const getInfoRequestRef = useRef(0);
   const searchPollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchSessionRef = useRef(0);
@@ -242,6 +255,8 @@ export function App() {
   const treeRequestRef = useRef<Record<string, number>>({});
   const treeNodesRef = useRef<Record<string, TreeNodeState>>({});
   const treeRootPathRef = useRef(treeRootPath);
+  const metadataCacheRef = useRef<Map<string, DirectoryEntryMetadata>>(new Map());
+  const metadataInflightRef = useRef<Set<string>>(new Set());
   const typeaheadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typeaheadQueryRef = useRef("");
   const typeaheadPaneRef = useRef<"tree" | "content" | null>(null);
@@ -523,7 +538,10 @@ export function App() {
         viewMode,
         foldersFirst,
         compactListView,
+        compactDetailsView,
         compactTreeView,
+        detailColumns,
+        detailColumnWidths,
         tabSwitchesExplorerPanes,
         typeaheadEnabled,
         typeaheadDebounceMs,
@@ -555,7 +573,10 @@ export function App() {
     infoRowOpen,
     foldersFirst,
     compactListView,
+    compactDetailsView,
     compactTreeView,
+    detailColumns,
+    detailColumnWidths,
     searchIncludeHidden,
     searchResultsSortBy,
     searchResultsSortDirection,
@@ -610,7 +631,10 @@ export function App() {
         setViewMode(preferences.viewMode);
         setFoldersFirst(preferences.foldersFirst);
         setCompactListView(preferences.compactListView);
+        setCompactDetailsView(preferences.compactDetailsView);
         setCompactTreeView(preferences.compactTreeView);
+        setDetailColumns(preferences.detailColumns);
+        setDetailColumnWidths(preferences.detailColumnWidths);
         setTabSwitchesExplorerPanes(preferences.tabSwitchesExplorerPanes);
         setTypeaheadEnabled(preferences.typeaheadEnabled);
         setTypeaheadDebounceMs(preferences.typeaheadDebounceMs);
@@ -796,22 +820,68 @@ export function App() {
     if (isSearchMode || viewMode !== "details" || currentPath.length === 0 || directoryLoading) {
       return;
     }
-    const currentEntryPaths = new Set(currentEntries.map((entry) => entry.path));
-    const missingPaths = visiblePaths.filter(
-      (path) => currentEntryPaths.has(path) && !metadataByPath[path],
-    );
+    const entryIndexByPath = new Map(currentEntries.map((entry, index) => [entry.path, index]));
+    const prioritizedPaths = new Set(visiblePaths.filter((path) => entryIndexByPath.has(path)));
+    if (visiblePaths.length > 0 && currentEntries.length > visiblePaths.length) {
+      const lastVisibleIndex = visiblePaths.reduce((maxIndex, path) => {
+        const index = entryIndexByPath.get(path);
+        return index === undefined ? maxIndex : Math.max(maxIndex, index);
+      }, -1);
+      if (lastVisibleIndex >= 0) {
+        for (
+          let index = lastVisibleIndex + 1;
+          index < Math.min(currentEntries.length, lastVisibleIndex + 1 + visiblePaths.length);
+          index += 1
+        ) {
+          const entry = currentEntries[index];
+          if (entry) {
+            prioritizedPaths.add(entry.path);
+          }
+        }
+      }
+    }
+
+    const cachedItems: DirectoryEntryMetadata[] = [];
+    const missingPaths: string[] = [];
+    for (const path of prioritizedPaths) {
+      if (metadataByPath[path]) {
+        continue;
+      }
+      const cached = metadataCacheRef.current.get(path);
+      if (cached) {
+        cachedItems.push(cached);
+        continue;
+      }
+      if (metadataInflightRef.current.has(path)) {
+        continue;
+      }
+      missingPaths.push(path);
+    }
+
+    if (cachedItems.length > 0) {
+      setMetadataByPath((current) => {
+        const next = { ...current };
+        for (const item of cachedItems) {
+          next[item.path] = item;
+        }
+        return next;
+      });
+    }
+
     if (missingPaths.length === 0) {
       return;
     }
-    const requestId = ++metadataRequestRef.current;
+    for (const path of missingPaths) {
+      metadataInflightRef.current.add(path);
+    }
     void client
       .invoke("directory:getMetadataBatch", {
         directoryPath: currentPath,
         paths: missingPaths,
       })
       .then((response) => {
-        if (metadataRequestRef.current !== requestId) {
-          return;
+        for (const item of response.items) {
+          metadataCacheRef.current.set(item.path, item);
         }
         setMetadataByPath((current) => {
           const next = { ...current };
@@ -823,11 +893,17 @@ export function App() {
       })
       .catch((error) => {
         logger.debug("metadata batch failed", error);
+      })
+      .finally(() => {
+        for (const path of missingPaths) {
+          metadataInflightRef.current.delete(path);
+        }
       });
   }, [
     client,
     currentEntries,
     currentPath,
+    compactDetailsView,
     directoryLoading,
     isSearchMode,
     metadataByPath,
@@ -866,6 +942,9 @@ export function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
       const target = event.target;
       const targetElement = target instanceof HTMLElement ? target : null;
       if (actionNotice) {
@@ -1107,7 +1186,6 @@ export function App() {
         !event.metaKey &&
         !event.ctrlKey &&
         !event.altKey &&
-        !isSearchMode &&
         (focusedPane === "tree" || focusedPane === "content") &&
         isTypeaheadCharacterKey(event.key)
       ) {
@@ -1207,6 +1285,7 @@ export function App() {
     tabSwitchesExplorerPanes,
     typeaheadEnabled,
     viewMode,
+    compactDetailsView,
     compactTreeView,
   ]);
 
@@ -1373,7 +1452,10 @@ export function App() {
         return didScroll;
       }
 
-      const stepItems = getPageStepItemCount(target.element.clientHeight, isSearchMode ? 56 : 38);
+      const stepItems = getPageStepItemCount(
+        target.element.clientHeight,
+        isSearchMode ? 56 : getDetailsRowHeight(compactDetailsView),
+      );
       const nextIndex = getPagedSelectionIndex({
         itemCount: activeContentEntries.length,
         currentIndex,
@@ -2062,11 +2144,18 @@ export function App() {
       if (directoryRequestRef.current !== requestId) {
         return false;
       }
+      const cachedMetadata = Object.fromEntries(
+        response.entries.flatMap((entry) => {
+          const cached = metadataCacheRef.current.get(entry.path);
+          return cached ? [[entry.path, cached] as const] : [];
+        }),
+      );
+      metadataCacheRef.current = new Map(Object.entries(cachedMetadata));
+      metadataInflightRef.current.clear();
       setCurrentPath(response.path);
       setCurrentEntries(response.entries);
       setVisiblePaths([]);
-      setMetadataByPath({});
-      metadataRequestRef.current += 1;
+      setMetadataByPath(cachedMetadata);
       if (searchResultsVisibleRef.current) {
         setSearchResultsVisible(false);
       }
@@ -2878,6 +2967,8 @@ export function App() {
                       openItemContextMenu(path, position, "search");
                     }}
                     onFocusChange={(focused) => setFocusedPane(focused ? "content" : null)}
+                    onTypeaheadInput={(key) => handleTypeaheadInput(key, "content")}
+                    typeaheadQuery={focusedPane === "content" ? typeaheadQuery : ""}
                     scrollTop={searchResultsScrollTop}
                     onScrollTopChange={setSearchResultsScrollTop}
                   />
@@ -2913,10 +3004,15 @@ export function App() {
                         inputPath,
                       })
                     }
+                    onTypeaheadInput={(key) => handleTypeaheadInput(key, "content")}
                     onItemContextMenu={(path, position) => {
                       openItemContextMenu(path, position, "browse");
                     }}
                     compactListView={compactListView}
+                    compactDetailsView={compactDetailsView}
+                    detailColumns={detailColumns}
+                    detailColumnWidths={detailColumnWidths}
+                    onDetailColumnWidthsChange={setDetailColumnWidths}
                     tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
                     searchQuery=""
                     typeaheadQuery={focusedPane === "content" ? typeaheadQuery : ""}
@@ -2997,7 +3093,9 @@ export function App() {
                 effectiveTextSecondaryColor={effectiveThemeColors.secondary}
                 effectiveTextMutedColor={effectiveThemeColors.muted}
                 compactListView={compactListView}
+                compactDetailsView={compactDetailsView}
                 compactTreeView={compactTreeView}
+                detailColumns={detailColumns}
                 layoutMode={singlePanelLayout}
                 tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
                 typeaheadEnabled={typeaheadEnabled}
@@ -3017,7 +3115,9 @@ export function App() {
                 onTextMutedColorChange={setTextMutedOverride}
                 onResetAppearance={resetAppearanceSettings}
                 onCompactListViewChange={setCompactListView}
+                onCompactDetailsViewChange={setCompactDetailsView}
                 onCompactTreeViewChange={setCompactTreeView}
+                onDetailColumnsChange={setDetailColumns}
                 onTabSwitchesExplorerPanesChange={setTabSwitchesExplorerPanes}
                 onTypeaheadEnabledChange={setTypeaheadEnabled}
                 onTypeaheadDebounceMsChange={setTypeaheadDebounceMs}
