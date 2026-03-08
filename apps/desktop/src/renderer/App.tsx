@@ -1500,6 +1500,29 @@ export function App() {
     focusContentPane();
   }
 
+  async function activatePathFromContextMenu(path: string) {
+    const browseEntry = currentEntries.find((entry) => entry.path === path);
+    if (browseEntry) {
+      await activateEntry(browseEntry);
+      return;
+    }
+
+    const searchResult = searchResults.find((result) => result.path === path);
+    if (!searchResult) {
+      return;
+    }
+
+    const entry: DirectoryEntry = {
+      path: searchResult.path,
+      name: searchResult.name,
+      extension: searchResult.extension,
+      kind: searchResult.kind,
+      isHidden: searchResult.isHidden,
+      isSymlink: searchResult.isSymlink,
+    };
+    await activateEntry(entry);
+  }
+
   async function runContextMenuAction(actionId: ContextMenuActionId, paths: string[]) {
     closeContextMenu();
     if (actionId === "revealInFolder") {
@@ -1515,12 +1538,19 @@ export function App() {
       }
       return;
     }
+    if (actionId === "open") {
+      const firstPath = paths[0];
+      if (firstPath) {
+        await activatePathFromContextMenu(firstPath);
+      }
+      return;
+    }
+    if (actionId === "info") {
+      setPropertiesOpen((value: boolean) => !value);
+      return;
+    }
     const title =
-      actionId === "open"
-        ? "Open"
-        : actionId === "info"
-          ? "Get Info"
-          : actionId === "copy"
+      actionId === "copy"
             ? "Copy"
             : actionId === "move"
               ? "Move To…"

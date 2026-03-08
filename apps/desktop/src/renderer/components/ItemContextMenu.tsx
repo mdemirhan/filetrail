@@ -119,13 +119,8 @@ export function ItemContextMenu({
       setActiveItemId(null);
       return;
     }
-    const firstEnabledItem = items.find(
-      (item) =>
-        item.type !== "separator" &&
-        !disabledActionIdSet.has(item.id),
-    );
-    setActiveItemId(firstEnabledItem?.type !== "separator" ? firstEnabledItem?.id ?? null : null);
-  }, [disabledActionIdSet, items, open]);
+    setActiveItemId(null);
+  }, [open]);
 
   const submenuOpen = activeItemId === "openWith";
   const menuStyle = useMemo(

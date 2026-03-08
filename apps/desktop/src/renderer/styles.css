@@ -110,6 +110,8 @@
   --crumb-active-bg: rgba(124, 58, 237, 0.08);
   --crumb-separator-bg: transparent;
   --crumb-border: transparent;
+  --scroll-thumb: rgba(60, 63, 86, 0.22);
+  --scroll-thumb-hover: rgba(60, 63, 86, 0.34);
   --search-surface: #f7f8fa;
   --search-surface-strong: #f7f8fa;
   --search-border: #c8c8d2;
@@ -2172,6 +2174,11 @@ body.resizing-panels * {
   border-radius: 999px;
 }
 
+.tree-scroll:hover::-webkit-scrollbar-thumb,
+.content-scroll:hover::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb-hover, var(--scroll-thumb));
+}
+
 .tree-virtual-spacer {
   padding: 10px 0 16px;
 }
@@ -3342,17 +3349,19 @@ body.resizing-panels * {
   display: grid;
   place-items: start center;
   padding-top: 28px;
-  background: rgba(17, 24, 39, 0.08);
+  background: rgba(17, 24, 39, 0.12);
   z-index: 20;
 }
 
 .location-sheet {
   width: min(560px, calc(100vw - 32px));
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--border-active) 92%, transparent);
   border-radius: var(--radius-lg);
-  background: var(--bg-surface);
-  box-shadow: var(--shadow-lg);
+  background: color-mix(in srgb, var(--bg-elevated) 96%, white 4%);
+  box-shadow: 0 18px 44px rgba(30, 32, 48, 0.16), 0 4px 14px rgba(30, 32, 48, 0.08);
   overflow: visible;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
 .help-view,
@@ -4128,7 +4137,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
   justify-content: space-between;
   gap: 12px;
   padding: 18px 18px 12px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 92%, transparent);
 }
 
 .location-sheet-eyebrow {
@@ -4136,12 +4145,13 @@ body.platform-macos .settings-view[data-layout="compact"] {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-tertiary);
+  color: var(--accent-gold);
 }
 
 .location-sheet-header h2 {
   margin-top: 2px;
   font-size: 20px;
+  color: var(--text-primary);
 }
 
 .location-sheet-form {
@@ -4157,21 +4167,23 @@ body.platform-macos .settings-view[data-layout="compact"] {
 .location-sheet-label {
   font-size: 12px;
   color: var(--text-secondary);
+  font-weight: 600;
 }
 
 .location-sheet-input {
   width: 100%;
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--border-active) 86%, transparent);
   border-radius: var(--radius-md);
-  background: var(--bg-elevated);
+  background: color-mix(in srgb, var(--bg-base) 30%, white 70%);
   padding: 11px 12px;
   color: var(--text-primary);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 .location-sheet-input:focus {
   outline: none;
-  border-color: var(--accent-blue);
-  box-shadow: 0 0 0 3px var(--accent-blue-dim);
+  border-color: var(--accent-gold);
+  box-shadow: 0 0 0 3px var(--accent-gold-dim);
 }
 
 .location-sheet-suggestions {

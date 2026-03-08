@@ -5,6 +5,21 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { ItemContextMenu } from "./ItemContextMenu";
 
 describe("ItemContextMenu", () => {
+  it("opens without preselecting any menu item", () => {
+    render(
+      <ItemContextMenu
+        anchorX={0}
+        anchorY={0}
+        variant="browse"
+        open
+        onAction={() => undefined}
+        onSubmenuAction={() => undefined}
+      />,
+    );
+
+    expect(document.querySelector(".context-menu-item.active")).toBeNull();
+  });
+
   it("disables all background actions except New Folder", () => {
     render(
       <ItemContextMenu
