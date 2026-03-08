@@ -46,17 +46,18 @@ export function ToolbarIcon({
   if (name === "details") {
     return (
       <svg className="toolbar-icon" viewBox="0 0 16 16" aria-hidden="true" role="presentation">
-        <rect x="1" y="2" width="14" height="11" rx="1.5" />
-        <line x1="1" y1="6" x2="15" y2="6" />
-        <line x1="10" y1="6" x2="10" y2="13" />
+        <rect x="1.5" y="1.5" width="5" height="5" rx="0.9" />
+        <rect x="9.5" y="1.5" width="5" height="5" rx="0.9" />
+        <rect x="1.5" y="9.5" width="5" height="5" rx="0.9" />
+        <rect x="9.5" y="9.5" width="5" height="5" rx="0.9" />
       </svg>
     );
   }
   if (name === "search") {
     return (
-      <svg className="toolbar-icon" viewBox="0 0 16 16" aria-hidden="true" role="presentation">
-        <circle cx="7" cy="7" r="4.5" />
-        <line x1="10.3" y1="10.3" x2="14" y2="14" />
+      <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" role="presentation">
+        <circle cx="11" cy="11" r="7" />
+        <line x1="16.5" y1="16.5" x2="21" y2="21" />
       </svg>
     );
   }
@@ -78,18 +79,18 @@ export function ToolbarIcon({
   }
 
   const path = (() => {
-    if (name === "back") return "M19 12H5M12 19l-7-7 7-7";
-    if (name === "forward") return "M5 12h14M12 5l7 7-7 7";
+    if (name === "back") return "M15 18l-6-6 6-6";
+    if (name === "forward") return "M9 18l6-6-6-6";
     if (name === "home") return "M3 9.5l9-7 9 7V20a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9.5zM9 22V12h6v10";
-    if (name === "up") return "M17 11l-5-5-5 5M12 6v12";
-    if (name === "down") return "M7 13l5 5 5-5M12 18V6";
+    if (name === "up") return "M18 15l-6-6-6 6";
+    if (name === "down") return "M6 9l6 6 6-6";
     if (name === "location")
       return "M12 20s6-5.2 6-10a6 6 0 1 0-12 0c0 4.8 6 10 6 10m0-8a2 2 0 1 1 0-4a2 2 0 0 1 0 4";
     if (name === "hidden") {
       return "M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M14.12 14.12A3 3 0 0 1 9.88 9.88M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19M1 1l22 22";
     }
-    if (name === "refresh") return "M20 12a8 8 0 1 1-2.3-5.7M20 4v4h-4";
-    if (name === "drawer") return "M3 3h18v18H3zM12 16v-4M12 8h.01";
+    if (name === "refresh") return "M1 4v6h6M3.51 15a9 9 0 1 0 2.13-9.36L1 10";
+    if (name === "drawer") return "M3 3h18v18H3zM12 3v18";
     if (name === "sidebar") return "M4 5h16v14H4zM9 5v14";
     if (name === "edit") return "M4 17.2V20h2.8l8.2-8.2-2.8-2.8zM16.5 5.7l1.8 1.8";
     if (name === "chevron") return "M6 4l4 4-4 4";

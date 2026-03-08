@@ -1774,7 +1774,7 @@ export function App() {
               <div className="toolbar-group toolbar-group-nav">
                 <button
                   type="button"
-                  className="tb-btn tb-btn-icon"
+                  className="tb-btn tb-btn-icon toolbar-btn-muted"
                   disabled={!canGoBack}
                   onClick={goBack}
                   title="Back (Cmd+Left)"
@@ -1784,7 +1784,7 @@ export function App() {
                 </button>
                 <button
                   type="button"
-                  className="tb-btn tb-btn-icon"
+                  className="tb-btn tb-btn-icon toolbar-btn-muted"
                   disabled={!canGoForward}
                   onClick={goForward}
                   title="Forward (Cmd+Right)"

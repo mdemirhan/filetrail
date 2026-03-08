@@ -28,7 +28,17 @@
   --icon-peach: #d97706;
   --danger: #b42318;
   --sidebar-bg: #e8eaf2;
-  --toolbar-bg: #e6e8f0;
+  --toolbar-bg: #e5e8ef;
+  --toolbar-border: #d3d6dd;
+  --toolbar-title-fg: #838592;
+  --toolbar-nav-icon: #c2c5ce;
+  --toolbar-nav-icon-active: #8a8c98;
+  --toolbar-toggle-bg: #d5d8df;
+  --toolbar-toggle-active-bg: #c8cbd2;
+  --toolbar-toggle-icon-active: #1c1a2f;
+  --toolbar-toggle-icon-inactive: #9a9ca8;
+  --toolbar-sort-text: #6e7080;
+  --toolbar-sort-arrow: #a0a2ae;
   --dropdown-bg: #eff0f5;
   --bg-raised: #e8eaf2;
   --fg: #3c3f56;
@@ -82,31 +92,32 @@
   --crumb-active-bg: rgba(124, 58, 237, 0.08);
   --crumb-separator-bg: transparent;
   --crumb-border: transparent;
-  --search-surface: rgba(247, 248, 252, 0.82);
-  --search-surface-strong: rgba(255, 255, 255, 0.92);
-  --search-border: rgba(60, 63, 86, 0.1);
-  --search-border-active: rgba(150, 111, 32, 0.58);
-  --search-divider: rgba(60, 63, 86, 0.1);
-  --search-panel-separator: rgba(60, 63, 86, 0.08);
-  --search-shadow: 0 8px 18px rgba(30, 32, 48, 0.06);
-  --search-shadow-active: 0 14px 28px rgba(30, 32, 48, 0.1);
-  --search-icon: rgba(150, 111, 32, 0.7);
-  --search-icon-active: var(--accent-gold);
-  --search-placeholder: rgba(139, 141, 163, 0.82);
-  --search-caret: var(--accent-gold);
-  --search-shortcut-bg: rgba(255, 255, 255, 0.5);
-  --search-shortcut-border: rgba(60, 63, 86, 0.12);
-  --search-shortcut-fg: rgba(120, 92, 30, 0.68);
-  --search-pill-bg: rgba(255, 255, 255, 0.56);
-  --search-pill-border: rgba(60, 63, 86, 0.12);
-  --search-pill-fg: rgba(60, 63, 86, 0.74);
-  --search-pill-hover-bg: rgba(255, 255, 255, 0.78);
-  --search-pill-hover-border: rgba(60, 63, 86, 0.18);
-  --search-pill-hover-fg: rgba(60, 63, 86, 0.96);
-  --search-pill-active-bg: rgba(199, 155, 55, 0.08);
-  --search-pill-active-border: rgba(150, 111, 32, 0.34);
-  --search-pill-active-fg: rgba(136, 100, 24, 0.92);
-  --search-meta-fg: rgba(60, 63, 86, 0.68);
+  --search-surface: #f7f8fa;
+  --search-surface-strong: #f7f8fa;
+  --search-border: #c8c8d2;
+  --search-border-active: #daa520;
+  --search-divider: #d0d0da;
+  --search-panel-separator: #d0d0da;
+  --search-shadow: none;
+  --search-shadow-active: 0 0 0 1px rgba(218, 165, 32, 0.15);
+  --search-text: #555566;
+  --search-icon: #babbbf;
+  --search-icon-active: #daa520;
+  --search-placeholder: #b0b0be;
+  --search-caret: #daa520;
+  --search-shortcut-bg: #edeef2;
+  --search-shortcut-border: #d0d0da;
+  --search-shortcut-fg: #9a9aa8;
+  --search-pill-bg: transparent;
+  --search-pill-border: #d0d0da;
+  --search-pill-fg: #7e808f;
+  --search-pill-hover-bg: rgba(0, 0, 0, 0.015);
+  --search-pill-hover-border: #c1c4ce;
+  --search-pill-hover-fg: #555566;
+  --search-pill-active-bg: rgba(218, 165, 32, 0.08);
+  --search-pill-active-border: rgba(218, 165, 32, 0.55);
+  --search-pill-active-fg: #8f6a1d;
+  --search-meta-fg: #8f91a0;
 }
 
 :root[data-theme="tomorrow-night"] {
@@ -140,6 +151,16 @@
   --danger: #cc6666;
   --sidebar-bg: #1b1d1f;
   --toolbar-bg: #18191b;
+  --toolbar-border: #252628;
+  --toolbar-title-fg: #757678;
+  --toolbar-nav-icon: #38393b;
+  --toolbar-nav-icon-active: #656668;
+  --toolbar-toggle-bg: #222324;
+  --toolbar-toggle-active-bg: #2d2e30;
+  --toolbar-toggle-icon-active: #e0dfe4;
+  --toolbar-toggle-icon-inactive: #555658;
+  --toolbar-sort-text: #959698;
+  --toolbar-sort-arrow: #555658;
   --dropdown-bg: #2a2c2e;
   --bg-raised: #1b1d1f;
   --fg: #c5c8c6;
@@ -180,31 +201,32 @@
   --crumb-separator-bg: transparent;
   --crumb-border: transparent;
   --scroll-thumb: rgba(197, 200, 198, 0.1);
-  --search-surface: rgba(37, 38, 42, 0.92);
-  --search-surface-strong: rgba(31, 32, 35, 0.98);
-  --search-border: rgba(240, 198, 116, 0.28);
-  --search-border-active: rgba(240, 198, 116, 0.44);
-  --search-divider: rgba(240, 198, 116, 0.16);
-  --search-panel-separator: rgba(240, 198, 116, 0.12);
-  --search-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
-  --search-shadow-active: 0 18px 36px rgba(0, 0, 0, 0.34);
-  --search-icon: rgba(240, 198, 116, 0.78);
-  --search-icon-active: var(--accent-gold);
-  --search-placeholder: rgba(197, 200, 198, 0.42);
-  --search-caret: var(--accent-gold);
-  --search-shortcut-bg: rgba(240, 198, 116, 0.08);
-  --search-shortcut-border: rgba(240, 198, 116, 0.16);
-  --search-shortcut-fg: rgba(240, 198, 116, 0.68);
-  --search-pill-bg: rgba(255, 255, 255, 0.025);
-  --search-pill-border: rgba(255, 255, 255, 0.1);
-  --search-pill-fg: rgba(197, 200, 198, 0.5);
-  --search-pill-hover-bg: rgba(240, 198, 116, 0.05);
-  --search-pill-hover-border: rgba(240, 198, 116, 0.18);
-  --search-pill-hover-fg: rgba(224, 224, 224, 0.8);
-  --search-pill-active-bg: rgba(240, 198, 116, 0.12);
-  --search-pill-active-border: rgba(240, 198, 116, 0.38);
-  --search-pill-active-fg: rgba(240, 198, 116, 0.98);
-  --search-meta-fg: rgba(197, 200, 198, 0.52);
+  --search-surface: #222126;
+  --search-surface-strong: #222126;
+  --search-border: #595a5e;
+  --search-border-active: #daa520;
+  --search-divider: #444448;
+  --search-panel-separator: #444448;
+  --search-shadow: none;
+  --search-shadow-active: 0 0 0 1px rgba(218, 165, 32, 0.15);
+  --search-text: #b8b8c2;
+  --search-icon: #4d4e52;
+  --search-icon-active: #daa520;
+  --search-placeholder: #505058;
+  --search-caret: #daa520;
+  --search-shortcut-bg: #2a2a30;
+  --search-shortcut-border: #444448;
+  --search-shortcut-fg: #656568;
+  --search-pill-bg: transparent;
+  --search-pill-border: #444448;
+  --search-pill-fg: #808187;
+  --search-pill-hover-bg: rgba(255, 255, 255, 0.02);
+  --search-pill-hover-border: #55565a;
+  --search-pill-hover-fg: #b8b8c2;
+  --search-pill-active-bg: rgba(218, 165, 32, 0.12);
+  --search-pill-active-border: rgba(218, 165, 32, 0.5);
+  --search-pill-active-fg: #f0c674;
+  --search-meta-fg: #75767b;
 }
 
 :root[data-theme="dark"] {
@@ -237,7 +259,17 @@
   --icon-peach: #f0b050;
   --danger: #f08080;
   --sidebar-bg: #20232b;
-  --toolbar-bg: #1c1f27;
+  --toolbar-bg: #1c1f26;
+  --toolbar-border: #2d3037;
+  --toolbar-title-fg: #7a7d84;
+  --toolbar-nav-icon: #3d4047;
+  --toolbar-nav-icon-active: #6a6d74;
+  --toolbar-toggle-bg: #282b32;
+  --toolbar-toggle-active-bg: #33363f;
+  --toolbar-toggle-icon-active: #d7e0e5;
+  --toolbar-toggle-icon-inactive: #5a5d64;
+  --toolbar-sort-text: #9a9da6;
+  --toolbar-sort-arrow: #5a5d64;
   --dropdown-bg: #2c2f3a;
   --bg-raised: #20232b;
   --fg: #9da1b3;
@@ -278,31 +310,32 @@
   --crumb-separator-bg: transparent;
   --crumb-border: transparent;
   --scroll-thumb: rgba(255, 255, 255, 0.1);
-  --search-surface: rgba(40, 42, 50, 0.94);
-  --search-surface-strong: rgba(33, 35, 42, 0.99);
-  --search-border: rgba(240, 176, 80, 0.26);
-  --search-border-active: rgba(240, 176, 80, 0.42);
-  --search-divider: rgba(240, 176, 80, 0.14);
-  --search-panel-separator: rgba(240, 176, 80, 0.1);
-  --search-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
-  --search-shadow-active: 0 18px 36px rgba(0, 0, 0, 0.34);
-  --search-icon: rgba(240, 176, 80, 0.82);
-  --search-icon-active: var(--accent-gold);
-  --search-placeholder: rgba(220, 222, 228, 0.38);
-  --search-caret: var(--accent-gold);
-  --search-shortcut-bg: rgba(240, 176, 80, 0.08);
-  --search-shortcut-border: rgba(240, 176, 80, 0.16);
-  --search-shortcut-fg: rgba(240, 176, 80, 0.68);
-  --search-pill-bg: rgba(255, 255, 255, 0.03);
-  --search-pill-border: rgba(255, 255, 255, 0.1);
-  --search-pill-fg: rgba(220, 222, 228, 0.42);
-  --search-pill-hover-bg: rgba(240, 176, 80, 0.06);
-  --search-pill-hover-border: rgba(240, 176, 80, 0.18);
-  --search-pill-hover-fg: rgba(220, 222, 228, 0.82);
-  --search-pill-active-bg: rgba(240, 176, 80, 0.12);
-  --search-pill-active-border: rgba(240, 176, 80, 0.34);
-  --search-pill-active-fg: rgba(240, 176, 80, 0.98);
-  --search-meta-fg: rgba(220, 222, 228, 0.48);
+  --search-surface: #27272f;
+  --search-surface-strong: #27272f;
+  --search-border: #5e5e66;
+  --search-border-active: #daa520;
+  --search-divider: #484850;
+  --search-panel-separator: #484850;
+  --search-shadow: none;
+  --search-shadow-active: 0 0 0 1px rgba(218, 165, 32, 0.15);
+  --search-text: #c0c2cc;
+  --search-icon: #54545c;
+  --search-icon-active: #daa520;
+  --search-placeholder: #55555f;
+  --search-caret: #daa520;
+  --search-shortcut-bg: #2e3038;
+  --search-shortcut-border: #484850;
+  --search-shortcut-fg: #6a6a74;
+  --search-pill-bg: transparent;
+  --search-pill-border: #484850;
+  --search-pill-fg: #81838d;
+  --search-pill-hover-bg: rgba(255, 255, 255, 0.025);
+  --search-pill-hover-border: #585a62;
+  --search-pill-hover-fg: #c0c2cc;
+  --search-pill-active-bg: rgba(218, 165, 32, 0.12);
+  --search-pill-active-border: rgba(218, 165, 32, 0.5);
+  --search-pill-active-fg: #f0b050;
+  --search-meta-fg: #727582;
 }
 
 :root[data-theme="catppuccin-mocha"] {
@@ -336,6 +369,16 @@
   --danger: #f38ba8;
   --sidebar-bg: #181825;
   --toolbar-bg: #11111b;
+  --toolbar-border: #21202e;
+  --toolbar-title-fg: #686e84;
+  --toolbar-nav-icon: #2e2e3e;
+  --toolbar-nav-icon-active: #555561;
+  --toolbar-toggle-bg: #1a1a28;
+  --toolbar-toggle-active-bg: #252538;
+  --toolbar-toggle-icon-active: #cdd6f5;
+  --toolbar-toggle-icon-inactive: #454560;
+  --toolbar-sort-text: #8a8ea6;
+  --toolbar-sort-arrow: #454560;
   --dropdown-bg: #313244;
   --bg-raised: #181825;
   --fg: #bac2de;
@@ -376,31 +419,32 @@
   --crumb-separator-bg: transparent;
   --crumb-border: transparent;
   --scroll-thumb: #45475a;
-  --search-surface: rgba(36, 38, 54, 0.94);
-  --search-surface-strong: rgba(30, 31, 46, 0.99);
-  --search-border: rgba(249, 226, 175, 0.26);
-  --search-border-active: rgba(249, 226, 175, 0.44);
-  --search-divider: rgba(249, 226, 175, 0.16);
-  --search-panel-separator: rgba(249, 226, 175, 0.12);
-  --search-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
-  --search-shadow-active: 0 18px 36px rgba(0, 0, 0, 0.34);
-  --search-icon: rgba(249, 226, 175, 0.82);
-  --search-icon-active: var(--accent-gold);
-  --search-placeholder: rgba(205, 214, 244, 0.38);
-  --search-caret: var(--accent-gold);
-  --search-shortcut-bg: rgba(249, 226, 175, 0.08);
-  --search-shortcut-border: rgba(249, 226, 175, 0.16);
-  --search-shortcut-fg: rgba(249, 226, 175, 0.7);
-  --search-pill-bg: rgba(255, 255, 255, 0.03);
-  --search-pill-border: rgba(205, 214, 244, 0.11);
-  --search-pill-fg: rgba(205, 214, 244, 0.48);
-  --search-pill-hover-bg: rgba(249, 226, 175, 0.06);
-  --search-pill-hover-border: rgba(249, 226, 175, 0.18);
-  --search-pill-hover-fg: rgba(205, 214, 244, 0.84);
-  --search-pill-active-bg: rgba(249, 226, 175, 0.12);
-  --search-pill-active-border: rgba(249, 226, 175, 0.36);
-  --search-pill-active-fg: rgba(249, 226, 175, 0.98);
-  --search-meta-fg: rgba(205, 214, 244, 0.5);
+  --search-surface: #212332;
+  --search-surface-strong: #212332;
+  --search-border: #58596b;
+  --search-border-active: #daa520;
+  --search-divider: #404058;
+  --search-panel-separator: #404058;
+  --search-shadow: none;
+  --search-shadow-active: 0 0 0 1px rgba(218, 165, 32, 0.15);
+  --search-text: #b0b4cc;
+  --search-icon: #4b4e5f;
+  --search-icon-active: #daa520;
+  --search-placeholder: #454560;
+  --search-caret: #daa520;
+  --search-shortcut-bg: #282840;
+  --search-shortcut-border: #404058;
+  --search-shortcut-fg: #5a5a74;
+  --search-pill-bg: transparent;
+  --search-pill-border: #404058;
+  --search-pill-fg: #7c8098;
+  --search-pill-hover-bg: rgba(255, 255, 255, 0.025);
+  --search-pill-hover-border: #525264;
+  --search-pill-hover-fg: #b0b4cc;
+  --search-pill-active-bg: rgba(218, 165, 32, 0.12);
+  --search-pill-active-border: rgba(218, 165, 32, 0.5);
+  --search-pill-active-fg: #f9e2af;
+  --search-meta-fg: #747891;
 }
 
 * {
@@ -482,7 +526,7 @@ input:focus-visible {
   gap: 12px;
   padding: 0 16px 0 12px;
   background: var(--toolbar-bg);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--toolbar-border);
   box-shadow: none;
   position: relative;
   z-index: 10;
@@ -504,7 +548,7 @@ body.platform-macos .window-toolbar-brand {
 }
 
 .window-toolbar-title {
-  color: var(--text-primary);
+  color: var(--toolbar-title-fg);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -580,9 +624,37 @@ body.platform-macos .window-toolbar-brand {
 .titlebar-divider {
   width: 1px;
   height: 18px;
-  background: var(--border);
+  background: var(--toolbar-border);
   margin: 0 5px;
   flex-shrink: 0;
+}
+
+.window-toolbar .tb-btn {
+  border-radius: 5px;
+  color: var(--toolbar-nav-icon-active);
+}
+
+.window-toolbar .tb-btn:hover:not(:disabled) {
+  background: transparent;
+  color: var(--toolbar-nav-icon-active);
+}
+
+.window-toolbar .tb-btn.active {
+  background: var(--toolbar-toggle-active-bg);
+  color: var(--toolbar-toggle-icon-active);
+}
+
+.window-toolbar .tb-btn:disabled {
+  color: var(--toolbar-nav-icon);
+  opacity: 0.55;
+}
+
+.window-toolbar .tb-btn.toolbar-btn-muted {
+  color: var(--toolbar-nav-icon);
+}
+
+.window-toolbar .tb-btn.toolbar-btn-muted:hover:not(:disabled) {
+  color: var(--toolbar-nav-icon-active);
 }
 
 .toolbar-icon {
@@ -603,10 +675,10 @@ body.platform-macos .window-toolbar-brand {
   min-width: 0;
   padding: 0;
   margin: 0;
-  border: 1px solid var(--border);
-  border-radius: 7px;
+  border: 1px solid var(--toolbar-border);
+  border-radius: 5px;
   overflow: hidden;
-  background: var(--bg-hover);
+  background: transparent;
   -webkit-app-region: no-drag;
 }
 
@@ -627,6 +699,24 @@ body.platform-macos .window-toolbar-brand {
   border-radius: 0;
 }
 
+.toolbar-group-view .toolbar-segmented {
+  background: var(--toolbar-toggle-bg);
+}
+
+.toolbar-group-view .toolbar-segmented .tb-btn {
+  color: var(--toolbar-toggle-icon-inactive);
+}
+
+.toolbar-group-view .toolbar-segmented .tb-btn:hover:not(:disabled) {
+  background: transparent;
+  color: var(--toolbar-toggle-icon-active);
+}
+
+.toolbar-group-view .toolbar-segmented .tb-btn.active {
+  background: var(--toolbar-toggle-active-bg);
+  color: var(--toolbar-toggle-icon-active);
+}
+
 .toolbar-segmented .tb-btn + .tb-btn,
 .toolbar-select-group .tb-btn + .toolbar-select,
 .toolbar-select-group .toolbar-select + .tb-btn,
@@ -639,7 +729,7 @@ body.platform-macos .window-toolbar-brand {
   padding: 0 34px 0 12px;
   border: 0;
   background: transparent;
-  color: var(--fg);
+  color: var(--toolbar-sort-text);
   font-size: 12px;
   font-weight: 500;
   appearance: none;
@@ -647,28 +737,32 @@ body.platform-macos .window-toolbar-brand {
   box-shadow: none;
   -webkit-appearance: none;
   -webkit-focus-ring-color: transparent;
-  background-image: linear-gradient(45deg, transparent 50%, var(--text-tertiary) 50%),
-    linear-gradient(135deg, var(--text-tertiary) 50%, transparent 50%);
+  background-image: linear-gradient(45deg, transparent 50%, var(--toolbar-sort-arrow) 50%),
+    linear-gradient(135deg, var(--toolbar-sort-arrow) 50%, transparent 50%);
   background-position: calc(100% - 16px) calc(50% - 2px), calc(100% - 11px) calc(50% - 2px);
   background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
 }
 
+.toolbar-select-group .tb-btn {
+  color: var(--toolbar-sort-arrow);
+}
+
 .toolbar-select:hover {
-  background-color: var(--bg-hover);
-  color: var(--text-primary);
+  background-color: transparent;
+  color: var(--toolbar-sort-text);
 }
 
 .toolbar-select:focus,
 .toolbar-select:focus-visible {
   outline: none;
   box-shadow: none;
-  background-color: var(--bg-hover);
-  color: var(--text-primary);
+  background-color: transparent;
+  color: var(--toolbar-sort-text);
 }
 
 .toolbar-select-group:focus-within {
-  border-color: var(--border);
+  border-color: var(--toolbar-border);
   box-shadow: none;
 }
 
@@ -685,10 +779,10 @@ body.platform-macos .window-toolbar-brand {
 .toolbar-search {
   width: 100%;
   min-width: 0;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  background: linear-gradient(180deg, var(--search-surface-strong) 0%, var(--search-surface) 100%);
-  color: var(--text-tertiary);
+  border: 1px solid var(--search-border);
+  border-radius: 6px;
+  background: var(--search-surface);
+  color: var(--search-text);
   box-shadow: var(--search-shadow);
   transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, border-radius
     0.18s ease;
@@ -705,9 +799,9 @@ body.platform-macos .window-toolbar-brand {
 .toolbar-search-row {
   display: flex;
   align-items: center;
-  gap: 9px;
-  min-height: 30px;
-  padding: 0 10px 0 11px;
+  gap: 7px;
+  min-height: 28px;
+  padding: 0 10px;
 }
 
 .toolbar-search-icon {
@@ -724,9 +818,9 @@ body.platform-macos .window-toolbar-brand {
 }
 
 .toolbar-search-icon .toolbar-icon {
-  width: 14px;
-  height: 14px;
-  stroke-width: 2.1;
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.4;
 }
 
 .toolbar-search-input {
@@ -736,8 +830,8 @@ body.platform-macos .window-toolbar-brand {
   outline: 0;
   box-shadow: none;
   background: transparent;
-  color: var(--text-primary);
-  font-size: 12px;
+  color: var(--search-text);
+  font-size: 12.5px;
   font-weight: 500;
   font-family: var(--font-mono);
   letter-spacing: 0.01em;
@@ -760,18 +854,19 @@ body.platform-macos .window-toolbar-brand {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  min-width: 30px;
-  height: 17px;
-  padding: 0 5px;
+  min-width: 0;
+  height: 16px;
+  padding: 0 4px;
   margin-left: auto;
   border: 1px solid var(--search-shortcut-border);
-  border-radius: 5px;
+  border-radius: 3px;
   background: var(--search-shortcut-bg);
   color: var(--search-shortcut-fg);
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 10px;
   line-height: 1;
   letter-spacing: 0.02em;
+  font-weight: 500;
   user-select: none;
 }
 
@@ -837,8 +932,8 @@ body.platform-macos .window-toolbar-brand {
   gap: 0;
   border: 1px solid var(--search-border-active);
   border-top: 0;
-  border-radius: 0 0 10px 10px;
-  background: linear-gradient(180deg, var(--search-surface-strong) 0%, var(--search-surface) 100%);
+  border-radius: 0 0 6px 6px;
+  background: var(--search-surface-strong);
   box-shadow: var(--search-shadow-active);
   z-index: 54;
   overflow: hidden;
