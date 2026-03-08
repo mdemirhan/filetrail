@@ -46,6 +46,33 @@ export function chunkItemsIntoRows<T>(items: T[], columns: number): T[][] {
   return rows;
 }
 
+export type FlowListLayout = {
+  rowHeight: number;
+  rowGap: number;
+  itemWidth: number;
+  columnGap: number;
+  paddingTop: number;
+  paddingBottom: number;
+};
+
+/**
+ * Compute the number of rows per column for a horizontal-scroll flow list.
+ *
+ * The container element should use `overflow-y: hidden; overflow-x: auto` so
+ * that the horizontal scrollbar (when present) reduces `clientHeight`
+ * automatically. This function simply converts the measured height to rows.
+ */
+export function computeRowsPerColumn(
+  containerHeight: number,
+  layout: FlowListLayout,
+): number {
+  if (containerHeight <= 0) {
+    return 1;
+  }
+  const contentHeight = containerHeight - layout.paddingTop - layout.paddingBottom + layout.rowGap;
+  return Math.max(1, Math.floor(Math.max(contentHeight, layout.rowHeight) / layout.rowHeight));
+}
+
 export function buildColumnMajorRows<T>(items: T[], rowsPerColumn: number): T[][] {
   const safeRowsPerColumn = Math.max(1, rowsPerColumn);
   const columnCount = Math.max(1, Math.ceil(items.length / safeRowsPerColumn));

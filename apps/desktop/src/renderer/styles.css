@@ -2024,11 +2024,13 @@ body.resizing-panels * {
 }
 
 .flow-list {
-  padding: 10px 20px 10px;
+  padding: 10px 20px 4px;
+  overflow-y: hidden;
+  overflow-x: auto;
 }
 
 .flow-list.compact {
-  padding: 8px 20px 8px;
+  padding: 8px 20px 4px;
 }
 
 .flow-grid-rows {

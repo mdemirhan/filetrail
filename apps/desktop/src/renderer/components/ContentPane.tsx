@@ -5,7 +5,11 @@ import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 import { useElementSize } from "../hooks/useElementSize";
 import { FileIcon, FolderIcon } from "../lib/fileIcons";
 import { formatDateTime, formatSize, splitDisplayName } from "../lib/formatting";
-import { buildColumnMajorRows, getVirtualRange } from "../lib/virtualization";
+import {
+  buildColumnMajorRows,
+  computeRowsPerColumn,
+  getVirtualRange,
+} from "../lib/virtualization";
 
 type DirectoryEntry = IpcResponse<"directory:getSnapshot">["entries"][number];
 type DirectoryEntryMetadata = IpcResponse<"directory:getMetadataBatch">["items"][number];
@@ -36,7 +40,7 @@ const FLOW_LIST_LAYOUT = {
   itemWidth: 292,
   columnGap: 18,
   paddingTop: 10,
-  paddingBottom: 10,
+  paddingBottom: 4,
 } as const;
 const COMPACT_FLOW_LIST_LAYOUT = {
   rowHeight: 36,
@@ -44,7 +48,7 @@ const COMPACT_FLOW_LIST_LAYOUT = {
   itemWidth: 292,
   columnGap: 18,
   paddingTop: 8,
-  paddingBottom: 8,
+  paddingBottom: 4,
 } as const;
 const DETAILS_LIST_LAYOUT = {
   rowHeight: 38,
@@ -766,18 +770,38 @@ function FlowListView({
   typeaheadQuery?: string;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const { height } = useElementSize(containerRef);
+  const [containerHeight, setContainerHeight] = useState(0);
   const [scrollTop, setScrollTop] = useState(0);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) {
+      return;
+    }
+    const measure = () => {
+      const h = el.clientHeight;
+      setContainerHeight((prev) => (prev === h ? prev : h));
+    };
+    measure();
+    const observer = new ResizeObserver(() => {
+      requestAnimationFrame(measure);
+    });
+    observer.observe(el);
+    if (el.parentElement) {
+      observer.observe(el.parentElement);
+    }
+    const onResize = () => {
+      requestAnimationFrame(measure);
+    };
+    window.addEventListener("resize", onResize);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", onResize);
+    };
+  }, []);
+
   const listLayout = compactListView ? COMPACT_FLOW_LIST_LAYOUT : FLOW_LIST_LAYOUT;
-  const rowsPerColumn = Math.max(
-    1,
-    Math.floor(
-      Math.max(
-        height - (listLayout.paddingTop + listLayout.paddingBottom - listLayout.rowGap),
-        listLayout.rowHeight,
-      ) / listLayout.rowHeight,
-    ),
-  );
+  const rowsPerColumn = computeRowsPerColumn(containerHeight, listLayout);
   const rows = useMemo(
     () => buildColumnMajorRows(entries, rowsPerColumn),
     [entries, rowsPerColumn],
@@ -786,7 +810,7 @@ function FlowListView({
   const range = getVirtualRange({
     itemCount: rows.length,
     itemSize: listLayout.rowHeight,
-    viewportSize: height,
+    viewportSize: containerHeight,
     scrollOffset: scrollTop,
     overscan: 6,
   });
