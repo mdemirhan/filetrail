@@ -33,6 +33,22 @@ describe("createApplicationMenuTemplate", () => {
     expect(send).toHaveBeenCalledWith("filetrail:command", { type: "copyPath" });
   });
 
+  it("wires Go to Folder to the renderer command channel", () => {
+    const send = vi.fn();
+    const template = createApplicationMenuTemplate({ send } as never);
+    const editMenu = template.find((item) => item.label === "Edit");
+    const submenu = Array.isArray(editMenu?.submenu) ? editMenu.submenu : [];
+    const goToFolderItem = submenu.find((item) => "label" in item && item.label === "Go to Folder…");
+
+    expect(goToFolderItem).toBeTruthy();
+    if (!goToFolderItem || !("click" in goToFolderItem) || typeof goToFolderItem.click !== "function") {
+      throw new Error("Go to Folder menu item missing.");
+    }
+    goToFolderItem.click(undefined as never, undefined as never, undefined as never);
+
+    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "openLocationSheet" });
+  });
+
   it("wires Refresh to the renderer command channel", () => {
     const send = vi.fn();
     const template = createApplicationMenuTemplate({ send } as never);

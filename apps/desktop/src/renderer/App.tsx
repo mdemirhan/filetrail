@@ -697,6 +697,10 @@ export function App() {
 
   useEffect(() => {
     const unsubscribe = client.onCommand((command) => {
+      if (command.type === "openLocationSheet") {
+        openLocationSheet();
+        return;
+      }
       if (command.type === "copyPath") {
         const pathsToCopy =
           (contextMenuState?.paths.length ?? 0) > 0
@@ -1031,10 +1035,15 @@ export function App() {
         }
         return;
       }
-      if (event.metaKey && event.key.toLowerCase() === "l") {
+      if (
+        event.metaKey &&
+        event.shiftKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === "g"
+      ) {
         event.preventDefault();
-        setLocationError(null);
-        setLocationSheetOpen(true);
+        openLocationSheet();
         return;
       }
       if (event.metaKey && event.key.toLowerCase() === "i") {
@@ -1209,6 +1218,12 @@ export function App() {
       }
       searchPointerIntentRef.current = false;
     });
+  }
+
+  function openLocationSheet() {
+    setMainView("explorer");
+    setLocationError(null);
+    setLocationSheetOpen(true);
   }
 
   function focusContentPane() {
@@ -2704,6 +2719,7 @@ export function App() {
                 onFocusChange={(focused) => setFocusedPane(focused ? "tree" : null)}
                 onGoHome={goHome}
                 onRerootHome={rerootTreeAtHome}
+                onOpenLocation={openLocationSheet}
                 onQuickAccess={goQuickAccess}
                 foldersFirst={foldersFirst}
                 onToggleFoldersFirst={toggleFoldersFirst}

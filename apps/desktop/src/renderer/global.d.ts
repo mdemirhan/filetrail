@@ -9,7 +9,11 @@ declare global {
       ): Promise<IpcResponse<C>>;
       onCommand(
         listener: (command: {
-          type: "focusFileSearch" | "copyPath" | "refreshOrApplySearchSort";
+          type:
+            | "focusFileSearch"
+            | "openLocationSheet"
+            | "copyPath"
+            | "refreshOrApplySearchSort";
         }) => void,
       ): () => void;
     };

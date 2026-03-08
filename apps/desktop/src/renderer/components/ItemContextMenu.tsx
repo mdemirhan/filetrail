@@ -153,14 +153,12 @@ export function ItemContextMenu({
             <button
               key={item.id}
               type="button"
-              disabled={isDisabled}
-              className={`context-menu-item${isActive ? " active" : ""}${
+              aria-disabled={isDisabled}
+              className={`context-menu-item${isActive ? " active" : ""}${isDisabled ? " disabled" : ""}${
                 item.destructive ? " destructive" : ""
               }`}
               onMouseEnter={() => {
-                if (!isDisabled) {
-                  setActiveItemId(item.id);
-                }
+                setActiveItemId(item.id);
               }}
               onClick={() => {
                 if (item.hasSubmenu || isDisabled) {

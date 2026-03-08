@@ -22,7 +22,7 @@ export const SHORTCUT_ITEMS = [
     shortcut: "Ctrl+D",
     description: "Scroll one page down in the focused tree or content view",
   },
-  { group: "Navigation", shortcut: "Cmd+L", description: "Open Go to Folder" },
+  { group: "Navigation", shortcut: "Cmd+Shift+G", description: "Open Go to Folder" },
   {
     group: "Navigation",
     shortcut: "Cmd+R",

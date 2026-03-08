@@ -1456,6 +1456,14 @@ body.platform-macos .window-toolbar-brand {
   background: var(--context-menu-hover);
 }
 
+.context-menu-item.disabled {
+  cursor: default;
+}
+
+.context-menu-item.disabled.active {
+  background: color-mix(in srgb, var(--context-menu-hover) 35%, transparent);
+}
+
 .context-menu-item.destructive.active {
   background: var(--context-menu-destructive-hover);
 }
@@ -1472,6 +1480,11 @@ body.platform-macos .window-toolbar-brand {
 
 .context-menu-item.active .context-menu-item-icon {
   color: var(--context-menu-icon-hover);
+}
+
+.context-menu-item.disabled .context-menu-item-icon,
+.context-menu-item.disabled.active .context-menu-item-icon {
+  color: var(--context-menu-disabled);
 }
 
 .context-menu-item.destructive.active .context-menu-item-icon {
@@ -1510,6 +1523,11 @@ body.platform-macos .window-toolbar-brand {
   color: var(--context-menu-hover-text);
 }
 
+.context-menu-item.disabled .context-menu-item-label,
+.context-menu-item.disabled.active .context-menu-item-label {
+  color: var(--context-menu-disabled);
+}
+
 .context-menu-item-shortcut {
   color: var(--context-menu-shortcut);
   font-family: var(--font-mono);
@@ -1520,6 +1538,13 @@ body.platform-macos .window-toolbar-brand {
 
 .context-menu-item.active .context-menu-item-shortcut {
   color: var(--context-menu-hover-accent);
+}
+
+.context-menu-item.disabled .context-menu-item-shortcut,
+.context-menu-item.disabled.active .context-menu-item-shortcut,
+.context-menu-item.disabled .context-menu-submenu-arrow,
+.context-menu-item.disabled.active .context-menu-submenu-arrow {
+  color: var(--context-menu-disabled);
 }
 
 .context-menu-item.destructive.active .context-menu-item-label,

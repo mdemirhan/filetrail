@@ -30,6 +30,7 @@ export function TreePane({
   onFocusChange,
   onGoHome,
   onRerootHome,
+  onOpenLocation,
   onQuickAccess,
   foldersFirst,
   onToggleFoldersFirst,
@@ -59,6 +60,7 @@ export function TreePane({
   onFocusChange: (focused: boolean) => void;
   onGoHome: () => void;
   onRerootHome: () => void;
+  onOpenLocation?: () => void;
   onQuickAccess: (location: "desktop" | "downloads" | "documents" | "source") => void;
   foldersFirst: boolean;
   onToggleFoldersFirst: () => void;
@@ -230,6 +232,16 @@ export function TreePane({
             aria-label="Root tree at Home"
           >
             <ToolbarIcon name="rerootHome" />
+          </button>
+          <span className="sidebar-rail-separator" />
+          <button
+            type="button"
+            className="sidebar-rail-button"
+            onClick={onOpenLocation}
+            title="Go to Folder (Cmd+Shift+G)"
+            aria-label="Go to Folder"
+          >
+            <ToolbarIcon name="location" />
           </button>
           <span className="sidebar-rail-separator" />
           <button
