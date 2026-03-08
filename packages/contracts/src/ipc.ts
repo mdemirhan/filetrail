@@ -296,6 +296,14 @@ export const ipcContractSchemas = {
       error: z.string().nullable(),
     }),
   },
+  "system:copyText": {
+    request: z.object({
+      text: z.string(),
+    }),
+    response: z.object({
+      ok: z.boolean(),
+    }),
+  },
 } as const;
 
 export type IpcContractSchemas = typeof ipcContractSchemas;

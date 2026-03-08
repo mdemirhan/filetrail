@@ -20,8 +20,14 @@ import {
   type UiFontFamily,
   type UiFontWeight,
 } from "../shared/appPreferences";
+import { ActionNoticeDialog } from "./components/ActionNoticeDialog";
 import { ContentPane } from "./components/ContentPane";
 import { HelpView } from "./components/HelpView";
+import {
+  type ContextMenuActionId,
+  type ContextMenuSubmenuActionId,
+  ItemContextMenu,
+} from "./components/ItemContextMenu";
 import { LocationSheet } from "./components/LocationSheet";
 import { PropertiesDrawer } from "./components/PropertiesDrawer";
 import { SearchResultsPane } from "./components/SearchResultsPane";
@@ -62,6 +68,10 @@ type SearchJobStatus = IpcResponse<"search:getUpdate">["status"];
 
 const logger = createRendererLogger("filetrail.renderer");
 const SEARCH_POLL_INTERVAL_MS = 120;
+const CONTEXT_MENU_WIDTH = 240;
+const CONTEXT_SUBMENU_WIDTH = 180;
+const CONTEXT_MENU_SAFE_MARGIN = 12;
+const CONTEXT_MENU_MAX_HEIGHT = 420;
 const SHORTCUT_ITEMS = [
   { group: "Navigation", shortcut: "Cmd+Left", description: "Go back to the previous folder" },
   { group: "Navigation", shortcut: "Cmd+Right", description: "Go forward to the next folder" },
@@ -94,7 +104,6 @@ const SHORTCUT_ITEMS = [
     shortcut: "Esc",
     description: "Close visible search results and return to normal browsing",
   },
-  { group: "Panels", shortcut: "Cmd+I", description: "Toggle the inspector drawer" },
   {
     group: "Panels",
     shortcut: "Tab",
@@ -219,6 +228,15 @@ export function App() {
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [typeaheadQuery, setTypeaheadQuery] = useState("");
   const [typeaheadPane, setTypeaheadPane] = useState<"tree" | "content" | null>(null);
+  const [contextMenuState, setContextMenuState] = useState<{
+    x: number;
+    y: number;
+    path: string;
+  } | null>(null);
+  const [actionNotice, setActionNotice] = useState<{
+    title: string;
+    message: string;
+  } | null>(null);
   const [restoredPaneWidths, setRestoredPaneWidths] = useState<{
     treeWidth: number;
     inspectorWidth: number;
@@ -249,6 +267,8 @@ export function App() {
   const typeaheadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typeaheadQueryRef = useRef("");
   const typeaheadPaneRef = useRef<"tree" | "content" | null>(null);
+  const actionNoticeReturnFocusPaneRef = useRef<"tree" | "content" | null>(null);
+  const lastExplorerFocusPaneRef = useRef<"tree" | "content" | null>(null);
   const panes = useExplorerPaneLayout({
     initialTreeWidth: DEFAULT_APP_PREFERENCES.treeWidth,
     initialInspectorWidth: DEFAULT_APP_PREFERENCES.inspectorWidth,
@@ -270,6 +290,13 @@ export function App() {
   const selectedEntry = useMemo(
     () => activeContentEntries.find((entry) => entry.path === selectedPath) ?? null,
     [activeContentEntries, selectedPath],
+  );
+  const contextMenuTargetEntry = useMemo(
+    () =>
+      contextMenuState
+        ? (activeContentEntries.find((entry) => entry.path === contextMenuState.path) ?? null)
+        : null,
+    [activeContentEntries, contextMenuState],
   );
 
   useEffect(() => {
@@ -310,6 +337,46 @@ export function App() {
     typeaheadPaneRef.current = typeaheadPane;
   }, [typeaheadPane]);
 
+  useEffect(() => {
+    if (!contextMenuState) {
+      return;
+    }
+    if (!activeContentEntries.some((entry) => entry.path === contextMenuState.path)) {
+      setContextMenuState(null);
+    }
+  }, [activeContentEntries, contextMenuState]);
+
+  useEffect(() => {
+    if (!contextMenuState) {
+      return;
+    }
+    if (mainView !== "explorer" || locationSheetOpen) {
+      setContextMenuState(null);
+    }
+  }, [contextMenuState, locationSheetOpen, mainView]);
+
+  useEffect(() => {
+    if (!contextMenuState) {
+      return;
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest(".context-menu-layer")) {
+        return;
+      }
+      setContextMenuState(null);
+    };
+    const closeMenu = () => setContextMenuState(null);
+    window.addEventListener("pointerdown", handlePointerDown, true);
+    window.addEventListener("scroll", closeMenu, true);
+    window.addEventListener("resize", closeMenu);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown, true);
+      window.removeEventListener("scroll", closeMenu, true);
+      window.removeEventListener("resize", closeMenu);
+    };
+  }, [contextMenuState]);
+
   useEffect(
     () => () => {
       if (typeaheadTimeoutRef.current) {
@@ -338,6 +405,12 @@ export function App() {
   }, [focusedPane, typeaheadPane]);
 
   useEffect(() => {
+    if (focusedPane === "tree" || focusedPane === "content") {
+      lastExplorerFocusPaneRef.current = focusedPane;
+    }
+  }, [focusedPane]);
+
+  useEffect(() => {
     if (typeaheadEnabled) {
       return;
     }
@@ -345,7 +418,14 @@ export function App() {
   }, [typeaheadEnabled]);
 
   useEffect(() => {
-    if (!preferencesReady || mainView !== "explorer" || locationSheetOpen || focusedPane !== null) {
+    if (
+      !preferencesReady ||
+      mainView !== "explorer" ||
+      locationSheetOpen ||
+      actionNotice ||
+      contextMenuState ||
+      focusedPane !== null
+    ) {
       return;
     }
     const activeElement = document.activeElement;
@@ -361,7 +441,7 @@ export function App() {
     }
     treePane.focus({ preventScroll: true });
     setFocusedPane("tree");
-  }, [focusedPane, locationSheetOpen, mainView, preferencesReady]);
+  }, [actionNotice, contextMenuState, focusedPane, locationSheetOpen, mainView, preferencesReady]);
 
   useEffect(() => {
     applyAppearance({
@@ -678,6 +758,29 @@ export function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      const targetElement = target instanceof HTMLElement ? target : null;
+      if (actionNotice) {
+        if (event.key === "Escape" || event.key === "Enter") {
+          event.preventDefault();
+          dismissActionNotice();
+          return;
+        }
+        if (event.key === "Tab") {
+          event.preventDefault();
+          return;
+        }
+        if (!event.metaKey && !event.ctrlKey && !event.altKey) {
+          event.preventDefault();
+          return;
+        }
+        return;
+      }
+      if (event.key === "Escape" && contextMenuState) {
+        event.preventDefault();
+        setContextMenuState(null);
+        return;
+      }
       if (event.key === "Escape" && locationSheetOpen) {
         return;
       }
@@ -688,8 +791,6 @@ export function App() {
       }
       const currentSelectedEntry =
         activeContentEntries.find((entry) => entry.path === selectedPath) ?? null;
-      const target = event.target;
-      const targetElement = target instanceof HTMLElement ? target : null;
       if (
         target instanceof HTMLInputElement ||
         target instanceof HTMLTextAreaElement ||
@@ -921,8 +1022,10 @@ export function App() {
     currentPath,
     focusedPane,
     hasCachedSearch,
+    actionNotice,
     includeHidden,
     isSearchMode,
+    contextMenuState,
     locationSheetOpen,
     mainView,
     selectedPath,
@@ -982,6 +1085,124 @@ export function App() {
         contentPaneRef.current?.focus({ preventScroll: true });
       });
     });
+  }
+
+  function focusTreePane() {
+    setFocusedPane("tree");
+    clearTypeahead();
+    window.requestAnimationFrame(() => {
+      treePaneRef.current?.focus({ preventScroll: true });
+      window.requestAnimationFrame(() => {
+        treePaneRef.current?.focus({ preventScroll: true });
+      });
+    });
+  }
+
+  function closeContextMenu() {
+    setContextMenuState(null);
+  }
+
+  function resolveContextMenuPosition(x: number, y: number) {
+    const maxX =
+      window.innerWidth - (CONTEXT_MENU_WIDTH + CONTEXT_SUBMENU_WIDTH + CONTEXT_MENU_SAFE_MARGIN);
+    const maxY = window.innerHeight - (CONTEXT_MENU_MAX_HEIGHT + CONTEXT_MENU_SAFE_MARGIN);
+    return {
+      x: Math.max(CONTEXT_MENU_SAFE_MARGIN, Math.min(x, maxX)),
+      y: Math.max(CONTEXT_MENU_SAFE_MARGIN, Math.min(y, maxY)),
+    };
+  }
+
+  function openItemContextMenu(path: string, position: { x: number; y: number }) {
+    const resolvedPosition = resolveContextMenuPosition(position.x, position.y);
+    setSelectedPath(path);
+    setFocusedPane("content");
+    window.requestAnimationFrame(() => {
+      contentPaneRef.current?.focus({ preventScroll: true });
+    });
+    setContextMenuState({
+      ...resolvedPosition,
+      path,
+    });
+  }
+
+  function showNotImplementedNotice(title: string) {
+    actionNoticeReturnFocusPaneRef.current =
+      focusedPane ?? lastExplorerFocusPaneRef.current ?? (contextMenuState ? "content" : null);
+    setActionNotice({
+      title,
+      message: `${title} is not implemented yet.`,
+    });
+  }
+
+  function dismissActionNotice() {
+    const paneToRestore = actionNoticeReturnFocusPaneRef.current;
+    actionNoticeReturnFocusPaneRef.current = null;
+    setActionNotice(null);
+    if (paneToRestore === "content") {
+      focusContentPane();
+      return;
+    }
+    if (paneToRestore === "tree") {
+      focusTreePane();
+    }
+  }
+
+  async function copyPathToClipboard(path: string) {
+    await client.invoke("system:copyText", { text: path });
+  }
+
+  async function runContextMenuAction(actionId: ContextMenuActionId, path: string) {
+    closeContextMenu();
+    if (actionId === "copyPath") {
+      try {
+        await copyPathToClipboard(path);
+      } catch (error) {
+        logger.error("copy path failed", error);
+        setActionNotice({
+          title: "Copy Path",
+          message: "Unable to copy the selected path to the clipboard.",
+        });
+      }
+      return;
+    }
+    const title =
+      actionId === "open"
+        ? "Open"
+        : actionId === "info"
+          ? "Get Info"
+          : actionId === "copy"
+            ? "Copy"
+            : actionId === "move"
+              ? "Move To…"
+              : actionId === "rename"
+                ? "Rename"
+                : actionId === "duplicate"
+                  ? "Duplicate"
+                  : actionId === "compress"
+                    ? "Compress"
+                    : actionId === "newFolder"
+                      ? "New Folder"
+                      : actionId === "terminal"
+                        ? "Open in Terminal"
+                        : actionId === "trash"
+                          ? "Move to Trash"
+                          : "Open With";
+    showNotImplementedNotice(title);
+  }
+
+  function runContextSubmenuAction(actionId: ContextMenuSubmenuActionId) {
+    closeContextMenu();
+    const title =
+      actionId === "vscode"
+        ? "Open With Visual Studio Code"
+        : actionId === "sublime"
+          ? "Open With Sublime Text"
+          : actionId === "nvim"
+            ? "Open With Neovim"
+            : actionId === "finder"
+              ? "Open With Finder"
+              : "Open With Other…";
+    showNotImplementedNotice(title);
   }
 
   function showCachedSearchResults(options?: { focusPane?: boolean }) {
@@ -2200,6 +2421,9 @@ export function App() {
                     onActivateResult={(item) => {
                       void activateEntry(toDirectoryEntryFromSearchResult(item));
                     }}
+                    onItemContextMenu={(item, position) => {
+                      openItemContextMenu(item.path, position);
+                    }}
                     onFocusChange={(focused) => setFocusedPane(focused ? "content" : null)}
                     typeaheadQuery={focusedPane === "content" ? typeaheadQuery : ""}
                   />
@@ -2233,6 +2457,9 @@ export function App() {
                         inputPath,
                       })
                     }
+                    onItemContextMenu={(entry, position) => {
+                      openItemContextMenu(entry.path, position);
+                    }}
                     compactListView={compactListView}
                     tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
                     searchQuery=""
@@ -2344,6 +2571,24 @@ export function App() {
         onClose={() => setLocationSheetOpen(false)}
         onSubmit={(path) => void submitLocationPath(path)}
       />
+      {contextMenuState && contextMenuTargetEntry ? (
+        <ItemContextMenu
+          anchorX={contextMenuState.x}
+          anchorY={contextMenuState.y}
+          open
+          onAction={(actionId) => {
+            void runContextMenuAction(actionId, contextMenuTargetEntry.path);
+          }}
+          onSubmenuAction={runContextSubmenuAction}
+        />
+      ) : null}
+      {actionNotice ? (
+        <ActionNoticeDialog
+          title={actionNotice.title}
+          message={actionNotice.message}
+          onClose={dismissActionNotice}
+        />
+      ) : null}
     </main>
   );
 }

@@ -39,6 +39,24 @@
   --toolbar-toggle-icon-inactive: #9a9ca8;
   --toolbar-sort-text: #6e7080;
   --toolbar-sort-arrow: #a0a2ae;
+  --context-menu-bg: #f0f1f5;
+  --context-menu-bg-blur: rgba(240, 241, 245, 0.88);
+  --context-menu-border: #c8c9d0;
+  --context-menu-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+  --context-menu-separator: #d4d5dc;
+  --context-menu-text: #1a1a24;
+  --context-menu-text-muted: #7a7a8a;
+  --context-menu-shortcut: #9a9aaa;
+  --context-menu-hover: rgba(218, 165, 32, 0.14);
+  --context-menu-hover-text: #1a1a24;
+  --context-menu-hover-accent: #b8860b;
+  --context-menu-disabled: #b0b0be;
+  --context-menu-destructive: #d44040;
+  --context-menu-destructive-hover: rgba(212, 64, 64, 0.1);
+  --context-menu-icon: #5a5a6e;
+  --context-menu-icon-hover: #b8860b;
+  --context-menu-submenu-arrow: #9a9aaa;
+  --context-menu-submenu-arrow-hover: #b8860b;
   --dropdown-bg: #eff0f5;
   --bg-raised: #e8eaf2;
   --fg: #3c3f56;
@@ -161,6 +179,24 @@
   --toolbar-toggle-icon-inactive: #555658;
   --toolbar-sort-text: #959698;
   --toolbar-sort-arrow: #555658;
+  --context-menu-bg: #222326;
+  --context-menu-bg-blur: rgba(34, 35, 38, 0.92);
+  --context-menu-border: #353638;
+  --context-menu-shadow: 0 8px 40px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+  --context-menu-separator: #2e2f32;
+  --context-menu-text: #c0c1c8;
+  --context-menu-text-muted: #68696e;
+  --context-menu-shortcut: #505158;
+  --context-menu-hover: rgba(218, 165, 32, 0.11);
+  --context-menu-hover-text: #dddee4;
+  --context-menu-hover-accent: #daa520;
+  --context-menu-disabled: #404148;
+  --context-menu-destructive: #dc5555;
+  --context-menu-destructive-hover: rgba(220, 85, 85, 0.1);
+  --context-menu-icon: #68696e;
+  --context-menu-icon-hover: #daa520;
+  --context-menu-submenu-arrow: #505158;
+  --context-menu-submenu-arrow-hover: #daa520;
   --dropdown-bg: #2a2c2e;
   --bg-raised: #1b1d1f;
   --fg: #c5c8c6;
@@ -270,6 +306,24 @@
   --toolbar-toggle-icon-inactive: #5a5d64;
   --toolbar-sort-text: #9a9da6;
   --toolbar-sort-arrow: #5a5d64;
+  --context-menu-bg: #252830;
+  --context-menu-bg-blur: rgba(37, 40, 48, 0.92);
+  --context-menu-border: #3a3d46;
+  --context-menu-shadow: 0 8px 40px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.25);
+  --context-menu-separator: #33363f;
+  --context-menu-text: #c8cad4;
+  --context-menu-text-muted: #6e7080;
+  --context-menu-shortcut: #555868;
+  --context-menu-hover: rgba(218, 165, 32, 0.12);
+  --context-menu-hover-text: #e0e2ec;
+  --context-menu-hover-accent: #daa520;
+  --context-menu-disabled: #44464e;
+  --context-menu-destructive: #e05555;
+  --context-menu-destructive-hover: rgba(224, 85, 85, 0.1);
+  --context-menu-icon: #6e7080;
+  --context-menu-icon-hover: #daa520;
+  --context-menu-submenu-arrow: #555868;
+  --context-menu-submenu-arrow-hover: #daa520;
   --dropdown-bg: #2c2f3a;
   --bg-raised: #20232b;
   --fg: #9da1b3;
@@ -379,6 +433,24 @@
   --toolbar-toggle-icon-inactive: #454560;
   --toolbar-sort-text: #8a8ea6;
   --toolbar-sort-arrow: #454560;
+  --context-menu-bg: #1e1e2e;
+  --context-menu-bg-blur: rgba(30, 30, 46, 0.92);
+  --context-menu-border: #363650;
+  --context-menu-shadow: 0 8px 40px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+  --context-menu-separator: #2a2a40;
+  --context-menu-text: #cdd6f5;
+  --context-menu-text-muted: #6c7086;
+  --context-menu-shortcut: #50506e;
+  --context-menu-hover: rgba(218, 165, 32, 0.11);
+  --context-menu-hover-text: #e4e8ff;
+  --context-menu-hover-accent: #daa520;
+  --context-menu-disabled: #40405a;
+  --context-menu-destructive: #f38ba8;
+  --context-menu-destructive-hover: rgba(243, 139, 168, 0.1);
+  --context-menu-icon: #6c7086;
+  --context-menu-icon-hover: #daa520;
+  --context-menu-submenu-arrow: #50506e;
+  --context-menu-submenu-arrow-hover: #daa520;
   --dropdown-bg: #313244;
   --bg-raised: #181825;
   --fg: #bac2de;
@@ -1107,6 +1179,206 @@ body.platform-macos .window-toolbar-brand {
   width: 12px;
   height: 12px;
   transform: rotate(90deg);
+}
+
+.context-menu-layer {
+  position: fixed;
+  z-index: 150;
+}
+
+.context-menu,
+.context-submenu {
+  min-width: 240px;
+  padding: 4px 0;
+  border: 1px solid var(--context-menu-border);
+  border-radius: 8px;
+  background: var(--context-menu-bg-blur);
+  box-shadow: var(--context-menu-shadow);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.context-menu {
+  position: relative;
+}
+
+.context-menu-separator {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--context-menu-separator);
+}
+
+.context-menu-item,
+.context-submenu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% - 8px);
+  margin: 0 4px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.context-menu-item {
+  position: relative;
+  padding: 5px 12px 5px 10px;
+}
+
+.context-submenu-item {
+  padding: 5px 12px;
+  color: var(--context-menu-text);
+  font-size: 12.5px;
+  font-weight: 450;
+  letter-spacing: -0.01em;
+}
+
+.context-menu-item.active,
+.context-submenu-item:hover,
+.context-submenu-item:focus-visible {
+  background: var(--context-menu-hover);
+}
+
+.context-menu-item.destructive.active {
+  background: var(--context-menu-destructive-hover);
+}
+
+.context-menu-item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--context-menu-icon);
+}
+
+.context-menu-item.active .context-menu-item-icon {
+  color: var(--context-menu-icon-hover);
+}
+
+.context-menu-item.destructive.active .context-menu-item-icon {
+  color: var(--context-menu-destructive);
+}
+
+.context-menu-icon-svg,
+.context-menu-chevron-svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  overflow: visible;
+}
+
+.context-menu-chevron-svg {
+  width: 10px;
+  height: 10px;
+  stroke-width: 2.5;
+}
+
+.context-menu-item-label {
+  flex: 1;
+  color: var(--context-menu-text);
+  font-size: 12.5px;
+  font-weight: 450;
+  letter-spacing: -0.01em;
+}
+
+.context-menu-item.active .context-menu-item-label,
+.context-submenu-item:hover,
+.context-submenu-item:focus-visible {
+  color: var(--context-menu-hover-text);
+}
+
+.context-menu-item-shortcut {
+  color: var(--context-menu-shortcut);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.context-menu-item.active .context-menu-item-shortcut {
+  color: var(--context-menu-hover-accent);
+}
+
+.context-menu-item.destructive.active .context-menu-item-label,
+.context-menu-item.destructive.active .context-menu-item-shortcut {
+  color: var(--context-menu-destructive);
+}
+
+.context-menu-submenu-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--context-menu-submenu-arrow);
+}
+
+.context-menu-item.active .context-menu-submenu-arrow {
+  color: var(--context-menu-submenu-arrow-hover);
+}
+
+.context-submenu {
+  position: absolute;
+  top: -4px;
+  left: calc(100% + 6px);
+  min-width: 180px;
+}
+
+.context-submenu-item:focus-visible {
+  outline: none;
+}
+
+.action-notice-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 170;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 12, 18, 0.24);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.action-notice-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(360px, calc(100vw - 32px));
+  margin: 0;
+  padding: 18px 18px 14px;
+  border: 1px solid var(--border-active);
+  border-radius: 14px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-lg);
+  outline: none;
+}
+
+.action-notice-title {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.action-notice-message {
+  margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.action-notice-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
 }
 
 .sort-direction-label {

@@ -101,6 +101,7 @@ function createHandlersThatFailOnSnapshot() {
     }),
     "folderSize:cancel": async () => ({ ok: true }),
     "system:openPath": async () => ({ ok: true, error: null }),
+    "system:copyText": async () => ({ ok: true }),
     "path:getSuggestions": async () => ({
       inputPath: "",
       basePath: null,

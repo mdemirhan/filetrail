@@ -53,6 +53,7 @@ export function ContentPane({
   onNavigatePath,
   onRequestPathSuggestions,
   onFocusChange,
+  onItemContextMenu = () => undefined,
   compactListView = false,
   tabSwitchesExplorerPanes = false,
   searchQuery = "",
@@ -78,6 +79,7 @@ export function ContentPane({
   onNavigatePath: (path: string) => void;
   onRequestPathSuggestions: (inputPath: string) => Promise<IpcResponse<"path:getSuggestions">>;
   onFocusChange: (focused: boolean) => void;
+  onItemContextMenu?: (entry: DirectoryEntry, position: { x: number; y: number }) => void;
   compactListView?: boolean;
   tabSwitchesExplorerPanes?: boolean;
   searchQuery?: string;
@@ -456,6 +458,7 @@ export function ContentPane({
           onLayoutColumnsChange={onLayoutColumnsChange}
           onSelectPath={onSelectPath}
           onVisiblePathsChange={onVisiblePathsChange}
+          onItemContextMenu={onItemContextMenu}
           compactListView={compactListView}
           typeaheadQuery={typeaheadQuery ?? ""}
         />
@@ -477,6 +480,7 @@ export function ContentPane({
           onLayoutColumnsChange={onLayoutColumnsChange}
           onSelectPath={onSelectPath}
           onVisiblePathsChange={onVisiblePathsChange}
+          onItemContextMenu={onItemContextMenu}
           typeaheadQuery={typeaheadQuery ?? ""}
         />
       )}
@@ -513,6 +517,7 @@ function FlowListView({
   onActivateEntry,
   onLayoutColumnsChange,
   onVisiblePathsChange,
+  onItemContextMenu = () => undefined,
   compactListView = false,
   typeaheadQuery,
 }: {
@@ -527,6 +532,7 @@ function FlowListView({
   onActivateEntry: (entry: DirectoryEntry) => void;
   onLayoutColumnsChange: (columns: number) => void;
   onVisiblePathsChange: (paths: string[]) => void;
+  onItemContextMenu?: (entry: DirectoryEntry, position: { x: number; y: number }) => void;
   compactListView?: boolean;
   typeaheadQuery?: string;
 }) {
@@ -569,6 +575,7 @@ function FlowListView({
     <div
       ref={containerRef}
       className={`content-scroll flow-list${compactListView ? " compact" : ""}`}
+      tabIndex={-1}
       onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
       onWheel={(event) => {
         if (event.ctrlKey || !containerRef.current) {
@@ -618,9 +625,19 @@ function FlowListView({
                 className={`flow-item${entry.path === selectedPath ? " active" : ""}${
                   entry.path === selectedPath && !isFocused ? " inactive" : ""
                 }`}
+                data-context-entry-path={entry.path}
                 onClick={() => {
                   onSelectPath(entry.path);
                   containerRef.current?.focus();
+                }}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  onSelectPath(entry.path);
+                  containerRef.current?.focus();
+                  onItemContextMenu(entry, {
+                    x: event.clientX,
+                    y: event.clientY,
+                  });
                 }}
                 onDoubleClick={() => onActivateEntry(entry)}
                 title={entry.name}
@@ -656,6 +673,7 @@ function DetailsView({
   onSortChange,
   onLayoutColumnsChange,
   onVisiblePathsChange,
+  onItemContextMenu = () => undefined,
   typeaheadQuery,
 }: {
   entries: DirectoryEntry[];
@@ -673,6 +691,7 @@ function DetailsView({
   onSortChange: (sortBy: IpcRequest<"directory:getSnapshot">["sortBy"]) => void;
   onLayoutColumnsChange: (columns: number) => void;
   onVisiblePathsChange: (paths: string[]) => void;
+  onItemContextMenu?: (entry: DirectoryEntry, position: { x: number; y: number }) => void;
   typeaheadQuery?: string;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -721,6 +740,7 @@ function DetailsView({
       <div
         ref={containerRef}
         className="content-scroll details-scroll"
+        tabIndex={-1}
         onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
       >
         {typeaheadQuery ? (
@@ -752,7 +772,20 @@ function DetailsView({
                 className={`details-row${entry.path === selectedPath ? " active" : ""}${
                   entry.path === selectedPath && !isFocused ? " inactive" : ""
                 }`}
-                onClick={() => onSelectPath(entry.path)}
+                data-context-entry-path={entry.path}
+                onClick={() => {
+                  onSelectPath(entry.path);
+                  containerRef.current?.focus();
+                }}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  onSelectPath(entry.path);
+                  containerRef.current?.focus();
+                  onItemContextMenu(entry, {
+                    x: event.clientX,
+                    y: event.clientY,
+                  });
+                }}
                 onDoubleClick={() => onActivateEntry(entry)}
                 title={entry.path}
               >

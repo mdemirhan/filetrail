@@ -1,4 +1,4 @@
-import { app, ipcMain, shell } from "electron";
+import { app, clipboard, ipcMain, shell } from "electron";
 
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 import { ExplorerWorkerClient, getPathSuggestions } from "@filetrail/core";
@@ -110,6 +110,10 @@ export async function bootstrapMainProcess(
       return { ok: true };
     },
     "system:openPath": (payload) => openPath(payload),
+    "system:copyText": (payload) => {
+      clipboard.writeText(payload.text);
+      return { ok: true };
+    },
   });
 }
 

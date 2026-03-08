@@ -28,6 +28,7 @@ export function SearchResultsPane({
   onCloseResults,
   onSelectPath,
   onActivateResult,
+  onItemContextMenu = () => undefined,
   onFocusChange,
   typeaheadQuery,
 }: {
@@ -45,6 +46,7 @@ export function SearchResultsPane({
   onCloseResults: () => void;
   onSelectPath: (path: string) => void;
   onActivateResult: (item: SearchResultItem) => void;
+  onItemContextMenu?: (item: SearchResultItem, position: { x: number; y: number }) => void;
   onFocusChange: (focused: boolean) => void;
   typeaheadQuery?: string;
 }) {
@@ -92,6 +94,7 @@ export function SearchResultsPane({
       <div
         ref={scrollRef}
         className="content-scroll search-results-scroll"
+        tabIndex={-1}
         onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
       >
         <div className="search-results-actions">
@@ -155,7 +158,20 @@ export function SearchResultsPane({
                 className={`search-result-row${result.path === selectedPath ? " active" : ""}${
                   result.path === selectedPath && !isFocused ? " inactive" : ""
                 }`}
-                onClick={() => onSelectPath(result.path)}
+                data-context-entry-path={result.path}
+                onClick={() => {
+                  onSelectPath(result.path);
+                  scrollRef.current?.focus();
+                }}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  onSelectPath(result.path);
+                  scrollRef.current?.focus();
+                  onItemContextMenu(result, {
+                    x: event.clientX,
+                    y: event.clientY,
+                  });
+                }}
                 onDoubleClick={() => onActivateResult(result)}
                 title={result.path}
               >
