@@ -79,6 +79,7 @@ export const appPreferencesSchema = z.object({
   textMutedOverride: colorOverrideSchema,
   viewMode: explorerViewModeSchema,
   foldersFirst: z.boolean(),
+  compactListView: z.boolean(),
   tabSwitchesExplorerPanes: z.boolean(),
   typeaheadEnabled: z.boolean(),
   typeaheadDebounceMs: z.number().int().min(250).max(1500),

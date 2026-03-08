@@ -61,10 +61,10 @@
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
-  --font-sans: "DM Sans", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-sans: "Lexend", "DM Sans", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: "Fira Code", "SFMono-Regular", ui-monospace, monospace;
   --ui-font-size: 13px;
-  --ui-font-weight: 400;
+  --ui-font-weight: 500;
   --mono-font-size: 12px;
   --mono-font-weight: 500;
   --ui-font-size-xs: calc(var(--ui-font-size) - 3px);
@@ -1274,15 +1274,27 @@ body.resizing-panels * {
   padding: 10px 20px 10px;
 }
 
+.flow-list.compact {
+  padding: 8px 20px 8px;
+}
+
 .flow-grid-rows {
   display: grid;
   gap: 4px;
+}
+
+.flow-list.compact .flow-grid-rows {
+  gap: 2px;
 }
 
 .flow-grid {
   display: grid;
   align-items: start;
   gap: 6px 18px;
+}
+
+.flow-list.compact .flow-grid {
+  gap: 2px 18px;
 }
 
 .flow-item {
@@ -1297,6 +1309,12 @@ body.resizing-panels * {
   background: transparent;
   text-align: left;
   transition: background 0.15s ease, color 0.15s ease;
+}
+
+.flow-list.compact .flow-item {
+  height: 34px;
+  gap: 8px;
+  padding: 0 10px;
 }
 
 .flow-item:hover,
@@ -1469,14 +1487,19 @@ body.resizing-panels * {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 56px;
-  height: 56px;
+  width: 128px;
+  height: 128px;
   color: var(--text-tertiary);
 }
 
 .empty-state-icon .file-icon {
-  width: 42px;
-  height: 42px;
+  width: 72px;
+  height: 72px;
+}
+
+.empty-state-folder-icon.file-icon.folder {
+  width: 112px;
+  height: 112px;
 }
 
 .empty-state-title {

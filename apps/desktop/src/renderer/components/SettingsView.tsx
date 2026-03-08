@@ -8,6 +8,7 @@ export function SettingsView({
   effectiveTextPrimaryColor,
   effectiveTextSecondaryColor,
   effectiveTextMutedColor,
+  compactListView,
   tabSwitchesExplorerPanes,
   typeaheadEnabled,
   typeaheadDebounceMs,
@@ -25,6 +26,7 @@ export function SettingsView({
   onTextSecondaryColorChange,
   onTextMutedColorChange,
   onResetAppearance,
+  onCompactListViewChange,
   onTabSwitchesExplorerPanesChange,
   onTypeaheadEnabledChange,
   onTypeaheadDebounceMsChange,
@@ -37,6 +39,7 @@ export function SettingsView({
   effectiveTextPrimaryColor: string;
   effectiveTextSecondaryColor: string;
   effectiveTextMutedColor: string;
+  compactListView: boolean;
   tabSwitchesExplorerPanes: boolean;
   typeaheadEnabled: boolean;
   typeaheadDebounceMs: number;
@@ -54,6 +57,7 @@ export function SettingsView({
   onTextSecondaryColorChange: (value: string | null) => void;
   onTextMutedColorChange: (value: string | null) => void;
   onResetAppearance: () => void;
+  onCompactListViewChange: (value: boolean) => void;
   onTabSwitchesExplorerPanesChange: (value: boolean) => void;
   onTypeaheadEnabledChange: (value: boolean) => void;
   onTypeaheadDebounceMsChange: (value: number) => void;
@@ -194,6 +198,36 @@ export function SettingsView({
                 </label>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section className="settings-panel">
+          <div className="settings-panel-header">
+            <div className="settings-panel-title">
+              <span className="settings-panel-icon settings-section-icon-storage" aria-hidden>
+                ≡
+              </span>
+              <span>Explorer</span>
+            </div>
+          </div>
+          <div className="settings-panel-body">
+            <label className="settings-toggle-row">
+              <span className="settings-toggle-copy">
+                <span className="settings-toggle-title">Compact list view</span>
+                <span className="settings-toggle-description">
+                  Reduce list row height and spacing while keeping horizontal scrolling.
+                </span>
+              </span>
+              <span className="settings-toggle-control">
+                <input
+                  type="checkbox"
+                  className="settings-toggle-input"
+                  checked={compactListView}
+                  onChange={(event) => onCompactListViewChange(event.currentTarget.checked)}
+                />
+                <span className="settings-toggle-track" aria-hidden />
+              </span>
+            </label>
           </div>
         </section>
 

@@ -26,17 +26,21 @@ export function FileIcon({ entry }: { entry: Entry }) {
   );
 }
 
-export function FolderIcon({ alias = false }: { alias?: boolean }) {
+export function FolderIcon({
+  alias = false,
+  className = "",
+}: { alias?: boolean; className?: string }) {
+  const iconClassName = className.length > 0 ? `file-icon folder ${className}` : "file-icon folder";
   if (alias) {
     return (
-      <span className="file-icon folder alias" aria-hidden>
+      <span className={`${iconClassName} alias`} aria-hidden>
         <FolderSvg open />
         <span className="alias-badge">↗</span>
       </span>
     );
   }
   return (
-    <span className="file-icon folder" aria-hidden>
+    <span className={iconClassName} aria-hidden>
       <FolderSvg />
     </span>
   );

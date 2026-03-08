@@ -28,6 +28,7 @@ export function TreePane({
   currentPath,
   onFocusChange,
   onGoHome,
+  onRerootHome,
   onQuickAccess,
   onToggleDetailRow,
   detailRowOpen,
@@ -53,6 +54,7 @@ export function TreePane({
   currentPath: string;
   onFocusChange: (focused: boolean) => void;
   onGoHome: () => void;
+  onRerootHome: () => void;
   onQuickAccess: (location: "desktop" | "downloads" | "documents" | "source") => void;
   onToggleDetailRow: () => void;
   detailRowOpen: boolean;
@@ -178,6 +180,15 @@ export function TreePane({
             aria-label="Quick access Source"
           >
             <ToolbarIcon name="source" />
+          </button>
+          <button
+            type="button"
+            className="sidebar-rail-button"
+            onClick={onRerootHome}
+            title="Root tree at Home"
+            aria-label="Root tree at Home"
+          >
+            <ToolbarIcon name="refresh" />
           </button>
           <span className="sidebar-rail-separator" />
           <button

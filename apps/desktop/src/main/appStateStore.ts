@@ -225,6 +225,7 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
     uiFontWeight: clampFontWeight(
       typeof record.uiFontWeight === "number" ? record.uiFontWeight : currentDefaults.uiFontWeight,
       UI_FONT_WEIGHT_OPTIONS,
+      currentDefaults.uiFontWeight,
     ) as AppPreferences["uiFontWeight"],
     textPrimaryOverride: normalizeColorOverride(record.textPrimaryOverride),
     textSecondaryOverride: normalizeColorOverride(record.textSecondaryOverride),
@@ -232,6 +233,10 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
     viewMode: record.viewMode === "details" ? "details" : "list",
     foldersFirst:
       typeof record.foldersFirst === "boolean" ? record.foldersFirst : currentDefaults.foldersFirst,
+    compactListView:
+      typeof record.compactListView === "boolean"
+        ? record.compactListView
+        : currentDefaults.compactListView,
     tabSwitchesExplorerPanes:
       typeof record.tabSwitchesExplorerPanes === "boolean"
         ? record.tabSwitchesExplorerPanes

@@ -32,6 +32,7 @@ export type AppPreferences = {
   textMutedOverride: string | null;
   viewMode: ExplorerViewMode;
   foldersFirst: boolean;
+  compactListView: boolean;
   tabSwitchesExplorerPanes: boolean;
   typeaheadEnabled: boolean;
   typeaheadDebounceMs: number;
@@ -47,14 +48,15 @@ export type AppPreferences = {
 
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   theme: "tomorrow-night",
-  uiFontFamily: "dm-sans",
+  uiFontFamily: "lexend",
   uiFontSize: 13,
-  uiFontWeight: 400,
+  uiFontWeight: 500,
   textPrimaryOverride: null,
   textSecondaryOverride: null,
   textMutedOverride: null,
   viewMode: "list",
   foldersFirst: true,
+  compactListView: false,
   tabSwitchesExplorerPanes: true,
   typeaheadEnabled: true,
   typeaheadDebounceMs: 750,
@@ -76,8 +78,12 @@ export function clampFontSize(value: number, min: number, max: number): number {
   return Math.round(Math.max(min, Math.min(max, value)));
 }
 
-export function clampFontWeight(value: number, options: readonly number[]): number {
-  return options.includes(value) ? value : (options[0] ?? 400);
+export function clampFontWeight(
+  value: number,
+  options: readonly number[],
+  fallback = options[0] ?? 400,
+): number {
+  return options.includes(value) ? value : fallback;
 }
 
 export function clampTypeaheadDebounceMs(value: number, min: number, max: number): number {

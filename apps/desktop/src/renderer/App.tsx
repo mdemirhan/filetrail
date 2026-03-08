@@ -146,6 +146,9 @@ export function App() {
   const [includeHidden, setIncludeHidden] = useState(DEFAULT_APP_PREFERENCES.includeHidden);
   const [viewMode, setViewMode] = useState<ExplorerViewMode>(DEFAULT_APP_PREFERENCES.viewMode);
   const [foldersFirst, setFoldersFirst] = useState(DEFAULT_APP_PREFERENCES.foldersFirst);
+  const [compactListView, setCompactListView] = useState(
+    DEFAULT_APP_PREFERENCES.compactListView,
+  );
   const [tabSwitchesExplorerPanes, setTabSwitchesExplorerPanes] = useState(
     DEFAULT_APP_PREFERENCES.tabSwitchesExplorerPanes,
   );
@@ -297,6 +300,7 @@ export function App() {
         textMutedOverride,
         viewMode,
         foldersFirst,
+        compactListView,
         tabSwitchesExplorerPanes,
         typeaheadEnabled,
         typeaheadDebounceMs,
@@ -320,6 +324,7 @@ export function App() {
     propertiesOpen,
     detailRowOpen,
     foldersFirst,
+    compactListView,
     tabSwitchesExplorerPanes,
     typeaheadDebounceMs,
     typeaheadEnabled,
@@ -356,6 +361,7 @@ export function App() {
         setIncludeHidden(preferences.includeHidden);
         setViewMode(preferences.viewMode);
         setFoldersFirst(preferences.foldersFirst);
+        setCompactListView(preferences.compactListView);
         setTabSwitchesExplorerPanes(preferences.tabSwitchesExplorerPanes);
         setTypeaheadEnabled(preferences.typeaheadEnabled);
         setTypeaheadDebounceMs(preferences.typeaheadDebounceMs);
@@ -858,6 +864,15 @@ export function App() {
     }
   }
 
+  function rerootTreeAtHome() {
+    if (!homePath) {
+      return;
+    }
+    const targetPath = isPathWithinRoot(currentPath, homePath) ? currentPath : homePath;
+    reinitializeTree(homePath, targetPath);
+    void navigateTo(targetPath, targetPath === currentPath ? "replace" : "push");
+  }
+
   function goQuickAccess(location: "desktop" | "downloads" | "documents" | "source") {
     if (!homePath) {
       return;
@@ -1239,7 +1254,7 @@ export function App() {
     if (!currentPath) {
       return;
     }
-    reinitializeTree(treeRootPath || currentPath, currentPath);
+    reinitializeTree(resolveRefreshRootPath(currentPath, treeRootPath, homePath), currentPath);
     await navigateTo(currentPath, "replace");
   }
 
@@ -1487,6 +1502,7 @@ export function App() {
                 rootPath={treeRootPath}
                 onFocusChange={(focused) => setFocusedPane(focused ? "tree" : null)}
                 onGoHome={goHome}
+                onRerootHome={rerootTreeAtHome}
                 onQuickAccess={goQuickAccess}
                 detailRowOpen={detailRowOpen}
                 onToggleDetailRow={() => setDetailRowOpen((value) => !value)}
@@ -1546,6 +1562,7 @@ export function App() {
                       inputPath,
                     })
                   }
+                  compactListView={compactListView}
                   tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
                   searchQuery={searchQuery}
                   typeaheadQuery={focusedPane === "content" ? typeaheadQuery : ""}
@@ -1599,6 +1616,7 @@ export function App() {
                 effectiveTextPrimaryColor={effectiveThemeColors.primary}
                 effectiveTextSecondaryColor={effectiveThemeColors.secondary}
                 effectiveTextMutedColor={effectiveThemeColors.muted}
+                compactListView={compactListView}
                 tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
                 typeaheadEnabled={typeaheadEnabled}
                 typeaheadDebounceMs={typeaheadDebounceMs}
@@ -1616,6 +1634,7 @@ export function App() {
                 onTextSecondaryColorChange={setTextSecondaryOverride}
                 onTextMutedColorChange={setTextMutedOverride}
                 onResetAppearance={resetAppearanceSettings}
+                onCompactListViewChange={setCompactListView}
                 onTabSwitchesExplorerPanesChange={setTabSwitchesExplorerPanes}
                 onTypeaheadEnabledChange={setTypeaheadEnabled}
                 onTypeaheadDebounceMsChange={setTypeaheadDebounceMs}
@@ -1751,6 +1770,17 @@ function isPathWithinRoot(path: string, rootPath: string): boolean {
     return true;
   }
   return path === rootPath || path.startsWith(`${rootPath}/`);
+}
+
+function resolveRefreshRootPath(currentPath: string, treeRootPath: string, homePath: string): string {
+  if (
+    homePath &&
+    isPathWithinRoot(currentPath, homePath) &&
+    (treeRootPath === "/" || isPathWithinRoot(homePath, treeRootPath))
+  ) {
+    return homePath;
+  }
+  return treeRootPath || currentPath;
 }
 
 async function requestPathSuggestions(args: {

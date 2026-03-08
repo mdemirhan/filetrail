@@ -13,14 +13,15 @@ describe("appStateStore", () => {
 
     expect(store.getPreferences()).toEqual({
       theme: "tomorrow-night",
-      uiFontFamily: "dm-sans",
+      uiFontFamily: "lexend",
       uiFontSize: 13,
-      uiFontWeight: 400,
+      uiFontWeight: 500,
       textPrimaryOverride: null,
       textSecondaryOverride: null,
       textMutedOverride: null,
       viewMode: "list",
       foldersFirst: true,
+      compactListView: false,
       tabSwitchesExplorerPanes: true,
       typeaheadEnabled: true,
       typeaheadDebounceMs: 750,
@@ -56,6 +57,7 @@ describe("appStateStore", () => {
       textMutedOverride: "#999999",
       viewMode: "details",
       foldersFirst: false,
+      compactListView: true,
       tabSwitchesExplorerPanes: false,
       typeaheadEnabled: false,
       typeaheadDebounceMs: 1000,
@@ -90,6 +92,7 @@ describe("appStateStore", () => {
       textMutedOverride: "#999999",
       viewMode: "details",
       foldersFirst: false,
+      compactListView: true,
       tabSwitchesExplorerPanes: false,
       typeaheadEnabled: false,
       typeaheadDebounceMs: 1000,
@@ -135,9 +138,9 @@ describe("appStateStore", () => {
     });
     expect(reloaded.getPreferences().treeWidth).toBe(220);
     expect(reloaded.getPreferences().inspectorWidth).toBe(480);
-    expect(reloaded.getPreferences().uiFontFamily).toBe("dm-sans");
+    expect(reloaded.getPreferences().uiFontFamily).toBe("lexend");
     expect(reloaded.getPreferences().uiFontSize).toBe(15);
-    expect(reloaded.getPreferences().uiFontWeight).toBe(400);
+    expect(reloaded.getPreferences().uiFontWeight).toBe(500);
     expect(reloaded.getPreferences().textPrimaryOverride).toBeNull();
     expect(reloaded.getPreferences().typeaheadDebounceMs).toBe(1500);
     expect(reloaded.getPreferences().treeRootPath).toBeNull();

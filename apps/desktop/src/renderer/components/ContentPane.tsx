@@ -20,6 +20,14 @@ const FLOW_LIST_LAYOUT = {
   paddingTop: 10,
   paddingBottom: 10,
 } as const;
+const COMPACT_FLOW_LIST_LAYOUT = {
+  rowHeight: 36,
+  rowGap: 2,
+  itemWidth: 292,
+  columnGap: 18,
+  paddingTop: 8,
+  paddingBottom: 8,
+} as const;
 const DETAILS_LIST_LAYOUT = {
   rowHeight: 38,
 } as const;
@@ -45,6 +53,7 @@ export function ContentPane({
   onNavigatePath,
   onRequestPathSuggestions,
   onFocusChange,
+  compactListView = false,
   tabSwitchesExplorerPanes = false,
   searchQuery = "",
   typeaheadQuery,
@@ -69,6 +78,7 @@ export function ContentPane({
   onNavigatePath: (path: string) => void;
   onRequestPathSuggestions: (inputPath: string) => Promise<IpcResponse<"path:getSuggestions">>;
   onFocusChange: (focused: boolean) => void;
+  compactListView?: boolean;
   tabSwitchesExplorerPanes?: boolean;
   searchQuery?: string;
   typeaheadQuery?: string;
@@ -451,6 +461,7 @@ export function ContentPane({
           onLayoutColumnsChange={onLayoutColumnsChange}
           onSelectPath={onSelectPath}
           onVisiblePathsChange={onVisiblePathsChange}
+          compactListView={compactListView}
           typeaheadQuery={typeaheadQuery ?? ""}
         />
       ) : (
@@ -507,6 +518,7 @@ function FlowListView({
   onActivateEntry,
   onLayoutColumnsChange,
   onVisiblePathsChange,
+  compactListView = false,
   typeaheadQuery,
 }: {
   entries: DirectoryEntry[];
@@ -520,21 +532,20 @@ function FlowListView({
   onActivateEntry: (entry: DirectoryEntry) => void;
   onLayoutColumnsChange: (columns: number) => void;
   onVisiblePathsChange: (paths: string[]) => void;
+  compactListView?: boolean;
   typeaheadQuery?: string;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const { height } = useElementSize(containerRef);
   const [scrollTop, setScrollTop] = useState(0);
+  const listLayout = compactListView ? COMPACT_FLOW_LIST_LAYOUT : FLOW_LIST_LAYOUT;
   const rowsPerColumn = Math.max(
     1,
     Math.floor(
       Math.max(
-        height -
-          (FLOW_LIST_LAYOUT.paddingTop +
-            FLOW_LIST_LAYOUT.paddingBottom -
-            FLOW_LIST_LAYOUT.rowGap),
-        FLOW_LIST_LAYOUT.rowHeight,
-      ) / FLOW_LIST_LAYOUT.rowHeight,
+        height - (listLayout.paddingTop + listLayout.paddingBottom - listLayout.rowGap),
+        listLayout.rowHeight,
+      ) / listLayout.rowHeight,
     ),
   );
   const rows = useMemo(
@@ -544,7 +555,7 @@ function FlowListView({
   const columnCount = Math.max(1, Math.ceil(entries.length / rowsPerColumn));
   const range = getVirtualRange({
     itemCount: rows.length,
-    itemSize: FLOW_LIST_LAYOUT.rowHeight,
+    itemSize: listLayout.rowHeight,
     viewportSize: height,
     scrollOffset: scrollTop,
     overscan: 6,
@@ -562,7 +573,7 @@ function FlowListView({
   return (
     <div
       ref={containerRef}
-      className="content-scroll flow-list"
+      className={`content-scroll flow-list${compactListView ? " compact" : ""}`}
       onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
       onWheel={(event) => {
         if (event.ctrlKey || !containerRef.current) {
@@ -591,13 +602,11 @@ function FlowListView({
       <div
         className="flow-grid-rows"
         style={{
-          paddingTop: `${range.startIndex * FLOW_LIST_LAYOUT.rowHeight}px`,
-          paddingBottom: `${
-            Math.max(0, rows.length - range.endIndex) * FLOW_LIST_LAYOUT.rowHeight
-          }px`,
+          paddingTop: `${range.startIndex * listLayout.rowHeight}px`,
+          paddingBottom: `${Math.max(0, rows.length - range.endIndex) * listLayout.rowHeight}px`,
           minWidth: `${
-            columnCount * FLOW_LIST_LAYOUT.itemWidth +
-            Math.max(0, columnCount - 1) * FLOW_LIST_LAYOUT.columnGap
+            columnCount * listLayout.itemWidth +
+            Math.max(0, columnCount - 1) * listLayout.columnGap
           }px`,
         }}
       >
@@ -606,7 +615,7 @@ function FlowListView({
             key={`${range.startIndex + rowIndex}-${row.at(0)?.path ?? "empty"}`}
             className="flow-grid"
             style={{
-              gridTemplateColumns: `repeat(${columnCount}, ${FLOW_LIST_LAYOUT.itemWidth}px)`,
+              gridTemplateColumns: `repeat(${columnCount}, ${listLayout.itemWidth}px)`,
             }}
           >
             {row.map((entry) => (
@@ -869,7 +878,7 @@ function EmptyState({
   return (
     <div className="content-state content-empty">
       <div className="empty-state-icon" aria-hidden="true">
-        <FolderIcon />
+        <FolderIcon className="empty-state-folder-icon" />
       </div>
       <strong className="empty-state-title">
         {hasSearchQuery ? "No results found" : "This folder is empty"}

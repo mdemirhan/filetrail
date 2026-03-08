@@ -190,6 +190,9 @@ function toPreferencePatch(
   if (value.foldersFirst !== undefined) {
     patch.foldersFirst = value.foldersFirst;
   }
+  if (value.compactListView !== undefined) {
+    patch.compactListView = value.compactListView;
+  }
   if (value.typeaheadEnabled !== undefined) {
     patch.typeaheadEnabled = value.typeaheadEnabled;
   }

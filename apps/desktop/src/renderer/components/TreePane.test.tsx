@@ -44,6 +44,7 @@ describe("TreePane", () => {
         }}
         onFocusChange={() => undefined}
         onGoHome={() => undefined}
+        onRerootHome={() => undefined}
         onQuickAccess={() => undefined}
         detailRowOpen
         onToggleDetailRow={() => undefined}
@@ -106,6 +107,7 @@ describe("TreePane", () => {
         }}
         onFocusChange={() => undefined}
         onGoHome={() => undefined}
+        onRerootHome={() => undefined}
         onQuickAccess={() => undefined}
         detailRowOpen
         onToggleDetailRow={() => undefined}
@@ -154,6 +156,7 @@ describe("TreePane", () => {
         }}
         onFocusChange={() => undefined}
         onGoHome={() => undefined}
+        onRerootHome={() => undefined}
         onQuickAccess={() => undefined}
         detailRowOpen
         onToggleDetailRow={() => undefined}
@@ -202,6 +205,7 @@ describe("TreePane", () => {
         }}
         onFocusChange={() => undefined}
         onGoHome={() => undefined}
+        onRerootHome={() => undefined}
         onQuickAccess={() => undefined}
         detailRowOpen
         onToggleDetailRow={() => undefined}
@@ -249,6 +253,7 @@ describe("TreePane", () => {
         }}
         onFocusChange={() => undefined}
         onGoHome={() => undefined}
+        onRerootHome={() => undefined}
         onQuickAccess={() => undefined}
         detailRowOpen
         onToggleDetailRow={() => undefined}
@@ -270,5 +275,53 @@ describe("TreePane", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /open help/i }));
     expect(handleOpenHelp).toHaveBeenCalledTimes(1);
+  });
+
+  it("reroots the tree at home from the rail button", () => {
+    const handleRerootHome = vi.fn();
+    render(
+      <TreePane
+        isFocused
+        rootPath="/"
+        homePath="/Users/demo"
+        currentPath="/Users/demo/Documents"
+        nodes={{
+          "/": {
+            path: "/",
+            name: "/",
+            kind: "directory",
+            isHidden: false,
+            isSymlink: false,
+            expanded: true,
+            loading: false,
+            loaded: true,
+            error: null,
+            childPaths: [],
+          },
+        }}
+        onFocusChange={() => undefined}
+        onGoHome={() => undefined}
+        onRerootHome={handleRerootHome}
+        onQuickAccess={() => undefined}
+        detailRowOpen
+        onToggleDetailRow={() => undefined}
+        theme="dark"
+        themeMenuOpen={false}
+        themeButtonRef={themeButtonRef}
+        themeMenuRef={themeMenuRef}
+        onToggleThemeMenu={() => undefined}
+        onSelectTheme={() => undefined}
+        onOpenHelp={() => undefined}
+        onOpenSettings={() => undefined}
+        includeHidden={false}
+        onToggleHidden={() => undefined}
+        onToggleExpand={() => undefined}
+        onNavigate={() => undefined}
+        typeaheadQuery=""
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /root tree at home/i }));
+    expect(handleRerootHome).toHaveBeenCalledTimes(1);
   });
 });
