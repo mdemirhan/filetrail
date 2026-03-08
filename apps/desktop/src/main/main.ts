@@ -1,8 +1,9 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { BrowserWindow, app, nativeImage, nativeTheme, shell } from "electron";
+import { BrowserWindow, Menu, app, nativeImage, nativeTheme, shell } from "electron";
 
+import { createApplicationMenuTemplate } from "./appMenu";
 import { type AppStateStore, createAppStateStore, resolveAppStatePath } from "./appStateStore";
 import { bootstrapMainProcess, shutdownMainProcess } from "./bootstrap";
 
@@ -122,6 +123,9 @@ function createWindow(): BrowserWindow {
     if (storedWindowState.maximized) {
       mainWindow.maximize();
     }
+    Menu.setApplicationMenu(
+      Menu.buildFromTemplate(createApplicationMenuTemplate(mainWindow.webContents)),
+    );
     mainWindow.show();
   });
 

@@ -4,9 +4,9 @@ import { dirname, join } from "node:path";
 import {
   type AppPreferences,
   DEFAULT_APP_PREFERENCES,
-  type ThemeMode,
   TYPEAHEAD_DEBOUNCE_MAX_MS,
   TYPEAHEAD_DEBOUNCE_MIN_MS,
+  type ThemeMode,
   UI_FONT_OPTIONS,
   UI_FONT_WEIGHT_OPTIONS,
   clampFontSize,
@@ -268,6 +268,22 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
       typeof record.includeHidden === "boolean"
         ? record.includeHidden
         : currentDefaults.includeHidden,
+    searchPatternMode:
+      record.searchPatternMode === "glob" || record.searchPatternMode === "regex"
+        ? record.searchPatternMode
+        : currentDefaults.searchPatternMode,
+    searchMatchScope:
+      record.searchMatchScope === "name" || record.searchMatchScope === "path"
+        ? record.searchMatchScope
+        : currentDefaults.searchMatchScope,
+    searchRecursive:
+      typeof record.searchRecursive === "boolean"
+        ? record.searchRecursive
+        : currentDefaults.searchRecursive,
+    searchIncludeHidden:
+      typeof record.searchIncludeHidden === "boolean"
+        ? record.searchIncludeHidden
+        : currentDefaults.searchIncludeHidden,
     treeWidth: clampPaneWidth(
       typeof record.treeWidth === "number" ? record.treeWidth : currentDefaults.treeWidth,
       220,

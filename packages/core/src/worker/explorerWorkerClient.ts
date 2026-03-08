@@ -10,6 +10,9 @@ type WorkerSupportedChannel = Extract<
   | "item:getProperties"
   | "path:getSuggestions"
   | "path:resolve"
+  | "search:start"
+  | "search:getUpdate"
+  | "search:cancel"
 >;
 
 type WorkerRequest<C extends WorkerSupportedChannel> = {
@@ -40,8 +43,8 @@ export class ExplorerWorkerClient {
   private readonly pending = new Map<string, PendingRequest>();
   private sequence = 0;
 
-  constructor(workerUrl: URL) {
-    this.worker = new Worker(workerUrl);
+  constructor(workerUrl: URL, workerData?: unknown) {
+    this.worker = new Worker(workerUrl, workerData === undefined ? undefined : { workerData });
     this.worker.on("message", (message: WorkerResponse<WorkerSupportedChannel>) => {
       const pending = this.pending.get(message.id);
       if (!pending) {

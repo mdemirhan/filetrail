@@ -17,6 +17,15 @@ export const colorOverrideSchema = z
 export const explorerViewModeSchema = z.enum(["list", "details"]);
 export const directorySortBySchema = z.enum(["name", "modified", "kind", "size"]);
 export const sortDirectionSchema = z.enum(["asc", "desc"]);
+export const searchPatternModeSchema = z.enum(["glob", "regex"]);
+export const searchMatchScopeSchema = z.enum(["name", "path"]);
+export const searchJobStatusSchema = z.enum([
+  "running",
+  "complete",
+  "cancelled",
+  "error",
+  "truncated",
+]);
 
 export const treeChildSchema = z.object({
   path: z.string().min(1),
@@ -64,6 +73,17 @@ export const pathSuggestionSchema = z.object({
   isDirectory: z.boolean(),
 });
 
+export const searchResultItemSchema = z.object({
+  path: z.string().min(1),
+  name: z.string().min(1),
+  extension: z.string(),
+  kind: explorerEntryKindSchema,
+  isHidden: z.boolean(),
+  isSymlink: z.boolean(),
+  parentPath: z.string().min(1),
+  relativeParentPath: z.string(),
+});
+
 export const resolvedPathSchema = z.object({
   inputPath: z.string().min(1),
   resolvedPath: z.string().nullable(),
@@ -87,6 +107,10 @@ export const appPreferencesSchema = z.object({
   propertiesOpen: z.boolean(),
   detailRowOpen: z.boolean(),
   includeHidden: z.boolean(),
+  searchPatternMode: searchPatternModeSchema,
+  searchMatchScope: searchMatchScopeSchema,
+  searchRecursive: z.boolean(),
+  searchIncludeHidden: z.boolean(),
   treeWidth: z.number().int().min(220).max(520),
   inspectorWidth: z.number().int().min(260).max(480),
   restoreLastVisitedFolderOnStartup: z.boolean(),
@@ -189,6 +213,43 @@ export const ipcContractSchemas = {
       path: z.string().min(1),
     }),
     response: resolvedPathSchema,
+  },
+  "search:start": {
+    request: z.object({
+      rootPath: z.string().min(1),
+      query: z.string().min(1),
+      patternMode: searchPatternModeSchema.default("regex"),
+      matchScope: searchMatchScopeSchema.default("name"),
+      recursive: z.boolean().default(true),
+      includeHidden: z.boolean().default(false),
+    }),
+    response: z.object({
+      jobId: z.string().min(1),
+      status: searchJobStatusSchema,
+    }),
+  },
+  "search:getUpdate": {
+    request: z.object({
+      jobId: z.string().min(1),
+      cursor: z.number().int().nonnegative().default(0),
+    }),
+    response: z.object({
+      jobId: z.string().min(1),
+      status: searchJobStatusSchema,
+      items: z.array(searchResultItemSchema),
+      nextCursor: z.number().int().nonnegative(),
+      done: z.boolean(),
+      truncated: z.boolean(),
+      error: z.string().nullable(),
+    }),
+  },
+  "search:cancel": {
+    request: z.object({
+      jobId: z.string().min(1),
+    }),
+    response: z.object({
+      ok: z.boolean(),
+    }),
   },
   "folderSize:start": {
     request: z.object({

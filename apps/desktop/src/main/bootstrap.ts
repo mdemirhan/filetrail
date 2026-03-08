@@ -4,6 +4,7 @@ import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 import { ExplorerWorkerClient, getPathSuggestions } from "@filetrail/core";
 import type { AppPreferences } from "../shared/appPreferences";
 import type { AppStateStore } from "./appStateStore";
+import { resolveBundledFdBinaryPath } from "./fdBinary";
 import { registerIpcHandlers } from "./ipc";
 
 let activeWorkerClient: ExplorerWorkerClient | null = null;
@@ -23,7 +24,9 @@ const folderSizeJobs = new Map<
 const debugTimingsEnabled = process.env.FILETRAIL_DEBUG_TIMINGS === "1";
 
 export async function bootstrapMainProcess(appStateStore: AppStateStore): Promise<void> {
-  const workerClient = new ExplorerWorkerClient(resolveExplorerWorkerUrl());
+  const workerClient = new ExplorerWorkerClient(resolveExplorerWorkerUrl(), {
+    fdBinaryPath: resolveBundledFdBinaryPath(),
+  });
   activeWorkerClient = workerClient;
 
   registerIpcHandlers(ipcMain, {
@@ -66,6 +69,12 @@ export async function bootstrapMainProcess(appStateStore: AppStateStore): Promis
       ),
     "path:resolve": (payload) =>
       withTiming("path:resolve", payload.path, () => workerClient.request("path:resolve", payload)),
+    "search:start": (payload) =>
+      withTiming("search:start", payload.rootPath, () =>
+        workerClient.request("search:start", payload),
+      ),
+    "search:getUpdate": (payload) => workerClient.request("search:getUpdate", payload),
+    "search:cancel": (payload) => workerClient.request("search:cancel", payload),
     "folderSize:start": (payload) => {
       const jobId = `folder-size-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
       folderSizeJobs.set(jobId, {
@@ -210,6 +219,18 @@ function toPreferencePatch(
   }
   if (value.includeHidden !== undefined) {
     patch.includeHidden = value.includeHidden;
+  }
+  if (value.searchPatternMode !== undefined) {
+    patch.searchPatternMode = value.searchPatternMode;
+  }
+  if (value.searchMatchScope !== undefined) {
+    patch.searchMatchScope = value.searchMatchScope;
+  }
+  if (value.searchRecursive !== undefined) {
+    patch.searchRecursive = value.searchRecursive;
+  }
+  if (value.searchIncludeHidden !== undefined) {
+    patch.searchIncludeHidden = value.searchIncludeHidden;
   }
   if (value.treeWidth !== undefined) {
     patch.treeWidth = value.treeWidth;

@@ -4,6 +4,7 @@ import type { IpcChannel, IpcRequestInput, IpcResponse } from "@filetrail/contra
 
 export type FiletrailClient = {
   invoke<C extends IpcChannel>(channel: C, payload: IpcRequestInput<C>): Promise<IpcResponse<C>>;
+  onCommand(listener: (command: { type: "focusFileSearch" }) => void): () => void;
 };
 
 const MISSING_PRELOAD_ERROR =
@@ -13,6 +14,7 @@ const MISSING_CLIENT: FiletrailClient = {
   invoke: async () => {
     throw new Error(MISSING_PRELOAD_ERROR);
   },
+  onCommand: () => () => undefined,
 };
 
 function isFiletrailClient(value: unknown): value is FiletrailClient {
@@ -20,7 +22,9 @@ function isFiletrailClient(value: unknown): value is FiletrailClient {
     typeof value === "object" &&
     value !== null &&
     "invoke" in value &&
-    typeof (value as { invoke?: unknown }).invoke === "function"
+    typeof (value as { invoke?: unknown }).invoke === "function" &&
+    "onCommand" in value &&
+    typeof (value as { onCommand?: unknown }).onCommand === "function"
   );
 }
 

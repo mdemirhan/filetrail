@@ -1,0 +1,14 @@
+{
+  "tool": "fd",
+  "version": "10.3.0",
+  "macos": {
+    "arm64": {
+      "archiveSha256": "0570263812089120bc2a5d84f9e65cd0c25e4a4d724c80075c357239c74ae904",
+      "relativeBinaryPath": "vendor/fd/darwin-arm64/fd"
+    },
+    "x64": {
+      "archiveSha256": "50d30f13fe3d5914b14c4fff5abcbd4d0cdab4b855970a6956f4f006c17117a3",
+      "relativeBinaryPath": "vendor/fd/darwin-x64/fd"
+    }
+  }
+}

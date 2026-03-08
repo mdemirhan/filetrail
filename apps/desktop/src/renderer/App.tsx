@@ -12,8 +12,8 @@ import {
   DEFAULT_APP_PREFERENCES,
   type ExplorerViewMode,
   THEME_OPTIONS,
-  type ThemeMode,
   TYPEAHEAD_DEBOUNCE_OPTIONS,
+  type ThemeMode,
   UI_FONT_OPTIONS,
   UI_FONT_SIZE_OPTIONS,
   UI_FONT_WEIGHT_OPTIONS,
@@ -24,48 +24,51 @@ import { ContentPane } from "./components/ContentPane";
 import { HelpView } from "./components/HelpView";
 import { LocationSheet } from "./components/LocationSheet";
 import { PropertiesDrawer } from "./components/PropertiesDrawer";
+import { SearchResultsPane } from "./components/SearchResultsPane";
 import { SettingsView } from "./components/SettingsView";
 import { ToolbarIcon } from "./components/ToolbarIcon";
 import { type TreeNodeState, TreePane } from "./components/TreePane";
 import { useElementSize } from "./hooks/useElementSize";
 import { useExplorerPaneLayout } from "./hooks/useExplorerPaneLayout";
 import {
-  getForcedVisibleHiddenChildPath,
   getAncestorChain,
+  getForcedVisibleHiddenChildPath,
   getNextSelectionIndex,
   getTreeSeedChain,
-  pathHasHiddenSegmentWithinRoot,
   parentDirectoryPath,
+  pathHasHiddenSegmentWithinRoot,
 } from "./lib/explorerNavigation";
 import { FileIcon } from "./lib/fileIcons";
 import { useFiletrailClient } from "./lib/filetrailClient";
 import { formatDateTime, formatPermissionMode, formatSize } from "./lib/formatting";
-import { createRendererLogger } from "./lib/logging";
 import { EXPLORER_LAYOUT } from "./lib/layoutTokens";
-import {
-  resolveExplorerToolbarLayout,
-  resolveSinglePanelLayout,
-} from "./lib/responsiveLayout";
+import { createRendererLogger } from "./lib/logging";
+import { resolveExplorerToolbarLayout, resolveSinglePanelLayout } from "./lib/responsiveLayout";
 import { resolveStartupNavigation } from "./lib/startupNavigation";
 import { applyAppearance, getThemeAppearanceDefaults } from "./lib/theme";
+import { getTreeKeyboardAction } from "./lib/treeView";
 import {
   findContentTypeaheadMatch,
   findTreeTypeaheadMatch,
   isTypeaheadCharacterKey,
 } from "./lib/typeahead";
-import { getTreeKeyboardAction } from "./lib/treeView";
 
 type DirectoryEntry = IpcResponse<"directory:getSnapshot">["entries"][number];
 type DirectoryEntryMetadata = IpcResponse<"directory:getMetadataBatch">["items"][number];
+type SearchResultItem = IpcResponse<"search:getUpdate">["items"][number];
+type SearchPatternMode = IpcRequest<"search:start">["patternMode"];
+type SearchMatchScope = IpcRequest<"search:start">["matchScope"];
+type SearchJobStatus = IpcResponse<"search:getUpdate">["status"];
 
 const logger = createRendererLogger("filetrail.renderer");
+const SEARCH_POLL_INTERVAL_MS = 120;
 const SHORTCUT_ITEMS = [
   { group: "Navigation", shortcut: "Cmd+Left", description: "Go back to the previous folder" },
   { group: "Navigation", shortcut: "Cmd+Right", description: "Go forward to the next folder" },
   {
     group: "Navigation",
     shortcut: "Cmd+Up",
-    description: "Open the parent folder from the file list",
+    description: "Open the parent folder",
   },
   {
     group: "Navigation",
@@ -80,16 +83,29 @@ const SHORTCUT_ITEMS = [
     shortcut: "Cmd+Shift+.",
     description: "Toggle hidden files",
   },
+  { group: "Search", shortcut: "Cmd+F", description: "Focus file search" },
+  {
+    group: "Search",
+    shortcut: "Cmd+Shift+F",
+    description: "Show cached search results without opening the search box",
+  },
+  {
+    group: "Search",
+    shortcut: "Esc",
+    description: "Close visible search results and return to normal browsing",
+  },
   { group: "Panels", shortcut: "Cmd+I", description: "Toggle the inspector drawer" },
   {
     group: "Panels",
     shortcut: "Tab",
-    description: "Move focus between the folder tree and file list when pane tab switching is enabled",
+    description:
+      "Move focus between the folder tree and file list when pane tab switching is enabled",
   },
   {
     group: "Panels",
     shortcut: "Shift+Tab",
-    description: "Move focus back between the file list and folder tree when pane tab switching is enabled",
+    description:
+      "Move focus back between the file list and folder tree when pane tab switching is enabled",
   },
   { group: "Panels", shortcut: "Cmd+1", description: "Focus the folder tree" },
   { group: "Panels", shortcut: "Cmd+2", description: "Focus the file list" },
@@ -148,16 +164,29 @@ export function App() {
   const [metadataByPath, setMetadataByPath] = useState<Record<string, DirectoryEntryMetadata>>({});
   const [directoryLoading, setDirectoryLoading] = useState(false);
   const [directoryError, setDirectoryError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchDraftQuery, setSearchDraftQuery] = useState("");
+  const [searchCommittedQuery, setSearchCommittedQuery] = useState("");
+  const [searchPatternMode, setSearchPatternMode] = useState<SearchPatternMode>(
+    DEFAULT_APP_PREFERENCES.searchPatternMode,
+  );
+  const [searchMatchScope, setSearchMatchScope] = useState<SearchMatchScope>(
+    DEFAULT_APP_PREFERENCES.searchMatchScope,
+  );
+  const [searchRecursive, setSearchRecursive] = useState(DEFAULT_APP_PREFERENCES.searchRecursive);
+  const [searchIncludeHidden, setSearchIncludeHidden] = useState(
+    DEFAULT_APP_PREFERENCES.searchIncludeHidden,
+  );
+  const [searchPopoverOpen, setSearchPopoverOpen] = useState(false);
+  const [searchResultsVisible, setSearchResultsVisible] = useState(false);
+  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
+  const [searchStatus, setSearchStatus] = useState<SearchJobStatus | "idle">("idle");
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchTruncated, setSearchTruncated] = useState(false);
   const [includeHidden, setIncludeHidden] = useState(DEFAULT_APP_PREFERENCES.includeHidden);
   const [viewMode, setViewMode] = useState<ExplorerViewMode>(DEFAULT_APP_PREFERENCES.viewMode);
   const [foldersFirst, setFoldersFirst] = useState(DEFAULT_APP_PREFERENCES.foldersFirst);
-  const [compactListView, setCompactListView] = useState(
-    DEFAULT_APP_PREFERENCES.compactListView,
-  );
-  const [compactTreeView, setCompactTreeView] = useState(
-    DEFAULT_APP_PREFERENCES.compactTreeView,
-  );
+  const [compactListView, setCompactListView] = useState(DEFAULT_APP_PREFERENCES.compactListView);
+  const [compactTreeView, setCompactTreeView] = useState(DEFAULT_APP_PREFERENCES.compactTreeView);
   const [tabSwitchesExplorerPanes, setTabSwitchesExplorerPanes] = useState(
     DEFAULT_APP_PREFERENCES.tabSwitchesExplorerPanes,
   );
@@ -199,11 +228,21 @@ export function App() {
   const toolbarRef = useRef<HTMLElement | null>(null);
   const singlePanelRef = useRef<HTMLElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const searchShellRef = useRef<HTMLDivElement | null>(null);
   const themeMenuRef = useRef<HTMLDivElement | null>(null);
   const themeButtonRef = useRef<HTMLButtonElement | null>(null);
   const directoryRequestRef = useRef(0);
   const metadataRequestRef = useRef(0);
   const propertiesRequestRef = useRef(0);
+  const searchPollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchSessionRef = useRef(0);
+  const searchJobIdRef = useRef<string | null>(null);
+  const searchPointerIntentRef = useRef(false);
+  const searchCommittedQueryRef = useRef("");
+  const searchResultsRef = useRef<SearchResultItem[]>([]);
+  const searchResultsVisibleRef = useRef(false);
+  const browseSelectedPathRef = useRef("");
+  const cachedSearchSelectedPathRef = useRef("");
   const treeRequestRef = useRef<Record<string, number>>({});
   const treeNodesRef = useRef<Record<string, TreeNodeState>>({});
   const treeRootPathRef = useRef(treeRootPath);
@@ -218,10 +257,46 @@ export function App() {
   });
   const { width: toolbarWidth } = useElementSize(toolbarRef);
   const { width: singlePanelWidth } = useElementSize(singlePanelRef);
+  const searchResultEntries = useMemo(
+    () => searchResults.map((result) => toDirectoryEntryFromSearchResult(result)),
+    [searchResults],
+  );
+  const hasCachedSearch = searchCommittedQuery.trim().length > 0;
+  const isSearchMode = searchResultsVisible && hasCachedSearch;
+  const activeContentEntries = useMemo(
+    () => (isSearchMode ? searchResultEntries : currentEntries),
+    [currentEntries, isSearchMode, searchResultEntries],
+  );
+  const selectedEntry = useMemo(
+    () => activeContentEntries.find((entry) => entry.path === selectedPath) ?? null,
+    [activeContentEntries, selectedPath],
+  );
 
   useEffect(() => {
     treeNodesRef.current = treeNodes;
   }, [treeNodes]);
+
+  useEffect(() => {
+    searchResultsVisibleRef.current = searchResultsVisible;
+  }, [searchResultsVisible]);
+
+  useEffect(() => {
+    searchCommittedQueryRef.current = searchCommittedQuery;
+  }, [searchCommittedQuery]);
+
+  useEffect(() => {
+    searchResultsRef.current = searchResults;
+  }, [searchResults]);
+
+  useEffect(() => {
+    if (isSearchMode) {
+      cachedSearchSelectedPathRef.current = selectedPath;
+      return;
+    }
+    if (!searchResultsVisibleRef.current) {
+      browseSelectedPathRef.current = selectedPath;
+    }
+  }, [isSearchMode, selectedPath]);
 
   useEffect(() => {
     treeRootPathRef.current = treeRootPath;
@@ -240,8 +315,16 @@ export function App() {
       if (typeaheadTimeoutRef.current) {
         clearTimeout(typeaheadTimeoutRef.current);
       }
+      if (searchPollTimeoutRef.current) {
+        clearTimeout(searchPollTimeoutRef.current);
+      }
+      if (searchJobIdRef.current) {
+        void client
+          .invoke("search:cancel", { jobId: searchJobIdRef.current })
+          .catch(() => undefined);
+      }
     },
-    [],
+    [client],
   );
 
   useEffect(() => {
@@ -262,11 +345,13 @@ export function App() {
   }, [typeaheadEnabled]);
 
   useEffect(() => {
+    if (!preferencesReady || mainView !== "explorer" || locationSheetOpen || focusedPane !== null) {
+      return;
+    }
+    const activeElement = document.activeElement;
     if (
-      !preferencesReady ||
-      mainView !== "explorer" ||
-      locationSheetOpen ||
-      focusedPane !== null
+      searchPointerIntentRef.current ||
+      (activeElement instanceof Node && (searchShellRef.current?.contains(activeElement) ?? false))
     ) {
       return;
     }
@@ -321,6 +406,10 @@ export function App() {
         propertiesOpen,
         detailRowOpen,
         includeHidden,
+        searchPatternMode,
+        searchMatchScope,
+        searchRecursive,
+        searchIncludeHidden,
         treeWidth: panes.treeWidth,
         inspectorWidth: panes.inspectorWidth,
         restoreLastVisitedFolderOnStartup,
@@ -340,6 +429,10 @@ export function App() {
     foldersFirst,
     compactListView,
     compactTreeView,
+    searchIncludeHidden,
+    searchMatchScope,
+    searchPatternMode,
+    searchRecursive,
     tabSwitchesExplorerPanes,
     typeaheadDebounceMs,
     typeaheadEnabled,
@@ -374,6 +467,10 @@ export function App() {
         setTextSecondaryOverride(preferences.textSecondaryOverride);
         setTextMutedOverride(preferences.textMutedOverride);
         setIncludeHidden(preferences.includeHidden);
+        setSearchPatternMode(preferences.searchPatternMode);
+        setSearchMatchScope(preferences.searchMatchScope);
+        setSearchRecursive(preferences.searchRecursive);
+        setSearchIncludeHidden(preferences.searchIncludeHidden);
         setViewMode(preferences.viewMode);
         setFoldersFirst(preferences.foldersFirst);
         setCompactListView(preferences.compactListView);
@@ -462,7 +559,51 @@ export function App() {
   }, [themeMenuOpen]);
 
   useEffect(() => {
-    if (viewMode !== "details" || currentPath.length === 0 || directoryLoading) {
+    const unsubscribe = client.onCommand((command) => {
+      if (command.type !== "focusFileSearch") {
+        return;
+      }
+      setMainView("explorer");
+      window.requestAnimationFrame(() => {
+        searchPointerIntentRef.current = true;
+        setFocusedPane(null);
+        clearTypeahead();
+        setSearchPopoverOpen(true);
+        if (searchCommittedQueryRef.current.trim().length > 0) {
+          setSearchResultsVisible(true);
+          setSelectedPath(
+            cachedSearchSelectedPathRef.current || searchResultsRef.current[0]?.path || "",
+          );
+        }
+        window.requestAnimationFrame(() => {
+          searchInputRef.current?.focus();
+          searchInputRef.current?.select();
+          searchPointerIntentRef.current = false;
+        });
+      });
+    });
+    return unsubscribe;
+  }, [client]);
+
+  useEffect(() => {
+    if (!searchPopoverOpen) {
+      return;
+    }
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (target instanceof Node && searchShellRef.current?.contains(target)) {
+        return;
+      }
+      setSearchPopoverOpen(false);
+    };
+    window.addEventListener("mousedown", handlePointerDown);
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+    };
+  }, [searchPopoverOpen]);
+
+  useEffect(() => {
+    if (isSearchMode || viewMode !== "details" || currentPath.length === 0 || directoryLoading) {
       return;
     }
     const currentEntryPaths = new Set(currentEntries.map((entry) => entry.path));
@@ -498,6 +639,7 @@ export function App() {
     currentEntries,
     currentPath,
     directoryLoading,
+    isSearchMode,
     metadataByPath,
     viewMode,
     visiblePaths,
@@ -543,7 +685,7 @@ export function App() {
         return;
       }
       const currentSelectedEntry =
-        currentEntries.find((entry) => entry.path === selectedPath) ?? null;
+        activeContentEntries.find((entry) => entry.path === selectedPath) ?? null;
       const target = event.target;
       const targetElement = target instanceof HTMLElement ? target : null;
       if (
@@ -571,8 +713,7 @@ export function App() {
         if (isAutocompleteContext) {
           return;
         }
-        const isTreeFocusTarget =
-          target instanceof Node && !!treePaneRef.current?.contains(target);
+        const isTreeFocusTarget = target instanceof Node && !!treePaneRef.current?.contains(target);
         const isContentFocusTarget =
           target instanceof Node && !!contentPaneRef.current?.contains(target);
         const shouldHandlePaneTab =
@@ -612,9 +753,14 @@ export function App() {
         setFocusedPane("content");
         return;
       }
-      if (event.metaKey && event.key.toLowerCase() === "f") {
+      if (event.metaKey && event.shiftKey && event.key.toLowerCase() === "f" && hasCachedSearch) {
         event.preventDefault();
-        searchInputRef.current?.focus();
+        showCachedSearchResults({ focusPane: true });
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        focusFileSearch(true);
         return;
       }
       if (event.metaKey && event.key === "ArrowLeft") {
@@ -679,6 +825,12 @@ export function App() {
         setPropertiesOpen((value: boolean) => !value);
         return;
       }
+      if (event.key === "Escape" && focusedPane === "content" && isSearchMode) {
+        event.preventDefault();
+        hideSearchResults();
+        focusContentPane();
+        return;
+      }
       if (
         typeaheadEnabled &&
         !event.metaKey &&
@@ -727,21 +879,25 @@ export function App() {
           }
           return;
         }
-        if (focusedPane !== "content" || currentEntries.length === 0) {
+        if (focusedPane !== "content" || activeContentEntries.length === 0) {
           return;
         }
         event.preventDefault();
-        const currentIndex = currentEntries.findIndex((entry) => entry.path === selectedPath);
+        const currentIndex = activeContentEntries.findIndex((entry) => entry.path === selectedPath);
         const nextIndex = getNextSelectionIndex({
-          itemCount: currentEntries.length,
+          itemCount: activeContentEntries.length,
           currentIndex,
           key: event.key,
-          columns: viewMode === "list" ? contentColumns : 1,
-          viewMode,
+          columns: isSearchMode ? 1 : viewMode === "list" ? contentColumns : 1,
+          viewMode: isSearchMode ? "details" : viewMode,
         });
-        const nextEntry = currentEntries[nextIndex];
+        const nextEntry = activeContentEntries[nextIndex];
         if (nextEntry) {
-          setSelectedPath(nextEntry.path);
+          if (isSearchMode) {
+            selectSearchResultPath(nextEntry.path);
+          } else {
+            setSelectedPath(nextEntry.path);
+          }
         }
         return;
       }
@@ -758,11 +914,13 @@ export function App() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
+    activeContentEntries,
     contentColumns,
-    currentEntries,
     currentPath,
     focusedPane,
+    hasCachedSearch,
     includeHidden,
+    isSearchMode,
     locationSheetOpen,
     mainView,
     selectedPath,
@@ -771,13 +929,8 @@ export function App() {
     tabSwitchesExplorerPanes,
     typeaheadEnabled,
     viewMode,
-    locationSheetOpen,
   ]);
 
-  const selectedEntry = useMemo(
-    () => currentEntries.find((entry) => entry.path === selectedPath) ?? null,
-    [currentEntries, selectedPath],
-  );
   const effectiveThemeColors = useMemo(() => {
     const defaults = getThemeAppearanceDefaults(theme);
     return {
@@ -801,8 +954,238 @@ export function App() {
   const showRefreshButton = explorerToolbarLayout !== "minimal";
   const showInspectorButton =
     explorerToolbarLayout === "full" || explorerToolbarLayout === "condensed";
-  const showFoldersFirstButton = explorerToolbarLayout !== "minimal";
   const showSortControls = explorerToolbarLayout !== "minimal";
+
+  function focusFileSearch(selectContents = false) {
+    searchPointerIntentRef.current = true;
+    setFocusedPane(null);
+    clearTypeahead();
+    setSearchPopoverOpen(true);
+    showCachedSearchResults();
+    window.requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+      if (selectContents) {
+        searchInputRef.current?.select();
+      }
+      searchPointerIntentRef.current = false;
+    });
+  }
+
+  function focusContentPane() {
+    setFocusedPane("content");
+    clearTypeahead();
+    window.requestAnimationFrame(() => {
+      contentPaneRef.current?.focus({ preventScroll: true });
+      window.requestAnimationFrame(() => {
+        contentPaneRef.current?.focus({ preventScroll: true });
+      });
+    });
+  }
+
+  function showCachedSearchResults(options?: { focusPane?: boolean }) {
+    if (!hasCachedSearch) {
+      return;
+    }
+    setSearchResultsVisible(true);
+    setSelectedPath(cachedSearchSelectedPathRef.current || searchResults[0]?.path || "");
+    if (options?.focusPane) {
+      focusContentPane();
+    }
+  }
+
+  function hideSearchResults() {
+    setSearchResultsVisible(false);
+    setSelectedPath(browseSelectedPathRef.current || currentEntries[0]?.path || "");
+  }
+
+  function selectSearchResultPath(path: string) {
+    cachedSearchSelectedPathRef.current = path;
+    if (searchResultsVisibleRef.current) {
+      setSelectedPath(path);
+    }
+  }
+
+  function dismissFileSearch(options?: { focusBelow?: boolean }) {
+    setSearchPopoverOpen(false);
+    searchInputRef.current?.blur();
+    if (options?.focusBelow) {
+      focusContentPane();
+    }
+  }
+
+  function clearSearchPolling() {
+    if (searchPollTimeoutRef.current) {
+      clearTimeout(searchPollTimeoutRef.current);
+      searchPollTimeoutRef.current = null;
+    }
+  }
+
+  async function cancelActiveSearch() {
+    const activeJobId = searchJobIdRef.current;
+    clearSearchPolling();
+    searchJobIdRef.current = null;
+    if (!activeJobId) {
+      return;
+    }
+    try {
+      await client.invoke("search:cancel", { jobId: activeJobId });
+    } catch (error) {
+      logger.debug("search cancel failed", error);
+    }
+  }
+
+  async function stopSearch() {
+    await cancelActiveSearch();
+    setSearchStatus("cancelled");
+    setSearchError(null);
+  }
+
+  async function clearCommittedSearch() {
+    await cancelActiveSearch();
+    searchSessionRef.current += 1;
+    setSearchCommittedQuery("");
+    setSearchResults([]);
+    setSearchStatus("idle");
+    setSearchError(null);
+    setSearchTruncated(false);
+    setSearchResultsVisible(false);
+    cachedSearchSelectedPathRef.current = "";
+    setSelectedPath(browseSelectedPathRef.current || currentEntries[0]?.path || "");
+  }
+
+  function mergeSearchResults(
+    current: SearchResultItem[],
+    next: SearchResultItem[],
+  ): SearchResultItem[] {
+    return [...current, ...next].sort(compareSearchResults);
+  }
+
+  function pollSearch(jobId: string, cursor: number, sessionId: number): void {
+    void client
+      .invoke("search:getUpdate", { jobId, cursor })
+      .then((response) => {
+        if (searchSessionRef.current !== sessionId || searchJobIdRef.current !== jobId) {
+          return;
+        }
+        setSearchResults((current) => {
+          const merged =
+            response.items.length > 0 ? mergeSearchResults(current, response.items) : current;
+          if (cachedSearchSelectedPathRef.current.length === 0 && merged[0]) {
+            cachedSearchSelectedPathRef.current = merged[0].path;
+            if (searchResultsVisibleRef.current) {
+              setSelectedPath(merged[0].path);
+            }
+          }
+          return merged;
+        });
+        setSearchStatus(response.status);
+        setSearchError(response.error);
+        setSearchTruncated(response.truncated);
+        if (response.done) {
+          searchJobIdRef.current = null;
+          clearSearchPolling();
+          return;
+        }
+        searchPollTimeoutRef.current = setTimeout(() => {
+          pollSearch(jobId, response.nextCursor, sessionId);
+        }, SEARCH_POLL_INTERVAL_MS);
+      })
+      .catch((error) => {
+        if (searchSessionRef.current !== sessionId || searchJobIdRef.current !== jobId) {
+          return;
+        }
+        searchJobIdRef.current = null;
+        clearSearchPolling();
+        setSearchStatus("error");
+        setSearchError(error instanceof Error ? error.message : String(error));
+      });
+  }
+
+  async function startSearch(
+    query: string,
+    overrides: Partial<{
+      patternMode: SearchPatternMode;
+      matchScope: SearchMatchScope;
+      recursive: boolean;
+      includeHidden: boolean;
+      rootPath: string;
+    }> = {},
+  ) {
+    const trimmedQuery = query.trim();
+    if (trimmedQuery.length === 0) {
+      await clearCommittedSearch();
+      return;
+    }
+    if (currentPath.length === 0) {
+      return;
+    }
+    await cancelActiveSearch();
+    browseSelectedPathRef.current = selectedPath;
+    const sessionId = searchSessionRef.current + 1;
+    searchSessionRef.current = sessionId;
+    setSearchCommittedQuery(trimmedQuery);
+    setSearchResultsVisible(true);
+    setSearchResults([]);
+    setSearchStatus("running");
+    setSearchError(null);
+    setSearchTruncated(false);
+    cachedSearchSelectedPathRef.current = "";
+    setSelectedPath("");
+
+    try {
+      const response = await client.invoke("search:start", {
+        rootPath: overrides.rootPath ?? currentPath,
+        query: trimmedQuery,
+        patternMode: overrides.patternMode ?? searchPatternMode,
+        matchScope: overrides.matchScope ?? searchMatchScope,
+        recursive: overrides.recursive ?? searchRecursive,
+        includeHidden: overrides.includeHidden ?? searchIncludeHidden,
+      });
+      if (searchSessionRef.current !== sessionId) {
+        await client.invoke("search:cancel", { jobId: response.jobId }).catch(() => undefined);
+        return;
+      }
+      searchJobIdRef.current = response.jobId;
+      setSearchStatus(response.status);
+      pollSearch(response.jobId, 0, sessionId);
+    } catch (error) {
+      if (searchSessionRef.current !== sessionId) {
+        return;
+      }
+      searchJobIdRef.current = null;
+      clearSearchPolling();
+      setSearchStatus("error");
+      setSearchError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  function updateSearchPatternMode(nextValue: SearchPatternMode) {
+    setSearchPatternMode(nextValue);
+    if (hasCachedSearch) {
+      void startSearch(searchCommittedQuery, { patternMode: nextValue });
+    }
+  }
+
+  function updateSearchMatchScope(nextValue: SearchMatchScope) {
+    setSearchMatchScope(nextValue);
+    if (hasCachedSearch) {
+      void startSearch(searchCommittedQuery, { matchScope: nextValue });
+    }
+  }
+
+  function updateSearchRecursive(nextValue: boolean) {
+    setSearchRecursive(nextValue);
+    if (hasCachedSearch) {
+      void startSearch(searchCommittedQuery, { recursive: nextValue });
+    }
+  }
+
+  function updateSearchIncludeHidden(nextValue: boolean) {
+    setSearchIncludeHidden(nextValue);
+    if (hasCachedSearch) {
+      void startSearch(searchCommittedQuery, { includeHidden: nextValue });
+    }
+  }
 
   function resetAppearanceSettings() {
     setUiFontFamily(DEFAULT_APP_PREFERENCES.uiFontFamily);
@@ -847,14 +1230,7 @@ export function App() {
     scheduleTypeaheadClear();
 
     if (pane === "content") {
-      const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase();
-      const typeaheadEntries =
-        normalizedSearchQuery.length === 0
-          ? currentEntries
-          : currentEntries.filter((entry) =>
-              entry.name.toLocaleLowerCase().includes(normalizedSearchQuery),
-            );
-      const match = findContentTypeaheadMatch(typeaheadEntries, nextQuery);
+      const match = findContentTypeaheadMatch(activeContentEntries, nextQuery);
       if (match) {
         setSelectedPath(match.path);
       }
@@ -992,6 +1368,9 @@ export function App() {
       setVisiblePaths([]);
       setMetadataByPath({});
       metadataRequestRef.current += 1;
+      if (searchResultsVisibleRef.current) {
+        setSearchResultsVisible(false);
+      }
       setSelectedPath(response.entries[0]?.path ?? "");
       setPropertiesItem(null);
       await syncTreeToPath(response.path, includeHiddenOverride);
@@ -1458,7 +1837,9 @@ export function App() {
                   <div className="toolbar-group">
                     <button
                       type="button"
-                      className={propertiesOpen ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
+                      className={
+                        propertiesOpen ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"
+                      }
                       onClick={() => setPropertiesOpen((value: boolean) => !value)}
                       title="Inspector (Cmd+I)"
                       aria-label="Inspector"
@@ -1495,18 +1876,6 @@ export function App() {
                     <ToolbarIcon name="details" />
                   </button>
                 </fieldset>
-                {showFoldersFirstButton ? (
-                  <button
-                    type="button"
-                    className={foldersFirst ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
-                    onClick={toggleFoldersFirst}
-                    title={foldersFirst ? "Folders first" : "Mixed file and folder order"}
-                    aria-label="Toggle folders first"
-                    aria-pressed={foldersFirst}
-                  >
-                    <ToolbarIcon name="foldersFirst" />
-                  </button>
-                ) : null}
               </div>
               {showSortControls ? (
                 <>
@@ -1540,19 +1909,203 @@ export function App() {
                 </>
               ) : null}
               <div className="toolbar-search-slot">
-                <label className="toolbar-search" aria-label="Search current folder">
-                <span className="toolbar-search-icon">
-                  <ToolbarIcon name="search" />
-                </span>
-                <input
-                  ref={searchInputRef}
-                  className="toolbar-search-input"
-                  type="text"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.currentTarget.value)}
-                  placeholder="Search... ⌘F"
-                />
-                </label>
+                <div
+                  ref={searchShellRef}
+                  className={`toolbar-search-shell${searchPopoverOpen ? " active" : ""}`}
+                  onBlurCapture={(event) => {
+                    const nextTarget = event.relatedTarget;
+                    if (
+                      nextTarget instanceof Node &&
+                      (searchShellRef.current?.contains(nextTarget) ?? false)
+                    ) {
+                      return;
+                    }
+                    setSearchPopoverOpen(false);
+                  }}
+                >
+                  <form
+                    className="toolbar-search"
+                    aria-label="Find files in current folder"
+                    onMouseDownCapture={(event) => {
+                      const target = event.target;
+                      if (!(target instanceof HTMLElement)) {
+                        return;
+                      }
+                      if (target.closest(".toolbar-search-clear") !== null) {
+                        return;
+                      }
+                      searchPointerIntentRef.current = true;
+                      setFocusedPane(null);
+                      clearTypeahead();
+                      window.requestAnimationFrame(() => {
+                        searchInputRef.current?.focus();
+                        searchPointerIntentRef.current = false;
+                      });
+                    }}
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void startSearch(searchDraftQuery).finally(() => {
+                        dismissFileSearch({ focusBelow: true });
+                      });
+                    }}
+                  >
+                    <div className="toolbar-search-row">
+                      <span className="toolbar-search-icon">
+                        <ToolbarIcon name="search" />
+                      </span>
+                      <input
+                        ref={searchInputRef}
+                        className="toolbar-search-input"
+                        type="text"
+                        value={searchDraftQuery}
+                        onFocus={() => {
+                          searchPointerIntentRef.current = false;
+                          setFocusedPane(null);
+                          clearTypeahead();
+                          setSearchPopoverOpen(true);
+                          showCachedSearchResults();
+                        }}
+                        onChange={(event) => {
+                          const nextValue = event.currentTarget.value;
+                          setSearchDraftQuery(nextValue);
+                          if (nextValue.trim().length === 0) {
+                            void clearCommittedSearch();
+                          }
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key !== "Escape") {
+                            return;
+                          }
+                          event.preventDefault();
+                          event.stopPropagation();
+                          dismissFileSearch({ focusBelow: true });
+                        }}
+                        placeholder="Find files…"
+                        spellCheck={false}
+                      />
+                      {searchDraftQuery.trim().length > 0 ? (
+                        <button
+                          type="button"
+                          className="toolbar-search-clear"
+                          aria-label="Clear file search"
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                          }}
+                          onClick={() => {
+                            setSearchDraftQuery("");
+                            void clearCommittedSearch().finally(() => {
+                              focusFileSearch(false);
+                            });
+                          }}
+                        >
+                          <ToolbarIcon name="close" />
+                        </button>
+                      ) : (
+                        <span className="toolbar-search-shortcut" aria-hidden="true">
+                          ⌘F
+                        </span>
+                      )}
+                    </div>
+                  </form>
+                  {searchPopoverOpen ? (
+                    <div className="toolbar-search-popover">
+                      <div className="toolbar-search-options">
+                        <div className="toolbar-search-option-row">
+                          <div className="toolbar-search-option-group">
+                            <button
+                              type="button"
+                              className={
+                                searchPatternMode === "regex"
+                                  ? "toolbar-search-pill active"
+                                  : "toolbar-search-pill"
+                              }
+                              onClick={() => updateSearchPatternMode("regex")}
+                            >
+                              Regex
+                            </button>
+                            <button
+                              type="button"
+                              className={
+                                searchPatternMode === "glob"
+                                  ? "toolbar-search-pill active"
+                                  : "toolbar-search-pill"
+                              }
+                              onClick={() => updateSearchPatternMode("glob")}
+                            >
+                              Glob
+                            </button>
+                          </div>
+                          <span className="toolbar-search-divider" aria-hidden />
+                          <div className="toolbar-search-option-group">
+                            <button
+                              type="button"
+                              className={
+                                searchMatchScope === "name"
+                                  ? "toolbar-search-pill active"
+                                  : "toolbar-search-pill"
+                              }
+                              onClick={() => updateSearchMatchScope("name")}
+                            >
+                              Name
+                            </button>
+                            <button
+                              type="button"
+                              className={
+                                searchMatchScope === "path"
+                                  ? "toolbar-search-pill active"
+                                  : "toolbar-search-pill"
+                              }
+                              onClick={() => updateSearchMatchScope("path")}
+                            >
+                              Path
+                            </button>
+                          </div>
+                        </div>
+                        <div className="toolbar-search-option-row toolbar-search-option-row-secondary">
+                          <div className="toolbar-search-option-group">
+                            <button
+                              type="button"
+                              className={
+                                searchRecursive
+                                  ? "toolbar-search-pill active"
+                                  : "toolbar-search-pill"
+                              }
+                              onClick={() => updateSearchRecursive(!searchRecursive)}
+                              aria-pressed={searchRecursive}
+                            >
+                              Recursive
+                            </button>
+                            <button
+                              type="button"
+                              className={
+                                searchIncludeHidden
+                                  ? "toolbar-search-pill active"
+                                  : "toolbar-search-pill"
+                              }
+                              onClick={() => updateSearchIncludeHidden(!searchIncludeHidden)}
+                              aria-pressed={searchIncludeHidden}
+                            >
+                              Hidden
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="toolbar-search-meta">
+                        <span className="toolbar-search-root">{currentPath || "Loading…"}</span>
+                        <span className="toolbar-search-status">
+                          {searchDraftQuery.trim().length > 0 &&
+                          searchDraftQuery.trim() !== searchCommittedQuery
+                            ? "Press Enter to search"
+                            : searchStatus === "running"
+                              ? "Searching…"
+                              : searchIncludeHidden
+                                ? "Hidden files included"
+                                : ""}
+                        </span>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </div>
           </header>
@@ -1584,6 +2137,8 @@ export function App() {
                 onGoHome={goHome}
                 onRerootHome={rerootTreeAtHome}
                 onQuickAccess={goQuickAccess}
+                foldersFirst={foldersFirst}
+                onToggleFoldersFirst={toggleFoldersFirst}
                 detailRowOpen={detailRowOpen}
                 onToggleDetailRow={() => setDetailRowOpen((value) => !value)}
                 theme={theme}
@@ -1613,40 +2168,75 @@ export function App() {
                 onKeyDown={(event) => handlePaneResizeKey("tree", event)}
               />
               <section className="main-shell">
-                <ContentPane
-                  paneRef={contentPaneRef}
-                  isFocused={focusedPane === "content"}
-                  currentPath={currentPath}
-                  entries={currentEntries}
-                  loading={directoryLoading}
-                  error={directoryError}
-                  includeHidden={includeHidden}
-                  metadataByPath={metadataByPath}
-                  selectedPath={selectedPath}
-                  viewMode={viewMode}
-                  onSelectPath={setSelectedPath}
-                  onActivateEntry={(entry) => {
-                    void activateEntry(entry);
-                  }}
-                  onFocusChange={(focused) => setFocusedPane(focused ? "content" : null)}
-                  sortBy={sortBy}
-                  sortDirection={sortDirection}
-                  onSortChange={handleSortChange}
-                  onLayoutColumnsChange={setContentColumns}
-                  onVisiblePathsChange={setVisiblePaths}
-                  onNavigatePath={(path) => void navigateTo(path, "push")}
-                  onRequestPathSuggestions={(inputPath) =>
-                    requestPathSuggestions({
-                      client,
-                      includeHidden,
-                      inputPath,
-                    })
-                  }
-                  compactListView={compactListView}
-                  tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
-                  searchQuery={searchQuery}
-                  typeaheadQuery={focusedPane === "content" ? typeaheadQuery : ""}
-                />
+                {isSearchMode ? (
+                  <SearchResultsPane
+                    key={`${currentPath}:${searchCommittedQuery}`}
+                    paneRef={contentPaneRef}
+                    isFocused={focusedPane === "content"}
+                    rootPath={currentPath}
+                    query={searchCommittedQuery}
+                    status={searchStatus}
+                    results={searchResults}
+                    selectedPath={selectedPath}
+                    error={searchError}
+                    truncated={searchTruncated}
+                    onStopSearch={() => {
+                      void stopSearch();
+                    }}
+                    onClearResults={() => {
+                      void clearCommittedSearch().finally(() => {
+                        focusContentPane();
+                      });
+                    }}
+                    onCloseResults={() => {
+                      setSearchPopoverOpen(false);
+                      searchInputRef.current?.blur();
+                      hideSearchResults();
+                      focusContentPane();
+                    }}
+                    onSelectPath={selectSearchResultPath}
+                    onActivateResult={(item) => {
+                      void activateEntry(toDirectoryEntryFromSearchResult(item));
+                    }}
+                    onFocusChange={(focused) => setFocusedPane(focused ? "content" : null)}
+                    typeaheadQuery={focusedPane === "content" ? typeaheadQuery : ""}
+                  />
+                ) : (
+                  <ContentPane
+                    paneRef={contentPaneRef}
+                    isFocused={focusedPane === "content"}
+                    currentPath={currentPath}
+                    entries={currentEntries}
+                    loading={directoryLoading}
+                    error={directoryError}
+                    includeHidden={includeHidden}
+                    metadataByPath={metadataByPath}
+                    selectedPath={selectedPath}
+                    viewMode={viewMode}
+                    onSelectPath={setSelectedPath}
+                    onActivateEntry={(entry) => {
+                      void activateEntry(entry);
+                    }}
+                    onFocusChange={(focused) => setFocusedPane(focused ? "content" : null)}
+                    sortBy={sortBy}
+                    sortDirection={sortDirection}
+                    onSortChange={handleSortChange}
+                    onLayoutColumnsChange={setContentColumns}
+                    onVisiblePathsChange={setVisiblePaths}
+                    onNavigatePath={(path) => void navigateTo(path, "push")}
+                    onRequestPathSuggestions={(inputPath) =>
+                      requestPathSuggestions({
+                        client,
+                        includeHidden,
+                        inputPath,
+                      })
+                    }
+                    compactListView={compactListView}
+                    tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
+                    searchQuery=""
+                    typeaheadQuery={focusedPane === "content" ? typeaheadQuery : ""}
+                  />
+                )}
                 <DetailRow
                   open={detailRowOpen}
                   currentPath={currentPath}
@@ -1655,8 +2245,16 @@ export function App() {
                   item={propertiesItem}
                 />
                 <footer className="status-bar">
-                  <span>{currentEntries.length} items</span>
-                  <span className="status-path">{currentPath}</span>
+                  <span>
+                    {isSearchMode
+                      ? searchStatus === "running"
+                        ? `${searchResults.length} matches so far`
+                        : `${searchResults.length} matches`
+                      : `${currentEntries.length} items`}
+                  </span>
+                  <span className="status-path">
+                    {isSearchMode ? `Search root: ${currentPath}` : currentPath}
+                  </span>
                 </footer>
               </section>
               {propertiesOpen ? (
@@ -1835,6 +2433,24 @@ function DetailRow({
   );
 }
 
+function toDirectoryEntryFromSearchResult(result: SearchResultItem): DirectoryEntry {
+  return {
+    path: result.path,
+    name: result.name,
+    extension: result.extension,
+    kind: result.kind,
+    isHidden: result.isHidden,
+    isSymlink: result.isSymlink,
+  };
+}
+
+function compareSearchResults(left: SearchResultItem, right: SearchResultItem): number {
+  return (
+    left.name.localeCompare(right.name, undefined, { sensitivity: "base" }) ||
+    left.path.localeCompare(right.path, undefined, { sensitivity: "base" })
+  );
+}
+
 function createTreeNode(path: string, expanded: boolean): TreeNodeState {
   return {
     path,
@@ -1859,7 +2475,11 @@ function isPathWithinRoot(path: string, rootPath: string): boolean {
   return path === rootPath || path.startsWith(`${rootPath}/`);
 }
 
-function resolveRefreshRootPath(currentPath: string, treeRootPath: string, homePath: string): string {
+function resolveRefreshRootPath(
+  currentPath: string,
+  treeRootPath: string,
+  homePath: string,
+): string {
   if (
     homePath &&
     isPathWithinRoot(currentPath, homePath) &&

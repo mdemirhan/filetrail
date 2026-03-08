@@ -1,0 +1,100 @@
+// @vitest-environment jsdom
+
+import { fireEvent, render, screen } from "@testing-library/react";
+
+import { SearchResultsPane } from "./SearchResultsPane";
+
+describe("SearchResultsPane", () => {
+  it("renders empty-state copy after a completed search with no matches", () => {
+    render(
+      <SearchResultsPane
+        isFocused
+        rootPath="/Users/demo/project"
+        query="*.tsx"
+        status="complete"
+        results={[]}
+        selectedPath=""
+        error={null}
+        truncated={false}
+        onStopSearch={() => undefined}
+        onClearResults={() => undefined}
+        onCloseResults={() => undefined}
+        onSelectPath={() => undefined}
+        onActivateResult={() => undefined}
+        onFocusChange={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("No matching files")).toBeInTheDocument();
+  });
+
+  it("calls selection and activation handlers for result rows", () => {
+    const handleSelect = vi.fn();
+    const handleActivate = vi.fn();
+
+    render(
+      <SearchResultsPane
+        isFocused
+        rootPath="/Users/demo/project"
+        query="*.tsx"
+        status="complete"
+        results={[
+          {
+            path: "/Users/demo/project/src/App.tsx",
+            name: "App.tsx",
+            extension: "tsx",
+            kind: "file",
+            isHidden: false,
+            isSymlink: false,
+            parentPath: "/Users/demo/project/src",
+            relativeParentPath: "src",
+          },
+        ]}
+        selectedPath=""
+        error={null}
+        truncated={false}
+        onStopSearch={() => undefined}
+        onClearResults={() => undefined}
+        onCloseResults={() => undefined}
+        onSelectPath={handleSelect}
+        onActivateResult={handleActivate}
+        onFocusChange={() => undefined}
+      />,
+    );
+
+    const row = screen.getByRole("button", { name: /App\.tsx/i });
+    fireEvent.click(row);
+    fireEvent.doubleClick(row);
+
+    expect(handleSelect).toHaveBeenCalledWith("/Users/demo/project/src/App.tsx");
+    expect(handleActivate).toHaveBeenCalledWith(
+      expect.objectContaining({ path: "/Users/demo/project/src/App.tsx" }),
+    );
+  });
+
+  it("shows a stop action while a search is running", () => {
+    const handleStop = vi.fn();
+
+    render(
+      <SearchResultsPane
+        isFocused
+        rootPath="/Users/demo/project"
+        query="app"
+        status="running"
+        results={[]}
+        selectedPath=""
+        error={null}
+        truncated={false}
+        onStopSearch={handleStop}
+        onClearResults={() => undefined}
+        onCloseResults={() => undefined}
+        onSelectPath={() => undefined}
+        onActivateResult={() => undefined}
+        onFocusChange={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /stop/i }));
+    expect(handleStop).toHaveBeenCalledTimes(1);
+  });
+});

@@ -46,6 +46,8 @@ describe("TreePane", () => {
         onGoHome={() => undefined}
         onRerootHome={() => undefined}
         onQuickAccess={() => undefined}
+        foldersFirst
+        onToggleFoldersFirst={() => undefined}
         detailRowOpen
         onToggleDetailRow={() => undefined}
         theme="tomorrow-night"
@@ -109,6 +111,8 @@ describe("TreePane", () => {
         onGoHome={() => undefined}
         onRerootHome={() => undefined}
         onQuickAccess={() => undefined}
+        foldersFirst
+        onToggleFoldersFirst={() => undefined}
         detailRowOpen
         onToggleDetailRow={() => undefined}
         theme="tomorrow-night"
@@ -158,6 +162,8 @@ describe("TreePane", () => {
         onGoHome={() => undefined}
         onRerootHome={() => undefined}
         onQuickAccess={() => undefined}
+        foldersFirst
+        onToggleFoldersFirst={() => undefined}
         detailRowOpen
         onToggleDetailRow={() => undefined}
         theme="dark"
@@ -207,6 +213,8 @@ describe("TreePane", () => {
         onGoHome={() => undefined}
         onRerootHome={() => undefined}
         onQuickAccess={() => undefined}
+        foldersFirst
+        onToggleFoldersFirst={() => undefined}
         detailRowOpen
         onToggleDetailRow={() => undefined}
         theme="dark"
@@ -255,6 +263,8 @@ describe("TreePane", () => {
         onGoHome={() => undefined}
         onRerootHome={() => undefined}
         onQuickAccess={() => undefined}
+        foldersFirst
+        onToggleFoldersFirst={() => undefined}
         detailRowOpen
         onToggleDetailRow={() => undefined}
         theme="dark"
@@ -303,6 +313,8 @@ describe("TreePane", () => {
         onGoHome={() => undefined}
         onRerootHome={handleRerootHome}
         onQuickAccess={() => undefined}
+        foldersFirst
+        onToggleFoldersFirst={() => undefined}
         detailRowOpen
         onToggleDetailRow={() => undefined}
         theme="dark"

@@ -1,4 +1,5 @@
-import { parentPort } from "node:worker_threads";
+import { spawn } from "node:child_process";
+import { parentPort, workerData } from "node:worker_threads";
 
 import { type IpcChannel, ipcContractSchemas } from "@filetrail/contracts";
 import {
@@ -9,6 +10,11 @@ import {
   listTreeChildren,
   resolvePathTarget,
 } from "../fs/explorerService";
+import { FdSearchRuntime } from "../search/fdSearch";
+
+type ExplorerWorkerData = {
+  fdBinaryPath?: string;
+};
 
 type WorkerRequest = {
   id: string;
@@ -20,6 +26,9 @@ type WorkerRequest = {
     | "item:getProperties"
     | "path:getSuggestions"
     | "path:resolve"
+    | "search:start"
+    | "search:getUpdate"
+    | "search:cancel"
   >;
   payload: unknown;
 };
@@ -39,6 +48,15 @@ type WorkerResponse =
 if (!parentPort) {
   throw new Error("File Trail explorer worker requires a parent port.");
 }
+
+const { fdBinaryPath } = (workerData ?? {}) as ExplorerWorkerData;
+if (!fdBinaryPath) {
+  throw new Error("File Trail explorer worker requires a bundled fd binary path.");
+}
+
+const searchRuntime = new FdSearchRuntime(fdBinaryPath, {
+  spawn: (file, args, options) => spawn(file, args, options),
+});
 
 const queue: WorkerRequest[] = [];
 let processing = false;
@@ -124,6 +142,30 @@ async function handleWorkerRequest(message: WorkerRequest): Promise<WorkerRespon
       id: message.id,
       ok: true,
       payload: await resolvePathTarget(payload.path),
+    };
+  }
+  if (message.channel === "search:start") {
+    const payload = ipcContractSchemas["search:start"].request.parse(message.payload);
+    return {
+      id: message.id,
+      ok: true,
+      payload: searchRuntime.startSearch(payload),
+    };
+  }
+  if (message.channel === "search:getUpdate") {
+    const payload = ipcContractSchemas["search:getUpdate"].request.parse(message.payload);
+    return {
+      id: message.id,
+      ok: true,
+      payload: searchRuntime.getUpdate(payload.jobId, payload.cursor),
+    };
+  }
+  if (message.channel === "search:cancel") {
+    const payload = ipcContractSchemas["search:cancel"].request.parse(message.payload);
+    return {
+      id: message.id,
+      ok: true,
+      payload: searchRuntime.cancelSearch(payload.jobId),
     };
   }
   throw new Error(`Unsupported worker channel: ${message.channel}`);

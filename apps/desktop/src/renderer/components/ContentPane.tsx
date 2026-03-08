@@ -98,14 +98,6 @@ export function ContentPane({
   const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState(-1);
   const pathSegments = useMemo(() => buildPathSegments(currentPath), [currentPath]);
   const displayedPath = previewPath ?? draftPath;
-  const filteredEntries = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLowerCase();
-    if (normalizedQuery.length === 0) {
-      return entries;
-    }
-    return entries.filter((entry) => entry.name.toLowerCase().includes(normalizedQuery));
-  }, [entries, searchQuery]);
-
   useEffect(() => {
     if (segmentClickTimeoutRef.current !== null) {
       window.clearTimeout(segmentClickTimeoutRef.current);
@@ -227,9 +219,8 @@ export function ContentPane({
   }
 
   function focusPathSuggestion(index: number): void {
-    const button = suggestionsRef.current?.querySelectorAll<HTMLButtonElement>(".pathbar-suggestion")[
-      index
-    ];
+    const button =
+      suggestionsRef.current?.querySelectorAll<HTMLButtonElement>(".pathbar-suggestion")[index];
     if (!button) {
       return;
     }
@@ -330,7 +321,11 @@ export function ContentPane({
                     previewSuggestion(nextIndex);
                     return;
                   }
-                  if (tabSwitchesExplorerPanes && event.key === "Tab" && pathSuggestions.length > 0) {
+                  if (
+                    tabSwitchesExplorerPanes &&
+                    event.key === "Tab" &&
+                    pathSuggestions.length > 0
+                  ) {
                     event.preventDefault();
                     focusPathSuggestion(event.shiftKey ? pathSuggestions.length - 1 : 0);
                   }
@@ -450,7 +445,7 @@ export function ContentPane({
       {viewMode === "list" ? (
         <FlowListView
           key={currentPath}
-          entries={filteredEntries}
+          entries={entries}
           isFocused={isFocused}
           loading={loading}
           error={error}
@@ -467,7 +462,7 @@ export function ContentPane({
       ) : (
         <DetailsView
           key={currentPath}
-          entries={filteredEntries}
+          entries={entries}
           isFocused={isFocused}
           loading={loading}
           error={error}
@@ -597,7 +592,6 @@ function FlowListView({
         error={error}
         entriesLength={entries.length}
         includeHidden={includeHidden}
-        searchQuery={searchQuery}
       />
       <div
         className="flow-grid-rows"
@@ -605,8 +599,7 @@ function FlowListView({
           paddingTop: `${range.startIndex * listLayout.rowHeight}px`,
           paddingBottom: `${Math.max(0, rows.length - range.endIndex) * listLayout.rowHeight}px`,
           minWidth: `${
-            columnCount * listLayout.itemWidth +
-            Math.max(0, columnCount - 1) * listLayout.columnGap
+            columnCount * listLayout.itemWidth + Math.max(0, columnCount - 1) * listLayout.columnGap
           }px`,
         }}
       >
@@ -741,7 +734,6 @@ function DetailsView({
           error={error}
           entriesLength={entries.length}
           includeHidden={includeHidden}
-          searchQuery={searchQuery}
         />
         <div
           style={{
@@ -818,13 +810,11 @@ function ContentState({
   error,
   entriesLength,
   includeHidden,
-  searchQuery,
 }: {
   loading: boolean;
   error: string | null;
   entriesLength: number;
   includeHidden: boolean;
-  searchQuery: string;
 }) {
   if (loading && entriesLength === 0) {
     return (
@@ -843,7 +833,7 @@ function ContentState({
     );
   }
   if (entriesLength === 0) {
-    return <EmptyState includeHidden={includeHidden} searchQuery={searchQuery} />;
+    return <EmptyState includeHidden={includeHidden} />;
   }
   return null;
 }
@@ -868,27 +858,19 @@ function FileNameLabel({
 
 function EmptyState({
   includeHidden,
-  searchQuery,
 }: {
   includeHidden: boolean;
-  searchQuery: string;
 }) {
-  const hasSearchQuery = searchQuery.trim().length > 0;
-
   return (
     <div className="content-state content-empty">
       <div className="empty-state-icon" aria-hidden="true">
         <FolderIcon className="empty-state-folder-icon" />
       </div>
-      <strong className="empty-state-title">
-        {hasSearchQuery ? "No results found" : "This folder is empty"}
-      </strong>
+      <strong className="empty-state-title">This folder is empty</strong>
       <span className="empty-state-message">
-        {hasSearchQuery
-          ? "Try a different search term in the current folder."
-          : includeHidden
-            ? "This directory is empty."
-            : "This directory is empty, or hidden files are currently filtered out."}
+        {includeHidden
+          ? "This directory is empty."
+          : "This directory is empty, or hidden files are currently filtered out."}
       </span>
     </div>
   );

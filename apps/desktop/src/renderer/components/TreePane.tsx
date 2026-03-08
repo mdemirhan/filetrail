@@ -31,6 +31,8 @@ export function TreePane({
   onGoHome,
   onRerootHome,
   onQuickAccess,
+  foldersFirst,
+  onToggleFoldersFirst,
   onToggleDetailRow,
   detailRowOpen,
   theme,
@@ -58,6 +60,8 @@ export function TreePane({
   onGoHome: () => void;
   onRerootHome: () => void;
   onQuickAccess: (location: "desktop" | "downloads" | "documents" | "source") => void;
+  foldersFirst: boolean;
+  onToggleFoldersFirst: () => void;
   onToggleDetailRow: () => void;
   detailRowOpen: boolean;
   theme: ThemeMode;
@@ -194,6 +198,16 @@ export function TreePane({
             <ToolbarIcon name="rerootHome" />
           </button>
           <span className="sidebar-rail-separator" />
+          <button
+            type="button"
+            className={`sidebar-rail-button${foldersFirst ? " active" : ""}`}
+            onClick={onToggleFoldersFirst}
+            title={foldersFirst ? "Folders first" : "Mixed file and folder order"}
+            aria-label="Toggle folders first"
+            aria-pressed={foldersFirst}
+          >
+            <ToolbarIcon name="foldersFirst" />
+          </button>
           <button
             type="button"
             className={`sidebar-rail-button${includeHidden ? " active" : ""}`}

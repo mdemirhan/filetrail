@@ -2,6 +2,8 @@ export type ThemeMode = "light" | "dark" | "tomorrow-night" | "catppuccin-mocha"
 export type ExplorerViewMode = "list" | "details";
 export type UiFontFamily = "dm-sans" | "lexend" | "fira-code" | "jetbrains-mono";
 export type UiFontWeight = 400 | 500 | 600;
+export type SearchPatternModePreference = "glob" | "regex";
+export type SearchMatchScopePreference = "name" | "path";
 
 export const THEME_OPTIONS = [
   { value: "dark", label: "Dark" },
@@ -40,6 +42,10 @@ export type AppPreferences = {
   propertiesOpen: boolean;
   detailRowOpen: boolean;
   includeHidden: boolean;
+  searchPatternMode: SearchPatternModePreference;
+  searchMatchScope: SearchMatchScopePreference;
+  searchRecursive: boolean;
+  searchIncludeHidden: boolean;
   treeWidth: number;
   inspectorWidth: number;
   restoreLastVisitedFolderOnStartup: boolean;
@@ -65,6 +71,10 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   propertiesOpen: true,
   detailRowOpen: true,
   includeHidden: false,
+  searchPatternMode: "regex",
+  searchMatchScope: "name",
+  searchRecursive: true,
+  searchIncludeHidden: false,
   treeWidth: 280,
   inspectorWidth: 320,
   restoreLastVisitedFolderOnStartup: false,

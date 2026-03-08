@@ -29,7 +29,6 @@ export function HelpView({
             <h2>Help &amp; Reference</h2>
             <p>Keyboard shortcuts and navigation guide</p>
           </div>
-          <span className="help-header-badge">Built-in Guide</span>
         </header>
 
         <div className="help-grid">

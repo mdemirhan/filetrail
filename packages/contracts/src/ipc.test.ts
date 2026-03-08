@@ -52,6 +52,10 @@ describe("ipc contracts", () => {
           propertiesOpen: true,
           detailRowOpen: true,
           includeHidden: false,
+          searchPatternMode: "regex",
+          searchMatchScope: "name",
+          searchRecursive: true,
+          searchIncludeHidden: false,
           treeWidth: 280,
           inspectorWidth: 320,
           restoreLastVisitedFolderOnStartup: false,
@@ -78,6 +82,10 @@ describe("ipc contracts", () => {
         propertiesOpen: true,
         detailRowOpen: true,
         includeHidden: false,
+        searchPatternMode: "regex",
+        searchMatchScope: "name",
+        searchRecursive: true,
+        searchIncludeHidden: false,
         treeWidth: 280,
         inspectorWidth: 320,
         restoreLastVisitedFolderOnStartup: false,
@@ -95,6 +103,10 @@ describe("ipc contracts", () => {
           uiFontWeight: 400,
           textPrimaryOverride: null,
           includeHidden: true,
+          searchPatternMode: "glob",
+          searchMatchScope: "path",
+          searchRecursive: false,
+          searchIncludeHidden: true,
           foldersFirst: false,
           compactListView: true,
           compactTreeView: true,
@@ -111,6 +123,10 @@ describe("ipc contracts", () => {
         uiFontWeight: 400,
         textPrimaryOverride: null,
         includeHidden: true,
+        searchPatternMode: "glob",
+        searchMatchScope: "path",
+        searchRecursive: false,
+        searchIncludeHidden: true,
         foldersFirst: false,
         compactListView: true,
         compactTreeView: true,
@@ -145,5 +161,77 @@ describe("ipc contracts", () => {
       inputPath: "/tmp/link",
       resolvedPath: "/tmp/target",
     });
+  });
+
+  it("defaults file search requests to regex name matching with recursive search", () => {
+    const parsed = ipcContractSchemas["search:start"].request.parse({
+      rootPath: "/Users/demo/project",
+      query: "*.tsx",
+    });
+
+    expect(parsed).toEqual({
+      rootPath: "/Users/demo/project",
+      query: "*.tsx",
+      patternMode: "regex",
+      matchScope: "name",
+      recursive: true,
+      includeHidden: false,
+    });
+  });
+
+  it("validates search update payloads", () => {
+    expect(
+      ipcContractSchemas["search:getUpdate"].response.parse({
+        jobId: "search-1",
+        status: "running",
+        items: [
+          {
+            path: "/Users/demo/project/src/App.tsx",
+            name: "App.tsx",
+            extension: "tsx",
+            kind: "file",
+            isHidden: false,
+            isSymlink: false,
+            parentPath: "/Users/demo/project/src",
+            relativeParentPath: "src",
+          },
+        ],
+        nextCursor: 1,
+        done: false,
+        truncated: false,
+        error: null,
+      }),
+    ).toEqual({
+      jobId: "search-1",
+      status: "running",
+      items: [
+        {
+          path: "/Users/demo/project/src/App.tsx",
+          name: "App.tsx",
+          extension: "tsx",
+          kind: "file",
+          isHidden: false,
+          isSymlink: false,
+          parentPath: "/Users/demo/project/src",
+          relativeParentPath: "src",
+        },
+      ],
+      nextCursor: 1,
+      done: false,
+      truncated: false,
+      error: null,
+    });
+
+    expect(() =>
+      ipcContractSchemas["search:getUpdate"].response.parse({
+        jobId: "search-1",
+        status: "unknown",
+        items: [],
+        nextCursor: 0,
+        done: true,
+        truncated: false,
+        error: null,
+      }),
+    ).toThrow();
   });
 });

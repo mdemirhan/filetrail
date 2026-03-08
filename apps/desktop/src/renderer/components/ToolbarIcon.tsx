@@ -30,7 +30,9 @@ export function ToolbarIcon({
     | "source"
     | "rerootHome"
     | "detailRow"
-    | "foldersFirst";
+    | "foldersFirst"
+    | "clear"
+    | "stop";
 }) {
   if (name === "list") {
     return (
@@ -47,6 +49,30 @@ export function ToolbarIcon({
         <rect x="1" y="2" width="14" height="11" rx="1.5" />
         <line x1="1" y1="6" x2="15" y2="6" />
         <line x1="10" y1="6" x2="10" y2="13" />
+      </svg>
+    );
+  }
+  if (name === "search") {
+    return (
+      <svg className="toolbar-icon" viewBox="0 0 16 16" aria-hidden="true" role="presentation">
+        <circle cx="7" cy="7" r="4.5" />
+        <line x1="10.3" y1="10.3" x2="14" y2="14" />
+      </svg>
+    );
+  }
+  if (name === "clear") {
+    return (
+      <svg className="toolbar-icon" viewBox="0 0 16 16" aria-hidden="true" role="presentation">
+        <circle cx="8" cy="8" r="6" />
+        <line x1="5.7" y1="5.7" x2="10.3" y2="10.3" />
+        <line x1="10.3" y1="5.7" x2="5.7" y2="10.3" />
+      </svg>
+    );
+  }
+  if (name === "stop") {
+    return (
+      <svg className="toolbar-icon" viewBox="0 0 16 16" aria-hidden="true" role="presentation">
+        <rect x="4" y="4" width="8" height="8" rx="1.5" />
       </svg>
     );
   }
@@ -78,7 +104,6 @@ export function ToolbarIcon({
     if (name === "settings") {
       return "M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1zM12 15a3 3 0 1 1 0-6 3 3 0 0 1 0 6z";
     }
-    if (name === "search") return "M11 11a7 7 0 1 0 0-14 7 7 0 0 0 0 14zm10 10l-4.35-4.35";
     if (name === "desktop") {
       return "M2 3h20v14H2zM8 21h8M12 17v4";
     }
