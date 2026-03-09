@@ -46,6 +46,23 @@ describe("appStateStore", () => {
       propertiesOpen: true,
       detailRowOpen: true,
       terminalApp: null,
+      openWithApplications: [
+        {
+          id: "visual-studio-code",
+          appPath: "/Applications/Visual Studio Code.app",
+          appName: "Visual Studio Code",
+        },
+        {
+          id: "sublime-text",
+          appPath: "/Applications/Sublime Text.app",
+          appName: "Sublime Text",
+        },
+        {
+          id: "zed",
+          appPath: "/Applications/Zed.app",
+          appName: "Zed",
+        },
+      ],
       includeHidden: false,
       searchPatternMode: "regex",
       searchMatchScope: "name",
@@ -106,6 +123,13 @@ describe("appStateStore", () => {
       notificationsEnabled: true,
       notificationDurationSeconds: 4,
       terminalApp: "iTerm",
+      openWithApplications: [
+        {
+          id: "zed",
+          appPath: "/Applications/Zed.app",
+          appName: "Zed",
+        },
+      ],
       includeHidden: true,
       searchPatternMode: "glob",
       searchMatchScope: "path",
@@ -167,6 +191,13 @@ describe("appStateStore", () => {
       notificationsEnabled: true,
       notificationDurationSeconds: 4,
       terminalApp: "iTerm",
+      openWithApplications: [
+        {
+          id: "zed",
+          appPath: "/Applications/Zed.app",
+          appName: "Zed",
+        },
+      ],
       includeHidden: true,
       searchPatternMode: "glob",
       searchMatchScope: "path",
@@ -208,6 +239,13 @@ describe("appStateStore", () => {
       textPrimaryOverride: "oops" as never,
       typeaheadDebounceMs: 9999,
       terminalApp: "   ",
+      openWithApplications: [
+        {
+          id: "",
+          appPath: "/Applications/Bad.app",
+          appName: "Bad",
+        },
+      ] as never,
       compactDetailsView: "yes" as never,
       detailColumns: {
         size: "nope",
@@ -242,6 +280,23 @@ describe("appStateStore", () => {
     expect(reloaded.getPreferences().textPrimaryOverride).toBeNull();
     expect(reloaded.getPreferences().typeaheadDebounceMs).toBe(1500);
     expect(reloaded.getPreferences().terminalApp).toBeNull();
+    expect(reloaded.getPreferences().openWithApplications).toEqual([
+      {
+        id: "visual-studio-code",
+        appPath: "/Applications/Visual Studio Code.app",
+        appName: "Visual Studio Code",
+      },
+      {
+        id: "sublime-text",
+        appPath: "/Applications/Sublime Text.app",
+        appName: "Sublime Text",
+      },
+      {
+        id: "zed",
+        appPath: "/Applications/Zed.app",
+        appName: "Zed",
+      },
+    ]);
     expect(reloaded.getPreferences().compactDetailsView).toBe(false);
     expect(reloaded.getPreferences().detailColumns).toEqual({
       size: true,
@@ -256,5 +311,24 @@ describe("appStateStore", () => {
     });
     expect(reloaded.getPreferences().treeRootPath).toBeNull();
     expect(reloaded.getPreferences().lastVisitedPath).toBeNull();
+  });
+
+  it("preserves an explicitly empty open with application list", () => {
+    const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
+    const filePath = resolveAppStatePath(userDataPath);
+    const store = createAppStateStore(filePath, {
+      defaultTheme: "dark",
+    });
+
+    store.updatePreferences({
+      openWithApplications: [],
+    });
+    store.flush();
+
+    const reloaded = createAppStateStore(filePath, {
+      defaultTheme: "dark",
+    });
+
+    expect(reloaded.getPreferences().openWithApplications).toEqual([]);
   });
 });

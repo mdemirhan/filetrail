@@ -36,6 +36,11 @@ export type DetailColumnKey = "name" | "size" | "modified" | "permissions";
 export type OptionalDetailColumnKey = Exclude<DetailColumnKey, "name">;
 export type DetailColumnVisibility = Record<OptionalDetailColumnKey, boolean>;
 export type DetailColumnWidths = Record<DetailColumnKey, number>;
+export type OpenWithApplication = {
+  id: string;
+  appPath: string;
+  appName: string;
+};
 
 // These option lists are used for both UI rendering and validation-like lookups.
 // Keep them stable unless the corresponding persisted preference values are migrated.
@@ -118,6 +123,23 @@ export const DETAIL_COLUMN_WIDTH_LIMITS = {
   modified: { min: 132, max: 280 },
   permissions: { min: 132, max: 260 },
 } as const satisfies Record<DetailColumnKey, { min: number; max: number }>;
+export const DEFAULT_OPEN_WITH_APPLICATIONS: OpenWithApplication[] = [
+  {
+    id: "visual-studio-code",
+    appPath: "/Applications/Visual Studio Code.app",
+    appName: "Visual Studio Code",
+  },
+  {
+    id: "sublime-text",
+    appPath: "/Applications/Sublime Text.app",
+    appName: "Sublime Text",
+  },
+  {
+    id: "zed",
+    appPath: "/Applications/Zed.app",
+    appName: "Zed",
+  },
+];
 
 // This is the durable shape written by the main-process state store.
 // Adding or renaming keys here requires corresponding migration handling in the loader,
@@ -148,6 +170,7 @@ export type AppPreferences = {
   propertiesOpen: boolean;
   detailRowOpen: boolean;
   terminalApp: string | null;
+  openWithApplications: OpenWithApplication[];
   includeHidden: boolean;
   searchPatternMode: SearchPatternModePreference;
   searchMatchScope: SearchMatchScopePreference;
@@ -189,6 +212,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   propertiesOpen: true,
   detailRowOpen: true,
   terminalApp: null,
+  openWithApplications: DEFAULT_OPEN_WITH_APPLICATIONS.map((entry) => ({ ...entry })),
   includeHidden: false,
   searchPatternMode: "regex",
   searchMatchScope: "name",

@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import {
   ACCENT_OPTIONS,
   type AppPreferences,
+  DEFAULT_OPEN_WITH_APPLICATIONS,
   DETAIL_COLUMN_KEYS,
   DEFAULT_DETAIL_COLUMN_VISIBILITY,
   DEFAULT_DETAIL_COLUMN_WIDTHS,
@@ -305,6 +306,10 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
         ? record.detailRowOpen
         : currentDefaults.detailRowOpen,
     terminalApp: normalizeTerminalAppPreference(record.terminalApp),
+    openWithApplications: sanitizeOpenWithApplications(
+      record.openWithApplications,
+      currentDefaults.openWithApplications,
+    ),
     includeHidden:
       typeof record.includeHidden === "boolean"
         ? record.includeHidden
@@ -378,6 +383,38 @@ function normalizeTerminalAppPreference(value: unknown): string | null {
   }
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : null;
+}
+
+function sanitizeOpenWithApplications(
+  value: unknown,
+  defaults = DEFAULT_OPEN_WITH_APPLICATIONS,
+): AppPreferences["openWithApplications"] {
+  if (!Array.isArray(value)) {
+    return defaults.map((entry) => ({ ...entry }));
+  }
+  if (value.length === 0) {
+    return [];
+  }
+  const entries = value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      return [];
+    }
+    const record = entry as Record<string, unknown>;
+    const id = typeof record.id === "string" ? record.id.trim() : "";
+    const appPath = typeof record.appPath === "string" ? record.appPath.trim() : "";
+    const appName = typeof record.appName === "string" ? record.appName.trim() : "";
+    if (id.length === 0 || appPath.length === 0 || appName.length === 0) {
+      return [];
+    }
+    return [
+      {
+        id,
+        appPath,
+        appName,
+      },
+    ];
+  });
+  return entries.length === value.length ? entries : defaults.map((entry) => ({ ...entry }));
 }
 
 function sanitizeDetailColumns(

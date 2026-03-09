@@ -1,4 +1,9 @@
-import { resolveTerminalApplicationName, toPreferencePatch } from "./bootstrap";
+import {
+  openPathsWithApplication,
+  resolveApplicationDisplayName,
+  resolveTerminalApplicationName,
+  toPreferencePatch,
+} from "./bootstrap";
 
 describe("toPreferencePatch", () => {
   it("preserves search result sorting fields", () => {
@@ -66,6 +71,28 @@ describe("toPreferencePatch", () => {
       terminalApp: "iTerm",
     });
   });
+
+  it("preserves open with application preferences", () => {
+    expect(
+      toPreferencePatch({
+        openWithApplications: [
+          {
+            id: "zed",
+            appPath: "/Applications/Zed.app",
+            appName: "Zed",
+          },
+        ],
+      }),
+    ).toEqual({
+      openWithApplications: [
+        {
+          id: "zed",
+          appPath: "/Applications/Zed.app",
+          appName: "Zed",
+        },
+      ],
+    });
+  });
 });
 
 describe("resolveTerminalApplicationName", () => {
@@ -77,5 +104,55 @@ describe("resolveTerminalApplicationName", () => {
   it("uses the configured terminal app override", () => {
     expect(resolveTerminalApplicationName("iTerm")).toBe("iTerm");
     expect(resolveTerminalApplicationName("  Ghostty  ")).toBe("Ghostty");
+  });
+});
+
+describe("resolveApplicationDisplayName", () => {
+  it("derives the display name from the app bundle path", () => {
+    expect(resolveApplicationDisplayName("/Applications/Visual Studio Code.app")).toBe(
+      "Visual Studio Code",
+    );
+    expect(resolveApplicationDisplayName("Finder")).toBe("Finder");
+  });
+});
+
+describe("openPathsWithApplication", () => {
+  it("launches selected paths with the requested application", async () => {
+    const runOpenCommand = vi.fn(async () => undefined);
+
+    await expect(
+      openPathsWithApplication(
+        {
+          applicationPath: "/Applications/Zed.app",
+          paths: ["/Users/demo/file.txt", "/Users/demo/folder"],
+        },
+        runOpenCommand,
+      ),
+    ).resolves.toEqual({
+      ok: true,
+      error: null,
+    });
+
+    expect(runOpenCommand).toHaveBeenCalledWith("/Applications/Zed.app", [
+      "/Users/demo/file.txt",
+      "/Users/demo/folder",
+    ]);
+  });
+
+  it("returns the launch error when opening with an application fails", async () => {
+    await expect(
+      openPathsWithApplication(
+        {
+          applicationPath: "Finder",
+          paths: ["/Users/demo/file.txt"],
+        },
+        async () => {
+          throw new Error("Application not found");
+        },
+      ),
+    ).resolves.toEqual({
+      ok: false,
+      error: "Application not found",
+    });
   });
 });

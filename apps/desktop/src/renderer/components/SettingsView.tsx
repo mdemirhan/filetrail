@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type {
   AccentMode,
   DetailColumnVisibility,
+  OpenWithApplication,
   ThemeMode,
   UiFontFamily,
   UiFontWeight,
@@ -766,6 +767,44 @@ function TextInput({
   );
 }
 
+function ActionButton({
+  label,
+  ariaLabel,
+  theme,
+  onClick,
+  disabled = false,
+}: {
+  label: string;
+  ariaLabel?: string;
+  theme: ResolvedSettingsTheme;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={ariaLabel ?? label}
+      disabled={disabled}
+      onClick={onClick}
+      style={{
+        height: "28px",
+        padding: "0 10px",
+        borderRadius: "6px",
+        border: `1px solid ${theme.input.border}`,
+        background: theme.input.bg,
+        color: disabled ? theme.label.secondary : theme.label.primary,
+        fontSize: "11px",
+        fontFamily: mono,
+        fontWeight: 500,
+        cursor: disabled ? "default" : "pointer",
+        opacity: disabled ? 0.6 : 1,
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
 function formatZoomPercent(value: number): string {
   return `${value}%`;
 }
@@ -992,6 +1031,7 @@ export function SettingsView({
   notificationDurationSeconds,
   restoreLastVisitedFolderOnStartup,
   terminalApp,
+  openWithApplications,
   themeOptions,
   accentOptions,
   uiFontOptions,
@@ -1021,6 +1061,10 @@ export function SettingsView({
   onNotificationDurationSecondsChange,
   onRestoreLastVisitedFolderOnStartupChange,
   onTerminalAppChange,
+  onAddOpenWithApplication,
+  onBrowseOpenWithApplication,
+  onMoveOpenWithApplication,
+  onRemoveOpenWithApplication,
 }: {
   theme: ThemeMode;
   accent: AccentMode;
@@ -1044,6 +1088,7 @@ export function SettingsView({
   notificationDurationSeconds: number;
   restoreLastVisitedFolderOnStartup: boolean;
   terminalApp: string | null;
+  openWithApplications: ReadonlyArray<OpenWithApplication>;
   themeOptions: ReadonlyArray<{ value: ThemeMode; label: string; group?: "dark" | "light" }>;
   accentOptions: ReadonlyArray<{
     value: AccentMode;
@@ -1077,6 +1122,10 @@ export function SettingsView({
   onNotificationDurationSecondsChange: (value: number) => void;
   onRestoreLastVisitedFolderOnStartupChange: (value: boolean) => void;
   onTerminalAppChange: (value: string | null) => void;
+  onAddOpenWithApplication: () => void;
+  onBrowseOpenWithApplication: (entryId: string) => void;
+  onMoveOpenWithApplication: (entryId: string, direction: "up" | "down") => void;
+  onRemoveOpenWithApplication: (entryId: string) => void;
 }) {
   const palette = resolveSettingsTheme(theme, accent);
   const [resetHover, setResetHover] = useState(false);
@@ -1570,6 +1619,128 @@ export function SettingsView({
               Leave blank to use Terminal. Enter another app name such as iTerm to override.
             </div>
           </div>
+        </SectionCard>
+
+        <SectionCard icon="↗" title="Open With" theme={palette}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "12px",
+              padding: "10px 0 12px",
+              borderBottom: `1px solid ${palette.separator}`,
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: "12.5px",
+                  fontFamily: sans,
+                  fontWeight: 500,
+                  color: palette.label.primary,
+                  marginBottom: "2px",
+                }}
+              >
+                Configured applications
+              </div>
+              <div
+                style={{
+                  fontSize: "11px",
+                  fontFamily: sans,
+                  fontWeight: 400,
+                  color: palette.label.secondary,
+                  lineHeight: "1.4",
+                }}
+              >
+                Finder and Other… always stay in the context menu.
+              </div>
+            </div>
+            <ActionButton
+              label="Add App"
+              theme={palette}
+              ariaLabel="Add Open With application"
+              onClick={onAddOpenWithApplication}
+            />
+          </div>
+
+          {openWithApplications.map((application, index) => (
+            <div
+              key={application.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "12px",
+                padding: "12px 0",
+                borderBottom:
+                  index === openWithApplications.length - 1
+                    ? "none"
+                    : `1px solid ${palette.separator}`,
+              }}
+            >
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div
+                  style={{
+                    fontSize: "12.5px",
+                    fontFamily: sans,
+                    fontWeight: 500,
+                    color: palette.label.primary,
+                    marginBottom: "4px",
+                  }}
+                >
+                  {application.appName}
+                </div>
+                <div
+                  style={{
+                    fontSize: "11px",
+                    fontFamily: mono,
+                    color: palette.label.secondary,
+                    lineHeight: "1.4",
+                    wordBreak: "break-all",
+                  }}
+                >
+                  {application.appPath}
+                </div>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  flexWrap: "wrap",
+                  justifyContent: "flex-end",
+                }}
+              >
+                <ActionButton
+                  label="Browse"
+                  ariaLabel={`Browse ${application.appName}`}
+                  theme={palette}
+                  onClick={() => onBrowseOpenWithApplication(application.id)}
+                />
+                <ActionButton
+                  label="Up"
+                  ariaLabel={`Move ${application.appName} up`}
+                  theme={palette}
+                  disabled={index === 0}
+                  onClick={() => onMoveOpenWithApplication(application.id, "up")}
+                />
+                <ActionButton
+                  label="Down"
+                  ariaLabel={`Move ${application.appName} down`}
+                  theme={palette}
+                  disabled={index === openWithApplications.length - 1}
+                  onClick={() => onMoveOpenWithApplication(application.id, "down")}
+                />
+                <ActionButton
+                  label="Remove"
+                  ariaLabel={`Remove ${application.appName}`}
+                  theme={palette}
+                  onClick={() => onRemoveOpenWithApplication(application.id)}
+                />
+              </div>
+            </div>
+          ))}
         </SectionCard>
 
         <div

@@ -35,6 +35,18 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       notificationDurationSeconds={4}
       restoreLastVisitedFolderOnStartup={false}
       terminalApp={null}
+      openWithApplications={[
+        {
+          id: "vscode",
+          appPath: "/Applications/Visual Studio Code.app",
+          appName: "Visual Studio Code",
+        },
+        {
+          id: "zed",
+          appPath: "/Applications/Zed.app",
+          appName: "Zed",
+        },
+      ]}
       themeOptions={THEME_OPTIONS}
       accentOptions={[
         { value: "gold", label: "Gold", primary: "#daa520" },
@@ -67,6 +79,10 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       onNotificationDurationSecondsChange={() => undefined}
       onRestoreLastVisitedFolderOnStartupChange={() => undefined}
       onTerminalAppChange={() => undefined}
+      onAddOpenWithApplication={() => undefined}
+      onBrowseOpenWithApplication={() => undefined}
+      onMoveOpenWithApplication={() => undefined}
+      onRemoveOpenWithApplication={() => undefined}
       {...overrides}
     />,
   );
@@ -186,5 +202,38 @@ describe("SettingsView", () => {
 
     expect(onNotificationsEnabledChange).toHaveBeenCalledWith(false);
     expect(onNotificationDurationSecondsChange).toHaveBeenCalledWith(6);
+  });
+
+  it("renders configured Open With applications and fixed helper text", () => {
+    renderSettingsView();
+
+    expect(screen.getByText("Visual Studio Code")).toBeInTheDocument();
+    expect(screen.getByText("/Applications/Visual Studio Code.app")).toBeInTheDocument();
+    expect(screen.getByText("Zed")).toBeInTheDocument();
+    expect(screen.getByText("Finder and Other… always stay in the context menu.")).toBeInTheDocument();
+  });
+
+  it("forwards Open With add, browse, move, and remove actions", () => {
+    const onAddOpenWithApplication = vi.fn();
+    const onBrowseOpenWithApplication = vi.fn();
+    const onMoveOpenWithApplication = vi.fn();
+    const onRemoveOpenWithApplication = vi.fn();
+
+    renderSettingsView({
+      onAddOpenWithApplication,
+      onBrowseOpenWithApplication,
+      onMoveOpenWithApplication,
+      onRemoveOpenWithApplication,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add Open With application" }));
+    fireEvent.click(screen.getByRole("button", { name: "Browse Visual Studio Code" }));
+    fireEvent.click(screen.getByRole("button", { name: "Move Zed up" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove Zed" }));
+
+    expect(onAddOpenWithApplication).toHaveBeenCalledTimes(1);
+    expect(onBrowseOpenWithApplication).toHaveBeenCalledWith("vscode");
+    expect(onMoveOpenWithApplication).toHaveBeenCalledWith("zed", "up");
+    expect(onRemoveOpenWithApplication).toHaveBeenCalledWith("zed");
   });
 });

@@ -17,7 +17,27 @@ export type ContextMenuActionId =
   | "copyPath"
   | "trash";
 
-export type ContextMenuSubmenuActionId = "vscode" | "sublime" | "nvim" | "finder" | "other";
+export type ContextMenuSubmenuAction =
+  | {
+      kind: "application";
+      id: string;
+      label: string;
+      appPath: string;
+      appName: string;
+    }
+  | {
+      kind: "finder";
+      id: "finder";
+      label: "Finder";
+      appName: "Finder";
+      appPath: "Finder";
+    }
+  | {
+      kind: "other";
+      id: "other";
+      label: "Other…";
+      appName: "Other…";
+    };
 
 type ContextMenuItem =
   | {
@@ -34,15 +54,14 @@ type ContextMenuItem =
       hasSubmenu?: boolean;
     };
 
-type ContextMenuSubmenuItem =
+export type ContextMenuSubmenuItem =
   | {
       type: "separator";
       key: string;
     }
   | {
       type?: "item";
-      id: ContextMenuSubmenuActionId;
-      label: string;
+      action: ContextMenuSubmenuAction;
     };
 
 type ContextMenuIconName =
@@ -90,20 +109,12 @@ export const SEARCH_CONTEXT_MENU_ITEMS: readonly ContextMenuItem[] = [
   ...BROWSE_CONTEXT_MENU_ITEMS,
 ] as const;
 
-export const CONTEXT_MENU_SUBMENU_ITEMS: readonly ContextMenuSubmenuItem[] = [
-  { id: "vscode", label: "Visual Studio Code" },
-  { id: "sublime", label: "Sublime Text" },
-  { id: "nvim", label: "Neovim" },
-  { type: "separator", key: "separator-submenu-main" },
-  { id: "finder", label: "Finder" },
-  { id: "other", label: "Other…" },
-] as const;
-
 export function ItemContextMenu({
   anchorX,
   anchorY,
   variant = "browse",
   disabledActionIds = [],
+  submenuItems,
   open,
   onAction,
   onSubmenuAction,
@@ -112,9 +123,10 @@ export function ItemContextMenu({
   anchorY: number;
   variant?: "browse" | "search";
   disabledActionIds?: ContextMenuActionId[];
+  submenuItems: readonly ContextMenuSubmenuItem[];
   open: boolean;
   onAction: (actionId: ContextMenuActionId) => void;
-  onSubmenuAction: (actionId: ContextMenuSubmenuActionId) => void;
+  onSubmenuAction: (action: ContextMenuSubmenuAction) => void;
 }) {
   const [activeItemId, setActiveItemId] = useState<ContextMenuActionId | null>(null);
   const disabledActionIdSet = useMemo(() => new Set(disabledActionIds), [disabledActionIds]);
@@ -181,18 +193,18 @@ export function ItemContextMenu({
               ) : null}
               {item.hasSubmenu && submenuOpen && !isDisabled ? (
                 <div className="context-submenu">
-                  {CONTEXT_MENU_SUBMENU_ITEMS.map((submenuItem) => {
+                  {submenuItems.map((submenuItem) => {
                     if (submenuItem.type === "separator") {
                       return <div key={submenuItem.key} className="context-menu-separator" />;
                     }
                     return (
                       <button
-                        key={submenuItem.id}
+                        key={submenuItem.action.id}
                         type="button"
                         className="context-submenu-item"
-                        onClick={() => onSubmenuAction(submenuItem.id)}
+                        onClick={() => onSubmenuAction(submenuItem.action)}
                       >
-                        {submenuItem.label}
+                        {submenuItem.action.label}
                       </button>
                     );
                   })}

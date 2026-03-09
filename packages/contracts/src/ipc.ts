@@ -62,6 +62,11 @@ export const detailColumnWidthsSchema = z.object({
   modified: z.number().int().min(132).max(280),
   permissions: z.number().int().min(132).max(260),
 });
+export const openWithApplicationSchema = z.object({
+  id: z.string().trim().min(1),
+  appPath: z.string().trim().min(1),
+  appName: z.string().trim().min(1),
+});
 export const searchJobStatusSchema = z.enum([
   "running",
   "complete",
@@ -269,6 +274,7 @@ export const appPreferencesSchema = z.object({
   propertiesOpen: z.boolean(),
   detailRowOpen: z.boolean(),
   terminalApp: z.string().trim().min(1).nullable(),
+  openWithApplications: z.array(openWithApplicationSchema),
   includeHidden: z.boolean(),
   searchPatternMode: searchPatternModeSchema,
   searchMatchScope: searchMatchScopeSchema,
@@ -483,6 +489,24 @@ export const ipcContractSchemas = {
   "system:openPath": {
     request: z.object({
       path: z.string().min(1),
+    }),
+    response: z.object({
+      ok: z.boolean(),
+      error: z.string().nullable(),
+    }),
+  },
+  "system:pickApplication": {
+    request: z.object({}),
+    response: z.object({
+      canceled: z.boolean(),
+      appPath: z.string().min(1).nullable(),
+      appName: z.string().min(1).nullable(),
+    }),
+  },
+  "system:openPathsWithApplication": {
+    request: z.object({
+      applicationPath: z.string().min(1),
+      paths: z.array(z.string().min(1)).min(1).max(500),
     }),
     response: z.object({
       ok: z.boolean(),

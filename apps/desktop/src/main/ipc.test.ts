@@ -61,6 +61,12 @@ function createHandlersThatFailOnSnapshot() {
     }),
     "folderSize:cancel": async () => ({ ok: true }),
     "system:openPath": async () => ({ ok: true, error: null }),
+    "system:pickApplication": async () => ({
+      canceled: false,
+      appPath: "/Applications/Zed.app",
+      appName: "Zed",
+    }),
+    "system:openPathsWithApplication": async () => ({ ok: true, error: null }),
     "system:openInTerminal": async () => ({ ok: true, error: null }),
     "system:copyText": async () => ({ ok: true }),
     "path:getSuggestions": async () => ({

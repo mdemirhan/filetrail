@@ -14,6 +14,7 @@ import {
   DEFAULT_DETAIL_COLUMN_VISIBILITY,
   DEFAULT_DETAIL_COLUMN_WIDTHS,
   DEFAULT_APP_PREFERENCES,
+  type OpenWithApplication,
   NOTIFICATION_DURATION_SECONDS_OPTIONS,
   clampZoomPercent,
   type AccentMode,
@@ -41,7 +42,8 @@ import { HelpView } from "./components/HelpView";
 import {
   BROWSE_CONTEXT_MENU_ITEMS,
   type ContextMenuActionId,
-  type ContextMenuSubmenuActionId,
+  type ContextMenuSubmenuAction,
+  type ContextMenuSubmenuItem,
   ItemContextMenu,
   SEARCH_CONTEXT_MENU_ITEMS,
 } from "./components/ItemContextMenu";
@@ -128,6 +130,7 @@ type CopyPasteDialogState =
   | {
       type: "plan";
       plan: CopyPastePlan;
+      clearClipboardOnStart: boolean;
     }
   | {
       type: "result";
@@ -164,6 +167,10 @@ const WRITE_LOCKED_CONTEXT_ACTION_IDS: ContextMenuActionId[] = [
   "copyPath",
   "trash",
 ];
+
+function createOpenWithApplicationId(): string {
+  return `open-with-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+}
 
 export function App() {
   type SortBy = IpcRequest<"directory:getSnapshot">["sortBy"];
@@ -264,6 +271,9 @@ export function App() {
     DEFAULT_APP_PREFERENCES.restoreLastVisitedFolderOnStartup,
   );
   const [terminalApp, setTerminalApp] = useState(DEFAULT_APP_PREFERENCES.terminalApp);
+  const [openWithApplications, setOpenWithApplications] = useState<OpenWithApplication[]>(
+    DEFAULT_APP_PREFERENCES.openWithApplications,
+  );
   const [sortBy, setSortBy] = useState<SortBy>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [infoPanelOpen, setInfoPanelOpen] = useState(DEFAULT_APP_PREFERENCES.propertiesOpen);
@@ -474,6 +484,46 @@ export function App() {
     copyPasteClipboard,
     isWriteOperationLocked,
   ]);
+  const contextMenuSubmenuItems = useMemo(
+    () => {
+      const items: ContextMenuSubmenuItem[] = openWithApplications.map((application) => ({
+        action: {
+          kind: "application",
+          id: application.id,
+          label: application.appName,
+          appPath: application.appPath,
+          appName: application.appName,
+        },
+      }));
+      if (items.length > 0) {
+        items.push({
+          type: "separator",
+          key: "separator-submenu-main",
+        });
+      }
+      items.push(
+        {
+          action: {
+            kind: "finder",
+            id: "finder",
+            label: "Finder",
+            appPath: "Finder",
+            appName: "Finder",
+          },
+        },
+        {
+          action: {
+            kind: "other",
+            id: "other",
+            label: "Other…",
+            appName: "Other…",
+          },
+        },
+      );
+      return items;
+    },
+    [openWithApplications],
+  );
 
   useEffect(() => {
     treeNodesRef.current = treeNodes;
@@ -730,6 +780,7 @@ export function App() {
         propertiesOpen: infoPanelOpen,
         detailRowOpen: infoRowOpen,
         terminalApp,
+        openWithApplications,
         includeHidden,
         searchPatternMode,
         searchMatchScope,
@@ -774,6 +825,7 @@ export function App() {
     typeaheadDebounceMs,
     typeaheadEnabled,
     notificationDurationSeconds,
+    openWithApplications,
     notificationsEnabled,
     restoreLastVisitedFolderOnStartup,
     terminalApp,
@@ -836,6 +888,7 @@ export function App() {
         setInfoRowOpen(preferences.detailRowOpen);
         setRestoreLastVisitedFolderOnStartup(preferences.restoreLastVisitedFolderOnStartup);
         setTerminalApp(preferences.terminalApp);
+        setOpenWithApplications(preferences.openWithApplications);
         panes.setTreeWidth(preferences.treeWidth);
         panes.setInspectorWidth(preferences.inspectorWidth);
         setRestoredPaneWidths({
@@ -2031,7 +2084,44 @@ export function App() {
         kind: "info",
         title: result.mode === "cut" ? "Move cancelled" : "Paste cancelled",
       });
+      return;
     }
+    if (event.status === "partial") {
+      pushToast({
+        kind: "warning",
+        title:
+          result.mode === "cut"
+            ? "Move completed with some issues"
+            : "Paste completed with some issues",
+      });
+    }
+  }
+
+  function beginPendingPasteAttempt(options: {
+    mode: CopyPastePlan["mode"];
+    destinationDirectoryPath: string;
+    totalItemCount: number;
+    totalBytes: number | null;
+    currentSourcePath: string | null;
+  }): number {
+    const pasteAttemptId = nextPasteAttemptIdRef.current + 1;
+    nextPasteAttemptIdRef.current = pasteAttemptId;
+    pendingPasteAttemptRef.current = {
+      id: pasteAttemptId,
+      phase: "planning",
+      cancelled: false,
+    };
+    applyWriteOperationCardState({
+      mode: options.mode,
+      stage: "starting",
+      destinationDirectoryPath: options.destinationDirectoryPath,
+      completedItemCount: 0,
+      totalItemCount: options.totalItemCount,
+      completedByteCount: 0,
+      totalBytes: options.totalBytes,
+      currentSourcePath: options.currentSourcePath,
+    });
+    return pasteAttemptId;
   }
 
   async function copyPathsToClipboard(paths: string[]) {
@@ -2138,21 +2228,10 @@ export function App() {
       });
       return;
     }
-    applyCopyPasteClipboardState(clearCopyPasteClipboard());
-    const pasteAttemptId = nextPasteAttemptIdRef.current + 1;
-    nextPasteAttemptIdRef.current = pasteAttemptId;
-    pendingPasteAttemptRef.current = {
-      id: pasteAttemptId,
-      phase: "planning",
-      cancelled: false,
-    };
-    applyWriteOperationCardState({
+    const pasteAttemptId = beginPendingPasteAttempt({
       mode: request.mode,
-      stage: "starting",
       destinationDirectoryPath: request.destinationDirectoryPath,
-      completedItemCount: 0,
       totalItemCount: request.sourcePaths.length,
-      completedByteCount: 0,
       totalBytes: null,
       currentSourcePath: request.sourcePaths[0] ?? null,
     });
@@ -2168,6 +2247,7 @@ export function App() {
         setCopyPasteDialogState({
           type: "plan",
           plan,
+          clearClipboardOnStart: true,
         });
         return;
       }
@@ -2177,7 +2257,10 @@ export function App() {
         showModalNotice("Paste cannot continue", plan.issues[0]?.message ?? "Paste cannot continue.");
         return;
       }
-      await executePastePlan(plan, pasteAttemptId);
+      await executePastePlan(plan, {
+        pasteAttemptId,
+        clearClipboardOnStart: true,
+      });
     } catch (error) {
       const pendingAttempt = pendingPasteAttemptRef.current;
       if (pendingAttempt && pendingAttempt.id === pasteAttemptId && pendingAttempt.cancelled) {
@@ -2194,7 +2277,15 @@ export function App() {
     }
   }
 
-  async function executePastePlan(plan: CopyPastePlan, pasteAttemptId: number | null = null) {
+  async function executePastePlan(
+    plan: CopyPastePlan,
+    options: {
+      pasteAttemptId?: number | null;
+      clearClipboardOnStart?: boolean;
+    } = {},
+  ) {
+    const pasteAttemptId = options.pasteAttemptId ?? null;
+    const clearClipboardOnStart = options.clearClipboardOnStart ?? false;
     if (pasteAttemptId !== null) {
       const pendingAttempt = pendingPasteAttemptRef.current;
       if (!pendingAttempt || pendingAttempt.id !== pasteAttemptId || pendingAttempt.cancelled) {
@@ -2222,6 +2313,9 @@ export function App() {
         destinationDirectoryPath: plan.destinationDirectoryPath,
         conflictResolution: plan.conflictResolution,
       });
+      if (clearClipboardOnStart) {
+        applyCopyPasteClipboardState(clearCopyPasteClipboard());
+      }
       const pendingAttempt = pasteAttemptId === null ? null : pendingPasteAttemptRef.current;
       if (pendingAttempt && pendingAttempt.id === pasteAttemptId && pendingAttempt.cancelled) {
         pendingPasteAttemptRef.current = null;
@@ -2328,6 +2422,13 @@ export function App() {
       dismissCopyPasteDialog();
       return;
     }
+    const pasteAttemptId = beginPendingPasteAttempt({
+      mode: result.mode,
+      destinationDirectoryPath: result.destinationDirectoryPath,
+      totalItemCount: failedSourcePaths.length,
+      totalBytes: null,
+      currentSourcePath: failedSourcePaths[0] ?? null,
+    });
     setCopyPasteProgressEvent(null);
     setCopyPasteDialogState(null);
     try {
@@ -2338,18 +2439,37 @@ export function App() {
         conflictResolution: "error",
       });
       if (plan.conflicts.length > 0) {
+        pendingPasteAttemptRef.current = null;
+        applyWriteOperationCardState(null);
         setCopyPasteDialogState({
           type: "plan",
           plan,
+          clearClipboardOnStart: false,
         });
         return;
       }
       if (plan.issues.length > 0) {
+        pendingPasteAttemptRef.current = null;
+        applyWriteOperationCardState(null);
         showModalNotice("Paste cannot continue", plan.issues[0]?.message ?? "Paste cannot continue.");
         return;
       }
-      await executePastePlan(plan);
+      const pendingAttempt = pendingPasteAttemptRef.current;
+      if (!pendingAttempt || pendingAttempt.id !== pasteAttemptId || pendingAttempt.cancelled) {
+        return;
+      }
+      await executePastePlan(plan, {
+        pasteAttemptId,
+        clearClipboardOnStart: false,
+      });
     } catch (error) {
+      const pendingAttempt = pendingPasteAttemptRef.current;
+      if (pendingAttempt && pendingAttempt.id === pasteAttemptId && pendingAttempt.cancelled) {
+        pendingPasteAttemptRef.current = null;
+        return;
+      }
+      pendingPasteAttemptRef.current = null;
+      applyWriteOperationCardState(null);
       logger.error("copy paste retry planning failed", error);
       showModalNotice(
         "Unable to retry failed items",
@@ -2426,6 +2546,115 @@ export function App() {
         message: "Unable to open Terminal for this location.",
       });
     }
+  }
+
+  async function pickApplicationForOpenWith(
+    title: string,
+    failureMessage: string,
+  ): Promise<{ appPath: string; appName: string } | null> {
+    try {
+      const response = await client.invoke("system:pickApplication", {});
+      if (response.canceled || !response.appPath || !response.appName) {
+        return null;
+      }
+      return {
+        appPath: response.appPath,
+        appName: response.appName,
+      };
+    } catch (error) {
+      logger.error("open with application picker failed", error);
+      setActionNotice({
+        title,
+        message: failureMessage,
+      });
+      return null;
+    }
+  }
+
+  async function openPathsWithApplication(
+    paths: string[],
+    applicationPath: string,
+    applicationName: string,
+  ) {
+    try {
+      const response = await client.invoke("system:openPathsWithApplication", {
+        applicationPath,
+        paths,
+      });
+      if (!response.ok) {
+        throw new Error(response.error ?? `Unable to open with ${applicationName}.`);
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      logger.error("open with application failed", error);
+      setActionNotice({
+        title: `Open With ${applicationName}`,
+        message: `Unable to open the selected ${paths.length === 1 ? "item" : "items"} with ${applicationName}. ${detail}`,
+      });
+    }
+  }
+
+  async function addOpenWithApplication() {
+    const selection = await pickApplicationForOpenWith(
+      "Open With Applications",
+      "Unable to choose an application.",
+    );
+    if (!selection) {
+      return;
+    }
+    setOpenWithApplications((current) => [
+      ...current,
+      {
+        id: createOpenWithApplicationId(),
+        appPath: selection.appPath,
+        appName: selection.appName,
+      },
+    ]);
+  }
+
+  async function browseOpenWithApplication(entryId: string) {
+    const selection = await pickApplicationForOpenWith(
+      "Open With Applications",
+      "Unable to choose an application.",
+    );
+    if (!selection) {
+      return;
+    }
+    setOpenWithApplications((current) =>
+      current.map((entry) =>
+        entry.id === entryId
+          ? {
+              ...entry,
+              appPath: selection.appPath,
+              appName: selection.appName,
+            }
+          : entry,
+      ),
+    );
+  }
+
+  function moveOpenWithApplication(entryId: string, direction: "up" | "down") {
+    setOpenWithApplications((current) => {
+      const index = current.findIndex((entry) => entry.id === entryId);
+      if (index === -1) {
+        return current;
+      }
+      const targetIndex = direction === "up" ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= current.length) {
+        return current;
+      }
+      const next = [...current];
+      const [entry] = next.splice(index, 1);
+      if (!entry) {
+        return current;
+      }
+      next.splice(targetIndex, 0, entry);
+      return next;
+    });
+  }
+
+  function removeOpenWithApplication(entryId: string) {
+    setOpenWithApplications((current) => current.filter((entry) => entry.id !== entryId));
   }
 
   async function revealSearchResultInFolder(path: string) {
@@ -2535,19 +2764,26 @@ export function App() {
     showNotImplementedNotice(title);
   }
 
-  function runContextSubmenuAction(actionId: ContextMenuSubmenuActionId) {
+  async function runContextSubmenuAction(
+    action: ContextMenuSubmenuAction,
+    paths: string[],
+  ): Promise<void> {
     closeContextMenu();
-    const title =
-      actionId === "vscode"
-        ? "Open With Visual Studio Code"
-        : actionId === "sublime"
-          ? "Open With Sublime Text"
-          : actionId === "nvim"
-            ? "Open With Neovim"
-            : actionId === "finder"
-              ? "Open With Finder"
-              : "Open With Other…";
-    showNotImplementedNotice(title);
+    if (paths.length === 0) {
+      return;
+    }
+    if (action.kind === "other") {
+      const selection = await pickApplicationForOpenWith(
+        "Open With Other…",
+        "Unable to choose an application.",
+      );
+      if (!selection) {
+        return;
+      }
+      await openPathsWithApplication(paths, selection.appPath, selection.appName);
+      return;
+    }
+    await openPathsWithApplication(paths, action.appPath, action.appName);
   }
 
   function showCachedSearchResults(options?: { focusPane?: boolean }) {
@@ -4001,6 +4237,7 @@ export function App() {
                 notificationDurationSeconds={notificationDurationSeconds}
                 restoreLastVisitedFolderOnStartup={restoreLastVisitedFolderOnStartup}
                 terminalApp={terminalApp}
+                openWithApplications={openWithApplications}
                 themeOptions={[...THEME_OPTIONS]}
                 accentOptions={[...ACCENT_OPTIONS]}
                 uiFontOptions={[...UI_FONT_OPTIONS]}
@@ -4030,6 +4267,14 @@ export function App() {
                 onNotificationDurationSecondsChange={setNotificationDurationSeconds}
                 onRestoreLastVisitedFolderOnStartupChange={setRestoreLastVisitedFolderOnStartup}
                 onTerminalAppChange={setTerminalApp}
+                onAddOpenWithApplication={() => {
+                  void addOpenWithApplication();
+                }}
+                onBrowseOpenWithApplication={(entryId) => {
+                  void browseOpenWithApplication(entryId);
+                }}
+                onMoveOpenWithApplication={moveOpenWithApplication}
+                onRemoveOpenWithApplication={removeOpenWithApplication}
               />
             )}
           </section>
@@ -4054,11 +4299,14 @@ export function App() {
           anchorY={contextMenuState.y}
           variant={contextMenuState.source}
           disabledActionIds={contextMenuDisabledActionIds}
+          submenuItems={contextMenuSubmenuItems}
           open
           onAction={(actionId) => {
             void runContextMenuAction(actionId, contextMenuState.paths);
           }}
-          onSubmenuAction={runContextSubmenuAction}
+          onSubmenuAction={(action) => {
+            void runContextSubmenuAction(action, contextMenuState.paths);
+          }}
         />
       ) : null}
       {actionNotice ? (
@@ -4080,6 +4328,8 @@ export function App() {
                 void executePastePlan({
                   ...copyPasteDialogState.plan,
                   conflictResolution: "skip",
+                }, {
+                  clearClipboardOnStart: copyPasteDialogState.clearClipboardOnStart,
                 }),
               destructive: copyPasteDialogState.plan.mode === "cut",
             }

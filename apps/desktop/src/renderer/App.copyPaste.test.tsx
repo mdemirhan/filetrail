@@ -39,9 +39,12 @@ vi.mock("./components/ContentPane", () => ({
           type="button"
           title={entry.path}
           data-selected={selectedPaths.includes(entry.path) ? "true" : "false"}
-          onClick={() => {
+          onClick={(event) => {
             onFocusChange(true);
-            onSelectionGesture(entry.path, { metaKey: false, shiftKey: false });
+            onSelectionGesture(entry.path, {
+              metaKey: event.metaKey,
+              shiftKey: event.shiftKey,
+            });
           }}
           onContextMenu={(event) => {
             event.preventDefault();
@@ -172,6 +175,114 @@ describe("App copy/paste integration", () => {
     expect(startupSnapshotCall?.payload).toMatchObject({
       path: "/Users/demo",
     });
+  });
+
+  it("opens the selected item with a configured application from the context menu", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceButton = await screen.findByTitle("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.click(sourceButton);
+      fireEvent.contextMenu(sourceButton);
+    });
+
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "Open With" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Visual Studio Code" }));
+    });
+
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.find((call) => call.channel === "system:openPathsWithApplication")
+          ?.payload,
+      ).toEqual({
+        applicationPath: "/Applications/Visual Studio Code.app",
+        paths: ["/Users/demo/source.txt"],
+      });
+    });
+  });
+
+  it("uses the Other menu item as a one-off picker without updating preferences", async () => {
+    const harness = createAppHarness({
+      pickApplicationResponse: {
+        canceled: false,
+        appPath: "/Applications/Ghostty.app",
+        appName: "Ghostty",
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await screen.findByTestId("content-pane");
+    const preferenceUpdateCountBeforeAction = harness.invocations.filter(
+      (call) => call.channel === "app:updatePreferences",
+    ).length;
+    const sourceButton = await screen.findByTitle("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.click(sourceButton);
+      fireEvent.contextMenu(sourceButton);
+    });
+
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "Open With" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Other…" }));
+    });
+
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.find((call) => call.channel === "system:pickApplication"),
+      ).toBeTruthy();
+      expect(
+        harness.invocations.find((call) => call.channel === "system:openPathsWithApplication")
+          ?.payload,
+      ).toEqual({
+        applicationPath: "/Applications/Ghostty.app",
+        paths: ["/Users/demo/source.txt"],
+      });
+    });
+
+    const preferenceUpdateCountAfterAction = harness.invocations.filter(
+      (call) => call.channel === "app:updatePreferences",
+    ).length;
+    expect(preferenceUpdateCountAfterAction).toBe(preferenceUpdateCountBeforeAction);
+  });
+
+  it("shows an action notice when open with launch fails", async () => {
+    const harness = createAppHarness({
+      openPathsWithApplicationError: new Error("Application not found"),
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceButton = await screen.findByTitle("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.click(sourceButton);
+      fireEvent.contextMenu(sourceButton);
+    });
+
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "Open With" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Visual Studio Code" }));
+    });
+
+    expect(
+      await screen.findByRole("dialog", { name: "Open With Visual Studio Code" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Application not found/)).toBeInTheDocument();
   });
 
   it("pastes into the right-clicked folder in the content pane", async () => {
@@ -512,7 +623,7 @@ describe("App copy/paste integration", () => {
     });
   });
 
-  it("cancels a planning-phase paste immediately and keeps the clipboard cleared", async () => {
+  it("cancels a planning-phase paste immediately and keeps the clipboard available", async () => {
     const harness = createAppHarness({
       deferCopyPastePlan: true,
     });
@@ -540,16 +651,130 @@ describe("App copy/paste integration", () => {
     });
 
     expect(screen.queryByRole("region", { name: "Paste In Progress" })).not.toBeInTheDocument();
+    const planCallsBeforeRetry = harness.invocations.filter((call) => call.channel === "copyPaste:plan");
 
     await act(async () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
-    expect(await screen.findByText("Clipboard is empty")).toBeInTheDocument();
+    await vi.waitFor(() => {
+      expect(harness.invocations.filter((call) => call.channel === "copyPaste:plan")).toHaveLength(
+        planCallsBeforeRetry.length + 1,
+      );
+    });
+    expect(screen.queryByText("Clipboard is empty")).not.toBeInTheDocument();
 
     await act(async () => {
       harness.resolveCopyPastePlan();
+      harness.resolveCopyPastePlan();
     });
+  });
+
+  it("keeps the clipboard when paste planning fails", async () => {
+    const harness = createAppHarness({
+      copyPastePlanError: new Error("planner unavailable"),
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+    await selectItem("/Users/demo/Folder");
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    expect(await screen.findByRole("dialog", { name: "Unable to prepare paste" })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "OK" }));
+    });
+
+    const planCallsBeforeRetry = harness.invocations.filter((call) => call.channel === "copyPaste:plan");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.filter((call) => call.channel === "copyPaste:plan")).toHaveLength(
+        planCallsBeforeRetry.length + 1,
+      );
+    });
+    expect(screen.queryByText("Clipboard is empty")).not.toBeInTheDocument();
+  });
+
+  it("keeps the clipboard when paste planning returns issues", async () => {
+    const harness = createAppHarness({
+      planResponse: {
+        mode: "copy",
+        sourcePaths: ["/Users/demo/source.txt"],
+        destinationDirectoryPath: "/Users/demo/Folder",
+        conflictResolution: "error",
+        items: [],
+        conflicts: [],
+        issues: [
+          {
+            code: "destination_missing",
+            message: "Destination folder is unavailable.",
+            sourcePath: null,
+            destinationPath: "/Users/demo/Folder",
+          },
+        ],
+        warnings: [],
+        requiresConfirmation: {
+          largeBatch: false,
+          cutDelete: false,
+        },
+        summary: {
+          topLevelItemCount: 1,
+          totalItemCount: 1,
+          totalBytes: 5,
+          skippedConflictCount: 0,
+        },
+        canExecute: false,
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+    await selectItem("/Users/demo/Folder");
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    expect(await screen.findByRole("dialog", { name: "Paste cannot continue" })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "OK" }));
+    });
+
+    const planCallsBeforeRetry = harness.invocations.filter((call) => call.channel === "copyPaste:plan");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.filter((call) => call.channel === "copyPaste:plan")).toHaveLength(
+        planCallsBeforeRetry.length + 1,
+      );
+    });
+    expect(screen.queryByText("Clipboard is empty")).not.toBeInTheDocument();
   });
 
   it("keeps the cut clipboard cleared after a cancelled cut/paste operation", async () => {
@@ -1280,6 +1505,95 @@ describe("App copy/paste integration", () => {
     });
   });
 
+  it("lets retry planning be cancelled before the retry starts", async () => {
+    const harness = createAppHarness({
+      deferCopyPastePlanCalls: [2],
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+    await openDirectory("/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.map((call) => call.channel)).toContain("copyPaste:start");
+    });
+
+    await act(async () => {
+      harness.emitProgress({
+        operationId: "copy-op-1",
+        mode: "copy",
+        status: "failed",
+        completedItemCount: 0,
+        totalItemCount: 1,
+        completedByteCount: 0,
+        totalBytes: 5,
+        currentSourcePath: null,
+        currentDestinationPath: null,
+        result: {
+          operationId: "copy-op-1",
+          mode: "copy",
+          status: "failed",
+          destinationDirectoryPath: "/Users/demo/Folder",
+          startedAt: "2026-03-09T00:00:00.000Z",
+          finishedAt: "2026-03-09T00:00:01.000Z",
+          summary: {
+            topLevelItemCount: 1,
+            totalItemCount: 1,
+            completedItemCount: 0,
+            failedItemCount: 1,
+            skippedItemCount: 0,
+            cancelledItemCount: 0,
+            completedByteCount: 0,
+            totalBytes: 5,
+          },
+          items: [
+            {
+              sourcePath: "/Users/demo/source.txt",
+              destinationPath: "/Users/demo/Folder/source.txt",
+              status: "failed",
+              error: "Disk full",
+            },
+          ],
+          error: "Disk full",
+        },
+      });
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Retry Failed Items" }));
+    });
+
+    expect(await screen.findByRole("region", { name: "Paste In Progress" })).toBeInTheDocument();
+    const startCallsBeforeCancel = harness.invocations.filter((call) => call.channel === "copyPaste:start");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    });
+
+    expect(screen.queryByRole("region", { name: "Paste In Progress" })).not.toBeInTheDocument();
+
+    await act(async () => {
+      harness.resolveCopyPastePlan();
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.filter((call) => call.channel === "copyPaste:start")).toHaveLength(
+        startCallsBeforeCancel.length,
+      );
+    });
+  });
+
   it("does not add a completion toast when the paste result dialog is shown", async () => {
     const harness = createAppHarness();
 
@@ -1353,9 +1667,13 @@ function createAppHarness(args: {
   planResponse?: IpcResponse<"copyPaste:plan">;
   preferences?: Partial<IpcResponse<"app:getPreferences">["preferences"]>;
   copyTextError?: Error;
+  pickApplicationResponse?: IpcResponse<"system:pickApplication">;
+  copyPastePlanError?: Error;
   deferCopyPastePlan?: boolean;
+  deferCopyPastePlanCalls?: number[];
   deferCopyPasteStart?: boolean;
   copyPasteStartError?: Error;
+  openPathsWithApplicationError?: Error;
 } = {}): {
   client: FiletrailClient;
   invocations: Array<{ channel: IpcChannel; payload: unknown }>;
@@ -1393,13 +1711,8 @@ function createAppHarness(args: {
   };
   const invocations: Array<{ channel: IpcChannel; payload: unknown }> = [];
   let progressListener: ((event: CopyPasteProgressEvent) => void) | null = null;
-  let resolveCopyPastePlanPromise: (() => void) | null = null;
-  const copyPastePlanPromise =
-    args.deferCopyPastePlan === true
-      ? new Promise<void>((resolve) => {
-          resolveCopyPastePlanPromise = resolve;
-        })
-      : null;
+  const resolveCopyPastePlanPromises: Array<() => void> = [];
+  let copyPastePlanCallCount = 0;
   let resolveCopyPasteStartPromise: (() => void) | null = null;
   const copyPasteStartPromise =
     args.deferCopyPasteStart === true
@@ -1451,8 +1764,17 @@ function createAppHarness(args: {
         } satisfies IpcResponse<"directory:getMetadataBatch">) as IpcResponse<C>;
       }
       if (channel === "copyPaste:plan") {
-        if (copyPastePlanPromise) {
-          await copyPastePlanPromise;
+        copyPastePlanCallCount += 1;
+        if (
+          args.deferCopyPastePlan === true ||
+          args.deferCopyPastePlanCalls?.includes(copyPastePlanCallCount)
+        ) {
+          await new Promise<void>((resolve) => {
+            resolveCopyPastePlanPromises.push(resolve);
+          });
+        }
+        if (args.copyPastePlanError) {
+          throw args.copyPastePlanError;
         }
         return (
           args.planResponse ?? {
@@ -1507,6 +1829,21 @@ function createAppHarness(args: {
       if (channel === "system:openPath") {
         return { ok: true, error: null } as IpcResponse<C>;
       }
+      if (channel === "system:pickApplication") {
+        return (
+          args.pickApplicationResponse ?? {
+            canceled: false,
+            appPath: "/Applications/Other.app",
+            appName: "Other",
+          }
+        ) as IpcResponse<C>;
+      }
+      if (channel === "system:openPathsWithApplication") {
+        if (args.openPathsWithApplicationError) {
+          throw args.openPathsWithApplicationError;
+        }
+        return { ok: true, error: null } as IpcResponse<C>;
+      }
       if (channel === "system:openInTerminal") {
         return { ok: true, error: null } as IpcResponse<C>;
       }
@@ -1549,7 +1886,7 @@ function createAppHarness(args: {
       };
     },
     resolveCopyPastePlan() {
-      resolveCopyPastePlanPromise?.();
+      resolveCopyPastePlanPromises.shift()?.();
     },
     resolveCopyPasteStart() {
       resolveCopyPasteStartPromise?.();

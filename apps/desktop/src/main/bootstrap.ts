@@ -1,8 +1,17 @@
 import { execFile } from "node:child_process";
 import { stat } from "node:fs/promises";
-import { dirname } from "node:path";
+import { basename, dirname } from "node:path";
 import { promisify } from "node:util";
-import { app, clipboard, ipcMain, shell } from "electron";
+import {
+  BrowserWindow,
+  app,
+  clipboard,
+  dialog,
+  ipcMain,
+  shell,
+  type IpcMainInvokeEvent,
+  type OpenDialogOptions,
+} from "electron";
 
 import {
   copyPasteProgressEventSchema,
@@ -230,6 +239,8 @@ export async function bootstrapMainProcess(
       return { ok: true };
     },
     "system:openPath": (payload) => openPath(payload),
+    "system:pickApplication": (_payload, event) => pickApplication(event),
+    "system:openPathsWithApplication": (payload) => openPathsWithApplication(payload),
     "system:openInTerminal": (payload) =>
       openInTerminal(payload, appStateStore.getPreferences().terminalApp),
     "system:copyText": (payload) => {
@@ -267,6 +278,55 @@ async function openPath(
     ok: error.length === 0,
     error: error.length === 0 ? null : error,
   };
+}
+
+async function pickApplication(
+  event: Pick<IpcMainInvokeEvent, "sender">,
+): Promise<IpcResponse<"system:pickApplication">> {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  const dialogOptions: OpenDialogOptions = {
+    title: "Choose Application",
+    buttonLabel: "Choose App",
+    defaultPath: "/Applications",
+    properties: ["openFile"],
+    filters: [
+      {
+        name: "Applications",
+        extensions: ["app"],
+      },
+    ],
+  };
+  const result = window
+    ? await dialog.showOpenDialog(window, dialogOptions)
+    : await dialog.showOpenDialog(dialogOptions);
+  const appPath = result.canceled ? null : result.filePaths[0] ?? null;
+  const appName = appPath ? resolveApplicationDisplayName(appPath) : null;
+  return {
+    canceled: result.canceled,
+    appPath,
+    appName,
+  };
+}
+
+export async function openPathsWithApplication(
+  payload: IpcRequest<"system:openPathsWithApplication">,
+  runOpenCommand: (applicationPath: string, paths: string[]) => Promise<void> = (
+    applicationPath,
+    paths,
+  ) => execFileAsync("open", ["-a", applicationPath, ...paths]).then(() => undefined),
+): Promise<IpcResponse<"system:openPathsWithApplication">> {
+  try {
+    await runOpenCommand(payload.applicationPath, [...payload.paths]);
+    return {
+      ok: true,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: toErrorMessage(error),
+    };
+  }
 }
 
 async function openInTerminal(
@@ -465,6 +525,9 @@ export function toPreferencePatch(
   if (value.terminalApp !== undefined) {
     patch.terminalApp = value.terminalApp;
   }
+  if (value.openWithApplications !== undefined) {
+    patch.openWithApplications = value.openWithApplications;
+  }
   if (value.includeHidden !== undefined) {
     patch.includeHidden = value.includeHidden;
   }
@@ -509,6 +572,14 @@ export function toPreferencePatch(
 
 export function resolveTerminalApplicationName(terminalApp: string | null): string {
   return terminalApp && terminalApp.trim().length > 0 ? terminalApp.trim() : "Terminal";
+}
+
+export function resolveApplicationDisplayName(applicationPath: string): string {
+  const trimmed = applicationPath.trim();
+  const bundleName = basename(trimmed);
+  return bundleName.toLowerCase().endsWith(".app")
+    ? bundleName.slice(0, -4) || trimmed
+    : bundleName || trimmed;
 }
 
 function toErrorMessage(error: unknown): string {

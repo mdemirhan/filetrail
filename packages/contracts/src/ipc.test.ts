@@ -69,6 +69,23 @@ describe("ipc contracts", () => {
           propertiesOpen: true,
           detailRowOpen: true,
           terminalApp: null,
+          openWithApplications: [
+            {
+              id: "visual-studio-code",
+              appPath: "/Applications/Visual Studio Code.app",
+              appName: "Visual Studio Code",
+            },
+            {
+              id: "sublime-text",
+              appPath: "/Applications/Sublime Text.app",
+              appName: "Sublime Text",
+            },
+            {
+              id: "zed",
+              appPath: "/Applications/Zed.app",
+              appName: "Zed",
+            },
+          ],
           includeHidden: false,
           searchPatternMode: "regex",
           searchMatchScope: "name",
@@ -120,6 +137,23 @@ describe("ipc contracts", () => {
         propertiesOpen: true,
         detailRowOpen: true,
         terminalApp: null,
+        openWithApplications: [
+          {
+            id: "visual-studio-code",
+            appPath: "/Applications/Visual Studio Code.app",
+            appName: "Visual Studio Code",
+          },
+          {
+            id: "sublime-text",
+            appPath: "/Applications/Sublime Text.app",
+            appName: "Sublime Text",
+          },
+          {
+            id: "zed",
+            appPath: "/Applications/Zed.app",
+            appName: "Zed",
+          },
+        ],
         includeHidden: false,
         searchPatternMode: "regex",
         searchMatchScope: "name",
@@ -174,6 +208,13 @@ describe("ipc contracts", () => {
           typeaheadEnabled: false,
           typeaheadDebounceMs: 1000,
           terminalApp: "iTerm",
+          openWithApplications: [
+            {
+              id: "zed",
+              appPath: "/Applications/Zed.app",
+              appName: "Zed",
+            },
+          ],
         },
       }),
     ).toEqual({
@@ -213,7 +254,38 @@ describe("ipc contracts", () => {
         typeaheadEnabled: false,
         typeaheadDebounceMs: 1000,
         terminalApp: "iTerm",
+        openWithApplications: [
+          {
+            id: "zed",
+            appPath: "/Applications/Zed.app",
+            appName: "Zed",
+          },
+        ],
       },
+    });
+  });
+
+  it("validates application picker and open with channels", () => {
+    expect(
+      ipcContractSchemas["system:pickApplication"].response.parse({
+        canceled: false,
+        appPath: "/Applications/Zed.app",
+        appName: "Zed",
+      }),
+    ).toEqual({
+      canceled: false,
+      appPath: "/Applications/Zed.app",
+      appName: "Zed",
+    });
+
+    expect(
+      ipcContractSchemas["system:openPathsWithApplication"].request.parse({
+        applicationPath: "Finder",
+        paths: ["/Users/demo/file.txt"],
+      }),
+    ).toEqual({
+      applicationPath: "Finder",
+      paths: ["/Users/demo/file.txt"],
     });
   });
 
