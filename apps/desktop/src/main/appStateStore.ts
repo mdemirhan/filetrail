@@ -284,6 +284,7 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
       typeof record.detailRowOpen === "boolean"
         ? record.detailRowOpen
         : currentDefaults.detailRowOpen,
+    terminalApp: normalizeTerminalAppPreference(record.terminalApp),
     includeHidden:
       typeof record.includeHidden === "boolean"
         ? record.includeHidden
@@ -349,6 +350,14 @@ function normalizeColorOverride(value: unknown): string | null {
   }
   const normalized = value.trim();
   return /^#[0-9a-fA-F]{6}$/.test(normalized) ? normalized.toLowerCase() : null;
+}
+
+function normalizeTerminalAppPreference(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
 }
 
 function sanitizeDetailColumns(

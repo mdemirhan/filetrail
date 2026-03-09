@@ -121,7 +121,8 @@ export async function bootstrapMainProcess(
       return { ok: true };
     },
     "system:openPath": (payload) => openPath(payload),
-    "system:openInTerminal": (payload) => openInTerminal(payload),
+    "system:openInTerminal": (payload) =>
+      openInTerminal(payload, appStateStore.getPreferences().terminalApp),
     "system:copyText": (payload) => {
       clipboard.writeText(payload.text);
       return { ok: true };
@@ -156,11 +157,12 @@ async function openPath(
 
 async function openInTerminal(
   payload: IpcRequest<"system:openInTerminal">,
+  terminalApp: string | null,
 ): Promise<IpcResponse<"system:openInTerminal">> {
   try {
     // Files open Terminal in their containing directory; directories open directly.
     const targetPath = await resolveTerminalTargetPath(payload.path);
-    await execFileAsync("open", ["-a", "Terminal", targetPath]);
+    await execFileAsync("open", ["-a", resolveTerminalApplicationName(terminalApp), targetPath]);
     return {
       ok: true,
       error: null,
@@ -331,6 +333,9 @@ export function toPreferencePatch(
   if (value.detailRowOpen !== undefined) {
     patch.detailRowOpen = value.detailRowOpen;
   }
+  if (value.terminalApp !== undefined) {
+    patch.terminalApp = value.terminalApp;
+  }
   if (value.includeHidden !== undefined) {
     patch.includeHidden = value.includeHidden;
   }
@@ -371,6 +376,10 @@ export function toPreferencePatch(
     patch.lastVisitedPath = value.lastVisitedPath;
   }
   return patch;
+}
+
+export function resolveTerminalApplicationName(terminalApp: string | null): string {
+  return terminalApp && terminalApp.trim().length > 0 ? terminalApp.trim() : "Terminal";
 }
 
 function toErrorMessage(error: unknown): string {

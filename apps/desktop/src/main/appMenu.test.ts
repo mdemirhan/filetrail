@@ -1,6 +1,28 @@
 import { createApplicationMenuTemplate } from "./appMenu";
 
 describe("createApplicationMenuTemplate", () => {
+  it("wires Open in Terminal to the renderer command channel", () => {
+    const send = vi.fn();
+    const template = createApplicationMenuTemplate({ send } as never);
+    const fileMenu = template.find((item) => item.label === "File");
+    const submenu = Array.isArray(fileMenu?.submenu) ? fileMenu.submenu : [];
+    const openInTerminalItem = submenu.find(
+      (item) => "label" in item && item.label === "Open in Terminal",
+    );
+
+    expect(openInTerminalItem).toBeTruthy();
+    if (
+      !openInTerminalItem ||
+      !("click" in openInTerminalItem) ||
+      typeof openInTerminalItem.click !== "function"
+    ) {
+      throw new Error("Open in Terminal menu item missing.");
+    }
+    openInTerminalItem.click(undefined as never, undefined as never, undefined as never);
+
+    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "openInTerminal" });
+  });
+
   it("wires Find Files to the renderer command channel", () => {
     const send = vi.fn();
     const template = createApplicationMenuTemplate({ send } as never);

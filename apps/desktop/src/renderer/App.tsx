@@ -66,6 +66,7 @@ import {
   parentDirectoryPath,
   pathHasHiddenSegmentWithinRoot,
 } from "./lib/explorerNavigation";
+import { resolveExplorerPaneRestoreTarget, type ExplorerPane } from "./lib/explorerPaneFocus";
 import { FileIcon } from "./lib/fileIcons";
 import { useFiletrailClient } from "./lib/filetrailClient";
 import { getDetailsRowHeight } from "./lib/detailsLayout";
@@ -77,6 +78,7 @@ import { createRendererLogger } from "./lib/logging";
 import { pageScrollElement, scrollElementByAmount } from "./lib/pagedScroll";
 import { resolveExplorerToolbarLayout, resolveSinglePanelLayout } from "./lib/responsiveLayout";
 import { appendSearchResults, filterSearchResults, sortSearchResults } from "./lib/searchResults";
+import { resolveOpenInTerminalPaths } from "./lib/shortcutTargets";
 import { resolveStartupNavigation } from "./lib/startupNavigation";
 import { applyAppearance, getThemeAppearanceDefaults } from "./lib/theme";
 import { getTreeKeyboardAction } from "./lib/treeView";
@@ -197,6 +199,7 @@ export function App() {
   const [restoreLastVisitedFolderOnStartup, setRestoreLastVisitedFolderOnStartup] = useState(
     DEFAULT_APP_PREFERENCES.restoreLastVisitedFolderOnStartup,
   );
+  const [terminalApp, setTerminalApp] = useState(DEFAULT_APP_PREFERENCES.terminalApp);
   const [sortBy, setSortBy] = useState<SortBy>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [infoPanelOpen, setInfoPanelOpen] = useState(DEFAULT_APP_PREFERENCES.propertiesOpen);
@@ -486,12 +489,7 @@ export function App() {
     ) {
       return;
     }
-    const nextPane = contentPaneRef.current ?? treePaneRef.current;
-    if (!nextPane) {
-      return;
-    }
-    nextPane.focus({ preventScroll: true });
-    setFocusedPane(contentPaneRef.current ? "content" : "tree");
+    restoreExplorerPaneFocus();
   }, [
     actionNotice,
     contextMenuState,
@@ -547,6 +545,7 @@ export function App() {
         typeaheadDebounceMs,
         propertiesOpen: infoPanelOpen,
         detailRowOpen: infoRowOpen,
+        terminalApp,
         includeHidden,
         searchPatternMode,
         searchMatchScope,
@@ -588,6 +587,7 @@ export function App() {
     typeaheadDebounceMs,
     typeaheadEnabled,
     restoreLastVisitedFolderOnStartup,
+    terminalApp,
     theme,
     uiFontFamily,
     uiFontSize,
@@ -641,6 +641,7 @@ export function App() {
         setInfoPanelOpen(preferences.propertiesOpen);
         setInfoRowOpen(preferences.detailRowOpen);
         setRestoreLastVisitedFolderOnStartup(preferences.restoreLastVisitedFolderOnStartup);
+        setTerminalApp(preferences.terminalApp);
         panes.setTreeWidth(preferences.treeWidth);
         panes.setInspectorWidth(preferences.inspectorWidth);
         setRestoredPaneWidths({
@@ -732,6 +733,20 @@ export function App() {
 
   useEffect(() => {
     const unsubscribe = client.onCommand((command) => {
+      if (command.type === "openInTerminal") {
+        const pathsToOpen = resolveOpenInTerminalPaths({
+          focusedPane,
+          lastFocusedPane: lastExplorerFocusPaneRef.current,
+          contextMenuPaths: contextMenuState?.paths ?? [],
+          selectedContentPaths: selectedPathsInViewOrder,
+          currentPath,
+        });
+        const firstPath = pathsToOpen[0];
+        if (firstPath) {
+          void openPathInTerminal(firstPath);
+        }
+        return;
+      }
       if (command.type === "openLocationSheet") {
         openLocationSheet();
         return;
@@ -794,6 +809,7 @@ export function App() {
     client,
     contextMenuState,
     currentPath,
+    focusedPane,
     isSearchMode,
     searchResultEntries,
     selectedPathsInViewOrder,
@@ -1355,6 +1371,22 @@ export function App() {
     });
   }
 
+  function restoreExplorerPaneFocus(preferredPane: ExplorerPane | null = null) {
+    const targetPane = resolveExplorerPaneRestoreTarget({
+      preferredPane,
+      lastFocusedPane: lastExplorerFocusPaneRef.current,
+      hasTreePane: treePaneRef.current !== null,
+      hasContentPane: contentPaneRef.current !== null,
+    });
+    if (targetPane === "tree") {
+      focusTreePane();
+      return;
+    }
+    if (targetPane === "content") {
+      focusContentPane();
+    }
+  }
+
   function getFocusedScrollTarget(): {
     axis: "horizontal" | "vertical";
     element: HTMLElement;
@@ -1579,13 +1611,7 @@ export function App() {
     const paneToRestore = actionNoticeReturnFocusPaneRef.current;
     actionNoticeReturnFocusPaneRef.current = null;
     setActionNotice(null);
-    if (paneToRestore === "content") {
-      focusContentPane();
-      return;
-    }
-    if (paneToRestore === "tree") {
-      focusTreePane();
-    }
+    restoreExplorerPaneFocus(paneToRestore);
   }
 
   async function copyPathsToClipboard(paths: string[]) {
@@ -3157,6 +3183,7 @@ export function App() {
                 typeaheadEnabled={typeaheadEnabled}
                 typeaheadDebounceMs={typeaheadDebounceMs}
                 restoreLastVisitedFolderOnStartup={restoreLastVisitedFolderOnStartup}
+                terminalApp={terminalApp}
                 themeOptions={[...THEME_OPTIONS]}
                 uiFontOptions={[...UI_FONT_OPTIONS]}
                 uiFontSizeOptions={[...UI_FONT_SIZE_OPTIONS]}
@@ -3178,6 +3205,7 @@ export function App() {
                 onTypeaheadEnabledChange={setTypeaheadEnabled}
                 onTypeaheadDebounceMsChange={setTypeaheadDebounceMs}
                 onRestoreLastVisitedFolderOnStartupChange={setRestoreLastVisitedFolderOnStartup}
+                onTerminalAppChange={setTerminalApp}
               />
             )}
           </section>

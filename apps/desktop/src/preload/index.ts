@@ -6,6 +6,7 @@ type RendererCommand = {
   type:
     | "focusFileSearch"
     | "openLocationSheet"
+    | "openInTerminal"
     | "copyPath"
     | "refreshOrApplySearchSort"
     | "toggleInfoPanel"

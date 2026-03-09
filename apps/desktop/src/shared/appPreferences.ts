@@ -77,6 +77,7 @@ export type AppPreferences = {
   typeaheadDebounceMs: number;
   propertiesOpen: boolean;
   detailRowOpen: boolean;
+  terminalApp: string | null;
   includeHidden: boolean;
   searchPatternMode: SearchPatternModePreference;
   searchMatchScope: SearchMatchScopePreference;
@@ -112,6 +113,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   typeaheadDebounceMs: 750,
   propertiesOpen: true,
   detailRowOpen: true,
+  terminalApp: null,
   includeHidden: false,
   searchPatternMode: "regex",
   searchMatchScope: "name",

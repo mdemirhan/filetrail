@@ -11,6 +11,7 @@ export type FiletrailClient = {
         | "toggleInfoPanel"
         | "toggleInfoRow"
         | "openLocationSheet"
+        | "openInTerminal"
         | "copyPath"
         | "refreshOrApplySearchSort";
     }) => void,

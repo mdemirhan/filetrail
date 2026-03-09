@@ -3,6 +3,7 @@ import type { MenuItemConstructorOptions, WebContents } from "electron";
 export type RendererCommand =
   | "focusFileSearch"
   | "openLocationSheet"
+  | "openInTerminal"
   | "copyPath"
   | "refreshOrApplySearchSort"
   | "toggleInfoPanel"
@@ -20,7 +21,19 @@ export function createApplicationMenuTemplate(
     },
     {
       label: "File",
-      submenu: [{ role: "close" }],
+      submenu: [
+        {
+          label: "Open in Terminal",
+          accelerator: "CommandOrControl+T",
+          click: () => {
+            webContents.send("filetrail:command", {
+              type: "openInTerminal" satisfies RendererCommand,
+            });
+          },
+        },
+        { type: "separator" },
+        { role: "close" },
+      ],
     },
     {
       label: "Edit",

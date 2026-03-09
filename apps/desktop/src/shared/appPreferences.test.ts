@@ -47,6 +47,7 @@ describe("appPreferences helpers", () => {
       uiFontWeight: 500,
       viewMode: "list",
       foldersFirst: true,
+      terminalApp: null,
       detailColumns: {
         size: true,
         modified: true,

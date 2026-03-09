@@ -136,6 +136,7 @@ export const appPreferencesSchema = z.object({
   typeaheadDebounceMs: z.number().int().min(250).max(1500),
   propertiesOpen: z.boolean(),
   detailRowOpen: z.boolean(),
+  terminalApp: z.string().trim().min(1).nullable(),
   includeHidden: z.boolean(),
   searchPatternMode: searchPatternModeSchema,
   searchMatchScope: searchMatchScopeSchema,

@@ -24,6 +24,7 @@ export function SettingsView({
   typeaheadEnabled,
   typeaheadDebounceMs,
   restoreLastVisitedFolderOnStartup,
+  terminalApp,
   themeOptions,
   uiFontOptions,
   uiFontSizeOptions,
@@ -45,6 +46,7 @@ export function SettingsView({
   onTypeaheadEnabledChange,
   onTypeaheadDebounceMsChange,
   onRestoreLastVisitedFolderOnStartupChange,
+  onTerminalAppChange,
 }: {
   theme: ThemeMode;
   uiFontFamily: UiFontFamily;
@@ -62,6 +64,7 @@ export function SettingsView({
   typeaheadEnabled: boolean;
   typeaheadDebounceMs: number;
   restoreLastVisitedFolderOnStartup: boolean;
+  terminalApp: string | null;
   themeOptions: ReadonlyArray<{ value: ThemeMode; label: string }>;
   uiFontOptions: ReadonlyArray<{ value: UiFontFamily; label: string }>;
   uiFontSizeOptions: ReadonlyArray<number>;
@@ -83,6 +86,7 @@ export function SettingsView({
   onTypeaheadEnabledChange: (value: boolean) => void;
   onTypeaheadDebounceMsChange: (value: number) => void;
   onRestoreLastVisitedFolderOnStartupChange: (value: boolean) => void;
+  onTerminalAppChange: (value: string | null) => void;
 }) {
   return (
     <div className="settings-view" data-layout={layoutMode}>
@@ -411,6 +415,25 @@ export function SettingsView({
                   }
                 />
                 <span className="settings-toggle-track" aria-hidden />
+              </span>
+            </label>
+
+            <label className="settings-field settings-field-wide">
+              <span className="settings-field-label">Terminal app</span>
+              <input
+                type="text"
+                className="settings-text-input"
+                aria-label="Terminal app"
+                value={terminalApp ?? ""}
+                placeholder="Terminal"
+                onChange={(event) => {
+                  const nextValue = event.currentTarget.value.trim();
+                  onTerminalAppChange(nextValue.length > 0 ? nextValue : null);
+                }}
+              />
+              <span className="settings-field-help">
+                Leave blank to use Terminal. Enter another app name such as iTerm to override the
+                default terminal launcher.
               </span>
             </label>
           </div>

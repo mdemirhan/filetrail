@@ -40,6 +40,7 @@ describe("appStateStore", () => {
       typeaheadDebounceMs: 750,
       propertiesOpen: true,
       detailRowOpen: true,
+      terminalApp: null,
       includeHidden: false,
       searchPatternMode: "regex",
       searchMatchScope: "name",
@@ -94,6 +95,7 @@ describe("appStateStore", () => {
       tabSwitchesExplorerPanes: false,
       typeaheadEnabled: false,
       typeaheadDebounceMs: 1000,
+      terminalApp: "iTerm",
       includeHidden: true,
       searchPatternMode: "glob",
       searchMatchScope: "path",
@@ -149,6 +151,7 @@ describe("appStateStore", () => {
       tabSwitchesExplorerPanes: false,
       typeaheadEnabled: false,
       typeaheadDebounceMs: 1000,
+      terminalApp: "iTerm",
       includeHidden: true,
       searchPatternMode: "glob",
       searchMatchScope: "path",
@@ -186,6 +189,7 @@ describe("appStateStore", () => {
       uiFontWeight: 123 as never,
       textPrimaryOverride: "oops" as never,
       typeaheadDebounceMs: 9999,
+      terminalApp: "   ",
       compactDetailsView: "yes" as never,
       detailColumns: {
         size: "nope",
@@ -215,6 +219,7 @@ describe("appStateStore", () => {
     expect(reloaded.getPreferences().uiFontWeight).toBe(500);
     expect(reloaded.getPreferences().textPrimaryOverride).toBeNull();
     expect(reloaded.getPreferences().typeaheadDebounceMs).toBe(1500);
+    expect(reloaded.getPreferences().terminalApp).toBeNull();
     expect(reloaded.getPreferences().compactDetailsView).toBe(false);
     expect(reloaded.getPreferences().detailColumns).toEqual({
       size: true,

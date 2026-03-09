@@ -4144,6 +4144,25 @@ body.platform-macos .settings-view[data-layout="compact"] {
   background-repeat: no-repeat;
 }
 
+.settings-text-input {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+  color: var(--text-primary);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.settings-field-help {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
 .settings-color-stack {
   display: grid;
   gap: 8px;
@@ -4186,6 +4205,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
 }
 
 .settings-select:focus,
+.settings-text-input:focus,
 .settings-toggle-input:focus-visible + .settings-toggle-track {
   outline: none;
   border-color: var(--accent-blue-border);

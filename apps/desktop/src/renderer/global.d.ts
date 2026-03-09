@@ -14,6 +14,7 @@ declare global {
             | "toggleInfoPanel"
             | "toggleInfoRow"
             | "openLocationSheet"
+            | "openInTerminal"
             | "copyPath"
             | "refreshOrApplySearchSort";
         }) => void,

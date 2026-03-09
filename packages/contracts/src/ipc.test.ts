@@ -63,6 +63,7 @@ describe("ipc contracts", () => {
           typeaheadDebounceMs: 750,
           propertiesOpen: true,
           detailRowOpen: true,
+          terminalApp: null,
           includeHidden: false,
           searchPatternMode: "regex",
           searchMatchScope: "name",
@@ -108,6 +109,7 @@ describe("ipc contracts", () => {
         typeaheadDebounceMs: 750,
         propertiesOpen: true,
         detailRowOpen: true,
+        terminalApp: null,
         includeHidden: false,
         searchPatternMode: "regex",
         searchMatchScope: "name",
@@ -158,6 +160,7 @@ describe("ipc contracts", () => {
           tabSwitchesExplorerPanes: false,
           typeaheadEnabled: false,
           typeaheadDebounceMs: 1000,
+          terminalApp: "iTerm",
         },
       }),
     ).toEqual({
@@ -193,6 +196,7 @@ describe("ipc contracts", () => {
         tabSwitchesExplorerPanes: false,
         typeaheadEnabled: false,
         typeaheadDebounceMs: 1000,
+        terminalApp: "iTerm",
       },
     });
   });
