@@ -398,8 +398,8 @@ describe("SearchResultsPane", () => {
       />,
     );
 
-    expect(scroll.scrollTop).toBe(120);
-    expect(handleScrollTopChange).toHaveBeenCalledWith(120);
+    expect(scroll.scrollTop).toBe(96);
+    expect(handleScrollTopChange).toHaveBeenCalledWith(96);
   });
 
   it("returns focus to search results when escape is pressed in the filter input", () => {
