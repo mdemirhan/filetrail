@@ -3164,6 +3164,7 @@ export function App() {
                 shortcutItems={[...SHORTCUT_ITEMS]}
                 referenceItems={[...REFERENCE_ITEMS]}
                 layoutMode={singlePanelLayout}
+                theme={theme}
               />
             ) : (
               <SettingsView
