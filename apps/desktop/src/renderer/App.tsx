@@ -16,6 +16,7 @@ import {
   DEFAULT_APP_PREFERENCES,
   DEFAULT_DETAIL_COLUMN_VISIBILITY,
   DEFAULT_DETAIL_COLUMN_WIDTHS,
+  DEFAULT_TEXT_EDITOR,
   DEFAULT_TERMINAL_APPLICATION,
   type DetailColumnVisibility,
   type DetailColumnWidths,
@@ -4459,6 +4460,7 @@ export function App() {
                 onBrowseDefaultTextEditor={() => {
                   void browseDefaultTextEditor();
                 }}
+                onClearDefaultTextEditor={() => setDefaultTextEditor(DEFAULT_TEXT_EDITOR)}
                 onAddOpenWithApplication={() => {
                   void addOpenWithApplication();
                 }}

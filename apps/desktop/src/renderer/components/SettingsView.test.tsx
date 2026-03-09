@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 
 import { THEME_OPTIONS, type ThemeMode } from "../../shared/appPreferences";
@@ -87,6 +87,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       onBrowseTerminalApp={() => undefined}
       onClearTerminalApp={() => undefined}
       onBrowseDefaultTextEditor={() => undefined}
+      onClearDefaultTextEditor={() => undefined}
       onAddOpenWithApplication={() => undefined}
       onBrowseOpenWithApplication={() => undefined}
       onMoveOpenWithApplication={() => undefined}
@@ -194,9 +195,8 @@ describe("SettingsView", () => {
       onClearTerminalApp,
     });
 
-    expect(screen.getByLabelText("Terminal app")).toHaveValue(
-      "iTerm - /Applications/iTerm.app",
-    );
+    expect(screen.getByText("iTerm")).toBeInTheDocument();
+    expect(screen.getByText("/Applications/iTerm.app")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Browse terminal app" }));
     fireEvent.click(screen.getByRole("button", { name: "Use default terminal app" }));
@@ -207,19 +207,25 @@ describe("SettingsView", () => {
 
   it("renders and updates file opening preferences", () => {
     const onBrowseDefaultTextEditor = vi.fn();
+    const onClearDefaultTextEditor = vi.fn();
     const onFileActivationActionChange = vi.fn();
     const onOpenItemLimitChange = vi.fn();
     renderSettingsView({
       fileActivationAction: "open",
       openItemLimit: 5,
+      defaultTextEditor: {
+        appPath: "/Applications/Zed.app",
+        appName: "Zed",
+      },
       onBrowseDefaultTextEditor,
+      onClearDefaultTextEditor,
       onFileActivationActionChange,
       onOpenItemLimitChange,
     });
 
-    expect(screen.getByLabelText("Default text editor")).toHaveValue(
-      "TextEdit - /System/Applications/TextEdit.app",
-    );
+    const editorGroup = screen.getByRole("group", { name: "Default text editor" });
+    expect(within(editorGroup).getByText("Zed")).toBeInTheDocument();
+    expect(within(editorGroup).getByText("/Applications/Zed.app")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("File activation"), {
       target: { value: "edit" },
@@ -229,10 +235,12 @@ describe("SettingsView", () => {
     });
     fireEvent.blur(screen.getByLabelText("Open and Edit item limit"));
     fireEvent.click(screen.getByRole("button", { name: "Browse default text editor" }));
+    fireEvent.click(screen.getByRole("button", { name: "Use default text editor" }));
 
     expect(onFileActivationActionChange).toHaveBeenCalledWith("edit");
     expect(onOpenItemLimitChange).toHaveBeenCalledWith(9);
     expect(onBrowseDefaultTextEditor).toHaveBeenCalled();
+    expect(onClearDefaultTextEditor).toHaveBeenCalled();
   });
 
   it("forwards notification preference changes", () => {

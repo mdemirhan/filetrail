@@ -12,6 +12,7 @@ import type {
 } from "../../shared/appPreferences";
 import {
   DEFAULT_APP_PREFERENCES,
+  DEFAULT_TEXT_EDITOR,
   DEFAULT_TERMINAL_APPLICATION,
   ZOOM_PERCENT_MAX,
   ZOOM_PERCENT_MIN,
@@ -811,6 +812,88 @@ function ActionButton({
   );
 }
 
+function ApplicationSelectionDisplay({
+  title,
+  ariaLabel,
+  application,
+  theme,
+  actions,
+}: {
+  title: string;
+  ariaLabel: string;
+  application: ApplicationSelection;
+  theme: ResolvedSettingsTheme;
+  actions: ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        paddingTop: "8px",
+        marginTop: "4px",
+      }}
+    >
+      <div
+        style={{
+          fontSize: "12.5px",
+          fontFamily: sans,
+          fontWeight: 500,
+          color: theme.label.primary,
+          marginBottom: "6px",
+        }}
+      >
+        {title}
+      </div>
+      <div
+        role="group"
+        aria-label={ariaLabel}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "12px",
+          padding: "12px 0",
+        }}
+      >
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div
+            style={{
+              fontSize: "12.5px",
+              fontFamily: sans,
+              fontWeight: 500,
+              color: theme.label.primary,
+              marginBottom: "4px",
+            }}
+          >
+            {application.appName}
+          </div>
+          <div
+            style={{
+              fontSize: "11px",
+              fontFamily: mono,
+              color: theme.label.secondary,
+              lineHeight: "1.4",
+              wordBreak: "break-all",
+            }}
+          >
+            {application.appPath}
+          </div>
+        </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            flexWrap: "wrap",
+            justifyContent: "flex-end",
+          }}
+        >
+          {actions}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function formatZoomPercent(value: number): string {
   return `${value}%`;
 }
@@ -1144,6 +1227,7 @@ export function SettingsView({
   onBrowseTerminalApp,
   onClearTerminalApp,
   onBrowseDefaultTextEditor,
+  onClearDefaultTextEditor,
   onAddOpenWithApplication,
   onBrowseOpenWithApplication,
   onMoveOpenWithApplication,
@@ -1212,6 +1296,7 @@ export function SettingsView({
   onBrowseTerminalApp: () => void;
   onClearTerminalApp: () => void;
   onBrowseDefaultTextEditor: () => void;
+  onClearDefaultTextEditor: () => void;
   onAddOpenWithApplication: () => void;
   onBrowseOpenWithApplication: (entryId: string) => void;
   onMoveOpenWithApplication: (entryId: string, direction: "up" | "down") => void;
@@ -1221,6 +1306,9 @@ export function SettingsView({
 }) {
   const palette = resolveSettingsTheme(theme, accent);
   const [resetHover, setResetHover] = useState(false);
+  const isDefaultTextEditorSelection =
+    defaultTextEditor.appPath === DEFAULT_TEXT_EDITOR.appPath &&
+    defaultTextEditor.appName === DEFAULT_TEXT_EDITOR.appName;
 
   return (
     <div
@@ -1678,68 +1766,30 @@ export function SettingsView({
             }
           />
 
-          <div
-            style={{
-              borderTop: `1px solid ${palette.separator}`,
-              paddingTop: "8px",
-              marginTop: "4px",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "12.5px",
-                fontFamily: sans,
-                fontWeight: 500,
-                color: palette.label.primary,
-                marginBottom: "6px",
-              }}
-            >
-              Terminal app
-            </div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-              }}
-            >
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <TextInput
-                  value={`${(terminalApp ?? DEFAULT_TERMINAL_APPLICATION).appName} - ${(terminalApp ?? DEFAULT_TERMINAL_APPLICATION).appPath}`}
-                  placeholder="Terminal"
-                  ariaLabel="Terminal app"
-                  theme={palette}
-                  readOnly
-                  onChange={() => undefined}
-                />
-              </div>
-              <ActionButton
-                label="Browse"
-                ariaLabel="Browse terminal app"
-                theme={palette}
-                onClick={onBrowseTerminalApp}
-              />
-              {terminalApp ? (
+          <ApplicationSelectionDisplay
+            title="Terminal app"
+            ariaLabel="Terminal app"
+            application={terminalApp ?? DEFAULT_TERMINAL_APPLICATION}
+            theme={palette}
+            actions={
+              <>
                 <ActionButton
-                  label="Default"
-                  ariaLabel="Use default terminal app"
+                  label="Browse"
+                  ariaLabel="Browse terminal app"
                   theme={palette}
-                  onClick={onClearTerminalApp}
+                  onClick={onBrowseTerminalApp}
                 />
-              ) : null}
-            </div>
-            <div
-              style={{
-                fontSize: "11px",
-                fontFamily: sans,
-                color: palette.label.secondary,
-                marginTop: "6px",
-                lineHeight: "1.4",
-              }}
-            >
-              Open in Terminal uses this application. Choose another app or reset to Terminal.
-            </div>
-          </div>
+                {terminalApp ? (
+                  <ActionButton
+                    label="Default"
+                    ariaLabel="Use default terminal app"
+                    theme={palette}
+                    onClick={onClearTerminalApp}
+                  />
+                ) : null}
+              </>
+            }
+          />
         </SectionCard>
 
         <SectionCard icon="✎" title="File Opening" theme={palette}>
@@ -1772,60 +1822,30 @@ export function SettingsView({
             }
           />
 
-          <div
-            style={{
-              borderTop: `1px solid ${palette.separator}`,
-              paddingTop: "8px",
-              marginTop: "4px",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "12.5px",
-                fontFamily: sans,
-                fontWeight: 500,
-                color: palette.label.primary,
-                marginBottom: "6px",
-              }}
-            >
-              Default text editor
-            </div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-              }}
-            >
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <TextInput
-                  value={`${defaultTextEditor.appName} - ${defaultTextEditor.appPath}`}
-                  placeholder="TextEdit"
-                  ariaLabel="Default text editor"
+          <ApplicationSelectionDisplay
+            title="Default text editor"
+            ariaLabel="Default text editor"
+            application={defaultTextEditor}
+            theme={palette}
+            actions={
+              <>
+                <ActionButton
+                  label="Browse"
+                  ariaLabel="Browse default text editor"
                   theme={palette}
-                  readOnly
-                  onChange={() => undefined}
+                  onClick={onBrowseDefaultTextEditor}
                 />
-              </div>
-              <ActionButton
-                label="Browse"
-                ariaLabel="Browse default text editor"
-                theme={palette}
-                onClick={onBrowseDefaultTextEditor}
-              />
-            </div>
-            <div
-              style={{
-                fontSize: "11px",
-                fontFamily: sans,
-                color: palette.label.secondary,
-                marginTop: "6px",
-                lineHeight: "1.4",
-              }}
-            >
-              Edit uses this application for files only.
-            </div>
-          </div>
+                {!isDefaultTextEditorSelection ? (
+                  <ActionButton
+                    label="Default"
+                    ariaLabel="Use default text editor"
+                    theme={palette}
+                    onClick={onClearDefaultTextEditor}
+                  />
+                ) : null}
+              </>
+            }
+          />
         </SectionCard>
 
         <SectionCard icon="↗" title="Open With" theme={palette}>
