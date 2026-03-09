@@ -1,8 +1,10 @@
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import { parentPort, workerData } from "node:worker_threads";
 
 import { ipcContractSchemas } from "@filetrail/contracts";
 import {
+  type ExplorerFileSystem,
   getDirectoryMetadataBatch,
   getItemProperties,
   getPathSuggestions,
@@ -12,6 +14,25 @@ import {
 } from "../fs/explorerService";
 import { FdSearchRuntime } from "../search/fdSearch";
 import type { WorkerSupportedChannel } from "./explorerWorkerClient";
+
+// Electron patches node:fs to treat .asar archives as virtual directories.
+// When running inside Electron, use original-fs so directory listings show .asar
+// files as regular files instead of phantom directories.
+let originalExplorerFs: ExplorerFileSystem | undefined;
+try {
+  const req = createRequire(import.meta.url);
+  const originalFs = req("original-fs") as typeof import("node:fs");
+  const { stat, lstat, readdir, realpath } = originalFs.promises;
+  originalExplorerFs = {
+    readdir: ((path: string, options: { withFileTypes: true }) =>
+      readdir(path, options)) as ExplorerFileSystem["readdir"],
+    stat: ((path: string) => stat(path)) as ExplorerFileSystem["stat"],
+    lstat: ((path: string) => lstat(path)) as ExplorerFileSystem["lstat"],
+    realpath: (path: string) => realpath(path),
+  };
+} catch {
+  // Not running inside Electron; functions will use default node:fs.
+}
 
 type ExplorerWorkerData = {
   fdBinaryPath?: string;
@@ -85,7 +106,7 @@ async function handleWorkerRequest(message: WorkerRequest): Promise<WorkerRespon
     return {
       id: message.id,
       ok: true,
-      payload: await listTreeChildren(payload.path, payload.includeHidden),
+      payload: await listTreeChildren(payload.path, payload.includeHidden, originalExplorerFs),
     };
   }
   if (message.channel === "directory:getSnapshot") {
@@ -99,6 +120,7 @@ async function handleWorkerRequest(message: WorkerRequest): Promise<WorkerRespon
         payload.sortBy,
         payload.sortDirection,
         payload.foldersFirst,
+        originalExplorerFs,
       ),
     };
   }
@@ -107,7 +129,11 @@ async function handleWorkerRequest(message: WorkerRequest): Promise<WorkerRespon
     return {
       id: message.id,
       ok: true,
-      payload: await getDirectoryMetadataBatch(payload.directoryPath, payload.paths),
+      payload: await getDirectoryMetadataBatch(
+        payload.directoryPath,
+        payload.paths,
+        originalExplorerFs,
+      ),
     };
   }
   if (message.channel === "item:getProperties") {
@@ -115,7 +141,7 @@ async function handleWorkerRequest(message: WorkerRequest): Promise<WorkerRespon
     return {
       id: message.id,
       ok: true,
-      payload: await getItemProperties(payload.path),
+      payload: await getItemProperties(payload.path, originalExplorerFs),
     };
   }
   if (message.channel === "path:getSuggestions") {
@@ -123,7 +149,12 @@ async function handleWorkerRequest(message: WorkerRequest): Promise<WorkerRespon
     return {
       id: message.id,
       ok: true,
-      payload: await getPathSuggestions(payload.inputPath, payload.includeHidden, payload.limit),
+      payload: await getPathSuggestions(
+        payload.inputPath,
+        payload.includeHidden,
+        payload.limit,
+        originalExplorerFs,
+      ),
     };
   }
   if (message.channel === "path:resolve") {
@@ -131,7 +162,7 @@ async function handleWorkerRequest(message: WorkerRequest): Promise<WorkerRespon
     return {
       id: message.id,
       ok: true,
-      payload: await resolvePathTarget(payload.path),
+      payload: await resolvePathTarget(payload.path, originalExplorerFs),
     };
   }
   if (message.channel === "search:start") {

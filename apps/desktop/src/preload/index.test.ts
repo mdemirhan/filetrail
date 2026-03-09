@@ -81,10 +81,7 @@ describe("preload bridge", () => {
     const [, registeredHandler] = electronMock.on.mock.calls[0] ?? [];
     expect(electronMock.on).toHaveBeenCalledWith("filetrail:command", expect.any(Function));
 
-    (registeredHandler as (event: unknown, command: unknown) => void)(
-      {},
-      { type: "copyPath" },
-    );
+    (registeredHandler as (event: unknown, command: unknown) => void)({}, { type: "copyPath" });
     expect(listener).toHaveBeenCalledWith({ type: "copyPath" });
 
     unsubscribe();

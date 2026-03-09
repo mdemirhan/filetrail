@@ -26,7 +26,8 @@ export function resolveStartupFolderPath(
   const fileSystem = options.fileSystem ?? DEFAULT_FILE_SYSTEM;
   const userArgs = argv.slice(argvOffset);
   const rawPath =
-    extractFolderOption(userArgs) ?? extractPositionalFolderArgument(userArgs, cwd, homePath, appPath);
+    extractFolderOption(userArgs) ??
+    extractPositionalFolderArgument(userArgs, cwd, homePath, appPath);
   if (!rawPath) {
     return null;
   }

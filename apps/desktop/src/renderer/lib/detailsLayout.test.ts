@@ -1,4 +1,9 @@
-import { DETAILS_LAYOUT, getDetailsRowHeight, getDetailsTableWidth, getVisibleDetailColumns } from "./detailsLayout";
+import {
+  DETAILS_LAYOUT,
+  getDetailsRowHeight,
+  getDetailsTableWidth,
+  getVisibleDetailColumns,
+} from "./detailsLayout";
 
 describe("detailsLayout", () => {
   it("returns the expected row height for compact and regular modes", () => {

@@ -30,18 +30,22 @@ if (hasSingleInstanceLock) {
       }
     }
     appStateStoreRef = appStateStore;
-    await bootstrapMainProcess(appStateStore, {
-      startupFolderPath: resolveStartupFolderPath(process.argv, resolveLaunchWorkingDirectory(), {
-        appPath: app.getAppPath(),
-        argvOffset: process.defaultApp ? 2 : 1,
-      }),
-    }, (preferences) => {
-      const window = mainWindowRef ?? BrowserWindow.getAllWindows()[0] ?? null;
-      if (!window || window.isDestroyed()) {
-        return;
-      }
-      applyWindowZoom(window, preferences.zoomPercent);
-    });
+    await bootstrapMainProcess(
+      appStateStore,
+      {
+        startupFolderPath: resolveStartupFolderPath(process.argv, resolveLaunchWorkingDirectory(), {
+          appPath: app.getAppPath(),
+          argvOffset: process.defaultApp ? 2 : 1,
+        }),
+      },
+      (preferences) => {
+        const window = mainWindowRef ?? BrowserWindow.getAllWindows()[0] ?? null;
+        if (!window || window.isDestroyed()) {
+          return;
+        }
+        applyWindowZoom(window, preferences.zoomPercent);
+      },
+    );
     mainWindowRef = createWindow();
 
     app.on("activate", () => {

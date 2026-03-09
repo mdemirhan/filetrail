@@ -323,7 +323,9 @@ export function TreePane({
               <div ref={themeMenuRef} className="sidebar-rail-menu" tabIndex={-1}>
                 {THEME_GROUPS.map((group, groupIndex) => (
                   <Fragment key={group.value}>
-                    {groupIndex > 0 ? <div className="sidebar-rail-menu-separator" role="separator" /> : null}
+                    {groupIndex > 0 ? (
+                      <div className="sidebar-rail-menu-separator" role="separator" />
+                    ) : null}
                     {group.options.map((option) => (
                       <button
                         key={option.value}

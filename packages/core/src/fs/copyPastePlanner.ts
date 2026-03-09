@@ -200,8 +200,7 @@ export function toPublicPlan(
   };
   const skippedConflictCount = request.conflictResolution === "skip" ? plan.conflicts.length : 0;
   const hasBlockingIssues = plan.issues.length > 0;
-  const hasUnresolvedConflicts =
-    plan.conflicts.length > 0 && request.conflictResolution !== "skip";
+  const hasUnresolvedConflicts = plan.conflicts.length > 0 && request.conflictResolution !== "skip";
 
   return {
     mode: request.mode,

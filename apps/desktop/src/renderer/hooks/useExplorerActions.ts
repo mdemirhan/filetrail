@@ -471,7 +471,9 @@ export function useExplorerActions(args: {
           action: event.action,
           stage: event.status,
           targetPath:
-            event.result?.targetPath ?? writeOperationCardState?.targetPath ?? currentPathRef.current,
+            event.result?.targetPath ??
+            writeOperationCardState?.targetPath ??
+            currentPathRef.current,
           completedItemCount: event.completedItemCount,
           totalItemCount: event.totalItemCount,
           completedByteCount: event.completedByteCount,
@@ -785,9 +787,12 @@ export function useExplorerActions(args: {
   }
 
   async function copyPathsToClipboard(paths: string[]) {
-    await client.invoke("system:copyText" as never, {
-      text: paths.map((path) => formatPathForShell(path)).join("\n"),
-    } as never);
+    await client.invoke(
+      "system:copyText" as never,
+      {
+        text: paths.map((path) => formatPathForShell(path)).join("\n"),
+      } as never,
+    );
   }
 
   async function runCopyPathAction(paths: string[]) {
@@ -885,13 +890,16 @@ export function useExplorerActions(args: {
       currentSourcePath: plan.sourcePaths[0] ?? null,
     });
     try {
-      const response = (await client.invoke("copyPaste:start" as never, {
-        mode: plan.mode,
-        sourcePaths: plan.sourcePaths,
-        destinationDirectoryPath: plan.destinationDirectoryPath,
-        conflictResolution: plan.conflictResolution,
-        action,
-      } as never)) as { operationId: string };
+      const response = (await client.invoke(
+        "copyPaste:start" as never,
+        {
+          mode: plan.mode,
+          sourcePaths: plan.sourcePaths,
+          destinationDirectoryPath: plan.destinationDirectoryPath,
+          conflictResolution: plan.conflictResolution,
+          action,
+        } as never,
+      )) as { operationId: string };
       if (clearClipboardOnStart) {
         applyCopyPasteClipboardState(clearCopyPasteClipboard());
       }
@@ -994,10 +1002,13 @@ export function useExplorerActions(args: {
       currentSourcePath: request.sourcePaths[0] ?? null,
     });
     try {
-      const plan = (await client.invoke("copyPaste:plan" as never, {
-        ...request,
-        action: "paste",
-      } as never)) as CopyPastePlan;
+      const plan = (await client.invoke(
+        "copyPaste:plan" as never,
+        {
+          ...request,
+          action: "paste",
+        } as never,
+      )) as CopyPastePlan;
       const pendingAttempt = pendingPasteAttemptRef.current;
       if (!pendingAttempt || pendingAttempt.id !== pasteAttemptId || pendingAttempt.cancelled) {
         return;
@@ -1100,13 +1111,16 @@ export function useExplorerActions(args: {
     setWriteOperationProgressEvent(null);
     setCopyPasteDialogState(null);
     try {
-      const plan = (await client.invoke("copyPaste:plan" as never, {
-        mode: event.action === "move_to" ? "cut" : "copy",
-        sourcePaths: failedSourcePaths,
-        destinationDirectoryPath: result.targetPath ?? currentPathRef.current,
-        conflictResolution: "error",
-        action: event.action === "move_to" ? "move_to" : event.action,
-      } as never)) as CopyPastePlan;
+      const plan = (await client.invoke(
+        "copyPaste:plan" as never,
+        {
+          mode: event.action === "move_to" ? "cut" : "copy",
+          sourcePaths: failedSourcePaths,
+          destinationDirectoryPath: result.targetPath ?? currentPathRef.current,
+          conflictResolution: "error",
+          action: event.action === "move_to" ? "move_to" : event.action,
+        } as never,
+      )) as CopyPastePlan;
       if (plan.conflicts.length > 0) {
         pendingPasteAttemptRef.current = null;
         applyWriteOperationCardState(null);
@@ -1195,7 +1209,10 @@ export function useExplorerActions(args: {
           item.status === "completed" && typeof item.destinationPath === "string",
       )
       .map((item) => item.destinationPath);
-    const selectionDirectoryPath = resolveWriteOperationSelectionDirectoryPath(result, selectedPaths);
+    const selectionDirectoryPath = resolveWriteOperationSelectionDirectoryPath(
+      result,
+      selectedPaths,
+    );
 
     if (
       isSearchModeRef.current ||
@@ -1234,9 +1251,12 @@ export function useExplorerActions(args: {
 
   async function openPathInTerminal(path: string) {
     try {
-      const response = (await client.invoke("system:openInTerminal" as never, {
-        path,
-      } as never)) as { ok: boolean; error?: string | null };
+      const response = (await client.invoke(
+        "system:openInTerminal" as never,
+        {
+          path,
+        } as never,
+      )) as { ok: boolean; error?: string | null };
       if (!response.ok) {
         throw new Error(response.error ?? "Unable to open Terminal for the selected path.");
       }
@@ -1282,10 +1302,13 @@ export function useExplorerActions(args: {
     applicationName: string,
   ) {
     try {
-      const response = (await client.invoke("system:openPathsWithApplication" as never, {
-        applicationPath,
-        paths,
-      } as never)) as { ok: boolean; error?: string | null };
+      const response = (await client.invoke(
+        "system:openPathsWithApplication" as never,
+        {
+          applicationPath,
+          paths,
+        } as never,
+      )) as { ok: boolean; error?: string | null };
       if (!response.ok) {
         throw new Error(response.error ?? `Unable to open with ${applicationName}.`);
       }
@@ -1391,7 +1414,10 @@ export function useExplorerActions(args: {
     }
     setSearchPopoverOpen(false);
     searchInputRef.current?.blur();
-    const didNavigate = await navigateTo(folderPath, folderPath === currentPath ? "replace" : "push");
+    const didNavigate = await navigateTo(
+      folderPath,
+      folderPath === currentPath ? "replace" : "push",
+    );
     if (!didNavigate) {
       return;
     }
@@ -1624,13 +1650,16 @@ export function useExplorerActions(args: {
       currentSourcePath: paths[0] ?? null,
     });
     try {
-      const plan = (await client.invoke("copyPaste:plan" as never, {
-        mode: "copy",
-        sourcePaths: paths,
-        destinationDirectoryPath: currentPathRef.current,
-        conflictResolution: "error",
-        action: "duplicate",
-      } as never)) as CopyPastePlan;
+      const plan = (await client.invoke(
+        "copyPaste:plan" as never,
+        {
+          mode: "copy",
+          sourcePaths: paths,
+          destinationDirectoryPath: currentPathRef.current,
+          conflictResolution: "error",
+          action: "duplicate",
+        } as never,
+      )) as CopyPastePlan;
       const pendingAttempt = pendingPasteAttemptRef.current;
       if (!pendingAttempt || pendingAttempt.id !== pasteAttemptId || pendingAttempt.cancelled) {
         return;
@@ -1696,13 +1725,16 @@ export function useExplorerActions(args: {
       currentSourcePath: moveDialogState.sourcePaths[0] ?? null,
     });
     try {
-      const plan = (await client.invoke("copyPaste:plan" as never, {
-        mode: "cut",
-        sourcePaths: moveDialogState.sourcePaths,
-        destinationDirectoryPath,
-        conflictResolution: "error",
-        action: "move_to",
-      } as never)) as CopyPastePlan;
+      const plan = (await client.invoke(
+        "copyPaste:plan" as never,
+        {
+          mode: "cut",
+          sourcePaths: moveDialogState.sourcePaths,
+          destinationDirectoryPath,
+          conflictResolution: "error",
+          action: "move_to",
+        } as never,
+      )) as CopyPastePlan;
       const pendingAttempt = pendingPasteAttemptRef.current;
       if (!pendingAttempt || pendingAttempt.id !== pasteAttemptId || pendingAttempt.cancelled) {
         return;
@@ -1755,9 +1787,12 @@ export function useExplorerActions(args: {
   }
 
   async function browseForDirectoryPath(currentDirectoryPath: string): Promise<string | null> {
-    const response = (await client.invoke("system:pickDirectory" as never, {
-      defaultPath: currentDirectoryPath.length > 0 ? currentDirectoryPath : null,
-    } as never)) as { canceled: boolean; path: string };
+    const response = (await client.invoke(
+      "system:pickDirectory" as never,
+      {
+        defaultPath: currentDirectoryPath.length > 0 ? currentDirectoryPath : null,
+      } as never,
+    )) as { canceled: boolean; path: string };
     return response.canceled ? null : response.path;
   }
 
@@ -1787,10 +1822,13 @@ export function useExplorerActions(args: {
       return;
     }
     try {
-      const response = (await client.invoke("writeOperation:rename" as never, {
-        sourcePath: renameDialogState.sourcePath,
-        destinationName: nextName,
-      } as never)) as { operationId: string };
+      const response = (await client.invoke(
+        "writeOperation:rename" as never,
+        {
+          sourcePath: renameDialogState.sourcePath,
+          destinationName: nextName,
+        } as never,
+      )) as { operationId: string };
       activeWriteOperationIdRef.current = response.operationId;
       applyWriteOperationCardState({
         action: "rename",
@@ -1805,7 +1843,9 @@ export function useExplorerActions(args: {
       setRenameDialogState(null);
     } catch (error) {
       setRenameDialogState((current) =>
-        current ? { ...current, error: error instanceof Error ? error.message : String(error) } : current,
+        current
+          ? { ...current, error: error instanceof Error ? error.message : String(error) }
+          : current,
       );
     }
   }
@@ -1846,10 +1886,13 @@ export function useExplorerActions(args: {
       return;
     }
     try {
-      const response = (await client.invoke("writeOperation:createFolder" as never, {
-        parentDirectoryPath: newFolderDialogState.parentDirectoryPath,
-        folderName,
-      } as never)) as { operationId: string };
+      const response = (await client.invoke(
+        "writeOperation:createFolder" as never,
+        {
+          parentDirectoryPath: newFolderDialogState.parentDirectoryPath,
+          folderName,
+        } as never,
+      )) as { operationId: string };
       activeWriteOperationIdRef.current = response.operationId;
       applyWriteOperationCardState({
         action: "new_folder",
@@ -1864,7 +1907,9 @@ export function useExplorerActions(args: {
       setNewFolderDialogState(null);
     } catch (error) {
       setNewFolderDialogState((current) =>
-        current ? { ...current, error: error instanceof Error ? error.message : String(error) } : current,
+        current
+          ? { ...current, error: error instanceof Error ? error.message : String(error) }
+          : current,
       );
     }
   }
@@ -1878,9 +1923,12 @@ export function useExplorerActions(args: {
       return;
     }
     try {
-      const response = (await client.invoke("writeOperation:trash" as never, {
-        paths,
-      } as never)) as { operationId: string };
+      const response = (await client.invoke(
+        "writeOperation:trash" as never,
+        {
+          paths,
+        } as never,
+      )) as { operationId: string };
       activeWriteOperationIdRef.current = response.operationId;
       applyWriteOperationCardState({
         action: "trash",

@@ -71,7 +71,10 @@ export function CopyPasteProgressCard({
               <div className="copy-paste-progress-card-title">{title}</div>
             </div>
           </div>
-          <div className="copy-paste-progress-card-percent" aria-label={`${Math.round(clampedPercent)} percent`}>
+          <div
+            className="copy-paste-progress-card-percent"
+            aria-label={`${Math.round(clampedPercent)} percent`}
+          >
             {Math.round(clampedPercent)}
             <span className="copy-paste-progress-card-percent-unit">%</span>
           </div>

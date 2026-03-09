@@ -56,7 +56,9 @@ export function getThemeAppearanceDefaults(theme: ThemeMode): {
   secondary: string;
   muted: string;
 } {
-  return getThemeVariant(theme)?.textDefaults ?? THEME_DEFAULT_TEXT_COLORS[resolveThemeCssBase(theme)];
+  return (
+    getThemeVariant(theme)?.textDefaults ?? THEME_DEFAULT_TEXT_COLORS[resolveThemeCssBase(theme)]
+  );
 }
 
 export function applyAppearance({
@@ -90,10 +92,7 @@ export function applyAppearance({
   root.dataset.themeVariant = theme;
   root.dataset.accent = accent;
   root.style.setProperty("--font-sans", UI_FONT_STACKS[uiFontFamily]);
-  root.style.setProperty(
-    "--font-mono",
-    '"Fira Code", "SFMono-Regular", ui-monospace, monospace',
-  );
+  root.style.setProperty("--font-mono", '"Fira Code", "SFMono-Regular", ui-monospace, monospace');
   root.style.setProperty("--ui-font-size", `${uiFontSize}px`);
   root.style.setProperty("--ui-font-weight", String(uiFontWeight));
   root.style.setProperty("--mono-font-size", "12px");

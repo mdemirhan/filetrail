@@ -372,7 +372,10 @@ describe("TreePane", () => {
     vi.useFakeTimers();
     let resolveNav!: (value: boolean) => void;
     const handleNavigate = vi.fn(
-      () => new Promise<boolean>((resolve) => { resolveNav = resolve; }),
+      () =>
+        new Promise<boolean>((resolve) => {
+          resolveNav = resolve;
+        }),
     );
 
     render(

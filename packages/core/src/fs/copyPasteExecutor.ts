@@ -25,11 +25,7 @@ export async function executeCopyPasteOperation(args: {
 }): Promise<void> {
   const startedAt = args.now().toISOString();
   const skippedResults = args.plan.items
-    .filter(
-      (item) =>
-        item.status === "conflict" &&
-        args.request.conflictResolution === "skip",
-    )
+    .filter((item) => item.status === "conflict" && args.request.conflictResolution === "skip")
     .map(
       (item): CopyPasteItemResult => ({
         sourcePath: item.sourcePath,
@@ -38,13 +34,8 @@ export async function executeCopyPasteOperation(args: {
         error: "Destination already exists.",
       }),
     );
-  const executableItems = args.plan.items.filter(
-    (item) => item.status === "ready",
-  );
-  const totalItemCount = executableItems.reduce(
-    (sum, item) => sum + item.itemCount,
-    0,
-  );
+  const executableItems = args.plan.items.filter((item) => item.status === "ready");
+  const totalItemCount = executableItems.reduce((sum, item) => sum + item.itemCount, 0);
   const totalBytes = args.publicPlan.summary.totalBytes;
 
   if (!args.publicPlan.canExecute) {
@@ -185,11 +176,8 @@ export async function executeCopyPasteOperation(args: {
     cancelled,
     encounteredError,
     completedItemCount,
-    skippedItemCount: itemResults.filter((item) => item.status === "skipped")
-      .length,
-    cancelledItemCount: itemResults.filter(
-      (item) => item.status === "cancelled",
-    ).length,
+    skippedItemCount: itemResults.filter((item) => item.status === "skipped").length,
+    cancelledItemCount: itemResults.filter((item) => item.status === "cancelled").length,
   });
   const result = createOperationResult({
     operationId: args.operationId,
@@ -248,13 +236,9 @@ export function createOperationResult(args: {
       topLevelItemCount: args.items.length,
       totalItemCount: args.totalItemCount,
       completedItemCount: args.completedItemCount,
-      failedItemCount: args.items.filter((item) => item.status === "failed")
-        .length,
-      skippedItemCount: args.items.filter((item) => item.status === "skipped")
-        .length,
-      cancelledItemCount: args.items.filter(
-        (item) => item.status === "cancelled",
-      ).length,
+      failedItemCount: args.items.filter((item) => item.status === "failed").length,
+      skippedItemCount: args.items.filter((item) => item.status === "skipped").length,
+      cancelledItemCount: args.items.filter((item) => item.status === "cancelled").length,
       completedByteCount: args.completedByteCount,
       totalBytes: args.totalBytes,
     },
@@ -284,9 +268,7 @@ export function resolveTerminalStatus(args: {
     return args.completedItemCount > 0 ? "partial" : "cancelled";
   }
   if (args.encounteredError) {
-    return args.completedItemCount > 0 || args.skippedItemCount > 0
-      ? "partial"
-      : "failed";
+    return args.completedItemCount > 0 || args.skippedItemCount > 0 ? "partial" : "failed";
   }
   if (args.skippedItemCount > 0 || args.cancelledItemCount > 0) {
     return "partial";
@@ -297,8 +279,7 @@ export function resolveTerminalStatus(args: {
 export function isAbortError(error: unknown): boolean {
   return (
     error instanceof Error &&
-    (error.name === "AbortError" ||
-      error.message.toLowerCase().includes("aborted"))
+    (error.name === "AbortError" || error.message.toLowerCase().includes("aborted"))
   );
 }
 
@@ -333,11 +314,7 @@ async function executeTopLevelItem(args: {
       await args.fileSystem.mkdir(step.destinationPath, { recursive: true });
       await preserveModeIfSupported(args.fileSystem, step.destinationPath, step.mode);
     } else if (step.type === "copy_file") {
-      await args.fileSystem.copyFileStream(
-        step.sourcePath,
-        step.destinationPath,
-        args.signal,
-      );
+      await args.fileSystem.copyFileStream(step.sourcePath, step.destinationPath, args.signal);
       await preserveModeIfSupported(args.fileSystem, step.destinationPath, step.mode);
       completedByteCount += step.sizeBytes;
     } else {

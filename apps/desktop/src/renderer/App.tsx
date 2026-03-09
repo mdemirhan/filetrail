@@ -1,8 +1,4 @@
-import {
-  useEffect,
-  useMemo,
-  useRef,
-} from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import type { IpcRequest, IpcResponse, WriteOperationProgressEvent } from "@filetrail/contracts";
 
@@ -47,9 +43,7 @@ import {
   EMPTY_CONTENT_SELECTION,
   setSingleContentSelection as createSingleContentSelection,
 } from "./lib/contentSelection";
-import {
-  buildPasteRequest,
-} from "./lib/copyPasteClipboard";
+import { buildPasteRequest } from "./lib/copyPasteClipboard";
 import {
   createOpenItemLimitMessage,
   formatPathForShell,

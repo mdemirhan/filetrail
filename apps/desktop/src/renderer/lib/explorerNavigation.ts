@@ -57,8 +57,7 @@ export function pathHasHiddenSegmentWithinRoot(path: string, rootPath: string): 
     return pathSegmentName(path).startsWith(".");
   }
 
-  const relativePath =
-    rootPath === "/" ? path.slice(1) : path.slice(rootPath.length + 1);
+  const relativePath = rootPath === "/" ? path.slice(1) : path.slice(rootPath.length + 1);
   return relativePath
     .split("/")
     .filter((segment) => segment.length > 0)
@@ -67,7 +66,10 @@ export function pathHasHiddenSegmentWithinRoot(path: string, rootPath: string): 
 
 // Returns only the first hidden child that must remain visible under `parentPath` in
 // order to preserve the active path while hidden-file filtering is disabled.
-export function getForcedVisibleHiddenChildPath(parentPath: string, activePath: string): string | null {
+export function getForcedVisibleHiddenChildPath(
+  parentPath: string,
+  activePath: string,
+): string | null {
   if (!isPathWithinRoot(activePath, parentPath) || activePath === parentPath) {
     return null;
   }

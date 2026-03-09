@@ -66,10 +66,7 @@ export type FlowListLayout = {
  * that the horizontal scrollbar (when present) reduces `clientHeight`
  * automatically. This function simply converts the measured height to rows.
  */
-export function computeRowsPerColumn(
-  containerHeight: number,
-  layout: FlowListLayout,
-): number {
+export function computeRowsPerColumn(containerHeight: number, layout: FlowListLayout): number {
   if (containerHeight <= 0) {
     return 1;
   }

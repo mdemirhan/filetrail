@@ -15,13 +15,7 @@ export function usePathSuggestions(args: {
   inputRef: RefObject<HTMLInputElement | null>;
   onRequestPathSuggestions: (inputPath: string) => Promise<IpcResponse<"path:getSuggestions">>;
 }) {
-  const {
-    open,
-    initialInput,
-    enableSuggestions = true,
-    inputRef,
-    onRequestPathSuggestions,
-  } = args;
+  const { open, initialInput, enableSuggestions = true, inputRef, onRequestPathSuggestions } = args;
   const [draftValue, setDraftValue] = useState(initialInput);
   const [previewValue, setPreviewValue] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<PathSuggestion[]>([]);
@@ -143,7 +137,9 @@ export function usePathSuggestions(args: {
     if (!suggestion) {
       return;
     }
-    const nextPreviewValue = suggestion.path.endsWith("/") ? suggestion.path : `${suggestion.path}/`;
+    const nextPreviewValue = suggestion.path.endsWith("/")
+      ? suggestion.path
+      : `${suggestion.path}/`;
     setHighlightedIndex(index);
     setPreviewValue(nextPreviewValue);
   }
@@ -161,9 +157,8 @@ export function usePathSuggestions(args: {
   }
 
   function focusSuggestion(index: number): void {
-    const button = suggestionsRef.current?.querySelectorAll<HTMLButtonElement>(".pathbar-suggestion")[
-      index
-    ];
+    const button =
+      suggestionsRef.current?.querySelectorAll<HTMLButtonElement>(".pathbar-suggestion")[index];
     if (!button) {
       return;
     }

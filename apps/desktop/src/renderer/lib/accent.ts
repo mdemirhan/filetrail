@@ -1,8 +1,4 @@
-import {
-  ACCENT_OPTIONS,
-  type AccentMode,
-  type ThemeMode,
-} from "../../shared/appPreferences";
+import { ACCENT_OPTIONS, type AccentMode, type ThemeMode } from "../../shared/appPreferences";
 import { withAlpha } from "./colorUtils";
 import { resolveThemeCssBase, type ThemeCssBase } from "./themeVariants";
 

@@ -14,7 +14,11 @@ import type { TreeNodeState } from "../components/TreePane";
 import type { ContentSelectionState } from "../lib/contentSelection";
 import { getDetailsRowHeight } from "../lib/detailsLayout";
 import { createTreeNode, isPathWithinRoot, resolveRefreshRootPath } from "../lib/explorerAppUtils";
-import type { DirectoryEntry, DirectoryEntryMetadata, SearchResultItem } from "../lib/explorerTypes";
+import type {
+  DirectoryEntry,
+  DirectoryEntryMetadata,
+  SearchResultItem,
+} from "../lib/explorerTypes";
 import {
   flattenVisibleTreePaths,
   getAncestorChain,
@@ -34,10 +38,7 @@ import { createRendererLogger } from "../lib/logging";
 import { pageScrollElement, scrollElementByAmount } from "../lib/pagedScroll";
 import { SEARCH_RESULT_ROW_HEIGHT } from "../components/SearchResultsPane";
 import { getTreeKeyboardAction } from "../lib/treeView";
-import {
-  findContentTypeaheadMatch,
-  findTreeTypeaheadMatch,
-} from "../lib/typeahead";
+import { findContentTypeaheadMatch, findTreeTypeaheadMatch } from "../lib/typeahead";
 
 const logger = createRendererLogger("filetrail.renderer");
 

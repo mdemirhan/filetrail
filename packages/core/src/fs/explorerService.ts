@@ -26,6 +26,9 @@ export type ExplorerFileSystem = {
   realpath: (path: string) => Promise<string>;
 };
 
+// Default implementation using node:fs. In Electron, callers should pass an
+// original-fs backed implementation so .asar files appear as regular files
+// instead of virtual directories (see explorerWorker.ts).
 const DEFAULT_FILE_SYSTEM: ExplorerFileSystem = {
   readdir: (path, options) => readdir(path, options) as Promise<FileSystemDirent[]>,
   stat: (path) => stat(path) as Promise<FileSystemStats>,

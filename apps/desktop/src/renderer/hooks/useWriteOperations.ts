@@ -7,7 +7,10 @@ import type {
   WriteOperationProgressEvent,
 } from "@filetrail/contracts";
 
-import { EMPTY_COPY_PASTE_CLIPBOARD, type CopyPasteClipboardState } from "../lib/copyPasteClipboard";
+import {
+  EMPTY_COPY_PASTE_CLIPBOARD,
+  type CopyPasteClipboardState,
+} from "../lib/copyPasteClipboard";
 import type { ToastEntry } from "../lib/toasts";
 
 type ContextMenuState = {
@@ -20,14 +23,12 @@ type ContextMenuState = {
 };
 
 type CopyPastePlan = IpcResponse<"copyPaste:plan">;
-type CopyPasteDialogState =
-  | {
-      type: "plan";
-      plan: CopyPastePlan;
-      action: "paste" | "move_to" | "duplicate";
-      clearClipboardOnStart: boolean;
-    }
-  | null;
+type CopyPasteDialogState = {
+  type: "plan";
+  plan: CopyPastePlan;
+  action: "paste" | "move_to" | "duplicate";
+  clearClipboardOnStart: boolean;
+} | null;
 
 type WriteOperationCardState = {
   action: WriteOperationAction;

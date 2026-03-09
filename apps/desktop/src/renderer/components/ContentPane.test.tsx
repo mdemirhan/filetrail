@@ -156,7 +156,10 @@ describe("ContentPane", () => {
       />,
     );
 
-    fireEvent.pointerDown(screen.getByRole("button", { name: /alpha\.txt/i }), { button: 0, metaKey: true });
+    fireEvent.pointerDown(screen.getByRole("button", { name: /alpha\.txt/i }), {
+      button: 0,
+      metaKey: true,
+    });
 
     expect(handleSelectionGesture).toHaveBeenCalledWith("/Users/demo/alpha.txt", {
       metaKey: true,

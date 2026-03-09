@@ -600,9 +600,9 @@ describe("App copy/paste integration", () => {
     });
 
     await vi.waitFor(() => {
-      expect(
-        harness.invocations.filter((call) => call.channel === "copyPaste:plan"),
-      ).toHaveLength(invocationCountBeforePaste + 1);
+      expect(harness.invocations.filter((call) => call.channel === "copyPaste:plan")).toHaveLength(
+        invocationCountBeforePaste + 1,
+      );
     });
     expectNativeEditActions(harness, []);
   });
@@ -1726,7 +1726,9 @@ describe("App copy/paste integration", () => {
       {
         command: "openSelection",
         assertNoSideEffect: () => {
-          expect(harness.invocations.some((call) => call.channel === "system:openPath")).toBe(false);
+          expect(harness.invocations.some((call) => call.channel === "system:openPath")).toBe(
+            false,
+          );
         },
       },
       {

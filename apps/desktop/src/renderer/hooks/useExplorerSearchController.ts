@@ -1,4 +1,11 @@
-import { type Dispatch, type MutableRefObject, type RefObject, type SetStateAction, useEffect, useMemo } from "react";
+import {
+  type Dispatch,
+  type MutableRefObject,
+  type RefObject,
+  type SetStateAction,
+  useEffect,
+  useMemo,
+} from "react";
 
 import type { IpcResponse } from "@filetrail/contracts";
 
@@ -11,7 +18,11 @@ import type {
   SearchPatternMode,
   SearchResultItem,
 } from "../lib/explorerTypes";
-import { EMPTY_CONTENT_SELECTION, sanitizeContentSelection, type ContentSelectionState } from "../lib/contentSelection";
+import {
+  EMPTY_CONTENT_SELECTION,
+  sanitizeContentSelection,
+  type ContentSelectionState,
+} from "../lib/contentSelection";
 import type {
   SearchResultsFilterScopePreference,
   SearchResultsSortByPreference,
@@ -144,7 +155,9 @@ export function useExplorerSearchController(args: {
         clearTimeout(searchPollTimeoutRef.current);
       }
       if (searchJobIdRef.current) {
-        void client.invoke("search:cancel", { jobId: searchJobIdRef.current }).catch(() => undefined);
+        void client
+          .invoke("search:cancel", { jobId: searchJobIdRef.current })
+          .catch(() => undefined);
       }
     },
     [client, searchJobIdRef, searchPollTimeoutRef],
@@ -196,8 +209,7 @@ export function useExplorerSearchController(args: {
     }
     try {
       await client.invoke("search:cancel", { jobId: activeJobId });
-    } catch {
-    }
+    } catch {}
   }
 
   async function stopSearch() {

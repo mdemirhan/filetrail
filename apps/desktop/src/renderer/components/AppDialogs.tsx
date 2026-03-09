@@ -1,4 +1,8 @@
-import type { IpcResponse, WriteOperationAction, WriteOperationProgressEvent } from "@filetrail/contracts";
+import type {
+  IpcResponse,
+  WriteOperationAction,
+  WriteOperationProgressEvent,
+} from "@filetrail/contracts";
 
 import { formatSize } from "../lib/formatting";
 import { ActionNoticeDialog } from "./ActionNoticeDialog";
@@ -220,8 +224,7 @@ export function AppDialogs({
                 },
               ),
             destructive:
-              copyPasteDialogState.action === "move_to" ||
-              copyPasteDialogState.plan.mode === "cut",
+              copyPasteDialogState.action === "move_to" || copyPasteDialogState.plan.mode === "cut",
           }}
           secondaryAction={{
             label: "Cancel",
@@ -235,7 +238,9 @@ export function AppDialogs({
           progressPercent={getWriteOperationProgressPercent(writeOperationCardState)}
           progressMetaStart={`${writeOperationCardState.completedItemCount.toLocaleString()} of ${Math.max(writeOperationCardState.totalItemCount, 0).toLocaleString()} items`}
           progressMetaEnd={formatWriteOperationByteLabel(writeOperationCardState)}
-          detailLabel={writeOperationCardState.action === "new_folder" ? "Destination" : "Current item"}
+          detailLabel={
+            writeOperationCardState.action === "new_folder" ? "Destination" : "Current item"
+          }
           detailValue={getPathLeafName(
             writeOperationCardState.currentSourcePath ??
               writeOperationCardState.targetPath ??
@@ -247,10 +252,7 @@ export function AppDialogs({
       {showCopyPasteResultDialog && writeOperationProgressEvent ? (
         <CopyPasteDialog
           title={getWriteOperationTitle(writeOperationProgressEvent.action, "result")}
-          message={
-            writeOperationProgressEvent.result?.error ??
-            "The write operation has finished."
-          }
+          message={writeOperationProgressEvent.result?.error ?? "The write operation has finished."}
           detailLines={buildCopyPasteResultDetailLines(writeOperationProgressEvent)}
           primaryAction={
             isRetryableCopyAction(writeOperationProgressEvent) &&
@@ -378,9 +380,7 @@ function getWriteOperationTitle(
 }
 
 function isRetryableCopyAction(event: WriteOperationProgressEvent): boolean {
-  return (
-    event.action === "paste" || event.action === "move_to" || event.action === "duplicate"
-  );
+  return event.action === "paste" || event.action === "move_to" || event.action === "duplicate";
 }
 
 function getPathLeafName(path: string): string {

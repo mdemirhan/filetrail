@@ -16,7 +16,9 @@ function ClientProbe({
 }) {
   const client = useFiletrailClient();
   onRender?.(client);
-  return <div data-testid="client-status">{isMissingFiletrailClient(client) ? "missing" : "ok"}</div>;
+  return (
+    <div data-testid="client-status">{isMissingFiletrailClient(client) ? "missing" : "ok"}</div>
+  );
 }
 
 describe("filetrailClient", () => {

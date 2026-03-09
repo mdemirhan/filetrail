@@ -3,8 +3,7 @@ import { app, clipboard, ipcMain } from "electron";
 import { ExplorerWorkerClient, createWriteService, getPathSuggestions } from "@filetrail/core";
 import type { AppPreferences } from "../shared/appPreferences";
 import type { AppStateStore } from "./appStateStore";
-import { resolveBundledFdBinaryPath } from "./fdBinary";
-import { registerIpcHandlers } from "./ipc";
+import { toPreferencePatch } from "./bootstrap/preferencesPatch";
 import {
   clearResponseCaches,
   createFolderSizeHandlers,
@@ -13,7 +12,6 @@ import {
   resetResponseCacheState,
   withTiming,
 } from "./bootstrap/responseCache";
-import { toPreferencePatch } from "./bootstrap/preferencesPatch";
 import {
   openInTerminal,
   openPath,
@@ -25,6 +23,8 @@ import {
   resolveTerminalApplicationName,
 } from "./bootstrap/systemHandlers";
 import { createWriteOperationCoordinator } from "./bootstrap/writeOperations";
+import { resolveBundledFdBinaryPath } from "./fdBinary";
+import { registerIpcHandlers } from "./ipc";
 
 let activeWorkerClient: ExplorerWorkerClient | null = null;
 let disposeWriteCoordinator: (() => void) | null = null;
@@ -38,8 +38,20 @@ export async function bootstrapMainProcess(
   const workerClient = new ExplorerWorkerClient(resolveExplorerWorkerUrl(), {
     fdBinaryPath: resolveBundledFdBinaryPath(),
   });
-  const writeService = createWriteService();
-  const writeCoordinator = createWriteOperationCoordinator(writeService);
+  // Use Electron's original-fs to bypass ASAR archive patching, so .asar
+  // files inside app bundles are copied as regular files instead of being
+  // treated as virtual directories. This applies to copy/paste, rename,
+  // mkdir, and all other filesystem operations that need the real filesystem.
+  const { originalExplorerFileSystem, originalFileSystem, originalRename } = await import(
+    "./originalFileSystem"
+  );
+  const writeService = createWriteService({ fileSystem: originalFileSystem });
+  const writeCoordinator = createWriteOperationCoordinator(writeService, {
+    lstat: originalFileSystem.lstat,
+    stat: originalFileSystem.stat,
+    mkdir: (path) => originalFileSystem.mkdir(path),
+    rename: originalRename,
+  });
   const folderSizeHandlers = createFolderSizeHandlers();
   activeWorkerClient = workerClient;
   disposeWriteCoordinator?.();
@@ -86,7 +98,12 @@ export async function bootstrapMainProcess(
       ),
     "path:getSuggestions": (payload) =>
       withTiming("path:getSuggestions", payload.inputPath, () =>
-        getPathSuggestions(payload.inputPath, payload.includeHidden, payload.limit),
+        getPathSuggestions(
+          payload.inputPath,
+          payload.includeHidden,
+          payload.limit,
+          originalExplorerFileSystem,
+        ),
       ),
     "path:resolve": (payload) =>
       withTiming("path:resolve", payload.path, () => workerClient.request("path:resolve", payload)),

@@ -10,10 +10,7 @@ import {
 import { clampZoomPercent } from "../../shared/appPreferences";
 import { resolveNewFolderTargetPath } from "../lib/explorerAppUtils";
 import type { DirectoryEntry } from "../lib/explorerTypes";
-import {
-  isKeyboardOwnedFormControl,
-  resolveFocusedEditTarget,
-} from "../lib/focusedEditTarget";
+import { isKeyboardOwnedFormControl, resolveFocusedEditTarget } from "../lib/focusedEditTarget";
 import { parentDirectoryPath } from "../lib/explorerNavigation";
 import { useFiletrailClient } from "../lib/filetrailClient";
 import {
@@ -221,7 +218,8 @@ export function useExplorerShortcuts(args: {
           if (isAutocompleteContext) {
             return false;
           }
-          const isTreeFocusTarget = target instanceof Node && !!treePaneRef.current?.contains(target);
+          const isTreeFocusTarget =
+            target instanceof Node && !!treePaneRef.current?.contains(target);
           const isContentFocusTarget =
             target instanceof Node && !!contentPaneRef.current?.contains(target);
           return (
@@ -232,7 +230,8 @@ export function useExplorerShortcuts(args: {
         },
         run: (keyboardEvent) => {
           const target = keyboardEvent.target;
-          const isTreeFocusTarget = target instanceof Node && !!treePaneRef.current?.contains(target);
+          const isTreeFocusTarget =
+            target instanceof Node && !!treePaneRef.current?.contains(target);
           keyboardEvent.preventDefault();
           if (isTreeFocusTarget || focusedPane === "tree") {
             contentPaneRef.current?.focus({ preventScroll: true });
@@ -769,9 +768,7 @@ export function useExplorerShortcuts(args: {
       {
         id: "contentEnter",
         matches: (keyboardEvent) =>
-          keyboardEvent.key === "Enter" &&
-          focusedPane === "content" &&
-          selectedEntry !== null,
+          keyboardEvent.key === "Enter" && focusedPane === "content" && selectedEntry !== null,
         run: (keyboardEvent) => {
           if (!selectedEntry) {
             return;
@@ -833,9 +830,7 @@ export function useExplorerShortcuts(args: {
     ],
   );
 
-  const performNativeEditAction = (
-    action: "cut" | "copy" | "paste" | "selectAll",
-  ): void => {
+  const performNativeEditAction = (action: "cut" | "copy" | "paste" | "selectAll"): void => {
     void client.invoke("system:performEditAction", { action });
   };
 

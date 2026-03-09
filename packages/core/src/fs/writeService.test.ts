@@ -16,6 +16,7 @@ import {
   type CopyPasteProgressEvent,
   WRITE_OPERATION_BUSY_ERROR,
   type WriteServiceFileSystem,
+  type WriteServiceStats,
   createWriteService,
 } from "./writeService";
 
@@ -23,11 +24,7 @@ describe("writeService", () => {
   it("plans same-directory copy/paste as duplicate naming instead of a conflict", async () => {
     const service = createWriteService({
       fileSystem: createMockFileSystem({
-        existingPaths: [
-          "/workspace",
-          "/workspace/file.txt",
-          "/workspace/file copy.txt",
-        ],
+        existingPaths: ["/workspace", "/workspace/file.txt", "/workspace/file copy.txt"],
         directoryPaths: ["/workspace"],
         fileSizes: {
           "/workspace/file.txt": 42,
@@ -183,9 +180,7 @@ describe("writeService", () => {
     await waitForTerminalEvent(events, "symlink-op");
     unsubscribe();
 
-    expect(await readlink(join(root, "target", "alias.txt"))).toBe(
-      "actual.txt",
-    );
+    expect(await readlink(join(root, "target", "alias.txt"))).toBe("actual.txt");
   });
 
   it("executes cut by copying first and removing the source after success", async () => {
@@ -210,9 +205,7 @@ describe("writeService", () => {
 
     const terminal = await waitForTerminalEvent(events, "cut-op");
     expect(terminal.result?.status).toBe("completed");
-    await expect(
-      readFile(join(root, "target", "notes.txt"), "utf8"),
-    ).resolves.toBe("hello");
+    await expect(readFile(join(root, "target", "notes.txt"), "utf8")).resolves.toBe("hello");
     await expect(lstat(join(root, "source", "notes.txt"))).rejects.toThrow();
   });
 
@@ -249,10 +242,7 @@ describe("writeService", () => {
 
     await vi.waitFor(() => {
       expect(
-        events.some(
-          (event) =>
-            event.operationId === "cancel-op" && event.completedItemCount === 1,
-        ),
+        events.some((event) => event.operationId === "cancel-op" && event.completedItemCount === 1),
       ).toBe(true);
     });
     expect(service.cancelOperation("cancel-op")).toEqual({ ok: true });
@@ -307,11 +297,7 @@ describe("writeService", () => {
     const root = await mkdtemp(join(tmpdir(), "filetrail-write-tree-"));
     await mkdir(join(root, "source", "nested"), { recursive: true });
     await mkdir(join(root, "target"), { recursive: true });
-    await writeFile(
-      join(root, "source", "nested", "alpha.txt"),
-      "alpha",
-      "utf8",
-    );
+    await writeFile(join(root, "source", "nested", "alpha.txt"), "alpha", "utf8");
     await writeFile(join(root, "source", "beta.txt"), "beta", "utf8");
 
     const service = createWriteService({
@@ -333,9 +319,9 @@ describe("writeService", () => {
     await expect(
       readFile(join(root, "target", "source", "nested", "alpha.txt"), "utf8"),
     ).resolves.toBe("alpha");
-    await expect(
-      readFile(join(root, "target", "source", "beta.txt"), "utf8"),
-    ).resolves.toBe("beta");
+    await expect(readFile(join(root, "target", "source", "beta.txt"), "utf8")).resolves.toBe(
+      "beta",
+    );
     await expect(readdir(join(root, "target", "source"))).resolves.toEqual(
       expect.arrayContaining(["nested", "beta.txt"]),
     );
@@ -345,11 +331,7 @@ describe("writeService", () => {
     const root = await mkdtemp(join(tmpdir(), "filetrail-write-perms-"));
     await mkdir(join(root, "source", "bin"), { recursive: true });
     await mkdir(join(root, "target"), { recursive: true });
-    await writeFile(
-      join(root, "source", "bin", "run"),
-      "#!/bin/sh\necho hi",
-      "utf8",
-    );
+    await writeFile(join(root, "source", "bin", "run"), "#!/bin/sh\necho hi", "utf8");
     await chmod(join(root, "source", "bin", "run"), 0o755);
     await writeFile(join(root, "source", "data.txt"), "hello", "utf8");
 
@@ -370,9 +352,7 @@ describe("writeService", () => {
     const terminal = await waitForTerminalEvent(events, "perms-op");
     expect(terminal.result?.status).toBe("completed");
 
-    const executableStats = await stat(
-      join(root, "target", "source", "bin", "run"),
-    );
+    const executableStats = await stat(join(root, "target", "source", "bin", "run"));
     // eslint-disable-next-line no-bitwise
     expect(executableStats.mode & 0o777).toBe(0o755);
 
@@ -412,10 +392,103 @@ describe("writeService", () => {
     expect(terminal.result?.status).toBe("completed");
   });
 
+  it("copies .asar files as regular files, not as virtual directories", async () => {
+    // Regression test: Electron patches node:fs to treat .asar archives as
+    // virtual directories, which breaks copy. The write service must use
+    // original-fs to see .asar files as regular files. Tests run inside
+    // Electron (ELECTRON_RUN_AS_NODE=1), so we use original-fs here too.
+    const { createRequire } = await import("node:module");
+    const { dirname } = await import("node:path");
+    const { pipeline } = await import("node:stream/promises");
+    const req = createRequire(import.meta.url);
+    let ofs: typeof import("node:fs");
+    try {
+      ofs = req("original-fs") as typeof import("node:fs");
+    } catch {
+      // Not running inside Electron; skip this test.
+      return;
+    }
+
+    const root = await mkdtemp(join(tmpdir(), "filetrail-write-asar-"));
+    const source = join(root, "source");
+    const target = join(root, "target");
+    await ofs.promises.mkdir(source, { recursive: true });
+    await ofs.promises.mkdir(target, { recursive: true });
+    await ofs.promises.writeFile(join(source, "app.asar"), "asar-archive-content");
+
+    const originalFileSystem: WriteServiceFileSystem = {
+      lstat: (p) => ofs.promises.lstat(p) as Promise<WriteServiceStats>,
+      stat: (p) => ofs.promises.stat(p) as Promise<WriteServiceStats>,
+      realpath: (p) => ofs.promises.realpath(p),
+      readdir: (p) => ofs.promises.readdir(p),
+      readlink: (p) => ofs.promises.readlink(p),
+      chmod: async (p, m) => {
+        await ofs.promises.chmod(p, m);
+      },
+      mkdir: async (p, o) => {
+        await ofs.promises.mkdir(p, o);
+      },
+      rm: async (p, o) => {
+        await ofs.promises.rm(p, o);
+      },
+      symlink: async (t, p) => {
+        await ofs.promises.symlink(t, p);
+      },
+      copyFileStream: async (src, dst, signal) => {
+        await ofs.promises.mkdir(dirname(dst), { recursive: true });
+        await pipeline(ofs.createReadStream(src), ofs.createWriteStream(dst), { signal });
+      },
+    };
+
+    const service = createWriteService({
+      createOperationId: () => "asar-copy-op",
+      fileSystem: originalFileSystem,
+    });
+    const events: CopyPasteProgressEvent[] = [];
+    service.subscribe((event) => events.push(event));
+
+    service.startCopyPaste({
+      mode: "copy",
+      sourcePaths: [source],
+      destinationDirectoryPath: target,
+    });
+
+    const terminal = await waitForTerminalEvent(events, "asar-copy-op");
+    expect(terminal.result?.status).toBe("completed");
+
+    // The .asar file must be copied as a regular file, not expanded as a directory.
+    const copiedAsarPath = join(target, "source", "app.asar");
+    const copiedStats = await ofs.promises.stat(copiedAsarPath);
+    expect(copiedStats.isFile()).toBe(true);
+    expect(copiedStats.isDirectory()).toBe(false);
+    const content = await ofs.promises.readFile(copiedAsarPath, "utf8");
+    expect(content).toBe("asar-archive-content");
+  });
+
+  it("plans .asar files as copy_file steps, not directory traversals", async () => {
+    // Ensures the planner sees .asar as a regular file, so it generates a
+    // copy_file step rather than recursing into it as a directory.
+    const service = createWriteService({
+      fileSystem: createMockFileSystem({
+        existingPaths: ["/target", "/source", "/source/app.asar"],
+        directoryPaths: ["/target", "/source"],
+        fileSizes: { "/source/app.asar": 4096 },
+      }),
+    });
+
+    const plan = await service.planCopyPaste({
+      mode: "copy",
+      sourcePaths: ["/source"],
+      destinationDirectoryPath: "/target",
+    });
+
+    expect(plan.canExecute).toBe(true);
+    // 2 items: mkdir for /target/source + copy_file for /target/source/app.asar
+    expect(plan.summary.totalItemCount).toBe(2);
+  });
+
   it("duplicates a file when copy/paste targets the same directory", async () => {
-    const root = await mkdtemp(
-      join(tmpdir(), "filetrail-write-duplicate-file-"),
-    );
+    const root = await mkdtemp(join(tmpdir(), "filetrail-write-duplicate-file-"));
     await mkdir(join(root, "workspace"), { recursive: true });
     await writeFile(join(root, "workspace", "notes.txt"), "hello", "utf8");
 
@@ -435,23 +508,17 @@ describe("writeService", () => {
 
     const terminal = await waitForTerminalEvent(events, "duplicate-file-op");
     expect(terminal.result?.status).toBe("completed");
-    await expect(
-      readFile(join(root, "workspace", "notes copy.txt"), "utf8"),
-    ).resolves.toBe("hello");
+    await expect(readFile(join(root, "workspace", "notes copy.txt"), "utf8")).resolves.toBe(
+      "hello",
+    );
   });
 
   it("duplicates a directory tree when copy/paste targets the same directory", async () => {
-    const root = await mkdtemp(
-      join(tmpdir(), "filetrail-write-duplicate-dir-"),
-    );
+    const root = await mkdtemp(join(tmpdir(), "filetrail-write-duplicate-dir-"));
     await mkdir(join(root, "workspace", "source", "nested"), {
       recursive: true,
     });
-    await writeFile(
-      join(root, "workspace", "source", "nested", "alpha.txt"),
-      "alpha",
-      "utf8",
-    );
+    await writeFile(join(root, "workspace", "source", "nested", "alpha.txt"), "alpha", "utf8");
 
     const service = createWriteService({
       createOperationId: () => "duplicate-dir-op",
@@ -470,10 +537,7 @@ describe("writeService", () => {
     const terminal = await waitForTerminalEvent(events, "duplicate-dir-op");
     expect(terminal.result?.status).toBe("completed");
     await expect(
-      readFile(
-        join(root, "workspace", "source copy", "nested", "alpha.txt"),
-        "utf8",
-      ),
+      readFile(join(root, "workspace", "source copy", "nested", "alpha.txt"), "utf8"),
     ).resolves.toBe("alpha");
   });
 });
@@ -498,7 +562,10 @@ function createMockFileSystem(args: {
     const segments = path.split("/").filter(Boolean);
     for (let index = 1; index < segments.length; index += 1) {
       const parent = `/${segments.slice(0, index).join("/")}`;
-      const child = segments[index]!;
+      const child = segments[index];
+      if (!child) {
+        continue;
+      }
       const existingChildren = childrenByDirectory.get(parent) ?? [];
       if (!existingChildren.includes(child)) {
         existingChildren.push(child);
@@ -528,9 +595,7 @@ function createMockFileSystem(args: {
       });
     }),
     realpath: vi.fn(async (path) => realPathMap[path] ?? path),
-    readdir: vi.fn(async (path) =>
-      (childrenByDirectory.get(path) ?? []).slice().sort(),
-    ),
+    readdir: vi.fn(async (path) => (childrenByDirectory.get(path) ?? []).slice().sort()),
     readlink: vi.fn(async (path) => {
       const target = symlinkTargets[path];
       if (!target) {

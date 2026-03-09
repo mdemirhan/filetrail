@@ -71,9 +71,7 @@ describe("search result ordering", () => {
       createSearchResult("/Users/demo/project/src/main.tsx"),
     ];
 
-    expect(filterSearchResults(items, "app", "name").map((item) => item.name)).toEqual([
-      "App.tsx",
-    ]);
+    expect(filterSearchResults(items, "app", "name").map((item) => item.name)).toEqual(["App.tsx"]);
   });
 
   it("filters by path using case-insensitive contains matching", () => {

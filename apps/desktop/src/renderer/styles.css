@@ -1819,12 +1819,11 @@ body.platform-macos .window-toolbar-brand {
   overflow: hidden;
   border: none;
   border-radius: 14px;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--bg-elevated) 95%, var(--bg-base) 5%),
-      color-mix(in srgb, var(--bg-elevated) 98%, black 2%)
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-elevated) 95%, var(--bg-base) 5%),
+    color-mix(in srgb, var(--bg-elevated) 98%, black 2%)
+  );
   box-shadow: var(--shadow-lg);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
@@ -1868,12 +1867,11 @@ body.platform-macos .window-toolbar-brand {
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--ft-accent-border) 55%, var(--border));
   border-radius: 18px;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--bg-elevated) 94%, var(--bg-base) 6%),
-      color-mix(in srgb, var(--bg-elevated) 98%, black 2%)
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-elevated) 94%, var(--bg-base) 6%),
+    color-mix(in srgb, var(--bg-elevated) 98%, black 2%)
+  );
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.24);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -2060,10 +2058,7 @@ body.platform-macos .window-toolbar-brand {
   font-weight: 700;
   letter-spacing: 0.01em;
   cursor: pointer;
-  transition:
-    background 120ms ease-out,
-    border-color 120ms ease-out,
-    color 120ms ease-out,
+  transition: background 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out,
     transform 120ms ease-out;
 }
 

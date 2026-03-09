@@ -1,4 +1,3 @@
-import { lstat, mkdir, rename as renamePath, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { shell } from "electron";
 
@@ -9,9 +8,19 @@ import {
   type WriteOperationResult,
   writeOperationProgressEventSchema,
 } from "@filetrail/contracts";
-import { type WriteService, WRITE_OPERATION_BUSY_ERROR } from "@filetrail/core";
+import { WRITE_OPERATION_BUSY_ERROR, type WriteService } from "@filetrail/core";
 import { toErrorMessage } from "../ipc";
 import { createWriteOperationLogger } from "../writeOperationLog";
+
+// Filesystem operations used by write operations (rename, mkdir, path checks).
+// Callers inject an original-fs backed implementation to bypass Electron's ASAR
+// patching, which would otherwise misreport .asar files as directories.
+type WriteOperationFs = {
+  lstat: (path: string) => Promise<{ isDirectory(): boolean }>;
+  stat: (path: string) => Promise<{ isDirectory(): boolean }>;
+  mkdir: (path: string) => Promise<void>;
+  rename: (oldPath: string, newPath: string) => Promise<void>;
+};
 
 type WriteOperationSender = {
   send: (channel: string, payload: unknown) => void;
@@ -26,7 +35,7 @@ type PreparedCreateFolderOperation = {
   destinationPath: string;
 };
 
-export function createWriteOperationCoordinator(writeService: WriteService) {
+export function createWriteOperationCoordinator(writeService: WriteService, fs: WriteOperationFs) {
   const writeOperationLogger = createWriteOperationLogger();
   const writeOperationSenders = new Map<string, WriteOperationSender>();
   const copyPasteRequests = new Map<string, IpcRequest<"copyPaste:start">>();
@@ -294,7 +303,7 @@ export function createWriteOperationCoordinator(writeService: WriteService) {
         result: null,
       });
       controller.signal.throwIfAborted();
-      await renamePath(sourcePath, destinationPath);
+      await fs.rename(sourcePath, destinationPath);
       const result = createLocalWriteOperationResult({
         operationId,
         action: "rename",
@@ -368,11 +377,11 @@ export function createWriteOperationCoordinator(writeService: WriteService) {
     const sourcePath = resolve(payload.sourcePath);
     const destinationName = payload.destinationName.trim();
     const destinationPath = join(dirname(sourcePath), destinationName);
-    await lstat(sourcePath);
+    await fs.lstat(sourcePath);
     if (destinationPath === sourcePath) {
       throw new Error("Choose a different name.");
     }
-    if (await pathExists(destinationPath)) {
+    if (await pathExists(destinationPath, fs.lstat)) {
       throw new Error(`An item named "${destinationName}" already exists.`);
     }
     return {
@@ -403,7 +412,7 @@ export function createWriteOperationCoordinator(writeService: WriteService) {
         result: null,
       });
       controller.signal.throwIfAborted();
-      await mkdir(destinationPath);
+      await fs.mkdir(destinationPath);
       const result = createLocalWriteOperationResult({
         operationId,
         action: "new_folder",
@@ -477,11 +486,11 @@ export function createWriteOperationCoordinator(writeService: WriteService) {
     const parentDirectoryPath = resolve(payload.parentDirectoryPath);
     const folderName = payload.folderName.trim();
     const destinationPath = join(parentDirectoryPath, folderName);
-    const parentStats = await stat(parentDirectoryPath);
+    const parentStats = await fs.stat(parentDirectoryPath);
     if (!parentStats.isDirectory()) {
       throw new Error("Folder destination must be an existing directory.");
     }
-    if (await pathExists(destinationPath)) {
+    if (await pathExists(destinationPath, fs.lstat)) {
       throw new Error(`An item named "${folderName}" already exists.`);
     }
     return { destinationPath };
@@ -578,7 +587,7 @@ export function createWriteOperationCoordinator(writeService: WriteService) {
         status === "cancelled"
           ? "Operation cancelled."
           : failedItemCount > 0
-            ? items.find((item) => item.status === "failed")?.error ?? "Trash failed."
+            ? (items.find((item) => item.status === "failed")?.error ?? "Trash failed.")
             : null,
     });
     emitLocalWriteOperationEvent({
@@ -625,7 +634,10 @@ export function createWriteOperationCoordinator(writeService: WriteService) {
           destinationDirectoryPath: payload.destinationDirectoryPath,
           conflictResolution: payload.conflictResolution,
         }),
-      "copyPaste:start": (payload: IpcRequest<"copyPaste:start">, event: { sender: WriteOperationSender }) => {
+      "copyPaste:start": (
+        payload: IpcRequest<"copyPaste:start">,
+        event: { sender: WriteOperationSender },
+      ) => {
         ensureNoWriteOperationInFlight();
         const handle = writeService.startCopyPaste({
           mode: payload.mode,
@@ -660,7 +672,8 @@ export function createWriteOperationCoordinator(writeService: WriteService) {
         writeOperationSenders.set(handle.operationId, event.sender);
         return handle;
       },
-      "copyPaste:cancel": (payload: IpcRequest<"copyPaste:cancel">) => cancelWriteOperation(payload.operationId),
+      "copyPaste:cancel": (payload: IpcRequest<"copyPaste:cancel">) =>
+        cancelWriteOperation(payload.operationId),
       "writeOperation:rename": async (
         payload: IpcRequest<"writeOperation:rename">,
         event: { sender: WriteOperationSender },
@@ -725,9 +738,9 @@ export function createWriteOperationCoordinator(writeService: WriteService) {
   };
 }
 
-async function pathExists(path: string): Promise<boolean> {
+async function pathExists(path: string, lstatFn: WriteOperationFs["lstat"]): Promise<boolean> {
   try {
-    await lstat(path);
+    await lstatFn(path);
     return true;
   } catch {
     return false;
@@ -745,9 +758,6 @@ function isTerminalStatus(
   status: WriteOperationProgressEvent["status"] | WriteOperationResult["status"],
 ): boolean {
   return (
-    status === "completed" ||
-    status === "failed" ||
-    status === "cancelled" ||
-    status === "partial"
+    status === "completed" || status === "failed" || status === "cancelled" || status === "partial"
   );
 }

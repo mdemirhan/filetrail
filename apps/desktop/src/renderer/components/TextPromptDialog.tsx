@@ -175,7 +175,11 @@ export function TextPromptDialog({
             <button type="button" className="tb-btn" onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" className="tb-btn primary" disabled={draftValue.trim().length === 0}>
+            <button
+              type="submit"
+              className="tb-btn primary"
+              disabled={draftValue.trim().length === 0}
+            >
               {submitLabel}
             </button>
           </div>

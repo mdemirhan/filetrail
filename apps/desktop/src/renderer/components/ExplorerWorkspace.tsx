@@ -70,9 +70,7 @@ export function ExplorerWorkspace({
   restoredPaneWidths: { treeWidth: number; inspectorWidth: number } | null;
   treeWidth: number;
   inspectorWidth: number;
-  beginResize: (
-    pane: "tree" | "inspector",
-  ) => (event: React.PointerEvent<HTMLDivElement>) => void;
+  beginResize: (pane: "tree" | "inspector") => (event: React.PointerEvent<HTMLDivElement>) => void;
   infoPanelOpen: boolean;
   toolbarRef: React.RefObject<HTMLElement | null>;
   treePaneProps: TreePaneProps;
@@ -114,10 +112,7 @@ export function ExplorerWorkspace({
   onSearchRecursiveChange: (value: boolean) => void;
   searchIncludeHidden: boolean;
   onSearchIncludeHiddenChange: (value: boolean) => void;
-  onPaneResizeKey: (
-    pane: "tree" | "inspector",
-    event: ReactKeyboardEvent<HTMLDivElement>,
-  ) => void;
+  onPaneResizeKey: (pane: "tree" | "inspector", event: ReactKeyboardEvent<HTMLDivElement>) => void;
 }) {
   return (
     <section className="workspace explorer-workspace">
@@ -337,9 +332,7 @@ export function ExplorerWorkspace({
                           className="toolbar-search-select"
                           value={searchMatchScope}
                           onChange={(event) =>
-                            onSearchMatchScopeChange(
-                              event.currentTarget.value as SearchMatchScope,
-                            )
+                            onSearchMatchScopeChange(event.currentTarget.value as SearchMatchScope)
                           }
                           aria-label="Search match scope"
                         >
@@ -362,9 +355,7 @@ export function ExplorerWorkspace({
                       <button
                         type="button"
                         className={
-                          searchIncludeHidden
-                            ? "toolbar-search-pill active"
-                            : "toolbar-search-pill"
+                          searchIncludeHidden ? "toolbar-search-pill active" : "toolbar-search-pill"
                         }
                         onClick={() => onSearchIncludeHiddenChange(!searchIncludeHidden)}
                         aria-pressed={searchIncludeHidden}
@@ -392,9 +383,7 @@ export function ExplorerWorkspace({
           className="workspace-body tomorrow-night-layout"
           style={{
             gridTemplateColumns: `${treeWidth}px ${EXPLORER_LAYOUT.resizerWidth}px minmax(0, 1fr)${
-              infoPanelOpen
-                ? ` ${EXPLORER_LAYOUT.resizerWidth}px ${inspectorWidth}px`
-                : ""
+              infoPanelOpen ? ` ${EXPLORER_LAYOUT.resizerWidth}px ${inspectorWidth}px` : ""
             }`,
           }}
         >

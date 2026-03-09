@@ -127,8 +127,17 @@ const THEME_VARIANTS: Partial<Record<ThemeMode, ThemeVariantDefinition>> = {
       badgeBorder: "#d8d8d8",
       badgeText: "#999999",
     },
-    viewToggle: { bg: "#e0e0e0", activeBg: "#d4d4d4", activeIcon: "#111111", inactiveIcon: "#999999" },
-    pills: { inactiveBg: "transparent", inactiveBorder: "rgba(0,0,0,0.12)", inactiveText: "#777777" },
+    viewToggle: {
+      bg: "#e0e0e0",
+      activeBg: "#d4d4d4",
+      activeIcon: "#111111",
+      inactiveIcon: "#999999",
+    },
+    pills: {
+      inactiveBg: "transparent",
+      inactiveBorder: "rgba(0,0,0,0.12)",
+      inactiveText: "#777777",
+    },
     menu: {
       bg: "#f8f8f8",
       border: "#d5d5d5",
@@ -189,8 +198,17 @@ const THEME_VARIANTS: Partial<Record<ThemeMode, ThemeVariantDefinition>> = {
       badgeBorder: "#d4d0c6",
       badgeText: "#9c9282",
     },
-    viewToggle: { bg: "#ddd8ce", activeBg: "#d0c9bc", activeIcon: "#1f1a14", inactiveIcon: "#9c9282" },
-    pills: { inactiveBg: "transparent", inactiveBorder: "rgba(100,80,40,0.12)", inactiveText: "#7d7364" },
+    viewToggle: {
+      bg: "#ddd8ce",
+      activeBg: "#d0c9bc",
+      activeIcon: "#1f1a14",
+      inactiveIcon: "#9c9282",
+    },
+    pills: {
+      inactiveBg: "transparent",
+      inactiveBorder: "rgba(100,80,40,0.12)",
+      inactiveText: "#7d7364",
+    },
     menu: {
       bg: "#f4f0ea",
       border: "#d0c9bc",
@@ -251,8 +269,17 @@ const THEME_VARIANTS: Partial<Record<ThemeMode, ThemeVariantDefinition>> = {
       badgeBorder: "#d0d0d0",
       badgeText: "#919191",
     },
-    viewToggle: { bg: "#d8d8d8", activeBg: "#cccccc", activeIcon: "#151515", inactiveIcon: "#919191" },
-    pills: { inactiveBg: "transparent", inactiveBorder: "rgba(0,0,0,0.1)", inactiveText: "#707070" },
+    viewToggle: {
+      bg: "#d8d8d8",
+      activeBg: "#cccccc",
+      activeIcon: "#151515",
+      inactiveIcon: "#919191",
+    },
+    pills: {
+      inactiveBg: "transparent",
+      inactiveBorder: "rgba(0,0,0,0.1)",
+      inactiveText: "#707070",
+    },
     menu: {
       bg: "#f2f2f2",
       border: "#cdcdcd",
@@ -313,8 +340,17 @@ const THEME_VARIANTS: Partial<Record<ThemeMode, ThemeVariantDefinition>> = {
       badgeBorder: "#cfc8bc",
       badgeText: "#968a74",
     },
-    viewToggle: { bg: "#d8d0c4", activeBg: "#ccc4b6", activeIcon: "#1c1508", inactiveIcon: "#968a74" },
-    pills: { inactiveBg: "transparent", inactiveBorder: "rgba(110,90,50,0.12)", inactiveText: "#787060" },
+    viewToggle: {
+      bg: "#d8d0c4",
+      activeBg: "#ccc4b6",
+      activeIcon: "#1c1508",
+      inactiveIcon: "#968a74",
+    },
+    pills: {
+      inactiveBg: "transparent",
+      inactiveBorder: "rgba(110,90,50,0.12)",
+      inactiveText: "#787060",
+    },
     menu: {
       bg: "#f0ebe2",
       border: "#ccc4b6",
@@ -375,8 +411,17 @@ const THEME_VARIANTS: Partial<Record<ThemeMode, ThemeVariantDefinition>> = {
       badgeBorder: "#2a2a2e",
       badgeText: "#5e5e64",
     },
-    viewToggle: { bg: "#1a1a1e", activeBg: "#242428", activeIcon: "#f0f0f2", inactiveIcon: "#5e5e64" },
-    pills: { inactiveBg: "transparent", inactiveBorder: "rgba(255,255,255,0.08)", inactiveText: "#6a6a70" },
+    viewToggle: {
+      bg: "#1a1a1e",
+      activeBg: "#242428",
+      activeIcon: "#f0f0f2",
+      inactiveIcon: "#5e5e64",
+    },
+    pills: {
+      inactiveBg: "transparent",
+      inactiveBorder: "rgba(255,255,255,0.08)",
+      inactiveText: "#6a6a70",
+    },
     menu: {
       bg: "#141416",
       border: "#262628",
@@ -437,8 +482,17 @@ const THEME_VARIANTS: Partial<Record<ThemeMode, ThemeVariantDefinition>> = {
       badgeBorder: "#343230",
       badgeText: "#5e5c58",
     },
-    viewToggle: { bg: "#222220", activeBg: "#2c2c28", activeIcon: "#ededec", inactiveIcon: "#5e5c58" },
-    pills: { inactiveBg: "transparent", inactiveBorder: "rgba(255,255,255,0.07)", inactiveText: "#706e68" },
+    viewToggle: {
+      bg: "#222220",
+      activeBg: "#2c2c28",
+      activeIcon: "#ededec",
+      inactiveIcon: "#5e5c58",
+    },
+    pills: {
+      inactiveBg: "transparent",
+      inactiveBorder: "rgba(255,255,255,0.07)",
+      inactiveText: "#706e68",
+    },
     menu: {
       bg: "#222220",
       border: "#343430",
@@ -499,8 +553,17 @@ const THEME_VARIANTS: Partial<Record<ThemeMode, ThemeVariantDefinition>> = {
       badgeBorder: "#2a3048",
       badgeText: "#505870",
     },
-    viewToggle: { bg: "#1a1e2e", activeBg: "#242a3c", activeIcon: "#eef0f6", inactiveIcon: "#505870" },
-    pills: { inactiveBg: "transparent", inactiveBorder: "rgba(140,160,255,0.08)", inactiveText: "#606878" },
+    viewToggle: {
+      bg: "#1a1e2e",
+      activeBg: "#242a3c",
+      activeIcon: "#eef0f6",
+      inactiveIcon: "#505870",
+    },
+    pills: {
+      inactiveBg: "transparent",
+      inactiveBorder: "rgba(140,160,255,0.08)",
+      inactiveText: "#606878",
+    },
     menu: {
       bg: "#161a26",
       border: "#2a3048",
@@ -561,8 +624,17 @@ const THEME_VARIANTS: Partial<Record<ThemeMode, ThemeVariantDefinition>> = {
       badgeBorder: "#30343e",
       badgeText: "#585e70",
     },
-    viewToggle: { bg: "#1e2028", activeBg: "#282c36", activeIcon: "#e8eaf0", inactiveIcon: "#585e70" },
-    pills: { inactiveBg: "transparent", inactiveBorder: "rgba(255,255,255,0.08)", inactiveText: "#666c7c" },
+    viewToggle: {
+      bg: "#1e2028",
+      activeBg: "#282c36",
+      activeIcon: "#e8eaf0",
+      inactiveIcon: "#585e70",
+    },
+    pills: {
+      inactiveBg: "transparent",
+      inactiveBorder: "rgba(255,255,255,0.08)",
+      inactiveText: "#666c7c",
+    },
     menu: {
       bg: "#1c1e26",
       border: "#30343e",

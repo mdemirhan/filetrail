@@ -33,12 +33,16 @@ describe("launchContext", () => {
 
   it("ignores the Electron app-path positional argument in dev launches", () => {
     expect(
-      resolveStartupFolderPath(["electron", ".", "/Users/demo/src"], "/Users/demo/filetrail/apps/desktop", {
-        appPath: "/Users/demo/filetrail/apps/desktop",
-        fileSystem: {
-          statSync: () => ({ isDirectory: () => true }),
+      resolveStartupFolderPath(
+        ["electron", ".", "/Users/demo/src"],
+        "/Users/demo/filetrail/apps/desktop",
+        {
+          appPath: "/Users/demo/filetrail/apps/desktop",
+          fileSystem: {
+            statSync: () => ({ isDirectory: () => true }),
+          },
         },
-      }),
+      ),
     ).toBe("/Users/demo/src");
   });
 

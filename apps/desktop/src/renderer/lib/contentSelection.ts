@@ -30,7 +30,7 @@ export function sanitizeContentSelection<T extends PathEntry>(
   const leadPath =
     selection.leadPath && availablePaths.has(selection.leadPath)
       ? selection.leadPath
-      : nextPaths.at(-1) ?? null;
+      : (nextPaths.at(-1) ?? null);
   const anchorPath =
     selection.anchorPath && availablePaths.has(selection.anchorPath)
       ? selection.anchorPath
@@ -89,10 +89,10 @@ export function toggleContentSelection<T extends PathEntry>(
     if (nextPaths.length === 0) {
       return EMPTY_CONTENT_SELECTION;
     }
-    const nextLeadPath = current.leadPath === path ? nextPaths.at(-1) ?? null : current.leadPath;
+    const nextLeadPath = current.leadPath === path ? (nextPaths.at(-1) ?? null) : current.leadPath;
     return {
       paths: nextPaths,
-      anchorPath: current.anchorPath === path ? nextLeadPath : current.anchorPath ?? nextLeadPath,
+      anchorPath: current.anchorPath === path ? nextLeadPath : (current.anchorPath ?? nextLeadPath),
       leadPath: nextLeadPath,
     };
   }

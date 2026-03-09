@@ -32,7 +32,7 @@ export function useExplorerPaneLayout(args: {
         pane,
         startX: event.clientX,
         treeWidth,
-      inspectorWidth,
+        inspectorWidth,
       };
       // Global class lets CSS disable selection and show the resize cursor consistently.
       document.body.classList.add("resizing-panels");
@@ -176,8 +176,7 @@ function getAvailableSideWidth(
   const { inspectorVisible, minContentWidth } = args;
   const resizerCount = inspectorVisible ? 2 : 1;
   return Math.max(
-    EXPLORER_LAYOUT.treeMinWidth +
-      (inspectorVisible ? EXPLORER_LAYOUT.inspectorMinWidth : 0),
+    EXPLORER_LAYOUT.treeMinWidth + (inspectorVisible ? EXPLORER_LAYOUT.inspectorMinWidth : 0),
     viewportWidth - minContentWidth - resizerCount * EXPLORER_LAYOUT.resizerWidth,
   );
 }

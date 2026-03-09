@@ -47,10 +47,7 @@ export type WriteServiceFileSystem = {
   readlink: (path: string) => Promise<string>;
   chmod?: (path: string, mode: number) => Promise<void>;
   mkdir: (path: string, options?: { recursive?: boolean }) => Promise<void>;
-  rm: (
-    path: string,
-    options?: { recursive?: boolean; force?: boolean },
-  ) => Promise<void>;
+  rm: (path: string, options?: { recursive?: boolean; force?: boolean }) => Promise<void>;
   symlink: (target: string, path: string) => Promise<void>;
   copyFileStream: (
     sourcePath: string,
@@ -160,8 +157,7 @@ export type CopyPasteOperationHandle = {
   status: "queued";
 };
 
-export const WRITE_OPERATION_BUSY_ERROR =
-  "Another write operation is already running.";
+export const WRITE_OPERATION_BUSY_ERROR = "Another write operation is already running.";
 
 export type WriteServiceDependencies = {
   fileSystem?: WriteServiceFileSystem;
@@ -218,6 +214,10 @@ export type InternalCopyPastePlan = {
   totalBytes: number | null;
 };
 
+// Default implementation using node:fs. In Electron, callers should provide an
+// original-fs backed implementation instead (see originalFileSystem.ts in the
+// desktop app) because Electron patches node:fs to treat .asar files as virtual
+// directories, which breaks copy operations on app bundles.
 export const DEFAULT_WRITE_SERVICE_FILE_SYSTEM: WriteServiceFileSystem = {
   lstat: async (path) => lstat(path) as Promise<WriteServiceStats>,
   stat: async (path) => stat(path) as Promise<WriteServiceStats>,
@@ -238,10 +238,6 @@ export const DEFAULT_WRITE_SERVICE_FILE_SYSTEM: WriteServiceFileSystem = {
   },
   copyFileStream: async (sourcePath, destinationPath, signal) => {
     await mkdir(dirname(destinationPath), { recursive: true });
-    await pipeline(
-      createReadStream(sourcePath),
-      createWriteStream(destinationPath),
-      { signal },
-    );
+    await pipeline(createReadStream(sourcePath), createWriteStream(destinationPath), { signal });
   },
 };
