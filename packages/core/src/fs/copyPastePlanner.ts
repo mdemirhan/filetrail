@@ -267,6 +267,7 @@ async function buildExecutionPlan(
         sourcePath,
         destinationPath,
         sizeBytes: 0,
+        mode: sourceStats.mode,
       },
     ];
     let itemCount = 1;
@@ -295,6 +296,7 @@ async function buildExecutionPlan(
         sourcePath,
         destinationPath,
         sizeBytes: fileStats.size,
+        mode: fileStats.mode,
       },
     ],
     itemCount: 1,

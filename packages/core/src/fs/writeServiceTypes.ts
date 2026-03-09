@@ -1,9 +1,10 @@
 import { createReadStream, createWriteStream } from "node:fs";
 import {
+  chmod,
   lstat,
   mkdir,
-  readlink,
   readdir,
+  readlink,
   realpath,
   rm,
   stat,
@@ -35,6 +36,7 @@ export type WriteServiceStats = {
   isFile: () => boolean;
   isSymbolicLink: () => boolean;
   size: number;
+  mode: number;
 };
 
 export type WriteServiceFileSystem = {
@@ -43,8 +45,12 @@ export type WriteServiceFileSystem = {
   realpath: (path: string) => Promise<string>;
   readdir: (path: string) => Promise<string[]>;
   readlink: (path: string) => Promise<string>;
+  chmod?: (path: string, mode: number) => Promise<void>;
   mkdir: (path: string, options?: { recursive?: boolean }) => Promise<void>;
-  rm: (path: string, options?: { recursive?: boolean; force?: boolean }) => Promise<void>;
+  rm: (
+    path: string,
+    options?: { recursive?: boolean; force?: boolean },
+  ) => Promise<void>;
   symlink: (target: string, path: string) => Promise<void>;
   copyFileStream: (
     sourcePath: string,
@@ -154,7 +160,8 @@ export type CopyPasteOperationHandle = {
   status: "queued";
 };
 
-export const WRITE_OPERATION_BUSY_ERROR = "Another write operation is already running.";
+export const WRITE_OPERATION_BUSY_ERROR =
+  "Another write operation is already running.";
 
 export type WriteServiceDependencies = {
   fileSystem?: WriteServiceFileSystem;
@@ -179,12 +186,14 @@ export type ExecutionStep =
       sourcePath: string;
       destinationPath: string;
       sizeBytes: 0;
+      mode: number;
     }
   | {
       type: "copy_file";
       sourcePath: string;
       destinationPath: string;
       sizeBytes: number;
+      mode: number;
     }
   | {
       type: "copy_symlink";
@@ -215,6 +224,9 @@ export const DEFAULT_WRITE_SERVICE_FILE_SYSTEM: WriteServiceFileSystem = {
   realpath: async (path) => realpath(path),
   readdir: async (path) => readdir(path),
   readlink: async (path) => readlink(path),
+  chmod: async (path, mode) => {
+    await chmod(path, mode);
+  },
   mkdir: async (path, options) => {
     await mkdir(path, options);
   },
@@ -226,6 +238,10 @@ export const DEFAULT_WRITE_SERVICE_FILE_SYSTEM: WriteServiceFileSystem = {
   },
   copyFileStream: async (sourcePath, destinationPath, signal) => {
     await mkdir(dirname(destinationPath), { recursive: true });
-    await pipeline(createReadStream(sourcePath), createWriteStream(destinationPath), { signal });
+    await pipeline(
+      createReadStream(sourcePath),
+      createWriteStream(destinationPath),
+      { signal },
+    );
   },
 };

@@ -27,7 +27,8 @@ export async function executeCopyPasteOperation(args: {
   const skippedResults = args.plan.items
     .filter(
       (item) =>
-        item.status === "conflict" && args.request.conflictResolution === "skip",
+        item.status === "conflict" &&
+        args.request.conflictResolution === "skip",
     )
     .map(
       (item): CopyPasteItemResult => ({
@@ -37,8 +38,13 @@ export async function executeCopyPasteOperation(args: {
         error: "Destination already exists.",
       }),
     );
-  const executableItems = args.plan.items.filter((item) => item.status === "ready");
-  const totalItemCount = executableItems.reduce((sum, item) => sum + item.itemCount, 0);
+  const executableItems = args.plan.items.filter(
+    (item) => item.status === "ready",
+  );
+  const totalItemCount = executableItems.reduce(
+    (sum, item) => sum + item.itemCount,
+    0,
+  );
   const totalBytes = args.publicPlan.summary.totalBytes;
 
   if (!args.publicPlan.canExecute) {
@@ -157,7 +163,10 @@ export async function executeCopyPasteOperation(args: {
         break;
       }
       try {
-        await args.fileSystem.rm(item.sourcePath, { recursive: true, force: false });
+        await args.fileSystem.rm(item.sourcePath, {
+          recursive: true,
+          force: false,
+        });
       } catch (error) {
         const message = toErrorMessage(error);
         itemResults.push({
@@ -176,8 +185,11 @@ export async function executeCopyPasteOperation(args: {
     cancelled,
     encounteredError,
     completedItemCount,
-    skippedItemCount: itemResults.filter((item) => item.status === "skipped").length,
-    cancelledItemCount: itemResults.filter((item) => item.status === "cancelled").length,
+    skippedItemCount: itemResults.filter((item) => item.status === "skipped")
+      .length,
+    cancelledItemCount: itemResults.filter(
+      (item) => item.status === "cancelled",
+    ).length,
   });
   const result = createOperationResult({
     operationId: args.operationId,
@@ -191,7 +203,11 @@ export async function executeCopyPasteOperation(args: {
     completedByteCount,
     items: itemResults,
     status: terminalStatus,
-    error: encounteredError ? toErrorMessage(encounteredError) : cancelled ? "Operation cancelled." : null,
+    error: encounteredError
+      ? toErrorMessage(encounteredError)
+      : cancelled
+        ? "Operation cancelled."
+        : null,
   });
   args.emit({
     operationId: args.operationId,
@@ -232,9 +248,13 @@ export function createOperationResult(args: {
       topLevelItemCount: args.items.length,
       totalItemCount: args.totalItemCount,
       completedItemCount: args.completedItemCount,
-      failedItemCount: args.items.filter((item) => item.status === "failed").length,
-      skippedItemCount: args.items.filter((item) => item.status === "skipped").length,
-      cancelledItemCount: args.items.filter((item) => item.status === "cancelled").length,
+      failedItemCount: args.items.filter((item) => item.status === "failed")
+        .length,
+      skippedItemCount: args.items.filter((item) => item.status === "skipped")
+        .length,
+      cancelledItemCount: args.items.filter(
+        (item) => item.status === "cancelled",
+      ).length,
       completedByteCount: args.completedByteCount,
       totalBytes: args.totalBytes,
     },
@@ -264,7 +284,9 @@ export function resolveTerminalStatus(args: {
     return args.completedItemCount > 0 ? "partial" : "cancelled";
   }
   if (args.encounteredError) {
-    return args.completedItemCount > 0 || args.skippedItemCount > 0 ? "partial" : "failed";
+    return args.completedItemCount > 0 || args.skippedItemCount > 0
+      ? "partial"
+      : "failed";
   }
   if (args.skippedItemCount > 0 || args.cancelledItemCount > 0) {
     return "partial";
@@ -275,7 +297,8 @@ export function resolveTerminalStatus(args: {
 export function isAbortError(error: unknown): boolean {
   return (
     error instanceof Error &&
-    (error.name === "AbortError" || error.message.toLowerCase().includes("aborted"))
+    (error.name === "AbortError" ||
+      error.message.toLowerCase().includes("aborted"))
   );
 }
 
@@ -308,11 +331,19 @@ async function executeTopLevelItem(args: {
     args.signal.throwIfAborted();
     if (step.type === "mkdir") {
       await args.fileSystem.mkdir(step.destinationPath, { recursive: true });
+      await preserveModeIfSupported(args.fileSystem, step.destinationPath, step.mode);
     } else if (step.type === "copy_file") {
-      await args.fileSystem.copyFileStream(step.sourcePath, step.destinationPath, args.signal);
+      await args.fileSystem.copyFileStream(
+        step.sourcePath,
+        step.destinationPath,
+        args.signal,
+      );
+      await preserveModeIfSupported(args.fileSystem, step.destinationPath, step.mode);
       completedByteCount += step.sizeBytes;
     } else {
-      await args.fileSystem.mkdir(dirname(step.destinationPath), { recursive: true });
+      await args.fileSystem.mkdir(dirname(step.destinationPath), {
+        recursive: true,
+      });
       await args.fileSystem.symlink(step.linkTarget, step.destinationPath);
     }
     completedItemCount += 1;
@@ -334,4 +365,33 @@ async function executeTopLevelItem(args: {
     completedItemCount,
     completedByteCount,
   };
+}
+
+async function preserveModeIfSupported(
+  fileSystem: WriteServiceFileSystem,
+  destinationPath: string,
+  mode: number,
+): Promise<void> {
+  if (!fileSystem.chmod) {
+    return;
+  }
+  try {
+    await fileSystem.chmod(destinationPath, mode);
+  } catch (error) {
+    if (isUnsupportedChmodError(error)) {
+      return;
+    }
+    throw error;
+  }
+}
+
+function isUnsupportedChmodError(error: unknown): boolean {
+  const code = error instanceof Error && "code" in error ? String(error.code) : null;
+  return (
+    code === "ENOTSUP" ||
+    code === "EOPNOTSUPP" ||
+    code === "ENOSYS" ||
+    code === "EINVAL" ||
+    code === "EPERM"
+  );
 }
