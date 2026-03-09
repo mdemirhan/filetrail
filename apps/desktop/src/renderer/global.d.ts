@@ -16,6 +16,8 @@ declare global {
         listener: (command: {
           type:
             | "focusFileSearch"
+            | "openSelection"
+            | "editSelection"
             | "toggleInfoPanel"
             | "toggleInfoRow"
             | "openLocationSheet"

@@ -4,11 +4,13 @@ import { dirname, join } from "node:path";
 import {
   ACCENT_OPTIONS,
   type AppPreferences,
-  DEFAULT_OPEN_WITH_APPLICATIONS,
-  DETAIL_COLUMN_KEYS,
+  type ApplicationSelection,
+  DEFAULT_APP_PREFERENCES,
   DEFAULT_DETAIL_COLUMN_VISIBILITY,
   DEFAULT_DETAIL_COLUMN_WIDTHS,
-  DEFAULT_APP_PREFERENCES,
+  DEFAULT_OPEN_WITH_APPLICATIONS,
+  DEFAULT_TEXT_EDITOR,
+  DETAIL_COLUMN_KEYS,
   THEME_OPTIONS,
   TYPEAHEAD_DEBOUNCE_MAX_MS,
   TYPEAHEAD_DEBOUNCE_MIN_MS,
@@ -19,6 +21,7 @@ import {
   clampFontSize,
   clampFontWeight,
   clampNotificationDurationSeconds,
+  clampOpenItemLimit,
   clampPaneWidth,
   clampTypeaheadDebounceMs,
   clampZoomPercent,
@@ -306,9 +309,22 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
         ? record.detailRowOpen
         : currentDefaults.detailRowOpen,
     terminalApp: normalizeTerminalAppPreference(record.terminalApp),
+    defaultTextEditor: sanitizeApplicationSelection(
+      record.defaultTextEditor,
+      currentDefaults.defaultTextEditor,
+    ),
     openWithApplications: sanitizeOpenWithApplications(
       record.openWithApplications,
       currentDefaults.openWithApplications,
+    ),
+    fileActivationAction:
+      record.fileActivationAction === "edit" || record.fileActivationAction === "open"
+        ? record.fileActivationAction
+        : currentDefaults.fileActivationAction,
+    openItemLimit: clampOpenItemLimit(
+      typeof record.openItemLimit === "number"
+        ? record.openItemLimit
+        : currentDefaults.openItemLimit,
     ),
     includeHidden:
       typeof record.includeHidden === "boolean"
@@ -383,6 +399,25 @@ function normalizeTerminalAppPreference(value: unknown): string | null {
   }
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : null;
+}
+
+function sanitizeApplicationSelection(
+  value: unknown,
+  defaults = DEFAULT_TEXT_EDITOR,
+): ApplicationSelection {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { ...defaults };
+  }
+  const record = value as Record<string, unknown>;
+  const appPath = typeof record.appPath === "string" ? record.appPath.trim() : "";
+  const appName = typeof record.appName === "string" ? record.appName.trim() : "";
+  if (appPath.length === 0 || appName.length === 0) {
+    return { ...defaults };
+  }
+  return {
+    appPath,
+    appName,
+  };
 }
 
 function sanitizeOpenWithApplications(

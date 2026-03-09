@@ -11,16 +11,17 @@ import type { CopyPasteProgressEvent, IpcRequest, IpcResponse } from "@filetrail
 
 import {
   ACCENT_OPTIONS,
+  type AccentMode,
+  type ApplicationSelection,
+  DEFAULT_APP_PREFERENCES,
   DEFAULT_DETAIL_COLUMN_VISIBILITY,
   DEFAULT_DETAIL_COLUMN_WIDTHS,
-  DEFAULT_APP_PREFERENCES,
-  type OpenWithApplication,
-  NOTIFICATION_DURATION_SECONDS_OPTIONS,
-  clampZoomPercent,
-  type AccentMode,
   type DetailColumnVisibility,
   type DetailColumnWidths,
   type ExplorerViewMode,
+  type FileActivationAction,
+  NOTIFICATION_DURATION_SECONDS_OPTIONS,
+  type OpenWithApplication,
   type SearchResultsFilterScopePreference,
   type SearchResultsSortByPreference,
   type SearchResultsSortDirectionPreference,
@@ -32,12 +33,15 @@ import {
   UI_FONT_WEIGHT_OPTIONS,
   type UiFontFamily,
   type UiFontWeight,
+  clampOpenItemLimit,
+  clampZoomPercent,
 } from "../shared/appPreferences";
 import { FEATURE_FLAGS } from "../shared/featureFlags";
 import { ActionNoticeDialog } from "./components/ActionNoticeDialog";
+import { ContentPane } from "./components/ContentPane";
 import { CopyPasteDialog } from "./components/CopyPasteDialog";
 import { CopyPasteProgressCard } from "./components/CopyPasteProgressCard";
-import { ContentPane } from "./components/ContentPane";
+import { InfoPanel } from "./components/GetInfoPanel";
 import { HelpView } from "./components/HelpView";
 import {
   BROWSE_CONTEXT_MENU_ITEMS,
@@ -47,7 +51,6 @@ import {
   ItemContextMenu,
   SEARCH_CONTEXT_MENU_ITEMS,
 } from "./components/ItemContextMenu";
-import { InfoPanel } from "./components/GetInfoPanel";
 import { LocationSheet } from "./components/LocationSheet";
 import { SEARCH_RESULT_ROW_HEIGHT, SearchResultsPane } from "./components/SearchResultsPane";
 import { SettingsView } from "./components/SettingsView";
@@ -57,38 +60,38 @@ import { type TreeNodeState, TreePane } from "./components/TreePane";
 import { useElementSize } from "./hooks/useElementSize";
 import { useExplorerPaneLayout } from "./hooks/useExplorerPaneLayout";
 import {
+  type ContentSelectionState,
+  EMPTY_CONTENT_SELECTION,
+  setSingleContentSelection as createSingleContentSelection,
+  extendContentSelectionToPath as extendSelectionStateToPath,
+  mergeSelectionPathsInEntryOrder,
+  sanitizeContentSelection,
+  selectAllContentEntries as selectAllSelectionStateEntries,
+  toggleContentSelection as toggleSelectionState,
+} from "./lib/contentSelection";
+import {
+  type CopyPasteClipboardState,
   EMPTY_COPY_PASTE_CLIPBOARD,
   buildPasteRequest,
   clearCopyPasteClipboard,
   hasClipboardItems,
   setCopyPasteClipboard,
-  type CopyPasteClipboardState,
 } from "./lib/copyPasteClipboard";
-import {
-  EMPTY_CONTENT_SELECTION,
-  extendContentSelectionToPath as extendSelectionStateToPath,
-  mergeSelectionPathsInEntryOrder,
-  sanitizeContentSelection,
-  selectAllContentEntries as selectAllSelectionStateEntries,
-  setSingleContentSelection as createSingleContentSelection,
-  toggleContentSelection as toggleSelectionState,
-  type ContentSelectionState,
-} from "./lib/contentSelection";
+import { getDetailsRowHeight } from "./lib/detailsLayout";
 import {
   flattenVisibleTreePaths,
-  getPageStepItemCount,
-  getPagedSelectionIndex,
   getAncestorChain,
   getForcedVisibleHiddenChildPath,
   getNextSelectionIndex,
+  getPageStepItemCount,
+  getPagedSelectionIndex,
   getTreeSeedChain,
   parentDirectoryPath,
   pathHasHiddenSegmentWithinRoot,
 } from "./lib/explorerNavigation";
-import { resolveExplorerPaneRestoreTarget, type ExplorerPane } from "./lib/explorerPaneFocus";
+import { type ExplorerPane, resolveExplorerPaneRestoreTarget } from "./lib/explorerPaneFocus";
 import { FileIcon } from "./lib/fileIcons";
 import { useFiletrailClient } from "./lib/filetrailClient";
-import { getDetailsRowHeight } from "./lib/detailsLayout";
 import { getFlowListColumnStep } from "./lib/flowListLayout";
 import { formatDateTime, formatPermissionMode, formatSize } from "./lib/formatting";
 import { REFERENCE_ITEMS, SHORTCUT_ITEMS } from "./lib/helpContent";
@@ -97,10 +100,14 @@ import { createRendererLogger } from "./lib/logging";
 import { pageScrollElement, scrollElementByAmount } from "./lib/pagedScroll";
 import { resolveExplorerToolbarLayout, resolveSinglePanelLayout } from "./lib/responsiveLayout";
 import { appendSearchResults, filterSearchResults, sortSearchResults } from "./lib/searchResults";
-import { resolveOpenInTerminalPaths } from "./lib/shortcutTargets";
+import {
+  resolveEditSelectionPaths,
+  resolveOpenInTerminalPaths,
+  resolveOpenSelectionPaths,
+} from "./lib/shortcutTargets";
 import { resolveStartupNavigation } from "./lib/startupNavigation";
-import { createToastEntry, enqueueToast, type ToastEntry, type ToastKind } from "./lib/toasts";
 import { applyAppearance, getThemeAppearanceDefaults } from "./lib/theme";
+import { type ToastEntry, type ToastKind, createToastEntry, enqueueToast } from "./lib/toasts";
 import { getTreeKeyboardAction } from "./lib/treeView";
 import {
   findContentTypeaheadMatch,
@@ -271,9 +278,16 @@ export function App() {
     DEFAULT_APP_PREFERENCES.restoreLastVisitedFolderOnStartup,
   );
   const [terminalApp, setTerminalApp] = useState(DEFAULT_APP_PREFERENCES.terminalApp);
+  const [defaultTextEditor, setDefaultTextEditor] = useState<ApplicationSelection>(
+    DEFAULT_APP_PREFERENCES.defaultTextEditor,
+  );
   const [openWithApplications, setOpenWithApplications] = useState<OpenWithApplication[]>(
     DEFAULT_APP_PREFERENCES.openWithApplications,
   );
+  const [fileActivationAction, setFileActivationAction] = useState<FileActivationAction>(
+    DEFAULT_APP_PREFERENCES.fileActivationAction,
+  );
+  const [openItemLimit, setOpenItemLimit] = useState(DEFAULT_APP_PREFERENCES.openItemLimit);
   const [sortBy, setSortBy] = useState<SortBy>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [infoPanelOpen, setInfoPanelOpen] = useState(DEFAULT_APP_PREFERENCES.propertiesOpen);
@@ -301,15 +315,14 @@ export function App() {
     message: string;
   } | null>(null);
   const [toasts, setToasts] = useState<ToastEntry[]>([]);
-  const [copyPasteClipboard, setCopyPasteClipboardState] =
-    useState<CopyPasteClipboardState>(EMPTY_COPY_PASTE_CLIPBOARD);
+  const [copyPasteClipboard, setCopyPasteClipboardState] = useState<CopyPasteClipboardState>(
+    EMPTY_COPY_PASTE_CLIPBOARD,
+  );
   const [copyPasteDialogState, setCopyPasteDialogState] = useState<CopyPasteDialogState>(null);
-  const [writeOperationCardState, setWriteOperationCardState] = useState<WriteOperationCardState | null>(
-    null,
-  );
-  const [copyPasteProgressEvent, setCopyPasteProgressEvent] = useState<CopyPasteProgressEvent | null>(
-    null,
-  );
+  const [writeOperationCardState, setWriteOperationCardState] =
+    useState<WriteOperationCardState | null>(null);
+  const [copyPasteProgressEvent, setCopyPasteProgressEvent] =
+    useState<CopyPasteProgressEvent | null>(null);
   const [restoredPaneWidths, setRestoredPaneWidths] = useState<{
     treeWidth: number;
     inspectorWidth: number;
@@ -421,7 +434,7 @@ export function App() {
   const contextMenuTargetEntry = useMemo(
     () =>
       contextMenuState?.targetPath
-        ? activeContentEntries.find((entry) => entry.path === contextMenuState.targetPath) ?? null
+        ? (activeContentEntries.find((entry) => entry.path === contextMenuState.targetPath) ?? null)
         : null,
     [activeContentEntries, contextMenuState],
   );
@@ -435,7 +448,14 @@ export function App() {
         isSearchMode,
         selectedEntry,
       }),
-    [contextMenuState, contextMenuTargetEntry, currentPath, focusedPane, isSearchMode, selectedEntry],
+    [
+      contextMenuState,
+      contextMenuTargetEntry,
+      currentPath,
+      focusedPane,
+      isSearchMode,
+      selectedEntry,
+    ],
   );
   const canPasteAtResolvedDestination =
     FEATURE_FLAGS.copyPaste &&
@@ -450,6 +470,10 @@ export function App() {
       return [] as ContextMenuActionId[];
     }
     const disabled = new Set<ContextMenuActionId>();
+    const hasOnlyEditableFiles =
+      contextMenuTargetEntries.length > 0 &&
+      contextMenuTargetEntries.length === contextMenuState.paths.length &&
+      contextMenuTargetEntries.every((entry) => isEditableFileEntry(entry));
     if (!FEATURE_FLAGS.copyPaste) {
       disabled.add("copy");
       disabled.add("cut");
@@ -462,6 +486,9 @@ export function App() {
       for (const actionId of WRITE_LOCKED_CONTEXT_ACTION_IDS) {
         disabled.add(actionId);
       }
+    }
+    if (!hasOnlyEditableFiles) {
+      disabled.add("edit");
     }
     if (contextMenuTargetEntries.length > 0) {
       return Array.from(disabled);
@@ -481,49 +508,47 @@ export function App() {
     canPasteAtResolvedDestination,
     contextMenuState,
     contextMenuTargetEntries.length,
+    contextMenuTargetEntries,
     copyPasteClipboard,
     isWriteOperationLocked,
   ]);
-  const contextMenuSubmenuItems = useMemo(
-    () => {
-      const items: ContextMenuSubmenuItem[] = openWithApplications.map((application) => ({
+  const contextMenuSubmenuItems = useMemo(() => {
+    const items: ContextMenuSubmenuItem[] = openWithApplications.map((application) => ({
+      action: {
+        kind: "application",
+        id: application.id,
+        label: application.appName,
+        appPath: application.appPath,
+        appName: application.appName,
+      },
+    }));
+    if (items.length > 0) {
+      items.push({
+        type: "separator",
+        key: "separator-submenu-main",
+      });
+    }
+    items.push(
+      {
         action: {
-          kind: "application",
-          id: application.id,
-          label: application.appName,
-          appPath: application.appPath,
-          appName: application.appName,
+          kind: "finder",
+          id: "finder",
+          label: "Finder",
+          appPath: "Finder",
+          appName: "Finder",
         },
-      }));
-      if (items.length > 0) {
-        items.push({
-          type: "separator",
-          key: "separator-submenu-main",
-        });
-      }
-      items.push(
-        {
-          action: {
-            kind: "finder",
-            id: "finder",
-            label: "Finder",
-            appPath: "Finder",
-            appName: "Finder",
-          },
+      },
+      {
+        action: {
+          kind: "other",
+          id: "other",
+          label: "Other…",
+          appName: "Other…",
         },
-        {
-          action: {
-            kind: "other",
-            id: "other",
-            label: "Other…",
-            appName: "Other…",
-          },
-        },
-      );
-      return items;
-    },
-    [openWithApplications],
-  );
+      },
+    );
+    return items;
+  }, [openWithApplications]);
 
   useEffect(() => {
     treeNodesRef.current = treeNodes;
@@ -780,7 +805,10 @@ export function App() {
         propertiesOpen: infoPanelOpen,
         detailRowOpen: infoRowOpen,
         terminalApp,
+        defaultTextEditor,
         openWithApplications,
+        fileActivationAction,
+        openItemLimit,
         includeHidden,
         searchPatternMode,
         searchMatchScope,
@@ -827,8 +855,10 @@ export function App() {
     notificationDurationSeconds,
     openWithApplications,
     notificationsEnabled,
+    openItemLimit,
     restoreLastVisitedFolderOnStartup,
     terminalApp,
+    defaultTextEditor,
     theme,
     uiFontFamily,
     uiFontSize,
@@ -838,6 +868,7 @@ export function App() {
     treeRootPath,
     uiFontWeight,
     viewMode,
+    fileActivationAction,
   ]);
 
   useEffect(() => {
@@ -888,7 +919,10 @@ export function App() {
         setInfoRowOpen(preferences.detailRowOpen);
         setRestoreLastVisitedFolderOnStartup(preferences.restoreLastVisitedFolderOnStartup);
         setTerminalApp(preferences.terminalApp);
+        setDefaultTextEditor(preferences.defaultTextEditor);
         setOpenWithApplications(preferences.openWithApplications);
+        setFileActivationAction(preferences.fileActivationAction);
+        setOpenItemLimit(preferences.openItemLimit);
         panes.setTreeWidth(preferences.treeWidth);
         panes.setInspectorWidth(preferences.inspectorWidth);
         setRestoredPaneWidths({
@@ -980,6 +1014,36 @@ export function App() {
 
   useEffect(() => {
     const unsubscribe = client.onCommand((command) => {
+      if (command.type === "openSelection") {
+        const activePane = focusedPane ?? lastExplorerFocusPaneRef.current;
+        if ((contextMenuState?.paths.length ?? 0) === 0 && activePane === "tree") {
+          void openTreeNode(currentPath);
+          return;
+        }
+        const pathsToOpen = resolveOpenSelectionPaths({
+          focusedPane,
+          lastFocusedPane: lastExplorerFocusPaneRef.current,
+          contextMenuPaths: contextMenuState?.paths ?? [],
+          selectedContentPaths: selectedPathsInViewOrder,
+          currentPath,
+        });
+        if (pathsToOpen.length > 0) {
+          void openPaths(pathsToOpen);
+        }
+        return;
+      }
+      if (command.type === "editSelection") {
+        const pathsToEdit = resolveEditSelectionPaths({
+          focusedPane,
+          lastFocusedPane: lastExplorerFocusPaneRef.current,
+          contextMenuPaths: contextMenuState?.paths ?? [],
+          selectedContentPaths: selectedPathsInViewOrder,
+        });
+        if (pathsToEdit.length > 0) {
+          void editPaths(pathsToEdit);
+        }
+        return;
+      }
       if (command.type === "openInTerminal") {
         const pathsToOpen = resolveOpenInTerminalPaths({
           focusedPane,
@@ -1085,10 +1149,15 @@ export function App() {
     client,
     contextMenuState,
     currentPath,
+    defaultTextEditor,
+    fileActivationAction,
     focusedPane,
+    includeHidden,
     isSearchMode,
+    openItemLimit,
     searchResultEntries,
     selectedPathsInViewOrder,
+    treeNodes,
   ]);
 
   useEffect(() => {
@@ -1464,7 +1533,9 @@ export function App() {
         currentSelectedEntry
       ) {
         event.preventDefault();
-        void activateEntry(currentSelectedEntry);
+        const pathsToActivate =
+          selectedPathsInViewOrder.length > 0 ? selectedPathsInViewOrder : [currentSelectedEntry.path];
+        void activateContentPaths(pathsToActivate);
         return;
       }
       if (event.metaKey && event.key === "ArrowDown" && focusedPane === "tree") {
@@ -1634,7 +1705,9 @@ export function App() {
       }
       if (event.key === "Enter" && focusedPane === "content" && currentSelectedEntry) {
         event.preventDefault();
-        void activateEntry(currentSelectedEntry);
+        const pathsToActivate =
+          selectedPathsInViewOrder.length > 0 ? selectedPathsInViewOrder : [currentSelectedEntry.path];
+        void activateContentPaths(pathsToActivate);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -1647,6 +1720,8 @@ export function App() {
     focusedPane,
     hasCachedSearch,
     actionNotice,
+    defaultTextEditor,
+    fileActivationAction,
     includeHidden,
     isSearchMode,
     copyPasteModalOpen,
@@ -1655,6 +1730,7 @@ export function App() {
     contextMenuState,
     locationSheetOpen,
     mainView,
+    openItemLimit,
     selectedEntry,
     selectedPathsInViewOrder,
     treeNodes,
@@ -2005,6 +2081,10 @@ export function App() {
     showModalNotice(title, `${title} is not implemented yet.`);
   }
 
+  function showOpenItemLimitNotice(action: "Open" | "Edit", selectedCount: number) {
+    showModalNotice(action, createOpenItemLimitMessage(action, selectedCount, openItemLimit));
+  }
+
   function showModalNotice(title: string, message: string) {
     actionNoticeReturnFocusPaneRef.current =
       focusedPane ?? lastExplorerFocusPaneRef.current ?? (contextMenuState ? "content" : null);
@@ -2254,7 +2334,10 @@ export function App() {
       if (plan.issues.length > 0) {
         pendingPasteAttemptRef.current = null;
         applyWriteOperationCardState(null);
-        showModalNotice("Paste cannot continue", plan.issues[0]?.message ?? "Paste cannot continue.");
+        showModalNotice(
+          "Paste cannot continue",
+          plan.issues[0]?.message ?? "Paste cannot continue.",
+        );
         return;
       }
       await executePastePlan(plan, {
@@ -2451,7 +2534,10 @@ export function App() {
       if (plan.issues.length > 0) {
         pendingPasteAttemptRef.current = null;
         applyWriteOperationCardState(null);
-        showModalNotice("Paste cannot continue", plan.issues[0]?.message ?? "Paste cannot continue.");
+        showModalNotice(
+          "Paste cannot continue",
+          plan.issues[0]?.message ?? "Paste cannot continue.",
+        );
         return;
       }
       const pendingAttempt = pendingPasteAttemptRef.current;
@@ -2486,7 +2572,10 @@ export function App() {
 
   function handleCopyPasteDialogEscape() {
     if (copyPasteProgressEvent) {
-      if (copyPasteProgressEvent.status === "running" || copyPasteProgressEvent.status === "queued") {
+      if (
+        copyPasteProgressEvent.status === "running" ||
+        copyPasteProgressEvent.status === "queued"
+      ) {
         void cancelCopyPasteOperation();
         return;
       }
@@ -2612,6 +2701,17 @@ export function App() {
     ]);
   }
 
+  async function browseDefaultTextEditor() {
+    const selection = await pickApplicationForOpenWith(
+      "Default Text Editor",
+      "Unable to choose a default text editor.",
+    );
+    if (!selection) {
+      return;
+    }
+    setDefaultTextEditor(selection);
+  }
+
   async function browseOpenWithApplication(entryId: string) {
     const selection = await pickApplicationForOpenWith(
       "Open With Applications",
@@ -2675,29 +2775,6 @@ export function App() {
     focusContentPane();
   }
 
-  async function activatePathFromContextMenu(path: string) {
-    const browseEntry = currentEntries.find((entry) => entry.path === path);
-    if (browseEntry) {
-      await activateEntry(browseEntry);
-      return;
-    }
-
-    const searchResult = searchResults.find((result) => result.path === path);
-    if (!searchResult) {
-      return;
-    }
-
-    const entry: DirectoryEntry = {
-      path: searchResult.path,
-      name: searchResult.name,
-      extension: searchResult.extension,
-      kind: searchResult.kind,
-      isHidden: searchResult.isHidden,
-      isSymlink: searchResult.isSymlink,
-    };
-    await activateEntry(entry);
-  }
-
   async function runContextMenuAction(actionId: ContextMenuActionId, paths: string[]) {
     closeContextMenu();
     if (WRITE_LOCKED_CONTEXT_ACTION_IDS.includes(actionId) && isWriteOperationInFlight()) {
@@ -2730,10 +2807,11 @@ export function App() {
       return;
     }
     if (actionId === "open") {
-      const firstPath = paths[0];
-      if (firstPath) {
-        await activatePathFromContextMenu(firstPath);
-      }
+      await openPaths(paths);
+      return;
+    }
+    if (actionId === "edit") {
+      await editPaths(paths);
       return;
     }
     if (actionId === "toggleInfoPanel") {
@@ -2749,18 +2827,18 @@ export function App() {
     }
     const title =
       actionId === "move"
-          ? "Move To…"
-          : actionId === "rename"
-            ? "Rename"
-            : actionId === "duplicate"
-              ? "Duplicate"
-              : actionId === "compress"
-                ? "Compress"
-                : actionId === "newFolder"
-                  ? "New Folder"
-                  : actionId === "trash"
-                    ? "Move to Trash"
-                    : "Open With";
+        ? "Move To…"
+        : actionId === "rename"
+          ? "Rename"
+          : actionId === "duplicate"
+            ? "Duplicate"
+            : actionId === "compress"
+              ? "Compress"
+              : actionId === "newFolder"
+                ? "New Folder"
+                : actionId === "trash"
+                  ? "Move to Trash"
+                  : "Open With";
     showNotImplementedNotice(title);
   }
 
@@ -3163,7 +3241,9 @@ export function App() {
       return;
     }
     if (selectedEntry) {
-      void activateEntry(selectedEntry);
+      const pathsToActivate =
+        selectedPathsInViewOrder.length > 0 ? selectedPathsInViewOrder : [selectedEntry.path];
+      void activateContentPaths(pathsToActivate);
     }
   }
 
@@ -3550,7 +3630,7 @@ export function App() {
     }
   }
 
-  async function activateEntry(entry: DirectoryEntry) {
+  async function openEntry(entry: DirectoryEntry) {
     if (entry.kind === "directory") {
       await navigateTo(entry.path, "push");
       return;
@@ -3565,21 +3645,89 @@ export function App() {
     if (entry.kind === "symlink_file") {
       const targetPath = await resolveTargetPath(entry.path);
       if (targetPath) {
-        await openExternally(targetPath);
+        await openPathExternally(targetPath);
       }
       return;
     }
     if (entry.kind === "file") {
-      await openExternally(entry.path);
+      await openPathExternally(entry.path);
+      return;
     }
+    await openPathExternally(entry.path);
   }
 
-  async function openExternally(path: string) {
+  async function activateContentEntry(entry: DirectoryEntry) {
+    await activateContentPaths([entry.path]);
+  }
+
+  async function openPathExternally(path: string) {
     try {
-      await client.invoke("system:openPath", { path });
+      const response = await client.invoke("system:openPath", { path });
+      if (!response.ok) {
+        throw new Error(response.error ?? "Unable to open the selected item.");
+      }
     } catch (error) {
       logger.error("open in macOS failed", error);
     }
+  }
+
+  async function openPaths(paths: string[]) {
+    if (paths.length === 0) {
+      return;
+    }
+    if (paths.length > openItemLimit) {
+      showOpenItemLimitNotice("Open", paths.length);
+      return;
+    }
+    if (paths.length === 1) {
+      const entry = activeContentEntries.find((candidate) => candidate.path === paths[0]);
+      if (entry) {
+        await openEntry(entry);
+        return;
+      }
+    }
+    for (const path of paths) {
+      await openPathExternally(path);
+    }
+  }
+
+  async function editPaths(paths: string[]) {
+    if (paths.length === 0) {
+      return;
+    }
+    const entries = paths
+      .map((path) => activeContentEntries.find((candidate) => candidate.path === path) ?? null)
+      .filter((entry): entry is DirectoryEntry => entry !== null);
+    if (entries.length !== paths.length || entries.some((entry) => !isEditableFileEntry(entry))) {
+      return;
+    }
+    if (paths.length > openItemLimit) {
+      showOpenItemLimitNotice("Edit", paths.length);
+      return;
+    }
+    await openPathsWithApplication(paths, defaultTextEditor.appPath, defaultTextEditor.appName);
+  }
+
+  async function activateContentPaths(paths: string[]) {
+    if (paths.length === 0) {
+      return;
+    }
+    if (isSearchMode) {
+      await openPaths(paths);
+      return;
+    }
+    const entries = paths
+      .map((path) => activeContentEntries.find((candidate) => candidate.path === path) ?? null)
+      .filter((entry): entry is DirectoryEntry => entry !== null);
+    if (
+      fileActivationAction === "edit" &&
+      entries.length === paths.length &&
+      entries.every((entry) => isEditableFileEntry(entry))
+    ) {
+      await editPaths(paths);
+      return;
+    }
+    await openPaths(paths);
   }
 
   function toggleHiddenFiles() {
@@ -4088,7 +4236,7 @@ export function App() {
                     onSelectionGesture={handleContentSelectionGesture}
                     onClearSelection={clearContentSelection}
                     onActivateResult={(item) => {
-                      void activateEntry(toDirectoryEntryFromSearchResult(item));
+                      void openEntry(toDirectoryEntryFromSearchResult(item));
                     }}
                     onItemContextMenu={(path, position) => {
                       openItemContextMenu(path, position, "search");
@@ -4115,7 +4263,7 @@ export function App() {
                     onSelectionGesture={handleContentSelectionGesture}
                     onClearSelection={clearContentSelection}
                     onActivateEntry={(entry) => {
-                      void activateEntry(entry);
+                      void activateContentEntry(entry);
                     }}
                     onFocusChange={(focused) => setFocusedPane(focused ? "content" : null)}
                     sortBy={sortBy}
@@ -4186,7 +4334,7 @@ export function App() {
                     }}
                     onOpen={() => {
                       if (getInfoItem) {
-                        void openExternally(getInfoItem.path);
+                        void openPathExternally(getInfoItem.path);
                       }
                     }}
                     onOpenInTerminal={() => {
@@ -4237,7 +4385,10 @@ export function App() {
                 notificationDurationSeconds={notificationDurationSeconds}
                 restoreLastVisitedFolderOnStartup={restoreLastVisitedFolderOnStartup}
                 terminalApp={terminalApp}
+                defaultTextEditor={defaultTextEditor}
                 openWithApplications={openWithApplications}
+                fileActivationAction={fileActivationAction}
+                openItemLimit={openItemLimit}
                 themeOptions={[...THEME_OPTIONS]}
                 accentOptions={[...ACCENT_OPTIONS]}
                 uiFontOptions={[...UI_FONT_OPTIONS]}
@@ -4267,6 +4418,9 @@ export function App() {
                 onNotificationDurationSecondsChange={setNotificationDurationSeconds}
                 onRestoreLastVisitedFolderOnStartupChange={setRestoreLastVisitedFolderOnStartup}
                 onTerminalAppChange={setTerminalApp}
+                onBrowseDefaultTextEditor={() => {
+                  void browseDefaultTextEditor();
+                }}
                 onAddOpenWithApplication={() => {
                   void addOpenWithApplication();
                 }}
@@ -4275,6 +4429,8 @@ export function App() {
                 }}
                 onMoveOpenWithApplication={moveOpenWithApplication}
                 onRemoveOpenWithApplication={removeOpenWithApplication}
+                onFileActivationActionChange={setFileActivationAction}
+                onOpenItemLimitChange={setOpenItemLimit}
               />
             )}
           </section>
@@ -4321,25 +4477,24 @@ export function App() {
           title="Paste Requires Review"
           message="Some destination items already exist. You can skip those conflicts or cancel."
           detailLines={buildCopyPastePlanDetailLines(copyPasteDialogState.plan)}
-          primaryAction={
-            {
-              label: "Skip Conflicts",
-              onClick: () =>
-                void executePastePlan({
+          primaryAction={{
+            label: "Skip Conflicts",
+            onClick: () =>
+              void executePastePlan(
+                {
                   ...copyPasteDialogState.plan,
                   conflictResolution: "skip",
-                }, {
+                },
+                {
                   clearClipboardOnStart: copyPasteDialogState.clearClipboardOnStart,
-                }),
-              destructive: copyPasteDialogState.plan.mode === "cut",
-            }
-          }
-          secondaryAction={
-            {
-              label: "Cancel",
-              onClick: () => setCopyPasteDialogState(null),
-            }
-          }
+                },
+              ),
+            destructive: copyPasteDialogState.plan.mode === "cut",
+          }}
+          secondaryAction={{
+            label: "Cancel",
+            onClick: () => setCopyPasteDialogState(null),
+          }}
         />
       ) : null}
       {showCopyPasteProgressCard && writeOperationCardState ? (
@@ -4351,12 +4506,10 @@ export function App() {
           progressMetaStart={`${writeOperationCardState.completedItemCount.toLocaleString()} of ${Math.max(writeOperationCardState.totalItemCount, 0).toLocaleString()} items`}
           progressMetaEnd={formatWriteOperationByteLabel(writeOperationCardState)}
           detailLabel="Current file"
-          detailValue={
-            getPathLeafName(
-              writeOperationCardState.currentSourcePath ??
-                writeOperationCardState.destinationDirectoryPath,
-            )
-          }
+          detailValue={getPathLeafName(
+            writeOperationCardState.currentSourcePath ??
+              writeOperationCardState.destinationDirectoryPath,
+          )}
           onCancel={() => {
             void cancelCopyPasteOperation();
           }}
@@ -4365,10 +4518,7 @@ export function App() {
       {showCopyPasteResultDialog && copyPasteProgressEvent ? (
         <CopyPasteDialog
           title="Paste Result"
-          message={
-            copyPasteProgressEvent.result?.error ??
-            "The copy/paste operation has finished."
-          }
+          message={copyPasteProgressEvent.result?.error ?? "The copy/paste operation has finished."}
           detailLines={buildCopyPasteResultDetailLines(copyPasteProgressEvent)}
           primaryAction={
             copyPasteProgressEvent.result?.items.some((item) => item.status === "failed")
@@ -4444,7 +4594,9 @@ function buildCopyPastePlanDetailLines(plan: CopyPastePlan): string[] {
     lines.push(`${formatSize(plan.summary.totalBytes, "ready")}`);
   }
   if (plan.conflicts.length > 0) {
-    lines.push(`${plan.conflicts.length} conflicting destination item${plan.conflicts.length === 1 ? "" : "s"}`);
+    lines.push(
+      `${plan.conflicts.length} conflicting destination item${plan.conflicts.length === 1 ? "" : "s"}`,
+    );
   }
   for (const issue of plan.issues.slice(0, 3)) {
     lines.push(issue.message);
@@ -4461,10 +4613,14 @@ function buildCopyPasteResultDetailLines(event: CopyPasteProgressEvent): string[
     `${result.summary.completedItemCount} of ${result.summary.totalItemCount} steps completed`,
   ];
   if (result.summary.failedItemCount > 0) {
-    lines.push(`${result.summary.failedItemCount} item${result.summary.failedItemCount === 1 ? "" : "s"} failed`);
+    lines.push(
+      `${result.summary.failedItemCount} item${result.summary.failedItemCount === 1 ? "" : "s"} failed`,
+    );
   }
   if (result.summary.skippedItemCount > 0) {
-    lines.push(`${result.summary.skippedItemCount} item${result.summary.skippedItemCount === 1 ? "" : "s"} skipped`);
+    lines.push(
+      `${result.summary.skippedItemCount} item${result.summary.skippedItemCount === 1 ? "" : "s"} skipped`,
+    );
   }
   if (result.summary.cancelledItemCount > 0) {
     lines.push(
@@ -4534,6 +4690,18 @@ function resolvePasteDestinationPath(args: {
 
 function isDirectoryLikeEntry(entry: DirectoryEntry | null): entry is DirectoryEntry {
   return entry?.kind === "directory" || entry?.kind === "symlink_directory";
+}
+
+function isEditableFileEntry(entry: DirectoryEntry | null): entry is DirectoryEntry {
+  return entry?.kind === "file" || entry?.kind === "symlink_file";
+}
+
+function createOpenItemLimitMessage(
+  action: "Open" | "Edit",
+  selectedCount: number,
+  limit: number,
+): string {
+  return `${action} is limited to ${limit} item${limit === 1 ? "" : "s"} at a time. You selected ${selectedCount}. Change this in Settings if you want a higher limit.`;
 }
 
 function InfoRow({

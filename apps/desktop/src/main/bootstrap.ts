@@ -4,19 +4,19 @@ import { basename, dirname } from "node:path";
 import { promisify } from "node:util";
 import {
   BrowserWindow,
+  type IpcMainInvokeEvent,
+  type OpenDialogOptions,
   app,
   clipboard,
   dialog,
   ipcMain,
   shell,
-  type IpcMainInvokeEvent,
-  type OpenDialogOptions,
 } from "electron";
 
 import {
-  copyPasteProgressEventSchema,
   type IpcRequest,
   type IpcResponse,
+  copyPasteProgressEventSchema,
 } from "@filetrail/contracts";
 import { ExplorerWorkerClient, createWriteService, getPathSuggestions } from "@filetrail/core";
 import type { AppPreferences } from "../shared/appPreferences";
@@ -299,7 +299,7 @@ async function pickApplication(
   const result = window
     ? await dialog.showOpenDialog(window, dialogOptions)
     : await dialog.showOpenDialog(dialogOptions);
-  const appPath = result.canceled ? null : result.filePaths[0] ?? null;
+  const appPath = result.canceled ? null : (result.filePaths[0] ?? null);
   const appName = appPath ? resolveApplicationDisplayName(appPath) : null;
   return {
     canceled: result.canceled,
@@ -525,8 +525,17 @@ export function toPreferencePatch(
   if (value.terminalApp !== undefined) {
     patch.terminalApp = value.terminalApp;
   }
+  if (value.defaultTextEditor !== undefined) {
+    patch.defaultTextEditor = value.defaultTextEditor;
+  }
   if (value.openWithApplications !== undefined) {
     patch.openWithApplications = value.openWithApplications;
+  }
+  if (value.fileActivationAction !== undefined) {
+    patch.fileActivationAction = value.fileActivationAction;
+  }
+  if (value.openItemLimit !== undefined) {
+    patch.openItemLimit = value.openItemLimit;
   }
   if (value.includeHidden !== undefined) {
     patch.includeHidden = value.includeHidden;

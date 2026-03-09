@@ -67,6 +67,10 @@ export const openWithApplicationSchema = z.object({
   appPath: z.string().trim().min(1),
   appName: z.string().trim().min(1),
 });
+export const applicationSelectionSchema = z.object({
+  appPath: z.string().trim().min(1),
+  appName: z.string().trim().min(1),
+});
 export const searchJobStatusSchema = z.enum([
   "running",
   "complete",
@@ -274,7 +278,10 @@ export const appPreferencesSchema = z.object({
   propertiesOpen: z.boolean(),
   detailRowOpen: z.boolean(),
   terminalApp: z.string().trim().min(1).nullable(),
+  defaultTextEditor: applicationSelectionSchema,
   openWithApplications: z.array(openWithApplicationSchema),
+  fileActivationAction: z.enum(["open", "edit"]),
+  openItemLimit: z.number().int().min(1).max(50),
   includeHidden: z.boolean(),
   searchPatternMode: searchPatternModeSchema,
   searchMatchScope: searchMatchScopeSchema,

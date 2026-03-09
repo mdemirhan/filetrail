@@ -35,6 +35,10 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       notificationDurationSeconds={4}
       restoreLastVisitedFolderOnStartup={false}
       terminalApp={null}
+      defaultTextEditor={{
+        appPath: "/System/Applications/TextEdit.app",
+        appName: "TextEdit",
+      }}
       openWithApplications={[
         {
           id: "vscode",
@@ -47,6 +51,8 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
           appName: "Zed",
         },
       ]}
+      fileActivationAction="open"
+      openItemLimit={5}
       themeOptions={THEME_OPTIONS}
       accentOptions={[
         { value: "gold", label: "Gold", primary: "#daa520" },
@@ -79,10 +85,13 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       onNotificationDurationSecondsChange={() => undefined}
       onRestoreLastVisitedFolderOnStartupChange={() => undefined}
       onTerminalAppChange={() => undefined}
+      onBrowseDefaultTextEditor={() => undefined}
       onAddOpenWithApplication={() => undefined}
       onBrowseOpenWithApplication={() => undefined}
       onMoveOpenWithApplication={() => undefined}
       onRemoveOpenWithApplication={() => undefined}
+      onFileActivationActionChange={() => undefined}
+      onOpenItemLimitChange={() => undefined}
       {...overrides}
     />,
   );
@@ -184,6 +193,36 @@ describe("SettingsView", () => {
     expect(onTerminalAppChange).toHaveBeenNthCalledWith(2, null);
   });
 
+  it("renders and updates file opening preferences", () => {
+    const onBrowseDefaultTextEditor = vi.fn();
+    const onFileActivationActionChange = vi.fn();
+    const onOpenItemLimitChange = vi.fn();
+    renderSettingsView({
+      fileActivationAction: "open",
+      openItemLimit: 5,
+      onBrowseDefaultTextEditor,
+      onFileActivationActionChange,
+      onOpenItemLimitChange,
+    });
+
+    expect(screen.getByLabelText("Default text editor")).toHaveValue(
+      "TextEdit - /System/Applications/TextEdit.app",
+    );
+
+    fireEvent.change(screen.getByLabelText("File activation"), {
+      target: { value: "edit" },
+    });
+    fireEvent.change(screen.getByLabelText("Open and Edit item limit"), {
+      target: { value: "9" },
+    });
+    fireEvent.blur(screen.getByLabelText("Open and Edit item limit"));
+    fireEvent.click(screen.getByRole("button", { name: "Browse default text editor" }));
+
+    expect(onFileActivationActionChange).toHaveBeenCalledWith("edit");
+    expect(onOpenItemLimitChange).toHaveBeenCalledWith(9);
+    expect(onBrowseDefaultTextEditor).toHaveBeenCalled();
+  });
+
   it("forwards notification preference changes", () => {
     const onNotificationsEnabledChange = vi.fn();
     const onNotificationDurationSecondsChange = vi.fn();
@@ -210,7 +249,9 @@ describe("SettingsView", () => {
     expect(screen.getByText("Visual Studio Code")).toBeInTheDocument();
     expect(screen.getByText("/Applications/Visual Studio Code.app")).toBeInTheDocument();
     expect(screen.getByText("Zed")).toBeInTheDocument();
-    expect(screen.getByText("Finder and Other… always stay in the context menu.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Finder and Other… always stay in the context menu."),
+    ).toBeInTheDocument();
   });
 
   it("forwards Open With add, browse, move, and remove actions", () => {

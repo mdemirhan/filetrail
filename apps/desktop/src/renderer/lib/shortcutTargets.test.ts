@@ -1,4 +1,8 @@
-import { resolveOpenInTerminalPaths } from "./shortcutTargets";
+import {
+  resolveEditSelectionPaths,
+  resolveOpenInTerminalPaths,
+  resolveOpenSelectionPaths,
+} from "./shortcutTargets";
 
 describe("shortcutTargets", () => {
   it("prefers explicit context menu paths over pane selection", () => {
@@ -59,5 +63,28 @@ describe("shortcutTargets", () => {
         currentPath: "/tmp/current",
       }),
     ).toEqual(["/tmp/current"]);
+  });
+
+  it("uses the tree path for Open when the tree pane is focused", () => {
+    expect(
+      resolveOpenSelectionPaths({
+        focusedPane: "tree",
+        lastFocusedPane: "content",
+        contextMenuPaths: [],
+        selectedContentPaths: ["/tmp/content"],
+        currentPath: "/tmp/tree",
+      }),
+    ).toEqual(["/tmp/tree"]);
+  });
+
+  it("does not fall back to the current path for Edit without a file selection", () => {
+    expect(
+      resolveEditSelectionPaths({
+        focusedPane: "tree",
+        lastFocusedPane: "tree",
+        contextMenuPaths: [],
+        selectedContentPaths: [],
+      }),
+    ).toEqual([]);
   });
 });

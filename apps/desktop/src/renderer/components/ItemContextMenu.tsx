@@ -4,6 +4,7 @@ export type ContextMenuActionId =
   | "revealInFolder"
   | "open"
   | "openWith"
+  | "edit"
   | "toggleInfoPanel"
   | "cut"
   | "copy"
@@ -68,6 +69,7 @@ type ContextMenuIconName =
   | "revealInFolder"
   | "open"
   | "openWith"
+  | "edit"
   | "toggleInfoPanel"
   | "cut"
   | "copy"
@@ -82,8 +84,9 @@ type ContextMenuIconName =
   | "trash";
 
 export const BROWSE_CONTEXT_MENU_ITEMS: readonly ContextMenuItem[] = [
-  { id: "open", label: "Open", icon: "open", shortcut: "⏎" },
+  { id: "open", label: "Open", icon: "open", shortcut: "⌘O" },
   { id: "openWith", label: "Open With", icon: "openWith", hasSubmenu: true },
+  { id: "edit", label: "Edit", icon: "edit", shortcut: "⌘E" },
   { type: "separator", key: "separator-open" },
   { id: "toggleInfoPanel", label: "Toggle Info Panel", icon: "toggleInfoPanel", shortcut: "⌘I" },
   { type: "separator", key: "separator-info" },
@@ -241,6 +244,14 @@ function ContextMenuIcon({ name }: { name: ContextMenuIconName }) {
         <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
         <polyline points="15 3 21 3 21 9" />
         <line x1="10" y1="14" x2="21" y2="3" />
+      </svg>
+    );
+  }
+  if (name === "edit") {
+    return (
+      <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z" />
       </svg>
     );
   }

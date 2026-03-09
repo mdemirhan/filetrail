@@ -1,6 +1,28 @@
 import { createApplicationMenuTemplate } from "./appMenu";
 
 describe("createApplicationMenuTemplate", () => {
+  it("wires Open and Edit to the renderer command channel", () => {
+    const send = vi.fn();
+    const template = createApplicationMenuTemplate({ send } as never);
+    const fileMenu = template.find((item) => item.label === "File");
+    const submenu = Array.isArray(fileMenu?.submenu) ? fileMenu.submenu : [];
+    const openItem = submenu.find((item) => "label" in item && item.label === "Open");
+    const editItem = submenu.find((item) => "label" in item && item.label === "Edit");
+
+    if (!openItem || !("click" in openItem) || typeof openItem.click !== "function") {
+      throw new Error("Open menu item missing.");
+    }
+    if (!editItem || !("click" in editItem) || typeof editItem.click !== "function") {
+      throw new Error("Edit menu item missing.");
+    }
+
+    openItem.click(undefined as never, undefined as never, undefined as never);
+    editItem.click(undefined as never, undefined as never, undefined as never);
+
+    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "openSelection" });
+    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "editSelection" });
+  });
+
   it("wires Open in Terminal to the renderer command channel", () => {
     const send = vi.fn();
     const template = createApplicationMenuTemplate({ send } as never);

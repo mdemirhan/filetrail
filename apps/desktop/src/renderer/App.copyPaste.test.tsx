@@ -101,6 +101,8 @@ vi.mock("./hooks/useExplorerPaneLayout", () => ({
 import { App } from "./App";
 import { type FiletrailClient, FiletrailClientProvider } from "./lib/filetrailClient";
 
+type RendererCommand = Parameters<Parameters<FiletrailClient["onCommand"]>[0]>[0];
+
 describe("App copy/paste integration", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -255,6 +257,162 @@ describe("App copy/paste integration", () => {
       (call) => call.channel === "app:updatePreferences",
     ).length;
     expect(preferenceUpdateCountAfterAction).toBe(preferenceUpdateCountBeforeAction);
+  });
+
+  it("edits files on double click when file activation is set to edit", async () => {
+    const harness = createAppHarness({
+      preferences: {
+        fileActivationAction: "edit",
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceButton = await screen.findByTitle("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.doubleClick(sourceButton);
+    });
+
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.find((call) => call.channel === "system:openPathsWithApplication")
+          ?.payload,
+      ).toEqual({
+        applicationPath: "/System/Applications/TextEdit.app",
+        paths: ["/Users/demo/source.txt"],
+      });
+    });
+  });
+
+  it("runs the Edit command against the selected files only", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceButton = await screen.findByTitle("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.click(sourceButton);
+      harness.emitCommand({ type: "editSelection" });
+    });
+
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.find((call) => call.channel === "system:openPathsWithApplication")
+          ?.payload,
+      ).toEqual({
+        applicationPath: "/System/Applications/TextEdit.app",
+        paths: ["/Users/demo/source.txt"],
+      });
+    });
+  });
+
+  it("uses the selected paths for Enter in the content pane", async () => {
+    const harness = createAppHarness();
+    harness.setDirectoryEntries("/Users/demo", [
+      createDirectoryEntry("/Users/demo/source-a.txt", "file"),
+      createDirectoryEntry("/Users/demo/source-b.txt", "file"),
+    ]);
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceAButton = await screen.findByTitle("/Users/demo/source-a.txt");
+    const sourceBButton = await screen.findByTitle("/Users/demo/source-b.txt");
+    await act(async () => {
+      fireEvent.click(sourceAButton);
+      fireEvent.click(sourceBButton, { metaKey: true });
+    });
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "Enter" });
+    });
+
+    const openPathCalls = harness.invocations.filter(
+      (call) => call.channel === "system:openPath",
+    );
+    expect(openPathCalls.slice(-2).map((call) => call.payload)).toEqual([
+      { path: "/Users/demo/source-a.txt" },
+      { path: "/Users/demo/source-b.txt" },
+    ]);
+  });
+
+  it("disables Edit in the context menu for folders and mixed selections", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceButton = await screen.findByTitle("/Users/demo/source.txt");
+    const folderButton = await screen.findByTitle("/Users/demo/Folder");
+
+    await act(async () => {
+      fireEvent.click(folderButton);
+      fireEvent.contextMenu(folderButton);
+    });
+    expect(screen.getByRole("button", { name: "Edit⌘E" })).toHaveAttribute("aria-disabled", "true");
+
+    await act(async () => {
+      fireEvent.mouseDown(document.body);
+    });
+
+    await act(async () => {
+      fireEvent.click(sourceButton);
+      fireEvent.click(folderButton, { metaKey: true });
+      fireEvent.contextMenu(folderButton);
+    });
+    expect(screen.getByRole("button", { name: "Edit⌘E" })).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("shows a notice when Open exceeds the configured item limit", async () => {
+    const harness = createAppHarness({
+      preferences: {
+        openItemLimit: 1,
+      },
+    });
+    harness.setDirectoryEntries("/Users/demo", [
+      createDirectoryEntry("/Users/demo/source-a.txt", "file"),
+      createDirectoryEntry("/Users/demo/source-b.txt", "file"),
+    ]);
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceAButton = await screen.findByTitle("/Users/demo/source-a.txt");
+    const sourceBButton = await screen.findByTitle("/Users/demo/source-b.txt");
+    await act(async () => {
+      fireEvent.click(sourceAButton);
+      fireEvent.click(sourceBButton, { metaKey: true });
+    });
+    await act(async () => {
+      harness.emitCommand({ type: "openSelection" });
+    });
+
+    expect(await screen.findByRole("dialog", { name: "Open" })).toHaveTextContent(
+      "Open is limited to 1 item at a time.",
+    );
+    expect(
+      harness.invocations.find(
+        (call) =>
+          call.channel === "system:openPath" &&
+          (call.payload as IpcRequestInput<"system:openPath">).path === "/Users/demo/source-a.txt",
+      ),
+    ).toBeUndefined();
   });
 
   it("shows an action notice when open with launch fails", async () => {
@@ -502,7 +660,9 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
-    expect(await screen.findByRole("dialog", { name: "Paste cannot continue" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("dialog", { name: "Paste cannot continue" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("Cannot paste an item onto itself.")).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Paste Requires Review" })).not.toBeInTheDocument();
   });
@@ -651,7 +811,9 @@ describe("App copy/paste integration", () => {
     });
 
     expect(screen.queryByRole("region", { name: "Paste In Progress" })).not.toBeInTheDocument();
-    const planCallsBeforeRetry = harness.invocations.filter((call) => call.channel === "copyPaste:plan");
+    const planCallsBeforeRetry = harness.invocations.filter(
+      (call) => call.channel === "copyPaste:plan",
+    );
 
     await act(async () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
@@ -691,13 +853,17 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
-    expect(await screen.findByRole("dialog", { name: "Unable to prepare paste" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("dialog", { name: "Unable to prepare paste" }),
+    ).toBeInTheDocument();
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "OK" }));
     });
 
-    const planCallsBeforeRetry = harness.invocations.filter((call) => call.channel === "copyPaste:plan");
+    const planCallsBeforeRetry = harness.invocations.filter(
+      (call) => call.channel === "copyPaste:plan",
+    );
     await act(async () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
@@ -758,13 +924,17 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
-    expect(await screen.findByRole("dialog", { name: "Paste cannot continue" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("dialog", { name: "Paste cannot continue" }),
+    ).toBeInTheDocument();
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "OK" }));
     });
 
-    const planCallsBeforeRetry = harness.invocations.filter((call) => call.channel === "copyPaste:plan");
+    const planCallsBeforeRetry = harness.invocations.filter(
+      (call) => call.channel === "copyPaste:plan",
+    );
     await act(async () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
@@ -1051,7 +1221,10 @@ describe("App copy/paste integration", () => {
     });
 
     await vi.waitFor(() => {
-      expect(screen.getByTitle("/Users/demo/Folder/source.txt")).toHaveAttribute("data-selected", "true");
+      expect(screen.getByTitle("/Users/demo/Folder/source.txt")).toHaveAttribute(
+        "data-selected",
+        "true",
+      );
     });
   });
 
@@ -1222,7 +1395,9 @@ describe("App copy/paste integration", () => {
     expect(await screen.findByText("Pasted 1 item into Folder")).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Paste Result" })).not.toBeInTheDocument();
 
-    const planCallsBeforeRetry = harness.invocations.filter((call) => call.channel === "copyPaste:plan");
+    const planCallsBeforeRetry = harness.invocations.filter(
+      (call) => call.channel === "copyPaste:plan",
+    );
     await act(async () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
@@ -1302,7 +1477,9 @@ describe("App copy/paste integration", () => {
       fireEvent.click(await screen.findByRole("button", { name: "Close" }));
     });
 
-    const planCallsBeforeRetry = harness.invocations.filter((call) => call.channel === "copyPaste:plan");
+    const planCallsBeforeRetry = harness.invocations.filter(
+      (call) => call.channel === "copyPaste:plan",
+    );
     await act(async () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
@@ -1412,7 +1589,9 @@ describe("App copy/paste integration", () => {
       fireEvent.click(await screen.findByRole("button", { name: "Close" }));
     });
 
-    const planCallsBeforeRetry = harness.invocations.filter((call) => call.channel === "copyPaste:plan");
+    const planCallsBeforeRetry = harness.invocations.filter(
+      (call) => call.channel === "copyPaste:plan",
+    );
     await act(async () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
@@ -1494,7 +1673,9 @@ describe("App copy/paste integration", () => {
     });
 
     await vi.waitFor(() => {
-      const retryPlanCalls = harness.invocations.filter((call) => call.channel === "copyPaste:plan");
+      const retryPlanCalls = harness.invocations.filter(
+        (call) => call.channel === "copyPaste:plan",
+      );
       expect(retryPlanCalls).toHaveLength(2);
       expect(retryPlanCalls[1]?.payload).toEqual({
         mode: "copy",
@@ -1575,7 +1756,9 @@ describe("App copy/paste integration", () => {
     });
 
     expect(await screen.findByRole("region", { name: "Paste In Progress" })).toBeInTheDocument();
-    const startCallsBeforeCancel = harness.invocations.filter((call) => call.channel === "copyPaste:start");
+    const startCallsBeforeCancel = harness.invocations.filter(
+      (call) => call.channel === "copyPaste:start",
+    );
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -1663,20 +1846,23 @@ describe("App copy/paste integration", () => {
   });
 });
 
-function createAppHarness(args: {
-  planResponse?: IpcResponse<"copyPaste:plan">;
-  preferences?: Partial<IpcResponse<"app:getPreferences">["preferences"]>;
-  copyTextError?: Error;
-  pickApplicationResponse?: IpcResponse<"system:pickApplication">;
-  copyPastePlanError?: Error;
-  deferCopyPastePlan?: boolean;
-  deferCopyPastePlanCalls?: number[];
-  deferCopyPasteStart?: boolean;
-  copyPasteStartError?: Error;
-  openPathsWithApplicationError?: Error;
-} = {}): {
+function createAppHarness(
+  args: {
+    planResponse?: IpcResponse<"copyPaste:plan">;
+    preferences?: Partial<IpcResponse<"app:getPreferences">["preferences"]>;
+    copyTextError?: Error;
+    pickApplicationResponse?: IpcResponse<"system:pickApplication">;
+    copyPastePlanError?: Error;
+    deferCopyPastePlan?: boolean;
+    deferCopyPastePlanCalls?: number[];
+    deferCopyPasteStart?: boolean;
+    copyPasteStartError?: Error;
+    openPathsWithApplicationError?: Error;
+  } = {},
+): {
   client: FiletrailClient;
   invocations: Array<{ channel: IpcChannel; payload: unknown }>;
+  emitCommand: (command: RendererCommand) => void;
   emitProgress: (event: CopyPasteProgressEvent) => void;
   setDirectoryEntries: (
     path: string,
@@ -1710,6 +1896,7 @@ function createAppHarness(args: {
     },
   };
   const invocations: Array<{ channel: IpcChannel; payload: unknown }> = [];
+  let commandListener: ((command: RendererCommand) => void) | null = null;
   let progressListener: ((event: CopyPasteProgressEvent) => void) | null = null;
   const resolveCopyPastePlanPromises: Array<() => void> = [];
   let copyPastePlanCallCount = 0;
@@ -1741,7 +1928,7 @@ function createAppHarness(args: {
         return { preferences } as IpcResponse<C>;
       }
       if (channel === "tree:getChildren") {
-        return ({
+        return {
           path: "/Users/demo",
           children: [
             {
@@ -1752,16 +1939,18 @@ function createAppHarness(args: {
               isSymlink: false,
             },
           ],
-        } satisfies IpcResponse<"tree:getChildren">) as IpcResponse<C>;
+        } satisfies IpcResponse<"tree:getChildren"> as IpcResponse<C>;
       }
       if (channel === "directory:getSnapshot") {
-        return directorySnapshots[(payload as IpcRequestInput<"directory:getSnapshot">).path] as IpcResponse<C>;
+        return directorySnapshots[
+          (payload as IpcRequestInput<"directory:getSnapshot">).path
+        ] as IpcResponse<C>;
       }
       if (channel === "directory:getMetadataBatch") {
-        return ({
+        return {
           directoryPath: (payload as IpcRequestInput<"directory:getMetadataBatch">).directoryPath,
           items: [],
-        } satisfies IpcResponse<"directory:getMetadataBatch">) as IpcResponse<C>;
+        } satisfies IpcResponse<"directory:getMetadataBatch"> as IpcResponse<C>;
       }
       if (channel === "copyPaste:plan") {
         copyPastePlanCallCount += 1;
@@ -1776,37 +1965,35 @@ function createAppHarness(args: {
         if (args.copyPastePlanError) {
           throw args.copyPastePlanError;
         }
-        return (
-          args.planResponse ?? {
-            mode: "copy",
-            sourcePaths: ["/Users/demo/source.txt"],
-            destinationDirectoryPath: "/Users/demo/Folder",
-            conflictResolution: "error",
-            items: [
-              {
-                sourcePath: "/Users/demo/source.txt",
-                destinationPath: "/Users/demo/Folder/source.txt",
-                kind: "file",
-                status: "ready",
-                sizeBytes: 5,
-              },
-            ],
-            conflicts: [],
-            issues: [],
-            warnings: [],
-            requiresConfirmation: {
-              largeBatch: false,
-              cutDelete: false,
+        return (args.planResponse ?? {
+          mode: "copy",
+          sourcePaths: ["/Users/demo/source.txt"],
+          destinationDirectoryPath: "/Users/demo/Folder",
+          conflictResolution: "error",
+          items: [
+            {
+              sourcePath: "/Users/demo/source.txt",
+              destinationPath: "/Users/demo/Folder/source.txt",
+              kind: "file",
+              status: "ready",
+              sizeBytes: 5,
             },
-            summary: {
-              topLevelItemCount: 1,
-              totalItemCount: 1,
-              totalBytes: 5,
-              skippedConflictCount: 0,
-            },
-            canExecute: true,
-          }
-        ) as IpcResponse<C>;
+          ],
+          conflicts: [],
+          issues: [],
+          warnings: [],
+          requiresConfirmation: {
+            largeBatch: false,
+            cutDelete: false,
+          },
+          summary: {
+            topLevelItemCount: 1,
+            totalItemCount: 1,
+            totalBytes: 5,
+            skippedConflictCount: 0,
+          },
+          canExecute: true,
+        }) as IpcResponse<C>;
       }
       if (channel === "copyPaste:start") {
         if (copyPasteStartPromise) {
@@ -1821,22 +2008,20 @@ function createAppHarness(args: {
         return { ok: true } as IpcResponse<C>;
       }
       if (channel === "path:resolve") {
-        return ({
+        return {
           inputPath: (payload as IpcRequestInput<"path:resolve">).path,
           resolvedPath: (payload as IpcRequestInput<"path:resolve">).path,
-        } satisfies IpcResponse<"path:resolve">) as IpcResponse<C>;
+        } satisfies IpcResponse<"path:resolve"> as IpcResponse<C>;
       }
       if (channel === "system:openPath") {
         return { ok: true, error: null } as IpcResponse<C>;
       }
       if (channel === "system:pickApplication") {
-        return (
-          args.pickApplicationResponse ?? {
-            canceled: false,
-            appPath: "/Applications/Other.app",
-            appName: "Other",
-          }
-        ) as IpcResponse<C>;
+        return (args.pickApplicationResponse ?? {
+          canceled: false,
+          appPath: "/Applications/Other.app",
+          appName: "Other",
+        }) as IpcResponse<C>;
       }
       if (channel === "system:openPathsWithApplication") {
         if (args.openPathsWithApplicationError) {
@@ -1858,7 +2043,14 @@ function createAppHarness(args: {
       }
       throw new Error(`Unhandled channel in test harness: ${channel}`);
     },
-    onCommand: () => () => undefined,
+    onCommand(listener) {
+      commandListener = listener;
+      return () => {
+        if (commandListener === listener) {
+          commandListener = null;
+        }
+      };
+    },
     onCopyPasteProgress(listener) {
       progressListener = listener;
       return () => {
@@ -1872,6 +2064,9 @@ function createAppHarness(args: {
   return {
     client,
     invocations,
+    emitCommand(command) {
+      commandListener?.(command);
+    },
     emitProgress(event) {
       progressListener?.(event);
     },
@@ -1935,7 +2130,9 @@ function mergePreferences(
   current: IpcResponse<"app:getPreferences">["preferences"],
   patch: IpcRequestInput<"app:updatePreferences">["preferences"],
 ): IpcResponse<"app:getPreferences">["preferences"] {
-  return Object.assign({}, current, stripUndefined(patch)) as IpcResponse<
-    "app:getPreferences"
-  >["preferences"];
+  return Object.assign(
+    {},
+    current,
+    stripUndefined(patch),
+  ) as IpcResponse<"app:getPreferences">["preferences"];
 }

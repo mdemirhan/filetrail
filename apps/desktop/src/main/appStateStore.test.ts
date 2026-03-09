@@ -46,6 +46,10 @@ describe("appStateStore", () => {
       propertiesOpen: true,
       detailRowOpen: true,
       terminalApp: null,
+      defaultTextEditor: {
+        appPath: "/System/Applications/TextEdit.app",
+        appName: "TextEdit",
+      },
       openWithApplications: [
         {
           id: "visual-studio-code",
@@ -63,6 +67,8 @@ describe("appStateStore", () => {
           appName: "Zed",
         },
       ],
+      fileActivationAction: "open",
+      openItemLimit: 5,
       includeHidden: false,
       searchPatternMode: "regex",
       searchMatchScope: "name",
@@ -123,6 +129,10 @@ describe("appStateStore", () => {
       notificationsEnabled: true,
       notificationDurationSeconds: 4,
       terminalApp: "iTerm",
+      defaultTextEditor: {
+        appPath: "/Applications/Zed.app",
+        appName: "Zed",
+      },
       openWithApplications: [
         {
           id: "zed",
@@ -130,6 +140,8 @@ describe("appStateStore", () => {
           appName: "Zed",
         },
       ],
+      fileActivationAction: "edit",
+      openItemLimit: 9,
       includeHidden: true,
       searchPatternMode: "glob",
       searchMatchScope: "path",
@@ -191,6 +203,10 @@ describe("appStateStore", () => {
       notificationsEnabled: true,
       notificationDurationSeconds: 4,
       terminalApp: "iTerm",
+      defaultTextEditor: {
+        appPath: "/Applications/Zed.app",
+        appName: "Zed",
+      },
       openWithApplications: [
         {
           id: "zed",
@@ -198,6 +214,8 @@ describe("appStateStore", () => {
           appName: "Zed",
         },
       ],
+      fileActivationAction: "edit",
+      openItemLimit: 9,
       includeHidden: true,
       searchPatternMode: "glob",
       searchMatchScope: "path",
@@ -239,6 +257,10 @@ describe("appStateStore", () => {
       textPrimaryOverride: "oops" as never,
       typeaheadDebounceMs: 9999,
       terminalApp: "   ",
+      defaultTextEditor: {
+        appPath: "   ",
+        appName: "TextEdit",
+      } as never,
       openWithApplications: [
         {
           id: "",
@@ -258,6 +280,8 @@ describe("appStateStore", () => {
         modified: 180,
         permissions: 100,
       } as never,
+      fileActivationAction: "launch" as never,
+      openItemLimit: 999,
       treeWidth: 1,
       inspectorWidth: 9999,
       treeRootPath: "",
@@ -280,6 +304,10 @@ describe("appStateStore", () => {
     expect(reloaded.getPreferences().textPrimaryOverride).toBeNull();
     expect(reloaded.getPreferences().typeaheadDebounceMs).toBe(1500);
     expect(reloaded.getPreferences().terminalApp).toBeNull();
+    expect(reloaded.getPreferences().defaultTextEditor).toEqual({
+      appPath: "/System/Applications/TextEdit.app",
+      appName: "TextEdit",
+    });
     expect(reloaded.getPreferences().openWithApplications).toEqual([
       {
         id: "visual-studio-code",
@@ -309,6 +337,8 @@ describe("appStateStore", () => {
       modified: 180,
       permissions: 132,
     });
+    expect(reloaded.getPreferences().fileActivationAction).toBe("open");
+    expect(reloaded.getPreferences().openItemLimit).toBe(50);
     expect(reloaded.getPreferences().treeRootPath).toBeNull();
     expect(reloaded.getPreferences().lastVisitedPath).toBeNull();
   });

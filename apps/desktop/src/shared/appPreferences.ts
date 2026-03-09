@@ -36,11 +36,14 @@ export type DetailColumnKey = "name" | "size" | "modified" | "permissions";
 export type OptionalDetailColumnKey = Exclude<DetailColumnKey, "name">;
 export type DetailColumnVisibility = Record<OptionalDetailColumnKey, boolean>;
 export type DetailColumnWidths = Record<DetailColumnKey, number>;
-export type OpenWithApplication = {
-  id: string;
+export type ApplicationSelection = {
   appPath: string;
   appName: string;
 };
+export type OpenWithApplication = {
+  id: string;
+} & ApplicationSelection;
+export type FileActivationAction = "open" | "edit";
 
 // These option lists are used for both UI rendering and validation-like lookups.
 // Keep them stable unless the corresponding persisted preference values are migrated.
@@ -140,6 +143,12 @@ export const DEFAULT_OPEN_WITH_APPLICATIONS: OpenWithApplication[] = [
     appName: "Zed",
   },
 ];
+export const DEFAULT_TEXT_EDITOR: ApplicationSelection = {
+  appPath: "/System/Applications/TextEdit.app",
+  appName: "TextEdit",
+};
+export const OPEN_ITEM_LIMIT_MIN = 1;
+export const OPEN_ITEM_LIMIT_MAX = 50;
 
 // This is the durable shape written by the main-process state store.
 // Adding or renaming keys here requires corresponding migration handling in the loader,
@@ -170,7 +179,10 @@ export type AppPreferences = {
   propertiesOpen: boolean;
   detailRowOpen: boolean;
   terminalApp: string | null;
+  defaultTextEditor: ApplicationSelection;
   openWithApplications: OpenWithApplication[];
+  fileActivationAction: FileActivationAction;
+  openItemLimit: number;
   includeHidden: boolean;
   searchPatternMode: SearchPatternModePreference;
   searchMatchScope: SearchMatchScopePreference;
@@ -212,7 +224,10 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   propertiesOpen: true,
   detailRowOpen: true,
   terminalApp: null,
+  defaultTextEditor: { ...DEFAULT_TEXT_EDITOR },
   openWithApplications: DEFAULT_OPEN_WITH_APPLICATIONS.map((entry) => ({ ...entry })),
+  fileActivationAction: "open",
+  openItemLimit: 5,
   includeHidden: false,
   searchPatternMode: "regex",
   searchMatchScope: "name",
@@ -258,11 +273,12 @@ export function clampTypeaheadDebounceMs(value: number, min: number, max: number
 
 export function clampNotificationDurationSeconds(value: number): number {
   return Math.round(
-    Math.max(
-      NOTIFICATION_DURATION_SECONDS_MIN,
-      Math.min(NOTIFICATION_DURATION_SECONDS_MAX, value),
-    ),
+    Math.max(NOTIFICATION_DURATION_SECONDS_MIN, Math.min(NOTIFICATION_DURATION_SECONDS_MAX, value)),
   );
+}
+
+export function clampOpenItemLimit(value: number): number {
+  return Math.round(Math.max(OPEN_ITEM_LIMIT_MIN, Math.min(OPEN_ITEM_LIMIT_MAX, value)));
 }
 
 export function clampDetailColumnWidth(key: DetailColumnKey, value: number): number {

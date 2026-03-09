@@ -1,8 +1,10 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
 import type {
   AccentMode,
+  ApplicationSelection,
   DetailColumnVisibility,
+  FileActivationAction,
   OpenWithApplication,
   ThemeMode,
   UiFontFamily,
@@ -12,14 +14,11 @@ import {
   DEFAULT_APP_PREFERENCES,
   ZOOM_PERCENT_MAX,
   ZOOM_PERCENT_MIN,
+  clampOpenItemLimit,
   clampZoomPercent,
 } from "../../shared/appPreferences";
 import { generateAccentTokens } from "../lib/accent";
-import {
-  getThemeVariant,
-  resolveThemeCssBase,
-  type ThemeCssBase,
-} from "../lib/themeVariants";
+import { type ThemeCssBase, getThemeVariant, resolveThemeCssBase } from "../lib/themeVariants";
 
 const mono = "'SF Mono', 'JetBrains Mono', 'Fira Code', monospace";
 const sans = "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', system-ui, sans-serif";
@@ -727,12 +726,16 @@ function AccentSelector({
 function TextInput({
   value,
   placeholder,
+  ariaLabel = "Terminal app",
   theme,
+  readOnly = false,
   onChange,
 }: {
   value: string;
   placeholder: string;
+  ariaLabel?: string;
   theme: ResolvedSettingsTheme;
+  readOnly?: boolean;
   onChange: (value: string) => void;
 }) {
   return (
@@ -740,8 +743,9 @@ function TextInput({
       type="text"
       value={value}
       placeholder={placeholder}
-      aria-label="Terminal app"
+      aria-label={ariaLabel}
       spellCheck={false}
+      readOnly={readOnly}
       onChange={(event) => onChange(event.currentTarget.value)}
       style={{
         width: "100%",
@@ -756,6 +760,7 @@ function TextInput({
         fontWeight: 450,
         outline: "none",
         caretColor: theme.input.caret,
+        opacity: readOnly ? 0.9 : 1,
       }}
       onFocus={(event) => {
         event.currentTarget.style.borderColor = theme.input.borderFocus;
@@ -854,6 +859,78 @@ function ZoomLevelInput({
       value={draft}
       aria-label="Zoom level"
       inputMode="decimal"
+      spellCheck={false}
+      onChange={(event) => setDraft(event.currentTarget.value)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.currentTarget.blur();
+        }
+      }}
+      onFocus={(event) => {
+        event.currentTarget.style.borderColor = theme.input.borderFocus;
+      }}
+      onBlur={(event) => {
+        event.currentTarget.style.borderColor = theme.input.border;
+        commit();
+      }}
+      style={{
+        width: "92px",
+        height: "32px",
+        padding: "0 10px",
+        borderRadius: "6px",
+        background: theme.input.bg,
+        border: `1px solid ${theme.input.border}`,
+        color: theme.input.text,
+        fontSize: "12px",
+        fontFamily: mono,
+        fontWeight: 450,
+        outline: "none",
+        caretColor: theme.input.caret,
+      }}
+    />
+  );
+}
+
+function OpenItemLimitInput({
+  value,
+  theme,
+  onChange,
+}: {
+  value: number;
+  theme: ResolvedSettingsTheme;
+  onChange: (value: number) => void;
+}) {
+  const [draft, setDraft] = useState(() => String(value));
+
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  const commit = () => {
+    const normalized = draft.trim();
+    if (!/^\d+$/.test(normalized)) {
+      const fallback = DEFAULT_APP_PREFERENCES.openItemLimit;
+      setDraft(String(fallback));
+      if (fallback !== value) {
+        onChange(fallback);
+      }
+      return;
+    }
+    const nextValue = clampOpenItemLimit(Number(normalized));
+    setDraft(String(nextValue));
+    if (nextValue !== value) {
+      onChange(nextValue);
+    }
+  };
+
+  return (
+    <input
+      type="number"
+      min={1}
+      max={50}
+      value={draft}
+      aria-label="Open and Edit item limit"
+      inputMode="numeric"
       spellCheck={false}
       onChange={(event) => setDraft(event.currentTarget.value)}
       onKeyDown={(event) => {
@@ -1031,7 +1108,10 @@ export function SettingsView({
   notificationDurationSeconds,
   restoreLastVisitedFolderOnStartup,
   terminalApp,
+  defaultTextEditor,
   openWithApplications,
+  fileActivationAction,
+  openItemLimit,
   themeOptions,
   accentOptions,
   uiFontOptions,
@@ -1061,10 +1141,13 @@ export function SettingsView({
   onNotificationDurationSecondsChange,
   onRestoreLastVisitedFolderOnStartupChange,
   onTerminalAppChange,
+  onBrowseDefaultTextEditor,
   onAddOpenWithApplication,
   onBrowseOpenWithApplication,
   onMoveOpenWithApplication,
   onRemoveOpenWithApplication,
+  onFileActivationActionChange,
+  onOpenItemLimitChange,
 }: {
   theme: ThemeMode;
   accent: AccentMode;
@@ -1088,7 +1171,10 @@ export function SettingsView({
   notificationDurationSeconds: number;
   restoreLastVisitedFolderOnStartup: boolean;
   terminalApp: string | null;
+  defaultTextEditor: ApplicationSelection;
   openWithApplications: ReadonlyArray<OpenWithApplication>;
+  fileActivationAction: FileActivationAction;
+  openItemLimit: number;
   themeOptions: ReadonlyArray<{ value: ThemeMode; label: string; group?: "dark" | "light" }>;
   accentOptions: ReadonlyArray<{
     value: AccentMode;
@@ -1122,10 +1208,13 @@ export function SettingsView({
   onNotificationDurationSecondsChange: (value: number) => void;
   onRestoreLastVisitedFolderOnStartupChange: (value: boolean) => void;
   onTerminalAppChange: (value: string | null) => void;
+  onBrowseDefaultTextEditor: () => void;
   onAddOpenWithApplication: () => void;
   onBrowseOpenWithApplication: (entryId: string) => void;
   onMoveOpenWithApplication: (entryId: string, direction: "up" | "down") => void;
   onRemoveOpenWithApplication: (entryId: string) => void;
+  onFileActivationActionChange: (value: FileActivationAction) => void;
+  onOpenItemLimitChange: (value: number) => void;
 }) {
   const palette = resolveSettingsTheme(theme, accent);
   const [resetHover, setResetHover] = useState(false);
@@ -1137,7 +1226,11 @@ export function SettingsView({
       style={{
         background: palette.page.bg,
         padding:
-          layoutMode === "compact" ? "20px 16px 16px" : layoutMode === "narrow" ? "24px 18px 18px" : "28px 24px 20px",
+          layoutMode === "compact"
+            ? "20px 16px 16px"
+            : layoutMode === "narrow"
+              ? "24px 18px 18px"
+              : "28px 24px 20px",
         minHeight: "100%",
         overflowY: "auto",
       }}
@@ -1266,7 +1359,9 @@ export function SettingsView({
             title="Zoom level"
             desc={`Electron window zoom. Accepts values between ${ZOOM_PERCENT_MIN}% and ${ZOOM_PERCENT_MAX}%.`}
             theme={palette}
-            right={<ZoomLevelInput value={zoomPercent} theme={palette} onChange={onZoomPercentChange} />}
+            right={
+              <ZoomLevelInput value={zoomPercent} theme={palette} onChange={onZoomPercentChange} />
+            }
           />
 
           <div style={{ paddingTop: "8px", paddingBottom: "4px" }}>
@@ -1609,7 +1704,7 @@ export function SettingsView({
             />
             <div
               style={{
-                fontSize: "10.5px",
+                fontSize: "11px",
                 fontFamily: sans,
                 color: palette.label.secondary,
                 marginTop: "6px",
@@ -1617,6 +1712,92 @@ export function SettingsView({
               }}
             >
               Leave blank to use Terminal. Enter another app name such as iTerm to override.
+            </div>
+          </div>
+        </SectionCard>
+
+        <SectionCard icon="✎" title="File Opening" theme={palette}>
+          <SettingRow
+            title="File activation"
+            desc="Choose what Enter and double click do for files in the content pane. Folders still open normally."
+            theme={palette}
+            right={
+              <SelectControl
+                value={fileActivationAction}
+                options={["open", "edit"] satisfies FileActivationAction[]}
+                theme={palette}
+                width="120px"
+                ariaLabel="File activation"
+                onChange={(value) => onFileActivationActionChange(value as FileActivationAction)}
+                formatOption={(value) => (value === "edit" ? "Edit" : "Open")}
+              />
+            }
+          />
+          <SettingRow
+            title="Open and Edit limit"
+            desc="Prevent large accidental launches. Applies to the Open and Edit actions."
+            theme={palette}
+            right={
+              <OpenItemLimitInput
+                value={openItemLimit}
+                theme={palette}
+                onChange={onOpenItemLimitChange}
+              />
+            }
+          />
+
+          <div
+            style={{
+              borderTop: `1px solid ${palette.separator}`,
+              paddingTop: "8px",
+              marginTop: "4px",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "12.5px",
+                fontFamily: sans,
+                fontWeight: 500,
+                color: palette.label.primary,
+                marginBottom: "6px",
+              }}
+            >
+              Default text editor
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+              }}
+            >
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <TextInput
+                  value={`${defaultTextEditor.appName} - ${defaultTextEditor.appPath}`}
+                  placeholder="TextEdit"
+                  ariaLabel="Default text editor"
+                  theme={palette}
+                  readOnly
+                  onChange={() => undefined}
+                />
+              </div>
+              <ActionButton
+                label="Browse"
+                ariaLabel="Browse default text editor"
+                theme={palette}
+                onClick={onBrowseDefaultTextEditor}
+              />
+            </div>
+            <div
+              style={{
+                fontSize: "11px",
+                fontFamily: sans,
+                color: palette.label.secondary,
+                marginTop: "6px",
+                lineHeight: "1.4",
+              }}
+            >
+              Edit uses this application for files only.
             </div>
           </div>
         </SectionCard>
@@ -1743,10 +1924,7 @@ export function SettingsView({
           ))}
         </SectionCard>
 
-        <div
-          className="settings-footer-note"
-          style={{ textAlign: "center", padding: "8px 0 4px" }}
-        >
+        <div className="settings-footer-note" style={{ textAlign: "center", padding: "8px 0 4px" }}>
           <span
             style={{
               fontSize: "10.5px",

@@ -72,6 +72,26 @@ describe("toPreferencePatch", () => {
     });
   });
 
+  it("preserves default editor and file activation preferences", () => {
+    expect(
+      toPreferencePatch({
+        defaultTextEditor: {
+          appPath: "/Applications/Zed.app",
+          appName: "Zed",
+        },
+        fileActivationAction: "edit",
+        openItemLimit: 9,
+      }),
+    ).toEqual({
+      defaultTextEditor: {
+        appPath: "/Applications/Zed.app",
+        appName: "Zed",
+      },
+      fileActivationAction: "edit",
+      openItemLimit: 9,
+    });
+  });
+
   it("preserves open with application preferences", () => {
     expect(
       toPreferencePatch({

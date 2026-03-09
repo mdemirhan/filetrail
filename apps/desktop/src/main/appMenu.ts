@@ -2,6 +2,8 @@ import type { MenuItemConstructorOptions, WebContents } from "electron";
 
 export type RendererCommand =
   | "focusFileSearch"
+  | "openSelection"
+  | "editSelection"
   | "openLocationSheet"
   | "openSettings"
   | "zoomIn"
@@ -29,6 +31,25 @@ export function createApplicationMenuTemplate(
     {
       label: "File",
       submenu: [
+        {
+          label: "Open",
+          accelerator: "CommandOrControl+O",
+          click: () => {
+            webContents.send("filetrail:command", {
+              type: "openSelection" satisfies RendererCommand,
+            });
+          },
+        },
+        {
+          label: "Edit",
+          accelerator: "CommandOrControl+E",
+          click: () => {
+            webContents.send("filetrail:command", {
+              type: "editSelection" satisfies RendererCommand,
+            });
+          },
+        },
+        { type: "separator" },
         {
           label: "Open in Terminal",
           accelerator: "CommandOrControl+T",

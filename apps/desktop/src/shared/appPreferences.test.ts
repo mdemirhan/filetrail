@@ -5,6 +5,7 @@ import {
   clampFontSize,
   clampFontWeight,
   clampNotificationDurationSeconds,
+  clampOpenItemLimit,
   clampPaneWidth,
   clampTypeaheadDebounceMs,
   clampZoomPercent,
@@ -21,6 +22,8 @@ describe("appPreferences helpers", () => {
     expect(clampTypeaheadDebounceMs(1600.4, 250, 1500)).toBe(1500);
     expect(clampNotificationDurationSeconds(1.2)).toBe(2);
     expect(clampNotificationDurationSeconds(10.8)).toBe(10);
+    expect(clampOpenItemLimit(0.3)).toBe(1);
+    expect(clampOpenItemLimit(51.2)).toBe(50);
     expect(clampZoomPercent(106.8)).toBe(107);
     expect(clampZoomPercent(500)).toBe(150);
   });
@@ -93,6 +96,12 @@ describe("appPreferences helpers", () => {
       restoreLastVisitedFolderOnStartup: false,
       notificationsEnabled: true,
       notificationDurationSeconds: 4,
+      defaultTextEditor: {
+        appPath: "/System/Applications/TextEdit.app",
+        appName: "TextEdit",
+      },
+      fileActivationAction: "open",
+      openItemLimit: 5,
       treeRootPath: null,
       lastVisitedPath: null,
     });

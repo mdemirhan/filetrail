@@ -69,6 +69,7 @@ describe("ItemContextMenu", () => {
         disabledActionIds={[
           "open",
           "openWith",
+          "edit",
           "toggleInfoPanel",
           "cut",
           "copy",
@@ -88,7 +89,8 @@ describe("ItemContextMenu", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Open⏎" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: "Open⌘O" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: "Edit⌘E" })).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByRole("button", { name: "New Folder⇧⌘N" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Copy Path⌥⌘C" })).toHaveAttribute(
       "aria-disabled",
@@ -138,9 +140,11 @@ describe("ItemContextMenu", () => {
 
     fireEvent.mouseEnter(screen.getByRole("button", { name: "Open With" }));
 
-    const submenuButtons = screen.getAllByRole("button").filter((button) =>
-      ["Zed", "Visual Studio Code", "Finder", "Other…"].includes(button.textContent ?? ""),
-    );
+    const submenuButtons = screen
+      .getAllByRole("button")
+      .filter((button) =>
+        ["Zed", "Visual Studio Code", "Finder", "Other…"].includes(button.textContent ?? ""),
+      );
     expect(submenuButtons.map((button) => button.textContent)).toEqual([
       "Zed",
       "Visual Studio Code",

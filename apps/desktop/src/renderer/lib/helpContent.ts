@@ -16,6 +16,16 @@ export const SHORTCUT_ITEMS = [
   },
   {
     group: "Navigation",
+    shortcut: "Cmd+O",
+    description: "Open the selected item or selection",
+  },
+  {
+    group: "Navigation",
+    shortcut: "Cmd+E",
+    description: "Edit the selected files with the configured text editor",
+  },
+  {
+    group: "Navigation",
     shortcut: "Ctrl+U",
     description: "Scroll one page up in the focused tree or content view",
   },
@@ -96,7 +106,8 @@ export const REFERENCE_ITEMS = [
   },
   {
     label: "List view activation",
-    description: "Double click a folder to enter it, or double click a file to open it in macOS.",
+    description:
+      "Double click a folder to enter it. Double click a file follows the Open/Edit setting.",
   },
   {
     label: "Tree disclosure chevron",

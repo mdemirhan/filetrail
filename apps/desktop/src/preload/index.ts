@@ -10,6 +10,8 @@ import type {
 type RendererCommand = {
   type:
     | "focusFileSearch"
+    | "openSelection"
+    | "editSelection"
     | "openLocationSheet"
     | "openSettings"
     | "zoomIn"

@@ -69,6 +69,10 @@ describe("ipc contracts", () => {
           propertiesOpen: true,
           detailRowOpen: true,
           terminalApp: null,
+          defaultTextEditor: {
+            appPath: "/System/Applications/TextEdit.app",
+            appName: "TextEdit",
+          },
           openWithApplications: [
             {
               id: "visual-studio-code",
@@ -86,6 +90,8 @@ describe("ipc contracts", () => {
               appName: "Zed",
             },
           ],
+          fileActivationAction: "open",
+          openItemLimit: 5,
           includeHidden: false,
           searchPatternMode: "regex",
           searchMatchScope: "name",
@@ -137,6 +143,10 @@ describe("ipc contracts", () => {
         propertiesOpen: true,
         detailRowOpen: true,
         terminalApp: null,
+        defaultTextEditor: {
+          appPath: "/System/Applications/TextEdit.app",
+          appName: "TextEdit",
+        },
         openWithApplications: [
           {
             id: "visual-studio-code",
@@ -154,6 +164,8 @@ describe("ipc contracts", () => {
             appName: "Zed",
           },
         ],
+        fileActivationAction: "open",
+        openItemLimit: 5,
         includeHidden: false,
         searchPatternMode: "regex",
         searchMatchScope: "name",
@@ -208,6 +220,10 @@ describe("ipc contracts", () => {
           typeaheadEnabled: false,
           typeaheadDebounceMs: 1000,
           terminalApp: "iTerm",
+          defaultTextEditor: {
+            appPath: "/Applications/Zed.app",
+            appName: "Zed",
+          },
           openWithApplications: [
             {
               id: "zed",
@@ -215,6 +231,8 @@ describe("ipc contracts", () => {
               appName: "Zed",
             },
           ],
+          fileActivationAction: "edit",
+          openItemLimit: 12,
         },
       }),
     ).toEqual({
@@ -254,6 +272,10 @@ describe("ipc contracts", () => {
         typeaheadEnabled: false,
         typeaheadDebounceMs: 1000,
         terminalApp: "iTerm",
+        defaultTextEditor: {
+          appPath: "/Applications/Zed.app",
+          appName: "Zed",
+        },
         openWithApplications: [
           {
             id: "zed",
@@ -261,6 +283,8 @@ describe("ipc contracts", () => {
             appName: "Zed",
           },
         ],
+        fileActivationAction: "edit",
+        openItemLimit: 12,
       },
     });
   });
