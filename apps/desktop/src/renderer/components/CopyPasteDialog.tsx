@@ -22,19 +22,50 @@ export function CopyPasteDialog({
     onClick: () => void;
   } | undefined;
 }) {
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
+  const secondaryButtonRef = useRef<HTMLButtonElement | null>(null);
   const primaryButtonRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
-    primaryButtonRef.current?.focus();
+    const target = primaryButtonRef.current ?? secondaryButtonRef.current ?? dialogRef.current;
+    target?.focus();
   }, []);
 
   return (
     <div className="action-notice-backdrop" role="presentation">
       <dialog
+        ref={dialogRef}
         className="action-notice-dialog copy-paste-dialog"
         aria-label={title}
+        aria-modal="true"
         open
+        tabIndex={-1}
         onMouseDown={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          if (event.defaultPrevented || event.key !== "Tab") {
+            return;
+          }
+          const dialog = dialogRef.current;
+          if (!dialog) {
+            return;
+          }
+          const focusableElements = getFocusableElements(dialog);
+          if (focusableElements.length === 0) {
+            return;
+          }
+          const activeElement = document.activeElement;
+          const currentIndex =
+            activeElement instanceof HTMLElement ? focusableElements.indexOf(activeElement) : -1;
+          const nextIndex = event.shiftKey
+            ? currentIndex <= 0
+              ? focusableElements.length - 1
+              : currentIndex - 1
+            : currentIndex < 0 || currentIndex >= focusableElements.length - 1
+              ? 0
+              : currentIndex + 1;
+          event.preventDefault();
+          focusableElements[nextIndex]?.focus();
+        }}
       >
         <div className="action-notice-title">{title}</div>
         <p className="action-notice-message">{message}</p>
@@ -48,7 +79,12 @@ export function CopyPasteDialog({
         ) : null}
         <div className="action-notice-actions">
           {secondaryAction ? (
-            <button type="button" className="tb-btn" onClick={secondaryAction.onClick}>
+            <button
+              ref={secondaryButtonRef}
+              type="button"
+              className="tb-btn"
+              onClick={secondaryAction.onClick}
+            >
               {secondaryAction.label}
             </button>
           ) : null}
@@ -65,5 +101,13 @@ export function CopyPasteDialog({
         </div>
       </dialog>
     </div>
+  );
+}
+
+function getFocusableElements(container: HTMLElement): HTMLElement[] {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
   );
 }

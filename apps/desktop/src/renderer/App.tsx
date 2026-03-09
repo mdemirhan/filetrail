@@ -1,6 +1,7 @@
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -302,6 +303,14 @@ export function App() {
   const actionNoticeReturnFocusPaneRef = useRef<"tree" | "content" | null>(null);
   const lastExplorerFocusPaneRef = useRef<"tree" | "content" | null>(null);
   const activeCopyPasteOperationIdRef = useRef<string | null>(null);
+  const currentPathRef = useRef(currentPath);
+  const isSearchModeRef = useRef(false);
+  const selectedPathsInViewOrderRef = useRef<string[]>([]);
+  const selectedEntryRef = useRef<DirectoryEntry | null>(null);
+  const pendingPasteSelectionRef = useRef<{
+    directoryPath: string;
+    selectedPaths: string[];
+  } | null>(null);
   const panes = useExplorerPaneLayout({
     initialTreeWidth: DEFAULT_APP_PREFERENCES.treeWidth,
     initialInspectorWidth: DEFAULT_APP_PREFERENCES.inspectorWidth,
@@ -444,7 +453,11 @@ export function App() {
   }, [searchResultsSortDirection]);
 
   useEffect(() => {
-    setContentSelection((current) => sanitizeContentSelection(current, activeContentEntries));
+    setContentSelection((current) => {
+      const nextSelection = sanitizeContentSelection(current, activeContentEntries);
+      syncContentSelectionRefs(nextSelection, activeContentEntries);
+      return nextSelection;
+    });
   }, [activeContentEntries]);
 
   useEffect(() => {
@@ -454,6 +467,22 @@ export function App() {
     }
     browseSelectionRef.current = contentSelection;
   }, [contentSelection, isSearchMode]);
+
+  useLayoutEffect(() => {
+    currentPathRef.current = currentPath;
+  }, [currentPath]);
+
+  useLayoutEffect(() => {
+    isSearchModeRef.current = isSearchMode;
+  }, [isSearchMode]);
+
+  useLayoutEffect(() => {
+    selectedPathsInViewOrderRef.current = selectedPathsInViewOrder;
+  }, [selectedPathsInViewOrder]);
+
+  useLayoutEffect(() => {
+    selectedEntryRef.current = selectedEntry;
+  }, [selectedEntry]);
 
   useEffect(() => {
     treeRootPathRef.current = treeRootPath;
@@ -913,8 +942,9 @@ export function App() {
         setSearchPopoverOpen(true);
         if (searchCommittedQueryRef.current.trim().length > 0) {
           setSearchResultsVisible(true);
-          setContentSelection(
+          applyContentSelection(
             sanitizeContentSelection(cachedSearchSelectionRef.current, searchResultEntries),
+            searchResultEntries,
           );
         }
         window.requestAnimationFrame(() => {
@@ -949,6 +979,9 @@ export function App() {
         event.status === "partial"
       ) {
         activeCopyPasteOperationIdRef.current = null;
+        if (event.result) {
+          queuePasteSelection(event.result);
+        }
         if (shouldClearClipboardAfterPasteResult(event)) {
           setCopyPasteClipboardState((current) => clearClipboardAfterSuccessfulPaste(current));
         }
@@ -1189,6 +1222,18 @@ export function App() {
       if (event.metaKey && event.key === ",") {
         event.preventDefault();
         openSettingsView();
+        return;
+      }
+      if (copyPasteDialogState || copyPasteProgressEvent) {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          handleCopyPasteDialogEscape();
+          return;
+        }
+        if (targetElement?.closest(".copy-paste-dialog")) {
+          return;
+        }
+        event.preventDefault();
         return;
       }
       if (mainView !== "explorer") {
@@ -1456,6 +1501,8 @@ export function App() {
     actionNotice,
     includeHidden,
     isSearchMode,
+    copyPasteDialogState,
+    copyPasteProgressEvent,
     contextMenuState,
     locationSheetOpen,
     mainView,
@@ -1702,20 +1749,31 @@ export function App() {
   }
 
   function clearContentSelection() {
-    setContentSelection(EMPTY_CONTENT_SELECTION);
+    applyContentSelection(EMPTY_CONTENT_SELECTION);
   }
 
   function setSingleContentSelection(path: string) {
-    setContentSelection(createSingleContentSelection(path));
+    applyContentSelection(createSingleContentSelection(path));
   }
 
   function toggleContentSelection(path: string) {
-    setContentSelection((current) => toggleSelectionState(current, activeContentEntries, path));
+    setContentSelection((current) => {
+      const nextSelection = toggleSelectionState(current, activeContentEntries, path);
+      syncContentSelectionRefs(nextSelection, activeContentEntries);
+      return nextSelection;
+    });
   }
 
   function extendContentSelectionToPath(path: string, additive = false) {
     setContentSelection((current) => {
-      return extendSelectionStateToPath(current, activeContentEntries, path, additive);
+      const nextSelection = extendSelectionStateToPath(
+        current,
+        activeContentEntries,
+        path,
+        additive,
+      );
+      syncContentSelectionRefs(nextSelection, activeContentEntries);
+      return nextSelection;
     });
   }
 
@@ -1739,7 +1797,29 @@ export function App() {
   }
 
   function selectAllContentEntries() {
-    setContentSelection(selectAllSelectionStateEntries(activeContentEntries));
+    applyContentSelection(selectAllSelectionStateEntries(activeContentEntries));
+  }
+
+  function syncContentSelectionRefs(
+    selection: ContentSelectionState,
+    entries: DirectoryEntry[] = activeContentEntries,
+  ) {
+    const selectedPaths = entries
+      .filter((entry) => selection.paths.includes(entry.path))
+      .map((entry) => entry.path);
+    selectedPathsInViewOrderRef.current = selectedPaths;
+    selectedEntryRef.current =
+      entries.find((entry) => entry.path === selection.leadPath) ??
+      entries.find((entry) => selectedPaths.includes(entry.path)) ??
+      null;
+  }
+
+  function applyContentSelection(
+    selection: ContentSelectionState,
+    entries: DirectoryEntry[] = activeContentEntries,
+  ) {
+    syncContentSelectionRefs(selection, entries);
+    setContentSelection(selection);
   }
 
   function openItemContextMenu(
@@ -1810,14 +1890,14 @@ export function App() {
     if (contextMenuState && contextMenuState.paths.length > 0) {
       return contextMenuState.paths;
     }
-    if (selectedPathsInViewOrder.length > 0) {
-      return selectedPathsInViewOrder;
+    if (selectedPathsInViewOrderRef.current.length > 0) {
+      return selectedPathsInViewOrderRef.current;
     }
-    if (selectedEntry) {
-      return [selectedEntry.path];
+    if (selectedEntryRef.current) {
+      return [selectedEntryRef.current.path];
     }
-    if (currentPath.length > 0) {
-      return [currentPath];
+    if (currentPathRef.current.length > 0) {
+      return [currentPathRef.current];
     }
     return [];
   }
@@ -1870,12 +1950,7 @@ export function App() {
     }
     try {
       const plan = await client.invoke("copyPaste:plan", request);
-      if (
-        plan.issues.length > 0 ||
-        plan.conflicts.length > 0 ||
-        plan.requiresConfirmation.largeBatch ||
-        plan.requiresConfirmation.cutDelete
-      ) {
+      if (plan.issues.length > 0 || plan.conflicts.length > 0) {
         setCopyPasteDialogState({
           type: "plan",
           plan,
@@ -1961,12 +2036,7 @@ export function App() {
         destinationDirectoryPath: result.destinationDirectoryPath,
         conflictResolution: "error",
       });
-      if (
-        plan.issues.length > 0 ||
-        plan.conflicts.length > 0 ||
-        plan.requiresConfirmation.largeBatch ||
-        plan.requiresConfirmation.cutDelete
-      ) {
+      if (plan.issues.length > 0 || plan.conflicts.length > 0) {
         setCopyPasteDialogState({
           type: "plan",
           plan,
@@ -1987,6 +2057,37 @@ export function App() {
     setCopyPasteDialogState(null);
     setCopyPasteProgressEvent(null);
     activeCopyPasteOperationIdRef.current = null;
+  }
+
+  function handleCopyPasteDialogEscape() {
+    if (copyPasteProgressEvent) {
+      if (copyPasteProgressEvent.status === "running" || copyPasteProgressEvent.status === "queued") {
+        void cancelCopyPasteOperation();
+        return;
+      }
+      dismissCopyPasteDialog();
+      return;
+    }
+    if (copyPasteDialogState) {
+      setCopyPasteDialogState(null);
+    }
+  }
+
+  function queuePasteSelection(result: NonNullable<CopyPasteProgressEvent["result"]>) {
+    if (isSearchModeRef.current || currentPathRef.current !== result.destinationDirectoryPath) {
+      pendingPasteSelectionRef.current = null;
+      return;
+    }
+    const selectedPaths = result.items
+      .filter((item) => item.status === "completed")
+      .map((item) => item.destinationPath);
+    pendingPasteSelectionRef.current =
+      selectedPaths.length > 0
+        ? {
+            directoryPath: result.destinationDirectoryPath,
+            selectedPaths,
+          }
+        : null;
   }
 
   async function copyGetInfoPath(path: string): Promise<boolean> {
@@ -2143,8 +2244,9 @@ export function App() {
       return;
     }
     setSearchResultsVisible(true);
-    setContentSelection(
+    applyContentSelection(
       sanitizeContentSelection(cachedSearchSelectionRef.current, searchResultEntries),
+      searchResultEntries,
     );
     if (options?.focusPane) {
       focusContentPane();
@@ -2153,7 +2255,10 @@ export function App() {
 
   function hideSearchResults() {
     setSearchResultsVisible(false);
-    setContentSelection(sanitizeContentSelection(browseSelectionRef.current, currentEntries));
+    applyContentSelection(
+      sanitizeContentSelection(browseSelectionRef.current, currentEntries),
+      currentEntries,
+    );
   }
 
   function dismissFileSearch(options?: { focusBelow?: boolean }) {
@@ -2205,7 +2310,10 @@ export function App() {
     setSearchTruncated(false);
     setSearchResultsVisible(false);
     cachedSearchSelectionRef.current = EMPTY_CONTENT_SELECTION;
-    setContentSelection(sanitizeContentSelection(browseSelectionRef.current, currentEntries));
+    applyContentSelection(
+      sanitizeContentSelection(browseSelectionRef.current, currentEntries),
+      currentEntries,
+    );
   }
 
   function pollSearch(jobId: string, cursor: number, sessionId: number): void {
@@ -2279,7 +2387,7 @@ export function App() {
     setSearchError(null);
     setSearchTruncated(false);
     cachedSearchSelectionRef.current = EMPTY_CONTENT_SELECTION;
-    setContentSelection(EMPTY_CONTENT_SELECTION);
+    applyContentSelection(EMPTY_CONTENT_SELECTION, searchResultEntries);
 
     try {
       const response = await client.invoke("search:start", {
@@ -2605,10 +2713,29 @@ export function App() {
       if (searchResultsVisibleRef.current) {
         setSearchResultsVisible(false);
       }
-      setContentSelection(
-        response.entries[0]
-          ? createSingleContentSelection(response.entries[0].path)
-          : EMPTY_CONTENT_SELECTION,
+      const pendingPasteSelection =
+        pendingPasteSelectionRef.current?.directoryPath === response.path
+          ? pendingPasteSelectionRef.current
+          : null;
+      if (pendingPasteSelection) {
+        pendingPasteSelectionRef.current = null;
+      }
+      const selectedPastePaths = pendingPasteSelection
+        ? response.entries
+            .filter((entry) => pendingPasteSelection.selectedPaths.includes(entry.path))
+            .map((entry) => entry.path)
+        : [];
+      applyContentSelection(
+        selectedPastePaths.length > 0
+          ? {
+              paths: selectedPastePaths,
+              anchorPath: selectedPastePaths[0] ?? null,
+              leadPath: selectedPastePaths.at(-1) ?? null,
+            }
+          : response.entries[0]
+            ? createSingleContentSelection(response.entries[0].path)
+            : EMPTY_CONTENT_SELECTION,
+        response.entries,
       );
       setGetInfoItem(null);
       await syncTreeToPath(response.path, includeHiddenOverride);

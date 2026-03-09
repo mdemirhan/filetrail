@@ -17,10 +17,12 @@ vi.mock("./components/ContentPane", () => ({
     onItemContextMenu,
     onSelectionGesture,
     onActivateEntry,
+    selectedPaths,
   }: {
     entries: Array<{ path: string; name: string }>;
     onFocusChange: (focused: boolean) => void;
     onItemContextMenu?: (path: string | null, position: { x: number; y: number }) => void;
+    selectedPaths: string[];
     onSelectionGesture: (
       path: string,
       modifiers: {
@@ -36,6 +38,7 @@ vi.mock("./components/ContentPane", () => ({
           key={entry.path}
           type="button"
           title={entry.path}
+          data-selected={selectedPaths.includes(entry.path) ? "true" : "false"}
           onClick={() => {
             onFocusChange(true);
             onSelectionGesture(entry.path, { metaKey: false, shiftKey: false });
@@ -206,7 +209,7 @@ describe("App copy/paste integration", () => {
     });
   });
 
-  it("plans before starting and requires confirmation for cut/paste", async () => {
+  it("starts non-conflicting cut/paste without a confirmation dialog", async () => {
     const harness = createAppHarness({
       planResponse: {
         mode: "cut",
@@ -255,17 +258,10 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
-    expect(await screen.findByRole("dialog", { name: "Confirm Cut/Paste" })).toBeInTheDocument();
-    expect(harness.invocations.map((call) => call.channel)).toContain("copyPaste:plan");
-    expect(harness.invocations.map((call) => call.channel)).not.toContain("copyPaste:start");
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Cut/Paste" }));
-    });
-
     await vi.waitFor(() => {
       expect(harness.invocations.map((call) => call.channel)).toContain("copyPaste:start");
     });
+    expect(screen.queryByRole("dialog", { name: "Confirm Cut/Paste" })).not.toBeInTheDocument();
   });
 
   it("shows streamed progress and dispatches cancel requests", async () => {
@@ -307,6 +303,7 @@ describe("App copy/paste integration", () => {
     });
 
     expect(await screen.findByText("0 / 1 steps")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel Operation" })).toHaveFocus();
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Cancel Operation" }));
     });
@@ -315,6 +312,105 @@ describe("App copy/paste integration", () => {
       expect(harness.invocations).toContainEqual({
         channel: "copyPaste:cancel",
         payload: { operationId: "copy-op-1" },
+      });
+    });
+  });
+
+  it("selects pasted items in the current view after paste finishes", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+    await openDirectory("/Users/demo/Folder");
+    harness.setDirectoryEntries("/Users/demo/Folder", [
+      createDirectoryEntry("/Users/demo/Folder/source.txt", "file"),
+    ]);
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.map((call) => call.channel)).toContain("copyPaste:start");
+    });
+
+    await act(async () => {
+      harness.emitProgress({
+        operationId: "copy-op-1",
+        mode: "copy",
+        status: "completed",
+        completedItemCount: 1,
+        totalItemCount: 1,
+        completedByteCount: 5,
+        totalBytes: 5,
+        currentSourcePath: null,
+        currentDestinationPath: null,
+        result: {
+          operationId: "copy-op-1",
+          mode: "copy",
+          status: "completed",
+          destinationDirectoryPath: "/Users/demo/Folder",
+          startedAt: "2026-03-09T00:00:00.000Z",
+          finishedAt: "2026-03-09T00:00:01.000Z",
+          summary: {
+            topLevelItemCount: 1,
+            totalItemCount: 1,
+            completedItemCount: 1,
+            failedItemCount: 0,
+            skippedItemCount: 0,
+            cancelledItemCount: 0,
+            completedByteCount: 5,
+            totalBytes: 5,
+          },
+          items: [
+            {
+              sourcePath: "/Users/demo/source.txt",
+              destinationPath: "/Users/demo/Folder/source.txt",
+              status: "completed",
+              error: null,
+            },
+          ],
+          error: null,
+        },
+      });
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTitle("/Users/demo/Folder/source.txt")).toHaveAttribute("data-selected", "true");
+    });
+  });
+
+  it("copies on the first command press after selecting an item", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceButton = await screen.findByTitle("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.click(sourceButton);
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+    await act(async () => {
+      fireEvent.click(await screen.findByTitle("/Users/demo/Folder"));
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    await vi.waitFor(() => {
+      const planCall = harness.invocations.find((call) => call.channel === "copyPaste:plan");
+      expect(planCall?.payload).toMatchObject({
+        sourcePaths: ["/Users/demo/source.txt"],
       });
     });
   });
@@ -380,6 +476,10 @@ describe("App copy/paste integration", () => {
           error: null,
         },
       });
+    });
+
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: "Close" }));
     });
 
     const planCallsBeforeRetry = harness.invocations.filter((call) => call.channel === "copyPaste:plan");
@@ -458,6 +558,10 @@ describe("App copy/paste integration", () => {
       });
     });
 
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: "Close" }));
+    });
+
     const planCallsBeforeRetry = harness.invocations.filter((call) => call.channel === "copyPaste:plan");
     await act(async () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
@@ -518,9 +622,6 @@ describe("App copy/paste integration", () => {
     await act(async () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Cut/Paste" }));
-    });
 
     await vi.waitFor(() => {
       expect(harness.invocations.map((call) => call.channel)).toContain("copyPaste:start");
@@ -565,6 +666,10 @@ describe("App copy/paste integration", () => {
           error: "Permission denied",
         },
       });
+    });
+
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: "Close" }));
     });
 
     const planCallsBeforeRetry = harness.invocations.filter((call) => call.channel === "copyPaste:plan");
@@ -668,6 +773,10 @@ function createAppHarness(args: {
   client: FiletrailClient;
   invocations: Array<{ channel: IpcChannel; payload: unknown }>;
   emitProgress: (event: CopyPasteProgressEvent) => void;
+  setDirectoryEntries: (
+    path: string,
+    entries: IpcResponse<"directory:getSnapshot">["entries"],
+  ) => void;
 } {
   let preferences = {
     ...DEFAULT_APP_PREFERENCES,
@@ -813,6 +922,16 @@ function createAppHarness(args: {
     invocations,
     emitProgress(event) {
       progressListener?.(event);
+    },
+    setDirectoryEntries(path, entries) {
+      const snapshot = directorySnapshots[path];
+      if (!snapshot) {
+        throw new Error(`Unknown directory snapshot path: ${path}`);
+      }
+      directorySnapshots[path] = {
+        ...snapshot,
+        entries,
+      };
     },
   };
 }
