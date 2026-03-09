@@ -2115,13 +2115,34 @@ export function App() {
     }
   }
 
+  // Tree loading consults `treeNodesRef.current` synchronously inside async flows such as
+  // refresh -> navigateTo -> syncTreeToPath -> loadTreeChildren. Updating only React state
+  // is not enough there because the ref would still point at the previous tree model until
+  // the next render commits, which can make refresh incorrectly treat stale nodes as loaded.
+  function replaceTreeNodes(nextNodes: Record<string, TreeNodeState>) {
+    treeNodesRef.current = nextNodes;
+    setTreeNodes(nextNodes);
+  }
+
+  // Same rationale as `replaceTreeNodes`, but for functional updates. The ref and state
+  // must advance together so synchronous reads during in-flight async work see the same tree.
+  function updateTreeNodes(
+    updater: (current: Record<string, TreeNodeState>) => Record<string, TreeNodeState>,
+  ) {
+    setTreeNodes((current) => {
+      const next = updater(current);
+      treeNodesRef.current = next;
+      return next;
+    });
+  }
+
   function initializeTree(path: string) {
     // Tree initialization starts with only the root node. Descendants are loaded lazily
     // as navigation and expansion demand them.
     treeRequestRef.current = {};
     treeRootPathRef.current = path;
     setTreeRootPath(path);
-    setTreeNodes({
+    replaceTreeNodes({
       [path]: createTreeNode(path, true),
     });
   }
@@ -2144,7 +2165,7 @@ export function App() {
         ];
       }),
     );
-    setTreeNodes(seededNodes);
+    replaceTreeNodes(seededNodes);
   }
 
   async function navigateTo(
@@ -2231,7 +2252,7 @@ export function App() {
   }
 
   function ensureTreeNode(path: string, expanded = false) {
-    setTreeNodes((current) => {
+    updateTreeNodes((current) => {
       if (current[path]) {
         if (!expanded || current[path].expanded) {
           return current;
@@ -2275,7 +2296,7 @@ export function App() {
       (currentNode.forcedVisibleHiddenChildPath ?? null) === forcedVisibleHiddenChildPath
     ) {
       if (expandOnSuccess && !currentNode.expanded) {
-        setTreeNodes((current) => ({
+        updateTreeNodes((current) => ({
           ...current,
           [path]: {
             ...currentNode,
@@ -2289,7 +2310,9 @@ export function App() {
     const requestId = (treeRequestRef.current[path] ?? 0) + 1;
     treeRequestRef.current[path] = requestId;
 
-    setTreeNodes((current) => ({
+    // Use the ref-synced helper here as well; otherwise a refresh can seed a new tree,
+    // then immediately overwrite it with loading state derived from the pre-refresh tree.
+    updateTreeNodes((current) => ({
       ...current,
       [path]: {
         ...(current[path] ?? createTreeNode(path, true)),
@@ -2311,7 +2334,7 @@ export function App() {
       if (treeRequestRef.current[path] !== requestId) {
         return;
       }
-      setTreeNodes((current) => {
+      updateTreeNodes((current) => {
         const next = { ...current };
         const existingNode = current[path] ?? createTreeNode(path, true);
         const visibleChildren =
@@ -2351,7 +2374,7 @@ export function App() {
       if (treeRequestRef.current[path] !== requestId) {
         return;
       }
-      setTreeNodes((current) => ({
+      updateTreeNodes((current) => ({
         ...current,
         [path]: {
           ...(current[path] ?? createTreeNode(path, true)),
@@ -2376,7 +2399,7 @@ export function App() {
       treeRequestRef.current = {};
       treeRootPathRef.current = nextRootPath;
       setTreeRootPath(nextRootPath);
-      setTreeNodes({
+      replaceTreeNodes({
         [nextRootPath]: createTreeNode(nextRootPath, true),
       });
     } else {
@@ -2425,7 +2448,7 @@ export function App() {
       return;
     }
     const nextExpanded = !node.expanded;
-    setTreeNodes((current) => ({
+    updateTreeNodes((current) => ({
       ...current,
       [path]: {
         ...node,
