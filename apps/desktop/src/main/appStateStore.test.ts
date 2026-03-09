@@ -27,6 +27,7 @@ describe("appStateStore", () => {
       compactListView: false,
       compactDetailsView: false,
       compactTreeView: false,
+      highlightHoveredItems: false,
       detailColumns: {
         size: true,
         modified: true,
@@ -112,6 +113,7 @@ describe("appStateStore", () => {
       compactListView: true,
       compactDetailsView: true,
       compactTreeView: true,
+      highlightHoveredItems: false,
       detailColumns: {
         size: true,
         modified: false,
@@ -189,6 +191,7 @@ describe("appStateStore", () => {
       compactListView: true,
       compactDetailsView: true,
       compactTreeView: true,
+      highlightHoveredItems: false,
       detailColumns: {
         size: true,
         modified: false,

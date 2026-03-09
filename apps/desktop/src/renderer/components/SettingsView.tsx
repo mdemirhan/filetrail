@@ -1181,6 +1181,7 @@ export function SettingsView({
   compactListView,
   compactDetailsView,
   compactTreeView,
+  highlightHoveredItems = true,
   detailColumns,
   layoutMode = "wide",
   tabSwitchesExplorerPanes,
@@ -1215,6 +1216,7 @@ export function SettingsView({
   onCompactListViewChange,
   onCompactDetailsViewChange,
   onCompactTreeViewChange,
+  onHighlightHoveredItemsChange = () => undefined,
   onDetailColumnsChange,
   onTabSwitchesExplorerPanesChange,
   onTypeaheadEnabledChange,
@@ -1246,6 +1248,7 @@ export function SettingsView({
   compactListView: boolean;
   compactDetailsView: boolean;
   compactTreeView: boolean;
+  highlightHoveredItems?: boolean;
   detailColumns: DetailColumnVisibility;
   layoutMode?: "wide" | "narrow" | "compact";
   tabSwitchesExplorerPanes: boolean;
@@ -1284,6 +1287,7 @@ export function SettingsView({
   onCompactListViewChange: (value: boolean) => void;
   onCompactDetailsViewChange: (value: boolean) => void;
   onCompactTreeViewChange: (value: boolean) => void;
+  onHighlightHoveredItemsChange?: (value: boolean) => void;
   onDetailColumnsChange: (value: DetailColumnVisibility) => void;
   onTabSwitchesExplorerPanesChange: (value: boolean) => void;
   onTypeaheadEnabledChange: (value: boolean) => void;
@@ -1612,6 +1616,19 @@ export function SettingsView({
                 onToggle={() => onCompactDetailsViewChange(!compactDetailsView)}
                 theme={palette}
                 label="Compact detail view"
+              />
+            }
+          />
+          <SettingRow
+            title="Highlight hovered items"
+            desc="Show hover highlighting in list view, detail view, and search results."
+            theme={palette}
+            right={
+              <Toggle
+                checked={highlightHoveredItems}
+                onToggle={() => onHighlightHoveredItemsChange(!highlightHoveredItems)}
+                theme={palette}
+                label="Highlight hovered items"
               />
             }
           />

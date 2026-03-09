@@ -64,6 +64,7 @@ describe("appPreferences helpers", () => {
       uiFontWeight: 500,
       viewMode: "list",
       foldersFirst: true,
+      highlightHoveredItems: false,
       terminalApp: null,
       openWithApplications: [
         {

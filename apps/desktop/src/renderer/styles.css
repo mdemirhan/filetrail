@@ -2900,8 +2900,8 @@ body.resizing-panels * {
   padding: 0 8px;
 }
 
-.flow-item:hover,
-.details-row:hover {
+.content-scroll[data-hover-highlight-enabled="true"] .flow-item:hover,
+.content-scroll[data-hover-highlight-enabled="true"] .details-row:hover {
   background: var(--bg-hover);
 }
 
@@ -3569,7 +3569,7 @@ body.resizing-panels * {
   -webkit-user-select: none;
 }
 
-.search-result-row:hover {
+.search-results-scroll[data-hover-highlight-enabled="true"] .search-result-row:hover {
   background: var(--bg-hover);
 }
 

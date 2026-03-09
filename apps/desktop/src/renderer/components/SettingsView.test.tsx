@@ -22,6 +22,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       compactListView={false}
       compactDetailsView={false}
       compactTreeView={false}
+      highlightHoveredItems={true}
       detailColumns={{
         size: true,
         modified: true,
@@ -77,6 +78,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       onCompactListViewChange={() => undefined}
       onCompactDetailsViewChange={() => undefined}
       onCompactTreeViewChange={() => undefined}
+      onHighlightHoveredItemsChange={() => undefined}
       onDetailColumnsChange={() => undefined}
       onTabSwitchesExplorerPanesChange={() => undefined}
       onTypeaheadEnabledChange={() => undefined}
@@ -157,6 +159,18 @@ describe("SettingsView", () => {
     fireEvent.click(screen.getByLabelText("Accent toolbar buttons"));
 
     expect(onAccentToolbarButtonsChange).toHaveBeenCalledWith(false);
+  });
+
+  it("forwards hovered item highlight toggle changes", () => {
+    const onHighlightHoveredItemsChange = vi.fn();
+    renderSettingsView({
+      highlightHoveredItems: true,
+      onHighlightHoveredItemsChange,
+    });
+
+    fireEvent.click(screen.getByLabelText("Highlight hovered items"));
+
+    expect(onHighlightHoveredItemsChange).toHaveBeenCalledWith(false);
   });
 
   it("accepts typed zoom percentages and normalizes them on blur", () => {

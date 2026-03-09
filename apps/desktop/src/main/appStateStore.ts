@@ -275,6 +275,10 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
       typeof record.compactTreeView === "boolean"
         ? record.compactTreeView
         : currentDefaults.compactTreeView,
+    highlightHoveredItems:
+      typeof record.highlightHoveredItems === "boolean"
+        ? record.highlightHoveredItems
+        : currentDefaults.highlightHoveredItems,
     detailColumns: sanitizeDetailColumns(record.detailColumns, currentDefaults.detailColumns),
     detailColumnWidths: sanitizeDetailColumnWidths(
       record.detailColumnWidths,

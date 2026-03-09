@@ -173,6 +173,7 @@ export type AppPreferences = {
   compactListView: boolean;
   compactDetailsView: boolean;
   compactTreeView: boolean;
+  highlightHoveredItems: boolean;
   detailColumns: DetailColumnVisibility;
   detailColumnWidths: DetailColumnWidths;
   tabSwitchesExplorerPanes: boolean;
@@ -218,6 +219,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   compactListView: false,
   compactDetailsView: false,
   compactTreeView: false,
+  highlightHoveredItems: false,
   detailColumns: DEFAULT_DETAIL_COLUMN_VISIBILITY,
   detailColumnWidths: DEFAULT_DETAIL_COLUMN_WIDTHS,
   tabSwitchesExplorerPanes: true,

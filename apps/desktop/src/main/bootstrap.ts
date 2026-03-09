@@ -1127,6 +1127,9 @@ export function toPreferencePatch(
   if (value.compactTreeView !== undefined) {
     patch.compactTreeView = value.compactTreeView;
   }
+  if (value.highlightHoveredItems !== undefined) {
+    patch.highlightHoveredItems = value.highlightHoveredItems;
+  }
   if (value.detailColumns !== undefined) {
     patch.detailColumns = value.detailColumns;
   }

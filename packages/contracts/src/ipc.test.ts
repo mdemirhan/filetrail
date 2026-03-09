@@ -50,6 +50,7 @@ describe("ipc contracts", () => {
           compactListView: false,
           compactDetailsView: false,
           compactTreeView: false,
+          highlightHoveredItems: false,
           detailColumns: {
             size: true,
             modified: true,
@@ -124,6 +125,7 @@ describe("ipc contracts", () => {
         compactListView: false,
         compactDetailsView: false,
         compactTreeView: false,
+        highlightHoveredItems: false,
         detailColumns: {
           size: true,
           modified: true,
@@ -205,6 +207,7 @@ describe("ipc contracts", () => {
           compactListView: true,
           compactDetailsView: true,
           compactTreeView: true,
+          highlightHoveredItems: false,
           detailColumns: {
             size: true,
             modified: false,
@@ -260,6 +263,7 @@ describe("ipc contracts", () => {
         compactListView: true,
         compactDetailsView: true,
         compactTreeView: true,
+        highlightHoveredItems: false,
         detailColumns: {
           size: true,
           modified: false,

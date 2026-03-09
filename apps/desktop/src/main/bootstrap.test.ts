@@ -30,6 +30,16 @@ describe("toPreferencePatch", () => {
     });
   });
 
+  it("preserves hovered item highlight preference", () => {
+    expect(
+      toPreferencePatch({
+        highlightHoveredItems: false,
+      }),
+    ).toEqual({
+      highlightHoveredItems: false,
+    });
+  });
+
   it("preserves detail view preference fields", () => {
     expect(
       toPreferencePatch({

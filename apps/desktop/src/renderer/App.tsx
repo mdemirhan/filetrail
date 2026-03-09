@@ -267,6 +267,9 @@ export function App() {
     DEFAULT_APP_PREFERENCES.compactDetailsView,
   );
   const [compactTreeView, setCompactTreeView] = useState(DEFAULT_APP_PREFERENCES.compactTreeView);
+  const [highlightHoveredItems, setHighlightHoveredItems] = useState(
+    DEFAULT_APP_PREFERENCES.highlightHoveredItems,
+  );
   const [detailColumns, setDetailColumns] = useState<DetailColumnVisibility>(
     DEFAULT_DETAIL_COLUMN_VISIBILITY,
   );
@@ -868,6 +871,7 @@ export function App() {
         compactListView,
         compactDetailsView,
         compactTreeView,
+        highlightHoveredItems,
         detailColumns,
         detailColumnWidths,
         tabSwitchesExplorerPanes,
@@ -910,6 +914,7 @@ export function App() {
     compactListView,
     compactDetailsView,
     compactTreeView,
+    highlightHoveredItems,
     detailColumns,
     detailColumnWidths,
     accent,
@@ -981,6 +986,7 @@ export function App() {
         setCompactListView(preferences.compactListView);
         setCompactDetailsView(preferences.compactDetailsView);
         setCompactTreeView(preferences.compactTreeView);
+        setHighlightHoveredItems(preferences.highlightHoveredItems);
         setDetailColumns(preferences.detailColumns);
         setDetailColumnWidths(preferences.detailColumnWidths);
         setTabSwitchesExplorerPanes(preferences.tabSwitchesExplorerPanes);
@@ -5065,6 +5071,7 @@ export function App() {
                     results={filteredSearchResults}
                     selectedPaths={contentSelection.paths}
                     selectionLeadPath={contentSelection.leadPath}
+                    highlightHoveredItems={highlightHoveredItems}
                     error={searchError}
                     truncated={searchTruncated}
                     filterQuery={searchResultsFilterQuery}
@@ -5143,6 +5150,7 @@ export function App() {
                     }}
                     compactListView={compactListView}
                     compactDetailsView={compactDetailsView}
+                    highlightHoveredItems={highlightHoveredItems}
                     detailColumns={detailColumns}
                     detailColumnWidths={detailColumnWidths}
                     onDetailColumnWidthsChange={setDetailColumnWidths}
@@ -5232,6 +5240,7 @@ export function App() {
                 compactListView={compactListView}
                 compactDetailsView={compactDetailsView}
                 compactTreeView={compactTreeView}
+                highlightHoveredItems={highlightHoveredItems}
                 detailColumns={detailColumns}
                 layoutMode={singlePanelLayout}
                 tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
@@ -5266,6 +5275,7 @@ export function App() {
                 onCompactListViewChange={setCompactListView}
                 onCompactDetailsViewChange={setCompactDetailsView}
                 onCompactTreeViewChange={setCompactTreeView}
+                onHighlightHoveredItemsChange={setHighlightHoveredItems}
                 onDetailColumnsChange={setDetailColumns}
                 onTabSwitchesExplorerPanesChange={setTabSwitchesExplorerPanes}
                 onTypeaheadEnabledChange={setTypeaheadEnabled}

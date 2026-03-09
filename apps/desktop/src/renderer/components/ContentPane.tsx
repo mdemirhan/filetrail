@@ -92,6 +92,7 @@ export function ContentPane({
   onItemContextMenu = () => undefined,
   compactListView = false,
   compactDetailsView = false,
+  highlightHoveredItems = true,
   detailColumns = DEFAULT_DETAIL_COLUMN_VISIBILITY,
   detailColumnWidths = DEFAULT_DETAIL_COLUMN_WIDTHS,
   onDetailColumnWidthsChange = () => undefined,
@@ -125,6 +126,7 @@ export function ContentPane({
   onItemContextMenu?: (path: string | null, position: { x: number; y: number }) => void;
   compactListView?: boolean;
   compactDetailsView?: boolean;
+  highlightHoveredItems?: boolean;
   detailColumns?: DetailColumnVisibility;
   detailColumnWidths?: DetailColumnWidths;
   onDetailColumnWidthsChange?: (value: DetailColumnWidths) => void;
@@ -493,6 +495,7 @@ export function ContentPane({
             onVisiblePathsChange={onVisiblePathsChange}
             onItemContextMenu={onItemContextMenu}
             compactListView={compactListView}
+            highlightHoveredItems={highlightHoveredItems}
             typeaheadQuery={typeaheadQuery ?? ""}
           />
         ) : (
@@ -518,6 +521,7 @@ export function ContentPane({
             onVisiblePathsChange={onVisiblePathsChange}
             onItemContextMenu={onItemContextMenu}
             compactDetailsView={compactDetailsView}
+            highlightHoveredItems={highlightHoveredItems}
             detailColumns={detailColumns}
             detailColumnWidths={detailColumnWidths}
             onDetailColumnWidthsChange={onDetailColumnWidthsChange}
@@ -696,6 +700,7 @@ function FlowListView({
   onVisiblePathsChange,
   onItemContextMenu = () => undefined,
   compactListView = false,
+  highlightHoveredItems = true,
   typeaheadQuery,
 }: {
   entries: DirectoryEntry[];
@@ -714,6 +719,7 @@ function FlowListView({
   onVisiblePathsChange: (paths: string[]) => void;
   onItemContextMenu?: (path: string | null, position: { x: number; y: number }) => void;
   compactListView?: boolean;
+  highlightHoveredItems?: boolean;
   typeaheadQuery?: string;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -807,6 +813,7 @@ function FlowListView({
     <div
       ref={containerRef}
       className={`content-scroll flow-list${compactListView ? " compact" : ""}`}
+      data-hover-highlight-enabled={highlightHoveredItems ? "true" : "false"}
       tabIndex={-1}
       onMouseDown={(event) => {
         const target = event.target;
@@ -934,6 +941,7 @@ function DetailsView({
   onVisiblePathsChange,
   onItemContextMenu = () => undefined,
   compactDetailsView = false,
+  highlightHoveredItems = true,
   detailColumns = DEFAULT_DETAIL_COLUMN_VISIBILITY,
   detailColumnWidths = DEFAULT_DETAIL_COLUMN_WIDTHS,
   onDetailColumnWidthsChange = () => undefined,
@@ -959,6 +967,7 @@ function DetailsView({
   onVisiblePathsChange: (paths: string[]) => void;
   onItemContextMenu?: (path: string | null, position: { x: number; y: number }) => void;
   compactDetailsView?: boolean;
+  highlightHoveredItems?: boolean;
   detailColumns?: DetailColumnVisibility;
   detailColumnWidths?: DetailColumnWidths;
   onDetailColumnWidthsChange?: (value: DetailColumnWidths) => void;
@@ -1124,6 +1133,7 @@ function DetailsView({
       <div
         ref={containerRef}
         className={`content-scroll details-scroll${compactDetailsView ? " compact" : ""}`}
+        data-hover-highlight-enabled={highlightHoveredItems ? "true" : "false"}
         tabIndex={-1}
         onMouseDown={(event) => {
           const target = event.target;
