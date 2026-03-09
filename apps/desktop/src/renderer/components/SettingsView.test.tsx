@@ -263,15 +263,12 @@ describe("SettingsView", () => {
     expect(onNotificationDurationSecondsChange).toHaveBeenCalledWith(6);
   });
 
-  it("renders configured Open With applications and fixed helper text", () => {
+  it("renders configured Open With applications", () => {
     renderSettingsView();
 
     expect(screen.getByText("Visual Studio Code")).toBeInTheDocument();
     expect(screen.getByText("/Applications/Visual Studio Code.app")).toBeInTheDocument();
     expect(screen.getByText("Zed")).toBeInTheDocument();
-    expect(
-      screen.getByText("Finder and Other… always stay in the context menu."),
-    ).toBeInTheDocument();
   });
 
   it("forwards Open With add, browse, move, and remove actions", () => {

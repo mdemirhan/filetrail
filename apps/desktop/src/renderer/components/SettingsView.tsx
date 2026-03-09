@@ -1859,29 +1859,15 @@ export function SettingsView({
               borderBottom: `1px solid ${palette.separator}`,
             }}
           >
-            <div style={{ minWidth: 0 }}>
-              <div
-                style={{
-                  fontSize: "12.5px",
-                  fontFamily: sans,
-                  fontWeight: 500,
-                  color: palette.label.primary,
-                  marginBottom: "2px",
-                }}
-              >
-                Configured applications
-              </div>
-              <div
-                style={{
-                  fontSize: "11px",
-                  fontFamily: sans,
-                  fontWeight: 400,
-                  color: palette.label.secondary,
-                  lineHeight: "1.4",
-                }}
-              >
-                Finder and Other… always stay in the context menu.
-              </div>
+            <div
+              style={{
+                fontSize: "12.5px",
+                fontFamily: sans,
+                fontWeight: 500,
+                color: palette.label.primary,
+              }}
+            >
+              Configured applications
             </div>
             <ActionButton
               label="Add App"

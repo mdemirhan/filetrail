@@ -77,7 +77,6 @@ describe("ItemContextMenu", () => {
           "move",
           "rename",
           "duplicate",
-          "compress",
           "terminal",
           "copyPath",
           "trash",

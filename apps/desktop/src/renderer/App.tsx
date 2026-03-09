@@ -172,7 +172,6 @@ const WRITE_LOCKED_CONTEXT_ACTION_IDS: ContextMenuActionId[] = [
   "move",
   "rename",
   "duplicate",
-  "compress",
   "newFolder",
   "copyPath",
   "trash",
@@ -2868,13 +2867,11 @@ export function App() {
           ? "Rename"
           : actionId === "duplicate"
             ? "Duplicate"
-            : actionId === "compress"
-              ? "Compress"
-              : actionId === "newFolder"
-                ? "New Folder"
-                : actionId === "trash"
-                  ? "Move to Trash"
-                  : "Open With";
+            : actionId === "newFolder"
+              ? "New Folder"
+              : actionId === "trash"
+                ? "Move to Trash"
+                : "Open With";
     showNotImplementedNotice(title);
   }
 

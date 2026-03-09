@@ -12,7 +12,6 @@ export type ContextMenuActionId =
   | "move"
   | "rename"
   | "duplicate"
-  | "compress"
   | "newFolder"
   | "terminal"
   | "copyPath"
@@ -77,7 +76,6 @@ type ContextMenuIconName =
   | "move"
   | "rename"
   | "duplicate"
-  | "compress"
   | "newFolder"
   | "terminal"
   | "copyPath"
@@ -97,7 +95,6 @@ export const BROWSE_CONTEXT_MENU_ITEMS: readonly ContextMenuItem[] = [
   { id: "rename", label: "Rename", icon: "rename", shortcut: "F2" },
   { id: "duplicate", label: "Duplicate", icon: "duplicate", shortcut: "⌘D" },
   { type: "separator", key: "separator-duplicate" },
-  { id: "compress", label: "Compress", icon: "compress" },
   { id: "newFolder", label: "New Folder", icon: "newFolder", shortcut: "⇧⌘N" },
   { type: "separator", key: "separator-new-folder" },
   { id: "terminal", label: "Open in Terminal", icon: "terminal", shortcut: "⌘T" },
@@ -310,15 +307,6 @@ function ContextMenuIcon({ name }: { name: ContextMenuIconName }) {
       <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
         <rect x="8" y="8" width="13" height="13" rx="2" />
         <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
-      </svg>
-    );
-  }
-  if (name === "compress") {
-    return (
-      <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-        <polyline points="7 10 12 15 17 10" />
-        <line x1="12" y1="15" x2="12" y2="3" />
       </svg>
     );
   }

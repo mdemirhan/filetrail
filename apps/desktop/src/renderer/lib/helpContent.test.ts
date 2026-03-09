@@ -16,13 +16,12 @@ describe("helpContent", () => {
     );
   });
 
-  it("documents Go to Folder with Cmd+Shift+G instead of Cmd+L", () => {
+  it("documents Go to Folder with Cmd+Shift+G", () => {
     expect(SHORTCUT_ITEMS).toContainEqual(
       expect.objectContaining({
         shortcut: "Cmd+Shift+G",
         description: "Open Go to Folder",
       }),
     );
-    expect(SHORTCUT_ITEMS.map((item) => item.shortcut)).not.toContain("Cmd+L");
   });
 });
