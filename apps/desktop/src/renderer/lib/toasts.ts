@@ -22,10 +22,14 @@ export function createToastEntry(
     kind: ToastKind;
     title: string;
     message?: string;
+    durationMs?: number;
   },
   now = Date.now(),
 ): ToastEntry {
-  const durationMs = TOAST_DURATION_MS[input.kind];
+  const durationMs =
+    typeof input.durationMs === "number" && Number.isFinite(input.durationMs)
+      ? Math.max(0, Math.round(input.durationMs))
+      : TOAST_DURATION_MS[input.kind];
   return {
     id,
     kind: input.kind,

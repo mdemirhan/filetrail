@@ -988,6 +988,8 @@ export function SettingsView({
   tabSwitchesExplorerPanes,
   typeaheadEnabled,
   typeaheadDebounceMs,
+  notificationsEnabled,
+  notificationDurationSeconds,
   restoreLastVisitedFolderOnStartup,
   terminalApp,
   themeOptions,
@@ -996,6 +998,7 @@ export function SettingsView({
   uiFontSizeOptions,
   uiFontWeightOptions,
   typeaheadDebounceOptions,
+  notificationDurationSecondsOptions,
   onThemeChange,
   onAccentChange,
   onAccentToolbarButtonsChange,
@@ -1014,6 +1017,8 @@ export function SettingsView({
   onTabSwitchesExplorerPanesChange,
   onTypeaheadEnabledChange,
   onTypeaheadDebounceMsChange,
+  onNotificationsEnabledChange,
+  onNotificationDurationSecondsChange,
   onRestoreLastVisitedFolderOnStartupChange,
   onTerminalAppChange,
 }: {
@@ -1035,6 +1040,8 @@ export function SettingsView({
   tabSwitchesExplorerPanes: boolean;
   typeaheadEnabled: boolean;
   typeaheadDebounceMs: number;
+  notificationsEnabled: boolean;
+  notificationDurationSeconds: number;
   restoreLastVisitedFolderOnStartup: boolean;
   terminalApp: string | null;
   themeOptions: ReadonlyArray<{ value: ThemeMode; label: string; group?: "dark" | "light" }>;
@@ -1047,6 +1054,7 @@ export function SettingsView({
   uiFontSizeOptions: ReadonlyArray<number>;
   uiFontWeightOptions: ReadonlyArray<number>;
   typeaheadDebounceOptions: ReadonlyArray<number>;
+  notificationDurationSecondsOptions: ReadonlyArray<number>;
   onThemeChange: (value: ThemeMode) => void;
   onAccentChange: (value: AccentMode) => void;
   onAccentToolbarButtonsChange: (value: boolean) => void;
@@ -1065,6 +1073,8 @@ export function SettingsView({
   onTabSwitchesExplorerPanesChange: (value: boolean) => void;
   onTypeaheadEnabledChange: (value: boolean) => void;
   onTypeaheadDebounceMsChange: (value: number) => void;
+  onNotificationsEnabledChange: (value: boolean) => void;
+  onNotificationDurationSecondsChange: (value: number) => void;
   onRestoreLastVisitedFolderOnStartupChange: (value: boolean) => void;
   onTerminalAppChange: (value: string | null) => void;
 }) {
@@ -1466,6 +1476,39 @@ export function SettingsView({
                 disabled={!typeaheadEnabled}
                 onChange={(value) => onTypeaheadDebounceMsChange(Number(value))}
                 formatOption={(value) => `${value} ms`}
+              />
+            }
+          />
+        </SectionCard>
+
+        <SectionCard icon="🔔" title="Notifications" theme={palette}>
+          <SettingRow
+            title="Show notifications"
+            desc="Show bottom-right banners for copy, cut, paste status, and warnings."
+            theme={palette}
+            right={
+              <Toggle
+                checked={notificationsEnabled}
+                onToggle={() => onNotificationsEnabledChange(!notificationsEnabled)}
+                theme={palette}
+                label="Show notifications"
+              />
+            }
+          />
+          <SettingRow
+            title="Notification duration"
+            theme={palette}
+            isLast
+            right={
+              <SelectControl
+                value={notificationDurationSeconds}
+                options={notificationDurationSecondsOptions}
+                theme={palette}
+                width="110px"
+                ariaLabel="Notification duration"
+                disabled={!notificationsEnabled}
+                onChange={(value) => onNotificationDurationSecondsChange(Number(value))}
+                formatOption={(value) => `${value} s`}
               />
             }
           />

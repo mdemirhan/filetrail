@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   createWriteService,
   type CopyPasteProgressEvent,
+  WRITE_OPERATION_BUSY_ERROR,
   type WriteServiceFileSystem,
 } from "./writeService";
 
@@ -244,6 +245,47 @@ describe("writeService", () => {
     const terminal = await waitForTerminalEvent(events, "cancel-op");
     expect(terminal.status).toBe("partial");
     expect(terminal.result?.summary.completedItemCount).toBe(1);
+  });
+
+  it("rejects starting a second write operation while one is already active", async () => {
+    const service = createWriteService({
+      createOperationId: (() => {
+        let index = 0;
+        return () => {
+          index += 1;
+          return `op-${index}`;
+        };
+      })(),
+      fileSystem: createMockFileSystem({
+        existingPaths: ["/target", "/source/one.txt", "/source/two.txt"],
+        directoryPaths: ["/target"],
+        fileSizes: {
+          "/source/one.txt": 5,
+          "/source/two.txt": 7,
+        },
+        copyFileStream: async (sourcePath, _destinationPath, signal) => {
+          if (sourcePath.endsWith("one.txt")) {
+            await new Promise((resolve) => setTimeout(resolve, 250));
+            signal?.throwIfAborted();
+          }
+          await Promise.resolve();
+        },
+      }),
+    });
+
+    service.startCopyPaste({
+      mode: "copy",
+      sourcePaths: ["/source/one.txt"],
+      destinationDirectoryPath: "/target",
+    });
+
+    expect(() =>
+      service.startCopyPaste({
+        mode: "copy",
+        sourcePaths: ["/source/two.txt"],
+        destinationDirectoryPath: "/target",
+      }),
+    ).toThrow(WRITE_OPERATION_BUSY_ERROR);
   });
 
   it("copies nested directory trees on the real filesystem", async () => {

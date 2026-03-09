@@ -31,6 +31,8 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       tabSwitchesExplorerPanes={true}
       typeaheadEnabled={true}
       typeaheadDebounceMs={750}
+      notificationsEnabled={true}
+      notificationDurationSeconds={4}
       restoreLastVisitedFolderOnStartup={false}
       terminalApp={null}
       themeOptions={THEME_OPTIONS}
@@ -42,6 +44,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       uiFontSizeOptions={[13]}
       uiFontWeightOptions={[500]}
       typeaheadDebounceOptions={[750]}
+      notificationDurationSecondsOptions={[4, 6]}
       onThemeChange={() => undefined}
       onAccentChange={() => undefined}
       onAccentToolbarButtonsChange={() => undefined}
@@ -60,6 +63,8 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       onTabSwitchesExplorerPanesChange={() => undefined}
       onTypeaheadEnabledChange={() => undefined}
       onTypeaheadDebounceMsChange={() => undefined}
+      onNotificationsEnabledChange={() => undefined}
+      onNotificationDurationSecondsChange={() => undefined}
       onRestoreLastVisitedFolderOnStartupChange={() => undefined}
       onTerminalAppChange={() => undefined}
       {...overrides}
@@ -161,5 +166,25 @@ describe("SettingsView", () => {
 
     expect(onTerminalAppChange).toHaveBeenNthCalledWith(1, "iTerm");
     expect(onTerminalAppChange).toHaveBeenNthCalledWith(2, null);
+  });
+
+  it("forwards notification preference changes", () => {
+    const onNotificationsEnabledChange = vi.fn();
+    const onNotificationDurationSecondsChange = vi.fn();
+    renderSettingsView({
+      notificationsEnabled: true,
+      notificationDurationSeconds: 4,
+      notificationDurationSecondsOptions: [4, 6],
+      onNotificationsEnabledChange,
+      onNotificationDurationSecondsChange,
+    });
+
+    fireEvent.click(screen.getByLabelText("Show notifications"));
+    fireEvent.change(screen.getByLabelText("Notification duration"), {
+      target: { value: "6" },
+    });
+
+    expect(onNotificationsEnabledChange).toHaveBeenCalledWith(false);
+    expect(onNotificationDurationSecondsChange).toHaveBeenCalledWith(6);
   });
 });

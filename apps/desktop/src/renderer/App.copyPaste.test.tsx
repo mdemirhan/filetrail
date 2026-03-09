@@ -99,6 +99,10 @@ import { App } from "./App";
 import { type FiletrailClient, FiletrailClientProvider } from "./lib/filetrailClient";
 
 describe("App copy/paste integration", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("shows a copy toast on the first command press without changing focus", async () => {
     const harness = createAppHarness();
 
@@ -108,7 +112,7 @@ describe("App copy/paste integration", () => {
       </FiletrailClientProvider>,
     );
 
-    const sourceButton = await screen.findByTitle("/Users/demo/source.txt");
+    const sourceButton = await screen.findByRole("button", { name: "source.txt" });
     await act(async () => {
       fireEvent.click(sourceButton);
     });
@@ -118,7 +122,7 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "c", metaKey: true });
     });
 
-    expect(await screen.findByText("Copied 1 item")).toBeInTheDocument();
+    expect(await screen.findByText("Ready to paste 1 item")).toBeInTheDocument();
     expect(document.activeElement).toBe(activeElementBeforeCopy);
   });
 
@@ -131,7 +135,7 @@ describe("App copy/paste integration", () => {
       </FiletrailClientProvider>,
     );
 
-    const sourceButton = await screen.findByTitle("/Users/demo/source.txt");
+    const sourceButton = await screen.findByRole("button", { name: "source.txt" });
     await act(async () => {
       fireEvent.click(sourceButton);
     });
@@ -340,7 +344,7 @@ describe("App copy/paste integration", () => {
     expect(screen.queryByRole("dialog", { name: "Confirm Cut/Paste" })).not.toBeInTheDocument();
   });
 
-  it("shows a toast instead of a dialog for non-recoverable planning issues", async () => {
+  it("shows a modal dialog for non-recoverable planning issues", async () => {
     const harness = createAppHarness({
       planResponse: {
         mode: "copy",
@@ -387,7 +391,8 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
-    expect(await screen.findByText("Cannot paste an item onto itself.")).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Paste cannot continue" })).toBeInTheDocument();
+    expect(screen.getByText("Cannot paste an item onto itself.")).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Paste Requires Review" })).not.toBeInTheDocument();
   });
 
@@ -414,6 +419,290 @@ describe("App copy/paste integration", () => {
     expect(document.activeElement).toBe(activeElementBeforePasteWarning);
   });
 
+  it("shows an immediate preparing progress card before copyPaste:plan resolves", async () => {
+    const harness = createAppHarness({
+      deferCopyPastePlan: true,
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+    await selectItem("/Users/demo/Folder");
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    expect(await screen.findByRole("region", { name: "Paste In Progress" })).toBeInTheDocument();
+    expect(screen.getByText("Preparing write plan")).toBeInTheDocument();
+
+    await act(async () => {
+      harness.resolveCopyPastePlan();
+    });
+  });
+
+  it("locks write actions immediately while paste planning is in flight", async () => {
+    const harness = createAppHarness({
+      deferCopyPastePlan: true,
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+    await selectItem("/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    expect(await screen.findByRole("region", { name: "Paste In Progress" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+
+    const invocationCountBeforeBlockedCopy = harness.invocations.length;
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "x", metaKey: true });
+    });
+    expect(await screen.findByText("Wait for the current write to finish")).toBeInTheDocument();
+    expect(harness.invocations).toHaveLength(invocationCountBeforeBlockedCopy);
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+    expect(harness.invocations).toHaveLength(invocationCountBeforeBlockedCopy);
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true, altKey: true });
+    });
+    expect(harness.invocations).toHaveLength(invocationCountBeforeBlockedCopy);
+
+    const sourceButton = await screen.findByRole("button", { name: "source.txt" });
+    await act(async () => {
+      fireEvent.contextMenu(sourceButton);
+    });
+
+    expect(await screen.findByRole("button", { name: "Copy⌘C" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Cut⌘X" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: "Paste⌘V" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Copy Path⌥⌘C" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+
+    await act(async () => {
+      harness.resolveCopyPastePlan();
+    });
+  });
+
+  it("cancels a planning-phase paste immediately and keeps the clipboard cleared", async () => {
+    const harness = createAppHarness({
+      deferCopyPastePlan: true,
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+    await selectItem("/Users/demo/Folder");
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    expect(await screen.findByRole("region", { name: "Paste In Progress" })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    });
+
+    expect(screen.queryByRole("region", { name: "Paste In Progress" })).not.toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    expect(await screen.findByText("Clipboard is empty")).toBeInTheDocument();
+
+    await act(async () => {
+      harness.resolveCopyPastePlan();
+    });
+  });
+
+  it("keeps the cut clipboard cleared after a cancelled cut/paste operation", async () => {
+    const harness = createAppHarness({
+      planResponse: {
+        mode: "cut",
+        sourcePaths: ["/Users/demo/source.txt"],
+        destinationDirectoryPath: "/Users/demo/Folder",
+        conflictResolution: "error",
+        items: [
+          {
+            sourcePath: "/Users/demo/source.txt",
+            destinationPath: "/Users/demo/Folder/source.txt",
+            kind: "file",
+            status: "ready",
+            sizeBytes: 5,
+          },
+        ],
+        conflicts: [],
+        issues: [],
+        warnings: [{ code: "cut_requires_delete", message: "Cut will remove the source item." }],
+        requiresConfirmation: {
+          largeBatch: false,
+          cutDelete: true,
+        },
+        summary: {
+          topLevelItemCount: 1,
+          totalItemCount: 1,
+          totalBytes: 5,
+          skippedConflictCount: 0,
+        },
+        canExecute: true,
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "x", metaKey: true });
+    });
+    await selectItem("/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.map((call) => call.channel)).toContain("copyPaste:start");
+    });
+
+    await act(async () => {
+      harness.emitProgress({
+        operationId: "copy-op-1",
+        mode: "cut",
+        status: "running",
+        completedItemCount: 0,
+        totalItemCount: 1,
+        completedByteCount: 0,
+        totalBytes: 5,
+        currentSourcePath: "/Users/demo/source.txt",
+        currentDestinationPath: "/Users/demo/Folder/source.txt",
+        result: null,
+      });
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.invocations).toContainEqual({
+        channel: "copyPaste:cancel",
+        payload: { operationId: "copy-op-1" },
+      });
+    });
+
+    await act(async () => {
+      harness.emitProgress({
+        operationId: "copy-op-1",
+        mode: "cut",
+        status: "cancelled",
+        completedItemCount: 0,
+        totalItemCount: 1,
+        completedByteCount: 0,
+        totalBytes: 5,
+        currentSourcePath: null,
+        currentDestinationPath: null,
+        result: {
+          operationId: "copy-op-1",
+          mode: "cut",
+          status: "cancelled",
+          destinationDirectoryPath: "/Users/demo/Folder",
+          startedAt: "2026-03-09T00:00:00.000Z",
+          finishedAt: "2026-03-09T00:00:01.000Z",
+          summary: {
+            topLevelItemCount: 1,
+            totalItemCount: 1,
+            completedItemCount: 0,
+            failedItemCount: 0,
+            skippedItemCount: 0,
+            cancelledItemCount: 1,
+            completedByteCount: 0,
+            totalBytes: 5,
+          },
+          items: [
+            {
+              sourcePath: "/Users/demo/source.txt",
+              destinationPath: "/Users/demo/Folder/source.txt",
+              status: "cancelled",
+              error: "User cancelled the operation.",
+            },
+          ],
+          error: "User cancelled the operation.",
+        },
+      });
+    });
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    expect(await screen.findByText("Clipboard is empty")).toBeInTheDocument();
+  });
+
+  it("clears the starting progress card if copyPaste:start is rejected as busy", async () => {
+    const harness = createAppHarness({
+      copyPasteStartError: new Error("Another write operation is already running."),
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+    await selectItem("/Users/demo/Folder");
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    expect(await screen.findByText("Wait for the current write to finish")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Paste In Progress" })).not.toBeInTheDocument();
+  });
+
   it("shows streamed progress and dispatches cancel requests", async () => {
     const harness = createAppHarness();
 
@@ -437,7 +726,8 @@ describe("App copy/paste integration", () => {
       expect(harness.invocations.map((call) => call.channel)).toContain("copyPaste:start");
     });
 
-    expect(await screen.findByText("Pasting into Folder")).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Paste In Progress" })).toBeInTheDocument();
+    expect(screen.queryByText("Pasting into Folder")).not.toBeInTheDocument();
 
     await act(async () => {
       harness.emitProgress({
@@ -454,11 +744,10 @@ describe("App copy/paste integration", () => {
       });
     });
 
-    expect(await screen.findByText("0 / 1 steps")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Paste In Progress" })).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Paste In Progress" })).not.toBeInTheDocument();
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Cancel Operation" }));
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     });
 
     await vi.waitFor(() => {
@@ -541,7 +830,7 @@ describe("App copy/paste integration", () => {
     });
   });
 
-  it("shows copy-path toasts for success and failure without changing focus", async () => {
+  it("shows copy-path success as a toast and failures as a modal dialog without changing focus", async () => {
     const successHarness = createAppHarness();
 
     const { unmount } = render(
@@ -585,8 +874,34 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { code: "KeyC", key: "c", metaKey: true, altKey: true });
     });
 
-    expect(await screen.findByText("Unable to copy the selected path(s)")).toBeInTheDocument();
-    expect(document.activeElement).toBe(activeElementBeforeCopyPathError);
+    const errorDialog = await screen.findByRole("dialog", {
+      name: "Unable to copy the selected path(s)",
+    });
+    expect(errorDialog).toBeInTheDocument();
+    expect(document.activeElement).not.toBe(activeElementBeforeCopyPathError);
+    expect(screen.getByRole("button", { name: "OK" })).toHaveFocus();
+  });
+
+  it("suppresses notifications entirely when the preference is disabled", async () => {
+    const harness = createAppHarness({
+      preferences: {
+        notificationsEnabled: false,
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+
+    expect(screen.queryByText("Ready to paste 1 item")).not.toBeInTheDocument();
+    expect(document.querySelectorAll(".toast-card")).toHaveLength(0);
   });
 
   it("copies on the first command press after selecting an item", async () => {
@@ -983,9 +1298,9 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
-    expect(await screen.findByText("Copied 1 item")).toBeInTheDocument();
-    expect(await screen.findByText("Pasting into Folder")).toBeInTheDocument();
-    expect(document.querySelectorAll(".toast-card")).toHaveLength(2);
+    expect(await screen.findByText("Ready to paste 1 item")).toBeInTheDocument();
+    expect(screen.queryByText("Pasting into Folder")).not.toBeInTheDocument();
+    expect(document.querySelectorAll(".toast-card")).toHaveLength(1);
 
     await act(async () => {
       harness.emitProgress({
@@ -1030,7 +1345,7 @@ describe("App copy/paste integration", () => {
 
     expect(screen.queryByRole("dialog", { name: "Paste Result" })).not.toBeInTheDocument();
     expect(await screen.findByText("Pasted 1 item into Folder")).toBeInTheDocument();
-    expect(document.querySelectorAll(".toast-card")).toHaveLength(3);
+    expect(document.querySelectorAll(".toast-card")).toHaveLength(2);
   });
 });
 
@@ -1038,6 +1353,9 @@ function createAppHarness(args: {
   planResponse?: IpcResponse<"copyPaste:plan">;
   preferences?: Partial<IpcResponse<"app:getPreferences">["preferences"]>;
   copyTextError?: Error;
+  deferCopyPastePlan?: boolean;
+  deferCopyPasteStart?: boolean;
+  copyPasteStartError?: Error;
 } = {}): {
   client: FiletrailClient;
   invocations: Array<{ channel: IpcChannel; payload: unknown }>;
@@ -1046,6 +1364,8 @@ function createAppHarness(args: {
     path: string,
     entries: IpcResponse<"directory:getSnapshot">["entries"],
   ) => void;
+  resolveCopyPastePlan: () => void;
+  resolveCopyPasteStart: () => void;
 } {
   let preferences = {
     ...DEFAULT_APP_PREFERENCES,
@@ -1073,6 +1393,20 @@ function createAppHarness(args: {
   };
   const invocations: Array<{ channel: IpcChannel; payload: unknown }> = [];
   let progressListener: ((event: CopyPasteProgressEvent) => void) | null = null;
+  let resolveCopyPastePlanPromise: (() => void) | null = null;
+  const copyPastePlanPromise =
+    args.deferCopyPastePlan === true
+      ? new Promise<void>((resolve) => {
+          resolveCopyPastePlanPromise = resolve;
+        })
+      : null;
+  let resolveCopyPasteStartPromise: (() => void) | null = null;
+  const copyPasteStartPromise =
+    args.deferCopyPasteStart === true
+      ? new Promise<void>((resolve) => {
+          resolveCopyPasteStartPromise = resolve;
+        })
+      : null;
 
   const client: FiletrailClient = {
     async invoke<C extends IpcChannel>(channel: C, payload: IpcRequestInput<C>) {
@@ -1117,6 +1451,9 @@ function createAppHarness(args: {
         } satisfies IpcResponse<"directory:getMetadataBatch">) as IpcResponse<C>;
       }
       if (channel === "copyPaste:plan") {
+        if (copyPastePlanPromise) {
+          await copyPastePlanPromise;
+        }
         return (
           args.planResponse ?? {
             mode: "copy",
@@ -1150,6 +1487,12 @@ function createAppHarness(args: {
         ) as IpcResponse<C>;
       }
       if (channel === "copyPaste:start") {
+        if (copyPasteStartPromise) {
+          await copyPasteStartPromise;
+        }
+        if (args.copyPasteStartError) {
+          throw args.copyPasteStartError;
+        }
         return { operationId: "copy-op-1", status: "queued" } as IpcResponse<C>;
       }
       if (channel === "copyPaste:cancel") {
@@ -1204,6 +1547,12 @@ function createAppHarness(args: {
         ...snapshot,
         entries,
       };
+    },
+    resolveCopyPastePlan() {
+      resolveCopyPastePlanPromise?.();
+    },
+    resolveCopyPasteStart() {
+      resolveCopyPasteStartPromise?.();
     },
   };
 }

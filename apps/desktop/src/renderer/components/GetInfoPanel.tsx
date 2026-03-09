@@ -18,6 +18,7 @@ export function InfoPanel({
   onOpen,
   onOpenInTerminal,
   onCopyPath,
+  copyPathDisabled = false,
 }: {
   open: boolean;
   loading: boolean;
@@ -27,6 +28,7 @@ export function InfoPanel({
   onOpen: () => void;
   onOpenInTerminal: () => void;
   onCopyPath: () => Promise<boolean> | boolean;
+  copyPathDisabled?: boolean | undefined;
 }) {
   const [copied, setCopied] = useState(false);
   const permissionParts = useMemo(() => splitPermissionMode(item?.permissionMode ?? null), [item]);
@@ -69,6 +71,7 @@ export function InfoPanel({
           copied={copied}
           item={item}
           permissionParts={permissionParts}
+          copyPathDisabled={copyPathDisabled}
           onCopyPath={handleCopyPath}
           onNavigateToPath={onNavigateToPath}
           onOpen={onOpen}
@@ -85,6 +88,7 @@ function GetInfoPanelContent({
   copied,
   item,
   permissionParts,
+  copyPathDisabled,
   onCopyPath,
   onNavigateToPath,
   onOpen,
@@ -93,6 +97,7 @@ function GetInfoPanelContent({
   copied: boolean;
   item: ItemProperties;
   permissionParts: { symbolic: string; octal: string } | null;
+  copyPathDisabled: boolean;
   onCopyPath: () => Promise<void>;
   onNavigateToPath: (path: string) => void;
   onOpen: () => void;
@@ -156,6 +161,7 @@ function GetInfoPanelContent({
         </GetInfoActionButton>
         <GetInfoActionButton
           label={copied ? "Copied" : "Copy Path"}
+          disabled={copyPathDisabled}
           onClick={() => void onCopyPath()}
         >
           <InfoPanelGlyph name={copied ? "check" : "copy"} />
@@ -208,14 +214,16 @@ function GetInfoPanelContent({
 function GetInfoActionButton({
   children,
   label,
+  disabled = false,
   onClick,
 }: {
   children: ReactNode;
   label: string;
+  disabled?: boolean | undefined;
   onClick: () => void;
 }) {
   return (
-    <button type="button" className="get-info-action" onClick={onClick}>
+    <button type="button" className="get-info-action" onClick={onClick} disabled={disabled}>
       <span className="get-info-action-icon" aria-hidden="true">
         {children}
       </span>

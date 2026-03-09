@@ -94,6 +94,9 @@ export const ZOOM_PERCENT_MAX = 150;
 export const TYPEAHEAD_DEBOUNCE_OPTIONS = [250, 500, 750, 1000, 1500] as const;
 export const TYPEAHEAD_DEBOUNCE_MIN_MS = 250;
 export const TYPEAHEAD_DEBOUNCE_MAX_MS = 1500;
+export const NOTIFICATION_DURATION_SECONDS_OPTIONS = [2, 3, 4, 5, 6, 8, 10] as const;
+export const NOTIFICATION_DURATION_SECONDS_MIN = 2;
+export const NOTIFICATION_DURATION_SECONDS_MAX = 10;
 export const DETAIL_COLUMN_KEYS = ["name", "size", "modified", "permissions"] as const;
 export const OPTIONAL_DETAIL_COLUMN_KEYS = ["size", "modified", "permissions"] as const;
 // `name` is always visible, so only optional columns are persisted as booleans.
@@ -140,6 +143,8 @@ export type AppPreferences = {
   tabSwitchesExplorerPanes: boolean;
   typeaheadEnabled: boolean;
   typeaheadDebounceMs: number;
+  notificationsEnabled: boolean;
+  notificationDurationSeconds: number;
   propertiesOpen: boolean;
   detailRowOpen: boolean;
   terminalApp: string | null;
@@ -179,6 +184,8 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   tabSwitchesExplorerPanes: true,
   typeaheadEnabled: true,
   typeaheadDebounceMs: 750,
+  notificationsEnabled: true,
+  notificationDurationSeconds: 4,
   propertiesOpen: true,
   detailRowOpen: true,
   terminalApp: null,
@@ -223,6 +230,15 @@ export function clampZoomPercent(value: number): number {
 // the shared debounce logic behaves consistently across tree, list, details, and search.
 export function clampTypeaheadDebounceMs(value: number, min: number, max: number): number {
   return Math.round(Math.max(min, Math.min(max, value)));
+}
+
+export function clampNotificationDurationSeconds(value: number): number {
+  return Math.round(
+    Math.max(
+      NOTIFICATION_DURATION_SECONDS_MIN,
+      Math.min(NOTIFICATION_DURATION_SECONDS_MAX, value),
+    ),
+  );
 }
 
 export function clampDetailColumnWidth(key: DetailColumnKey, value: number): number {

@@ -14,6 +14,7 @@ import {
   DEFAULT_DETAIL_COLUMN_VISIBILITY,
   DEFAULT_DETAIL_COLUMN_WIDTHS,
   DEFAULT_APP_PREFERENCES,
+  NOTIFICATION_DURATION_SECONDS_OPTIONS,
   clampZoomPercent,
   type AccentMode,
   type DetailColumnVisibility,
@@ -56,7 +57,7 @@ import { useExplorerPaneLayout } from "./hooks/useExplorerPaneLayout";
 import {
   EMPTY_COPY_PASTE_CLIPBOARD,
   buildPasteRequest,
-  clearClipboardAfterSuccessfulPaste,
+  clearCopyPasteClipboard,
   hasClipboardItems,
   setCopyPasteClipboard,
   type CopyPasteClipboardState,
@@ -133,6 +134,16 @@ type CopyPasteDialogState =
       event: CopyPasteProgressEvent;
     }
   | null;
+type WriteOperationCardState = {
+  mode: "copy" | "cut";
+  stage: "starting" | "queued" | "running";
+  destinationDirectoryPath: string;
+  completedItemCount: number;
+  totalItemCount: number;
+  completedByteCount: number;
+  totalBytes: number | null;
+  currentSourcePath: string | null;
+};
 
 const logger = createRendererLogger("filetrail.renderer");
 const SEARCH_POLL_INTERVAL_MS = 120;
@@ -140,6 +151,19 @@ const CONTEXT_MENU_WIDTH = 240;
 const CONTEXT_SUBMENU_WIDTH = 180;
 const CONTEXT_MENU_SAFE_MARGIN = 12;
 const CONTEXT_MENU_MAX_HEIGHT = 420;
+const WRITE_OPERATION_BUSY_ERROR = "Another write operation is already running.";
+const WRITE_LOCKED_CONTEXT_ACTION_IDS: ContextMenuActionId[] = [
+  "cut",
+  "copy",
+  "paste",
+  "move",
+  "rename",
+  "duplicate",
+  "compress",
+  "newFolder",
+  "copyPath",
+  "trash",
+];
 
 export function App() {
   type SortBy = IpcRequest<"directory:getSnapshot">["sortBy"];
@@ -230,6 +254,12 @@ export function App() {
   const [typeaheadDebounceMs, setTypeaheadDebounceMs] = useState(
     DEFAULT_APP_PREFERENCES.typeaheadDebounceMs,
   );
+  const [notificationsEnabled, setNotificationsEnabled] = useState(
+    DEFAULT_APP_PREFERENCES.notificationsEnabled,
+  );
+  const [notificationDurationSeconds, setNotificationDurationSeconds] = useState(
+    DEFAULT_APP_PREFERENCES.notificationDurationSeconds,
+  );
   const [restoreLastVisitedFolderOnStartup, setRestoreLastVisitedFolderOnStartup] = useState(
     DEFAULT_APP_PREFERENCES.restoreLastVisitedFolderOnStartup,
   );
@@ -264,6 +294,9 @@ export function App() {
   const [copyPasteClipboard, setCopyPasteClipboardState] =
     useState<CopyPasteClipboardState>(EMPTY_COPY_PASTE_CLIPBOARD);
   const [copyPasteDialogState, setCopyPasteDialogState] = useState<CopyPasteDialogState>(null);
+  const [writeOperationCardState, setWriteOperationCardState] = useState<WriteOperationCardState | null>(
+    null,
+  );
   const [copyPasteProgressEvent, setCopyPasteProgressEvent] = useState<CopyPasteProgressEvent | null>(
     null,
   );
@@ -307,8 +340,15 @@ export function App() {
   const actionNoticeReturnFocusPaneRef = useRef<"tree" | "content" | null>(null);
   const lastExplorerFocusPaneRef = useRef<"tree" | "content" | null>(null);
   const activeCopyPasteOperationIdRef = useRef<string | null>(null);
+  const nextPasteAttemptIdRef = useRef(0);
+  const pendingPasteAttemptRef = useRef<{
+    id: number;
+    phase: "planning" | "starting";
+    cancelled: boolean;
+  } | null>(null);
   const nextToastIdRef = useRef(0);
   const copyPasteClipboardRef = useRef<CopyPasteClipboardState>(EMPTY_COPY_PASTE_CLIPBOARD);
+  const writeOperationLockedRef = useRef(false);
   const currentPathRef = useRef(currentPath);
   const isSearchModeRef = useRef(false);
   const selectedPathsInViewOrderRef = useRef<string[]>([]);
@@ -391,7 +431,8 @@ export function App() {
     FEATURE_FLAGS.copyPaste &&
     hasClipboardItems(copyPasteClipboard) &&
     pasteDestinationPath !== null;
-  const showCopyPasteProgressCard = isCopyPasteProgressActive(copyPasteProgressEvent);
+  const isWriteOperationLocked = writeOperationCardState !== null;
+  const showCopyPasteProgressCard = writeOperationCardState !== null;
   const showCopyPasteResultDialog = shouldRenderCopyPasteResultDialog(copyPasteProgressEvent);
   const copyPasteModalOpen = copyPasteDialogState !== null || showCopyPasteResultDialog;
   const contextMenuDisabledActionIds = useMemo(() => {
@@ -406,6 +447,11 @@ export function App() {
     }
     if (!canPasteAtResolvedDestination) {
       disabled.add("paste");
+    }
+    if (isWriteOperationLocked) {
+      for (const actionId of WRITE_LOCKED_CONTEXT_ACTION_IDS) {
+        disabled.add(actionId);
+      }
     }
     if (contextMenuTargetEntries.length > 0) {
       return Array.from(disabled);
@@ -426,6 +472,7 @@ export function App() {
     contextMenuState,
     contextMenuTargetEntries.length,
     copyPasteClipboard,
+    isWriteOperationLocked,
   ]);
 
   useEffect(() => {
@@ -496,6 +543,12 @@ export function App() {
   useLayoutEffect(() => {
     copyPasteClipboardRef.current = copyPasteClipboard;
   }, [copyPasteClipboard]);
+
+  useEffect(() => {
+    if (!notificationsEnabled) {
+      setToasts([]);
+    }
+  }, [notificationsEnabled]);
 
   useEffect(() => {
     treeRootPathRef.current = treeRootPath;
@@ -672,6 +725,8 @@ export function App() {
         tabSwitchesExplorerPanes,
         typeaheadEnabled,
         typeaheadDebounceMs,
+        notificationsEnabled,
+        notificationDurationSeconds,
         propertiesOpen: infoPanelOpen,
         detailRowOpen: infoRowOpen,
         terminalApp,
@@ -718,6 +773,8 @@ export function App() {
     tabSwitchesExplorerPanes,
     typeaheadDebounceMs,
     typeaheadEnabled,
+    notificationDurationSeconds,
+    notificationsEnabled,
     restoreLastVisitedFolderOnStartup,
     terminalApp,
     theme,
@@ -773,6 +830,8 @@ export function App() {
         setTabSwitchesExplorerPanes(preferences.tabSwitchesExplorerPanes);
         setTypeaheadEnabled(preferences.typeaheadEnabled);
         setTypeaheadDebounceMs(preferences.typeaheadDebounceMs);
+        setNotificationsEnabled(preferences.notificationsEnabled);
+        setNotificationDurationSeconds(preferences.notificationDurationSeconds);
         setInfoPanelOpen(preferences.propertiesOpen);
         setInfoRowOpen(preferences.detailRowOpen);
         setRestoreLastVisitedFolderOnStartup(preferences.restoreLastVisitedFolderOnStartup);
@@ -984,8 +1043,18 @@ export function App() {
       if (event.operationId !== activeCopyPasteOperationIdRef.current) {
         return;
       }
-      if (isCopyPasteProgressActive(event)) {
-        setCopyPasteProgressEvent(event);
+      if (event.status === "queued" || event.status === "running") {
+        applyWriteOperationCardState({
+          mode: event.mode,
+          stage: event.status,
+          destinationDirectoryPath:
+            writeOperationCardState?.destinationDirectoryPath ?? currentPathRef.current,
+          completedItemCount: event.completedItemCount,
+          totalItemCount: event.totalItemCount,
+          completedByteCount: event.completedByteCount,
+          totalBytes: event.totalBytes,
+          currentSourcePath: event.currentSourcePath,
+        });
       }
       if (
         event.status === "completed" ||
@@ -994,13 +1063,10 @@ export function App() {
         event.status === "partial"
       ) {
         activeCopyPasteOperationIdRef.current = null;
+        pendingPasteAttemptRef.current = null;
+        applyWriteOperationCardState(null);
         if (event.result) {
           queuePasteSelection(event.result);
-        }
-        if (shouldClearClipboardAfterPasteResult(event)) {
-          applyCopyPasteClipboardState(
-            clearClipboardAfterSuccessfulPaste(copyPasteClipboardRef.current),
-          );
         }
         if (shouldRenderCopyPasteResultDialog(event)) {
           setCopyPasteProgressEvent(event);
@@ -1012,7 +1078,13 @@ export function App() {
       }
     });
     return unsubscribe;
-  }, [applyCopyPasteClipboardState, client, pushTerminalCopyPasteToast, refreshDirectory]);
+  }, [
+    applyCopyPasteClipboardState,
+    client,
+    pushTerminalCopyPasteToast,
+    refreshDirectory,
+    writeOperationCardState?.destinationDirectoryPath,
+  ]);
 
   useEffect(() => {
     if (!searchPopoverOpen) {
@@ -1877,11 +1949,15 @@ export function App() {
   }
 
   function showNotImplementedNotice(title: string) {
+    showModalNotice(title, `${title} is not implemented yet.`);
+  }
+
+  function showModalNotice(title: string, message: string) {
     actionNoticeReturnFocusPaneRef.current =
       focusedPane ?? lastExplorerFocusPaneRef.current ?? (contextMenuState ? "content" : null);
     setActionNotice({
       title,
-      message: `${title} is not implemented yet.`,
+      message,
     });
   }
 
@@ -1896,19 +1972,46 @@ export function App() {
     setToasts((current) => current.filter((toast) => toast.id !== id));
   }
 
+  function applyWriteOperationCardState(nextState: WriteOperationCardState | null) {
+    writeOperationLockedRef.current = nextState !== null;
+    setWriteOperationCardState(nextState);
+  }
+
   function pushToast(input: {
     kind: ToastKind;
     title: string;
     message?: string;
   }) {
+    if (!notificationsEnabled) {
+      return;
+    }
     const id = `toast-${nextToastIdRef.current}`;
     nextToastIdRef.current += 1;
-    setToasts((current) => enqueueToast(current, createToastEntry(id, input)));
+    setToasts((current) =>
+      enqueueToast(
+        current,
+        createToastEntry(id, {
+          ...input,
+          durationMs: notificationDurationSeconds * 1000,
+        }),
+      ),
+    );
   }
 
   function applyCopyPasteClipboardState(nextClipboard: CopyPasteClipboardState) {
     copyPasteClipboardRef.current = nextClipboard;
     setCopyPasteClipboardState(nextClipboard);
+  }
+
+  function isWriteOperationInFlight(): boolean {
+    return writeOperationLockedRef.current;
+  }
+
+  function showWriteOperationBusyToast() {
+    pushToast({
+      kind: "warning",
+      title: "Wait for the current write to finish",
+    });
   }
 
   function pushTerminalCopyPasteToast(event: CopyPasteProgressEvent) {
@@ -1938,6 +2041,10 @@ export function App() {
   }
 
   async function runCopyPathAction(paths: string[]) {
+    if (isWriteOperationInFlight()) {
+      showWriteOperationBusyToast();
+      return;
+    }
     try {
       await copyPathsToClipboard(paths);
       pushToast({
@@ -1946,10 +2053,10 @@ export function App() {
       });
     } catch (error) {
       logger.error("copy path failed", error);
-      pushToast({
-        kind: "error",
-        title: "Unable to copy the selected path(s)",
-      });
+      showModalNotice(
+        "Unable to copy the selected path(s)",
+        "File Trail could not copy the selected path text to the clipboard.",
+      );
     }
   }
 
@@ -1974,6 +2081,10 @@ export function App() {
       showNotImplementedNotice(mode === "copy" ? "Copy" : "Cut");
       return;
     }
+    if (isWriteOperationInFlight()) {
+      showWriteOperationBusyToast();
+      return;
+    }
     const paths = resolveClipboardSourcePaths();
     if (paths.length === 0) {
       pushToast({
@@ -1984,12 +2095,12 @@ export function App() {
     }
     applyCopyPasteClipboardState(setCopyPasteClipboard(mode, paths, new Date().toISOString()));
     pushToast({
-      kind: mode === "copy" ? "success" : "info",
+      kind: "info",
       title:
         mode === "copy"
           ? paths.length === 1
-            ? "Copied 1 item"
-            : `Copied ${paths.length} items`
+            ? "Ready to paste 1 item"
+            : `Ready to paste ${paths.length} items`
           : paths.length === 1
             ? "Ready to move 1 item"
             : `Ready to move ${paths.length} items`,
@@ -2004,11 +2115,8 @@ export function App() {
       showNotImplementedNotice("Paste");
       return;
     }
-    if (activeCopyPasteOperationIdRef.current) {
-      pushToast({
-        kind: "warning",
-        title: "Wait for the current paste to finish",
-      });
+    if (isWriteOperationInFlight()) {
+      showWriteOperationBusyToast();
       return;
     }
     if (pasteDestinationPath === null) {
@@ -2030,9 +2138,33 @@ export function App() {
       });
       return;
     }
+    applyCopyPasteClipboardState(clearCopyPasteClipboard());
+    const pasteAttemptId = nextPasteAttemptIdRef.current + 1;
+    nextPasteAttemptIdRef.current = pasteAttemptId;
+    pendingPasteAttemptRef.current = {
+      id: pasteAttemptId,
+      phase: "planning",
+      cancelled: false,
+    };
+    applyWriteOperationCardState({
+      mode: request.mode,
+      stage: "starting",
+      destinationDirectoryPath: request.destinationDirectoryPath,
+      completedItemCount: 0,
+      totalItemCount: request.sourcePaths.length,
+      completedByteCount: 0,
+      totalBytes: null,
+      currentSourcePath: request.sourcePaths[0] ?? null,
+    });
     try {
       const plan = await client.invoke("copyPaste:plan", request);
+      const pendingAttempt = pendingPasteAttemptRef.current;
+      if (!pendingAttempt || pendingAttempt.id !== pasteAttemptId || pendingAttempt.cancelled) {
+        return;
+      }
       if (plan.conflicts.length > 0) {
+        pendingPasteAttemptRef.current = null;
+        applyWriteOperationCardState(null);
         setCopyPasteDialogState({
           type: "plan",
           plan,
@@ -2040,23 +2172,49 @@ export function App() {
         return;
       }
       if (plan.issues.length > 0) {
-        pushToast({
-          kind: "error",
-          title: plan.issues[0]?.message ?? "Paste cannot continue.",
-        });
+        pendingPasteAttemptRef.current = null;
+        applyWriteOperationCardState(null);
+        showModalNotice("Paste cannot continue", plan.issues[0]?.message ?? "Paste cannot continue.");
         return;
       }
-      await executePastePlan(plan);
+      await executePastePlan(plan, pasteAttemptId);
     } catch (error) {
+      const pendingAttempt = pendingPasteAttemptRef.current;
+      if (pendingAttempt && pendingAttempt.id === pasteAttemptId && pendingAttempt.cancelled) {
+        pendingPasteAttemptRef.current = null;
+        return;
+      }
+      pendingPasteAttemptRef.current = null;
+      applyWriteOperationCardState(null);
       logger.error("copy paste planning failed", error);
-      pushToast({
-        kind: "error",
-        title: "Unable to prepare paste",
-      });
+      showModalNotice(
+        "Unable to prepare paste",
+        "File Trail could not validate the paste operation. No files were written.",
+      );
     }
   }
 
-  async function executePastePlan(plan: CopyPastePlan) {
+  async function executePastePlan(plan: CopyPastePlan, pasteAttemptId: number | null = null) {
+    if (pasteAttemptId !== null) {
+      const pendingAttempt = pendingPasteAttemptRef.current;
+      if (!pendingAttempt || pendingAttempt.id !== pasteAttemptId || pendingAttempt.cancelled) {
+        return;
+      }
+      pendingPasteAttemptRef.current = {
+        ...pendingAttempt,
+        phase: "starting",
+      };
+    }
+    applyWriteOperationCardState({
+      mode: plan.mode,
+      stage: "starting",
+      destinationDirectoryPath: plan.destinationDirectoryPath,
+      completedItemCount: 0,
+      totalItemCount: plan.summary.totalItemCount,
+      completedByteCount: 0,
+      totalBytes: plan.summary.totalBytes,
+      currentSourcePath: plan.sourcePaths[0] ?? null,
+    });
     try {
       const response = await client.invoke("copyPaste:start", {
         mode: plan.mode,
@@ -2064,7 +2222,37 @@ export function App() {
         destinationDirectoryPath: plan.destinationDirectoryPath,
         conflictResolution: plan.conflictResolution,
       });
+      const pendingAttempt = pasteAttemptId === null ? null : pendingPasteAttemptRef.current;
+      if (pendingAttempt && pendingAttempt.id === pasteAttemptId && pendingAttempt.cancelled) {
+        pendingPasteAttemptRef.current = null;
+        activeCopyPasteOperationIdRef.current = response.operationId;
+        setCopyPasteProgressEvent({
+          operationId: response.operationId,
+          mode: plan.mode,
+          status: "queued",
+          completedItemCount: 0,
+          totalItemCount: plan.summary.totalItemCount,
+          completedByteCount: 0,
+          totalBytes: plan.summary.totalBytes,
+          currentSourcePath: plan.sourcePaths[0] ?? null,
+          currentDestinationPath: null,
+          result: null,
+        });
+        void cancelCopyPasteOperation();
+        return;
+      }
+      pendingPasteAttemptRef.current = null;
       activeCopyPasteOperationIdRef.current = response.operationId;
+      applyWriteOperationCardState({
+        mode: plan.mode,
+        stage: "queued",
+        destinationDirectoryPath: plan.destinationDirectoryPath,
+        completedItemCount: 0,
+        totalItemCount: plan.summary.totalItemCount,
+        completedByteCount: 0,
+        totalBytes: plan.summary.totalBytes,
+        currentSourcePath: plan.sourcePaths[0] ?? null,
+      });
       setCopyPasteProgressEvent({
         operationId: response.operationId,
         mode: plan.mode,
@@ -2073,41 +2261,58 @@ export function App() {
         totalItemCount: plan.summary.totalItemCount,
         completedByteCount: 0,
         totalBytes: plan.summary.totalBytes,
-        currentSourcePath: null,
+        currentSourcePath: plan.sourcePaths[0] ?? null,
         currentDestinationPath: null,
         result: null,
       });
       setCopyPasteDialogState(null);
       closeContextMenu();
-      pushToast({
-        kind: "info",
-        title:
-          plan.mode === "cut"
-            ? `Moving into ${getPathLeafName(plan.destinationDirectoryPath)}`
-            : `Pasting into ${getPathLeafName(plan.destinationDirectoryPath)}`,
-      });
     } catch (error) {
+      const pendingAttempt = pasteAttemptId === null ? null : pendingPasteAttemptRef.current;
+      if (pendingAttempt && pendingAttempt.id === pasteAttemptId && pendingAttempt.cancelled) {
+        pendingPasteAttemptRef.current = null;
+        return;
+      }
+      pendingPasteAttemptRef.current = null;
+      applyWriteOperationCardState(null);
       logger.error("copy paste start failed", error);
-      pushToast({
-        kind: "error",
-        title: "Unable to start paste",
-      });
+      if (error instanceof Error && error.message.includes(WRITE_OPERATION_BUSY_ERROR)) {
+        showWriteOperationBusyToast();
+        return;
+      }
+      showModalNotice(
+        "Unable to start paste",
+        "File Trail could not start the write operation. No files were written.",
+      );
     }
   }
 
   async function cancelCopyPasteOperation() {
     const operationId = activeCopyPasteOperationIdRef.current;
     if (!operationId) {
+      const pendingAttempt = pendingPasteAttemptRef.current;
+      if (!pendingAttempt) {
+        return;
+      }
+      pendingPasteAttemptRef.current = {
+        ...pendingAttempt,
+        cancelled: true,
+      };
+      if (pendingAttempt.phase === "planning") {
+        pendingPasteAttemptRef.current = null;
+        applyWriteOperationCardState(null);
+        setCopyPasteProgressEvent(null);
+      }
       return;
     }
     try {
       await client.invoke("copyPaste:cancel", { operationId });
     } catch (error) {
       logger.error("copy paste cancel failed", error);
-      pushToast({
-        kind: "error",
-        title: "Unable to cancel paste",
-      });
+      showModalNotice(
+        "Unable to cancel paste",
+        "File Trail could not stop the active write operation. Wait for it to finish, then verify the results.",
+      );
     }
   }
 
@@ -2140,19 +2345,16 @@ export function App() {
         return;
       }
       if (plan.issues.length > 0) {
-        pushToast({
-          kind: "error",
-          title: plan.issues[0]?.message ?? "Paste cannot continue.",
-        });
+        showModalNotice("Paste cannot continue", plan.issues[0]?.message ?? "Paste cannot continue.");
         return;
       }
       await executePastePlan(plan);
     } catch (error) {
       logger.error("copy paste retry planning failed", error);
-      pushToast({
-        kind: "error",
-        title: "Unable to retry failed items",
-      });
+      showModalNotice(
+        "Unable to retry failed items",
+        "File Trail could not prepare a retry plan for the failed items.",
+      );
     }
   }
 
@@ -2194,6 +2396,10 @@ export function App() {
   }
 
   async function copyGetInfoPath(path: string): Promise<boolean> {
+    if (isWriteOperationInFlight()) {
+      showWriteOperationBusyToast();
+      return false;
+    }
     try {
       await client.invoke("system:copyText", { text: path });
       return true;
@@ -2265,6 +2471,10 @@ export function App() {
 
   async function runContextMenuAction(actionId: ContextMenuActionId, paths: string[]) {
     closeContextMenu();
+    if (WRITE_LOCKED_CONTEXT_ACTION_IDS.includes(actionId) && isWriteOperationInFlight()) {
+      showWriteOperationBusyToast();
+      return;
+    }
     if (actionId === "revealInFolder") {
       const firstPath = paths[0];
       if (firstPath) {
@@ -3749,6 +3959,7 @@ export function App() {
                       }
                     }}
                     onCopyPath={() => (getInfoItem ? copyGetInfoPath(getInfoItem.path) : false)}
+                    copyPathDisabled={isWriteOperationLocked}
                   />
                 </>
               ) : null}
@@ -3786,6 +3997,8 @@ export function App() {
                 tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
                 typeaheadEnabled={typeaheadEnabled}
                 typeaheadDebounceMs={typeaheadDebounceMs}
+                notificationsEnabled={notificationsEnabled}
+                notificationDurationSeconds={notificationDurationSeconds}
                 restoreLastVisitedFolderOnStartup={restoreLastVisitedFolderOnStartup}
                 terminalApp={terminalApp}
                 themeOptions={[...THEME_OPTIONS]}
@@ -3794,6 +4007,7 @@ export function App() {
                 uiFontSizeOptions={[...UI_FONT_SIZE_OPTIONS]}
                 uiFontWeightOptions={[...UI_FONT_WEIGHT_OPTIONS]}
                 typeaheadDebounceOptions={[...TYPEAHEAD_DEBOUNCE_OPTIONS]}
+                notificationDurationSecondsOptions={[...NOTIFICATION_DURATION_SECONDS_OPTIONS]}
                 onThemeChange={setTheme}
                 onAccentChange={setAccent}
                 onAccentToolbarButtonsChange={setAccentToolbarButtons}
@@ -3812,6 +4026,8 @@ export function App() {
                 onTabSwitchesExplorerPanesChange={setTabSwitchesExplorerPanes}
                 onTypeaheadEnabledChange={setTypeaheadEnabled}
                 onTypeaheadDebounceMsChange={setTypeaheadDebounceMs}
+                onNotificationsEnabledChange={setNotificationsEnabled}
+                onNotificationDurationSecondsChange={setNotificationDurationSeconds}
                 onRestoreLastVisitedFolderOnStartupChange={setRestoreLastVisitedFolderOnStartup}
                 onTerminalAppChange={setTerminalApp}
               />
@@ -3876,20 +4092,21 @@ export function App() {
           }
         />
       ) : null}
-      {showCopyPasteProgressCard && copyPasteProgressEvent ? (
+      {showCopyPasteProgressCard && writeOperationCardState ? (
         <CopyPasteProgressCard
-          title={copyPasteProgressEvent.mode === "cut" ? "Cut/Paste In Progress" : "Paste In Progress"}
-          message={
-            copyPasteProgressEvent.status === "queued"
-              ? "The copy/paste operation is queued."
-              : "File Trail is writing to disk through the protected copy/paste pipeline."
+          title={
+            writeOperationCardState.mode === "cut" ? "Cut/Paste In Progress" : "Paste In Progress"
           }
-          progressLabel={`${copyPasteProgressEvent.completedItemCount} / ${copyPasteProgressEvent.totalItemCount} steps`}
-          detailLines={[
-            copyPasteProgressEvent.currentSourcePath
-              ? `Current source: ${copyPasteProgressEvent.currentSourcePath}`
-              : "Waiting for the next filesystem step.",
-          ]}
+          progressPercent={getWriteOperationProgressPercent(writeOperationCardState)}
+          progressMetaStart={`${writeOperationCardState.completedItemCount.toLocaleString()} of ${Math.max(writeOperationCardState.totalItemCount, 0).toLocaleString()} items`}
+          progressMetaEnd={formatWriteOperationByteLabel(writeOperationCardState)}
+          detailLabel="Current file"
+          detailValue={
+            getPathLeafName(
+              writeOperationCardState.currentSourcePath ??
+                writeOperationCardState.destinationDirectoryPath,
+            )
+          }
           onCancel={() => {
             void cancelCopyPasteOperation();
           }}
@@ -3926,7 +4143,11 @@ export function App() {
           }
         />
       ) : null}
-      <ToastViewport toasts={toasts} onDismiss={dismissToast} offsetBottom={showCopyPasteProgressCard ? 176 : 16} />
+      <ToastViewport
+        toasts={toasts}
+        onDismiss={dismissToast}
+        offsetBottom={showCopyPasteProgressCard ? 272 : 16}
+      />
     </main>
   );
 }
@@ -4006,15 +4227,25 @@ function buildCopyPasteResultDetailLines(event: CopyPasteProgressEvent): string[
   return lines;
 }
 
-function shouldClearClipboardAfterPasteResult(event: CopyPasteProgressEvent): boolean {
-  const result = event.result;
-  if (!result) {
-    return false;
+function getWriteOperationProgressPercent(state: WriteOperationCardState): number {
+  if (state.totalBytes !== null && state.totalBytes > 0) {
+    return (state.completedByteCount / state.totalBytes) * 100;
   }
-  if (result.mode === "cut") {
-    return true;
+  if (state.totalItemCount <= 0) {
+    return state.stage === "starting" ? 4 : 0;
   }
-  return result.status === "completed" || result.status === "partial";
+  return (state.completedItemCount / state.totalItemCount) * 100;
+}
+
+function formatWriteOperationByteLabel(state: WriteOperationCardState): string {
+  if (state.totalBytes !== null) {
+    return `${formatSize(state.completedByteCount, "ready")} of ${formatSize(state.totalBytes, "ready")}`;
+  }
+  return state.stage === "starting"
+    ? "Preparing write plan"
+    : state.stage === "queued"
+      ? "Waiting to begin"
+      : "Tracking bytes";
 }
 
 function resolvePasteDestinationPath(args: {

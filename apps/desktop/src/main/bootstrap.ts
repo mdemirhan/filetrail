@@ -450,6 +450,12 @@ export function toPreferencePatch(
   if (value.typeaheadDebounceMs !== undefined) {
     patch.typeaheadDebounceMs = value.typeaheadDebounceMs;
   }
+  if (value.notificationsEnabled !== undefined) {
+    patch.notificationsEnabled = value.notificationsEnabled;
+  }
+  if (value.notificationDurationSeconds !== undefined) {
+    patch.notificationDurationSeconds = value.notificationDurationSeconds;
+  }
   if (value.propertiesOpen !== undefined) {
     patch.propertiesOpen = value.propertiesOpen;
   }

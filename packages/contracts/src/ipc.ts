@@ -264,6 +264,8 @@ export const appPreferencesSchema = z.object({
   tabSwitchesExplorerPanes: z.boolean(),
   typeaheadEnabled: z.boolean(),
   typeaheadDebounceMs: z.number().int().min(250).max(1500),
+  notificationsEnabled: z.boolean(),
+  notificationDurationSeconds: z.number().int().min(2).max(10),
   propertiesOpen: z.boolean(),
   detailRowOpen: z.boolean(),
   terminalApp: z.string().trim().min(1).nullable(),

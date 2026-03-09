@@ -150,6 +150,8 @@ export type CopyPasteOperationHandle = {
   status: "queued";
 };
 
+export const WRITE_OPERATION_BUSY_ERROR = "Another write operation is already running.";
+
 type WriteServiceDependencies = {
   fileSystem?: WriteServiceFileSystem;
   now?: () => Date;
@@ -220,7 +222,6 @@ export class WriteService {
   private readonly largeBatchItemThreshold: number;
   private readonly largeBatchByteThreshold: number;
   private readonly listeners = new Set<(event: CopyPasteProgressEvent) => void>();
-  private readonly queue: QueuedOperation[] = [];
   private readonly controllers = new Map<string, AbortController>();
   private activeOperationId: string | null = null;
   private sequence = 0;
@@ -252,15 +253,19 @@ export class WriteService {
   }
 
   startCopyPaste(request: CopyPasteRequest): CopyPasteOperationHandle {
+    if (this.activeOperationId !== null) {
+      throw new Error(WRITE_OPERATION_BUSY_ERROR);
+    }
     const normalizedRequest = normalizeCopyPasteRequest(request);
     const operationId = this.createOperationId();
     const controller = new AbortController();
     this.controllers.set(operationId, controller);
-    this.queue.push({
+    this.activeOperationId = operationId;
+    const operation = {
       operationId,
       request: normalizedRequest,
       controller,
-    });
+    };
     this.emit({
       operationId,
       mode: normalizedRequest.mode,
@@ -273,7 +278,7 @@ export class WriteService {
       currentDestinationPath: null,
       result: null,
     });
-    void this.runQueue();
+    void this.executeActiveOperation(operation);
     return {
       operationId,
       status: "queued",
@@ -289,23 +294,12 @@ export class WriteService {
     return { ok: true };
   }
 
-  private async runQueue(): Promise<void> {
-    if (this.activeOperationId) {
-      return;
-    }
-    const next = this.queue.shift();
-    if (!next) {
-      return;
-    }
-    this.activeOperationId = next.operationId;
+  private async executeActiveOperation(operation: QueuedOperation): Promise<void> {
     try {
-      await this.executeOperation(next);
+      await this.executeOperation(operation);
     } finally {
-      this.controllers.delete(next.operationId);
+      this.controllers.delete(operation.operationId);
       this.activeOperationId = null;
-      if (this.queue.length > 0) {
-        void this.runQueue();
-      }
     }
   }
 

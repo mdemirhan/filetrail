@@ -17,6 +17,7 @@ import {
   clampDetailColumnWidth,
   clampFontSize,
   clampFontWeight,
+  clampNotificationDurationSeconds,
   clampPaneWidth,
   clampTypeaheadDebounceMs,
   clampZoomPercent,
@@ -285,6 +286,15 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
         : currentDefaults.typeaheadDebounceMs,
       TYPEAHEAD_DEBOUNCE_MIN_MS,
       TYPEAHEAD_DEBOUNCE_MAX_MS,
+    ),
+    notificationsEnabled:
+      typeof record.notificationsEnabled === "boolean"
+        ? record.notificationsEnabled
+        : currentDefaults.notificationsEnabled,
+    notificationDurationSeconds: clampNotificationDurationSeconds(
+      typeof record.notificationDurationSeconds === "number"
+        ? record.notificationDurationSeconds
+        : currentDefaults.notificationDurationSeconds,
     ),
     propertiesOpen:
       typeof record.propertiesOpen === "boolean"
