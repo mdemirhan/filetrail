@@ -1,58 +1,70 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen } from "@testing-library/react";
+import type { ComponentProps } from "react";
 
+import type { ThemeMode } from "../../shared/appPreferences";
 import { SettingsView } from "./SettingsView";
+
+function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsView>> = {}) {
+  return render(
+    <SettingsView
+      theme="dark"
+      uiFontFamily="lexend"
+      uiFontSize={13}
+      uiFontWeight={500}
+      effectiveTextPrimaryColor="#ffffff"
+      effectiveTextSecondaryColor="#cccccc"
+      effectiveTextMutedColor="#999999"
+      compactListView={false}
+      compactDetailsView={false}
+      compactTreeView={false}
+      detailColumns={{
+        size: true,
+        modified: true,
+        permissions: true,
+      }}
+      layoutMode="wide"
+      tabSwitchesExplorerPanes={true}
+      typeaheadEnabled={true}
+      typeaheadDebounceMs={750}
+      restoreLastVisitedFolderOnStartup={false}
+      terminalApp={null}
+      themeOptions={[
+        { value: "light", label: "Light" },
+        { value: "dark", label: "Dark" },
+        { value: "tomorrow-night", label: "Tomorrow Night" },
+        { value: "catppuccin-mocha", label: "Catppuccin Mocha" },
+      ]}
+      uiFontOptions={[{ value: "lexend", label: "Lexend" }]}
+      uiFontSizeOptions={[13]}
+      uiFontWeightOptions={[500]}
+      typeaheadDebounceOptions={[750]}
+      onThemeChange={() => undefined}
+      onUiFontFamilyChange={() => undefined}
+      onUiFontSizeChange={() => undefined}
+      onUiFontWeightChange={() => undefined}
+      onTextPrimaryColorChange={() => undefined}
+      onTextSecondaryColorChange={() => undefined}
+      onTextMutedColorChange={() => undefined}
+      onResetAppearance={() => undefined}
+      onCompactListViewChange={() => undefined}
+      onCompactDetailsViewChange={() => undefined}
+      onCompactTreeViewChange={() => undefined}
+      onDetailColumnsChange={() => undefined}
+      onTabSwitchesExplorerPanesChange={() => undefined}
+      onTypeaheadEnabledChange={() => undefined}
+      onTypeaheadDebounceMsChange={() => undefined}
+      onRestoreLastVisitedFolderOnStartupChange={() => undefined}
+      onTerminalAppChange={() => undefined}
+      {...overrides}
+    />,
+  );
+}
 
 describe("SettingsView", () => {
   it("exposes the selected layout mode on the root element", () => {
-    render(
-      <SettingsView
-        theme="dark"
-        uiFontFamily="lexend"
-        uiFontSize={13}
-        uiFontWeight={500}
-        effectiveTextPrimaryColor="#ffffff"
-        effectiveTextSecondaryColor="#cccccc"
-        effectiveTextMutedColor="#999999"
-        compactListView={false}
-        compactDetailsView={false}
-        compactTreeView={false}
-        detailColumns={{
-          size: true,
-          modified: true,
-          permissions: true,
-        }}
-        layoutMode="compact"
-        tabSwitchesExplorerPanes={true}
-        typeaheadEnabled={true}
-        typeaheadDebounceMs={750}
-        restoreLastVisitedFolderOnStartup={false}
-        terminalApp={null}
-        themeOptions={[{ value: "dark", label: "Dark" }]}
-        uiFontOptions={[{ value: "lexend", label: "Lexend" }]}
-        uiFontSizeOptions={[13]}
-        uiFontWeightOptions={[500]}
-        typeaheadDebounceOptions={[750]}
-        onThemeChange={() => undefined}
-        onUiFontFamilyChange={() => undefined}
-        onUiFontSizeChange={() => undefined}
-        onUiFontWeightChange={() => undefined}
-        onTextPrimaryColorChange={() => undefined}
-        onTextSecondaryColorChange={() => undefined}
-        onTextMutedColorChange={() => undefined}
-        onResetAppearance={() => undefined}
-        onCompactListViewChange={() => undefined}
-        onCompactDetailsViewChange={() => undefined}
-        onCompactTreeViewChange={() => undefined}
-        onDetailColumnsChange={() => undefined}
-        onTabSwitchesExplorerPanesChange={() => undefined}
-        onTypeaheadEnabledChange={() => undefined}
-        onTypeaheadDebounceMsChange={() => undefined}
-        onRestoreLastVisitedFolderOnStartupChange={() => undefined}
-        onTerminalAppChange={() => undefined}
-      />,
-    );
+    renderSettingsView({ layoutMode: "compact" });
 
     expect(screen.getByText("Settings").closest(".settings-view")).toHaveAttribute(
       "data-layout",
@@ -60,55 +72,35 @@ describe("SettingsView", () => {
     );
   });
 
+  it.each([
+    ["light", "#edeef4"],
+    ["dark", "#181b22"],
+    ["tomorrow-night", "#151617"],
+    ["catppuccin-mocha", "#0e0e18"],
+  ] satisfies Array<[ThemeMode, string]>)(
+    "applies the supplied %s theme palette to the page background",
+    (theme, expectedBackground) => {
+      renderSettingsView({ theme });
+
+      expect(screen.getByText("Settings").closest(".settings-view")).toHaveStyle({
+        background: expectedBackground,
+      });
+    },
+  );
+
+  it("renders the provided theme labels in the theme selector", () => {
+    renderSettingsView();
+
+    const themeSelect = screen.getByLabelText("Theme");
+    expect(themeSelect).toHaveTextContent("Light");
+    expect(themeSelect).toHaveTextContent("Dark");
+    expect(themeSelect).toHaveTextContent("Tomorrow Night");
+    expect(themeSelect).toHaveTextContent("Catppuccin Mocha");
+  });
+
   it("forwards terminal app edits as trimmed nullable values", () => {
     const onTerminalAppChange = vi.fn();
-
-    render(
-      <SettingsView
-        theme="dark"
-        uiFontFamily="lexend"
-        uiFontSize={13}
-        uiFontWeight={500}
-        effectiveTextPrimaryColor="#ffffff"
-        effectiveTextSecondaryColor="#cccccc"
-        effectiveTextMutedColor="#999999"
-        compactListView={false}
-        compactDetailsView={false}
-        compactTreeView={false}
-        detailColumns={{
-          size: true,
-          modified: true,
-          permissions: true,
-        }}
-        tabSwitchesExplorerPanes={true}
-        typeaheadEnabled={true}
-        typeaheadDebounceMs={750}
-        restoreLastVisitedFolderOnStartup={false}
-        terminalApp={null}
-        themeOptions={[{ value: "dark", label: "Dark" }]}
-        uiFontOptions={[{ value: "lexend", label: "Lexend" }]}
-        uiFontSizeOptions={[13]}
-        uiFontWeightOptions={[500]}
-        typeaheadDebounceOptions={[750]}
-        onThemeChange={() => undefined}
-        onUiFontFamilyChange={() => undefined}
-        onUiFontSizeChange={() => undefined}
-        onUiFontWeightChange={() => undefined}
-        onTextPrimaryColorChange={() => undefined}
-        onTextSecondaryColorChange={() => undefined}
-        onTextMutedColorChange={() => undefined}
-        onResetAppearance={() => undefined}
-        onCompactListViewChange={() => undefined}
-        onCompactDetailsViewChange={() => undefined}
-        onCompactTreeViewChange={() => undefined}
-        onDetailColumnsChange={() => undefined}
-        onTabSwitchesExplorerPanesChange={() => undefined}
-        onTypeaheadEnabledChange={() => undefined}
-        onTypeaheadDebounceMsChange={() => undefined}
-        onRestoreLastVisitedFolderOnStartupChange={() => undefined}
-        onTerminalAppChange={onTerminalAppChange}
-      />,
-    );
+    renderSettingsView({ onTerminalAppChange });
 
     const input = screen.getByLabelText("Terminal app");
     fireEvent.change(input, { target: { value: "  iTerm  " } });

@@ -1,3 +1,5 @@
+import { useState, type ReactNode } from "react";
+
 import type {
   DetailColumnVisibility,
   ThemeMode,
@@ -5,8 +7,651 @@ import type {
   UiFontWeight,
 } from "../../shared/appPreferences";
 
-// SettingsView is a fully controlled form. Every field reflects the current preference
-// snapshot and forwards edits upward immediately instead of maintaining local drafts.
+const mono = "'SF Mono', 'JetBrains Mono', 'Fira Code', monospace";
+const sans = "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', system-ui, sans-serif";
+
+const settingsThemes = {
+  light: {
+    page: { bg: "#edeef4" },
+    header: { title: "#2a2a34", subtitle: "#daa520", desc: "#a0a2ae" },
+    card: { bg: "#f7f8fb", border: "rgba(0,0,0,0.06)", shadow: "0 1px 3px rgba(0,0,0,0.04)" },
+    section: {
+      iconBg: "rgba(218,165,32,0.1)",
+      title: "#2a2a34",
+    },
+    label: { primary: "#3a3a4a", secondary: "#8a8c9a", category: "#b8860b" },
+    input: {
+      bg: "#fff",
+      border: "rgba(0,0,0,0.1)",
+      borderFocus: "rgba(218,165,32,0.5)",
+      text: "#2a2a34",
+    },
+    select: {
+      bg: "#fff",
+      border: "rgba(0,0,0,0.1)",
+      text: "#3a3a4a",
+      arrow: "#a0a2ae",
+    },
+    toggle: { trackOff: "#d0d2da", trackOn: "#daa520", knob: "#fff" },
+    checkbox: {
+      bg: "#daa520",
+      border: "rgba(0,0,0,0.15)",
+      check: "#fff",
+      uncheckedBg: "#fff",
+    },
+    color: {
+      swatchBorder: "rgba(0,0,0,0.1)",
+      inputBg: "#fff",
+      inputBorder: "rgba(0,0,0,0.08)",
+      text: "#5a5a6a",
+    },
+    separator: "rgba(0,0,0,0.05)",
+    reset: {
+      text: "#8a8c9a",
+      textHover: "#b8860b",
+      bg: "transparent",
+      bgHover: "rgba(218,165,32,0.08)",
+      border: "rgba(0,0,0,0.1)",
+      borderHover: "rgba(218,165,32,0.3)",
+    },
+    footer: "#a0a2ae",
+  },
+  dark: {
+    page: { bg: "#181b22" },
+    header: { title: "#dcdee8", subtitle: "#daa520", desc: "#6a6d78" },
+    card: {
+      bg: "#1f222a",
+      border: "rgba(255,255,255,0.05)",
+      shadow: "0 1px 4px rgba(0,0,0,0.2)",
+    },
+    section: {
+      iconBg: "rgba(218,165,32,0.08)",
+      title: "#dcdee8",
+    },
+    label: { primary: "#c0c4d0", secondary: "#7a7d8e", category: "#daa520" },
+    input: {
+      bg: "rgba(255,255,255,0.04)",
+      border: "rgba(255,255,255,0.07)",
+      borderFocus: "rgba(218,165,32,0.4)",
+      text: "#d4d6e0",
+    },
+    select: {
+      bg: "rgba(255,255,255,0.04)",
+      border: "rgba(255,255,255,0.07)",
+      text: "#c0c4d0",
+      arrow: "#6a6d78",
+    },
+    toggle: { trackOff: "#333640", trackOn: "#daa520", knob: "#1c1f26" },
+    checkbox: {
+      bg: "#daa520",
+      border: "rgba(255,255,255,0.08)",
+      check: "#1c1f26",
+      uncheckedBg: "rgba(255,255,255,0.04)",
+    },
+    color: {
+      swatchBorder: "rgba(255,255,255,0.08)",
+      inputBg: "rgba(255,255,255,0.04)",
+      inputBorder: "rgba(255,255,255,0.06)",
+      text: "#a0a4b4",
+    },
+    separator: "rgba(255,255,255,0.04)",
+    reset: {
+      text: "#7a7d8e",
+      textHover: "#daa520",
+      bg: "transparent",
+      bgHover: "rgba(218,165,32,0.08)",
+      border: "rgba(255,255,255,0.07)",
+      borderHover: "rgba(218,165,32,0.25)",
+    },
+    footer: "#6a6d78",
+  },
+  "tomorrow-night": {
+    page: { bg: "#151617" },
+    header: { title: "#d8d9e0", subtitle: "#daa520", desc: "#62636a" },
+    card: {
+      bg: "#1c1d1f",
+      border: "rgba(255,255,255,0.04)",
+      shadow: "0 1px 4px rgba(0,0,0,0.25)",
+    },
+    section: {
+      iconBg: "rgba(218,165,32,0.07)",
+      title: "#d8d9e0",
+    },
+    label: { primary: "#b8b9c2", secondary: "#74757c", category: "#daa520" },
+    input: {
+      bg: "rgba(255,255,255,0.03)",
+      border: "rgba(255,255,255,0.06)",
+      borderFocus: "rgba(218,165,32,0.4)",
+      text: "#d0d1d8",
+    },
+    select: {
+      bg: "rgba(255,255,255,0.03)",
+      border: "rgba(255,255,255,0.06)",
+      text: "#b8b9c2",
+      arrow: "#6a6b72",
+    },
+    toggle: { trackOff: "#2e2f32", trackOn: "#daa520", knob: "#18191b" },
+    checkbox: {
+      bg: "#daa520",
+      border: "rgba(255,255,255,0.06)",
+      check: "#18191b",
+      uncheckedBg: "rgba(255,255,255,0.03)",
+    },
+    color: {
+      swatchBorder: "rgba(255,255,255,0.06)",
+      inputBg: "rgba(255,255,255,0.03)",
+      inputBorder: "rgba(255,255,255,0.05)",
+      text: "#9a9ba4",
+    },
+    separator: "rgba(255,255,255,0.035)",
+    reset: {
+      text: "#74757c",
+      textHover: "#daa520",
+      bg: "transparent",
+      bgHover: "rgba(218,165,32,0.07)",
+      border: "rgba(255,255,255,0.06)",
+      borderHover: "rgba(218,165,32,0.2)",
+    },
+    footer: "#62636a",
+  },
+  "catppuccin-mocha": {
+    page: { bg: "#0e0e18" },
+    header: { title: "#dde4ff", subtitle: "#daa520", desc: "#585878" },
+    card: {
+      bg: "#141420",
+      border: "rgba(255,255,255,0.04)",
+      shadow: "0 1px 4px rgba(0,0,0,0.3)",
+    },
+    section: {
+      iconBg: "rgba(218,165,32,0.07)",
+      title: "#dde4ff",
+    },
+    label: { primary: "#b8bee0", secondary: "#707090", category: "#daa520" },
+    input: {
+      bg: "rgba(255,255,255,0.025)",
+      border: "rgba(255,255,255,0.05)",
+      borderFocus: "rgba(218,165,32,0.35)",
+      text: "#dde4ff",
+    },
+    select: {
+      bg: "rgba(255,255,255,0.025)",
+      border: "rgba(255,255,255,0.05)",
+      text: "#b8bee0",
+      arrow: "#686888",
+    },
+    toggle: { trackOff: "#2a2a40", trackOn: "#daa520", knob: "#11111b" },
+    checkbox: {
+      bg: "#daa520",
+      border: "rgba(255,255,255,0.05)",
+      check: "#11111b",
+      uncheckedBg: "rgba(255,255,255,0.025)",
+    },
+    color: {
+      swatchBorder: "rgba(255,255,255,0.06)",
+      inputBg: "rgba(255,255,255,0.025)",
+      inputBorder: "rgba(255,255,255,0.04)",
+      text: "#9a9ac0",
+    },
+    separator: "rgba(255,255,255,0.03)",
+    reset: {
+      text: "#707090",
+      textHover: "#daa520",
+      bg: "transparent",
+      bgHover: "rgba(218,165,32,0.06)",
+      border: "rgba(255,255,255,0.05)",
+      borderHover: "rgba(218,165,32,0.18)",
+    },
+    footer: "#585878",
+  },
+} as const satisfies Record<ThemeMode, unknown>;
+
+function getTypographyColumns(layoutMode: "wide" | "narrow" | "compact") {
+  if (layoutMode === "compact") {
+    return "1fr";
+  }
+  if (layoutMode === "narrow") {
+    return "minmax(0, 1fr) repeat(2, minmax(110px, 1fr))";
+  }
+  return "minmax(0, 2fr) repeat(2, minmax(132px, 1fr))";
+}
+
+function Toggle({
+  checked,
+  onToggle,
+  theme,
+  label,
+}: {
+  checked: boolean;
+  onToggle: () => void;
+  theme: (typeof settingsThemes)[ThemeMode];
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={onToggle}
+      style={{
+        width: "36px",
+        height: "20px",
+        borderRadius: "10px",
+        padding: "2px",
+        background: checked ? theme.toggle.trackOn : theme.toggle.trackOff,
+        border: "none",
+        cursor: "pointer",
+        transition: "background 0.2s ease",
+        display: "flex",
+        alignItems: "center",
+        flexShrink: 0,
+        outline: "none",
+      }}
+    >
+      <div
+        style={{
+          width: "16px",
+          height: "16px",
+          borderRadius: "50%",
+          background: theme.toggle.knob,
+          transform: checked ? "translateX(16px)" : "translateX(0)",
+          transition: "transform 0.2s ease",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+        }}
+      />
+    </button>
+  );
+}
+
+function CheckboxChip({
+  checked,
+  onToggle,
+  label,
+  theme,
+}: {
+  checked: boolean;
+  onToggle: () => void;
+  label: string;
+  theme: (typeof settingsThemes)[ThemeMode];
+}) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      onClick={onToggle}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "6px",
+        background: "none",
+        border: "none",
+        cursor: "pointer",
+        padding: "4px 10px 4px 4px",
+        outline: "none",
+        borderRadius: "4px",
+      }}
+    >
+      <div
+        style={{
+          width: "16px",
+          height: "16px",
+          borderRadius: "4px",
+          background: checked ? theme.checkbox.bg : theme.checkbox.uncheckedBg,
+          border: `1.5px solid ${checked ? theme.checkbox.bg : theme.checkbox.border}`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          transition: "all 0.15s ease",
+          flexShrink: 0,
+        }}
+      >
+        {checked ? (
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={theme.checkbox.check}
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        ) : null}
+      </div>
+      <span
+        style={{
+          fontSize: "12px",
+          fontFamily: sans,
+          fontWeight: 450,
+          color: theme.label.primary,
+        }}
+      >
+        {label}
+      </span>
+    </button>
+  );
+}
+
+function SelectControl({
+  value,
+  options,
+  theme,
+  width = "100%",
+  onChange,
+  ariaLabel,
+  disabled = false,
+  formatOption,
+}: {
+  value: string | number;
+  options: ReadonlyArray<string | number>;
+  theme: (typeof settingsThemes)[ThemeMode];
+  width?: string;
+  onChange: (value: string) => void;
+  ariaLabel?: string;
+  disabled?: boolean;
+  formatOption?: (value: string | number) => string;
+}) {
+  return (
+    <div style={{ position: "relative", width }}>
+      <select
+        value={String(value)}
+        aria-label={ariaLabel}
+        disabled={disabled}
+        onChange={(event) => onChange(event.currentTarget.value)}
+        style={{
+          appearance: "none",
+          WebkitAppearance: "none",
+          width: "100%",
+          height: "32px",
+          padding: "0 28px 0 10px",
+          borderRadius: "6px",
+          background: theme.select.bg,
+          border: `1px solid ${theme.select.border}`,
+          color: disabled ? theme.label.secondary : theme.select.text,
+          fontSize: "12px",
+          fontFamily: mono,
+          fontWeight: 500,
+          cursor: disabled ? "default" : "pointer",
+          outline: "none",
+          opacity: disabled ? 0.6 : 1,
+        }}
+      >
+        {options.map((option) => (
+          <option key={String(option)} value={String(option)}>
+            {formatOption ? formatOption(option) : String(option)}
+          </option>
+        ))}
+      </select>
+      <svg
+        width="10"
+        height="10"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke={theme.select.arrow}
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        style={{
+          position: "absolute",
+          right: "10px",
+          top: "50%",
+          transform: "translateY(-50%)",
+          pointerEvents: "none",
+        }}
+      >
+        <path d="M6 9l6 6 6-6" />
+      </svg>
+    </div>
+  );
+}
+
+function ColorRow({
+  label,
+  value,
+  theme,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  theme: (typeof settingsThemes)[ThemeMode];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "8px 0",
+        cursor: "pointer",
+      }}
+    >
+      <span
+        style={{
+          fontSize: "12.5px",
+          fontFamily: sans,
+          fontWeight: 450,
+          color: theme.label.primary,
+        }}
+      >
+        {label}
+      </span>
+      <span style={{ display: "flex", alignItems: "center", gap: "6px", position: "relative" }}>
+        <span
+          style={{
+            width: "22px",
+            height: "22px",
+            borderRadius: "5px",
+            background: value,
+            border: `1.5px solid ${theme.color.swatchBorder}`,
+            position: "relative",
+            overflow: "hidden",
+          }}
+        >
+          <input
+            type="color"
+            aria-label={label}
+            value={value}
+            onChange={(event) => onChange(event.currentTarget.value)}
+            style={{
+              position: "absolute",
+              inset: 0,
+              opacity: 0,
+              cursor: "pointer",
+            }}
+          />
+        </span>
+        <span
+          style={{
+            padding: "3px 8px",
+            borderRadius: "4px",
+            background: theme.color.inputBg,
+            border: `1px solid ${theme.color.inputBorder}`,
+          }}
+        >
+          <span
+            style={{
+              fontSize: "11px",
+              fontFamily: mono,
+              color: theme.color.text,
+              fontWeight: 500,
+            }}
+          >
+            {value}
+          </span>
+        </span>
+      </span>
+    </label>
+  );
+}
+
+function TextInput({
+  value,
+  placeholder,
+  theme,
+  onChange,
+}: {
+  value: string;
+  placeholder: string;
+  theme: (typeof settingsThemes)[ThemeMode];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <input
+      type="text"
+      value={value}
+      placeholder={placeholder}
+      aria-label="Terminal app"
+      spellCheck={false}
+      onChange={(event) => onChange(event.currentTarget.value)}
+      style={{
+        width: "100%",
+        height: "32px",
+        padding: "0 10px",
+        borderRadius: "6px",
+        background: theme.input.bg,
+        border: `1px solid ${theme.input.border}`,
+        color: theme.input.text,
+        fontSize: "12px",
+        fontFamily: mono,
+        fontWeight: 450,
+        outline: "none",
+        caretColor: "#daa520",
+      }}
+      onFocus={(event) => {
+        event.currentTarget.style.borderColor = theme.input.borderFocus;
+      }}
+      onBlur={(event) => {
+        event.currentTarget.style.borderColor = theme.input.border;
+      }}
+    />
+  );
+}
+
+function SettingRow({
+  title,
+  desc,
+  right,
+  theme,
+  isLast = false,
+}: {
+  title: string;
+  desc?: string;
+  right: ReactNode;
+  theme: (typeof settingsThemes)[ThemeMode];
+  isLast?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "10px 0",
+        gap: "16px",
+        borderBottom: isLast ? "none" : `1px solid ${theme.separator}`,
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: "12.5px",
+            fontFamily: sans,
+            fontWeight: 500,
+            color: theme.label.primary,
+            marginBottom: desc ? "2px" : 0,
+          }}
+        >
+          {title}
+        </div>
+        {desc ? (
+          <div
+            style={{
+              fontSize: "11px",
+              fontFamily: sans,
+              fontWeight: 400,
+              color: theme.label.secondary,
+              lineHeight: "1.4",
+            }}
+          >
+            {desc}
+          </div>
+        ) : null}
+      </div>
+      <div style={{ flexShrink: 0 }}>{right}</div>
+    </div>
+  );
+}
+
+function SectionCard({
+  icon,
+  title,
+  theme,
+  resetButton,
+  children,
+}: {
+  icon: string;
+  title: string;
+  theme: (typeof settingsThemes)[ThemeMode];
+  resetButton?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        background: theme.card.bg,
+        border: `1px solid ${theme.card.border}`,
+        borderRadius: "10px",
+        boxShadow: theme.card.shadow,
+        marginBottom: "12px",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "12px 16px",
+          borderBottom: `1px solid ${theme.separator}`,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <div
+            style={{
+              width: "22px",
+              height: "22px",
+              borderRadius: "5px",
+              background: theme.section.iconBg,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <span style={{ fontSize: "10px" }}>{icon}</span>
+          </div>
+          <span
+            style={{
+              fontSize: "11px",
+              fontFamily: mono,
+              fontWeight: 600,
+              color: theme.section.title,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+            }}
+          >
+            {title}
+          </span>
+        </div>
+        {resetButton}
+      </div>
+      <div style={{ padding: "4px 16px 12px" }}>{children}</div>
+    </div>
+  );
+}
+
 export function SettingsView({
   theme,
   uiFontFamily,
@@ -88,358 +733,449 @@ export function SettingsView({
   onRestoreLastVisitedFolderOnStartupChange: (value: boolean) => void;
   onTerminalAppChange: (value: string | null) => void;
 }) {
+  const palette = settingsThemes[theme];
+  const [resetHover, setResetHover] = useState(false);
+
   return (
-    <div className="settings-view" data-layout={layoutMode}>
-      <div className="settings-page">
-        <header className="settings-page-header">
+    <div
+      className="settings-view"
+      data-layout={layoutMode}
+      style={{
+        background: palette.page.bg,
+        padding:
+          layoutMode === "compact" ? "20px 16px 16px" : layoutMode === "narrow" ? "24px 18px 18px" : "28px 24px 20px",
+        minHeight: "100%",
+        overflowY: "auto",
+      }}
+    >
+      <div
+        className="settings-page"
+        style={{
+          maxWidth: "640px",
+          margin: "0 auto",
+        }}
+      >
+        <header className="settings-page-header" style={{ marginBottom: "20px" }}>
           <div className="settings-page-header-left">
-            <span className="settings-page-eyebrow">File Trail</span>
-            <h2>Settings</h2>
-            <p>Application preferences and configuration</p>
+            <span
+              className="settings-page-eyebrow"
+              style={{
+                fontSize: "10px",
+                fontFamily: mono,
+                fontWeight: 600,
+                color: palette.header.subtitle,
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+              }}
+            >
+              File Trail
+            </span>
+            <h2
+              style={{
+                fontSize: "20px",
+                fontFamily: sans,
+                fontWeight: 700,
+                color: palette.header.title,
+                margin: "2px 0 3px",
+                letterSpacing: "-0.02em",
+              }}
+            >
+              Settings
+            </h2>
+            <p
+              style={{
+                fontSize: "11.5px",
+                fontFamily: sans,
+                color: palette.header.desc,
+                fontWeight: 400,
+                margin: 0,
+              }}
+            >
+              Application preferences and configuration
+            </p>
           </div>
         </header>
 
-        <section className="settings-panel">
-          <div className="settings-panel-header">
-            <div className="settings-panel-title">
-              <span className="settings-panel-icon settings-section-icon-storage" aria-hidden>
-                Aa
-              </span>
-              <span>Appearance</span>
-            </div>
-            <button type="button" className="settings-section-action" onClick={onResetAppearance}>
+        <SectionCard
+          icon="Aa"
+          title="Appearance"
+          theme={palette}
+          resetButton={
+            <button
+              type="button"
+              onClick={onResetAppearance}
+              onMouseEnter={() => setResetHover(true)}
+              onMouseLeave={() => setResetHover(false)}
+              style={{
+                fontSize: "11px",
+                fontFamily: mono,
+                fontWeight: 500,
+                color: resetHover ? palette.reset.textHover : palette.reset.text,
+                background: resetHover ? palette.reset.bgHover : palette.reset.bg,
+                border: `1px solid ${resetHover ? palette.reset.borderHover : palette.reset.border}`,
+                borderRadius: "5px",
+                padding: "3px 10px",
+                cursor: "pointer",
+                transition: "all 0.12s ease",
+                outline: "none",
+              }}
+            >
               Reset
             </button>
-          </div>
-
-          <div className="settings-panel-body">
-            <div className="settings-field-row">
-              <div className="settings-field-row-label">Theme</div>
-              <div className="settings-field-row-control">
-                <select
-                  className="settings-select"
-                  value={theme}
-                  onChange={(event) => onThemeChange(event.currentTarget.value as ThemeMode)}
-                >
-                  {themeOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="settings-subsection">
-              <div className="settings-subsection-title">UI Typography</div>
-              <div className="settings-inline-grid">
-                <label className="settings-field settings-field-wide">
-                  <span className="settings-field-label">Font</span>
-                  <select
-                    className="settings-select"
-                    value={uiFontFamily}
-                    onChange={(event) =>
-                      onUiFontFamilyChange(event.currentTarget.value as UiFontFamily)
-                    }
-                  >
-                    {uiFontOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="settings-field">
-                  <span className="settings-field-label">Size</span>
-                  <select
-                    className="settings-select"
-                    value={uiFontSize}
-                    onChange={(event) => onUiFontSizeChange(Number(event.currentTarget.value))}
-                  >
-                    {uiFontSizeOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}px
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="settings-field">
-                  <span className="settings-field-label">Weight</span>
-                  <select
-                    className="settings-select"
-                    value={uiFontWeight}
-                    onChange={(event) =>
-                      onUiFontWeightChange(Number(event.currentTarget.value) as UiFontWeight)
-                    }
-                  >
-                    {uiFontWeightOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-            </div>
-
-            <div className="settings-subsection">
-              <div className="settings-subsection-title">Colors</div>
-              <div className="settings-color-stack">
-                <label className="settings-field-row">
-                  <span className="settings-field-row-label">Primary text</span>
-                  <span className="settings-field-row-control settings-color-control">
-                    <input
-                      type="color"
-                      className="settings-color-input"
-                      value={effectiveTextPrimaryColor}
-                      onChange={(event) => onTextPrimaryColorChange(event.currentTarget.value)}
-                    />
-                    <span className="settings-color-value">{effectiveTextPrimaryColor}</span>
-                  </span>
-                </label>
-                <label className="settings-field-row">
-                  <span className="settings-field-row-label">Secondary</span>
-                  <span className="settings-field-row-control settings-color-control">
-                    <input
-                      type="color"
-                      className="settings-color-input"
-                      value={effectiveTextSecondaryColor}
-                      onChange={(event) => onTextSecondaryColorChange(event.currentTarget.value)}
-                    />
-                    <span className="settings-color-value">{effectiveTextSecondaryColor}</span>
-                  </span>
-                </label>
-                <label className="settings-field-row">
-                  <span className="settings-field-row-label">Muted</span>
-                  <span className="settings-field-row-control settings-color-control">
-                    <input
-                      type="color"
-                      className="settings-color-input"
-                      value={effectiveTextMutedColor}
-                      onChange={(event) => onTextMutedColorChange(event.currentTarget.value)}
-                    />
-                    <span className="settings-color-value">{effectiveTextMutedColor}</span>
-                  </span>
-                </label>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="settings-panel">
-          <div className="settings-panel-header">
-            <div className="settings-panel-title">
-              <span className="settings-panel-icon settings-section-icon-storage" aria-hidden>
-                ≡
-              </span>
-              <span>Explorer</span>
-            </div>
-          </div>
-          <div className="settings-panel-body">
-            <label className="settings-toggle-row">
-              <span className="settings-toggle-copy">
-                <span className="settings-toggle-title">Compact list view</span>
-                <span className="settings-toggle-description">
-                  Reduce list row height and spacing while keeping horizontal scrolling.
-                </span>
-              </span>
-              <span className="settings-toggle-control">
-                <input
-                  type="checkbox"
-                  className="settings-toggle-input"
-                  checked={compactListView}
-                  onChange={(event) => onCompactListViewChange(event.currentTarget.checked)}
-                />
-                <span className="settings-toggle-track" aria-hidden />
-              </span>
-            </label>
-            <label className="settings-toggle-row">
-              <span className="settings-toggle-copy">
-                <span className="settings-toggle-title">Compact tree view</span>
-                <span className="settings-toggle-description">
-                  Reduce tree row height and spacing in the folders pane.
-                </span>
-              </span>
-              <span className="settings-toggle-control">
-                <input
-                  type="checkbox"
-                  className="settings-toggle-input"
-                  checked={compactTreeView}
-                  onChange={(event) => onCompactTreeViewChange(event.currentTarget.checked)}
-                />
-                <span className="settings-toggle-track" aria-hidden />
-              </span>
-            </label>
-            <label className="settings-toggle-row">
-              <span className="settings-toggle-copy">
-                <span className="settings-toggle-title">Compact detail view</span>
-                <span className="settings-toggle-description">
-                  Use the same denser row height as compact list view in detail mode.
-                </span>
-              </span>
-              <span className="settings-toggle-control">
-                <input
-                  type="checkbox"
-                  className="settings-toggle-input"
-                  checked={compactDetailsView}
-                  onChange={(event) => onCompactDetailsViewChange(event.currentTarget.checked)}
-                />
-                <span className="settings-toggle-track" aria-hidden />
-              </span>
-            </label>
-            <div className="settings-subsection">
-              <div className="settings-subsection-title">Detail view columns</div>
-              <div className="settings-check-grid">
-                {(
-                  [
-                    ["size", "Size"],
-                    ["modified", "Modified"],
-                    ["permissions", "Permissions"],
-                  ] as const
-                ).map(([key, label]) => (
-                  <label key={key} className="settings-check-chip">
-                    <input
-                      type="checkbox"
-                      checked={detailColumns[key]}
-                      onChange={(event) =>
-                        onDetailColumnsChange({
-                          ...detailColumns,
-                          [key]: event.currentTarget.checked,
-                        })
-                      }
-                    />
-                    <span>{label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="settings-panel">
-          <div className="settings-panel-header">
-            <div className="settings-panel-title">
-              <span className="settings-panel-icon settings-panel-icon-startup" aria-hidden>
-                ⌨
-              </span>
-              <span>Keyboard</span>
-            </div>
-          </div>
-          <div className="settings-panel-body">
-            <label className="settings-toggle-row">
-              <span className="settings-toggle-copy">
-                <span className="settings-toggle-title">Tab switches between panes</span>
-                <span className="settings-toggle-description">
-                  Use Tab and Shift+Tab to move between the folder tree and file list while keeping
-                  native Tab behavior in dialogs and standard controls.
-                </span>
-              </span>
-              <span className="settings-toggle-control">
-                <input
-                  type="checkbox"
-                  className="settings-toggle-input"
-                  checked={tabSwitchesExplorerPanes}
-                  onChange={(event) =>
-                    onTabSwitchesExplorerPanesChange(event.currentTarget.checked)
-                  }
-                />
-                <span className="settings-toggle-track" aria-hidden />
-              </span>
-            </label>
-
-            <label className="settings-toggle-row">
-              <span className="settings-toggle-copy">
-                <span className="settings-toggle-title">Type to select</span>
-                <span className="settings-toggle-description">
-                  Jump to the first visible matching item while typing in the tree, list view, or
-                  detail view.
-                </span>
-              </span>
-              <span className="settings-toggle-control">
-                <input
-                  type="checkbox"
-                  className="settings-toggle-input"
-                  checked={typeaheadEnabled}
-                  onChange={(event) => onTypeaheadEnabledChange(event.currentTarget.checked)}
-                />
-                <span className="settings-toggle-track" aria-hidden />
-              </span>
-            </label>
-
-            <div className="settings-field-row">
-              <div className="settings-field-row-label">Reset delay</div>
-              <div className="settings-field-row-control">
-                <select
-                  className="settings-select"
-                  value={typeaheadDebounceMs}
-                  disabled={!typeaheadEnabled}
-                  onChange={(event) =>
-                    onTypeaheadDebounceMsChange(Number(event.currentTarget.value))
-                  }
-                >
-                  {typeaheadDebounceOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option} ms
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="settings-panel settings-panel-startup">
-          <div className="settings-panel-header">
-            <div className="settings-panel-title">
-              <span className="settings-panel-icon settings-panel-icon-startup" aria-hidden>
-                ⚡
-              </span>
-              <span>Startup</span>
-            </div>
-          </div>
-          <div className="settings-panel-body">
-            <label className="settings-toggle-row">
-              <span className="settings-toggle-copy">
-                <span className="settings-toggle-title">Restore last visited folder</span>
-                <span className="settings-toggle-description">
-                  Reopen the last folder instead of starting at home.
-                </span>
-              </span>
-              <span className="settings-toggle-control">
-                <input
-                  type="checkbox"
-                  className="settings-toggle-input"
-                  checked={restoreLastVisitedFolderOnStartup}
-                  onChange={(event) =>
-                    onRestoreLastVisitedFolderOnStartupChange(event.currentTarget.checked)
-                  }
-                />
-                <span className="settings-toggle-track" aria-hidden />
-              </span>
-            </label>
-
-            <label className="settings-field settings-field-wide">
-              <span className="settings-field-label">Terminal app</span>
-              <input
-                type="text"
-                className="settings-text-input"
-                aria-label="Terminal app"
-                value={terminalApp ?? ""}
-                placeholder="Terminal"
-                onChange={(event) => {
-                  const nextValue = event.currentTarget.value.trim();
-                  onTerminalAppChange(nextValue.length > 0 ? nextValue : null);
-                }}
+          }
+        >
+          <SettingRow
+            title="Theme"
+            theme={palette}
+            right={
+              <SelectControl
+                value={theme}
+                options={themeOptions.map((option) => option.value)}
+                theme={palette}
+                width="150px"
+                ariaLabel="Theme"
+                onChange={(value) => onThemeChange(value as ThemeMode)}
+                formatOption={(value) =>
+                  themeOptions.find((option) => option.value === value)?.label ?? String(value)
+                }
               />
-              <span className="settings-field-help">
-                Leave blank to use Terminal. Enter another app name such as iTerm to override the
-                default terminal launcher.
-              </span>
-            </label>
-          </div>
-        </section>
+            }
+          />
 
-        <div className="settings-footer-note">Changes are saved automatically</div>
+          <div style={{ paddingTop: "8px", paddingBottom: "4px" }}>
+            <span
+              style={{
+                fontSize: "10px",
+                fontFamily: mono,
+                fontWeight: 600,
+                color: palette.label.category,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+              }}
+            >
+              UI Typography
+            </span>
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: getTypographyColumns(layoutMode),
+              gap: "8px",
+              paddingBottom: "8px",
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: "10.5px",
+                  fontFamily: mono,
+                  color: palette.label.secondary,
+                  marginBottom: "4px",
+                  fontWeight: 500,
+                }}
+              >
+                Font
+              </div>
+              <SelectControl
+                value={uiFontFamily}
+                options={uiFontOptions.map((option) => option.value)}
+                theme={palette}
+                ariaLabel="Font"
+                onChange={(value) => onUiFontFamilyChange(value as UiFontFamily)}
+                formatOption={(value) =>
+                  uiFontOptions.find((option) => option.value === value)?.label ?? String(value)
+                }
+              />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: "10.5px",
+                  fontFamily: mono,
+                  color: palette.label.secondary,
+                  marginBottom: "4px",
+                  fontWeight: 500,
+                }}
+              >
+                Size
+              </div>
+              <SelectControl
+                value={uiFontSize}
+                options={uiFontSizeOptions}
+                theme={palette}
+                ariaLabel="Size"
+                onChange={(value) => onUiFontSizeChange(Number(value))}
+                formatOption={(value) => `${value}px`}
+              />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: "10.5px",
+                  fontFamily: mono,
+                  color: palette.label.secondary,
+                  marginBottom: "4px",
+                  fontWeight: 500,
+                }}
+              >
+                Weight
+              </div>
+              <SelectControl
+                value={uiFontWeight}
+                options={uiFontWeightOptions}
+                theme={palette}
+                ariaLabel="Weight"
+                onChange={(value) => onUiFontWeightChange(Number(value) as UiFontWeight)}
+              />
+            </div>
+          </div>
+
+          <div style={{ borderTop: `1px solid ${palette.separator}`, paddingTop: "8px" }}>
+            <span
+              style={{
+                fontSize: "10px",
+                fontFamily: mono,
+                fontWeight: 600,
+                color: palette.label.category,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+              }}
+            >
+              Colors
+            </span>
+          </div>
+          <ColorRow
+            label="Primary text"
+            value={effectiveTextPrimaryColor}
+            theme={palette}
+            onChange={(value) => onTextPrimaryColorChange(value)}
+          />
+          <ColorRow
+            label="Secondary"
+            value={effectiveTextSecondaryColor}
+            theme={palette}
+            onChange={(value) => onTextSecondaryColorChange(value)}
+          />
+          <ColorRow
+            label="Muted"
+            value={effectiveTextMutedColor}
+            theme={palette}
+            onChange={(value) => onTextMutedColorChange(value)}
+          />
+        </SectionCard>
+
+        <SectionCard icon="≡" title="Explorer" theme={palette}>
+          <SettingRow
+            title="Compact list view"
+            desc="Reduce list row height and spacing while keeping horizontal scrolling."
+            theme={palette}
+            right={
+              <Toggle
+                checked={compactListView}
+                onToggle={() => onCompactListViewChange(!compactListView)}
+                theme={palette}
+                label="Compact list view"
+              />
+            }
+          />
+          <SettingRow
+            title="Compact tree view"
+            desc="Reduce tree row height and spacing in the folders pane."
+            theme={palette}
+            right={
+              <Toggle
+                checked={compactTreeView}
+                onToggle={() => onCompactTreeViewChange(!compactTreeView)}
+                theme={palette}
+                label="Compact tree view"
+              />
+            }
+          />
+          <SettingRow
+            title="Compact detail view"
+            desc="Use the same denser row height as compact list view in detail mode."
+            theme={palette}
+            right={
+              <Toggle
+                checked={compactDetailsView}
+                onToggle={() => onCompactDetailsViewChange(!compactDetailsView)}
+                theme={palette}
+                label="Compact detail view"
+              />
+            }
+          />
+
+          <div
+            style={{
+              borderTop: `1px solid ${palette.separator}`,
+              paddingTop: "8px",
+              marginTop: "4px",
+            }}
+          >
+            <span
+              style={{
+                fontSize: "10px",
+                fontFamily: mono,
+                fontWeight: 600,
+                color: palette.label.category,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+              }}
+            >
+              Detail View Columns
+            </span>
+          </div>
+          <div
+            style={{
+              display: "flex",
+              gap: "4px",
+              paddingTop: "8px",
+              paddingBottom: "4px",
+              flexWrap: "wrap",
+            }}
+          >
+            {(
+              [
+                ["size", "Size"],
+                ["modified", "Modified"],
+                ["permissions", "Permissions"],
+              ] as const
+            ).map(([key, label]) => (
+              <CheckboxChip
+                key={key}
+                checked={detailColumns[key]}
+                label={label}
+                theme={palette}
+                onToggle={() =>
+                  onDetailColumnsChange({
+                    ...detailColumns,
+                    [key]: !detailColumns[key],
+                  })
+                }
+              />
+            ))}
+          </div>
+        </SectionCard>
+
+        <SectionCard icon="⌨" title="Keyboard" theme={palette}>
+          <SettingRow
+            title="Tab switches between panes"
+            desc="Use Tab and Shift+Tab to move between the folder tree and file list while keeping native Tab behavior in dialogs and standard controls."
+            theme={palette}
+            right={
+              <Toggle
+                checked={tabSwitchesExplorerPanes}
+                onToggle={() => onTabSwitchesExplorerPanesChange(!tabSwitchesExplorerPanes)}
+                theme={palette}
+                label="Tab switches between panes"
+              />
+            }
+          />
+          <SettingRow
+            title="Type to select"
+            desc="Jump to the first visible matching item while typing in the tree, list, or detail view."
+            theme={palette}
+            right={
+              <Toggle
+                checked={typeaheadEnabled}
+                onToggle={() => onTypeaheadEnabledChange(!typeaheadEnabled)}
+                theme={palette}
+                label="Type to select"
+              />
+            }
+          />
+          <SettingRow
+            title="Reset delay"
+            theme={palette}
+            isLast
+            right={
+              <SelectControl
+                value={typeaheadDebounceMs}
+                options={typeaheadDebounceOptions}
+                theme={palette}
+                width="110px"
+                ariaLabel="Reset delay"
+                disabled={!typeaheadEnabled}
+                onChange={(value) => onTypeaheadDebounceMsChange(Number(value))}
+                formatOption={(value) => `${value} ms`}
+              />
+            }
+          />
+        </SectionCard>
+
+        <SectionCard icon="⚡" title="Startup" theme={palette}>
+          <SettingRow
+            title="Restore last visited folder"
+            desc="Reopen the last folder instead of starting at home."
+            theme={palette}
+            right={
+              <Toggle
+                checked={restoreLastVisitedFolderOnStartup}
+                onToggle={() =>
+                  onRestoreLastVisitedFolderOnStartupChange(!restoreLastVisitedFolderOnStartup)
+                }
+                theme={palette}
+                label="Restore last visited folder"
+              />
+            }
+          />
+
+          <div
+            style={{
+              borderTop: `1px solid ${palette.separator}`,
+              paddingTop: "8px",
+              marginTop: "4px",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "12.5px",
+                fontFamily: sans,
+                fontWeight: 500,
+                color: palette.label.primary,
+                marginBottom: "6px",
+              }}
+            >
+              Terminal app
+            </div>
+            <TextInput
+              value={terminalApp ?? ""}
+              placeholder="Terminal"
+              theme={palette}
+              onChange={(value) => {
+                const trimmed = value.trim();
+                onTerminalAppChange(trimmed.length > 0 ? trimmed : null);
+              }}
+            />
+            <div
+              style={{
+                fontSize: "10.5px",
+                fontFamily: sans,
+                color: palette.label.secondary,
+                marginTop: "6px",
+                lineHeight: "1.4",
+              }}
+            >
+              Leave blank to use Terminal. Enter another app name such as iTerm to override.
+            </div>
+          </div>
+        </SectionCard>
+
+        <div
+          className="settings-footer-note"
+          style={{ textAlign: "center", padding: "8px 0 4px" }}
+        >
+          <span
+            style={{
+              fontSize: "10.5px",
+              fontFamily: mono,
+              color: palette.footer,
+              fontWeight: 400,
+            }}
+          >
+            Changes are saved automatically
+          </span>
+        </div>
       </div>
     </div>
   );
