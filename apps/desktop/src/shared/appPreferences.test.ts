@@ -39,6 +39,7 @@ describe("appPreferences helpers", () => {
   it("resolves known labels and falls back to the raw stored value", () => {
     expect(getThemeLabel("tomorrow-night")).toBe("Tomorrow Night");
     expect(getThemeLabel("midnight")).toBe("Midnight");
+    expect(getAccentLabel("lavender")).toBe("Lavender");
     expect(getAccentLabel("emerald")).toBe("Emerald");
     expect(getUiFontLabel("jetbrains-mono")).toBe("JetBrains Mono");
     expect(getThemeLabel("aurora" as never)).toBe("aurora");

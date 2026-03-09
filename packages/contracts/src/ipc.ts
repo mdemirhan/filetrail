@@ -34,6 +34,10 @@ export const accentModeSchema = z.enum([
   "emerald",
   "copper",
   "sky",
+  "lavender",
+  "coral",
+  "indigo",
+  "lime",
 ]);
 export const uiFontFamilySchema = z.enum(["dm-sans", "lexend", "fira-code", "jetbrains-mono"]);
 export const colorOverrideSchema = z

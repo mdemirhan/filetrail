@@ -19,7 +19,11 @@ export type AccentMode =
   | "rose"
   | "emerald"
   | "copper"
-  | "sky";
+  | "sky"
+  | "lavender"
+  | "coral"
+  | "indigo"
+  | "lime";
 export type ExplorerViewMode = "list" | "details";
 export type UiFontFamily = "dm-sans" | "lexend" | "fira-code" | "jetbrains-mono";
 export type UiFontWeight = 400 | 500 | 600;
@@ -71,6 +75,10 @@ export const ACCENT_OPTIONS = [
   { value: "emerald", label: "Emerald", primary: "#3dbf7a", dark: "#2a9e62" },
   { value: "copper", label: "Copper", primary: "#d4845a", dark: "#b86e48" },
   { value: "sky", label: "Sky", primary: "#58b9e8", dark: "#3a9acb" },
+  { value: "lavender", label: "Lavender", primary: "#a78bfa", dark: "#7c5fd6" },
+  { value: "coral", label: "Coral", primary: "#e8806a", dark: "#c86850" },
+  { value: "indigo", label: "Indigo", primary: "#6366f1", dark: "#4f46e5" },
+  { value: "lime", label: "Lime", primary: "#84b840", dark: "#6a9830" },
 ] as const;
 
 export const UI_FONT_OPTIONS = [

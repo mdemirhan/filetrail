@@ -136,7 +136,7 @@ describe("ipc contracts", () => {
       ipcContractSchemas["app:updatePreferences"].request.parse({
         preferences: {
           theme: "obsidian",
-          accent: "blue",
+          accent: "lime",
           accentToolbarButtons: false,
           zoomPercent: 125,
           uiFontFamily: "fira-code",
@@ -175,7 +175,7 @@ describe("ipc contracts", () => {
     ).toEqual({
       preferences: {
         theme: "obsidian",
-        accent: "blue",
+        accent: "lime",
         accentToolbarButtons: false,
         zoomPercent: 125,
         uiFontFamily: "fira-code",
