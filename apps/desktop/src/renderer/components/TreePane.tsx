@@ -1,6 +1,6 @@
-import { useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef } from "react";
 
-import { THEME_OPTIONS, type ThemeMode, getThemeLabel } from "../../shared/appPreferences";
+import { THEME_GROUPS, type ThemeMode, getThemeLabel } from "../../shared/appPreferences";
 import { TreeFolderIcon } from "../lib/fileIcons";
 import { ToolbarIcon } from "./ToolbarIcon";
 
@@ -316,19 +316,24 @@ export function TreePane({
             </button>
             {themeMenuOpen ? (
               <div ref={themeMenuRef} className="sidebar-rail-menu" tabIndex={-1}>
-                {THEME_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    className={`sidebar-rail-menu-item${theme === option.value ? " active" : ""}`}
-                    onClick={() => onSelectTheme(option.value)}
-                    aria-pressed={theme === option.value}
-                  >
-                    <span>{option.label}</span>
-                    {theme === option.value ? (
-                      <span className="sidebar-rail-menu-check">✓</span>
-                    ) : null}
-                  </button>
+                {THEME_GROUPS.map((group, groupIndex) => (
+                  <Fragment key={group.value}>
+                    {groupIndex > 0 ? <div className="sidebar-rail-menu-separator" role="separator" /> : null}
+                    {group.options.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={`sidebar-rail-menu-item${theme === option.value ? " active" : ""}`}
+                        onClick={() => onSelectTheme(option.value)}
+                        aria-pressed={theme === option.value}
+                      >
+                        <span>{option.label}</span>
+                        {theme === option.value ? (
+                          <span className="sidebar-rail-menu-check">✓</span>
+                        ) : null}
+                      </button>
+                    ))}
+                  </Fragment>
                 ))}
               </div>
             ) : null}

@@ -1,4 +1,16 @@
-export type ThemeMode = "light" | "dark" | "tomorrow-night" | "catppuccin-mocha";
+export type ThemeMode =
+  | "dark"
+  | "tomorrow-night"
+  | "catppuccin-mocha"
+  | "obsidian"
+  | "graphite"
+  | "midnight"
+  | "onyx"
+  | "light"
+  | "clean-white"
+  | "warm-paper"
+  | "stone"
+  | "sand";
 export type AccentMode =
   | "gold"
   | "teal"
@@ -24,10 +36,31 @@ export type DetailColumnWidths = Record<DetailColumnKey, number>;
 // These option lists are used for both UI rendering and validation-like lookups.
 // Keep them stable unless the corresponding persisted preference values are migrated.
 export const THEME_OPTIONS = [
-  { value: "dark", label: "Dark" },
-  { value: "tomorrow-night", label: "Tomorrow Night" },
-  { value: "catppuccin-mocha", label: "Catppuccin Mocha" },
-  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark", group: "dark" },
+  { value: "tomorrow-night", label: "Tomorrow Night", group: "dark" },
+  { value: "catppuccin-mocha", label: "Catppuccin Mocha", group: "dark" },
+  { value: "obsidian", label: "Obsidian", group: "dark" },
+  { value: "graphite", label: "Graphite", group: "dark" },
+  { value: "midnight", label: "Midnight", group: "dark" },
+  { value: "onyx", label: "Onyx", group: "dark" },
+  { value: "light", label: "Light", group: "light" },
+  { value: "clean-white", label: "Clean White", group: "light" },
+  { value: "warm-paper", label: "Warm Paper", group: "light" },
+  { value: "stone", label: "Stone", group: "light" },
+  { value: "sand", label: "Sand", group: "light" },
+] as const;
+
+export const THEME_GROUPS = [
+  {
+    value: "dark",
+    label: "Dark Themes",
+    options: THEME_OPTIONS.filter((option) => option.group === "dark"),
+  },
+  {
+    value: "light",
+    label: "Light Themes",
+    options: THEME_OPTIONS.filter((option) => option.group === "light"),
+  },
 ] as const;
 export const ACCENT_OPTIONS = [
   { value: "gold", label: "Gold", primary: "#daa520", dark: "#b8860b" },

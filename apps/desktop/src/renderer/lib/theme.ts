@@ -9,6 +9,12 @@ import {
   generateAccentTokens,
   getToolbarAccentVariables,
 } from "./accent";
+import {
+  THEME_VARIANT_OVERRIDE_KEYS,
+  getThemeVariant,
+  getThemeVariantCssOverrides,
+  resolveThemeCssBase,
+} from "./themeVariants";
 
 // CSS files own the full palettes; this module applies the user-selected theme identity,
 // font stack, and optional text color overrides at runtime.
@@ -20,7 +26,7 @@ const UI_FONT_STACKS: Record<UiFontFamily, string> = {
 };
 
 const THEME_DEFAULT_TEXT_COLORS: Record<
-  ThemeMode,
+  ReturnType<typeof resolveThemeCssBase>,
   { primary: string; secondary: string; muted: string }
 > = {
   light: {
@@ -50,7 +56,7 @@ export function getThemeAppearanceDefaults(theme: ThemeMode): {
   secondary: string;
   muted: string;
 } {
-  return THEME_DEFAULT_TEXT_COLORS[theme];
+  return getThemeVariant(theme)?.textDefaults ?? THEME_DEFAULT_TEXT_COLORS[resolveThemeCssBase(theme)];
 }
 
 export function applyAppearance({
@@ -79,42 +85,51 @@ export function applyAppearance({
   if (typeof document === "undefined") {
     return;
   }
-  document.documentElement.dataset.theme = theme;
-  document.documentElement.dataset.accent = accent;
-  document.documentElement.style.setProperty("--font-sans", UI_FONT_STACKS[uiFontFamily]);
-  document.documentElement.style.setProperty(
+  const root = document.documentElement;
+  root.dataset.theme = resolveThemeCssBase(theme);
+  root.dataset.themeVariant = theme;
+  root.dataset.accent = accent;
+  root.style.setProperty("--font-sans", UI_FONT_STACKS[uiFontFamily]);
+  root.style.setProperty(
     "--font-mono",
     '"Fira Code", "SFMono-Regular", ui-monospace, monospace',
   );
-  document.documentElement.style.setProperty("--ui-font-size", `${uiFontSize}px`);
-  document.documentElement.style.setProperty("--ui-font-weight", String(uiFontWeight));
-  document.documentElement.style.setProperty("--mono-font-size", "12px");
-  document.documentElement.style.setProperty("--mono-font-weight", "500");
+  root.style.setProperty("--ui-font-size", `${uiFontSize}px`);
+  root.style.setProperty("--ui-font-weight", String(uiFontWeight));
+  root.style.setProperty("--mono-font-size", "12px");
+  root.style.setProperty("--mono-font-weight", "500");
+  for (const propertyName of THEME_VARIANT_OVERRIDE_KEYS) {
+    root.style.removeProperty(propertyName);
+  }
+  const themeVariantVariables = getThemeVariantCssOverrides(theme);
+  for (const [propertyName, value] of Object.entries(themeVariantVariables)) {
+    root.style.setProperty(propertyName, value);
+  }
   const accentTokens = generateAccentTokens(accent, theme);
   const accentVariables = accentTokensToCssVariables(accentTokens);
   for (const [propertyName, value] of Object.entries(accentVariables)) {
-    document.documentElement.style.setProperty(propertyName, value);
+    root.style.setProperty(propertyName, value);
   }
   if (accentToolbarButtons) {
     const toolbarAccentVariables = getToolbarAccentVariables(accentTokens);
     for (const [propertyName, value] of Object.entries(toolbarAccentVariables)) {
-      document.documentElement.style.setProperty(propertyName, value);
+      root.style.setProperty(propertyName, value);
     }
   } else {
-    document.documentElement.style.removeProperty("--tb-primary-bg");
-    document.documentElement.style.removeProperty("--tb-primary-fg");
-    document.documentElement.style.removeProperty("--tb-primary-hover-bg");
-    document.documentElement.style.removeProperty("--toolbar-nav-icon-active");
-    document.documentElement.style.removeProperty("--toolbar-toggle-active-bg");
-    document.documentElement.style.removeProperty("--toolbar-toggle-icon-active");
-    document.documentElement.style.removeProperty("--toolbar-sort-text");
-    document.documentElement.style.removeProperty("--toolbar-sort-arrow");
-    document.documentElement.style.removeProperty("--sidebar-rail-icon");
-    document.documentElement.style.removeProperty("--sidebar-rail-active-bg");
-    document.documentElement.style.removeProperty("--sidebar-rail-icon-active");
-    document.documentElement.style.removeProperty("--sidebar-rail-menu-active-bg");
-    document.documentElement.style.removeProperty("--sidebar-rail-menu-active-fg");
-    document.documentElement.style.removeProperty("--sidebar-rail-menu-check");
+    root.style.removeProperty("--tb-primary-bg");
+    root.style.removeProperty("--tb-primary-fg");
+    root.style.removeProperty("--tb-primary-hover-bg");
+    root.style.removeProperty("--toolbar-nav-icon-active");
+    root.style.removeProperty("--toolbar-toggle-active-bg");
+    root.style.removeProperty("--toolbar-toggle-icon-active");
+    root.style.removeProperty("--toolbar-sort-text");
+    root.style.removeProperty("--toolbar-sort-arrow");
+    root.style.removeProperty("--sidebar-rail-icon");
+    root.style.removeProperty("--sidebar-rail-active-bg");
+    root.style.removeProperty("--sidebar-rail-icon-active");
+    root.style.removeProperty("--sidebar-rail-menu-active-bg");
+    root.style.removeProperty("--sidebar-rail-menu-active-fg");
+    root.style.removeProperty("--sidebar-rail-menu-check");
   }
   applyOptionalColor("--text-primary", textPrimaryOverride);
   applyOptionalColor("--text-secondary", textSecondaryOverride);

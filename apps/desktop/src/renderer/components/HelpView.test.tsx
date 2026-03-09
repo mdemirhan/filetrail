@@ -60,6 +60,8 @@ describe("HelpView", () => {
     ["dark", "#181b22"],
     ["tomorrow-night", "#151617"],
     ["catppuccin-mocha", "#0e0e18"],
+    ["graphite", "#161614"],
+    ["sand", "#ece7dc"],
   ] satisfies Array<[ThemeMode, string]>)(
     "uses the attached design palette for the %s theme",
     (theme, background) => {
@@ -72,7 +74,8 @@ describe("HelpView", () => {
   );
 
   it("falls back to the document theme when no theme prop is provided", () => {
-    document.documentElement.dataset.theme = "catppuccin-mocha";
+    document.documentElement.dataset.theme = "dark";
+    document.documentElement.dataset.themeVariant = "onyx";
 
     render(
       <HelpView
@@ -83,7 +86,7 @@ describe("HelpView", () => {
     );
 
     expect(screen.getByText("Help & Reference").closest(".help-view")).toHaveStyle({
-      background: "#0e0e18",
+      background: "#101218",
     });
   });
 

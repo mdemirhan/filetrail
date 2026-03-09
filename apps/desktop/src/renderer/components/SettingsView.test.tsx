@@ -3,7 +3,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
 
-import type { ThemeMode } from "../../shared/appPreferences";
+import { THEME_OPTIONS, type ThemeMode } from "../../shared/appPreferences";
 import { SettingsView } from "./SettingsView";
 
 function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsView>> = {}) {
@@ -33,12 +33,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       typeaheadDebounceMs={750}
       restoreLastVisitedFolderOnStartup={false}
       terminalApp={null}
-      themeOptions={[
-        { value: "light", label: "Light" },
-        { value: "dark", label: "Dark" },
-        { value: "tomorrow-night", label: "Tomorrow Night" },
-        { value: "catppuccin-mocha", label: "Catppuccin Mocha" },
-      ]}
+      themeOptions={THEME_OPTIONS}
       accentOptions={[
         { value: "gold", label: "Gold", primary: "#daa520" },
         { value: "teal", label: "Teal", primary: "#2cb5a0" },
@@ -87,6 +82,8 @@ describe("SettingsView", () => {
     ["dark", "#181b22"],
     ["tomorrow-night", "#151617"],
     ["catppuccin-mocha", "#0e0e18"],
+    ["obsidian", "#080809"],
+    ["clean-white", "#f3f3f3"],
   ] satisfies Array<[ThemeMode, string]>)(
     "applies the supplied %s theme palette to the page background",
     (theme, expectedBackground) => {
@@ -106,6 +103,8 @@ describe("SettingsView", () => {
     expect(themeSelect).toHaveTextContent("Dark");
     expect(themeSelect).toHaveTextContent("Tomorrow Night");
     expect(themeSelect).toHaveTextContent("Catppuccin Mocha");
+    expect(themeSelect).toHaveTextContent("Obsidian");
+    expect(themeSelect).toHaveTextContent("Clean White");
   });
 
   it("renders the supplied accent options and selected label", () => {

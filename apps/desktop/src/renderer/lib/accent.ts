@@ -3,6 +3,7 @@ import {
   type AccentMode,
   type ThemeMode,
 } from "../../shared/appPreferences";
+import { resolveThemeCssBase, type ThemeCssBase } from "./themeVariants";
 
 type Rgb = {
   r: number;
@@ -65,7 +66,7 @@ export type AccentTokens = {
   ringSoft: string;
 };
 
-const ACCENT_THEME_PROFILES: Record<ThemeMode, AccentThemeProfile> = {
+const ACCENT_THEME_PROFILES: Record<ThemeCssBase, AccentThemeProfile> = {
   light: {
     isLight: true,
     hoverBgAlpha: 0.14,
@@ -162,7 +163,7 @@ export function getAccentPalette(accent: AccentMode) {
 
 export function generateAccentTokens(accent: AccentMode, theme: ThemeMode): AccentTokens {
   const palette = getAccentPalette(accent);
-  const profile = ACCENT_THEME_PROFILES[theme];
+  const profile = ACCENT_THEME_PROFILES[resolveThemeCssBase(theme)];
   const rgb = hexToRgb(palette.primary);
 
   return {

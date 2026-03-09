@@ -14,6 +14,11 @@ import {
   clampZoomPercent,
 } from "../../shared/appPreferences";
 import { generateAccentTokens } from "../lib/accent";
+import {
+  getThemeVariant,
+  resolveThemeCssBase,
+  type ThemeCssBase,
+} from "../lib/themeVariants";
 
 const mono = "'SF Mono', 'JetBrains Mono', 'Fira Code', monospace";
 const sans = "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', system-ui, sans-serif";
@@ -179,12 +184,12 @@ const settingsBaseThemes = {
     },
     footer: "#585878",
   },
-} as const satisfies Record<ThemeMode, unknown>;
+} as const satisfies Record<ThemeCssBase, unknown>;
 
 type ResolvedSettingsTheme = ReturnType<typeof resolveSettingsTheme>;
 
 function resolveSettingsTheme(theme: ThemeMode, accent: AccentMode) {
-  const base = settingsBaseThemes[theme];
+  const base = resolveSettingsBaseTheme(theme);
   const accentTokens = generateAccentTokens(accent, theme);
 
   return {
@@ -221,6 +226,66 @@ function resolveSettingsTheme(theme: ThemeMode, accent: AccentMode) {
       borderHover: accentTokens.border,
     },
     accent: accentTokens,
+  };
+}
+
+function resolveSettingsBaseTheme(theme: ThemeMode) {
+  const cssBase = resolveThemeCssBase(theme);
+  const base = settingsBaseThemes[cssBase];
+  const variant = getThemeVariant(theme);
+  if (!variant) {
+    return base;
+  }
+  return {
+    ...base,
+    page: { bg: variant.surfaces.page },
+    header: {
+      title: variant.text.primary,
+      desc: variant.text.muted,
+    },
+    card: {
+      ...base.card,
+      bg: variant.surfaces.card,
+      border: variant.surfaces.cardBorder,
+    },
+    section: { title: variant.text.primary },
+    label: {
+      primary: variant.text.secondary,
+      secondary: variant.text.muted,
+    },
+    input: {
+      bg: variant.controls.inputBg,
+      border: variant.controls.inputBorder,
+      text: variant.text.primary,
+    },
+    select: {
+      bg: variant.controls.selectBg,
+      border: variant.controls.selectBorder,
+      text: variant.controls.selectText,
+      arrow: variant.controls.selectArrow,
+    },
+    toggle: {
+      trackOff: variant.controls.toggleOff,
+      knob: base.toggle.knob,
+    },
+    checkbox: {
+      border: variant.controls.checkBorder,
+      check: base.checkbox.check,
+      uncheckedBg: variant.controls.checkOff,
+    },
+    color: {
+      swatchBorder: variant.controls.inputBorder,
+      inputBg: variant.controls.inputBg,
+      inputBorder: variant.controls.inputBorder,
+      text: variant.text.tertiary,
+    },
+    separator: variant.separator,
+    reset: {
+      ...base.reset,
+      text: variant.text.muted,
+      border: variant.controls.inputBorder,
+    },
+    footer: variant.text.muted,
   };
 }
 
@@ -401,6 +466,99 @@ function SelectControl({
         {options.map((option) => (
           <option key={String(option)} value={String(option)}>
             {formatOption ? formatOption(option) : String(option)}
+          </option>
+        ))}
+      </select>
+      <svg
+        width="10"
+        height="10"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke={theme.select.arrow}
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        style={{
+          position: "absolute",
+          right: "10px",
+          top: "50%",
+          transform: "translateY(-50%)",
+          pointerEvents: "none",
+        }}
+      >
+        <path d="M6 9l6 6 6-6" />
+      </svg>
+    </div>
+  );
+}
+
+function ThemeSelectControl({
+  value,
+  themeOptions,
+  theme,
+  width = "100%",
+  onChange,
+  ariaLabel,
+}: {
+  value: ThemeMode;
+  themeOptions: ReadonlyArray<{ value: ThemeMode; label: string; group?: "dark" | "light" }>;
+  theme: ResolvedSettingsTheme;
+  width?: string;
+  onChange: (value: ThemeMode) => void;
+  ariaLabel?: string;
+}) {
+  const darkOptions = themeOptions.filter((option) => option.group === "dark");
+  const lightOptions = themeOptions.filter((option) => option.group === "light");
+  const ungroupedOptions = themeOptions.filter(
+    (option) => option.group !== "dark" && option.group !== "light",
+  );
+  const groups: Array<{
+    label: string;
+    options: ReadonlyArray<{ value: ThemeMode; label: string; group?: "dark" | "light" }>;
+  }> = [];
+  if (darkOptions.length > 0) {
+    groups.push({ label: "Dark Themes", options: darkOptions });
+  }
+  if (lightOptions.length > 0) {
+    groups.push({ label: "Light Themes", options: lightOptions });
+  }
+
+  return (
+    <div style={{ position: "relative", width }}>
+      <select
+        value={value}
+        aria-label={ariaLabel}
+        onChange={(event) => onChange(event.currentTarget.value as ThemeMode)}
+        style={{
+          appearance: "none",
+          WebkitAppearance: "none",
+          width: "100%",
+          height: "32px",
+          padding: "0 28px 0 10px",
+          borderRadius: "6px",
+          background: theme.select.bg,
+          border: `1px solid ${theme.select.border}`,
+          color: theme.select.text,
+          fontSize: "12px",
+          fontFamily: mono,
+          fontWeight: 500,
+          cursor: "pointer",
+          outline: "none",
+        }}
+      >
+        {groups.length > 0
+          ? groups.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.options.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </optgroup>
+            ))
+          : null}
+        {ungroupedOptions.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
           </option>
         ))}
       </select>
@@ -879,7 +1037,7 @@ export function SettingsView({
   typeaheadDebounceMs: number;
   restoreLastVisitedFolderOnStartup: boolean;
   terminalApp: string | null;
-  themeOptions: ReadonlyArray<{ value: ThemeMode; label: string }>;
+  themeOptions: ReadonlyArray<{ value: ThemeMode; label: string; group?: "dark" | "light" }>;
   accentOptions: ReadonlyArray<{
     value: AccentMode;
     label: string;
@@ -1005,16 +1163,13 @@ export function SettingsView({
             title="Theme"
             theme={palette}
             right={
-              <SelectControl
+              <ThemeSelectControl
                 value={theme}
-                options={themeOptions.map((option) => option.value)}
+                themeOptions={themeOptions}
                 theme={palette}
-                width="150px"
+                width="176px"
                 ariaLabel="Theme"
-                onChange={(value) => onThemeChange(value as ThemeMode)}
-                formatOption={(value) =>
-                  themeOptions.find((option) => option.value === value)?.label ?? String(value)
-                }
+                onChange={onThemeChange}
               />
             }
           />

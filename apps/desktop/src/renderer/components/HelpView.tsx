@@ -2,10 +2,16 @@ import { useMemo, useState } from "react";
 
 import {
   ACCENT_OPTIONS,
+  getThemeLabel,
   type AccentMode,
   type ThemeMode,
 } from "../../shared/appPreferences";
 import { generateAccentTokens } from "../lib/accent";
+import {
+  getThemeVariant,
+  resolveThemeCssBase,
+  type ThemeCssBase,
+} from "../lib/themeVariants";
 
 type ShortcutItem = {
   group: string;
@@ -126,14 +132,14 @@ const helpBaseThemes = {
       text: "#50506e",
     },
   },
-} as const satisfies Record<ThemeMode, unknown>;
+} as const satisfies Record<ThemeCssBase, unknown>;
 
 type ResolvedHelpTheme = ReturnType<typeof resolveHelpTheme>;
 
 function resolveHelpTheme(theme: ThemeMode | undefined, accent: AccentMode | undefined) {
   const resolvedTheme = resolveThemeMode(theme);
   const resolvedAccent = resolveAccentMode(accent);
-  const base = helpBaseThemes[resolvedTheme];
+  const base = resolveHelpBaseTheme(resolvedTheme);
   const accentTokens = generateAccentTokens(resolvedAccent, resolvedTheme);
 
   return {
@@ -151,6 +157,48 @@ function resolveHelpTheme(theme: ThemeMode | undefined, accent: AccentMode | und
       bg: accentTokens.pillBg,
       border: accentTokens.pillBorder,
       text: accentTokens.pillText,
+    },
+  };
+}
+
+function resolveHelpBaseTheme(theme: ThemeMode) {
+  const cssBase = resolveThemeCssBase(theme);
+  const base = helpBaseThemes[cssBase];
+  const variant = getThemeVariant(theme);
+  if (!variant) {
+    return base;
+  }
+  return {
+    ...base,
+    name: getThemeLabel(theme),
+    page: variant.surfaces.page,
+    card: variant.surfaces.card,
+    cardBorder: variant.surfaces.cardBorder,
+    title: variant.text.primary,
+    desc: variant.text.muted,
+    sectionTitle: variant.text.primary,
+    text: variant.text.secondary,
+    textMuted: variant.text.muted,
+    kbd: {
+      ...base.kbd,
+      bg: variant.controls.inputBg,
+      border: variant.controls.inputBorder,
+      text: variant.text.secondary,
+    },
+    plus: variant.text.placeholder,
+    sep: variant.separator,
+    interaction: {
+      label: variant.text.primary,
+      desc: variant.text.muted,
+    },
+    callout: {
+      text: variant.text.secondary,
+      bold: variant.text.primary,
+    },
+    tabInactive: {
+      bg: "transparent",
+      border: variant.pills.inactiveBorder,
+      text: variant.pills.inactiveText,
     },
   };
 }
@@ -638,6 +686,13 @@ function resolveThemeMode(theme: ThemeMode | undefined): ThemeMode {
     return theme;
   }
   if (typeof document !== "undefined") {
+    const documentThemeVariant = document.documentElement.dataset.themeVariant as ThemeMode | undefined;
+    if (
+      documentThemeVariant &&
+      (documentThemeVariant in helpBaseThemes || getThemeVariant(documentThemeVariant) !== null)
+    ) {
+      return documentThemeVariant;
+    }
     const documentTheme = document.documentElement.dataset.theme as ThemeMode | undefined;
     if (documentTheme && documentTheme in helpBaseThemes) {
       return documentTheme;

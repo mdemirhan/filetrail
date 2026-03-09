@@ -2255,6 +2255,13 @@ body.resizing-panels * {
   box-shadow: var(--shadow-lg);
 }
 
+.sidebar-rail-menu-separator {
+  height: 1px;
+  margin: 4px 6px;
+  border-radius: 999px;
+  background: var(--context-menu-separator, var(--border-light));
+}
+
 .sidebar-rail-menu-item {
   display: flex;
   align-items: center;

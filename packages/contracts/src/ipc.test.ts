@@ -135,7 +135,7 @@ describe("ipc contracts", () => {
     expect(
       ipcContractSchemas["app:updatePreferences"].request.parse({
         preferences: {
-          theme: "dark",
+          theme: "obsidian",
           accent: "blue",
           accentToolbarButtons: false,
           zoomPercent: 125,
@@ -174,7 +174,7 @@ describe("ipc contracts", () => {
       }),
     ).toEqual({
       preferences: {
-        theme: "dark",
+        theme: "obsidian",
         accent: "blue",
         accentToolbarButtons: false,
         zoomPercent: 125,

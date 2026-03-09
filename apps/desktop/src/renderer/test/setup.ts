@@ -32,6 +32,7 @@ if (typeof window !== "undefined" && !("matchMedia" in window)) {
 beforeEach(() => {
   if (typeof document !== "undefined") {
     document.documentElement.removeAttribute("data-theme");
+    document.documentElement.removeAttribute("data-theme-variant");
     document.documentElement.removeAttribute("data-accent");
   }
 });

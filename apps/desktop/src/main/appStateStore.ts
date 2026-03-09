@@ -8,6 +8,7 @@ import {
   DEFAULT_DETAIL_COLUMN_VISIBILITY,
   DEFAULT_DETAIL_COLUMN_WIDTHS,
   DEFAULT_APP_PREFERENCES,
+  THEME_OPTIONS,
   TYPEAHEAD_DEBOUNCE_MAX_MS,
   TYPEAHEAD_DEBOUNCE_MIN_MS,
   type ThemeMode,
@@ -216,15 +217,10 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
   const record = value as Record<string, unknown>;
   return {
     theme:
-      record.theme === "light"
-        ? "light"
-        : record.theme === "dark"
-          ? "dark"
-          : record.theme === "tomorrow-night"
-            ? "tomorrow-night"
-            : record.theme === "catppuccin-mocha"
-              ? "catppuccin-mocha"
-              : defaultTheme,
+      typeof record.theme === "string" &&
+      THEME_OPTIONS.some((option) => option.value === record.theme)
+        ? (record.theme as AppPreferences["theme"])
+        : defaultTheme,
     accent:
       typeof record.accent === "string" &&
       ACCENT_OPTIONS.some((option) => option.value === record.accent)

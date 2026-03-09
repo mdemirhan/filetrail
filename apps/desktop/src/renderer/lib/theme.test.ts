@@ -17,6 +17,7 @@ describe("theme helpers", () => {
     });
 
     expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(document.documentElement.dataset.themeVariant).toBe("dark");
     expect(document.documentElement.dataset.accent).toBe("teal");
     expect(document.documentElement.style.getPropertyValue("--font-sans")).toContain("Lexend");
     expect(document.documentElement.style.getPropertyValue("--font-mono")).toContain("Fira Code");
@@ -65,5 +66,24 @@ describe("theme helpers", () => {
     expect(document.documentElement.style.getPropertyValue("--sidebar-rail-icon")).toBe("");
     expect(document.documentElement.style.getPropertyValue("--sidebar-rail-active-bg")).toBe("");
     expect(document.documentElement.style.getPropertyValue("--help-accent")).toBe("#e8729a");
+  });
+
+  it("maps variant themes onto a css base and applies palette overrides", () => {
+    applyAppearance({
+      theme: "obsidian",
+      accent: "gold",
+      accentToolbarButtons: false,
+      uiFontFamily: "lexend",
+      uiFontSize: 13,
+      uiFontWeight: 500,
+      textPrimaryOverride: null,
+      textSecondaryOverride: null,
+      textMutedOverride: null,
+    });
+
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(document.documentElement.dataset.themeVariant).toBe("obsidian");
+    expect(document.documentElement.style.getPropertyValue("--bg-base")).toBe("#080809");
+    expect(document.documentElement.style.getPropertyValue("--toolbar-bg")).toBe("#101012");
   });
 });

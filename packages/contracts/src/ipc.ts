@@ -11,7 +11,20 @@ export const explorerEntryKindSchema = z.enum([
   "other",
 ]);
 
-export const themeModeSchema = z.enum(["light", "dark", "tomorrow-night", "catppuccin-mocha"]);
+export const themeModeSchema = z.enum([
+  "dark",
+  "tomorrow-night",
+  "catppuccin-mocha",
+  "obsidian",
+  "graphite",
+  "midnight",
+  "onyx",
+  "light",
+  "clean-white",
+  "warm-paper",
+  "stone",
+  "sand",
+]);
 export const accentModeSchema = z.enum([
   "gold",
   "teal",
