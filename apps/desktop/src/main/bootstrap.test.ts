@@ -65,10 +65,16 @@ describe("toPreferencePatch", () => {
   it("preserves terminal app override preferences", () => {
     expect(
       toPreferencePatch({
-        terminalApp: "iTerm",
+        terminalApp: {
+          appPath: "/Applications/iTerm.app",
+          appName: "iTerm",
+        },
       }),
     ).toEqual({
-      terminalApp: "iTerm",
+      terminalApp: {
+        appPath: "/Applications/iTerm.app",
+        appName: "iTerm",
+      },
     });
   });
 
@@ -118,12 +124,15 @@ describe("toPreferencePatch", () => {
 describe("resolveTerminalApplicationName", () => {
   it("falls back to Terminal when no override is configured", () => {
     expect(resolveTerminalApplicationName(null)).toBe("Terminal");
-    expect(resolveTerminalApplicationName("   ")).toBe("Terminal");
   });
 
   it("uses the configured terminal app override", () => {
-    expect(resolveTerminalApplicationName("iTerm")).toBe("iTerm");
-    expect(resolveTerminalApplicationName("  Ghostty  ")).toBe("Ghostty");
+    expect(
+      resolveTerminalApplicationName({
+        appPath: "/Applications/iTerm.app",
+        appName: "iTerm",
+      }),
+    ).toBe("/Applications/iTerm.app");
   });
 });
 

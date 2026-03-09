@@ -1,22 +1,6 @@
 import type { MenuItemConstructorOptions, WebContents } from "electron";
 
-export type RendererCommand =
-  | "focusFileSearch"
-  | "openSelection"
-  | "editSelection"
-  | "openLocationSheet"
-  | "openSettings"
-  | "zoomIn"
-  | "zoomOut"
-  | "resetZoom"
-  | "openInTerminal"
-  | "copySelection"
-  | "cutSelection"
-  | "pasteSelection"
-  | "copyPath"
-  | "refreshOrApplySearchSort"
-  | "toggleInfoPanel"
-  | "toggleInfoRow";
+import type { RendererCommandType } from "../shared/rendererCommands";
 
 // The native menu emits high-level renderer commands; the renderer owns the actual UI
 // transitions so shortcuts, toolbar buttons, and menu items stay behaviorally aligned.
@@ -36,7 +20,7 @@ export function createApplicationMenuTemplate(
           accelerator: "CommandOrControl+O",
           click: () => {
             webContents.send("filetrail:command", {
-              type: "openSelection" satisfies RendererCommand,
+              type: "openSelection" satisfies RendererCommandType,
             });
           },
         },
@@ -45,7 +29,7 @@ export function createApplicationMenuTemplate(
           accelerator: "CommandOrControl+E",
           click: () => {
             webContents.send("filetrail:command", {
-              type: "editSelection" satisfies RendererCommand,
+              type: "editSelection" satisfies RendererCommandType,
             });
           },
         },
@@ -55,7 +39,7 @@ export function createApplicationMenuTemplate(
           accelerator: "CommandOrControl+T",
           click: () => {
             webContents.send("filetrail:command", {
-              type: "openInTerminal" satisfies RendererCommand,
+              type: "openInTerminal" satisfies RendererCommandType,
             });
           },
         },
@@ -74,7 +58,7 @@ export function createApplicationMenuTemplate(
           accelerator: "CommandOrControl+X",
           click: () => {
             webContents.send("filetrail:command", {
-              type: "cutSelection" satisfies RendererCommand,
+              type: "cutSelection" satisfies RendererCommandType,
             });
           },
         },
@@ -83,7 +67,7 @@ export function createApplicationMenuTemplate(
           accelerator: "CommandOrControl+C",
           click: () => {
             webContents.send("filetrail:command", {
-              type: "copySelection" satisfies RendererCommand,
+              type: "copySelection" satisfies RendererCommandType,
             });
           },
         },
@@ -92,7 +76,7 @@ export function createApplicationMenuTemplate(
           accelerator: "CommandOrControl+V",
           click: () => {
             webContents.send("filetrail:command", {
-              type: "pasteSelection" satisfies RendererCommand,
+              type: "pasteSelection" satisfies RendererCommandType,
             });
           },
         },
@@ -103,7 +87,7 @@ export function createApplicationMenuTemplate(
           accelerator: "CommandOrControl+F",
           click: () => {
             webContents.send("filetrail:command", {
-              type: "focusFileSearch" satisfies RendererCommand,
+              type: "focusFileSearch" satisfies RendererCommandType,
             });
           },
         },
@@ -112,7 +96,7 @@ export function createApplicationMenuTemplate(
           accelerator: "CommandOrControl+Shift+G",
           click: () => {
             webContents.send("filetrail:command", {
-              type: "openLocationSheet" satisfies RendererCommand,
+              type: "openLocationSheet" satisfies RendererCommandType,
             });
           },
         },
@@ -121,7 +105,7 @@ export function createApplicationMenuTemplate(
           accelerator: "CommandOrControl+,",
           click: () => {
             webContents.send("filetrail:command", {
-              type: "openSettings" satisfies RendererCommand,
+              type: "openSettings" satisfies RendererCommandType,
             });
           },
         },
@@ -130,7 +114,7 @@ export function createApplicationMenuTemplate(
           accelerator: "Alt+CommandOrControl+C",
           click: () => {
             webContents.send("filetrail:command", {
-              type: "copyPath" satisfies RendererCommand,
+              type: "copyPath" satisfies RendererCommandType,
             });
           },
         },
@@ -144,7 +128,7 @@ export function createApplicationMenuTemplate(
           accelerator: "CommandOrControl+I",
           click: () => {
             webContents.send("filetrail:command", {
-              type: "toggleInfoPanel" satisfies RendererCommand,
+              type: "toggleInfoPanel" satisfies RendererCommandType,
             });
           },
         },
@@ -153,7 +137,7 @@ export function createApplicationMenuTemplate(
           accelerator: "CommandOrControl+Shift+I",
           click: () => {
             webContents.send("filetrail:command", {
-              type: "toggleInfoRow" satisfies RendererCommand,
+              type: "toggleInfoRow" satisfies RendererCommandType,
             });
           },
         },
@@ -163,7 +147,7 @@ export function createApplicationMenuTemplate(
           accelerator: "CommandOrControl+R",
           click: () => {
             webContents.send("filetrail:command", {
-              type: "refreshOrApplySearchSort" satisfies RendererCommand,
+              type: "refreshOrApplySearchSort" satisfies RendererCommandType,
             });
           },
         },
@@ -173,7 +157,7 @@ export function createApplicationMenuTemplate(
           accelerator: "CommandOrControl+Plus",
           click: () => {
             webContents.send("filetrail:command", {
-              type: "zoomIn" satisfies RendererCommand,
+              type: "zoomIn" satisfies RendererCommandType,
             });
           },
         },
@@ -182,7 +166,7 @@ export function createApplicationMenuTemplate(
           accelerator: "CommandOrControl+-",
           click: () => {
             webContents.send("filetrail:command", {
-              type: "zoomOut" satisfies RendererCommand,
+              type: "zoomOut" satisfies RendererCommandType,
             });
           },
         },
@@ -191,7 +175,7 @@ export function createApplicationMenuTemplate(
           accelerator: "CommandOrControl+0",
           click: () => {
             webContents.send("filetrail:command", {
-              type: "resetZoom" satisfies RendererCommand,
+              type: "resetZoom" satisfies RendererCommandType,
             });
           },
         },

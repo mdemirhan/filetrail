@@ -128,7 +128,10 @@ describe("appStateStore", () => {
       typeaheadDebounceMs: 1000,
       notificationsEnabled: true,
       notificationDurationSeconds: 4,
-      terminalApp: "iTerm",
+      terminalApp: {
+        appPath: "/Applications/iTerm.app",
+        appName: "iTerm",
+      },
       defaultTextEditor: {
         appPath: "/Applications/Zed.app",
         appName: "Zed",
@@ -202,7 +205,10 @@ describe("appStateStore", () => {
       typeaheadDebounceMs: 1000,
       notificationsEnabled: true,
       notificationDurationSeconds: 4,
-      terminalApp: "iTerm",
+      terminalApp: {
+        appPath: "/Applications/iTerm.app",
+        appName: "iTerm",
+      },
       defaultTextEditor: {
         appPath: "/Applications/Zed.app",
         appName: "Zed",
@@ -256,7 +262,10 @@ describe("appStateStore", () => {
       uiFontWeight: 123 as never,
       textPrimaryOverride: "oops" as never,
       typeaheadDebounceMs: 9999,
-      terminalApp: "   ",
+      terminalApp: {
+        appPath: "   ",
+        appName: "iTerm",
+      } as never,
       defaultTextEditor: {
         appPath: "   ",
         appName: "TextEdit",

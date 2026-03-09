@@ -219,7 +219,10 @@ describe("ipc contracts", () => {
           tabSwitchesExplorerPanes: false,
           typeaheadEnabled: false,
           typeaheadDebounceMs: 1000,
-          terminalApp: "iTerm",
+          terminalApp: {
+            appPath: "/Applications/iTerm.app",
+            appName: "iTerm",
+          },
           defaultTextEditor: {
             appPath: "/Applications/Zed.app",
             appName: "Zed",
@@ -271,7 +274,10 @@ describe("ipc contracts", () => {
         tabSwitchesExplorerPanes: false,
         typeaheadEnabled: false,
         typeaheadDebounceMs: 1000,
-        terminalApp: "iTerm",
+        terminalApp: {
+          appPath: "/Applications/iTerm.app",
+          appName: "iTerm",
+        },
         defaultTextEditor: {
           appPath: "/Applications/Zed.app",
           appName: "Zed",

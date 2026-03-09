@@ -154,6 +154,50 @@ describe("App copy/paste integration", () => {
     expect(document.activeElement).toBe(activeElementBeforeCut);
   });
 
+  it("ignores menu shortcut commands while help is open", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await screen.findByTestId("content-pane");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "?" });
+    });
+    await screen.findByTestId("help-view");
+
+    await act(async () => {
+      harness.emitCommand({ type: "copyPath" });
+    });
+
+    expect(harness.invocations.some((call) => call.channel === "system:copyText")).toBe(false);
+  });
+
+  it("ignores menu shortcut commands while settings is open", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await screen.findByTestId("content-pane");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: ",", metaKey: true });
+    });
+    await screen.findByTestId("settings-view");
+
+    await act(async () => {
+      harness.emitCommand({ type: "copyPath" });
+    });
+
+    expect(harness.invocations.some((call) => call.channel === "system:copyText")).toBe(false);
+  });
+
   it("starts at home when restore last visited is disabled", async () => {
     const harness = createAppHarness({
       preferences: {
@@ -337,9 +381,7 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "Enter" });
     });
 
-    const openPathCalls = harness.invocations.filter(
-      (call) => call.channel === "system:openPath",
-    );
+    const openPathCalls = harness.invocations.filter((call) => call.channel === "system:openPath");
     expect(openPathCalls.slice(-2).map((call) => call.payload)).toEqual([
       { path: "/Users/demo/source-a.txt" },
       { path: "/Users/demo/source-b.txt" },

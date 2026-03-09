@@ -12,6 +12,7 @@ import type {
 } from "../../shared/appPreferences";
 import {
   DEFAULT_APP_PREFERENCES,
+  DEFAULT_TERMINAL_APPLICATION,
   ZOOM_PERCENT_MAX,
   ZOOM_PERCENT_MIN,
   clampOpenItemLimit,
@@ -1140,7 +1141,8 @@ export function SettingsView({
   onNotificationsEnabledChange,
   onNotificationDurationSecondsChange,
   onRestoreLastVisitedFolderOnStartupChange,
-  onTerminalAppChange,
+  onBrowseTerminalApp,
+  onClearTerminalApp,
   onBrowseDefaultTextEditor,
   onAddOpenWithApplication,
   onBrowseOpenWithApplication,
@@ -1170,7 +1172,7 @@ export function SettingsView({
   notificationsEnabled: boolean;
   notificationDurationSeconds: number;
   restoreLastVisitedFolderOnStartup: boolean;
-  terminalApp: string | null;
+  terminalApp: ApplicationSelection | null;
   defaultTextEditor: ApplicationSelection;
   openWithApplications: ReadonlyArray<OpenWithApplication>;
   fileActivationAction: FileActivationAction;
@@ -1207,7 +1209,8 @@ export function SettingsView({
   onNotificationsEnabledChange: (value: boolean) => void;
   onNotificationDurationSecondsChange: (value: number) => void;
   onRestoreLastVisitedFolderOnStartupChange: (value: boolean) => void;
-  onTerminalAppChange: (value: string | null) => void;
+  onBrowseTerminalApp: () => void;
+  onClearTerminalApp: () => void;
   onBrowseDefaultTextEditor: () => void;
   onAddOpenWithApplication: () => void;
   onBrowseOpenWithApplication: (entryId: string) => void;
@@ -1693,15 +1696,38 @@ export function SettingsView({
             >
               Terminal app
             </div>
-            <TextInput
-              value={terminalApp ?? ""}
-              placeholder="Terminal"
-              theme={palette}
-              onChange={(value) => {
-                const trimmed = value.trim();
-                onTerminalAppChange(trimmed.length > 0 ? trimmed : null);
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
               }}
-            />
+            >
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <TextInput
+                  value={`${(terminalApp ?? DEFAULT_TERMINAL_APPLICATION).appName} - ${(terminalApp ?? DEFAULT_TERMINAL_APPLICATION).appPath}`}
+                  placeholder="Terminal"
+                  ariaLabel="Terminal app"
+                  theme={palette}
+                  readOnly
+                  onChange={() => undefined}
+                />
+              </div>
+              <ActionButton
+                label="Browse"
+                ariaLabel="Browse terminal app"
+                theme={palette}
+                onClick={onBrowseTerminalApp}
+              />
+              {terminalApp ? (
+                <ActionButton
+                  label="Default"
+                  ariaLabel="Use default terminal app"
+                  theme={palette}
+                  onClick={onClearTerminalApp}
+                />
+              ) : null}
+            </div>
             <div
               style={{
                 fontSize: "11px",
@@ -1711,7 +1737,7 @@ export function SettingsView({
                 lineHeight: "1.4",
               }}
             >
-              Leave blank to use Terminal. Enter another app name such as iTerm to override.
+              Open in Terminal uses this application. Choose another app or reset to Terminal.
             </div>
           </div>
         </SectionCard>

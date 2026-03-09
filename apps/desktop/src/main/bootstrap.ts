@@ -331,7 +331,7 @@ export async function openPathsWithApplication(
 
 async function openInTerminal(
   payload: IpcRequest<"system:openInTerminal">,
-  terminalApp: string | null,
+  terminalApp: { appPath: string; appName: string } | null,
 ): Promise<IpcResponse<"system:openInTerminal">> {
   try {
     // Files open Terminal in their containing directory; directories open directly.
@@ -579,8 +579,14 @@ export function toPreferencePatch(
   return patch;
 }
 
-export function resolveTerminalApplicationName(terminalApp: string | null): string {
-  return terminalApp && terminalApp.trim().length > 0 ? terminalApp.trim() : "Terminal";
+export function resolveTerminalApplicationName(
+  terminalApp: { appPath: string; appName: string } | null,
+): string {
+  if (!terminalApp) {
+    return "Terminal";
+  }
+  const appPath = terminalApp.appPath.trim();
+  return appPath.length > 0 ? appPath : "Terminal";
 }
 
 export function resolveApplicationDisplayName(applicationPath: string): string {

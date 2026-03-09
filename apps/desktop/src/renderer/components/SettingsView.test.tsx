@@ -84,7 +84,8 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       onNotificationsEnabledChange={() => undefined}
       onNotificationDurationSecondsChange={() => undefined}
       onRestoreLastVisitedFolderOnStartupChange={() => undefined}
-      onTerminalAppChange={() => undefined}
+      onBrowseTerminalApp={() => undefined}
+      onClearTerminalApp={() => undefined}
       onBrowseDefaultTextEditor={() => undefined}
       onAddOpenWithApplication={() => undefined}
       onBrowseOpenWithApplication={() => undefined}
@@ -181,16 +182,27 @@ describe("SettingsView", () => {
     expect(input).toHaveValue("100%");
   });
 
-  it("forwards terminal app edits as trimmed nullable values", () => {
-    const onTerminalAppChange = vi.fn();
-    renderSettingsView({ onTerminalAppChange });
+  it("forwards terminal browse and reset actions", () => {
+    const onBrowseTerminalApp = vi.fn();
+    const onClearTerminalApp = vi.fn();
+    renderSettingsView({
+      terminalApp: {
+        appPath: "/Applications/iTerm.app",
+        appName: "iTerm",
+      },
+      onBrowseTerminalApp,
+      onClearTerminalApp,
+    });
 
-    const input = screen.getByLabelText("Terminal app");
-    fireEvent.change(input, { target: { value: "  iTerm  " } });
-    fireEvent.change(input, { target: { value: "   " } });
+    expect(screen.getByLabelText("Terminal app")).toHaveValue(
+      "iTerm - /Applications/iTerm.app",
+    );
 
-    expect(onTerminalAppChange).toHaveBeenNthCalledWith(1, "iTerm");
-    expect(onTerminalAppChange).toHaveBeenNthCalledWith(2, null);
+    fireEvent.click(screen.getByRole("button", { name: "Browse terminal app" }));
+    fireEvent.click(screen.getByRole("button", { name: "Use default terminal app" }));
+
+    expect(onBrowseTerminalApp).toHaveBeenCalled();
+    expect(onClearTerminalApp).toHaveBeenCalled();
   });
 
   it("renders and updates file opening preferences", () => {

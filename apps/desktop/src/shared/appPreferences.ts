@@ -147,6 +147,10 @@ export const DEFAULT_TEXT_EDITOR: ApplicationSelection = {
   appPath: "/System/Applications/TextEdit.app",
   appName: "TextEdit",
 };
+export const DEFAULT_TERMINAL_APPLICATION: ApplicationSelection = {
+  appPath: "/System/Applications/Utilities/Terminal.app",
+  appName: "Terminal",
+};
 export const OPEN_ITEM_LIMIT_MIN = 1;
 export const OPEN_ITEM_LIMIT_MAX = 50;
 
@@ -178,7 +182,7 @@ export type AppPreferences = {
   notificationDurationSeconds: number;
   propertiesOpen: boolean;
   detailRowOpen: boolean;
-  terminalApp: string | null;
+  terminalApp: ApplicationSelection | null;
   defaultTextEditor: ApplicationSelection;
   openWithApplications: OpenWithApplication[];
   fileActivationAction: FileActivationAction;

@@ -277,7 +277,7 @@ export const appPreferencesSchema = z.object({
   notificationDurationSeconds: z.number().int().min(2).max(10),
   propertiesOpen: z.boolean(),
   detailRowOpen: z.boolean(),
-  terminalApp: z.string().trim().min(1).nullable(),
+  terminalApp: applicationSelectionSchema.nullable(),
   defaultTextEditor: applicationSelectionSchema,
   openWithApplications: z.array(openWithApplicationSchema),
   fileActivationAction: z.enum(["open", "edit"]),

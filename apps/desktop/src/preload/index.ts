@@ -6,26 +6,7 @@ import type {
   IpcRequestInput,
   IpcResponse,
 } from "@filetrail/contracts";
-
-type RendererCommand = {
-  type:
-    | "focusFileSearch"
-    | "openSelection"
-    | "editSelection"
-    | "openLocationSheet"
-    | "openSettings"
-    | "zoomIn"
-    | "zoomOut"
-    | "resetZoom"
-    | "openInTerminal"
-    | "copySelection"
-    | "cutSelection"
-    | "pasteSelection"
-    | "copyPath"
-    | "refreshOrApplySearchSort"
-    | "toggleInfoPanel"
-    | "toggleInfoRow";
-};
+import type { RendererCommand } from "../shared/rendererCommands";
 
 type IpcEnvelope =
   | {

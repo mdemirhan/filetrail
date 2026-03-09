@@ -16,6 +16,7 @@ import {
   DEFAULT_APP_PREFERENCES,
   DEFAULT_DETAIL_COLUMN_VISIBILITY,
   DEFAULT_DETAIL_COLUMN_WIDTHS,
+  DEFAULT_TERMINAL_APPLICATION,
   type DetailColumnVisibility,
   type DetailColumnWidths,
   type ExplorerViewMode,
@@ -100,6 +101,7 @@ import { createRendererLogger } from "./lib/logging";
 import { pageScrollElement, scrollElementByAmount } from "./lib/pagedScroll";
 import { resolveExplorerToolbarLayout, resolveSinglePanelLayout } from "./lib/responsiveLayout";
 import { appendSearchResults, filterSearchResults, sortSearchResults } from "./lib/searchResults";
+import { canHandleExplorerKeyboardShortcuts, canHandleRendererCommand } from "./lib/shortcutPolicy";
 import {
   resolveEditSelectionPaths,
   resolveOpenInTerminalPaths,
@@ -465,6 +467,15 @@ export function App() {
   const showCopyPasteProgressCard = writeOperationCardState !== null;
   const showCopyPasteResultDialog = shouldRenderCopyPasteResultDialog(copyPasteProgressEvent);
   const copyPasteModalOpen = copyPasteDialogState !== null || showCopyPasteResultDialog;
+  const shortcutContext = useMemo(
+    () => ({
+      actionNoticeOpen: actionNotice !== null,
+      copyPasteModalOpen,
+      locationSheetOpen,
+      mainView,
+    }),
+    [actionNotice, copyPasteModalOpen, locationSheetOpen, mainView],
+  );
   const contextMenuDisabledActionIds = useMemo(() => {
     if (!contextMenuState) {
       return [] as ContextMenuActionId[];
@@ -1014,6 +1025,9 @@ export function App() {
 
   useEffect(() => {
     const unsubscribe = client.onCommand((command) => {
+      if (!canHandleRendererCommand(command.type, shortcutContext)) {
+        return;
+      }
       if (command.type === "openSelection") {
         const activePane = focusedPane ?? lastExplorerFocusPaneRef.current;
         if ((contextMenuState?.paths.length ?? 0) === 0 && activePane === "tree") {
@@ -1157,6 +1171,7 @@ export function App() {
     openItemLimit,
     searchResultEntries,
     selectedPathsInViewOrder,
+    shortcutContext,
     treeNodes,
   ]);
 
@@ -1436,7 +1451,11 @@ export function App() {
         setMainView((value) => (value === "help" ? "explorer" : "help"));
         return;
       }
-      if (event.metaKey && event.key === ",") {
+      if (
+        event.metaKey &&
+        event.key === "," &&
+        canHandleRendererCommand("openSettings", shortcutContext)
+      ) {
         event.preventDefault();
         openSettingsView();
         return;
@@ -1453,7 +1472,7 @@ export function App() {
         event.preventDefault();
         return;
       }
-      if (mainView !== "explorer") {
+      if (!canHandleExplorerKeyboardShortcuts(shortcutContext)) {
         return;
       }
       if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey) {
@@ -1534,7 +1553,9 @@ export function App() {
       ) {
         event.preventDefault();
         const pathsToActivate =
-          selectedPathsInViewOrder.length > 0 ? selectedPathsInViewOrder : [currentSelectedEntry.path];
+          selectedPathsInViewOrder.length > 0
+            ? selectedPathsInViewOrder
+            : [currentSelectedEntry.path];
         void activateContentPaths(pathsToActivate);
         return;
       }
@@ -1706,7 +1727,9 @@ export function App() {
       if (event.key === "Enter" && focusedPane === "content" && currentSelectedEntry) {
         event.preventDefault();
         const pathsToActivate =
-          selectedPathsInViewOrder.length > 0 ? selectedPathsInViewOrder : [currentSelectedEntry.path];
+          selectedPathsInViewOrder.length > 0
+            ? selectedPathsInViewOrder
+            : [currentSelectedEntry.path];
         void activateContentPaths(pathsToActivate);
       }
     };
@@ -1733,6 +1756,7 @@ export function App() {
     openItemLimit,
     selectedEntry,
     selectedPathsInViewOrder,
+    shortcutContext,
     treeNodes,
     treeRootPath,
     tabSwitchesExplorerPanes,
@@ -2710,6 +2734,17 @@ export function App() {
       return;
     }
     setDefaultTextEditor(selection);
+  }
+
+  async function browseTerminalApplication() {
+    const selection = await pickApplicationForOpenWith(
+      "Terminal App",
+      "Unable to choose a terminal application.",
+    );
+    if (!selection) {
+      return;
+    }
+    setTerminalApp(selection);
   }
 
   async function browseOpenWithApplication(entryId: string) {
@@ -4417,7 +4452,10 @@ export function App() {
                 onNotificationsEnabledChange={setNotificationsEnabled}
                 onNotificationDurationSecondsChange={setNotificationDurationSeconds}
                 onRestoreLastVisitedFolderOnStartupChange={setRestoreLastVisitedFolderOnStartup}
-                onTerminalAppChange={setTerminalApp}
+                onBrowseTerminalApp={() => {
+                  void browseTerminalApplication();
+                }}
+                onClearTerminalApp={() => setTerminalApp(null)}
                 onBrowseDefaultTextEditor={() => {
                   void browseDefaultTextEditor();
                 }}

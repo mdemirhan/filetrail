@@ -308,7 +308,7 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
       typeof record.detailRowOpen === "boolean"
         ? record.detailRowOpen
         : currentDefaults.detailRowOpen,
-    terminalApp: normalizeTerminalAppPreference(record.terminalApp),
+    terminalApp: sanitizeTerminalApplicationSelection(record.terminalApp),
     defaultTextEditor: sanitizeApplicationSelection(
       record.defaultTextEditor,
       currentDefaults.defaultTextEditor,
@@ -393,12 +393,33 @@ function normalizeColorOverride(value: unknown): string | null {
   return /^#[0-9a-fA-F]{6}$/.test(normalized) ? normalized.toLowerCase() : null;
 }
 
-function normalizeTerminalAppPreference(value: unknown): string | null {
-  if (typeof value !== "string") {
+function sanitizeTerminalApplicationSelection(value: unknown): ApplicationSelection | null {
+  if (value === null || value === undefined) {
     return null;
   }
-  const normalized = value.trim();
-  return normalized.length > 0 ? normalized : null;
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    if (normalized.length === 0) {
+      return null;
+    }
+    return {
+      appPath: normalized,
+      appName: normalized,
+    };
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const appPath = typeof record.appPath === "string" ? record.appPath.trim() : "";
+  const appName = typeof record.appName === "string" ? record.appName.trim() : "";
+  if (appPath.length === 0 || appName.length === 0) {
+    return null;
+  }
+  return {
+    appPath,
+    appName,
+  };
 }
 
 function sanitizeApplicationSelection(

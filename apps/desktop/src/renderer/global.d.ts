@@ -4,6 +4,7 @@ import type {
   IpcRequestInput,
   IpcResponse,
 } from "@filetrail/contracts";
+import type { RendererCommand } from "../shared/rendererCommands";
 
 declare global {
   interface Window {
@@ -12,27 +13,7 @@ declare global {
         channel: C,
         payload: IpcRequestInput<C>,
       ): Promise<IpcResponse<C>>;
-      onCommand(
-        listener: (command: {
-          type:
-            | "focusFileSearch"
-            | "openSelection"
-            | "editSelection"
-            | "toggleInfoPanel"
-            | "toggleInfoRow"
-            | "openLocationSheet"
-            | "openSettings"
-            | "zoomIn"
-            | "zoomOut"
-            | "resetZoom"
-            | "openInTerminal"
-            | "copySelection"
-            | "cutSelection"
-            | "pasteSelection"
-            | "copyPath"
-            | "refreshOrApplySearchSort";
-        }) => void,
-      ): () => void;
+      onCommand(listener: (command: RendererCommand) => void): () => void;
       onCopyPasteProgress(listener: (event: CopyPasteProgressEvent) => void): () => void;
     };
   }
