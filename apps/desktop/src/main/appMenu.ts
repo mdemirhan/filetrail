@@ -3,6 +3,7 @@ import type { MenuItemConstructorOptions, WebContents } from "electron";
 export type RendererCommand =
   | "focusFileSearch"
   | "openLocationSheet"
+  | "openSettings"
   | "openInTerminal"
   | "copyPath"
   | "refreshOrApplySearchSort"
@@ -61,6 +62,15 @@ export function createApplicationMenuTemplate(
           click: () => {
             webContents.send("filetrail:command", {
               type: "openLocationSheet" satisfies RendererCommand,
+            });
+          },
+        },
+        {
+          label: "Settings…",
+          accelerator: "CommandOrControl+,",
+          click: () => {
+            webContents.send("filetrail:command", {
+              type: "openSettings" satisfies RendererCommand,
             });
           },
         },

@@ -10,6 +10,8 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
   return render(
     <SettingsView
       theme="dark"
+      accent="gold"
+      accentToolbarButtons={true}
       uiFontFamily="lexend"
       uiFontSize={13}
       uiFontWeight={500}
@@ -36,11 +38,17 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
         { value: "tomorrow-night", label: "Tomorrow Night" },
         { value: "catppuccin-mocha", label: "Catppuccin Mocha" },
       ]}
+      accentOptions={[
+        { value: "gold", label: "Gold", primary: "#daa520" },
+        { value: "teal", label: "Teal", primary: "#2cb5a0" },
+      ]}
       uiFontOptions={[{ value: "lexend", label: "Lexend" }]}
       uiFontSizeOptions={[13]}
       uiFontWeightOptions={[500]}
       typeaheadDebounceOptions={[750]}
       onThemeChange={() => undefined}
+      onAccentChange={() => undefined}
+      onAccentToolbarButtonsChange={() => undefined}
       onUiFontFamilyChange={() => undefined}
       onUiFontSizeChange={() => undefined}
       onUiFontWeightChange={() => undefined}
@@ -96,6 +104,26 @@ describe("SettingsView", () => {
     expect(themeSelect).toHaveTextContent("Dark");
     expect(themeSelect).toHaveTextContent("Tomorrow Night");
     expect(themeSelect).toHaveTextContent("Catppuccin Mocha");
+  });
+
+  it("renders the supplied accent options and selected label", () => {
+    renderSettingsView({ accent: "teal" });
+
+    expect(screen.getByLabelText("Accent color Gold")).toBeInTheDocument();
+    expect(screen.getByLabelText("Accent color Teal")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Teal")).toBeInTheDocument();
+  });
+
+  it("forwards toolbar accent toggle changes", () => {
+    const onAccentToolbarButtonsChange = vi.fn();
+    renderSettingsView({
+      accentToolbarButtons: true,
+      onAccentToolbarButtonsChange,
+    });
+
+    fireEvent.click(screen.getByLabelText("Accent toolbar buttons"));
+
+    expect(onAccentToolbarButtonsChange).toHaveBeenCalledWith(false);
   });
 
   it("forwards terminal app edits as trimmed nullable values", () => {

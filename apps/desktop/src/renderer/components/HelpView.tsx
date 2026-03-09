@@ -1,6 +1,11 @@
 import { useMemo, useState } from "react";
 
-import type { ThemeMode } from "../../shared/appPreferences";
+import {
+  ACCENT_OPTIONS,
+  type AccentMode,
+  type ThemeMode,
+} from "../../shared/appPreferences";
+import { generateAccentTokens } from "../lib/accent";
 
 type ShortcutItem = {
   group: string;
@@ -16,18 +21,15 @@ type ReferenceItem = {
 const mono = "'SF Mono', 'JetBrains Mono', 'Fira Code', monospace";
 const sans = "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', system-ui, sans-serif";
 
-const helpThemes = {
+const helpBaseThemes = {
   light: {
     name: "Light",
     page: "#edeef4",
     card: "#f7f8fb",
     cardBorder: "rgba(0,0,0,0.06)",
     title: "#2a2a34",
-    subtitle: "#daa520",
     desc: "#8a8c9a",
-    sectionIcon: "rgba(218,165,32,0.1)",
     sectionTitle: "#2a2a34",
-    category: "#b8860b",
     text: "#4a4a5a",
     textMuted: "#8a8c9a",
     kbd: {
@@ -39,18 +41,7 @@ const helpThemes = {
     plus: "#c0c2ce",
     sep: "rgba(0,0,0,0.05)",
     interaction: { label: "#2a2a34", desc: "#6e7080" },
-    callout: {
-      bg: "rgba(218,165,32,0.06)",
-      border: "rgba(218,165,32,0.15)",
-      icon: "#daa520",
-      text: "#5a5a6a",
-      bold: "#3a3a4a",
-    },
-    tabActive: {
-      bg: "rgba(218,165,32,0.12)",
-      border: "rgba(218,165,32,0.3)",
-      text: "#b8860b",
-    },
+    callout: { text: "#5a5a6a", bold: "#3a3a4a" },
     tabInactive: {
       bg: "transparent",
       border: "rgba(0,0,0,0.06)",
@@ -63,11 +54,8 @@ const helpThemes = {
     card: "#1f222a",
     cardBorder: "rgba(255,255,255,0.05)",
     title: "#dcdee8",
-    subtitle: "#daa520",
     desc: "#6a6d78",
-    sectionIcon: "rgba(218,165,32,0.08)",
     sectionTitle: "#dcdee8",
-    category: "#daa520",
     text: "#c0c4d0",
     textMuted: "#7a7d8e",
     kbd: {
@@ -79,18 +67,7 @@ const helpThemes = {
     plus: "#484b54",
     sep: "rgba(255,255,255,0.04)",
     interaction: { label: "#dcdee8", desc: "#7a7d8e" },
-    callout: {
-      bg: "rgba(218,165,32,0.06)",
-      border: "rgba(218,165,32,0.12)",
-      icon: "#daa520",
-      text: "#7a7d8e",
-      bold: "#c0c4d0",
-    },
-    tabActive: {
-      bg: "rgba(218,165,32,0.1)",
-      border: "rgba(218,165,32,0.3)",
-      text: "#daa520",
-    },
+    callout: { text: "#7a7d8e", bold: "#c0c4d0" },
     tabInactive: {
       bg: "transparent",
       border: "rgba(255,255,255,0.06)",
@@ -103,11 +80,8 @@ const helpThemes = {
     card: "#1c1d1f",
     cardBorder: "rgba(255,255,255,0.04)",
     title: "#d8d9e0",
-    subtitle: "#daa520",
     desc: "#62636a",
-    sectionIcon: "rgba(218,165,32,0.07)",
     sectionTitle: "#d8d9e0",
-    category: "#daa520",
     text: "#b8b9c2",
     textMuted: "#74757c",
     kbd: {
@@ -119,18 +93,7 @@ const helpThemes = {
     plus: "#44454a",
     sep: "rgba(255,255,255,0.035)",
     interaction: { label: "#d8d9e0", desc: "#74757c" },
-    callout: {
-      bg: "rgba(218,165,32,0.05)",
-      border: "rgba(218,165,32,0.1)",
-      icon: "#daa520",
-      text: "#74757c",
-      bold: "#b8b9c2",
-    },
-    tabActive: {
-      bg: "rgba(218,165,32,0.09)",
-      border: "rgba(218,165,32,0.25)",
-      text: "#daa520",
-    },
+    callout: { text: "#74757c", bold: "#b8b9c2" },
     tabInactive: {
       bg: "transparent",
       border: "rgba(255,255,255,0.05)",
@@ -143,11 +106,8 @@ const helpThemes = {
     card: "#141420",
     cardBorder: "rgba(255,255,255,0.04)",
     title: "#dde4ff",
-    subtitle: "#daa520",
     desc: "#585878",
-    sectionIcon: "rgba(218,165,32,0.07)",
     sectionTitle: "#dde4ff",
-    category: "#daa520",
     text: "#b8bee0",
     textMuted: "#707090",
     kbd: {
@@ -159,18 +119,7 @@ const helpThemes = {
     plus: "#3a3a52",
     sep: "rgba(255,255,255,0.03)",
     interaction: { label: "#dde4ff", desc: "#707090" },
-    callout: {
-      bg: "rgba(218,165,32,0.05)",
-      border: "rgba(218,165,32,0.1)",
-      icon: "#daa520",
-      text: "#707090",
-      bold: "#b8bee0",
-    },
-    tabActive: {
-      bg: "rgba(218,165,32,0.08)",
-      border: "rgba(218,165,32,0.22)",
-      text: "#daa520",
-    },
+    callout: { text: "#707090", bold: "#b8bee0" },
     tabInactive: {
       bg: "transparent",
       border: "rgba(255,255,255,0.04)",
@@ -178,6 +127,33 @@ const helpThemes = {
     },
   },
 } as const satisfies Record<ThemeMode, unknown>;
+
+type ResolvedHelpTheme = ReturnType<typeof resolveHelpTheme>;
+
+function resolveHelpTheme(theme: ThemeMode | undefined, accent: AccentMode | undefined) {
+  const resolvedTheme = resolveThemeMode(theme);
+  const resolvedAccent = resolveAccentMode(accent);
+  const base = helpBaseThemes[resolvedTheme];
+  const accentTokens = generateAccentTokens(resolvedAccent, resolvedTheme);
+
+  return {
+    ...base,
+    subtitle: accentTokens.solid,
+    sectionIcon: accentTokens.heroIconBg,
+    category: accentTokens.pathCrumbHover,
+    callout: {
+      ...base.callout,
+      bg: accentTokens.calloutBg,
+      border: accentTokens.calloutBorder,
+      icon: accentTokens.solid,
+    },
+    tabActive: {
+      bg: accentTokens.pillBg,
+      border: accentTokens.pillBorder,
+      text: accentTokens.pillText,
+    },
+  };
+}
 
 const PREFERRED_LEFT_GROUPS = ["Navigation", "Panels"];
 const PREFERRED_RIGHT_GROUPS = ["Search", "Views"];
@@ -187,13 +163,15 @@ export function HelpView({
   referenceItems,
   layoutMode = "wide",
   theme,
+  accent,
 }: {
   shortcutItems: readonly ShortcutItem[];
   referenceItems: readonly ReferenceItem[];
   layoutMode?: "wide" | "narrow" | "compact";
   theme?: ThemeMode;
+  accent?: AccentMode;
 }) {
-  const resolvedTheme = resolveHelpTheme(theme);
+  const resolvedTheme = resolveHelpTheme(theme, accent);
   const [activeTab, setActiveTab] = useState<"shortcuts" | "explorer">("shortcuts");
   const groupedShortcuts = useMemo(() => groupShortcuts(shortcutItems), [shortcutItems]);
   const { leftGroups, rightGroups } = useMemo(
@@ -428,7 +406,7 @@ export function HelpView({
   );
 }
 
-function cardStyle(theme: (typeof helpThemes)[ThemeMode]) {
+function cardStyle(theme: ResolvedHelpTheme) {
   return {
     background: theme.card,
     border: `1px solid ${theme.cardBorder}`,
@@ -443,7 +421,7 @@ function Kbd({
   theme,
 }: {
   children: string;
-  theme: (typeof helpThemes)[ThemeMode];
+  theme: ResolvedHelpTheme;
 }) {
   return (
     <span
@@ -476,7 +454,7 @@ function Keys({
   theme,
 }: {
   keys: string[];
-  theme: (typeof helpThemes)[ThemeMode];
+  theme: ResolvedHelpTheme;
 }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "3px", flexShrink: 0 }}>
@@ -500,7 +478,7 @@ function ShortcutRow({
 }: {
   desc: string;
   keys: string[];
-  theme: (typeof helpThemes)[ThemeMode];
+  theme: ResolvedHelpTheme;
   isLast: boolean;
 }) {
   return (
@@ -541,7 +519,7 @@ function InteractionRow({
 }: {
   label: string;
   desc: string;
-  theme: (typeof helpThemes)[ThemeMode];
+  theme: ResolvedHelpTheme;
   isLast: boolean;
   stacked: boolean;
   labelWidth: string;
@@ -590,7 +568,7 @@ function CategoryLabel({
   theme,
 }: {
   children: string;
-  theme: (typeof helpThemes)[ThemeMode];
+  theme: ResolvedHelpTheme;
 }) {
   return (
     <div
@@ -655,17 +633,31 @@ function shortcutParts(shortcut: string): string[] {
     .filter((part) => part.length > 0);
 }
 
-function resolveHelpTheme(theme: ThemeMode | undefined): (typeof helpThemes)[ThemeMode] {
+function resolveThemeMode(theme: ThemeMode | undefined): ThemeMode {
   if (theme) {
-    return helpThemes[theme];
+    return theme;
   }
   if (typeof document !== "undefined") {
     const documentTheme = document.documentElement.dataset.theme as ThemeMode | undefined;
-    if (documentTheme && documentTheme in helpThemes) {
-      return helpThemes[documentTheme];
+    if (documentTheme && documentTheme in helpBaseThemes) {
+      return documentTheme;
     }
   }
-  return helpThemes.dark;
+  return "dark";
+}
+
+function resolveAccentMode(accent: AccentMode | undefined): AccentMode {
+  if (accent) {
+    return accent;
+  }
+  if (typeof document !== "undefined") {
+    const documentAccent = document.documentElement.dataset.accent as AccentMode | undefined;
+    const resolvedDocumentAccent = ACCENT_OPTIONS.find((option) => option.value === documentAccent);
+    if (resolvedDocumentAccent) {
+      return resolvedDocumentAccent.value;
+    }
+  }
+  return "gold";
 }
 
 function isPresent<T>(value: T | undefined): value is T {

@@ -1,4 +1,13 @@
 export type ThemeMode = "light" | "dark" | "tomorrow-night" | "catppuccin-mocha";
+export type AccentMode =
+  | "gold"
+  | "teal"
+  | "blue"
+  | "violet"
+  | "rose"
+  | "emerald"
+  | "copper"
+  | "sky";
 export type ExplorerViewMode = "list" | "details";
 export type UiFontFamily = "dm-sans" | "lexend" | "fira-code" | "jetbrains-mono";
 export type UiFontWeight = 400 | 500 | 600;
@@ -19,6 +28,16 @@ export const THEME_OPTIONS = [
   { value: "tomorrow-night", label: "Tomorrow Night" },
   { value: "catppuccin-mocha", label: "Catppuccin Mocha" },
   { value: "light", label: "Light" },
+] as const;
+export const ACCENT_OPTIONS = [
+  { value: "gold", label: "Gold", primary: "#daa520", dark: "#b8860b" },
+  { value: "teal", label: "Teal", primary: "#2cb5a0", dark: "#1e9a87" },
+  { value: "blue", label: "Blue", primary: "#4a9eff", dark: "#2d7fd4" },
+  { value: "violet", label: "Violet", primary: "#9580ff", dark: "#7a62e0" },
+  { value: "rose", label: "Rose", primary: "#e8729a", dark: "#c75a80" },
+  { value: "emerald", label: "Emerald", primary: "#3dbf7a", dark: "#2a9e62" },
+  { value: "copper", label: "Copper", primary: "#d4845a", dark: "#b86e48" },
+  { value: "sky", label: "Sky", primary: "#58b9e8", dark: "#3a9acb" },
 ] as const;
 
 export const UI_FONT_OPTIONS = [
@@ -59,6 +78,8 @@ export const DETAIL_COLUMN_WIDTH_LIMITS = {
 // otherwise older saved preferences will either be dropped or fail validation.
 export type AppPreferences = {
   theme: ThemeMode;
+  accent: AccentMode;
+  accentToolbarButtons: boolean;
   uiFontFamily: UiFontFamily;
   uiFontSize: number;
   uiFontWeight: UiFontWeight;
@@ -95,6 +116,8 @@ export type AppPreferences = {
 
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   theme: "tomorrow-night",
+  accent: "gold",
+  accentToolbarButtons: true,
   uiFontFamily: "lexend",
   uiFontSize: 13,
   uiFontWeight: 500,
@@ -160,6 +183,10 @@ export function clampDetailColumnWidth(key: DetailColumnKey, value: number): num
 
 export function getThemeLabel(theme: ThemeMode): string {
   return THEME_OPTIONS.find((option) => option.value === theme)?.label ?? theme;
+}
+
+export function getAccentLabel(accent: AccentMode): string {
+  return ACCENT_OPTIONS.find((option) => option.value === accent)?.label ?? accent;
 }
 
 export function getUiFontLabel(font: UiFontFamily): string {

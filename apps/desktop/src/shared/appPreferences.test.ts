@@ -6,6 +6,7 @@ import {
   clampFontWeight,
   clampPaneWidth,
   clampTypeaheadDebounceMs,
+  getAccentLabel,
   getThemeLabel,
   getUiFontLabel,
 } from "./appPreferences";
@@ -34,14 +35,18 @@ describe("appPreferences helpers", () => {
 
   it("resolves known labels and falls back to the raw stored value", () => {
     expect(getThemeLabel("tomorrow-night")).toBe("Tomorrow Night");
+    expect(getAccentLabel("emerald")).toBe("Emerald");
     expect(getUiFontLabel("jetbrains-mono")).toBe("JetBrains Mono");
     expect(getThemeLabel("midnight" as never)).toBe("midnight");
+    expect(getAccentLabel("sunset" as never)).toBe("sunset");
     expect(getUiFontLabel("mono" as never)).toBe("mono");
   });
 
   it("ships expected defaults for the persisted preference shape", () => {
     expect(DEFAULT_APP_PREFERENCES).toMatchObject({
       theme: "tomorrow-night",
+      accent: "gold",
+      accentToolbarButtons: true,
       uiFontFamily: "lexend",
       uiFontSize: 13,
       uiFontWeight: 500,

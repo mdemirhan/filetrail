@@ -9,9 +9,11 @@ import {
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 
 import {
+  ACCENT_OPTIONS,
   DEFAULT_DETAIL_COLUMN_VISIBILITY,
   DEFAULT_DETAIL_COLUMN_WIDTHS,
   DEFAULT_APP_PREFERENCES,
+  type AccentMode,
   type DetailColumnVisibility,
   type DetailColumnWidths,
   type ExplorerViewMode,
@@ -119,6 +121,10 @@ export function App() {
   const client = useFiletrailClient();
   const [preferencesReady, setPreferencesReady] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>(DEFAULT_APP_PREFERENCES.theme);
+  const [accent, setAccent] = useState<AccentMode>(DEFAULT_APP_PREFERENCES.accent);
+  const [accentToolbarButtons, setAccentToolbarButtons] = useState(
+    DEFAULT_APP_PREFERENCES.accentToolbarButtons,
+  );
   const [uiFontFamily, setUiFontFamily] = useState<UiFontFamily>(
     DEFAULT_APP_PREFERENCES.uiFontFamily,
   );
@@ -503,6 +509,8 @@ export function App() {
   useEffect(() => {
     applyAppearance({
       theme,
+      accent,
+      accentToolbarButtons,
       uiFontFamily,
       uiFontSize,
       uiFontWeight,
@@ -514,6 +522,8 @@ export function App() {
     textMutedOverride,
     textPrimaryOverride,
     textSecondaryOverride,
+    accent,
+    accentToolbarButtons,
     theme,
     uiFontFamily,
     uiFontSize,
@@ -527,6 +537,8 @@ export function App() {
     void client.invoke("app:updatePreferences", {
       preferences: {
         theme,
+        accent,
+        accentToolbarButtons,
         uiFontFamily,
         uiFontSize,
         uiFontWeight,
@@ -576,6 +588,8 @@ export function App() {
     compactTreeView,
     detailColumns,
     detailColumnWidths,
+    accent,
+    accentToolbarButtons,
     searchIncludeHidden,
     searchResultsSortBy,
     searchResultsSortDirection,
@@ -612,6 +626,8 @@ export function App() {
         }
         const preferences = preferencesResponse.preferences;
         setTheme(preferences.theme);
+        setAccent(preferences.accent);
+        setAccentToolbarButtons(preferences.accentToolbarButtons);
         setUiFontFamily(preferences.uiFontFamily);
         setUiFontSize(preferences.uiFontSize);
         setUiFontWeight(preferences.uiFontWeight);
@@ -749,6 +765,10 @@ export function App() {
       }
       if (command.type === "openLocationSheet") {
         openLocationSheet();
+        return;
+      }
+      if (command.type === "openSettings") {
+        openSettingsView();
         return;
       }
       if (command.type === "copyPath") {
@@ -1041,6 +1061,11 @@ export function App() {
       if (event.key === "?") {
         event.preventDefault();
         setMainView((value) => (value === "help" ? "explorer" : "help"));
+        return;
+      }
+      if (event.metaKey && event.key === ",") {
+        event.preventDefault();
+        openSettingsView();
         return;
       }
       if (mainView !== "explorer") {
@@ -1347,6 +1372,14 @@ export function App() {
     setMainView("explorer");
     setLocationError(null);
     setLocationSheetOpen(true);
+  }
+
+  function openSettingsView() {
+    setLocationSheetOpen(false);
+    setLocationError(null);
+    setThemeMenuOpen(false);
+    setSearchPopoverOpen(false);
+    setMainView("settings");
   }
 
   function focusContentPane() {
@@ -2986,7 +3019,7 @@ export function App() {
                   setThemeMenuOpen(false);
                 }}
                 onOpenHelp={() => setMainView("help")}
-                onOpenSettings={() => setMainView("settings")}
+                onOpenSettings={openSettingsView}
                 includeHidden={includeHidden}
                 onToggleHidden={toggleHiddenFiles}
                 onNavigate={(path) => void navigateTo(path, "push")}
@@ -3165,10 +3198,13 @@ export function App() {
                 referenceItems={[...REFERENCE_ITEMS]}
                 layoutMode={singlePanelLayout}
                 theme={theme}
+                accent={accent}
               />
             ) : (
               <SettingsView
                 theme={theme}
+                accent={accent}
+                accentToolbarButtons={accentToolbarButtons}
                 uiFontFamily={uiFontFamily}
                 uiFontSize={uiFontSize}
                 uiFontWeight={uiFontWeight}
@@ -3186,11 +3222,14 @@ export function App() {
                 restoreLastVisitedFolderOnStartup={restoreLastVisitedFolderOnStartup}
                 terminalApp={terminalApp}
                 themeOptions={[...THEME_OPTIONS]}
+                accentOptions={[...ACCENT_OPTIONS]}
                 uiFontOptions={[...UI_FONT_OPTIONS]}
                 uiFontSizeOptions={[...UI_FONT_SIZE_OPTIONS]}
                 uiFontWeightOptions={[...UI_FONT_WEIGHT_OPTIONS]}
                 typeaheadDebounceOptions={[...TYPEAHEAD_DEBOUNCE_OPTIONS]}
                 onThemeChange={setTheme}
+                onAccentChange={setAccent}
+                onAccentToolbarButtonsChange={setAccentToolbarButtons}
                 onUiFontFamilyChange={setUiFontFamily}
                 onUiFontSizeChange={setUiFontSize}
                 onUiFontWeightChange={setUiFontWeight}

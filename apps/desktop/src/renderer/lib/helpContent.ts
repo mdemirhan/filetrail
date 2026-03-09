@@ -73,6 +73,7 @@ export const SHORTCUT_ITEMS = [
   { group: "Panels", shortcut: "Cmd+1", description: "Focus the folder tree" },
   { group: "Panels", shortcut: "Cmd+2", description: "Focus the file list" },
   { group: "Views", shortcut: "?", description: "Open help" },
+  { group: "Views", shortcut: "Cmd+,", description: "Open settings" },
   { group: "Views", shortcut: "Esc", description: "Return from Help or Settings to Explorer" },
 ] as const;
 

@@ -279,6 +279,12 @@ export function toPreferencePatch(
   if (value.theme !== undefined) {
     patch.theme = value.theme;
   }
+  if (value.accent !== undefined) {
+    patch.accent = value.accent;
+  }
+  if (value.accentToolbarButtons !== undefined) {
+    patch.accentToolbarButtons = value.accentToolbarButtons;
+  }
   if (value.uiFontFamily !== undefined) {
     patch.uiFontFamily = value.uiFontFamily;
   }

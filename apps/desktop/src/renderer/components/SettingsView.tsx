@@ -1,29 +1,27 @@
 import { useState, type ReactNode } from "react";
 
 import type {
+  AccentMode,
   DetailColumnVisibility,
   ThemeMode,
   UiFontFamily,
   UiFontWeight,
 } from "../../shared/appPreferences";
+import { generateAccentTokens } from "../lib/accent";
 
 const mono = "'SF Mono', 'JetBrains Mono', 'Fira Code', monospace";
 const sans = "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', system-ui, sans-serif";
 
-const settingsThemes = {
+const settingsBaseThemes = {
   light: {
     page: { bg: "#edeef4" },
-    header: { title: "#2a2a34", subtitle: "#daa520", desc: "#a0a2ae" },
+    header: { title: "#2a2a34", desc: "#a0a2ae" },
     card: { bg: "#f7f8fb", border: "rgba(0,0,0,0.06)", shadow: "0 1px 3px rgba(0,0,0,0.04)" },
-    section: {
-      iconBg: "rgba(218,165,32,0.1)",
-      title: "#2a2a34",
-    },
-    label: { primary: "#3a3a4a", secondary: "#8a8c9a", category: "#b8860b" },
+    section: { title: "#2a2a34" },
+    label: { primary: "#3a3a4a", secondary: "#8a8c9a" },
     input: {
       bg: "#fff",
       border: "rgba(0,0,0,0.1)",
-      borderFocus: "rgba(218,165,32,0.5)",
       text: "#2a2a34",
     },
     select: {
@@ -32,9 +30,8 @@ const settingsThemes = {
       text: "#3a3a4a",
       arrow: "#a0a2ae",
     },
-    toggle: { trackOff: "#d0d2da", trackOn: "#daa520", knob: "#fff" },
+    toggle: { trackOff: "#d0d2da", knob: "#fff" },
     checkbox: {
-      bg: "#daa520",
       border: "rgba(0,0,0,0.15)",
       check: "#fff",
       uncheckedBg: "#fff",
@@ -48,31 +45,24 @@ const settingsThemes = {
     separator: "rgba(0,0,0,0.05)",
     reset: {
       text: "#8a8c9a",
-      textHover: "#b8860b",
       bg: "transparent",
-      bgHover: "rgba(218,165,32,0.08)",
       border: "rgba(0,0,0,0.1)",
-      borderHover: "rgba(218,165,32,0.3)",
     },
     footer: "#a0a2ae",
   },
   dark: {
     page: { bg: "#181b22" },
-    header: { title: "#dcdee8", subtitle: "#daa520", desc: "#6a6d78" },
+    header: { title: "#dcdee8", desc: "#6a6d78" },
     card: {
       bg: "#1f222a",
       border: "rgba(255,255,255,0.05)",
       shadow: "0 1px 4px rgba(0,0,0,0.2)",
     },
-    section: {
-      iconBg: "rgba(218,165,32,0.08)",
-      title: "#dcdee8",
-    },
-    label: { primary: "#c0c4d0", secondary: "#7a7d8e", category: "#daa520" },
+    section: { title: "#dcdee8" },
+    label: { primary: "#c0c4d0", secondary: "#7a7d8e" },
     input: {
       bg: "rgba(255,255,255,0.04)",
       border: "rgba(255,255,255,0.07)",
-      borderFocus: "rgba(218,165,32,0.4)",
       text: "#d4d6e0",
     },
     select: {
@@ -81,9 +71,8 @@ const settingsThemes = {
       text: "#c0c4d0",
       arrow: "#6a6d78",
     },
-    toggle: { trackOff: "#333640", trackOn: "#daa520", knob: "#1c1f26" },
+    toggle: { trackOff: "#333640", knob: "#1c1f26" },
     checkbox: {
-      bg: "#daa520",
       border: "rgba(255,255,255,0.08)",
       check: "#1c1f26",
       uncheckedBg: "rgba(255,255,255,0.04)",
@@ -97,31 +86,24 @@ const settingsThemes = {
     separator: "rgba(255,255,255,0.04)",
     reset: {
       text: "#7a7d8e",
-      textHover: "#daa520",
       bg: "transparent",
-      bgHover: "rgba(218,165,32,0.08)",
       border: "rgba(255,255,255,0.07)",
-      borderHover: "rgba(218,165,32,0.25)",
     },
     footer: "#6a6d78",
   },
   "tomorrow-night": {
     page: { bg: "#151617" },
-    header: { title: "#d8d9e0", subtitle: "#daa520", desc: "#62636a" },
+    header: { title: "#d8d9e0", desc: "#62636a" },
     card: {
       bg: "#1c1d1f",
       border: "rgba(255,255,255,0.04)",
       shadow: "0 1px 4px rgba(0,0,0,0.25)",
     },
-    section: {
-      iconBg: "rgba(218,165,32,0.07)",
-      title: "#d8d9e0",
-    },
-    label: { primary: "#b8b9c2", secondary: "#74757c", category: "#daa520" },
+    section: { title: "#d8d9e0" },
+    label: { primary: "#b8b9c2", secondary: "#74757c" },
     input: {
       bg: "rgba(255,255,255,0.03)",
       border: "rgba(255,255,255,0.06)",
-      borderFocus: "rgba(218,165,32,0.4)",
       text: "#d0d1d8",
     },
     select: {
@@ -130,9 +112,8 @@ const settingsThemes = {
       text: "#b8b9c2",
       arrow: "#6a6b72",
     },
-    toggle: { trackOff: "#2e2f32", trackOn: "#daa520", knob: "#18191b" },
+    toggle: { trackOff: "#2e2f32", knob: "#18191b" },
     checkbox: {
-      bg: "#daa520",
       border: "rgba(255,255,255,0.06)",
       check: "#18191b",
       uncheckedBg: "rgba(255,255,255,0.03)",
@@ -146,31 +127,24 @@ const settingsThemes = {
     separator: "rgba(255,255,255,0.035)",
     reset: {
       text: "#74757c",
-      textHover: "#daa520",
       bg: "transparent",
-      bgHover: "rgba(218,165,32,0.07)",
       border: "rgba(255,255,255,0.06)",
-      borderHover: "rgba(218,165,32,0.2)",
     },
     footer: "#62636a",
   },
   "catppuccin-mocha": {
     page: { bg: "#0e0e18" },
-    header: { title: "#dde4ff", subtitle: "#daa520", desc: "#585878" },
+    header: { title: "#dde4ff", desc: "#585878" },
     card: {
       bg: "#141420",
       border: "rgba(255,255,255,0.04)",
       shadow: "0 1px 4px rgba(0,0,0,0.3)",
     },
-    section: {
-      iconBg: "rgba(218,165,32,0.07)",
-      title: "#dde4ff",
-    },
-    label: { primary: "#b8bee0", secondary: "#707090", category: "#daa520" },
+    section: { title: "#dde4ff" },
+    label: { primary: "#b8bee0", secondary: "#707090" },
     input: {
       bg: "rgba(255,255,255,0.025)",
       border: "rgba(255,255,255,0.05)",
-      borderFocus: "rgba(218,165,32,0.35)",
       text: "#dde4ff",
     },
     select: {
@@ -179,9 +153,8 @@ const settingsThemes = {
       text: "#b8bee0",
       arrow: "#686888",
     },
-    toggle: { trackOff: "#2a2a40", trackOn: "#daa520", knob: "#11111b" },
+    toggle: { trackOff: "#2a2a40", knob: "#11111b" },
     checkbox: {
-      bg: "#daa520",
       border: "rgba(255,255,255,0.05)",
       check: "#11111b",
       uncheckedBg: "rgba(255,255,255,0.025)",
@@ -195,15 +168,55 @@ const settingsThemes = {
     separator: "rgba(255,255,255,0.03)",
     reset: {
       text: "#707090",
-      textHover: "#daa520",
       bg: "transparent",
-      bgHover: "rgba(218,165,32,0.06)",
       border: "rgba(255,255,255,0.05)",
-      borderHover: "rgba(218,165,32,0.18)",
     },
     footer: "#585878",
   },
 } as const satisfies Record<ThemeMode, unknown>;
+
+type ResolvedSettingsTheme = ReturnType<typeof resolveSettingsTheme>;
+
+function resolveSettingsTheme(theme: ThemeMode, accent: AccentMode) {
+  const base = settingsBaseThemes[theme];
+  const accentTokens = generateAccentTokens(accent, theme);
+
+  return {
+    ...base,
+    header: {
+      ...base.header,
+      subtitle: accentTokens.solid,
+    },
+    section: {
+      ...base.section,
+      iconBg: accentTokens.heroIconBg,
+    },
+    label: {
+      ...base.label,
+      category: accentTokens.pathCrumbHover,
+    },
+    input: {
+      ...base.input,
+      borderFocus: accentTokens.focusBorder,
+      caret: accentTokens.solid,
+    },
+    toggle: {
+      ...base.toggle,
+      trackOn: accentTokens.solid,
+    },
+    checkbox: {
+      ...base.checkbox,
+      bg: accentTokens.solid,
+    },
+    reset: {
+      ...base.reset,
+      textHover: accentTokens.pathCrumbHover,
+      bgHover: accentTokens.softBg,
+      borderHover: accentTokens.border,
+    },
+    accent: accentTokens,
+  };
+}
 
 function getTypographyColumns(layoutMode: "wide" | "narrow" | "compact") {
   if (layoutMode === "compact") {
@@ -223,7 +236,7 @@ function Toggle({
 }: {
   checked: boolean;
   onToggle: () => void;
-  theme: (typeof settingsThemes)[ThemeMode];
+  theme: ResolvedSettingsTheme;
   label: string;
 }) {
   return (
@@ -272,7 +285,7 @@ function CheckboxChip({
   checked: boolean;
   onToggle: () => void;
   label: string;
-  theme: (typeof settingsThemes)[ThemeMode];
+  theme: ResolvedSettingsTheme;
 }) {
   return (
     <button
@@ -347,7 +360,7 @@ function SelectControl({
 }: {
   value: string | number;
   options: ReadonlyArray<string | number>;
-  theme: (typeof settingsThemes)[ThemeMode];
+  theme: ResolvedSettingsTheme;
   width?: string;
   onChange: (value: string) => void;
   ariaLabel?: string;
@@ -415,7 +428,7 @@ function ColorRow({
 }: {
   label: string;
   value: string;
-  theme: (typeof settingsThemes)[ThemeMode];
+  theme: ResolvedSettingsTheme;
   onChange: (value: string) => void;
 }) {
   return (
@@ -487,6 +500,65 @@ function ColorRow({
   );
 }
 
+function AccentSelector({
+  accent,
+  accentOptions,
+  theme,
+  onChange,
+}: {
+  accent: AccentMode;
+  accentOptions: ReadonlyArray<{
+    value: AccentMode;
+    label: string;
+    primary: string;
+  }>;
+  theme: ResolvedSettingsTheme;
+  onChange: (value: AccentMode) => void;
+}) {
+  const selected = accentOptions.find((option) => option.value === accent);
+
+  return (
+    <div style={{ display: "grid", gap: "8px", width: "100%" }}>
+      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+        {accentOptions.map((option) => {
+          const active = option.value === accent;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              aria-label={`Accent color ${option.label}`}
+              aria-pressed={active}
+              onClick={() => onChange(option.value)}
+              style={{
+                width: "28px",
+                height: "28px",
+                borderRadius: "999px",
+                border: `1px solid ${active ? theme.accent.border : theme.color.swatchBorder}`,
+                background: option.primary,
+                boxShadow: active
+                  ? `0 0 0 2px ${theme.card.bg}, 0 0 0 4px ${theme.accent.focusBorder}`
+                  : "inset 0 0 0 1px rgba(255,255,255,0.08)",
+                cursor: "pointer",
+                transition: "box-shadow 0.14s ease, border-color 0.14s ease, transform 0.14s ease",
+              }}
+            />
+          );
+        })}
+      </div>
+      <span
+        style={{
+          fontSize: "11px",
+          fontFamily: mono,
+          fontWeight: 500,
+          color: theme.label.secondary,
+        }}
+      >
+        {selected?.label ?? accent}
+      </span>
+    </div>
+  );
+}
+
 function TextInput({
   value,
   placeholder,
@@ -495,7 +567,7 @@ function TextInput({
 }: {
   value: string;
   placeholder: string;
-  theme: (typeof settingsThemes)[ThemeMode];
+  theme: ResolvedSettingsTheme;
   onChange: (value: string) => void;
 }) {
   return (
@@ -518,7 +590,7 @@ function TextInput({
         fontFamily: mono,
         fontWeight: 450,
         outline: "none",
-        caretColor: "#daa520",
+        caretColor: theme.input.caret,
       }}
       onFocus={(event) => {
         event.currentTarget.style.borderColor = theme.input.borderFocus;
@@ -540,7 +612,7 @@ function SettingRow({
   title: string;
   desc?: string;
   right: ReactNode;
-  theme: (typeof settingsThemes)[ThemeMode];
+  theme: ResolvedSettingsTheme;
   isLast?: boolean;
 }) {
   return (
@@ -594,7 +666,7 @@ function SectionCard({
 }: {
   icon: string;
   title: string;
-  theme: (typeof settingsThemes)[ThemeMode];
+  theme: ResolvedSettingsTheme;
   resetButton?: ReactNode;
   children: ReactNode;
 }) {
@@ -654,6 +726,8 @@ function SectionCard({
 
 export function SettingsView({
   theme,
+  accent,
+  accentToolbarButtons,
   uiFontFamily,
   uiFontSize,
   uiFontWeight,
@@ -671,11 +745,14 @@ export function SettingsView({
   restoreLastVisitedFolderOnStartup,
   terminalApp,
   themeOptions,
+  accentOptions,
   uiFontOptions,
   uiFontSizeOptions,
   uiFontWeightOptions,
   typeaheadDebounceOptions,
   onThemeChange,
+  onAccentChange,
+  onAccentToolbarButtonsChange,
   onUiFontFamilyChange,
   onUiFontSizeChange,
   onUiFontWeightChange,
@@ -694,6 +771,8 @@ export function SettingsView({
   onTerminalAppChange,
 }: {
   theme: ThemeMode;
+  accent: AccentMode;
+  accentToolbarButtons: boolean;
   uiFontFamily: UiFontFamily;
   uiFontSize: number;
   uiFontWeight: UiFontWeight;
@@ -711,11 +790,18 @@ export function SettingsView({
   restoreLastVisitedFolderOnStartup: boolean;
   terminalApp: string | null;
   themeOptions: ReadonlyArray<{ value: ThemeMode; label: string }>;
+  accentOptions: ReadonlyArray<{
+    value: AccentMode;
+    label: string;
+    primary: string;
+  }>;
   uiFontOptions: ReadonlyArray<{ value: UiFontFamily; label: string }>;
   uiFontSizeOptions: ReadonlyArray<number>;
   uiFontWeightOptions: ReadonlyArray<number>;
   typeaheadDebounceOptions: ReadonlyArray<number>;
   onThemeChange: (value: ThemeMode) => void;
+  onAccentChange: (value: AccentMode) => void;
+  onAccentToolbarButtonsChange: (value: boolean) => void;
   onUiFontFamilyChange: (value: UiFontFamily) => void;
   onUiFontSizeChange: (value: number) => void;
   onUiFontWeightChange: (value: UiFontWeight) => void;
@@ -733,7 +819,7 @@ export function SettingsView({
   onRestoreLastVisitedFolderOnStartupChange: (value: boolean) => void;
   onTerminalAppChange: (value: string | null) => void;
 }) {
-  const palette = settingsThemes[theme];
+  const palette = resolveSettingsTheme(theme, accent);
   const [resetHover, setResetHover] = useState(false);
 
   return (
@@ -838,6 +924,35 @@ export function SettingsView({
                 formatOption={(value) =>
                   themeOptions.find((option) => option.value === value)?.label ?? String(value)
                 }
+              />
+            }
+          />
+
+          <SettingRow
+            title="Accent color"
+            theme={palette}
+            right={
+              <div style={{ width: "228px", maxWidth: "100%" }}>
+                <AccentSelector
+                  accent={accent}
+                  accentOptions={accentOptions}
+                  theme={palette}
+                  onChange={onAccentChange}
+                />
+              </div>
+            }
+          />
+
+          <SettingRow
+            title="Accent toolbar buttons"
+            desc="Use the selected accent for primary toolbar actions."
+            theme={palette}
+            right={
+              <Toggle
+                checked={accentToolbarButtons}
+                onToggle={() => onAccentToolbarButtonsChange(!accentToolbarButtons)}
+                theme={palette}
+                label="Accent toolbar buttons"
               />
             }
           />

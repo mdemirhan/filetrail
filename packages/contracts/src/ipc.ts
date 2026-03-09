@@ -12,6 +12,16 @@ export const explorerEntryKindSchema = z.enum([
 ]);
 
 export const themeModeSchema = z.enum(["light", "dark", "tomorrow-night", "catppuccin-mocha"]);
+export const accentModeSchema = z.enum([
+  "gold",
+  "teal",
+  "blue",
+  "violet",
+  "rose",
+  "emerald",
+  "copper",
+  "sky",
+]);
 export const uiFontFamilySchema = z.enum(["dm-sans", "lexend", "fira-code", "jetbrains-mono"]);
 export const colorOverrideSchema = z
   .string()
@@ -118,6 +128,8 @@ export const launchContextSchema = z.object({
 
 export const appPreferencesSchema = z.object({
   theme: themeModeSchema,
+  accent: accentModeSchema,
+  accentToolbarButtons: z.boolean(),
   uiFontFamily: uiFontFamilySchema,
   uiFontSize: z.number().int().min(12).max(15),
   uiFontWeight: z.union([z.literal(400), z.literal(500), z.literal(600)]),

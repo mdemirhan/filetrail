@@ -6,6 +6,8 @@ function createHandlersThatFailOnSnapshot() {
     "app:getPreferences": async () => ({
       preferences: {
         theme: "tomorrow-night" as const,
+        accent: "gold" as const,
+        accentToolbarButtons: true,
         uiFontFamily: "lexend" as const,
         uiFontSize: 13,
         uiFontWeight: 500 as const,
@@ -55,6 +57,8 @@ function createHandlersThatFailOnSnapshot() {
     "app:updatePreferences": async () => ({
       preferences: {
         theme: "tomorrow-night" as const,
+        accent: "gold" as const,
+        accentToolbarButtons: true,
         uiFontFamily: "lexend" as const,
         uiFontSize: 13,
         uiFontWeight: 500 as const,

@@ -36,6 +36,8 @@ describe("ipc contracts", () => {
       ipcContractSchemas["app:getPreferences"].response.parse({
         preferences: {
           theme: "tomorrow-night",
+          accent: "gold",
+          accentToolbarButtons: true,
           uiFontFamily: "lexend",
           uiFontSize: 13,
           uiFontWeight: 500,
@@ -82,6 +84,8 @@ describe("ipc contracts", () => {
     ).toEqual({
       preferences: {
         theme: "tomorrow-night",
+        accent: "gold",
+        accentToolbarButtons: true,
         uiFontFamily: "lexend",
         uiFontSize: 13,
         uiFontWeight: 500,
@@ -130,6 +134,8 @@ describe("ipc contracts", () => {
       ipcContractSchemas["app:updatePreferences"].request.parse({
         preferences: {
           theme: "dark",
+          accent: "blue",
+          accentToolbarButtons: false,
           uiFontFamily: "fira-code",
           uiFontSize: 14,
           uiFontWeight: 400,
@@ -166,6 +172,8 @@ describe("ipc contracts", () => {
     ).toEqual({
       preferences: {
         theme: "dark",
+        accent: "blue",
+        accentToolbarButtons: false,
         uiFontFamily: "fira-code",
         uiFontSize: 14,
         uiFontWeight: 400,

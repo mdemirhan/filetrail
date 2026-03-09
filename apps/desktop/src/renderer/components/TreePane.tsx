@@ -337,7 +337,7 @@ export function TreePane({
             type="button"
             className="sidebar-rail-button"
             onClick={onOpenSettings}
-            title="Settings"
+            title="Settings (Cmd+,)"
             aria-label="Open settings"
           >
             <ToolbarIcon name="settings" />

@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import {
+  ACCENT_OPTIONS,
   type AppPreferences,
   DETAIL_COLUMN_KEYS,
   DEFAULT_DETAIL_COLUMN_VISIBILITY,
@@ -223,6 +224,15 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
             : record.theme === "catppuccin-mocha"
               ? "catppuccin-mocha"
               : defaultTheme,
+    accent:
+      typeof record.accent === "string" &&
+      ACCENT_OPTIONS.some((option) => option.value === record.accent)
+        ? (record.accent as AppPreferences["accent"])
+        : currentDefaults.accent,
+    accentToolbarButtons:
+      typeof record.accentToolbarButtons === "boolean"
+        ? record.accentToolbarButtons
+        : currentDefaults.accentToolbarButtons,
     uiFontFamily:
       typeof record.uiFontFamily === "string" &&
       UI_FONT_OPTIONS.some((option) => option.value === record.uiFontFamily)

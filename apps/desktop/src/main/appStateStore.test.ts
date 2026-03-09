@@ -13,6 +13,8 @@ describe("appStateStore", () => {
 
     expect(store.getPreferences()).toEqual({
       theme: "tomorrow-night",
+      accent: "gold",
+      accentToolbarButtons: true,
       uiFontFamily: "lexend",
       uiFontSize: 13,
       uiFontWeight: 500,
@@ -70,6 +72,8 @@ describe("appStateStore", () => {
 
     store.updatePreferences({
       theme: "dark",
+      accent: "teal",
+      accentToolbarButtons: false,
       uiFontFamily: "lexend",
       uiFontSize: 14,
       uiFontWeight: 500,
@@ -126,6 +130,8 @@ describe("appStateStore", () => {
     });
     expect(reloaded.getPreferences()).toEqual({
       theme: "dark",
+      accent: "teal",
+      accentToolbarButtons: false,
       uiFontFamily: "lexend",
       uiFontSize: 14,
       uiFontWeight: 500,
@@ -184,6 +190,8 @@ describe("appStateStore", () => {
       defaultTheme: "dark",
     });
     store.updatePreferences({
+      accent: "bad-accent" as never,
+      accentToolbarButtons: "nope" as never,
       uiFontFamily: "bad-font" as never,
       uiFontSize: 999,
       uiFontWeight: 123 as never,
@@ -212,8 +220,11 @@ describe("appStateStore", () => {
     const reloaded = createAppStateStore(filePath, {
       defaultTheme: "dark",
     });
+    expect(reloaded.getPreferences().accent).toBe("gold");
+    expect(reloaded.getPreferences().accentToolbarButtons).toBe(true);
     expect(reloaded.getPreferences().treeWidth).toBe(220);
     expect(reloaded.getPreferences().inspectorWidth).toBe(480);
+    expect(reloaded.getPreferences().accent).toBe("gold");
     expect(reloaded.getPreferences().uiFontFamily).toBe("lexend");
     expect(reloaded.getPreferences().uiFontSize).toBe(15);
     expect(reloaded.getPreferences().uiFontWeight).toBe(500);

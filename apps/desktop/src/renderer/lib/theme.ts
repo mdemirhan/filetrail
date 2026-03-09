@@ -1,4 +1,14 @@
-import type { ThemeMode, UiFontFamily, UiFontWeight } from "../../shared/appPreferences";
+import type {
+  AccentMode,
+  ThemeMode,
+  UiFontFamily,
+  UiFontWeight,
+} from "../../shared/appPreferences";
+import {
+  accentTokensToCssVariables,
+  generateAccentTokens,
+  getToolbarAccentVariables,
+} from "./accent";
 
 // CSS files own the full palettes; this module applies the user-selected theme identity,
 // font stack, and optional text color overrides at runtime.
@@ -45,6 +55,8 @@ export function getThemeAppearanceDefaults(theme: ThemeMode): {
 
 export function applyAppearance({
   theme,
+  accent,
+  accentToolbarButtons,
   uiFontFamily,
   uiFontSize,
   uiFontWeight,
@@ -53,6 +65,8 @@ export function applyAppearance({
   textMutedOverride,
 }: {
   theme: ThemeMode;
+  accent: AccentMode;
+  accentToolbarButtons: boolean;
   uiFontFamily: UiFontFamily;
   uiFontSize: number;
   uiFontWeight: UiFontWeight;
@@ -66,6 +80,7 @@ export function applyAppearance({
     return;
   }
   document.documentElement.dataset.theme = theme;
+  document.documentElement.dataset.accent = accent;
   document.documentElement.style.setProperty("--font-sans", UI_FONT_STACKS[uiFontFamily]);
   document.documentElement.style.setProperty(
     "--font-mono",
@@ -75,6 +90,32 @@ export function applyAppearance({
   document.documentElement.style.setProperty("--ui-font-weight", String(uiFontWeight));
   document.documentElement.style.setProperty("--mono-font-size", "12px");
   document.documentElement.style.setProperty("--mono-font-weight", "500");
+  const accentTokens = generateAccentTokens(accent, theme);
+  const accentVariables = accentTokensToCssVariables(accentTokens);
+  for (const [propertyName, value] of Object.entries(accentVariables)) {
+    document.documentElement.style.setProperty(propertyName, value);
+  }
+  if (accentToolbarButtons) {
+    const toolbarAccentVariables = getToolbarAccentVariables(accentTokens);
+    for (const [propertyName, value] of Object.entries(toolbarAccentVariables)) {
+      document.documentElement.style.setProperty(propertyName, value);
+    }
+  } else {
+    document.documentElement.style.removeProperty("--tb-primary-bg");
+    document.documentElement.style.removeProperty("--tb-primary-fg");
+    document.documentElement.style.removeProperty("--tb-primary-hover-bg");
+    document.documentElement.style.removeProperty("--toolbar-nav-icon-active");
+    document.documentElement.style.removeProperty("--toolbar-toggle-active-bg");
+    document.documentElement.style.removeProperty("--toolbar-toggle-icon-active");
+    document.documentElement.style.removeProperty("--toolbar-sort-text");
+    document.documentElement.style.removeProperty("--toolbar-sort-arrow");
+    document.documentElement.style.removeProperty("--sidebar-rail-icon");
+    document.documentElement.style.removeProperty("--sidebar-rail-active-bg");
+    document.documentElement.style.removeProperty("--sidebar-rail-icon-active");
+    document.documentElement.style.removeProperty("--sidebar-rail-menu-active-bg");
+    document.documentElement.style.removeProperty("--sidebar-rail-menu-active-fg");
+    document.documentElement.style.removeProperty("--sidebar-rail-menu-check");
+  }
   applyOptionalColor("--text-primary", textPrimaryOverride);
   applyOptionalColor("--text-secondary", textSecondaryOverride);
   applyOptionalColor("--text-tertiary", textMutedOverride);
