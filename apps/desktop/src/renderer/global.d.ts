@@ -15,6 +15,9 @@ declare global {
             | "toggleInfoRow"
             | "openLocationSheet"
             | "openSettings"
+            | "zoomIn"
+            | "zoomOut"
+            | "resetZoom"
             | "openInTerminal"
             | "copyPath"
             | "refreshOrApplySearchSort";

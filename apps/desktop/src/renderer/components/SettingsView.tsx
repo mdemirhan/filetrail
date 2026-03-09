@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import type {
   AccentMode,
@@ -6,6 +6,12 @@ import type {
   ThemeMode,
   UiFontFamily,
   UiFontWeight,
+} from "../../shared/appPreferences";
+import {
+  DEFAULT_APP_PREFERENCES,
+  ZOOM_PERCENT_MAX,
+  ZOOM_PERCENT_MIN,
+  clampZoomPercent,
 } from "../../shared/appPreferences";
 import { generateAccentTokens } from "../lib/accent";
 
@@ -602,6 +608,87 @@ function TextInput({
   );
 }
 
+function formatZoomPercent(value: number): string {
+  return `${value}%`;
+}
+
+function parseZoomPercent(value: string): number | null {
+  const normalized = value.replace(/\s+/g, "").replace(/%/g, "");
+  if (!/^\d+(\.\d+)?$/.test(normalized)) {
+    return null;
+  }
+  return clampZoomPercent(Number(normalized));
+}
+
+function ZoomLevelInput({
+  value,
+  theme,
+  onChange,
+}: {
+  value: number;
+  theme: ResolvedSettingsTheme;
+  onChange: (value: number) => void;
+}) {
+  const [draft, setDraft] = useState(() => formatZoomPercent(value));
+
+  useEffect(() => {
+    setDraft(formatZoomPercent(value));
+  }, [value]);
+
+  const commit = () => {
+    const parsed = parseZoomPercent(draft);
+    if (parsed === null) {
+      const fallback = DEFAULT_APP_PREFERENCES.zoomPercent;
+      setDraft(formatZoomPercent(fallback));
+      if (fallback !== value) {
+        onChange(fallback);
+      }
+      return;
+    }
+    setDraft(formatZoomPercent(parsed));
+    if (parsed !== value) {
+      onChange(parsed);
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      value={draft}
+      aria-label="Zoom level"
+      inputMode="decimal"
+      spellCheck={false}
+      onChange={(event) => setDraft(event.currentTarget.value)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.currentTarget.blur();
+        }
+      }}
+      onFocus={(event) => {
+        event.currentTarget.style.borderColor = theme.input.borderFocus;
+      }}
+      onBlur={(event) => {
+        event.currentTarget.style.borderColor = theme.input.border;
+        commit();
+      }}
+      style={{
+        width: "92px",
+        height: "32px",
+        padding: "0 10px",
+        borderRadius: "6px",
+        background: theme.input.bg,
+        border: `1px solid ${theme.input.border}`,
+        color: theme.input.text,
+        fontSize: "12px",
+        fontFamily: mono,
+        fontWeight: 450,
+        outline: "none",
+        caretColor: theme.input.caret,
+      }}
+    />
+  );
+}
+
 function SettingRow({
   title,
   desc,
@@ -728,6 +815,7 @@ export function SettingsView({
   theme,
   accent,
   accentToolbarButtons,
+  zoomPercent,
   uiFontFamily,
   uiFontSize,
   uiFontWeight,
@@ -753,6 +841,7 @@ export function SettingsView({
   onThemeChange,
   onAccentChange,
   onAccentToolbarButtonsChange,
+  onZoomPercentChange,
   onUiFontFamilyChange,
   onUiFontSizeChange,
   onUiFontWeightChange,
@@ -773,6 +862,7 @@ export function SettingsView({
   theme: ThemeMode;
   accent: AccentMode;
   accentToolbarButtons: boolean;
+  zoomPercent: number;
   uiFontFamily: UiFontFamily;
   uiFontSize: number;
   uiFontWeight: UiFontWeight;
@@ -802,6 +892,7 @@ export function SettingsView({
   onThemeChange: (value: ThemeMode) => void;
   onAccentChange: (value: AccentMode) => void;
   onAccentToolbarButtonsChange: (value: boolean) => void;
+  onZoomPercentChange: (value: number) => void;
   onUiFontFamilyChange: (value: UiFontFamily) => void;
   onUiFontSizeChange: (value: number) => void;
   onUiFontWeightChange: (value: UiFontWeight) => void;
@@ -955,6 +1046,13 @@ export function SettingsView({
                 label="Accent toolbar buttons"
               />
             }
+          />
+
+          <SettingRow
+            title="Zoom level"
+            desc={`Electron window zoom. Accepts values between ${ZOOM_PERCENT_MIN}% and ${ZOOM_PERCENT_MAX}%.`}
+            theme={palette}
+            right={<ZoomLevelInput value={zoomPercent} theme={palette} onChange={onZoomPercentChange} />}
           />
 
           <div style={{ paddingTop: "8px", paddingBottom: "4px" }}>

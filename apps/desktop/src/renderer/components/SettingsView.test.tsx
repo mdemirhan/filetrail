@@ -12,6 +12,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       theme="dark"
       accent="gold"
       accentToolbarButtons={true}
+      zoomPercent={100}
       uiFontFamily="lexend"
       uiFontSize={13}
       uiFontWeight={500}
@@ -49,6 +50,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       onThemeChange={() => undefined}
       onAccentChange={() => undefined}
       onAccentToolbarButtonsChange={() => undefined}
+      onZoomPercentChange={() => undefined}
       onUiFontFamilyChange={() => undefined}
       onUiFontSizeChange={() => undefined}
       onUiFontWeightChange={() => undefined}
@@ -124,6 +126,30 @@ describe("SettingsView", () => {
     fireEvent.click(screen.getByLabelText("Accent toolbar buttons"));
 
     expect(onAccentToolbarButtonsChange).toHaveBeenCalledWith(false);
+  });
+
+  it("accepts typed zoom percentages and normalizes them on blur", () => {
+    const onZoomPercentChange = vi.fn();
+    renderSettingsView({ onZoomPercentChange });
+
+    const input = screen.getByLabelText("Zoom level");
+    fireEvent.change(input, { target: { value: "%107" } });
+    fireEvent.blur(input);
+
+    expect(onZoomPercentChange).toHaveBeenCalledWith(107);
+    expect(input).toHaveValue("107%");
+  });
+
+  it("reverts invalid zoom input to the current persisted value", () => {
+    const onZoomPercentChange = vi.fn();
+    renderSettingsView({ zoomPercent: 125, onZoomPercentChange });
+
+    const input = screen.getByLabelText("Zoom level");
+    fireEvent.change(input, { target: { value: "oops" } });
+    fireEvent.blur(input);
+
+    expect(onZoomPercentChange).toHaveBeenCalledWith(100);
+    expect(input).toHaveValue("100%");
   });
 
   it("forwards terminal app edits as trimmed nullable values", () => {

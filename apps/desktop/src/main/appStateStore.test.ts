@@ -15,6 +15,7 @@ describe("appStateStore", () => {
       theme: "tomorrow-night",
       accent: "gold",
       accentToolbarButtons: true,
+      zoomPercent: 100,
       uiFontFamily: "lexend",
       uiFontSize: 13,
       uiFontWeight: 500,
@@ -74,6 +75,7 @@ describe("appStateStore", () => {
       theme: "dark",
       accent: "teal",
       accentToolbarButtons: false,
+      zoomPercent: 115,
       uiFontFamily: "lexend",
       uiFontSize: 14,
       uiFontWeight: 500,
@@ -132,6 +134,7 @@ describe("appStateStore", () => {
       theme: "dark",
       accent: "teal",
       accentToolbarButtons: false,
+      zoomPercent: 115,
       uiFontFamily: "lexend",
       uiFontSize: 14,
       uiFontWeight: 500,
@@ -192,6 +195,7 @@ describe("appStateStore", () => {
     store.updatePreferences({
       accent: "bad-accent" as never,
       accentToolbarButtons: "nope" as never,
+      zoomPercent: 999,
       uiFontFamily: "bad-font" as never,
       uiFontSize: 999,
       uiFontWeight: 123 as never,
@@ -222,6 +226,7 @@ describe("appStateStore", () => {
     });
     expect(reloaded.getPreferences().accent).toBe("gold");
     expect(reloaded.getPreferences().accentToolbarButtons).toBe(true);
+    expect(reloaded.getPreferences().zoomPercent).toBe(150);
     expect(reloaded.getPreferences().treeWidth).toBe(220);
     expect(reloaded.getPreferences().inspectorWidth).toBe(480);
     expect(reloaded.getPreferences().accent).toBe("gold");

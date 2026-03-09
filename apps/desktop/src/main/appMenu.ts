@@ -4,6 +4,9 @@ export type RendererCommand =
   | "focusFileSearch"
   | "openLocationSheet"
   | "openSettings"
+  | "zoomIn"
+  | "zoomOut"
+  | "resetZoom"
   | "openInTerminal"
   | "copyPath"
   | "refreshOrApplySearchSort"
@@ -116,6 +119,35 @@ export function createApplicationMenuTemplate(
             });
           },
         },
+        { type: "separator" },
+        {
+          label: "Zoom In",
+          accelerator: "CommandOrControl+Plus",
+          click: () => {
+            webContents.send("filetrail:command", {
+              type: "zoomIn" satisfies RendererCommand,
+            });
+          },
+        },
+        {
+          label: "Zoom Out",
+          accelerator: "CommandOrControl+-",
+          click: () => {
+            webContents.send("filetrail:command", {
+              type: "zoomOut" satisfies RendererCommand,
+            });
+          },
+        },
+        {
+          label: "Actual Size",
+          accelerator: "CommandOrControl+0",
+          click: () => {
+            webContents.send("filetrail:command", {
+              type: "resetZoom" satisfies RendererCommand,
+            });
+          },
+        },
+        { type: "separator" },
         { role: "toggleDevTools" },
       ],
     },

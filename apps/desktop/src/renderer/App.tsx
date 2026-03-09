@@ -13,6 +13,7 @@ import {
   DEFAULT_DETAIL_COLUMN_VISIBILITY,
   DEFAULT_DETAIL_COLUMN_WIDTHS,
   DEFAULT_APP_PREFERENCES,
+  clampZoomPercent,
   type AccentMode,
   type DetailColumnVisibility,
   type DetailColumnWidths,
@@ -125,6 +126,7 @@ export function App() {
   const [accentToolbarButtons, setAccentToolbarButtons] = useState(
     DEFAULT_APP_PREFERENCES.accentToolbarButtons,
   );
+  const [zoomPercent, setZoomPercent] = useState(DEFAULT_APP_PREFERENCES.zoomPercent);
   const [uiFontFamily, setUiFontFamily] = useState<UiFontFamily>(
     DEFAULT_APP_PREFERENCES.uiFontFamily,
   );
@@ -539,6 +541,7 @@ export function App() {
         theme,
         accent,
         accentToolbarButtons,
+        zoomPercent,
         uiFontFamily,
         uiFontSize,
         uiFontWeight,
@@ -590,6 +593,7 @@ export function App() {
     detailColumnWidths,
     accent,
     accentToolbarButtons,
+    zoomPercent,
     searchIncludeHidden,
     searchResultsSortBy,
     searchResultsSortDirection,
@@ -628,6 +632,7 @@ export function App() {
         setTheme(preferences.theme);
         setAccent(preferences.accent);
         setAccentToolbarButtons(preferences.accentToolbarButtons);
+        setZoomPercent(preferences.zoomPercent);
         setUiFontFamily(preferences.uiFontFamily);
         setUiFontSize(preferences.uiFontSize);
         setUiFontWeight(preferences.uiFontWeight);
@@ -769,6 +774,18 @@ export function App() {
       }
       if (command.type === "openSettings") {
         openSettingsView();
+        return;
+      }
+      if (command.type === "zoomIn") {
+        setZoomPercent((value) => clampZoomPercent(value + 10));
+        return;
+      }
+      if (command.type === "zoomOut") {
+        setZoomPercent((value) => clampZoomPercent(value - 10));
+        return;
+      }
+      if (command.type === "resetZoom") {
+        setZoomPercent(100);
         return;
       }
       if (command.type === "copyPath") {
@@ -2046,6 +2063,8 @@ export function App() {
   }
 
   function resetAppearanceSettings() {
+    setAccent(DEFAULT_APP_PREFERENCES.accent);
+    setZoomPercent(DEFAULT_APP_PREFERENCES.zoomPercent);
     setUiFontFamily(DEFAULT_APP_PREFERENCES.uiFontFamily);
     setUiFontSize(DEFAULT_APP_PREFERENCES.uiFontSize);
     setUiFontWeight(DEFAULT_APP_PREFERENCES.uiFontWeight);
@@ -3205,6 +3224,7 @@ export function App() {
                 theme={theme}
                 accent={accent}
                 accentToolbarButtons={accentToolbarButtons}
+                zoomPercent={zoomPercent}
                 uiFontFamily={uiFontFamily}
                 uiFontSize={uiFontSize}
                 uiFontWeight={uiFontWeight}
@@ -3230,6 +3250,7 @@ export function App() {
                 onThemeChange={setTheme}
                 onAccentChange={setAccent}
                 onAccentToolbarButtonsChange={setAccentToolbarButtons}
+                onZoomPercentChange={setZoomPercent}
                 onUiFontFamilyChange={setUiFontFamily}
                 onUiFontSizeChange={setUiFontSize}
                 onUiFontWeightChange={setUiFontWeight}

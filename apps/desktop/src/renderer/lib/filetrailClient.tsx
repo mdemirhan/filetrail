@@ -12,6 +12,9 @@ export type FiletrailClient = {
         | "toggleInfoRow"
         | "openLocationSheet"
         | "openSettings"
+        | "zoomIn"
+        | "zoomOut"
+        | "resetZoom"
         | "openInTerminal"
         | "copyPath"
         | "refreshOrApplySearchSort";

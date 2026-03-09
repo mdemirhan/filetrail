@@ -18,6 +18,7 @@ import {
   clampFontWeight,
   clampPaneWidth,
   clampTypeaheadDebounceMs,
+  clampZoomPercent,
 } from "../shared/appPreferences";
 
 export type StoredWindowState = {
@@ -233,6 +234,9 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
       typeof record.accentToolbarButtons === "boolean"
         ? record.accentToolbarButtons
         : currentDefaults.accentToolbarButtons,
+    zoomPercent: clampZoomPercent(
+      typeof record.zoomPercent === "number" ? record.zoomPercent : currentDefaults.zoomPercent,
+    ),
     uiFontFamily:
       typeof record.uiFontFamily === "string" &&
       UI_FONT_OPTIONS.some((option) => option.value === record.uiFontFamily)

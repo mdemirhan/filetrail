@@ -48,6 +48,8 @@ export const UI_FONT_OPTIONS = [
 ] as const;
 export const UI_FONT_SIZE_OPTIONS = [12, 13, 14, 15] as const;
 export const UI_FONT_WEIGHT_OPTIONS = [400, 500, 600] as const;
+export const ZOOM_PERCENT_MIN = 75;
+export const ZOOM_PERCENT_MAX = 150;
 export const TYPEAHEAD_DEBOUNCE_OPTIONS = [250, 500, 750, 1000, 1500] as const;
 export const TYPEAHEAD_DEBOUNCE_MIN_MS = 250;
 export const TYPEAHEAD_DEBOUNCE_MAX_MS = 1500;
@@ -80,6 +82,7 @@ export type AppPreferences = {
   theme: ThemeMode;
   accent: AccentMode;
   accentToolbarButtons: boolean;
+  zoomPercent: number;
   uiFontFamily: UiFontFamily;
   uiFontSize: number;
   uiFontWeight: UiFontWeight;
@@ -118,6 +121,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   theme: "tomorrow-night",
   accent: "gold",
   accentToolbarButtons: true,
+  zoomPercent: 100,
   uiFontFamily: "lexend",
   uiFontSize: 13,
   uiFontWeight: 500,
@@ -168,6 +172,10 @@ export function clampFontWeight(
   fallback = options[0] ?? 400,
 ): number {
   return options.includes(value) ? value : fallback;
+}
+
+export function clampZoomPercent(value: number): number {
+  return Math.round(Math.max(ZOOM_PERCENT_MIN, Math.min(ZOOM_PERCENT_MAX, value)));
 }
 
 // Typeahead timing is user-tunable but is kept inside a narrow, predictable range so

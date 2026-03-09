@@ -34,6 +34,7 @@ const debugTimingsEnabled = process.env.FILETRAIL_DEBUG_TIMINGS === "1";
 export async function bootstrapMainProcess(
   appStateStore: AppStateStore,
   launchContext: { startupFolderPath: string | null } = { startupFolderPath: null },
+  onPreferencesChanged?: (preferences: AppPreferences) => void,
 ): Promise<void> {
   // Main owns the worker client so the renderer only ever talks through the IPC contract.
   const workerClient = new ExplorerWorkerClient(resolveExplorerWorkerUrl(), {
@@ -49,9 +50,11 @@ export async function bootstrapMainProcess(
       preferences: appStateStore.getPreferences(),
     }),
     "app:getLaunchContext": () => launchContext,
-    "app:updatePreferences": (payload) => ({
-      preferences: appStateStore.updatePreferences(toPreferencePatch(payload.preferences)),
-    }),
+    "app:updatePreferences": (payload) => {
+      const preferences = appStateStore.updatePreferences(toPreferencePatch(payload.preferences));
+      onPreferencesChanged?.(preferences);
+      return { preferences };
+    },
     "app:clearCaches": () => {
       clearCaches();
       return { ok: true };
@@ -284,6 +287,9 @@ export function toPreferencePatch(
   }
   if (value.accentToolbarButtons !== undefined) {
     patch.accentToolbarButtons = value.accentToolbarButtons;
+  }
+  if (value.zoomPercent !== undefined) {
+    patch.zoomPercent = value.zoomPercent;
   }
   if (value.uiFontFamily !== undefined) {
     patch.uiFontFamily = value.uiFontFamily;

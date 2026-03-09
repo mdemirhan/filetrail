@@ -130,6 +130,7 @@ export const appPreferencesSchema = z.object({
   theme: themeModeSchema,
   accent: accentModeSchema,
   accentToolbarButtons: z.boolean(),
+  zoomPercent: z.number().int().min(75).max(150),
   uiFontFamily: uiFontFamilySchema,
   uiFontSize: z.number().int().min(12).max(15),
   uiFontWeight: z.union([z.literal(400), z.literal(500), z.literal(600)]),

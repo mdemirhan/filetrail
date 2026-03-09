@@ -34,6 +34,12 @@ if (hasSingleInstanceLock) {
       startupFolderPath: resolveStartupFolderPath(process.argv, resolveLaunchWorkingDirectory(), {
         argvOffset: process.defaultApp ? 2 : 1,
       }),
+    }, (preferences) => {
+      const window = mainWindowRef ?? BrowserWindow.getAllWindows()[0] ?? null;
+      if (!window || window.isDestroyed()) {
+        return;
+      }
+      applyWindowZoom(window, preferences.zoomPercent);
     });
     mainWindowRef = createWindow();
 
@@ -92,6 +98,7 @@ function createWindow(): BrowserWindow {
     ...(iconPath ? { icon: iconPath } : {}),
   });
   let saveTimeout: ReturnType<typeof setTimeout> | null = null;
+  applyWindowZoom(mainWindow, appStateStore.getPreferences().zoomPercent);
 
   const persistWindowState = () => {
     if (mainWindow.isDestroyed()) {
@@ -162,6 +169,10 @@ function createWindow(): BrowserWindow {
   mainWindow.on("close", persistWindowState);
 
   return mainWindow;
+}
+
+function applyWindowZoom(mainWindow: BrowserWindow, zoomPercent: number): void {
+  mainWindow.webContents.setZoomFactor(zoomPercent / 100);
 }
 
 function resolveAppIconPath(): string | null {

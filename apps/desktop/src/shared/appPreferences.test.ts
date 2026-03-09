@@ -6,6 +6,7 @@ import {
   clampFontWeight,
   clampPaneWidth,
   clampTypeaheadDebounceMs,
+  clampZoomPercent,
   getAccentLabel,
   getThemeLabel,
   getUiFontLabel,
@@ -17,6 +18,8 @@ describe("appPreferences helpers", () => {
     expect(clampPaneWidth(99.2, 200, 320)).toBe(200);
     expect(clampFontSize(14.6, 12, 15)).toBe(15);
     expect(clampTypeaheadDebounceMs(1600.4, 250, 1500)).toBe(1500);
+    expect(clampZoomPercent(106.8)).toBe(107);
+    expect(clampZoomPercent(500)).toBe(150);
   });
 
   it("keeps font weight within the allowed set", () => {
@@ -47,6 +50,7 @@ describe("appPreferences helpers", () => {
       theme: "tomorrow-night",
       accent: "gold",
       accentToolbarButtons: true,
+      zoomPercent: 100,
       uiFontFamily: "lexend",
       uiFontSize: 13,
       uiFontWeight: 500,
