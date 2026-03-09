@@ -4,50 +4,31 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
-  useState,
 } from "react";
 
-import type {
-  IpcRequest,
-  IpcResponse,
-  WriteOperationAction,
-  WriteOperationProgressEvent,
-} from "@filetrail/contracts";
+import type { IpcRequest, IpcResponse, WriteOperationProgressEvent } from "@filetrail/contracts";
 
 import {
   ACCENT_OPTIONS,
-  type AccentMode,
-  type ApplicationSelection,
   DEFAULT_APP_PREFERENCES,
-  DEFAULT_DETAIL_COLUMN_VISIBILITY,
-  DEFAULT_DETAIL_COLUMN_WIDTHS,
   DEFAULT_TEXT_EDITOR,
   DEFAULT_TERMINAL_APPLICATION,
   type DetailColumnVisibility,
   type DetailColumnWidths,
-  type ExplorerViewMode,
-  type FileActivationAction,
   NOTIFICATION_DURATION_SECONDS_OPTIONS,
-  type OpenWithApplication,
   type SearchResultsFilterScopePreference,
   type SearchResultsSortByPreference,
   type SearchResultsSortDirectionPreference,
   THEME_OPTIONS,
   TYPEAHEAD_DEBOUNCE_OPTIONS,
-  type ThemeMode,
   UI_FONT_OPTIONS,
   UI_FONT_SIZE_OPTIONS,
   UI_FONT_WEIGHT_OPTIONS,
-  type UiFontFamily,
-  type UiFontWeight,
   clampOpenItemLimit,
   clampZoomPercent,
 } from "../shared/appPreferences";
-import { ActionNoticeDialog } from "./components/ActionNoticeDialog";
-import { ContentPane } from "./components/ContentPane";
-import { CopyPasteDialog } from "./components/CopyPasteDialog";
-import { CopyPasteProgressCard } from "./components/CopyPasteProgressCard";
-import { InfoPanel } from "./components/GetInfoPanel";
+import { AppDialogs } from "./components/AppDialogs";
+import { ExplorerWorkspace } from "./components/ExplorerWorkspace";
 import { HelpView } from "./components/HelpView";
 import {
   BROWSE_CONTEXT_MENU_ITEMS,
@@ -57,15 +38,19 @@ import {
   ItemContextMenu,
   SEARCH_CONTEXT_MENU_ITEMS,
 } from "./components/ItemContextMenu";
-import { LocationSheet } from "./components/LocationSheet";
-import { SEARCH_RESULT_ROW_HEIGHT, SearchResultsPane } from "./components/SearchResultsPane";
+import { SEARCH_RESULT_ROW_HEIGHT } from "./components/SearchResultsPane";
 import { SettingsView } from "./components/SettingsView";
-import { TextPromptDialog } from "./components/TextPromptDialog";
-import { ToastViewport } from "./components/ToastViewport";
-import { ToolbarIcon } from "./components/ToolbarIcon";
-import { type TreeNodeState, TreePane } from "./components/TreePane";
+import { type TreeNodeState } from "./components/TreePane";
+import { useAppPreferences } from "./hooks/useAppPreferences";
 import { useElementSize } from "./hooks/useElementSize";
+import { useExplorerNavigation } from "./hooks/useExplorerNavigation";
 import { useExplorerPaneLayout } from "./hooks/useExplorerPaneLayout";
+import { useSearchSession } from "./hooks/useSearchSession";
+import {
+  type ContextMenuState,
+  type WriteOperationCardState,
+  useWriteOperations,
+} from "./hooks/useWriteOperations";
 import {
   type ContentSelectionState,
   EMPTY_CONTENT_SELECTION,
@@ -119,7 +104,7 @@ import {
   resolveOpenSelectionPaths,
 } from "./lib/shortcutTargets";
 import { resolveStartupNavigation } from "./lib/startupNavigation";
-import { applyAppearance, getThemeAppearanceDefaults } from "./lib/theme";
+import { getThemeAppearanceDefaults } from "./lib/theme";
 import { type ToastEntry, type ToastKind, createToastEntry, enqueueToast } from "./lib/toasts";
 import { getTreeKeyboardAction } from "./lib/treeView";
 import {
@@ -133,37 +118,10 @@ type DirectoryEntryMetadata = IpcResponse<"directory:getMetadataBatch">["items"]
 type SearchResultItem = IpcResponse<"search:getUpdate">["items"][number];
 type SearchPatternMode = IpcRequest<"search:start">["patternMode"];
 type SearchMatchScope = IpcRequest<"search:start">["matchScope"];
-type SearchJobStatus = IpcResponse<"search:getUpdate">["status"];
 type SearchResultsFilterScope = SearchResultsFilterScopePreference;
 type SearchResultsSortBy = SearchResultsSortByPreference;
 type SearchResultsSortDirection = SearchResultsSortDirectionPreference;
-type ContextMenuState = {
-  x: number;
-  y: number;
-  paths: string[];
-  targetPath: string | null;
-  source: "browse" | "search";
-  scope: "selection" | "background";
-};
 type CopyPastePlan = IpcResponse<"copyPaste:plan">;
-type CopyPasteDialogState =
-  | {
-      type: "plan";
-      plan: CopyPastePlan;
-      action: "paste" | "move_to" | "duplicate";
-      clearClipboardOnStart: boolean;
-    }
-  | null;
-type WriteOperationCardState = {
-  action: WriteOperationAction;
-  stage: "starting" | "queued" | "running";
-  targetPath: string | null;
-  completedItemCount: number;
-  totalItemCount: number;
-  completedByteCount: number;
-  totalBytes: number | null;
-  currentSourcePath: string | null;
-};
 type RawShortcutBinding = {
   id: RawExplorerShortcutId;
   matches: (event: KeyboardEvent) => boolean;
@@ -198,168 +156,221 @@ export function App() {
   type SortDirection = IpcRequest<"directory:getSnapshot">["sortDirection"];
 
   const client = useFiletrailClient();
-  const [preferencesReady, setPreferencesReady] = useState(false);
-  const [theme, setTheme] = useState<ThemeMode>(DEFAULT_APP_PREFERENCES.theme);
-  const [accent, setAccent] = useState<AccentMode>(DEFAULT_APP_PREFERENCES.accent);
-  const [accentToolbarButtons, setAccentToolbarButtons] = useState(
-    DEFAULT_APP_PREFERENCES.accentToolbarButtons,
-  );
-  const [zoomPercent, setZoomPercent] = useState(DEFAULT_APP_PREFERENCES.zoomPercent);
-  const [uiFontFamily, setUiFontFamily] = useState<UiFontFamily>(
-    DEFAULT_APP_PREFERENCES.uiFontFamily,
-  );
-  const [uiFontSize, setUiFontSize] = useState(DEFAULT_APP_PREFERENCES.uiFontSize);
-  const [uiFontWeight, setUiFontWeight] = useState<UiFontWeight>(
-    DEFAULT_APP_PREFERENCES.uiFontWeight,
-  );
-  const [textPrimaryOverride, setTextPrimaryOverride] = useState(
-    DEFAULT_APP_PREFERENCES.textPrimaryOverride,
-  );
-  const [textSecondaryOverride, setTextSecondaryOverride] = useState(
-    DEFAULT_APP_PREFERENCES.textSecondaryOverride,
-  );
-  const [textMutedOverride, setTextMutedOverride] = useState(
-    DEFAULT_APP_PREFERENCES.textMutedOverride,
-  );
-  const [mainView, setMainView] = useState<"explorer" | "help" | "settings">("explorer");
-  const [treeRootPath, setTreeRootPath] = useState("");
-  const [homePath, setHomePath] = useState("");
-  const [treeNodes, setTreeNodes] = useState<Record<string, TreeNodeState>>({});
-  const [currentPath, setCurrentPath] = useState("");
-  const [currentEntries, setCurrentEntries] = useState<DirectoryEntry[]>([]);
-  const [metadataByPath, setMetadataByPath] = useState<Record<string, DirectoryEntryMetadata>>({});
-  const [directoryLoading, setDirectoryLoading] = useState(false);
-  const [directoryError, setDirectoryError] = useState<string | null>(null);
-  const [searchDraftQuery, setSearchDraftQuery] = useState("");
-  const [searchCommittedQuery, setSearchCommittedQuery] = useState("");
-  const [searchRootPath, setSearchRootPath] = useState("");
-  const [searchPatternMode, setSearchPatternMode] = useState<SearchPatternMode>(
-    DEFAULT_APP_PREFERENCES.searchPatternMode,
-  );
-  const [searchMatchScope, setSearchMatchScope] = useState<SearchMatchScope>(
-    DEFAULT_APP_PREFERENCES.searchMatchScope,
-  );
-  const [searchRecursive, setSearchRecursive] = useState(DEFAULT_APP_PREFERENCES.searchRecursive);
-  const [searchIncludeHidden, setSearchIncludeHidden] = useState(
-    DEFAULT_APP_PREFERENCES.searchIncludeHidden,
-  );
-  const [searchResultsSortBy, setSearchResultsSortBy] = useState<SearchResultsSortBy>(
-    DEFAULT_APP_PREFERENCES.searchResultsSortBy,
-  );
-  const [searchResultsSortDirection, setSearchResultsSortDirection] =
-    useState<SearchResultsSortDirection>(DEFAULT_APP_PREFERENCES.searchResultsSortDirection);
-  const [searchPopoverOpen, setSearchPopoverOpen] = useState(false);
-  const [searchResultsVisible, setSearchResultsVisible] = useState(false);
-  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
-  const [searchResultsScrollTop, setSearchResultsScrollTop] = useState(0);
-  const [searchResultsFilterQuery, setSearchResultsFilterQuery] = useState("");
-  const [debouncedSearchResultsFilterQuery, setDebouncedSearchResultsFilterQuery] = useState("");
-  const [searchResultsFilterScope, setSearchResultsFilterScope] =
-    useState<SearchResultsFilterScope>(DEFAULT_APP_PREFERENCES.searchResultsFilterScope);
-  const [searchStatus, setSearchStatus] = useState<SearchJobStatus | "idle">("idle");
-  const [searchError, setSearchError] = useState<string | null>(null);
-  const [searchTruncated, setSearchTruncated] = useState(false);
-  const [includeHidden, setIncludeHidden] = useState(DEFAULT_APP_PREFERENCES.includeHidden);
-  const [viewMode, setViewMode] = useState<ExplorerViewMode>(DEFAULT_APP_PREFERENCES.viewMode);
-  const [foldersFirst, setFoldersFirst] = useState(DEFAULT_APP_PREFERENCES.foldersFirst);
-  const [compactListView, setCompactListView] = useState(DEFAULT_APP_PREFERENCES.compactListView);
-  const [compactDetailsView, setCompactDetailsView] = useState(
-    DEFAULT_APP_PREFERENCES.compactDetailsView,
-  );
-  const [compactTreeView, setCompactTreeView] = useState(DEFAULT_APP_PREFERENCES.compactTreeView);
-  const [highlightHoveredItems, setHighlightHoveredItems] = useState(
-    DEFAULT_APP_PREFERENCES.highlightHoveredItems,
-  );
-  const [detailColumns, setDetailColumns] = useState<DetailColumnVisibility>(
-    DEFAULT_DETAIL_COLUMN_VISIBILITY,
-  );
-  const [detailColumnWidths, setDetailColumnWidths] = useState<DetailColumnWidths>(
-    DEFAULT_DETAIL_COLUMN_WIDTHS,
-  );
-  const [tabSwitchesExplorerPanes, setTabSwitchesExplorerPanes] = useState(
-    DEFAULT_APP_PREFERENCES.tabSwitchesExplorerPanes,
-  );
-  const [typeaheadEnabled, setTypeaheadEnabled] = useState(
-    DEFAULT_APP_PREFERENCES.typeaheadEnabled,
-  );
-  const [typeaheadDebounceMs, setTypeaheadDebounceMs] = useState(
-    DEFAULT_APP_PREFERENCES.typeaheadDebounceMs,
-  );
-  const [notificationsEnabled, setNotificationsEnabled] = useState(
-    DEFAULT_APP_PREFERENCES.notificationsEnabled,
-  );
-  const [notificationDurationSeconds, setNotificationDurationSeconds] = useState(
-    DEFAULT_APP_PREFERENCES.notificationDurationSeconds,
-  );
-  const [restoreLastVisitedFolderOnStartup, setRestoreLastVisitedFolderOnStartup] = useState(
-    DEFAULT_APP_PREFERENCES.restoreLastVisitedFolderOnStartup,
-  );
-  const [terminalApp, setTerminalApp] = useState(DEFAULT_APP_PREFERENCES.terminalApp);
-  const [defaultTextEditor, setDefaultTextEditor] = useState<ApplicationSelection>(
-    DEFAULT_APP_PREFERENCES.defaultTextEditor,
-  );
-  const [openWithApplications, setOpenWithApplications] = useState<OpenWithApplication[]>(
-    DEFAULT_APP_PREFERENCES.openWithApplications,
-  );
-  const [fileActivationAction, setFileActivationAction] = useState<FileActivationAction>(
-    DEFAULT_APP_PREFERENCES.fileActivationAction,
-  );
-  const [openItemLimit, setOpenItemLimit] = useState(DEFAULT_APP_PREFERENCES.openItemLimit);
-  const [sortBy, setSortBy] = useState<SortBy>("name");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
-  const [infoPanelOpen, setInfoPanelOpen] = useState(DEFAULT_APP_PREFERENCES.propertiesOpen);
-  const [infoRowOpen, setInfoRowOpen] = useState(DEFAULT_APP_PREFERENCES.detailRowOpen);
-  const [contentSelection, setContentSelection] =
-    useState<ContentSelectionState>(EMPTY_CONTENT_SELECTION);
-  const [historyPaths, setHistoryPaths] = useState<string[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
-  const [visiblePaths, setVisiblePaths] = useState<string[]>([]);
-  const [contentColumns, setContentColumns] = useState(1);
-  const [getInfoLoading, setGetInfoLoading] = useState(false);
-  const [getInfoItem, setGetInfoItem] = useState<IpcResponse<"item:getProperties">["item"] | null>(
-    null,
-  );
-  const [locationSheetOpen, setLocationSheetOpen] = useState(false);
-  const [locationSubmitting, setLocationSubmitting] = useState(false);
-  const [locationError, setLocationError] = useState<string | null>(null);
-  const [focusedPane, setFocusedPane] = useState<"tree" | "content" | null>(null);
-  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
-  const [typeaheadQuery, setTypeaheadQuery] = useState("");
-  const [typeaheadPane, setTypeaheadPane] = useState<"tree" | "content" | null>(null);
-  const [contextMenuState, setContextMenuState] = useState<ContextMenuState | null>(null);
-  const [actionNotice, setActionNotice] = useState<{
-    title: string;
-    message: string;
-  } | null>(null);
-  const [toasts, setToasts] = useState<ToastEntry[]>([]);
-  const [copyPasteClipboard, setCopyPasteClipboardState] = useState<CopyPasteClipboardState>(
-    EMPTY_COPY_PASTE_CLIPBOARD,
-  );
-  const [copyPasteDialogState, setCopyPasteDialogState] = useState<CopyPasteDialogState>(null);
-  const [writeOperationCardState, setWriteOperationCardState] =
-    useState<WriteOperationCardState | null>(null);
-  const [writeOperationProgressEvent, setWriteOperationProgressEvent] =
-    useState<WriteOperationProgressEvent | null>(null);
-  const [renameDialogState, setRenameDialogState] = useState<{
-    sourcePath: string;
-    currentName: string;
-    error: string | null;
-  } | null>(null);
-  const [newFolderDialogState, setNewFolderDialogState] = useState<{
-    parentDirectoryPath: string;
-    initialName: string;
-    error: string | null;
-  } | null>(null);
-  const [moveDialogState, setMoveDialogState] = useState<{
-    sourcePaths: string[];
-    currentPath: string;
-    submitting: boolean;
-    error: string | null;
-  } | null>(null);
-  const [restoredPaneWidths, setRestoredPaneWidths] = useState<{
-    treeWidth: number;
-    inspectorWidth: number;
-  } | null>(null);
+  const {
+    preferencesReady,
+    setPreferencesReady,
+    theme,
+    setTheme,
+    accent,
+    setAccent,
+    accentToolbarButtons,
+    setAccentToolbarButtons,
+    zoomPercent,
+    setZoomPercent,
+    uiFontFamily,
+    setUiFontFamily,
+    uiFontSize,
+    setUiFontSize,
+    uiFontWeight,
+    setUiFontWeight,
+    textPrimaryOverride,
+    setTextPrimaryOverride,
+    textSecondaryOverride,
+    setTextSecondaryOverride,
+    textMutedOverride,
+    setTextMutedOverride,
+    includeHidden,
+    setIncludeHidden,
+    viewMode,
+    setViewMode,
+    foldersFirst,
+    setFoldersFirst,
+    compactListView,
+    setCompactListView,
+    compactDetailsView,
+    setCompactDetailsView,
+    compactTreeView,
+    setCompactTreeView,
+    highlightHoveredItems,
+    setHighlightHoveredItems,
+    detailColumns,
+    setDetailColumns,
+    detailColumnWidths,
+    setDetailColumnWidths,
+    tabSwitchesExplorerPanes,
+    setTabSwitchesExplorerPanes,
+    typeaheadEnabled,
+    setTypeaheadEnabled,
+    typeaheadDebounceMs,
+    setTypeaheadDebounceMs,
+    notificationsEnabled,
+    setNotificationsEnabled,
+    notificationDurationSeconds,
+    setNotificationDurationSeconds,
+    restoreLastVisitedFolderOnStartup,
+    setRestoreLastVisitedFolderOnStartup,
+    terminalApp,
+    setTerminalApp,
+    defaultTextEditor,
+    setDefaultTextEditor,
+    openWithApplications,
+    setOpenWithApplications,
+    fileActivationAction,
+    setFileActivationAction,
+    openItemLimit,
+    setOpenItemLimit,
+    resetAppearanceSettings,
+  } = useAppPreferences();
+  const {
+    mainView,
+    setMainView,
+    treeRootPath,
+    setTreeRootPath,
+    homePath,
+    setHomePath,
+    treeNodes,
+    setTreeNodes,
+    currentPath,
+    setCurrentPath,
+    currentEntries,
+    setCurrentEntries,
+    metadataByPath,
+    setMetadataByPath,
+    directoryLoading,
+    setDirectoryLoading,
+    directoryError,
+    setDirectoryError,
+    sortBy,
+    setSortBy,
+    sortDirection,
+    setSortDirection,
+    contentSelection,
+    setContentSelection,
+    historyPaths,
+    setHistoryPaths,
+    historyIndex,
+    setHistoryIndex,
+    visiblePaths,
+    setVisiblePaths,
+    contentColumns,
+    setContentColumns,
+    getInfoLoading,
+    setGetInfoLoading,
+    getInfoItem,
+    setGetInfoItem,
+    locationSheetOpen,
+    setLocationSheetOpen,
+    locationSubmitting,
+    setLocationSubmitting,
+    locationError,
+    setLocationError,
+    focusedPane,
+    setFocusedPane,
+    themeMenuOpen,
+    setThemeMenuOpen,
+    typeaheadQuery,
+    setTypeaheadQuery,
+    typeaheadPane,
+    setTypeaheadPane,
+    infoPanelOpen,
+    setInfoPanelOpen,
+    infoRowOpen,
+    setInfoRowOpen,
+    restoredPaneWidths,
+    setRestoredPaneWidths,
+    directoryRequestRef,
+    getInfoRequestRef,
+    treeRequestRef,
+    treeNodesRef,
+    treeRootPathRef,
+    metadataCacheRef,
+    metadataInflightRef,
+    currentPathRef,
+    isSearchModeRef,
+    selectedPathsInViewOrderRef,
+    selectedEntryRef,
+    lastExplorerFocusPaneRef,
+  } = useExplorerNavigation();
+  const {
+    searchDraftQuery,
+    setSearchDraftQuery,
+    searchCommittedQuery,
+    setSearchCommittedQuery,
+    searchRootPath,
+    setSearchRootPath,
+    searchPatternMode,
+    setSearchPatternMode,
+    searchMatchScope,
+    setSearchMatchScope,
+    searchRecursive,
+    setSearchRecursive,
+    searchIncludeHidden,
+    setSearchIncludeHidden,
+    searchResultsSortBy,
+    setSearchResultsSortBy,
+    searchResultsSortDirection,
+    setSearchResultsSortDirection,
+    searchPopoverOpen,
+    setSearchPopoverOpen,
+    searchResultsVisible,
+    setSearchResultsVisible,
+    searchResults,
+    setSearchResults,
+    searchResultsScrollTop,
+    setSearchResultsScrollTop,
+    searchResultsFilterQuery,
+    setSearchResultsFilterQuery,
+    debouncedSearchResultsFilterQuery,
+    setDebouncedSearchResultsFilterQuery,
+    searchResultsFilterScope,
+    setSearchResultsFilterScope,
+    searchStatus,
+    setSearchStatus,
+    searchError,
+    setSearchError,
+    searchTruncated,
+    setSearchTruncated,
+    searchPollTimeoutRef,
+    searchSessionRef,
+    searchJobIdRef,
+    searchPointerIntentRef,
+    searchCommittedQueryRef,
+    searchResultsVisibleRef,
+    searchResultsSortByRef,
+    searchResultsSortDirectionRef,
+    browseSelectionRef,
+    cachedSearchSelectionRef,
+  } = useSearchSession();
+  const {
+    contextMenuState,
+    setContextMenuState,
+    actionNotice,
+    setActionNotice,
+    toasts,
+    setToasts,
+    copyPasteClipboard,
+    setCopyPasteClipboardState,
+    copyPasteDialogState,
+    setCopyPasteDialogState,
+    writeOperationCardState,
+    setWriteOperationCardState,
+    writeOperationProgressEvent,
+    setWriteOperationProgressEvent,
+    renameDialogState,
+    setRenameDialogState,
+    newFolderDialogState,
+    setNewFolderDialogState,
+    moveDialogState,
+    setMoveDialogState,
+    actionNoticeReturnFocusPaneRef,
+    activeWriteOperationIdRef,
+    nextPasteAttemptIdRef,
+    pendingPasteAttemptRef,
+    nextToastIdRef,
+    copyPasteClipboardRef,
+    writeOperationLockedRef,
+    pendingPasteSelectionRef,
+  } = useWriteOperations();
   const treePaneRef = useRef<HTMLElement | null>(null);
   const contentPaneRef = useRef<HTMLElement | null>(null);
   const toolbarRef = useRef<HTMLElement | null>(null);
@@ -368,51 +379,9 @@ export function App() {
   const searchShellRef = useRef<HTMLDivElement | null>(null);
   const themeMenuRef = useRef<HTMLDivElement | null>(null);
   const themeButtonRef = useRef<HTMLButtonElement | null>(null);
-  const directoryRequestRef = useRef(0);
-  const getInfoRequestRef = useRef(0);
-  const searchPollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const searchSessionRef = useRef(0);
-  const searchJobIdRef = useRef<string | null>(null);
-  const searchPointerIntentRef = useRef(false);
-  const searchCommittedQueryRef = useRef("");
-  const searchResultsRef = useRef<SearchResultItem[]>([]);
-  const searchResultsVisibleRef = useRef(false);
-  const searchResultsSortByRef = useRef<SearchResultsSortBy>(
-    DEFAULT_APP_PREFERENCES.searchResultsSortBy,
-  );
-  const searchResultsSortDirectionRef = useRef<SearchResultsSortDirection>(
-    DEFAULT_APP_PREFERENCES.searchResultsSortDirection,
-  );
-  const browseSelectionRef = useRef<ContentSelectionState>(EMPTY_CONTENT_SELECTION);
-  const cachedSearchSelectionRef = useRef<ContentSelectionState>(EMPTY_CONTENT_SELECTION);
-  const treeRequestRef = useRef<Record<string, number>>({});
-  const treeNodesRef = useRef<Record<string, TreeNodeState>>({});
-  const treeRootPathRef = useRef(treeRootPath);
-  const metadataCacheRef = useRef<Map<string, DirectoryEntryMetadata>>(new Map());
-  const metadataInflightRef = useRef<Set<string>>(new Set());
   const typeaheadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typeaheadQueryRef = useRef("");
   const typeaheadPaneRef = useRef<"tree" | "content" | null>(null);
-  const actionNoticeReturnFocusPaneRef = useRef<"tree" | "content" | null>(null);
-  const lastExplorerFocusPaneRef = useRef<"tree" | "content" | null>(null);
-  const activeWriteOperationIdRef = useRef<string | null>(null);
-  const nextPasteAttemptIdRef = useRef(0);
-  const pendingPasteAttemptRef = useRef<{
-    id: number;
-    phase: "planning" | "starting";
-    cancelled: boolean;
-  } | null>(null);
-  const nextToastIdRef = useRef(0);
-  const copyPasteClipboardRef = useRef<CopyPasteClipboardState>(EMPTY_COPY_PASTE_CLIPBOARD);
-  const writeOperationLockedRef = useRef(false);
-  const currentPathRef = useRef(currentPath);
-  const isSearchModeRef = useRef(false);
-  const selectedPathsInViewOrderRef = useRef<string[]>([]);
-  const selectedEntryRef = useRef<DirectoryEntry | null>(null);
-  const pendingPasteSelectionRef = useRef<{
-    directoryPath: string;
-    selectedPaths: string[];
-  } | null>(null);
   const panes = useExplorerPaneLayout({
     initialTreeWidth: DEFAULT_APP_PREFERENCES.treeWidth,
     initialInspectorWidth: DEFAULT_APP_PREFERENCES.inspectorWidth,
@@ -629,35 +598,6 @@ export function App() {
   }, [treeNodes]);
 
   useEffect(() => {
-    searchResultsVisibleRef.current = searchResultsVisible;
-  }, [searchResultsVisible]);
-
-  useEffect(() => {
-    searchCommittedQueryRef.current = searchCommittedQuery;
-  }, [searchCommittedQuery]);
-
-  useEffect(() => {
-    searchResultsRef.current = searchResults;
-  }, [searchResults]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setDebouncedSearchResultsFilterQuery(searchResultsFilterQuery);
-    }, 500);
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [searchResultsFilterQuery]);
-
-  useEffect(() => {
-    searchResultsSortByRef.current = searchResultsSortBy;
-  }, [searchResultsSortBy]);
-
-  useEffect(() => {
-    searchResultsSortDirectionRef.current = searchResultsSortDirection;
-  }, [searchResultsSortDirection]);
-
-  useEffect(() => {
     setContentSelection((current) => {
       const nextSelection = sanitizeContentSelection(current, activeContentEntries);
       syncContentSelectionRefs(nextSelection, activeContentEntries);
@@ -824,30 +764,6 @@ export function App() {
     locationDialogOpen,
     mainView,
     preferencesReady,
-  ]);
-
-  useEffect(() => {
-    applyAppearance({
-      theme,
-      accent,
-      accentToolbarButtons,
-      uiFontFamily,
-      uiFontSize,
-      uiFontWeight,
-      textPrimaryOverride,
-      textSecondaryOverride,
-      textMutedOverride,
-    });
-  }, [
-    textMutedOverride,
-    textPrimaryOverride,
-    textSecondaryOverride,
-    accent,
-    accentToolbarButtons,
-    theme,
-    uiFontFamily,
-    uiFontSize,
-    uiFontWeight,
   ]);
 
   useEffect(() => {
@@ -3685,17 +3601,6 @@ export function App() {
     }
   }
 
-  function resetAppearanceSettings() {
-    setAccent(DEFAULT_APP_PREFERENCES.accent);
-    setZoomPercent(DEFAULT_APP_PREFERENCES.zoomPercent);
-    setUiFontFamily(DEFAULT_APP_PREFERENCES.uiFontFamily);
-    setUiFontSize(DEFAULT_APP_PREFERENCES.uiFontSize);
-    setUiFontWeight(DEFAULT_APP_PREFERENCES.uiFontWeight);
-    setTextPrimaryOverride(null);
-    setTextSecondaryOverride(null);
-    setTextMutedOverride(null);
-  }
-
   function clearTypeahead() {
     if (typeaheadTimeoutRef.current) {
       clearTimeout(typeaheadTimeoutRef.current);
@@ -4701,519 +4606,258 @@ export function App() {
   return (
     <main className="app-shell">
       {mainView === "explorer" ? (
-        <section className="workspace explorer-workspace">
-          <header ref={toolbarRef} className="window-toolbar">
-            <div className="window-toolbar-brand">
-              <span className="window-toolbar-title">File Trail</span>
-            </div>
-            <div className="titlebar-actions" data-layout={explorerToolbarLayout}>
-              <div className="toolbar-group toolbar-group-nav">
-                <button
-                  type="button"
-                  className="tb-btn tb-btn-icon toolbar-btn-muted"
-                  disabled={!canGoBack}
-                  onClick={goBack}
-                  title="Back (Cmd+Left)"
-                  aria-label="Back"
-                >
-                  <ToolbarIcon name="back" />
-                </button>
-                <button
-                  type="button"
-                  className="tb-btn tb-btn-icon toolbar-btn-muted"
-                  disabled={!canGoForward}
-                  onClick={goForward}
-                  title="Forward (Cmd+Right)"
-                  aria-label="Forward"
-                >
-                  <ToolbarIcon name="forward" />
-                </button>
-                {explorerToolbarLayout !== "minimal" ? (
-                  <button
-                    type="button"
-                    className="tb-btn tb-btn-icon"
-                    disabled={!parentDirectoryPath(currentPath)}
-                    onClick={navigateToParentFolder}
-                    title="Enclosing Folder (Cmd+Up)"
-                    aria-label="Enclosing Folder"
-                  >
-                    <ToolbarIcon name="up" />
-                  </button>
-                ) : null}
-                {explorerToolbarLayout !== "minimal" ? (
-                  <button
-                    type="button"
-                    className="tb-btn tb-btn-icon"
-                    disabled={focusedPane !== "tree" && !selectedEntry}
-                    onClick={navigateDownAction}
-                    title="Open selected item (Cmd+Down)"
-                    aria-label="Open selected item"
-                  >
-                    <ToolbarIcon name="down" />
-                  </button>
-                ) : null}
-              </div>
-              {explorerToolbarLayout !== "minimal" ? (
-                <>
-                  <span className="titlebar-divider" aria-hidden />
-                  <div className="toolbar-group">
-                    <button
-                      type="button"
-                      className="tb-btn tb-btn-icon"
-                      onClick={() => void refreshDirectory()}
-                      title="Refresh current folder (Cmd+R)"
-                      aria-label="Refresh current folder"
-                    >
-                      <ToolbarIcon name="refresh" />
-                    </button>
-                  </div>
-                </>
-              ) : null}
-              <span className="titlebar-divider" aria-hidden />
-              <div className="toolbar-group toolbar-group-view">
-                <fieldset className="toolbar-segmented">
-                  <legend className="sr-only">View mode</legend>
-                  <button
-                    type="button"
-                    className={
-                      viewMode === "list" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"
-                    }
-                    onClick={() => setViewMode("list")}
-                    title="List view"
-                    aria-label="List view"
-                  >
-                    <ToolbarIcon name="list" />
-                  </button>
-                  <button
-                    type="button"
-                    className={
-                      viewMode === "details" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"
-                    }
-                    onClick={() => setViewMode("details")}
-                    title="Details view"
-                    aria-label="Details view"
-                  >
-                    <ToolbarIcon name="details" />
-                  </button>
-                </fieldset>
-              </div>
-              {explorerToolbarLayout !== "minimal" ? (
-                <>
-                  <span className="titlebar-divider" aria-hidden />
-                  <div className="toolbar-group">
-                    <fieldset className="toolbar-select-group">
-                      <legend className="sr-only">Sorting controls</legend>
-                      <button
-                        type="button"
-                        className="tb-btn tb-btn-icon"
-                        onClick={() => handleSortChange(sortBy)}
-                        title={sortDirection === "asc" ? "Ascending sort" : "Descending sort"}
-                        aria-label={sortDirection === "asc" ? "Ascending sort" : "Descending sort"}
-                      >
-                        <ToolbarIcon name={sortDirection === "asc" ? "sortAsc" : "sortDesc"} />
-                      </button>
-                      <select
-                        className="toolbar-select"
-                        value={sortBy}
-                        onChange={(event) => handleSortChange(event.currentTarget.value as SortBy)}
-                        title="Sort by"
-                        aria-label="Sort by"
-                      >
-                        <option value="name">Name</option>
-                        <option value="size">Size</option>
-                        <option value="modified">Date Modified</option>
-                        <option value="kind">Kind</option>
-                      </select>
-                    </fieldset>
-                  </div>
-                </>
-              ) : null}
-              <div className="toolbar-search-slot">
-                <div
-                  ref={searchShellRef}
-                  className={`toolbar-search-shell${searchPopoverOpen ? " active" : ""}`}
-                  onBlurCapture={(event) => {
-                    const nextTarget = event.relatedTarget;
-                    if (
-                      nextTarget instanceof Node &&
-                      (searchShellRef.current?.contains(nextTarget) ?? false)
-                    ) {
-                      return;
-                    }
-                    setSearchPopoverOpen(false);
-                  }}
-                >
-                  <form
-                    className="toolbar-search"
-                    aria-label="Find files in current folder"
-                    onMouseDownCapture={(event) => {
-                      const target = event.target;
-                      if (!(target instanceof HTMLElement)) {
-                        return;
-                      }
-                      if (target.closest(".toolbar-search-clear") !== null) {
-                        return;
-                      }
-                      searchPointerIntentRef.current = true;
-                      setFocusedPane(null);
-                      clearTypeahead();
-                      window.requestAnimationFrame(() => {
-                        searchInputRef.current?.focus();
-                        searchPointerIntentRef.current = false;
-                      });
-                    }}
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      void startSearch(searchDraftQuery).finally(() => {
-                        dismissFileSearch({ focusBelow: true });
-                      });
-                    }}
-                  >
-                    <div className="toolbar-search-row">
-                      <span className="toolbar-search-icon">
-                        <ToolbarIcon name="search" />
-                      </span>
-                      <input
-                        ref={searchInputRef}
-                        className="toolbar-search-input"
-                        type="text"
-                        value={searchDraftQuery}
-                        onFocus={() => {
-                          searchPointerIntentRef.current = false;
-                          setFocusedPane(null);
-                          clearTypeahead();
-                          setSearchPopoverOpen(true);
-                          showCachedSearchResults();
-                        }}
-                        onChange={(event) => {
-                          const nextValue = event.currentTarget.value;
-                          setSearchDraftQuery(nextValue);
-                          if (nextValue.trim().length === 0) {
-                            void clearCommittedSearch();
-                          }
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key !== "Escape") {
-                            return;
-                          }
-                          event.preventDefault();
-                          event.stopPropagation();
-                          dismissFileSearch({ focusBelow: true });
-                        }}
-                        placeholder="Find files…"
-                        spellCheck={false}
-                      />
-                      {searchDraftQuery.trim().length > 0 ? (
-                        <button
-                          type="button"
-                          className="toolbar-search-clear"
-                          aria-label="Clear file search"
-                          onMouseDown={(event) => {
-                            event.preventDefault();
-                          }}
-                          onClick={() => {
-                            setSearchDraftQuery("");
-                            void clearCommittedSearch().finally(() => {
-                              focusFileSearch(false);
-                            });
-                          }}
-                        >
-                          <ToolbarIcon name="close" />
-                        </button>
-                      ) : (
-                        <span className="toolbar-search-shortcut" aria-hidden="true">
-                          ⌘F
-                        </span>
-                      )}
-                    </div>
-                  </form>
-                  {searchPopoverOpen ? (
-                    <div className="toolbar-search-popover">
-                      <div className="toolbar-search-options">
-                        <div className="toolbar-search-option-row toolbar-search-option-row-primary">
-                          <label className="toolbar-search-listbox">
-                            <span className="toolbar-search-listbox-label">Pattern</span>
-                            <select
-                              className="toolbar-search-select"
-                              value={searchPatternMode}
-                              onChange={(event) =>
-                                updateSearchPatternMode(
-                                  event.currentTarget.value as SearchPatternMode,
-                                )
-                              }
-                              aria-label="Search pattern mode"
-                            >
-                              <option value="regex">Regex</option>
-                              <option value="glob">Glob</option>
-                            </select>
-                          </label>
-                          <label className="toolbar-search-listbox">
-                            <span className="toolbar-search-listbox-label">Match</span>
-                            <select
-                              className="toolbar-search-select"
-                              value={searchMatchScope}
-                              onChange={(event) =>
-                                updateSearchMatchScope(
-                                  event.currentTarget.value as SearchMatchScope,
-                                )
-                              }
-                              aria-label="Search match scope"
-                            >
-                              <option value="name">Name</option>
-                              <option value="path">Path</option>
-                            </select>
-                          </label>
-                        </div>
-                        <div className="toolbar-search-option-row toolbar-search-option-row-secondary">
-                          <button
-                            type="button"
-                            className={
-                              searchRecursive ? "toolbar-search-pill active" : "toolbar-search-pill"
-                            }
-                            onClick={() => updateSearchRecursive(!searchRecursive)}
-                            aria-pressed={searchRecursive}
-                          >
-                            Recursive
-                          </button>
-                          <button
-                            type="button"
-                            className={
-                              searchIncludeHidden
-                                ? "toolbar-search-pill active"
-                                : "toolbar-search-pill"
-                            }
-                            onClick={() => updateSearchIncludeHidden(!searchIncludeHidden)}
-                            aria-pressed={searchIncludeHidden}
-                          >
-                            Hidden
-                          </button>
-                        </div>
-                      </div>
-                      <div className="toolbar-search-meta">
-                        <span className="toolbar-search-status">Press Enter to search</span>
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          </header>
-          {!preferencesReady ||
-          (restoredPaneWidths !== null &&
-            (panes.treeWidth !== restoredPaneWidths.treeWidth ||
-              panes.inspectorWidth !== restoredPaneWidths.inspectorWidth)) ? (
-            <section className="workspace-body workspace-loading" />
-          ) : (
-            <section
-              className="workspace-body tomorrow-night-layout"
-              style={{
-                gridTemplateColumns: `${panes.treeWidth}px ${EXPLORER_LAYOUT.resizerWidth}px minmax(0, 1fr)${
-                  infoPanelOpen
-                    ? ` ${EXPLORER_LAYOUT.resizerWidth}px ${panes.inspectorWidth}px`
-                    : ""
-                }`,
-              }}
-            >
-              <TreePane
-                paneRef={treePaneRef}
-                isFocused={focusedPane === "tree"}
-                homePath={homePath}
+        <ExplorerWorkspace
+          preferencesReady={preferencesReady}
+          restoredPaneWidths={restoredPaneWidths}
+          treeWidth={panes.treeWidth}
+          inspectorWidth={panes.inspectorWidth}
+          beginResize={panes.beginResize}
+          infoPanelOpen={infoPanelOpen}
+          toolbarRef={toolbarRef}
+          treePaneProps={{
+            paneRef: treePaneRef,
+            isFocused: focusedPane === "tree",
+            homePath,
+            currentPath,
+            compactTreeView,
+            nodes: treeNodes,
+            rootPath: treeRootPath,
+            onFocusChange: (focused) => setFocusedPane(focused ? "tree" : null),
+            onGoHome: goHome,
+            onRerootHome: rerootTreeAtHome,
+            onOpenLocation: openLocationSheet,
+            onQuickAccess: goQuickAccess,
+            foldersFirst,
+            onToggleFoldersFirst: toggleFoldersFirst,
+            infoPanelOpen,
+            onToggleInfoPanel: () => setInfoPanelOpen((value) => !value),
+            infoRowOpen,
+            onToggleInfoRow: () => setInfoRowOpen((value) => !value),
+            theme,
+            themeMenuOpen,
+            themeButtonRef,
+            themeMenuRef,
+            onToggleThemeMenu: () => setThemeMenuOpen((value) => !value),
+            onSelectTheme: (nextTheme) => {
+              setTheme(nextTheme);
+              setThemeMenuOpen(false);
+            },
+            onOpenHelp: () => setMainView("help"),
+            onOpenSettings: openSettingsView,
+            includeHidden,
+            onToggleHidden: toggleHiddenFiles,
+            onNavigate: (path) => void navigateTo(path, "push"),
+            onToggleExpand: toggleTreeNode,
+            typeaheadQuery: focusedPane === "tree" ? typeaheadQuery : "",
+          }}
+          searchWorkspaceProps={{
+            isSearchMode,
+            searchResultsKey: `${searchRootPath}:${searchCommittedQuery}`,
+            searchResultsPaneProps: {
+              paneRef: contentPaneRef,
+              isFocused: focusedPane === "content",
+              rootPath: searchRootPath,
+              query: searchCommittedQuery,
+              status: searchStatus,
+              results: filteredSearchResults,
+              selectedPaths: contentSelection.paths,
+              selectionLeadPath: contentSelection.leadPath,
+              highlightHoveredItems,
+              error: searchError,
+              truncated: searchTruncated,
+              filterQuery: searchResultsFilterQuery,
+              filterScope: searchResultsFilterScope,
+              totalCount: searchResults.length,
+              sortBy: searchResultsSortBy,
+              sortDirection: searchResultsSortDirection,
+              onStopSearch: () => {
+                void stopSearch();
+              },
+              onClearResults: () => {
+                void clearCommittedSearch().finally(() => {
+                  focusContentPane();
+                });
+              },
+              onCloseResults: () => {
+                setSearchPopoverOpen(false);
+                searchInputRef.current?.blur();
+                hideSearchResults();
+                focusContentPane();
+              },
+              onFilterQueryChange: updateSearchResultsFilterQuery,
+              onFilterScopeChange: updateSearchResultsFilterScope,
+              onSortByChange: updateSearchResultsSortBy,
+              onSortDirectionToggle: toggleSearchResultsSortDirection,
+              onApplySort: applySearchResultsSort,
+              onSelectionGesture: handleContentSelectionGesture,
+              onClearSelection: clearContentSelection,
+              onActivateResult: (item) => {
+                void openEntry(toDirectoryEntryFromSearchResult(item));
+              },
+              onItemContextMenu: (path, position) => {
+                openItemContextMenu(path, position, "search");
+              },
+              onFocusChange: (focused) => setFocusedPane(focused ? "content" : null),
+              onTypeaheadInput: (key) => handleTypeaheadInput(key, "content"),
+              typeaheadQuery: focusedPane === "content" ? typeaheadQuery : "",
+              scrollTop: searchResultsScrollTop,
+              onScrollTopChange: setSearchResultsScrollTop,
+            },
+            contentPaneProps: {
+              paneRef: contentPaneRef,
+              isFocused: focusedPane === "content",
+              currentPath,
+              entries: currentEntries,
+              loading: directoryLoading,
+              error: directoryError,
+              includeHidden,
+              metadataByPath,
+              selectedPaths: contentSelection.paths,
+              selectionLeadPath: contentSelection.leadPath,
+              viewMode,
+              onSelectionGesture: handleContentSelectionGesture,
+              onClearSelection: clearContentSelection,
+              onActivateEntry: (entry) => {
+                void activateContentEntry(entry);
+              },
+              onFocusChange: (focused) => setFocusedPane(focused ? "content" : null),
+              sortBy,
+              sortDirection,
+              onSortChange: handleSortChange,
+              onLayoutColumnsChange: setContentColumns,
+              onVisiblePathsChange: setVisiblePaths,
+              onNavigatePath: (path) => void navigateTo(path, "push"),
+              onRequestPathSuggestions: (inputPath) =>
+                requestPathSuggestions({
+                  client,
+                  includeHidden,
+                  inputPath,
+                }),
+              onTypeaheadInput: (key) => handleTypeaheadInput(key, "content"),
+              onItemContextMenu: (path, position) => {
+                openItemContextMenu(path, position, "browse");
+              },
+              compactListView,
+              compactDetailsView,
+              highlightHoveredItems,
+              detailColumns,
+              detailColumnWidths,
+              onDetailColumnWidthsChange: setDetailColumnWidths,
+              tabSwitchesExplorerPanes,
+              typeaheadQuery: focusedPane === "content" ? typeaheadQuery : "",
+            },
+            infoRow: (
+              <InfoRow
+                open={infoRowOpen}
                 currentPath={currentPath}
-                compactTreeView={compactTreeView}
-                nodes={treeNodes}
-                rootPath={treeRootPath}
-                onFocusChange={(focused) => setFocusedPane(focused ? "tree" : null)}
-                onGoHome={goHome}
-                onRerootHome={rerootTreeAtHome}
-                onOpenLocation={openLocationSheet}
-                onQuickAccess={goQuickAccess}
-                foldersFirst={foldersFirst}
-                onToggleFoldersFirst={toggleFoldersFirst}
-                infoPanelOpen={infoPanelOpen}
-                onToggleInfoPanel={() => setInfoPanelOpen((value) => !value)}
-                infoRowOpen={infoRowOpen}
-                onToggleInfoRow={() => setInfoRowOpen((value) => !value)}
-                theme={theme}
-                themeMenuOpen={themeMenuOpen}
-                themeButtonRef={themeButtonRef}
-                themeMenuRef={themeMenuRef}
-                onToggleThemeMenu={() => setThemeMenuOpen((value) => !value)}
-                onSelectTheme={(nextTheme) => {
-                  setTheme(nextTheme);
-                  setThemeMenuOpen(false);
-                }}
-                onOpenHelp={() => setMainView("help")}
-                onOpenSettings={openSettingsView}
-                includeHidden={includeHidden}
-                onToggleHidden={toggleHiddenFiles}
-                onNavigate={(path) => void navigateTo(path, "push")}
-                onToggleExpand={toggleTreeNode}
-                typeaheadQuery={focusedPane === "tree" ? typeaheadQuery : ""}
+                currentEntries={currentEntries}
+                selectedEntry={selectedEntry}
+                item={getInfoItem}
               />
-              <div
-                className="pane-resizer"
-                onPointerDown={panes.beginResize("tree")}
-                role="separator"
-                tabIndex={0}
-                aria-orientation="vertical"
-                aria-label="Resize folders pane"
-                onKeyDown={(event) => handlePaneResizeKey("tree", event)}
-              />
-              <section className="main-shell">
-                {isSearchMode ? (
-                  <SearchResultsPane
-                    key={`${searchRootPath}:${searchCommittedQuery}`}
-                    paneRef={contentPaneRef}
-                    isFocused={focusedPane === "content"}
-                    rootPath={searchRootPath}
-                    query={searchCommittedQuery}
-                    status={searchStatus}
-                    results={filteredSearchResults}
-                    selectedPaths={contentSelection.paths}
-                    selectionLeadPath={contentSelection.leadPath}
-                    highlightHoveredItems={highlightHoveredItems}
-                    error={searchError}
-                    truncated={searchTruncated}
-                    filterQuery={searchResultsFilterQuery}
-                    filterScope={searchResultsFilterScope}
-                    totalCount={searchResults.length}
-                    sortBy={searchResultsSortBy}
-                    sortDirection={searchResultsSortDirection}
-                    onStopSearch={() => {
-                      void stopSearch();
-                    }}
-                    onClearResults={() => {
-                      void clearCommittedSearch().finally(() => {
-                        focusContentPane();
-                      });
-                    }}
-                    onCloseResults={() => {
-                      setSearchPopoverOpen(false);
-                      searchInputRef.current?.blur();
-                      hideSearchResults();
-                      focusContentPane();
-                    }}
-                    onFilterQueryChange={updateSearchResultsFilterQuery}
-                    onFilterScopeChange={updateSearchResultsFilterScope}
-                    onSortByChange={updateSearchResultsSortBy}
-                    onSortDirectionToggle={toggleSearchResultsSortDirection}
-                    onApplySort={applySearchResultsSort}
-                    onSelectionGesture={handleContentSelectionGesture}
-                    onClearSelection={clearContentSelection}
-                    onActivateResult={(item) => {
-                      void openEntry(toDirectoryEntryFromSearchResult(item));
-                    }}
-                    onItemContextMenu={(path, position) => {
-                      openItemContextMenu(path, position, "search");
-                    }}
-                    onFocusChange={(focused) => setFocusedPane(focused ? "content" : null)}
-                    onTypeaheadInput={(key) => handleTypeaheadInput(key, "content")}
-                    typeaheadQuery={focusedPane === "content" ? typeaheadQuery : ""}
-                    scrollTop={searchResultsScrollTop}
-                    onScrollTopChange={setSearchResultsScrollTop}
-                  />
-                ) : (
-                  <ContentPane
-                    paneRef={contentPaneRef}
-                    isFocused={focusedPane === "content"}
-                    currentPath={currentPath}
-                    entries={currentEntries}
-                    loading={directoryLoading}
-                    error={directoryError}
-                    includeHidden={includeHidden}
-                    metadataByPath={metadataByPath}
-                    selectedPaths={contentSelection.paths}
-                    selectionLeadPath={contentSelection.leadPath}
-                    viewMode={viewMode}
-                    onSelectionGesture={handleContentSelectionGesture}
-                    onClearSelection={clearContentSelection}
-                    onActivateEntry={(entry) => {
-                      void activateContentEntry(entry);
-                    }}
-                    onFocusChange={(focused) => setFocusedPane(focused ? "content" : null)}
-                    sortBy={sortBy}
-                    sortDirection={sortDirection}
-                    onSortChange={handleSortChange}
-                    onLayoutColumnsChange={setContentColumns}
-                    onVisiblePathsChange={setVisiblePaths}
-                    onNavigatePath={(path) => void navigateTo(path, "push")}
-                    onRequestPathSuggestions={(inputPath) =>
-                      requestPathSuggestions({
-                        client,
-                        includeHidden,
-                        inputPath,
-                      })
-                    }
-                    onTypeaheadInput={(key) => handleTypeaheadInput(key, "content")}
-                    onItemContextMenu={(path, position) => {
-                      openItemContextMenu(path, position, "browse");
-                    }}
-                    compactListView={compactListView}
-                    compactDetailsView={compactDetailsView}
-                    highlightHoveredItems={highlightHoveredItems}
-                    detailColumns={detailColumns}
-                    detailColumnWidths={detailColumnWidths}
-                    onDetailColumnWidthsChange={setDetailColumnWidths}
-                    tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
-                    typeaheadQuery={focusedPane === "content" ? typeaheadQuery : ""}
-                  />
-                )}
-                <InfoRow
-                  open={infoRowOpen}
-                  currentPath={currentPath}
-                  currentEntries={currentEntries}
-                  selectedEntry={selectedEntry}
-                  item={getInfoItem}
-                />
-                <footer className="status-bar">
-                  <span>
-                    {isSearchMode
-                      ? searchStatus === "running"
-                        ? `${filteredSearchResults.length} / ${searchResults.length} matches so far`
-                        : `${filteredSearchResults.length} / ${searchResults.length} matches`
-                      : `${currentEntries.length} items`}
-                  </span>
-                  <span className="status-path">
-                    {isSearchMode ? `Search root: ${searchRootPath}` : currentPath}
-                  </span>
-                </footer>
-              </section>
-              {infoPanelOpen ? (
-                <>
-                  <div
-                    className="pane-resizer"
-                    onPointerDown={panes.beginResize("inspector")}
-                    role="separator"
-                    tabIndex={0}
-                    aria-orientation="vertical"
-                    aria-label="Resize Info Panel pane"
-                    onKeyDown={(event) => handlePaneResizeKey("inspector", event)}
-                  />
-                  <InfoPanel
-                    loading={getInfoLoading}
-                    item={getInfoItem}
-                    onClose={() => setInfoPanelOpen(false)}
-                    onNavigateToPath={(path) => {
-                      void navigateTo(path, path === currentPath ? "replace" : "push");
-                    }}
-                    onOpen={() => {
-                      if (getInfoItem) {
-                        void openPathExternally(getInfoItem.path);
-                      }
-                    }}
-                    onOpenInTerminal={() => {
-                      if (getInfoItem) {
-                        void openPathInTerminal(getInfoItem.path);
-                      }
-                    }}
-                    onCopyPath={() => (getInfoItem ? copyGetInfoPath(getInfoItem.path) : false)}
-                    copyPathDisabled={isWriteOperationLocked}
-                  />
-                </>
-              ) : null}
-            </section>
-          )}
-        </section>
+            ),
+            statusLabel: isSearchMode
+              ? searchStatus === "running"
+                ? `${filteredSearchResults.length} / ${searchResults.length} matches so far`
+                : `${filteredSearchResults.length} / ${searchResults.length} matches`
+              : `${currentEntries.length} items`,
+            statusPathLabel: isSearchMode ? `Search root: ${searchRootPath}` : currentPath,
+          }}
+          infoPanelProps={{
+            loading: getInfoLoading,
+            item: getInfoItem,
+            onClose: () => setInfoPanelOpen(false),
+            onNavigateToPath: (path) => {
+              void navigateTo(path, path === currentPath ? "replace" : "push");
+            },
+            onOpen: () => {
+              if (getInfoItem) {
+                void openPathExternally(getInfoItem.path);
+              }
+            },
+            onOpenInTerminal: () => {
+              if (getInfoItem) {
+                void openPathInTerminal(getInfoItem.path);
+              }
+            },
+            onCopyPath: () => (getInfoItem ? copyGetInfoPath(getInfoItem.path) : false),
+            copyPathDisabled: isWriteOperationLocked,
+          }}
+          currentPath={currentPath}
+          explorerToolbarLayout={explorerToolbarLayout}
+          canGoBack={canGoBack}
+          canGoForward={canGoForward}
+          focusedPane={focusedPane}
+          selectedEntryExists={selectedEntry !== null}
+          goBack={goBack}
+          goForward={goForward}
+          navigateToParentFolder={navigateToParentFolder}
+          navigateDownAction={navigateDownAction}
+          refreshDirectory={refreshDirectory}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          sortBy={sortBy}
+          sortDirection={sortDirection}
+          onSortChange={handleSortChange}
+          searchShellRef={searchShellRef}
+          searchPopoverOpen={searchPopoverOpen}
+          onSearchShellBlur={(event) => {
+            const nextTarget = event.relatedTarget;
+            if (
+              nextTarget instanceof Node &&
+              (searchShellRef.current?.contains(nextTarget) ?? false)
+            ) {
+              return;
+            }
+            setSearchPopoverOpen(false);
+          }}
+          searchPointerIntentRef={searchPointerIntentRef}
+          onSearchShellPointerIntent={() => {
+            setFocusedPane(null);
+            clearTypeahead();
+            window.requestAnimationFrame(() => {
+              searchInputRef.current?.focus();
+              searchPointerIntentRef.current = false;
+            });
+          }}
+          onSearchSubmit={() => {
+            void startSearch(searchDraftQuery).finally(() => {
+              dismissFileSearch({ focusBelow: true });
+            });
+          }}
+          searchInputRef={searchInputRef}
+          searchDraftQuery={searchDraftQuery}
+          onSearchInputFocus={() => {
+            searchPointerIntentRef.current = false;
+            setFocusedPane(null);
+            clearTypeahead();
+            setSearchPopoverOpen(true);
+            showCachedSearchResults();
+          }}
+          onSearchDraftQueryChange={(nextValue) => {
+            setSearchDraftQuery(nextValue);
+            if (nextValue.trim().length === 0) {
+              void clearCommittedSearch();
+            }
+          }}
+          onSearchInputEscape={() => {
+            dismissFileSearch({ focusBelow: true });
+          }}
+          onClearSearchDraft={() => {
+            setSearchDraftQuery("");
+            void clearCommittedSearch().finally(() => {
+              focusFileSearch(false);
+            });
+          }}
+          searchPatternMode={searchPatternMode}
+          onSearchPatternModeChange={updateSearchPatternMode}
+          searchMatchScope={searchMatchScope}
+          onSearchMatchScopeChange={updateSearchMatchScope}
+          searchRecursive={searchRecursive}
+          onSearchRecursiveChange={updateSearchRecursive}
+          searchIncludeHidden={searchIncludeHidden}
+          onSearchIncludeHiddenChange={updateSearchIncludeHidden}
+          onPaneResizeKey={handlePaneResizeKey}
+        />
       ) : (
         <section className="workspace single-panel-layout">
           <section ref={singlePanelRef} className="pane single-panel-pane">
@@ -5306,207 +4950,55 @@ export function App() {
           </section>
         </section>
       )}
-
-      <LocationSheet
-        open={locationSheetOpen}
+      <AppDialogs
+        locationSheetOpen={locationSheetOpen}
         currentPath={currentPath}
-        submitting={locationSubmitting}
-        error={locationError}
+        locationSubmitting={locationSubmitting}
+        locationError={locationError}
         tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
         onRequestPathSuggestions={(inputPath) =>
           requestPathSuggestions({ client, includeHidden, inputPath })
         }
-        onClose={() => setLocationSheetOpen(false)}
-        onSubmit={(path) => void submitLocationPath(path)}
-      />
-      <LocationSheet
-        open={moveDialogState !== null}
-        currentPath={moveDialogState?.currentPath ?? currentPath}
-        submitting={moveDialogState?.submitting ?? false}
-        error={moveDialogState?.error ?? null}
-        title="Move To"
-        eyebrow="Destination"
-        label="Destination folder"
-        submitLabel="Move"
-        placeholder={currentPath}
-        tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
-        enableSuggestions={false}
-        browseLabel="Browse"
-        onBrowse={(path) => browseForDirectoryPath(path)}
-        onRequestPathSuggestions={(inputPath) =>
-          requestPathSuggestions({ client, includeHidden, inputPath })
-        }
-        onClose={() => setMoveDialogState(null)}
-        onSubmit={(path) => void submitMoveDialog(path)}
-      />
-      {contextMenuState ? (
-        <ItemContextMenu
-          anchorX={contextMenuState.x}
-          anchorY={contextMenuState.y}
-          variant={contextMenuState.source}
-          disabledActionIds={contextMenuDisabledActionIds}
-          submenuItems={contextMenuSubmenuItems}
-          open
-          onAction={(actionId) => {
-            void runContextMenuAction(actionId, contextMenuState.paths);
-          }}
-          onSubmenuAction={(action) => {
-            void runContextSubmenuAction(action, contextMenuState.paths);
-          }}
-        />
-      ) : null}
-      {actionNotice ? (
-        <ActionNoticeDialog
-          title={actionNotice.title}
-          message={actionNotice.message}
-          onClose={dismissActionNotice}
-        />
-      ) : null}
-      <TextPromptDialog
-        open={renameDialogState !== null}
-        title="Rename"
-        {...(renameDialogState
-          ? { message: `Rename ${renameDialogState.currentName}` }
-          : {})}
-        label="New name"
-        value={renameDialogState?.currentName ?? ""}
-        submitLabel="Rename"
-        error={renameDialogState?.error ?? null}
-        onClose={() => setRenameDialogState(null)}
-        onSubmit={(value) => void submitRenameDialog(value)}
-      />
-      <TextPromptDialog
-        open={newFolderDialogState !== null}
-        title="New Folder"
-        {...(newFolderDialogState
-          ? { message: `Create in ${newFolderDialogState.parentDirectoryPath}` }
-          : {})}
-        label="Folder name"
-        value={newFolderDialogState?.initialName ?? "New Folder"}
-        submitLabel="Create Folder"
-        error={newFolderDialogState?.error ?? null}
-        onClose={() => setNewFolderDialogState(null)}
-        onSubmit={(value) => void submitNewFolderDialog(value)}
-      />
-      {copyPasteDialogState?.type === "plan" ? (
-        <CopyPasteDialog
-          title={
-            copyPasteDialogState.action === "move_to"
-              ? "Move Requires Review"
-              : copyPasteDialogState.action === "duplicate"
-                ? "Duplicate Requires Review"
-                : "Paste Requires Review"
-          }
-          message={
-            copyPasteDialogState.action === "move_to"
-              ? "Some destination items already exist. You can skip those conflicts or cancel the move."
-              : "Some destination items already exist. You can skip those conflicts or cancel."
-          }
-          detailLines={buildCopyPastePlanDetailLines(copyPasteDialogState.plan)}
-          primaryAction={{
-            label: "Skip Conflicts",
-            onClick: () =>
-              void executeCopyLikePlan(
-                {
-                  ...copyPasteDialogState.plan,
-                  conflictResolution: "skip",
-                },
-                copyPasteDialogState.action,
-                {
-                  clearClipboardOnStart: copyPasteDialogState.clearClipboardOnStart,
-                },
-              ),
-            destructive:
-              copyPasteDialogState.action === "move_to" || copyPasteDialogState.plan.mode === "cut",
-          }}
-          secondaryAction={{
-            label: "Cancel",
-            onClick: () => setCopyPasteDialogState(null),
-          }}
-        />
-      ) : null}
-      {showCopyPasteProgressCard && writeOperationCardState ? (
-        <CopyPasteProgressCard
-          title={
-            writeOperationCardState.action === "move_to"
-              ? "Move In Progress"
-              : writeOperationCardState.action === "duplicate"
-                ? "Duplicate In Progress"
-                : writeOperationCardState.action === "trash"
-                  ? "Move to Trash In Progress"
-                  : writeOperationCardState.action === "rename"
-                    ? "Rename In Progress"
-                    : writeOperationCardState.action === "new_folder"
-                      ? "Create Folder In Progress"
-                      : "Paste In Progress"
-          }
-          progressPercent={getWriteOperationProgressPercent(writeOperationCardState)}
-          progressMetaStart={`${writeOperationCardState.completedItemCount.toLocaleString()} of ${Math.max(writeOperationCardState.totalItemCount, 0).toLocaleString()} items`}
-          progressMetaEnd={formatWriteOperationByteLabel(writeOperationCardState)}
-          detailLabel={writeOperationCardState.action === "new_folder" ? "Destination" : "Current item"}
-          detailValue={getPathLeafName(
-            writeOperationCardState.currentSourcePath ??
-              writeOperationCardState.targetPath ??
-              currentPath,
-          )}
-          onCancel={() => {
-            void cancelWriteOperation();
-          }}
-        />
-      ) : null}
-      {showCopyPasteResultDialog && writeOperationProgressEvent ? (
-        <CopyPasteDialog
-          title={
-            writeOperationProgressEvent.action === "move_to"
-              ? "Move Result"
-              : writeOperationProgressEvent.action === "duplicate"
-                ? "Duplicate Result"
-                : writeOperationProgressEvent.action === "trash"
-                  ? "Trash Result"
-                  : writeOperationProgressEvent.action === "rename"
-                    ? "Rename Result"
-                    : writeOperationProgressEvent.action === "new_folder"
-                      ? "Create Folder Result"
-                      : "Paste Result"
-          }
-          message={
-            writeOperationProgressEvent.result?.error ??
-            "The write operation has finished."
-          }
-          detailLines={buildCopyPasteResultDetailLines(writeOperationProgressEvent)}
-          primaryAction={
-            (writeOperationProgressEvent.action === "paste" ||
-              writeOperationProgressEvent.action === "move_to" ||
-              writeOperationProgressEvent.action === "duplicate") &&
-            writeOperationProgressEvent.result?.items.some((item) => item.status === "failed")
-              ? {
-                  label: "Retry Failed Items",
-                  onClick: () => {
-                    void retryFailedCopyPasteItems(writeOperationProgressEvent);
-                  },
-                }
-              : {
-                  label: "Close",
-                  onClick: dismissCopyPasteDialog,
-                }
-          }
-          secondaryAction={
-            (writeOperationProgressEvent.action === "paste" ||
-              writeOperationProgressEvent.action === "move_to" ||
-              writeOperationProgressEvent.action === "duplicate") &&
-            writeOperationProgressEvent.result?.items.some((item) => item.status === "failed")
-              ? {
-                  label: "Close",
-                  onClick: dismissCopyPasteDialog,
-                }
-              : undefined
-          }
-        />
-      ) : null}
-      <ToastViewport
+        onCloseLocationSheet={() => setLocationSheetOpen(false)}
+        onSubmitLocationPath={(path) => void submitLocationPath(path)}
+        moveDialogState={moveDialogState}
+        onBrowseForDirectoryPath={browseForDirectoryPath}
+        onCloseMoveDialog={() => setMoveDialogState(null)}
+        onSubmitMoveDialog={(path) => void submitMoveDialog(path)}
+        contextMenuState={contextMenuState}
+        contextMenuDisabledActionIds={contextMenuDisabledActionIds}
+        contextMenuSubmenuItems={contextMenuSubmenuItems}
+        onRunContextMenuAction={(actionId, paths) => {
+          void runContextMenuAction(actionId, paths);
+        }}
+        onRunContextSubmenuAction={(action, paths) => {
+          void runContextSubmenuAction(action, paths);
+        }}
+        actionNotice={actionNotice}
+        onDismissActionNotice={dismissActionNotice}
+        renameDialogState={renameDialogState}
+        onCloseRenameDialog={() => setRenameDialogState(null)}
+        onSubmitRenameDialog={(value) => void submitRenameDialog(value)}
+        newFolderDialogState={newFolderDialogState}
+        onCloseNewFolderDialog={() => setNewFolderDialogState(null)}
+        onSubmitNewFolderDialog={(value) => void submitNewFolderDialog(value)}
+        copyPasteDialogState={copyPasteDialogState}
+        onExecuteCopyLikePlan={(plan, action, options) => {
+          void executeCopyLikePlan(plan, action, options);
+        }}
+        onCloseCopyPasteDialog={dismissCopyPasteDialog}
+        showCopyPasteProgressCard={showCopyPasteProgressCard}
+        writeOperationCardState={writeOperationCardState}
+        onCancelWriteOperation={() => {
+          void cancelWriteOperation();
+        }}
+        showCopyPasteResultDialog={showCopyPasteResultDialog}
+        writeOperationProgressEvent={writeOperationProgressEvent}
+        onRetryFailedCopyPasteItems={(event) => {
+          void retryFailedCopyPasteItems(event);
+        }}
         toasts={toasts}
-        onDismiss={dismissToast}
-        offsetBottom={showCopyPasteProgressCard ? 272 : 16}
+        onDismissToast={dismissToast}
       />
     </main>
   );
@@ -5542,75 +5034,6 @@ function shouldRenderCopyPasteResultDialog(event: WriteOperationProgressEvent | 
     event.result.summary.failedItemCount > 0 ||
     event.result.summary.skippedItemCount > 0
   );
-}
-
-function buildCopyPastePlanDetailLines(plan: CopyPastePlan): string[] {
-  const lines = [
-    `${plan.summary.topLevelItemCount} selected item${plan.summary.topLevelItemCount === 1 ? "" : "s"}`,
-    `${plan.summary.totalItemCount} filesystem write step${plan.summary.totalItemCount === 1 ? "" : "s"}`,
-  ];
-  if (plan.summary.totalBytes !== null) {
-    lines.push(`${formatSize(plan.summary.totalBytes, "ready")}`);
-  }
-  if (plan.conflicts.length > 0) {
-    lines.push(
-      `${plan.conflicts.length} conflicting destination item${plan.conflicts.length === 1 ? "" : "s"}`,
-    );
-  }
-  for (const issue of plan.issues.slice(0, 3)) {
-    lines.push(issue.message);
-  }
-  return lines;
-}
-
-function buildCopyPasteResultDetailLines(event: WriteOperationProgressEvent): string[] {
-  const result = event.result;
-  if (!result) {
-    return [];
-  }
-  const lines = [
-    `${result.summary.completedItemCount} of ${result.summary.totalItemCount} steps completed`,
-  ];
-  if (result.summary.failedItemCount > 0) {
-    lines.push(
-      `${result.summary.failedItemCount} item${result.summary.failedItemCount === 1 ? "" : "s"} failed`,
-    );
-  }
-  if (result.summary.skippedItemCount > 0) {
-    lines.push(
-      `${result.summary.skippedItemCount} item${result.summary.skippedItemCount === 1 ? "" : "s"} skipped`,
-    );
-  }
-  if (result.summary.cancelledItemCount > 0) {
-    lines.push(
-      `${result.summary.cancelledItemCount} item${result.summary.cancelledItemCount === 1 ? "" : "s"} cancelled`,
-    );
-  }
-  for (const item of result.items.filter((entry) => entry.error).slice(0, 3)) {
-    lines.push(item.error ?? "");
-  }
-  return lines;
-}
-
-function getWriteOperationProgressPercent(state: WriteOperationCardState): number {
-  if (state.totalBytes !== null && state.totalBytes > 0) {
-    return (state.completedByteCount / state.totalBytes) * 100;
-  }
-  if (state.totalItemCount <= 0) {
-    return state.stage === "starting" ? 4 : 0;
-  }
-  return (state.completedItemCount / state.totalItemCount) * 100;
-}
-
-function formatWriteOperationByteLabel(state: WriteOperationCardState): string {
-  if (state.totalBytes !== null) {
-    return `${formatSize(state.completedByteCount, "ready")} of ${formatSize(state.totalBytes, "ready")}`;
-  }
-  return state.stage === "starting"
-    ? "Preparing write plan"
-    : state.stage === "queued"
-      ? "Waiting to begin"
-      : "Tracking progress";
 }
 
 function resolvePasteDestinationPath(args: {
