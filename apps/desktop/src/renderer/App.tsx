@@ -43,7 +43,6 @@ import {
   clampOpenItemLimit,
   clampZoomPercent,
 } from "../shared/appPreferences";
-import { FEATURE_FLAGS } from "../shared/featureFlags";
 import { ActionNoticeDialog } from "./components/ActionNoticeDialog";
 import { ContentPane } from "./components/ContentPane";
 import { CopyPasteDialog } from "./components/CopyPasteDialog";
@@ -489,9 +488,7 @@ export function App() {
     ],
   );
   const canPasteAtResolvedDestination =
-    FEATURE_FLAGS.copyPaste &&
-    hasClipboardItems(copyPasteClipboard) &&
-    pasteDestinationPath !== null;
+    hasClipboardItems(copyPasteClipboard) && pasteDestinationPath !== null;
   const isWriteOperationLocked = writeOperationCardState !== null;
   const showCopyPasteProgressCard = writeOperationCardState !== null;
   const showCopyPasteResultDialog = shouldRenderCopyPasteResultDialog(writeOperationProgressEvent);
@@ -525,11 +522,6 @@ export function App() {
     const hasSingleContextItem = contextMenuState.paths.length === 1;
     const hasSingleSelectedFolder =
       contextMenuState.paths.length === 1 && isDirectoryLikeEntry(contextMenuTargetEntries[0] ?? null);
-    if (!FEATURE_FLAGS.copyPaste) {
-      disabled.add("copy");
-      disabled.add("cut");
-      disabled.add("paste");
-    }
     if (!canPasteAtResolvedDestination) {
       disabled.add("paste");
     }
@@ -1418,9 +1410,7 @@ export function App() {
           return next;
         });
       })
-      .catch((error) => {
-        logger.debug("metadata batch failed", error);
-      })
+      .catch(() => undefined)
       .finally(() => {
         for (const path of missingPaths) {
           metadataInflightRef.current.delete(path);
@@ -2238,10 +2228,6 @@ export function App() {
   );
   const canGoBack = historyIndex > 0;
   const canGoForward = historyIndex >= 0 && historyIndex < historyPaths.length - 1;
-  const showUpButton = explorerToolbarLayout !== "minimal";
-  const showDownButton = explorerToolbarLayout !== "minimal";
-  const showRefreshButton = explorerToolbarLayout !== "minimal";
-  const showSortControls = explorerToolbarLayout !== "minimal";
 
   function focusFileSearch(selectContents = false) {
     searchPointerIntentRef.current = true;
@@ -2768,10 +2754,6 @@ export function App() {
   }
 
   async function runCopyClipboardAction(mode: "copy" | "cut") {
-    if (!FEATURE_FLAGS.copyPaste) {
-      showNotImplementedNotice(mode === "copy" ? "Copy" : "Cut");
-      return;
-    }
     if (isWriteOperationInFlight()) {
       showWriteOperationBusyToast();
       return;
@@ -2802,10 +2784,6 @@ export function App() {
   async function startPasteFromClipboard(
     conflictResolution: IpcRequest<"copyPaste:plan">["conflictResolution"] = "error",
   ) {
-    if (!FEATURE_FLAGS.copyPaste) {
-      showNotImplementedNotice("Paste");
-      return;
-    }
     if (isWriteOperationInFlight()) {
       showWriteOperationBusyToast();
       return;
@@ -3500,8 +3478,7 @@ export function App() {
     }
     try {
       await client.invoke("search:cancel", { jobId: activeJobId });
-    } catch (error) {
-      logger.debug("search cancel failed", error);
+    } catch {
     }
   }
 
@@ -4745,7 +4722,7 @@ export function App() {
                 >
                   <ToolbarIcon name="forward" />
                 </button>
-                {showUpButton ? (
+                {explorerToolbarLayout !== "minimal" ? (
                   <button
                     type="button"
                     className="tb-btn tb-btn-icon"
@@ -4757,7 +4734,7 @@ export function App() {
                     <ToolbarIcon name="up" />
                   </button>
                 ) : null}
-                {showDownButton ? (
+                {explorerToolbarLayout !== "minimal" ? (
                   <button
                     type="button"
                     className="tb-btn tb-btn-icon"
@@ -4770,7 +4747,7 @@ export function App() {
                   </button>
                 ) : null}
               </div>
-              {showRefreshButton ? (
+              {explorerToolbarLayout !== "minimal" ? (
                 <>
                   <span className="titlebar-divider" aria-hidden />
                   <div className="toolbar-group">
@@ -4814,7 +4791,7 @@ export function App() {
                   </button>
                 </fieldset>
               </div>
-              {showSortControls ? (
+              {explorerToolbarLayout !== "minimal" ? (
                 <>
                   <span className="titlebar-divider" aria-hidden />
                   <div className="toolbar-group">
@@ -5170,7 +5147,6 @@ export function App() {
                     detailColumnWidths={detailColumnWidths}
                     onDetailColumnWidthsChange={setDetailColumnWidths}
                     tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
-                    searchQuery=""
                     typeaheadQuery={focusedPane === "content" ? typeaheadQuery : ""}
                   />
                 )}
@@ -5206,7 +5182,6 @@ export function App() {
                     onKeyDown={(event) => handlePaneResizeKey("inspector", event)}
                   />
                   <InfoPanel
-                    open={infoPanelOpen}
                     loading={getInfoLoading}
                     item={getInfoItem}
                     onClose={() => setInfoPanelOpen(false)}
@@ -5537,10 +5512,6 @@ function formatPathForShell(path: string): string {
 function getPathLeafName(path: string): string {
   const trimmedPath = path.replace(/\/+$/u, "");
   return trimmedPath.split("/").filter(Boolean).at(-1) ?? path;
-}
-
-function isCopyPasteProgressActive(event: WriteOperationProgressEvent | null): boolean {
-  return event?.status === "queued" || event?.status === "running";
 }
 
 function shouldRenderCopyPasteResultDialog(event: WriteOperationProgressEvent | null): boolean {

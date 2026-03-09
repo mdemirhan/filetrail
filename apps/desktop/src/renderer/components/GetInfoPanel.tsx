@@ -10,7 +10,6 @@ type ItemProperties = IpcResponse<"item:getProperties">["item"];
 // The info panel is display-only. It reflects the selected item and exposes a small action
 // set, but it does not own filesystem state itself.
 export function InfoPanel({
-  open,
   loading,
   item,
   onClose,
@@ -20,7 +19,6 @@ export function InfoPanel({
   onCopyPath,
   copyPathDisabled = false,
 }: {
-  open: boolean;
   loading: boolean;
   item: ItemProperties | null;
   onClose: () => void;
@@ -45,10 +43,6 @@ export function InfoPanel({
     if (await onCopyPath()) {
       setCopied(true);
     }
-  }
-
-  if (!open) {
-    return null;
   }
 
   return (

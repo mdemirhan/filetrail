@@ -1,5 +1,4 @@
 import {
-  compactPath,
   formatDateTime,
   formatPermissionMode,
   formatSize,
@@ -9,14 +8,6 @@ import {
 } from "./formatting";
 
 describe("formatting helpers", () => {
-  it("compacts long paths", () => {
-    expect(
-      compactPath(
-        "/a/very/long/path/that/keeps/going/and/going/and/going/for/testing/with/even/more/depth.txt",
-      ),
-    ).toContain("...");
-  });
-
   it("formats invalid dates defensively", () => {
     expect(formatDateTime("bad-date")).toBe("Not available");
   });

@@ -6,14 +6,7 @@ export function toErrorMessage(error: unknown): string {
 }
 
 export function createRendererLogger(namespace: string) {
-  const debugEnabled = false;
   return {
-    debug(message: string, details?: unknown) {
-      if (!debugEnabled) {
-        return;
-      }
-      console.debug(`[${namespace}] ${message}`, details);
-    },
     error(message: string, error: unknown) {
       console.error(`[${namespace}] ${message}: ${toErrorMessage(error)}`);
     },

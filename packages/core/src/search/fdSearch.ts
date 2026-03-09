@@ -124,7 +124,7 @@ export class FdSearchRuntime {
     const items = job.items.slice(safeCursor);
     const done = job.done;
 
-    return {
+    const response = {
       jobId,
       status: job.status,
       items,
@@ -133,6 +133,10 @@ export class FdSearchRuntime {
       truncated: job.truncated,
       error: job.error,
     };
+    if (done) {
+      this.jobs.delete(jobId);
+    }
+    return response;
   }
 
   cancelSearch(jobId: string): IpcResponse<"search:cancel"> {
@@ -240,13 +244,12 @@ export class FdSearchRuntime {
 }
 
 function toSearchResultItem(rootPath: string, entryPath: string): SearchResultItem {
-  const resolvedPath = resolve(entryPath);
-  const name = basename(resolvedPath);
-  const parentPath = dirname(resolvedPath);
+  const name = basename(entryPath);
+  const parentPath = dirname(entryPath);
   const relativeParentPath = relative(rootPath, parentPath);
 
   return {
-    path: resolvedPath,
+    path: entryPath,
     name,
     extension: extname(name).replace(/^\./, "").toLowerCase(),
     kind: "file",

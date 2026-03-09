@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { parentPort, workerData } from "node:worker_threads";
 
-import { type IpcChannel, ipcContractSchemas } from "@filetrail/contracts";
+import { ipcContractSchemas } from "@filetrail/contracts";
 import {
   getDirectoryMetadataBatch,
   getItemProperties,
@@ -11,6 +11,7 @@ import {
   resolvePathTarget,
 } from "../fs/explorerService";
 import { FdSearchRuntime } from "../search/fdSearch";
+import type { WorkerSupportedChannel } from "./explorerWorkerClient";
 
 type ExplorerWorkerData = {
   fdBinaryPath?: string;
@@ -18,18 +19,7 @@ type ExplorerWorkerData = {
 
 type WorkerRequest = {
   id: string;
-  channel: Extract<
-    IpcChannel,
-    | "tree:getChildren"
-    | "directory:getSnapshot"
-    | "directory:getMetadataBatch"
-    | "item:getProperties"
-    | "path:getSuggestions"
-    | "path:resolve"
-    | "search:start"
-    | "search:getUpdate"
-    | "search:cancel"
-  >;
+  channel: WorkerSupportedChannel;
   payload: unknown;
 };
 
@@ -58,12 +48,12 @@ const searchRuntime = new FdSearchRuntime(fdBinaryPath, {
   spawn: (file, args, options) => spawn(file, args, options),
 });
 
-const queue: WorkerRequest[] = [];
+const normalPriorityQueue: WorkerRequest[] = [];
+const lowPriorityQueue: WorkerRequest[] = [];
 let processing = false;
 
 parentPort.on("message", (message: WorkerRequest) => {
-  queue.push(message);
-  queue.sort((left, right) => getPriority(left.channel) - getPriority(right.channel));
+  getQueue(message.channel).push(message);
   if (!processing) {
     void processQueue();
   }
@@ -72,8 +62,8 @@ parentPort.on("message", (message: WorkerRequest) => {
 async function processQueue(): Promise<void> {
   processing = true;
   try {
-    while (queue.length > 0) {
-      const message = queue.shift();
+    while (normalPriorityQueue.length > 0 || lowPriorityQueue.length > 0) {
+      const message = normalPriorityQueue.shift() ?? lowPriorityQueue.shift();
       if (!message) {
         continue;
       }
@@ -171,9 +161,9 @@ async function handleWorkerRequest(message: WorkerRequest): Promise<WorkerRespon
   throw new Error(`Unsupported worker channel: ${message.channel}`);
 }
 
-function getPriority(channel: WorkerRequest["channel"]): number {
+function getQueue(channel: WorkerRequest["channel"]): WorkerRequest[] {
   if (channel === "directory:getMetadataBatch") {
-    return 2;
+    return lowPriorityQueue;
   }
-  return 1;
+  return normalPriorityQueue;
 }

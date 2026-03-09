@@ -170,6 +170,10 @@ export function resolveAppStatePath(userDataPath: string): string {
   return join(userDataPath, "app-state.json");
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
 // Loading is best-effort. Corrupt or old state should never block startup.
 function readState(
   filePath: string,
@@ -182,10 +186,10 @@ function readState(
   try {
     const raw = fileSystem.readFileSync(filePath, "utf8");
     const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    if (!isPlainObject(parsed)) {
       return {};
     }
-    const record = parsed as Record<string, unknown>;
+    const record = parsed;
     const preferences = sanitizePreferences(record.preferences, defaultTheme);
     const window = sanitizeWindowState(record.window);
     return {
@@ -216,10 +220,10 @@ function persistState(
 // removed, normalize legacy shapes here instead of letting stale values leak outward.
 function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPreferences {
   const currentDefaults = withDefaultTheme(DEFAULT_APP_PREFERENCES, defaultTheme);
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isPlainObject(value)) {
     return currentDefaults;
   }
-  const record = value as Record<string, unknown>;
+  const record = value;
   return {
     theme:
       typeof record.theme === "string" &&
@@ -407,10 +411,10 @@ function sanitizeTerminalApplicationSelection(value: unknown): ApplicationSelect
       appName: normalized,
     };
   }
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isPlainObject(value)) {
     return null;
   }
-  const record = value as Record<string, unknown>;
+  const record = value;
   const appPath = typeof record.appPath === "string" ? record.appPath.trim() : "";
   const appName = typeof record.appName === "string" ? record.appName.trim() : "";
   if (appPath.length === 0 || appName.length === 0) {
@@ -426,10 +430,10 @@ function sanitizeApplicationSelection(
   value: unknown,
   defaults = DEFAULT_TEXT_EDITOR,
 ): ApplicationSelection {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isPlainObject(value)) {
     return { ...defaults };
   }
-  const record = value as Record<string, unknown>;
+  const record = value;
   const appPath = typeof record.appPath === "string" ? record.appPath.trim() : "";
   const appName = typeof record.appName === "string" ? record.appName.trim() : "";
   if (appPath.length === 0 || appName.length === 0) {
@@ -452,10 +456,10 @@ function sanitizeOpenWithApplications(
     return [];
   }
   const entries = value.flatMap((entry) => {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    if (!isPlainObject(entry)) {
       return [];
     }
-    const record = entry as Record<string, unknown>;
+    const record = entry;
     const id = typeof record.id === "string" ? record.id.trim() : "";
     const appPath = typeof record.appPath === "string" ? record.appPath.trim() : "";
     const appName = typeof record.appName === "string" ? record.appName.trim() : "";
@@ -478,10 +482,10 @@ function sanitizeDetailColumns(
   defaults = DEFAULT_DETAIL_COLUMN_VISIBILITY,
 ): AppPreferences["detailColumns"] {
   // Optional detail columns are stored as booleans, but the runtime expects a full record.
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isPlainObject(value)) {
     return defaults;
   }
-  const record = value as Record<string, unknown>;
+  const record = value;
   return {
     size: typeof record.size === "boolean" ? record.size : defaults.size,
     modified: typeof record.modified === "boolean" ? record.modified : defaults.modified,
@@ -495,10 +499,10 @@ function sanitizeDetailColumnWidths(
   defaults = DEFAULT_DETAIL_COLUMN_WIDTHS,
 ): AppPreferences["detailColumnWidths"] {
   // Widths are clamped per column so a bad saved value cannot collapse or explode the table.
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isPlainObject(value)) {
     return defaults;
   }
-  const record = value as Record<string, unknown>;
+  const record = value;
   return Object.fromEntries(
     DETAIL_COLUMN_KEYS.map((key) => [
       key,
@@ -509,10 +513,10 @@ function sanitizeDetailColumnWidths(
 
 function sanitizeWindowState(value: unknown): StoredWindowState {
   // Window position is optional, but dimensions are always normalized into a safe range.
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!isPlainObject(value)) {
     return DEFAULT_WINDOW_STATE;
   }
-  const record = value as Record<string, unknown>;
+  const record = value;
   return {
     width:
       typeof record.width === "number" && record.width >= 320 && record.width <= 6000

@@ -177,7 +177,7 @@ describe("explorerService", () => {
     expect(snapshot.entries.map((entry) => entry.name)).toEqual(["alpha.txt", "zeta"]);
   });
 
-  it("does not include symlinked directories in tree children", async () => {
+  it("includes symlinked directories in tree children and marks them as aliases", async () => {
     const fakeFileSystem = {
       readdir: vi.fn(async () => [fakeDirent("Alias", { symbolicLink: true })]),
       stat: vi.fn(async () => fakeStats(true, false, 0)),
@@ -186,7 +186,15 @@ describe("explorerService", () => {
     };
 
     const tree = await listTreeChildren("/workspace", true, fakeFileSystem);
-    expect(tree.children).toEqual([]);
+    expect(tree.children).toEqual([
+      {
+        path: "/workspace/Alias",
+        name: "Alias",
+        kind: "symlink_directory",
+        isHidden: false,
+        isSymlink: true,
+      },
+    ]);
   });
 
   it("rejects metadata requests for paths outside the requested directory", async () => {

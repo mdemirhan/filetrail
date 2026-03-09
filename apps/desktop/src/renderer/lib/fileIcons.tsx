@@ -170,10 +170,10 @@ function resolveIconType(entry: Entry): string {
   if (["zip", "tar", "gz", "xz", "rar"].includes(extension)) {
     return "archive";
   }
-  if (["pdf"].includes(extension)) {
+  if (extension === "pdf") {
     return "pdf";
   }
-  if (["app"].includes(extension)) {
+  if (extension === "app") {
     return "app";
   }
   if (["txt", "rtf", "log"].includes(extension)) {

@@ -1,10 +1,3 @@
-export function compactPath(path: string): string {
-  if (path.length <= 72) {
-    return path;
-  }
-  return `${path.slice(0, 24)}...${path.slice(-44)}`;
-}
-
 // Used in contexts that still want a human-readable fallback string.
 // Table/detail views that need an empty loading state should check raw metadata first.
 export function formatDateTime(value: string | null): string {

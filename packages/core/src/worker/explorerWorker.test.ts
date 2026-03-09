@@ -262,8 +262,8 @@ describe("explorerWorker", () => {
     releaseTree();
     await flushWorkerQueue();
 
-    expect(workerModuleMock.parentPort.postMessage.mock.calls.map(([message]) => message.id)).toEqual(
-      ["req-1", "req-3", "req-2"],
-    );
+    expect(
+      workerModuleMock.parentPort.postMessage.mock.calls.map(([message]) => message.id),
+    ).toEqual(["req-1", "req-3", "req-2"]);
   });
 });

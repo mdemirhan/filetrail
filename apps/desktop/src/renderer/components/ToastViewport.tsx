@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import type { ToastEntry, ToastKind } from "../lib/toasts";
 
@@ -82,25 +82,60 @@ export function ToastViewport({
   onDismiss: (id: string) => void;
   offsetBottom?: number | undefined;
 }) {
+  const timersRef = useRef<Record<string, { expiresAt: number; timer: number }>>({});
+
   useEffect(() => {
-    const timers = toasts.map((toast) =>
-      window.setTimeout(() => {
-        onDismiss(toast.id);
-      }, Math.max(0, toast.expiresAt - Date.now())),
-    );
-    return () => {
-      for (const timer of timers) {
-        window.clearTimeout(timer);
+    const activeTimers = timersRef.current;
+    const nextToastIds = new Set(toasts.map((toast) => toast.id));
+
+    for (const toast of toasts) {
+      const existing = activeTimers[toast.id];
+      if (existing && existing.expiresAt === toast.expiresAt) {
+        continue;
       }
-    };
+      if (existing) {
+        window.clearTimeout(existing.timer);
+      }
+      activeTimers[toast.id] = {
+        expiresAt: toast.expiresAt,
+        timer: window.setTimeout(
+          () => {
+            delete activeTimers[toast.id];
+            onDismiss(toast.id);
+          },
+          Math.max(0, toast.expiresAt - Date.now()),
+        ),
+      };
+    }
+
+    for (const [toastId, entry] of Object.entries(activeTimers)) {
+      if (nextToastIds.has(toastId)) {
+        continue;
+      }
+      window.clearTimeout(entry.timer);
+      delete activeTimers[toastId];
+    }
   }, [onDismiss, toasts]);
+
+  useEffect(() => {
+    return () => {
+      for (const entry of Object.values(timersRef.current)) {
+        window.clearTimeout(entry.timer);
+      }
+      timersRef.current = {};
+    };
+  }, []);
 
   if (toasts.length === 0) {
     return null;
   }
 
   return (
-    <div className="toast-viewport" data-testid="toast-viewport" style={{ bottom: `${offsetBottom}px` }}>
+    <div
+      className="toast-viewport"
+      data-testid="toast-viewport"
+      style={{ bottom: `${offsetBottom}px` }}
+    >
       {toasts.map((toast) => {
         const isAssertive = toast.kind === "warning" || toast.kind === "error";
         const hasMessage = typeof toast.message === "string" && toast.message.length > 0;

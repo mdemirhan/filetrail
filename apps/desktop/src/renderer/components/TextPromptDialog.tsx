@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
+import { getFocusableElements } from "../lib/focusUtils";
+
 export function TextPromptDialog({
   open,
   title,
@@ -181,12 +183,4 @@ export function TextPromptDialog({
       </section>
     </div>
   );
-}
-
-function getFocusableElements(root: HTMLElement): HTMLElement[] {
-  return Array.from(
-    root.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    ),
-  ).filter((element) => !element.hasAttribute("disabled"));
 }

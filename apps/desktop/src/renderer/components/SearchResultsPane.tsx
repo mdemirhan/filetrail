@@ -32,9 +32,8 @@ export function SearchResultsPane({
   query,
   status,
   results,
-  selectedPath = "",
-  selectedPaths = selectedPath ? [selectedPath] : [],
-  selectionLeadPath = selectedPath || null,
+  selectedPaths = [],
+  selectionLeadPath = null,
   error,
   truncated,
   filterQuery,
@@ -67,7 +66,6 @@ export function SearchResultsPane({
   query: string;
   status: SearchStatus;
   results: SearchResultItem[];
-  selectedPath?: string;
   selectedPaths?: string[];
   selectionLeadPath?: string | null;
   error: string | null;

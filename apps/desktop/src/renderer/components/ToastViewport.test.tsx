@@ -2,8 +2,8 @@
 
 import { act, render, screen } from "@testing-library/react";
 
-import { ToastViewport } from "./ToastViewport";
 import { createToastEntry } from "../lib/toasts";
+import { ToastViewport } from "./ToastViewport";
 
 describe("ToastViewport", () => {
   beforeEach(() => {
@@ -27,7 +27,9 @@ describe("ToastViewport", () => {
       throw new Error("Expected toast card wrapper");
     }
     expect(statusToast).toHaveClass("toast-card", "toast-card-info");
-    expect(statusToast.querySelector("button, [tabindex], input, select, textarea, a[href]")).toBeNull();
+    expect(
+      statusToast.querySelector("button, [tabindex], input, select, textarea, a[href]"),
+    ).toBeNull();
     expect(statusToast.querySelector(".toast-card-icon-wrap")).not.toBeNull();
     expect(screen.getByText("Ready to paste 1 item")).toBeInTheDocument();
   });
@@ -80,7 +82,9 @@ describe("ToastViewport", () => {
     );
 
     expect(screen.getByTestId("toast-viewport")).toHaveClass("toast-viewport");
-    expect(screen.getByText("Ready to paste 1 item").closest(".toast-card")).toHaveClass("toast-card");
+    expect(screen.getByText("Ready to paste 1 item").closest(".toast-card")).toHaveClass(
+      "toast-card",
+    );
   });
 
   it("renders semantic icon wrappers for each toast kind", () => {

@@ -28,7 +28,6 @@ describe("SearchResultsPane", () => {
         query="*.tsx"
         status="complete"
         results={[]}
-        selectedPath=""
         error={null}
         truncated={false}
         {...defaultFilterProps}
@@ -67,7 +66,6 @@ describe("SearchResultsPane", () => {
             relativeParentPath: "src",
           },
         ]}
-        selectedPath=""
         error={null}
         truncated={false}
         {...defaultFilterProps}
@@ -101,7 +99,6 @@ describe("SearchResultsPane", () => {
         query="app"
         status="running"
         results={[]}
-        selectedPath=""
         error={null}
         truncated={false}
         {...defaultFilterProps}
@@ -209,7 +206,6 @@ describe("SearchResultsPane", () => {
             relativeParentPath: "src",
           },
         ]}
-        selectedPath=""
         error={null}
         truncated={false}
         {...defaultFilterProps}

@@ -25,11 +25,10 @@ import { ExplorerWorkerClient, createWriteService, getPathSuggestions } from "@f
 import type { AppPreferences } from "../shared/appPreferences";
 import type { AppStateStore } from "./appStateStore";
 import { resolveBundledFdBinaryPath } from "./fdBinary";
-import { registerIpcHandlers } from "./ipc";
+import { registerIpcHandlers, toErrorMessage } from "./ipc";
 import { createWriteOperationLogger } from "./writeOperationLog";
 
 let activeWorkerClient: ExplorerWorkerClient | null = null;
-let activeWriteService: ReturnType<typeof createWriteService> | null = null;
 let writeServiceUnsubscribe: (() => void) | null = null;
 const execFileAsync = promisify(execFile);
 // These caches are short-lived UI accelerators, not durable state. They smooth repeated
@@ -82,18 +81,12 @@ export async function bootstrapMainProcess(
   });
   const writeService = createWriteService();
   activeWorkerClient = workerClient;
-  activeWriteService = writeService;
   writeServiceUnsubscribe?.();
   writeServiceUnsubscribe = writeService.subscribe((event) => {
     const request = copyPasteRequests.get(event.operationId);
     const action = request?.action ?? "paste";
     const metadata = writeOperationMetadata.get(event.operationId);
-    if (
-      event.status === "completed" ||
-      event.status === "failed" ||
-      event.status === "cancelled" ||
-      event.status === "partial"
-    ) {
+    if (isTerminalStatus(event.status)) {
       const logMetadata =
         metadata?.metadata ??
         (request
@@ -160,12 +153,7 @@ export async function bootstrapMainProcess(
           : null,
       }),
     );
-    if (
-      event.status === "completed" ||
-      event.status === "failed" ||
-      event.status === "cancelled" ||
-      event.status === "partial"
-    ) {
+    if (isTerminalStatus(event.status)) {
       writeOperationSenders.delete(event.operationId);
     }
   });
@@ -266,30 +254,30 @@ export async function bootstrapMainProcess(
     },
     "writeOperation:rename": async (payload, event) => {
       ensureNoWriteOperationInFlight();
-      await validateRenameRequest(payload);
+      const operation = await prepareRenameOperation(payload);
       return queueLocalWriteOperation({
         action: "rename",
         kind: "rename",
-        sourcePaths: [payload.sourcePath],
-        targetPaths: [join(dirname(resolve(payload.sourcePath)), payload.destinationName.trim())],
+        sourcePaths: [operation.sourcePath],
+        targetPaths: [operation.destinationPath],
         metadata: null,
         sender: event.sender,
         execute: (operationId, controller) =>
-          executeRenameOperation(payload, operationId, controller),
+          executeRenameOperation(operation, operationId, controller),
       });
     },
     "writeOperation:createFolder": async (payload, event) => {
       ensureNoWriteOperationInFlight();
-      await validateCreateFolderRequest(payload);
+      const operation = await prepareCreateFolderOperation(payload);
       return queueLocalWriteOperation({
         action: "new_folder",
         kind: "newFolder",
         sourcePaths: [],
-        targetPaths: [join(resolve(payload.parentDirectoryPath), payload.folderName.trim())],
+        targetPaths: [operation.destinationPath],
         metadata: null,
         sender: event.sender,
         execute: (operationId, controller) =>
-          executeCreateFolderOperation(payload, operationId, controller),
+          executeCreateFolderOperation(operation, operationId, controller),
       });
     },
     "writeOperation:trash": (payload, event) => {
@@ -359,7 +347,6 @@ export async function shutdownMainProcess(): Promise<void> {
   }
   const workerClient = activeWorkerClient;
   activeWorkerClient = null;
-  activeWriteService = null;
   writeServiceUnsubscribe?.();
   writeServiceUnsubscribe = null;
   clearCaches();
@@ -443,12 +430,7 @@ function emitLocalWriteOperationEvent(
   if (sender) {
     sender.send("filetrail:writeOperationProgress", writeOperationProgressEventSchema.parse(event));
   }
-  if (
-    event.status === "completed" ||
-    event.status === "failed" ||
-    event.status === "cancelled" ||
-    event.status === "partial"
-  ) {
+  if (isTerminalStatus(event.status)) {
     const metadata = writeOperationMetadata.get(event.operationId);
     writeOperationLogger.log({
       phase: "finished",
@@ -519,6 +501,15 @@ function createLocalWriteOperationResult(args: {
   };
 }
 
+type PreparedRenameOperation = {
+  sourcePath: string;
+  destinationPath: string;
+};
+
+type PreparedCreateFolderOperation = {
+  destinationPath: string;
+};
+
 function resolveLocalTerminalStatus(args: {
   cancelled: boolean;
   completedItemCount: number;
@@ -534,13 +525,11 @@ function resolveLocalTerminalStatus(args: {
 }
 
 async function executeRenameOperation(
-  payload: IpcRequest<"writeOperation:rename">,
+  operation: PreparedRenameOperation,
   operationId: string,
   controller: AbortController,
 ): Promise<void> {
-  const sourcePath = resolve(payload.sourcePath);
-  const destinationName = payload.destinationName.trim();
-  const destinationPath = join(dirname(sourcePath), destinationName);
+  const { sourcePath, destinationPath } = operation;
   const startedAt = new Date().toISOString();
   try {
     controller.signal.throwIfAborted();
@@ -556,13 +545,6 @@ async function executeRenameOperation(
       currentDestinationPath: destinationPath,
       result: null,
     });
-    await lstat(sourcePath);
-    if (destinationPath === sourcePath) {
-      throw new Error("Choose a different name.");
-    }
-    if (await pathExists(destinationPath)) {
-      throw new Error(`An item named "${destinationName}" already exists.`);
-    }
     controller.signal.throwIfAborted();
     await renamePath(sourcePath, destinationPath);
     const result = createLocalWriteOperationResult({
@@ -632,7 +614,9 @@ async function executeRenameOperation(
   }
 }
 
-async function validateRenameRequest(payload: IpcRequest<"writeOperation:rename">): Promise<void> {
+async function prepareRenameOperation(
+  payload: IpcRequest<"writeOperation:rename">,
+): Promise<PreparedRenameOperation> {
   const sourcePath = resolve(payload.sourcePath);
   const destinationName = payload.destinationName.trim();
   const destinationPath = join(dirname(sourcePath), destinationName);
@@ -643,16 +627,18 @@ async function validateRenameRequest(payload: IpcRequest<"writeOperation:rename"
   if (await pathExists(destinationPath)) {
     throw new Error(`An item named "${destinationName}" already exists.`);
   }
+  return {
+    sourcePath,
+    destinationPath,
+  };
 }
 
 async function executeCreateFolderOperation(
-  payload: IpcRequest<"writeOperation:createFolder">,
+  operation: PreparedCreateFolderOperation,
   operationId: string,
   controller: AbortController,
 ): Promise<void> {
-  const parentDirectoryPath = resolve(payload.parentDirectoryPath);
-  const folderName = payload.folderName.trim();
-  const destinationPath = join(parentDirectoryPath, folderName);
+  const { destinationPath } = operation;
   const startedAt = new Date().toISOString();
   try {
     controller.signal.throwIfAborted();
@@ -668,13 +654,6 @@ async function executeCreateFolderOperation(
       currentDestinationPath: destinationPath,
       result: null,
     });
-    const parentStats = await stat(parentDirectoryPath);
-    if (!parentStats.isDirectory()) {
-      throw new Error("Folder destination must be an existing directory.");
-    }
-    if (await pathExists(destinationPath)) {
-      throw new Error(`An item named "${folderName}" already exists.`);
-    }
     controller.signal.throwIfAborted();
     await mkdir(destinationPath);
     const result = createLocalWriteOperationResult({
@@ -744,9 +723,9 @@ async function executeCreateFolderOperation(
   }
 }
 
-async function validateCreateFolderRequest(
+async function prepareCreateFolderOperation(
   payload: IpcRequest<"writeOperation:createFolder">,
-): Promise<void> {
+): Promise<PreparedCreateFolderOperation> {
   const parentDirectoryPath = resolve(payload.parentDirectoryPath);
   const folderName = payload.folderName.trim();
   const destinationPath = join(parentDirectoryPath, folderName);
@@ -757,6 +736,7 @@ async function validateCreateFolderRequest(
   if (await pathExists(destinationPath)) {
     throw new Error(`An item named "${folderName}" already exists.`);
   }
+  return { destinationPath };
 }
 
 async function executeTrashOperation(
@@ -769,7 +749,7 @@ async function executeTrashOperation(
   const items: WriteOperationResult["items"] = [];
   let completedItemCount = 0;
   let cancelled = false;
-  for (const path of paths) {
+  for (const [index, path] of paths.entries()) {
     if (controller.signal.aborted) {
       cancelled = true;
       items.push({
@@ -817,6 +797,14 @@ async function executeTrashOperation(
           destinationPath: null,
           status: "failed",
           error: toErrorMessage(error),
+        });
+      }
+      for (const remainingPath of paths.slice(index + 1)) {
+        items.push({
+          sourcePath: remainingPath,
+          destinationPath: null,
+          status: "cancelled",
+          error: "Operation stopped before this item was processed.",
         });
       }
       break;
@@ -1241,16 +1229,20 @@ export function resolveApplicationDisplayName(applicationPath: string): string {
     : bundleName || trimmed;
 }
 
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return String(error);
-}
-
 function isAbortError(error: unknown): boolean {
   return (
     error instanceof Error &&
     (error.name === "AbortError" || error.message.toLowerCase().includes("aborted"))
+  );
+}
+
+function isTerminalStatus(
+  status: WriteOperationProgressEvent["status"] | WriteOperationResult["status"],
+): boolean {
+  return (
+    status === "completed" ||
+    status === "failed" ||
+    status === "cancelled" ||
+    status === "partial"
   );
 }

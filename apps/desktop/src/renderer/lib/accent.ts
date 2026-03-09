@@ -3,13 +3,8 @@ import {
   type AccentMode,
   type ThemeMode,
 } from "../../shared/appPreferences";
+import { withAlpha } from "./colorUtils";
 import { resolveThemeCssBase, type ThemeCssBase } from "./themeVariants";
-
-type Rgb = {
-  r: number;
-  g: number;
-  b: number;
-};
 
 type AccentThemeProfile = {
   isLight: boolean;
@@ -164,7 +159,6 @@ export function getAccentPalette(accent: AccentMode) {
 export function generateAccentTokens(accent: AccentMode, theme: ThemeMode): AccentTokens {
   const palette = getAccentPalette(accent);
   const profile = ACCENT_THEME_PROFILES[resolveThemeCssBase(theme)];
-  const rgb = hexToRgb(palette.primary);
 
   return {
     id: accent,
@@ -173,30 +167,30 @@ export function generateAccentTokens(accent: AccentMode, theme: ThemeMode): Acce
     dark: palette.dark,
     solid: palette.primary,
     solidDark: palette.dark,
-    hoverBg: toRgba(rgb, profile.hoverBgAlpha),
-    pillBg: toRgba(rgb, profile.pillBgAlpha),
-    pillBorder: toRgba(rgb, profile.pillBorderAlpha),
+    hoverBg: withAlpha(palette.primary, profile.hoverBgAlpha),
+    pillBg: withAlpha(palette.primary, profile.pillBgAlpha),
+    pillBorder: withAlpha(palette.primary, profile.pillBorderAlpha),
     pillText: profile.isLight ? palette.dark : palette.primary,
-    border: toRgba(rgb, 0.3),
-    borderSoft: toRgba(rgb, 0.18),
-    focusBorder: toRgba(rgb, profile.focusBorderAlpha),
-    softBg: toRgba(rgb, 0.08),
-    activeBg: toRgba(rgb, profile.activeBgAlpha),
-    activeStrongBg: toRgba(rgb, profile.activeStrongAlpha),
-    heroIconBg: toRgba(rgb, profile.heroIconBgAlpha),
-    folderTint: toRgba(rgb, profile.folderTintAlpha),
+    border: withAlpha(palette.primary, 0.3),
+    borderSoft: withAlpha(palette.primary, 0.18),
+    focusBorder: withAlpha(palette.primary, profile.focusBorderAlpha),
+    softBg: withAlpha(palette.primary, 0.08),
+    activeBg: withAlpha(palette.primary, profile.activeBgAlpha),
+    activeStrongBg: withAlpha(palette.primary, profile.activeStrongAlpha),
+    heroIconBg: withAlpha(palette.primary, profile.heroIconBgAlpha),
+    folderTint: withAlpha(palette.primary, profile.folderTintAlpha),
     pathCrumbHover: profile.isLight ? palette.dark : palette.primary,
-    actionHoverBg: toRgba(rgb, profile.actionHoverBgAlpha),
-    calloutBg: toRgba(rgb, profile.calloutBgAlpha),
-    calloutBorder: toRgba(rgb, profile.calloutBorderAlpha),
-    searchPillBg: toRgba(rgb, profile.searchPillBgAlpha),
-    searchPillBorder: toRgba(rgb, profile.searchPillBorderAlpha),
-    searchStopBg: toRgba(rgb, profile.searchStopBgAlpha),
-    searchStopBgHover: toRgba(rgb, profile.searchStopBgHoverAlpha),
-    searchStopBorder: toRgba(rgb, profile.searchStopBorderAlpha),
-    searchToggleBg: toRgba(rgb, profile.searchToggleBgAlpha),
-    locationRing: toRgba(rgb, profile.locationRingAlpha),
-    ringSoft: toRgba(rgb, 0.15),
+    actionHoverBg: withAlpha(palette.primary, profile.actionHoverBgAlpha),
+    calloutBg: withAlpha(palette.primary, profile.calloutBgAlpha),
+    calloutBorder: withAlpha(palette.primary, profile.calloutBorderAlpha),
+    searchPillBg: withAlpha(palette.primary, profile.searchPillBgAlpha),
+    searchPillBorder: withAlpha(palette.primary, profile.searchPillBorderAlpha),
+    searchStopBg: withAlpha(palette.primary, profile.searchStopBgAlpha),
+    searchStopBgHover: withAlpha(palette.primary, profile.searchStopBgHoverAlpha),
+    searchStopBorder: withAlpha(palette.primary, profile.searchStopBorderAlpha),
+    searchToggleBg: withAlpha(palette.primary, profile.searchToggleBgAlpha),
+    locationRing: withAlpha(palette.primary, profile.locationRingAlpha),
+    ringSoft: withAlpha(palette.primary, 0.15),
   };
 }
 
@@ -259,17 +253,4 @@ export function getToolbarAccentVariables(tokens: AccentTokens): Record<string, 
     "--sidebar-rail-menu-active-fg": tokens.pathCrumbHover,
     "--sidebar-rail-menu-check": tokens.pathCrumbHover,
   };
-}
-
-function hexToRgb(value: string): Rgb {
-  const normalized = value.trim().replace(/^#/, "");
-  return {
-    r: Number.parseInt(normalized.slice(0, 2), 16),
-    g: Number.parseInt(normalized.slice(2, 4), 16),
-    b: Number.parseInt(normalized.slice(4, 6), 16),
-  };
-}
-
-function toRgba(rgb: Rgb, alpha: number): string {
-  return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
 }

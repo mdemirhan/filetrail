@@ -133,8 +133,7 @@ export function ItemContextMenu({
   const items = variant === "search" ? SEARCH_CONTEXT_MENU_ITEMS : BROWSE_CONTEXT_MENU_ITEMS;
 
   useEffect(() => {
-    if (!open) {
-      setActiveItemId(null);
+    if (open) {
       return;
     }
     setActiveItemId(null);

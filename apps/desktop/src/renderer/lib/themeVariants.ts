@@ -1,5 +1,7 @@
 import type { ThemeMode } from "../../shared/appPreferences";
 
+import { withAlpha } from "./colorUtils";
+
 export type ThemeCssBase = "light" | "dark" | "tomorrow-night" | "catppuccin-mocha";
 
 type ThemeVariantDefinition = {
@@ -709,15 +711,4 @@ function getThemeVariantCssOverridesFromVariant(
     "--scroll-thumb": withAlpha(variant.icons.active, isLight ? 0.22 : 0.3),
     "--scroll-thumb-hover": withAlpha(variant.icons.active, isLight ? 0.34 : 0.42),
   };
-}
-
-function withAlpha(value: string, alpha: number): string {
-  if (!value.startsWith("#")) {
-    return value;
-  }
-  const normalized = value.slice(1);
-  const r = Number.parseInt(normalized.slice(0, 2), 16);
-  const g = Number.parseInt(normalized.slice(2, 4), 16);
-  const b = Number.parseInt(normalized.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }

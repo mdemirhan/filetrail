@@ -21,9 +21,7 @@ import {
 } from "../../shared/appPreferences";
 import { generateAccentTokens } from "../lib/accent";
 import { type ThemeCssBase, getThemeVariant, resolveThemeCssBase } from "../lib/themeVariants";
-
-const mono = "'SF Mono', 'JetBrains Mono', 'Fira Code', monospace";
-const sans = "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', system-ui, sans-serif";
+import { uiMonoFontStack as mono, uiSansFontStack as sans } from "../lib/viewFonts";
 
 const settingsBaseThemes = {
   light: {

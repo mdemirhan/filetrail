@@ -2,7 +2,7 @@ import { Worker } from "node:worker_threads";
 
 import type { IpcChannel, IpcRequest, IpcResponse } from "@filetrail/contracts";
 
-type WorkerSupportedChannel = Extract<
+export type WorkerSupportedChannel = Extract<
   IpcChannel,
   | "tree:getChildren"
   | "directory:getSnapshot"

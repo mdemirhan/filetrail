@@ -7,16 +7,6 @@ describe("logging helpers", () => {
     expect(toErrorMessage(42)).toBe("42");
   });
 
-  it("suppresses debug logs when renderer debugging is disabled", () => {
-    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => undefined);
-    const logger = createRendererLogger("renderer");
-
-    logger.debug("ignored", { ok: true });
-
-    expect(debugSpy).not.toHaveBeenCalled();
-    debugSpy.mockRestore();
-  });
-
   it("formats renderer error logs with namespace and normalized error text", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const logger = createRendererLogger("renderer");

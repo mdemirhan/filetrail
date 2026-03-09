@@ -86,7 +86,7 @@ function isExpectedAccessError(error: unknown): boolean {
   );
 }
 
-function toErrorMessage(error: unknown): string {
+export function toErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
   }

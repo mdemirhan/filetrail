@@ -20,24 +20,9 @@ const baseItem = {
 };
 
 describe("InfoPanel", () => {
-  it("renders nothing when closed and shows loading/empty states when open", () => {
+  it("shows loading and empty states", () => {
     const { rerender } = render(
       <InfoPanel
-        open={false}
-        loading={false}
-        item={null}
-        onClose={() => undefined}
-        onNavigateToPath={() => undefined}
-        onOpen={() => undefined}
-        onOpenInTerminal={() => undefined}
-        onCopyPath={() => true}
-      />,
-    );
-    expect(screen.queryByText("Get Info")).toBeNull();
-
-    rerender(
-      <InfoPanel
-        open
         loading
         item={null}
         onClose={() => undefined}
@@ -51,7 +36,6 @@ describe("InfoPanel", () => {
 
     rerender(
       <InfoPanel
-        open
         loading={false}
         item={null}
         onClose={() => undefined}
@@ -74,7 +58,6 @@ describe("InfoPanel", () => {
 
     render(
       <InfoPanel
-        open
         loading={false}
         item={baseItem}
         onClose={onClose}
@@ -115,7 +98,6 @@ describe("InfoPanel", () => {
   it("shows directory placeholders instead of file-only metadata", () => {
     render(
       <InfoPanel
-        open
         loading={false}
         item={{
           ...baseItem,

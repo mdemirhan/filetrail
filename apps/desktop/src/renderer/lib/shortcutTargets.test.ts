@@ -17,7 +17,7 @@ describe("shortcutTargets", () => {
     ).toEqual(["/tmp/context"]);
   });
 
-  it("does not return terminal targets when the tree pane is focused", () => {
+  it("falls back to the current path for terminal when the tree pane is focused", () => {
     expect(
       resolveOpenInTerminalPaths({
         focusedPane: "tree",
@@ -26,10 +26,10 @@ describe("shortcutTargets", () => {
         selectedContentPaths: ["/tmp/content"],
         currentPath: "/tmp/tree",
       }),
-    ).toEqual([]);
+    ).toEqual(["/tmp/tree"]);
   });
 
-  it("does not fall back to the tree path for terminal when the tree pane is focused", () => {
+  it("falls back to the tree path for terminal when the tree pane is focused", () => {
     expect(
       resolveOpenInTerminalPaths({
         focusedPane: "tree",
@@ -38,7 +38,7 @@ describe("shortcutTargets", () => {
         selectedContentPaths: [],
         currentPath: "/tmp/tree",
       }),
-    ).toEqual([]);
+    ).toEqual(["/tmp/tree"]);
   });
 
   it("uses the content selection when the content pane is focused", () => {
@@ -53,7 +53,7 @@ describe("shortcutTargets", () => {
     ).toEqual(["/tmp/content-a", "/tmp/content-b"]);
   });
 
-  it("keeps terminal targets empty when focus is temporarily null after tree focus", () => {
+  it("falls back to the current path for terminal when focus is temporarily null after tree focus", () => {
     expect(
       resolveOpenInTerminalPaths({
         focusedPane: null,
@@ -62,7 +62,7 @@ describe("shortcutTargets", () => {
         selectedContentPaths: ["/tmp/content"],
         currentPath: "/tmp/tree",
       }),
-    ).toEqual([]);
+    ).toEqual(["/tmp/tree"]);
   });
 
   it("falls back to the current path when content has no selection", () => {
@@ -86,10 +86,10 @@ describe("shortcutTargets", () => {
         selectedContentPaths: ["/tmp/content"],
         currentPath: "/tmp/tree",
       }),
-    ).toEqual([]);
+    ).toEqual(["/tmp/tree"]);
   });
 
-  it("does not return content targets for Open when the tree pane is focused", () => {
+  it("falls back to the current path for Open when the tree pane is focused", () => {
     expect(
       resolveOpenSelectionPaths({
         focusedPane: "tree",
@@ -98,7 +98,19 @@ describe("shortcutTargets", () => {
         selectedContentPaths: ["/tmp/content"],
         currentPath: "/tmp/tree",
       }),
-    ).toEqual([]);
+    ).toEqual(["/tmp/tree"]);
+  });
+
+  it("falls back to the current path for Open when focus is temporarily null after tree focus", () => {
+    expect(
+      resolveOpenSelectionPaths({
+        focusedPane: null,
+        lastFocusedPane: "tree",
+        contextMenuPaths: [],
+        selectedContentPaths: ["/tmp/content"],
+        currentPath: "/tmp/tree",
+      }),
+    ).toEqual(["/tmp/tree"]);
   });
 
   it("does not fall back to the current path for Edit without a file selection", () => {

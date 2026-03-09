@@ -2,16 +2,13 @@ import { useMemo, useState } from "react";
 
 import {
   ACCENT_OPTIONS,
-  getThemeLabel,
   type AccentMode,
   type ThemeMode,
+  getThemeLabel,
 } from "../../shared/appPreferences";
 import { generateAccentTokens } from "../lib/accent";
-import {
-  getThemeVariant,
-  resolveThemeCssBase,
-  type ThemeCssBase,
-} from "../lib/themeVariants";
+import { type ThemeCssBase, getThemeVariant, resolveThemeCssBase } from "../lib/themeVariants";
+import { uiMonoFontStack as mono, uiSansFontStack as sans } from "../lib/viewFonts";
 
 type ShortcutItem = {
   group: string;
@@ -23,9 +20,6 @@ type ReferenceItem = {
   label: string;
   description: string;
 };
-
-const mono = "'SF Mono', 'JetBrains Mono', 'Fira Code', monospace";
-const sans = "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', system-ui, sans-serif";
 
 const helpBaseThemes = {
   light: {
@@ -504,16 +498,24 @@ function Keys({
   keys: string[];
   theme: ResolvedHelpTheme;
 }) {
+  const keyOccurrences = new Map<string, number>();
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "3px", flexShrink: 0 }}>
-      {keys.map((key, index) => (
-        <span key={`${key}-${index}`} style={{ display: "flex", alignItems: "center", gap: "3px" }}>
-          {index > 0 ? (
-            <span style={{ fontSize: "9px", color: theme.plus, fontFamily: mono }}>+</span>
-          ) : null}
-          <Kbd theme={theme}>{key}</Kbd>
-        </span>
-      ))}
+      {keys.map((key, index) => {
+        const occurrenceCount = keyOccurrences.get(key) ?? 0;
+        keyOccurrences.set(key, occurrenceCount + 1);
+        return (
+          <span
+            key={`${keys.join("::")}-${key}-${occurrenceCount}`}
+            style={{ display: "flex", alignItems: "center", gap: "3px" }}
+          >
+            {index > 0 ? (
+              <span style={{ fontSize: "9px", color: theme.plus, fontFamily: mono }}>+</span>
+            ) : null}
+            <Kbd theme={theme}>{key}</Kbd>
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -686,7 +688,9 @@ function resolveThemeMode(theme: ThemeMode | undefined): ThemeMode {
     return theme;
   }
   if (typeof document !== "undefined") {
-    const documentThemeVariant = document.documentElement.dataset.themeVariant as ThemeMode | undefined;
+    const documentThemeVariant = document.documentElement.dataset.themeVariant as
+      | ThemeMode
+      | undefined;
     if (
       documentThemeVariant &&
       (documentThemeVariant in helpBaseThemes || getThemeVariant(documentThemeVariant) !== null)

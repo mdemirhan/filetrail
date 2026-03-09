@@ -379,7 +379,7 @@ export class WriteService {
         itemResults.push({
           sourcePath: item.sourcePath,
           destinationPath: item.destinationPath,
-          status: completedItemCount > 0 ? "cancelled" : "cancelled",
+          status: "cancelled",
           error: "Operation cancelled.",
         });
         break;
@@ -504,7 +504,6 @@ export class WriteService {
       if (step.type === "mkdir") {
         await this.fileSystem.mkdir(step.destinationPath, { recursive: true });
       } else if (step.type === "copy_file") {
-        await this.fileSystem.mkdir(dirname(step.destinationPath), { recursive: true });
         await this.fileSystem.copyFileStream(step.sourcePath, step.destinationPath, signal);
         completedByteCount += step.sizeBytes;
       } else {
@@ -716,9 +715,7 @@ export function createWriteService(dependencies: WriteServiceDependencies = {}):
 function normalizeCopyPasteRequest(request: CopyPasteRequest): Required<CopyPasteRequest> {
   return {
     mode: request.mode,
-    sourcePaths: Array.from(new Set(request.sourcePaths.map((path) => resolve(path)))).filter(
-      (path) => path.length > 0,
-    ),
+    sourcePaths: Array.from(new Set(request.sourcePaths.map((path) => resolve(path)))),
     destinationDirectoryPath: resolve(request.destinationDirectoryPath),
     conflictResolution: request.conflictResolution ?? "error",
   };

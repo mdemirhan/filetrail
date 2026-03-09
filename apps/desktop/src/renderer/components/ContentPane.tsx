@@ -10,6 +10,7 @@ import {
   DEFAULT_DETAIL_COLUMN_WIDTHS,
   clampDetailColumnWidth,
 } from "../../shared/appPreferences";
+import { usePathSuggestions } from "../hooks/usePathSuggestions";
 import { useElementSize } from "../hooks/useElementSize";
 import { FileIcon, FolderIcon } from "../lib/fileIcons";
 import {
@@ -31,10 +32,10 @@ import {
 } from "../lib/formatting";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
 import { buildColumnMajorRows, computeRowsPerColumn, getVirtualRange } from "../lib/virtualization";
+import { PathSuggestionDropdown } from "./PathSuggestionDropdown";
 
 type DirectoryEntry = IpcResponse<"directory:getSnapshot">["entries"][number];
 type DirectoryEntryMetadata = IpcResponse<"directory:getMetadataBatch">["items"][number];
-type PathSuggestion = IpcResponse<"path:getSuggestions">["suggestions"][number];
 type PathbarSegment = { label: string; path: string };
 type PathbarDisplayItem =
   | {
@@ -48,7 +49,6 @@ type PathbarDisplayItem =
       hiddenCount: number;
     };
 
-const PATH_SUGGESTION_DEBOUNCE_MS = 350;
 const PATHBAR_WIDTH_SAFETY_MARGIN = 12;
 const PATHBAR_SEPARATOR_WIDTH = 16;
 const PATHBAR_COLLAPSED_WIDTH = 34;
@@ -73,9 +73,8 @@ export function ContentPane({
   loading,
   error,
   includeHidden,
-  selectedPath = "",
-  selectedPaths = selectedPath ? [selectedPath] : [],
-  selectionLeadPath = selectedPath || null,
+  selectedPaths = [],
+  selectionLeadPath = null,
   metadataByPath,
   sortBy,
   sortDirection,
@@ -97,7 +96,6 @@ export function ContentPane({
   detailColumnWidths = DEFAULT_DETAIL_COLUMN_WIDTHS,
   onDetailColumnWidthsChange = () => undefined,
   tabSwitchesExplorerPanes = false,
-  searchQuery = "",
   typeaheadQuery,
 }: {
   paneRef?: React.RefObject<HTMLElement | null>;
@@ -108,7 +106,6 @@ export function ContentPane({
   loading: boolean;
   error: string | null;
   includeHidden: boolean;
-  selectedPath?: string;
   selectedPaths?: string[];
   selectionLeadPath?: string | null;
   metadataByPath: Record<string, DirectoryEntryMetadata>;
@@ -132,24 +129,32 @@ export function ContentPane({
   detailColumnWidths?: DetailColumnWidths;
   onDetailColumnWidthsChange?: (value: DetailColumnWidths) => void;
   tabSwitchesExplorerPanes?: boolean;
-  searchQuery?: string;
   typeaheadQuery?: string;
 }) {
   const [pathEditorOpen, setPathEditorOpen] = useState(false);
   const [pathbarExpanded, setPathbarExpanded] = useState(false);
-  const [draftPath, setDraftPath] = useState(currentPath);
-  const [previewPath, setPreviewPath] = useState<string | null>(null);
   const pathInputRef = useRef<HTMLInputElement | null>(null);
   const pathbarRef = useRef<HTMLElement | null>(null);
   const pathEditorShellRef = useRef<HTMLDivElement | null>(null);
-  const suggestionsRef = useRef<HTMLDivElement | null>(null);
   const segmentClickTimeoutRef = useRef<number | null>(null);
-  const suggestionDebounceTimeoutRef = useRef<number | null>(null);
-  const suggestionRequestRef = useRef(0);
-  const pathEditorOpenRef = useRef(false);
-  const pendingSuggestionInputRef = useRef("");
-  const [pathSuggestions, setPathSuggestions] = useState<PathSuggestion[]>([]);
-  const [highlightedSuggestionIndex, setHighlightedSuggestionIndex] = useState(-1);
+  const {
+    draftValue,
+    displayedValue,
+    suggestions,
+    highlightedIndex,
+    previewValue,
+    suggestionsRef,
+    setValue,
+    clearSuggestions,
+    acceptSuggestion,
+    previewSuggestion,
+    focusSuggestion,
+  } = usePathSuggestions({
+    open: pathEditorOpen,
+    initialInput: currentPath,
+    inputRef: pathInputRef,
+    onRequestPathSuggestions,
+  });
   const pathSegments = useMemo(() => buildPathSegments(currentPath), [currentPath]);
   const { width: pathbarWidth } = useElementSize(pathbarRef);
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -158,7 +163,6 @@ export function ContentPane({
     () => resolveVisiblePathbarItems(pathSegments, pathbarWidth, pathbarExpanded),
     [pathSegments, pathbarWidth, pathbarExpanded],
   );
-  const displayedPath = previewPath ?? draftPath;
 
   // Navigating to a new folder resets all transient editor state so previews, expanded
   // breadcrumbs, and highlighted suggestions do not leak across locations.
@@ -167,21 +171,11 @@ export function ContentPane({
       window.clearTimeout(segmentClickTimeoutRef.current);
       segmentClickTimeoutRef.current = null;
     }
-    if (suggestionDebounceTimeoutRef.current !== null) {
-      window.clearTimeout(suggestionDebounceTimeoutRef.current);
-      suggestionDebounceTimeoutRef.current = null;
-    }
     setPathEditorOpen(false);
-    setDraftPath(currentPath);
-    setPreviewPath(null);
-    setPathSuggestions([]);
-    setHighlightedSuggestionIndex(-1);
     setPathbarExpanded(false);
-    pendingSuggestionInputRef.current = "";
   }, [currentPath]);
 
   useEffect(() => {
-    pathEditorOpenRef.current = pathEditorOpen;
     if (pathEditorOpen) {
       pathInputRef.current?.focus();
       const input = pathInputRef.current;
@@ -189,42 +183,13 @@ export function ContentPane({
         const caretPosition = currentPath.length;
         input.setSelectionRange(caretPosition, caretPosition);
       }
-      scheduleSuggestionsRequest(currentPath);
-      return;
-    }
-    if (suggestionDebounceTimeoutRef.current !== null) {
-      window.clearTimeout(suggestionDebounceTimeoutRef.current);
-      suggestionDebounceTimeoutRef.current = null;
     }
   }, [currentPath, pathEditorOpen]);
-
-  // Suggestion previews temporarily replace the input text while selecting the autocompleted
-  // suffix, which keeps keyboard acceptance behavior predictable.
-  useEffect(() => {
-    if (!pathEditorOpen || previewPath === null) {
-      return;
-    }
-    const input = pathInputRef.current;
-    if (!input) {
-      return;
-    }
-    const selectionStart = getSharedPrefixLength(draftPath, previewPath);
-    const selectionEnd = previewPath.length;
-    window.requestAnimationFrame(() => {
-      if (document.activeElement !== input) {
-        return;
-      }
-      input.setSelectionRange(selectionStart, selectionEnd);
-    });
-  }, [draftPath, pathEditorOpen, previewPath]);
 
   useEffect(
     () => () => {
       if (segmentClickTimeoutRef.current !== null) {
         window.clearTimeout(segmentClickTimeoutRef.current);
-      }
-      if (suggestionDebounceTimeoutRef.current !== null) {
-        window.clearTimeout(suggestionDebounceTimeoutRef.current);
       }
     },
     [],
@@ -285,75 +250,6 @@ export function ContentPane({
       window.cancelAnimationFrame(frameId);
     };
   }, [pathbarExpanded]);
-
-  // Suggestions are debounced because they can hit the filesystem on every keystroke.
-  // Request IDs and the pending-input ref prevent older responses from winning races.
-  function scheduleSuggestionsRequest(inputPath: string): void {
-    if (suggestionDebounceTimeoutRef.current !== null) {
-      window.clearTimeout(suggestionDebounceTimeoutRef.current);
-    }
-    suggestionDebounceTimeoutRef.current = window.setTimeout(() => {
-      suggestionDebounceTimeoutRef.current = null;
-      void requestSuggestionsForInput(inputPath);
-    }, PATH_SUGGESTION_DEBOUNCE_MS);
-  }
-
-  async function requestSuggestionsForInput(inputPath: string): Promise<void> {
-    const requestedInput = inputPath;
-    pendingSuggestionInputRef.current = requestedInput;
-    const requestId = ++suggestionRequestRef.current;
-    const response = await onRequestPathSuggestions(requestedInput).catch(() => null);
-    if (!pathEditorOpenRef.current) {
-      return;
-    }
-    if (suggestionRequestRef.current !== requestId) {
-      return;
-    }
-    if (pendingSuggestionInputRef.current !== requestedInput) {
-      return;
-    }
-    setPreviewPath(null);
-    setHighlightedSuggestionIndex(-1);
-    setPathSuggestions(response?.suggestions ?? []);
-  }
-
-  // Accepted suggestions normalize directory-style paths with a trailing slash so follow-up
-  // suggestions continue from the accepted folder.
-  function acceptSuggestion(suggestion: PathSuggestion): void {
-    const acceptedPath = suggestion.path.endsWith("/") ? suggestion.path : `${suggestion.path}/`;
-    pendingSuggestionInputRef.current = acceptedPath;
-    setDraftPath(acceptedPath);
-    setPreviewPath(null);
-    setPathSuggestions([]);
-    setHighlightedSuggestionIndex(-1);
-    scheduleSuggestionsRequest(acceptedPath);
-  }
-
-  function previewSuggestion(index: number): void {
-    const suggestion = pathSuggestions[index];
-    if (!suggestion) {
-      return;
-    }
-    const previewPath = suggestion.path.endsWith("/") ? suggestion.path : `${suggestion.path}/`;
-    setHighlightedSuggestionIndex(index);
-    setPreviewPath(previewPath);
-  }
-
-  function clearPathSuggestions(): void {
-    setPreviewPath(null);
-    setPathSuggestions([]);
-    setHighlightedSuggestionIndex(-1);
-  }
-
-  function focusPathSuggestion(index: number): void {
-    const button =
-      suggestionsRef.current?.querySelectorAll<HTMLButtonElement>(".pathbar-suggestion")[index];
-    if (!button) {
-      return;
-    }
-    previewSuggestion(index);
-    button.focus();
-  }
 
   return (
     <section
@@ -432,17 +328,14 @@ export function ContentPane({
             onSubmit={(event) => {
               event.preventDefault();
               const nextPath =
-                highlightedSuggestionIndex >= 0 && pathSuggestions[highlightedSuggestionIndex]
-                  ? pathSuggestions[highlightedSuggestionIndex].path
-                  : draftPath.trim();
+                highlightedIndex >= 0 && suggestions[highlightedIndex]
+                  ? suggestions[highlightedIndex].path
+                  : draftValue.trim();
               if (nextPath.length === 0) {
                 return;
               }
               setPathEditorOpen(false);
-              setPreviewPath(null);
-              setPathSuggestions([]);
-              setHighlightedSuggestionIndex(-1);
-              pendingSuggestionInputRef.current = "";
+              clearSuggestions();
               onNavigatePath(nextPath);
             }}
           >
@@ -453,7 +346,7 @@ export function ContentPane({
                 aria-label="Current folder path"
                 autoComplete="off"
                 spellCheck={false}
-                value={displayedPath}
+                value={displayedValue}
                 onBlur={(event) => {
                   const nextTarget = event.relatedTarget;
                   if (
@@ -463,128 +356,54 @@ export function ContentPane({
                   ) {
                     return;
                   }
-                  setDraftPath(currentPath);
-                  clearPathSuggestions();
-                  pendingSuggestionInputRef.current = "";
+                  setValue(currentPath, false);
                   setPathEditorOpen(false);
                 }}
-                onChange={(event) => {
-                  const nextValue = event.currentTarget.value;
-                  pendingSuggestionInputRef.current = nextValue;
-                  clearPathSuggestions();
-                  setDraftPath(nextValue);
-                  scheduleSuggestionsRequest(nextValue);
-                }}
+                onChange={(event) => setValue(event.currentTarget.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Escape") {
                     event.preventDefault();
-                    if (pathSuggestions.length > 0 || previewPath !== null) {
-                      clearPathSuggestions();
+                    if (suggestions.length > 0 || previewValue !== null) {
+                      clearSuggestions();
                       return;
                     }
-                    setDraftPath(currentPath);
-                    clearPathSuggestions();
-                    pendingSuggestionInputRef.current = "";
+                    setValue(currentPath, false);
                     setPathEditorOpen(false);
                     return;
                   }
                   if (
                     (event.key === "ArrowDown" || event.key === "ArrowUp") &&
-                    pathSuggestions.length > 0
+                    suggestions.length > 0
                   ) {
                     event.preventDefault();
                     const nextIndex =
-                      highlightedSuggestionIndex < 0
+                      highlightedIndex < 0
                         ? event.key === "ArrowDown"
                           ? 0
-                          : pathSuggestions.length - 1
+                          : suggestions.length - 1
                         : event.key === "ArrowDown"
-                          ? (highlightedSuggestionIndex + 1) % pathSuggestions.length
-                          : (highlightedSuggestionIndex - 1 + pathSuggestions.length) %
-                            pathSuggestions.length;
+                          ? (highlightedIndex + 1) % suggestions.length
+                          : (highlightedIndex - 1 + suggestions.length) % suggestions.length;
                     previewSuggestion(nextIndex);
                     return;
                   }
-                  if (
-                    tabSwitchesExplorerPanes &&
-                    event.key === "Tab" &&
-                    pathSuggestions.length > 0
-                  ) {
+                  if (tabSwitchesExplorerPanes && event.key === "Tab" && suggestions.length > 0) {
                     event.preventDefault();
-                    focusPathSuggestion(event.shiftKey ? pathSuggestions.length - 1 : 0);
+                    focusSuggestion(event.shiftKey ? suggestions.length - 1 : 0);
                   }
                 }}
               />
-              {pathSuggestions.length > 0 ? (
-                <div
-                  ref={suggestionsRef}
-                  className="pathbar-suggestions"
-                  aria-label="Path suggestions"
-                >
-                  {pathSuggestions.map((suggestion) => (
-                    <button
-                      key={suggestion.path}
-                      type="button"
-                      className={`pathbar-suggestion${
-                        pathSuggestions[highlightedSuggestionIndex]?.path === suggestion.path
-                          ? " active"
-                          : ""
-                      }`}
-                      onMouseEnter={() => {
-                        const index = pathSuggestions.findIndex(
-                          (item) => item.path === suggestion.path,
-                        );
-                        if (index >= 0) {
-                          previewSuggestion(index);
-                        }
-                      }}
-                      onFocus={() => {
-                        const index = pathSuggestions.findIndex(
-                          (item) => item.path === suggestion.path,
-                        );
-                        if (index >= 0) {
-                          previewSuggestion(index);
-                        }
-                      }}
-                      onKeyDown={(event) => {
-                        const index = pathSuggestions.findIndex(
-                          (item) => item.path === suggestion.path,
-                        );
-                        if (event.key === "Escape") {
-                          event.preventDefault();
-                          clearPathSuggestions();
-                          pathInputRef.current?.focus();
-                          return;
-                        }
-                        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                          event.preventDefault();
-                          if (pathSuggestions.length === 0 || index < 0) {
-                            return;
-                          }
-                          const nextIndex =
-                            event.key === "ArrowDown"
-                              ? (index + 1) % pathSuggestions.length
-                              : (index - 1 + pathSuggestions.length) % pathSuggestions.length;
-                          focusPathSuggestion(nextIndex);
-                          return;
-                        }
-                        if (tabSwitchesExplorerPanes && event.key === "Tab") {
-                          event.preventDefault();
-                          pathInputRef.current?.focus();
-                        }
-                      }}
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => {
-                        acceptSuggestion(suggestion);
-                      }}
-                      title={suggestion.path}
-                    >
-                      <span className="pathbar-suggestion-name">{suggestion.name}</span>
-                      <span className="pathbar-suggestion-path">{suggestion.path}</span>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
+              <PathSuggestionDropdown
+                suggestions={suggestions}
+                highlightedIndex={highlightedIndex}
+                suggestionsRef={suggestionsRef}
+                inputRef={pathInputRef}
+                tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
+                onPreviewSuggestion={previewSuggestion}
+                onFocusSuggestion={focusSuggestion}
+                onClearSuggestions={clearSuggestions}
+                onAcceptSuggestion={acceptSuggestion}
+              />
             </div>
           </form>
         ) : (
@@ -663,7 +482,6 @@ export function ContentPane({
             loading={loading}
             error={error}
             includeHidden={includeHidden}
-            searchQuery={searchQuery}
             selectedPaths={selectedPaths}
             selectionLeadPath={selectionLeadPath}
             viewportWidth={viewportWidth}
@@ -685,7 +503,6 @@ export function ContentPane({
             loading={loading}
             error={error}
             includeHidden={includeHidden}
-            searchQuery={searchQuery}
             metadataByPath={metadataByPath}
             selectedPaths={selectedPaths}
             selectionLeadPath={selectionLeadPath}
@@ -868,7 +685,6 @@ function FlowListView({
   loading,
   error,
   includeHidden,
-  searchQuery,
   selectedPaths,
   selectionLeadPath,
   viewportWidth,
@@ -887,7 +703,6 @@ function FlowListView({
   loading: boolean;
   error: string | null;
   includeHidden: boolean;
-  searchQuery: string;
   selectedPaths: string[];
   selectionLeadPath: string | null;
   viewportWidth: number;
@@ -1104,7 +919,6 @@ function DetailsView({
   loading,
   error,
   includeHidden,
-  searchQuery,
   metadataByPath,
   selectedPaths,
   selectionLeadPath,
@@ -1130,7 +944,6 @@ function DetailsView({
   loading: boolean;
   error: string | null;
   includeHidden: boolean;
-  searchQuery: string;
   metadataByPath: Record<string, DirectoryEntryMetadata>;
   selectedPaths: string[];
   selectionLeadPath: string | null;
@@ -1632,13 +1445,4 @@ function EmptyState({
       </span>
     </div>
   );
-}
-
-function getSharedPrefixLength(left: string, right: string): number {
-  const maxLength = Math.min(left.length, right.length);
-  let index = 0;
-  while (index < maxLength && left[index] === right[index]) {
-    index += 1;
-  }
-  return index;
 }

@@ -105,6 +105,8 @@ export const writeOperationActionSchema = z.enum([
   "rename",
   "new_folder",
 ]);
+export const sizeStatusSchema = z.enum(["ready", "deferred", "unavailable"]);
+const emptyRequestSchema = z.object({});
 
 export const treeChildSchema = z.object({
   path: z.string().min(1),
@@ -131,7 +133,7 @@ export const directoryEntryMetadataSchema = z.object({
   // Directories intentionally report `deferred` while folder size calculation is skipped
   // or backgrounded; the renderer maps that to `-` or an empty loading state instead of
   // implying the data is unavailable forever.
-  sizeStatus: z.enum(["ready", "deferred", "unavailable"]),
+  sizeStatus: sizeStatusSchema,
   permissionMode: z.number().int().nonnegative().nullable(),
 });
 
@@ -146,7 +148,7 @@ export const itemPropertiesSchema = z.object({
   createdAt: z.string().nullable(),
   modifiedAt: z.string().nullable(),
   sizeBytes: z.number().int().nonnegative().nullable(),
-  sizeStatus: z.enum(["ready", "deferred", "unavailable"]),
+  sizeStatus: sizeStatusSchema,
   permissionMode: z.number().int().nonnegative().nullable(),
 });
 
@@ -357,19 +359,19 @@ export const folderSizeJobStatusSchema = z.enum([
 // The renderer-side generic helpers derive their compile-time types directly from this map.
 export const ipcContractSchemas = {
   "app:getHomeDirectory": {
-    request: z.object({}),
+    request: emptyRequestSchema,
     response: z.object({
       path: z.string().min(1),
     }),
   },
   "app:getPreferences": {
-    request: z.object({}),
+    request: emptyRequestSchema,
     response: z.object({
       preferences: appPreferencesSchema,
     }),
   },
   "app:getLaunchContext": {
-    request: z.object({}),
+    request: emptyRequestSchema,
     response: launchContextSchema,
   },
   "app:updatePreferences": {
@@ -381,7 +383,7 @@ export const ipcContractSchemas = {
     }),
   },
   "app:clearCaches": {
-    request: z.object({}),
+    request: emptyRequestSchema,
     response: z.object({
       ok: z.literal(true),
     }),
@@ -593,7 +595,7 @@ export const ipcContractSchemas = {
     }),
   },
   "system:pickApplication": {
-    request: z.object({}),
+    request: emptyRequestSchema,
     response: z.object({
       canceled: z.boolean(),
       appPath: z.string().min(1).nullable(),

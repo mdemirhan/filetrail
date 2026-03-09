@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
 
+import { getFocusableElements } from "../lib/focusUtils";
+
 export function CopyPasteDialog({
   title,
   message,
@@ -12,15 +14,19 @@ export function CopyPasteDialog({
   message: string;
   detailLines?: string[];
   progressLabel?: string | null | undefined;
-  primaryAction?: {
-    label: string;
-    onClick: () => void;
-    destructive?: boolean | undefined;
-  } | undefined;
-  secondaryAction?: {
-    label: string;
-    onClick: () => void;
-  } | undefined;
+  primaryAction?:
+    | {
+        label: string;
+        onClick: () => void;
+        destructive?: boolean | undefined;
+      }
+    | undefined;
+  secondaryAction?:
+    | {
+        label: string;
+        onClick: () => void;
+      }
+    | undefined;
 }) {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const secondaryButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -60,7 +66,7 @@ export function CopyPasteDialog({
           if (!dialog) {
             return;
           }
-          const focusableElements = getFocusableElements(dialog);
+          const focusableElements = getFocusableElements(dialog, { includeLinks: true });
           if (focusableElements.length === 0) {
             return;
           }
@@ -112,13 +118,5 @@ export function CopyPasteDialog({
         </div>
       </dialog>
     </div>
-  );
-}
-
-function getFocusableElements(container: HTMLElement): HTMLElement[] {
-  return Array.from(
-    container.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    ),
   );
 }

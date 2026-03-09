@@ -129,7 +129,7 @@ export function TreePane({
         scrollFrameRef.current = null;
       }
     };
-  });
+  }, [currentPath]);
 
   if (!root) {
     return (

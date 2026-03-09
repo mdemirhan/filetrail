@@ -1,3 +1,5 @@
+import { isPathWithinRoot } from "./pathUtils";
+
 // Returns the parent directory, treating `/` as the root sentinel with no parent.
 export function parentDirectoryPath(path: string): string | null {
   if (path === "/") {
@@ -56,7 +58,7 @@ export function pathHasHiddenSegmentWithinRoot(path: string, rootPath: string): 
   }
 
   const relativePath =
-    rootPath === "/" ? path.slice(1) : path.slice(rootPath.length + (path === rootPath ? 0 : 1));
+    rootPath === "/" ? path.slice(1) : path.slice(rootPath.length + 1);
   return relativePath
     .split("/")
     .filter((segment) => segment.length > 0)
@@ -105,13 +107,7 @@ export function getNextSelectionIndex(args: {
   const step = Math.max(1, columns);
 
   if (viewMode === "details") {
-    if (key === "ArrowUp") {
-      return clampIndex(safeIndex - 1, itemCount);
-    }
-    if (key === "ArrowDown") {
-      return clampIndex(safeIndex + 1, itemCount);
-    }
-    if (key === "ArrowLeft") {
+    if (key === "ArrowUp" || key === "ArrowLeft") {
       return clampIndex(safeIndex - 1, itemCount);
     }
     return clampIndex(safeIndex + 1, itemCount);
@@ -204,11 +200,4 @@ function pathSegmentName(path: string): string {
   }
   const parts = path.split("/").filter((part) => part.length > 0);
   return parts.at(-1) ?? path;
-}
-
-function isPathWithinRoot(path: string, rootPath: string): boolean {
-  if (rootPath === "/") {
-    return true;
-  }
-  return path === rootPath || path.startsWith(`${rootPath}/`);
 }

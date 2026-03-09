@@ -50,7 +50,7 @@ export async function listTreeChildren(
       }
       const entryPath = resolve(directoryPath, dirent.name);
       const kind = await classifyEntry(dirent, entryPath, fileSystem);
-      if (kind !== "directory") {
+      if (kind !== "directory" && kind !== "symlink_directory") {
         return null;
       }
       return {
@@ -58,7 +58,7 @@ export async function listTreeChildren(
         name: dirent.name,
         kind,
         isHidden: isHiddenName(dirent.name),
-        isSymlink: false,
+        isSymlink: kind === "symlink_directory",
       };
     }),
   );
@@ -381,18 +381,6 @@ async function safeLstat(
   }
 }
 
-function compareEntriesByKindThenName(
-  left: IpcResponse<"directory:getSnapshot">["entries"][number],
-  right: IpcResponse<"directory:getSnapshot">["entries"][number],
-): number {
-  const leftRank = isDirectoryKind(left.kind) ? 0 : 1;
-  const rightRank = isDirectoryKind(right.kind) ? 0 : 1;
-  if (leftRank !== rightRank) {
-    return leftRank - rightRank;
-  }
-  return compareEntriesByName(left, right);
-}
-
 function compareEntries(
   left: IpcResponse<"directory:getSnapshot">["entries"][number] & {
     sortModifiedAt?: number | null;
@@ -465,15 +453,11 @@ function isHiddenName(name: string): boolean {
 }
 
 function normalizeSuggestionInput(inputPath: string): string {
-  const resolvedPath = resolve(inputPath);
-  if (resolvedPath === "/") {
-    return "/";
-  }
-  return buildPathFromParts(splitPathParts(resolvedPath));
+  return resolve(inputPath);
 }
 
 function hasTrailingSlash(inputPath: string): boolean {
-  return /[\\/]$/.test(inputPath);
+  return inputPath.endsWith("/");
 }
 
 function splitPathParts(path: string): string[] {
@@ -485,12 +469,7 @@ function buildPathFromParts(parts: string[]): string {
 }
 
 function parentDirectoryPath(path: string): string {
-  const resolvedPath = resolve(path);
-  if (resolvedPath === "/") {
-    return "/";
-  }
-  const parts = splitPathParts(resolvedPath);
-  return buildPathFromParts(parts.slice(0, -1));
+  return dirname(resolve(path));
 }
 
 function getKindLabel(kind: EntryKind, path: string): string {

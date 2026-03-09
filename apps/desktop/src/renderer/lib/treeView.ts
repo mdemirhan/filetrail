@@ -1,4 +1,5 @@
 import type { TreeNodeState } from "../components/TreePane";
+import { isPathWithinRoot } from "./pathUtils";
 
 export type FlattenedTreeNode = {
   path: string;
@@ -122,11 +123,4 @@ function parentDirectoryPath(path: string): string {
     return "/";
   }
   return path.split("/").slice(0, -1).join("/") || "/";
-}
-
-function isPathWithinRoot(path: string, rootPath: string): boolean {
-  if (rootPath === "/") {
-    return true;
-  }
-  return path === rootPath || path.startsWith(`${rootPath}/`);
 }

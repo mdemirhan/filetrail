@@ -7,6 +7,10 @@ import type { RendererCommandType } from "../shared/rendererCommands";
 export function createApplicationMenuTemplate(
   webContents: Pick<WebContents, "send">,
 ): MenuItemConstructorOptions[] {
+  const sendCommand = (type: RendererCommandType) => {
+    webContents.send("filetrail:command", { type });
+  };
+
   return [
     {
       label: "File Trail",
@@ -18,75 +22,43 @@ export function createApplicationMenuTemplate(
         {
           label: "Open",
           accelerator: "CommandOrControl+O",
-          click: () => {
-            webContents.send("filetrail:command", {
-              type: "openSelection" satisfies RendererCommandType,
-            });
-          },
+          click: () => sendCommand("openSelection"),
         },
         {
           label: "Edit",
           accelerator: "CommandOrControl+E",
-          click: () => {
-            webContents.send("filetrail:command", {
-              type: "editSelection" satisfies RendererCommandType,
-            });
-          },
+          click: () => sendCommand("editSelection"),
         },
         {
           label: "Move To…",
           accelerator: "CommandOrControl+Shift+M",
-          click: () => {
-            webContents.send("filetrail:command", {
-              type: "moveSelection" satisfies RendererCommandType,
-            });
-          },
+          click: () => sendCommand("moveSelection"),
         },
         {
           label: "Rename",
           accelerator: "F2",
-          click: () => {
-            webContents.send("filetrail:command", {
-              type: "renameSelection" satisfies RendererCommandType,
-            });
-          },
+          click: () => sendCommand("renameSelection"),
         },
         {
           label: "Duplicate",
           accelerator: "CommandOrControl+D",
-          click: () => {
-            webContents.send("filetrail:command", {
-              type: "duplicateSelection" satisfies RendererCommandType,
-            });
-          },
+          click: () => sendCommand("duplicateSelection"),
         },
         {
           label: "New Folder",
           accelerator: "CommandOrControl+Shift+N",
-          click: () => {
-            webContents.send("filetrail:command", {
-              type: "newFolder" satisfies RendererCommandType,
-            });
-          },
+          click: () => sendCommand("newFolder"),
         },
         {
           label: "Move to Trash",
           accelerator: "CommandOrControl+Backspace",
-          click: () => {
-            webContents.send("filetrail:command", {
-              type: "trashSelection" satisfies RendererCommandType,
-            });
-          },
+          click: () => sendCommand("trashSelection"),
         },
         { type: "separator" },
         {
           label: "Open in Terminal",
           accelerator: "CommandOrControl+T",
-          click: () => {
-            webContents.send("filetrail:command", {
-              type: "openInTerminal" satisfies RendererCommandType,
-            });
-          },
+          click: () => sendCommand("openInTerminal"),
         },
         { type: "separator" },
         { role: "close" },
@@ -101,67 +73,39 @@ export function createApplicationMenuTemplate(
         {
           label: "Cut",
           accelerator: "CommandOrControl+X",
-          click: () => {
-            webContents.send("filetrail:command", {
-              type: "cutSelection" satisfies RendererCommandType,
-            });
-          },
+          click: () => sendCommand("cutSelection"),
         },
         {
           label: "Copy",
           accelerator: "CommandOrControl+C",
-          click: () => {
-            webContents.send("filetrail:command", {
-              type: "copySelection" satisfies RendererCommandType,
-            });
-          },
+          click: () => sendCommand("copySelection"),
         },
         {
           label: "Paste",
           accelerator: "CommandOrControl+V",
-          click: () => {
-            webContents.send("filetrail:command", {
-              type: "pasteSelection" satisfies RendererCommandType,
-            });
-          },
+          click: () => sendCommand("pasteSelection"),
         },
         { role: "selectAll" },
         { type: "separator" },
         {
           label: "Find Files…",
           accelerator: "CommandOrControl+F",
-          click: () => {
-            webContents.send("filetrail:command", {
-              type: "focusFileSearch" satisfies RendererCommandType,
-            });
-          },
+          click: () => sendCommand("focusFileSearch"),
         },
         {
           label: "Go to Folder…",
           accelerator: "CommandOrControl+Shift+G",
-          click: () => {
-            webContents.send("filetrail:command", {
-              type: "openLocationSheet" satisfies RendererCommandType,
-            });
-          },
+          click: () => sendCommand("openLocationSheet"),
         },
         {
           label: "Settings…",
           accelerator: "CommandOrControl+,",
-          click: () => {
-            webContents.send("filetrail:command", {
-              type: "openSettings" satisfies RendererCommandType,
-            });
-          },
+          click: () => sendCommand("openSettings"),
         },
         {
           label: "Copy Path",
           accelerator: "Alt+CommandOrControl+C",
-          click: () => {
-            webContents.send("filetrail:command", {
-              type: "copyPath" satisfies RendererCommandType,
-            });
-          },
+          click: () => sendCommand("copyPath"),
         },
       ],
     },
@@ -171,58 +115,34 @@ export function createApplicationMenuTemplate(
         {
           label: "Toggle Info Panel",
           accelerator: "CommandOrControl+I",
-          click: () => {
-            webContents.send("filetrail:command", {
-              type: "toggleInfoPanel" satisfies RendererCommandType,
-            });
-          },
+          click: () => sendCommand("toggleInfoPanel"),
         },
         {
           label: "Toggle Info Row",
           accelerator: "CommandOrControl+Shift+I",
-          click: () => {
-            webContents.send("filetrail:command", {
-              type: "toggleInfoRow" satisfies RendererCommandType,
-            });
-          },
+          click: () => sendCommand("toggleInfoRow"),
         },
         { type: "separator" },
         {
           label: "Refresh",
           accelerator: "CommandOrControl+R",
-          click: () => {
-            webContents.send("filetrail:command", {
-              type: "refreshOrApplySearchSort" satisfies RendererCommandType,
-            });
-          },
+          click: () => sendCommand("refreshOrApplySearchSort"),
         },
         { type: "separator" },
         {
           label: "Zoom In",
           accelerator: "CommandOrControl+Plus",
-          click: () => {
-            webContents.send("filetrail:command", {
-              type: "zoomIn" satisfies RendererCommandType,
-            });
-          },
+          click: () => sendCommand("zoomIn"),
         },
         {
           label: "Zoom Out",
           accelerator: "CommandOrControl+-",
-          click: () => {
-            webContents.send("filetrail:command", {
-              type: "zoomOut" satisfies RendererCommandType,
-            });
-          },
+          click: () => sendCommand("zoomOut"),
         },
         {
           label: "Actual Size",
           accelerator: "CommandOrControl+0",
-          click: () => {
-            webContents.send("filetrail:command", {
-              type: "resetZoom" satisfies RendererCommandType,
-            });
-          },
+          click: () => sendCommand("resetZoom"),
         },
         { type: "separator" },
         { role: "toggleDevTools" },

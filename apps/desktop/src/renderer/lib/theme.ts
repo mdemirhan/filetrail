@@ -116,20 +116,9 @@ export function applyAppearance({
       root.style.setProperty(propertyName, value);
     }
   } else {
-    root.style.removeProperty("--tb-primary-bg");
-    root.style.removeProperty("--tb-primary-fg");
-    root.style.removeProperty("--tb-primary-hover-bg");
-    root.style.removeProperty("--toolbar-nav-icon-active");
-    root.style.removeProperty("--toolbar-toggle-active-bg");
-    root.style.removeProperty("--toolbar-toggle-icon-active");
-    root.style.removeProperty("--toolbar-sort-text");
-    root.style.removeProperty("--toolbar-sort-arrow");
-    root.style.removeProperty("--sidebar-rail-icon");
-    root.style.removeProperty("--sidebar-rail-active-bg");
-    root.style.removeProperty("--sidebar-rail-icon-active");
-    root.style.removeProperty("--sidebar-rail-menu-active-bg");
-    root.style.removeProperty("--sidebar-rail-menu-active-fg");
-    root.style.removeProperty("--sidebar-rail-menu-check");
+    for (const propertyName of Object.keys(getToolbarAccentVariables(accentTokens))) {
+      root.style.removeProperty(propertyName);
+    }
   }
   applyOptionalColor("--text-primary", textPrimaryOverride);
   applyOptionalColor("--text-secondary", textSecondaryOverride);

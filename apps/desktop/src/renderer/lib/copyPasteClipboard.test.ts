@@ -32,6 +32,7 @@ describe("copyPasteClipboard", () => {
         "skip",
       ),
     ).toEqual({
+      action: "paste",
       mode: "copy",
       sourcePaths: ["/tmp/a"],
       destinationDirectoryPath: "/tmp/target",

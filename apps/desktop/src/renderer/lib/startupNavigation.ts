@@ -1,4 +1,5 @@
 import type { AppPreferences } from "../../shared/appPreferences";
+import { isPathWithinRoot } from "./pathUtils";
 
 // Startup navigation merges explicit launch context, persisted preferences, and home-folder
 // fallbacks into one path/root pair the renderer can use immediately.
@@ -37,11 +38,4 @@ export function resolveStartupNavigation(
     // Restored startup prefers the home directory as a stable tree root when possible.
     startupRootPath: isPathWithinRoot(startupPath, homePath) ? homePath : "/",
   };
-}
-
-function isPathWithinRoot(path: string, rootPath: string): boolean {
-  if (rootPath === "/") {
-    return true;
-  }
-  return path === rootPath || path.startsWith(`${rootPath}/`);
 }
