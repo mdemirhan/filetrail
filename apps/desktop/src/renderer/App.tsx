@@ -47,6 +47,7 @@ import { InfoPanel } from "./components/GetInfoPanel";
 import { LocationSheet } from "./components/LocationSheet";
 import { SEARCH_RESULT_ROW_HEIGHT, SearchResultsPane } from "./components/SearchResultsPane";
 import { SettingsView } from "./components/SettingsView";
+import { ToastViewport } from "./components/ToastViewport";
 import { ToolbarIcon } from "./components/ToolbarIcon";
 import { type TreeNodeState, TreePane } from "./components/TreePane";
 import { useElementSize } from "./hooks/useElementSize";
@@ -94,6 +95,7 @@ import { resolveExplorerToolbarLayout, resolveSinglePanelLayout } from "./lib/re
 import { appendSearchResults, filterSearchResults, sortSearchResults } from "./lib/searchResults";
 import { resolveOpenInTerminalPaths } from "./lib/shortcutTargets";
 import { resolveStartupNavigation } from "./lib/startupNavigation";
+import { createToastEntry, enqueueToast, type ToastEntry, type ToastKind } from "./lib/toasts";
 import { applyAppearance, getThemeAppearanceDefaults } from "./lib/theme";
 import { getTreeKeyboardAction } from "./lib/treeView";
 import {
@@ -257,6 +259,7 @@ export function App() {
     title: string;
     message: string;
   } | null>(null);
+  const [toasts, setToasts] = useState<ToastEntry[]>([]);
   const [copyPasteClipboard, setCopyPasteClipboardState] =
     useState<CopyPasteClipboardState>(EMPTY_COPY_PASTE_CLIPBOARD);
   const [copyPasteDialogState, setCopyPasteDialogState] = useState<CopyPasteDialogState>(null);
@@ -303,6 +306,8 @@ export function App() {
   const actionNoticeReturnFocusPaneRef = useRef<"tree" | "content" | null>(null);
   const lastExplorerFocusPaneRef = useRef<"tree" | "content" | null>(null);
   const activeCopyPasteOperationIdRef = useRef<string | null>(null);
+  const nextToastIdRef = useRef(0);
+  const copyPasteClipboardRef = useRef<CopyPasteClipboardState>(EMPTY_COPY_PASTE_CLIPBOARD);
   const currentPathRef = useRef(currentPath);
   const isSearchModeRef = useRef(false);
   const selectedPathsInViewOrderRef = useRef<string[]>([]);
@@ -483,6 +488,10 @@ export function App() {
   useLayoutEffect(() => {
     selectedEntryRef.current = selectedEntry;
   }, [selectedEntry]);
+
+  useLayoutEffect(() => {
+    copyPasteClipboardRef.current = copyPasteClipboard;
+  }, [copyPasteClipboard]);
 
   useEffect(() => {
     treeRootPathRef.current = treeRootPath;
@@ -983,13 +992,15 @@ export function App() {
           queuePasteSelection(event.result);
         }
         if (shouldClearClipboardAfterPasteResult(event)) {
-          setCopyPasteClipboardState((current) => clearClipboardAfterSuccessfulPaste(current));
+          applyCopyPasteClipboardState(
+            clearClipboardAfterSuccessfulPaste(copyPasteClipboardRef.current),
+          );
         }
         void refreshDirectory();
       }
     });
     return unsubscribe;
-  }, [client, refreshDirectory]);
+  }, [applyCopyPasteClipboardState, client, refreshDirectory]);
 
   useEffect(() => {
     if (!searchPopoverOpen) {
@@ -1868,6 +1879,25 @@ export function App() {
     restoreExplorerPaneFocus(paneToRestore);
   }
 
+  function dismissToast(id: string) {
+    setToasts((current) => current.filter((toast) => toast.id !== id));
+  }
+
+  function pushToast(input: {
+    kind: ToastKind;
+    title: string;
+    message?: string;
+  }) {
+    const id = `toast-${nextToastIdRef.current}`;
+    nextToastIdRef.current += 1;
+    setToasts((current) => enqueueToast(current, createToastEntry(id, input)));
+  }
+
+  function applyCopyPasteClipboardState(nextClipboard: CopyPasteClipboardState) {
+    copyPasteClipboardRef.current = nextClipboard;
+    setCopyPasteClipboardState(nextClipboard);
+  }
+
   async function copyPathsToClipboard(paths: string[]) {
     await client.invoke("system:copyText", {
       text: paths.map((path) => formatPathForShell(path)).join("\n"),
@@ -1877,11 +1907,15 @@ export function App() {
   async function runCopyPathAction(paths: string[]) {
     try {
       await copyPathsToClipboard(paths);
+      pushToast({
+        kind: "success",
+        title: paths.length === 1 ? "Copied path" : `Copied ${paths.length} paths`,
+      });
     } catch (error) {
       logger.error("copy path failed", error);
-      setActionNotice({
-        title: "Copy Path",
-        message: "Unable to copy the selected paths to the clipboard.",
+      pushToast({
+        kind: "error",
+        title: "Unable to copy the selected path(s)",
       });
     }
   }
@@ -1909,13 +1943,24 @@ export function App() {
     }
     const paths = resolveClipboardSourcePaths();
     if (paths.length === 0) {
-      setActionNotice({
-        title: mode === "copy" ? "Copy" : "Cut",
-        message: `Select at least one item to ${mode}.`,
+      pushToast({
+        kind: "warning",
+        title: `Select at least one item to ${mode}.`,
       });
       return;
     }
-    setCopyPasteClipboardState(setCopyPasteClipboard(mode, paths, new Date().toISOString()));
+    applyCopyPasteClipboardState(setCopyPasteClipboard(mode, paths, new Date().toISOString()));
+    pushToast({
+      kind: mode === "copy" ? "success" : "info",
+      title:
+        mode === "copy"
+          ? paths.length === 1
+            ? "Copied 1 item"
+            : `Copied ${paths.length} items`
+          : paths.length === 1
+            ? "Ready to move 1 item"
+            : `Ready to move ${paths.length} items`,
+    });
     closeContextMenu();
   }
 
@@ -1927,24 +1972,28 @@ export function App() {
       return;
     }
     if (activeCopyPasteOperationIdRef.current) {
-      setActionNotice({
-        title: "Paste",
-        message: "Wait for the active copy/paste operation to finish before starting another one.",
+      pushToast({
+        kind: "warning",
+        title: "Wait for the current paste to finish",
       });
       return;
     }
     if (pasteDestinationPath === null) {
-      setActionNotice({
-        title: "Paste",
-        message: "Paste is only available when a destination folder is selected.",
+      pushToast({
+        kind: "warning",
+        title: "Select a destination folder to paste into",
       });
       return;
     }
-    const request = buildPasteRequest(copyPasteClipboard, pasteDestinationPath, conflictResolution);
+    const request = buildPasteRequest(
+      copyPasteClipboardRef.current,
+      pasteDestinationPath,
+      conflictResolution,
+    );
     if (!request) {
-      setActionNotice({
-        title: "Paste",
-        message: "The copy/paste clipboard is empty.",
+      pushToast({
+        kind: "warning",
+        title: "Clipboard is empty",
       });
       return;
     }
@@ -1960,9 +2009,9 @@ export function App() {
       await executePastePlan(plan);
     } catch (error) {
       logger.error("copy paste planning failed", error);
-      setActionNotice({
-        title: "Paste",
-        message: "Unable to prepare the copy/paste operation.",
+      pushToast({
+        kind: "error",
+        title: "Unable to prepare paste",
       });
     }
   }
@@ -1990,11 +2039,18 @@ export function App() {
       });
       setCopyPasteDialogState(null);
       closeContextMenu();
+      pushToast({
+        kind: "info",
+        title:
+          plan.mode === "cut"
+            ? `Moving into ${getPathLeafName(plan.destinationDirectoryPath)}`
+            : `Pasting into ${getPathLeafName(plan.destinationDirectoryPath)}`,
+      });
     } catch (error) {
       logger.error("copy paste start failed", error);
-      setActionNotice({
-        title: "Paste",
-        message: "Unable to start the copy/paste operation.",
+      pushToast({
+        kind: "error",
+        title: "Unable to start paste",
       });
     }
   }
@@ -2008,9 +2064,9 @@ export function App() {
       await client.invoke("copyPaste:cancel", { operationId });
     } catch (error) {
       logger.error("copy paste cancel failed", error);
-      setActionNotice({
-        title: "Paste",
-        message: "Unable to cancel the active copy/paste operation.",
+      pushToast({
+        kind: "error",
+        title: "Unable to cancel paste",
       });
     }
   }
@@ -3863,6 +3919,7 @@ export function App() {
           }
         />
       ) : null}
+      <ToastViewport toasts={toasts} onDismiss={dismissToast} />
     </main>
   );
 }
@@ -3872,6 +3929,11 @@ function formatPathForShell(path: string): string {
     return path;
   }
   return `'${path.replaceAll("'", "'\\''")}'`;
+}
+
+function getPathLeafName(path: string): string {
+  const trimmedPath = path.replace(/\/+$/u, "");
+  return trimmedPath.split("/").filter(Boolean).at(-1) ?? path;
 }
 
 function buildCopyPastePlanDetailLines(plan: CopyPastePlan): string[] {

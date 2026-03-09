@@ -43,4 +43,23 @@ describe("CopyPasteDialog", () => {
     });
     expect(primaryButton).toHaveFocus();
   });
+
+  it("activates the primary action when Enter is pressed on the dialog container", async () => {
+    const onPrimaryAction = vi.fn();
+
+    render(
+      <CopyPasteDialog
+        title="Paste Result"
+        message="Finished"
+        primaryAction={{ label: "Close", onClick: onPrimaryAction }}
+      />,
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Paste Result" });
+    dialog.focus();
+    expect(dialog).toHaveFocus();
+
+    fireEvent.keyDown(dialog, { key: "Enter" });
+    expect(onPrimaryAction).toHaveBeenCalledTimes(1);
+  });
 });

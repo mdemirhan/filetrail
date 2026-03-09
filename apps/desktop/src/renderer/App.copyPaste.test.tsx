@@ -99,6 +99,52 @@ import { App } from "./App";
 import { type FiletrailClient, FiletrailClientProvider } from "./lib/filetrailClient";
 
 describe("App copy/paste integration", () => {
+  it("shows a copy toast on the first command press without changing focus", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceButton = await screen.findByTitle("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.click(sourceButton);
+    });
+    const activeElementBeforeCopy = document.activeElement;
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+
+    expect(await screen.findByText("Copied 1 item")).toBeInTheDocument();
+    expect(document.activeElement).toBe(activeElementBeforeCopy);
+  });
+
+  it("shows a cut toast without changing focus", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceButton = await screen.findByTitle("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.click(sourceButton);
+    });
+    const activeElementBeforeCut = document.activeElement;
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "x", metaKey: true });
+    });
+
+    expect(await screen.findByText("Ready to move 1 item")).toBeInTheDocument();
+    expect(document.activeElement).toBe(activeElementBeforeCut);
+  });
+
   it("starts at home when restore last visited is disabled", async () => {
     const harness = createAppHarness({
       preferences: {
@@ -178,6 +224,36 @@ describe("App copy/paste integration", () => {
         destinationDirectoryPath: "/Users/demo/Folder",
       });
     });
+  });
+
+  it("pastes immediately after copy without reading an empty clipboard state", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    const folderButton = await screen.findByTitle("/Users/demo/Folder");
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+      fireEvent.click(folderButton);
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    await vi.waitFor(() => {
+      const planCall = harness.invocations.find((call) => call.channel === "copyPaste:plan");
+      expect(planCall?.payload).toMatchObject({
+        sourcePaths: ["/Users/demo/source.txt"],
+      });
+    });
+    await vi.waitFor(() => {
+      expect(harness.invocations.map((call) => call.channel)).toContain("copyPaste:start");
+    });
+    expect(screen.queryByText("Clipboard is empty")).not.toBeInTheDocument();
   });
 
   it("uses the selected tree folder as the keyboard paste target", async () => {
@@ -264,6 +340,29 @@ describe("App copy/paste integration", () => {
     expect(screen.queryByRole("dialog", { name: "Confirm Cut/Paste" })).not.toBeInTheDocument();
   });
 
+  it("shows a warning toast for empty clipboard without opening a paste dialog", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const folderButton = await screen.findByTitle("/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.click(folderButton);
+    });
+    const activeElementBeforePasteWarning = document.activeElement;
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    expect(await screen.findByText("Clipboard is empty")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: /Paste/ })).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(activeElementBeforePasteWarning);
+  });
+
   it("shows streamed progress and dispatches cancel requests", async () => {
     const harness = createAppHarness();
 
@@ -286,6 +385,8 @@ describe("App copy/paste integration", () => {
     await vi.waitFor(() => {
       expect(harness.invocations.map((call) => call.channel)).toContain("copyPaste:start");
     });
+
+    expect(await screen.findByText("Pasting into Folder")).toBeInTheDocument();
 
     await act(async () => {
       harness.emitProgress({
@@ -386,6 +487,54 @@ describe("App copy/paste integration", () => {
     await vi.waitFor(() => {
       expect(screen.getByTitle("/Users/demo/Folder/source.txt")).toHaveAttribute("data-selected", "true");
     });
+  });
+
+  it("shows copy-path toasts for success and failure without changing focus", async () => {
+    const successHarness = createAppHarness();
+
+    const { unmount } = render(
+      <FiletrailClientProvider value={successHarness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceButton = await screen.findByTitle("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.click(sourceButton);
+    });
+    const activeElementBeforeCopyPath = document.activeElement;
+
+    await act(async () => {
+      fireEvent.keyDown(window, { code: "KeyC", key: "c", metaKey: true, altKey: true });
+    });
+
+    expect(await screen.findByText("Copied path")).toBeInTheDocument();
+    expect(document.activeElement).toBe(activeElementBeforeCopyPath);
+
+    unmount();
+
+    const failureHarness = createAppHarness({
+      copyTextError: new Error("clipboard unavailable"),
+    });
+
+    render(
+      <FiletrailClientProvider value={failureHarness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const failedSourceButton = await screen.findByTitle("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.click(failedSourceButton);
+    });
+    const activeElementBeforeCopyPathError = document.activeElement;
+
+    await act(async () => {
+      fireEvent.keyDown(window, { code: "KeyC", key: "c", metaKey: true, altKey: true });
+    });
+
+    expect(await screen.findByText("Unable to copy the selected path(s)")).toBeInTheDocument();
+    expect(document.activeElement).toBe(activeElementBeforeCopyPathError);
   });
 
   it("copies on the first command press after selecting an item", async () => {
@@ -492,7 +641,7 @@ describe("App copy/paste integration", () => {
         planCallsBeforeRetry.length,
       );
     });
-    expect(await screen.findByText("The copy/paste clipboard is empty.")).toBeInTheDocument();
+    expect(await screen.findByText("Clipboard is empty")).toBeInTheDocument();
   });
 
   it("clears the clipboard after a skip-conflicts paste result", async () => {
@@ -572,7 +721,7 @@ describe("App copy/paste integration", () => {
         planCallsBeforeRetry.length,
       );
     });
-    expect(await screen.findByText("The copy/paste clipboard is empty.")).toBeInTheDocument();
+    expect(await screen.findByText("Clipboard is empty")).toBeInTheDocument();
   });
 
   it("clears the cut clipboard after a failed cut/paste result", async () => {
@@ -682,7 +831,7 @@ describe("App copy/paste integration", () => {
         planCallsBeforeRetry.length,
       );
     });
-    expect(await screen.findByText("The copy/paste clipboard is empty.")).toBeInTheDocument();
+    expect(await screen.findByText("Clipboard is empty")).toBeInTheDocument();
   });
 
   it("offers retry for failed items from the result dialog", async () => {
@@ -764,11 +913,79 @@ describe("App copy/paste integration", () => {
       });
     });
   });
+
+  it("does not add a completion toast when the paste result dialog is shown", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+    await selectItem("/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    expect(await screen.findByText("Copied 1 item")).toBeInTheDocument();
+    expect(await screen.findByText("Pasting into Folder")).toBeInTheDocument();
+    expect(document.querySelectorAll(".toast-card")).toHaveLength(2);
+
+    await act(async () => {
+      harness.emitProgress({
+        operationId: "copy-op-1",
+        mode: "copy",
+        status: "completed",
+        completedItemCount: 1,
+        totalItemCount: 1,
+        completedByteCount: 5,
+        totalBytes: 5,
+        currentSourcePath: null,
+        currentDestinationPath: null,
+        result: {
+          operationId: "copy-op-1",
+          mode: "copy",
+          status: "completed",
+          destinationDirectoryPath: "/Users/demo/Folder",
+          startedAt: "2026-03-09T00:00:00.000Z",
+          finishedAt: "2026-03-09T00:00:01.000Z",
+          summary: {
+            topLevelItemCount: 1,
+            totalItemCount: 1,
+            completedItemCount: 1,
+            failedItemCount: 0,
+            skippedItemCount: 0,
+            cancelledItemCount: 0,
+            completedByteCount: 5,
+            totalBytes: 5,
+          },
+          items: [
+            {
+              sourcePath: "/Users/demo/source.txt",
+              destinationPath: "/Users/demo/Folder/source.txt",
+              status: "completed",
+              error: null,
+            },
+          ],
+          error: null,
+        },
+      });
+    });
+
+    expect(await screen.findByRole("dialog", { name: "Paste Result" })).toBeInTheDocument();
+    expect(document.querySelectorAll(".toast-card")).toHaveLength(2);
+  });
 });
 
 function createAppHarness(args: {
   planResponse?: IpcResponse<"copyPaste:plan">;
   preferences?: Partial<IpcResponse<"app:getPreferences">["preferences"]>;
+  copyTextError?: Error;
 } = {}): {
   client: FiletrailClient;
   invocations: Array<{ channel: IpcChannel; payload: unknown }>;
@@ -899,6 +1116,9 @@ function createAppHarness(args: {
         return { ok: true, error: null } as IpcResponse<C>;
       }
       if (channel === "system:copyText") {
+        if (args.copyTextError) {
+          throw args.copyTextError;
+        }
         return { ok: true } as IpcResponse<C>;
       }
       if (channel === "app:clearCaches") {

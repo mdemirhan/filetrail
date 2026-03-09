@@ -42,7 +42,18 @@ export function CopyPasteDialog({
         tabIndex={-1}
         onMouseDown={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
-          if (event.defaultPrevented || event.key !== "Tab") {
+          if (event.defaultPrevented) {
+            return;
+          }
+          if (event.key === "Enter" && primaryAction) {
+            const target = event.target;
+            if (!(target instanceof HTMLElement) || target === dialogRef.current) {
+              event.preventDefault();
+              primaryAction.onClick();
+            }
+            return;
+          }
+          if (event.key !== "Tab") {
             return;
           }
           const dialog = dialogRef.current;
