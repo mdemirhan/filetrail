@@ -340,6 +340,57 @@ describe("App copy/paste integration", () => {
     expect(screen.queryByRole("dialog", { name: "Confirm Cut/Paste" })).not.toBeInTheDocument();
   });
 
+  it("shows a toast instead of a dialog for non-recoverable planning issues", async () => {
+    const harness = createAppHarness({
+      planResponse: {
+        mode: "copy",
+        sourcePaths: ["/Users/demo/source.txt"],
+        destinationDirectoryPath: "/Users/demo/Folder",
+        conflictResolution: "error",
+        items: [],
+        conflicts: [],
+        issues: [
+          {
+            code: "same_path",
+            message: "Cannot paste an item onto itself.",
+            sourcePath: "/Users/demo/source.txt",
+            destinationPath: "/Users/demo/Folder/source.txt",
+          },
+        ],
+        warnings: [],
+        requiresConfirmation: {
+          largeBatch: false,
+          cutDelete: false,
+        },
+        summary: {
+          topLevelItemCount: 1,
+          totalItemCount: 0,
+          totalBytes: 0,
+          skippedConflictCount: 0,
+        },
+        canExecute: false,
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+    await selectItem("/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    expect(await screen.findByText("Cannot paste an item onto itself.")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Paste Requires Review" })).not.toBeInTheDocument();
+  });
+
   it("shows a warning toast for empty clipboard without opening a paste dialog", async () => {
     const harness = createAppHarness();
 
@@ -404,7 +455,8 @@ describe("App copy/paste integration", () => {
     });
 
     expect(await screen.findByText("0 / 1 steps")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Cancel Operation" })).toHaveFocus();
+    expect(screen.getByRole("region", { name: "Paste In Progress" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Paste In Progress" })).not.toBeInTheDocument();
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Cancel Operation" }));
     });
@@ -627,9 +679,8 @@ describe("App copy/paste integration", () => {
       });
     });
 
-    await act(async () => {
-      fireEvent.click(await screen.findByRole("button", { name: "Close" }));
-    });
+    expect(await screen.findByText("Pasted 1 item into Folder")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Paste Result" })).not.toBeInTheDocument();
 
     const planCallsBeforeRetry = harness.invocations.filter((call) => call.channel === "copyPaste:plan");
     await act(async () => {
@@ -977,8 +1028,9 @@ describe("App copy/paste integration", () => {
       });
     });
 
-    expect(await screen.findByRole("dialog", { name: "Paste Result" })).toBeInTheDocument();
-    expect(document.querySelectorAll(".toast-card")).toHaveLength(2);
+    expect(screen.queryByRole("dialog", { name: "Paste Result" })).not.toBeInTheDocument();
+    expect(await screen.findByText("Pasted 1 item into Folder")).toBeInTheDocument();
+    expect(document.querySelectorAll(".toast-card")).toHaveLength(3);
   });
 });
 

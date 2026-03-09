@@ -34,6 +34,7 @@ import {
 import { FEATURE_FLAGS } from "../shared/featureFlags";
 import { ActionNoticeDialog } from "./components/ActionNoticeDialog";
 import { CopyPasteDialog } from "./components/CopyPasteDialog";
+import { CopyPasteProgressCard } from "./components/CopyPasteProgressCard";
 import { ContentPane } from "./components/ContentPane";
 import { HelpView } from "./components/HelpView";
 import {
@@ -390,6 +391,9 @@ export function App() {
     FEATURE_FLAGS.copyPaste &&
     hasClipboardItems(copyPasteClipboard) &&
     pasteDestinationPath !== null;
+  const showCopyPasteProgressCard = isCopyPasteProgressActive(copyPasteProgressEvent);
+  const showCopyPasteResultDialog = shouldRenderCopyPasteResultDialog(copyPasteProgressEvent);
+  const copyPasteModalOpen = copyPasteDialogState !== null || showCopyPasteResultDialog;
   const contextMenuDisabledActionIds = useMemo(() => {
     if (!contextMenuState) {
       return [] as ContextMenuActionId[];
@@ -980,7 +984,9 @@ export function App() {
       if (event.operationId !== activeCopyPasteOperationIdRef.current) {
         return;
       }
-      setCopyPasteProgressEvent(event);
+      if (isCopyPasteProgressActive(event)) {
+        setCopyPasteProgressEvent(event);
+      }
       if (
         event.status === "completed" ||
         event.status === "failed" ||
@@ -996,11 +1002,17 @@ export function App() {
             clearClipboardAfterSuccessfulPaste(copyPasteClipboardRef.current),
           );
         }
+        if (shouldRenderCopyPasteResultDialog(event)) {
+          setCopyPasteProgressEvent(event);
+        } else {
+          setCopyPasteProgressEvent(null);
+          pushTerminalCopyPasteToast(event);
+        }
         void refreshDirectory();
       }
     });
     return unsubscribe;
-  }, [applyCopyPasteClipboardState, client, refreshDirectory]);
+  }, [applyCopyPasteClipboardState, client, pushTerminalCopyPasteToast, refreshDirectory]);
 
   useEffect(() => {
     if (!searchPopoverOpen) {
@@ -1235,7 +1247,7 @@ export function App() {
         openSettingsView();
         return;
       }
-      if (copyPasteDialogState || copyPasteProgressEvent) {
+      if (copyPasteModalOpen) {
         if (event.key === "Escape") {
           event.preventDefault();
           handleCopyPasteDialogEscape();
@@ -1512,6 +1524,7 @@ export function App() {
     actionNotice,
     includeHidden,
     isSearchMode,
+    copyPasteModalOpen,
     copyPasteDialogState,
     copyPasteProgressEvent,
     contextMenuState,
@@ -1898,6 +1911,26 @@ export function App() {
     setCopyPasteClipboardState(nextClipboard);
   }
 
+  function pushTerminalCopyPasteToast(event: CopyPasteProgressEvent) {
+    const result = event.result;
+    if (!result) {
+      return;
+    }
+    if (event.status === "completed") {
+      pushToast({
+        kind: "success",
+        title: `${result.mode === "cut" ? "Moved" : "Pasted"} ${result.summary.topLevelItemCount} item${result.summary.topLevelItemCount === 1 ? "" : "s"} into ${getPathLeafName(result.destinationDirectoryPath)}`,
+      });
+      return;
+    }
+    if (event.status === "cancelled") {
+      pushToast({
+        kind: "info",
+        title: result.mode === "cut" ? "Move cancelled" : "Paste cancelled",
+      });
+    }
+  }
+
   async function copyPathsToClipboard(paths: string[]) {
     await client.invoke("system:copyText", {
       text: paths.map((path) => formatPathForShell(path)).join("\n"),
@@ -1999,10 +2032,17 @@ export function App() {
     }
     try {
       const plan = await client.invoke("copyPaste:plan", request);
-      if (plan.issues.length > 0 || plan.conflicts.length > 0) {
+      if (plan.conflicts.length > 0) {
         setCopyPasteDialogState({
           type: "plan",
           plan,
+        });
+        return;
+      }
+      if (plan.issues.length > 0) {
+        pushToast({
+          kind: "error",
+          title: plan.issues[0]?.message ?? "Paste cannot continue.",
         });
         return;
       }
@@ -2092,19 +2132,26 @@ export function App() {
         destinationDirectoryPath: result.destinationDirectoryPath,
         conflictResolution: "error",
       });
-      if (plan.issues.length > 0 || plan.conflicts.length > 0) {
+      if (plan.conflicts.length > 0) {
         setCopyPasteDialogState({
           type: "plan",
           plan,
         });
         return;
       }
+      if (plan.issues.length > 0) {
+        pushToast({
+          kind: "error",
+          title: plan.issues[0]?.message ?? "Paste cannot continue.",
+        });
+        return;
+      }
       await executePastePlan(plan);
     } catch (error) {
       logger.error("copy paste retry planning failed", error);
-      setActionNotice({
-        title: "Paste",
-        message: "Unable to retry the failed copy/paste items.",
+      pushToast({
+        kind: "error",
+        title: "Unable to retry failed items",
       });
     }
   }
@@ -3807,119 +3854,79 @@ export function App() {
       ) : null}
       {copyPasteDialogState?.type === "plan" ? (
         <CopyPasteDialog
-          title={
-            copyPasteDialogState.plan.conflicts.length > 0
-              ? "Paste Requires Review"
-              : copyPasteDialogState.plan.mode === "cut"
-                ? "Confirm Cut/Paste"
-                : "Confirm Paste"
-          }
-          message={
-            copyPasteDialogState.plan.issues.length > 0
-              ? copyPasteDialogState.plan.issues[0]?.message ?? "Paste cannot continue."
-              : copyPasteDialogState.plan.conflicts.length > 0
-                ? "Some destination items already exist. You can skip those conflicts or cancel."
-                : copyPasteDialogState.plan.mode === "cut"
-                  ? "Cut/Paste will remove the original items after the copy succeeds."
-                  : "Review this paste operation before continuing."
-          }
+          title="Paste Requires Review"
+          message="Some destination items already exist. You can skip those conflicts or cancel."
           detailLines={buildCopyPastePlanDetailLines(copyPasteDialogState.plan)}
           primaryAction={
-            copyPasteDialogState.plan.issues.length > 0
-              ? {
-                  label: "Close",
-                  onClick: () => setCopyPasteDialogState(null),
-                }
-              : {
-                  label:
-                    copyPasteDialogState.plan.conflicts.length > 0
-                      ? "Skip Conflicts"
-                      : copyPasteDialogState.plan.mode === "cut"
-                        ? "Cut/Paste"
-                        : "Paste",
-                  onClick: () =>
-                    void executePastePlan({
-                      ...copyPasteDialogState.plan,
-                      conflictResolution:
-                        copyPasteDialogState.plan.conflicts.length > 0 ? "skip" : "error",
-                    }),
-                  destructive: copyPasteDialogState.plan.mode === "cut",
-                }
+            {
+              label: "Skip Conflicts",
+              onClick: () =>
+                void executePastePlan({
+                  ...copyPasteDialogState.plan,
+                  conflictResolution: "skip",
+                }),
+              destructive: copyPasteDialogState.plan.mode === "cut",
+            }
           }
           secondaryAction={
-            copyPasteDialogState.plan.issues.length > 0
-              ? undefined
-              : {
-                  label: "Cancel",
-                  onClick: () => setCopyPasteDialogState(null),
-                }
+            {
+              label: "Cancel",
+              onClick: () => setCopyPasteDialogState(null),
+            }
           }
         />
       ) : null}
-      {copyPasteProgressEvent ? (
-        <CopyPasteDialog
-          title={
-            copyPasteProgressEvent.status === "running" || copyPasteProgressEvent.status === "queued"
-              ? copyPasteProgressEvent.mode === "cut"
-                ? "Cut/Paste In Progress"
-                : "Paste In Progress"
-              : "Paste Result"
+      {showCopyPasteProgressCard && copyPasteProgressEvent ? (
+        <CopyPasteProgressCard
+          title={copyPasteProgressEvent.mode === "cut" ? "Cut/Paste In Progress" : "Paste In Progress"}
+          message={
+            copyPasteProgressEvent.status === "queued"
+              ? "The copy/paste operation is queued."
+              : "File Trail is writing to disk through the protected copy/paste pipeline."
           }
+          progressLabel={`${copyPasteProgressEvent.completedItemCount} / ${copyPasteProgressEvent.totalItemCount} steps`}
+          detailLines={[
+            copyPasteProgressEvent.currentSourcePath
+              ? `Current source: ${copyPasteProgressEvent.currentSourcePath}`
+              : "Waiting for the next filesystem step.",
+          ]}
+          onCancel={() => {
+            void cancelCopyPasteOperation();
+          }}
+        />
+      ) : null}
+      {showCopyPasteResultDialog && copyPasteProgressEvent ? (
+        <CopyPasteDialog
+          title="Paste Result"
           message={
             copyPasteProgressEvent.result?.error ??
-            (copyPasteProgressEvent.status === "running"
-              ? "File Trail is writing to disk through the protected copy/paste pipeline."
-              : copyPasteProgressEvent.status === "queued"
-                ? "The copy/paste operation is queued."
-                : "The copy/paste operation has finished.")
+            "The copy/paste operation has finished."
           }
-          progressLabel={
-            copyPasteProgressEvent.status === "running" || copyPasteProgressEvent.status === "queued"
-              ? `${copyPasteProgressEvent.completedItemCount} / ${copyPasteProgressEvent.totalItemCount} steps`
-              : null
-          }
-          detailLines={
-            copyPasteProgressEvent.status === "running" || copyPasteProgressEvent.status === "queued"
-              ? [
-                  copyPasteProgressEvent.currentSourcePath
-                    ? `Current source: ${copyPasteProgressEvent.currentSourcePath}`
-                    : "Waiting for the next filesystem step.",
-                ]
-              : buildCopyPasteResultDetailLines(copyPasteProgressEvent)
-          }
+          detailLines={buildCopyPasteResultDetailLines(copyPasteProgressEvent)}
           primaryAction={
-            copyPasteProgressEvent.status === "running" || copyPasteProgressEvent.status === "queued"
+            copyPasteProgressEvent.result?.items.some((item) => item.status === "failed")
               ? {
-                  label: "Cancel Operation",
+                  label: "Retry Failed Items",
                   onClick: () => {
-                    void cancelCopyPasteOperation();
+                    void retryFailedCopyPasteItems(copyPasteProgressEvent);
                   },
                 }
-              : copyPasteProgressEvent.result?.items.some((item) => item.status === "failed")
-                ? {
-                    label: "Retry Failed Items",
-                    onClick: () => {
-                      void retryFailedCopyPasteItems(copyPasteProgressEvent);
-                    },
-                  }
-                : {
-                    label: "Close",
-                    onClick: dismissCopyPasteDialog,
-                  }
+              : {
+                  label: "Close",
+                  onClick: dismissCopyPasteDialog,
+                }
           }
           secondaryAction={
-            copyPasteProgressEvent.status === "running" || copyPasteProgressEvent.status === "queued"
-              ? undefined
-              : copyPasteProgressEvent.result?.items.some((item) => item.status === "failed")
-                ? {
-                    label: "Close",
-                    onClick: dismissCopyPasteDialog,
-                  }
-                : undefined
+            copyPasteProgressEvent.result?.items.some((item) => item.status === "failed")
+              ? {
+                  label: "Close",
+                  onClick: dismissCopyPasteDialog,
+                }
+              : undefined
           }
         />
       ) : null}
-      <ToastViewport toasts={toasts} onDismiss={dismissToast} />
+      <ToastViewport toasts={toasts} onDismiss={dismissToast} offsetBottom={showCopyPasteProgressCard ? 176 : 16} />
     </main>
   );
 }
@@ -3934,6 +3941,27 @@ function formatPathForShell(path: string): string {
 function getPathLeafName(path: string): string {
   const trimmedPath = path.replace(/\/+$/u, "");
   return trimmedPath.split("/").filter(Boolean).at(-1) ?? path;
+}
+
+function isCopyPasteProgressActive(event: CopyPasteProgressEvent | null): boolean {
+  return event?.status === "queued" || event?.status === "running";
+}
+
+function shouldRenderCopyPasteResultDialog(event: CopyPasteProgressEvent | null): boolean {
+  if (!event || !event.result) {
+    return false;
+  }
+  if (event.status === "failed" || event.status === "partial") {
+    return true;
+  }
+  if (event.status !== "cancelled") {
+    return false;
+  }
+  return (
+    event.result.summary.completedItemCount > 0 ||
+    event.result.summary.failedItemCount > 0 ||
+    event.result.summary.skippedItemCount > 0
+  );
 }
 
 function buildCopyPastePlanDetailLines(plan: CopyPastePlan): string[] {

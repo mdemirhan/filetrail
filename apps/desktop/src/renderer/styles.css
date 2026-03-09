@@ -1827,6 +1827,53 @@ body.platform-macos .window-toolbar-brand {
   animation: toast-slide-in 160ms ease-out;
 }
 
+.copy-paste-progress-card {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 36;
+  width: min(360px, calc(100vw - 32px));
+  padding: 14px 14px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 24%, var(--border));
+  border-radius: 14px;
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-lg);
+}
+
+.copy-paste-progress-card-title {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.copy-paste-progress-card-message {
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.copy-paste-progress-card-label {
+  margin-top: 8px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.copy-paste-progress-card-details {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.copy-paste-progress-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
 .toast-card-success {
   border-color: color-mix(in srgb, var(--icon-green) 28%, var(--border));
 }

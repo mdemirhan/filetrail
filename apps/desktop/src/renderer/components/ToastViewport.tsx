@@ -5,9 +5,11 @@ import type { ToastEntry } from "../lib/toasts";
 export function ToastViewport({
   toasts,
   onDismiss,
+  offsetBottom = 16,
 }: {
   toasts: ToastEntry[];
   onDismiss: (id: string) => void;
+  offsetBottom?: number | undefined;
 }) {
   useEffect(() => {
     const timers = toasts.map((toast) =>
@@ -27,7 +29,7 @@ export function ToastViewport({
   }
 
   return (
-    <div className="toast-viewport" data-testid="toast-viewport">
+    <div className="toast-viewport" data-testid="toast-viewport" style={{ bottom: `${offsetBottom}px` }}>
       {toasts.map((toast) => {
         const isAssertive = toast.kind === "warning" || toast.kind === "error";
         return (
