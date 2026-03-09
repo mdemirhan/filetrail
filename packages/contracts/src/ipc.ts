@@ -97,6 +97,14 @@ export const copyPastePlanIssueCodeSchema = z.enum([
   "parent_into_child",
 ]);
 export const copyPastePlanWarningCodeSchema = z.enum(["large_batch", "cut_requires_delete"]);
+export const writeOperationActionSchema = z.enum([
+  "paste",
+  "move_to",
+  "duplicate",
+  "trash",
+  "rename",
+  "new_folder",
+]);
 
 export const treeChildSchema = z.object({
   path: z.string().min(1),
@@ -236,6 +244,7 @@ export const copyPasteOperationResultSchema = z.object({
   error: z.string().nullable(),
 });
 export const copyPasteProgressEventSchema = z.object({
+  action: writeOperationActionSchema.default("paste"),
   operationId: z.string().min(1),
   mode: copyPasteModeSchema,
   status: copyPasteOperationStatusSchema,
@@ -246,6 +255,44 @@ export const copyPasteProgressEventSchema = z.object({
   currentSourcePath: z.string().nullable(),
   currentDestinationPath: z.string().nullable(),
   result: copyPasteOperationResultSchema.nullable(),
+});
+export const writeOperationItemResultSchema = z.object({
+  sourcePath: z.string().nullable(),
+  destinationPath: z.string().nullable(),
+  status: z.enum(["completed", "skipped", "failed", "cancelled"]),
+  error: z.string().nullable(),
+});
+export const writeOperationResultSchema = z.object({
+  operationId: z.string().min(1),
+  action: writeOperationActionSchema,
+  status: copyPasteOperationStatusSchema,
+  targetPath: z.string().nullable(),
+  startedAt: z.string().min(1),
+  finishedAt: z.string().min(1),
+  summary: z.object({
+    topLevelItemCount: z.number().int().nonnegative(),
+    totalItemCount: z.number().int().nonnegative(),
+    completedItemCount: z.number().int().nonnegative(),
+    failedItemCount: z.number().int().nonnegative(),
+    skippedItemCount: z.number().int().nonnegative(),
+    cancelledItemCount: z.number().int().nonnegative(),
+    completedByteCount: z.number().int().nonnegative(),
+    totalBytes: z.number().int().nonnegative().nullable(),
+  }),
+  items: z.array(writeOperationItemResultSchema),
+  error: z.string().nullable(),
+});
+export const writeOperationProgressEventSchema = z.object({
+  operationId: z.string().min(1),
+  action: writeOperationActionSchema,
+  status: copyPasteOperationStatusSchema,
+  completedItemCount: z.number().int().nonnegative(),
+  totalItemCount: z.number().int().nonnegative(),
+  completedByteCount: z.number().int().nonnegative(),
+  totalBytes: z.number().int().nonnegative().nullable(),
+  currentSourcePath: z.string().nullable(),
+  currentDestinationPath: z.string().nullable(),
+  result: writeOperationResultSchema.nullable(),
 });
 
 export const launchContextSchema = z.object({
@@ -442,6 +489,9 @@ export const ipcContractSchemas = {
       sourcePaths: z.array(z.string().min(1)).min(1).max(500),
       destinationDirectoryPath: z.string().min(1),
       conflictResolution: copyPasteConflictResolutionSchema.default("error"),
+      action: writeOperationActionSchema
+        .extract(["paste", "move_to", "duplicate"])
+        .default("paste"),
     }),
     response: copyPastePlanSchema,
   },
@@ -451,6 +501,9 @@ export const ipcContractSchemas = {
       sourcePaths: z.array(z.string().min(1)).min(1).max(500),
       destinationDirectoryPath: z.string().min(1),
       conflictResolution: copyPasteConflictResolutionSchema.default("error"),
+      action: writeOperationActionSchema
+        .extract(["paste", "move_to", "duplicate"])
+        .default("paste"),
     }),
     response: z.object({
       operationId: z.string().min(1),
@@ -458,6 +511,43 @@ export const ipcContractSchemas = {
     }),
   },
   "copyPaste:cancel": {
+    request: z.object({
+      operationId: z.string().min(1),
+    }),
+    response: z.object({
+      ok: z.boolean(),
+    }),
+  },
+  "writeOperation:rename": {
+    request: z.object({
+      sourcePath: z.string().min(1),
+      destinationName: z.string().trim().min(1).max(255),
+    }),
+    response: z.object({
+      operationId: z.string().min(1),
+      status: z.literal("queued"),
+    }),
+  },
+  "writeOperation:createFolder": {
+    request: z.object({
+      parentDirectoryPath: z.string().min(1),
+      folderName: z.string().trim().min(1).max(255),
+    }),
+    response: z.object({
+      operationId: z.string().min(1),
+      status: z.literal("queued"),
+    }),
+  },
+  "writeOperation:trash": {
+    request: z.object({
+      paths: z.array(z.string().min(1)).min(1).max(500),
+    }),
+    response: z.object({
+      operationId: z.string().min(1),
+      status: z.literal("queued"),
+    }),
+  },
+  "writeOperation:cancel": {
     request: z.object({
       operationId: z.string().min(1),
     }),
@@ -510,6 +600,15 @@ export const ipcContractSchemas = {
       appName: z.string().min(1).nullable(),
     }),
   },
+  "system:pickDirectory": {
+    request: z.object({
+      defaultPath: z.string().min(1).nullable().optional(),
+    }),
+    response: z.object({
+      canceled: z.boolean(),
+      path: z.string().min(1).nullable(),
+    }),
+  },
   "system:openPathsWithApplication": {
     request: z.object({
       applicationPath: z.string().min(1),
@@ -548,6 +647,9 @@ export type IpcResponse<C extends IpcChannel> = z.output<IpcContractSchemas[C]["
 export type CopyPastePlan = z.output<typeof copyPastePlanSchema>;
 export type CopyPasteOperationResult = z.output<typeof copyPasteOperationResultSchema>;
 export type CopyPasteProgressEvent = z.output<typeof copyPasteProgressEventSchema>;
+export type WriteOperationAction = z.output<typeof writeOperationActionSchema>;
+export type WriteOperationResult = z.output<typeof writeOperationResultSchema>;
+export type WriteOperationProgressEvent = z.output<typeof writeOperationProgressEventSchema>;
 
 // Validation failures are surfaced with a dedicated error type so transport bugs can be
 // distinguished from domain failures such as "path not found" or "search cancelled".

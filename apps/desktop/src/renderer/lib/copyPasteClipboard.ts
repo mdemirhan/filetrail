@@ -51,6 +51,7 @@ export function buildPasteRequest(
     sourcePaths: clipboard.sourcePaths,
     destinationDirectoryPath,
     conflictResolution,
+    action: "paste",
   };
 }
 

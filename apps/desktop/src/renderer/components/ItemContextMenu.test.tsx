@@ -122,6 +122,22 @@ describe("ItemContextMenu", () => {
     expect(onAction).not.toHaveBeenCalled();
   });
 
+  it("shows the updated Move To shortcut", () => {
+    render(
+      <ItemContextMenu
+        anchorX={0}
+        anchorY={0}
+        variant="browse"
+        submenuItems={submenuItems}
+        open
+        onAction={() => undefined}
+        onSubmenuAction={() => undefined}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Move To…⇧⌘M" })).toBeInTheDocument();
+  });
+
   it("renders submenu items in the supplied order and dispatches the clicked action", () => {
     const onSubmenuAction = vi.fn();
 

@@ -556,7 +556,7 @@ export class WriteService {
       if (!destinationStats.isDirectory()) {
         issues.push({
           code: "destination_not_directory",
-          message: "Paste destination must be an existing directory.",
+          message: "Destination must be an existing directory.",
           sourcePath: null,
           destinationPath,
         });
@@ -566,7 +566,7 @@ export class WriteService {
     } catch {
       issues.push({
         code: "destination_missing",
-        message: "Paste destination does not exist.",
+        message: "Destination does not exist.",
         sourcePath: null,
         destinationPath,
       });

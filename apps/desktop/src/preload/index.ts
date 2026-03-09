@@ -1,10 +1,10 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 import type {
-  CopyPasteProgressEvent,
   IpcChannel,
   IpcRequestInput,
   IpcResponse,
+  WriteOperationProgressEvent,
 } from "@filetrail/contracts";
 import type { RendererCommand } from "../shared/rendererCommands";
 
@@ -21,7 +21,8 @@ type IpcEnvelope =
 type InvokeApi = {
   invoke<C extends IpcChannel>(channel: C, payload: IpcRequestInput<C>): Promise<IpcResponse<C>>;
   onCommand(listener: (command: RendererCommand) => void): () => void;
-  onCopyPasteProgress(listener: (event: CopyPasteProgressEvent) => void): () => void;
+  onWriteOperationProgress(listener: (event: WriteOperationProgressEvent) => void): () => void;
+  onCopyPasteProgress(listener: (event: WriteOperationProgressEvent) => void): () => void;
 };
 
 const api: InvokeApi = {
@@ -41,15 +42,16 @@ const api: InvokeApi = {
       ipcRenderer.removeListener("filetrail:command", handleCommand);
     };
   },
-  onCopyPasteProgress: (listener) => {
-    const handleProgress = (_event: unknown, event: CopyPasteProgressEvent) => {
+  onWriteOperationProgress: (listener) => {
+    const handleProgress = (_event: unknown, event: WriteOperationProgressEvent) => {
       listener(event);
     };
-    ipcRenderer.on("filetrail:copyPasteProgress", handleProgress);
+    ipcRenderer.on("filetrail:writeOperationProgress", handleProgress);
     return () => {
-      ipcRenderer.removeListener("filetrail:copyPasteProgress", handleProgress);
+      ipcRenderer.removeListener("filetrail:writeOperationProgress", handleProgress);
     };
   },
+  onCopyPasteProgress: (listener) => api.onWriteOperationProgress(listener),
 };
 
 contextBridge.exposeInMainWorld("filetrail", api);

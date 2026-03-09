@@ -1,8 +1,8 @@
 import type {
-  CopyPasteProgressEvent,
   IpcChannel,
   IpcRequestInput,
   IpcResponse,
+  WriteOperationProgressEvent,
 } from "@filetrail/contracts";
 import type { RendererCommand } from "../shared/rendererCommands";
 
@@ -14,7 +14,8 @@ declare global {
         payload: IpcRequestInput<C>,
       ): Promise<IpcResponse<C>>;
       onCommand(listener: (command: RendererCommand) => void): () => void;
-      onCopyPasteProgress(listener: (event: CopyPasteProgressEvent) => void): () => void;
+      onWriteOperationProgress(listener: (event: WriteOperationProgressEvent) => void): () => void;
+      onCopyPasteProgress(listener: (event: WriteOperationProgressEvent) => void): () => void;
     };
   }
 }

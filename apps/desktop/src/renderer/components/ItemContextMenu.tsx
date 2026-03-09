@@ -91,7 +91,7 @@ export const BROWSE_CONTEXT_MENU_ITEMS: readonly ContextMenuItem[] = [
   { id: "cut", label: "Cut", icon: "cut", shortcut: "⌘X" },
   { id: "copy", label: "Copy", icon: "copy", shortcut: "⌘C" },
   { id: "paste", label: "Paste", icon: "paste", shortcut: "⌘V" },
-  { id: "move", label: "Move To…", icon: "move", shortcut: "⌘M" },
+  { id: "move", label: "Move To…", icon: "move", shortcut: "⇧⌘M" },
   { id: "rename", label: "Rename", icon: "rename", shortcut: "F2" },
   { id: "duplicate", label: "Duplicate", icon: "duplicate", shortcut: "⌘D" },
   { type: "separator", key: "separator-duplicate" },

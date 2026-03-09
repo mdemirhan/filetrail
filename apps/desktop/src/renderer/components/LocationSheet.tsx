@@ -12,7 +12,15 @@ export function LocationSheet({
   currentPath,
   submitting,
   error,
+  title = "Go to Folder",
+  eyebrow = "Location",
+  label = "Absolute path",
+  submitLabel = "Open Folder",
+  placeholder = "/Users/you",
   tabSwitchesExplorerPanes = false,
+  enableSuggestions = true,
+  browseLabel,
+  onBrowse,
   onClose,
   onSubmit,
   onRequestPathSuggestions,
@@ -21,7 +29,15 @@ export function LocationSheet({
   currentPath: string;
   submitting: boolean;
   error: string | null;
+  title?: string;
+  eyebrow?: string;
+  label?: string;
+  submitLabel?: string;
+  placeholder?: string;
   tabSwitchesExplorerPanes?: boolean;
+  enableSuggestions?: boolean;
+  browseLabel?: string;
+  onBrowse?: ((currentPath: string) => Promise<string | null>) | null;
   onClose: () => void;
   onSubmit: (path: string) => void;
   onRequestPathSuggestions: (inputPath: string) => Promise<IpcResponse<"path:getSuggestions">>;
@@ -37,6 +53,7 @@ export function LocationSheet({
   const suggestionRequestRef = useRef(0);
   const openRef = useRef(open);
   const pendingSuggestionInputRef = useRef("");
+  const [browseInProgress, setBrowseInProgress] = useState(false);
   const displayedPath = previewPath ?? draftPath;
 
   useEffect(() => {
@@ -53,6 +70,7 @@ export function LocationSheet({
       setPreviewPath(null);
       setPathSuggestions([]);
       setHighlightedSuggestionIndex(-1);
+      setBrowseInProgress(false);
       pendingSuggestionInputRef.current = "";
       return;
     }
@@ -60,6 +78,7 @@ export function LocationSheet({
     setPreviewPath(null);
     setPathSuggestions([]);
     setHighlightedSuggestionIndex(-1);
+    setBrowseInProgress(false);
     pendingSuggestionInputRef.current = currentPath;
     window.requestAnimationFrame(() => {
       const input = inputRef.current;
@@ -69,8 +88,10 @@ export function LocationSheet({
       input.focus();
       input.setSelectionRange(currentPath.length, currentPath.length);
     });
-    scheduleSuggestionsRequest(currentPath);
-  }, [currentPath, open]);
+    if (enableSuggestions) {
+      scheduleSuggestionsRequest(currentPath);
+    }
+  }, [currentPath, enableSuggestions, open]);
 
   useEffect(() => {
     if (!open) {
@@ -117,6 +138,9 @@ export function LocationSheet({
   );
 
   function scheduleSuggestionsRequest(inputPath: string): void {
+    if (!enableSuggestions) {
+      return;
+    }
     if (suggestionDebounceTimeoutRef.current !== null) {
       window.clearTimeout(suggestionDebounceTimeoutRef.current);
     }
@@ -152,7 +176,9 @@ export function LocationSheet({
     setPreviewPath(null);
     setPathSuggestions([]);
     setHighlightedSuggestionIndex(-1);
-    scheduleSuggestionsRequest(acceptedPath);
+    if (enableSuggestions) {
+      scheduleSuggestionsRequest(acceptedPath);
+    }
   }
 
   function previewSuggestion(index: number): void {
@@ -169,6 +195,31 @@ export function LocationSheet({
     setPreviewPath(null);
     setPathSuggestions([]);
     setHighlightedSuggestionIndex(-1);
+  }
+
+  async function handleBrowse(): Promise<void> {
+    if (!onBrowse || browseInProgress) {
+      return;
+    }
+    setBrowseInProgress(true);
+    try {
+      const pickedPath = await onBrowse(draftPath.trim().length > 0 ? draftPath.trim() : currentPath);
+      if (!pickedPath) {
+        return;
+      }
+      pendingSuggestionInputRef.current = pickedPath;
+      clearPathSuggestions();
+      setDraftPath(pickedPath);
+      if (enableSuggestions) {
+        scheduleSuggestionsRequest(pickedPath);
+      }
+      window.requestAnimationFrame(() => {
+        inputRef.current?.focus();
+        inputRef.current?.setSelectionRange(pickedPath.length, pickedPath.length);
+      });
+    } finally {
+      setBrowseInProgress(false);
+    }
   }
 
   function focusPathSuggestion(index: number): void {
@@ -193,7 +244,7 @@ export function LocationSheet({
         className="location-sheet"
         role="dialog"
         aria-modal="true"
-        aria-label="Go to folder"
+        aria-label={title}
         onKeyDown={(event) => {
           if (event.defaultPrevented || event.key !== "Tab" || !tabSwitchesExplorerPanes) {
             return;
@@ -222,8 +273,8 @@ export function LocationSheet({
       >
         <div className="location-sheet-header">
           <div>
-            <div className="location-sheet-eyebrow">Location</div>
-            <h2>Go to Folder</h2>
+            <div className="location-sheet-eyebrow">{eyebrow}</div>
+            <h2>{title}</h2>
           </div>
           <button type="button" className="tb-btn tb-btn-icon" onClick={onClose} aria-label="Close">
             <ToolbarIcon name="close" />
@@ -244,7 +295,7 @@ export function LocationSheet({
           }}
         >
           <label className="location-sheet-label" htmlFor="location-sheet-input">
-            Absolute path
+            {label}
           </label>
           <div className="location-sheet-input-shell">
             <input
@@ -272,7 +323,9 @@ export function LocationSheet({
                 pendingSuggestionInputRef.current = nextValue;
                 clearPathSuggestions();
                 setDraftPath(nextValue);
-                scheduleSuggestionsRequest(nextValue);
+                if (enableSuggestions) {
+                  scheduleSuggestionsRequest(nextValue);
+                }
               }}
               onKeyDown={(event) => {
                 if (event.key === "Escape") {
@@ -286,6 +339,7 @@ export function LocationSheet({
                 }
                 if (
                   (event.key === "ArrowDown" || event.key === "ArrowUp") &&
+                  enableSuggestions &&
                   pathSuggestions.length > 0
                 ) {
                   event.preventDefault();
@@ -301,14 +355,19 @@ export function LocationSheet({
                   previewSuggestion(nextIndex);
                   return;
                 }
-                if (tabSwitchesExplorerPanes && event.key === "Tab" && pathSuggestions.length > 0) {
+                if (
+                  enableSuggestions &&
+                  tabSwitchesExplorerPanes &&
+                  event.key === "Tab" &&
+                  pathSuggestions.length > 0
+                ) {
                   event.preventDefault();
                   focusPathSuggestion(event.shiftKey ? pathSuggestions.length - 1 : 0);
                 }
               }}
-              placeholder="/Users/you"
+              placeholder={placeholder}
             />
-            {pathSuggestions.length > 0 ? (
+            {enableSuggestions && pathSuggestions.length > 0 ? (
               <div
                 ref={suggestionsRef}
                 className="pathbar-suggestions location-sheet-suggestions"
@@ -378,12 +437,22 @@ export function LocationSheet({
             <button type="button" className="tb-btn" onClick={onClose}>
               Cancel
             </button>
+            {onBrowse ? (
+              <button
+                type="button"
+                className="tb-btn"
+                onClick={() => void handleBrowse()}
+                disabled={browseInProgress || submitting}
+              >
+                {browseInProgress ? `${browseLabel ?? "Browse"}...` : (browseLabel ?? "Browse")}
+              </button>
+            ) : null}
             <button
               type="submit"
               className="tb-btn primary"
-              disabled={draftPath.trim().length === 0}
+              disabled={draftPath.trim().length === 0 || browseInProgress}
             >
-              {submitting ? "Opening..." : "Open Folder"}
+              {submitting ? `${submitLabel}...` : submitLabel}
             </button>
           </div>
           {error ? <div className="location-sheet-error">{error}</div> : null}

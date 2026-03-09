@@ -45,6 +45,30 @@ describe("createApplicationMenuTemplate", () => {
     expect(send).toHaveBeenCalledWith("filetrail:command", { type: "openInTerminal" });
   });
 
+  it("wires Move To, Rename, Duplicate, New Folder, and Move to Trash", () => {
+    const send = vi.fn();
+    const template = createApplicationMenuTemplate({ send } as never);
+    const fileMenu = template.find((item) => item.label === "File");
+    const submenu = Array.isArray(fileMenu?.submenu) ? fileMenu.submenu : [];
+    const labels = [
+      ["Move To…", "moveSelection"],
+      ["Rename", "renameSelection"],
+      ["Duplicate", "duplicateSelection"],
+      ["New Folder", "newFolder"],
+      ["Move to Trash", "trashSelection"],
+    ] as const;
+
+    for (const [label, command] of labels) {
+      const item = submenu.find((entry) => "label" in entry && entry.label === label);
+      expect(item).toBeTruthy();
+      if (!item || !("click" in item) || typeof item.click !== "function") {
+        throw new Error(`${label} menu item missing.`);
+      }
+      item.click(undefined as never, undefined as never, undefined as never);
+      expect(send).toHaveBeenCalledWith("filetrail:command", { type: command });
+    }
+  });
+
   it("wires Find Files to the renderer command channel", () => {
     const send = vi.fn();
     const template = createApplicationMenuTemplate({ send } as never);

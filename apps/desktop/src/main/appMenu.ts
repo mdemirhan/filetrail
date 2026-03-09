@@ -33,6 +33,51 @@ export function createApplicationMenuTemplate(
             });
           },
         },
+        {
+          label: "Move To…",
+          accelerator: "CommandOrControl+Shift+M",
+          click: () => {
+            webContents.send("filetrail:command", {
+              type: "moveSelection" satisfies RendererCommandType,
+            });
+          },
+        },
+        {
+          label: "Rename",
+          accelerator: "F2",
+          click: () => {
+            webContents.send("filetrail:command", {
+              type: "renameSelection" satisfies RendererCommandType,
+            });
+          },
+        },
+        {
+          label: "Duplicate",
+          accelerator: "CommandOrControl+D",
+          click: () => {
+            webContents.send("filetrail:command", {
+              type: "duplicateSelection" satisfies RendererCommandType,
+            });
+          },
+        },
+        {
+          label: "New Folder",
+          accelerator: "CommandOrControl+Shift+N",
+          click: () => {
+            webContents.send("filetrail:command", {
+              type: "newFolder" satisfies RendererCommandType,
+            });
+          },
+        },
+        {
+          label: "Move to Trash",
+          accelerator: "CommandOrControl+Backspace",
+          click: () => {
+            webContents.send("filetrail:command", {
+              type: "trashSelection" satisfies RendererCommandType,
+            });
+          },
+        },
         { type: "separator" },
         {
           label: "Open in Terminal",

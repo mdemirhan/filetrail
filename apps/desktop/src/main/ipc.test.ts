@@ -66,6 +66,10 @@ function createHandlersThatFailOnSnapshot() {
       appPath: "/Applications/Zed.app",
       appName: "Zed",
     }),
+    "system:pickDirectory": async () => ({
+      canceled: false,
+      path: "/Users/demo/Folder",
+    }),
     "system:openPathsWithApplication": async () => ({ ok: true, error: null }),
     "system:openInTerminal": async () => ({ ok: true, error: null }),
     "system:copyText": async () => ({ ok: true }),
@@ -112,6 +116,13 @@ function createHandlersThatFailOnSnapshot() {
     }),
     "copyPaste:start": async () => ({ operationId: "copy-op-1", status: "queued" as const }),
     "copyPaste:cancel": async () => ({ ok: true }),
+    "writeOperation:rename": async () => ({ operationId: "write-op-1", status: "queued" as const }),
+    "writeOperation:createFolder": async () => ({
+      operationId: "write-op-2",
+      status: "queued" as const,
+    }),
+    "writeOperation:trash": async () => ({ operationId: "write-op-3", status: "queued" as const }),
+    "writeOperation:cancel": async () => ({ ok: true }),
   } as const;
 }
 

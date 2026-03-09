@@ -1,17 +1,18 @@
 import { createContext, useContext, useRef } from "react";
 
 import type {
-  CopyPasteProgressEvent,
   IpcChannel,
   IpcRequestInput,
   IpcResponse,
+  WriteOperationProgressEvent,
 } from "@filetrail/contracts";
 import type { RendererCommand } from "../../shared/rendererCommands";
 
 export type FiletrailClient = {
   invoke<C extends IpcChannel>(channel: C, payload: IpcRequestInput<C>): Promise<IpcResponse<C>>;
   onCommand(listener: (command: RendererCommand) => void): () => void;
-  onCopyPasteProgress(listener: (event: CopyPasteProgressEvent) => void): () => void;
+  onWriteOperationProgress(listener: (event: WriteOperationProgressEvent) => void): () => void;
+  onCopyPasteProgress(listener: (event: WriteOperationProgressEvent) => void): () => void;
 };
 
 const MISSING_PRELOAD_ERROR =
@@ -23,6 +24,7 @@ const MISSING_CLIENT: FiletrailClient = {
     throw new Error(MISSING_PRELOAD_ERROR);
   },
   onCommand: () => () => undefined,
+  onWriteOperationProgress: () => () => undefined,
   onCopyPasteProgress: () => () => undefined,
 };
 
@@ -34,6 +36,9 @@ function isFiletrailClient(value: unknown): value is FiletrailClient {
     typeof (value as { invoke?: unknown }).invoke === "function" &&
     "onCommand" in value &&
     typeof (value as { onCommand?: unknown }).onCommand === "function" &&
+    "onWriteOperationProgress" in value &&
+    typeof (value as { onWriteOperationProgress?: unknown }).onWriteOperationProgress ===
+      "function" &&
     "onCopyPasteProgress" in value &&
     typeof (value as { onCopyPasteProgress?: unknown }).onCopyPasteProgress === "function"
   );

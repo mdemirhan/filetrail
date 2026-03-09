@@ -24,4 +24,37 @@ describe("helpContent", () => {
       }),
     );
   });
+
+  it("documents file operation shortcuts", () => {
+    expect(SHORTCUT_ITEMS).toContainEqual(
+      expect.objectContaining({
+        shortcut: "Cmd+Shift+M",
+        description: "Move the selected items to another folder",
+      }),
+    );
+    expect(SHORTCUT_ITEMS).toContainEqual(
+      expect.objectContaining({
+        shortcut: "F2",
+        description: "Rename the selected item",
+      }),
+    );
+    expect(SHORTCUT_ITEMS).toContainEqual(
+      expect.objectContaining({
+        shortcut: "Cmd+D",
+        description: "Duplicate the selected items",
+      }),
+    );
+    expect(SHORTCUT_ITEMS).toContainEqual(
+      expect.objectContaining({
+        shortcut: "Cmd+Shift+N",
+        description: "Create a new folder",
+      }),
+    );
+    expect(SHORTCUT_ITEMS).toContainEqual(
+      expect.objectContaining({
+        shortcut: "Cmd+Backspace",
+        description: "Move the selected items to Trash",
+      }),
+    );
+  });
 });

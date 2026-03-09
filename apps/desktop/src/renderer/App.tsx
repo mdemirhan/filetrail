@@ -7,7 +7,12 @@ import {
   useState,
 } from "react";
 
-import type { CopyPasteProgressEvent, IpcRequest, IpcResponse } from "@filetrail/contracts";
+import type {
+  IpcRequest,
+  IpcResponse,
+  WriteOperationAction,
+  WriteOperationProgressEvent,
+} from "@filetrail/contracts";
 
 import {
   ACCENT_OPTIONS,
@@ -56,6 +61,7 @@ import {
 import { LocationSheet } from "./components/LocationSheet";
 import { SEARCH_RESULT_ROW_HEIGHT, SearchResultsPane } from "./components/SearchResultsPane";
 import { SettingsView } from "./components/SettingsView";
+import { TextPromptDialog } from "./components/TextPromptDialog";
 import { ToastViewport } from "./components/ToastViewport";
 import { ToolbarIcon } from "./components/ToolbarIcon";
 import { type TreeNodeState, TreePane } from "./components/TreePane";
@@ -140,17 +146,14 @@ type CopyPasteDialogState =
   | {
       type: "plan";
       plan: CopyPastePlan;
+      action: "paste" | "move_to" | "duplicate";
       clearClipboardOnStart: boolean;
-    }
-  | {
-      type: "result";
-      event: CopyPasteProgressEvent;
     }
   | null;
 type WriteOperationCardState = {
-  mode: "copy" | "cut";
+  action: WriteOperationAction;
   stage: "starting" | "queued" | "running";
-  destinationDirectoryPath: string;
+  targetPath: string | null;
   completedItemCount: number;
   totalItemCount: number;
   completedByteCount: number;
@@ -323,8 +326,24 @@ export function App() {
   const [copyPasteDialogState, setCopyPasteDialogState] = useState<CopyPasteDialogState>(null);
   const [writeOperationCardState, setWriteOperationCardState] =
     useState<WriteOperationCardState | null>(null);
-  const [copyPasteProgressEvent, setCopyPasteProgressEvent] =
-    useState<CopyPasteProgressEvent | null>(null);
+  const [writeOperationProgressEvent, setWriteOperationProgressEvent] =
+    useState<WriteOperationProgressEvent | null>(null);
+  const [renameDialogState, setRenameDialogState] = useState<{
+    sourcePath: string;
+    currentName: string;
+    error: string | null;
+  } | null>(null);
+  const [newFolderDialogState, setNewFolderDialogState] = useState<{
+    parentDirectoryPath: string;
+    initialName: string;
+    error: string | null;
+  } | null>(null);
+  const [moveDialogState, setMoveDialogState] = useState<{
+    sourcePaths: string[];
+    currentPath: string;
+    submitting: boolean;
+    error: string | null;
+  } | null>(null);
   const [restoredPaneWidths, setRestoredPaneWidths] = useState<{
     treeWidth: number;
     inspectorWidth: number;
@@ -364,7 +383,7 @@ export function App() {
   const typeaheadPaneRef = useRef<"tree" | "content" | null>(null);
   const actionNoticeReturnFocusPaneRef = useRef<"tree" | "content" | null>(null);
   const lastExplorerFocusPaneRef = useRef<"tree" | "content" | null>(null);
-  const activeCopyPasteOperationIdRef = useRef<string | null>(null);
+  const activeWriteOperationIdRef = useRef<string | null>(null);
   const nextPasteAttemptIdRef = useRef(0);
   const pendingPasteAttemptRef = useRef<{
     id: number;
@@ -465,26 +484,36 @@ export function App() {
     pasteDestinationPath !== null;
   const isWriteOperationLocked = writeOperationCardState !== null;
   const showCopyPasteProgressCard = writeOperationCardState !== null;
-  const showCopyPasteResultDialog = shouldRenderCopyPasteResultDialog(copyPasteProgressEvent);
-  const copyPasteModalOpen = copyPasteDialogState !== null || showCopyPasteResultDialog;
+  const showCopyPasteResultDialog = shouldRenderCopyPasteResultDialog(writeOperationProgressEvent);
+  const locationDialogOpen = locationSheetOpen || moveDialogState !== null;
+  const copyPasteModalOpen =
+    copyPasteDialogState !== null ||
+    showCopyPasteResultDialog ||
+    renameDialogState !== null ||
+    newFolderDialogState !== null ||
+    moveDialogState !== null;
   const shortcutContext = useMemo(
     () => ({
       actionNoticeOpen: actionNotice !== null,
       copyPasteModalOpen,
-      locationSheetOpen,
+      locationSheetOpen: locationDialogOpen,
       mainView,
     }),
-    [actionNotice, copyPasteModalOpen, locationSheetOpen, mainView],
+    [actionNotice, copyPasteModalOpen, locationDialogOpen, mainView],
   );
   const contextMenuDisabledActionIds = useMemo(() => {
     if (!contextMenuState) {
       return [] as ContextMenuActionId[];
     }
     const disabled = new Set<ContextMenuActionId>();
+    const isBrowseContext = contextMenuState.source === "browse" && !isSearchMode;
     const hasOnlyEditableFiles =
       contextMenuTargetEntries.length > 0 &&
       contextMenuTargetEntries.length === contextMenuState.paths.length &&
       contextMenuTargetEntries.every((entry) => isEditableFileEntry(entry));
+    const hasSingleContextItem = contextMenuState.paths.length === 1;
+    const hasSingleSelectedFolder =
+      contextMenuState.paths.length === 1 && isDirectoryLikeEntry(contextMenuTargetEntries[0] ?? null);
     if (!FEATURE_FLAGS.copyPaste) {
       disabled.add("copy");
       disabled.add("cut");
@@ -500,6 +529,34 @@ export function App() {
     }
     if (!hasOnlyEditableFiles) {
       disabled.add("edit");
+    }
+    if (!isBrowseContext) {
+      disabled.add("move");
+      disabled.add("rename");
+      disabled.add("duplicate");
+      disabled.add("newFolder");
+      disabled.add("trash");
+    } else {
+      if (contextMenuState.scope === "background") {
+        disabled.add("move");
+        disabled.add("rename");
+        disabled.add("duplicate");
+        disabled.add("trash");
+      }
+      if (!hasSingleContextItem) {
+        disabled.add("rename");
+      }
+      if (contextMenuState.scope === "selection" && contextMenuState.paths.length === 0) {
+        disabled.add("move");
+        disabled.add("duplicate");
+        disabled.add("trash");
+      }
+      const canCreateNewFolder =
+        contextMenuState.scope === "background" ||
+        (contextMenuState.paths.length === 1 && hasSingleSelectedFolder);
+      if (!canCreateNewFolder) {
+        disabled.add("newFolder");
+      }
     }
     if (contextMenuTargetEntries.length > 0) {
       return Array.from(disabled);
@@ -665,10 +722,10 @@ export function App() {
     if (!contextMenuState) {
       return;
     }
-    if (mainView !== "explorer" || locationSheetOpen) {
+    if (mainView !== "explorer" || locationDialogOpen) {
       setContextMenuState(null);
     }
-  }, [contextMenuState, locationSheetOpen, mainView]);
+  }, [contextMenuState, locationDialogOpen, mainView]);
 
   useEffect(() => {
     if (!contextMenuState) {
@@ -736,7 +793,8 @@ export function App() {
     if (
       !preferencesReady ||
       mainView !== "explorer" ||
-      locationSheetOpen ||
+      locationDialogOpen ||
+      copyPasteModalOpen ||
       actionNotice ||
       contextMenuState ||
       focusedPane !== null
@@ -753,10 +811,11 @@ export function App() {
     restoreExplorerPaneFocus();
   }, [
     actionNotice,
+    copyPasteModalOpen,
     contextMenuState,
     focusedPane,
     isSearchMode,
-    locationSheetOpen,
+    locationDialogOpen,
     mainView,
     preferencesReady,
   ]);
@@ -1072,6 +1131,46 @@ export function App() {
         }
         return;
       }
+      if (command.type === "moveSelection") {
+        const paths = resolveContentActionPaths();
+        if (paths.length > 0) {
+          openMoveDialog(paths);
+        }
+        return;
+      }
+      if (command.type === "renameSelection") {
+        const paths = resolveContentActionPaths();
+        if (paths.length === 1) {
+          openRenameDialog(paths);
+        }
+        return;
+      }
+      if (command.type === "duplicateSelection") {
+        const paths = resolveContentActionPaths();
+        if (paths.length > 0) {
+          void startDuplicatePaths(paths);
+        }
+        return;
+      }
+      if (command.type === "newFolder") {
+        const targetPath = resolveNewFolderTargetPath({
+          currentPath,
+          selectedEntry,
+          selectedPaths: selectedPathsInViewOrder,
+          isSearchMode,
+        });
+        if (targetPath) {
+          openNewFolderDialog(targetPath);
+        }
+        return;
+      }
+      if (command.type === "trashSelection") {
+        const paths = resolveContentActionPaths();
+        if (paths.length > 0) {
+          void startTrashPaths(paths);
+        }
+        return;
+      }
       if (command.type === "copySelection") {
         void runCopyClipboardAction("copy");
         return;
@@ -1176,16 +1275,15 @@ export function App() {
   ]);
 
   useEffect(() => {
-    const unsubscribe = client.onCopyPasteProgress((event) => {
-      if (event.operationId !== activeCopyPasteOperationIdRef.current) {
+    const unsubscribe = client.onWriteOperationProgress((event) => {
+      if (event.operationId !== activeWriteOperationIdRef.current) {
         return;
       }
       if (event.status === "queued" || event.status === "running") {
         applyWriteOperationCardState({
-          mode: event.mode,
+          action: event.action,
           stage: event.status,
-          destinationDirectoryPath:
-            writeOperationCardState?.destinationDirectoryPath ?? currentPathRef.current,
+          targetPath: event.result?.targetPath ?? writeOperationCardState?.targetPath ?? currentPathRef.current,
           completedItemCount: event.completedItemCount,
           totalItemCount: event.totalItemCount,
           completedByteCount: event.completedByteCount,
@@ -1199,16 +1297,16 @@ export function App() {
         event.status === "cancelled" ||
         event.status === "partial"
       ) {
-        activeCopyPasteOperationIdRef.current = null;
+        activeWriteOperationIdRef.current = null;
         pendingPasteAttemptRef.current = null;
         applyWriteOperationCardState(null);
         if (event.result) {
-          queuePasteSelection(event.result);
+          queueWriteOperationSelection(event.result);
         }
         if (shouldRenderCopyPasteResultDialog(event)) {
-          setCopyPasteProgressEvent(event);
+          setWriteOperationProgressEvent(event);
         } else {
-          setCopyPasteProgressEvent(null);
+          setWriteOperationProgressEvent(null);
           pushTerminalCopyPasteToast(event);
         }
         void refreshDirectory();
@@ -1216,11 +1314,10 @@ export function App() {
     });
     return unsubscribe;
   }, [
-    applyCopyPasteClipboardState,
     client,
     pushTerminalCopyPasteToast,
     refreshDirectory,
-    writeOperationCardState?.destinationDirectoryPath,
+    writeOperationCardState?.targetPath,
   ]);
 
   useEffect(() => {
@@ -1392,7 +1489,7 @@ export function App() {
         setContextMenuState(null);
         return;
       }
-      if (event.key === "Escape" && locationSheetOpen) {
+      if (event.key === "Escape" && locationDialogOpen) {
         return;
       }
       if (event.key === "Escape" && mainView !== "explorer") {
@@ -1412,14 +1509,14 @@ export function App() {
       if (targetElement?.closest(".pathbar-editor-shell")) {
         return;
       }
-      if (locationSheetOpen) {
+      if (locationDialogOpen) {
         return;
       }
       if (
         tabSwitchesExplorerPanes &&
         event.key === "Tab" &&
         mainView === "explorer" &&
-        !locationSheetOpen
+        !locationDialogOpen
       ) {
         const isAutocompleteContext =
           targetElement?.closest(".pathbar-editor-shell, .location-sheet-input-shell") !== null;
@@ -1466,7 +1563,7 @@ export function App() {
           handleCopyPasteDialogEscape();
           return;
         }
-        if (targetElement?.closest(".copy-paste-dialog")) {
+        if (targetElement?.closest(".copy-paste-dialog, .location-sheet")) {
           return;
         }
         event.preventDefault();
@@ -1491,6 +1588,30 @@ export function App() {
           void startPasteFromClipboard();
           return;
         }
+        if (event.metaKey && event.key.toLowerCase() === "d") {
+          const paths = resolveContentActionPaths();
+          if (paths.length > 0) {
+            event.preventDefault();
+            void startDuplicatePaths(paths);
+          }
+          return;
+        }
+        if (event.metaKey && event.key === "Backspace") {
+          const paths = resolveContentActionPaths();
+          if (paths.length > 0) {
+            event.preventDefault();
+            void startTrashPaths(paths);
+          }
+          return;
+        }
+      }
+      if (!event.metaKey && !event.ctrlKey && !event.altKey && event.key === "F2") {
+        const paths = resolveContentActionPaths();
+        if (paths.length === 1) {
+          event.preventDefault();
+          openRenameDialog(paths);
+        }
+        return;
       }
       if (event.metaKey && event.key.toLowerCase() === "a" && focusedPane === "content") {
         event.preventDefault();
@@ -1596,6 +1717,39 @@ export function App() {
         if (pathsToCopy.length > 0) {
           event.preventDefault();
           void runCopyPathAction(pathsToCopy);
+        }
+        return;
+      }
+      if (
+        event.metaKey &&
+        event.shiftKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === "m"
+      ) {
+        const paths = resolveContentActionPaths();
+        if (paths.length > 0) {
+          event.preventDefault();
+          openMoveDialog(paths);
+        }
+        return;
+      }
+      if (
+        event.metaKey &&
+        event.shiftKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === "n"
+      ) {
+        const targetPath = resolveNewFolderTargetPath({
+          currentPath,
+          selectedEntry,
+          selectedPaths: selectedPathsInViewOrder,
+          isSearchMode,
+        });
+        if (targetPath) {
+          event.preventDefault();
+          openNewFolderDialog(targetPath);
         }
         return;
       }
@@ -1749,7 +1903,7 @@ export function App() {
     isSearchMode,
     copyPasteModalOpen,
     copyPasteDialogState,
-    copyPasteProgressEvent,
+    writeOperationProgressEvent,
     contextMenuState,
     locationSheetOpen,
     mainView,
@@ -1805,8 +1959,12 @@ export function App() {
   }
 
   function openLocationSheet() {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
     setMainView("explorer");
     setLocationError(null);
+    setFocusedPane(null);
     setLocationSheetOpen(true);
   }
 
@@ -2171,22 +2329,49 @@ export function App() {
     });
   }
 
-  function pushTerminalCopyPasteToast(event: CopyPasteProgressEvent) {
+  function pushTerminalCopyPasteToast(event: WriteOperationProgressEvent) {
     const result = event.result;
     if (!result) {
       return;
     }
+    const itemLabel = `${result.summary.topLevelItemCount} item${result.summary.topLevelItemCount === 1 ? "" : "s"}`;
+    const actionLabel =
+      event.action === "move_to"
+        ? "Moved"
+        : event.action === "duplicate"
+          ? "Duplicated"
+          : event.action === "trash"
+            ? "Moved to Trash"
+            : event.action === "rename"
+              ? "Renamed"
+              : event.action === "new_folder"
+                ? "Created folder"
+                : "Pasted";
     if (event.status === "completed") {
       pushToast({
         kind: "success",
-        title: `${result.mode === "cut" ? "Moved" : "Pasted"} ${result.summary.topLevelItemCount} item${result.summary.topLevelItemCount === 1 ? "" : "s"} into ${getPathLeafName(result.destinationDirectoryPath)}`,
+        title:
+          result.targetPath && (event.action === "paste" || event.action === "move_to" || event.action === "duplicate")
+            ? `${actionLabel} ${itemLabel} into ${getPathLeafName(result.targetPath)}`
+            : `${actionLabel} ${itemLabel}`,
       });
       return;
     }
     if (event.status === "cancelled") {
       pushToast({
         kind: "info",
-        title: result.mode === "cut" ? "Move cancelled" : "Paste cancelled",
+        title:
+          event.action === "move_to"
+            ? "Move cancelled"
+            : event.action === "duplicate"
+              ? "Duplicate cancelled"
+              : event.action === "trash"
+                ? "Trash cancelled"
+                : event.action === "rename"
+                  ? "Rename cancelled"
+                  : event.action === "new_folder"
+                    ? "Create folder cancelled"
+                    : "Paste cancelled",
       });
       return;
     }
@@ -2194,16 +2379,28 @@ export function App() {
       pushToast({
         kind: "warning",
         title:
-          result.mode === "cut"
+          event.action === "move_to"
             ? "Move completed with some issues"
-            : "Paste completed with some issues",
+            : event.action === "duplicate"
+              ? "Duplicate completed with some issues"
+              : event.action === "trash"
+                ? "Trash completed with some issues"
+                : "Paste completed with some issues",
+      });
+      return;
+    }
+    if (event.status === "failed") {
+      pushToast({
+        kind: "error",
+        title: `${actionLabel} failed`,
+        ...(result.error ? { message: result.error } : {}),
       });
     }
   }
 
   function beginPendingPasteAttempt(options: {
-    mode: CopyPastePlan["mode"];
-    destinationDirectoryPath: string;
+    action: "paste" | "move_to" | "duplicate";
+    targetPath: string;
     totalItemCount: number;
     totalBytes: number | null;
     currentSourcePath: string | null;
@@ -2216,9 +2413,9 @@ export function App() {
       cancelled: false,
     };
     applyWriteOperationCardState({
-      mode: options.mode,
+      action: options.action,
       stage: "starting",
-      destinationDirectoryPath: options.destinationDirectoryPath,
+      targetPath: options.targetPath,
       completedItemCount: 0,
       totalItemCount: options.totalItemCount,
       completedByteCount: 0,
@@ -2333,14 +2530,17 @@ export function App() {
       return;
     }
     const pasteAttemptId = beginPendingPasteAttempt({
-      mode: request.mode,
-      destinationDirectoryPath: request.destinationDirectoryPath,
+      action: "paste",
+      targetPath: request.destinationDirectoryPath,
       totalItemCount: request.sourcePaths.length,
       totalBytes: null,
       currentSourcePath: request.sourcePaths[0] ?? null,
     });
     try {
-      const plan = await client.invoke("copyPaste:plan", request);
+      const plan = await client.invoke("copyPaste:plan", {
+        ...request,
+        action: "paste",
+      });
       const pendingAttempt = pendingPasteAttemptRef.current;
       if (!pendingAttempt || pendingAttempt.id !== pasteAttemptId || pendingAttempt.cancelled) {
         return;
@@ -2351,6 +2551,7 @@ export function App() {
         setCopyPasteDialogState({
           type: "plan",
           plan,
+          action: "paste",
           clearClipboardOnStart: true,
         });
         return;
@@ -2364,7 +2565,7 @@ export function App() {
         );
         return;
       }
-      await executePastePlan(plan, {
+      await executeCopyLikePlan(plan, "paste", {
         pasteAttemptId,
         clearClipboardOnStart: true,
       });
@@ -2384,8 +2585,9 @@ export function App() {
     }
   }
 
-  async function executePastePlan(
+  async function executeCopyLikePlan(
     plan: CopyPastePlan,
+    action: "paste" | "move_to" | "duplicate",
     options: {
       pasteAttemptId?: number | null;
       clearClipboardOnStart?: boolean;
@@ -2404,9 +2606,9 @@ export function App() {
       };
     }
     applyWriteOperationCardState({
-      mode: plan.mode,
+      action,
       stage: "starting",
-      destinationDirectoryPath: plan.destinationDirectoryPath,
+      targetPath: plan.destinationDirectoryPath,
       completedItemCount: 0,
       totalItemCount: plan.summary.totalItemCount,
       completedByteCount: 0,
@@ -2419,6 +2621,7 @@ export function App() {
         sourcePaths: plan.sourcePaths,
         destinationDirectoryPath: plan.destinationDirectoryPath,
         conflictResolution: plan.conflictResolution,
+        action,
       });
       if (clearClipboardOnStart) {
         applyCopyPasteClipboardState(clearCopyPasteClipboard());
@@ -2426,10 +2629,10 @@ export function App() {
       const pendingAttempt = pasteAttemptId === null ? null : pendingPasteAttemptRef.current;
       if (pendingAttempt && pendingAttempt.id === pasteAttemptId && pendingAttempt.cancelled) {
         pendingPasteAttemptRef.current = null;
-        activeCopyPasteOperationIdRef.current = response.operationId;
-        setCopyPasteProgressEvent({
+        activeWriteOperationIdRef.current = response.operationId;
+        setWriteOperationProgressEvent({
           operationId: response.operationId,
-          mode: plan.mode,
+          action,
           status: "queued",
           completedItemCount: 0,
           totalItemCount: plan.summary.totalItemCount,
@@ -2439,24 +2642,24 @@ export function App() {
           currentDestinationPath: null,
           result: null,
         });
-        void cancelCopyPasteOperation();
+        void cancelWriteOperation();
         return;
       }
       pendingPasteAttemptRef.current = null;
-      activeCopyPasteOperationIdRef.current = response.operationId;
+      activeWriteOperationIdRef.current = response.operationId;
       applyWriteOperationCardState({
-        mode: plan.mode,
+        action,
         stage: "queued",
-        destinationDirectoryPath: plan.destinationDirectoryPath,
+        targetPath: plan.destinationDirectoryPath,
         completedItemCount: 0,
         totalItemCount: plan.summary.totalItemCount,
         completedByteCount: 0,
         totalBytes: plan.summary.totalBytes,
         currentSourcePath: plan.sourcePaths[0] ?? null,
       });
-      setCopyPasteProgressEvent({
+      setWriteOperationProgressEvent({
         operationId: response.operationId,
-        mode: plan.mode,
+        action,
         status: "queued",
         completedItemCount: 0,
         totalItemCount: plan.summary.totalItemCount,
@@ -2488,8 +2691,8 @@ export function App() {
     }
   }
 
-  async function cancelCopyPasteOperation() {
-    const operationId = activeCopyPasteOperationIdRef.current;
+  async function cancelWriteOperation() {
+    const operationId = activeWriteOperationIdRef.current;
     if (!operationId) {
       const pendingAttempt = pendingPasteAttemptRef.current;
       if (!pendingAttempt) {
@@ -2502,48 +2705,60 @@ export function App() {
       if (pendingAttempt.phase === "planning") {
         pendingPasteAttemptRef.current = null;
         applyWriteOperationCardState(null);
-        setCopyPasteProgressEvent(null);
+        setWriteOperationProgressEvent(null);
       }
       return;
     }
     try {
-      await client.invoke("copyPaste:cancel", { operationId });
+      await client.invoke("writeOperation:cancel", { operationId });
     } catch (error) {
       logger.error("copy paste cancel failed", error);
       showModalNotice(
-        "Unable to cancel paste",
+        "Unable to cancel write operation",
         "File Trail could not stop the active write operation. Wait for it to finish, then verify the results.",
       );
     }
   }
 
-  async function retryFailedCopyPasteItems(event: CopyPasteProgressEvent) {
+  async function retryFailedCopyPasteItems(event: WriteOperationProgressEvent) {
     const result = event.result;
     if (!result) {
       return;
     }
+    if (
+      event.action !== "paste" &&
+      event.action !== "move_to" &&
+      event.action !== "duplicate"
+    ) {
+      dismissCopyPasteDialog();
+      return;
+    }
     const failedSourcePaths = result.items
-      .filter((item) => item.status === "failed")
+      .filter(
+        (item): item is typeof item & { sourcePath: string } =>
+          item.status === "failed" && typeof item.sourcePath === "string",
+      )
       .map((item) => item.sourcePath);
     if (failedSourcePaths.length === 0) {
       dismissCopyPasteDialog();
       return;
     }
     const pasteAttemptId = beginPendingPasteAttempt({
-      mode: result.mode,
-      destinationDirectoryPath: result.destinationDirectoryPath,
+      action: event.action,
+      targetPath: result.targetPath ?? currentPathRef.current,
       totalItemCount: failedSourcePaths.length,
       totalBytes: null,
       currentSourcePath: failedSourcePaths[0] ?? null,
     });
-    setCopyPasteProgressEvent(null);
+    setWriteOperationProgressEvent(null);
     setCopyPasteDialogState(null);
     try {
       const plan = await client.invoke("copyPaste:plan", {
-        mode: result.mode,
+        mode: event.action === "move_to" ? "cut" : "copy",
         sourcePaths: failedSourcePaths,
-        destinationDirectoryPath: result.destinationDirectoryPath,
+        destinationDirectoryPath: result.targetPath ?? currentPathRef.current,
         conflictResolution: "error",
+        action: event.action === "move_to" ? "move_to" : event.action,
       });
       if (plan.conflicts.length > 0) {
         pendingPasteAttemptRef.current = null;
@@ -2551,6 +2766,7 @@ export function App() {
         setCopyPasteDialogState({
           type: "plan",
           plan,
+          action: event.action === "move_to" ? "move_to" : "duplicate",
           clearClipboardOnStart: false,
         });
         return;
@@ -2568,7 +2784,7 @@ export function App() {
       if (!pendingAttempt || pendingAttempt.id !== pasteAttemptId || pendingAttempt.cancelled) {
         return;
       }
-      await executePastePlan(plan, {
+      await executeCopyLikePlan(plan, event.action === "move_to" ? "move_to" : "duplicate", {
         pasteAttemptId,
         clearClipboardOnStart: false,
       });
@@ -2590,17 +2806,29 @@ export function App() {
 
   function dismissCopyPasteDialog() {
     setCopyPasteDialogState(null);
-    setCopyPasteProgressEvent(null);
-    activeCopyPasteOperationIdRef.current = null;
+    setWriteOperationProgressEvent(null);
+    activeWriteOperationIdRef.current = null;
   }
 
   function handleCopyPasteDialogEscape() {
-    if (copyPasteProgressEvent) {
+    if (moveDialogState) {
+      setMoveDialogState(null);
+      return;
+    }
+    if (renameDialogState) {
+      setRenameDialogState(null);
+      return;
+    }
+    if (newFolderDialogState) {
+      setNewFolderDialogState(null);
+      return;
+    }
+    if (writeOperationProgressEvent) {
       if (
-        copyPasteProgressEvent.status === "running" ||
-        copyPasteProgressEvent.status === "queued"
+        writeOperationProgressEvent.status === "running" ||
+        writeOperationProgressEvent.status === "queued"
       ) {
-        void cancelCopyPasteOperation();
+        void cancelWriteOperation();
         return;
       }
       dismissCopyPasteDialog();
@@ -2611,18 +2839,27 @@ export function App() {
     }
   }
 
-  function queuePasteSelection(result: NonNullable<CopyPasteProgressEvent["result"]>) {
-    if (isSearchModeRef.current || currentPathRef.current !== result.destinationDirectoryPath) {
+  function queueWriteOperationSelection(result: NonNullable<WriteOperationProgressEvent["result"]>) {
+    const selectedPaths = result.items
+      .filter(
+        (item): item is typeof item & { destinationPath: string } =>
+          item.status === "completed" && typeof item.destinationPath === "string",
+      )
+      .map((item) => item.destinationPath);
+    const selectionDirectoryPath = resolveWriteOperationSelectionDirectoryPath(result, selectedPaths);
+
+    if (
+      isSearchModeRef.current ||
+      !selectionDirectoryPath ||
+      currentPathRef.current !== selectionDirectoryPath
+    ) {
       pendingPasteSelectionRef.current = null;
       return;
     }
-    const selectedPaths = result.items
-      .filter((item) => item.status === "completed")
-      .map((item) => item.destinationPath);
     pendingPasteSelectionRef.current =
       selectedPaths.length > 0
         ? {
-            directoryPath: result.destinationDirectoryPath,
+            directoryPath: selectionDirectoryPath,
             selectedPaths,
           }
         : null;
@@ -2853,6 +3090,35 @@ export function App() {
       setInfoPanelOpen(true);
       return;
     }
+    if (actionId === "move") {
+      openMoveDialog(paths);
+      return;
+    }
+    if (actionId === "rename") {
+      openRenameDialog(paths);
+      return;
+    }
+    if (actionId === "duplicate") {
+      await startDuplicatePaths(paths);
+      return;
+    }
+    if (actionId === "newFolder") {
+      const targetPath = resolveNewFolderTargetPath({
+        currentPath,
+        selectedEntry: contextMenuTargetEntry,
+        selectedPaths: paths,
+        isSearchMode,
+        contextScope: contextMenuState?.scope ?? "selection",
+      });
+      if (targetPath) {
+        openNewFolderDialog(targetPath);
+      }
+      return;
+    }
+    if (actionId === "trash") {
+      await startTrashPaths(paths);
+      return;
+    }
     if (actionId === "terminal") {
       const firstPath = paths[0];
       if (firstPath) {
@@ -2860,18 +3126,7 @@ export function App() {
       }
       return;
     }
-    const title =
-      actionId === "move"
-        ? "Move To…"
-        : actionId === "rename"
-          ? "Rename"
-          : actionId === "duplicate"
-            ? "Duplicate"
-            : actionId === "newFolder"
-              ? "New Folder"
-              : actionId === "trash"
-                ? "Move to Trash"
-                : "Open With";
+    const title = "Open With";
     showNotImplementedNotice(title);
   }
 
@@ -3741,6 +3996,299 @@ export function App() {
     await openPathsWithApplication(paths, defaultTextEditor.appPath, defaultTextEditor.appName);
   }
 
+  function canRunContentSelectionAction(): boolean {
+    if (mainView !== "explorer" || isSearchMode) {
+      return false;
+    }
+    const activePane = focusedPane ?? lastExplorerFocusPaneRef.current;
+    return activePane === "content";
+  }
+
+  function resolveContentActionPaths(): string[] {
+    if (!canRunContentSelectionAction()) {
+      return [];
+    }
+    return [...selectedPathsInViewOrderRef.current];
+  }
+
+  async function startDuplicatePaths(paths: string[]) {
+    if (paths.length === 0 || currentPathRef.current.length === 0) {
+      return;
+    }
+    if (isWriteOperationInFlight()) {
+      showWriteOperationBusyToast();
+      return;
+    }
+    const pasteAttemptId = beginPendingPasteAttempt({
+      action: "duplicate",
+      targetPath: currentPathRef.current,
+      totalItemCount: paths.length,
+      totalBytes: null,
+      currentSourcePath: paths[0] ?? null,
+    });
+    try {
+      const plan = await client.invoke("copyPaste:plan", {
+        mode: "copy",
+        sourcePaths: paths,
+        destinationDirectoryPath: currentPathRef.current,
+        conflictResolution: "error",
+        action: "duplicate",
+      });
+      const pendingAttempt = pendingPasteAttemptRef.current;
+      if (!pendingAttempt || pendingAttempt.id !== pasteAttemptId || pendingAttempt.cancelled) {
+        return;
+      }
+      if (plan.issues.length > 0) {
+        pendingPasteAttemptRef.current = null;
+        applyWriteOperationCardState(null);
+        showModalNotice("Duplicate cannot continue", plan.issues[0]?.message ?? "Duplicate cannot continue.");
+        return;
+      }
+      await executeCopyLikePlan(plan, "duplicate", {
+        pasteAttemptId,
+        clearClipboardOnStart: false,
+      });
+      closeContextMenu();
+    } catch (error) {
+      pendingPasteAttemptRef.current = null;
+      applyWriteOperationCardState(null);
+      logger.error("duplicate planning failed", error);
+      showModalNotice(
+        "Unable to prepare duplicate",
+        "File Trail could not validate the duplicate operation.",
+      );
+    }
+  }
+
+  function openMoveDialog(paths: string[]) {
+    if (paths.length === 0) {
+      return;
+    }
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    setFocusedPane(null);
+    setMoveDialogState({
+      sourcePaths: paths,
+      currentPath: currentPathRef.current,
+      submitting: false,
+      error: null,
+    });
+    closeContextMenu();
+  }
+
+  async function submitMoveDialog(destinationDirectoryPath: string) {
+    if (!moveDialogState) {
+      return;
+    }
+    if (isWriteOperationInFlight()) {
+      showWriteOperationBusyToast();
+      return;
+    }
+    setMoveDialogState((current) => (current ? { ...current, submitting: true, error: null } : current));
+    const pasteAttemptId = beginPendingPasteAttempt({
+      action: "move_to",
+      targetPath: destinationDirectoryPath,
+      totalItemCount: moveDialogState.sourcePaths.length,
+      totalBytes: null,
+      currentSourcePath: moveDialogState.sourcePaths[0] ?? null,
+    });
+    try {
+      const plan = await client.invoke("copyPaste:plan", {
+        mode: "cut",
+        sourcePaths: moveDialogState.sourcePaths,
+        destinationDirectoryPath,
+        conflictResolution: "error",
+        action: "move_to",
+      });
+      const pendingAttempt = pendingPasteAttemptRef.current;
+      if (!pendingAttempt || pendingAttempt.id !== pasteAttemptId || pendingAttempt.cancelled) {
+        return;
+      }
+      if (plan.conflicts.length > 0) {
+        pendingPasteAttemptRef.current = null;
+        applyWriteOperationCardState(null);
+        setMoveDialogState(null);
+        setCopyPasteDialogState({
+          type: "plan",
+          plan,
+          action: "move_to",
+          clearClipboardOnStart: false,
+        });
+        return;
+      }
+      if (plan.issues.length > 0) {
+        pendingPasteAttemptRef.current = null;
+        applyWriteOperationCardState(null);
+        setMoveDialogState((current) =>
+          current ? { ...current, submitting: false, error: plan.issues[0]?.message ?? "Move cannot continue." } : current,
+        );
+        return;
+      }
+      setMoveDialogState(null);
+      await executeCopyLikePlan(plan, "move_to", {
+        pasteAttemptId,
+        clearClipboardOnStart: false,
+      });
+    } catch (error) {
+      pendingPasteAttemptRef.current = null;
+      applyWriteOperationCardState(null);
+      logger.error("move planning failed", error);
+      setMoveDialogState((current) =>
+        current ? { ...current, submitting: false, error: "Unable to prepare the move destination." } : current,
+      );
+    }
+  }
+
+  async function browseForDirectoryPath(currentDirectoryPath: string): Promise<string | null> {
+    const response = await client.invoke("system:pickDirectory", {
+      defaultPath: currentDirectoryPath.length > 0 ? currentDirectoryPath : null,
+    });
+    return response.canceled ? null : response.path;
+  }
+
+  function openRenameDialog(paths: string[]) {
+    if (paths.length !== 1) {
+      return;
+    }
+    const sourcePath = paths[0];
+    if (!sourcePath) {
+      return;
+    }
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    setFocusedPane(null);
+    clearTypeahead();
+    setRenameDialogState({
+      sourcePath,
+      currentName: getPathLeafName(sourcePath),
+      error: null,
+    });
+    closeContextMenu();
+  }
+
+  async function submitRenameDialog(nextName: string) {
+    if (!renameDialogState) {
+      return;
+    }
+    try {
+      const response = await client.invoke("writeOperation:rename", {
+        sourcePath: renameDialogState.sourcePath,
+        destinationName: nextName,
+      });
+      activeWriteOperationIdRef.current = response.operationId;
+      applyWriteOperationCardState({
+        action: "rename",
+        stage: "queued",
+        targetPath: renameDialogState.sourcePath,
+        completedItemCount: 0,
+        totalItemCount: 1,
+        completedByteCount: 0,
+        totalBytes: null,
+        currentSourcePath: renameDialogState.sourcePath,
+      });
+      setRenameDialogState(null);
+    } catch (error) {
+      setRenameDialogState((current) =>
+        current ? { ...current, error: error instanceof Error ? error.message : String(error) } : current,
+      );
+    }
+  }
+
+  function resolveDefaultNewFolderName(parentPath: string): string {
+    if (parentPath !== currentPathRef.current) {
+      return "New Folder";
+    }
+    const existingNames = new Set(currentEntries.map((entry) => entry.name));
+    if (!existingNames.has("New Folder")) {
+      return "New Folder";
+    }
+    for (let index = 2; index < 500; index += 1) {
+      const candidate = `New Folder ${index}`;
+      if (!existingNames.has(candidate)) {
+        return candidate;
+      }
+    }
+    return "New Folder";
+  }
+
+  function openNewFolderDialog(parentDirectoryPath: string) {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    setFocusedPane(null);
+    clearTypeahead();
+    setNewFolderDialogState({
+      parentDirectoryPath,
+      initialName: resolveDefaultNewFolderName(parentDirectoryPath),
+      error: null,
+    });
+    closeContextMenu();
+  }
+
+  async function submitNewFolderDialog(folderName: string) {
+    if (!newFolderDialogState) {
+      return;
+    }
+    try {
+      const response = await client.invoke("writeOperation:createFolder", {
+        parentDirectoryPath: newFolderDialogState.parentDirectoryPath,
+        folderName,
+      });
+      activeWriteOperationIdRef.current = response.operationId;
+      applyWriteOperationCardState({
+        action: "new_folder",
+        stage: "queued",
+        targetPath: newFolderDialogState.parentDirectoryPath,
+        completedItemCount: 0,
+        totalItemCount: 1,
+        completedByteCount: 0,
+        totalBytes: null,
+        currentSourcePath: null,
+      });
+      setNewFolderDialogState(null);
+    } catch (error) {
+      setNewFolderDialogState((current) =>
+        current ? { ...current, error: error instanceof Error ? error.message : String(error) } : current,
+      );
+    }
+  }
+
+  async function startTrashPaths(paths: string[]) {
+    if (paths.length === 0) {
+      return;
+    }
+    if (isWriteOperationInFlight()) {
+      showWriteOperationBusyToast();
+      return;
+    }
+    try {
+      const response = await client.invoke("writeOperation:trash", {
+        paths,
+      });
+      activeWriteOperationIdRef.current = response.operationId;
+      applyWriteOperationCardState({
+        action: "trash",
+        stage: "queued",
+        targetPath: null,
+        completedItemCount: 0,
+        totalItemCount: paths.length,
+        completedByteCount: 0,
+        totalBytes: null,
+        currentSourcePath: paths[0] ?? null,
+      });
+      closeContextMenu();
+    } catch (error) {
+      logger.error("trash start failed", error);
+      if (error instanceof Error && error.message.includes(WRITE_OPERATION_BUSY_ERROR)) {
+        showWriteOperationBusyToast();
+        return;
+      }
+      showModalNotice("Move to Trash", "File Trail could not move the selected items to Trash.");
+    }
+  }
+
   async function activateContentPaths(paths: string[]) {
     if (paths.length === 0) {
       return;
@@ -4486,6 +5034,26 @@ export function App() {
         onClose={() => setLocationSheetOpen(false)}
         onSubmit={(path) => void submitLocationPath(path)}
       />
+      <LocationSheet
+        open={moveDialogState !== null}
+        currentPath={moveDialogState?.currentPath ?? currentPath}
+        submitting={moveDialogState?.submitting ?? false}
+        error={moveDialogState?.error ?? null}
+        title="Move To"
+        eyebrow="Destination"
+        label="Destination folder"
+        submitLabel="Move"
+        placeholder={currentPath}
+        tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
+        enableSuggestions={false}
+        browseLabel="Browse"
+        onBrowse={(path) => browseForDirectoryPath(path)}
+        onRequestPathSuggestions={(inputPath) =>
+          requestPathSuggestions({ client, includeHidden, inputPath })
+        }
+        onClose={() => setMoveDialogState(null)}
+        onSubmit={(path) => void submitMoveDialog(path)}
+      />
       {contextMenuState ? (
         <ItemContextMenu
           anchorX={contextMenuState.x}
@@ -4509,24 +5077,62 @@ export function App() {
           onClose={dismissActionNotice}
         />
       ) : null}
+      <TextPromptDialog
+        open={renameDialogState !== null}
+        title="Rename"
+        {...(renameDialogState
+          ? { message: `Rename ${renameDialogState.currentName}` }
+          : {})}
+        label="New name"
+        value={renameDialogState?.currentName ?? ""}
+        submitLabel="Rename"
+        error={renameDialogState?.error ?? null}
+        onClose={() => setRenameDialogState(null)}
+        onSubmit={(value) => void submitRenameDialog(value)}
+      />
+      <TextPromptDialog
+        open={newFolderDialogState !== null}
+        title="New Folder"
+        {...(newFolderDialogState
+          ? { message: `Create in ${newFolderDialogState.parentDirectoryPath}` }
+          : {})}
+        label="Folder name"
+        value={newFolderDialogState?.initialName ?? "New Folder"}
+        submitLabel="Create Folder"
+        error={newFolderDialogState?.error ?? null}
+        onClose={() => setNewFolderDialogState(null)}
+        onSubmit={(value) => void submitNewFolderDialog(value)}
+      />
       {copyPasteDialogState?.type === "plan" ? (
         <CopyPasteDialog
-          title="Paste Requires Review"
-          message="Some destination items already exist. You can skip those conflicts or cancel."
+          title={
+            copyPasteDialogState.action === "move_to"
+              ? "Move Requires Review"
+              : copyPasteDialogState.action === "duplicate"
+                ? "Duplicate Requires Review"
+                : "Paste Requires Review"
+          }
+          message={
+            copyPasteDialogState.action === "move_to"
+              ? "Some destination items already exist. You can skip those conflicts or cancel the move."
+              : "Some destination items already exist. You can skip those conflicts or cancel."
+          }
           detailLines={buildCopyPastePlanDetailLines(copyPasteDialogState.plan)}
           primaryAction={{
             label: "Skip Conflicts",
             onClick: () =>
-              void executePastePlan(
+              void executeCopyLikePlan(
                 {
                   ...copyPasteDialogState.plan,
                   conflictResolution: "skip",
                 },
+                copyPasteDialogState.action,
                 {
                   clearClipboardOnStart: copyPasteDialogState.clearClipboardOnStart,
                 },
               ),
-            destructive: copyPasteDialogState.plan.mode === "cut",
+            destructive:
+              copyPasteDialogState.action === "move_to" || copyPasteDialogState.plan.mode === "cut",
           }}
           secondaryAction={{
             label: "Cancel",
@@ -4537,32 +5143,61 @@ export function App() {
       {showCopyPasteProgressCard && writeOperationCardState ? (
         <CopyPasteProgressCard
           title={
-            writeOperationCardState.mode === "cut" ? "Cut/Paste In Progress" : "Paste In Progress"
+            writeOperationCardState.action === "move_to"
+              ? "Move In Progress"
+              : writeOperationCardState.action === "duplicate"
+                ? "Duplicate In Progress"
+                : writeOperationCardState.action === "trash"
+                  ? "Move to Trash In Progress"
+                  : writeOperationCardState.action === "rename"
+                    ? "Rename In Progress"
+                    : writeOperationCardState.action === "new_folder"
+                      ? "Create Folder In Progress"
+                      : "Paste In Progress"
           }
           progressPercent={getWriteOperationProgressPercent(writeOperationCardState)}
           progressMetaStart={`${writeOperationCardState.completedItemCount.toLocaleString()} of ${Math.max(writeOperationCardState.totalItemCount, 0).toLocaleString()} items`}
           progressMetaEnd={formatWriteOperationByteLabel(writeOperationCardState)}
-          detailLabel="Current file"
+          detailLabel={writeOperationCardState.action === "new_folder" ? "Destination" : "Current item"}
           detailValue={getPathLeafName(
             writeOperationCardState.currentSourcePath ??
-              writeOperationCardState.destinationDirectoryPath,
+              writeOperationCardState.targetPath ??
+              currentPath,
           )}
           onCancel={() => {
-            void cancelCopyPasteOperation();
+            void cancelWriteOperation();
           }}
         />
       ) : null}
-      {showCopyPasteResultDialog && copyPasteProgressEvent ? (
+      {showCopyPasteResultDialog && writeOperationProgressEvent ? (
         <CopyPasteDialog
-          title="Paste Result"
-          message={copyPasteProgressEvent.result?.error ?? "The copy/paste operation has finished."}
-          detailLines={buildCopyPasteResultDetailLines(copyPasteProgressEvent)}
+          title={
+            writeOperationProgressEvent.action === "move_to"
+              ? "Move Result"
+              : writeOperationProgressEvent.action === "duplicate"
+                ? "Duplicate Result"
+                : writeOperationProgressEvent.action === "trash"
+                  ? "Trash Result"
+                  : writeOperationProgressEvent.action === "rename"
+                    ? "Rename Result"
+                    : writeOperationProgressEvent.action === "new_folder"
+                      ? "Create Folder Result"
+                      : "Paste Result"
+          }
+          message={
+            writeOperationProgressEvent.result?.error ??
+            "The write operation has finished."
+          }
+          detailLines={buildCopyPasteResultDetailLines(writeOperationProgressEvent)}
           primaryAction={
-            copyPasteProgressEvent.result?.items.some((item) => item.status === "failed")
+            (writeOperationProgressEvent.action === "paste" ||
+              writeOperationProgressEvent.action === "move_to" ||
+              writeOperationProgressEvent.action === "duplicate") &&
+            writeOperationProgressEvent.result?.items.some((item) => item.status === "failed")
               ? {
                   label: "Retry Failed Items",
                   onClick: () => {
-                    void retryFailedCopyPasteItems(copyPasteProgressEvent);
+                    void retryFailedCopyPasteItems(writeOperationProgressEvent);
                   },
                 }
               : {
@@ -4571,7 +5206,10 @@ export function App() {
                 }
           }
           secondaryAction={
-            copyPasteProgressEvent.result?.items.some((item) => item.status === "failed")
+            (writeOperationProgressEvent.action === "paste" ||
+              writeOperationProgressEvent.action === "move_to" ||
+              writeOperationProgressEvent.action === "duplicate") &&
+            writeOperationProgressEvent.result?.items.some((item) => item.status === "failed")
               ? {
                   label: "Close",
                   onClick: dismissCopyPasteDialog,
@@ -4601,13 +5239,16 @@ function getPathLeafName(path: string): string {
   return trimmedPath.split("/").filter(Boolean).at(-1) ?? path;
 }
 
-function isCopyPasteProgressActive(event: CopyPasteProgressEvent | null): boolean {
+function isCopyPasteProgressActive(event: WriteOperationProgressEvent | null): boolean {
   return event?.status === "queued" || event?.status === "running";
 }
 
-function shouldRenderCopyPasteResultDialog(event: CopyPasteProgressEvent | null): boolean {
+function shouldRenderCopyPasteResultDialog(event: WriteOperationProgressEvent | null): boolean {
   if (!event || !event.result) {
     return false;
+  }
+  if (event.action === "rename" || event.action === "new_folder") {
+    return event.status === "failed";
   }
   if (event.status === "failed" || event.status === "partial") {
     return true;
@@ -4641,7 +5282,7 @@ function buildCopyPastePlanDetailLines(plan: CopyPastePlan): string[] {
   return lines;
 }
 
-function buildCopyPasteResultDetailLines(event: CopyPasteProgressEvent): string[] {
+function buildCopyPasteResultDetailLines(event: WriteOperationProgressEvent): string[] {
   const result = event.result;
   if (!result) {
     return [];
@@ -4688,7 +5329,7 @@ function formatWriteOperationByteLabel(state: WriteOperationCardState): string {
     ? "Preparing write plan"
     : state.stage === "queued"
       ? "Waiting to begin"
-      : "Tracking bytes";
+      : "Tracking progress";
 }
 
 function resolvePasteDestinationPath(args: {
@@ -4723,6 +5364,45 @@ function resolvePasteDestinationPath(args: {
     return selectedEntry.path;
   }
   return currentPath.length > 0 ? currentPath : null;
+}
+
+function resolveNewFolderTargetPath(args: {
+  currentPath: string;
+  selectedEntry: DirectoryEntry | null;
+  selectedPaths: string[];
+  isSearchMode: boolean;
+  contextScope?: "selection" | "background";
+}): string | null {
+  if (args.isSearchMode) {
+    return null;
+  }
+  if (args.contextScope === "background") {
+    return args.currentPath.length > 0 ? args.currentPath : null;
+  }
+  if (args.selectedPaths.length === 0) {
+    return args.currentPath.length > 0 ? args.currentPath : null;
+  }
+  if (args.selectedPaths.length !== 1) {
+    return null;
+  }
+  return isDirectoryLikeEntry(args.selectedEntry) ? args.selectedEntry.path : null;
+}
+
+function resolveWriteOperationSelectionDirectoryPath(
+  result: NonNullable<WriteOperationProgressEvent["result"]>,
+  selectedPaths: string[],
+): string | null {
+  const firstSelectedPath = selectedPaths[0];
+  if (!firstSelectedPath) {
+    return null;
+  }
+  if (
+    result.action === "rename" ||
+    result.action === "new_folder"
+  ) {
+    return parentDirectoryPath(firstSelectedPath) ?? null;
+  }
+  return result.targetPath;
 }
 
 function isDirectoryLikeEntry(entry: DirectoryEntry | null): entry is DirectoryEntry {

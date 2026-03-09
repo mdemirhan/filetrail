@@ -309,6 +309,16 @@ describe("ipc contracts", () => {
     });
 
     expect(
+      ipcContractSchemas["system:pickDirectory"].response.parse({
+        canceled: false,
+        path: "/Users/demo/Folder",
+      }),
+    ).toEqual({
+      canceled: false,
+      path: "/Users/demo/Folder",
+    });
+
+    expect(
       ipcContractSchemas["system:openPathsWithApplication"].request.parse({
         applicationPath: "Finder",
         paths: ["/Users/demo/file.txt"],

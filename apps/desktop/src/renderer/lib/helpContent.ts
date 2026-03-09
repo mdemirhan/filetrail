@@ -26,6 +26,15 @@ export const SHORTCUT_ITEMS = [
   },
   {
     group: "Navigation",
+    shortcut: "Cmd+Shift+M",
+    description: "Move the selected items to another folder",
+  },
+  { group: "Navigation", shortcut: "F2", description: "Rename the selected item" },
+  { group: "Navigation", shortcut: "Cmd+D", description: "Duplicate the selected items" },
+  { group: "Navigation", shortcut: "Cmd+Shift+N", description: "Create a new folder" },
+  { group: "Navigation", shortcut: "Cmd+Backspace", description: "Move the selected items to Trash" },
+  {
+    group: "Navigation",
     shortcut: "Ctrl+U",
     description: "Scroll one page up in the focused tree or content view",
   },

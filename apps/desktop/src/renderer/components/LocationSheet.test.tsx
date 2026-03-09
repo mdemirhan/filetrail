@@ -231,4 +231,68 @@ describe("LocationSheet", () => {
     expect(handleClose).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
   });
+
+  it("fills the input from Browse when provided", async () => {
+    const handleBrowse = vi.fn().mockResolvedValue("/Users/demo/Target");
+
+    render(
+      <LocationSheet
+        open
+        currentPath="/Users/demo"
+        submitting={false}
+        error={null}
+        browseLabel="Browse"
+        tabSwitchesExplorerPanes={false}
+        onBrowse={handleBrowse}
+        onClose={() => undefined}
+        onSubmit={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Browse" }));
+
+    await screen.findByDisplayValue("/Users/demo/Target");
+    expect(handleBrowse).toHaveBeenCalledWith("/Users/demo");
+  });
+
+  it("does not request or render suggestions when autocomplete is disabled", async () => {
+    vi.useFakeTimers();
+    const handleRequestPathSuggestions = vi.fn().mockResolvedValue({
+      inputPath: "/Users/de",
+      basePath: "/Users",
+      suggestions: [{ name: "demo", path: "/Users/demo" }],
+    });
+
+    render(
+      <LocationSheet
+        open
+        currentPath="/Users/demo"
+        submitting={false}
+        error={null}
+        enableSuggestions={false}
+        tabSwitchesExplorerPanes={false}
+        onClose={() => undefined}
+        onSubmit={() => undefined}
+        onRequestPathSuggestions={handleRequestPathSuggestions}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Absolute path"), {
+      target: { value: "/Users/de" },
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(350);
+    });
+    await act(async () => {});
+
+    expect(handleRequestPathSuggestions).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /demo/i })).not.toBeInTheDocument();
+    vi.useRealTimers();
+  });
 });

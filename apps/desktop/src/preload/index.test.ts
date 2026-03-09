@@ -22,6 +22,7 @@ async function importPreload() {
   return api as {
     invoke: (channel: string, payload: unknown) => Promise<unknown>;
     onCommand: (listener: (command: unknown) => void) => () => void;
+    onWriteOperationProgress: (listener: (event: unknown) => void) => () => void;
     onCopyPasteProgress: (listener: (event: unknown) => void) => () => void;
   };
 }
@@ -43,6 +44,7 @@ describe("preload bridge", () => {
       expect.objectContaining({
         invoke: expect.any(Function),
         onCommand: expect.any(Function),
+        onWriteOperationProgress: expect.any(Function),
         onCopyPasteProgress: expect.any(Function),
       }),
     );
@@ -92,14 +94,14 @@ describe("preload bridge", () => {
     );
   });
 
-  it("subscribes to copy/paste progress events and unregisters the exact listener", async () => {
+  it("subscribes to write-operation progress events and unregisters the exact listener", async () => {
     const api = await importPreload();
     const listener = vi.fn();
 
-    const unsubscribe = api.onCopyPasteProgress(listener);
+    const unsubscribe = api.onWriteOperationProgress(listener);
     const [, registeredHandler] = electronMock.on.mock.calls[0] ?? [];
     expect(electronMock.on).toHaveBeenCalledWith(
-      "filetrail:copyPasteProgress",
+      "filetrail:writeOperationProgress",
       expect.any(Function),
     );
 
@@ -108,7 +110,7 @@ describe("preload bridge", () => {
 
     unsubscribe();
     expect(electronMock.removeListener).toHaveBeenCalledWith(
-      "filetrail:copyPasteProgress",
+      "filetrail:writeOperationProgress",
       registeredHandler,
     );
   });
