@@ -168,4 +168,123 @@ describe("fdSearch", () => {
       error: "regex parse error",
     });
   });
+
+  it("flushes a trailing stdout buffer on close and preserves root-relative parents", () => {
+    const process = createMockProcess();
+    const runtime = new FdSearchRuntime("/tmp/fd", {
+      spawn: vi.fn(() => process as never),
+    });
+
+    const started = runtime.startSearch({
+      rootPath: "/Users/demo/project",
+      query: ".env",
+      patternMode: "glob",
+      matchScope: "name",
+      recursive: true,
+      includeHidden: true,
+    });
+
+    process.stdout.write("/Users/demo/project/.env");
+    process.emit("close", 0, null);
+
+    expect(runtime.getUpdate(started.jobId, 0)).toEqual({
+      jobId: started.jobId,
+      status: "complete",
+      items: [
+        {
+          path: "/Users/demo/project/.env",
+          name: ".env",
+          extension: "",
+          kind: "file",
+          isHidden: true,
+          isSymlink: false,
+          parentPath: "/Users/demo/project",
+          relativeParentPath: ".",
+        },
+      ],
+      nextCursor: 1,
+      done: true,
+      truncated: false,
+      error: null,
+    });
+  });
+
+  it("surfaces process error events as search failures", () => {
+    const process = createMockProcess();
+    const runtime = new FdSearchRuntime("/tmp/fd", {
+      spawn: vi.fn(() => process as never),
+    });
+
+    const started = runtime.startSearch({
+      rootPath: "/Users/demo/project",
+      query: "*.ts",
+      patternMode: "glob",
+      matchScope: "name",
+      recursive: true,
+      includeHidden: false,
+    });
+
+    process.emit("error", new Error("spawn failed"));
+
+    expect(runtime.getUpdate(started.jobId, 0)).toEqual({
+      jobId: started.jobId,
+      status: "error",
+      items: [],
+      nextCursor: 0,
+      done: true,
+      truncated: false,
+      error: "spawn failed",
+    });
+  });
+
+  it("reports unexpected exit signals when fd is terminated externally", () => {
+    const process = createMockProcess();
+    const runtime = new FdSearchRuntime("/tmp/fd", {
+      spawn: vi.fn(() => process as never),
+    });
+
+    const started = runtime.startSearch({
+      rootPath: "/Users/demo/project",
+      query: "*.ts",
+      patternMode: "glob",
+      matchScope: "name",
+      recursive: true,
+      includeHidden: false,
+    });
+
+    process.emit("close", null, "SIGKILL");
+
+    expect(runtime.getUpdate(started.jobId, 0)).toEqual({
+      jobId: started.jobId,
+      status: "error",
+      items: [],
+      nextCursor: 0,
+      done: true,
+      truncated: false,
+      error: "fd exited via signal SIGKILL",
+    });
+  });
+
+  it("cancels running jobs and clears the registry when the runtime closes", async () => {
+    const process = createMockProcess();
+    const runtime = new FdSearchRuntime("/tmp/fd", {
+      spawn: vi.fn(() => process as never),
+    });
+
+    const started = runtime.startSearch({
+      rootPath: "/Users/demo/project",
+      query: "*.ts",
+      patternMode: "glob",
+      matchScope: "name",
+      recursive: true,
+      includeHidden: false,
+    });
+
+    await runtime.close();
+
+    expect(process.kill).toHaveBeenCalledWith("SIGTERM");
+    expect(() => runtime.getUpdate(started.jobId, 0)).toThrow(
+      `Unknown search job: ${started.jobId}`,
+    );
+  });
 });

@@ -355,6 +355,146 @@ describe("explorerService", () => {
       resolvedPath: "/resolved/path",
     });
   });
+
+  it("falls back to the resolved input path when path activation cannot resolve aliases", async () => {
+    const fakeFileSystem = {
+      readdir: vi.fn(),
+      stat: vi.fn(),
+      lstat: vi.fn(),
+      realpath: vi.fn(async () => {
+        throw new Error("missing target");
+      }),
+    };
+
+    await expect(resolvePathTarget("/input/path", fakeFileSystem)).resolves.toEqual({
+      inputPath: "/input/path",
+      resolvedPath: null,
+    });
+  });
+
+  it("falls back to the original directory path when realpath normalization fails", async () => {
+    const fakeFileSystem = {
+      readdir: vi.fn(async () => [fakeDirent("Desktop", { directory: true })]),
+      stat: vi.fn(async (path: string) =>
+        fakeStats(path === "/Users/demo" || path.endsWith("Desktop"), false, 0),
+      ),
+      lstat: vi.fn(async () => fakeStats(false, false, 0, false)),
+      realpath: vi.fn(async () => {
+        throw new Error("realpath unavailable");
+      }),
+    };
+
+    const snapshot = await listDirectorySnapshot(
+      "/Users/demo",
+      false,
+      "name",
+      "asc",
+      true,
+      fakeFileSystem,
+    );
+
+    expect(snapshot.path).toBe("/Users/demo");
+    expect(snapshot.parentPath).toBe("/Users");
+    expect(snapshot.entries.map((entry) => entry.path)).toEqual(["/Users/demo/Desktop"]);
+  });
+
+  it("reports symlink directory properties and drops invalid dates to null", async () => {
+    const invalidDate = new Date("invalid");
+    const fakeFileSystem = {
+      readdir: vi.fn(),
+      stat: vi.fn(async () => ({
+        ...fakeStats(true, false, 0),
+        birthtime: invalidDate,
+        mtime: invalidDate,
+      })),
+      lstat: vi.fn(async () => fakeStats(false, false, 0, true)),
+      realpath: vi.fn(async (path: string) => path),
+    };
+
+    const response = await getItemProperties("/Users/demo/Alias", fakeFileSystem);
+
+    expect(response.item).toEqual({
+      path: "/Users/demo/Alias",
+      name: "Alias",
+      extension: "",
+      kind: "symlink_directory",
+      kindLabel: "Alias Folder",
+      isHidden: false,
+      isSymlink: true,
+      createdAt: null,
+      modifiedAt: null,
+      sizeBytes: null,
+      sizeStatus: "deferred",
+      permissionMode: 0o755,
+    });
+  });
+
+  it("skips broken and non-directory suggestion entries while applying the result limit", async () => {
+    const fakeFileSystem = {
+      readdir: vi.fn(async () => [
+        fakeDirent("Desktop", { directory: true }),
+        fakeDirent("Documents", { directory: true }),
+        fakeDirent("notes.txt", { file: true }),
+        fakeDirent("Downloads Alias", { symbolicLink: true }),
+      ]),
+      stat: vi.fn(async (path: string) => {
+        if (path === "/Users/demo") {
+          return fakeStats(true, false, 0);
+        }
+        if (path.endsWith("Desktop") || path.endsWith("Documents")) {
+          return fakeStats(true, false, 0);
+        }
+        if (path.endsWith("notes.txt")) {
+          return fakeStats(false, true, 0);
+        }
+        throw new Error("broken alias");
+      }),
+      lstat: vi.fn(async () => fakeStats(false, false, 0, false)),
+      realpath: vi.fn(async (path: string) => path),
+    };
+
+    const response = await getPathSuggestions("/Users/demo/D", false, 1, fakeFileSystem);
+
+    expect(response.basePath).toBe("/Users/demo");
+    expect(response.suggestions.map((item) => item.path)).toEqual(["/Users/demo/Desktop"]);
+  });
+
+  it("preserves request order for metadata batches even when lstat is unavailable", async () => {
+    const fakeFileSystem = {
+      readdir: vi.fn(),
+      stat: vi.fn(async (path: string) => {
+        if (path === "/workspace") {
+          return fakeStats(true, false, 0);
+        }
+        return fakeStats(false, true, path.endsWith("beta.txt") ? 4 : 2);
+      }),
+      lstat: vi.fn(async () => {
+        throw new Error("lstat unavailable");
+      }),
+      realpath: vi.fn(async (path: string) => path),
+    };
+
+    const response = await getDirectoryMetadataBatch(
+      "/workspace",
+      ["/workspace/beta.txt", "/workspace/alpha.txt"],
+      fakeFileSystem,
+    );
+
+    expect(response.items).toEqual([
+      expect.objectContaining({
+        path: "/workspace/beta.txt",
+        kindLabel: "TXT File",
+        sizeBytes: 4,
+        sizeStatus: "ready",
+      }),
+      expect.objectContaining({
+        path: "/workspace/alpha.txt",
+        kindLabel: "TXT File",
+        sizeBytes: 2,
+        sizeStatus: "ready",
+      }),
+    ]);
+  });
 });
 
 function fakeDirent(

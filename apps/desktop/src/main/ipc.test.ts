@@ -212,6 +212,106 @@ describe("registerIpcHandlers", () => {
     expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
 
+  it("returns validated success envelopes for handlers with well-formed payloads", async () => {
+    const handle = vi.fn();
+    const { registerIpcHandlers } = await import("./ipc");
+
+    registerIpcHandlers(
+      { handle },
+      {
+        ...createHandlersThatFailOnSnapshot(),
+        "app:getHomeDirectory": async () => ({ path: "/Users/demo" }),
+      },
+    );
+
+    const homeHandler = handle.mock.calls.find((call) => call[0] === "app:getHomeDirectory")?.[1];
+
+    await expect(homeHandler?.({}, {})).resolves.toEqual({
+      ok: true,
+      payload: {
+        path: "/Users/demo",
+      },
+    });
+  });
+
+  it("rejects invalid request payloads before invoking the channel handler", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const invalidHandler = vi.fn(async () => ({
+      inputPath: "/Users/demo",
+      basePath: null,
+      suggestions: [],
+    }));
+    const handle = vi.fn();
+    const { registerIpcHandlers } = await import("./ipc");
+
+    registerIpcHandlers(
+      { handle },
+      {
+        ...createHandlersThatFailOnSnapshot(),
+        "path:getSuggestions": invalidHandler,
+      },
+    );
+
+    const suggestionHandler = handle.mock.calls.find(
+      (call) => call[0] === "path:getSuggestions",
+    )?.[1];
+
+    await expect(
+      suggestionHandler?.({}, { inputPath: "/Users/demo", includeHidden: false, limit: 0 }),
+    ).resolves.toEqual({
+      ok: false,
+      error: expect.stringContaining("Invalid payload for path:getSuggestions"),
+    });
+    expect(invalidHandler).not.toHaveBeenCalled();
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects invalid response payloads returned by handlers", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const handle = vi.fn();
+    const { registerIpcHandlers } = await import("./ipc");
+
+    registerIpcHandlers(
+      { handle },
+      {
+        ...createHandlersThatFailOnSnapshot(),
+        "app:getHomeDirectory": async () => ({ path: "" }),
+      },
+    );
+
+    const homeHandler = handle.mock.calls.find((call) => call[0] === "app:getHomeDirectory")?.[1];
+
+    await expect(homeHandler?.({}, {})).resolves.toEqual({
+      ok: false,
+      error: expect.stringContaining("Invalid response for app:getHomeDirectory"),
+    });
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("stringifies non-Error throw values in failed responses", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const handle = vi.fn();
+    const { registerIpcHandlers } = await import("./ipc");
+
+    registerIpcHandlers(
+      { handle },
+      {
+        ...createHandlersThatFailOnSnapshot(),
+        "app:getHomeDirectory": async () => {
+          throw "boom";
+        },
+      },
+    );
+
+    const homeHandler = handle.mock.calls.find((call) => call[0] === "app:getHomeDirectory")?.[1];
+
+    await expect(homeHandler?.({}, {})).resolves.toEqual({
+      ok: false,
+      error: "boom",
+    });
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("logs invalid-path IPC errors when debug mode is enabled", async () => {
     process.env.FILETRAIL_DEBUG = "1";
     const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
