@@ -11,7 +11,7 @@ export function resolveOpenInTerminalPaths(input: {
 
   const activePane = input.focusedPane ?? input.lastFocusedPane;
   if (activePane === "tree") {
-    return input.currentPath ? [input.currentPath] : [];
+    return [];
   }
   if (activePane === "content") {
     if (input.selectedContentPaths.length > 0) {
@@ -39,10 +39,7 @@ export function resolveOpenSelectionPaths(input: {
 
   const activePane = input.focusedPane ?? input.lastFocusedPane;
   if (activePane === "tree") {
-    return input.currentPath ? [input.currentPath] : [];
-  }
-  if (activePane === "content") {
-    return [...input.selectedContentPaths];
+    return [];
   }
 
   return [...input.selectedContentPaths];
@@ -59,8 +56,8 @@ export function resolveEditSelectionPaths(input: {
   }
 
   const activePane = input.focusedPane ?? input.lastFocusedPane;
-  if (activePane === "content") {
-    return [...input.selectedContentPaths];
+  if (activePane === "tree") {
+    return [];
   }
 
   return [...input.selectedContentPaths];

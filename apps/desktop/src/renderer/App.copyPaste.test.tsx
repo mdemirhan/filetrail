@@ -1192,7 +1192,43 @@ describe("App copy/paste integration", () => {
     expect(screen.queryByText("Clipboard is empty")).not.toBeInTheDocument();
   });
 
-  it("uses the selected tree folder as the keyboard paste target", async () => {
+  it("blocks Cmd+C in tree focus even when content still has a stale selection", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await focusTreePane();
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+
+    expect(screen.queryByText("Ready to paste 1 item")).not.toBeInTheDocument();
+  });
+
+  it("blocks Cmd+X in tree focus even when content still has a stale selection", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await focusTreePane();
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "x", metaKey: true });
+    });
+
+    expect(screen.queryByText("Ready to move 1 item")).not.toBeInTheDocument();
+  });
+
+  it("blocks Cmd+V in tree focus even when the current tree folder is a valid destination", async () => {
     const harness = createAppHarness();
 
     render(
@@ -1206,19 +1242,297 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "c", metaKey: true });
     });
     await openDirectory("/Users/demo/Folder");
-    await act(async () => {
-      fireEvent.keyDown(window, { key: "1", metaKey: true });
-    });
+    await focusTreePane();
+    const invocationCountBeforePaste = harness.invocations.length;
     await act(async () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
-    await vi.waitFor(() => {
-      const planCall = harness.invocations.find((call) => call.channel === "copyPaste:plan");
-      expect(planCall?.payload).toMatchObject({
-        destinationDirectoryPath: "/Users/demo/Folder",
-      });
+    expect(harness.invocations).toHaveLength(invocationCountBeforePaste);
+  });
+
+  it("blocks Cmd+Shift+N in tree focus even when content still has a stale selection", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/Folder");
+    await focusTreePane();
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "n", metaKey: true, shiftKey: true });
     });
+
+    expect(screen.queryByRole("dialog", { name: "New Folder" })).not.toBeInTheDocument();
+  });
+
+  it("blocks Cmd+Option+C in tree focus even when content still has a stale selection", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await focusTreePane();
+    await act(async () => {
+      fireEvent.keyDown(window, { code: "KeyC", metaKey: true, altKey: true });
+    });
+
+    expect(harness.invocations.some((call) => call.channel === "system:copyText")).toBe(false);
+  });
+
+  it("blocks the Copy menu command in tree focus", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await focusTreePane();
+    await act(async () => {
+      harness.emitCommand({ type: "copySelection" });
+    });
+
+    expect(screen.queryByText("Ready to paste 1 item")).not.toBeInTheDocument();
+  });
+
+  it("blocks the Cut menu command in tree focus", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await focusTreePane();
+    await act(async () => {
+      harness.emitCommand({ type: "cutSelection" });
+    });
+
+    expect(screen.queryByText("Ready to move 1 item")).not.toBeInTheDocument();
+  });
+
+  it("blocks the Paste menu command in tree focus", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+    await openDirectory("/Users/demo/Folder");
+    await focusTreePane();
+    const invocationCountBeforePaste = harness.invocations.length;
+    await act(async () => {
+      harness.emitCommand({ type: "pasteSelection" });
+    });
+
+    expect(harness.invocations).toHaveLength(invocationCountBeforePaste);
+  });
+
+  it("blocks the New Folder menu command in tree focus", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await focusTreePane();
+    await act(async () => {
+      harness.emitCommand({ type: "newFolder" });
+    });
+
+    expect(screen.queryByRole("dialog", { name: "New Folder" })).not.toBeInTheDocument();
+  });
+
+  it("blocks the Copy Path menu command in tree focus", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await focusTreePane();
+    await act(async () => {
+      harness.emitCommand({ type: "copyPath" });
+    });
+
+    expect(harness.invocations.some((call) => call.channel === "system:copyText")).toBe(false);
+  });
+
+  it("blocks the remaining content-only renderer commands in tree focus", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await focusTreePane();
+
+    const commands: Array<{
+      command: RendererCommand["type"];
+      assertNoSideEffect: () => void;
+    }> = [
+      {
+        command: "openSelection",
+        assertNoSideEffect: () => {
+          expect(harness.invocations.some((call) => call.channel === "system:openPath")).toBe(false);
+        },
+      },
+      {
+        command: "editSelection",
+        assertNoSideEffect: () => {
+          expect(
+            harness.invocations.some((call) => call.channel === "system:openPathsWithApplication"),
+          ).toBe(false);
+        },
+      },
+      {
+        command: "openInTerminal",
+        assertNoSideEffect: () => {
+          expect(harness.invocations.some((call) => call.channel === "system:openInTerminal")).toBe(
+            false,
+          );
+        },
+      },
+      {
+        command: "moveSelection",
+        assertNoSideEffect: () => {
+          expect(screen.queryByText("Move")).not.toBeInTheDocument();
+        },
+      },
+      {
+        command: "renameSelection",
+        assertNoSideEffect: () => {
+          expect(screen.queryByRole("dialog", { name: "Rename" })).not.toBeInTheDocument();
+        },
+      },
+      {
+        command: "duplicateSelection",
+        assertNoSideEffect: () => {
+          expect(harness.invocations.some((call) => call.channel === "copyPaste:plan")).toBe(false);
+        },
+      },
+      {
+        command: "newFolder",
+        assertNoSideEffect: () => {
+          expect(screen.queryByRole("dialog", { name: "New Folder" })).not.toBeInTheDocument();
+        },
+      },
+      {
+        command: "trashSelection",
+        assertNoSideEffect: () => {
+          expect(harness.invocations.some((call) => call.channel === "writeOperation:trash")).toBe(
+            false,
+          );
+        },
+      },
+    ];
+
+    for (const { command, assertNoSideEffect } of commands) {
+      await act(async () => {
+        harness.emitCommand({ type: command });
+      });
+      assertNoSideEffect();
+    }
+  });
+
+  it("keeps global tree-focus shortcuts working", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await focusTreePane();
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "f", metaKey: true });
+    });
+    await vi.waitFor(() => {
+      expect(screen.getByPlaceholderText("Find files…")).toBe(document.activeElement);
+    });
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "g", metaKey: true, shiftKey: true });
+    });
+    expect(await screen.findByLabelText("Path")).toBeInTheDocument();
+  });
+
+  it("keeps tree pane switching shortcuts working", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await focusTreePane();
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "2", metaKey: true });
+    });
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "a", metaKey: true });
+    });
+
+    expect(screen.getByTitle("/Users/demo/source.txt")).toHaveAttribute("data-selected", "true");
+    expect(screen.getByTitle("/Users/demo/Folder")).toHaveAttribute("data-selected", "true");
+  });
+
+  it("switches from tree to content with Tab through the raw shortcut registry", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await focusTreePane();
+    const activeElement = document.activeElement;
+    expect(activeElement).not.toBeNull();
+    if (!activeElement) {
+      throw new Error("Missing active element for pane tab switch.");
+    }
+
+    await act(async () => {
+      fireEvent.keyDown(activeElement, { key: "Tab" });
+    });
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "a", metaKey: true });
+    });
+
+    expect(screen.getByTitle("/Users/demo/source.txt")).toHaveAttribute("data-selected", "true");
+    expect(screen.getByTitle("/Users/demo/Folder")).toHaveAttribute("data-selected", "true");
   });
 
   it("starts non-conflicting cut/paste without a confirmation dialog", async () => {
@@ -2804,6 +3118,13 @@ async function selectItem(path: string): Promise<void> {
   const button = await screen.findByTitle(path);
   await act(async () => {
     fireEvent.click(button);
+  });
+}
+
+async function focusTreePane(): Promise<void> {
+  const treePane = await screen.findByTestId("tree-pane");
+  await act(async () => {
+    fireEvent.click(treePane);
   });
 }
 

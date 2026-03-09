@@ -1,4 +1,12 @@
-import { canHandleExplorerKeyboardShortcuts, canHandleRendererCommand } from "./shortcutPolicy";
+import {
+  RAW_EXPLORER_SHORTCUT_IDS,
+  RAW_EXPLORER_SHORTCUT_TREE_FOCUS_BUCKETS,
+  RENDERER_COMMAND_TREE_FOCUS_BUCKETS,
+  canHandleExplorerKeyboardShortcuts,
+  canHandleRawExplorerShortcut,
+  canHandleRendererCommand,
+} from "./shortcutPolicy";
+import { RENDERER_COMMAND_TYPES } from "../../shared/rendererCommands";
 
 describe("shortcutPolicy", () => {
   it("allows explorer-scoped commands in the explorer view", () => {
@@ -6,6 +14,7 @@ describe("shortcutPolicy", () => {
       canHandleRendererCommand("copyPath", {
         actionNoticeOpen: false,
         copyPasteModalOpen: false,
+        focusedPane: "content",
         locationSheetOpen: false,
         mainView: "explorer",
       }),
@@ -17,6 +26,7 @@ describe("shortcutPolicy", () => {
       canHandleRendererCommand("copyPath", {
         actionNoticeOpen: false,
         copyPasteModalOpen: false,
+        focusedPane: "content",
         locationSheetOpen: false,
         mainView: "help",
       }),
@@ -25,6 +35,7 @@ describe("shortcutPolicy", () => {
       canHandleRendererCommand("copyPath", {
         actionNoticeOpen: false,
         copyPasteModalOpen: false,
+        focusedPane: "content",
         locationSheetOpen: false,
         mainView: "settings",
       }),
@@ -33,6 +44,7 @@ describe("shortcutPolicy", () => {
       canHandleRendererCommand("focusFileSearch", {
         actionNoticeOpen: false,
         copyPasteModalOpen: false,
+        focusedPane: "content",
         locationSheetOpen: false,
         mainView: "help",
       }),
@@ -41,6 +53,7 @@ describe("shortcutPolicy", () => {
       canHandleRendererCommand("openLocationSheet", {
         actionNoticeOpen: false,
         copyPasteModalOpen: false,
+        focusedPane: "content",
         locationSheetOpen: false,
         mainView: "settings",
       }),
@@ -52,6 +65,7 @@ describe("shortcutPolicy", () => {
       canHandleRendererCommand("openSettings", {
         actionNoticeOpen: false,
         copyPasteModalOpen: false,
+        focusedPane: "content",
         locationSheetOpen: false,
         mainView: "help",
       }),
@@ -60,6 +74,7 @@ describe("shortcutPolicy", () => {
       canHandleRendererCommand("zoomIn", {
         actionNoticeOpen: false,
         copyPasteModalOpen: false,
+        focusedPane: "content",
         locationSheetOpen: false,
         mainView: "settings",
       }),
@@ -71,6 +86,7 @@ describe("shortcutPolicy", () => {
       canHandleRendererCommand("openSelection", {
         actionNoticeOpen: false,
         copyPasteModalOpen: true,
+        focusedPane: "content",
         locationSheetOpen: false,
         mainView: "explorer",
       }),
@@ -79,6 +95,7 @@ describe("shortcutPolicy", () => {
       canHandleRendererCommand("copySelection", {
         actionNoticeOpen: true,
         copyPasteModalOpen: false,
+        focusedPane: "content",
         locationSheetOpen: false,
         mainView: "explorer",
       }),
@@ -87,6 +104,7 @@ describe("shortcutPolicy", () => {
       canHandleRendererCommand("openSettings", {
         actionNoticeOpen: true,
         copyPasteModalOpen: false,
+        focusedPane: "content",
         locationSheetOpen: false,
         mainView: "explorer",
       }),
@@ -98,6 +116,7 @@ describe("shortcutPolicy", () => {
       canHandleExplorerKeyboardShortcuts({
         actionNoticeOpen: false,
         copyPasteModalOpen: false,
+        focusedPane: "content",
         locationSheetOpen: false,
         mainView: "explorer",
       }),
@@ -106,6 +125,7 @@ describe("shortcutPolicy", () => {
       canHandleExplorerKeyboardShortcuts({
         actionNoticeOpen: false,
         copyPasteModalOpen: false,
+        focusedPane: "content",
         locationSheetOpen: false,
         mainView: "help",
       }),
@@ -114,9 +134,106 @@ describe("shortcutPolicy", () => {
       canHandleExplorerKeyboardShortcuts({
         actionNoticeOpen: false,
         copyPasteModalOpen: false,
+        focusedPane: "content",
         locationSheetOpen: true,
         mainView: "explorer",
       }),
     ).toBe(false);
+  });
+
+  it("blocks content-only renderer commands when the tree is focused", () => {
+    expect(
+      canHandleRendererCommand("copyPath", {
+        actionNoticeOpen: false,
+        copyPasteModalOpen: false,
+        focusedPane: "tree",
+        locationSheetOpen: false,
+        mainView: "explorer",
+      }),
+    ).toBe(false);
+    expect(
+      canHandleRendererCommand("newFolder", {
+        actionNoticeOpen: false,
+        copyPasteModalOpen: false,
+        focusedPane: "tree",
+        locationSheetOpen: false,
+        mainView: "explorer",
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps global renderer commands available when the tree is focused", () => {
+    expect(
+      canHandleRendererCommand("focusFileSearch", {
+        actionNoticeOpen: false,
+        copyPasteModalOpen: false,
+        focusedPane: "tree",
+        locationSheetOpen: false,
+        mainView: "explorer",
+      }),
+    ).toBe(true);
+    expect(
+      canHandleRendererCommand("refreshOrApplySearchSort", {
+        actionNoticeOpen: false,
+        copyPasteModalOpen: false,
+        focusedPane: "tree",
+        locationSheetOpen: false,
+        mainView: "explorer",
+      }),
+    ).toBe(true);
+  });
+
+  it("blocks content-only raw shortcuts when the tree is focused", () => {
+    expect(
+      canHandleRawExplorerShortcut("copySelection", {
+        actionNoticeOpen: false,
+        copyPasteModalOpen: false,
+        focusedPane: "tree",
+        locationSheetOpen: false,
+        mainView: "explorer",
+      }),
+    ).toBe(false);
+    expect(
+      canHandleRawExplorerShortcut("newFolder", {
+        actionNoticeOpen: false,
+        copyPasteModalOpen: false,
+        focusedPane: "tree",
+        locationSheetOpen: false,
+        mainView: "explorer",
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps allowed raw shortcuts available when the tree is focused", () => {
+    expect(
+      canHandleRawExplorerShortcut("treeArrowNavigation", {
+        actionNoticeOpen: false,
+        copyPasteModalOpen: false,
+        focusedPane: "tree",
+        locationSheetOpen: false,
+        mainView: "explorer",
+      }),
+    ).toBe(true);
+    expect(
+      canHandleRawExplorerShortcut("focusFileSearch", {
+        actionNoticeOpen: false,
+        copyPasteModalOpen: false,
+        focusedPane: "tree",
+        locationSheetOpen: false,
+        mainView: "explorer",
+      }),
+    ).toBe(true);
+  });
+
+  it("keeps renderer command tree-focus buckets exhaustive", () => {
+    expect(Object.keys(RENDERER_COMMAND_TREE_FOCUS_BUCKETS).sort()).toEqual(
+      [...RENDERER_COMMAND_TYPES].sort(),
+    );
+  });
+
+  it("keeps raw shortcut tree-focus buckets exhaustive", () => {
+    expect(Object.keys(RAW_EXPLORER_SHORTCUT_TREE_FOCUS_BUCKETS).sort()).toEqual(
+      [...RAW_EXPLORER_SHORTCUT_IDS].sort(),
+    );
   });
 });

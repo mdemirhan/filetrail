@@ -108,7 +108,12 @@ import { createRendererLogger } from "./lib/logging";
 import { pageScrollElement, scrollElementByAmount } from "./lib/pagedScroll";
 import { resolveExplorerToolbarLayout, resolveSinglePanelLayout } from "./lib/responsiveLayout";
 import { appendSearchResults, filterSearchResults, sortSearchResults } from "./lib/searchResults";
-import { canHandleExplorerKeyboardShortcuts, canHandleRendererCommand } from "./lib/shortcutPolicy";
+import {
+  canHandleExplorerKeyboardShortcuts,
+  canHandleRawExplorerShortcut,
+  canHandleRendererCommand,
+  type RawExplorerShortcutId,
+} from "./lib/shortcutPolicy";
 import {
   resolveEditSelectionPaths,
   resolveOpenInTerminalPaths,
@@ -159,6 +164,11 @@ type WriteOperationCardState = {
   completedByteCount: number;
   totalBytes: number | null;
   currentSourcePath: string | null;
+};
+type RawShortcutBinding = {
+  id: RawExplorerShortcutId;
+  matches: (event: KeyboardEvent) => boolean;
+  run: (event: KeyboardEvent) => void;
 };
 
 const logger = createRendererLogger("filetrail.renderer");
@@ -496,10 +506,11 @@ export function App() {
     () => ({
       actionNoticeOpen: actionNotice !== null,
       copyPasteModalOpen,
+      focusedPane,
       locationSheetOpen: locationDialogOpen,
       mainView,
     }),
-    [actionNotice, copyPasteModalOpen, locationDialogOpen, mainView],
+    [actionNotice, copyPasteModalOpen, focusedPane, locationDialogOpen, mainView],
   );
   const contextMenuDisabledActionIds = useMemo(() => {
     if (!contextMenuState) {
@@ -1088,11 +1099,6 @@ export function App() {
         return;
       }
       if (command.type === "openSelection") {
-        const activePane = focusedPane ?? lastExplorerFocusPaneRef.current;
-        if ((contextMenuState?.paths.length ?? 0) === 0 && activePane === "tree") {
-          void openTreeNode(currentPath);
-          return;
-        }
         const pathsToOpen = resolveOpenSelectionPaths({
           focusedPane,
           lastFocusedPane: lastExplorerFocusPaneRef.current,
@@ -1461,6 +1467,630 @@ export function App() {
       });
   }, [client, contentSelection.leadPath, currentPath, infoPanelOpen, infoRowOpen]);
 
+  const rawShortcutBindings = useMemo<readonly RawShortcutBinding[]>(
+    () => [
+      {
+        id: "paneTabSwitch",
+        matches: (keyboardEvent) => {
+          if (!tabSwitchesExplorerPanes || keyboardEvent.key !== "Tab") {
+            return false;
+          }
+          const target = keyboardEvent.target;
+          const targetElement = target instanceof HTMLElement ? target : null;
+          const isAutocompleteContext =
+            targetElement?.closest(".pathbar-editor-shell, .location-sheet-input-shell") !== null;
+          if (isAutocompleteContext) {
+            return false;
+          }
+          const isTreeFocusTarget = target instanceof Node && !!treePaneRef.current?.contains(target);
+          const isContentFocusTarget =
+            target instanceof Node && !!contentPaneRef.current?.contains(target);
+          return (
+            isTreeFocusTarget ||
+            isContentFocusTarget ||
+            (document.activeElement === document.body && focusedPane !== null)
+          );
+        },
+        run: (keyboardEvent) => {
+          const target = keyboardEvent.target;
+          const isTreeFocusTarget = target instanceof Node && !!treePaneRef.current?.contains(target);
+          keyboardEvent.preventDefault();
+          if (isTreeFocusTarget || focusedPane === "tree") {
+            contentPaneRef.current?.focus({ preventScroll: true });
+            setFocusedPane("content");
+            return;
+          }
+          treePaneRef.current?.focus({ preventScroll: true });
+          setFocusedPane("tree");
+        },
+      },
+      {
+        id: "copySelection",
+        matches: (keyboardEvent) =>
+          (keyboardEvent.metaKey || keyboardEvent.ctrlKey) &&
+          !keyboardEvent.shiftKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key.toLowerCase() === "c",
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          void runCopyClipboardAction("copy");
+        },
+      },
+      {
+        id: "cutSelection",
+        matches: (keyboardEvent) =>
+          (keyboardEvent.metaKey || keyboardEvent.ctrlKey) &&
+          !keyboardEvent.shiftKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key.toLowerCase() === "x",
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          void runCopyClipboardAction("cut");
+        },
+      },
+      {
+        id: "pasteSelection",
+        matches: (keyboardEvent) =>
+          (keyboardEvent.metaKey || keyboardEvent.ctrlKey) &&
+          !keyboardEvent.shiftKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key.toLowerCase() === "v",
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          void startPasteFromClipboard();
+        },
+      },
+      {
+        id: "duplicateSelection",
+        matches: (keyboardEvent) =>
+          keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.shiftKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key.toLowerCase() === "d",
+        run: (keyboardEvent) => {
+          const paths = resolveContentActionPaths();
+          if (paths.length === 0) {
+            return;
+          }
+          keyboardEvent.preventDefault();
+          void startDuplicatePaths(paths);
+        },
+      },
+      {
+        id: "trashSelection",
+        matches: (keyboardEvent) =>
+          keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.shiftKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key === "Backspace",
+        run: (keyboardEvent) => {
+          const paths = resolveContentActionPaths();
+          if (paths.length === 0) {
+            return;
+          }
+          keyboardEvent.preventDefault();
+          void startTrashPaths(paths);
+        },
+      },
+      {
+        id: "renameSelection",
+        matches: (keyboardEvent) =>
+          !keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key === "F2",
+        run: (keyboardEvent) => {
+          const paths = resolveContentActionPaths();
+          if (paths.length !== 1) {
+            return;
+          }
+          keyboardEvent.preventDefault();
+          openRenameDialog(paths);
+        },
+      },
+      {
+        id: "selectAllContent",
+        matches: (keyboardEvent) =>
+          keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.shiftKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key.toLowerCase() === "a" &&
+          focusedPane === "content",
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          selectAllContentEntries();
+        },
+      },
+      {
+        id: "focusTreePane",
+        matches: (keyboardEvent) =>
+          keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.shiftKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key === "1",
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          treePaneRef.current?.focus({ preventScroll: true });
+          setFocusedPane("tree");
+        },
+      },
+      {
+        id: "focusContentPane",
+        matches: (keyboardEvent) =>
+          keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.shiftKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key === "2",
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          contentPaneRef.current?.focus({ preventScroll: true });
+          setFocusedPane("content");
+        },
+      },
+      {
+        id: "showCachedSearchResults",
+        matches: (keyboardEvent) =>
+          keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
+          keyboardEvent.shiftKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key.toLowerCase() === "f" &&
+          hasCachedSearch,
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          showCachedSearchResults({ focusPane: true });
+        },
+      },
+      {
+        id: "focusFileSearch",
+        matches: (keyboardEvent) =>
+          (keyboardEvent.metaKey || keyboardEvent.ctrlKey) &&
+          !keyboardEvent.shiftKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key.toLowerCase() === "f",
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          focusFileSearch(true);
+        },
+      },
+      {
+        id: "historyBack",
+        matches: (keyboardEvent) =>
+          keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.shiftKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key === "ArrowLeft",
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          goBack();
+        },
+      },
+      {
+        id: "historyForward",
+        matches: (keyboardEvent) =>
+          keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.shiftKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key === "ArrowRight",
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          goForward();
+        },
+      },
+      {
+        id: "openParentTree",
+        matches: (keyboardEvent) =>
+          keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.shiftKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key === "ArrowUp" &&
+          focusedPane === "tree",
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          const nextPath = parentDirectoryPath(currentPath);
+          if (nextPath && nextPath !== currentPath) {
+            void navigateTo(nextPath, "push");
+          }
+        },
+      },
+      {
+        id: "openParentContent",
+        matches: (keyboardEvent) =>
+          keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.shiftKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key === "ArrowUp" &&
+          focusedPane === "content",
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          const nextPath = parentDirectoryPath(currentPath);
+          if (nextPath) {
+            void navigateTo(nextPath, "push");
+          }
+        },
+      },
+      {
+        id: "openSelectedContentWithCommand",
+        matches: (keyboardEvent) =>
+          keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.shiftKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key === "ArrowDown" &&
+          focusedPane === "content" &&
+          selectedEntry !== null,
+        run: (keyboardEvent) => {
+          if (!selectedEntry) {
+            return;
+          }
+          keyboardEvent.preventDefault();
+          const pathsToActivate =
+            selectedPathsInViewOrder.length > 0 ? selectedPathsInViewOrder : [selectedEntry.path];
+          void activateContentPaths(pathsToActivate);
+        },
+      },
+      {
+        id: "openTreeNodeWithCommand",
+        matches: (keyboardEvent) =>
+          keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.shiftKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key === "ArrowDown" &&
+          focusedPane === "tree",
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          void openTreeNode(currentPath);
+        },
+      },
+      {
+        id: "toggleHiddenFiles",
+        matches: (keyboardEvent) =>
+          keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
+          keyboardEvent.shiftKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key === ".",
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          toggleHiddenFiles();
+        },
+      },
+      {
+        id: "refreshOrApplySearchSort",
+        matches: (keyboardEvent) =>
+          keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.shiftKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key.toLowerCase() === "r",
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          if (isSearchMode) {
+            applySearchResultsSort();
+            return;
+          }
+          void refreshDirectory();
+        },
+      },
+      {
+        id: "copyPath",
+        matches: (keyboardEvent) =>
+          keyboardEvent.metaKey &&
+          keyboardEvent.altKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.shiftKey &&
+          keyboardEvent.code === "KeyC",
+        run: (keyboardEvent) => {
+          const pathsToCopy =
+            contextMenuState && contextMenuState.paths.length > 0
+              ? contextMenuState.paths
+              : selectedPathsInViewOrder.length > 0
+                ? selectedPathsInViewOrder
+                : currentPath
+                  ? [currentPath]
+                  : [];
+          if (pathsToCopy.length === 0) {
+            return;
+          }
+          keyboardEvent.preventDefault();
+          void runCopyPathAction(pathsToCopy);
+        },
+      },
+      {
+        id: "moveSelection",
+        matches: (keyboardEvent) =>
+          keyboardEvent.metaKey &&
+          keyboardEvent.shiftKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key.toLowerCase() === "m",
+        run: (keyboardEvent) => {
+          const paths = resolveContentActionPaths();
+          if (paths.length === 0) {
+            return;
+          }
+          keyboardEvent.preventDefault();
+          openMoveDialog(paths);
+        },
+      },
+      {
+        id: "newFolder",
+        matches: (keyboardEvent) =>
+          keyboardEvent.metaKey &&
+          keyboardEvent.shiftKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key.toLowerCase() === "n",
+        run: (keyboardEvent) => {
+          const targetPath = resolveNewFolderTargetPath({
+            currentPath,
+            selectedEntry,
+            selectedPaths: selectedPathsInViewOrder,
+            isSearchMode,
+          });
+          if (!targetPath) {
+            return;
+          }
+          keyboardEvent.preventDefault();
+          openNewFolderDialog(targetPath);
+        },
+      },
+      {
+        id: "openLocationSheet",
+        matches: (keyboardEvent) =>
+          keyboardEvent.metaKey &&
+          keyboardEvent.shiftKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key.toLowerCase() === "g",
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          openLocationSheet();
+        },
+      },
+      {
+        id: "toggleInfoRow",
+        matches: (keyboardEvent) =>
+          keyboardEvent.metaKey &&
+          keyboardEvent.shiftKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key.toLowerCase() === "i",
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          setInfoRowOpen((value: boolean) => !value);
+        },
+      },
+      {
+        id: "toggleInfoPanel",
+        matches: (keyboardEvent) =>
+          keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.shiftKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key.toLowerCase() === "i",
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          setInfoPanelOpen((value: boolean) => !value);
+        },
+      },
+      {
+        id: "pagedScrollBackward",
+        matches: (keyboardEvent) =>
+          keyboardEvent.ctrlKey &&
+          !keyboardEvent.metaKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key.toLowerCase() === "u",
+        run: (keyboardEvent) => {
+          const didHandle = handlePagedPaneScroll("backward");
+          if (!didHandle) {
+            return;
+          }
+          keyboardEvent.preventDefault();
+        },
+      },
+      {
+        id: "pagedScrollForward",
+        matches: (keyboardEvent) =>
+          keyboardEvent.ctrlKey &&
+          !keyboardEvent.metaKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key.toLowerCase() === "d",
+        run: (keyboardEvent) => {
+          const didHandle = handlePagedPaneScroll("forward");
+          if (!didHandle) {
+            return;
+          }
+          keyboardEvent.preventDefault();
+        },
+      },
+      {
+        id: "typeahead",
+        matches: (keyboardEvent) =>
+          typeaheadEnabled &&
+          !keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.altKey &&
+          (focusedPane === "tree" || focusedPane === "content") &&
+          isTypeaheadCharacterKey(keyboardEvent.key),
+        run: (keyboardEvent) => {
+          if (focusedPane !== "tree" && focusedPane !== "content") {
+            return;
+          }
+          keyboardEvent.preventDefault();
+          handleTypeaheadInput(keyboardEvent.key, focusedPane);
+        },
+      },
+      {
+        id: "treeArrowNavigation",
+        matches: (keyboardEvent) =>
+          !keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.altKey &&
+          (keyboardEvent.key === "ArrowUp" ||
+            keyboardEvent.key === "ArrowDown" ||
+            keyboardEvent.key === "ArrowLeft" ||
+            keyboardEvent.key === "ArrowRight" ||
+            keyboardEvent.key === "Home" ||
+            keyboardEvent.key === "End") &&
+          focusedPane === "tree",
+        run: (keyboardEvent) => {
+          const action = getTreeKeyboardAction({
+            key: keyboardEvent.key as
+              | "ArrowUp"
+              | "ArrowDown"
+              | "ArrowLeft"
+              | "ArrowRight"
+              | "Home"
+              | "End",
+            currentPath,
+            rootPath: treeRootPath,
+            nodes: treeNodes,
+          });
+          if (action.type === "none") {
+            return;
+          }
+          keyboardEvent.preventDefault();
+          if (action.type === "navigate") {
+            void navigateTo(action.path, "push");
+            return;
+          }
+          if (action.type === "expand" || action.type === "collapse") {
+            toggleTreeNode(action.path);
+            return;
+          }
+          if (action.type === "load") {
+            void loadTreeChildren(action.path, includeHidden, true);
+          }
+        },
+      },
+      {
+        id: "contentArrowNavigation",
+        matches: (keyboardEvent) =>
+          !keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.altKey &&
+          (keyboardEvent.key === "ArrowUp" ||
+            keyboardEvent.key === "ArrowDown" ||
+            keyboardEvent.key === "ArrowLeft" ||
+            keyboardEvent.key === "ArrowRight" ||
+            keyboardEvent.key === "Home" ||
+            keyboardEvent.key === "End") &&
+          focusedPane === "content",
+        run: (keyboardEvent) => {
+          if (activeContentEntries.length === 0) {
+            return;
+          }
+          keyboardEvent.preventDefault();
+          const currentIndex = activeContentEntries.findIndex(
+            (entry) => entry.path === contentSelection.leadPath,
+          );
+          const nextIndex = getNextSelectionIndex({
+            itemCount: activeContentEntries.length,
+            currentIndex,
+            key: keyboardEvent.key as
+              | "ArrowUp"
+              | "ArrowDown"
+              | "ArrowLeft"
+              | "ArrowRight"
+              | "Home"
+              | "End",
+            columns: isSearchMode ? 1 : viewMode === "list" ? contentColumns : 1,
+            viewMode: isSearchMode ? "details" : viewMode,
+          });
+          const nextEntry = activeContentEntries[nextIndex];
+          if (!nextEntry) {
+            return;
+          }
+          if (keyboardEvent.shiftKey) {
+            extendContentSelectionToPath(nextEntry.path);
+            return;
+          }
+          setSingleContentSelection(nextEntry.path);
+        },
+      },
+      {
+        id: "treeEnter",
+        matches: (keyboardEvent) => keyboardEvent.key === "Enter" && focusedPane === "tree",
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          void openTreeNode(currentPath);
+        },
+      },
+      {
+        id: "contentEnter",
+        matches: (keyboardEvent) =>
+          keyboardEvent.key === "Enter" &&
+          focusedPane === "content" &&
+          selectedEntry !== null,
+        run: (keyboardEvent) => {
+          if (!selectedEntry) {
+            return;
+          }
+          keyboardEvent.preventDefault();
+          const pathsToActivate =
+            selectedPathsInViewOrder.length > 0 ? selectedPathsInViewOrder : [selectedEntry.path];
+          void activateContentPaths(pathsToActivate);
+        },
+      },
+    ],
+    [
+      activeContentEntries,
+      applySearchResultsSort,
+      contentColumns,
+      contentSelection.leadPath,
+      contextMenuState,
+      currentPath,
+      focusedPane,
+      handlePagedPaneScroll,
+      handleTypeaheadInput,
+      hasCachedSearch,
+      includeHidden,
+      isSearchMode,
+      navigateTo,
+      openLocationSheet,
+      openMoveDialog,
+      openNewFolderDialog,
+      openRenameDialog,
+      openTreeNode,
+      refreshDirectory,
+      resolveContentActionPaths,
+      runCopyClipboardAction,
+      runCopyPathAction,
+      selectedEntry,
+      selectedPathsInViewOrder,
+      showCachedSearchResults,
+      startDuplicatePaths,
+      startPasteFromClipboard,
+      startTrashPaths,
+      tabSwitchesExplorerPanes,
+      treeNodes,
+      treeRootPath,
+      toggleHiddenFiles,
+      toggleTreeNode,
+      typeaheadEnabled,
+      viewMode,
+      focusFileSearch,
+      goBack,
+      goForward,
+      selectAllContentEntries,
+      setSingleContentSelection,
+      activateContentPaths,
+      extendContentSelectionToPath,
+      loadTreeChildren,
+    ],
+  );
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) {
@@ -1497,7 +2127,6 @@ export function App() {
         setMainView("explorer");
         return;
       }
-      const currentSelectedEntry = selectedEntry;
       if (
         target instanceof HTMLInputElement ||
         target instanceof HTMLTextAreaElement ||
@@ -1510,37 +2139,6 @@ export function App() {
         return;
       }
       if (locationDialogOpen) {
-        return;
-      }
-      if (
-        tabSwitchesExplorerPanes &&
-        event.key === "Tab" &&
-        mainView === "explorer" &&
-        !locationDialogOpen
-      ) {
-        const isAutocompleteContext =
-          targetElement?.closest(".pathbar-editor-shell, .location-sheet-input-shell") !== null;
-        if (isAutocompleteContext) {
-          return;
-        }
-        const isTreeFocusTarget = target instanceof Node && !!treePaneRef.current?.contains(target);
-        const isContentFocusTarget =
-          target instanceof Node && !!contentPaneRef.current?.contains(target);
-        const shouldHandlePaneTab =
-          isTreeFocusTarget ||
-          isContentFocusTarget ||
-          (document.activeElement === document.body && focusedPane !== null);
-        if (!shouldHandlePaneTab) {
-          return;
-        }
-        event.preventDefault();
-        if (isTreeFocusTarget || focusedPane === "tree") {
-          contentPaneRef.current?.focus({ preventScroll: true });
-          setFocusedPane("content");
-          return;
-        }
-        treePaneRef.current?.focus({ preventScroll: true });
-        setFocusedPane("tree");
         return;
       }
       if (event.key === "?") {
@@ -1572,319 +2170,20 @@ export function App() {
       if (!canHandleExplorerKeyboardShortcuts(shortcutContext)) {
         return;
       }
-      if ((event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey) {
-        if (event.key.toLowerCase() === "c") {
-          event.preventDefault();
-          void runCopyClipboardAction("copy");
+      for (const rawShortcutBinding of rawShortcutBindings) {
+        if (!rawShortcutBinding.matches(event)) {
+          continue;
+        }
+        if (!canHandleRawExplorerShortcut(rawShortcutBinding.id, shortcutContext)) {
           return;
         }
-        if (event.key.toLowerCase() === "x") {
-          event.preventDefault();
-          void runCopyClipboardAction("cut");
-          return;
-        }
-        if (event.key.toLowerCase() === "v") {
-          event.preventDefault();
-          void startPasteFromClipboard();
-          return;
-        }
-        if (event.metaKey && event.key.toLowerCase() === "d") {
-          const paths = resolveContentActionPaths();
-          if (paths.length > 0) {
-            event.preventDefault();
-            void startDuplicatePaths(paths);
-          }
-          return;
-        }
-        if (event.metaKey && event.key === "Backspace") {
-          const paths = resolveContentActionPaths();
-          if (paths.length > 0) {
-            event.preventDefault();
-            void startTrashPaths(paths);
-          }
-          return;
-        }
-      }
-      if (!event.metaKey && !event.ctrlKey && !event.altKey && event.key === "F2") {
-        const paths = resolveContentActionPaths();
-        if (paths.length === 1) {
-          event.preventDefault();
-          openRenameDialog(paths);
-        }
-        return;
-      }
-      if (event.metaKey && event.key.toLowerCase() === "a" && focusedPane === "content") {
-        event.preventDefault();
-        selectAllContentEntries();
-        return;
-      }
-      if (event.metaKey && event.key === "1") {
-        event.preventDefault();
-        treePaneRef.current?.focus({ preventScroll: true });
-        setFocusedPane("tree");
-        return;
-      }
-      if (event.metaKey && event.key === "2") {
-        event.preventDefault();
-        contentPaneRef.current?.focus({ preventScroll: true });
-        setFocusedPane("content");
-        return;
-      }
-      if (event.metaKey && event.shiftKey && event.key.toLowerCase() === "f" && hasCachedSearch) {
-        event.preventDefault();
-        showCachedSearchResults({ focusPane: true });
-        return;
-      }
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
-        event.preventDefault();
-        focusFileSearch(true);
-        return;
-      }
-      if (event.metaKey && event.key === "ArrowLeft") {
-        event.preventDefault();
-        goBack();
-        return;
-      }
-      if (event.metaKey && event.key === "ArrowRight") {
-        event.preventDefault();
-        goForward();
-        return;
-      }
-      if (event.metaKey && event.key === "ArrowUp" && focusedPane === "tree") {
-        event.preventDefault();
-        const nextPath = parentDirectoryPath(currentPath);
-        if (nextPath && nextPath !== currentPath) {
-          void navigateTo(nextPath, "push");
-        }
-        return;
-      }
-      if (event.metaKey && event.key === "ArrowUp" && focusedPane === "content") {
-        event.preventDefault();
-        const nextPath = parentDirectoryPath(currentPath);
-        if (nextPath) {
-          void navigateTo(nextPath, "push");
-        }
-        return;
-      }
-      if (
-        event.metaKey &&
-        event.key === "ArrowDown" &&
-        focusedPane === "content" &&
-        currentSelectedEntry
-      ) {
-        event.preventDefault();
-        const pathsToActivate =
-          selectedPathsInViewOrder.length > 0
-            ? selectedPathsInViewOrder
-            : [currentSelectedEntry.path];
-        void activateContentPaths(pathsToActivate);
-        return;
-      }
-      if (event.metaKey && event.key === "ArrowDown" && focusedPane === "tree") {
-        event.preventDefault();
-        void openTreeNode(currentPath);
-        return;
-      }
-      if (event.metaKey && event.shiftKey && event.key === ".") {
-        event.preventDefault();
-        toggleHiddenFiles();
-        return;
-      }
-      if (event.metaKey && event.key.toLowerCase() === "r") {
-        event.preventDefault();
-        if (isSearchMode) {
-          applySearchResultsSort();
-          return;
-        }
-        void refreshDirectory();
-        return;
-      }
-      if (
-        event.metaKey &&
-        event.altKey &&
-        !event.ctrlKey &&
-        !event.shiftKey &&
-        event.code === "KeyC"
-      ) {
-        const pathsToCopy =
-          contextMenuState && contextMenuState.paths.length > 0
-            ? contextMenuState.paths
-            : selectedPathsInViewOrder.length > 0
-              ? selectedPathsInViewOrder
-              : currentPath
-                ? [currentPath]
-                : [];
-        if (pathsToCopy.length > 0) {
-          event.preventDefault();
-          void runCopyPathAction(pathsToCopy);
-        }
-        return;
-      }
-      if (
-        event.metaKey &&
-        event.shiftKey &&
-        !event.ctrlKey &&
-        !event.altKey &&
-        event.key.toLowerCase() === "m"
-      ) {
-        const paths = resolveContentActionPaths();
-        if (paths.length > 0) {
-          event.preventDefault();
-          openMoveDialog(paths);
-        }
-        return;
-      }
-      if (
-        event.metaKey &&
-        event.shiftKey &&
-        !event.ctrlKey &&
-        !event.altKey &&
-        event.key.toLowerCase() === "n"
-      ) {
-        const targetPath = resolveNewFolderTargetPath({
-          currentPath,
-          selectedEntry,
-          selectedPaths: selectedPathsInViewOrder,
-          isSearchMode,
-        });
-        if (targetPath) {
-          event.preventDefault();
-          openNewFolderDialog(targetPath);
-        }
-        return;
-      }
-      if (
-        event.metaKey &&
-        event.shiftKey &&
-        !event.ctrlKey &&
-        !event.altKey &&
-        event.key.toLowerCase() === "g"
-      ) {
-        event.preventDefault();
-        openLocationSheet();
-        return;
-      }
-      if (
-        event.metaKey &&
-        event.shiftKey &&
-        !event.ctrlKey &&
-        !event.altKey &&
-        event.key.toLowerCase() === "i"
-      ) {
-        event.preventDefault();
-        setInfoRowOpen((value: boolean) => !value);
-        return;
-      }
-      if (event.metaKey && event.key.toLowerCase() === "i") {
-        event.preventDefault();
-        setInfoPanelOpen((value: boolean) => !value);
+        rawShortcutBinding.run(event);
         return;
       }
       if (event.key === "Escape" && focusedPane === "content" && isSearchMode) {
         event.preventDefault();
         hideSearchResults();
         focusContentPane();
-        return;
-      }
-      if (
-        event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        (event.key.toLowerCase() === "u" || event.key.toLowerCase() === "d")
-      ) {
-        const didHandle = handlePagedPaneScroll(
-          event.key.toLowerCase() === "d" ? "forward" : "backward",
-        );
-        if (!didHandle) {
-          return;
-        }
-        event.preventDefault();
-        return;
-      }
-      if (
-        typeaheadEnabled &&
-        !event.metaKey &&
-        !event.ctrlKey &&
-        !event.altKey &&
-        (focusedPane === "tree" || focusedPane === "content") &&
-        isTypeaheadCharacterKey(event.key)
-      ) {
-        event.preventDefault();
-        handleTypeaheadInput(event.key, focusedPane);
-        return;
-      }
-      if (
-        event.key === "ArrowUp" ||
-        event.key === "ArrowDown" ||
-        event.key === "ArrowLeft" ||
-        event.key === "ArrowRight" ||
-        event.key === "Home" ||
-        event.key === "End"
-      ) {
-        if (event.metaKey || event.ctrlKey || event.altKey) {
-          return;
-        }
-        if (focusedPane === "tree") {
-          const action = getTreeKeyboardAction({
-            key: event.key,
-            currentPath,
-            rootPath: treeRootPath,
-            nodes: treeNodes,
-          });
-          if (action.type === "none") {
-            return;
-          }
-          event.preventDefault();
-          if (action.type === "navigate") {
-            void navigateTo(action.path, "push");
-            return;
-          }
-          if (action.type === "expand" || action.type === "collapse") {
-            toggleTreeNode(action.path);
-            return;
-          }
-          if (action.type === "load") {
-            void loadTreeChildren(action.path, includeHidden, true);
-            return;
-          }
-          return;
-        }
-        if (focusedPane !== "content" || activeContentEntries.length === 0) {
-          return;
-        }
-        event.preventDefault();
-        const currentIndex = activeContentEntries.findIndex(
-          (entry) => entry.path === contentSelection.leadPath,
-        );
-        const nextIndex = getNextSelectionIndex({
-          itemCount: activeContentEntries.length,
-          currentIndex,
-          key: event.key,
-          columns: isSearchMode ? 1 : viewMode === "list" ? contentColumns : 1,
-          viewMode: isSearchMode ? "details" : viewMode,
-        });
-        const nextEntry = activeContentEntries[nextIndex];
-        if (nextEntry) {
-          if (event.shiftKey) {
-            extendContentSelectionToPath(nextEntry.path);
-          } else {
-            setSingleContentSelection(nextEntry.path);
-          }
-        }
-        return;
-      }
-      if (event.key === "Enter" && focusedPane === "tree") {
-        event.preventDefault();
-        void openTreeNode(currentPath);
-        return;
-      }
-      if (event.key === "Enter" && focusedPane === "content" && currentSelectedEntry) {
-        event.preventDefault();
-        const pathsToActivate =
-          selectedPathsInViewOrder.length > 0
-            ? selectedPathsInViewOrder
-            : [currentSelectedEntry.path];
-        void activateContentPaths(pathsToActivate);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -1910,6 +2209,7 @@ export function App() {
     openItemLimit,
     selectedEntry,
     selectedPathsInViewOrder,
+    rawShortcutBindings,
     shortcutContext,
     treeNodes,
     treeRootPath,

@@ -360,6 +360,25 @@ export function ContentPane({
       ref={paneRef}
       className="content-pane pane pane-focus-target"
       tabIndex={-1}
+      onMouseDownCapture={(event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+          return;
+        }
+        if (
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement ||
+          target instanceof HTMLSelectElement ||
+          target.isContentEditable ||
+          target.closest(".pathbar-editor-shell, .pathbar-suggestions, .details-column-resizer")
+        ) {
+          return;
+        }
+        if (!target.closest(".pane-header, .content-viewport")) {
+          return;
+        }
+        (paneRef?.current ?? event.currentTarget).focus({ preventScroll: true });
+      }}
       onFocusCapture={() => onFocusChange(true)}
       onBlurCapture={(event) => {
         const nextTarget = event.relatedTarget;

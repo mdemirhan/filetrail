@@ -275,6 +275,94 @@ describe("ContentPane", () => {
     expect(handleTypeaheadInput).toHaveBeenCalledWith("a");
   });
 
+  it("focuses the content pane when the path bar is clicked", () => {
+    const handleFocusChange = vi.fn();
+    const { container } = render(
+      <ContentPane
+        isFocused={false}
+        currentPath="/Users/demo/projects"
+        entries={[]}
+        viewMode="list"
+        loading={false}
+        error={null}
+        includeHidden={false}
+        selectedPath=""
+        metadataByPath={{}}
+        sortBy="name"
+        sortDirection="asc"
+        onSelectPath={() => undefined}
+        onActivateEntry={() => undefined}
+        onSortChange={() => undefined}
+        onLayoutColumnsChange={() => undefined}
+        onVisiblePathsChange={() => undefined}
+        onNavigatePath={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+        onFocusChange={handleFocusChange}
+        typeaheadQuery=""
+      />,
+    );
+
+    const pane = container.querySelector<HTMLElement>(".content-pane");
+    expect(pane).not.toBeNull();
+    if (!pane) {
+      throw new Error("Missing content pane.");
+    }
+
+    fireEvent.mouseDown(screen.getByRole("navigation", { name: "Folder path" }));
+
+    expect(document.activeElement).toBe(pane);
+    expect(handleFocusChange).toHaveBeenCalledWith(true);
+  });
+
+  it("focuses the content pane when the viewport background is clicked", () => {
+    const handleFocusChange = vi.fn();
+    const { container } = render(
+      <ContentPane
+        isFocused={false}
+        currentPath="/Users/demo"
+        entries={[]}
+        viewMode="list"
+        loading={false}
+        error={null}
+        includeHidden={false}
+        selectedPath=""
+        metadataByPath={{}}
+        sortBy="name"
+        sortDirection="asc"
+        onSelectPath={() => undefined}
+        onActivateEntry={() => undefined}
+        onSortChange={() => undefined}
+        onLayoutColumnsChange={() => undefined}
+        onVisiblePathsChange={() => undefined}
+        onNavigatePath={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+        onFocusChange={handleFocusChange}
+        typeaheadQuery=""
+      />,
+    );
+
+    const pane = container.querySelector<HTMLElement>(".content-pane");
+    const viewport = container.querySelector<HTMLElement>(".content-viewport");
+    expect(pane).not.toBeNull();
+    expect(viewport).not.toBeNull();
+    if (!pane || !viewport) {
+      throw new Error("Missing content viewport.");
+    }
+
+    fireEvent.mouseDown(viewport);
+
+    expect(document.activeElement).toBe(pane);
+    expect(handleFocusChange).toHaveBeenCalledWith(true);
+  });
+
   it("navigates when a path segment is clicked", () => {
     vi.useFakeTimers();
     const handleNavigatePath = vi.fn();
