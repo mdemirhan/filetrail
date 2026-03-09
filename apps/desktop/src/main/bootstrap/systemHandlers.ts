@@ -7,6 +7,7 @@ import {
   type OpenDialogOptions,
   dialog,
   shell,
+  type WebContents,
 } from "electron";
 
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
@@ -113,6 +114,23 @@ export async function openInTerminal(
       error: toErrorMessage(error),
     };
   }
+}
+
+export function performEditAction(
+  payload: IpcRequest<"system:performEditAction">,
+  webContents: Pick<WebContents, "copy" | "cut" | "paste" | "selectAll">,
+): IpcResponse<"system:performEditAction"> {
+  if (payload.action === "cut") {
+    webContents.cut();
+  } else if (payload.action === "copy") {
+    webContents.copy();
+  } else if (payload.action === "paste") {
+    webContents.paste();
+  } else {
+    webContents.selectAll();
+  }
+
+  return { ok: true };
 }
 
 export function resolveTerminalApplicationName(

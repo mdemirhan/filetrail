@@ -13,6 +13,7 @@ import {
 import { usePathSuggestions } from "../hooks/usePathSuggestions";
 import { useElementSize } from "../hooks/useElementSize";
 import { FileIcon, FolderIcon } from "../lib/fileIcons";
+import { isKeyboardOwnedFormControl } from "../lib/focusedEditTarget";
 import {
   DETAILS_LAYOUT,
   getDetailsRowHeight,
@@ -264,10 +265,7 @@ export function ContentPane({
           return;
         }
         if (
-          target instanceof HTMLInputElement ||
-          target instanceof HTMLTextAreaElement ||
-          target instanceof HTMLSelectElement ||
-          target.isContentEditable ||
+          isKeyboardOwnedFormControl(target) ||
           target.closest(".pathbar-editor-shell, .pathbar-suggestions, .details-column-resizer")
         ) {
           return;
@@ -291,12 +289,7 @@ export function ContentPane({
           return;
         }
         const target = event.target;
-        if (
-          target instanceof HTMLInputElement ||
-          target instanceof HTMLTextAreaElement ||
-          target instanceof HTMLSelectElement ||
-          (target instanceof HTMLElement && target.isContentEditable)
-        ) {
+        if (isKeyboardOwnedFormControl(target)) {
           return;
         }
         if (

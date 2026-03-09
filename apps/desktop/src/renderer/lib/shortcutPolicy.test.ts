@@ -81,6 +81,27 @@ describe("shortcutPolicy", () => {
     ).toBe(true);
   });
 
+  it("keeps generic edit commands available regardless of the active view", () => {
+    expect(
+      canHandleRendererCommand("editCopy", {
+        actionNoticeOpen: false,
+        copyPasteModalOpen: false,
+        focusedPane: "tree",
+        locationSheetOpen: false,
+        mainView: "help",
+      }),
+    ).toBe(true);
+    expect(
+      canHandleRendererCommand("editSelectAll", {
+        actionNoticeOpen: true,
+        copyPasteModalOpen: true,
+        focusedPane: "tree",
+        locationSheetOpen: true,
+        mainView: "settings",
+      }),
+    ).toBe(true);
+  });
+
   it("blocks content-capturing commands while transient overlays are open", () => {
     expect(
       canHandleRendererCommand("openSelection", {

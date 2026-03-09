@@ -10,6 +10,10 @@ import {
 import { clampZoomPercent } from "../../shared/appPreferences";
 import { resolveNewFolderTargetPath } from "../lib/explorerAppUtils";
 import type { DirectoryEntry } from "../lib/explorerTypes";
+import {
+  isKeyboardOwnedFormControl,
+  resolveFocusedEditTarget,
+} from "../lib/focusedEditTarget";
 import { parentDirectoryPath } from "../lib/explorerNavigation";
 import { useFiletrailClient } from "../lib/filetrailClient";
 import {
@@ -829,8 +833,75 @@ export function useExplorerShortcuts(args: {
     ],
   );
 
+  const performNativeEditAction = (
+    action: "cut" | "copy" | "paste" | "selectAll",
+  ): void => {
+    void client.invoke("system:performEditAction", { action });
+  };
+
+  const runGenericEditCommand = (
+    command: "editCut" | "editCopy" | "editPaste" | "editSelectAll",
+  ): void => {
+    const targetType = resolveFocusedEditTarget(document.activeElement);
+    if (targetType === "editable-text") {
+      performNativeEditAction(
+        command === "editCut"
+          ? "cut"
+          : command === "editCopy"
+            ? "copy"
+            : command === "editPaste"
+              ? "paste"
+              : "selectAll",
+      );
+      return;
+    }
+
+    if (targetType === "readonly-text") {
+      if (command === "editCopy" || command === "editSelectAll") {
+        performNativeEditAction(command === "editCopy" ? "copy" : "selectAll");
+      }
+      return;
+    }
+
+    if (command === "editSelectAll") {
+      if (canHandleExplorerKeyboardShortcuts(shortcutContext) && focusedPane === "content") {
+        selectAllContentEntries();
+      }
+      return;
+    }
+
+    const fallbackCommand =
+      command === "editCopy"
+        ? "copySelection"
+        : command === "editCut"
+          ? "cutSelection"
+          : "pasteSelection";
+    if (!canHandleRendererCommand(fallbackCommand, shortcutContext)) {
+      return;
+    }
+
+    if (fallbackCommand === "copySelection") {
+      void runCopyClipboardAction("copy");
+      return;
+    }
+    if (fallbackCommand === "cutSelection") {
+      void runCopyClipboardAction("cut");
+      return;
+    }
+    void startPasteFromClipboard();
+  };
+
   useEffect(() => {
     const unsubscribe = client.onCommand((command) => {
+      if (
+        command.type === "editCut" ||
+        command.type === "editCopy" ||
+        command.type === "editPaste" ||
+        command.type === "editSelectAll"
+      ) {
+        runGenericEditCommand(command.type);
+        return;
+      }
       if (!canHandleRendererCommand(command.type, shortcutContext)) {
         return;
       }
@@ -1017,6 +1088,7 @@ export function useExplorerShortcuts(args: {
     openSettingsView,
     refreshDirectory,
     resolveContentActionPaths,
+    runGenericEditCommand,
     runCopyClipboardAction,
     runCopyPathAction,
     searchCommittedQueryRef,
@@ -1074,12 +1146,7 @@ export function useExplorerShortcuts(args: {
         setMainView("explorer");
         return;
       }
-      if (
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target instanceof HTMLSelectElement ||
-        (target instanceof HTMLElement && target.isContentEditable)
-      ) {
+      if (isKeyboardOwnedFormControl(target)) {
         return;
       }
       if (targetElement?.closest(".pathbar-editor-shell")) {

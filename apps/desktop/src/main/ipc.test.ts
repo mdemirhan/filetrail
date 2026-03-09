@@ -73,6 +73,7 @@ function createHandlersThatFailOnSnapshot() {
     "system:openPathsWithApplication": async () => ({ ok: true, error: null }),
     "system:openInTerminal": async () => ({ ok: true, error: null }),
     "system:copyText": async () => ({ ok: true }),
+    "system:performEditAction": async () => ({ ok: true }),
     "path:getSuggestions": async () => ({
       inputPath: "",
       basePath: null,
@@ -223,6 +224,32 @@ describe("registerIpcHandlers", () => {
     ).resolves.toEqual({
       ok: false,
       error: expect.stringContaining("Invalid payload for path:getSuggestions"),
+    });
+    expect(invalidHandler).not.toHaveBeenCalled();
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects invalid native edit requests before invoking the channel handler", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const invalidHandler = vi.fn(async () => ({ ok: true as const }));
+    const handle = vi.fn();
+    const { registerIpcHandlers } = await import("./ipc");
+
+    registerIpcHandlers(
+      { handle },
+      {
+        ...createHandlersThatFailOnSnapshot(),
+        "system:performEditAction": invalidHandler,
+      },
+    );
+
+    const actionHandler = handle.mock.calls.find(
+      (call) => call[0] === "system:performEditAction",
+    )?.[1];
+
+    await expect(actionHandler?.({}, { action: "deleteAll" })).resolves.toEqual({
+      ok: false,
+      error: expect.stringContaining("Invalid payload for system:performEditAction"),
     });
     expect(invalidHandler).not.toHaveBeenCalled();
     expect(consoleErrorSpy).toHaveBeenCalledTimes(1);

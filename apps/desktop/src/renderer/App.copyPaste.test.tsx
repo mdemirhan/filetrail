@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 
 import type {
   CopyPasteProgressEvent,
@@ -36,6 +36,14 @@ vi.mock("./components/ContentPane", () => ({
     onActivateEntry: (entry: { path: string; name: string }) => void;
   }) => (
     <div data-testid="content-pane" onClick={() => onFocusChange(true)}>
+      <label>
+        Current folder path
+        <input
+          aria-label="Current folder path"
+          defaultValue="/Users/demo"
+          onFocus={() => onFocusChange(true)}
+        />
+      </label>
       <button
         type="button"
         data-testid="content-pane-background"
@@ -86,7 +94,14 @@ vi.mock("./components/TreePane", () => ({
 }));
 vi.mock("./components/SearchResultsPane", () => ({
   SEARCH_RESULT_ROW_HEIGHT: 32,
-  SearchResultsPane: () => <div data-testid="search-results-pane" />,
+  SearchResultsPane: () => (
+    <div data-testid="search-results-pane">
+      <label>
+        Filter search results
+        <input aria-label="Filter search results" defaultValue="source" />
+      </label>
+    </div>
+  ),
 }));
 vi.mock("./components/GetInfoPanel", () => ({
   InfoPanel: () => null,
@@ -155,10 +170,39 @@ vi.mock("./components/LocationSheet", () => ({
     ) : null,
 }));
 vi.mock("./components/HelpView", () => ({
-  HelpView: () => <div data-testid="help-view" />,
+  HelpView: () => (
+    <div data-testid="help-view">
+      <label>
+        Help notes
+        <input aria-label="Help notes" defaultValue="docs" />
+      </label>
+    </div>
+  ),
 }));
 vi.mock("./components/SettingsView", () => ({
-  SettingsView: () => <div data-testid="settings-view" />,
+  SettingsView: () => (
+    <div data-testid="settings-view">
+      <label>
+        Terminal app
+        <input aria-label="Terminal app" defaultValue="Terminal" />
+      </label>
+      <label>
+        Open and Edit item limit
+        <input aria-label="Open and Edit item limit" defaultValue="5" readOnly />
+      </label>
+      <label>
+        Search scope
+        <select aria-label="Search scope" defaultValue="name">
+          <option value="name">Name</option>
+          <option value="path">Path</option>
+        </select>
+      </label>
+      <label>
+        Accent color
+        <input aria-label="Accent color" type="color" defaultValue="#336699" />
+      </label>
+    </div>
+  ),
 }));
 vi.mock("./components/ToolbarIcon", () => ({
   ToolbarIcon: () => null,
@@ -280,6 +324,287 @@ describe("App copy/paste integration", () => {
     });
 
     expect(harness.invocations.some((call) => call.channel === "system:copyText")).toBe(false);
+  });
+
+  it("routes generic edit menu commands to native text editing for the toolbar search input", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const searchInput = await screen.findByPlaceholderText("Find files…");
+    await act(async () => {
+      searchInput.focus();
+      harness.emitCommand({ type: "editCopy" });
+      harness.emitCommand({ type: "editCut" });
+      harness.emitCommand({ type: "editPaste" });
+      harness.emitCommand({ type: "editSelectAll" });
+    });
+
+    expectNativeEditActions(harness, ["copy", "cut", "paste", "selectAll"]);
+    expectNoFileClipboardActions(harness);
+    expect(screen.queryByText("Ready to paste 1 item")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ready to move 1 item")).not.toBeInTheDocument();
+  });
+
+  it("does not trigger explorer file actions when keyboard copy, cut, or paste are pressed in a text input", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const searchInput = await screen.findByPlaceholderText("Find files…");
+    await act(async () => {
+      searchInput.focus();
+      fireEvent.keyDown(searchInput, { key: "c", metaKey: true });
+      fireEvent.keyDown(searchInput, { key: "x", metaKey: true });
+      fireEvent.keyDown(searchInput, { key: "v", metaKey: true });
+    });
+
+    expectNoFileClipboardActions(harness);
+    expect(screen.queryByText("Ready to paste 1 item")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ready to move 1 item")).not.toBeInTheDocument();
+  });
+
+  it("routes generic edit commands to native editing for path, location, rename, and settings inputs", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const pathInput = await screen.findByLabelText("Current folder path");
+    await act(async () => {
+      pathInput.focus();
+      harness.emitCommand({ type: "editCopy" });
+    });
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "g", metaKey: true, shiftKey: true });
+    });
+    const locationInput = await screen.findByLabelText("Path");
+    await act(async () => {
+      locationInput.focus();
+      harness.emitCommand({ type: "editPaste" });
+    });
+    const locationDialog = document.querySelector('dialog[aria-label="Location"]');
+    if (!(locationDialog instanceof HTMLDialogElement)) {
+      throw new Error("Missing location dialog.");
+    }
+    await act(async () => {
+      fireEvent.click(within(locationDialog).getByText("Cancel"));
+    });
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      harness.emitCommand({ type: "renameSelection" });
+    });
+    const renameInput = await screen.findByLabelText("New name");
+    await act(async () => {
+      renameInput.focus();
+      harness.emitCommand({ type: "editSelectAll" });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    });
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: ",", metaKey: true });
+    });
+    const settingsInput = await screen.findByLabelText("Terminal app");
+    await act(async () => {
+      settingsInput.focus();
+      harness.emitCommand({ type: "editCut" });
+    });
+
+    expectNativeEditActions(harness, ["copy", "paste", "selectAll", "cut"]);
+    expectNoFileClipboardActions(harness);
+  });
+
+  it("routes generic edit commands to the search results filter input", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await openSearchResults();
+    const filterInput = await screen.findByLabelText("Filter search results");
+    await act(async () => {
+      filterInput.focus();
+      harness.emitCommand({ type: "editCopy" });
+    });
+
+    expectNativeEditActions(harness, ["copy"]);
+    expectNoFileClipboardActions(harness);
+  });
+
+  it("uses copy and select all for readonly text inputs but ignores cut and paste", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: ",", metaKey: true });
+    });
+    const readonlyInput = await screen.findByLabelText("Open and Edit item limit");
+    await act(async () => {
+      readonlyInput.focus();
+      harness.emitCommand({ type: "editCopy" });
+      harness.emitCommand({ type: "editSelectAll" });
+      harness.emitCommand({ type: "editCut" });
+      harness.emitCommand({ type: "editPaste" });
+    });
+
+    expectNativeEditActions(harness, ["copy", "selectAll"]);
+    expectNoFileClipboardActions(harness);
+  });
+
+  it("does not treat non-text settings controls as native text editors", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: ",", metaKey: true });
+    });
+    const searchScopeSelect = await screen.findByLabelText("Search scope");
+    const accentColorInput = await screen.findByLabelText("Accent color");
+
+    await act(async () => {
+      searchScopeSelect.focus();
+      harness.emitCommand({ type: "editCopy" });
+      accentColorInput.focus();
+      harness.emitCommand({ type: "editPaste" });
+    });
+
+    expectNativeEditActions(harness, []);
+    expectNoFileClipboardActions(harness);
+  });
+
+  it("keeps generic edit commands working for text inputs in help and settings views", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "?" });
+    });
+    const helpInput = await screen.findByLabelText("Help notes");
+    await act(async () => {
+      helpInput.focus();
+      harness.emitCommand({ type: "editCopy" });
+    });
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: ",", metaKey: true });
+    });
+    const settingsInput = await screen.findByLabelText("Terminal app");
+    await act(async () => {
+      settingsInput.focus();
+      harness.emitCommand({ type: "editPaste" });
+    });
+
+    expectNativeEditActions(harness, ["copy", "paste"]);
+    expectNoFileClipboardActions(harness);
+  });
+
+  it("no-ops generic edit commands outside text inputs on non-explorer views", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "?" });
+    });
+    await screen.findByTestId("help-view");
+
+    await act(async () => {
+      harness.emitCommand({ type: "editCopy" });
+      harness.emitCommand({ type: "editPaste" });
+      harness.emitCommand({ type: "editSelectAll" });
+    });
+
+    expectNativeEditActions(harness, []);
+    expectNoFileClipboardActions(harness);
+  });
+
+  it("falls back to explorer copy and select all when the content pane is focused", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      harness.emitCommand({ type: "editCopy" });
+      harness.emitCommand({ type: "editSelectAll" });
+    });
+
+    expect(await screen.findByText("Ready to paste 1 item")).toBeInTheDocument();
+    expect(screen.getByTitle("/Users/demo/source.txt")).toHaveAttribute("data-selected", "true");
+    expect(screen.getByTitle("/Users/demo/Folder")).toHaveAttribute("data-selected", "true");
+    expectNativeEditActions(harness, []);
+  });
+
+  it("falls back to explorer paste when the content pane is focused", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+    await openDirectory("/Users/demo/Folder");
+
+    const invocationCountBeforePaste = harness.invocations.filter(
+      (call) => call.channel === "copyPaste:plan",
+    ).length;
+
+    await act(async () => {
+      harness.emitCommand({ type: "editPaste" });
+    });
+
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.filter((call) => call.channel === "copyPaste:plan"),
+      ).toHaveLength(invocationCountBeforePaste + 1);
+    });
+    expectNativeEditActions(harness, []);
   });
 
   it("starts at home when restore last visited is disabled", async () => {
@@ -1299,7 +1624,7 @@ describe("App copy/paste integration", () => {
     await selectItem("/Users/demo/source.txt");
     await focusTreePane();
     await act(async () => {
-      harness.emitCommand({ type: "copySelection" });
+      harness.emitCommand({ type: "editCopy" });
     });
 
     expect(screen.queryByText("Ready to paste 1 item")).not.toBeInTheDocument();
@@ -1317,7 +1642,7 @@ describe("App copy/paste integration", () => {
     await selectItem("/Users/demo/source.txt");
     await focusTreePane();
     await act(async () => {
-      harness.emitCommand({ type: "cutSelection" });
+      harness.emitCommand({ type: "editCut" });
     });
 
     expect(screen.queryByText("Ready to move 1 item")).not.toBeInTheDocument();
@@ -1340,7 +1665,7 @@ describe("App copy/paste integration", () => {
     await focusTreePane();
     const invocationCountBeforePaste = harness.invocations.length;
     await act(async () => {
-      harness.emitCommand({ type: "pasteSelection" });
+      harness.emitCommand({ type: "editPaste" });
     });
 
     expect(harness.invocations).toHaveLength(invocationCountBeforePaste);
@@ -3004,6 +3329,41 @@ function createAppHarness(
           resolvedPath: (payload as IpcRequestInput<"path:resolve">).path,
         } satisfies IpcResponse<"path:resolve"> as IpcResponse<C>;
       }
+      if (channel === "path:getSuggestions") {
+        return {
+          inputPath: (payload as IpcRequestInput<"path:getSuggestions">).inputPath,
+          basePath: null,
+          suggestions: [],
+        } satisfies IpcResponse<"path:getSuggestions"> as IpcResponse<C>;
+      }
+      if (channel === "search:start") {
+        return { jobId: "search-job-1", status: "running" } as IpcResponse<C>;
+      }
+      if (channel === "search:getUpdate") {
+        return {
+          jobId: "search-job-1",
+          status: "complete",
+          items: [
+            {
+              path: "/Users/demo/source.txt",
+              name: "source.txt",
+              extension: "txt",
+              kind: "file",
+              isHidden: false,
+              isSymlink: false,
+              parentPath: "/Users/demo",
+              relativeParentPath: ".",
+            },
+          ],
+          nextCursor: 1,
+          done: true,
+          truncated: false,
+          error: null,
+        } satisfies IpcResponse<"search:getUpdate"> as IpcResponse<C>;
+      }
+      if (channel === "search:cancel") {
+        return { ok: true } as IpcResponse<C>;
+      }
       if (channel === "system:openPath") {
         return { ok: true, error: null } as IpcResponse<C>;
       }
@@ -3033,6 +3393,9 @@ function createAppHarness(
         if (args.copyTextError) {
           throw args.copyTextError;
         }
+        return { ok: true } as IpcResponse<C>;
+      }
+      if (channel === "system:performEditAction") {
         return { ok: true } as IpcResponse<C>;
       }
       if (channel === "app:clearCaches") {
@@ -3136,6 +3499,36 @@ async function openDirectory(path: string): Promise<void> {
   await vi.waitFor(() => {
     expect(screen.queryByTitle("/Users/demo/source.txt")).not.toBeInTheDocument();
   });
+}
+
+async function openSearchResults(): Promise<void> {
+  const searchInput = await screen.findByPlaceholderText("Find files…");
+  const form = searchInput.closest("form");
+  if (!form) {
+    throw new Error("Missing search form.");
+  }
+  await act(async () => {
+    fireEvent.change(searchInput, { target: { value: "source" } });
+    fireEvent.submit(form);
+  });
+  await screen.findByTestId("search-results-pane");
+}
+
+function expectNativeEditActions(
+  harness: ReturnType<typeof createAppHarness>,
+  actions: Array<"cut" | "copy" | "paste" | "selectAll">,
+): void {
+  expect(
+    harness.invocations
+      .filter((call) => call.channel === "system:performEditAction")
+      .map((call) => (call.payload as IpcRequestInput<"system:performEditAction">).action),
+  ).toEqual(actions);
+}
+
+function expectNoFileClipboardActions(harness: ReturnType<typeof createAppHarness>): void {
+  expect(harness.invocations.some((call) => call.channel === "copyPaste:plan")).toBe(false);
+  expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
+  expect(harness.invocations.some((call) => call.channel === "system:copyText")).toBe(false);
 }
 
 function createDirectoryEntry(

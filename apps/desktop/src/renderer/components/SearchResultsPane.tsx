@@ -9,6 +9,7 @@ import type {
 
 import { useElementSize } from "../hooks/useElementSize";
 import { FileIcon } from "../lib/fileIcons";
+import { isKeyboardOwnedFormControl } from "../lib/focusedEditTarget";
 import { splitDisplayName } from "../lib/formatting";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
 import { getVirtualRange } from "../lib/virtualization";
@@ -179,12 +180,7 @@ export function SearchResultsPane({
           return;
         }
         const target = event.target;
-        if (
-          target instanceof HTMLInputElement ||
-          target instanceof HTMLTextAreaElement ||
-          target instanceof HTMLSelectElement ||
-          (target instanceof HTMLElement && target.isContentEditable)
-        ) {
+        if (isKeyboardOwnedFormControl(target)) {
           return;
         }
         // `?` is reserved as the global Help shortcut and should not be consumed by search

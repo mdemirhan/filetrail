@@ -73,19 +73,23 @@ export function createApplicationMenuTemplate(
         {
           label: "Cut",
           accelerator: "CommandOrControl+X",
-          click: () => sendCommand("cutSelection"),
+          click: () => sendCommand("editCut"),
         },
         {
           label: "Copy",
           accelerator: "CommandOrControl+C",
-          click: () => sendCommand("copySelection"),
+          click: () => sendCommand("editCopy"),
         },
         {
           label: "Paste",
           accelerator: "CommandOrControl+V",
-          click: () => sendCommand("pasteSelection"),
+          click: () => sendCommand("editPaste"),
         },
-        { role: "selectAll" },
+        {
+          label: "Select All",
+          accelerator: "CommandOrControl+A",
+          click: () => sendCommand("editSelectAll"),
+        },
         { type: "separator" },
         {
           label: "Find Files…",

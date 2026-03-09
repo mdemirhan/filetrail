@@ -101,7 +101,7 @@ describe("createApplicationMenuTemplate", () => {
     expect(send).toHaveBeenCalledWith("filetrail:command", { type: "copyPath" });
   });
 
-  it("wires Copy, Cut, and Paste to renderer command channels", () => {
+  it("wires Copy, Cut, Paste, and Select All to generic edit commands", () => {
     const send = vi.fn();
     const template = createApplicationMenuTemplate({ send } as never);
     const editMenu = template.find((item) => item.label === "Edit");
@@ -109,6 +109,7 @@ describe("createApplicationMenuTemplate", () => {
     const copyItem = submenu.find((item) => "label" in item && item.label === "Copy");
     const cutItem = submenu.find((item) => "label" in item && item.label === "Cut");
     const pasteItem = submenu.find((item) => "label" in item && item.label === "Paste");
+    const selectAllItem = submenu.find((item) => "label" in item && item.label === "Select All");
 
     if (!copyItem || !("click" in copyItem) || typeof copyItem.click !== "function") {
       throw new Error("Copy menu item missing.");
@@ -119,14 +120,23 @@ describe("createApplicationMenuTemplate", () => {
     if (!pasteItem || !("click" in pasteItem) || typeof pasteItem.click !== "function") {
       throw new Error("Paste menu item missing.");
     }
+    if (
+      !selectAllItem ||
+      !("click" in selectAllItem) ||
+      typeof selectAllItem.click !== "function"
+    ) {
+      throw new Error("Select All menu item missing.");
+    }
 
     copyItem.click(undefined as never, undefined as never, undefined as never);
     cutItem.click(undefined as never, undefined as never, undefined as never);
     pasteItem.click(undefined as never, undefined as never, undefined as never);
+    selectAllItem.click(undefined as never, undefined as never, undefined as never);
 
-    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "copySelection" });
-    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "cutSelection" });
-    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "pasteSelection" });
+    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "editCopy" });
+    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "editCut" });
+    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "editPaste" });
+    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "editSelectAll" });
   });
 
   it("wires Go to Folder to the renderer command channel", () => {

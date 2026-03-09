@@ -1,5 +1,6 @@
 import {
   openPathsWithApplication,
+  performEditAction,
   resolveApplicationDisplayName,
   resolveTerminalApplicationName,
   toPreferencePatch,
@@ -193,5 +194,26 @@ describe("openPathsWithApplication", () => {
       ok: false,
       error: "Application not found",
     });
+  });
+});
+
+describe("performEditAction", () => {
+  it("dispatches native edit actions to webContents", () => {
+    const webContents = {
+      copy: vi.fn(),
+      cut: vi.fn(),
+      paste: vi.fn(),
+      selectAll: vi.fn(),
+    };
+
+    expect(performEditAction({ action: "cut" }, webContents)).toEqual({ ok: true });
+    expect(performEditAction({ action: "copy" }, webContents)).toEqual({ ok: true });
+    expect(performEditAction({ action: "paste" }, webContents)).toEqual({ ok: true });
+    expect(performEditAction({ action: "selectAll" }, webContents)).toEqual({ ok: true });
+
+    expect(webContents.cut).toHaveBeenCalledTimes(1);
+    expect(webContents.copy).toHaveBeenCalledTimes(1);
+    expect(webContents.paste).toHaveBeenCalledTimes(1);
+    expect(webContents.selectAll).toHaveBeenCalledTimes(1);
   });
 });

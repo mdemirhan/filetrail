@@ -78,6 +78,7 @@ export const searchJobStatusSchema = z.enum([
   "error",
   "truncated",
 ]);
+export const nativeEditActionSchema = z.enum(["cut", "copy", "paste", "selectAll"]);
 export const copyPasteModeSchema = z.enum(["copy", "cut"]);
 export const copyPasteConflictResolutionSchema = z.enum(["error", "skip"]);
 export const copyPasteOperationStatusSchema = z.enum([
@@ -634,6 +635,14 @@ export const ipcContractSchemas = {
   "system:copyText": {
     request: z.object({
       text: z.string(),
+    }),
+    response: z.object({
+      ok: z.boolean(),
+    }),
+  },
+  "system:performEditAction": {
+    request: z.object({
+      action: nativeEditActionSchema,
     }),
     response: z.object({
       ok: z.boolean(),

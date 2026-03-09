@@ -1,4 +1,8 @@
 export const RENDERER_COMMAND_TYPES = [
+  "editCut",
+  "editCopy",
+  "editPaste",
+  "editSelectAll",
   "focusFileSearch",
   "openSelection",
   "editSelection",

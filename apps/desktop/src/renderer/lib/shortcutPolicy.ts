@@ -13,9 +13,19 @@ export type ShortcutContext = {
   mainView: MainView;
 };
 
+const EDIT_COMMANDS = new Set<RendererCommandType>([
+  "editCut",
+  "editCopy",
+  "editPaste",
+  "editSelectAll",
+]);
 const ZOOM_COMMANDS = new Set<RendererCommandType>(["zoomIn", "zoomOut", "resetZoom"]);
 
 export const RENDERER_COMMAND_TREE_FOCUS_BUCKETS = {
+  editCut: "globalExplorer",
+  editCopy: "globalExplorer",
+  editPaste: "globalExplorer",
+  editSelectAll: "globalExplorer",
   focusFileSearch: "globalExplorer",
   openSelection: "contentOnly",
   editSelection: "contentOnly",
@@ -120,6 +130,10 @@ export function canHandleRendererCommand(
   command: RendererCommandType,
   context: ShortcutContext,
 ): boolean {
+  if (EDIT_COMMANDS.has(command)) {
+    return true;
+  }
+
   if (
     context.focusedPane === "tree" &&
     RENDERER_COMMAND_TREE_FOCUS_BUCKETS[command] === "contentOnly"

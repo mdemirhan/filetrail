@@ -331,6 +331,14 @@ describe("ipc contracts", () => {
       applicationPath: "Finder",
       paths: ["/Users/demo/file.txt"],
     });
+
+    expect(
+      ipcContractSchemas["system:performEditAction"].request.parse({
+        action: "selectAll",
+      }),
+    ).toEqual({
+      action: "selectAll",
+    });
   });
 
   it("validates launch context payloads", () => {

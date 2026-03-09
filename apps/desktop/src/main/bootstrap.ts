@@ -18,6 +18,7 @@ import {
   openInTerminal,
   openPath,
   openPathsWithApplication,
+  performEditAction,
   pickApplication,
   pickDirectory,
   resolveApplicationDisplayName,
@@ -109,6 +110,7 @@ export async function bootstrapMainProcess(
       clipboard.writeText(payload.text);
       return { ok: true };
     },
+    "system:performEditAction": (payload, event) => performEditAction(payload, event.sender),
   });
 }
 
@@ -130,6 +132,7 @@ function resolveExplorerWorkerUrl(): URL {
 
 export {
   openPathsWithApplication,
+  performEditAction,
   resolveApplicationDisplayName,
   resolveTerminalApplicationName,
   toPreferencePatch,
