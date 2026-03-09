@@ -445,7 +445,10 @@ export function SearchResultsPane({
                   }`}
                   data-selectable-entry-path={result.path}
                   draggable={false}
-                  onClick={(event) => {
+                  onPointerDown={(event) => {
+                    if (event.button !== 0) {
+                      return;
+                    }
                     onSelectionGesture(result.path, {
                       metaKey: event.metaKey,
                       shiftKey: event.shiftKey,

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { createRef } from "react";
 
 import { TreePane } from "./TreePane";
@@ -295,6 +295,160 @@ describe("TreePane", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /open help/i }));
     expect(handleOpenHelp).toHaveBeenCalledTimes(1);
+  });
+
+  it("highlights a folder immediately on pointer down before the click timeout", () => {
+    vi.useFakeTimers();
+    render(
+      <TreePane
+        isFocused
+        rootPath="/Users/demo"
+        homePath="/Users/demo"
+        currentPath="/Users/demo"
+        nodes={{
+          "/Users/demo": {
+            path: "/Users/demo",
+            name: "demo",
+            kind: "directory",
+            isHidden: false,
+            isSymlink: false,
+            expanded: true,
+            loading: false,
+            loaded: true,
+            error: null,
+            childPaths: ["/Users/demo/Documents"],
+          },
+          "/Users/demo/Documents": {
+            path: "/Users/demo/Documents",
+            name: "Documents",
+            kind: "directory",
+            isHidden: false,
+            isSymlink: false,
+            expanded: false,
+            loading: false,
+            loaded: false,
+            error: null,
+            childPaths: [],
+          },
+        }}
+        onFocusChange={() => undefined}
+        onGoHome={() => undefined}
+        onRerootHome={() => undefined}
+        onQuickAccess={() => undefined}
+        foldersFirst
+        onToggleFoldersFirst={() => undefined}
+        infoPanelOpen
+        onToggleInfoPanel={() => undefined}
+        infoRowOpen
+        onToggleInfoRow={() => undefined}
+        theme="dark"
+        themeMenuOpen={false}
+        themeButtonRef={themeButtonRef}
+        themeMenuRef={themeMenuRef}
+        onToggleThemeMenu={() => undefined}
+        onSelectTheme={() => undefined}
+        onOpenHelp={() => undefined}
+        onOpenSettings={() => undefined}
+        includeHidden={false}
+        onToggleHidden={() => undefined}
+        onToggleExpand={() => undefined}
+        onNavigate={() => undefined}
+        typeaheadQuery=""
+      />,
+    );
+
+    const row = screen.getByRole("button", { name: "Documents" });
+    const treeRow = row.closest(".tree-row")!;
+    expect(treeRow).not.toHaveClass("active");
+
+    fireEvent.pointerDown(row, { button: 0 });
+    // Before the 180ms click timeout fires, the row should already be highlighted
+    expect(treeRow).toHaveClass("active");
+
+    vi.useRealTimers();
+  });
+
+  it("rolls back optimistic highlight when navigation returns false", async () => {
+    vi.useFakeTimers();
+    let resolveNav!: (value: boolean) => void;
+    const handleNavigate = vi.fn(
+      () => new Promise<boolean>((resolve) => { resolveNav = resolve; }),
+    );
+
+    render(
+      <TreePane
+        isFocused
+        rootPath="/Users/demo"
+        homePath="/Users/demo"
+        currentPath="/Users/demo"
+        nodes={{
+          "/Users/demo": {
+            path: "/Users/demo",
+            name: "demo",
+            kind: "directory",
+            isHidden: false,
+            isSymlink: false,
+            expanded: true,
+            loading: false,
+            loaded: true,
+            error: null,
+            childPaths: ["/Users/demo/Documents"],
+          },
+          "/Users/demo/Documents": {
+            path: "/Users/demo/Documents",
+            name: "Documents",
+            kind: "directory",
+            isHidden: false,
+            isSymlink: false,
+            expanded: false,
+            loading: false,
+            loaded: false,
+            error: null,
+            childPaths: [],
+          },
+        }}
+        onFocusChange={() => undefined}
+        onGoHome={() => undefined}
+        onRerootHome={() => undefined}
+        onQuickAccess={() => undefined}
+        foldersFirst
+        onToggleFoldersFirst={() => undefined}
+        infoPanelOpen
+        onToggleInfoPanel={() => undefined}
+        infoRowOpen
+        onToggleInfoRow={() => undefined}
+        theme="dark"
+        themeMenuOpen={false}
+        themeButtonRef={themeButtonRef}
+        themeMenuRef={themeMenuRef}
+        onToggleThemeMenu={() => undefined}
+        onSelectTheme={() => undefined}
+        onOpenHelp={() => undefined}
+        onOpenSettings={() => undefined}
+        includeHidden={false}
+        onToggleHidden={() => undefined}
+        onToggleExpand={() => undefined}
+        onNavigate={handleNavigate}
+        typeaheadQuery=""
+      />,
+    );
+
+    const row = screen.getByRole("button", { name: "Documents" });
+    const treeRow = row.closest(".tree-row")!;
+
+    fireEvent.pointerDown(row, { button: 0 });
+    expect(treeRow).toHaveClass("active");
+
+    // Fire the click → triggers the 180ms timeout
+    fireEvent.click(row);
+    vi.runAllTimers();
+    expect(handleNavigate).toHaveBeenCalledWith("/Users/demo/Documents");
+
+    // Navigation rejects — optimistic highlight should roll back
+    await act(async () => resolveNav(false));
+
+    expect(treeRow).not.toHaveClass("active");
+    vi.useRealTimers();
   });
 
   it("reroots the tree at home from the rail button", () => {

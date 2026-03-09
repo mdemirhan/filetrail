@@ -886,7 +886,10 @@ function FlowListView({
                 }`}
                 data-selectable-entry-path={entry.path}
                 draggable={false}
-                onClick={(event) => {
+                onPointerDown={(event) => {
+                  if (event.button !== 0) {
+                    return;
+                  }
                   onSelectionGesture(entry.path, {
                     metaKey: event.metaKey,
                     shiftKey: event.shiftKey,
@@ -1188,7 +1191,10 @@ function DetailsView({
                 }`}
                 data-selectable-entry-path={entry.path}
                 draggable={false}
-                onClick={(event) => {
+                onPointerDown={(event) => {
+                  if (event.button !== 0) {
+                    return;
+                  }
                   onSelectionGesture(entry.path, {
                     metaKey: event.metaKey,
                     shiftKey: event.shiftKey,

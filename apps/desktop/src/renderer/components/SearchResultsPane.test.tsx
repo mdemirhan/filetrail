@@ -80,7 +80,7 @@ describe("SearchResultsPane", () => {
     );
 
     const row = screen.getByRole("button", { name: /App\.tsx/i });
-    fireEvent.click(row);
+    fireEvent.pointerDown(row, { button: 0 });
     fireEvent.doubleClick(row);
 
     expect(handleSelect).toHaveBeenCalledWith("/Users/demo/project/src/App.tsx");
@@ -173,7 +173,7 @@ describe("SearchResultsPane", () => {
       throw new Error("Missing search results scroll container.");
     }
 
-    fireEvent.click(row, { metaKey: true });
+    fireEvent.pointerDown(row, { button: 0, metaKey: true });
     fireEvent.mouseDown(scroll);
     fireEvent.contextMenu(scroll, { clientX: 24, clientY: 36 });
 

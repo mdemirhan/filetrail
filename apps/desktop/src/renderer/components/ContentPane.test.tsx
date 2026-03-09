@@ -156,7 +156,7 @@ describe("ContentPane", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /alpha\.txt/i }), { metaKey: true });
+    fireEvent.pointerDown(screen.getByRole("button", { name: /alpha\.txt/i }), { button: 0, metaKey: true });
 
     expect(handleSelectionGesture).toHaveBeenCalledWith("/Users/demo/alpha.txt", {
       metaKey: true,
@@ -933,7 +933,7 @@ describe("ContentPane", () => {
       throw new Error("Missing flow list container.");
     }
 
-    fireEvent.click(row, { shiftKey: true });
+    fireEvent.pointerDown(row, { button: 0, shiftKey: true });
     fireEvent.mouseDown(list);
     fireEvent.contextMenu(list, { clientX: 12, clientY: 18 });
 

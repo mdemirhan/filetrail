@@ -1180,7 +1180,7 @@ export function App() {
             onOpenSettings: openSettingsView,
             includeHidden,
             onToggleHidden: toggleHiddenFiles,
-            onNavigate: (path) => void navigateTo(path, "push"),
+            onNavigate: (path) => navigateTo(path, "push"),
             onToggleExpand: toggleTreeNode,
             typeaheadQuery: focusedPane === "tree" ? typeaheadQuery : "",
           }}

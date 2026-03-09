@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef } from "react";
+import { Fragment, type Dispatch, type SetStateAction, useEffect, useRef, useState } from "react";
 
 import { THEME_GROUPS, type ThemeMode, getThemeLabel } from "../../shared/appPreferences";
 import { TreeFolderIcon } from "../lib/fileIcons";
@@ -92,6 +92,7 @@ export function TreePane({
   const scrollFrameRef = useRef<number | null>(null);
   const lastScrolledPathRef = useRef<string | null>(null);
   const lastScrolledRowRef = useRef<HTMLDivElement | null>(null);
+  const [optimisticCurrentPath, setOptimisticCurrentPath] = useState<string | null>(null);
 
   useEffect(
     () => () => {
@@ -129,6 +130,10 @@ export function TreePane({
         scrollFrameRef.current = null;
       }
     };
+  }, [currentPath]);
+
+  useEffect(() => {
+    setOptimisticCurrentPath(null);
   }, [currentPath]);
 
   if (!root) {
@@ -368,6 +373,8 @@ export function TreePane({
                   node={root}
                   nodes={nodes}
                   clickTimeoutRef={clickTimeoutRef}
+                  optimisticCurrentPath={optimisticCurrentPath}
+                  setOptimisticCurrentPath={setOptimisticCurrentPath}
                   onToggleExpand={onToggleExpand}
                   onNavigate={onNavigate}
                   registerRowRef={(path, element) => {
@@ -390,6 +397,8 @@ function TreeNodeRow({
   depth,
   isPaneFocused,
   clickTimeoutRef,
+  optimisticCurrentPath,
+  setOptimisticCurrentPath,
   onToggleExpand,
   onNavigate,
   registerRowRef,
@@ -400,11 +409,13 @@ function TreeNodeRow({
   depth: number;
   isPaneFocused: boolean;
   clickTimeoutRef: React.RefObject<number | null>;
+  optimisticCurrentPath: string | null;
+  setOptimisticCurrentPath: Dispatch<SetStateAction<string | null>>;
   onToggleExpand: (path: string) => void;
-  onNavigate: (path: string) => void;
+  onNavigate: (path: string) => Promise<boolean> | void;
   registerRowRef: (path: string, element: HTMLDivElement | null) => void;
 }) {
-  const isCurrent = currentPath === node.path;
+  const isCurrent = (optimisticCurrentPath ?? currentPath) === node.path;
   const canExpand = !node.isSymlink;
 
   return (
@@ -430,13 +441,27 @@ function TreeNodeRow({
         <button
           type="button"
           className="tree-label"
+          onPointerDown={(event) => {
+            if (event.button !== 0) {
+              return;
+            }
+            setOptimisticCurrentPath(node.path);
+          }}
           onClick={() => {
             if (clickTimeoutRef.current !== null) {
               window.clearTimeout(clickTimeoutRef.current);
             }
             clickTimeoutRef.current = window.setTimeout(() => {
               clickTimeoutRef.current = null;
-              onNavigate(node.path);
+              const navigationResult = onNavigate(node.path);
+              if (!navigationResult || typeof navigationResult.then !== "function") {
+                return;
+              }
+              void navigationResult.then((didNavigate) => {
+                if (!didNavigate) {
+                  setOptimisticCurrentPath(null);
+                }
+              });
             }, 180);
           }}
           onDoubleClick={() => {
@@ -444,6 +469,7 @@ function TreeNodeRow({
               window.clearTimeout(clickTimeoutRef.current);
               clickTimeoutRef.current = null;
             }
+            setOptimisticCurrentPath(node.path);
             onToggleExpand(node.path);
           }}
           title={node.path}
@@ -478,6 +504,8 @@ function TreeNodeRow({
                 node={child}
                 nodes={nodes}
                 clickTimeoutRef={clickTimeoutRef}
+                optimisticCurrentPath={optimisticCurrentPath}
+                setOptimisticCurrentPath={setOptimisticCurrentPath}
                 onToggleExpand={onToggleExpand}
                 onNavigate={onNavigate}
                 registerRowRef={registerRowRef}

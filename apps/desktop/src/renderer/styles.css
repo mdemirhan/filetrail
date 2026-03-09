@@ -2889,7 +2889,6 @@ body.resizing-panels * {
   border-radius: 8px;
   background: transparent;
   text-align: left;
-  transition: background 0.15s ease, color 0.15s ease;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -2905,6 +2904,8 @@ body.resizing-panels * {
   background: var(--bg-hover);
 }
 
+.flow-item:active,
+.details-row:active,
 .flow-item.active,
 .details-row.active {
   background: var(--bg-active);
@@ -3573,6 +3574,7 @@ body.resizing-panels * {
   background: var(--bg-hover);
 }
 
+.search-result-row:active,
 .search-result-row.active {
   background: var(--bg-active);
 }
