@@ -69,6 +69,25 @@ export const searchJobStatusSchema = z.enum([
   "error",
   "truncated",
 ]);
+export const copyPasteModeSchema = z.enum(["copy", "cut"]);
+export const copyPasteConflictResolutionSchema = z.enum(["error", "skip"]);
+export const copyPasteOperationStatusSchema = z.enum([
+  "queued",
+  "running",
+  "completed",
+  "failed",
+  "cancelled",
+  "partial",
+]);
+export const copyPastePlanItemStatusSchema = z.enum(["ready", "conflict", "blocked"]);
+export const copyPastePlanIssueCodeSchema = z.enum([
+  "destination_missing",
+  "destination_not_directory",
+  "source_missing",
+  "same_path",
+  "parent_into_child",
+]);
+export const copyPastePlanWarningCodeSchema = z.enum(["large_batch", "cut_requires_delete"]);
 
 export const treeChildSchema = z.object({
   path: z.string().min(1),
@@ -137,6 +156,87 @@ export const searchResultItemSchema = z.object({
 export const resolvedPathSchema = z.object({
   inputPath: z.string().min(1),
   resolvedPath: z.string().nullable(),
+});
+export const copyPastePlanItemSchema = z.object({
+  sourcePath: z.string().min(1),
+  destinationPath: z.string().min(1),
+  kind: z.enum(["file", "directory", "symlink"]),
+  status: copyPastePlanItemStatusSchema,
+  sizeBytes: z.number().int().nonnegative().nullable(),
+});
+export const copyPastePlanConflictSchema = z.object({
+  sourcePath: z.string().min(1),
+  destinationPath: z.string().min(1),
+  reason: z.literal("destination_exists"),
+});
+export const copyPastePlanIssueSchema = z.object({
+  code: copyPastePlanIssueCodeSchema,
+  message: z.string().min(1),
+  sourcePath: z.string().nullable(),
+  destinationPath: z.string().nullable(),
+});
+export const copyPastePlanWarningSchema = z.object({
+  code: copyPastePlanWarningCodeSchema,
+  message: z.string().min(1),
+});
+export const copyPastePlanSchema = z.object({
+  mode: copyPasteModeSchema,
+  sourcePaths: z.array(z.string().min(1)).min(1).max(500),
+  destinationDirectoryPath: z.string().min(1),
+  conflictResolution: copyPasteConflictResolutionSchema,
+  items: z.array(copyPastePlanItemSchema),
+  conflicts: z.array(copyPastePlanConflictSchema),
+  issues: z.array(copyPastePlanIssueSchema),
+  warnings: z.array(copyPastePlanWarningSchema),
+  requiresConfirmation: z.object({
+    largeBatch: z.boolean(),
+    cutDelete: z.boolean(),
+  }),
+  summary: z.object({
+    topLevelItemCount: z.number().int().nonnegative(),
+    totalItemCount: z.number().int().nonnegative(),
+    totalBytes: z.number().int().nonnegative().nullable(),
+    skippedConflictCount: z.number().int().nonnegative(),
+  }),
+  canExecute: z.boolean(),
+});
+export const copyPasteItemResultSchema = z.object({
+  sourcePath: z.string().min(1),
+  destinationPath: z.string().min(1),
+  status: z.enum(["completed", "skipped", "failed", "cancelled"]),
+  error: z.string().nullable(),
+});
+export const copyPasteOperationResultSchema = z.object({
+  operationId: z.string().min(1),
+  mode: copyPasteModeSchema,
+  status: copyPasteOperationStatusSchema,
+  destinationDirectoryPath: z.string().min(1),
+  startedAt: z.string().min(1),
+  finishedAt: z.string().min(1),
+  summary: z.object({
+    topLevelItemCount: z.number().int().nonnegative(),
+    totalItemCount: z.number().int().nonnegative(),
+    completedItemCount: z.number().int().nonnegative(),
+    failedItemCount: z.number().int().nonnegative(),
+    skippedItemCount: z.number().int().nonnegative(),
+    cancelledItemCount: z.number().int().nonnegative(),
+    completedByteCount: z.number().int().nonnegative(),
+    totalBytes: z.number().int().nonnegative().nullable(),
+  }),
+  items: z.array(copyPasteItemResultSchema),
+  error: z.string().nullable(),
+});
+export const copyPasteProgressEventSchema = z.object({
+  operationId: z.string().min(1),
+  mode: copyPasteModeSchema,
+  status: copyPasteOperationStatusSchema,
+  completedItemCount: z.number().int().nonnegative(),
+  totalItemCount: z.number().int().nonnegative(),
+  completedByteCount: z.number().int().nonnegative(),
+  totalBytes: z.number().int().nonnegative().nullable(),
+  currentSourcePath: z.string().nullable(),
+  currentDestinationPath: z.string().nullable(),
+  result: copyPasteOperationResultSchema.nullable(),
 });
 
 export const launchContextSchema = z.object({
@@ -321,6 +421,35 @@ export const ipcContractSchemas = {
       ok: z.boolean(),
     }),
   },
+  "copyPaste:plan": {
+    request: z.object({
+      mode: copyPasteModeSchema,
+      sourcePaths: z.array(z.string().min(1)).min(1).max(500),
+      destinationDirectoryPath: z.string().min(1),
+      conflictResolution: copyPasteConflictResolutionSchema.default("error"),
+    }),
+    response: copyPastePlanSchema,
+  },
+  "copyPaste:start": {
+    request: z.object({
+      mode: copyPasteModeSchema,
+      sourcePaths: z.array(z.string().min(1)).min(1).max(500),
+      destinationDirectoryPath: z.string().min(1),
+      conflictResolution: copyPasteConflictResolutionSchema.default("error"),
+    }),
+    response: z.object({
+      operationId: z.string().min(1),
+      status: z.literal("queued"),
+    }),
+  },
+  "copyPaste:cancel": {
+    request: z.object({
+      operationId: z.string().min(1),
+    }),
+    response: z.object({
+      ok: z.boolean(),
+    }),
+  },
   "folderSize:start": {
     request: z.object({
       path: z.string().min(1),
@@ -383,6 +512,9 @@ export const ipcChannels = Object.keys(ipcContractSchemas) as IpcChannel[];
 export type IpcRequest<C extends IpcChannel> = z.output<IpcContractSchemas[C]["request"]>;
 export type IpcRequestInput<C extends IpcChannel> = z.input<IpcContractSchemas[C]["request"]>;
 export type IpcResponse<C extends IpcChannel> = z.output<IpcContractSchemas[C]["response"]>;
+export type CopyPastePlan = z.output<typeof copyPastePlanSchema>;
+export type CopyPasteOperationResult = z.output<typeof copyPasteOperationResultSchema>;
+export type CopyPasteProgressEvent = z.output<typeof copyPasteProgressEventSchema>;
 
 // Validation failures are surfaced with a dedicated error type so transport bugs can be
 // distinguished from domain failures such as "path not found" or "search cancelled".

@@ -5,7 +5,9 @@ export type ContextMenuActionId =
   | "open"
   | "openWith"
   | "toggleInfoPanel"
+  | "cut"
   | "copy"
+  | "paste"
   | "move"
   | "rename"
   | "duplicate"
@@ -48,7 +50,9 @@ type ContextMenuIconName =
   | "open"
   | "openWith"
   | "toggleInfoPanel"
+  | "cut"
   | "copy"
+  | "paste"
   | "move"
   | "rename"
   | "duplicate"
@@ -64,7 +68,9 @@ export const BROWSE_CONTEXT_MENU_ITEMS: readonly ContextMenuItem[] = [
   { type: "separator", key: "separator-open" },
   { id: "toggleInfoPanel", label: "Toggle Info Panel", icon: "toggleInfoPanel", shortcut: "⌘I" },
   { type: "separator", key: "separator-info" },
+  { id: "cut", label: "Cut", icon: "cut", shortcut: "⌘X" },
   { id: "copy", label: "Copy", icon: "copy", shortcut: "⌘C" },
+  { id: "paste", label: "Paste", icon: "paste", shortcut: "⌘V" },
   { id: "move", label: "Move To…", icon: "move", shortcut: "⌘M" },
   { id: "rename", label: "Rename", icon: "rename", shortcut: "F2" },
   { id: "duplicate", label: "Duplicate", icon: "duplicate", shortcut: "⌘D" },
@@ -240,6 +246,25 @@ function ContextMenuIcon({ name }: { name: ContextMenuIconName }) {
       <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
         <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
         <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+      </svg>
+    );
+  }
+  if (name === "cut") {
+    return (
+      <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="6" cy="6" r="3" />
+        <circle cx="6" cy="18" r="3" />
+        <path d="M20 4 8.5 15.5" />
+        <path d="M20 20 10.5 10.5" />
+      </svg>
+    );
+  }
+  if (name === "paste") {
+    return (
+      <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-2" />
+        <path d="M9 4h5l1 2H8l1-2z" />
+        <rect x="4" y="8" width="10" height="12" rx="2" ry="2" />
       </svg>
     );
   }

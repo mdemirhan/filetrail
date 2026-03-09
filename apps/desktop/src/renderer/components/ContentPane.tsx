@@ -55,6 +55,7 @@ const PATHBAR_COLLAPSED_WIDTH = 34;
 const PATHBAR_SEGMENT_HORIZONTAL_PADDING = 18;
 const PATHBAR_MAX_SEGMENT_WIDTH = 220;
 const PATHBAR_MAX_ACTIVE_SEGMENT_WIDTH = 320;
+const PATHBAR_SEGMENT_CLICK_DELAY_MS = 320;
 type SelectionGestureModifiers = {
   metaKey: boolean;
   shiftKey: boolean;
@@ -597,7 +598,7 @@ export function ContentPane({
                         segmentClickTimeoutRef.current = null;
                         setPathbarExpanded(false);
                         onNavigatePath(item.segment.path);
-                      }, 180);
+                      }, PATHBAR_SEGMENT_CLICK_DELAY_MS);
                     }}
                     onDoubleClick={(event) => {
                       event.preventDefault();

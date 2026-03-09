@@ -24,13 +24,11 @@ export function resolveStartupNavigation(
       : homePath;
 
   if (!preferences.restoreLastVisitedFolderOnStartup || !preferences.lastVisitedPath) {
-    // Only reuse a saved tree root if the startup path still sits inside that root.
+    // When restore-last-visited is off, startup ignores persisted navigation state and
+    // returns to home with a home-rooted tree.
     return {
       startupPath,
-      startupRootPath:
-        preferences.treeRootPath && isPathWithinRoot(startupPath, preferences.treeRootPath)
-          ? preferences.treeRootPath
-          : startupPath,
+      startupRootPath: homePath,
     };
   }
 

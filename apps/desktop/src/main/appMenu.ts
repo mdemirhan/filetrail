@@ -8,6 +8,9 @@ export type RendererCommand =
   | "zoomOut"
   | "resetZoom"
   | "openInTerminal"
+  | "copySelection"
+  | "cutSelection"
+  | "pasteSelection"
   | "copyPath"
   | "refreshOrApplySearchSort"
   | "toggleInfoPanel"
@@ -45,9 +48,33 @@ export function createApplicationMenuTemplate(
         { role: "undo" },
         { role: "redo" },
         { type: "separator" },
-        { role: "cut" },
-        { role: "copy" },
-        { role: "paste" },
+        {
+          label: "Cut",
+          accelerator: "CommandOrControl+X",
+          click: () => {
+            webContents.send("filetrail:command", {
+              type: "cutSelection" satisfies RendererCommand,
+            });
+          },
+        },
+        {
+          label: "Copy",
+          accelerator: "CommandOrControl+C",
+          click: () => {
+            webContents.send("filetrail:command", {
+              type: "copySelection" satisfies RendererCommand,
+            });
+          },
+        },
+        {
+          label: "Paste",
+          accelerator: "CommandOrControl+V",
+          click: () => {
+            webContents.send("filetrail:command", {
+              type: "pasteSelection" satisfies RendererCommand,
+            });
+          },
+        },
         { role: "selectAll" },
         { type: "separator" },
         {

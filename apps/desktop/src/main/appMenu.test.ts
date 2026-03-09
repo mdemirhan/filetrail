@@ -55,6 +55,34 @@ describe("createApplicationMenuTemplate", () => {
     expect(send).toHaveBeenCalledWith("filetrail:command", { type: "copyPath" });
   });
 
+  it("wires Copy, Cut, and Paste to renderer command channels", () => {
+    const send = vi.fn();
+    const template = createApplicationMenuTemplate({ send } as never);
+    const editMenu = template.find((item) => item.label === "Edit");
+    const submenu = Array.isArray(editMenu?.submenu) ? editMenu.submenu : [];
+    const copyItem = submenu.find((item) => "label" in item && item.label === "Copy");
+    const cutItem = submenu.find((item) => "label" in item && item.label === "Cut");
+    const pasteItem = submenu.find((item) => "label" in item && item.label === "Paste");
+
+    if (!copyItem || !("click" in copyItem) || typeof copyItem.click !== "function") {
+      throw new Error("Copy menu item missing.");
+    }
+    if (!cutItem || !("click" in cutItem) || typeof cutItem.click !== "function") {
+      throw new Error("Cut menu item missing.");
+    }
+    if (!pasteItem || !("click" in pasteItem) || typeof pasteItem.click !== "function") {
+      throw new Error("Paste menu item missing.");
+    }
+
+    copyItem.click(undefined as never, undefined as never, undefined as never);
+    cutItem.click(undefined as never, undefined as never, undefined as never);
+    pasteItem.click(undefined as never, undefined as never, undefined as never);
+
+    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "copySelection" });
+    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "cutSelection" });
+    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "pasteSelection" });
+  });
+
   it("wires Go to Folder to the renderer command channel", () => {
     const send = vi.fn();
     const template = createApplicationMenuTemplate({ send } as never);

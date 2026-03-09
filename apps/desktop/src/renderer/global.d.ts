@@ -1,4 +1,9 @@
-import type { IpcChannel, IpcRequestInput, IpcResponse } from "@filetrail/contracts";
+import type {
+  CopyPasteProgressEvent,
+  IpcChannel,
+  IpcRequestInput,
+  IpcResponse,
+} from "@filetrail/contracts";
 
 declare global {
   interface Window {
@@ -19,10 +24,14 @@ declare global {
             | "zoomOut"
             | "resetZoom"
             | "openInTerminal"
+            | "copySelection"
+            | "cutSelection"
+            | "pasteSelection"
             | "copyPath"
             | "refreshOrApplySearchSort";
         }) => void,
       ): () => void;
+      onCopyPasteProgress(listener: (event: CopyPasteProgressEvent) => void): () => void;
     };
   }
 }

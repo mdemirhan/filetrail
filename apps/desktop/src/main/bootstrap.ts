@@ -4,14 +4,21 @@ import { dirname } from "node:path";
 import { promisify } from "node:util";
 import { app, clipboard, ipcMain, shell } from "electron";
 
-import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
-import { ExplorerWorkerClient, getPathSuggestions } from "@filetrail/core";
+import {
+  copyPasteProgressEventSchema,
+  type IpcRequest,
+  type IpcResponse,
+} from "@filetrail/contracts";
+import { ExplorerWorkerClient, createWriteService, getPathSuggestions } from "@filetrail/core";
 import type { AppPreferences } from "../shared/appPreferences";
 import type { AppStateStore } from "./appStateStore";
 import { resolveBundledFdBinaryPath } from "./fdBinary";
 import { registerIpcHandlers } from "./ipc";
+import { createWriteOperationLogger } from "./writeOperationLog";
 
 let activeWorkerClient: ExplorerWorkerClient | null = null;
+let activeWriteService: ReturnType<typeof createWriteService> | null = null;
+let writeServiceUnsubscribe: (() => void) | null = null;
 const execFileAsync = promisify(execFile);
 // These caches are short-lived UI accelerators, not durable state. They smooth repeated
 // reads while navigating without hiding filesystem changes for long.
@@ -30,6 +37,14 @@ const folderSizeJobs = new Map<
   }
 >();
 const debugTimingsEnabled = process.env.FILETRAIL_DEBUG_TIMINGS === "1";
+const writeOperationLogger = createWriteOperationLogger();
+const copyPasteSenders = new Map<
+  string,
+  {
+    send: (channel: string, payload: unknown) => void;
+  }
+>();
+const copyPasteRequests = new Map<string, IpcRequest<"copyPaste:start">>();
 
 export async function bootstrapMainProcess(
   appStateStore: AppStateStore,
@@ -40,7 +55,61 @@ export async function bootstrapMainProcess(
   const workerClient = new ExplorerWorkerClient(resolveExplorerWorkerUrl(), {
     fdBinaryPath: resolveBundledFdBinaryPath(),
   });
+  const writeService = createWriteService();
   activeWorkerClient = workerClient;
+  activeWriteService = writeService;
+  writeServiceUnsubscribe?.();
+  writeServiceUnsubscribe = writeService.subscribe((event) => {
+    if (
+      event.status === "completed" ||
+      event.status === "failed" ||
+      event.status === "cancelled" ||
+      event.status === "partial"
+    ) {
+      const request = copyPasteRequests.get(event.operationId);
+      writeOperationLogger.log({
+        phase: "finished",
+        kind: "copyPaste",
+        action: event.mode,
+        operationId: event.operationId,
+        sourcePaths: request?.sourcePaths ?? [],
+        targetPaths: request ? [request.destinationDirectoryPath] : [],
+        result: event.result
+          ? {
+              status: event.result.status,
+              completedItemCount: event.result.summary.completedItemCount,
+              failedItemCount: event.result.summary.failedItemCount,
+              skippedItemCount: event.result.summary.skippedItemCount,
+              cancelledItemCount: event.result.summary.cancelledItemCount,
+              error: event.result.error,
+            }
+          : {
+              status: event.status,
+            },
+        ...(request
+          ? {
+              metadata: {
+                conflictResolution: request.conflictResolution,
+              },
+            }
+          : {}),
+      });
+      copyPasteRequests.delete(event.operationId);
+    }
+    const sender = copyPasteSenders.get(event.operationId);
+    if (!sender) {
+      return;
+    }
+    sender.send("filetrail:copyPasteProgress", copyPasteProgressEventSchema.parse(event));
+    if (
+      event.status === "completed" ||
+      event.status === "failed" ||
+      event.status === "cancelled" ||
+      event.status === "partial"
+    ) {
+      copyPasteSenders.delete(event.operationId);
+    }
+  });
 
   registerIpcHandlers(ipcMain, {
     "app:getHomeDirectory": () => ({
@@ -91,6 +160,43 @@ export async function bootstrapMainProcess(
       ),
     "search:getUpdate": (payload) => workerClient.request("search:getUpdate", payload),
     "search:cancel": (payload) => workerClient.request("search:cancel", payload),
+    "copyPaste:plan": (payload) => writeService.planCopyPaste(payload),
+    "copyPaste:start": (payload, event) => {
+      const handle = writeService.startCopyPaste(payload);
+      copyPasteRequests.set(handle.operationId, payload);
+      writeOperationLogger.log({
+        phase: "started",
+        kind: "copyPaste",
+        action: payload.mode,
+        operationId: handle.operationId,
+        sourcePaths: payload.sourcePaths,
+        targetPaths: [payload.destinationDirectoryPath],
+        metadata: {
+          conflictResolution: payload.conflictResolution ?? "error",
+        },
+      });
+      copyPasteSenders.set(handle.operationId, event.sender);
+      return handle;
+    },
+    "copyPaste:cancel": (payload) => {
+      const request = copyPasteRequests.get(payload.operationId);
+      writeOperationLogger.log({
+        phase: "cancel_requested",
+        kind: "copyPaste",
+        action: request?.mode ?? "unknown",
+        operationId: payload.operationId,
+        sourcePaths: request?.sourcePaths ?? [],
+        targetPaths: request ? [request.destinationDirectoryPath] : [],
+        ...(request
+          ? {
+              metadata: {
+                conflictResolution: request.conflictResolution ?? "error",
+              },
+            }
+          : {}),
+      });
+      return writeService.cancelOperation(payload.operationId);
+    },
     "folderSize:start": (payload) => {
       // Folder sizes are deferred for now because recursive sizing is much more expensive
       // than the rest of the metadata path and should not block basic inspection UI.
@@ -139,8 +245,13 @@ export async function shutdownMainProcess(): Promise<void> {
   }
   const workerClient = activeWorkerClient;
   activeWorkerClient = null;
+  activeWriteService = null;
+  writeServiceUnsubscribe?.();
+  writeServiceUnsubscribe = null;
   clearCaches();
   folderSizeJobs.clear();
+  copyPasteSenders.clear();
+  copyPasteRequests.clear();
   await workerClient.close();
 }
 

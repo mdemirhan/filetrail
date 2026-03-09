@@ -416,6 +416,59 @@ describe("ContentPane", () => {
     expect(handleNavigatePath).toHaveBeenCalledWith("/tmp/project");
   });
 
+  it("opens the path editor when a breadcrumb segment is double-clicked", async () => {
+    vi.useFakeTimers();
+    try {
+      const handleNavigatePath = vi.fn();
+
+      render(
+        <ContentPane
+          isFocused
+          currentPath="/Users/demo/projects/filetrail"
+          entries={[]}
+          viewMode="list"
+          loading={false}
+          error={null}
+          includeHidden={false}
+          selectedPath=""
+          metadataByPath={{}}
+          sortBy="name"
+          sortDirection="asc"
+          onSelectPath={() => undefined}
+          onActivateEntry={() => undefined}
+          onSortChange={() => undefined}
+          onLayoutColumnsChange={() => undefined}
+          onVisiblePathsChange={() => undefined}
+          onNavigatePath={handleNavigatePath}
+          onRequestPathSuggestions={async () => ({
+            inputPath: "",
+            basePath: null,
+            suggestions: [],
+          })}
+          onFocusChange={() => undefined}
+          typeaheadQuery=""
+        />,
+      );
+
+      const segment = screen.getByRole("button", { name: "filetrail" });
+      act(() => {
+        fireEvent.click(segment);
+        vi.advanceTimersByTime(250);
+        fireEvent.doubleClick(segment);
+      });
+      await act(async () => {
+        vi.runOnlyPendingTimers();
+      });
+
+      expect(screen.getByLabelText("Current folder path")).toHaveValue(
+        "/Users/demo/projects/filetrail",
+      );
+      expect(handleNavigatePath).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("shows live path suggestions while editing", async () => {
     render(
       <ContentPane

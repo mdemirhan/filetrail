@@ -16,14 +16,17 @@ export function resolveStartupFolderPath(
   options: {
     argvOffset?: number;
     homePath?: string;
+    appPath?: string | null;
     fileSystem?: FileSystem;
   } = {},
 ): string | null {
   const argvOffset = options.argvOffset ?? 1;
   const homePath = options.homePath ?? homedir();
+  const appPath = options.appPath ?? null;
   const fileSystem = options.fileSystem ?? DEFAULT_FILE_SYSTEM;
   const userArgs = argv.slice(argvOffset);
-  const rawPath = extractFolderOption(userArgs) ?? extractPositionalFolderArgument(userArgs);
+  const rawPath =
+    extractFolderOption(userArgs) ?? extractPositionalFolderArgument(userArgs, cwd, homePath, appPath);
   if (!rawPath) {
     return null;
   }
@@ -35,6 +38,16 @@ export function resolveStartupFolderPath(
   } catch {
     return null;
   }
+}
+
+export function resolveLaunchWorkingDirectory(envPwd: string | undefined, cwd: string): string {
+  if (typeof cwd === "string" && cwd.length > 0 && isAbsolute(cwd)) {
+    return cwd;
+  }
+  if (envPwd && isAbsolute(envPwd)) {
+    return envPwd;
+  }
+  return cwd;
 }
 
 function extractFolderOption(argv: string[]): string | null {
@@ -54,9 +67,17 @@ function extractFolderOption(argv: string[]): string | null {
   return null;
 }
 
-function extractPositionalFolderArgument(argv: string[]): string | null {
+function extractPositionalFolderArgument(
+  argv: string[],
+  cwd: string,
+  homePath: string,
+  appPath: string | null,
+): string | null {
   for (const value of argv) {
     if (!value || value.startsWith("-")) {
+      continue;
+    }
+    if (appPath && resolveLaunchPath(value, cwd, homePath) === appPath) {
       continue;
     }
     return value;

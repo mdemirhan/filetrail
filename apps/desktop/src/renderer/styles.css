@@ -1009,6 +1009,15 @@ body.platform-macos .window-toolbar-brand {
   box-shadow: var(--tb-primary-hover-shadow);
 }
 
+.tb-btn.danger {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: var(--danger);
+}
+
+.tb-btn.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 28%, transparent);
+}
+
 .tb-btn.tb-btn-icon {
   width: 32px;
   min-width: 32px;
@@ -1791,6 +1800,30 @@ body.platform-macos .window-toolbar-brand {
   display: flex;
   justify-content: flex-end;
   margin-top: 14px;
+  gap: 8px;
+}
+
+.copy-paste-dialog {
+  width: min(460px, calc(100vw - 32px));
+}
+
+.copy-paste-progress {
+  margin-top: 8px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.copy-paste-detail-list {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.copy-paste-detail-list li + li {
+  margin-top: 4px;
 }
 
 .sort-direction-label {

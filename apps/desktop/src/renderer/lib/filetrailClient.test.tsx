@@ -34,10 +34,12 @@ describe("filetrailClient", () => {
     const providerClient: FiletrailClient = {
       invoke: vi.fn(),
       onCommand: vi.fn(() => () => undefined),
+      onCopyPasteProgress: vi.fn(() => () => undefined),
     };
     window.filetrail = {
       invoke: vi.fn(),
       onCommand: vi.fn(() => () => undefined),
+      onCopyPasteProgress: vi.fn(() => () => undefined),
     };
 
     render(
@@ -54,6 +56,7 @@ describe("filetrailClient", () => {
     const bridgeClient: FiletrailClient = {
       invoke: vi.fn(),
       onCommand: vi.fn(() => () => undefined),
+      onCopyPasteProgress: vi.fn(() => () => undefined),
     };
     const seen: FiletrailClient[] = [];
     window.filetrail = bridgeClient;

@@ -31,6 +31,28 @@ describe("launchContext", () => {
     ).toBe("/Users/demo/src");
   });
 
+  it("ignores the Electron app-path positional argument in dev launches", () => {
+    expect(
+      resolveStartupFolderPath(["electron", ".", "/Users/demo/src"], "/Users/demo/filetrail/apps/desktop", {
+        appPath: "/Users/demo/filetrail/apps/desktop",
+        fileSystem: {
+          statSync: () => ({ isDirectory: () => true }),
+        },
+      }),
+    ).toBe("/Users/demo/src");
+  });
+
+  it("does not treat the Electron app path itself as a startup folder", () => {
+    expect(
+      resolveStartupFolderPath(["electron", "."], "/Users/demo/filetrail/apps/desktop", {
+        appPath: "/Users/demo/filetrail/apps/desktop",
+        fileSystem: {
+          statSync: () => ({ isDirectory: () => true }),
+        },
+      }),
+    ).toBeNull();
+  });
+
   it("expands tilde-prefixed folder arguments", () => {
     expect(
       resolveStartupFolderPath(["filetrail", "~/src"], "/tmp", {

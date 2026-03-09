@@ -1,12 +1,24 @@
 import { contextBridge, ipcRenderer } from "electron";
 
-import type { IpcChannel, IpcRequestInput, IpcResponse } from "@filetrail/contracts";
+import type {
+  CopyPasteProgressEvent,
+  IpcChannel,
+  IpcRequestInput,
+  IpcResponse,
+} from "@filetrail/contracts";
 
 type RendererCommand = {
   type:
     | "focusFileSearch"
     | "openLocationSheet"
+    | "openSettings"
+    | "zoomIn"
+    | "zoomOut"
+    | "resetZoom"
     | "openInTerminal"
+    | "copySelection"
+    | "cutSelection"
+    | "pasteSelection"
     | "copyPath"
     | "refreshOrApplySearchSort"
     | "toggleInfoPanel"
@@ -26,6 +38,7 @@ type IpcEnvelope =
 type InvokeApi = {
   invoke<C extends IpcChannel>(channel: C, payload: IpcRequestInput<C>): Promise<IpcResponse<C>>;
   onCommand(listener: (command: RendererCommand) => void): () => void;
+  onCopyPasteProgress(listener: (event: CopyPasteProgressEvent) => void): () => void;
 };
 
 const api: InvokeApi = {
@@ -43,6 +56,15 @@ const api: InvokeApi = {
     ipcRenderer.on("filetrail:command", handleCommand);
     return () => {
       ipcRenderer.removeListener("filetrail:command", handleCommand);
+    };
+  },
+  onCopyPasteProgress: (listener) => {
+    const handleProgress = (_event: unknown, event: CopyPasteProgressEvent) => {
+      listener(event);
+    };
+    ipcRenderer.on("filetrail:copyPasteProgress", handleProgress);
+    return () => {
+      ipcRenderer.removeListener("filetrail:copyPasteProgress", handleProgress);
     };
   },
 };

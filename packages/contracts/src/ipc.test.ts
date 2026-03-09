@@ -1,4 +1,4 @@
-import { ipcContractSchemas } from "./ipc";
+import { copyPasteProgressEventSchema, ipcContractSchemas } from "./ipc";
 
 describe("ipc contracts", () => {
   it("validates the folder size placeholder channels", () => {
@@ -357,5 +357,90 @@ describe("ipc contracts", () => {
         error: null,
       }),
     ).toThrow();
+  });
+
+  it("validates copy/paste planning and progress payloads", () => {
+    expect(
+      ipcContractSchemas["copyPaste:plan"].response.parse({
+        mode: "copy",
+        sourcePaths: ["/Users/demo/source.txt"],
+        destinationDirectoryPath: "/Users/demo/target",
+        conflictResolution: "error",
+        items: [
+          {
+            sourcePath: "/Users/demo/source.txt",
+            destinationPath: "/Users/demo/target/source.txt",
+            kind: "file",
+            status: "ready",
+            sizeBytes: 42,
+          },
+        ],
+        conflicts: [],
+        issues: [],
+        warnings: [],
+        requiresConfirmation: {
+          largeBatch: false,
+          cutDelete: false,
+        },
+        summary: {
+          topLevelItemCount: 1,
+          totalItemCount: 1,
+          totalBytes: 42,
+          skippedConflictCount: 0,
+        },
+        canExecute: true,
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        mode: "copy",
+        canExecute: true,
+      }),
+    );
+
+    expect(
+      copyPasteProgressEventSchema.parse({
+        operationId: "copy-op-1",
+        mode: "copy",
+        status: "completed",
+        completedItemCount: 1,
+        totalItemCount: 1,
+        completedByteCount: 42,
+        totalBytes: 42,
+        currentSourcePath: null,
+        currentDestinationPath: null,
+        result: {
+          operationId: "copy-op-1",
+          mode: "copy",
+          status: "completed",
+          destinationDirectoryPath: "/Users/demo/target",
+          startedAt: "2026-03-09T00:00:00.000Z",
+          finishedAt: "2026-03-09T00:00:01.000Z",
+          summary: {
+            topLevelItemCount: 1,
+            totalItemCount: 1,
+            completedItemCount: 1,
+            failedItemCount: 0,
+            skippedItemCount: 0,
+            cancelledItemCount: 0,
+            completedByteCount: 42,
+            totalBytes: 42,
+          },
+          items: [
+            {
+              sourcePath: "/Users/demo/source.txt",
+              destinationPath: "/Users/demo/target/source.txt",
+              status: "completed",
+              error: null,
+            },
+          ],
+          error: null,
+        },
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        operationId: "copy-op-1",
+        status: "completed",
+      }),
+    );
   });
 });

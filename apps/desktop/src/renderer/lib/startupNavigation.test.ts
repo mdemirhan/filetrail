@@ -66,4 +66,20 @@ describe("startup navigation", () => {
       startupRootPath: "/Users/demo",
     });
   });
+
+  it("starts at home when restore last visited is disabled", () => {
+    expect(
+      resolveStartupNavigation(
+        {
+          restoreLastVisitedFolderOnStartup: false,
+          lastVisitedPath: "/Users/demo/projects/filetrail",
+          treeRootPath: "/Users/demo/projects",
+        },
+        "/Users/demo",
+      ),
+    ).toEqual({
+      startupPath: "/Users/demo",
+      startupRootPath: "/Users/demo",
+    });
+  });
 });

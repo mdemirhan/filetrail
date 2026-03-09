@@ -161,6 +161,29 @@ function createHandlersThatFailOnSnapshot() {
       error: null,
     }),
     "search:cancel": async () => ({ ok: true }),
+    "copyPaste:plan": async () => ({
+      mode: "copy" as const,
+      sourcePaths: ["/Users/demo/source.txt"],
+      destinationDirectoryPath: "/Users/demo/target",
+      conflictResolution: "error" as const,
+      items: [],
+      conflicts: [],
+      issues: [],
+      warnings: [],
+      requiresConfirmation: {
+        largeBatch: false,
+        cutDelete: false,
+      },
+      summary: {
+        topLevelItemCount: 1,
+        totalItemCount: 1,
+        totalBytes: 42,
+        skippedConflictCount: 0,
+      },
+      canExecute: true,
+    }),
+    "copyPaste:start": async () => ({ operationId: "copy-op-1", status: "queued" as const }),
+    "copyPaste:cancel": async () => ({ ok: true }),
   } as const;
 }
 

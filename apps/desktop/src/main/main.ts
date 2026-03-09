@@ -32,6 +32,7 @@ if (hasSingleInstanceLock) {
     appStateStoreRef = appStateStore;
     await bootstrapMainProcess(appStateStore, {
       startupFolderPath: resolveStartupFolderPath(process.argv, resolveLaunchWorkingDirectory(), {
+        appPath: app.getAppPath(),
         argvOffset: process.defaultApp ? 2 : 1,
       }),
     }, (preferences) => {
