@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import type { RefObject } from "react";
 
 import type {
   CopyPasteProgressEvent,
@@ -87,24 +88,41 @@ vi.mock("./components/ContentPane", () => ({
 }));
 vi.mock("./components/TreePane", () => ({
   TreePane: ({
+    paneRef,
     onFocusChange,
+    onLeftPaneSubviewChange,
     onNavigate,
     onNavigateFavorite,
     nodes,
     favorites,
+    favoritesPlacement,
+    activeLeftPaneSubview,
     selectedTreeItemId,
   }: {
+    paneRef?: RefObject<HTMLDivElement | null>;
     onFocusChange: (focused: boolean) => void;
+    onLeftPaneSubviewChange: (value: "favorites" | "tree") => void;
     onNavigate: (path: string) => Promise<boolean> | void;
     onNavigateFavorite: (path: string) => Promise<boolean> | void;
     nodes: Record<string, { path: string; name: string }>;
     favorites: Array<{ path: string }>;
+    favoritesPlacement: "integrated" | "separate";
+    activeLeftPaneSubview: "favorites" | "tree";
     selectedTreeItemId: string;
   }) => (
-    <div data-testid="tree-pane-shell">
-      <button type="button" data-testid="tree-pane" onClick={() => onFocusChange(true)}>
+    <div ref={paneRef} data-testid="tree-pane-shell">
+      <button
+        type="button"
+        data-testid="tree-pane"
+        onClick={() => {
+          onLeftPaneSubviewChange("tree");
+          onFocusChange(true);
+        }}
+      >
         Tree
       </button>
+      <output data-testid="left-pane-subview">{activeLeftPaneSubview}</output>
+      <output data-testid="favorites-placement">{favoritesPlacement}</output>
       <output data-testid="tree-selection">{selectedTreeItemId}</output>
       {favorites.map((favorite) => (
         <button
@@ -112,6 +130,7 @@ vi.mock("./components/TreePane", () => ({
           type="button"
           title={`favorite:${favorite.path}`}
           onClick={() => {
+            onLeftPaneSubviewChange("favorites");
             onFocusChange(true);
             void onNavigateFavorite(favorite.path);
           }}
@@ -714,6 +733,51 @@ describe("App copy/paste integration", () => {
     expect(screen.getByTitle("tree:/Users/demo/Documents")).toBeInTheDocument();
   });
 
+  it("restores the favorites subview in separate placement when the remembered location is a favorite root", async () => {
+    const harness = createAppHarness({
+      preferences: {
+        restoreLastVisitedFolderOnStartup: true,
+        treeRootPath: "/",
+        lastVisitedPath: "/Users/demo/Documents",
+        lastVisitedFavoritePath: "/Users/demo/Documents",
+        favoritesPlacement: "separate",
+        favoritesPaneHeight: 240,
+        favorites: [
+          { path: "/Users/demo", icon: "home" },
+          { path: "/Users/demo/Documents", icon: "documents" },
+        ],
+      },
+      directorySnapshots: {
+        "/Users/demo/Documents": {
+          path: "/Users/demo/Documents",
+          parentPath: "/Users/demo",
+          entries: [],
+        },
+      },
+      treeChildrenByPath: {
+        "/": [createTreeChild("/Users", "directory")],
+        "/Users": [createTreeChild("/Users/demo", "directory")],
+        "/Users/demo": [createTreeChild("/Users/demo/Documents", "directory")],
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await screen.findByTestId("content-pane");
+
+    expect(screen.getByTestId("favorites-placement")).toHaveTextContent("separate");
+    expect(screen.getByTestId("left-pane-subview")).toHaveTextContent("favorites");
+    expect(screen.getByTestId("tree-selection")).toHaveTextContent(
+      "favorite:/Users/demo/Documents",
+    );
+    expect(screen.getByTitle("favorite:/Users/demo/Documents")).toBeInTheDocument();
+    expect(screen.getByTitle("tree:/")).toBeInTheDocument();
+  });
+
   it("reroots the tree at slash when tree navigation moves above home", async () => {
     const harness = createAppHarness({
       directorySnapshots: {
@@ -878,6 +942,8 @@ describe("App copy/paste integration", () => {
     const sourceButton = await screen.findByTitle("/Users/demo/source.txt");
     await act(async () => {
       fireEvent.click(sourceButton);
+    });
+    await act(async () => {
       harness.emitCommand({ type: "editSelection" });
     });
 
@@ -2441,6 +2507,10 @@ describe("App copy/paste integration", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "OK" }));
     });
+    await vi.waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Unable to prepare paste" })).toBeNull();
+    });
+    await selectItem("/Users/demo/Folder");
 
     const planCallsBeforeRetry = harness.invocations.filter(
       (call) => call.channel === "copyPaste:plan",
@@ -2512,6 +2582,10 @@ describe("App copy/paste integration", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "OK" }));
     });
+    await vi.waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Paste cannot continue" })).toBeNull();
+    });
+    await selectItem("/Users/demo/Folder");
 
     const planCallsBeforeRetry = harness.invocations.filter(
       (call) => call.channel === "copyPaste:plan",
@@ -2895,6 +2969,8 @@ describe("App copy/paste integration", () => {
     const sourceButton = await screen.findByTitle("/Users/demo/source.txt");
     await act(async () => {
       fireEvent.click(sourceButton);
+    });
+    await act(async () => {
       fireEvent.keyDown(window, { key: "c", metaKey: true });
     });
     await act(async () => {

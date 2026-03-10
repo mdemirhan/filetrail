@@ -149,52 +149,55 @@ export function buildTreePresentation(args: {
   homePath: string;
   rootPath: string;
   nodes: Record<string, TreeNodeState>;
+  includeFavorites?: boolean;
 }): {
   items: Record<TreeItemId, TreePresentationItem>;
   visibleItemIds: TreeItemId[];
 } {
-  const { favorites, favoritesExpanded, homePath, rootPath, nodes } = args;
+  const { favorites, favoritesExpanded, homePath, rootPath, nodes, includeFavorites = true } = args;
   const items = {} as Record<TreeItemId, TreePresentationItem>;
   const visibleItemIds: TreeItemId[] = [];
 
-  const favoriteChildIds = favorites.map((favorite) => createFavoriteItemId(favorite.path));
-  const favoritesRootId = getFavoritesRootItemId();
-  items[favoritesRootId] = {
-    id: favoritesRootId,
-    kind: "favorites-root",
-    label: "Favorites",
-    depth: 0,
-    path: null,
-    parentId: null,
-    expanded: favoritesExpanded,
-    canExpand: favoriteChildIds.length > 0,
-    loading: false,
-    error: null,
-    isSymlink: false,
-    childIds: favoriteChildIds,
-    icon: "star",
-  };
-  visibleItemIds.push(favoritesRootId);
+  if (includeFavorites) {
+    const favoriteChildIds = favorites.map((favorite) => createFavoriteItemId(favorite.path));
+    const favoritesRootId = getFavoritesRootItemId();
+    items[favoritesRootId] = {
+      id: favoritesRootId,
+      kind: "favorites-root",
+      label: "Favorites",
+      depth: 0,
+      path: null,
+      parentId: null,
+      expanded: favoritesExpanded,
+      canExpand: favoriteChildIds.length > 0,
+      loading: false,
+      error: null,
+      isSymlink: false,
+      childIds: favoriteChildIds,
+      icon: "star",
+    };
+    visibleItemIds.push(favoritesRootId);
 
-  if (favoritesExpanded) {
-    for (const favorite of favorites) {
-      const itemId = createFavoriteItemId(favorite.path);
-      items[itemId] = {
-        id: itemId,
-        kind: "favorite",
-        label: getFavoriteLabel(favorite.path, homePath),
-        depth: 1,
-        path: favorite.path,
-        parentId: favoritesRootId,
-        expanded: false,
-        canExpand: false,
-        loading: false,
-        error: null,
-        isSymlink: false,
-        childIds: [],
-        icon: favorite.icon,
-      };
-      visibleItemIds.push(itemId);
+    if (favoritesExpanded) {
+      for (const favorite of favorites) {
+        const itemId = createFavoriteItemId(favorite.path);
+        items[itemId] = {
+          id: itemId,
+          kind: "favorite",
+          label: getFavoriteLabel(favorite.path, homePath),
+          depth: 1,
+          path: favorite.path,
+          parentId: favoritesRootId,
+          expanded: false,
+          canExpand: false,
+          loading: false,
+          error: null,
+          isSymlink: false,
+          childIds: [],
+          icon: favorite.icon,
+        };
+        visibleItemIds.push(itemId);
+      }
     }
   }
 

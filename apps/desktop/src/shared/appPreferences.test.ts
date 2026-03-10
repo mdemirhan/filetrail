@@ -106,6 +106,8 @@ describe("appPreferences helpers", () => {
       treeRootPath: null,
       lastVisitedPath: null,
       lastVisitedFavoritePath: null,
+      favoritesPlacement: "integrated",
+      favoritesPaneHeight: null,
     });
   });
 });

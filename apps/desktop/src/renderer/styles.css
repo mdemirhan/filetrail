@@ -2338,6 +2338,15 @@ body.resizing-panels * {
   cursor: col-resize !important;
 }
 
+body.resizing-panels-vertical {
+  cursor: row-resize;
+  user-select: none;
+}
+
+body.resizing-panels-vertical * {
+  cursor: row-resize !important;
+}
+
 .tree-pane,
 .get-info-panel {
   display: grid;
@@ -2721,6 +2730,54 @@ body.resizing-panels * {
   overflow: hidden;
 }
 
+.sidebar-split-pane {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.favorites-pane-section {
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.favorites-pane-section.active,
+.filesystem-tree-section.active {
+  background: color-mix(in srgb, var(--sidebar-bg) 94%, var(--bg-hover));
+}
+
+.favorites-pane-resizer {
+  position: relative;
+  height: 8px;
+  flex: 0 0 8px;
+  cursor: row-resize;
+  background: transparent;
+}
+
+.favorites-pane-resizer::before {
+  content: "";
+  position: absolute;
+  inset: 3px 0;
+  background: var(--border);
+  transition: background 0.15s ease;
+}
+
+.favorites-pane-resizer:hover::before {
+  background: var(--accent-blue-border);
+}
+
+.favorites-scroll {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
 .tree-scroll {
   width: 100%;
   height: 100%;
@@ -2746,18 +2803,21 @@ body.resizing-panels * {
 }
 
 .tree-scroll::-webkit-scrollbar,
+.favorites-scroll::-webkit-scrollbar,
 .content-scroll::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 .tree-scroll::-webkit-scrollbar-thumb,
+.favorites-scroll::-webkit-scrollbar-thumb,
 .content-scroll::-webkit-scrollbar-thumb {
   background: var(--scroll-thumb);
   border-radius: 999px;
 }
 
 .tree-scroll:hover::-webkit-scrollbar-thumb,
+.favorites-scroll:hover::-webkit-scrollbar-thumb,
 .content-scroll:hover::-webkit-scrollbar-thumb {
   background: var(--scroll-thumb-hover, var(--scroll-thumb));
 }

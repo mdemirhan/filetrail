@@ -47,9 +47,14 @@ function renderTreePane(overrides: Partial<ComponentProps<typeof TreePane>> = {}
         { path: "/Users/demo/Desktop", icon: "desktop" },
         { path: "/Users/demo/Documents", icon: "documents" },
       ]}
+      favoritesPlacement="integrated"
+      favoritesPaneHeight={220}
+      activeLeftPaneSubview="tree"
       favoritesExpanded
       nodes={baseNodes}
       onFocusChange={() => undefined}
+      onLeftPaneSubviewChange={() => undefined}
+      onFavoritesPaneHeightChange={() => undefined}
       onGoHome={() => undefined}
       onRerootHome={() => undefined}
       onOpenLocation={() => undefined}
@@ -162,6 +167,43 @@ describe("TreePane", () => {
     expect(
       screen.getAllByRole("button", { name: "Documents" })[0]!.closest(".tree-row"),
     ).toHaveAttribute("data-tree-kind", "favorite");
+  });
+
+  it("renders favorites separately from the filesystem tree when configured", () => {
+    renderTreePane({
+      favoritesPlacement: "separate",
+      activeLeftPaneSubview: "favorites",
+      selectedTreeItemId: "favorite:/Users/demo/Documents",
+    });
+
+    expect(screen.queryByRole("button", { name: "Favorites" })).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Documents" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Documents" })[0]!.closest(".favorites-pane-section")).not.toBeNull();
+    expect(screen.getAllByRole("button", { name: "Documents" })[1]!.closest(".filesystem-tree-section")).not.toBeNull();
+  });
+
+  it("persists divider changes for the separate favorites pane", () => {
+    const handleFavoritesPaneHeightChange = vi.fn();
+    renderTreePane({
+      favoritesPlacement: "separate",
+      onFavoritesPaneHeightChange: handleFavoritesPaneHeightChange,
+    });
+
+    const splitPane = document.querySelector(".sidebar-split-pane");
+    if (!(splitPane instanceof HTMLDivElement)) {
+      throw new Error("Missing split pane container.");
+    }
+    Object.defineProperty(splitPane, "clientHeight", {
+      configurable: true,
+      value: 500,
+    });
+
+    const separator = screen.getByRole("separator", { name: /resize favorites pane/i });
+    fireEvent.pointerDown(separator, { clientY: 200 });
+    fireEvent.pointerMove(window, { clientY: 240 });
+    fireEvent.pointerUp(window);
+
+    expect(handleFavoritesPaneHeightChange).toHaveBeenCalledWith(260);
   });
 
   it("renders theme options when the rail menu is open", () => {

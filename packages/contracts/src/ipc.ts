@@ -96,6 +96,7 @@ export const favoritePreferenceSchema = z.object({
   path: z.string().trim().min(1),
   icon: favoriteIconIdSchema,
 });
+export const favoritesPlacementSchema = z.enum(["integrated", "separate"]);
 export const applicationSelectionSchema = z.object({
   appPath: z.string().trim().min(1),
   appName: z.string().trim().min(1),
@@ -380,6 +381,8 @@ export const appPreferencesSchema = z.object({
   lastVisitedPath: z.string().min(1).nullable(),
   lastVisitedFavoritePath: z.string().min(1).nullable(),
   favorites: z.array(favoritePreferenceSchema),
+  favoritesPlacement: favoritesPlacementSchema,
+  favoritesPaneHeight: z.number().int().min(96).max(2400).nullable(),
   favoritesExpanded: z.boolean(),
   favoritesInitialized: z.boolean(),
 });

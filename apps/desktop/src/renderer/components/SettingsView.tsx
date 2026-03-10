@@ -7,6 +7,7 @@ import type {
   DetailColumnVisibility,
   FileActivationAction,
   FavoriteIconId,
+  FavoritesPlacement,
   FavoritePreference,
   OpenWithApplication,
   ThemeMode,
@@ -1522,6 +1523,7 @@ export function SettingsView({
   terminalApp,
   defaultTextEditor,
   favorites,
+  favoritesPlacement,
   openWithApplications,
   fileActivationAction,
   openItemLimit,
@@ -1566,6 +1568,7 @@ export function SettingsView({
   onMoveFavorite,
   onRemoveFavorite,
   onFavoriteIconChange,
+  onFavoritesPlacementChange,
   onAddOpenWithApplication,
   onBrowseOpenWithApplication,
   onMoveOpenWithApplication,
@@ -1602,6 +1605,7 @@ export function SettingsView({
   terminalApp: ApplicationSelection | null;
   defaultTextEditor: ApplicationSelection;
   favorites: ReadonlyArray<FavoritePreference>;
+  favoritesPlacement: FavoritesPlacement;
   openWithApplications: ReadonlyArray<OpenWithApplication>;
   fileActivationAction: FileActivationAction;
   openItemLimit: number;
@@ -1650,6 +1654,7 @@ export function SettingsView({
   onMoveFavorite: (index: number, direction: "up" | "down") => void;
   onRemoveFavorite: (index: number) => void;
   onFavoriteIconChange: (index: number, icon: FavoriteIconId) => void;
+  onFavoritesPlacementChange: (value: FavoritesPlacement) => void;
   onAddOpenWithApplication: () => void;
   onBrowseOpenWithApplication: (entryId: string) => void;
   onMoveOpenWithApplication: (entryId: string, direction: "up" | "down") => void;
@@ -2257,6 +2262,24 @@ export function SettingsView({
         </SectionCard>
 
         <SectionCard icon="★" title="Favorites" theme={palette}>
+          <SettingRow
+            title="Favorites placement"
+            theme={palette}
+            desc="Choose whether favorites stay inside the tree or live in a separate row above it."
+            right={
+              <SelectControl
+                value={favoritesPlacement}
+                options={["integrated", "separate"]}
+                theme={palette}
+                width="220px"
+                ariaLabel="Favorites placement"
+                onChange={(value) => onFavoritesPlacementChange(value as FavoritesPlacement)}
+                formatOption={(value) =>
+                  value === "integrated" ? "Integrated in tree" : "Separate row above tree"
+                }
+              />
+            }
+          />
           <div
             style={{
               display: "flex",

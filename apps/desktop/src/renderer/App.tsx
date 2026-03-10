@@ -140,6 +140,10 @@ export function App() {
     setRestoreLastVisitedFolderOnStartup,
     favorites,
     setFavorites,
+    favoritesPlacement,
+    setFavoritesPlacement,
+    favoritesPaneHeight,
+    setFavoritesPaneHeight,
     favoritesExpanded,
     setFavoritesExpanded,
     favoritesInitialized,
@@ -203,6 +207,8 @@ export function App() {
     setLocationError,
     focusedPane,
     setFocusedPane,
+    leftPaneSubview,
+    setLeftPaneSubview,
     themeMenuOpen,
     setThemeMenuOpen,
     typeaheadQuery,
@@ -228,6 +234,8 @@ export function App() {
     selectedPathsInViewOrderRef,
     selectedEntryRef,
     lastExplorerFocusPaneRef,
+    leftPaneSubviewRef,
+    lastLeftPaneSubviewRef,
   } = useExplorerNavigation();
   const {
     searchDraftQuery,
@@ -544,6 +552,7 @@ export function App() {
     treeNodes,
     setTreeNodes,
     favorites,
+    favoritesPlacement,
     favoritesExpanded,
     setFavoritesExpanded,
     selectedTreeItemId,
@@ -584,6 +593,8 @@ export function App() {
     setLocationError,
     focusedPane,
     setFocusedPane,
+    leftPaneSubview,
+    setLeftPaneSubview,
     typeaheadQuery,
     typeaheadPane,
     setTypeaheadPane,
@@ -612,6 +623,8 @@ export function App() {
     selectedPathsInViewOrderRef,
     selectedEntryRef,
     lastExplorerFocusPaneRef,
+    leftPaneSubviewRef,
+    lastLeftPaneSubviewRef,
     pendingPasteSelectionRef,
   });
   const {
@@ -896,6 +909,8 @@ export function App() {
             ? getFavoriteItemPath(selectedTreeItemId)
             : null,
         favorites,
+        favoritesPlacement,
+        favoritesPaneHeight,
         favoritesExpanded,
         favoritesInitialized,
       },
@@ -939,6 +954,8 @@ export function App() {
     openItemLimit,
     restoreLastVisitedFolderOnStartup,
     favorites,
+    favoritesPlacement,
+    favoritesPaneHeight,
     favoritesExpanded,
     favoritesInitialized,
     terminalApp,
@@ -1007,6 +1024,8 @@ export function App() {
         setInfoRowOpen(preferences.detailRowOpen);
         setRestoreLastVisitedFolderOnStartup(preferences.restoreLastVisitedFolderOnStartup);
         setFavorites(preferences.favorites);
+        setFavoritesPlacement(preferences.favoritesPlacement);
+        setFavoritesPaneHeight(preferences.favoritesPaneHeight);
         setFavoritesExpanded(preferences.favoritesExpanded);
         setFavoritesInitialized(preferences.favoritesInitialized);
         setTerminalApp(preferences.terminalApp);
@@ -1040,6 +1059,9 @@ export function App() {
           restoredFavoritePath
             ? createFavoriteItemId(restoredFavoritePath)
             : createFileSystemItemId(startupPath),
+        );
+        setLeftPaneSubview(
+          preferences.favoritesPlacement === "separate" && restoredFavoritePath ? "favorites" : "tree",
         );
         if (restoredFavoritePath) {
           await loadTreeChildren(startupRootPath, preferences.includeHidden, false, startupRootPath);
@@ -1293,9 +1315,14 @@ export function App() {
             compactTreeView,
             nodes: treeNodes,
             favorites,
+            favoritesPlacement,
+            favoritesPaneHeight,
+            activeLeftPaneSubview: leftPaneSubview,
             favoritesExpanded,
             rootPath: treeRootPath,
             onFocusChange: (focused) => setFocusedPane(focused ? "tree" : null),
+            onLeftPaneSubviewChange: setLeftPaneSubview,
+            onFavoritesPaneHeightChange: setFavoritesPaneHeight,
             onGoHome: goHome,
             onRerootHome: rerootTreeAtHome,
             onOpenLocation: openLocationSheet,
@@ -1581,6 +1608,7 @@ export function App() {
                 terminalApp={terminalApp}
                 defaultTextEditor={defaultTextEditor}
                 favorites={favorites}
+                favoritesPlacement={favoritesPlacement}
                 openWithApplications={openWithApplications}
                 fileActivationAction={fileActivationAction}
                 openItemLimit={openItemLimit}
@@ -1633,6 +1661,7 @@ export function App() {
                 onMoveFavorite={moveFavoriteInSettings}
                 onRemoveFavorite={removeFavoriteInSettings}
                 onFavoriteIconChange={updateFavoriteIconInSettings}
+                onFavoritesPlacementChange={setFavoritesPlacement}
                 onAddOpenWithApplication={() => {
                   void addOpenWithApplication();
                 }}

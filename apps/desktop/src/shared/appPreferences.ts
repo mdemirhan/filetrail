@@ -71,6 +71,8 @@ export type FavoritePreference = {
   path: string;
   icon: FavoriteIconId;
 };
+
+export type FavoritesPlacement = "integrated" | "separate";
 export type FileActivationAction = "open" | "edit";
 
 // These option lists are used for both UI rendering and validation-like lookups.
@@ -259,6 +261,8 @@ export type AppPreferences = {
   lastVisitedPath: string | null;
   lastVisitedFavoritePath: string | null;
   favorites: FavoritePreference[];
+  favoritesPlacement: FavoritesPlacement;
+  favoritesPaneHeight: number | null;
   favoritesExpanded: boolean;
   favoritesInitialized: boolean;
 };
@@ -312,6 +316,8 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   lastVisitedPath: null,
   lastVisitedFavoritePath: null,
   favorites: [],
+  favoritesPlacement: "integrated",
+  favoritesPaneHeight: null,
   favoritesExpanded: true,
   favoritesInitialized: false,
 };

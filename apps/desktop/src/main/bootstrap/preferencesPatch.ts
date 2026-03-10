@@ -151,6 +151,12 @@ export function toPreferencePatch(
   if (value.favorites !== undefined) {
     patch.favorites = value.favorites;
   }
+  if (value.favoritesPlacement !== undefined) {
+    patch.favoritesPlacement = value.favoritesPlacement;
+  }
+  if (value.favoritesPaneHeight !== undefined) {
+    patch.favoritesPaneHeight = value.favoritesPaneHeight;
+  }
   if (value.favoritesExpanded !== undefined) {
     patch.favoritesExpanded = value.favoritesExpanded;
   }

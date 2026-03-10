@@ -10,6 +10,7 @@ import {
   type DetailColumnWidths,
   type ExplorerViewMode,
   type FileActivationAction,
+  type FavoritesPlacement,
   type FavoritePreference,
   type OpenWithApplication,
   type ThemeMode,
@@ -87,6 +88,12 @@ export function useAppPreferences() {
     DEFAULT_APP_PREFERENCES.restoreLastVisitedFolderOnStartup,
   );
   const [favorites, setFavorites] = useState<FavoritePreference[]>(DEFAULT_APP_PREFERENCES.favorites);
+  const [favoritesPlacement, setFavoritesPlacement] = useState<FavoritesPlacement>(
+    DEFAULT_APP_PREFERENCES.favoritesPlacement,
+  );
+  const [favoritesPaneHeight, setFavoritesPaneHeight] = useState<number | null>(
+    DEFAULT_APP_PREFERENCES.favoritesPaneHeight,
+  );
   const [favoritesExpanded, setFavoritesExpanded] = useState(
     DEFAULT_APP_PREFERENCES.favoritesExpanded,
   );
@@ -212,6 +219,10 @@ export function useAppPreferences() {
     setRestoreLastVisitedFolderOnStartup,
     favorites,
     setFavorites,
+    favoritesPlacement,
+    setFavoritesPlacement,
+    favoritesPaneHeight,
+    setFavoritesPaneHeight,
     favoritesExpanded,
     setFavoritesExpanded,
     favoritesInitialized,

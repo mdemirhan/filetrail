@@ -54,6 +54,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
           icon: "applications",
         },
       ]}
+      favoritesPlacement="integrated"
       openWithApplications={[
         {
           id: "vscode",
@@ -113,6 +114,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       onMoveFavorite={() => undefined}
       onRemoveFavorite={() => undefined}
       onFavoriteIconChange={() => undefined}
+      onFavoritesPlacementChange={() => undefined}
       onAddOpenWithApplication={() => undefined}
       onBrowseOpenWithApplication={() => undefined}
       onMoveOpenWithApplication={() => undefined}
@@ -361,6 +363,20 @@ describe("SettingsView", () => {
     const homeControls = screen.getByRole("button", { name: "Browse Home" }).parentElement;
     expect(homeControls).not.toBeNull();
     expect(within(homeControls!).getByLabelText("Favorite icon for Home")).toBeInTheDocument();
+  });
+
+  it("forwards favorites placement changes", () => {
+    const onFavoritesPlacementChange = vi.fn();
+    renderSettingsView({
+      favoritesPlacement: "integrated",
+      onFavoritesPlacementChange,
+    });
+
+    fireEvent.change(screen.getByLabelText("Favorites placement"), {
+      target: { value: "separate" },
+    });
+
+    expect(onFavoritesPlacementChange).toHaveBeenCalledWith("separate");
   });
 
   it("forwards favorite add, browse, move, icon, and remove actions", () => {

@@ -9,7 +9,7 @@ import {
 } from "react";
 
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
-import type { FavoritePreference } from "../../shared/appPreferences";
+import type { FavoritePreference, FavoritesPlacement } from "../../shared/appPreferences";
 
 import type { TreeNodeState } from "../components/TreePane";
 import type { ContentSelectionState } from "../lib/contentSelection";
@@ -46,6 +46,7 @@ import {
   createFavoriteItemId,
   createFileSystemItemId,
   getFavoriteItemPath,
+  getFavoriteLabel,
   getFileSystemItemPath,
   getFavoritesRootItemId,
   getTrashPath,
@@ -80,6 +81,7 @@ export function useExplorerNavigationController(args: {
   treeNodes: Record<string, TreeNodeState>;
   setTreeNodes: Dispatch<SetStateAction<Record<string, TreeNodeState>>>;
   favorites: FavoritePreference[];
+  favoritesPlacement: FavoritesPlacement;
   favoritesExpanded: boolean;
   setFavoritesExpanded: Dispatch<SetStateAction<boolean>>;
   selectedTreeItemId: TreeItemId;
@@ -120,6 +122,8 @@ export function useExplorerNavigationController(args: {
   setLocationError: Dispatch<SetStateAction<string | null>>;
   focusedPane: "tree" | "content" | null;
   setFocusedPane: Dispatch<SetStateAction<"tree" | "content" | null>>;
+  leftPaneSubview: "favorites" | "tree";
+  setLeftPaneSubview: Dispatch<SetStateAction<"favorites" | "tree">>;
   typeaheadQuery: string;
   typeaheadPane: "tree" | "content" | null;
   setTypeaheadPane: Dispatch<SetStateAction<"tree" | "content" | null>>;
@@ -151,6 +155,8 @@ export function useExplorerNavigationController(args: {
   selectedPathsInViewOrderRef: MutableRefObject<string[]>;
   selectedEntryRef: MutableRefObject<DirectoryEntry | null>;
   lastExplorerFocusPaneRef: MutableRefObject<"tree" | "content" | null>;
+  leftPaneSubviewRef: MutableRefObject<"favorites" | "tree">;
+  lastLeftPaneSubviewRef: MutableRefObject<"favorites" | "tree">;
   pendingPasteSelectionRef: MutableRefObject<{
     directoryPath: string;
     selectedPaths: string[];
@@ -182,6 +188,7 @@ export function useExplorerNavigationController(args: {
     treeNodes,
     setTreeNodes,
     favorites,
+    favoritesPlacement,
     favoritesExpanded,
     setFavoritesExpanded,
     selectedTreeItemId,
@@ -221,6 +228,8 @@ export function useExplorerNavigationController(args: {
     setLocationError,
     focusedPane,
     setFocusedPane,
+    leftPaneSubview,
+    setLeftPaneSubview,
     typeaheadQuery,
     typeaheadPane,
     setTypeaheadPane,
@@ -249,6 +258,8 @@ export function useExplorerNavigationController(args: {
     selectedPathsInViewOrderRef,
     selectedEntryRef,
     lastExplorerFocusPaneRef,
+    leftPaneSubviewRef,
+    lastLeftPaneSubviewRef,
     pendingPasteSelectionRef,
   } = args;
 
@@ -281,9 +292,30 @@ export function useExplorerNavigationController(args: {
     setFocusedPane("tree");
     clearTypeahead();
     window.requestAnimationFrame(() => {
-      treePaneRef.current?.focus({ preventScroll: true });
-      window.requestAnimationFrame(() => {
+      const targetSubview =
+        favoritesPlacement === "separate" ? lastLeftPaneSubviewRef.current : "tree";
+      const selectedSelector =
+        targetSubview === "favorites"
+          ? '.favorites-pane-section .tree-row.active .tree-label'
+          : '.sidebar-tree .tree-row.active .tree-label';
+      const fallbackSelector =
+        targetSubview === "favorites"
+          ? ".favorites-pane-section .tree-label"
+          : ".sidebar-tree .tree-label";
+      const focusTarget =
+        treePaneRef.current?.querySelector<HTMLElement>(selectedSelector) ??
+        treePaneRef.current?.querySelector<HTMLElement>(fallbackSelector);
+      if (focusTarget) {
+        focusTarget.focus({ preventScroll: true });
+      } else {
         treePaneRef.current?.focus({ preventScroll: true });
+      }
+      window.requestAnimationFrame(() => {
+        if (focusTarget) {
+          focusTarget.focus({ preventScroll: true });
+        } else {
+          treePaneRef.current?.focus({ preventScroll: true });
+        }
       });
     });
   }
@@ -295,6 +327,7 @@ export function useExplorerNavigationController(args: {
       homePath,
       rootPath: treeRootPathRef.current,
       nodes: treeNodesRef.current,
+      includeFavorites: favoritesPlacement === "integrated",
     });
   }
 
@@ -328,6 +361,15 @@ export function useExplorerNavigationController(args: {
   function resolveTreeItemLabel(itemId: TreeItemId): string {
     const presentation = getTreePresentationState();
     return presentation.items[itemId]?.label ?? "";
+  }
+
+  function getFavoriteItemIds(): TreeItemId[] {
+    return favorites.map((favorite) => createFavoriteItemId(favorite.path));
+  }
+
+  function getFavoriteLabelById(itemId: TreeItemId): string {
+    const favoritePath = getFavoriteItemPath(itemId);
+    return favoritePath ? getFavoriteLabel(favoritePath, homePath) : "";
   }
 
   function getSelectedTreeReloadOptions(path: string) {
@@ -376,6 +418,10 @@ export function useExplorerNavigationController(args: {
     element: HTMLElement;
   } | null {
     if (focusedPane === "tree") {
+      if (favoritesPlacement === "separate" && leftPaneSubviewRef.current === "favorites") {
+        const element = treePaneRef.current?.querySelector<HTMLElement>(".favorites-scroll");
+        return element ? { axis: "vertical", element } : null;
+      }
       const element = treePaneRef.current?.querySelector<HTMLElement>(".tree-scroll");
       return element ? { axis: "vertical", element } : null;
     }
@@ -402,6 +448,28 @@ export function useExplorerNavigationController(args: {
 
     if (focusedPane === "tree") {
       const didScroll = pageScrollElement(target.element, target.axis, direction);
+      if (favoritesPlacement === "separate" && leftPaneSubviewRef.current === "favorites") {
+        const favoriteItemIds = getFavoriteItemIds();
+        if (favoriteItemIds.length === 0) {
+          return didScroll;
+        }
+        const currentIndex = favoriteItemIds.findIndex((itemId) => itemId === selectedTreeItemIdRef.current);
+        const stepItems = getPageStepItemCount(
+          target.element.clientHeight,
+          compactTreeView ? 25 : 32,
+        );
+        const nextIndex = getPagedSelectionIndex({
+          itemCount: favoriteItemIds.length,
+          currentIndex,
+          stepItems,
+          direction,
+        });
+        const nextItemId = favoriteItemIds[nextIndex];
+        if (nextItemId && nextItemId !== selectedTreeItemIdRef.current) {
+          void selectTreeItem(nextItemId, "push");
+        }
+        return didScroll || nextItemId !== undefined;
+      }
       const { visibleItemIds } = getTreePresentationState();
       if (visibleItemIds.length === 0) {
         return didScroll;
@@ -519,6 +587,15 @@ export function useExplorerNavigationController(args: {
 
     const normalizedQuery = nextQuery.trim().toLocaleLowerCase();
     if (normalizedQuery.length === 0) {
+      return;
+    }
+    if (favoritesPlacement === "separate" && leftPaneSubviewRef.current === "favorites") {
+      const match = getFavoriteItemIds().find((itemId) =>
+        getFavoriteLabelById(itemId).toLocaleLowerCase().startsWith(normalizedQuery),
+      );
+      if (match) {
+        void selectTreeItem(match, "push");
+      }
       return;
     }
     const { visibleItemIds } = getTreePresentationState();
@@ -716,8 +793,12 @@ export function useExplorerNavigationController(args: {
       }
       if (options.treeSelectionMode === "favorite") {
         setTreeSelection(createFavoriteItemId(options.favoritePath ?? response.path));
+        if (favoritesPlacement === "separate") {
+          setLeftPaneSubview("favorites");
+        }
       } else if (options.treeSelectionMode !== "preserve") {
         setTreeSelection(createFileSystemItemId(response.path));
+        setLeftPaneSubview("tree");
       }
       applyHistoryUpdate(response.path, historyMode);
       return true;
@@ -732,8 +813,12 @@ export function useExplorerNavigationController(args: {
         applyDirectorySnapshot(path, [], {});
         if (options.treeSelectionMode === "favorite") {
           setTreeSelection(createFavoriteItemId(options.favoritePath ?? path));
+          if (favoritesPlacement === "separate") {
+            setLeftPaneSubview("favorites");
+          }
         } else if (options.treeSelectionMode === "filesystem") {
           setTreeSelection(createFileSystemItemId(path));
+          setLeftPaneSubview("tree");
         }
         applyHistoryUpdate(path, historyMode);
         logger.error("directory navigation failed", error);
@@ -928,6 +1013,7 @@ export function useExplorerNavigationController(args: {
     historyMode: "push" | "replace" | "skip",
   ) {
     setTreeSelection(createFileSystemItemId(path));
+    setLeftPaneSubview("tree");
     const node = treeNodesRef.current[path];
     if (node?.isSymlink) {
       await navigateTo(path, historyMode, undefined, undefined, undefined, undefined, {
@@ -964,11 +1050,15 @@ export function useExplorerNavigationController(args: {
   async function selectTreeItem(itemId: TreeItemId, historyMode: "push" | "replace" | "skip") {
     if (isFavoritesRootItemId(itemId)) {
       setTreeSelection(itemId);
+      setLeftPaneSubview("tree");
       return;
     }
     const favoritePath = getFavoriteItemPath(itemId);
     if (favoritePath) {
       setTreeSelection(itemId);
+       if (favoritesPlacement === "separate") {
+        setLeftPaneSubview("favorites");
+      }
       await navigateTo(favoritePath, historyMode, undefined, undefined, undefined, undefined, {
         syncTree: false,
         treeSelectionMode: "favorite",
@@ -981,11 +1071,19 @@ export function useExplorerNavigationController(args: {
     if (!fileSystemPath) {
       return;
     }
+    setLeftPaneSubview("tree");
     await navigateTreeFileSystemPath(fileSystemPath, historyMode);
   }
 
   async function openTreeNode() {
     const currentItemId = selectedTreeItemIdRef.current;
+    if (favoritesPlacement === "separate" && leftPaneSubviewRef.current === "favorites") {
+      const favoritePath = getFavoriteItemPath(currentItemId);
+      if (favoritePath) {
+        await selectTreeItem(currentItemId, "push");
+      }
+      return;
+    }
     if (isFavoritesRootItemId(currentItemId)) {
       return;
     }
@@ -1015,6 +1113,9 @@ export function useExplorerNavigationController(args: {
 
   async function navigateTreeSelectionToParent() {
     const currentItemId = selectedTreeItemIdRef.current;
+    if (favoritesPlacement === "separate" && leftPaneSubviewRef.current === "favorites") {
+      return;
+    }
     if (isFavoriteItemId(currentItemId)) {
       setTreeSelection(getFavoritesRootItemId());
       return;
@@ -1032,8 +1133,61 @@ export function useExplorerNavigationController(args: {
   async function handleTreeKeyboardAction(
     key: "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight" | "Home" | "End",
   ): Promise<boolean> {
+    if (favoritesPlacement === "separate" && leftPaneSubviewRef.current === "favorites") {
+      const favoriteItemIds = getFavoriteItemIds();
+      if (favoriteItemIds.length === 0) {
+        return false;
+      }
+      const currentItemId = selectedTreeItemIdRef.current;
+      const currentIndex = favoriteItemIds.findIndex((itemId) => itemId === currentItemId);
+      const safeCurrentIndex = currentIndex >= 0 ? currentIndex : 0;
+      if (key === "Home") {
+        await selectTreeItem(favoriteItemIds[0]!, "push");
+        return true;
+      }
+      if (key === "End") {
+        await selectTreeItem(favoriteItemIds.at(-1)!, "push");
+        return true;
+      }
+      if (key === "ArrowLeft" || key === "ArrowRight") {
+        return false;
+      }
+      if (key === "ArrowUp") {
+        const previousId = favoriteItemIds[safeCurrentIndex - 1];
+        if (!previousId) {
+          return false;
+        }
+        await selectTreeItem(previousId, "push");
+        return true;
+      }
+      if (key === "ArrowDown") {
+        const nextFavoriteId = favoriteItemIds[safeCurrentIndex + 1];
+        if (nextFavoriteId) {
+          await selectTreeItem(nextFavoriteId, "push");
+          return true;
+        }
+        const firstTreeId = getTreePresentationState().visibleItemIds[0];
+        if (!firstTreeId) {
+          return false;
+        }
+        setLeftPaneSubview("tree");
+        await selectTreeItem(firstTreeId, "push");
+        return true;
+      }
+      return false;
+    }
+
     const { items, visibleItemIds } = getTreePresentationState();
     if (visibleItemIds.length === 0) {
+      if (favoritesPlacement === "separate" && leftPaneSubviewRef.current === "tree" && key === "ArrowUp") {
+        const favoriteItemIds = getFavoriteItemIds();
+        const lastFavoriteId = favoriteItemIds.at(-1);
+        if (lastFavoriteId) {
+          setLeftPaneSubview("favorites");
+          await selectTreeItem(lastFavoriteId, "push");
+          return true;
+        }
+      }
       return false;
     }
     const currentItemId = selectedTreeItemIdRef.current;
@@ -1065,6 +1219,20 @@ export function useExplorerNavigationController(args: {
     }
     if (key === "ArrowUp" || key === "ArrowDown") {
       const baseIndex = currentIndex >= 0 ? currentIndex : 0;
+      if (
+        favoritesPlacement === "separate" &&
+        leftPaneSubviewRef.current === "tree" &&
+        key === "ArrowUp" &&
+        baseIndex === 0
+      ) {
+        const favoriteItemIds = getFavoriteItemIds();
+        const lastFavoriteId = favoriteItemIds.at(-1);
+        if (lastFavoriteId) {
+          setLeftPaneSubview("favorites");
+          await selectTreeItem(lastFavoriteId, "push");
+          return true;
+        }
+      }
       const nextIndex =
         key === "ArrowUp"
           ? Math.max(0, baseIndex - 1)
@@ -1322,6 +1490,11 @@ export function useExplorerNavigationController(args: {
       lastExplorerFocusPaneRef.current = focusedPane;
     }
   }, [focusedPane, lastExplorerFocusPaneRef]);
+
+  useEffect(() => {
+    leftPaneSubviewRef.current = leftPaneSubview;
+    lastLeftPaneSubviewRef.current = leftPaneSubview;
+  }, [leftPaneSubview, leftPaneSubviewRef, lastLeftPaneSubviewRef]);
 
   useEffect(() => {
     if (typeaheadEnabled) {

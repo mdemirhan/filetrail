@@ -40,6 +40,7 @@ export function useExplorerNavigation() {
   const [locationSubmitting, setLocationSubmitting] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [focusedPane, setFocusedPane] = useState<"tree" | "content" | null>(null);
+  const [leftPaneSubview, setLeftPaneSubview] = useState<"favorites" | "tree">("tree");
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [typeaheadQuery, setTypeaheadQuery] = useState("");
   const [typeaheadPane, setTypeaheadPane] = useState<"tree" | "content" | null>(null);
@@ -62,6 +63,8 @@ export function useExplorerNavigation() {
   const selectedPathsInViewOrderRef = useRef<string[]>([]);
   const selectedEntryRef = useRef<DirectoryEntry | null>(null);
   const lastExplorerFocusPaneRef = useRef<"tree" | "content" | null>(null);
+  const leftPaneSubviewRef = useRef<"favorites" | "tree">(leftPaneSubview);
+  const lastLeftPaneSubviewRef = useRef<"favorites" | "tree">("tree");
 
   return {
     mainView,
@@ -110,6 +113,8 @@ export function useExplorerNavigation() {
     setLocationError,
     focusedPane,
     setFocusedPane,
+    leftPaneSubview,
+    setLeftPaneSubview,
     themeMenuOpen,
     setThemeMenuOpen,
     typeaheadQuery,
@@ -135,5 +140,7 @@ export function useExplorerNavigation() {
     selectedPathsInViewOrderRef,
     selectedEntryRef,
     lastExplorerFocusPaneRef,
+    leftPaneSubviewRef,
+    lastLeftPaneSubviewRef,
   };
 }
