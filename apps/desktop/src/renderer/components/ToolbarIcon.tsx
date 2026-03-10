@@ -24,10 +24,9 @@ export function ToolbarIcon({
     | "help"
     | "settings"
     | "search"
-    | "desktop"
-    | "downloads"
-    | "documents"
-    | "source"
+    | "applications"
+    | "drive"
+    | "trash"
     | "rerootHome"
     | "infoRow"
     | "foldersFirst"
@@ -105,17 +104,14 @@ export function ToolbarIcon({
     if (name === "settings") {
       return "M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1zM12 15a3 3 0 1 1 0-6 3 3 0 0 1 0 6z";
     }
-    if (name === "desktop") {
-      return "M2 3h20v14H2zM8 21h8M12 17v4";
+    if (name === "applications") {
+      return "M5 5h5v5H5zM14 5h5v5h-5zM5 14h5v5H5zM14 14h5v5h-5z";
     }
-    if (name === "downloads") {
-      return "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3";
+    if (name === "drive") {
+      return "M4 7h16l2 5H2zM5 12h14l-1.1 5.2A2 2 0 0 1 15.94 19H8.06a2 2 0 0 1-1.96-1.8zM16.5 15.5h.01M13 15.5h.01";
     }
-    if (name === "documents") {
-      return "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6M14 2v6h6";
-    }
-    if (name === "source") {
-      return "M16 18l6-6-6-6M8 6l-6 6 6 6";
+    if (name === "trash") {
+      return "M8 6h8M10 6V4h4v2M6 6h12l-1 13a2 2 0 0 1-2 1.85H9A2 2 0 0 1 7 19L6 6M10 10v6M14 10v6";
     }
     if (name === "rerootHome") {
       return "M10 9.5l7-5.5 7 5.5V20a2 2 0 0 1-2 2h-4v-6h-4v6h-4a2 2 0 0 1-2-2V9.5M2 12h7M2 12l3-3M2 12l3 3";

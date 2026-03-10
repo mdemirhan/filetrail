@@ -5,6 +5,7 @@ import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 import { DEFAULT_APP_PREFERENCES } from "../../shared/appPreferences";
 import { EMPTY_CONTENT_SELECTION, type ContentSelectionState } from "../lib/contentSelection";
 import type { TreeNodeState } from "../components/TreePane";
+import type { TreeItemId } from "../lib/favorites";
 
 type DirectoryEntry = IpcResponse<"directory:getSnapshot">["entries"][number];
 type DirectoryEntryMetadata = IpcResponse<"directory:getMetadataBatch">["items"][number];
@@ -17,6 +18,7 @@ export function useExplorerNavigation() {
   const [treeRootPath, setTreeRootPath] = useState("");
   const [homePath, setHomePath] = useState("");
   const [treeNodes, setTreeNodes] = useState<Record<string, TreeNodeState>>({});
+  const [selectedTreeItemId, setSelectedTreeItemId] = useState<TreeItemId>("favorites-root");
   const [currentPath, setCurrentPath] = useState("");
   const [currentEntries, setCurrentEntries] = useState<DirectoryEntry[]>([]);
   const [metadataByPath, setMetadataByPath] = useState<Record<string, DirectoryEntryMetadata>>({});
@@ -51,6 +53,7 @@ export function useExplorerNavigation() {
   const getInfoRequestRef = useRef(0);
   const treeRequestRef = useRef<Record<string, number>>({});
   const treeNodesRef = useRef<Record<string, TreeNodeState>>({});
+  const selectedTreeItemIdRef = useRef<TreeItemId>(selectedTreeItemId);
   const treeRootPathRef = useRef(treeRootPath);
   const metadataCacheRef = useRef<Map<string, DirectoryEntryMetadata>>(new Map());
   const metadataInflightRef = useRef<Set<string>>(new Set());
@@ -69,6 +72,8 @@ export function useExplorerNavigation() {
     setHomePath,
     treeNodes,
     setTreeNodes,
+    selectedTreeItemId,
+    setSelectedTreeItemId,
     currentPath,
     setCurrentPath,
     currentEntries,
@@ -121,6 +126,7 @@ export function useExplorerNavigation() {
     getInfoRequestRef,
     treeRequestRef,
     treeNodesRef,
+    selectedTreeItemIdRef,
     treeRootPathRef,
     metadataCacheRef,
     metadataInflightRef,

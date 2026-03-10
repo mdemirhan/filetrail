@@ -12,6 +12,9 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       theme="dark"
       accent="gold"
       accentToolbarButtons={true}
+      accentFavoriteItems={false}
+      accentFavoriteText={false}
+      favoriteAccent="coral"
       zoomPercent={100}
       uiFontFamily="lexend"
       uiFontSize={13}
@@ -35,11 +38,22 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       notificationsEnabled={true}
       notificationDurationSeconds={4}
       restoreLastVisitedFolderOnStartup={false}
+      homePath="/Users/demo"
       terminalApp={null}
       defaultTextEditor={{
         appPath: "/System/Applications/TextEdit.app",
         appName: "TextEdit",
       }}
+      favorites={[
+        {
+          path: "/Users/demo",
+          icon: "home",
+        },
+        {
+          path: "/Applications",
+          icon: "applications",
+        },
+      ]}
       openWithApplications={[
         {
           id: "vscode",
@@ -58,6 +72,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       accentOptions={[
         { value: "gold", label: "Gold", primary: "#daa520" },
         { value: "teal", label: "Teal", primary: "#2cb5a0" },
+        { value: "coral", label: "Coral", primary: "#e8806a" },
       ]}
       uiFontOptions={[{ value: "lexend", label: "Lexend" }]}
       uiFontSizeOptions={[13]}
@@ -67,6 +82,9 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       onThemeChange={() => undefined}
       onAccentChange={() => undefined}
       onAccentToolbarButtonsChange={() => undefined}
+      onAccentFavoriteItemsChange={() => undefined}
+      onAccentFavoriteTextChange={() => undefined}
+      onFavoriteAccentChange={() => undefined}
       onZoomPercentChange={() => undefined}
       onUiFontFamilyChange={() => undefined}
       onUiFontSizeChange={() => undefined}
@@ -90,6 +108,11 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       onClearTerminalApp={() => undefined}
       onBrowseDefaultTextEditor={() => undefined}
       onClearDefaultTextEditor={() => undefined}
+      onAddFavorite={() => undefined}
+      onBrowseFavorite={() => undefined}
+      onMoveFavorite={() => undefined}
+      onRemoveFavorite={() => undefined}
+      onFavoriteIconChange={() => undefined}
       onAddOpenWithApplication={() => undefined}
       onBrowseOpenWithApplication={() => undefined}
       onMoveOpenWithApplication={() => undefined}
@@ -145,7 +168,10 @@ describe("SettingsView", () => {
     renderSettingsView({ accent: "teal" });
 
     expect(screen.getByLabelText("Accent color Gold")).toBeInTheDocument();
-    expect(screen.getByLabelText("Accent color Teal")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("Accent color Teal")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     expect(screen.getByText("Teal")).toBeInTheDocument();
   });
 
@@ -159,6 +185,41 @@ describe("SettingsView", () => {
     fireEvent.click(screen.getByLabelText("Accent toolbar buttons"));
 
     expect(onAccentToolbarButtonsChange).toHaveBeenCalledWith(false);
+  });
+
+  it("forwards favorite accent preference changes", () => {
+    const onAccentFavoriteItemsChange = vi.fn();
+    const onAccentFavoriteTextChange = vi.fn();
+    const onFavoriteAccentChange = vi.fn();
+    renderSettingsView({
+      accentFavoriteItems: true,
+      accentFavoriteText: false,
+      favoriteAccent: "coral",
+      onAccentFavoriteItemsChange,
+      onAccentFavoriteTextChange,
+      onFavoriteAccentChange,
+    });
+
+    fireEvent.click(screen.getByLabelText("Accent favorite items"));
+    fireEvent.click(screen.getByLabelText("Accent favorite text"));
+    fireEvent.click(screen.getByLabelText("Favorite accent Coral"));
+    const favoriteAccentDialog = screen.getByRole("dialog", { name: "Favorite accent options" });
+    expect(favoriteAccentDialog.firstElementChild).toHaveStyle({
+      gridTemplateColumns: "repeat(6, 28px)",
+    });
+    fireEvent.click(screen.getByLabelText("Favorite accent Teal"));
+
+    expect(onAccentFavoriteItemsChange).toHaveBeenCalledWith(false);
+    expect(onAccentFavoriteTextChange).toHaveBeenCalledWith(true);
+    expect(onFavoriteAccentChange).toHaveBeenCalledWith("teal");
+  });
+
+  it("disables the favorite accent swatch when favorite accents are off", () => {
+    renderSettingsView({
+      accentFavoriteItems: false,
+    });
+
+    expect(screen.getByLabelText("Favorite accent Coral")).toBeDisabled();
   });
 
   it("forwards hovered item highlight toggle changes", () => {
@@ -283,6 +344,65 @@ describe("SettingsView", () => {
     expect(screen.getByText("Visual Studio Code")).toBeInTheDocument();
     expect(screen.getByText("/Applications/Visual Studio Code.app")).toBeInTheDocument();
     expect(screen.getByText("Zed")).toBeInTheDocument();
+  });
+
+  it("renders configured favorites with compact icon pickers", () => {
+    renderSettingsView();
+
+    expect(screen.getByLabelText("Favorite icon for Home")).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText("/Users/demo")).toBeInTheDocument();
+    expect(screen.getByLabelText("Favorite icon for Applications")).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.getByText("/Applications")).toBeInTheDocument();
+    expect(screen.queryByText("Icon")).toBeNull();
+
+    const homeControls = screen.getByRole("button", { name: "Browse Home" }).parentElement;
+    expect(homeControls).not.toBeNull();
+    expect(within(homeControls!).getByLabelText("Favorite icon for Home")).toBeInTheDocument();
+  });
+
+  it("forwards favorite add, browse, move, icon, and remove actions", () => {
+    const onAddFavorite = vi.fn();
+    const onBrowseFavorite = vi.fn();
+    const onMoveFavorite = vi.fn();
+    const onRemoveFavorite = vi.fn();
+    const onFavoriteIconChange = vi.fn();
+
+    renderSettingsView({
+      onAddFavorite,
+      onBrowseFavorite,
+      onMoveFavorite,
+      onRemoveFavorite,
+      onFavoriteIconChange,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add Favorite" }));
+    fireEvent.click(screen.getByLabelText("Favorite icon for Home"));
+    fireEvent.click(screen.getByLabelText("Favorite icon for Home: Star"));
+    fireEvent.click(screen.getByRole("button", { name: "Browse Home" }));
+    fireEvent.click(screen.getByRole("button", { name: "Move Applications up" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove Applications" }));
+
+    expect(onAddFavorite).toHaveBeenCalledTimes(1);
+    expect(onFavoriteIconChange).toHaveBeenCalledWith(0, "star");
+    expect(onBrowseFavorite).toHaveBeenCalledWith(0);
+    expect(onMoveFavorite).toHaveBeenCalledWith(1, "up");
+    expect(onRemoveFavorite).toHaveBeenCalledWith(1);
+  });
+
+  it("renders favorite icon picker popovers in a body portal", () => {
+    renderSettingsView();
+
+    fireEvent.click(screen.getByLabelText("Favorite icon for Home"));
+
+    const iconDialog = screen.getByRole("dialog", { name: "Favorite icon for Home options" });
+    expect(iconDialog.parentElement).toBe(document.body);
+    expect(iconDialog).toHaveStyle({
+      position: "fixed",
+      gridTemplateColumns: "repeat(6, 34px)",
+    });
   });
 
   it("forwards Open With add, browse, move, and remove actions", () => {

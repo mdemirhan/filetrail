@@ -7,6 +7,7 @@ import type {
 import {
   accentTokensToCssVariables,
   generateAccentTokens,
+  getFavoriteAccentVariables,
   getToolbarAccentVariables,
 } from "./accent";
 import {
@@ -65,6 +66,9 @@ export function applyAppearance({
   theme,
   accent,
   accentToolbarButtons,
+  accentFavoriteItems,
+  accentFavoriteText,
+  favoriteAccent,
   uiFontFamily,
   uiFontSize,
   uiFontWeight,
@@ -75,6 +79,9 @@ export function applyAppearance({
   theme: ThemeMode;
   accent: AccentMode;
   accentToolbarButtons: boolean;
+  accentFavoriteItems: boolean;
+  accentFavoriteText: boolean;
+  favoriteAccent: AccentMode;
   uiFontFamily: UiFontFamily;
   uiFontSize: number;
   uiFontWeight: UiFontWeight;
@@ -91,6 +98,10 @@ export function applyAppearance({
   root.dataset.theme = resolveThemeCssBase(theme);
   root.dataset.themeVariant = theme;
   root.dataset.accent = accent;
+  root.dataset.favoriteAccent = favoriteAccent;
+  root.dataset.accentFavoriteItems = accentFavoriteItems ? "true" : "false";
+  root.dataset.accentFavoriteText =
+    accentFavoriteItems && accentFavoriteText ? "true" : "false";
   root.style.setProperty("--font-sans", UI_FONT_STACKS[uiFontFamily]);
   root.style.setProperty("--font-mono", '"Fira Code", "SFMono-Regular", ui-monospace, monospace');
   root.style.setProperty("--ui-font-size", `${uiFontSize}px`);
@@ -107,6 +118,12 @@ export function applyAppearance({
   const accentTokens = generateAccentTokens(accent, theme);
   const accentVariables = accentTokensToCssVariables(accentTokens);
   for (const [propertyName, value] of Object.entries(accentVariables)) {
+    root.style.setProperty(propertyName, value);
+  }
+  const favoriteAccentVariables = getFavoriteAccentVariables(
+    generateAccentTokens(favoriteAccent, theme),
+  );
+  for (const [propertyName, value] of Object.entries(favoriteAccentVariables)) {
     root.style.setProperty(propertyName, value);
   }
   if (accentToolbarButtons) {

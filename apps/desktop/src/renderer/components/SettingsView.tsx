@@ -1,10 +1,13 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import type {
   AccentMode,
   ApplicationSelection,
   DetailColumnVisibility,
   FileActivationAction,
+  FavoriteIconId,
+  FavoritePreference,
   OpenWithApplication,
   ThemeMode,
   UiFontFamily,
@@ -14,12 +17,15 @@ import {
   DEFAULT_APP_PREFERENCES,
   DEFAULT_TEXT_EDITOR,
   DEFAULT_TERMINAL_APPLICATION,
+  FAVORITE_ICON_OPTIONS,
   ZOOM_PERCENT_MAX,
   ZOOM_PERCENT_MIN,
   clampOpenItemLimit,
   clampZoomPercent,
 } from "../../shared/appPreferences";
 import { generateAccentTokens } from "../lib/accent";
+import { FavoriteItemIcon } from "../lib/fileIcons";
+import { getFavoriteLabel } from "../lib/favorites";
 import { type ThemeCssBase, getThemeVariant, resolveThemeCssBase } from "../lib/themeVariants";
 import { uiMonoFontStack as mono, uiSansFontStack as sans } from "../lib/viewFonts";
 
@@ -304,11 +310,13 @@ function Toggle({
   onToggle,
   theme,
   label,
+  disabled = false,
 }: {
   checked: boolean;
   onToggle: () => void;
   theme: ResolvedSettingsTheme;
   label: string;
+  disabled?: boolean;
 }) {
   return (
     <button
@@ -316,6 +324,7 @@ function Toggle({
       role="switch"
       aria-checked={checked}
       aria-label={label}
+      disabled={disabled}
       onClick={onToggle}
       style={{
         width: "36px",
@@ -324,12 +333,13 @@ function Toggle({
         padding: "2px",
         background: checked ? theme.toggle.trackOn : theme.toggle.trackOff,
         border: "none",
-        cursor: "pointer",
+        cursor: disabled ? "default" : "pointer",
         transition: "background 0.2s ease",
         display: "flex",
         alignItems: "center",
         flexShrink: 0,
         outline: "none",
+        opacity: disabled ? 0.5 : 1,
       }}
     >
       <div
@@ -668,6 +678,10 @@ function AccentSelector({
   accent,
   accentOptions,
   theme,
+  disabled = false,
+  labelPrefix = "Accent color",
+  mode = "popover",
+  showSelectedLabel = true,
   onChange,
 }: {
   accent: AccentMode;
@@ -677,48 +691,359 @@ function AccentSelector({
     primary: string;
   }>;
   theme: ResolvedSettingsTheme;
+  disabled?: boolean;
+  labelPrefix?: string;
+  mode?: "inline" | "popover";
+  showSelectedLabel?: boolean;
   onChange: (value: AccentMode) => void;
 }) {
   const selected = accentOptions.find((option) => option.value === accent);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node) || containerRef.current?.contains(target)) {
+        return;
+      }
+      setOpen(false);
+    };
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [open]);
+
+  if (mode === "inline") {
+    return (
+      <div style={{ display: "grid", gap: "8px", width: "100%" }}>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          {accentOptions.map((option) => {
+            const active = option.value === accent;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                aria-label={`${labelPrefix} ${option.label}`}
+                aria-pressed={active}
+                disabled={disabled}
+                onClick={() => onChange(option.value)}
+                style={{
+                  width: "28px",
+                  height: "28px",
+                  borderRadius: "999px",
+                  border: `1px solid ${active ? theme.accent.border : theme.color.swatchBorder}`,
+                  background: option.primary,
+                  boxShadow: active
+                    ? `0 0 0 2px ${theme.card.bg}, 0 0 0 4px ${theme.accent.focusBorder}`
+                    : "inset 0 0 0 1px rgba(255,255,255,0.08)",
+                  cursor: disabled ? "default" : "pointer",
+                  transition:
+                    "box-shadow 0.14s ease, border-color 0.14s ease, transform 0.14s ease",
+                  opacity: disabled ? 0.5 : 1,
+                  outline: "none",
+                }}
+              />
+            );
+          })}
+        </div>
+        {showSelectedLabel ? (
+          <span
+            style={{
+              fontSize: "11px",
+              fontFamily: mono,
+              fontWeight: 500,
+              color: theme.label.secondary,
+            }}
+          >
+            {selected?.label ?? accent}
+          </span>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
-    <div style={{ display: "grid", gap: "8px", width: "100%" }}>
-      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-        {accentOptions.map((option) => {
-          const active = option.value === accent;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              aria-label={`Accent color ${option.label}`}
-              aria-pressed={active}
-              onClick={() => onChange(option.value)}
-              style={{
-                width: "28px",
-                height: "28px",
-                borderRadius: "999px",
-                border: `1px solid ${active ? theme.accent.border : theme.color.swatchBorder}`,
-                background: option.primary,
-                boxShadow: active
-                  ? `0 0 0 2px ${theme.card.bg}, 0 0 0 4px ${theme.accent.focusBorder}`
-                  : "inset 0 0 0 1px rgba(255,255,255,0.08)",
-                cursor: "pointer",
-                transition: "box-shadow 0.14s ease, border-color 0.14s ease, transform 0.14s ease",
-              }}
-            />
-          );
-        })}
-      </div>
-      <span
+    <div
+      ref={containerRef}
+      style={{ display: "inline-flex", position: "relative", alignItems: "center", gap: "8px" }}
+    >
+      <button
+        type="button"
+        aria-label={`${labelPrefix} ${selected?.label ?? accent}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen((current) => !current)}
         style={{
-          fontSize: "11px",
-          fontFamily: mono,
-          fontWeight: 500,
-          color: theme.label.secondary,
+          width: "30px",
+          height: "30px",
+          borderRadius: "999px",
+          border: `1px solid ${selected ? theme.accent.border : theme.color.swatchBorder}`,
+          background: selected?.primary ?? theme.input.bg,
+          boxShadow: `0 0 0 2px ${theme.card.bg}, 0 0 0 4px ${
+            open ? theme.accent.focusBorder : "transparent"
+          }`,
+          cursor: disabled ? "default" : "pointer",
+          opacity: disabled ? 0.5 : 1,
+          transition: "box-shadow 0.14s ease, border-color 0.14s ease",
+          outline: "none",
+        }}
+      />
+      {showSelectedLabel ? (
+        <span
+          style={{
+            fontSize: "11px",
+            fontFamily: mono,
+            fontWeight: 500,
+            color: theme.label.secondary,
+          }}
+        >
+          {selected?.label ?? accent}
+        </span>
+      ) : null}
+      {open && !disabled ? (
+        <div
+          role="dialog"
+          aria-label={`${labelPrefix} options`}
+          style={{
+            position: "absolute",
+            top: "calc(100% + 10px)",
+            right: 0,
+            zIndex: 5,
+            width: "228px",
+            padding: "10px",
+            borderRadius: "12px",
+            background: theme.card.bg,
+            border: `1px solid ${theme.input.border}`,
+            boxShadow: theme.card.shadow,
+            display: "grid",
+          }}
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(6, 28px)",
+              gridAutoRows: "28px",
+              gap: "8px",
+              justifyContent: "start",
+            }}
+          >
+            {accentOptions.map((option) => {
+              const active = option.value === accent;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-label={`${labelPrefix} ${option.label}`}
+                  aria-pressed={active}
+                  onClick={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                  }}
+                  style={{
+                    width: "28px",
+                    height: "28px",
+                    borderRadius: "999px",
+                    border: `1px solid ${active ? theme.accent.border : theme.color.swatchBorder}`,
+                    background: option.primary,
+                    boxShadow: active
+                      ? `0 0 0 2px ${theme.card.bg}, 0 0 0 4px ${theme.accent.focusBorder}`
+                      : "inset 0 0 0 1px rgba(255,255,255,0.08)",
+                    cursor: "pointer",
+                    transition:
+                      "box-shadow 0.14s ease, border-color 0.14s ease, transform 0.14s ease",
+                    outline: "none",
+                  }}
+                />
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function FavoriteIconPicker({
+  selectedIcon,
+  theme,
+  ariaLabel,
+  onChange,
+}: {
+  selectedIcon: FavoriteIconId;
+  theme: ResolvedSettingsTheme;
+  ariaLabel: string;
+  onChange: (icon: FavoriteIconId) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const popupRef = useRef<HTMLDivElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const [popupPosition, setPopupPosition] = useState({ left: 0, top: 0 });
+
+  const popupColumns = 6;
+  const popupWidth = 20 + popupColumns * 34 + (popupColumns - 1) * 8;
+  const popupRows = Math.ceil(FAVORITE_ICON_OPTIONS.length / popupColumns);
+  const popupHeight = 20 + popupRows * 34 + (popupRows - 1) * 8;
+
+  const updatePopupPosition = () => {
+    const trigger = triggerRef.current;
+    if (!trigger) {
+      return;
+    }
+    const rect = trigger.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const margin = 12;
+    const gap = 10;
+    const preferredLeft = rect.left;
+    const maxLeft = Math.max(margin, viewportWidth - popupWidth - margin);
+    const left = Math.min(Math.max(preferredLeft, margin), maxLeft);
+    const fitsBelow = rect.bottom + gap + popupHeight <= viewportHeight - margin;
+    const top = fitsBelow
+      ? rect.bottom + gap
+      : Math.max(margin, rect.top - gap - popupHeight);
+    setPopupPosition({ left, top });
+  };
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (
+        !(target instanceof Node) ||
+        containerRef.current?.contains(target) ||
+        popupRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setOpen(false);
+    };
+    const handleWindowChange = () => {
+      updatePopupPosition();
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+    updatePopupPosition();
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("resize", handleWindowChange);
+    window.addEventListener("scroll", handleWindowChange, true);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("resize", handleWindowChange);
+      window.removeEventListener("scroll", handleWindowChange, true);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [open]);
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        display: "inline-flex",
+        position: "relative",
+        alignItems: "center",
+      }}
+    >
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label={ariaLabel}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => {
+          if (!open) {
+            updatePopupPosition();
+          }
+          setOpen((current) => !current);
+        }}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: "34px",
+          height: "34px",
+          padding: "0",
+          borderRadius: "8px",
+          border: `1px solid ${theme.input.border}`,
+          background: theme.input.bg,
+          boxShadow: open ? `0 0 0 1px ${theme.accent.focusBorder}` : "none",
+          outline: "none",
         }}
       >
-        {selected?.label ?? accent}
-      </span>
+        <FavoriteItemIcon icon={selectedIcon} />
+      </button>
+      {open
+        ? createPortal(
+            <div
+              ref={popupRef}
+              role="dialog"
+              aria-label={`${ariaLabel} options`}
+              style={{
+                position: "fixed",
+                top: `${popupPosition.top}px`,
+                left: `${popupPosition.left}px`,
+                zIndex: 1000,
+                width: `${popupWidth}px`,
+                padding: "10px",
+                borderRadius: "12px",
+                background: theme.card.bg,
+                border: `1px solid ${theme.input.border}`,
+                boxShadow: theme.card.shadow,
+                display: "grid",
+                gridTemplateColumns: "repeat(6, 34px)",
+                gridAutoRows: "34px",
+                gap: "8px",
+              }}
+            >
+              {FAVORITE_ICON_OPTIONS.map((option) => {
+                const active = option.value === selectedIcon;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    aria-label={`${ariaLabel}: ${option.label}`}
+                    aria-pressed={active}
+                    onClick={() => {
+                      onChange(option.value);
+                      setOpen(false);
+                    }}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: "34px",
+                      height: "34px",
+                      padding: "0",
+                      borderRadius: "8px",
+                      border: `1px solid ${active ? theme.accent.border : theme.input.border}`,
+                      background: active ? theme.accent.softBg : theme.input.bg,
+                      color: active ? theme.accent.pathCrumbHover : theme.label.primary,
+                      boxShadow: active ? `0 0 0 1px ${theme.accent.focusBorder}` : "none",
+                      transition:
+                        "border-color 0.14s ease, box-shadow 0.14s ease, background 0.14s ease",
+                      outline: "none",
+                    }}
+                  >
+                    <FavoriteItemIcon icon={option.value} />
+                  </button>
+                );
+              })}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
@@ -1171,6 +1496,9 @@ export function SettingsView({
   theme,
   accent,
   accentToolbarButtons,
+  accentFavoriteItems,
+  accentFavoriteText,
+  favoriteAccent,
   zoomPercent,
   uiFontFamily,
   uiFontSize,
@@ -1190,8 +1518,10 @@ export function SettingsView({
   notificationsEnabled,
   notificationDurationSeconds,
   restoreLastVisitedFolderOnStartup,
+  homePath,
   terminalApp,
   defaultTextEditor,
+  favorites,
   openWithApplications,
   fileActivationAction,
   openItemLimit,
@@ -1205,6 +1535,9 @@ export function SettingsView({
   onThemeChange,
   onAccentChange,
   onAccentToolbarButtonsChange,
+  onAccentFavoriteItemsChange,
+  onAccentFavoriteTextChange,
+  onFavoriteAccentChange,
   onZoomPercentChange,
   onUiFontFamilyChange,
   onUiFontSizeChange,
@@ -1228,6 +1561,11 @@ export function SettingsView({
   onClearTerminalApp,
   onBrowseDefaultTextEditor,
   onClearDefaultTextEditor,
+  onAddFavorite,
+  onBrowseFavorite,
+  onMoveFavorite,
+  onRemoveFavorite,
+  onFavoriteIconChange,
   onAddOpenWithApplication,
   onBrowseOpenWithApplication,
   onMoveOpenWithApplication,
@@ -1238,6 +1576,9 @@ export function SettingsView({
   theme: ThemeMode;
   accent: AccentMode;
   accentToolbarButtons: boolean;
+  accentFavoriteItems: boolean;
+  accentFavoriteText: boolean;
+  favoriteAccent: AccentMode;
   zoomPercent: number;
   uiFontFamily: UiFontFamily;
   uiFontSize: number;
@@ -1257,8 +1598,10 @@ export function SettingsView({
   notificationsEnabled: boolean;
   notificationDurationSeconds: number;
   restoreLastVisitedFolderOnStartup: boolean;
+  homePath: string;
   terminalApp: ApplicationSelection | null;
   defaultTextEditor: ApplicationSelection;
+  favorites: ReadonlyArray<FavoritePreference>;
   openWithApplications: ReadonlyArray<OpenWithApplication>;
   fileActivationAction: FileActivationAction;
   openItemLimit: number;
@@ -1276,6 +1619,9 @@ export function SettingsView({
   onThemeChange: (value: ThemeMode) => void;
   onAccentChange: (value: AccentMode) => void;
   onAccentToolbarButtonsChange: (value: boolean) => void;
+  onAccentFavoriteItemsChange: (value: boolean) => void;
+  onAccentFavoriteTextChange: (value: boolean) => void;
+  onFavoriteAccentChange: (value: AccentMode) => void;
   onZoomPercentChange: (value: number) => void;
   onUiFontFamilyChange: (value: UiFontFamily) => void;
   onUiFontSizeChange: (value: number) => void;
@@ -1299,6 +1645,11 @@ export function SettingsView({
   onClearTerminalApp: () => void;
   onBrowseDefaultTextEditor: () => void;
   onClearDefaultTextEditor: () => void;
+  onAddFavorite: () => void;
+  onBrowseFavorite: (index: number) => void;
+  onMoveFavorite: (index: number, direction: "up" | "down") => void;
+  onRemoveFavorite: (index: number) => void;
+  onFavoriteIconChange: (index: number, icon: FavoriteIconId) => void;
   onAddOpenWithApplication: () => void;
   onBrowseOpenWithApplication: (entryId: string) => void;
   onMoveOpenWithApplication: (entryId: string, direction: "up" | "down") => void;
@@ -1428,6 +1779,8 @@ export function SettingsView({
                   accent={accent}
                   accentOptions={accentOptions}
                   theme={palette}
+                  labelPrefix="Accent color"
+                  mode="inline"
                   onChange={onAccentChange}
                 />
               </div>
@@ -1444,6 +1797,46 @@ export function SettingsView({
                 onToggle={() => onAccentToolbarButtonsChange(!accentToolbarButtons)}
                 theme={palette}
                 label="Accent toolbar buttons"
+              />
+            }
+          />
+
+          <SettingRow
+            title="Accent favorite items"
+            desc="Use the dedicated favorite accent for favorite icons in the tree."
+            theme={palette}
+            right={
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <AccentSelector
+                  accent={favoriteAccent}
+                  accentOptions={accentOptions}
+                  theme={palette}
+                  disabled={!accentFavoriteItems}
+                  labelPrefix="Favorite accent"
+                  showSelectedLabel={false}
+                  onChange={onFavoriteAccentChange}
+                />
+                <Toggle
+                  checked={accentFavoriteItems}
+                  onToggle={() => onAccentFavoriteItemsChange(!accentFavoriteItems)}
+                  theme={palette}
+                  label="Accent favorite items"
+                />
+              </div>
+            }
+          />
+
+          <SettingRow
+            title="Accent favorite text"
+            desc="Also apply the favorite accent to favorite labels in the tree."
+            theme={palette}
+            right={
+              <Toggle
+                checked={accentFavoriteText}
+                onToggle={() => onAccentFavoriteTextChange(!accentFavoriteText)}
+                theme={palette}
+                label="Accent favorite text"
+                disabled={!accentFavoriteItems}
               />
             }
           />
@@ -1861,6 +2254,129 @@ export function SettingsView({
               </>
             }
           />
+        </SectionCard>
+
+        <SectionCard icon="★" title="Favorites" theme={palette}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "12px",
+              padding: "10px 0 12px",
+              borderBottom: `1px solid ${palette.separator}`,
+            }}
+          >
+            <div
+              style={{
+                fontSize: "12.5px",
+                fontFamily: sans,
+                fontWeight: 500,
+                color: palette.label.primary,
+              }}
+            >
+              Configured favorites
+            </div>
+            <ActionButton
+              label="Add Favorite"
+              theme={palette}
+              ariaLabel="Add Favorite"
+              onClick={onAddFavorite}
+            />
+          </div>
+
+          {favorites.map((favorite, index) => (
+            <div
+              key={`${favorite.path}-${index}`}
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
+                gap: "12px",
+                padding: "12px 0",
+                borderBottom:
+                  index === favorites.length - 1 ? "none" : `1px solid ${palette.separator}`,
+              }}
+            >
+            <div
+              style={{
+                minWidth: 0,
+                flex: 1,
+                display: "flex",
+                alignItems: "center",
+                gap: "12px",
+              }}
+            >
+              <FavoriteItemIcon icon={favorite.icon} />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div
+                  style={{
+                    fontSize: "12.5px",
+                    fontFamily: sans,
+                      fontWeight: 500,
+                      color: palette.label.primary,
+                      marginBottom: "4px",
+                    }}
+                  >
+                    {getFavoriteLabel(favorite.path, homePath)}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: "11px",
+                      fontFamily: mono,
+                      color: palette.label.secondary,
+                      lineHeight: "1.4",
+                      wordBreak: "break-all",
+                    }}
+                  >
+                    {favorite.path}
+                  </div>
+                </div>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  flexWrap: "wrap",
+                  justifyContent: "flex-end",
+                }}
+              >
+                <FavoriteIconPicker
+                  selectedIcon={favorite.icon}
+                  theme={palette}
+                  ariaLabel={`Favorite icon for ${getFavoriteLabel(favorite.path, homePath)}`}
+                  onChange={(icon) => onFavoriteIconChange(index, icon)}
+                />
+                <ActionButton
+                  label="Browse"
+                  ariaLabel={`Browse ${getFavoriteLabel(favorite.path, homePath)}`}
+                  theme={palette}
+                  onClick={() => onBrowseFavorite(index)}
+                />
+                <ActionButton
+                  label="Up"
+                  ariaLabel={`Move ${getFavoriteLabel(favorite.path, homePath)} up`}
+                  theme={palette}
+                  disabled={index === 0}
+                  onClick={() => onMoveFavorite(index, "up")}
+                />
+                <ActionButton
+                  label="Down"
+                  ariaLabel={`Move ${getFavoriteLabel(favorite.path, homePath)} down`}
+                  theme={palette}
+                  disabled={index === favorites.length - 1}
+                  onClick={() => onMoveFavorite(index, "down")}
+                />
+                <ActionButton
+                  label="Remove"
+                  ariaLabel={`Remove ${getFavoriteLabel(favorite.path, homePath)}`}
+                  theme={palette}
+                  onClick={() => onRemoveFavorite(index)}
+                />
+              </div>
+            </div>
+          ))}
         </SectionCard>
 
         <SectionCard icon="↗" title="Open With" theme={palette}>

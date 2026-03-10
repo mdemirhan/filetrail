@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from "node:fs";
+
 import { applyAppearance } from "./theme";
 import { getThemeAppearanceDefaults } from "./theme";
 
@@ -22,6 +24,9 @@ describe("theme helpers", () => {
       theme: "dark",
       accent: "teal",
       accentToolbarButtons: true,
+      accentFavoriteItems: true,
+      accentFavoriteText: true,
+      favoriteAccent: "coral",
       uiFontFamily: "lexend",
       uiFontSize: 14,
       uiFontWeight: 500,
@@ -33,6 +38,9 @@ describe("theme helpers", () => {
     expect(document.documentElement.dataset.theme).toBe("dark");
     expect(document.documentElement.dataset.themeVariant).toBe("dark");
     expect(document.documentElement.dataset.accent).toBe("teal");
+    expect(document.documentElement.dataset.favoriteAccent).toBe("coral");
+    expect(document.documentElement.dataset.accentFavoriteItems).toBe("true");
+    expect(document.documentElement.dataset.accentFavoriteText).toBe("true");
     expect(document.documentElement.style.getPropertyValue("--font-sans")).toContain("Lexend");
     expect(document.documentElement.style.getPropertyValue("--font-mono")).toContain("Fira Code");
     expect(document.documentElement.style.getPropertyValue("--ui-font-size")).toBe("14px");
@@ -54,6 +62,12 @@ describe("theme helpers", () => {
     expect(document.documentElement.style.getPropertyValue("--sidebar-rail-active-bg")).toBe(
       "rgba(44, 181, 160, 0.16)",
     );
+    expect(document.documentElement.style.getPropertyValue("--favorite-accent-solid")).toBe(
+      "#e8806a",
+    );
+    expect(document.documentElement.style.getPropertyValue("--favorite-accent-active-bg")).toBe(
+      "rgba(232, 128, 106, 0.16)",
+    );
     expect(document.documentElement.style.getPropertyValue("--text-primary")).toBe("#ffffff");
   });
 
@@ -62,6 +76,9 @@ describe("theme helpers", () => {
       theme: "dark",
       accent: "rose",
       accentToolbarButtons: false,
+      accentFavoriteItems: false,
+      accentFavoriteText: true,
+      favoriteAccent: "gold",
       uiFontFamily: "lexend",
       uiFontSize: 13,
       uiFontWeight: 500,
@@ -78,6 +95,7 @@ describe("theme helpers", () => {
     expect(document.documentElement.style.getPropertyValue("--sidebar-rail-icon")).toBe("");
     expect(document.documentElement.style.getPropertyValue("--sidebar-rail-active-bg")).toBe("");
     expect(document.documentElement.style.getPropertyValue("--help-accent")).toBe("#e8729a");
+    expect(document.documentElement.dataset.accentFavoriteText).toBe("false");
   });
 
   it("maps variant themes onto a css base and applies palette overrides", () => {
@@ -85,6 +103,9 @@ describe("theme helpers", () => {
       theme: "obsidian",
       accent: "gold",
       accentToolbarButtons: false,
+      accentFavoriteItems: false,
+      accentFavoriteText: false,
+      favoriteAccent: "gold",
       uiFontFamily: "lexend",
       uiFontSize: 13,
       uiFontWeight: 500,
@@ -99,6 +120,17 @@ describe("theme helpers", () => {
     expect(document.documentElement.style.getPropertyValue("--toolbar-bg")).toBe("#101012");
   });
 
+  it("ships a stylesheet rule that targets the favorite svg for accent overrides", () => {
+    const styles = readFileSync("apps/desktop/src/renderer/styles.css", "utf8");
+
+    expect(styles).toContain(
+      '.tree-row[data-tree-kind="favorite"]\n  .file-icon.favorite\n  .file-icon-favorite',
+    );
+    expect(styles).toContain(
+      '.tree-row[data-tree-kind="favorites-root"]\n  .file-icon.favorite\n  .file-icon-favorite',
+    );
+  });
+
   it("no-ops cleanly when no DOM is available", () => {
     const originalDocument = globalThis.document;
 
@@ -110,6 +142,9 @@ describe("theme helpers", () => {
           theme: "dark",
           accent: "gold",
           accentToolbarButtons: false,
+          accentFavoriteItems: false,
+          accentFavoriteText: false,
+          favoriteAccent: "gold",
           uiFontFamily: "lexend",
           uiFontSize: 13,
           uiFontWeight: 500,

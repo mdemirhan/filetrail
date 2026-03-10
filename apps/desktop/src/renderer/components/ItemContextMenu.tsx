@@ -13,6 +13,7 @@ export type ContextMenuActionId =
   | "rename"
   | "duplicate"
   | "newFolder"
+  | "toggleFavorite"
   | "terminal"
   | "copyPath"
   | "trash";
@@ -96,6 +97,7 @@ export const BROWSE_CONTEXT_MENU_ITEMS: readonly ContextMenuItem[] = [
   { id: "duplicate", label: "Duplicate", icon: "duplicate", shortcut: "⌘D" },
   { type: "separator", key: "separator-duplicate" },
   { id: "newFolder", label: "New Folder", icon: "newFolder", shortcut: "⇧⌘N" },
+  { id: "toggleFavorite", label: "Add to Favorites", icon: "open" },
   { type: "separator", key: "separator-new-folder" },
   { id: "terminal", label: "Open in Terminal", icon: "terminal", shortcut: "⌘T" },
   { id: "copyPath", label: "Copy Path", icon: "copyPath", shortcut: "⌥⌘C" },
@@ -114,6 +116,8 @@ export function ItemContextMenu({
   anchorY,
   variant = "browse",
   disabledActionIds = [],
+  favoriteToggleLabel = null,
+  hiddenActionIds = [],
   submenuItems,
   open,
   onAction,
@@ -123,6 +127,8 @@ export function ItemContextMenu({
   anchorY: number;
   variant?: "browse" | "search";
   disabledActionIds?: ContextMenuActionId[];
+  favoriteToggleLabel?: string | null;
+  hiddenActionIds?: ContextMenuActionId[];
   submenuItems: readonly ContextMenuSubmenuItem[];
   open: boolean;
   onAction: (actionId: ContextMenuActionId) => void;
@@ -130,6 +136,7 @@ export function ItemContextMenu({
 }) {
   const [activeItemId, setActiveItemId] = useState<ContextMenuActionId | null>(null);
   const disabledActionIdSet = useMemo(() => new Set(disabledActionIds), [disabledActionIds]);
+  const hiddenActionIdSet = useMemo(() => new Set(hiddenActionIds), [hiddenActionIds]);
   const items = variant === "search" ? SEARCH_CONTEXT_MENU_ITEMS : BROWSE_CONTEXT_MENU_ITEMS;
 
   useEffect(() => {
@@ -159,8 +166,12 @@ export function ItemContextMenu({
           if (item.type === "separator") {
             return <div key={item.key} className="context-menu-separator" />;
           }
+          if (hiddenActionIdSet.has(item.id)) {
+            return null;
+          }
           const isActive = activeItemId === item.id;
           const isDisabled = disabledActionIdSet.has(item.id);
+          const label = item.id === "toggleFavorite" && favoriteToggleLabel ? favoriteToggleLabel : item.label;
           return (
             <button
               key={item.id}
@@ -182,7 +193,7 @@ export function ItemContextMenu({
               <span className="context-menu-item-icon" aria-hidden="true">
                 <ContextMenuIcon name={item.icon} />
               </span>
-              <span className="context-menu-item-label">{item.label}</span>
+              <span className="context-menu-item-label">{label}</span>
               {item.hasSubmenu ? (
                 <span className="context-menu-submenu-arrow" aria-hidden="true">
                   <SubmenuChevron />

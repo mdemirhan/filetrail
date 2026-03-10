@@ -43,6 +43,34 @@ export type ApplicationSelection = {
 export type OpenWithApplication = {
   id: string;
 } & ApplicationSelection;
+export type FavoriteIconId =
+  | "home"
+  | "applications"
+  | "desktop"
+  | "documents"
+  | "downloads"
+  | "trash"
+  | "folder"
+  | "star"
+  | "drive"
+  | "code"
+  | "terminal"
+  | "globe"
+  | "music"
+  | "photos"
+  | "videos"
+  | "archive"
+  | "cloud"
+  | "server"
+  | "projects"
+  | "books"
+  | "camera"
+  | "toolbox"
+  | "network";
+export type FavoritePreference = {
+  path: string;
+  icon: FavoriteIconId;
+};
 export type FileActivationAction = "open" | "edit";
 
 // These option lists are used for both UI rendering and validation-like lookups.
@@ -143,6 +171,31 @@ export const DEFAULT_OPEN_WITH_APPLICATIONS: OpenWithApplication[] = [
     appName: "Zed",
   },
 ];
+export const FAVORITE_ICON_OPTIONS = [
+  { value: "home", label: "Home" },
+  { value: "applications", label: "Applications" },
+  { value: "desktop", label: "Desktop" },
+  { value: "documents", label: "Documents" },
+  { value: "downloads", label: "Downloads" },
+  { value: "trash", label: "Trash" },
+  { value: "folder", label: "Folder" },
+  { value: "star", label: "Star" },
+  { value: "drive", label: "Drive" },
+  { value: "code", label: "Code" },
+  { value: "terminal", label: "Terminal" },
+  { value: "globe", label: "Globe" },
+  { value: "music", label: "Music" },
+  { value: "photos", label: "Photos" },
+  { value: "videos", label: "Videos" },
+  { value: "archive", label: "Archive" },
+  { value: "cloud", label: "Cloud" },
+  { value: "server", label: "Server" },
+  { value: "projects", label: "Projects" },
+  { value: "books", label: "Books" },
+  { value: "camera", label: "Camera" },
+  { value: "toolbox", label: "Toolbox" },
+  { value: "network", label: "Network" },
+] as const satisfies ReadonlyArray<{ value: FavoriteIconId; label: string }>;
 export const DEFAULT_TEXT_EDITOR: ApplicationSelection = {
   appPath: "/System/Applications/TextEdit.app",
   appName: "TextEdit",
@@ -161,6 +214,9 @@ export type AppPreferences = {
   theme: ThemeMode;
   accent: AccentMode;
   accentToolbarButtons: boolean;
+  accentFavoriteItems: boolean;
+  accentFavoriteText: boolean;
+  favoriteAccent: AccentMode;
   zoomPercent: number;
   uiFontFamily: UiFontFamily;
   uiFontSize: number;
@@ -201,12 +257,19 @@ export type AppPreferences = {
   restoreLastVisitedFolderOnStartup: boolean;
   treeRootPath: string | null;
   lastVisitedPath: string | null;
+  lastVisitedFavoritePath: string | null;
+  favorites: FavoritePreference[];
+  favoritesExpanded: boolean;
+  favoritesInitialized: boolean;
 };
 
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   theme: "tomorrow-night",
   accent: "gold",
   accentToolbarButtons: true,
+  accentFavoriteItems: false,
+  accentFavoriteText: false,
+  favoriteAccent: "gold",
   zoomPercent: 100,
   uiFontFamily: "lexend",
   uiFontSize: 13,
@@ -247,6 +310,10 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   restoreLastVisitedFolderOnStartup: false,
   treeRootPath: null,
   lastVisitedPath: null,
+  lastVisitedFavoritePath: null,
+  favorites: [],
+  favoritesExpanded: true,
+  favoritesInitialized: false,
 };
 
 // Pane widths are rounded before persistence so restored layouts remain stable and do not
@@ -302,4 +369,8 @@ export function getAccentLabel(accent: AccentMode): string {
 
 export function getUiFontLabel(font: UiFontFamily): string {
   return UI_FONT_OPTIONS.find((option) => option.value === font)?.label ?? font;
+}
+
+export function getFavoriteIconLabel(icon: FavoriteIconId): string {
+  return FAVORITE_ICON_OPTIONS.find((option) => option.value === icon)?.label ?? icon;
 }

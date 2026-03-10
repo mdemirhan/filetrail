@@ -49,6 +49,12 @@
   --icon-blue: #2563eb;
   --icon-green: #0d9488;
   --icon-peach: #d97706;
+  --icon-cyan: #0891b2;
+  --icon-indigo: #4f46e5;
+  --icon-pink: #db2777;
+  --icon-violet: #8b5cf6;
+  --icon-orange: #ea580c;
+  --icon-sky: #0284c7;
   --danger: #b42318;
   --sidebar-bg: #e8eaf2;
   --toolbar-bg: #e5e8ef;
@@ -266,6 +272,12 @@
   --icon-blue: #81a2be;
   --icon-green: #b5bd68;
   --icon-peach: #de935f;
+  --icon-cyan: #8abeb7;
+  --icon-indigo: #8fa1d2;
+  --icon-pink: #cc8ba2;
+  --icon-violet: #b294bb;
+  --icon-orange: #d08770;
+  --icon-sky: #81a2be;
   --danger: #cc6666;
   --sidebar-bg: #1b1d1f;
   --toolbar-bg: #18191b;
@@ -468,6 +480,12 @@
   --icon-blue: #6da0f7;
   --icon-green: #5dd8a8;
   --icon-peach: #f0b050;
+  --icon-cyan: #52d4ff;
+  --icon-indigo: #818cf8;
+  --icon-pink: #f472b6;
+  --icon-violet: #a78bfa;
+  --icon-orange: #fb923c;
+  --icon-sky: #38bdf8;
   --danger: #f08080;
   --sidebar-bg: #20232b;
   --toolbar-bg: #1c1f26;
@@ -670,6 +688,12 @@
   --icon-blue: #89b4fa;
   --icon-green: #a6e3a1;
   --icon-peach: #fab387;
+  --icon-cyan: #89dceb;
+  --icon-indigo: #b4befe;
+  --icon-pink: #f5c2e7;
+  --icon-violet: #cba6f7;
+  --icon-orange: #fab387;
+  --icon-sky: #74c7ec;
   --danger: #f38ba8;
   --sidebar-bg: #181825;
   --toolbar-bg: #11111b;
@@ -3642,7 +3666,8 @@ body.resizing-panels * {
 }
 
 .file-icon.folder,
-.file-icon.document {
+.file-icon.document,
+.file-icon.favorite {
   width: 18px;
   height: 18px;
 }
@@ -3662,6 +3687,129 @@ body.resizing-panels * {
 .file-icon-folder-stroke {
   stroke: var(--accent-gold);
   stroke-width: 1.5;
+}
+
+.file-icon-favorite {
+  color: var(--icon-neutral);
+}
+
+.file-icon-favorite-stroke {
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.favorite-icon-home {
+  color: var(--accent-blue);
+}
+
+.favorite-icon-applications {
+  color: var(--accent-gold);
+}
+
+.favorite-icon-desktop {
+  color: var(--icon-cyan);
+}
+
+.favorite-icon-documents {
+  color: var(--icon-indigo);
+}
+
+.favorite-icon-downloads {
+  color: var(--icon-green);
+}
+
+.favorite-icon-trash {
+  color: var(--danger);
+}
+
+.favorite-icon-folder {
+  color: var(--accent-gold);
+}
+
+.favorite-icon-star {
+  color: var(--accent-gold);
+}
+
+.favorite-icon-drive {
+  color: var(--icon-neutral);
+}
+
+.favorite-icon-code {
+  color: var(--icon-blue);
+}
+
+.favorite-icon-terminal {
+  color: var(--icon-green);
+}
+
+.favorite-icon-globe {
+  color: var(--icon-cyan);
+}
+
+.favorite-icon-music {
+  color: var(--icon-pink);
+}
+
+.favorite-icon-photos {
+  color: var(--icon-violet);
+}
+
+.favorite-icon-videos {
+  color: var(--icon-peach);
+}
+
+.favorite-icon-archive {
+  color: var(--icon-orange);
+}
+
+.favorite-icon-cloud {
+  color: var(--icon-sky);
+}
+
+.favorite-icon-server {
+  color: var(--icon-neutral);
+}
+
+.favorite-icon-projects {
+  color: var(--icon-blue);
+}
+
+.favorite-icon-books {
+  color: var(--accent-gold);
+}
+
+.favorite-icon-camera {
+  color: var(--icon-cyan);
+}
+
+.favorite-icon-toolbox {
+  color: var(--icon-green);
+}
+
+.favorite-icon-network {
+  color: var(--icon-indigo);
+}
+
+:root[data-accent-favorite-items="true"]
+  .tree-row[data-tree-kind="favorite"]
+  .file-icon.favorite
+  .file-icon-favorite,
+:root[data-accent-favorite-items="true"]
+  .tree-row[data-tree-kind="favorites-root"]
+  .file-icon.favorite
+  .file-icon-favorite {
+  color: var(--favorite-accent-solid);
+}
+
+:root[data-accent-favorite-text="true"]
+  .tree-row[data-tree-kind="favorite"]
+  .tree-label,
+:root[data-accent-favorite-text="true"]
+  .tree-row[data-tree-kind="favorites-root"]
+  .tree-label {
+  color: var(--favorite-accent-text);
 }
 
 .alias-badge {

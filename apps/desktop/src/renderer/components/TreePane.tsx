@@ -1,7 +1,17 @@
 import { Fragment, type Dispatch, type SetStateAction, useEffect, useRef, useState } from "react";
 
-import { THEME_GROUPS, type ThemeMode, getThemeLabel } from "../../shared/appPreferences";
-import { TreeFolderIcon } from "../lib/fileIcons";
+import {
+  THEME_GROUPS,
+  type FavoritePreference,
+  type ThemeMode,
+  getThemeLabel,
+} from "../../shared/appPreferences";
+import {
+  buildTreePresentation,
+  type TreeItemId,
+  type TreePresentationItem,
+} from "../lib/favorites";
+import { FavoriteItemIcon, TreeFolderIcon } from "../lib/fileIcons";
 import { ToolbarIcon } from "./ToolbarIcon";
 
 export type TreeNodeState = {
@@ -28,7 +38,9 @@ export function TreePane({
   homePath,
   compactTreeView = false,
   nodes,
-  currentPath,
+  selectedTreeItemId,
+  favorites,
+  favoritesExpanded,
   onFocusChange,
   onGoHome,
   onRerootHome,
@@ -52,6 +64,8 @@ export function TreePane({
   onToggleHidden,
   onToggleExpand,
   onNavigate,
+  onNavigateFavorite,
+  onToggleFavoritesExpanded,
   typeaheadQuery,
 }: {
   paneRef?: React.RefObject<HTMLElement | null>;
@@ -60,12 +74,14 @@ export function TreePane({
   homePath: string;
   compactTreeView?: boolean;
   nodes: Record<string, TreeNodeState>;
-  currentPath: string;
+  selectedTreeItemId: TreeItemId;
+  favorites: FavoritePreference[];
+  favoritesExpanded: boolean;
   onFocusChange: (focused: boolean) => void;
   onGoHome: () => void;
   onRerootHome: () => void;
   onOpenLocation?: () => void;
-  onQuickAccess: (location: "desktop" | "downloads" | "documents" | "source") => void;
+  onQuickAccess: (location: "root" | "applications" | "trash") => void;
   foldersFirst: boolean;
   onToggleFoldersFirst: () => void;
   onToggleInfoPanel: () => void;
@@ -84,15 +100,23 @@ export function TreePane({
   onToggleHidden: () => void;
   onToggleExpand: (path: string) => void;
   onNavigate: (path: string) => void;
+  onNavigateFavorite: (path: string) => Promise<boolean> | void;
+  onToggleFavoritesExpanded: () => void;
   typeaheadQuery?: string;
 }) {
-  const root = nodes[rootPath];
+  const presentation = buildTreePresentation({
+    favorites,
+    favoritesExpanded,
+    homePath,
+    rootPath,
+    nodes,
+  });
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const clickTimeoutRef = useRef<number | null>(null);
   const scrollFrameRef = useRef<number | null>(null);
   const lastScrolledPathRef = useRef<string | null>(null);
   const lastScrolledRowRef = useRef<HTMLDivElement | null>(null);
-  const [optimisticCurrentPath, setOptimisticCurrentPath] = useState<string | null>(null);
+  const [optimisticSelectedItemId, setOptimisticSelectedItemId] = useState<TreeItemId | null>(null);
 
   useEffect(
     () => () => {
@@ -107,20 +131,23 @@ export function TreePane({
   );
 
   useEffect(() => {
-    const currentRow = rowRefs.current[currentPath];
+    const currentRow = rowRefs.current[selectedTreeItemId];
     if (!currentRow || typeof currentRow.scrollIntoView !== "function") {
       return;
     }
     // Selection can move because of keyboard navigation, typeahead, or external path sync.
     // Keep the active row visible without repeatedly re-scrolling the same element.
-    if (lastScrolledPathRef.current === currentPath && lastScrolledRowRef.current === currentRow) {
+    if (
+      lastScrolledPathRef.current === selectedTreeItemId &&
+      lastScrolledRowRef.current === currentRow
+    ) {
       return;
     }
     scrollFrameRef.current = window.requestAnimationFrame(() => {
       currentRow.scrollIntoView({
         block: "nearest",
       });
-      lastScrolledPathRef.current = currentPath;
+      lastScrolledPathRef.current = selectedTreeItemId;
       lastScrolledRowRef.current = currentRow;
       scrollFrameRef.current = null;
     });
@@ -130,44 +157,11 @@ export function TreePane({
         scrollFrameRef.current = null;
       }
     };
-  }, [currentPath]);
+  }, [selectedTreeItemId]);
 
   useEffect(() => {
-    setOptimisticCurrentPath(null);
-  }, [currentPath]);
-
-  if (!root) {
-    return (
-      <aside
-        ref={paneRef}
-        className={`tree-pane sidebar pane pane-focus-target${compactTreeView ? " compact-tree-view" : ""}`}
-        tabIndex={-1}
-        onMouseDownCapture={(event) => {
-          const target = event.target;
-          if (!(target instanceof Element) || !target.closest(".tree-scroll, .tree-row")) {
-            return;
-          }
-          paneRef?.current?.focus({ preventScroll: true });
-        }}
-        onFocusCapture={() => onFocusChange(true)}
-        onBlurCapture={(event) => {
-          const nextTarget = event.relatedTarget;
-          if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) {
-            onFocusChange(false);
-          }
-        }}
-      >
-        <div className="sidebar-shell">
-          <aside className="sidebar-rail" />
-          <div className="sidebar-main">
-            <div className="sidebar-header">
-              <span className="sidebar-title">Folders</span>
-            </div>
-          </div>
-        </div>
-      </aside>
-    );
-  }
+    setOptimisticSelectedItemId(null);
+  }, [selectedTreeItemId]);
 
   return (
     <aside
@@ -205,38 +199,29 @@ export function TreePane({
           <button
             type="button"
             className="sidebar-rail-button"
-            onClick={() => onQuickAccess("desktop")}
-            title="Desktop"
-            aria-label="Quick access Desktop"
+            onClick={() => onQuickAccess("root")}
+            title="Macintosh HD"
+            aria-label="Quick access Macintosh HD"
           >
-            <ToolbarIcon name="desktop" />
+            <ToolbarIcon name="drive" />
           </button>
           <button
             type="button"
             className="sidebar-rail-button"
-            onClick={() => onQuickAccess("downloads")}
-            title="Downloads"
-            aria-label="Quick access Downloads"
+            onClick={() => onQuickAccess("applications")}
+            title="Applications"
+            aria-label="Quick access Applications"
           >
-            <ToolbarIcon name="downloads" />
+            <ToolbarIcon name="applications" />
           </button>
           <button
             type="button"
             className="sidebar-rail-button"
-            onClick={() => onQuickAccess("documents")}
-            title="Documents"
-            aria-label="Quick access Documents"
+            onClick={() => onQuickAccess("trash")}
+            title="Trash"
+            aria-label="Quick access Trash"
           >
-            <ToolbarIcon name="documents" />
-          </button>
-          <button
-            type="button"
-            className="sidebar-rail-button"
-            onClick={() => onQuickAccess("source")}
-            title="Source"
-            aria-label="Quick access Source"
-          >
-            <ToolbarIcon name="source" />
+            <ToolbarIcon name="trash" />
           </button>
           <span className="sidebar-rail-separator" />
           <button
@@ -368,21 +353,31 @@ export function TreePane({
           <div className="sidebar-tree">
             <div className="tree-scroll">
               <div className="tree-list">
-                <TreeNodeRow
-                  currentPath={currentPath}
-                  depth={0}
-                  isPaneFocused={isFocused}
-                  node={root}
-                  nodes={nodes}
-                  clickTimeoutRef={clickTimeoutRef}
-                  optimisticCurrentPath={optimisticCurrentPath}
-                  setOptimisticCurrentPath={setOptimisticCurrentPath}
-                  onToggleExpand={onToggleExpand}
-                  onNavigate={onNavigate}
-                  registerRowRef={(path, element) => {
-                    rowRefs.current[path] = element;
-                  }}
-                />
+                {presentation.visibleItemIds.map((itemId) => {
+                  const item = presentation.items[itemId];
+                  if (!item) {
+                    return null;
+                  }
+                  const path = item.path;
+                  return (
+                    <TreeItemRow
+                      key={item.id}
+                      item={item}
+                      isPaneFocused={isFocused}
+                      selectedTreeItemId={selectedTreeItemId}
+                      clickTimeoutRef={clickTimeoutRef}
+                      optimisticSelectedItemId={optimisticSelectedItemId}
+                      setOptimisticSelectedItemId={setOptimisticSelectedItemId}
+                      onToggleExpand={onToggleExpand}
+                      onToggleFavoritesExpanded={onToggleFavoritesExpanded}
+                      onNavigate={onNavigate}
+                      onNavigateFavorite={onNavigateFavorite}
+                      registerRowRef={(id, element) => {
+                        rowRefs.current[id] = element;
+                      }}
+                    />
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -392,51 +387,85 @@ export function TreePane({
   );
 }
 
-function TreeNodeRow({
-  node,
-  nodes,
-  currentPath,
-  depth,
+function TreeItemRow({
+  item,
   isPaneFocused,
+  selectedTreeItemId,
   clickTimeoutRef,
-  optimisticCurrentPath,
-  setOptimisticCurrentPath,
+  optimisticSelectedItemId,
+  setOptimisticSelectedItemId,
   onToggleExpand,
+  onToggleFavoritesExpanded,
   onNavigate,
+  onNavigateFavorite,
   registerRowRef,
 }: {
-  node: TreeNodeState;
-  nodes: Record<string, TreeNodeState>;
-  currentPath: string;
-  depth: number;
+  item: TreePresentationItem;
   isPaneFocused: boolean;
+  selectedTreeItemId: TreeItemId;
   clickTimeoutRef: React.RefObject<number | null>;
-  optimisticCurrentPath: string | null;
-  setOptimisticCurrentPath: Dispatch<SetStateAction<string | null>>;
+  optimisticSelectedItemId: TreeItemId | null;
+  setOptimisticSelectedItemId: Dispatch<SetStateAction<TreeItemId | null>>;
   onToggleExpand: (path: string) => void;
+  onToggleFavoritesExpanded: () => void;
   onNavigate: (path: string) => Promise<boolean> | void;
-  registerRowRef: (path: string, element: HTMLDivElement | null) => void;
+  onNavigateFavorite: (path: string) => Promise<boolean> | void;
+  registerRowRef: (id: string, element: HTMLDivElement | null) => void;
 }) {
-  const isCurrent = (optimisticCurrentPath ?? currentPath) === node.path;
-  const canExpand = !node.isSymlink;
+  const isCurrent = (optimisticSelectedItemId ?? selectedTreeItemId) === item.id;
+  const canExpand =
+    item.kind === "favorites-root" ? item.canExpand : item.kind === "filesystem" ? !item.isSymlink : false;
+  const isFavorite = item.kind === "favorite";
+  const isFavoritesRoot = item.kind === "favorites-root";
+  const isFileSystem = item.kind === "filesystem";
+  const itemPath = item.path;
 
   return (
     <div className="tree-branch">
       <div
-        ref={(element) => registerRowRef(node.path, element)}
+        ref={(element) => registerRowRef(item.id, element)}
         className={`tree-row${isCurrent ? " active" : ""}${isCurrent && !isPaneFocused ? " inactive" : ""}`}
-        data-tree-path={node.path}
-        style={{ paddingLeft: `${12 + depth * 16}px` }}
+        data-tree-path={itemPath ?? item.id}
+        data-tree-kind={item.kind}
+        style={{ paddingLeft: `${12 + item.depth * 16}px` }}
       >
         <button
           type="button"
-          className={`tree-expand${node.expanded ? " expanded" : ""}${
-            !canExpand && !node.loading ? " empty" : ""
+          className={`tree-expand${item.expanded ? " expanded" : ""}${
+            !canExpand && !item.loading ? " empty" : ""
           }`}
-          onClick={() => onToggleExpand(node.path)}
-          disabled={!canExpand || node.loading}
-          aria-label={node.expanded ? "Collapse folder" : "Expand folder"}
-          title={!canExpand ? "No subfolders" : node.expanded ? "Collapse folder" : "Expand folder"}
+          onClick={() => {
+            if (isFavoritesRoot) {
+              onToggleFavoritesExpanded();
+              return;
+            }
+            if (isFileSystem && itemPath) {
+              onToggleExpand(itemPath);
+            }
+          }}
+          disabled={!canExpand || item.loading}
+          aria-label={
+            isFavoritesRoot
+              ? item.expanded
+                ? "Collapse favorites"
+                : "Expand favorites"
+              : item.expanded
+                ? "Collapse folder"
+                : "Expand folder"
+          }
+          title={
+            !canExpand
+              ? isFavoritesRoot
+                ? "No favorites"
+                : "No subfolders"
+              : isFavoritesRoot
+                ? item.expanded
+                  ? "Collapse favorites"
+                  : "Expand favorites"
+                : item.expanded
+                  ? "Collapse folder"
+                  : "Expand folder"
+          }
         >
           <ToolbarIcon name="chevron" />
         </button>
@@ -447,74 +476,67 @@ function TreeNodeRow({
             if (event.button !== 0) {
               return;
             }
-            setOptimisticCurrentPath(node.path);
+            setOptimisticSelectedItemId(item.id);
           }}
           onClick={() => {
+            if (isFavoritesRoot) {
+              return;
+            }
             if (clickTimeoutRef.current !== null) {
               window.clearTimeout(clickTimeoutRef.current);
             }
             clickTimeoutRef.current = window.setTimeout(() => {
               clickTimeoutRef.current = null;
-              const navigationResult = onNavigate(node.path);
+              const navigationResult = itemPath
+                ? isFavorite
+                  ? onNavigateFavorite(itemPath)
+                  : onNavigate(itemPath)
+                : undefined;
               if (!navigationResult || typeof navigationResult.then !== "function") {
                 return;
               }
               void navigationResult.then((didNavigate) => {
                 if (!didNavigate) {
-                  setOptimisticCurrentPath(null);
+                  setOptimisticSelectedItemId(null);
                 }
               });
             }, 180);
           }}
           onDoubleClick={() => {
+            if (isFavoritesRoot) {
+              onToggleFavoritesExpanded();
+              return;
+            }
             if (clickTimeoutRef.current !== null) {
               window.clearTimeout(clickTimeoutRef.current);
               clickTimeoutRef.current = null;
             }
-            setOptimisticCurrentPath(node.path);
-            onToggleExpand(node.path);
+            setOptimisticSelectedItemId(item.id);
+            if (isFileSystem && itemPath) {
+              onToggleExpand(itemPath);
+            }
           }}
-          title={node.path}
+          title={itemPath ?? item.label}
         >
-          <TreeFolderIcon open={node.expanded} alias={node.isSymlink} />
-          <span className="tree-label-text">{node.name}</span>
-          {node.isSymlink ? <span className="tree-label-badge">Alias</span> : null}
+          {isFavorite || isFavoritesRoot ? (
+            <FavoriteItemIcon icon={item.icon ?? "folder"} />
+          ) : (
+            <TreeFolderIcon open={item.expanded} alias={item.isSymlink} />
+          )}
+          <span className="tree-label-text">{item.label}</span>
+          {item.isSymlink ? <span className="tree-label-badge">Alias</span> : null}
         </button>
       </div>
-      {node.loading ? (
-        <div className="tree-loading" style={{ paddingLeft: `${44 + depth * 16}px` }}>
+      {item.loading ? (
+        <div className="tree-loading" style={{ paddingLeft: `${44 + item.depth * 16}px` }}>
           Loading folder…
         </div>
       ) : null}
-      {node.error ? (
-        <div className="tree-error" style={{ paddingLeft: `${44 + depth * 16}px` }}>
-          {node.error}
+      {item.error ? (
+        <div className="tree-error" style={{ paddingLeft: `${44 + item.depth * 16}px` }}>
+          {item.error}
         </div>
       ) : null}
-      {node.expanded
-        ? node.childPaths.map((childPath) => {
-            const child = nodes[childPath];
-            if (!child) {
-              return null;
-            }
-            return (
-              <TreeNodeRow
-                key={child.path}
-                currentPath={currentPath}
-                depth={depth + 1}
-                isPaneFocused={isPaneFocused}
-                node={child}
-                nodes={nodes}
-                clickTimeoutRef={clickTimeoutRef}
-                optimisticCurrentPath={optimisticCurrentPath}
-                setOptimisticCurrentPath={setOptimisticCurrentPath}
-                onToggleExpand={onToggleExpand}
-                onNavigate={onNavigate}
-                registerRowRef={registerRowRef}
-              />
-            );
-          })
-        : null}
     </div>
   );
 }

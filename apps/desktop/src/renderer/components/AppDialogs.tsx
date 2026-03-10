@@ -41,6 +41,8 @@ export function AppDialogs({
   onSubmitMoveDialog,
   contextMenuState,
   contextMenuDisabledActionIds,
+  contextMenuFavoriteToggleLabel,
+  contextMenuHiddenActionIds,
   contextMenuSubmenuItems,
   onRunContextMenuAction,
   onRunContextSubmenuAction,
@@ -83,6 +85,8 @@ export function AppDialogs({
   onSubmitMoveDialog: (path: string) => void;
   contextMenuState: ContextMenuState | null;
   contextMenuDisabledActionIds: ContextMenuActionId[];
+  contextMenuFavoriteToggleLabel: string | null;
+  contextMenuHiddenActionIds: ContextMenuActionId[];
   contextMenuSubmenuItems: ContextMenuSubmenuItem[];
   onRunContextMenuAction: (actionId: ContextMenuActionId, paths: string[]) => void;
   onRunContextSubmenuAction: (action: ContextMenuSubmenuAction, paths: string[]) => void;
@@ -154,6 +158,8 @@ export function AppDialogs({
           anchorY={contextMenuState.y}
           variant={contextMenuState.source}
           disabledActionIds={contextMenuDisabledActionIds}
+          favoriteToggleLabel={contextMenuFavoriteToggleLabel}
+          hiddenActionIds={contextMenuHiddenActionIds}
           submenuItems={contextMenuSubmenuItems}
           open
           onAction={(actionId) => {

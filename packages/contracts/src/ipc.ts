@@ -67,6 +67,35 @@ export const openWithApplicationSchema = z.object({
   appPath: z.string().trim().min(1),
   appName: z.string().trim().min(1),
 });
+export const favoriteIconIdSchema = z.enum([
+  "home",
+  "applications",
+  "desktop",
+  "documents",
+  "downloads",
+  "trash",
+  "folder",
+  "star",
+  "drive",
+  "code",
+  "terminal",
+  "globe",
+  "music",
+  "photos",
+  "videos",
+  "archive",
+  "cloud",
+  "server",
+  "projects",
+  "books",
+  "camera",
+  "toolbox",
+  "network",
+]);
+export const favoritePreferenceSchema = z.object({
+  path: z.string().trim().min(1),
+  icon: favoriteIconIdSchema,
+});
 export const applicationSelectionSchema = z.object({
   appPath: z.string().trim().min(1),
   appName: z.string().trim().min(1),
@@ -306,6 +335,9 @@ export const appPreferencesSchema = z.object({
   theme: themeModeSchema,
   accent: accentModeSchema,
   accentToolbarButtons: z.boolean(),
+  accentFavoriteItems: z.boolean(),
+  accentFavoriteText: z.boolean(),
+  favoriteAccent: accentModeSchema,
   zoomPercent: z.number().int().min(75).max(150),
   uiFontFamily: uiFontFamilySchema,
   uiFontSize: z.number().int().min(12).max(15),
@@ -346,6 +378,10 @@ export const appPreferencesSchema = z.object({
   restoreLastVisitedFolderOnStartup: z.boolean(),
   treeRootPath: z.string().min(1).nullable(),
   lastVisitedPath: z.string().min(1).nullable(),
+  lastVisitedFavoritePath: z.string().min(1).nullable(),
+  favorites: z.array(favoritePreferenceSchema),
+  favoritesExpanded: z.boolean(),
+  favoritesInitialized: z.boolean(),
 });
 
 export const folderSizeJobStatusSchema = z.enum([

@@ -1,6 +1,7 @@
 import {
   accentTokensToCssVariables,
   generateAccentTokens,
+  getFavoriteAccentVariables,
   getAccentPalette,
   getToolbarAccentVariables,
 } from "./accent";
@@ -62,6 +63,16 @@ describe("accent helpers", () => {
       "--sidebar-rail-menu-active-bg": "rgba(232, 114, 154, 0.11)",
       "--sidebar-rail-menu-active-fg": "#e8729a",
       "--sidebar-rail-menu-check": "#e8729a",
+    });
+    expect(getFavoriteAccentVariables(tokens)).toEqual({
+      "--favorite-accent-solid": "#e8729a",
+      "--favorite-accent-text": "#e8729a",
+      "--favorite-accent-soft-bg": "rgba(232, 114, 154, 0.08)",
+      "--favorite-accent-active-bg": "rgba(232, 114, 154, 0.14)",
+      "--favorite-accent-border": "rgba(232, 114, 154, 0.3)",
+      "--favorite-accent-focus-border": "rgba(232, 114, 154, 0.4)",
+      "--favorite-accent-badge-bg": "rgba(232, 114, 154, 0.11)",
+      "--favorite-accent-badge-text": "#e8729a",
     });
   });
 });

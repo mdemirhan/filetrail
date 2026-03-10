@@ -16,6 +16,15 @@ export function toPreferencePatch(
   if (value.accentToolbarButtons !== undefined) {
     patch.accentToolbarButtons = value.accentToolbarButtons;
   }
+  if (value.accentFavoriteItems !== undefined) {
+    patch.accentFavoriteItems = value.accentFavoriteItems;
+  }
+  if (value.accentFavoriteText !== undefined) {
+    patch.accentFavoriteText = value.accentFavoriteText;
+  }
+  if (value.favoriteAccent !== undefined) {
+    patch.favoriteAccent = value.favoriteAccent;
+  }
   if (value.zoomPercent !== undefined) {
     patch.zoomPercent = value.zoomPercent;
   }
@@ -135,6 +144,18 @@ export function toPreferencePatch(
   }
   if (value.lastVisitedPath !== undefined) {
     patch.lastVisitedPath = value.lastVisitedPath;
+  }
+  if (value.lastVisitedFavoritePath !== undefined) {
+    patch.lastVisitedFavoritePath = value.lastVisitedFavoritePath;
+  }
+  if (value.favorites !== undefined) {
+    patch.favorites = value.favorites;
+  }
+  if (value.favoritesExpanded !== undefined) {
+    patch.favoritesExpanded = value.favoritesExpanded;
+  }
+  if (value.favoritesInitialized !== undefined) {
+    patch.favoritesInitialized = value.favoritesInitialized;
   }
   return patch;
 }

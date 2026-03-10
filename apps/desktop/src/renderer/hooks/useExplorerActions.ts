@@ -13,6 +13,7 @@ import type { IpcRequest, WriteOperationProgressEvent } from "@filetrail/contrac
 import type {
   ApplicationSelection,
   FileActivationAction,
+  FavoritePreference,
   OpenWithApplication,
 } from "../../shared/appPreferences";
 import {
@@ -51,6 +52,7 @@ import {
 import type { DirectoryEntry, CopyPastePlan } from "../lib/explorerTypes";
 import { parentDirectoryPath } from "../lib/explorerNavigation";
 import { useFiletrailClient } from "../lib/filetrailClient";
+import { createFavorite, isFavoritePath } from "../lib/favorites";
 import { createRendererLogger } from "../lib/logging";
 import { type ToastEntry, type ToastKind, createToastEntry, enqueueToast } from "../lib/toasts";
 import type {
@@ -88,9 +90,12 @@ export function useExplorerActions(args: {
   focusedPane: "tree" | "content" | null;
   setFocusedPane: (value: "tree" | "content" | null) => void;
   setInfoPanelOpen: Dispatch<SetStateAction<boolean>>;
+  homePath: string;
   currentPath: string;
   currentEntries: DirectoryEntry[];
   activeContentEntries: DirectoryEntry[];
+  favorites: FavoritePreference[];
+  setFavorites: Dispatch<SetStateAction<FavoritePreference[]>>;
   selectedEntry: DirectoryEntry | null;
   selectedPathsInViewOrder: string[];
   selectedPathSet: Set<string>;
@@ -198,9 +203,12 @@ export function useExplorerActions(args: {
     focusedPane,
     setFocusedPane,
     setInfoPanelOpen,
+    homePath,
     currentPath,
     currentEntries,
     activeContentEntries,
+    favorites,
+    setFavorites,
     selectedEntry,
     selectedPathsInViewOrder,
     selectedPathSet,
@@ -269,6 +277,24 @@ export function useExplorerActions(args: {
     hasClipboardItems(copyPasteClipboard) && pasteDestinationPath !== null;
   const showCopyPasteProgressCard = writeOperationCardState !== null;
   const showCopyPasteResultDialog = shouldRenderCopyPasteResultDialog(writeOperationProgressEvent);
+  const contextMenuFavoriteToggleLabel = useMemo(() => {
+    if (!contextMenuState || contextMenuState.source !== "browse" || isSearchMode) {
+      return null;
+    }
+    if (contextMenuState.scope !== "selection" || contextMenuState.paths.length !== 1) {
+      return null;
+    }
+    const targetEntry = contextMenuTargetEntries[0] ?? null;
+    if (!isDirectoryLikeEntry(targetEntry)) {
+      return null;
+    }
+    return isFavoritePath(favorites, targetEntry.path) ? "Remove from Favorites" : "Add to Favorites";
+  }, [contextMenuState, contextMenuTargetEntries, favorites, isSearchMode]);
+
+  const contextMenuHiddenActionIds = useMemo(
+    () => (contextMenuFavoriteToggleLabel === null ? (["toggleFavorite"] as ContextMenuActionId[]) : []),
+    [contextMenuFavoriteToggleLabel],
+  );
 
   const contextMenuDisabledActionIds = useMemo(() => {
     if (!contextMenuState) {
@@ -1468,6 +1494,18 @@ export function useExplorerActions(args: {
       setInfoPanelOpen(true);
       return;
     }
+    if (actionId === "toggleFavorite") {
+      const targetPath = paths[0];
+      if (!targetPath) {
+        return;
+      }
+      setFavorites((current) =>
+        isFavoritePath(current, targetPath)
+          ? current.filter((favorite) => favorite.path !== targetPath)
+          : [...current, createFavorite(targetPath, homePath)],
+      );
+      return;
+    }
     if (actionId === "move") {
       openMoveDialog(paths);
       return;
@@ -1984,6 +2022,8 @@ export function useExplorerActions(args: {
     clearContentSelection,
     closeContextMenu,
     contextMenuDisabledActionIds,
+    contextMenuFavoriteToggleLabel,
+    contextMenuHiddenActionIds,
     contextMenuSubmenuItems,
     copyGetInfoPath,
     dismissActionNotice,

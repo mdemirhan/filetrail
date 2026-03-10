@@ -1,21 +1,33 @@
 import type { AppPreferences } from "../../shared/appPreferences";
 import { isPathWithinRoot } from "./pathUtils";
 
+function resolvePersistedStartupRoot(
+  persistedRootPath: string | null,
+  homePath: string,
+  startupPath: string,
+): string {
+  if (persistedRootPath === "/" || persistedRootPath === homePath) {
+    return persistedRootPath;
+  }
+  return isPathWithinRoot(startupPath, homePath) ? homePath : "/";
+}
+
 // Startup navigation merges explicit launch context, persisted preferences, and home-folder
 // fallbacks into one path/root pair the renderer can use immediately.
 export function resolveStartupNavigation(
   preferences: Pick<
     AppPreferences,
-    "restoreLastVisitedFolderOnStartup" | "lastVisitedPath" | "treeRootPath"
+    "restoreLastVisitedFolderOnStartup" | "lastVisitedPath" | "lastVisitedFavoritePath" | "treeRootPath"
   >,
   homePath: string,
   startupFolderPath: string | null = null,
-): { startupPath: string; startupRootPath: string } {
+): { startupPath: string; startupRootPath: string; startupFavoritePath: string | null } {
   if (startupFolderPath) {
     // OS-provided launch targets always win.
     return {
       startupPath: startupFolderPath,
-      startupRootPath: isPathWithinRoot(startupFolderPath, homePath) ? homePath : "/",
+      startupRootPath: resolvePersistedStartupRoot(null, homePath, startupFolderPath),
+      startupFavoritePath: null,
     };
   }
 
@@ -30,12 +42,14 @@ export function resolveStartupNavigation(
     return {
       startupPath,
       startupRootPath: homePath,
+      startupFavoritePath: null,
     };
   }
 
   return {
     startupPath,
-    // Restored startup prefers the home directory as a stable tree root when possible.
-    startupRootPath: isPathWithinRoot(startupPath, homePath) ? homePath : "/",
+    startupRootPath: resolvePersistedStartupRoot(preferences.treeRootPath, homePath, startupPath),
+    startupFavoritePath:
+      preferences.lastVisitedFavoritePath === startupPath ? preferences.lastVisitedFavoritePath : null,
   };
 }

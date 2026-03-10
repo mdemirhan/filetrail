@@ -105,6 +105,7 @@ describe("appPreferences helpers", () => {
       openItemLimit: 5,
       treeRootPath: null,
       lastVisitedPath: null,
+      lastVisitedFavoritePath: null,
     });
   });
 });

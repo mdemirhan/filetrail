@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -15,6 +15,9 @@ describe("appStateStore", () => {
       theme: "tomorrow-night",
       accent: "gold",
       accentToolbarButtons: true,
+      accentFavoriteItems: false,
+      accentFavoriteText: false,
+      favoriteAccent: "gold",
       zoomPercent: 100,
       uiFontFamily: "lexend",
       uiFontSize: 13,
@@ -83,6 +86,10 @@ describe("appStateStore", () => {
       restoreLastVisitedFolderOnStartup: false,
       treeRootPath: null,
       lastVisitedPath: null,
+      lastVisitedFavoritePath: null,
+      favorites: [],
+      favoritesExpanded: true,
+      favoritesInitialized: false,
     });
     expect(store.getWindowState()).toEqual({
       width: 1480,
@@ -101,6 +108,9 @@ describe("appStateStore", () => {
       theme: "dark",
       accent: "teal",
       accentToolbarButtons: false,
+      accentFavoriteItems: true,
+      accentFavoriteText: true,
+      favoriteAccent: "coral",
       zoomPercent: 115,
       uiFontFamily: "lexend",
       uiFontSize: 14,
@@ -162,6 +172,13 @@ describe("appStateStore", () => {
       restoreLastVisitedFolderOnStartup: true,
       treeRootPath: "/Users/demo",
       lastVisitedPath: "/Users/demo/src",
+      lastVisitedFavoritePath: "/Users/demo/Documents",
+      favorites: [
+        { path: "/Users/demo/Documents", icon: "documents" },
+        { path: "/Applications", icon: "applications" },
+      ],
+      favoritesExpanded: false,
+      favoritesInitialized: true,
     });
     store.setWindowState({
       x: 120,
@@ -179,6 +196,9 @@ describe("appStateStore", () => {
       theme: "dark",
       accent: "teal",
       accentToolbarButtons: false,
+      accentFavoriteItems: true,
+      accentFavoriteText: true,
+      favoriteAccent: "coral",
       zoomPercent: 115,
       uiFontFamily: "lexend",
       uiFontSize: 14,
@@ -240,6 +260,13 @@ describe("appStateStore", () => {
       restoreLastVisitedFolderOnStartup: true,
       treeRootPath: "/Users/demo",
       lastVisitedPath: "/Users/demo/src",
+      lastVisitedFavoritePath: "/Users/demo/Documents",
+      favorites: [
+        { path: "/Users/demo/Documents", icon: "documents" },
+        { path: "/Applications", icon: "applications" },
+      ],
+      favoritesExpanded: false,
+      favoritesInitialized: true,
     });
     expect(reloaded.getWindowState()).toEqual({
       x: 120,
@@ -259,6 +286,9 @@ describe("appStateStore", () => {
     store.updatePreferences({
       accent: "bad-accent" as never,
       accentToolbarButtons: "nope" as never,
+      accentFavoriteItems: "nope" as never,
+      accentFavoriteText: "nope" as never,
+      favoriteAccent: "bad-accent" as never,
       zoomPercent: 999,
       uiFontFamily: "bad-font" as never,
       uiFontSize: 999,
@@ -298,6 +328,7 @@ describe("appStateStore", () => {
       inspectorWidth: 9999,
       treeRootPath: "",
       lastVisitedPath: "",
+      lastVisitedFavoritePath: "",
     });
     store.flush();
 
@@ -306,6 +337,9 @@ describe("appStateStore", () => {
     });
     expect(reloaded.getPreferences().accent).toBe("gold");
     expect(reloaded.getPreferences().accentToolbarButtons).toBe(true);
+    expect(reloaded.getPreferences().accentFavoriteItems).toBe(false);
+    expect(reloaded.getPreferences().accentFavoriteText).toBe(false);
+    expect(reloaded.getPreferences().favoriteAccent).toBe("gold");
     expect(reloaded.getPreferences().zoomPercent).toBe(150);
     expect(reloaded.getPreferences().treeWidth).toBe(220);
     expect(reloaded.getPreferences().inspectorWidth).toBe(480);
@@ -353,6 +387,41 @@ describe("appStateStore", () => {
     expect(reloaded.getPreferences().openItemLimit).toBe(50);
     expect(reloaded.getPreferences().treeRootPath).toBeNull();
     expect(reloaded.getPreferences().lastVisitedPath).toBeNull();
+    expect(reloaded.getPreferences().lastVisitedFavoritePath).toBeNull();
+  });
+
+  it("migrates legacy favorite path arrays into favorite entries", () => {
+    const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
+    const filePath = resolveAppStatePath(userDataPath);
+    const store = createAppStateStore(filePath, {
+      defaultTheme: "dark",
+    });
+
+    store.updatePreferences({
+      favoritesExpanded: false,
+      favoritesInitialized: true,
+    });
+    store.flush();
+
+    const fileContents = `{
+  "preferences": {
+    "theme": "dark",
+    "favoritePaths": ["/Users/demo/Documents", "/Applications", "/Users/demo/Documents"],
+    "favoritesExpanded": false,
+    "favoritesInitialized": true
+  }
+}\n`;
+    writeFileSync(filePath, fileContents, "utf8");
+
+    const reloaded = createAppStateStore(filePath, {
+      defaultTheme: "dark",
+    });
+
+    expect(reloaded.getPreferences().favorites).toEqual([
+      { path: "/Users/demo/Documents", icon: "documents" },
+      { path: "/Applications", icon: "applications" },
+    ]);
+    expect(reloaded.getPreferences().lastVisitedFavoritePath).toBeNull();
   });
 
   it("preserves an explicitly empty open with application list", () => {

@@ -86,10 +86,53 @@ vi.mock("./components/ContentPane", () => ({
   ),
 }));
 vi.mock("./components/TreePane", () => ({
-  TreePane: ({ onFocusChange }: { onFocusChange: (focused: boolean) => void }) => (
-    <button type="button" data-testid="tree-pane" onClick={() => onFocusChange(true)}>
-      Tree
-    </button>
+  TreePane: ({
+    onFocusChange,
+    onNavigate,
+    onNavigateFavorite,
+    nodes,
+    favorites,
+    selectedTreeItemId,
+  }: {
+    onFocusChange: (focused: boolean) => void;
+    onNavigate: (path: string) => Promise<boolean> | void;
+    onNavigateFavorite: (path: string) => Promise<boolean> | void;
+    nodes: Record<string, { path: string; name: string }>;
+    favorites: Array<{ path: string }>;
+    selectedTreeItemId: string;
+  }) => (
+    <div data-testid="tree-pane-shell">
+      <button type="button" data-testid="tree-pane" onClick={() => onFocusChange(true)}>
+        Tree
+      </button>
+      <output data-testid="tree-selection">{selectedTreeItemId}</output>
+      {favorites.map((favorite) => (
+        <button
+          key={`favorite:${favorite.path}`}
+          type="button"
+          title={`favorite:${favorite.path}`}
+          onClick={() => {
+            onFocusChange(true);
+            void onNavigateFavorite(favorite.path);
+          }}
+        >
+          Favorite {favorite.path}
+        </button>
+      ))}
+      {Object.values(nodes).map((node) => (
+        <button
+          key={`tree:${node.path}`}
+          type="button"
+          title={`tree:${node.path}`}
+          onClick={() => {
+            onFocusChange(true);
+            void onNavigate(node.path);
+          }}
+        >
+          Tree {node.name}
+        </button>
+      ))}
+    </div>
   ),
 }));
 vi.mock("./components/SearchResultsPane", () => ({
@@ -613,6 +656,7 @@ describe("App copy/paste integration", () => {
         restoreLastVisitedFolderOnStartup: false,
         treeRootPath: "/Users/demo/projects",
         lastVisitedPath: "/Users/demo/projects/filetrail",
+        lastVisitedFavoritePath: "/Users/demo/projects/filetrail",
       },
     });
 
@@ -630,6 +674,87 @@ describe("App copy/paste integration", () => {
     expect(startupSnapshotCall?.payload).toMatchObject({
       path: "/Users/demo",
     });
+  });
+
+  it("restores favorite tree selection when the remembered location is a favorite root", async () => {
+    const harness = createAppHarness({
+      preferences: {
+        restoreLastVisitedFolderOnStartup: true,
+        treeRootPath: "/Users/demo",
+        lastVisitedPath: "/Users/demo/Documents",
+        lastVisitedFavoritePath: "/Users/demo/Documents",
+        favorites: [
+          { path: "/Users/demo", icon: "home" },
+          { path: "/Users/demo/Documents", icon: "documents" },
+        ],
+      },
+      directorySnapshots: {
+        "/Users/demo/Documents": {
+          path: "/Users/demo/Documents",
+          parentPath: "/Users/demo",
+          entries: [],
+        },
+      },
+      treeChildrenByPath: {
+        "/Users/demo": [createTreeChild("/Users/demo/Documents", "directory")],
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await screen.findByTestId("content-pane");
+
+    expect(screen.getByTestId("tree-selection")).toHaveTextContent(
+      "favorite:/Users/demo/Documents",
+    );
+    expect(screen.getByTitle("tree:/Users/demo/Documents")).toBeInTheDocument();
+  });
+
+  it("reroots the tree at slash when tree navigation moves above home", async () => {
+    const harness = createAppHarness({
+      directorySnapshots: {
+        "/Users": {
+          path: "/Users",
+          parentPath: "/",
+          entries: [createDirectoryEntry("/Users/demo", "directory")],
+        },
+      },
+      treeChildrenByPath: {
+        "/Users/demo": [createTreeChild("/Users/demo/Folder", "directory")],
+        "/": [createTreeChild("/Users", "directory")],
+        "/Users": [createTreeChild("/Users/demo", "directory")],
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await screen.findByTestId("content-pane");
+    await focusTreePane();
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "ArrowUp", metaKey: true });
+    });
+
+    await vi.waitFor(() => {
+      const lastUpdate = [...harness.invocations]
+        .reverse()
+        .find((call) => call.channel === "app:updatePreferences");
+      expect(lastUpdate?.payload).toMatchObject({
+        preferences: {
+          treeRootPath: "/",
+          lastVisitedPath: "/Users",
+        },
+      });
+    });
+    expect(screen.getByTestId("tree-selection")).toHaveTextContent("fs:/Users");
   });
 
   it("opens the selected item with a configured application from the context menu", async () => {
@@ -1274,6 +1399,158 @@ describe("App copy/paste integration", () => {
     expect(
       harness.invocations.find((call) => call.channel === "writeOperation:createFolder"),
     ).toBeUndefined();
+  });
+
+  it("shows Add to Favorites for non-favorite folders and persists the change", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const folderButton = await screen.findByTitle("/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.contextMenu(folderButton);
+    });
+
+    const addToFavoritesButton = screen.getByRole("button", { name: "Add to Favorites" });
+    expect(addToFavoritesButton).toHaveAttribute("aria-disabled", "false");
+
+    await act(async () => {
+      fireEvent.click(addToFavoritesButton);
+    });
+
+    await vi.waitFor(() => {
+      const lastUpdate = [...harness.invocations]
+        .reverse()
+        .find((call) => call.channel === "app:updatePreferences");
+      expect(lastUpdate?.payload).toMatchObject({
+        preferences: {
+          favorites: expect.arrayContaining([{ path: "/Users/demo/Folder", icon: "folder" }]),
+        },
+      });
+    });
+  });
+
+  it("shows Remove from Favorites for existing favorites and persists removal", async () => {
+    const harness = createAppHarness({
+      preferences: {
+        favorites: [{ path: "/Users/demo/Folder", icon: "folder" }],
+        favoritesExpanded: true,
+        favoritesInitialized: true,
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const folderButton = await screen.findByTitle("/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.contextMenu(folderButton);
+    });
+
+    const removeFromFavoritesButton = screen.getByRole("button", {
+      name: "Remove from Favorites",
+    });
+    expect(removeFromFavoritesButton).toHaveAttribute("aria-disabled", "false");
+
+    await act(async () => {
+      fireEvent.click(removeFromFavoritesButton);
+    });
+
+    await vi.waitFor(() => {
+      const lastUpdate = [...harness.invocations]
+        .reverse()
+        .find((call) => call.channel === "app:updatePreferences");
+      expect(lastUpdate?.payload).toMatchObject({
+        preferences: {
+          favorites: [],
+        },
+      });
+    });
+  });
+
+  it("keeps a tree symlink selected until content navigation moves into a child", async () => {
+    const harness = createAppHarness({
+      directorySnapshots: {
+        "/Users/demo/Alias": {
+          path: "/Volumes/Shared/RealFolder",
+          parentPath: "/Volumes/Shared",
+          entries: [createDirectoryEntry("/Volumes/Shared/RealFolder/Child", "directory")],
+        },
+        "/Volumes/Shared/RealFolder/Child": {
+          path: "/Volumes/Shared/RealFolder/Child",
+          parentPath: "/Volumes/Shared/RealFolder",
+          entries: [],
+        },
+      },
+      treeChildrenByPath: {
+        "/Users/demo": [
+          createTreeChild("/Users/demo/Folder", "directory"),
+          createTreeChild("/Users/demo/Alias", "symlink_directory", { isSymlink: true }),
+        ],
+        "/": [createTreeChild("/Volumes", "directory")],
+        "/Volumes": [createTreeChild("/Volumes/Shared", "directory")],
+        "/Volumes/Shared": [createTreeChild("/Volumes/Shared/RealFolder", "directory")],
+        "/Volumes/Shared/RealFolder": [
+          createTreeChild("/Volumes/Shared/RealFolder/Child", "directory"),
+        ],
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await screen.findByTestId("content-pane");
+
+    await act(async () => {
+      fireEvent.click(await screen.findByTitle("tree:/Users/demo/Alias"));
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("tree-selection")).toHaveTextContent("fs:/Users/demo/Alias");
+    });
+    expect(
+      harness.invocations.some(
+        (call) =>
+          call.channel === "directory:getSnapshot" &&
+          (call.payload as IpcRequestInput<"directory:getSnapshot">).path === "/Users/demo/Alias",
+      ),
+    ).toBe(true);
+    expect(
+      harness.invocations.some(
+        (call) =>
+          call.channel === "tree:getChildren" &&
+          (call.payload as IpcRequestInput<"tree:getChildren">).path ===
+            "/Volumes/Shared/RealFolder",
+      ),
+    ).toBe(false);
+
+    await act(async () => {
+      fireEvent.doubleClick(await screen.findByTitle("/Volumes/Shared/RealFolder/Child"));
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("tree-selection")).toHaveTextContent(
+        "fs:/Volumes/Shared/RealFolder/Child",
+      );
+    });
+    expect(
+      harness.invocations.some(
+        (call) =>
+          call.channel === "tree:getChildren" &&
+          (call.payload as IpcRequestInput<"tree:getChildren">).path ===
+            "/Volumes/Shared/RealFolder",
+      ),
+    ).toBe(true);
   });
 
   it("moves the selected items to Trash with Cmd+Backspace", async () => {
@@ -3155,6 +3432,8 @@ function createAppHarness(
   args: {
     planResponse?: IpcResponse<"copyPaste:plan">;
     preferences?: Partial<IpcResponse<"app:getPreferences">["preferences"]>;
+    directorySnapshots?: Record<string, IpcResponse<"directory:getSnapshot">>;
+    treeChildrenByPath?: Record<string, IpcResponse<"tree:getChildren">["children"]>;
     copyTextError?: Error;
     pickApplicationResponse?: IpcResponse<"system:pickApplication">;
     pickDirectoryResponse?: IpcResponse<"system:pickDirectory">;
@@ -3200,6 +3479,13 @@ function createAppHarness(
       parentPath: "/Users/demo",
       entries: [],
     },
+    ...args.directorySnapshots,
+  };
+  const treeChildrenByPath: Record<string, IpcResponse<"tree:getChildren">["children"]> = {
+    "/Users/demo": [
+      createTreeChild("/Users/demo/Folder", "directory"),
+    ],
+    ...args.treeChildrenByPath,
   };
   const invocations: Array<{ channel: IpcChannel; payload: unknown }> = [];
   let commandListener: ((command: RendererCommand) => void) | null = null;
@@ -3235,16 +3521,9 @@ function createAppHarness(
       }
       if (channel === "tree:getChildren") {
         return {
-          path: "/Users/demo",
-          children: [
-            {
-              path: "/Users/demo/Folder",
-              name: "Folder",
-              kind: "directory",
-              isHidden: false,
-              isSymlink: false,
-            },
-          ],
+          path: (payload as IpcRequestInput<"tree:getChildren">).path,
+          children:
+            treeChildrenByPath[(payload as IpcRequestInput<"tree:getChildren">).path] ?? [],
         } satisfies IpcResponse<"tree:getChildren"> as IpcResponse<C>;
       }
       if (channel === "directory:getSnapshot") {
@@ -3536,6 +3815,9 @@ function expectNoFileClipboardActions(harness: ReturnType<typeof createAppHarnes
 function createDirectoryEntry(
   path: string,
   kind: IpcResponse<"directory:getSnapshot">["entries"][number]["kind"],
+  options: {
+    isSymlink?: boolean;
+  } = {},
 ): IpcResponse<"directory:getSnapshot">["entries"][number] {
   return {
     path,
@@ -3543,7 +3825,23 @@ function createDirectoryEntry(
     extension: kind === "file" ? "txt" : "",
     kind,
     isHidden: false,
-    isSymlink: false,
+    isSymlink: options.isSymlink ?? false,
+  };
+}
+
+function createTreeChild(
+  path: string,
+  kind: IpcResponse<"tree:getChildren">["children"][number]["kind"],
+  options: {
+    isSymlink?: boolean;
+  } = {},
+): IpcResponse<"tree:getChildren">["children"][number] {
+  return {
+    path,
+    name: path.split("/").at(-1) ?? path,
+    kind,
+    isHidden: false,
+    isSymlink: options.isSymlink ?? false,
   };
 }
 

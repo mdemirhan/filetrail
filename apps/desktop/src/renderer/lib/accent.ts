@@ -250,3 +250,16 @@ export function getToolbarAccentVariables(tokens: AccentTokens): Record<string, 
     "--sidebar-rail-menu-check": tokens.pathCrumbHover,
   };
 }
+
+export function getFavoriteAccentVariables(tokens: AccentTokens): Record<string, string> {
+  return {
+    "--favorite-accent-solid": tokens.solid,
+    "--favorite-accent-text": tokens.pathCrumbHover,
+    "--favorite-accent-soft-bg": tokens.softBg,
+    "--favorite-accent-active-bg": tokens.activeStrongBg,
+    "--favorite-accent-border": tokens.border,
+    "--favorite-accent-focus-border": tokens.focusBorder,
+    "--favorite-accent-badge-bg": tokens.pillBg,
+    "--favorite-accent-badge-text": tokens.pillText,
+  };
+}

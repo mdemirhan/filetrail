@@ -138,6 +138,40 @@ describe("ItemContextMenu", () => {
     expect(screen.getByRole("button", { name: "Move To…⇧⌘M" })).toBeInTheDocument();
   });
 
+  it("shows a dynamic favorite toggle label when supplied", () => {
+    render(
+      <ItemContextMenu
+        anchorX={0}
+        anchorY={0}
+        variant="browse"
+        favoriteToggleLabel="Remove from Favorites"
+        submenuItems={submenuItems}
+        open
+        onAction={() => undefined}
+        onSubmenuAction={() => undefined}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Remove from Favorites" })).toBeInTheDocument();
+  });
+
+  it("hides the favorite toggle item when requested", () => {
+    render(
+      <ItemContextMenu
+        anchorX={0}
+        anchorY={0}
+        variant="browse"
+        hiddenActionIds={["toggleFavorite"]}
+        submenuItems={submenuItems}
+        open
+        onAction={() => undefined}
+        onSubmenuAction={() => undefined}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /Favorites/i })).toBeNull();
+  });
+
   it("renders submenu items in the supplied order and dispatches the clicked action", () => {
     const onSubmenuAction = vi.fn();
 

@@ -10,6 +10,7 @@ import {
   type DetailColumnWidths,
   type ExplorerViewMode,
   type FileActivationAction,
+  type FavoritePreference,
   type OpenWithApplication,
   type ThemeMode,
   type UiFontFamily,
@@ -23,6 +24,15 @@ export function useAppPreferences() {
   const [accent, setAccent] = useState<AccentMode>(DEFAULT_APP_PREFERENCES.accent);
   const [accentToolbarButtons, setAccentToolbarButtons] = useState(
     DEFAULT_APP_PREFERENCES.accentToolbarButtons,
+  );
+  const [accentFavoriteItems, setAccentFavoriteItems] = useState(
+    DEFAULT_APP_PREFERENCES.accentFavoriteItems,
+  );
+  const [accentFavoriteText, setAccentFavoriteText] = useState(
+    DEFAULT_APP_PREFERENCES.accentFavoriteText,
+  );
+  const [favoriteAccent, setFavoriteAccent] = useState<AccentMode>(
+    DEFAULT_APP_PREFERENCES.favoriteAccent,
   );
   const [zoomPercent, setZoomPercent] = useState(DEFAULT_APP_PREFERENCES.zoomPercent);
   const [uiFontFamily, setUiFontFamily] = useState<UiFontFamily>(
@@ -76,6 +86,13 @@ export function useAppPreferences() {
   const [restoreLastVisitedFolderOnStartup, setRestoreLastVisitedFolderOnStartup] = useState(
     DEFAULT_APP_PREFERENCES.restoreLastVisitedFolderOnStartup,
   );
+  const [favorites, setFavorites] = useState<FavoritePreference[]>(DEFAULT_APP_PREFERENCES.favorites);
+  const [favoritesExpanded, setFavoritesExpanded] = useState(
+    DEFAULT_APP_PREFERENCES.favoritesExpanded,
+  );
+  const [favoritesInitialized, setFavoritesInitialized] = useState(
+    DEFAULT_APP_PREFERENCES.favoritesInitialized,
+  );
   const [terminalApp, setTerminalApp] = useState<ApplicationSelection | null>(
     DEFAULT_APP_PREFERENCES.terminalApp,
   );
@@ -94,6 +111,9 @@ export function useAppPreferences() {
       theme,
       accent,
       accentToolbarButtons,
+      accentFavoriteItems,
+      accentFavoriteText,
+      favoriteAccent,
       uiFontFamily,
       uiFontSize,
       uiFontWeight,
@@ -104,6 +124,9 @@ export function useAppPreferences() {
   }, [
     accent,
     accentToolbarButtons,
+    accentFavoriteItems,
+    accentFavoriteText,
+    favoriteAccent,
     textMutedOverride,
     textPrimaryOverride,
     textSecondaryOverride,
@@ -123,6 +146,9 @@ export function useAppPreferences() {
     setTextSecondaryOverride(null);
     setTextMutedOverride(null);
     setAccentToolbarButtons(DEFAULT_APP_PREFERENCES.accentToolbarButtons);
+    setAccentFavoriteItems(DEFAULT_APP_PREFERENCES.accentFavoriteItems);
+    setAccentFavoriteText(DEFAULT_APP_PREFERENCES.accentFavoriteText);
+    setFavoriteAccent(DEFAULT_APP_PREFERENCES.favoriteAccent);
   }
 
   return {
@@ -134,6 +160,12 @@ export function useAppPreferences() {
     setAccent,
     accentToolbarButtons,
     setAccentToolbarButtons,
+    accentFavoriteItems,
+    setAccentFavoriteItems,
+    accentFavoriteText,
+    setAccentFavoriteText,
+    favoriteAccent,
+    setFavoriteAccent,
     zoomPercent,
     setZoomPercent,
     uiFontFamily,
@@ -178,6 +210,12 @@ export function useAppPreferences() {
     setNotificationDurationSeconds,
     restoreLastVisitedFolderOnStartup,
     setRestoreLastVisitedFolderOnStartup,
+    favorites,
+    setFavorites,
+    favoritesExpanded,
+    setFavoritesExpanded,
+    favoritesInitialized,
+    setFavoritesInitialized,
     terminalApp,
     setTerminalApp,
     defaultTextEditor,

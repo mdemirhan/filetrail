@@ -159,17 +159,20 @@ export function isPathWithinRoot(path: string, rootPath: string): boolean {
   return path === rootPath || path.startsWith(`${rootPath}/`);
 }
 
+export function resolveExplorerTreeRootPath(path: string, homePath: string): string {
+  if (homePath.length > 0 && isPathWithinRoot(path, homePath)) {
+    return homePath;
+  }
+  return "/";
+}
+
 export function resolveRefreshRootPath(
   currentPath: string,
   treeRootPath: string,
   homePath: string,
 ): string {
-  if (
-    homePath &&
-    isPathWithinRoot(currentPath, homePath) &&
-    (treeRootPath === "/" || isPathWithinRoot(homePath, treeRootPath))
-  ) {
-    return homePath;
+  if (treeRootPath === "/" || (homePath && isPathWithinRoot(currentPath, homePath))) {
+    return resolveExplorerTreeRootPath(currentPath, homePath);
   }
-  return treeRootPath || currentPath;
+  return resolveExplorerTreeRootPath(currentPath, homePath);
 }

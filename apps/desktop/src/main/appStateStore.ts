@@ -5,6 +5,9 @@ import {
   ACCENT_OPTIONS,
   type AppPreferences,
   type ApplicationSelection,
+  type FavoriteIconId,
+  type FavoritePreference,
+  FAVORITE_ICON_OPTIONS,
   DEFAULT_APP_PREFERENCES,
   DEFAULT_DETAIL_COLUMN_VISIBILITY,
   DEFAULT_DETAIL_COLUMN_WIDTHS,
@@ -239,6 +242,19 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
       typeof record.accentToolbarButtons === "boolean"
         ? record.accentToolbarButtons
         : currentDefaults.accentToolbarButtons,
+    accentFavoriteItems:
+      typeof record.accentFavoriteItems === "boolean"
+        ? record.accentFavoriteItems
+        : currentDefaults.accentFavoriteItems,
+    accentFavoriteText:
+      typeof record.accentFavoriteText === "boolean"
+        ? record.accentFavoriteText
+        : currentDefaults.accentFavoriteText,
+    favoriteAccent:
+      typeof record.favoriteAccent === "string" &&
+      ACCENT_OPTIONS.some((option) => option.value === record.favoriteAccent)
+        ? (record.favoriteAccent as AppPreferences["favoriteAccent"])
+        : currentDefaults.favoriteAccent,
     zoomPercent: clampZoomPercent(
       typeof record.zoomPercent === "number" ? record.zoomPercent : currentDefaults.zoomPercent,
     ),
@@ -390,7 +406,109 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
       typeof record.lastVisitedPath === "string" && record.lastVisitedPath.length > 0
         ? record.lastVisitedPath
         : null,
+    lastVisitedFavoritePath:
+      typeof record.lastVisitedFavoritePath === "string" && record.lastVisitedFavoritePath.length > 0
+        ? record.lastVisitedFavoritePath
+        : null,
+    favorites: sanitizeFavorites(record.favorites, record.favoritePaths, currentDefaults.favorites),
+    favoritesExpanded:
+      typeof record.favoritesExpanded === "boolean"
+        ? record.favoritesExpanded
+        : currentDefaults.favoritesExpanded,
+    favoritesInitialized:
+      typeof record.favoritesInitialized === "boolean"
+        ? record.favoritesInitialized
+        : currentDefaults.favoritesInitialized,
   };
+}
+
+function sanitizeFavorites(
+  value: unknown,
+  legacyFavoritePaths: unknown,
+  fallback: FavoritePreference[],
+): FavoritePreference[] {
+  if (Array.isArray(value)) {
+    const favorites = value
+      .map((entry) => sanitizeFavoritePreference(entry))
+      .filter((entry): entry is FavoritePreference => entry !== null);
+    return dedupeFavorites(favorites);
+  }
+  if (Array.isArray(legacyFavoritePaths)) {
+    const favorites = legacyFavoritePaths
+      .filter((path): path is string => typeof path === "string" && path.trim().length > 0)
+      .map((path) => ({
+        path,
+        icon: inferLegacyFavoriteIcon(path),
+      }));
+    return dedupeFavorites(favorites);
+  }
+  return fallback;
+}
+
+function sanitizeFavoritePreference(value: unknown): FavoritePreference | null {
+  if (!isPlainObject(value)) {
+    return null;
+  }
+  const path = typeof value.path === "string" ? value.path.trim() : "";
+  const icon = typeof value.icon === "string" ? value.icon : "";
+  if (path.length === 0 || !isFavoriteIconId(icon)) {
+    return null;
+  }
+  return {
+    path,
+    icon,
+  };
+}
+
+function dedupeFavorites(favorites: FavoritePreference[]): FavoritePreference[] {
+  const seen = new Set<string>();
+  return favorites.filter((favorite) => {
+    if (seen.has(favorite.path)) {
+      return false;
+    }
+    seen.add(favorite.path);
+    return true;
+  });
+}
+
+function isFavoriteIconId(value: string): value is FavoriteIconId {
+  return FAVORITE_ICON_OPTIONS.some((option) => option.value === value);
+}
+
+function inferLegacyFavoriteIcon(path: string): FavoriteIconId {
+  if (path === "/") {
+    return "drive";
+  }
+  if (path === "/Applications") {
+    return "applications";
+  }
+  const normalizedPath = path.replace(/\/+$/u, "");
+  const leaf = normalizedPath.split("/").filter(Boolean).at(-1) ?? normalizedPath;
+  if (leaf === "Desktop") {
+    return "desktop";
+  }
+  if (leaf === "Documents") {
+    return "documents";
+  }
+  if (leaf === "Downloads") {
+    return "downloads";
+  }
+  if (leaf === "Music") {
+    return "music";
+  }
+  if (leaf === "Pictures" || leaf === "Photos") {
+    return "photos";
+  }
+  if (leaf === "Movies" || leaf === "Videos") {
+    return "videos";
+  }
+  if (leaf === "Projects") {
+    return "projects";
+  }
+  if (leaf === ".Trash") {
+    return "trash";
+  }
+  return "folder";
 }
 
 function normalizeColorOverride(value: unknown): string | null {

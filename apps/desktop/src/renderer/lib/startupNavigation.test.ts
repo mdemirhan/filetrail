@@ -7,6 +7,7 @@ describe("startup navigation", () => {
         {
           restoreLastVisitedFolderOnStartup: true,
           lastVisitedPath: "/Users/demo/projects/filetrail",
+          lastVisitedFavoritePath: null,
           treeRootPath: "/Users/demo/projects",
         },
         "/Users/demo",
@@ -14,6 +15,7 @@ describe("startup navigation", () => {
     ).toEqual({
       startupPath: "/Users/demo/projects/filetrail",
       startupRootPath: "/Users/demo",
+      startupFavoritePath: null,
     });
   });
 
@@ -23,6 +25,7 @@ describe("startup navigation", () => {
         {
           restoreLastVisitedFolderOnStartup: true,
           lastVisitedPath: "/Applications",
+          lastVisitedFavoritePath: null,
           treeRootPath: "/Applications",
         },
         "/Users/demo",
@@ -30,6 +33,25 @@ describe("startup navigation", () => {
     ).toEqual({
       startupPath: "/Applications",
       startupRootPath: "/",
+      startupFavoritePath: null,
+    });
+  });
+
+  it("uses the persisted slash root when restoring a path inside home", () => {
+    expect(
+      resolveStartupNavigation(
+        {
+          restoreLastVisitedFolderOnStartup: true,
+          lastVisitedPath: "/Users/demo/Documents",
+          lastVisitedFavoritePath: "/Users/demo/Documents",
+          treeRootPath: "/",
+        },
+        "/Users/demo",
+      ),
+    ).toEqual({
+      startupPath: "/Users/demo/Documents",
+      startupRootPath: "/",
+      startupFavoritePath: "/Users/demo/Documents",
     });
   });
 
@@ -39,6 +61,7 @@ describe("startup navigation", () => {
         {
           restoreLastVisitedFolderOnStartup: true,
           lastVisitedPath: "/Users/demo/projects/filetrail",
+          lastVisitedFavoritePath: "/Users/demo/projects/filetrail",
           treeRootPath: "/Users/demo/projects",
         },
         "/Users/demo",
@@ -47,6 +70,7 @@ describe("startup navigation", () => {
     ).toEqual({
       startupPath: "/Applications",
       startupRootPath: "/",
+      startupFavoritePath: null,
     });
   });
 
@@ -56,6 +80,7 @@ describe("startup navigation", () => {
         {
           restoreLastVisitedFolderOnStartup: false,
           lastVisitedPath: null,
+          lastVisitedFavoritePath: null,
           treeRootPath: "/Users/demo/projects",
         },
         "/Users/demo",
@@ -64,6 +89,7 @@ describe("startup navigation", () => {
     ).toEqual({
       startupPath: "/Users/demo/src/filetrail",
       startupRootPath: "/Users/demo",
+      startupFavoritePath: null,
     });
   });
 
@@ -73,6 +99,7 @@ describe("startup navigation", () => {
         {
           restoreLastVisitedFolderOnStartup: false,
           lastVisitedPath: "/Users/demo/projects/filetrail",
+          lastVisitedFavoritePath: "/Users/demo/projects/filetrail",
           treeRootPath: "/Users/demo/projects",
         },
         "/Users/demo",
@@ -80,6 +107,25 @@ describe("startup navigation", () => {
     ).toEqual({
       startupPath: "/Users/demo",
       startupRootPath: "/Users/demo",
+      startupFavoritePath: null,
+    });
+  });
+
+  it("restores a selected favorite path when the restored folder exactly matches it", () => {
+    expect(
+      resolveStartupNavigation(
+        {
+          restoreLastVisitedFolderOnStartup: true,
+          lastVisitedPath: "/Users/demo/Documents",
+          lastVisitedFavoritePath: "/Users/demo/Documents",
+          treeRootPath: "/Users/demo",
+        },
+        "/Users/demo",
+      ),
+    ).toEqual({
+      startupPath: "/Users/demo/Documents",
+      startupRootPath: "/Users/demo",
+      startupFavoritePath: "/Users/demo/Documents",
     });
   });
 });

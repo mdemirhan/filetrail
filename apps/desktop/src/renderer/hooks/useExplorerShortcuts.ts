@@ -24,11 +24,9 @@ import {
   resolveOpenInTerminalPaths,
   resolveOpenSelectionPaths,
 } from "../lib/shortcutTargets";
-import { getTreeKeyboardAction } from "../lib/treeView";
 import { getNextSelectionIndex } from "../lib/explorerNavigation";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
 import type { ContentSelectionState } from "../lib/contentSelection";
-import type { TreeNodeState } from "../components/TreePane";
 import type { ContextMenuState } from "./useWriteOperations";
 
 type RawShortcutBinding = {
@@ -83,15 +81,12 @@ export function useExplorerShortcuts(args: {
   tabSwitchesExplorerPanes: boolean;
   typeaheadEnabled: boolean;
   viewMode: "list" | "details";
-  treeRootPath: string;
-  treeNodes: Record<string, TreeNodeState>;
-  includeHidden: boolean;
   showCachedSearchResults: (options?: { focusPane?: boolean }) => void;
   hideSearchResults: () => void;
   goBack: () => void;
   goForward: () => void;
   navigateTo: (path: string, historyMode: "push" | "replace" | "skip") => Promise<boolean>;
-  openTreeNode: (path: string) => Promise<void>;
+  openTreeNode: () => Promise<void>;
   toggleHiddenFiles: () => void;
   refreshDirectory: () => Promise<void>;
   applySearchResultsSort: () => void;
@@ -110,13 +105,10 @@ export function useExplorerShortcuts(args: {
   focusContentPane: () => void;
   handlePagedPaneScroll: (direction: "backward" | "forward") => boolean;
   handleTypeaheadInput: (key: string, pane: "tree" | "content") => void;
-  loadTreeChildren: (
-    path: string,
-    includeHiddenOverride?: boolean,
-    expandOnSuccess?: boolean,
-    activePath?: string,
-  ) => Promise<void>;
-  toggleTreeNode: (path: string) => void;
+  handleTreeKeyboardAction: (
+    key: "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight" | "Home" | "End",
+  ) => Promise<boolean>;
+  navigateTreeSelectionToParent: () => Promise<void>;
   activateContentPaths: (paths: string[]) => Promise<void>;
   extendContentSelectionToPath: (path: string, additive?: boolean) => void;
   setSingleContentSelection: (path: string) => void;
@@ -165,9 +157,6 @@ export function useExplorerShortcuts(args: {
     tabSwitchesExplorerPanes,
     typeaheadEnabled,
     viewMode,
-    treeRootPath,
-    treeNodes,
-    includeHidden,
     showCachedSearchResults,
     hideSearchResults,
     goBack,
@@ -192,8 +181,8 @@ export function useExplorerShortcuts(args: {
     focusContentPane,
     handlePagedPaneScroll,
     handleTypeaheadInput,
-    loadTreeChildren,
-    toggleTreeNode,
+    handleTreeKeyboardAction,
+    navigateTreeSelectionToParent,
     activateContentPaths,
     extendContentSelectionToPath,
     setSingleContentSelection,
@@ -433,10 +422,7 @@ export function useExplorerShortcuts(args: {
           focusedPane === "tree",
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
-          const nextPath = parentDirectoryPath(currentPath);
-          if (nextPath && nextPath !== currentPath) {
-            void navigateTo(nextPath, "push");
-          }
+          void navigateTreeSelectionToParent();
         },
       },
       {
@@ -487,7 +473,7 @@ export function useExplorerShortcuts(args: {
           focusedPane === "tree",
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
-          void openTreeNode(currentPath);
+          void openTreeNode();
         },
       },
       {
@@ -683,33 +669,16 @@ export function useExplorerShortcuts(args: {
             keyboardEvent.key === "End") &&
           focusedPane === "tree",
         run: (keyboardEvent) => {
-          const action = getTreeKeyboardAction({
-            key: keyboardEvent.key as
+          keyboardEvent.preventDefault();
+          void handleTreeKeyboardAction(
+            keyboardEvent.key as
               | "ArrowUp"
               | "ArrowDown"
               | "ArrowLeft"
               | "ArrowRight"
               | "Home"
               | "End",
-            currentPath,
-            rootPath: treeRootPath,
-            nodes: treeNodes,
-          });
-          if (action.type === "none") {
-            return;
-          }
-          keyboardEvent.preventDefault();
-          if (action.type === "navigate") {
-            void navigateTo(action.path, "push");
-            return;
-          }
-          if (action.type === "expand" || action.type === "collapse") {
-            toggleTreeNode(action.path);
-            return;
-          }
-          if (action.type === "load") {
-            void loadTreeChildren(action.path, includeHidden, true);
-          }
+          );
         },
       },
       {
@@ -762,7 +731,7 @@ export function useExplorerShortcuts(args: {
         matches: (keyboardEvent) => keyboardEvent.key === "Enter" && focusedPane === "tree",
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
-          void openTreeNode(currentPath);
+          void openTreeNode();
         },
       },
       {
@@ -791,7 +760,6 @@ export function useExplorerShortcuts(args: {
       handlePagedPaneScroll,
       handleTypeaheadInput,
       hasCachedSearch,
-      includeHidden,
       isSearchMode,
       navigateTo,
       openLocationSheet,
@@ -810,10 +778,7 @@ export function useExplorerShortcuts(args: {
       startPasteFromClipboard,
       startTrashPaths,
       tabSwitchesExplorerPanes,
-      treeNodes,
-      treeRootPath,
       toggleHiddenFiles,
-      toggleTreeNode,
       typeaheadEnabled,
       viewMode,
       focusFileSearch,
@@ -823,7 +788,8 @@ export function useExplorerShortcuts(args: {
       setSingleContentSelection,
       activateContentPaths,
       extendContentSelectionToPath,
-      loadTreeChildren,
+      handleTreeKeyboardAction,
+      navigateTreeSelectionToParent,
       setFocusedPane,
       setInfoPanelOpen,
       setInfoRowOpen,

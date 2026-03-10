@@ -9,18 +9,22 @@ import {
 } from "react";
 
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
+import type { FavoritePreference } from "../../shared/appPreferences";
 
 import type { TreeNodeState } from "../components/TreePane";
 import type { ContentSelectionState } from "../lib/contentSelection";
 import { getDetailsRowHeight } from "../lib/detailsLayout";
-import { createTreeNode, isPathWithinRoot, resolveRefreshRootPath } from "../lib/explorerAppUtils";
+import {
+  createTreeNode,
+  isPathWithinRoot,
+  resolveExplorerTreeRootPath,
+  resolveRefreshRootPath,
+} from "../lib/explorerAppUtils";
 import type {
   DirectoryEntry,
   DirectoryEntryMetadata,
-  SearchResultItem,
 } from "../lib/explorerTypes";
 import {
-  flattenVisibleTreePaths,
   getAncestorChain,
   getForcedVisibleHiddenChildPath,
   getNextSelectionIndex,
@@ -37,8 +41,19 @@ import { EXPLORER_LAYOUT } from "../lib/layoutTokens";
 import { createRendererLogger } from "../lib/logging";
 import { pageScrollElement, scrollElementByAmount } from "../lib/pagedScroll";
 import { SEARCH_RESULT_ROW_HEIGHT } from "../components/SearchResultsPane";
-import { getTreeKeyboardAction } from "../lib/treeView";
-import { findContentTypeaheadMatch, findTreeTypeaheadMatch } from "../lib/typeahead";
+import {
+  buildTreePresentation,
+  createFavoriteItemId,
+  createFileSystemItemId,
+  getFavoriteItemPath,
+  getFileSystemItemPath,
+  getFavoritesRootItemId,
+  getTrashPath,
+  isFavoriteItemId,
+  isFavoritesRootItemId,
+  type TreeItemId,
+} from "../lib/favorites";
+import { findContentTypeaheadMatch } from "../lib/typeahead";
 
 const logger = createRendererLogger("filetrail.renderer");
 
@@ -64,6 +79,11 @@ export function useExplorerNavigationController(args: {
   setTreeRootPath: Dispatch<SetStateAction<string>>;
   treeNodes: Record<string, TreeNodeState>;
   setTreeNodes: Dispatch<SetStateAction<Record<string, TreeNodeState>>>;
+  favorites: FavoritePreference[];
+  favoritesExpanded: boolean;
+  setFavoritesExpanded: Dispatch<SetStateAction<boolean>>;
+  selectedTreeItemId: TreeItemId;
+  setSelectedTreeItemId: Dispatch<SetStateAction<TreeItemId>>;
   currentPath: string;
   setCurrentPath: Dispatch<SetStateAction<string>>;
   currentEntries: DirectoryEntry[];
@@ -123,6 +143,7 @@ export function useExplorerNavigationController(args: {
   getInfoRequestRef: MutableRefObject<number>;
   treeRequestRef: MutableRefObject<Record<string, number>>;
   treeNodesRef: MutableRefObject<Record<string, TreeNodeState>>;
+  selectedTreeItemIdRef: MutableRefObject<TreeItemId>;
   treeRootPathRef: MutableRefObject<string>;
   metadataCacheRef: MutableRefObject<Map<string, DirectoryEntryMetadata>>;
   metadataInflightRef: MutableRefObject<Set<string>>;
@@ -160,6 +181,11 @@ export function useExplorerNavigationController(args: {
     setTreeRootPath,
     treeNodes,
     setTreeNodes,
+    favorites,
+    favoritesExpanded,
+    setFavoritesExpanded,
+    selectedTreeItemId,
+    setSelectedTreeItemId,
     currentPath,
     setCurrentPath,
     currentEntries,
@@ -215,6 +241,7 @@ export function useExplorerNavigationController(args: {
     getInfoRequestRef,
     treeRequestRef,
     treeNodesRef,
+    selectedTreeItemIdRef,
     treeRootPathRef,
     metadataCacheRef,
     metadataInflightRef,
@@ -259,6 +286,73 @@ export function useExplorerNavigationController(args: {
         treePaneRef.current?.focus({ preventScroll: true });
       });
     });
+  }
+
+  function getTreePresentationState() {
+    return buildTreePresentation({
+      favorites,
+      favoritesExpanded,
+      homePath,
+      rootPath: treeRootPathRef.current,
+      nodes: treeNodesRef.current,
+    });
+  }
+
+  function setTreeSelection(itemId: TreeItemId) {
+    selectedTreeItemIdRef.current = itemId;
+    setSelectedTreeItemId(itemId);
+  }
+
+  function applyHistoryUpdate(path: string, historyMode: "push" | "replace" | "skip") {
+    if (historyMode === "push") {
+      setHistoryPaths((current) => {
+        const base = current.slice(0, historyIndex + 1);
+        return [...base, path];
+      });
+      setHistoryIndex((current) => current + 1);
+      return;
+    }
+    if (historyMode === "replace") {
+      setHistoryPaths((current) => {
+        if (current.length === 0) {
+          return [path];
+        }
+        const next = [...current];
+        next[Math.max(0, historyIndex)] = path;
+        return next;
+      });
+      setHistoryIndex((current) => (current < 0 ? 0 : current));
+    }
+  }
+
+  function resolveTreeItemLabel(itemId: TreeItemId): string {
+    const presentation = getTreePresentationState();
+    return presentation.items[itemId]?.label ?? "";
+  }
+
+  function getSelectedTreeReloadOptions(path: string) {
+    const favoritePath = getFavoriteItemPath(selectedTreeItemIdRef.current);
+    if (!favoritePath || favoritePath !== path) {
+      const selectedTreePath = getFileSystemItemPath(selectedTreeItemIdRef.current);
+      if (!selectedTreePath) {
+        return undefined;
+      }
+      const selectedTreeNode = treeNodesRef.current[selectedTreePath];
+      if (!selectedTreeNode?.isSymlink) {
+        return undefined;
+      }
+      return {
+        syncTree: false,
+        treeSelectionMode: "preserve" as const,
+        persistOnError: true,
+      };
+    }
+    return {
+      syncTree: false,
+      treeSelectionMode: "favorite" as const,
+      favoritePath,
+      persistOnError: true,
+    };
   }
 
   function restoreExplorerPaneFocus(preferredPane: ExplorerPane | null = null) {
@@ -308,26 +402,26 @@ export function useExplorerNavigationController(args: {
 
     if (focusedPane === "tree") {
       const didScroll = pageScrollElement(target.element, target.axis, direction);
-      const orderedPaths = flattenVisibleTreePaths(treeRootPath, treeNodes);
-      if (orderedPaths.length === 0) {
+      const { visibleItemIds } = getTreePresentationState();
+      if (visibleItemIds.length === 0) {
         return didScroll;
       }
-      const currentIndex = orderedPaths.findIndex((path) => path === currentPath);
+      const currentIndex = visibleItemIds.findIndex((itemId) => itemId === selectedTreeItemIdRef.current);
       const stepItems = getPageStepItemCount(
         target.element.clientHeight,
         compactTreeView ? 25 : 32,
       );
       const nextIndex = getPagedSelectionIndex({
-        itemCount: orderedPaths.length,
+        itemCount: visibleItemIds.length,
         currentIndex,
         stepItems,
         direction,
       });
-      const nextPath = orderedPaths[nextIndex];
-      if (nextPath && nextPath !== currentPath) {
-        void navigateTo(nextPath, "push");
+      const nextItemId = visibleItemIds[nextIndex];
+      if (nextItemId && nextItemId !== selectedTreeItemIdRef.current) {
+        void selectTreeItem(nextItemId, "push");
       }
-      return didScroll || nextPath !== undefined;
+      return didScroll || nextItemId !== undefined;
     }
 
     if (focusedPane !== "content") {
@@ -423,13 +517,16 @@ export function useExplorerNavigationController(args: {
       return;
     }
 
-    const match = findTreeTypeaheadMatch({
-      rootPath: treeRootPathRef.current,
-      nodes: treeNodesRef.current,
-      query: nextQuery,
-    });
+    const normalizedQuery = nextQuery.trim().toLocaleLowerCase();
+    if (normalizedQuery.length === 0) {
+      return;
+    }
+    const { visibleItemIds } = getTreePresentationState();
+    const match = visibleItemIds.find((itemId) =>
+      resolveTreeItemLabel(itemId).toLocaleLowerCase().startsWith(normalizedQuery),
+    );
     if (match) {
-      void navigateTo(match.path, "push");
+      void selectTreeItem(match, "push");
     }
   }
 
@@ -466,19 +563,19 @@ export function useExplorerNavigationController(args: {
     void navigateTo(targetPath, targetPath === currentPath ? "replace" : "push");
   }
 
-  function goQuickAccess(location: "desktop" | "downloads" | "documents" | "source") {
-    if (!homePath) {
+  function goQuickAccess(location: "root" | "applications" | "trash") {
+    const targetPath =
+      location === "root"
+        ? "/"
+        : location === "applications"
+          ? "/Applications"
+          : homePath.length > 0
+            ? getTrashPath(homePath)
+            : "";
+    if (targetPath.length === 0) {
       return;
     }
-    const suffix =
-      location === "desktop"
-        ? "/Desktop"
-        : location === "downloads"
-          ? "/Downloads"
-          : location === "documents"
-            ? "/Documents"
-            : "/src";
-    void navigateTo(`${homePath}${suffix}`, "push");
+    void navigateTo(targetPath, "push");
   }
 
   function navigateToParentFolder() {
@@ -531,6 +628,53 @@ export function useExplorerNavigationController(args: {
     replaceTreeNodes(seededNodes);
   }
 
+  function applyDirectorySnapshot(
+    path: string,
+    entries: DirectoryEntry[],
+    cachedMetadata: Record<string, DirectoryEntryMetadata>,
+  ) {
+    metadataCacheRef.current = new Map(Object.entries(cachedMetadata));
+    metadataInflightRef.current.clear();
+    setCurrentPath(path);
+    setCurrentEntries(entries);
+    setVisiblePaths([]);
+    setMetadataByPath(cachedMetadata);
+    if (searchResultsVisibleRef.current) {
+      setSearchResultsVisible(false);
+    }
+    const pendingPasteSelection =
+      pendingPasteSelectionRef.current?.directoryPath === path ? pendingPasteSelectionRef.current : null;
+    if (pendingPasteSelection) {
+      pendingPasteSelectionRef.current = null;
+    }
+    const selectedPastePaths = pendingPasteSelection
+      ? entries
+          .filter((entry) => pendingPasteSelection.selectedPaths.includes(entry.path))
+          .map((entry) => entry.path)
+      : [];
+    applyContentSelection(
+      selectedPastePaths.length > 0
+        ? {
+            paths: selectedPastePaths,
+            anchorPath: selectedPastePaths[0] ?? null,
+            leadPath: selectedPastePaths.at(-1) ?? null,
+          }
+        : entries[0]
+          ? {
+              paths: [entries[0].path],
+              anchorPath: entries[0].path,
+              leadPath: entries[0].path,
+            }
+          : {
+              paths: [],
+              anchorPath: null,
+              leadPath: null,
+            },
+      entries,
+    );
+    setGetInfoItem(null);
+  }
+
   async function navigateTo(
     path: string,
     historyMode: "push" | "replace" | "skip",
@@ -538,6 +682,12 @@ export function useExplorerNavigationController(args: {
     sortByOverride = sortBy,
     sortDirectionOverride = sortDirection,
     foldersFirstOverride = foldersFirst,
+    options: {
+      syncTree?: boolean;
+      treeSelectionMode?: "filesystem" | "favorite" | "preserve";
+      favoritePath?: string;
+      persistOnError?: boolean;
+    } = {},
   ): Promise<boolean> {
     const requestId = ++directoryRequestRef.current;
     setDirectoryLoading(true);
@@ -560,66 +710,16 @@ export function useExplorerNavigationController(args: {
           return cached ? [[entry.path, cached] as const] : [];
         }),
       );
-      metadataCacheRef.current = new Map(Object.entries(cachedMetadata));
-      metadataInflightRef.current.clear();
-      setCurrentPath(response.path);
-      setCurrentEntries(response.entries);
-      setVisiblePaths([]);
-      setMetadataByPath(cachedMetadata);
-      if (searchResultsVisibleRef.current) {
-        setSearchResultsVisible(false);
+      applyDirectorySnapshot(response.path, response.entries, cachedMetadata);
+      if (options.syncTree !== false) {
+        await syncTreeToPath(response.path, includeHiddenOverride);
       }
-      const pendingPasteSelection =
-        pendingPasteSelectionRef.current?.directoryPath === response.path
-          ? pendingPasteSelectionRef.current
-          : null;
-      if (pendingPasteSelection) {
-        pendingPasteSelectionRef.current = null;
+      if (options.treeSelectionMode === "favorite") {
+        setTreeSelection(createFavoriteItemId(options.favoritePath ?? response.path));
+      } else if (options.treeSelectionMode !== "preserve") {
+        setTreeSelection(createFileSystemItemId(response.path));
       }
-      const selectedPastePaths = pendingPasteSelection
-        ? response.entries
-            .filter((entry) => pendingPasteSelection.selectedPaths.includes(entry.path))
-            .map((entry) => entry.path)
-        : [];
-      applyContentSelection(
-        selectedPastePaths.length > 0
-          ? {
-              paths: selectedPastePaths,
-              anchorPath: selectedPastePaths[0] ?? null,
-              leadPath: selectedPastePaths.at(-1) ?? null,
-            }
-          : response.entries[0]
-            ? {
-                paths: [response.entries[0].path],
-                anchorPath: response.entries[0].path,
-                leadPath: response.entries[0].path,
-              }
-            : {
-                paths: [],
-                anchorPath: null,
-                leadPath: null,
-              },
-        response.entries,
-      );
-      setGetInfoItem(null);
-      await syncTreeToPath(response.path, includeHiddenOverride);
-      if (historyMode === "push") {
-        setHistoryPaths((current) => {
-          const base = current.slice(0, historyIndex + 1);
-          return [...base, response.path];
-        });
-        setHistoryIndex((current) => current + 1);
-      } else if (historyMode === "replace") {
-        setHistoryPaths((current) => {
-          if (current.length === 0) {
-            return [response.path];
-          }
-          const next = [...current];
-          next[Math.max(0, historyIndex)] = response.path;
-          return next;
-        });
-        setHistoryIndex((current) => (current < 0 ? 0 : current));
-      }
+      applyHistoryUpdate(response.path, historyMode);
       return true;
     } catch (error) {
       if (directoryRequestRef.current !== requestId) {
@@ -628,6 +728,17 @@ export function useExplorerNavigationController(args: {
       const message = error instanceof Error ? error.message : String(error);
       setDirectoryError(message);
       setLocationError(message);
+      if (options.persistOnError) {
+        applyDirectorySnapshot(path, [], {});
+        if (options.treeSelectionMode === "favorite") {
+          setTreeSelection(createFavoriteItemId(options.favoritePath ?? path));
+        } else if (options.treeSelectionMode === "filesystem") {
+          setTreeSelection(createFileSystemItemId(path));
+        }
+        applyHistoryUpdate(path, historyMode);
+        logger.error("directory navigation failed", error);
+        return true;
+      }
       logger.error("directory navigation failed", error);
       return false;
     } finally {
@@ -785,7 +896,7 @@ export function useExplorerNavigationController(args: {
     const currentRootPath = treeRootPathRef.current;
     const nextRootPath =
       currentRootPath.length === 0 || !isPathWithinRoot(path, currentRootPath)
-        ? path
+        ? resolveExplorerTreeRootPath(path, homePath)
         : currentRootPath;
 
     if (nextRootPath !== currentRootPath) {
@@ -812,8 +923,25 @@ export function useExplorerNavigationController(args: {
     }
   }
 
+  async function navigateTreeFileSystemPath(
+    path: string,
+    historyMode: "push" | "replace" | "skip",
+  ) {
+    setTreeSelection(createFileSystemItemId(path));
+    const node = treeNodesRef.current[path];
+    if (node?.isSymlink) {
+      await navigateTo(path, historyMode, undefined, undefined, undefined, undefined, {
+        syncTree: false,
+        treeSelectionMode: "preserve",
+        persistOnError: true,
+      });
+      return;
+    }
+    await navigateTo(path, historyMode);
+  }
+
   function toggleTreeNode(path: string) {
-    const node = treeNodes[path];
+    const node = treeNodesRef.current[path];
     if (!node || node.isSymlink) {
       return;
     }
@@ -833,9 +961,49 @@ export function useExplorerNavigationController(args: {
     }));
   }
 
-  async function openTreeNode(path: string) {
-    const node = treeNodes[path];
+  async function selectTreeItem(itemId: TreeItemId, historyMode: "push" | "replace" | "skip") {
+    if (isFavoritesRootItemId(itemId)) {
+      setTreeSelection(itemId);
+      return;
+    }
+    const favoritePath = getFavoriteItemPath(itemId);
+    if (favoritePath) {
+      setTreeSelection(itemId);
+      await navigateTo(favoritePath, historyMode, undefined, undefined, undefined, undefined, {
+        syncTree: false,
+        treeSelectionMode: "favorite",
+        favoritePath,
+        persistOnError: true,
+      });
+      return;
+    }
+    const fileSystemPath = getFileSystemItemPath(itemId);
+    if (!fileSystemPath) {
+      return;
+    }
+    await navigateTreeFileSystemPath(fileSystemPath, historyMode);
+  }
+
+  async function openTreeNode() {
+    const currentItemId = selectedTreeItemIdRef.current;
+    if (isFavoritesRootItemId(currentItemId)) {
+      return;
+    }
+    const favoritePath = getFavoriteItemPath(currentItemId);
+    if (favoritePath) {
+      await selectTreeItem(currentItemId, "push");
+      return;
+    }
+    const path = getFileSystemItemPath(currentItemId);
+    if (!path) {
+      return;
+    }
+    const node = treeNodesRef.current[path];
     if (!node) {
+      return;
+    }
+    if (node.isSymlink) {
+      await navigateTreeFileSystemPath(path, "push");
       return;
     }
     if (!node.loaded) {
@@ -845,14 +1013,158 @@ export function useExplorerNavigationController(args: {
     toggleTreeNode(path);
   }
 
+  async function navigateTreeSelectionToParent() {
+    const currentItemId = selectedTreeItemIdRef.current;
+    if (isFavoriteItemId(currentItemId)) {
+      setTreeSelection(getFavoritesRootItemId());
+      return;
+    }
+    const path = getFileSystemItemPath(currentItemId);
+    if (!path) {
+      return;
+    }
+    const nextPath = parentDirectoryPath(path);
+    if (nextPath && nextPath !== path) {
+      await selectTreeItem(createFileSystemItemId(nextPath), "push");
+    }
+  }
+
+  async function handleTreeKeyboardAction(
+    key: "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight" | "Home" | "End",
+  ): Promise<boolean> {
+    const { items, visibleItemIds } = getTreePresentationState();
+    if (visibleItemIds.length === 0) {
+      return false;
+    }
+    const currentItemId = selectedTreeItemIdRef.current;
+    const currentIndex = visibleItemIds.findIndex((itemId) => itemId === currentItemId);
+    const safeCurrentId = currentIndex >= 0 ? currentItemId : visibleItemIds[0] ?? null;
+    if (!safeCurrentId) {
+      return false;
+    }
+    const currentItem = items[safeCurrentId];
+    if (!currentItem) {
+      return false;
+    }
+
+    if (key === "Home") {
+      const firstId = visibleItemIds[0];
+      if (firstId) {
+        await selectTreeItem(firstId, "push");
+        return true;
+      }
+      return false;
+    }
+    if (key === "End") {
+      const lastId = visibleItemIds.at(-1);
+      if (lastId) {
+        await selectTreeItem(lastId, "push");
+        return true;
+      }
+      return false;
+    }
+    if (key === "ArrowUp" || key === "ArrowDown") {
+      const baseIndex = currentIndex >= 0 ? currentIndex : 0;
+      const nextIndex =
+        key === "ArrowUp"
+          ? Math.max(0, baseIndex - 1)
+          : Math.min(visibleItemIds.length - 1, baseIndex + 1);
+      const nextId = visibleItemIds[nextIndex];
+      if (!nextId) {
+        return false;
+      }
+      await selectTreeItem(nextId, "push");
+      return true;
+    }
+    if (key === "ArrowRight") {
+      if (isFavoritesRootItemId(safeCurrentId)) {
+        if (!favoritesExpanded && favorites.length > 0) {
+          setFavoritesExpanded(true);
+          return true;
+        }
+        const firstFavoriteId = favorites[0] ? createFavoriteItemId(favorites[0].path) : null;
+        if (favoritesExpanded && firstFavoriteId) {
+          await selectTreeItem(firstFavoriteId, "push");
+          return true;
+        }
+        return false;
+      }
+      if (isFavoriteItemId(safeCurrentId)) {
+        return false;
+      }
+      const path = getFileSystemItemPath(safeCurrentId);
+      const node = path ? treeNodesRef.current[path] : null;
+      if (!path || !node || node.isSymlink) {
+        return false;
+      }
+      if (!node.loaded) {
+        await loadTreeChildren(path, includeHidden, true);
+        return true;
+      }
+      if (!node.expanded && node.childPaths.length > 0) {
+        toggleTreeNode(path);
+        return true;
+      }
+      if (node.expanded && node.childPaths.length > 0) {
+        const firstChildPath = node.childPaths[0];
+        if (firstChildPath) {
+          await selectTreeItem(createFileSystemItemId(firstChildPath), "push");
+          return true;
+        }
+      }
+      return false;
+    }
+
+    if (isFavoritesRootItemId(safeCurrentId)) {
+      if (favoritesExpanded && favorites.length > 0) {
+        setFavoritesExpanded(false);
+        return true;
+      }
+      return false;
+    }
+    if (isFavoriteItemId(safeCurrentId)) {
+      setTreeSelection(getFavoritesRootItemId());
+      return true;
+    }
+    const path = getFileSystemItemPath(safeCurrentId);
+    const node = path ? treeNodesRef.current[path] : null;
+    if (!path || !node) {
+      return false;
+    }
+    if (node.expanded && node.childPaths.length > 0) {
+      toggleTreeNode(path);
+      return true;
+    }
+    if (path === treeRootPathRef.current) {
+      return false;
+    }
+    const parentPath = parentDirectoryPath(path);
+    if (!parentPath || parentPath === path) {
+      return false;
+    }
+    await selectTreeItem(createFileSystemItemId(parentPath), "push");
+    return true;
+  }
+
   function toggleHiddenFiles() {
     const nextValue = !includeHidden;
     setIncludeHidden(nextValue);
     if (!currentPath) {
       return;
     }
-    reinitializeTree(treeRootPath || currentPath, currentPath);
-    void navigateTo(currentPath, "replace", nextValue);
+    const reloadOptions = getSelectedTreeReloadOptions(currentPath);
+    if (!reloadOptions) {
+      reinitializeTree(treeRootPath || currentPath, currentPath);
+    }
+    void navigateTo(
+      currentPath,
+      "replace",
+      nextValue,
+      undefined,
+      undefined,
+      undefined,
+      reloadOptions,
+    );
   }
 
   async function refreshDirectory() {
@@ -860,8 +1172,19 @@ export function useExplorerNavigationController(args: {
     if (!currentPath) {
       return;
     }
-    reinitializeTree(resolveRefreshRootPath(currentPath, treeRootPath, homePath), currentPath);
-    await navigateTo(currentPath, "replace");
+    const reloadOptions = getSelectedTreeReloadOptions(currentPath);
+    if (!reloadOptions) {
+      reinitializeTree(resolveRefreshRootPath(currentPath, treeRootPath, homePath), currentPath);
+    }
+    await navigateTo(
+      currentPath,
+      "replace",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      reloadOptions,
+    );
   }
 
   function handleSortChange(nextSortBy: SortBy) {
@@ -889,6 +1212,7 @@ export function useExplorerNavigationController(args: {
       nextSortBy,
       nextSortDirection,
       foldersFirst,
+      getSelectedTreeReloadOptions(currentPath),
     );
   }
 
@@ -898,7 +1222,15 @@ export function useExplorerNavigationController(args: {
     if (!currentPath) {
       return;
     }
-    void navigateTo(currentPath, "replace", includeHidden, sortBy, sortDirection, nextValue);
+    void navigateTo(
+      currentPath,
+      "replace",
+      includeHidden,
+      sortBy,
+      sortDirection,
+      nextValue,
+      getSelectedTreeReloadOptions(currentPath),
+    );
   }
 
   async function submitLocationPath(path: string) {
@@ -950,6 +1282,10 @@ export function useExplorerNavigationController(args: {
   useEffect(() => {
     treeNodesRef.current = treeNodes;
   }, [treeNodes, treeNodesRef]);
+
+  useEffect(() => {
+    selectedTreeItemIdRef.current = selectedTreeItemId;
+  }, [selectedTreeItemId, selectedTreeItemIdRef]);
 
   useLayoutEffect(() => {
     currentPathRef.current = currentPath;
@@ -1168,15 +1504,18 @@ export function useExplorerNavigationController(args: {
     restoreExplorerPaneFocus,
     handlePagedPaneScroll,
     handleTypeaheadInput,
+    handleTreeKeyboardAction,
     goBack,
     goForward,
     goHome,
     rerootTreeAtHome,
     goQuickAccess,
     navigateToParentFolder,
+    navigateTreeSelectionToParent,
     initializeTree,
     reinitializeTree,
     navigateTo,
+    navigateTreeFileSystemPath,
     loadTreeChildren,
     toggleTreeNode,
     openTreeNode,
@@ -1186,6 +1525,5 @@ export function useExplorerNavigationController(args: {
     toggleFoldersFirst,
     submitLocationPath,
     handlePaneResizeKey,
-    getTreeKeyboardAction,
   };
 }

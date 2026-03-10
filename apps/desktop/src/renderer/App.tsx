@@ -7,6 +7,7 @@ import {
   DEFAULT_APP_PREFERENCES,
   DEFAULT_TEXT_EDITOR,
   DEFAULT_TERMINAL_APPLICATION,
+  type FavoritePreference,
   type DetailColumnVisibility,
   type DetailColumnWidths,
   NOTIFICATION_DURATION_SECONDS_OPTIONS,
@@ -22,11 +23,6 @@ import { AppDialogs } from "./components/AppDialogs";
 import { ExplorerWorkspace } from "./components/ExplorerWorkspace";
 import { HelpView } from "./components/HelpView";
 import { InfoRow } from "./components/InfoRow";
-import {
-  BROWSE_CONTEXT_MENU_ITEMS,
-  ItemContextMenu,
-  SEARCH_CONTEXT_MENU_ITEMS,
-} from "./components/ItemContextMenu";
 import { SettingsView } from "./components/SettingsView";
 import { useAppPreferences } from "./hooks/useAppPreferences";
 import { useElementSize } from "./hooks/useElementSize";
@@ -67,6 +63,14 @@ import { resolveExplorerToolbarLayout, resolveSinglePanelLayout } from "./lib/re
 import { resolveStartupNavigation } from "./lib/startupNavigation";
 import { getThemeAppearanceDefaults } from "./lib/theme";
 import { type ToastEntry, type ToastKind, createToastEntry, enqueueToast } from "./lib/toasts";
+import {
+  createFavorite,
+  createFileSystemItemId,
+  createFavoriteItemId,
+  getFavoriteItemPath,
+  getDefaultFavorites,
+  isFavoritePath,
+} from "./lib/favorites";
 
 const logger = createRendererLogger("filetrail.renderer");
 
@@ -84,6 +88,12 @@ export function App() {
     setAccent,
     accentToolbarButtons,
     setAccentToolbarButtons,
+    accentFavoriteItems,
+    setAccentFavoriteItems,
+    accentFavoriteText,
+    setAccentFavoriteText,
+    favoriteAccent,
+    setFavoriteAccent,
     zoomPercent,
     setZoomPercent,
     uiFontFamily,
@@ -128,6 +138,12 @@ export function App() {
     setNotificationDurationSeconds,
     restoreLastVisitedFolderOnStartup,
     setRestoreLastVisitedFolderOnStartup,
+    favorites,
+    setFavorites,
+    favoritesExpanded,
+    setFavoritesExpanded,
+    favoritesInitialized,
+    setFavoritesInitialized,
     terminalApp,
     setTerminalApp,
     defaultTextEditor,
@@ -149,6 +165,8 @@ export function App() {
     setHomePath,
     treeNodes,
     setTreeNodes,
+    selectedTreeItemId,
+    setSelectedTreeItemId,
     currentPath,
     setCurrentPath,
     currentEntries,
@@ -201,6 +219,7 @@ export function App() {
     getInfoRequestRef,
     treeRequestRef,
     treeNodesRef,
+    selectedTreeItemIdRef,
     treeRootPathRef,
     metadataCacheRef,
     metadataInflightRef,
@@ -482,14 +501,17 @@ export function App() {
     restoreExplorerPaneFocus,
     handlePagedPaneScroll,
     handleTypeaheadInput,
+    handleTreeKeyboardAction,
     goBack,
     goForward,
     goHome,
     rerootTreeAtHome,
     goQuickAccess,
     navigateToParentFolder,
+    navigateTreeSelectionToParent,
     initializeTree,
     navigateTo,
+    navigateTreeFileSystemPath,
     loadTreeChildren,
     toggleTreeNode,
     openTreeNode,
@@ -521,6 +543,11 @@ export function App() {
     setTreeRootPath,
     treeNodes,
     setTreeNodes,
+    favorites,
+    favoritesExpanded,
+    setFavoritesExpanded,
+    selectedTreeItemId,
+    setSelectedTreeItemId,
     currentPath,
     setCurrentPath,
     currentEntries,
@@ -577,6 +604,7 @@ export function App() {
     getInfoRequestRef,
     treeRequestRef,
     treeNodesRef,
+    selectedTreeItemIdRef,
     treeRootPathRef,
     metadataCacheRef,
     metadataInflightRef,
@@ -598,6 +626,8 @@ export function App() {
     cancelWriteOperation,
     clearContentSelection,
     contextMenuDisabledActionIds,
+    contextMenuFavoriteToggleLabel,
+    contextMenuHiddenActionIds,
     contextMenuSubmenuItems,
     copyGetInfoPath,
     dismissActionNotice,
@@ -640,6 +670,7 @@ export function App() {
     focusedPane,
     setFocusedPane,
     setInfoPanelOpen,
+    homePath,
     currentPath,
     currentEntries,
     activeContentEntries,
@@ -648,6 +679,8 @@ export function App() {
     selectedPathSet,
     contextMenuTargetEntries,
     contextMenuTargetEntry,
+    favorites,
+    setFavorites,
     pasteDestinationPath,
     isSearchMode,
     openItemLimit,
@@ -762,9 +795,6 @@ export function App() {
     tabSwitchesExplorerPanes,
     typeaheadEnabled,
     viewMode,
-    treeRootPath,
-    treeNodes,
-    includeHidden,
     showCachedSearchResults,
     hideSearchResults,
     goBack,
@@ -789,8 +819,8 @@ export function App() {
     focusContentPane,
     handlePagedPaneScroll,
     handleTypeaheadInput,
-    loadTreeChildren,
-    toggleTreeNode,
+    handleTreeKeyboardAction,
+    navigateTreeSelectionToParent,
     activateContentPaths,
     extendContentSelectionToPath,
     setSingleContentSelection,
@@ -818,6 +848,9 @@ export function App() {
         theme,
         accent,
         accentToolbarButtons,
+        accentFavoriteItems,
+        accentFavoriteText,
+        favoriteAccent,
         zoomPercent,
         uiFontFamily,
         uiFontSize,
@@ -858,11 +891,19 @@ export function App() {
         restoreLastVisitedFolderOnStartup,
         treeRootPath: treeRootPath || null,
         lastVisitedPath: currentPath || null,
+        lastVisitedFavoritePath:
+          getFavoriteItemPath(selectedTreeItemId) === currentPath
+            ? getFavoriteItemPath(selectedTreeItemId)
+            : null,
+        favorites,
+        favoritesExpanded,
+        favoritesInitialized,
       },
     });
   }, [
     client,
     currentPath,
+    selectedTreeItemId,
     includeHidden,
     panes.inspectorWidth,
     panes.treeWidth,
@@ -878,6 +919,9 @@ export function App() {
     detailColumnWidths,
     accent,
     accentToolbarButtons,
+    accentFavoriteItems,
+    accentFavoriteText,
+    favoriteAccent,
     zoomPercent,
     searchIncludeHidden,
     searchResultsSortBy,
@@ -894,6 +938,9 @@ export function App() {
     notificationsEnabled,
     openItemLimit,
     restoreLastVisitedFolderOnStartup,
+    favorites,
+    favoritesExpanded,
+    favoritesInitialized,
     terminalApp,
     defaultTextEditor,
     theme,
@@ -915,7 +962,7 @@ export function App() {
       client.invoke("app:getHomeDirectory", {}),
       client.invoke("app:getLaunchContext", {}),
     ])
-      .then(([preferencesResponse, homeResponse, launchContextResponse]) => {
+      .then(async ([preferencesResponse, homeResponse, launchContextResponse]) => {
         if (cancelled) {
           return;
         }
@@ -923,6 +970,9 @@ export function App() {
         setTheme(preferences.theme);
         setAccent(preferences.accent);
         setAccentToolbarButtons(preferences.accentToolbarButtons);
+        setAccentFavoriteItems(preferences.accentFavoriteItems);
+        setAccentFavoriteText(preferences.accentFavoriteText);
+        setFavoriteAccent(preferences.favoriteAccent);
         setZoomPercent(preferences.zoomPercent);
         setUiFontFamily(preferences.uiFontFamily);
         setUiFontSize(preferences.uiFontSize);
@@ -956,6 +1006,9 @@ export function App() {
         setInfoPanelOpen(preferences.propertiesOpen);
         setInfoRowOpen(preferences.detailRowOpen);
         setRestoreLastVisitedFolderOnStartup(preferences.restoreLastVisitedFolderOnStartup);
+        setFavorites(preferences.favorites);
+        setFavoritesExpanded(preferences.favoritesExpanded);
+        setFavoritesInitialized(preferences.favoritesInitialized);
         setTerminalApp(preferences.terminalApp);
         setDefaultTextEditor(preferences.defaultTextEditor);
         setOpenWithApplications(preferences.openWithApplications);
@@ -968,12 +1021,29 @@ export function App() {
           inspectorWidth: preferences.inspectorWidth,
         });
         setHomePath(homeResponse.path);
-        const { startupPath, startupRootPath } = resolveStartupNavigation(
+        if (!preferences.favoritesInitialized) {
+          setFavorites(getDefaultFavorites(homeResponse.path));
+          setFavoritesExpanded(true);
+          setFavoritesInitialized(true);
+        }
+        const { startupPath, startupRootPath, startupFavoritePath } = resolveStartupNavigation(
           preferences,
           homeResponse.path,
           launchContextResponse.startupFolderPath,
         );
         initializeTree(startupRootPath);
+        const restoredFavoritePath =
+          startupFavoritePath && isFavoritePath(preferences.favorites, startupFavoritePath)
+            ? startupFavoritePath
+            : null;
+        setSelectedTreeItemId(
+          restoredFavoritePath
+            ? createFavoriteItemId(restoredFavoritePath)
+            : createFileSystemItemId(startupPath),
+        );
+        if (restoredFavoritePath) {
+          await loadTreeChildren(startupRootPath, preferences.includeHidden, false, startupRootPath);
+        }
         void navigateTo(
           startupPath,
           "replace",
@@ -981,6 +1051,14 @@ export function App() {
           undefined,
           undefined,
           preferences.foldersFirst,
+          restoredFavoritePath
+            ? {
+                syncTree: false,
+                treeSelectionMode: "favorite",
+                favoritePath: restoredFavoritePath,
+                persistOnError: true,
+              }
+            : undefined,
         ).then((didNavigate) => {
           if (cancelled || didNavigate || startupPath === homeResponse.path) {
             setPreferencesReady(true);
@@ -1119,9 +1197,74 @@ export function App() {
     setMainView("settings");
   }
 
+  async function addFavoriteFromSettings() {
+    const pickedPath = await browseForDirectoryPath(currentPath || homePath);
+    if (!pickedPath || isFavoritePath(favorites, pickedPath)) {
+      return;
+    }
+    setFavorites((current) => [...current, createFavorite(pickedPath, homePath)]);
+  }
+
+  async function browseFavoriteInSettings(index: number) {
+    const currentFavorite = favorites[index];
+    if (!currentFavorite) {
+      return;
+    }
+    const pickedPath = await browseForDirectoryPath(currentFavorite.path);
+    if (!pickedPath) {
+      return;
+    }
+    if (favorites.some((favorite, favoriteIndex) => favoriteIndex !== index && favorite.path === pickedPath)) {
+      return;
+    }
+    setFavorites((current) =>
+      current.map((favorite, favoriteIndex) =>
+        favoriteIndex === index
+          ? {
+              path: pickedPath,
+              icon: favorite.icon,
+            }
+          : favorite,
+      ),
+    );
+  }
+
+  function moveFavoriteInSettings(index: number, direction: "up" | "down") {
+    setFavorites((current) => {
+      const targetIndex = direction === "up" ? index - 1 : index + 1;
+      if (index < 0 || index >= current.length || targetIndex < 0 || targetIndex >= current.length) {
+        return current;
+      }
+      const next = [...current];
+      const [favorite] = next.splice(index, 1);
+      if (!favorite) {
+        return current;
+      }
+      next.splice(targetIndex, 0, favorite);
+      return next;
+    });
+  }
+
+  function removeFavoriteInSettings(index: number) {
+    setFavorites((current) => current.filter((_, favoriteIndex) => favoriteIndex !== index));
+  }
+
+  function updateFavoriteIconInSettings(index: number, icon: FavoritePreference["icon"]) {
+    setFavorites((current) =>
+      current.map((favorite, favoriteIndex) =>
+        favoriteIndex === index
+          ? {
+              ...favorite,
+              icon,
+            }
+          : favorite,
+      ),
+    );
+  }
+
   function navigateDownAction() {
     if (focusedPane === "tree") {
-      void openTreeNode(currentPath);
+      void openTreeNode();
       return;
     }
     if (selectedEntry) {
@@ -1146,9 +1289,11 @@ export function App() {
             paneRef: treePaneRef,
             isFocused: focusedPane === "tree",
             homePath,
-            currentPath,
+            selectedTreeItemId,
             compactTreeView,
             nodes: treeNodes,
+            favorites,
+            favoritesExpanded,
             rootPath: treeRootPath,
             onFocusChange: (focused) => setFocusedPane(focused ? "tree" : null),
             onGoHome: goHome,
@@ -1174,8 +1319,16 @@ export function App() {
             onOpenSettings: openSettingsView,
             includeHidden,
             onToggleHidden: toggleHiddenFiles,
-            onNavigate: (path) => navigateTo(path, "push"),
+            onNavigate: (path) => navigateTreeFileSystemPath(path, "push"),
+            onNavigateFavorite: (path) =>
+              navigateTo(path, "push", undefined, undefined, undefined, undefined, {
+                syncTree: false,
+                treeSelectionMode: "favorite",
+                favoritePath: path,
+                persistOnError: true,
+              }),
             onToggleExpand: toggleTreeNode,
+            onToggleFavoritesExpanded: () => setFavoritesExpanded((value) => !value),
             typeaheadQuery: focusedPane === "tree" ? typeaheadQuery : "",
           }}
           searchWorkspaceProps={{
@@ -1402,6 +1555,9 @@ export function App() {
                 theme={theme}
                 accent={accent}
                 accentToolbarButtons={accentToolbarButtons}
+                accentFavoriteItems={accentFavoriteItems}
+                accentFavoriteText={accentFavoriteText}
+                favoriteAccent={favoriteAccent}
                 zoomPercent={zoomPercent}
                 uiFontFamily={uiFontFamily}
                 uiFontSize={uiFontSize}
@@ -1421,8 +1577,10 @@ export function App() {
                 notificationsEnabled={notificationsEnabled}
                 notificationDurationSeconds={notificationDurationSeconds}
                 restoreLastVisitedFolderOnStartup={restoreLastVisitedFolderOnStartup}
+                homePath={homePath}
                 terminalApp={terminalApp}
                 defaultTextEditor={defaultTextEditor}
+                favorites={favorites}
                 openWithApplications={openWithApplications}
                 fileActivationAction={fileActivationAction}
                 openItemLimit={openItemLimit}
@@ -1436,6 +1594,9 @@ export function App() {
                 onThemeChange={setTheme}
                 onAccentChange={setAccent}
                 onAccentToolbarButtonsChange={setAccentToolbarButtons}
+                onAccentFavoriteItemsChange={setAccentFavoriteItems}
+                onAccentFavoriteTextChange={setAccentFavoriteText}
+                onFavoriteAccentChange={setFavoriteAccent}
                 onZoomPercentChange={setZoomPercent}
                 onUiFontFamilyChange={setUiFontFamily}
                 onUiFontSizeChange={setUiFontSize}
@@ -1463,6 +1624,15 @@ export function App() {
                   void browseDefaultTextEditor();
                 }}
                 onClearDefaultTextEditor={() => setDefaultTextEditor(DEFAULT_TEXT_EDITOR)}
+                onAddFavorite={() => {
+                  void addFavoriteFromSettings();
+                }}
+                onBrowseFavorite={(index) => {
+                  void browseFavoriteInSettings(index);
+                }}
+                onMoveFavorite={moveFavoriteInSettings}
+                onRemoveFavorite={removeFavoriteInSettings}
+                onFavoriteIconChange={updateFavoriteIconInSettings}
                 onAddOpenWithApplication={() => {
                   void addOpenWithApplication();
                 }}
@@ -1495,6 +1665,8 @@ export function App() {
         onSubmitMoveDialog={(path) => void submitMoveDialog(path)}
         contextMenuState={contextMenuState}
         contextMenuDisabledActionIds={contextMenuDisabledActionIds}
+        contextMenuFavoriteToggleLabel={contextMenuFavoriteToggleLabel}
+        contextMenuHiddenActionIds={contextMenuHiddenActionIds}
         contextMenuSubmenuItems={contextMenuSubmenuItems}
         onRunContextMenuAction={(actionId, paths) => {
           void runContextMenuAction(actionId, paths);
