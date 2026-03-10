@@ -317,9 +317,9 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "c", metaKey: true });
     });
 
-    const toastViewport = await screen.findByTestId("toast-viewport");
-    expect(within(toastViewport).getByText("Ready to paste")).toBeInTheDocument();
-    expect(within(toastViewport).getByText("source.txt")).toBeInTheDocument();
+    const initialToastViewport = await screen.findByTestId("toast-viewport");
+    expect(within(initialToastViewport).getByText("Ready to paste")).toBeInTheDocument();
+    expect(within(initialToastViewport).getByText("source.txt")).toBeInTheDocument();
     expect(document.activeElement).toBe(activeElementBeforeCopy);
   });
 
@@ -2945,7 +2945,9 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { code: "KeyC", key: "c", metaKey: true, altKey: true });
     });
 
-    expect(await screen.findByText("Copied path")).toBeInTheDocument();
+    const toastViewport = await screen.findByTestId("toast-viewport");
+    expect(within(toastViewport).getByText("Copied path")).toBeInTheDocument();
+    expect(within(toastViewport).getByText("source.txt")).toBeInTheDocument();
     expect(document.activeElement).toBe(activeElementBeforeCopyPath);
 
     unmount();
@@ -3092,7 +3094,11 @@ describe("App copy/paste integration", () => {
       });
     });
 
-    expect(await screen.findByText("Pasted 1 item into Folder")).toBeInTheDocument();
+    const updatedToastViewport = await screen.findByTestId("toast-viewport");
+    const pastedToastTitle = within(updatedToastViewport).getByText("Pasted into Folder");
+    const pastedToast = pastedToastTitle.closest(".toast-card");
+    expect(pastedToast).not.toBeNull();
+    expect(within(pastedToast as HTMLElement).getByText("source.txt")).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Paste Result" })).not.toBeInTheDocument();
 
     const planCallsBeforeRetry = harness.invocations.filter(
@@ -3544,7 +3550,11 @@ describe("App copy/paste integration", () => {
     });
 
     expect(screen.queryByRole("dialog", { name: "Paste Result" })).not.toBeInTheDocument();
-    expect(await screen.findByText("Pasted 1 item into Folder")).toBeInTheDocument();
+    const updatedToastViewport = await screen.findByTestId("toast-viewport");
+    const pastedToastTitle = within(updatedToastViewport).getByText("Pasted into Folder");
+    const pastedToast = pastedToastTitle.closest(".toast-card");
+    expect(pastedToast).not.toBeNull();
+    expect(within(pastedToast as HTMLElement).getByText("source.txt")).toBeInTheDocument();
     expect(document.querySelectorAll(".toast-card")).toHaveLength(2);
   });
 });

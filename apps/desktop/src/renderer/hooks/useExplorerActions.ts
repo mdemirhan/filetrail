@@ -715,16 +715,76 @@ export function useExplorerActions(args: {
     });
   }
 
+  function formatItemSummaryFromPathCount(firstPath: string, itemCount: number): string {
+    const firstName = getPathLeafName(firstPath);
+    if (itemCount <= 1) {
+      return firstName;
+    }
+    return `${firstName} and ${itemCount - 1} more`;
+  }
+
   function formatClipboardItemSummary(paths: string[]): string {
     const firstPath = paths[0];
     if (!firstPath) {
       return "item";
     }
-    const firstName = getPathLeafName(firstPath);
-    if (paths.length === 1) {
-      return firstName;
+    return formatItemSummaryFromPathCount(firstPath, paths.length);
+  }
+
+  function getWriteOperationRepresentativePath(event: WriteOperationProgressEvent): string | null {
+    const result = event.result;
+    if (!result) {
+      return event.currentSourcePath ?? event.currentDestinationPath;
     }
-    return `${firstName} and ${paths.length - 1} more`;
+    const representativeItem = result.items.find((item) => {
+      if (event.action === "new_folder") {
+        return typeof item.destinationPath === "string" && item.destinationPath.length > 0;
+      }
+      if (event.action === "rename") {
+        return (
+          (typeof item.destinationPath === "string" && item.destinationPath.length > 0) ||
+          (typeof item.sourcePath === "string" && item.sourcePath.length > 0)
+        );
+      }
+      if (event.action === "trash") {
+        return typeof item.sourcePath === "string" && item.sourcePath.length > 0;
+      }
+      return (
+        (typeof item.sourcePath === "string" && item.sourcePath.length > 0) ||
+        (typeof item.destinationPath === "string" && item.destinationPath.length > 0)
+      );
+    });
+    if (event.action === "new_folder") {
+      return representativeItem?.destinationPath ?? event.currentDestinationPath;
+    }
+    if (event.action === "rename") {
+      return (
+        representativeItem?.destinationPath ??
+        representativeItem?.sourcePath ??
+        event.currentDestinationPath ??
+        event.currentSourcePath
+      );
+    }
+    if (event.action === "trash") {
+      return representativeItem?.sourcePath ?? event.currentSourcePath;
+    }
+    return (
+      representativeItem?.sourcePath ??
+      representativeItem?.destinationPath ??
+      event.currentSourcePath ??
+      event.currentDestinationPath
+    );
+  }
+
+  function formatWriteOperationItemSummary(event: WriteOperationProgressEvent): string | null {
+    const result = event.result;
+    const representativePath = getWriteOperationRepresentativePath(event);
+    if (!representativePath) {
+      return null;
+    }
+    const itemCount =
+      result?.summary.topLevelItemCount ?? (event.totalItemCount > 0 ? event.totalItemCount : 1);
+    return formatItemSummaryFromPathCount(representativePath, itemCount);
   }
 
   function pushTerminalCopyPasteToast(event: WriteOperationProgressEvent) {
@@ -732,27 +792,30 @@ export function useExplorerActions(args: {
     if (!result) {
       return;
     }
-    const itemLabel = `${result.summary.topLevelItemCount} item${result.summary.topLevelItemCount === 1 ? "" : "s"}`;
-    const actionLabel =
+    const itemSummary = formatWriteOperationItemSummary(event);
+    const completedTitle =
       event.action === "move_to"
-        ? "Moved"
+        ? result.targetPath
+          ? `Moved to ${getPathLeafName(result.targetPath)}`
+          : "Moved"
         : event.action === "duplicate"
-          ? "Duplicated"
+          ? result.targetPath
+            ? `Duplicated into ${getPathLeafName(result.targetPath)}`
+            : "Duplicated"
           : event.action === "trash"
             ? "Moved to Trash"
             : event.action === "rename"
               ? "Renamed"
               : event.action === "new_folder"
                 ? "Created folder"
-                : "Pasted";
+                : result.targetPath
+                  ? `Pasted into ${getPathLeafName(result.targetPath)}`
+                  : "Pasted";
     if (event.status === "completed") {
       pushToast({
         kind: "success",
-        title:
-          result.targetPath &&
-          (event.action === "paste" || event.action === "move_to" || event.action === "duplicate")
-            ? `${actionLabel} ${itemLabel} into ${getPathLeafName(result.targetPath)}`
-            : `${actionLabel} ${itemLabel}`,
+        title: completedTitle,
+        ...(itemSummary ? { message: itemSummary } : {}),
       });
       return;
     }
@@ -771,6 +834,7 @@ export function useExplorerActions(args: {
                   : event.action === "new_folder"
                     ? "Create folder cancelled"
                     : "Paste cancelled",
+        ...(itemSummary ? { message: itemSummary } : {}),
       });
       return;
     }
@@ -781,18 +845,34 @@ export function useExplorerActions(args: {
           event.action === "move_to"
             ? "Move completed with some issues"
             : event.action === "duplicate"
-              ? "Duplicate completed with some issues"
+            ? "Duplicate completed with some issues"
               : event.action === "trash"
                 ? "Trash completed with some issues"
                 : "Paste completed with some issues",
+        ...(itemSummary ? { message: itemSummary } : {}),
       });
       return;
     }
     if (event.status === "failed") {
+      const failureMessage =
+        itemSummary && result.error
+          ? `${itemSummary}: ${result.error}`
+          : (itemSummary ?? result.error ?? null);
       pushToast({
         kind: "error",
-        title: `${actionLabel} failed`,
-        ...(result.error ? { message: result.error } : {}),
+        title:
+          event.action === "move_to"
+            ? "Move failed"
+            : event.action === "duplicate"
+              ? "Duplicate failed"
+              : event.action === "trash"
+                ? "Trash failed"
+                : event.action === "rename"
+                  ? "Rename failed"
+                  : event.action === "new_folder"
+                  ? "Create folder failed"
+                    : "Paste failed",
+        ...(failureMessage ? { message: failureMessage } : {}),
       });
     }
   }
@@ -842,7 +922,8 @@ export function useExplorerActions(args: {
       await copyPathsToClipboard(paths);
       pushToast({
         kind: "success",
-        title: paths.length === 1 ? "Copied path" : `Copied ${paths.length} paths`,
+        title: paths.length === 1 ? "Copied path" : "Copied paths",
+        message: formatClipboardItemSummary(paths),
       });
     } catch (error) {
       logger.error("copy path failed", error);
