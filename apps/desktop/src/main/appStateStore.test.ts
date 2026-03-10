@@ -13,11 +13,11 @@ describe("appStateStore", () => {
 
     expect(store.getPreferences()).toEqual({
       theme: "tomorrow-night",
-      accent: "gold",
+      accent: "copper",
       accentToolbarButtons: false,
       accentFavoriteItems: true,
       accentFavoriteText: false,
-      favoriteAccent: "rose",
+      favoriteAccent: "sky",
       zoomPercent: 100,
       uiFontFamily: "lexend",
       uiFontSize: 13,
@@ -30,6 +30,7 @@ describe("appStateStore", () => {
       compactListView: false,
       compactDetailsView: false,
       compactTreeView: false,
+      singleClickExpandTreeItems: false,
       highlightHoveredItems: false,
       detailColumns: {
         size: true,
@@ -125,6 +126,7 @@ describe("appStateStore", () => {
       compactListView: true,
       compactDetailsView: true,
       compactTreeView: true,
+      singleClickExpandTreeItems: true,
       highlightHoveredItems: false,
       detailColumns: {
         size: true,
@@ -215,6 +217,7 @@ describe("appStateStore", () => {
       compactListView: true,
       compactDetailsView: true,
       compactTreeView: true,
+      singleClickExpandTreeItems: true,
       highlightHoveredItems: false,
       detailColumns: {
         size: true,
@@ -341,15 +344,15 @@ describe("appStateStore", () => {
     const reloaded = createAppStateStore(filePath, {
       defaultTheme: "dark",
     });
-    expect(reloaded.getPreferences().accent).toBe("gold");
+    expect(reloaded.getPreferences().accent).toBe("copper");
     expect(reloaded.getPreferences().accentToolbarButtons).toBe(false);
     expect(reloaded.getPreferences().accentFavoriteItems).toBe(true);
     expect(reloaded.getPreferences().accentFavoriteText).toBe(false);
-    expect(reloaded.getPreferences().favoriteAccent).toBe("rose");
+    expect(reloaded.getPreferences().favoriteAccent).toBe("sky");
     expect(reloaded.getPreferences().zoomPercent).toBe(150);
     expect(reloaded.getPreferences().treeWidth).toBe(220);
     expect(reloaded.getPreferences().inspectorWidth).toBe(480);
-    expect(reloaded.getPreferences().accent).toBe("gold");
+    expect(reloaded.getPreferences().accent).toBe("copper");
     expect(reloaded.getPreferences().uiFontFamily).toBe("lexend");
     expect(reloaded.getPreferences().uiFontSize).toBe(15);
     expect(reloaded.getPreferences().uiFontWeight).toBe(500);

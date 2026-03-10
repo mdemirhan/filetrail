@@ -8,7 +8,7 @@ import {
   useMemo,
 } from "react";
 
-import type { IpcRequest, WriteOperationProgressEvent } from "@filetrail/contracts";
+import type { IpcRequest, IpcResponse, WriteOperationProgressEvent } from "@filetrail/contracts";
 
 import type {
   ApplicationSelection,
@@ -17,12 +17,12 @@ import type {
   OpenWithApplication,
 } from "../../shared/appPreferences";
 import {
-  BROWSE_CONTEXT_MENU_ITEMS,
   type ContextMenuActionId,
+  type ContextMenuSourceSubview,
   type ContextMenuSubmenuAction,
   type ContextMenuSubmenuItem,
-  SEARCH_CONTEXT_MENU_ITEMS,
-} from "../components/ItemContextMenu";
+  getContextMenuItems,
+} from "../lib/contextMenu";
 import {
   type ContentSelectionState,
   EMPTY_CONTENT_SELECTION,
@@ -46,13 +46,15 @@ import {
   isDirectoryLikeEntry,
   isEditableFileEntry,
   resolveNewFolderTargetPath,
+  resolveWriteOperationRefreshPath,
+  resolveWriteOperationTreeSelectionPath,
   resolveWriteOperationSelectionDirectoryPath,
   shouldRenderCopyPasteResultDialog,
 } from "../lib/explorerAppUtils";
 import type { DirectoryEntry, CopyPastePlan } from "../lib/explorerTypes";
 import { parentDirectoryPath } from "../lib/explorerNavigation";
 import { useFiletrailClient } from "../lib/filetrailClient";
-import { createFavorite, isFavoritePath } from "../lib/favorites";
+import { createFavorite, getFileSystemItemPath, isFavoritePath } from "../lib/favorites";
 import { createRendererLogger } from "../lib/logging";
 import { type ToastEntry, type ToastKind, createToastEntry, enqueueToast } from "../lib/toasts";
 import type {
@@ -90,6 +92,10 @@ export function useExplorerActions(args: {
   focusedPane: "tree" | "content" | null;
   setFocusedPane: (value: "tree" | "content" | null) => void;
   setInfoPanelOpen: Dispatch<SetStateAction<boolean>>;
+  setInfoTargetPathOverride: Dispatch<SetStateAction<string | null>>;
+  setGetInfoItem: Dispatch<SetStateAction<IpcResponse<"item:getProperties">["item"] | null>>;
+  setGetInfoLoading: Dispatch<SetStateAction<boolean>>;
+  getInfoRequestRef: MutableRefObject<number>;
   homePath: string;
   currentPath: string;
   currentEntries: DirectoryEntry[];
@@ -119,10 +125,20 @@ export function useExplorerActions(args: {
   focusContentPane: () => void;
   restoreExplorerPaneFocus: (preferredPane?: "tree" | "content" | null) => void;
   navigateTo: (path: string, historyMode: "push" | "replace" | "skip") => Promise<boolean>;
-  refreshDirectory: () => Promise<void>;
+  navigateTreeFileSystemPath: (
+    path: string,
+    historyMode: "push" | "replace" | "skip",
+  ) => Promise<void>;
+  navigateFavoritePath: (path: string, historyMode: "push" | "replace" | "skip") => Promise<boolean>;
+  toggleTreeNode: (path: string) => void;
+  refreshDirectory: (options?: {
+    path?: string;
+    treeSelectionPath?: string | null;
+  }) => Promise<void>;
   contentSelection: ContentSelectionState;
   setContentSelection: Dispatch<SetStateAction<ContentSelectionState>>;
   currentPathRef: MutableRefObject<string>;
+  selectedTreeItemIdRef: MutableRefObject<string>;
   isSearchModeRef: MutableRefObject<boolean>;
   selectedPathsInViewOrderRef: MutableRefObject<string[]>;
   selectedEntryRef: MutableRefObject<DirectoryEntry | null>;
@@ -159,12 +175,14 @@ export function useExplorerActions(args: {
     parentDirectoryPath: string;
     initialName: string;
     error: string | null;
+    selectInTreeOnSuccess: boolean;
   } | null;
   setNewFolderDialogState: Dispatch<
     SetStateAction<{
       parentDirectoryPath: string;
       initialName: string;
       error: string | null;
+      selectInTreeOnSuccess: boolean;
     } | null>
   >;
   moveDialogState: {
@@ -196,6 +214,7 @@ export function useExplorerActions(args: {
     directoryPath: string;
     selectedPaths: string[];
   } | null>;
+  pendingTreeSelectionPathRef: MutableRefObject<string | null>;
 }) {
   const {
     client,
@@ -203,6 +222,10 @@ export function useExplorerActions(args: {
     focusedPane,
     setFocusedPane,
     setInfoPanelOpen,
+    setInfoTargetPathOverride,
+    setGetInfoItem,
+    setGetInfoLoading,
+    getInfoRequestRef,
     homePath,
     currentPath,
     currentEntries,
@@ -232,10 +255,14 @@ export function useExplorerActions(args: {
     focusContentPane,
     restoreExplorerPaneFocus,
     navigateTo,
+    navigateTreeFileSystemPath,
+    navigateFavoritePath,
+    toggleTreeNode,
     refreshDirectory,
     contentSelection,
     setContentSelection,
     currentPathRef,
+    selectedTreeItemIdRef,
     isSearchModeRef,
     selectedPathsInViewOrderRef,
     selectedEntryRef,
@@ -270,6 +297,7 @@ export function useExplorerActions(args: {
     copyPasteClipboardRef,
     writeOperationLockedRef,
     pendingPasteSelectionRef,
+    pendingTreeSelectionPathRef,
   } = args;
 
   const isWriteOperationLocked = writeOperationCardState !== null;
@@ -278,30 +306,62 @@ export function useExplorerActions(args: {
   const showCopyPasteProgressCard = writeOperationCardState !== null;
   const showCopyPasteResultDialog = shouldRenderCopyPasteResultDialog(writeOperationProgressEvent);
   const contextMenuFavoriteToggleLabel = useMemo(() => {
-    if (!contextMenuState || contextMenuState.source !== "browse" || isSearchMode) {
+    if (!contextMenuState || isSearchMode) {
       return null;
     }
     if (contextMenuState.scope !== "selection" || contextMenuState.paths.length !== 1) {
       return null;
     }
-    const targetEntry = contextMenuTargetEntries[0] ?? null;
-    if (!isDirectoryLikeEntry(targetEntry)) {
+    const targetPath = contextMenuState.targetPath;
+    if (!targetPath) {
       return null;
     }
-    return isFavoritePath(favorites, targetEntry.path) ? "Remove from Favorites" : "Add to Favorites";
+    if (contextMenuState.surface === "favorite") {
+      return "Remove from Favorites";
+    }
+    if (contextMenuState.surface !== "content" && contextMenuState.surface !== "treeFolder") {
+      return null;
+    }
+    if (
+      contextMenuState.surface === "content" &&
+      !isDirectoryLikeEntry(contextMenuTargetEntries[0] ?? null)
+    ) {
+      return null;
+    }
+    return isFavoritePath(favorites, targetPath) ? "Remove from Favorites" : "Add to Favorites";
   }, [contextMenuState, contextMenuTargetEntries, favorites, isSearchMode]);
 
-  const contextMenuHiddenActionIds = useMemo(
-    () => (contextMenuFavoriteToggleLabel === null ? (["toggleFavorite"] as ContextMenuActionId[]) : []),
-    [contextMenuFavoriteToggleLabel],
-  );
+  const contextMenuHiddenActionIds = useMemo(() => {
+    if (!contextMenuState) {
+      return [] as ContextMenuActionId[];
+    }
+    const hidden = new Set<ContextMenuActionId>();
+    if (contextMenuFavoriteToggleLabel === null) {
+      hidden.add("toggleFavorite");
+    }
+    if (contextMenuState.surface === "favorite") {
+      return Array.from(hidden);
+    }
+    if (contextMenuState.surface === "treeFolder") {
+      if (contextMenuState.folderExpansionLabel === null) {
+        hidden.add("toggleExpand");
+      }
+      return Array.from(hidden);
+    }
+    if (contextMenuState.surface === "search") {
+      hidden.add("toggleFavorite");
+    }
+    return Array.from(hidden);
+  }, [contextMenuFavoriteToggleLabel, contextMenuState]);
 
   const contextMenuDisabledActionIds = useMemo(() => {
     if (!contextMenuState) {
       return [] as ContextMenuActionId[];
     }
     const disabled = new Set<ContextMenuActionId>();
-    const isBrowseContext = contextMenuState.source === "browse" && !isSearchMode;
+    const isContentContext = contextMenuState.surface === "content" && !isSearchMode;
+    const isTreeFolderContext = contextMenuState.surface === "treeFolder";
+    const isFavoriteContext = contextMenuState.surface === "favorite";
     const hasOnlyEditableFiles =
       contextMenuTargetEntries.length > 0 &&
       contextMenuTargetEntries.length === contextMenuState.paths.length &&
@@ -318,10 +378,53 @@ export function useExplorerActions(args: {
         disabled.add(actionId);
       }
     }
+    if (isTreeFolderContext) {
+      disabled.add("openWith");
+      disabled.add("edit");
+      if (!contextMenuState.targetPath) {
+        disabled.add("open");
+        disabled.add("showInfo");
+        disabled.add("toggleFavorite");
+        disabled.add("terminal");
+        disabled.add("copyPath");
+        disabled.add("copy");
+        disabled.add("cut");
+        disabled.add("move");
+        disabled.add("rename");
+        disabled.add("duplicate");
+        disabled.add("newFolder");
+        disabled.add("trash");
+      }
+      if (contextMenuState.folderExpansionLabel === null) {
+        disabled.add("toggleExpand");
+      }
+      return Array.from(disabled);
+    }
+    if (isFavoriteContext) {
+      disabled.add("openWith");
+      disabled.add("edit");
+      disabled.add("copy");
+      disabled.add("cut");
+      disabled.add("move");
+      disabled.add("rename");
+      disabled.add("duplicate");
+      disabled.add("trash");
+      disabled.add("toggleExpand");
+      if (!contextMenuState.targetPath) {
+        disabled.add("open");
+        disabled.add("revealInTree");
+        disabled.add("showInfo");
+        disabled.add("toggleFavorite");
+        disabled.add("terminal");
+        disabled.add("copyPath");
+        disabled.add("newFolder");
+      }
+      return Array.from(disabled);
+    }
     if (!hasOnlyEditableFiles) {
       disabled.add("edit");
     }
-    if (!isBrowseContext) {
+    if (!isContentContext) {
       disabled.add("move");
       disabled.add("rename");
       disabled.add("duplicate");
@@ -352,8 +455,11 @@ export function useExplorerActions(args: {
     if (contextMenuTargetEntries.length > 0) {
       return Array.from(disabled);
     }
-    const items =
-      contextMenuState.source === "search" ? SEARCH_CONTEXT_MENU_ITEMS : BROWSE_CONTEXT_MENU_ITEMS;
+    const items = getContextMenuItems({
+      surface: contextMenuState.surface,
+      favoriteToggleLabel: contextMenuFavoriteToggleLabel,
+      folderExpansionLabel: contextMenuState.folderExpansionLabel,
+    });
     for (const item of items) {
       if (item.type === "separator" || item.id === "newFolder") {
         continue;
@@ -447,6 +553,9 @@ export function useExplorerActions(args: {
     if (!contextMenuState) {
       return;
     }
+    if (contextMenuState.surface === "treeFolder" || contextMenuState.surface === "favorite") {
+      return;
+    }
     if (
       contextMenuState.paths.some(
         (path) => !activeContentEntries.some((entry) => entry.path === path),
@@ -525,7 +634,15 @@ export function useExplorerActions(args: {
           setWriteOperationProgressEvent(null);
           pushTerminalCopyPasteToast(event);
         }
-        void refreshDirectory();
+        const nextPath = event.result
+          ? resolveWriteOperationRefreshPath(event.result, currentPathRef.current)
+          : currentPathRef.current;
+        const nextTreeSelectionPath = event.result ? resolveCompletedTreeSelectionPath(event) : null;
+        pendingTreeSelectionPathRef.current = null;
+        void refreshDirectory({
+          path: nextPath,
+          treeSelectionPath: nextTreeSelectionPath,
+        });
       }
     });
     return unsubscribe;
@@ -563,6 +680,7 @@ export function useExplorerActions(args: {
     selection: ContentSelectionState,
     entries: DirectoryEntry[] = activeContentEntries,
   ) {
+    setInfoTargetPathOverride(null);
     syncContentSelectionRefs(selection, entries);
     setContentSelection(selection);
   }
@@ -622,7 +740,7 @@ export function useExplorerActions(args: {
   function openItemContextMenu(
     path: string | null,
     position: { x: number; y: number },
-    source: "browse" | "search" = "browse",
+    surface: "content" | "search" = "content",
   ) {
     const resolvedPosition = resolveContextMenuPosition(position.x, position.y);
     let contextPaths: string[] = [];
@@ -644,14 +762,43 @@ export function useExplorerActions(args: {
       ...resolvedPosition,
       paths: contextPaths,
       targetPath: path,
-      source,
+      surface,
+      targetKind: "contentEntry",
+      sourceSubview: null,
       scope: contextPaths.length > 0 ? "selection" : "background",
+      folderExpansionLabel: null,
+    });
+  }
+
+  function openTreeItemContextMenu(input: {
+    path: string;
+    sourceSubview: ContextMenuSourceSubview;
+    targetKind: "treeFolder" | "favorite";
+    folderExpansionLabel: "Expand" | "Collapse" | null;
+  } & { position: { x: number; y: number } }) {
+    const resolvedPosition = resolveContextMenuPosition(input.position.x, input.position.y);
+    setFocusedPane("tree");
+    setContextMenuState({
+      ...resolvedPosition,
+      paths: [input.path],
+      targetPath: input.path,
+      surface: input.targetKind,
+      targetKind: input.targetKind,
+      sourceSubview: input.sourceSubview,
+      scope: "selection",
+      folderExpansionLabel: input.folderExpansionLabel,
     });
   }
 
   function showModalNotice(title: string, message: string) {
     actionNoticeReturnFocusPaneRef.current =
-      focusedPane ?? lastExplorerFocusPaneRef.current ?? (contextMenuState ? "content" : null);
+      focusedPane ??
+      lastExplorerFocusPaneRef.current ??
+      (contextMenuState
+        ? contextMenuState.surface === "treeFolder" || contextMenuState.surface === "favorite"
+          ? "tree"
+          : "content"
+        : null);
     setActionNotice({
       title,
       message,
@@ -950,12 +1097,12 @@ export function useExplorerActions(args: {
     return [];
   }
 
-  async function runCopyClipboardAction(mode: "copy" | "cut") {
+  async function runCopyClipboardAction(mode: "copy" | "cut", explicitPaths?: string[]) {
     if (isWriteOperationInFlight()) {
       showWriteOperationBusyToast();
       return;
     }
-    const paths = resolveClipboardSourcePaths();
+    const paths = explicitPaths && explicitPaths.length > 0 ? explicitPaths : resolveClipboardSourcePaths();
     if (paths.length === 0) {
       pushToast({
         kind: "warning",
@@ -978,10 +1125,12 @@ export function useExplorerActions(args: {
     options: {
       pasteAttemptId?: number | null;
       clearClipboardOnStart?: boolean;
+      pendingTreeSelectionPath?: string | null;
     } = {},
   ) {
     const pasteAttemptId = options.pasteAttemptId ?? null;
     const clearClipboardOnStart = options.clearClipboardOnStart ?? false;
+    rememberPendingTreeSelectionPath(options.pendingTreeSelectionPath ?? null);
     if (pasteAttemptId !== null) {
       const pendingAttempt = pendingPasteAttemptRef.current;
       if (!pendingAttempt || pendingAttempt.id !== pasteAttemptId || pendingAttempt.cancelled) {
@@ -1019,6 +1168,7 @@ export function useExplorerActions(args: {
       const pendingAttempt = pasteAttemptId === null ? null : pendingPasteAttemptRef.current;
       if (pendingAttempt && pendingAttempt.id === pasteAttemptId && pendingAttempt.cancelled) {
         pendingPasteAttemptRef.current = null;
+        rememberPendingTreeSelectionPath(null);
         activeWriteOperationIdRef.current = response.operationId;
         setWriteOperationProgressEvent({
           operationId: response.operationId,
@@ -1062,6 +1212,7 @@ export function useExplorerActions(args: {
       setCopyPasteDialogState(null);
       closeContextMenu();
     } catch (error) {
+      rememberPendingTreeSelectionPath(null);
       const pendingAttempt = pasteAttemptId === null ? null : pendingPasteAttemptRef.current;
       if (pendingAttempt && pendingAttempt.id === pasteAttemptId && pendingAttempt.cancelled) {
         pendingPasteAttemptRef.current = null;
@@ -1538,7 +1689,64 @@ export function useExplorerActions(args: {
     focusContentPane();
   }
 
+  async function showInfoForPath(path: string) {
+    const requestId = ++getInfoRequestRef.current;
+    setInfoTargetPathOverride(path);
+    setInfoPanelOpen(true);
+    setGetInfoLoading(true);
+    void client
+      .invoke("item:getProperties", { path })
+      .then((response) => {
+        if (getInfoRequestRef.current !== requestId) {
+          return;
+        }
+        setGetInfoItem(response.item);
+      })
+      .catch((error) => {
+        if (getInfoRequestRef.current !== requestId) {
+          return;
+        }
+        setGetInfoItem(null);
+        logger.error("Info Panel load failed", error);
+      })
+      .finally(() => {
+        if (getInfoRequestRef.current === requestId) {
+          setGetInfoLoading(false);
+        }
+      });
+  }
+
+  async function openTreeContextTarget(
+    path: string,
+    surface: ContextMenuState["surface"] | null,
+  ) {
+    if (surface === "favorite") {
+      await navigateFavoritePath(path, "push");
+      return;
+    }
+    await navigateTreeFileSystemPath(path, "push");
+  }
+
+  async function revealFavoriteInTree(path: string) {
+    await navigateTreeFileSystemPath(path, currentPathRef.current === path ? "replace" : "push");
+  }
+
+  function toggleFavoritePath(path: string, options?: { revealInTreeOnRemove?: boolean }) {
+    const shouldRemove = isFavoritePath(favorites, path);
+    setFavorites((current) =>
+      shouldRemove
+        ? current.filter((favorite) => favorite.path !== path)
+        : [...current, createFavorite(path, homePath)],
+    );
+    if (shouldRemove && options?.revealInTreeOnRemove) {
+      void revealFavoriteInTree(path);
+    }
+  }
+
   async function runContextMenuAction(actionId: ContextMenuActionId, paths: string[]) {
+    const contextMenuSurface = contextMenuState?.surface ?? null;
+    const contextMenuTargetPath = contextMenuState?.targetPath ?? null;
+    const contextMenuScope = contextMenuState?.scope ?? "selection";
     closeContextMenu();
     if (WRITE_LOCKED_CONTEXT_ACTION_IDS.includes(actionId) && isWriteOperationInFlight()) {
       showWriteOperationBusyToast();
@@ -1558,11 +1766,11 @@ export function useExplorerActions(args: {
       return;
     }
     if (actionId === "copy") {
-      await runCopyClipboardAction("copy");
+      await runCopyClipboardAction("copy", paths);
       return;
     }
     if (actionId === "cut") {
-      await runCopyClipboardAction("cut");
+      await runCopyClipboardAction("cut", paths);
       return;
     }
     if (actionId === "paste") {
@@ -1570,6 +1778,14 @@ export function useExplorerActions(args: {
       return;
     }
     if (actionId === "open") {
+      const firstPath = paths[0];
+      if (!firstPath) {
+        return;
+      }
+      if (contextMenuSurface === "treeFolder" || contextMenuSurface === "favorite") {
+        await openTreeContextTarget(firstPath, contextMenuSurface);
+        return;
+      }
       await openPaths(paths);
       return;
     }
@@ -1577,8 +1793,11 @@ export function useExplorerActions(args: {
       await editPaths(paths);
       return;
     }
-    if (actionId === "toggleInfoPanel") {
-      setInfoPanelOpen(true);
+    if (actionId === "showInfo") {
+      const firstPath = paths[0];
+      if (firstPath) {
+        await showInfoForPath(firstPath);
+      }
       return;
     }
     if (actionId === "toggleFavorite") {
@@ -1586,11 +1805,23 @@ export function useExplorerActions(args: {
       if (!targetPath) {
         return;
       }
-      setFavorites((current) =>
-        isFavoritePath(current, targetPath)
-          ? current.filter((favorite) => favorite.path !== targetPath)
-          : [...current, createFavorite(targetPath, homePath)],
-      );
+      toggleFavoritePath(targetPath, {
+        revealInTreeOnRemove: contextMenuSurface === "favorite",
+      });
+      return;
+    }
+    if (actionId === "toggleExpand") {
+      const targetPath = paths[0];
+      if (targetPath) {
+        toggleTreeNode(targetPath);
+      }
+      return;
+    }
+    if (actionId === "revealInTree") {
+      const targetPath = paths[0];
+      if (targetPath) {
+        await revealFavoriteInTree(targetPath);
+      }
       return;
     }
     if (actionId === "move") {
@@ -1602,23 +1833,44 @@ export function useExplorerActions(args: {
       return;
     }
     if (actionId === "duplicate") {
-      await startDuplicatePaths(paths);
+      const targetPath = paths[0];
+      const destinationDirectoryPath =
+        contextMenuSurface === "treeFolder" && targetPath
+          ? parentDirectoryPath(targetPath) ?? currentPathRef.current
+          : currentPathRef.current;
+      await startDuplicatePaths(paths, destinationDirectoryPath, {
+        selectInTreeOnSuccess: contextMenuSurface === "treeFolder",
+      });
       return;
     }
     if (actionId === "newFolder") {
-      const targetPath = resolveNewFolderTargetPath({
-        currentPath,
-        selectedEntry: contextMenuTargetEntry,
-        selectedPaths: paths,
-        isSearchMode,
-        contextScope: contextMenuState?.scope ?? "selection",
-      });
+      const targetPath =
+        contextMenuSurface === "treeFolder" || contextMenuSurface === "favorite"
+          ? contextMenuTargetPath
+          : resolveNewFolderTargetPath({
+              currentPath,
+              selectedEntry: contextMenuTargetEntry,
+              selectedPaths: paths,
+              isSearchMode,
+              contextScope: contextMenuScope,
+            });
       if (targetPath) {
-        openNewFolderDialog(targetPath);
+        openNewFolderDialog(targetPath, {
+          selectInTreeOnSuccess:
+            contextMenuSurface === "treeFolder" || contextMenuSurface === "favorite",
+        });
       }
       return;
     }
     if (actionId === "trash") {
+      if (contextMenuSurface === "treeFolder") {
+        setCopyPasteDialogState({
+          type: "confirmTrash",
+          paths,
+          itemLabel: formatItemSummaryFromPathCount(paths[0] ?? "item", paths.length),
+        });
+        return;
+      }
       await startTrashPaths(paths);
       return;
     }
@@ -1629,7 +1881,8 @@ export function useExplorerActions(args: {
       }
       return;
     }
-    showNotImplementedNotice("Open With");
+    logger.error("unhandled context menu action", { actionId, paths, surface: contextMenuSurface });
+    showModalNotice("Unsupported action", `File Trail could not run the "${actionId}" action.`);
   }
 
   async function runContextSubmenuAction(action: ContextMenuSubmenuAction, paths: string[]) {
@@ -1759,8 +2012,12 @@ export function useExplorerActions(args: {
     return [...selectedPathsInViewOrderRef.current];
   }
 
-  async function startDuplicatePaths(paths: string[]) {
-    if (paths.length === 0 || currentPathRef.current.length === 0) {
+  async function startDuplicatePaths(
+    paths: string[],
+    destinationDirectoryPath = currentPathRef.current,
+    options: { selectInTreeOnSuccess?: boolean } = {},
+  ) {
+    if (paths.length === 0 || destinationDirectoryPath.length === 0) {
       return;
     }
     if (isWriteOperationInFlight()) {
@@ -1769,7 +2026,7 @@ export function useExplorerActions(args: {
     }
     const pasteAttemptId = beginPendingPasteAttempt({
       action: "duplicate",
-      targetPath: currentPathRef.current,
+      targetPath: destinationDirectoryPath,
       totalItemCount: paths.length,
       totalBytes: null,
       currentSourcePath: paths[0] ?? null,
@@ -1780,7 +2037,7 @@ export function useExplorerActions(args: {
         {
           mode: "copy",
           sourcePaths: paths,
-          destinationDirectoryPath: currentPathRef.current,
+          destinationDirectoryPath,
           conflictResolution: "error",
           action: "duplicate",
         } as never,
@@ -1798,9 +2055,13 @@ export function useExplorerActions(args: {
         );
         return;
       }
+      const pendingTreeSelectionPath = options.selectInTreeOnSuccess
+        ? resolvePlannedTreeSelectionPath(plan)
+        : null;
       await executeCopyLikePlan(plan, "duplicate", {
         pasteAttemptId,
         clearClipboardOnStart: false,
+        pendingTreeSelectionPath,
       });
       closeContextMenu();
     } catch (error) {
@@ -1992,7 +2253,48 @@ export function useExplorerActions(args: {
     return "New Folder";
   }
 
-  function openNewFolderDialog(parentDirectoryPath: string) {
+  function buildChildPath(parentPath: string, childName: string): string {
+    return parentPath === "/" ? `/${childName}` : `${parentPath}/${childName}`;
+  }
+
+  function rememberPendingTreeSelectionPath(path: string | null) {
+    pendingTreeSelectionPathRef.current = path;
+  }
+
+  function resolvePlannedTreeSelectionPath(plan: CopyPastePlan): string | null {
+    const sourcePath = plan.sourcePaths[0];
+    if (!sourcePath) {
+      return null;
+    }
+    const targetItem = plan.items.find((item) => item.sourcePath === sourcePath);
+    return targetItem?.destinationPath ?? null;
+  }
+
+  function resolveCompletedTreeSelectionPath(event: WriteOperationProgressEvent): string | null {
+    const result = event.result;
+    if (!result) {
+      return null;
+    }
+    const explicitTreeSelectionPath = pendingTreeSelectionPathRef.current;
+    if (
+      explicitTreeSelectionPath &&
+      (event.status === "completed" || event.status === "partial") &&
+      result.items.some(
+        (item) => item.status === "completed" && item.destinationPath === explicitTreeSelectionPath,
+      )
+    ) {
+      return explicitTreeSelectionPath;
+    }
+    return resolveWriteOperationTreeSelectionPath(
+      result,
+      getFileSystemItemPath(selectedTreeItemIdRef.current),
+    );
+  }
+
+  function openNewFolderDialog(
+    parentDirectoryPath: string,
+    options: { selectInTreeOnSuccess?: boolean } = {},
+  ) {
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
@@ -2002,6 +2304,7 @@ export function useExplorerActions(args: {
       parentDirectoryPath,
       initialName: resolveDefaultNewFolderName(parentDirectoryPath),
       error: null,
+      selectInTreeOnSuccess: options.selectInTreeOnSuccess ?? false,
     });
     closeContextMenu();
   }
@@ -2018,6 +2321,11 @@ export function useExplorerActions(args: {
           folderName,
         } as never,
       )) as { operationId: string };
+      rememberPendingTreeSelectionPath(
+        newFolderDialogState.selectInTreeOnSuccess
+          ? buildChildPath(newFolderDialogState.parentDirectoryPath, folderName)
+          : null,
+      );
       activeWriteOperationIdRef.current = response.operationId;
       applyWriteOperationCardState({
         action: "new_folder",
@@ -2048,12 +2356,14 @@ export function useExplorerActions(args: {
       return;
     }
     try {
+      setCopyPasteDialogState(null);
       const response = (await client.invoke(
         "writeOperation:trash" as never,
         {
           paths,
         } as never,
       )) as { operationId: string };
+      rememberPendingTreeSelectionPath(null);
       activeWriteOperationIdRef.current = response.operationId;
       applyWriteOperationCardState({
         action: "trash",
@@ -2122,6 +2432,7 @@ export function useExplorerActions(args: {
     handleCopyPasteDialogEscape,
     moveOpenWithApplication,
     openItemContextMenu,
+    openTreeItemContextMenu,
     openMoveDialog,
     openNewFolderDialog,
     openPathExternally,

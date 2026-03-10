@@ -472,6 +472,7 @@ export function ContentPane({
         {viewMode === "list" ? (
           <FlowListView
             key={currentPath}
+            currentPath={currentPath}
             entries={entries}
             isFocused={isFocused}
             loading={loading}
@@ -494,6 +495,7 @@ export function ContentPane({
         ) : (
           <DetailsView
             key={currentPath}
+            currentPath={currentPath}
             entries={entries}
             isFocused={isFocused}
             loading={loading}
@@ -677,6 +679,7 @@ function estimatePathbarSegmentWidth(label: string, isActive: boolean): number {
 }
 
 function FlowListView({
+  currentPath,
   entries,
   isFocused,
   loading,
@@ -696,6 +699,7 @@ function FlowListView({
   highlightHoveredItems = true,
   typeaheadQuery,
 }: {
+  currentPath: string;
   entries: DirectoryEntry[];
   isFocused: boolean;
   loading: boolean;
@@ -846,6 +850,7 @@ function FlowListView({
       <ContentState
         loading={loading}
         error={error}
+        currentPath={currentPath}
         entriesLength={entries.length}
         includeHidden={includeHidden}
       />
@@ -917,6 +922,7 @@ function FlowListView({
 }
 
 function DetailsView({
+  currentPath,
   entries,
   isFocused,
   loading,
@@ -943,6 +949,7 @@ function DetailsView({
   onDetailColumnWidthsChange = () => undefined,
   typeaheadQuery,
 }: {
+  currentPath: string;
   entries: DirectoryEntry[];
   isFocused: boolean;
   loading: boolean;
@@ -1160,6 +1167,7 @@ function DetailsView({
         <ContentState
           loading={loading}
           error={error}
+          currentPath={currentPath}
           entriesLength={entries.length}
           includeHidden={includeHidden}
         />
@@ -1388,11 +1396,13 @@ function formatDetailPermissions(metadata: DirectoryEntryMetadata | undefined): 
 function ContentState({
   loading,
   error,
+  currentPath,
   entriesLength,
   includeHidden,
 }: {
   loading: boolean;
   error: string | null;
+  currentPath: string;
   entriesLength: number;
   includeHidden: boolean;
 }) {
@@ -1413,7 +1423,7 @@ function ContentState({
     );
   }
   if (entriesLength === 0) {
-    return <EmptyState includeHidden={includeHidden} />;
+    return <EmptyState currentPath={currentPath} includeHidden={includeHidden} />;
   }
   return null;
 }
@@ -1437,20 +1447,27 @@ function FileNameLabel({
 }
 
 function EmptyState({
+  currentPath,
   includeHidden,
 }: {
+  currentPath: string;
   includeHidden: boolean;
 }) {
+  const hasDirectoryPath = currentPath.trim().length > 0;
   return (
     <div className="content-state content-empty">
       <div className="empty-state-icon" aria-hidden="true">
         <FolderIcon className="empty-state-folder-icon" />
       </div>
-      <strong className="empty-state-title">This folder is empty</strong>
+      <strong className="empty-state-title">
+        {hasDirectoryPath ? "This folder is empty" : "No folder selected"}
+      </strong>
       <span className="empty-state-message">
-        {includeHidden
-          ? "This directory is empty."
-          : "This directory is empty, or hidden files are currently filtered out."}
+        {hasDirectoryPath
+          ? includeHidden
+            ? "This directory is empty."
+            : "This directory is empty, or hidden files are currently filtered out."
+          : "Select a folder or favorite to view its contents."}
       </span>
     </div>
   );

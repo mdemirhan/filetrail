@@ -51,6 +51,7 @@ export function TreePane({
   rootPath,
   homePath,
   compactTreeView = false,
+  singleClickExpandTreeItems = false,
   nodes,
   selectedTreeItemId,
   favorites,
@@ -84,6 +85,8 @@ export function TreePane({
   onToggleExpand,
   onNavigate,
   onNavigateFavorite,
+  onSelectFavoritesRoot,
+  onItemContextMenu,
   onToggleFavoritesExpanded,
   typeaheadQuery,
 }: {
@@ -92,6 +95,7 @@ export function TreePane({
   rootPath: string;
   homePath: string;
   compactTreeView?: boolean;
+  singleClickExpandTreeItems?: boolean;
   nodes: Record<string, TreeNodeState>;
   selectedTreeItemId: TreeItemId;
   favorites: FavoritePreference[];
@@ -125,6 +129,12 @@ export function TreePane({
   onToggleExpand: (path: string) => void;
   onNavigate: (path: string) => Promise<boolean | void> | void;
   onNavigateFavorite: (path: string) => Promise<boolean | void> | void;
+  onSelectFavoritesRoot?: (() => Promise<boolean | void> | void) | undefined;
+  onItemContextMenu?: ((
+    item: TreePresentationItem,
+    subview: "favorites" | "tree",
+    position: { x: number; y: number },
+  ) => void) | undefined;
   onToggleFavoritesExpanded: () => void;
   typeaheadQuery?: string;
 }) {
@@ -224,8 +234,11 @@ export function TreePane({
     ) {
       return;
     }
+    const scrollContainer = currentRow.closest<HTMLElement>(".tree-scroll, .favorites-scroll");
     scrollFrameRef.current = window.requestAnimationFrame(() => {
-      currentRow.scrollIntoView({ block: "nearest" });
+      if (!scrollContainer || !isElementFullyVisibleWithinContainer(currentRow, scrollContainer)) {
+        currentRow.scrollIntoView({ block: "nearest" });
+      }
       lastScrolledPathRef.current = selectedTreeItemId;
       lastScrolledRowRef.current = currentRow;
       scrollFrameRef.current = null;
@@ -458,8 +471,12 @@ export function TreePane({
                         setOptimisticSelectedItemId={setOptimisticSelectedItemId}
                         onToggleExpand={onToggleExpand}
                         onToggleFavoritesExpanded={onToggleFavoritesExpanded}
+                        singleClickExpandTreeItems={singleClickExpandTreeItems}
                         onNavigate={onNavigate}
                         onNavigateFavorite={onNavigateFavorite}
+                        onSelectFavoritesRoot={onSelectFavoritesRoot}
+                        onItemContextMenu={onItemContextMenu}
+                        subview="favorites"
                         onSubviewFocus={() => onLeftPaneSubviewChange("favorites")}
                         registerRowRef={(id, element) => {
                           rowRefs.current[id] = element;
@@ -542,8 +559,12 @@ export function TreePane({
                   setOptimisticSelectedItemId={setOptimisticSelectedItemId}
                   onToggleExpand={onToggleExpand}
                   onToggleFavoritesExpanded={onToggleFavoritesExpanded}
+                  singleClickExpandTreeItems={singleClickExpandTreeItems}
                   onNavigate={onNavigate}
                   onNavigateFavorite={onNavigateFavorite}
+                  onSelectFavoritesRoot={onSelectFavoritesRoot}
+                  onItemContextMenu={onItemContextMenu}
+                  subview="tree"
                   onSubviewFocus={() => onLeftPaneSubviewChange("tree")}
                   registerRowRef={(id, element) => {
                     rowRefs.current[id] = element;
@@ -563,8 +584,12 @@ export function TreePane({
                 setOptimisticSelectedItemId={setOptimisticSelectedItemId}
                 onToggleExpand={onToggleExpand}
                 onToggleFavoritesExpanded={onToggleFavoritesExpanded}
+                singleClickExpandTreeItems={singleClickExpandTreeItems}
                 onNavigate={onNavigate}
                 onNavigateFavorite={onNavigateFavorite}
+                onSelectFavoritesRoot={onSelectFavoritesRoot}
+                onItemContextMenu={onItemContextMenu}
+                subview="tree"
                 onSubviewFocus={() => onLeftPaneSubviewChange("tree")}
                 registerRowRef={(id, element) => {
                   rowRefs.current[id] = element;
@@ -578,6 +603,12 @@ export function TreePane({
   );
 }
 
+function isElementFullyVisibleWithinContainer(element: HTMLElement, container: HTMLElement): boolean {
+  const elementRect = element.getBoundingClientRect();
+  const containerRect = container.getBoundingClientRect();
+  return elementRect.top >= containerRect.top && elementRect.bottom <= containerRect.bottom;
+}
+
 function TreeList({
   items,
   visibleItemIds,
@@ -588,8 +619,12 @@ function TreeList({
   setOptimisticSelectedItemId,
   onToggleExpand,
   onToggleFavoritesExpanded,
+  singleClickExpandTreeItems,
   onNavigate,
   onNavigateFavorite,
+  onSelectFavoritesRoot,
+  onItemContextMenu,
+  subview,
   onSubviewFocus,
   registerRowRef,
 }: {
@@ -602,8 +637,16 @@ function TreeList({
   setOptimisticSelectedItemId: Dispatch<SetStateAction<TreeItemId | null>>;
   onToggleExpand: (path: string) => void;
   onToggleFavoritesExpanded: () => void;
+  singleClickExpandTreeItems: boolean;
   onNavigate: (path: string) => Promise<boolean | void> | void;
   onNavigateFavorite: (path: string) => Promise<boolean | void> | void;
+  onSelectFavoritesRoot?: (() => Promise<boolean | void> | void) | undefined;
+  onItemContextMenu?: ((
+    item: TreePresentationItem,
+    subview: "favorites" | "tree",
+    position: { x: number; y: number },
+  ) => void) | undefined;
+  subview: "favorites" | "tree";
   onSubviewFocus: () => void;
   registerRowRef: (id: string, element: HTMLDivElement | null) => void;
 }) {
@@ -626,8 +669,12 @@ function TreeList({
               setOptimisticSelectedItemId={setOptimisticSelectedItemId}
               onToggleExpand={onToggleExpand}
               onToggleFavoritesExpanded={onToggleFavoritesExpanded}
+              singleClickExpandTreeItems={singleClickExpandTreeItems}
               onNavigate={onNavigate}
               onNavigateFavorite={onNavigateFavorite}
+              onSelectFavoritesRoot={onSelectFavoritesRoot}
+              onItemContextMenu={onItemContextMenu}
+              subview={subview}
               onSubviewFocus={onSubviewFocus}
               registerRowRef={registerRowRef}
             />
@@ -647,8 +694,12 @@ function TreeItemRow({
   setOptimisticSelectedItemId,
   onToggleExpand,
   onToggleFavoritesExpanded,
+  singleClickExpandTreeItems,
   onNavigate,
   onNavigateFavorite,
+  onSelectFavoritesRoot,
+  onItemContextMenu,
+  subview,
   onSubviewFocus,
   registerRowRef,
 }: {
@@ -660,8 +711,16 @@ function TreeItemRow({
   setOptimisticSelectedItemId: Dispatch<SetStateAction<TreeItemId | null>>;
   onToggleExpand: (path: string) => void;
   onToggleFavoritesExpanded: () => void;
+  singleClickExpandTreeItems: boolean;
   onNavigate: (path: string) => Promise<boolean | void> | void;
   onNavigateFavorite: (path: string) => Promise<boolean | void> | void;
+  onSelectFavoritesRoot?: (() => Promise<boolean | void> | void) | undefined;
+  onItemContextMenu?: ((
+    item: TreePresentationItem,
+    subview: "favorites" | "tree",
+    position: { x: number; y: number },
+  ) => void) | undefined;
+  subview: "favorites" | "tree";
   onSubviewFocus: () => void;
   registerRowRef: (id: string, element: HTMLDivElement | null) => void;
 }) {
@@ -739,6 +798,7 @@ function TreeItemRow({
           onClick={() => {
             onSubviewFocus();
             if (isFavoritesRoot) {
+              onSelectFavoritesRoot?.();
               return;
             }
             if (clickTimeoutRef.current !== null) {
@@ -746,6 +806,9 @@ function TreeItemRow({
             }
             clickTimeoutRef.current = window.setTimeout(() => {
               clickTimeoutRef.current = null;
+              if (singleClickExpandTreeItems && isFileSystem && itemPath && canExpand) {
+                onToggleExpand(itemPath);
+              }
               const navigationResult = itemPath
                 ? isFavorite
                   ? onNavigateFavorite(itemPath)
@@ -775,6 +838,18 @@ function TreeItemRow({
             if (isFileSystem && itemPath) {
               onToggleExpand(itemPath);
             }
+          }}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            if (!itemPath || isFavoritesRoot) {
+              return;
+            }
+            onSubviewFocus();
+            setOptimisticSelectedItemId(item.id);
+            onItemContextMenu?.(item, subview, {
+              x: event.clientX,
+              y: event.clientY,
+            });
           }}
           title={itemPath ?? item.label}
         >

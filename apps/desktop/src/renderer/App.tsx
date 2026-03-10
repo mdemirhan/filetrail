@@ -68,8 +68,11 @@ import {
   createFileSystemItemId,
   createFavoriteItemId,
   getFavoriteItemPath,
+  getFavoritesRootItemId,
+  getFileSystemItemPath,
   getDefaultFavorites,
   isFavoritePath,
+  isFavoritesRootItemId,
 } from "./lib/favorites";
 
 const logger = createRendererLogger("filetrail.renderer");
@@ -120,6 +123,8 @@ export function App() {
     setCompactDetailsView,
     compactTreeView,
     setCompactTreeView,
+    singleClickExpandTreeItems,
+    setSingleClickExpandTreeItems,
     highlightHoveredItems,
     setHighlightHoveredItems,
     detailColumns,
@@ -215,6 +220,8 @@ export function App() {
     setTypeaheadQuery,
     typeaheadPane,
     setTypeaheadPane,
+    infoTargetPathOverride,
+    setInfoTargetPathOverride,
     infoPanelOpen,
     setInfoPanelOpen,
     infoRowOpen,
@@ -316,6 +323,7 @@ export function App() {
     copyPasteClipboardRef,
     writeOperationLockedRef,
     pendingPasteSelectionRef,
+    pendingTreeSelectionPathRef,
   } = useWriteOperations();
   const treePaneRef = useRef<HTMLElement | null>(null);
   const contentPaneRef = useRef<HTMLElement | null>(null);
@@ -460,6 +468,8 @@ export function App() {
     applyContentSelectionBridge(createSingleContentSelection(path), activeContentEntries);
   }
   const contextMenuTargetEntries = useMemo(
+    // Content-menu target entries are resolved from the visible content listing only.
+    // Tree and favorite menus intentionally do not rely on this memo.
     () =>
       contextMenuState
         ? contextMenuState.paths
@@ -475,11 +485,37 @@ export function App() {
         : null,
     [activeContentEntries, contextMenuState],
   );
+  const selectedTreeTargetPath = useMemo(
+    () => getFavoriteItemPath(selectedTreeItemId) ?? getFileSystemItemPath(selectedTreeItemId),
+    [selectedTreeItemId],
+  );
+  const selectedTreeTargetKind = useMemo(() => {
+    if (isFavoritesRootItemId(selectedTreeItemId)) {
+      return "favoritesRoot" as const;
+    }
+    if (getFavoriteItemPath(selectedTreeItemId)) {
+      return "favorite" as const;
+    }
+    if (getFileSystemItemPath(selectedTreeItemId)) {
+      return "filesystemFolder" as const;
+    }
+    return null;
+  }, [selectedTreeItemId]);
+  const clipboardSourcePaths = useMemo(
+    () => {
+      if (copyPasteClipboard.type !== "ready" || copyPasteClipboard.sourcePaths.length === 0) {
+        return [];
+      }
+      return copyPasteClipboard.sourcePaths;
+    },
+    [copyPasteClipboard],
+  );
   const pasteDestinationPath = useMemo(
     () =>
       resolvePasteDestinationPath({
         contextMenuState,
         contextMenuTargetEntry,
+        clipboardSourcePaths,
         currentPath,
         focusedPane,
         isSearchMode,
@@ -488,6 +524,7 @@ export function App() {
     [
       contextMenuState,
       contextMenuTargetEntry,
+      clipboardSourcePaths,
       currentPath,
       focusedPane,
       isSearchMode,
@@ -517,6 +554,7 @@ export function App() {
     goQuickAccess,
     navigateToParentFolder,
     navigateTreeSelectionToParent,
+    selectTreeItem,
     initializeTree,
     navigateTo,
     navigateTreeFileSystemPath,
@@ -599,6 +637,8 @@ export function App() {
     typeaheadPane,
     setTypeaheadPane,
     setTypeaheadQuery,
+    infoTargetPathOverride,
+    setInfoTargetPathOverride,
     infoPanelOpen,
     infoRowOpen,
     setGetInfoLoading,
@@ -653,6 +693,7 @@ export function App() {
     handleCopyPasteDialogEscape,
     moveOpenWithApplication,
     openItemContextMenu,
+    openTreeItemContextMenu,
     openNewFolderDialog,
     openPathExternally,
     openPathInTerminal,
@@ -683,6 +724,10 @@ export function App() {
     focusedPane,
     setFocusedPane,
     setInfoPanelOpen,
+    setInfoTargetPathOverride,
+    setGetInfoItem,
+    setGetInfoLoading,
+    getInfoRequestRef,
     homePath,
     currentPath,
     currentEntries,
@@ -712,10 +757,20 @@ export function App() {
     focusContentPane,
     restoreExplorerPaneFocus,
     navigateTo,
+    navigateTreeFileSystemPath,
+    navigateFavoritePath: (path, historyMode) =>
+      navigateTo(path, historyMode, undefined, undefined, undefined, undefined, {
+        syncTree: false,
+        treeSelectionMode: "favorite",
+        favoritePath: path,
+        persistOnError: true,
+      }),
+    toggleTreeNode,
     refreshDirectory,
     contentSelection,
     setContentSelection,
     currentPathRef,
+    selectedTreeItemIdRef,
     isSearchModeRef,
     selectedPathsInViewOrderRef,
     selectedEntryRef,
@@ -750,6 +805,7 @@ export function App() {
     copyPasteClipboardRef,
     writeOperationLockedRef,
     pendingPasteSelectionRef,
+    pendingTreeSelectionPathRef,
   });
   const copyPasteModalOpen =
     copyPasteDialogState !== null ||
@@ -764,8 +820,9 @@ export function App() {
       focusedPane,
       locationSheetOpen: locationDialogOpen,
       mainView,
+      selectedTreeTargetKind,
     }),
-    [actionNotice, copyPasteModalOpen, focusedPane, locationDialogOpen, mainView],
+    [actionNotice, copyPasteModalOpen, focusedPane, locationDialogOpen, mainView, selectedTreeTargetKind],
   );
 
   useExplorerShortcuts({
@@ -797,6 +854,7 @@ export function App() {
     cachedSearchSelectionRef,
     searchResultEntries,
     applyContentSelection,
+    selectedTreeTargetPath,
     selectedPathsInViewOrder,
     currentPath,
     selectedEntry,
@@ -813,6 +871,14 @@ export function App() {
     goBack,
     goForward,
     navigateTo,
+    navigateTreeFileSystemPath,
+    navigateFavoritePath: (path, historyMode) =>
+      navigateTo(path, historyMode, undefined, undefined, undefined, undefined, {
+        syncTree: false,
+        treeSelectionMode: "favorite",
+        favoritePath: path,
+        persistOnError: true,
+      }),
     openTreeNode,
     toggleHiddenFiles,
     refreshDirectory,
@@ -876,6 +942,7 @@ export function App() {
         compactListView,
         compactDetailsView,
         compactTreeView,
+        singleClickExpandTreeItems,
         highlightHoveredItems,
         detailColumns,
         detailColumnWidths,
@@ -929,6 +996,7 @@ export function App() {
     compactListView,
     compactDetailsView,
     compactTreeView,
+    singleClickExpandTreeItems,
     highlightHoveredItems,
     detailColumns,
     detailColumnWidths,
@@ -1012,6 +1080,7 @@ export function App() {
         setCompactListView(preferences.compactListView);
         setCompactDetailsView(preferences.compactDetailsView);
         setCompactTreeView(preferences.compactTreeView);
+        setSingleClickExpandTreeItems(preferences.singleClickExpandTreeItems);
         setHighlightHoveredItems(preferences.highlightHoveredItems);
         setDetailColumns(preferences.detailColumns);
         setDetailColumnWidths(preferences.detailColumnWidths);
@@ -1313,6 +1382,7 @@ export function App() {
             homePath,
             selectedTreeItemId,
             compactTreeView,
+            singleClickExpandTreeItems,
             nodes: treeNodes,
             favorites,
             favoritesPlacement,
@@ -1354,6 +1424,24 @@ export function App() {
                 favoritePath: path,
                 persistOnError: true,
               }),
+            onSelectFavoritesRoot: () => selectTreeItem(getFavoritesRootItemId(), "skip"),
+            onItemContextMenu: (item, subview, position) => {
+              if (!item.path || item.kind === "favorites-root") {
+                return;
+              }
+              openTreeItemContextMenu({
+                path: item.path,
+                sourceSubview: subview,
+                targetKind: item.kind === "favorite" ? "favorite" : "treeFolder",
+                folderExpansionLabel:
+                  item.kind === "filesystem" && !item.isSymlink
+                    ? item.expanded
+                      ? "Collapse"
+                      : "Expand"
+                    : null,
+                position,
+              });
+            },
             onToggleExpand: toggleTreeNode,
             onToggleFavoritesExpanded: () => setFavoritesExpanded((value) => !value),
             typeaheadQuery: focusedPane === "tree" ? typeaheadQuery : "",
@@ -1443,7 +1531,7 @@ export function App() {
                 }),
               onTypeaheadInput: (key) => handleTypeaheadInput(key, "content"),
               onItemContextMenu: (path, position) => {
-                openItemContextMenu(path, position, "browse");
+                openItemContextMenu(path, position, "content");
               },
               compactListView,
               compactDetailsView,
@@ -1595,6 +1683,7 @@ export function App() {
                 compactListView={compactListView}
                 compactDetailsView={compactDetailsView}
                 compactTreeView={compactTreeView}
+                singleClickExpandTreeItems={singleClickExpandTreeItems}
                 highlightHoveredItems={highlightHoveredItems}
                 detailColumns={detailColumns}
                 layoutMode={singlePanelLayout}
@@ -1636,6 +1725,7 @@ export function App() {
                 onCompactListViewChange={setCompactListView}
                 onCompactDetailsViewChange={setCompactDetailsView}
                 onCompactTreeViewChange={setCompactTreeView}
+                onSingleClickExpandTreeItemsChange={setSingleClickExpandTreeItems}
                 onHighlightHoveredItemsChange={setHighlightHoveredItems}
                 onDetailColumnsChange={setDetailColumns}
                 onTabSwitchesExplorerPanesChange={setTabSwitchesExplorerPanes}
@@ -1697,6 +1787,7 @@ export function App() {
         contextMenuFavoriteToggleLabel={contextMenuFavoriteToggleLabel}
         contextMenuHiddenActionIds={contextMenuHiddenActionIds}
         contextMenuSubmenuItems={contextMenuSubmenuItems}
+        shortcutContext={shortcutContext}
         onRunContextMenuAction={(actionId, paths) => {
           void runContextMenuAction(actionId, paths);
         }}
@@ -1716,6 +1807,9 @@ export function App() {
           void executeCopyLikePlan(plan, action, options);
         }}
         onCloseCopyPasteDialog={dismissCopyPasteDialog}
+        onConfirmTrashDialog={(paths) => {
+          void startTrashPaths(paths);
+        }}
         showCopyPasteProgressCard={showCopyPasteProgressCard}
         writeOperationCardState={writeOperationCardState}
         onCancelWriteOperation={() => {

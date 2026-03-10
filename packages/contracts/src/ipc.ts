@@ -351,6 +351,7 @@ export const appPreferencesSchema = z.object({
   compactListView: z.boolean(),
   compactDetailsView: z.boolean(),
   compactTreeView: z.boolean(),
+  singleClickExpandTreeItems: z.boolean(),
   highlightHoveredItems: z.boolean(),
   detailColumns: detailColumnVisibilitySchema,
   detailColumnWidths: detailColumnWidthsSchema,

@@ -60,6 +60,9 @@ export function useAppPreferences() {
     DEFAULT_APP_PREFERENCES.compactDetailsView,
   );
   const [compactTreeView, setCompactTreeView] = useState(DEFAULT_APP_PREFERENCES.compactTreeView);
+  const [singleClickExpandTreeItems, setSingleClickExpandTreeItems] = useState(
+    DEFAULT_APP_PREFERENCES.singleClickExpandTreeItems,
+  );
   const [highlightHoveredItems, setHighlightHoveredItems] = useState(
     DEFAULT_APP_PREFERENCES.highlightHoveredItems,
   );
@@ -199,6 +202,8 @@ export function useAppPreferences() {
     setCompactDetailsView,
     compactTreeView,
     setCompactTreeView,
+    singleClickExpandTreeItems,
+    setSingleClickExpandTreeItems,
     highlightHoveredItems,
     setHighlightHoveredItems,
     detailColumns,

@@ -56,16 +56,17 @@ describe("appPreferences helpers", () => {
   it("ships expected defaults for the persisted preference shape", () => {
     expect(DEFAULT_APP_PREFERENCES).toMatchObject({
       theme: "dark",
-      accent: "gold",
+      accent: "copper",
       accentToolbarButtons: false,
       accentFavoriteItems: true,
-      favoriteAccent: "rose",
+      favoriteAccent: "sky",
       zoomPercent: 100,
       uiFontFamily: "lexend",
       uiFontSize: 13,
       uiFontWeight: 500,
       viewMode: "list",
       foldersFirst: true,
+      singleClickExpandTreeItems: false,
       highlightHoveredItems: false,
       terminalApp: null,
       openWithApplications: [

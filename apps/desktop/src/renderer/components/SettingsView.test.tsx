@@ -25,6 +25,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       compactListView={false}
       compactDetailsView={false}
       compactTreeView={false}
+      singleClickExpandTreeItems={false}
       highlightHoveredItems={true}
       detailColumns={{
         size: true,
@@ -97,6 +98,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       onCompactListViewChange={() => undefined}
       onCompactDetailsViewChange={() => undefined}
       onCompactTreeViewChange={() => undefined}
+      onSingleClickExpandTreeItemsChange={() => undefined}
       onHighlightHoveredItemsChange={() => undefined}
       onDetailColumnsChange={() => undefined}
       onTabSwitchesExplorerPanesChange={() => undefined}
@@ -214,6 +216,18 @@ describe("SettingsView", () => {
     expect(onAccentFavoriteItemsChange).toHaveBeenCalledWith(false);
     expect(onAccentFavoriteTextChange).toHaveBeenCalledWith(true);
     expect(onFavoriteAccentChange).toHaveBeenCalledWith("teal");
+  });
+
+  it("forwards single-click tree expansion preference changes", () => {
+    const onSingleClickExpandTreeItemsChange = vi.fn();
+    renderSettingsView({
+      singleClickExpandTreeItems: false,
+      onSingleClickExpandTreeItemsChange,
+    });
+
+    fireEvent.click(screen.getByLabelText("Single-click expand tree folders"));
+
+    expect(onSingleClickExpandTreeItemsChange).toHaveBeenCalledWith(true);
   });
 
   it("disables the favorite accent swatch when favorite accents are off", () => {

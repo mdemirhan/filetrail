@@ -430,6 +430,10 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
       typeof record.favoritesInitialized === "boolean"
         ? record.favoritesInitialized
         : currentDefaults.favoritesInitialized,
+    singleClickExpandTreeItems:
+      typeof record.singleClickExpandTreeItems === "boolean"
+        ? record.singleClickExpandTreeItems
+        : currentDefaults.singleClickExpandTreeItems,
   };
 }
 

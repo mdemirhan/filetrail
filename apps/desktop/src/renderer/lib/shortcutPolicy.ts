@@ -1,7 +1,9 @@
 import type { RendererCommandType } from "../../shared/rendererCommands";
+import type { ContextMenuActionId } from "./contextMenu";
 
 type MainView = "explorer" | "help" | "settings";
 type FocusedPane = "tree" | "content" | null;
+export type SelectedTreeTargetKind = "filesystemFolder" | "favorite" | "favoritesRoot" | null;
 
 export type TreeFocusShortcutBucket = "treeNavigation" | "globalExplorer" | "contentOnly";
 
@@ -11,6 +13,7 @@ export type ShortcutContext = {
   focusedPane: FocusedPane;
   locationSheetOpen: boolean;
   mainView: MainView;
+  selectedTreeTargetKind: SelectedTreeTargetKind;
 };
 
 const EDIT_COMMANDS = new Set<RendererCommandType>([
@@ -20,6 +23,26 @@ const EDIT_COMMANDS = new Set<RendererCommandType>([
   "editSelectAll",
 ]);
 const ZOOM_COMMANDS = new Set<RendererCommandType>(["zoomIn", "zoomOut", "resetZoom"]);
+const TREE_SAFE_RENDERER_COMMANDS = new Set<RendererCommandType>([
+  "openSelection",
+  "openInTerminal",
+  "copyPath",
+]);
+const TREE_SAFE_RAW_SHORTCUTS = new Set<RawExplorerShortcutId>(["copyPath", "openInTerminal"]);
+const CONTEXT_MENU_SHORTCUT_LABELS = {
+  open: "⌘O",
+  edit: "⌘E",
+  cut: "⌘X",
+  copy: "⌘C",
+  paste: "⌘V",
+  move: "⇧⌘M",
+  rename: "F2",
+  duplicate: "⌘D",
+  newFolder: "⇧⌘N",
+  terminal: "⌘T",
+  copyPath: "⌥⌘C",
+  trash: "⌘⌫",
+} as const satisfies Partial<Record<ContextMenuActionId, string>>;
 
 export const RENDERER_COMMAND_TREE_FOCUS_BUCKETS = {
   editCut: "globalExplorer",
@@ -71,6 +94,7 @@ export const RAW_EXPLORER_SHORTCUT_IDS = [
   "toggleHiddenFiles",
   "refreshOrApplySearchSort",
   "copyPath",
+  "openInTerminal",
   "moveSelection",
   "newFolder",
   "openLocationSheet",
@@ -109,6 +133,7 @@ export const RAW_EXPLORER_SHORTCUT_TREE_FOCUS_BUCKETS = {
   toggleHiddenFiles: "globalExplorer",
   refreshOrApplySearchSort: "globalExplorer",
   copyPath: "contentOnly",
+  openInTerminal: "contentOnly",
   moveSelection: "contentOnly",
   newFolder: "contentOnly",
   openLocationSheet: "globalExplorer",
@@ -134,13 +159,6 @@ export function canHandleRendererCommand(
     return true;
   }
 
-  if (
-    context.focusedPane === "tree" &&
-    RENDERER_COMMAND_TREE_FOCUS_BUCKETS[command] === "contentOnly"
-  ) {
-    return false;
-  }
-
   if (ZOOM_COMMANDS.has(command)) {
     return true;
   }
@@ -150,6 +168,13 @@ export function canHandleRendererCommand(
   }
 
   if (context.actionNoticeOpen || context.locationSheetOpen || context.copyPasteModalOpen) {
+    return false;
+  }
+
+  if (context.focusedPane === "tree" && RENDERER_COMMAND_TREE_FOCUS_BUCKETS[command] === "contentOnly") {
+    if (TREE_SAFE_RENDERER_COMMANDS.has(command)) {
+      return isSafeTreeTargetKind(context.selectedTreeTargetKind) && context.mainView === "explorer";
+    }
     return false;
   }
 
@@ -177,5 +202,61 @@ export function canHandleRawExplorerShortcut(
     return true;
   }
 
-  return RAW_EXPLORER_SHORTCUT_TREE_FOCUS_BUCKETS[shortcutId] !== "contentOnly";
+  if (RAW_EXPLORER_SHORTCUT_TREE_FOCUS_BUCKETS[shortcutId] !== "contentOnly") {
+    return true;
+  }
+
+  return TREE_SAFE_RAW_SHORTCUTS.has(shortcutId) && isSafeTreeTargetKind(context.selectedTreeTargetKind);
+}
+
+export function getContextMenuShortcutLabel(
+  actionId: ContextMenuActionId,
+  context: ShortcutContext,
+): string | null {
+  if (actionId === "open" && canHandleRendererCommand("openSelection", context)) {
+    return CONTEXT_MENU_SHORTCUT_LABELS.open ?? null;
+  }
+  if (actionId === "edit" && canHandleRendererCommand("editSelection", context)) {
+    return CONTEXT_MENU_SHORTCUT_LABELS.edit ?? null;
+  }
+  if (actionId === "cut" && canHandleRawExplorerShortcut("cutSelection", context)) {
+    return CONTEXT_MENU_SHORTCUT_LABELS.cut ?? null;
+  }
+  if (actionId === "copy" && canHandleRawExplorerShortcut("copySelection", context)) {
+    return CONTEXT_MENU_SHORTCUT_LABELS.copy ?? null;
+  }
+  if (actionId === "paste" && canHandleRawExplorerShortcut("pasteSelection", context)) {
+    return CONTEXT_MENU_SHORTCUT_LABELS.paste ?? null;
+  }
+  if (actionId === "move" && canHandleRawExplorerShortcut("moveSelection", context)) {
+    return CONTEXT_MENU_SHORTCUT_LABELS.move ?? null;
+  }
+  if (actionId === "rename" && canHandleRawExplorerShortcut("renameSelection", context)) {
+    return CONTEXT_MENU_SHORTCUT_LABELS.rename ?? null;
+  }
+  if (actionId === "duplicate" && canHandleRawExplorerShortcut("duplicateSelection", context)) {
+    return CONTEXT_MENU_SHORTCUT_LABELS.duplicate ?? null;
+  }
+  if (actionId === "newFolder" && canHandleRawExplorerShortcut("newFolder", context)) {
+    return CONTEXT_MENU_SHORTCUT_LABELS.newFolder ?? null;
+  }
+  if (actionId === "terminal" && canHandleRendererCommand("openInTerminal", context)) {
+    return CONTEXT_MENU_SHORTCUT_LABELS.terminal ?? null;
+  }
+  if (
+    actionId === "copyPath" &&
+    (canHandleRawExplorerShortcut("copyPath", context) ||
+      canHandleRendererCommand("copyPath", context))
+  ) {
+    return CONTEXT_MENU_SHORTCUT_LABELS.copyPath ?? null;
+  }
+  if (actionId === "trash" && canHandleRawExplorerShortcut("trashSelection", context)) {
+    return CONTEXT_MENU_SHORTCUT_LABELS.trash ?? null;
+  }
+
+  return null;
+}
+
+function isSafeTreeTargetKind(kind: SelectedTreeTargetKind): boolean {
+  return kind === "filesystemFolder" || kind === "favorite";
 }

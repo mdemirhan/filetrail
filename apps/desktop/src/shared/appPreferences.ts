@@ -231,6 +231,7 @@ export type AppPreferences = {
   compactListView: boolean;
   compactDetailsView: boolean;
   compactTreeView: boolean;
+  singleClickExpandTreeItems: boolean;
   highlightHoveredItems: boolean;
   detailColumns: DetailColumnVisibility;
   detailColumnWidths: DetailColumnWidths;
@@ -269,11 +270,11 @@ export type AppPreferences = {
 
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   theme: "dark",
-  accent: "gold",
+  accent: "copper",
   accentToolbarButtons: false,
   accentFavoriteItems: true,
   accentFavoriteText: false,
-  favoriteAccent: "rose",
+  favoriteAccent: "sky",
   zoomPercent: 100,
   uiFontFamily: "lexend",
   uiFontSize: 13,
@@ -286,6 +287,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   compactListView: false,
   compactDetailsView: false,
   compactTreeView: false,
+  singleClickExpandTreeItems: false,
   highlightHoveredItems: false,
   detailColumns: DEFAULT_DETAIL_COLUMN_VISIBILITY,
   detailColumnWidths: DEFAULT_DETAIL_COLUMN_WIDTHS,

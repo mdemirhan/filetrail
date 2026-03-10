@@ -18,7 +18,6 @@ import {
   createTreeNode,
   isPathWithinRoot,
   resolveExplorerTreeRootPath,
-  resolveRefreshRootPath,
 } from "../lib/explorerAppUtils";
 import type {
   DirectoryEntry,
@@ -128,6 +127,8 @@ export function useExplorerNavigationController(args: {
   typeaheadPane: "tree" | "content" | null;
   setTypeaheadPane: Dispatch<SetStateAction<"tree" | "content" | null>>;
   setTypeaheadQuery: Dispatch<SetStateAction<string>>;
+  infoTargetPathOverride: string | null;
+  setInfoTargetPathOverride: Dispatch<SetStateAction<string | null>>;
   infoPanelOpen: boolean;
   infoRowOpen: boolean;
   setGetInfoLoading: Dispatch<SetStateAction<boolean>>;
@@ -234,6 +235,8 @@ export function useExplorerNavigationController(args: {
     typeaheadPane,
     setTypeaheadPane,
     setTypeaheadQuery,
+    infoTargetPathOverride,
+    setInfoTargetPathOverride,
     infoPanelOpen,
     infoRowOpen,
     setGetInfoLoading,
@@ -635,9 +638,25 @@ export function useExplorerNavigationController(args: {
     if (!homePath) {
       return;
     }
-    const targetPath = isPathWithinRoot(currentPath, homePath) ? currentPath : homePath;
-    reinitializeTree(homePath, targetPath);
-    void navigateTo(targetPath, targetPath === currentPath ? "replace" : "push");
+    const selectedTreePath = getFileSystemItemPath(selectedTreeItemIdRef.current);
+    const nextSelectionPath =
+      selectedTreePath && isPathWithinRoot(selectedTreePath, homePath) ? selectedTreePath : null;
+
+    if (nextSelectionPath) {
+      reinitializeTree(homePath, nextSelectionPath);
+      setTreeSelection(createFileSystemItemId(nextSelectionPath));
+      setLeftPaneSubview("tree");
+      void syncTreeToPath(nextSelectionPath, includeHidden, {
+        forceReload: true,
+      });
+      return;
+    }
+
+    initializeTree(homePath);
+    applyEmptyDirectorySnapshot();
+    setTreeSelection(createFileSystemItemId(""));
+    setLeftPaneSubview("tree");
+    void loadTreeChildren(homePath, includeHidden, false, currentPathRef.current, true);
   }
 
   function goQuickAccess(location: "root" | "applications" | "trash") {
@@ -692,7 +711,7 @@ export function useExplorerNavigationController(args: {
     setTreeRootPath(rootPath);
     const seededNodes = Object.fromEntries(
       getTreeSeedChain(rootPath, focusPath).map(({ path, childPath }) => {
-        const node = createTreeNode(path, true);
+        const node = createTreeNode(path, childPath !== null);
         return [
           path,
           {
@@ -703,6 +722,36 @@ export function useExplorerNavigationController(args: {
       }),
     );
     replaceTreeNodes(seededNodes);
+  }
+
+  function applyEmptyDirectorySnapshot() {
+    metadataCacheRef.current = new Map();
+    metadataInflightRef.current.clear();
+    pendingPasteSelectionRef.current = null;
+    currentPathRef.current = "";
+    selectedPathsInViewOrderRef.current = [];
+    selectedEntryRef.current = null;
+    setCurrentPath("");
+    setCurrentEntries([]);
+    setVisiblePaths([]);
+    setMetadataByPath({});
+    setDirectoryError(null);
+    setLocationError(null);
+    setInfoTargetPathOverride(null);
+    setGetInfoLoading(false);
+    if (searchResultsVisibleRef.current) {
+      searchResultsVisibleRef.current = false;
+      setSearchResultsVisible(false);
+    }
+    applyContentSelection(
+      {
+        paths: [],
+        anchorPath: null,
+        leadPath: null,
+      },
+      [],
+    );
+    setGetInfoItem(null);
   }
 
   function applyDirectorySnapshot(
@@ -764,9 +813,11 @@ export function useExplorerNavigationController(args: {
       treeSelectionMode?: "filesystem" | "favorite" | "preserve";
       favoritePath?: string;
       persistOnError?: boolean;
+      forceTreeReload?: boolean;
     } = {},
   ): Promise<boolean> {
     const requestId = ++directoryRequestRef.current;
+    setInfoTargetPathOverride(null);
     setDirectoryLoading(true);
     setDirectoryError(null);
     setLocationError(null);
@@ -789,7 +840,9 @@ export function useExplorerNavigationController(args: {
       );
       applyDirectorySnapshot(response.path, response.entries, cachedMetadata);
       if (options.syncTree !== false) {
-        await syncTreeToPath(response.path, includeHiddenOverride);
+        await syncTreeToPath(response.path, includeHiddenOverride, {
+          forceReload: options.forceTreeReload ?? false,
+        });
       }
       if (options.treeSelectionMode === "favorite") {
         setTreeSelection(createFavoriteItemId(options.favoritePath ?? response.path));
@@ -874,6 +927,7 @@ export function useExplorerNavigationController(args: {
     includeHiddenOverride = includeHidden,
     expandOnSuccess = false,
     activePath = currentPath,
+    forceReload = false,
   ) {
     const currentNode = treeNodesRef.current[path];
     const rootPath = treeRootPathRef.current;
@@ -885,6 +939,7 @@ export function useExplorerNavigationController(args: {
       return;
     }
     if (
+      !forceReload &&
       currentNode?.loaded &&
       currentNode.loadedIncludeHidden === includeHiddenOverride &&
       (currentNode.forcedVisibleHiddenChildPath ?? null) === forcedVisibleHiddenChildPath
@@ -944,19 +999,24 @@ export function useExplorerNavigationController(args: {
           childPaths: visibleChildren.map((child) => child.path),
         };
         for (const child of visibleChildren) {
+          const existingChildNode = current[child.path];
           next[child.path] = {
             path: child.path,
             name: child.name,
             kind: child.kind,
             isHidden: child.isHidden,
             isSymlink: child.isSymlink,
-            expanded: current[child.path]?.expanded ?? false,
-            loading: false,
-            loaded: current[child.path]?.loaded ?? false,
-            loadedIncludeHidden: current[child.path]?.loadedIncludeHidden ?? false,
-            forcedVisibleHiddenChildPath: current[child.path]?.forcedVisibleHiddenChildPath ?? null,
+            expanded:
+              existingChildNode?.expanded === true &&
+              (existingChildNode.loaded ||
+                existingChildNode.loading ||
+                existingChildNode.childPaths.length > 0),
+            loading: existingChildNode?.loading ?? false,
+            loaded: existingChildNode?.loaded ?? false,
+            loadedIncludeHidden: existingChildNode?.loadedIncludeHidden ?? false,
+            forcedVisibleHiddenChildPath: existingChildNode?.forcedVisibleHiddenChildPath ?? null,
             error: null,
-            childPaths: current[child.path]?.childPaths ?? [],
+            childPaths: existingChildNode?.childPaths ?? [],
           };
         }
         return next;
@@ -977,7 +1037,12 @@ export function useExplorerNavigationController(args: {
     }
   }
 
-  async function syncTreeToPath(path: string, includeHiddenOverride: boolean) {
+  async function syncTreeToPath(
+    path: string,
+    includeHiddenOverride: boolean,
+    options: { forceReload?: boolean } = {},
+  ) {
+    const forceReload = options.forceReload ?? false;
     const currentRootPath = treeRootPathRef.current;
     const nextRootPath =
       currentRootPath.length === 0 || !isPathWithinRoot(path, currentRootPath)
@@ -995,7 +1060,7 @@ export function useExplorerNavigationController(args: {
       ensureTreeNode(nextRootPath, true);
     }
 
-    await loadTreeChildren(nextRootPath, includeHiddenOverride, false, path);
+    await loadTreeChildren(nextRootPath, includeHiddenOverride, false, path, forceReload);
 
     if (path === nextRootPath) {
       return;
@@ -1004,7 +1069,13 @@ export function useExplorerNavigationController(args: {
     const ancestorChain = getAncestorChain(nextRootPath, path).slice(1, -1);
     for (const ancestorPath of ancestorChain) {
       ensureTreeNode(ancestorPath, true);
-      await loadTreeChildren(ancestorPath, includeHiddenOverride, true, path);
+      await loadTreeChildren(ancestorPath, includeHiddenOverride, true, path, forceReload);
+    }
+
+    const focusedNode = treeNodesRef.current[path];
+    if (path !== nextRootPath && (focusedNode?.expanded || forceReload)) {
+      ensureTreeNode(path, focusedNode?.expanded ?? false);
+      await loadTreeChildren(path, includeHiddenOverride, false, path, forceReload);
     }
   }
 
@@ -1050,13 +1121,14 @@ export function useExplorerNavigationController(args: {
   async function selectTreeItem(itemId: TreeItemId, historyMode: "push" | "replace" | "skip") {
     if (isFavoritesRootItemId(itemId)) {
       setTreeSelection(itemId);
-      setLeftPaneSubview("tree");
+      setLeftPaneSubview(favoritesPlacement === "separate" ? "favorites" : "tree");
+      applyEmptyDirectorySnapshot();
       return;
     }
     const favoritePath = getFavoriteItemPath(itemId);
     if (favoritePath) {
       setTreeSelection(itemId);
-       if (favoritesPlacement === "separate") {
+      if (favoritesPlacement === "separate") {
         setLeftPaneSubview("favorites");
       }
       await navigateTo(favoritePath, historyMode, undefined, undefined, undefined, undefined, {
@@ -1117,7 +1189,7 @@ export function useExplorerNavigationController(args: {
       return;
     }
     if (isFavoriteItemId(currentItemId)) {
-      setTreeSelection(getFavoritesRootItemId());
+      await selectTreeItem(getFavoritesRootItemId(), "skip");
       return;
     }
     const path = getFileSystemItemPath(currentItemId);
@@ -1291,7 +1363,7 @@ export function useExplorerNavigationController(args: {
       return false;
     }
     if (isFavoriteItemId(safeCurrentId)) {
-      setTreeSelection(getFavoritesRootItemId());
+      await selectTreeItem(getFavoritesRootItemId(), "skip");
       return true;
     }
     const path = getFileSystemItemPath(safeCurrentId);
@@ -1335,24 +1407,34 @@ export function useExplorerNavigationController(args: {
     );
   }
 
-  async function refreshDirectory() {
+  async function refreshDirectory(
+    options: { path?: string; treeSelectionPath?: string | null } = {},
+  ) {
     await client.invoke("app:clearCaches", {});
-    if (!currentPath) {
+    const targetPath = options.path ?? currentPathRef.current;
+    if (!targetPath) {
       return;
     }
-    const reloadOptions = getSelectedTreeReloadOptions(currentPath);
-    if (!reloadOptions) {
-      reinitializeTree(resolveRefreshRootPath(currentPath, treeRootPath, homePath), currentPath);
-    }
+    const reloadOptions = getSelectedTreeReloadOptions(targetPath);
     await navigateTo(
-      currentPath,
+      targetPath,
       "replace",
       undefined,
       undefined,
       undefined,
       undefined,
-      reloadOptions,
+      {
+        ...reloadOptions,
+        forceTreeReload: true,
+      },
     );
+    if (options.treeSelectionPath) {
+      await syncTreeToPath(options.treeSelectionPath, includeHidden, {
+        forceReload: true,
+      });
+      setTreeSelection(createFileSystemItemId(options.treeSelectionPath));
+      setLeftPaneSubview("tree");
+    }
   }
 
   function handleSortChange(nextSortBy: SortBy) {
@@ -1636,7 +1718,7 @@ export function useExplorerNavigationController(args: {
     if ((!infoPanelOpen && !infoRowOpen) || currentPath.length === 0) {
       return;
     }
-    const targetPath = contentSelection.leadPath || currentPath;
+    const targetPath = infoTargetPathOverride ?? contentSelection.leadPath ?? currentPath;
     const requestId = ++getInfoRequestRef.current;
     setGetInfoLoading(true);
     void client
@@ -1664,6 +1746,7 @@ export function useExplorerNavigationController(args: {
     contentSelection.leadPath,
     currentPath,
     getInfoRequestRef,
+    infoTargetPathOverride,
     infoPanelOpen,
     infoRowOpen,
     setGetInfoItem,
@@ -1685,6 +1768,7 @@ export function useExplorerNavigationController(args: {
     goQuickAccess,
     navigateToParentFolder,
     navigateTreeSelectionToParent,
+    selectTreeItem,
     initializeTree,
     reinitializeTree,
     navigateTo,

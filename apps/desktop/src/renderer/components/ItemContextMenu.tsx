@@ -1,135 +1,43 @@
 import { type CSSProperties, useEffect, useMemo, useState } from "react";
 
-export type ContextMenuActionId =
-  | "revealInFolder"
-  | "open"
-  | "openWith"
-  | "edit"
-  | "toggleInfoPanel"
-  | "cut"
-  | "copy"
-  | "paste"
-  | "move"
-  | "rename"
-  | "duplicate"
-  | "newFolder"
-  | "toggleFavorite"
-  | "terminal"
-  | "copyPath"
-  | "trash";
+import {
+  type ContextMenuActionId,
+  type ContextMenuIconName,
+  type ContextMenuSubmenuAction,
+  type ContextMenuSubmenuItem,
+  type ContextMenuSurface,
+  getContextMenuItems,
+} from "../lib/contextMenu";
+import {
+  getContextMenuShortcutLabel,
+  type ShortcutContext,
+} from "../lib/shortcutPolicy";
 
-export type ContextMenuSubmenuAction =
-  | {
-      kind: "application";
-      id: string;
-      label: string;
-      appPath: string;
-      appName: string;
-    }
-  | {
-      kind: "finder";
-      id: "finder";
-      label: "Finder";
-      appName: "Finder";
-      appPath: "Finder";
-    }
-  | {
-      kind: "other";
-      id: "other";
-      label: "Other…";
-      appName: "Other…";
-    };
-
-type ContextMenuItem =
-  | {
-      type: "separator";
-      key: string;
-    }
-  | {
-      type?: "action";
-      id: ContextMenuActionId;
-      label: string;
-      icon: ContextMenuIconName;
-      shortcut?: string;
-      destructive?: boolean;
-      hasSubmenu?: boolean;
-    };
-
-export type ContextMenuSubmenuItem =
-  | {
-      type: "separator";
-      key: string;
-    }
-  | {
-      type?: "item";
-      action: ContextMenuSubmenuAction;
-    };
-
-type ContextMenuIconName =
-  | "revealInFolder"
-  | "open"
-  | "openWith"
-  | "edit"
-  | "toggleInfoPanel"
-  | "cut"
-  | "copy"
-  | "paste"
-  | "move"
-  | "rename"
-  | "duplicate"
-  | "newFolder"
-  | "terminal"
-  | "copyPath"
-  | "trash";
-
-export const BROWSE_CONTEXT_MENU_ITEMS: readonly ContextMenuItem[] = [
-  { id: "open", label: "Open", icon: "open", shortcut: "⌘O" },
-  { id: "openWith", label: "Open With", icon: "openWith", hasSubmenu: true },
-  { id: "edit", label: "Edit", icon: "edit", shortcut: "⌘E" },
-  { type: "separator", key: "separator-open" },
-  { id: "toggleInfoPanel", label: "Toggle Info Panel", icon: "toggleInfoPanel", shortcut: "⌘I" },
-  { type: "separator", key: "separator-info" },
-  { id: "cut", label: "Cut", icon: "cut", shortcut: "⌘X" },
-  { id: "copy", label: "Copy", icon: "copy", shortcut: "⌘C" },
-  { id: "paste", label: "Paste", icon: "paste", shortcut: "⌘V" },
-  { id: "move", label: "Move To…", icon: "move", shortcut: "⇧⌘M" },
-  { id: "rename", label: "Rename", icon: "rename", shortcut: "F2" },
-  { id: "duplicate", label: "Duplicate", icon: "duplicate", shortcut: "⌘D" },
-  { type: "separator", key: "separator-duplicate" },
-  { id: "newFolder", label: "New Folder", icon: "newFolder", shortcut: "⇧⌘N" },
-  { id: "toggleFavorite", label: "Add to Favorites", icon: "open" },
-  { type: "separator", key: "separator-new-folder" },
-  { id: "terminal", label: "Open in Terminal", icon: "terminal", shortcut: "⌘T" },
-  { id: "copyPath", label: "Copy Path", icon: "copyPath", shortcut: "⌥⌘C" },
-  { type: "separator", key: "separator-copy-path" },
-  { id: "trash", label: "Move to Trash", icon: "trash", shortcut: "⌘⌫", destructive: true },
-] as const;
-
-export const SEARCH_CONTEXT_MENU_ITEMS: readonly ContextMenuItem[] = [
-  { id: "revealInFolder", label: "Reveal in Folder", icon: "revealInFolder" },
-  { type: "separator", key: "separator-reveal" },
-  ...BROWSE_CONTEXT_MENU_ITEMS,
-] as const;
+export type { ContextMenuActionId, ContextMenuSubmenuAction, ContextMenuSubmenuItem };
 
 export function ItemContextMenu({
   anchorX,
   anchorY,
-  variant = "browse",
+  surface = "content",
   disabledActionIds = [],
   favoriteToggleLabel = null,
+  folderExpansionLabel = null,
   hiddenActionIds = [],
   submenuItems,
+  shortcutContext,
   open,
   onAction,
   onSubmenuAction,
 }: {
   anchorX: number;
   anchorY: number;
-  variant?: "browse" | "search";
+  surface?: ContextMenuSurface;
   disabledActionIds?: ContextMenuActionId[];
   favoriteToggleLabel?: string | null;
+  folderExpansionLabel?: "Expand" | "Collapse" | null;
   hiddenActionIds?: ContextMenuActionId[];
   submenuItems: readonly ContextMenuSubmenuItem[];
+  shortcutContext: ShortcutContext;
   open: boolean;
   onAction: (actionId: ContextMenuActionId) => void;
   onSubmenuAction: (action: ContextMenuSubmenuAction) => void;
@@ -137,7 +45,37 @@ export function ItemContextMenu({
   const [activeItemId, setActiveItemId] = useState<ContextMenuActionId | null>(null);
   const disabledActionIdSet = useMemo(() => new Set(disabledActionIds), [disabledActionIds]);
   const hiddenActionIdSet = useMemo(() => new Set(hiddenActionIds), [hiddenActionIds]);
-  const items = variant === "search" ? SEARCH_CONTEXT_MENU_ITEMS : BROWSE_CONTEXT_MENU_ITEMS;
+  const items = useMemo(() => {
+    const rawItems = getContextMenuItems({
+      surface,
+      favoriteToggleLabel,
+      folderExpansionLabel,
+    });
+    const visibleItems = rawItems.filter(
+      (item) => item.type === "separator" || !hiddenActionIdSet.has(item.id),
+    );
+    const compactedItems = [];
+    let previousWasSeparator = true;
+
+    for (const item of visibleItems) {
+      if (item.type === "separator") {
+        if (previousWasSeparator) {
+          continue;
+        }
+        compactedItems.push(item);
+        previousWasSeparator = true;
+        continue;
+      }
+      compactedItems.push(item);
+      previousWasSeparator = false;
+    }
+
+    if (compactedItems.at(-1)?.type === "separator") {
+      compactedItems.pop();
+    }
+
+    return compactedItems;
+  }, [favoriteToggleLabel, folderExpansionLabel, hiddenActionIdSet, surface]);
 
   useEffect(() => {
     if (open) {
@@ -166,12 +104,9 @@ export function ItemContextMenu({
           if (item.type === "separator") {
             return <div key={item.key} className="context-menu-separator" />;
           }
-          if (hiddenActionIdSet.has(item.id)) {
-            return null;
-          }
           const isActive = activeItemId === item.id;
           const isDisabled = disabledActionIdSet.has(item.id);
-          const label = item.id === "toggleFavorite" && favoriteToggleLabel ? favoriteToggleLabel : item.label;
+          const shortcut = isDisabled ? null : getContextMenuShortcutLabel(item.id, shortcutContext);
           return (
             <button
               key={item.id}
@@ -193,13 +128,13 @@ export function ItemContextMenu({
               <span className="context-menu-item-icon" aria-hidden="true">
                 <ContextMenuIcon name={item.icon} />
               </span>
-              <span className="context-menu-item-label">{label}</span>
+              <span className="context-menu-item-label">{item.label}</span>
               {item.hasSubmenu ? (
                 <span className="context-menu-submenu-arrow" aria-hidden="true">
                   <SubmenuChevron />
                 </span>
-              ) : item.shortcut ? (
-                <span className="context-menu-item-shortcut">{item.shortcut}</span>
+              ) : shortcut ? (
+                <span className="context-menu-item-shortcut">{shortcut}</span>
               ) : null}
               {item.hasSubmenu && submenuOpen && !isDisabled ? (
                 <div className="context-submenu">
@@ -238,6 +173,16 @@ function ContextMenuIcon({ name }: { name: ContextMenuIconName }) {
       </svg>
     );
   }
+  if (name === "revealInTree") {
+    return (
+      <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 6h16" />
+        <path d="M4 12h10" />
+        <path d="M4 18h10" />
+        <path d="M16 9l4 3-4 3" />
+      </svg>
+    );
+  }
   if (name === "open") {
     return (
       <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
@@ -262,7 +207,7 @@ function ContextMenuIcon({ name }: { name: ContextMenuIconName }) {
       </svg>
     );
   }
-  if (name === "toggleInfoPanel") {
+  if (name === "showInfo") {
     return (
       <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
         <circle cx="12" cy="12" r="10" />
@@ -326,6 +271,20 @@ function ContextMenuIcon({ name }: { name: ContextMenuIconName }) {
         <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
         <line x1="12" y1="11" x2="12" y2="17" />
         <line x1="9" y1="14" x2="15" y2="14" />
+      </svg>
+    );
+  }
+  if (name === "toggleExpand") {
+    return (
+      <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+        <polyline points="9 6 15 12 9 18" />
+      </svg>
+    );
+  }
+  if (name === "favorite") {
+    return (
+      <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="m12 17.27-5.18 3.05 1.39-5.88L3 9.97l6.01-.5L12 4l2.99 5.47 6.01.5-5.21 4.47 1.39 5.88Z" />
       </svg>
     );
   }

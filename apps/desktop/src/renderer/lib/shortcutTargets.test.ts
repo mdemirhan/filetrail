@@ -41,6 +41,19 @@ describe("shortcutTargets", () => {
     ).toEqual(["/tmp/tree"]);
   });
 
+  it("prefers the explicit selected tree path for terminal when the tree pane is focused", () => {
+    expect(
+      resolveOpenInTerminalPaths({
+        focusedPane: "tree",
+        lastFocusedPane: "content",
+        contextMenuPaths: [],
+        selectedContentPaths: ["/tmp/content"],
+        selectedTreePath: "/tmp/tree-selected",
+        currentPath: "/tmp/tree",
+      }),
+    ).toEqual(["/tmp/tree-selected"]);
+  });
+
   it("uses the content selection when the content pane is focused", () => {
     expect(
       resolveOpenInTerminalPaths({
@@ -77,7 +90,7 @@ describe("shortcutTargets", () => {
     ).toEqual(["/tmp/current"]);
   });
 
-  it("does not return open targets when the tree pane is focused", () => {
+  it("returns the current tree path for Open when the tree pane is focused", () => {
     expect(
       resolveOpenSelectionPaths({
         focusedPane: "tree",
@@ -101,6 +114,19 @@ describe("shortcutTargets", () => {
     ).toEqual(["/tmp/tree"]);
   });
 
+  it("prefers the explicit selected tree path for Open when the tree pane is focused", () => {
+    expect(
+      resolveOpenSelectionPaths({
+        focusedPane: "tree",
+        lastFocusedPane: "content",
+        contextMenuPaths: [],
+        selectedContentPaths: ["/tmp/content"],
+        selectedTreePath: "/tmp/tree-selected",
+        currentPath: "/tmp/tree",
+      }),
+    ).toEqual(["/tmp/tree-selected"]);
+  });
+
   it("falls back to the current path for Open when focus is temporarily null after tree focus", () => {
     expect(
       resolveOpenSelectionPaths({
@@ -122,5 +148,17 @@ describe("shortcutTargets", () => {
         selectedContentPaths: [],
       }),
     ).toEqual([]);
+  });
+
+  it("prefers the explicit selected tree path for Edit when the tree pane is focused", () => {
+    expect(
+      resolveEditSelectionPaths({
+        focusedPane: "tree",
+        lastFocusedPane: "content",
+        contextMenuPaths: [],
+        selectedContentPaths: [],
+        selectedTreePath: "/tmp/tree-selected",
+      }),
+    ).toEqual(["/tmp/tree-selected"]);
   });
 });

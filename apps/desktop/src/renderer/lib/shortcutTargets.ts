@@ -3,6 +3,7 @@ export function resolveOpenInTerminalPaths(input: {
   lastFocusedPane: "tree" | "content" | null;
   contextMenuPaths: string[];
   selectedContentPaths: string[];
+  selectedTreePath?: string | null;
   currentPath: string;
 }): string[] {
   if (input.contextMenuPaths.length > 0) {
@@ -11,6 +12,9 @@ export function resolveOpenInTerminalPaths(input: {
 
   const activePane = input.focusedPane ?? input.lastFocusedPane;
   if (activePane === "tree") {
+    if (input.selectedTreePath) {
+      return [input.selectedTreePath];
+    }
     return input.currentPath ? [input.currentPath] : [];
   }
   if (input.selectedContentPaths.length > 0) {
@@ -24,6 +28,7 @@ function resolveSelectionPaths(input: {
   lastFocusedPane: "tree" | "content" | null;
   contextMenuPaths: string[];
   selectedContentPaths: string[];
+  selectedTreePath?: string | null;
   currentPath?: string;
 }): string[] {
   if (input.contextMenuPaths.length > 0) {
@@ -32,6 +37,9 @@ function resolveSelectionPaths(input: {
 
   const activePane = input.focusedPane ?? input.lastFocusedPane;
   if (activePane === "tree") {
+    if (input.selectedTreePath) {
+      return [input.selectedTreePath];
+    }
     return input.currentPath ? [input.currentPath] : [];
   }
 
@@ -43,6 +51,7 @@ export function resolveOpenSelectionPaths(input: {
   lastFocusedPane: "tree" | "content" | null;
   contextMenuPaths: string[];
   selectedContentPaths: string[];
+  selectedTreePath?: string | null;
   currentPath: string;
 }): string[] {
   return resolveSelectionPaths(input);
@@ -53,6 +62,7 @@ export function resolveEditSelectionPaths(input: {
   lastFocusedPane: "tree" | "content" | null;
   contextMenuPaths: string[];
   selectedContentPaths: string[];
+  selectedTreePath?: string | null;
 }): string[] {
   return resolveSelectionPaths(input);
 }

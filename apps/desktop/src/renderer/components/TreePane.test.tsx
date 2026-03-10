@@ -43,6 +43,7 @@ function renderTreePane(overrides: Partial<ComponentProps<typeof TreePane>> = {}
       homePath="/Users/demo"
       selectedTreeItemId="fs:/Users/demo"
       compactTreeView={false}
+      singleClickExpandTreeItems={false}
       favorites={[
         { path: "/Users/demo/Desktop", icon: "desktop" },
         { path: "/Users/demo/Documents", icon: "documents" },
@@ -124,11 +125,31 @@ describe("TreePane", () => {
   it("navigates when a filesystem folder row is clicked", () => {
     vi.useFakeTimers();
     const handleNavigate = vi.fn();
-    renderTreePane({ onNavigate: handleNavigate });
+    const handleToggleExpand = vi.fn();
+    renderTreePane({ onNavigate: handleNavigate, onToggleExpand: handleToggleExpand });
 
     fireEvent.click(screen.getAllByRole("button", { name: "Documents" })[1]!);
     vi.runAllTimers();
 
+    expect(handleNavigate).toHaveBeenCalledWith("/Users/demo/Documents");
+    expect(handleToggleExpand).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it("optionally expands a filesystem folder on single click before navigating", () => {
+    vi.useFakeTimers();
+    const handleNavigate = vi.fn();
+    const handleToggleExpand = vi.fn();
+    renderTreePane({
+      onNavigate: handleNavigate,
+      onToggleExpand: handleToggleExpand,
+      singleClickExpandTreeItems: true,
+    });
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Documents" })[1]!);
+    vi.runAllTimers();
+
+    expect(handleToggleExpand).toHaveBeenCalledWith("/Users/demo/Documents");
     expect(handleNavigate).toHaveBeenCalledWith("/Users/demo/Documents");
     vi.useRealTimers();
   });
@@ -155,6 +176,15 @@ describe("TreePane", () => {
     fireEvent.click(screen.getByLabelText(/collapse favorites/i));
 
     expect(handleToggleFavoritesExpanded).toHaveBeenCalledTimes(1);
+  });
+
+  it("notifies the app when the Favorites root label is selected", () => {
+    const handleSelectFavoritesRoot = vi.fn();
+    renderTreePane({ onSelectFavoritesRoot: handleSelectFavoritesRoot });
+
+    fireEvent.click(screen.getByRole("button", { name: "Favorites" }));
+
+    expect(handleSelectFavoritesRoot).toHaveBeenCalledTimes(1);
   });
 
   it("marks favorites rows with their tree kind for accent styling", () => {
@@ -303,5 +333,119 @@ describe("TreePane", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /root tree at home/i }));
     expect(handleRerootHome).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens a folder context menu for filesystem tree rows", () => {
+    const handleItemContextMenu = vi.fn();
+    renderTreePane({ onItemContextMenu: handleItemContextMenu });
+
+    fireEvent.contextMenu(screen.getAllByRole("button", { name: "Documents" })[1]!);
+
+    expect(handleItemContextMenu).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "filesystem",
+        path: "/Users/demo/Documents",
+      }),
+      "tree",
+      expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }),
+    );
+  });
+
+  it("opens a favorite context menu for integrated favorites inside the tree", () => {
+    const handleItemContextMenu = vi.fn();
+    renderTreePane({ onItemContextMenu: handleItemContextMenu });
+
+    fireEvent.contextMenu(screen.getAllByRole("button", { name: "Documents" })[0]!);
+
+    expect(handleItemContextMenu).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "favorite",
+        path: "/Users/demo/Documents",
+      }),
+      "tree",
+      expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }),
+    );
+  });
+
+  it("opens a favorite context menu in the separate favorites subview", () => {
+    const handleItemContextMenu = vi.fn();
+    renderTreePane({
+      favoritesPlacement: "separate",
+      activeLeftPaneSubview: "favorites",
+      onItemContextMenu: handleItemContextMenu,
+      selectedTreeItemId: "favorite:/Users/demo/Documents",
+    });
+
+    fireEvent.contextMenu(screen.getAllByRole("button", { name: "Documents" })[0]!);
+
+    expect(handleItemContextMenu).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "favorite",
+        path: "/Users/demo/Documents",
+      }),
+      "favorites",
+      expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }),
+    );
+  });
+
+  it("does not scroll the selected row into view when it is already fully visible", () => {
+    vi.useFakeTimers();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    const scrollIntoViewSpy = vi
+      .spyOn(HTMLElement.prototype, "scrollIntoView")
+      .mockImplementation(() => undefined);
+    const getBoundingClientRectSpy = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function mockRect(this: HTMLElement) {
+        if (this.classList.contains("tree-scroll")) {
+          return {
+            top: 0,
+            bottom: 400,
+            left: 0,
+            right: 240,
+            width: 240,
+            height: 400,
+            x: 0,
+            y: 0,
+            toJSON: () => ({}),
+          } as DOMRect;
+        }
+        if (this.getAttribute("title") === "/Users/demo/Documents") {
+          return {
+            top: 80,
+            bottom: 112,
+            left: 0,
+            right: 240,
+            width: 240,
+            height: 32,
+            x: 0,
+            y: 80,
+            toJSON: () => ({}),
+          } as DOMRect;
+        }
+        return {
+          top: 0,
+          bottom: 0,
+          left: 0,
+          right: 0,
+          width: 0,
+          height: 0,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        } as DOMRect;
+      });
+
+    renderTreePane({ selectedTreeItemId: "fs:/Users/demo/Documents" });
+    vi.runAllTimers();
+
+    expect(scrollIntoViewSpy).not.toHaveBeenCalled();
+
+    getBoundingClientRectSpy.mockRestore();
+    scrollIntoViewSpy.mockRestore();
+    vi.useRealTimers();
   });
 });

@@ -11,6 +11,12 @@ import {
   EMPTY_COPY_PASTE_CLIPBOARD,
   type CopyPasteClipboardState,
 } from "../lib/copyPasteClipboard";
+import type {
+  ContextMenuScope,
+  ContextMenuSourceSubview,
+  ContextMenuSurface,
+  ContextMenuTargetKind,
+} from "../lib/contextMenu";
 import type { ToastEntry } from "../lib/toasts";
 
 type ContextMenuState = {
@@ -18,17 +24,28 @@ type ContextMenuState = {
   y: number;
   paths: string[];
   targetPath: string | null;
-  source: "browse" | "search";
-  scope: "selection" | "background";
+  surface: ContextMenuSurface;
+  targetKind: ContextMenuTargetKind;
+  sourceSubview: ContextMenuSourceSubview;
+  scope: ContextMenuScope;
+  folderExpansionLabel: "Expand" | "Collapse" | null;
 };
 
 type CopyPastePlan = IpcResponse<"copyPaste:plan">;
-type CopyPasteDialogState = {
-  type: "plan";
-  plan: CopyPastePlan;
-  action: "paste" | "move_to" | "duplicate";
-  clearClipboardOnStart: boolean;
-} | null;
+type CopyPasteDialogState =
+  | {
+      type: "plan";
+      plan: CopyPastePlan;
+      action: "paste" | "move_to" | "duplicate";
+      clearClipboardOnStart: boolean;
+      pendingTreeSelectionPath?: string | null;
+    }
+  | {
+      type: "confirmTrash";
+      paths: string[];
+      itemLabel: string;
+    }
+  | null;
 
 type WriteOperationCardState = {
   action: WriteOperationAction;
@@ -65,6 +82,7 @@ export function useWriteOperations() {
     parentDirectoryPath: string;
     initialName: string;
     error: string | null;
+    selectInTreeOnSuccess: boolean;
   } | null>(null);
   const [moveDialogState, setMoveDialogState] = useState<{
     sourcePaths: string[];
@@ -87,6 +105,7 @@ export function useWriteOperations() {
     directoryPath: string;
     selectedPaths: string[];
   } | null>(null);
+  const pendingTreeSelectionPathRef = useRef<string | null>(null);
 
   return {
     contextMenuState,
@@ -117,6 +136,7 @@ export function useWriteOperations() {
     copyPasteClipboardRef,
     writeOperationLockedRef,
     pendingPasteSelectionRef,
+    pendingTreeSelectionPathRef,
   };
 }
 

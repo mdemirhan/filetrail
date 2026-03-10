@@ -44,6 +44,7 @@ export function useExplorerNavigation() {
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [typeaheadQuery, setTypeaheadQuery] = useState("");
   const [typeaheadPane, setTypeaheadPane] = useState<"tree" | "content" | null>(null);
+  const [infoTargetPathOverride, setInfoTargetPathOverride] = useState<string | null>(null);
   const [infoPanelOpen, setInfoPanelOpen] = useState(DEFAULT_APP_PREFERENCES.propertiesOpen);
   const [infoRowOpen, setInfoRowOpen] = useState(DEFAULT_APP_PREFERENCES.detailRowOpen);
   const [restoredPaneWidths, setRestoredPaneWidths] = useState<{
@@ -121,6 +122,8 @@ export function useExplorerNavigation() {
     setTypeaheadQuery,
     typeaheadPane,
     setTypeaheadPane,
+    infoTargetPathOverride,
+    setInfoTargetPathOverride,
     infoPanelOpen,
     setInfoPanelOpen,
     infoRowOpen,

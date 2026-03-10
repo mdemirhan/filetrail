@@ -41,6 +41,7 @@ export function shouldRenderCopyPasteResultDialog(
 export function resolvePasteDestinationPath(args: {
   contextMenuState: ContextMenuState | null;
   contextMenuTargetEntry: DirectoryEntry | null;
+  clipboardSourcePaths: string[];
   currentPath: string;
   focusedPane: "tree" | "content" | null;
   isSearchMode: boolean;
@@ -49,6 +50,7 @@ export function resolvePasteDestinationPath(args: {
   const {
     contextMenuState,
     contextMenuTargetEntry,
+    clipboardSourcePaths,
     currentPath,
     focusedPane,
     isSearchMode,
@@ -58,6 +60,9 @@ export function resolvePasteDestinationPath(args: {
     return null;
   }
   if (contextMenuState) {
+    if (contextMenuState.targetKind === "treeFolder" || contextMenuState.targetKind === "favorite") {
+      return contextMenuState.targetPath;
+    }
     if (isDirectoryLikeEntry(contextMenuTargetEntry)) {
       return contextMenuTargetEntry.path;
     }
@@ -67,6 +72,9 @@ export function resolvePasteDestinationPath(args: {
     return currentPath.length > 0 ? currentPath : null;
   }
   if (focusedPane === "content" && isDirectoryLikeEntry(selectedEntry)) {
+    if (clipboardSourcePaths.includes(selectedEntry.path)) {
+      return currentPath.length > 0 ? currentPath : selectedEntry.path;
+    }
     return selectedEntry.path;
   }
   return currentPath.length > 0 ? currentPath : null;
@@ -106,6 +114,99 @@ export function resolveWriteOperationSelectionDirectoryPath(
     return parentDirectoryPath(firstSelectedPath) ?? null;
   }
   return result.targetPath;
+}
+
+export function resolveWriteOperationRefreshPath(
+  result: WriteOperationResult,
+  currentPath: string,
+): string {
+  if (result.action === "trash") {
+    const impactedPath = findDeepestMatchingSourcePath(result, currentPath);
+    if (!impactedPath) {
+      return currentPath;
+    }
+    return parentDirectoryPath(impactedPath) ?? currentPath;
+  }
+
+  if (result.action === "rename" || result.action === "move_to") {
+    const impactedItem = findDeepestMatchingSourceItem(result, currentPath);
+    if (!impactedItem?.sourcePath || !impactedItem.destinationPath) {
+      return currentPath;
+    }
+    return replacePathPrefix(currentPath, impactedItem.sourcePath, impactedItem.destinationPath);
+  }
+
+  return currentPath;
+}
+
+export function resolveWriteOperationTreeSelectionPath(
+  result: WriteOperationResult,
+  selectedTreePath: string | null,
+): string | null {
+  if (!selectedTreePath) {
+    return null;
+  }
+
+  if (result.action === "trash") {
+    const impactedPath = findDeepestMatchingSourcePath(result, selectedTreePath);
+    if (!impactedPath) {
+      return null;
+    }
+    return parentDirectoryPath(impactedPath) ?? null;
+  }
+
+  if (result.action === "rename" || result.action === "move_to") {
+    const impactedItem = findDeepestMatchingSourceItem(result, selectedTreePath);
+    if (!impactedItem?.sourcePath || !impactedItem.destinationPath) {
+      return null;
+    }
+    return replacePathPrefix(selectedTreePath, impactedItem.sourcePath, impactedItem.destinationPath);
+  }
+
+  return null;
+}
+
+export function replacePathPrefix(path: string, sourcePrefix: string, destinationPrefix: string): string {
+  if (path === sourcePrefix) {
+    return destinationPrefix;
+  }
+  if (!path.startsWith(`${sourcePrefix}/`)) {
+    return path;
+  }
+  return `${destinationPrefix}${path.slice(sourcePrefix.length)}`;
+}
+
+function findDeepestMatchingSourcePath(result: WriteOperationResult, currentPath: string): string | null {
+  const matchingSourcePaths = result.items
+    .map((item) => item.sourcePath)
+    .filter((sourcePath): sourcePath is string => {
+      if (typeof sourcePath !== "string" || sourcePath.length === 0) {
+        return false;
+      }
+      return currentPath === sourcePath || currentPath.startsWith(`${sourcePath}/`);
+    })
+    .sort((left, right) => right.length - left.length);
+  return matchingSourcePaths[0] ?? null;
+}
+
+function findDeepestMatchingSourceItem(
+  result: WriteOperationResult,
+  currentPath: string,
+): {
+  sourcePath: string;
+  destinationPath: string;
+} | null {
+  const matchingItems = result.items
+    .filter(
+      (item): item is typeof item & { sourcePath: string; destinationPath: string } =>
+        typeof item.sourcePath === "string" &&
+        item.sourcePath.length > 0 &&
+        typeof item.destinationPath === "string" &&
+        item.destinationPath.length > 0 &&
+        (currentPath === item.sourcePath || currentPath.startsWith(`${item.sourcePath}/`)),
+    )
+    .sort((left, right) => right.sourcePath.length - left.sourcePath.length);
+  return matchingItems[0] ?? null;
 }
 
 export function isDirectoryLikeEntry(entry: DirectoryEntry | null): entry is DirectoryEntry {
@@ -164,15 +265,4 @@ export function resolveExplorerTreeRootPath(path: string, homePath: string): str
     return homePath;
   }
   return "/";
-}
-
-export function resolveRefreshRootPath(
-  currentPath: string,
-  treeRootPath: string,
-  homePath: string,
-): string {
-  if (treeRootPath === "/" || (homePath && isPathWithinRoot(currentPath, homePath))) {
-    return resolveExplorerTreeRootPath(currentPath, homePath);
-  }
-  return resolveExplorerTreeRootPath(currentPath, homePath);
 }

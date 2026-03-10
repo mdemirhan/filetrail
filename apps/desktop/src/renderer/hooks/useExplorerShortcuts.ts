@@ -18,6 +18,7 @@ import {
   canHandleRawExplorerShortcut,
   canHandleRendererCommand,
   type RawExplorerShortcutId,
+  type ShortcutContext,
 } from "../lib/shortcutPolicy";
 import {
   resolveEditSelectionPaths,
@@ -37,13 +38,7 @@ type RawShortcutBinding = {
 
 export function useExplorerShortcuts(args: {
   client: ReturnType<typeof useFiletrailClient>;
-  shortcutContext: {
-    actionNoticeOpen: boolean;
-    copyPasteModalOpen: boolean;
-    focusedPane: "tree" | "content" | null;
-    locationSheetOpen: boolean;
-    mainView: "explorer" | "help" | "settings";
-  };
+  shortcutContext: ShortcutContext;
   actionNotice: { title: string; message: string } | null;
   dismissActionNotice: () => void;
   copyPasteModalOpen: boolean;
@@ -70,6 +65,7 @@ export function useExplorerShortcuts(args: {
   cachedSearchSelectionRef: MutableRefObject<ContentSelectionState>;
   searchResultEntries: DirectoryEntry[];
   applyContentSelection: (selection: ContentSelectionState, entries: DirectoryEntry[]) => void;
+  selectedTreeTargetPath: string | null;
   selectedPathsInViewOrder: string[];
   currentPath: string;
   selectedEntry: DirectoryEntry | null;
@@ -86,9 +82,17 @@ export function useExplorerShortcuts(args: {
   goBack: () => void;
   goForward: () => void;
   navigateTo: (path: string, historyMode: "push" | "replace" | "skip") => Promise<boolean>;
+  navigateTreeFileSystemPath: (
+    path: string,
+    historyMode: "push" | "replace" | "skip",
+  ) => Promise<void>;
+  navigateFavoritePath: (path: string, historyMode: "push" | "replace" | "skip") => Promise<boolean>;
   openTreeNode: () => Promise<void>;
   toggleHiddenFiles: () => void;
-  refreshDirectory: () => Promise<void>;
+  refreshDirectory: (options?: {
+    path?: string;
+    treeSelectionPath?: string | null;
+  }) => Promise<void>;
   applySearchResultsSort: () => void;
   runCopyClipboardAction: (mode: "copy" | "cut") => Promise<void>;
   startPasteFromClipboard: () => Promise<void>;
@@ -146,6 +150,7 @@ export function useExplorerShortcuts(args: {
     cachedSearchSelectionRef,
     searchResultEntries,
     applyContentSelection,
+    selectedTreeTargetPath,
     selectedPathsInViewOrder,
     currentPath,
     selectedEntry,
@@ -162,6 +167,8 @@ export function useExplorerShortcuts(args: {
     goBack,
     goForward,
     navigateTo,
+    navigateTreeFileSystemPath,
+    navigateFavoritePath,
     openTreeNode,
     toggleHiddenFiles,
     refreshDirectory,
@@ -518,6 +525,8 @@ export function useExplorerShortcuts(args: {
           const pathsToCopy =
             contextMenuState && contextMenuState.paths.length > 0
               ? contextMenuState.paths
+              : focusedPane === "tree" && selectedTreeTargetPath
+                ? [selectedTreeTargetPath]
               : selectedPathsInViewOrder.length > 0
                 ? selectedPathsInViewOrder
                 : currentPath
@@ -528,6 +537,31 @@ export function useExplorerShortcuts(args: {
           }
           keyboardEvent.preventDefault();
           void runCopyPathAction(pathsToCopy);
+        },
+      },
+      {
+        id: "openInTerminal",
+        matches: (keyboardEvent) =>
+          keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.shiftKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key.toLowerCase() === "t",
+        run: (keyboardEvent) => {
+          const pathsToOpen = resolveOpenInTerminalPaths({
+            focusedPane,
+            lastFocusedPane: lastExplorerFocusPaneRef.current,
+            contextMenuPaths: contextMenuState?.paths ?? [],
+            selectedContentPaths: selectedPathsInViewOrder,
+            selectedTreePath: selectedTreeTargetPath,
+            currentPath,
+          });
+          const firstPath = pathsToOpen[0];
+          if (!firstPath) {
+            return;
+          }
+          keyboardEvent.preventDefault();
+          void openPathInTerminal(firstPath);
         },
       },
       {
@@ -771,6 +805,7 @@ export function useExplorerShortcuts(args: {
       resolveContentActionPaths,
       runCopyClipboardAction,
       runCopyPathAction,
+      selectedTreeTargetPath,
       selectedEntry,
       selectedPathsInViewOrder,
       showCachedSearchResults,
@@ -872,8 +907,20 @@ export function useExplorerShortcuts(args: {
           lastFocusedPane: lastExplorerFocusPaneRef.current,
           contextMenuPaths: contextMenuState?.paths ?? [],
           selectedContentPaths: selectedPathsInViewOrder,
+          selectedTreePath: selectedTreeTargetPath,
           currentPath,
         });
+        const firstPath = pathsToOpen[0];
+        if (focusedPane === "tree" && firstPath) {
+          if (shortcutContext.selectedTreeTargetKind === "favorite") {
+            void navigateFavoritePath(firstPath, "push");
+            return;
+          }
+          if (shortcutContext.selectedTreeTargetKind === "filesystemFolder") {
+            void navigateTreeFileSystemPath(firstPath, "push");
+            return;
+          }
+        }
         if (pathsToOpen.length > 0) {
           void openPaths(pathsToOpen);
         }
@@ -885,6 +932,7 @@ export function useExplorerShortcuts(args: {
           lastFocusedPane: lastExplorerFocusPaneRef.current,
           contextMenuPaths: contextMenuState?.paths ?? [],
           selectedContentPaths: selectedPathsInViewOrder,
+          selectedTreePath: selectedTreeTargetPath,
         });
         if (pathsToEdit.length > 0) {
           void editPaths(pathsToEdit);
@@ -897,6 +945,7 @@ export function useExplorerShortcuts(args: {
           lastFocusedPane: lastExplorerFocusPaneRef.current,
           contextMenuPaths: contextMenuState?.paths ?? [],
           selectedContentPaths: selectedPathsInViewOrder,
+          selectedTreePath: selectedTreeTargetPath,
           currentPath,
         });
         const firstPath = pathsToOpen[0];
@@ -981,6 +1030,8 @@ export function useExplorerShortcuts(args: {
         const pathsToCopy =
           (contextMenuState?.paths.length ?? 0) > 0
             ? (contextMenuState?.paths ?? [])
+            : focusedPane === "tree" && selectedTreeTargetPath
+              ? [selectedTreeTargetPath]
             : selectedPathsInViewOrder.length > 0
               ? selectedPathsInViewOrder
               : currentPath
@@ -1040,6 +1091,7 @@ export function useExplorerShortcuts(args: {
     focusedPane,
     lastExplorerFocusPaneRef,
     isSearchMode,
+    navigateFavoritePath,
     openLocationSheet,
     openMoveDialog,
     openNewFolderDialog,
@@ -1052,6 +1104,7 @@ export function useExplorerShortcuts(args: {
     runGenericEditCommand,
     runCopyClipboardAction,
     runCopyPathAction,
+    selectedTreeTargetPath,
     searchCommittedQueryRef,
     searchInputRef,
     searchPointerIntentRef,
@@ -1069,6 +1122,7 @@ export function useExplorerShortcuts(args: {
     startDuplicatePaths,
     startPasteFromClipboard,
     startTrashPaths,
+    navigateTreeFileSystemPath,
   ]);
 
   useEffect(() => {

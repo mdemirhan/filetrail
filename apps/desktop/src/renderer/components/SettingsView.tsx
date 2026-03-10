@@ -1510,6 +1510,7 @@ export function SettingsView({
   compactListView,
   compactDetailsView,
   compactTreeView,
+  singleClickExpandTreeItems,
   highlightHoveredItems = true,
   detailColumns,
   layoutMode = "wide",
@@ -1551,6 +1552,7 @@ export function SettingsView({
   onCompactListViewChange,
   onCompactDetailsViewChange,
   onCompactTreeViewChange,
+  onSingleClickExpandTreeItemsChange,
   onHighlightHoveredItemsChange = () => undefined,
   onDetailColumnsChange,
   onTabSwitchesExplorerPanesChange,
@@ -1592,6 +1594,7 @@ export function SettingsView({
   compactListView: boolean;
   compactDetailsView: boolean;
   compactTreeView: boolean;
+  singleClickExpandTreeItems: boolean;
   highlightHoveredItems?: boolean;
   detailColumns: DetailColumnVisibility;
   layoutMode?: "wide" | "narrow" | "compact";
@@ -1637,6 +1640,7 @@ export function SettingsView({
   onCompactListViewChange: (value: boolean) => void;
   onCompactDetailsViewChange: (value: boolean) => void;
   onCompactTreeViewChange: (value: boolean) => void;
+  onSingleClickExpandTreeItemsChange: (value: boolean) => void;
   onHighlightHoveredItemsChange?: (value: boolean) => void;
   onDetailColumnsChange: (value: DetailColumnVisibility) => void;
   onTabSwitchesExplorerPanesChange: (value: boolean) => void;
@@ -2014,6 +2018,19 @@ export function SettingsView({
                 onToggle={() => onCompactDetailsViewChange(!compactDetailsView)}
                 theme={palette}
                 label="Compact detail view"
+              />
+            }
+          />
+          <SettingRow
+            title="Single-click expand tree folders"
+            desc="Expand or collapse filesystem tree folders when you single-click them in the folders pane."
+            theme={palette}
+            right={
+              <Toggle
+                checked={singleClickExpandTreeItems}
+                onToggle={() => onSingleClickExpandTreeItemsChange(!singleClickExpandTreeItems)}
+                theme={palette}
+                label="Single-click expand tree folders"
               />
             }
           />

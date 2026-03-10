@@ -163,5 +163,8 @@ export function toPreferencePatch(
   if (value.favoritesInitialized !== undefined) {
     patch.favoritesInitialized = value.favoritesInitialized;
   }
+  if (value.singleClickExpandTreeItems !== undefined) {
+    patch.singleClickExpandTreeItems = value.singleClickExpandTreeItems;
+  }
   return patch;
 }

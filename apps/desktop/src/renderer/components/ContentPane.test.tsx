@@ -37,6 +37,39 @@ describe("ContentPane", () => {
     expect(screen.getByText("This folder is empty")).toBeInTheDocument();
   });
 
+  it("renders a selection-empty state when no folder is selected", () => {
+    render(
+      <ContentPane
+        isFocused
+        currentPath=""
+        entries={[]}
+        viewMode="list"
+        loading={false}
+        error={null}
+        includeHidden={false}
+        metadataByPath={{}}
+        sortBy="name"
+        sortDirection="asc"
+        onSelectPath={() => undefined}
+        onActivateEntry={() => undefined}
+        onSortChange={() => undefined}
+        onLayoutColumnsChange={() => undefined}
+        onVisiblePathsChange={() => undefined}
+        onNavigatePath={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+        onFocusChange={() => undefined}
+        typeaheadQuery=""
+      />,
+    );
+
+    expect(screen.getByText("No folder selected")).toBeInTheDocument();
+    expect(screen.getByText("Select a folder or favorite to view its contents.")).toBeInTheDocument();
+  });
+
   it("surfaces directory errors inline", () => {
     render(
       <ContentPane

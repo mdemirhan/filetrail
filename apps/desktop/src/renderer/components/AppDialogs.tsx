@@ -14,6 +14,7 @@ import {
   type ContextMenuSubmenuItem,
   ItemContextMenu,
 } from "./ItemContextMenu";
+import type { ShortcutContext } from "../lib/shortcutPolicy";
 import { LocationSheet } from "./LocationSheet";
 import { TextPromptDialog } from "./TextPromptDialog";
 import { ToastViewport } from "./ToastViewport";
@@ -25,6 +26,28 @@ import type {
 import type { ToastEntry } from "../lib/toasts";
 
 type CopyPastePlan = IpcResponse<"copyPaste:plan">;
+
+function resolveContextMenuShortcutContext(
+  shortcutContext: ShortcutContext,
+  contextMenuState: ContextMenuState | null,
+): ShortcutContext {
+  if (!contextMenuState) {
+    return shortcutContext;
+  }
+  if (contextMenuState.targetKind === "treeFolder") {
+    return {
+      ...shortcutContext,
+      selectedTreeTargetKind: "filesystemFolder",
+    };
+  }
+  if (contextMenuState.targetKind === "favorite") {
+    return {
+      ...shortcutContext,
+      selectedTreeTargetKind: "favorite",
+    };
+  }
+  return shortcutContext;
+}
 
 export function AppDialogs({
   locationSheetOpen,
@@ -44,6 +67,7 @@ export function AppDialogs({
   contextMenuFavoriteToggleLabel,
   contextMenuHiddenActionIds,
   contextMenuSubmenuItems,
+  shortcutContext,
   onRunContextMenuAction,
   onRunContextSubmenuAction,
   actionNotice,
@@ -57,6 +81,7 @@ export function AppDialogs({
   copyPasteDialogState,
   onExecuteCopyLikePlan,
   onCloseCopyPasteDialog,
+  onConfirmTrashDialog,
   showCopyPasteProgressCard,
   writeOperationCardState,
   onCancelWriteOperation,
@@ -88,6 +113,7 @@ export function AppDialogs({
   contextMenuFavoriteToggleLabel: string | null;
   contextMenuHiddenActionIds: ContextMenuActionId[];
   contextMenuSubmenuItems: ContextMenuSubmenuItem[];
+  shortcutContext: ShortcutContext;
   onRunContextMenuAction: (actionId: ContextMenuActionId, paths: string[]) => void;
   onRunContextSubmenuAction: (action: ContextMenuSubmenuAction, paths: string[]) => void;
   actionNotice: { title: string; message: string } | null;
@@ -110,9 +136,10 @@ export function AppDialogs({
   onExecuteCopyLikePlan: (
     plan: CopyPastePlan,
     action: "paste" | "move_to" | "duplicate",
-    options: { clearClipboardOnStart: boolean },
+    options: { clearClipboardOnStart: boolean; pendingTreeSelectionPath?: string | null },
   ) => void;
   onCloseCopyPasteDialog: () => void;
+  onConfirmTrashDialog: (paths: string[]) => void;
   showCopyPasteProgressCard: boolean;
   writeOperationCardState: WriteOperationCardState | null;
   onCancelWriteOperation: () => void;
@@ -122,6 +149,11 @@ export function AppDialogs({
   toasts: ToastEntry[];
   onDismissToast: (id: string) => void;
 }) {
+  const contextMenuShortcutContext = resolveContextMenuShortcutContext(
+    shortcutContext,
+    contextMenuState,
+  );
+
   return (
     <>
       <LocationSheet
@@ -156,11 +188,13 @@ export function AppDialogs({
         <ItemContextMenu
           anchorX={contextMenuState.x}
           anchorY={contextMenuState.y}
-          variant={contextMenuState.source}
+          surface={contextMenuState.surface}
           disabledActionIds={contextMenuDisabledActionIds}
           favoriteToggleLabel={contextMenuFavoriteToggleLabel}
+          folderExpansionLabel={contextMenuState.folderExpansionLabel}
           hiddenActionIds={contextMenuHiddenActionIds}
           submenuItems={contextMenuSubmenuItems}
+          shortcutContext={contextMenuShortcutContext}
           open
           onAction={(actionId) => {
             onRunContextMenuAction(actionId, contextMenuState.paths);
@@ -227,10 +261,26 @@ export function AppDialogs({
                 copyPasteDialogState.action,
                 {
                   clearClipboardOnStart: copyPasteDialogState.clearClipboardOnStart,
+                  pendingTreeSelectionPath: copyPasteDialogState.pendingTreeSelectionPath ?? null,
                 },
               ),
             destructive:
               copyPasteDialogState.action === "move_to" || copyPasteDialogState.plan.mode === "cut",
+          }}
+          secondaryAction={{
+            label: "Cancel",
+            onClick: onCloseCopyPasteDialog,
+          }}
+        />
+      ) : null}
+      {copyPasteDialogState?.type === "confirmTrash" ? (
+        <CopyPasteDialog
+          title="Move to Trash?"
+          message={`Move ${copyPasteDialogState.itemLabel} to Trash?`}
+          primaryAction={{
+            label: "Move to Trash",
+            onClick: () => onConfirmTrashDialog(copyPasteDialogState.paths),
+            destructive: true,
           }}
           secondaryAction={{
             label: "Cancel",

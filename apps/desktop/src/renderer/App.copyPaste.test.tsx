@@ -14,6 +14,7 @@ import type {
 import { DEFAULT_APP_PREFERENCES } from "../shared/appPreferences";
 vi.mock("./components/ContentPane", () => ({
   ContentPane: ({
+    currentPath,
     entries,
     onFocusChange,
     onClearSelection,
@@ -22,6 +23,7 @@ vi.mock("./components/ContentPane", () => ({
     onActivateEntry,
     selectedPaths,
   }: {
+    currentPath: string;
     entries: Array<{ path: string; name: string }>;
     onFocusChange: (focused: boolean) => void;
     onClearSelection?: () => void;
@@ -37,11 +39,13 @@ vi.mock("./components/ContentPane", () => ({
     onActivateEntry: (entry: { path: string; name: string }) => void;
   }) => (
     <div data-testid="content-pane" onClick={() => onFocusChange(true)}>
+      <output data-testid="content-current-path">{currentPath}</output>
+      <output data-testid="content-entry-count">{entries.length}</output>
       <label>
         Current folder path
         <input
           aria-label="Current folder path"
-          defaultValue="/Users/demo"
+          defaultValue={currentPath}
           onFocus={() => onFocusChange(true)}
         />
       </label>
@@ -91,24 +95,53 @@ vi.mock("./components/TreePane", () => ({
     paneRef,
     onFocusChange,
     onLeftPaneSubviewChange,
+    onRerootHome,
     onNavigate,
     onNavigateFavorite,
+    onSelectFavoritesRoot,
+    onItemContextMenu,
     nodes,
     favorites,
     favoritesPlacement,
     activeLeftPaneSubview,
     selectedTreeItemId,
+    rootPath,
   }: {
     paneRef?: RefObject<HTMLDivElement | null>;
     onFocusChange: (focused: boolean) => void;
     onLeftPaneSubviewChange: (value: "favorites" | "tree") => void;
+    onRerootHome: () => void;
     onNavigate: (path: string) => Promise<boolean> | void;
     onNavigateFavorite: (path: string) => Promise<boolean> | void;
-    nodes: Record<string, { path: string; name: string }>;
+    onSelectFavoritesRoot?: () => Promise<boolean> | void;
+    onItemContextMenu?: (
+      item: {
+        id: string;
+        kind: "favorite" | "filesystem";
+        label: string;
+        depth: number;
+        path: string | null;
+        parentId: string | null;
+        expanded: boolean;
+        canExpand: boolean;
+        loading: boolean;
+        error: string | null;
+        isSymlink: boolean;
+        childIds: string[];
+        icon?: string;
+      },
+      subview: "favorites" | "tree",
+      position: { x: number; y: number },
+    ) => void;
+    nodes: Record<
+      string,
+      { path: string; name: string; isSymlink?: boolean; expanded?: boolean; childPaths?: string[] }
+    >;
     favorites: Array<{ path: string }>;
     favoritesPlacement: "integrated" | "separate";
     activeLeftPaneSubview: "favorites" | "tree";
     selectedTreeItemId: string;
+    rootPath: string;
   }) => (
     <div ref={paneRef} data-testid="tree-pane-shell">
       <button
@@ -121,18 +154,57 @@ vi.mock("./components/TreePane", () => ({
       >
         Tree
       </button>
+      <button
+        type="button"
+        data-testid="favorites-root"
+        onClick={() => {
+          onLeftPaneSubviewChange(favoritesPlacement === "separate" ? "favorites" : "tree");
+          onFocusChange(true);
+          void onSelectFavoritesRoot?.();
+        }}
+      >
+        Favorites
+      </button>
+      <button type="button" data-testid="reroot-home" onClick={() => onRerootHome()}>
+        Reroot Home
+      </button>
       <output data-testid="left-pane-subview">{activeLeftPaneSubview}</output>
       <output data-testid="favorites-placement">{favoritesPlacement}</output>
       <output data-testid="tree-selection">{selectedTreeItemId}</output>
+      <output data-testid="tree-root">{rootPath}</output>
       {favorites.map((favorite) => (
         <button
           key={`favorite:${favorite.path}`}
           type="button"
           title={`favorite:${favorite.path}`}
           onClick={() => {
-            onLeftPaneSubviewChange("favorites");
+            onLeftPaneSubviewChange(favoritesPlacement === "separate" ? "favorites" : "tree");
             onFocusChange(true);
             void onNavigateFavorite(favorite.path);
+          }}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            onLeftPaneSubviewChange(favoritesPlacement === "separate" ? "favorites" : "tree");
+            onFocusChange(true);
+            onItemContextMenu?.(
+              {
+                id: `favorite:${favorite.path}`,
+                kind: "favorite",
+                label: favorite.path.split("/").at(-1) ?? favorite.path,
+                depth: 0,
+                path: favorite.path,
+                parentId: null,
+                expanded: false,
+                canExpand: false,
+                loading: false,
+                error: null,
+                isSymlink: false,
+                childIds: [],
+                icon: "folder",
+              },
+              favoritesPlacement === "separate" ? "favorites" : "tree",
+              { x: 120, y: 140 },
+            );
           }}
         >
           Favorite {favorite.path}
@@ -143,9 +215,34 @@ vi.mock("./components/TreePane", () => ({
           key={`tree:${node.path}`}
           type="button"
           title={`tree:${node.path}`}
+          data-expanded={node.expanded ? "true" : "false"}
           onClick={() => {
+            onLeftPaneSubviewChange("tree");
             onFocusChange(true);
             void onNavigate(node.path);
+          }}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            onLeftPaneSubviewChange("tree");
+            onFocusChange(true);
+            onItemContextMenu?.(
+              {
+                id: `fs:${node.path}`,
+                kind: "filesystem",
+                label: node.name,
+                depth: 0,
+                path: node.path,
+                parentId: null,
+                expanded: Boolean(node.expanded),
+                canExpand: !node.isSymlink && (node.childPaths?.length ?? 0) > 0,
+                loading: false,
+                error: null,
+                isSymlink: Boolean(node.isSymlink),
+                childIds: node.childPaths ?? [],
+              },
+              "tree",
+              { x: 120, y: 140 },
+            );
           }}
         >
           Tree {node.name}
@@ -1736,7 +1833,7 @@ describe("App copy/paste integration", () => {
       fireEvent.click(folderButton);
       fireEvent.contextMenu(folderButton);
     });
-    expect(screen.getByRole("button", { name: "Edit⌘E" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: "Edit" })).toHaveAttribute("aria-disabled", "true");
 
     await act(async () => {
       fireEvent.mouseDown(document.body);
@@ -1747,7 +1844,7 @@ describe("App copy/paste integration", () => {
       fireEvent.click(folderButton, { metaKey: true });
       fireEvent.contextMenu(folderButton);
     });
-    expect(screen.getByRole("button", { name: "Edit⌘E" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: "Edit" })).toHaveAttribute("aria-disabled", "true");
   });
 
   it("shows a notice when Open exceeds the configured item limit", async () => {
@@ -1903,6 +2000,618 @@ describe("App copy/paste integration", () => {
     expect(screen.queryByText("Clipboard is empty")).not.toBeInTheDocument();
   });
 
+  it("pastes into the right-clicked tree folder target", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+
+    const treeFolderButton = await screen.findByTitle("tree:/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.contextMenu(treeFolderButton);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Paste" }));
+    });
+
+    await vi.waitFor(() => {
+      const planCall = harness.invocations.findLast((call) => call.channel === "copyPaste:plan");
+      expect(planCall?.payload).toMatchObject({
+        destinationDirectoryPath: "/Users/demo/Folder",
+      });
+    });
+  });
+
+  it("pastes a copied folder back into the current directory when it is selected in content", async () => {
+    const harness = createAppHarness({
+      planResponse: {
+        mode: "copy",
+        sourcePaths: ["/Users/demo/Folder"],
+        destinationDirectoryPath: "/Users/demo",
+        conflictResolution: "error",
+        items: [
+          {
+            sourcePath: "/Users/demo/Folder",
+            destinationPath: "/Users/demo/Folder copy",
+            kind: "directory",
+            status: "ready",
+            sizeBytes: null,
+          },
+        ],
+        conflicts: [],
+        issues: [],
+        warnings: [],
+        requiresConfirmation: {
+          largeBatch: false,
+          cutDelete: false,
+        },
+        summary: {
+          topLevelItemCount: 1,
+          totalItemCount: 1,
+          totalBytes: null,
+          skippedConflictCount: 0,
+        },
+        canExecute: true,
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    await vi.waitFor(() => {
+      const planCall = harness.invocations.findLast((call) => call.channel === "copyPaste:plan");
+      expect(planCall?.payload).toMatchObject({
+        sourcePaths: ["/Users/demo/Folder"],
+        destinationDirectoryPath: "/Users/demo",
+      });
+    });
+  });
+
+  it("pastes into the right-clicked favorite target in both integrated and separate layouts", async () => {
+    for (const favoritesPlacement of ["integrated", "separate"] as const) {
+      const harness = createAppHarness({
+        preferences: {
+          favoritesPlacement,
+        },
+        directorySnapshots: {
+          "/Users/demo/Documents": {
+            path: "/Users/demo/Documents",
+            parentPath: "/Users/demo",
+            entries: [],
+          },
+        },
+      });
+
+      const { unmount } = render(
+        <FiletrailClientProvider value={harness.client}>
+          <App />
+        </FiletrailClientProvider>,
+      );
+
+      await selectItem("/Users/demo/source.txt");
+      await act(async () => {
+        fireEvent.keyDown(window, { key: "c", metaKey: true });
+      });
+
+      const favoriteButton = await screen.findByTitle("favorite:/Users/demo/Documents");
+      await act(async () => {
+        fireEvent.contextMenu(favoriteButton);
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Paste Into Favorite" }));
+      });
+
+      await vi.waitFor(() => {
+        const planCall = harness.invocations.findLast((call) => call.channel === "copyPaste:plan");
+        expect(planCall?.payload).toMatchObject({
+          destinationDirectoryPath: "/Users/demo/Documents",
+        });
+      });
+
+      unmount();
+    }
+  });
+
+  it("shows tree-safe shortcut badges for right-clicked tree and favorite targets even when Favorites is selected", async () => {
+    for (const targetTitle of ["tree:/Users/demo/Folder", "favorite:/Users/demo/Documents"]) {
+      const harness = createAppHarness({
+        directorySnapshots: {
+          "/Users/demo/Documents": {
+            path: "/Users/demo/Documents",
+            parentPath: "/Users/demo",
+            entries: [],
+          },
+        },
+      });
+
+      const { unmount } = render(
+        <FiletrailClientProvider value={harness.client}>
+          <App />
+        </FiletrailClientProvider>,
+      );
+
+      const favoritesRootButton = await screen.findByTestId("favorites-root");
+      await act(async () => {
+        fireEvent.click(favoritesRootButton);
+      });
+      expect(screen.getByTestId("tree-selection")).toHaveTextContent("favorites-root");
+
+      const targetButton = await screen.findByTitle(targetTitle);
+      await act(async () => {
+        fireEvent.contextMenu(targetButton);
+      });
+
+      expect(screen.getByRole("button", { name: "Open in Terminal⌘T" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Copy Path⌥⌘C" })).toBeInTheDocument();
+
+      unmount();
+    }
+  });
+
+  it("asks for confirmation before trashing a tree folder from the context menu", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const treeFolderButton = await screen.findByTitle("tree:/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.contextMenu(treeFolderButton);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Move to Trash" }));
+    });
+
+    expect(await screen.findByRole("dialog", { name: "Move to Trash?" })).toHaveTextContent(
+      "Move Folder to Trash?",
+    );
+    expect(harness.invocations.some((call) => call.channel === "writeOperation:trash")).toBe(false);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Move to Trash" }));
+    });
+
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.find((call) => call.channel === "writeOperation:trash")?.payload,
+      ).toEqual({
+        paths: ["/Users/demo/Folder"],
+      });
+    });
+  });
+
+  it("closes the tree trash confirmation dialog immediately after confirming with the button", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const treeFolderButton = await screen.findByTitle("tree:/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.contextMenu(treeFolderButton);
+    });
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: "Move to Trash" }));
+    });
+
+    const dialog = await screen.findByRole("dialog", { name: "Move to Trash?" });
+    expect(dialog).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Move to Trash" }));
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Move to Trash?" })).not.toBeInTheDocument();
+      expect(
+        harness.invocations.find((call) => call.channel === "writeOperation:trash")?.payload,
+      ).toEqual({
+        paths: ["/Users/demo/Folder"],
+      });
+    });
+  });
+
+  it("closes the tree trash confirmation dialog immediately after confirming with Enter", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const treeFolderButton = await screen.findByTitle("tree:/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.contextMenu(treeFolderButton);
+    });
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: "Move to Trash" }));
+    });
+
+    const dialog = await screen.findByRole("dialog", { name: "Move to Trash?" });
+    await act(async () => {
+      fireEvent.keyDown(dialog, { key: "Enter" });
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Move to Trash?" })).not.toBeInTheDocument();
+      expect(
+        harness.invocations.find((call) => call.channel === "writeOperation:trash")?.payload,
+      ).toEqual({
+        paths: ["/Users/demo/Folder"],
+      });
+    });
+  });
+
+  it("reselects the parent tree folder after trashing the selected filesystem node", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const treeFolderButton = await screen.findByTitle("tree:/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.click(treeFolderButton);
+    });
+    await act(async () => {
+      fireEvent.contextMenu(treeFolderButton);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Move to Trash" }));
+      fireEvent.click(screen.getByRole("button", { name: "Move to Trash" }));
+    });
+
+    await act(async () => {
+      harness.emitProgress({
+        operationId: "write-op-trash",
+        action: "trash",
+        status: "completed",
+        completedItemCount: 1,
+        totalItemCount: 1,
+        completedByteCount: 0,
+        totalBytes: null,
+        currentSourcePath: "/Users/demo/Folder",
+        currentDestinationPath: null,
+        result: {
+          operationId: "write-op-trash",
+          action: "trash",
+          status: "completed",
+          targetPath: null,
+          startedAt: "2026-03-10T10:00:00.000Z",
+          finishedAt: "2026-03-10T10:00:01.000Z",
+          summary: {
+            topLevelItemCount: 1,
+            totalItemCount: 1,
+            completedItemCount: 1,
+            failedItemCount: 0,
+            skippedItemCount: 0,
+            cancelledItemCount: 0,
+            completedByteCount: 0,
+            totalBytes: null,
+          },
+          items: [
+            {
+              sourcePath: "/Users/demo/Folder",
+              destinationPath: null,
+              status: "completed",
+              error: null,
+            },
+          ],
+          error: null,
+        },
+      });
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("tree-selection")).toHaveTextContent("fs:/Users/demo");
+    });
+  });
+
+  it("reselects the renamed filesystem tree folder after the write completes", async () => {
+    const harness = createAppHarness({
+      directorySnapshots: {
+        "/Users/demo/Renamed Folder": {
+          path: "/Users/demo/Renamed Folder",
+          parentPath: "/Users/demo",
+          entries: [],
+        },
+      },
+      treeChildrenByPath: {
+        "/Users/demo": [
+          createTreeChild("/Users/demo/Folder", "directory"),
+          createTreeChild("/Users/demo/Renamed Folder", "directory"),
+        ],
+        "/Users/demo/Renamed Folder": [],
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const treeFolderButton = await screen.findByTitle("tree:/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.click(treeFolderButton);
+    });
+    await act(async () => {
+      fireEvent.contextMenu(treeFolderButton);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+    });
+
+    expect(await screen.findByRole("dialog", { name: "Rename" })).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("New name"), {
+        target: { value: "Renamed Folder" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+    });
+
+    await act(async () => {
+      harness.emitProgress({
+        operationId: "write-op-rename",
+        action: "rename",
+        status: "completed",
+        completedItemCount: 1,
+        totalItemCount: 1,
+        completedByteCount: 0,
+        totalBytes: null,
+        currentSourcePath: "/Users/demo/Folder",
+        currentDestinationPath: "/Users/demo/Renamed Folder",
+        result: {
+          operationId: "write-op-rename",
+          action: "rename",
+          status: "completed",
+          targetPath: "/Users/demo/Renamed Folder",
+          startedAt: "2026-03-10T10:00:00.000Z",
+          finishedAt: "2026-03-10T10:00:01.000Z",
+          summary: {
+            topLevelItemCount: 1,
+            totalItemCount: 1,
+            completedItemCount: 1,
+            failedItemCount: 0,
+            skippedItemCount: 0,
+            cancelledItemCount: 0,
+            completedByteCount: 0,
+            totalBytes: null,
+          },
+          items: [
+            {
+              sourcePath: "/Users/demo/Folder",
+              destinationPath: "/Users/demo/Renamed Folder",
+              status: "completed",
+              error: null,
+            },
+          ],
+          error: null,
+        },
+      });
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("tree-selection")).toHaveTextContent(
+        "fs:/Users/demo/Renamed Folder",
+      );
+    });
+  });
+
+  it("reveals a separate favorite in the filesystem tree", async () => {
+    const harness = createAppHarness({
+      preferences: {
+        favoritesPlacement: "separate",
+      },
+      treeChildrenByPath: {
+        "/Users/demo": [
+          createTreeChild("/Users/demo/Documents", "directory"),
+          createTreeChild("/Users/demo/Folder", "directory"),
+        ],
+      },
+      directorySnapshots: {
+        "/Users/demo/Documents": {
+          path: "/Users/demo/Documents",
+          parentPath: "/Users/demo",
+          entries: [],
+        },
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const favoriteButton = await screen.findByTitle("favorite:/Users/demo/Documents");
+    await act(async () => {
+      fireEvent.contextMenu(favoriteButton);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Reveal in Tree" }));
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("left-pane-subview")).toHaveTextContent("tree");
+      expect(screen.getByTestId("tree-selection")).toHaveTextContent("fs:/Users/demo/Documents");
+    });
+  });
+
+  it("reroots the tree at home without keeping an out-of-home selection", async () => {
+    const harness = createAppHarness({
+      directorySnapshots: {
+        "/Users/demo": {
+          path: "/Users/demo",
+          parentPath: "/Users",
+          entries: [
+            createDirectoryEntry("/Users/demo/source.txt", "file"),
+            createDirectoryEntry("/Volumes/Shared/Project", "directory"),
+          ],
+        },
+        "/Volumes/Shared/Project": {
+          path: "/Volumes/Shared/Project",
+          parentPath: "/Volumes/Shared",
+          entries: [],
+        },
+      },
+      treeChildrenByPath: {
+        "/": [
+          createTreeChild("/Users", "directory"),
+          createTreeChild("/Volumes", "directory"),
+        ],
+        "/Volumes": [createTreeChild("/Volumes/Shared", "directory")],
+        "/Volumes/Shared": [createTreeChild("/Volumes/Shared/Project", "directory")],
+        "/Users/demo": [
+          createTreeChild("/Users/demo/Folder", "directory"),
+          createTreeChild("/Users/demo/go", "directory"),
+        ],
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await openDirectory("/Volumes/Shared/Project");
+    await screen.findByTitle("tree:/Volumes/Shared/Project");
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("reroot-home"));
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("tree-root")).toHaveTextContent("/Users/demo");
+      expect(screen.getByTestId("tree-selection")).toHaveTextContent("fs:");
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent("");
+      expect(screen.getByTestId("content-entry-count")).toHaveTextContent("0");
+      expect(screen.queryByTitle("tree:/Volumes/Shared/Project")).not.toBeInTheDocument();
+      expect(screen.queryByTitle("/Volumes/Shared/Project")).not.toBeInTheDocument();
+      expect(screen.getByTitle("tree:/Users/demo")).toBeInTheDocument();
+    });
+  });
+
+  it("clears the content pane when the integrated Favorites root is selected", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await screen.findByTestId("content-pane");
+    expect(screen.getByTitle("/Users/demo/source.txt")).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("favorites-root"));
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("tree-selection")).toHaveTextContent("favorites-root");
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent("");
+      expect(screen.getByTestId("content-entry-count")).toHaveTextContent("0");
+      expect(screen.queryByTitle("/Users/demo/source.txt")).not.toBeInTheDocument();
+    });
+  });
+
+  it("keeps the separate favorites subview active and clears content when Favorites is selected", async () => {
+    const harness = createAppHarness({
+      preferences: {
+        favoritesPlacement: "separate",
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await screen.findByTestId("content-pane");
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("favorites-root"));
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("left-pane-subview")).toHaveTextContent("favorites");
+      expect(screen.getByTestId("tree-selection")).toHaveTextContent("favorites-root");
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent("");
+      expect(screen.getByTestId("content-entry-count")).toHaveTextContent("0");
+    });
+  });
+
+  it("does not mark the selected leaf folder expanded after rerooting at home", async () => {
+    const harness = createAppHarness({
+      preferences: {
+        treeRootPath: "/Users/demo",
+        lastVisitedPath: "/Users/demo/go",
+      },
+      directorySnapshots: {
+        "/Users/demo/go": {
+          path: "/Users/demo/go",
+          parentPath: "/Users/demo",
+          entries: [createDirectoryEntry("/Users/demo/go/pkg", "directory")],
+        },
+      },
+      treeChildrenByPath: {
+        "/Users/demo": [
+          createTreeChild("/Users/demo/Folder", "directory"),
+          createTreeChild("/Users/demo/go", "directory"),
+        ],
+        "/Users/demo/go": [createTreeChild("/Users/demo/go/pkg", "directory")],
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const goButton = await screen.findByTitle("tree:/Users/demo/go");
+    expect(goButton).toHaveAttribute("data-expanded", "false");
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("reroot-home"));
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("tree-root")).toHaveTextContent("/Users/demo");
+      expect(screen.getByTitle("tree:/Users/demo/go")).toHaveAttribute("data-expanded", "false");
+    });
+  });
+
   it("blocks Cmd+C in tree focus even when content still has a stale selection", async () => {
     const harness = createAppHarness();
 
@@ -1980,7 +2689,7 @@ describe("App copy/paste integration", () => {
     expect(screen.queryByRole("dialog", { name: "New Folder" })).not.toBeInTheDocument();
   });
 
-  it("blocks Cmd+Option+C in tree focus even when content still has a stale selection", async () => {
+  it("allows Cmd+Option+C in tree focus for the selected tree folder", async () => {
     const harness = createAppHarness();
 
     render(
@@ -1995,7 +2704,9 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { code: "KeyC", metaKey: true, altKey: true });
     });
 
-    expect(harness.invocations.some((call) => call.channel === "system:copyText")).toBe(false);
+    expect(
+      harness.invocations.find((call) => call.channel === "system:copyText")?.payload,
+    ).toEqual({ text: "/Users/demo" });
   });
 
   it("blocks the Copy menu command in tree focus", async () => {
@@ -2075,7 +2786,7 @@ describe("App copy/paste integration", () => {
     expect(screen.queryByRole("dialog", { name: "New Folder" })).not.toBeInTheDocument();
   });
 
-  it("blocks the Copy Path menu command in tree focus", async () => {
+  it("allows the Copy Path menu command in tree focus", async () => {
     const harness = createAppHarness();
 
     render(
@@ -2090,10 +2801,12 @@ describe("App copy/paste integration", () => {
       harness.emitCommand({ type: "copyPath" });
     });
 
-    expect(harness.invocations.some((call) => call.channel === "system:copyText")).toBe(false);
+    expect(
+      harness.invocations.find((call) => call.channel === "system:copyText")?.payload,
+    ).toEqual({ text: "/Users/demo" });
   });
 
-  it("blocks the remaining content-only renderer commands in tree focus", async () => {
+  it("keeps dangerous renderer commands blocked in tree focus", async () => {
     const harness = createAppHarness();
 
     render(
@@ -2110,27 +2823,11 @@ describe("App copy/paste integration", () => {
       assertNoSideEffect: () => void;
     }> = [
       {
-        command: "openSelection",
-        assertNoSideEffect: () => {
-          expect(harness.invocations.some((call) => call.channel === "system:openPath")).toBe(
-            false,
-          );
-        },
-      },
-      {
         command: "editSelection",
         assertNoSideEffect: () => {
           expect(
             harness.invocations.some((call) => call.channel === "system:openPathsWithApplication"),
           ).toBe(false);
-        },
-      },
-      {
-        command: "openInTerminal",
-        assertNoSideEffect: () => {
-          expect(harness.invocations.some((call) => call.channel === "system:openInTerminal")).toBe(
-            false,
-          );
         },
       },
       {
@@ -2196,6 +2893,70 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "g", metaKey: true, shiftKey: true });
     });
     expect(await screen.findByLabelText("Path")).toBeInTheDocument();
+  });
+
+  it("allows Cmd+T in tree focus for the selected tree folder", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await focusTreePane();
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "t", metaKey: true });
+    });
+
+    expect(
+      harness.invocations.find((call) => call.channel === "system:openInTerminal")?.payload,
+    ).toEqual({ path: "/Users/demo" });
+  });
+
+  it("allows Cmd+T and Cmd+Option+C for favorites in the separate favorites pane", async () => {
+    const harness = createAppHarness({
+      preferences: {
+        favoritesPlacement: "separate",
+      },
+      treeChildrenByPath: {
+        "/Users/demo": [
+          createTreeChild("/Users/demo/Documents", "directory"),
+          createTreeChild("/Users/demo/Folder", "directory"),
+        ],
+      },
+      directorySnapshots: {
+        "/Users/demo/Documents": {
+          path: "/Users/demo/Documents",
+          parentPath: "/Users/demo",
+          entries: [],
+        },
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const favoriteButton = await screen.findByTitle("favorite:/Users/demo/Documents");
+    await act(async () => {
+      fireEvent.click(favoriteButton);
+    });
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "t", metaKey: true });
+      fireEvent.keyDown(window, { code: "KeyC", metaKey: true, altKey: true });
+    });
+
+    expect(screen.getByTestId("left-pane-subview")).toHaveTextContent("favorites");
+    expect(
+      harness.invocations.find((call) => call.channel === "system:openInTerminal")?.payload,
+    ).toEqual({ path: "/Users/demo/Documents" });
+    expect(
+      harness.invocations.findLast((call) => call.channel === "system:copyText")?.payload,
+    ).toEqual({ text: "/Users/demo/Documents" });
   });
 
   it("keeps tree pane switching shortcuts working", async () => {
@@ -2454,16 +3215,16 @@ describe("App copy/paste integration", () => {
       fireEvent.contextMenu(sourceButton);
     });
 
-    expect(await screen.findByRole("button", { name: "Copy⌘C" })).toHaveAttribute(
+    expect(await screen.findByRole("button", { name: "Copy" })).toHaveAttribute(
       "aria-disabled",
       "true",
     );
-    expect(screen.getByRole("button", { name: "Cut⌘X" })).toHaveAttribute("aria-disabled", "true");
-    expect(screen.getByRole("button", { name: "Paste⌘V" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Cut" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: "Paste" })).toHaveAttribute(
       "aria-disabled",
       "true",
     );
-    expect(screen.getByRole("button", { name: "Copy Path⌥⌘C" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Copy Path" })).toHaveAttribute(
       "aria-disabled",
       "true",
     );
@@ -3620,7 +4381,8 @@ function createAppHarness(
   };
   const invocations: Array<{ channel: IpcChannel; payload: unknown }> = [];
   let commandListener: ((command: RendererCommand) => void) | null = null;
-  let progressListener: ((event: WriteOperationProgressEvent) => void) | null = null;
+  let writeOperationProgressListener: ((event: WriteOperationProgressEvent) => void) | null = null;
+  let copyPasteProgressListener: ((event: WriteOperationProgressEvent) => void) | null = null;
   const resolveCopyPastePlanPromises: Array<() => void> = [];
   let copyPastePlanCallCount = 0;
   let resolveCopyPasteStartPromise: (() => void) | null = null;
@@ -3824,18 +4586,18 @@ function createAppHarness(
       };
     },
     onWriteOperationProgress(listener) {
-      progressListener = listener;
+      writeOperationProgressListener = listener;
       return () => {
-        if (progressListener === listener) {
-          progressListener = null;
+        if (writeOperationProgressListener === listener) {
+          writeOperationProgressListener = null;
         }
       };
     },
     onCopyPasteProgress(listener) {
-      progressListener = listener;
+      copyPasteProgressListener = listener;
       return () => {
-        if (progressListener === listener) {
-          progressListener = null;
+        if (copyPasteProgressListener === listener) {
+          copyPasteProgressListener = null;
         }
       };
     },
@@ -3849,26 +4611,11 @@ function createAppHarness(
     },
     emitProgress(event) {
       if ("mode" in event) {
-        progressListener?.({
-          ...event,
-          action: event.action ?? "paste",
-          result: event.result
-            ? {
-                operationId: event.result.operationId,
-                action: event.action ?? "paste",
-                status: event.result.status,
-                targetPath: event.result.destinationDirectoryPath,
-                startedAt: event.result.startedAt,
-                finishedAt: event.result.finishedAt,
-                summary: event.result.summary,
-                items: event.result.items,
-                error: event.result.error,
-              }
-            : null,
-        });
+        writeOperationProgressListener?.(event as WriteOperationProgressEvent);
+        copyPasteProgressListener?.(event as WriteOperationProgressEvent);
         return;
       }
-      progressListener?.(event);
+      writeOperationProgressListener?.(event);
     },
     setDirectoryEntries(path, entries) {
       const snapshot = directorySnapshots[path];
@@ -3950,15 +4697,66 @@ function createDirectoryEntry(
     isSymlink?: boolean;
   } = {},
 ): IpcResponse<"directory:getSnapshot">["entries"][number] {
+  const name = path.split("/").at(-1) ?? path;
+  const extension =
+    kind === "file"
+      ? (() => {
+          const dotIndex = name.lastIndexOf(".");
+          return dotIndex > 0 ? name.slice(dotIndex + 1) : "";
+        })()
+      : "";
   return {
     path,
-    name: path.split("/").at(-1) ?? path,
-    extension: kind === "file" ? "txt" : "",
+    name,
+    extension,
     kind,
     isHidden: false,
     isSymlink: options.isSymlink ?? false,
   };
 }
+
+describe("App test harness", () => {
+  it("routes write and copy-paste progress to their matching listeners only", () => {
+    const harness = createAppHarness();
+    const handleWriteProgress = vi.fn<(event: WriteOperationProgressEvent) => void>();
+    const handleCopyPasteProgress = vi.fn<(event: WriteOperationProgressEvent) => void>();
+
+    harness.client.onWriteOperationProgress(handleWriteProgress);
+    harness.client.onCopyPasteProgress(handleCopyPasteProgress);
+
+    harness.emitProgress({
+      operationId: "copy-op-1",
+      mode: "copy",
+      status: "completed",
+      completedItemCount: 1,
+      totalItemCount: 1,
+      completedByteCount: 5,
+      totalBytes: 5,
+      currentSourcePath: "/Users/demo/source.txt",
+      currentDestinationPath: "/Users/demo/Folder/source.txt",
+      result: null,
+    } satisfies TestProgressEvent);
+
+    expect(handleCopyPasteProgress).toHaveBeenCalledTimes(1);
+    expect(handleWriteProgress).toHaveBeenCalledTimes(1);
+
+    harness.emitProgress({
+      operationId: "write-op-rename",
+      action: "rename",
+      status: "completed",
+      completedItemCount: 1,
+      totalItemCount: 1,
+      completedByteCount: 0,
+      totalBytes: null,
+      currentSourcePath: "/Users/demo/source.txt",
+      currentDestinationPath: "/Users/demo/renamed.txt",
+      result: null,
+    } satisfies WriteOperationProgressEvent);
+
+    expect(handleWriteProgress).toHaveBeenCalledTimes(2);
+    expect(handleCopyPasteProgress).toHaveBeenCalledTimes(1);
+  });
+});
 
 function createTreeChild(
   path: string,
