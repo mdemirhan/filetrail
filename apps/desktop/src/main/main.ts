@@ -7,7 +7,6 @@ import { createApplicationMenuTemplate } from "./appMenu";
 import { type AppStateStore, createAppStateStore, resolveAppStatePath } from "./appStateStore";
 import { bootstrapMainProcess, shutdownMainProcess } from "./bootstrap";
 import { resolveStartupFolderPath } from "./launchContext";
-
 let mainWindowRef: BrowserWindow | null = null;
 let appStateStoreRef: AppStateStore | null = null;
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -20,7 +19,7 @@ if (!hasSingleInstanceLock) {
 if (hasSingleInstanceLock) {
   app.whenReady().then(async () => {
     const appStateStore = createAppStateStore(resolveAppStatePath(app.getPath("userData")), {
-      defaultTheme: nativeTheme.shouldUseDarkColors ? "tomorrow-night" : "light",
+      defaultTheme: nativeTheme.shouldUseDarkColors ? "dark" : "light",
     });
     const iconPath = resolveAppIconPath();
     if (iconPath && process.platform === "darwin") {

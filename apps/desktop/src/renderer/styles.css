@@ -2131,13 +2131,19 @@ body.platform-macos .window-toolbar-brand {
   font-weight: 650;
   line-height: 1.35;
   letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .toast-card-message {
   margin-top: 3px;
-  color: var(--text-tertiary);
+  color: var(--text-primary);
   font-size: 11px;
   line-height: 1.45;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .toast-card-compact .toast-card-body {
@@ -2353,13 +2359,26 @@ body.resizing-panels-vertical * {
   min-height: 0;
 }
 
+.tree-pane,
+.sidebar-header,
+.sidebar-tree,
+.favorites-pane-section,
+.tree-row,
+.tree-expand,
+.tree-label,
+.tree-label-text {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 :root {
   --pane-header-height: 30px;
+  --breadcrumb-row-height: 33px;
 }
 
 .content-pane {
   display: grid;
-  grid-template-rows: 33px minmax(0, 1fr);
+  grid-template-rows: var(--breadcrumb-row-height) minmax(0, 1fr);
   background: var(--bg-base);
   min-height: 0;
 }
@@ -2393,8 +2412,8 @@ body.resizing-panels-vertical * {
 
 .content-header {
   align-items: center;
-  height: 33px;
-  min-height: 33px;
+  height: var(--breadcrumb-row-height);
+  min-height: var(--breadcrumb-row-height);
   padding: 0 20px;
   font-size: var(--ui-font-size-xs);
   font-weight: 500;
@@ -2709,9 +2728,11 @@ body.resizing-panels-vertical * {
 }
 
 .sidebar-header {
-  padding: 12px 14px 10px;
   display: flex;
   align-items: center;
+  min-height: var(--breadcrumb-row-height);
+  height: var(--breadcrumb-row-height);
+  padding: 0 14px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -3987,7 +4008,9 @@ body.resizing-panels-vertical * {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 12px;
+  min-height: var(--breadcrumb-row-height);
+  height: var(--breadcrumb-row-height);
+  padding: 0 12px;
   border-bottom: 1px solid var(--get-info-panel-border);
   font-family: var(--font-mono);
   font-size: 10.5px;

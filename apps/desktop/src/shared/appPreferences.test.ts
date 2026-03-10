@@ -55,9 +55,11 @@ describe("appPreferences helpers", () => {
 
   it("ships expected defaults for the persisted preference shape", () => {
     expect(DEFAULT_APP_PREFERENCES).toMatchObject({
-      theme: "tomorrow-night",
+      theme: "dark",
       accent: "gold",
-      accentToolbarButtons: true,
+      accentToolbarButtons: false,
+      accentFavoriteItems: true,
+      favoriteAccent: "rose",
       zoomPercent: 100,
       uiFontFamily: "lexend",
       uiFontSize: 13,
@@ -95,8 +97,10 @@ describe("appPreferences helpers", () => {
         permissions: 148,
       },
       restoreLastVisitedFolderOnStartup: false,
+      typeaheadDebounceMs: 1000,
       notificationsEnabled: true,
       notificationDurationSeconds: 4,
+      propertiesOpen: false,
       defaultTextEditor: {
         appPath: "/System/Applications/TextEdit.app",
         appName: "TextEdit",

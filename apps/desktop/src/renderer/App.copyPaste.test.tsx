@@ -317,7 +317,9 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "c", metaKey: true });
     });
 
-    expect(await screen.findByText("Ready to paste 1 item")).toBeInTheDocument();
+    const toastViewport = await screen.findByTestId("toast-viewport");
+    expect(within(toastViewport).getByText("Ready to paste")).toBeInTheDocument();
+    expect(within(toastViewport).getByText("source.txt")).toBeInTheDocument();
     expect(document.activeElement).toBe(activeElementBeforeCopy);
   });
 
@@ -340,8 +342,47 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "x", metaKey: true });
     });
 
-    expect(await screen.findByText("Ready to move 1 item")).toBeInTheDocument();
+    const toastViewport = await screen.findByTestId("toast-viewport");
+    expect(within(toastViewport).getByText("Ready to move")).toBeInTheDocument();
+    expect(within(toastViewport).getByText("source.txt")).toBeInTheDocument();
     expect(document.activeElement).toBe(activeElementBeforeCut);
+  });
+
+  it("shows the first selected item name and remaining count for multi-item copy toasts", async () => {
+    const harness = createAppHarness({
+      directorySnapshots: {
+        "/Users/demo": {
+          path: "/Users/demo",
+          parentPath: "/Users",
+          entries: [
+            createDirectoryEntry("/Users/demo/source-a.txt", "file"),
+            createDirectoryEntry("/Users/demo/source-b.txt", "file"),
+            createDirectoryEntry("/Users/demo/Folder", "directory"),
+          ],
+        },
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceAButton = await screen.findByRole("button", { name: "source-a.txt" });
+    const sourceBButton = await screen.findByRole("button", { name: "source-b.txt" });
+    await act(async () => {
+      fireEvent.click(sourceAButton);
+      fireEvent.click(sourceBButton, { metaKey: true });
+    });
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+
+    const toastViewport = await screen.findByTestId("toast-viewport");
+    expect(within(toastViewport).getByText("Ready to paste")).toBeInTheDocument();
+    expect(within(toastViewport).getByText("source-a.txt and 1 more")).toBeInTheDocument();
   });
 
   it("ignores menu shortcut commands while help is open", async () => {
@@ -408,8 +449,8 @@ describe("App copy/paste integration", () => {
 
     expectNativeEditActions(harness, ["copy", "cut", "paste", "selectAll"]);
     expectNoFileClipboardActions(harness);
-    expect(screen.queryByText("Ready to paste 1 item")).not.toBeInTheDocument();
-    expect(screen.queryByText("Ready to move 1 item")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ready to paste")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ready to move")).not.toBeInTheDocument();
   });
 
   it("does not trigger explorer file actions when keyboard copy, cut, or paste are pressed in a text input", async () => {
@@ -430,8 +471,8 @@ describe("App copy/paste integration", () => {
     });
 
     expectNoFileClipboardActions(harness);
-    expect(screen.queryByText("Ready to paste 1 item")).not.toBeInTheDocument();
-    expect(screen.queryByText("Ready to move 1 item")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ready to paste")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ready to move")).not.toBeInTheDocument();
   });
 
   it("routes generic edit commands to native editing for path, location, rename, and settings inputs", async () => {
@@ -632,7 +673,9 @@ describe("App copy/paste integration", () => {
       harness.emitCommand({ type: "editSelectAll" });
     });
 
-    expect(await screen.findByText("Ready to paste 1 item")).toBeInTheDocument();
+    const toastViewport = await screen.findByTestId("toast-viewport");
+    expect(within(toastViewport).getByText("Ready to paste")).toBeInTheDocument();
+    expect(within(toastViewport).getByText("source.txt")).toBeInTheDocument();
     expect(screen.getByTitle("/Users/demo/source.txt")).toHaveAttribute("data-selected", "true");
     expect(screen.getByTitle("/Users/demo/Folder")).toHaveAttribute("data-selected", "true");
     expectNativeEditActions(harness, []);
@@ -1875,7 +1918,7 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "c", metaKey: true });
     });
 
-    expect(screen.queryByText("Ready to paste 1 item")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ready to paste")).not.toBeInTheDocument();
   });
 
   it("blocks Cmd+X in tree focus even when content still has a stale selection", async () => {
@@ -1893,7 +1936,7 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "x", metaKey: true });
     });
 
-    expect(screen.queryByText("Ready to move 1 item")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ready to move")).not.toBeInTheDocument();
   });
 
   it("blocks Cmd+V in tree focus even when the current tree folder is a valid destination", async () => {
@@ -1970,7 +2013,7 @@ describe("App copy/paste integration", () => {
       harness.emitCommand({ type: "editCopy" });
     });
 
-    expect(screen.queryByText("Ready to paste 1 item")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ready to paste")).not.toBeInTheDocument();
   });
 
   it("blocks the Cut menu command in tree focus", async () => {
@@ -1988,7 +2031,7 @@ describe("App copy/paste integration", () => {
       harness.emitCommand({ type: "editCut" });
     });
 
-    expect(screen.queryByText("Ready to move 1 item")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ready to move")).not.toBeInTheDocument();
   });
 
   it("blocks the Paste menu command in tree focus", async () => {
@@ -2953,7 +2996,7 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "c", metaKey: true });
     });
 
-    expect(screen.queryByText("Ready to paste 1 item")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ready to paste")).not.toBeInTheDocument();
     expect(document.querySelectorAll(".toast-card")).toHaveLength(0);
   });
 
@@ -3453,7 +3496,9 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
-    expect(await screen.findByText("Ready to paste 1 item")).toBeInTheDocument();
+    const toastViewport = await screen.findByTestId("toast-viewport");
+    expect(within(toastViewport).getByText("Ready to paste")).toBeInTheDocument();
+    expect(within(toastViewport).getByText("source.txt")).toBeInTheDocument();
     expect(screen.queryByText("Pasting into Folder")).not.toBeInTheDocument();
     expect(document.querySelectorAll(".toast-card")).toHaveLength(1);
 

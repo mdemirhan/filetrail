@@ -715,6 +715,18 @@ export function useExplorerActions(args: {
     });
   }
 
+  function formatClipboardItemSummary(paths: string[]): string {
+    const firstPath = paths[0];
+    if (!firstPath) {
+      return "item";
+    }
+    const firstName = getPathLeafName(firstPath);
+    if (paths.length === 1) {
+      return firstName;
+    }
+    return `${firstName} and ${paths.length - 1} more`;
+  }
+
   function pushTerminalCopyPasteToast(event: WriteOperationProgressEvent) {
     const result = event.result;
     if (!result) {
@@ -873,14 +885,8 @@ export function useExplorerActions(args: {
     applyCopyPasteClipboardState(setCopyPasteClipboard(mode, paths, new Date().toISOString()));
     pushToast({
       kind: "info",
-      title:
-        mode === "copy"
-          ? paths.length === 1
-            ? "Ready to paste 1 item"
-            : `Ready to paste ${paths.length} items`
-          : paths.length === 1
-            ? "Ready to move 1 item"
-            : `Ready to move ${paths.length} items`,
+      title: mode === "copy" ? "Ready to paste" : "Ready to move",
+      message: formatClipboardItemSummary(paths),
     });
     closeContextMenu();
   }

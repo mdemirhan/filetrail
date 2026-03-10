@@ -14,10 +14,10 @@ describe("appStateStore", () => {
     expect(store.getPreferences()).toEqual({
       theme: "tomorrow-night",
       accent: "gold",
-      accentToolbarButtons: true,
-      accentFavoriteItems: false,
+      accentToolbarButtons: false,
+      accentFavoriteItems: true,
       accentFavoriteText: false,
-      favoriteAccent: "gold",
+      favoriteAccent: "rose",
       zoomPercent: 100,
       uiFontFamily: "lexend",
       uiFontSize: 13,
@@ -44,10 +44,10 @@ describe("appStateStore", () => {
       },
       tabSwitchesExplorerPanes: true,
       typeaheadEnabled: true,
-      typeaheadDebounceMs: 750,
+      typeaheadDebounceMs: 1000,
       notificationsEnabled: true,
       notificationDurationSeconds: 4,
-      propertiesOpen: true,
+      propertiesOpen: false,
       detailRowOpen: true,
       terminalApp: null,
       defaultTextEditor: {
@@ -342,10 +342,10 @@ describe("appStateStore", () => {
       defaultTheme: "dark",
     });
     expect(reloaded.getPreferences().accent).toBe("gold");
-    expect(reloaded.getPreferences().accentToolbarButtons).toBe(true);
-    expect(reloaded.getPreferences().accentFavoriteItems).toBe(false);
+    expect(reloaded.getPreferences().accentToolbarButtons).toBe(false);
+    expect(reloaded.getPreferences().accentFavoriteItems).toBe(true);
     expect(reloaded.getPreferences().accentFavoriteText).toBe(false);
-    expect(reloaded.getPreferences().favoriteAccent).toBe("gold");
+    expect(reloaded.getPreferences().favoriteAccent).toBe("rose");
     expect(reloaded.getPreferences().zoomPercent).toBe(150);
     expect(reloaded.getPreferences().treeWidth).toBe(220);
     expect(reloaded.getPreferences().inspectorWidth).toBe(480);
