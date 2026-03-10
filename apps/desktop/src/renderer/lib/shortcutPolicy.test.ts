@@ -206,6 +206,7 @@ describe("shortcutPolicy", () => {
     });
 
     expect(getContextMenuShortcutLabel("open", treeFolderContext)).toBe("⌘O");
+    expect(getContextMenuShortcutLabel("showInfo", treeFolderContext)).toBe("⌘I");
     expect(getContextMenuShortcutLabel("terminal", treeFolderContext)).toBe("⌘T");
     expect(getContextMenuShortcutLabel("copyPath", treeFolderContext)).toBe("⌥⌘C");
     expect(getContextMenuShortcutLabel("copy", treeFolderContext)).toBeNull();
@@ -225,12 +226,12 @@ describe("shortcutPolicy", () => {
       selectedTreeTargetKind: "favoritesRoot",
     });
 
-    expect(getContextMenuShortcutLabel("open", favoriteContext)).toBe("⌘O");
+    expect(getContextMenuShortcutLabel("showInfo", favoriteContext)).toBe("⌘I");
     expect(getContextMenuShortcutLabel("terminal", favoriteContext)).toBe("⌘T");
     expect(getContextMenuShortcutLabel("copyPath", favoriteContext)).toBe("⌥⌘C");
     expect(getContextMenuShortcutLabel("paste", favoriteContext)).toBeNull();
     expect(getContextMenuShortcutLabel("newFolder", favoriteContext)).toBeNull();
-    expect(getContextMenuShortcutLabel("open", favoritesRootContext)).toBeNull();
+    expect(getContextMenuShortcutLabel("showInfo", favoritesRootContext)).toBe("⌘I");
     expect(getContextMenuShortcutLabel("terminal", favoritesRootContext)).toBeNull();
     expect(getContextMenuShortcutLabel("copyPath", favoritesRootContext)).toBeNull();
   });

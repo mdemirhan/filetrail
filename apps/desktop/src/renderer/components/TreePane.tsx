@@ -2,6 +2,7 @@ import {
   Fragment,
   type Dispatch,
   type SetStateAction,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -192,6 +193,7 @@ export function TreePane({
   const scrollFrameRef = useRef<number | null>(null);
   const lastScrolledPathRef = useRef<string | null>(null);
   const lastScrolledRowRef = useRef<HTMLDivElement | null>(null);
+  const lastRegisteredSelectedRowRef = useRef<HTMLDivElement | null>(null);
   const splitPaneRef = useRef<HTMLDivElement | null>(null);
   const splitResizeRef = useRef<{
     startY: number;
@@ -200,6 +202,7 @@ export function TreePane({
   const splitResizeCleanupRef = useRef<(() => void) | null>(null);
   const [optimisticSelectedItemId, setOptimisticSelectedItemId] = useState<TreeItemId | null>(null);
   const [splitPaneHeight, setSplitPaneHeight] = useState(0);
+  const [selectedRowRegistrationVersion, setSelectedRowRegistrationVersion] = useState(0);
 
   useEffect(
     () => () => {
@@ -215,6 +218,10 @@ export function TreePane({
     },
     [],
   );
+
+  useEffect(() => {
+    lastRegisteredSelectedRowRef.current = null;
+  }, [selectedTreeItemId]);
 
   useEffect(() => {
     const measureSplitPane = () => {
@@ -258,7 +265,7 @@ export function TreePane({
         scrollFrameRef.current = null;
       }
     };
-  }, [selectedTreeItemId]);
+  }, [selectedRowRegistrationVersion, selectedTreeItemId]);
 
   useEffect(() => {
     setOptimisticSelectedItemId(null);
@@ -267,6 +274,17 @@ export function TreePane({
   const resolvedFavoritesPaneHeight = clampFavoritesPaneHeight(
     favoritesPaneHeight ?? FAVORITES_PANE_DEFAULT_HEIGHT,
     splitPaneHeight,
+  );
+
+  const registerTreeRowRef = useCallback(
+    (id: string, element: HTMLDivElement | null) => {
+      rowRefs.current[id] = element;
+      if (id === selectedTreeItemId && element && lastRegisteredSelectedRowRef.current !== element) {
+        lastRegisteredSelectedRowRef.current = element;
+        setSelectedRowRegistrationVersion((current) => current + 1);
+      }
+    },
+    [selectedTreeItemId],
   );
 
   function handlePaneMouseDownCapture(subview: "favorites" | "tree") {
@@ -518,9 +536,7 @@ export function TreePane({
                         onItemContextMenu={onItemContextMenu}
                         subview="favorites"
                         onSubviewFocus={() => onLeftPaneSubviewChange("favorites")}
-                        registerRowRef={(id, element) => {
-                          rowRefs.current[id] = element;
-                        }}
+                        registerRowRef={registerTreeRowRef}
                       />
                     ))}
                   </div>
@@ -607,9 +623,7 @@ export function TreePane({
                   onItemContextMenu={onItemContextMenu}
                   subview="tree"
                   onSubviewFocus={() => onLeftPaneSubviewChange("tree")}
-                  registerRowRef={(id, element) => {
-                    rowRefs.current[id] = element;
-                  }}
+                  registerRowRef={registerTreeRowRef}
                 />
               </div>
             </div>
@@ -637,9 +651,7 @@ export function TreePane({
                 onItemContextMenu={onItemContextMenu}
                 subview="tree"
                 onSubviewFocus={() => onLeftPaneSubviewChange("tree")}
-                registerRowRef={(id, element) => {
-                  rowRefs.current[id] = element;
-                }}
+                registerRowRef={registerTreeRowRef}
               />
             </div>
           )}
@@ -826,22 +838,7 @@ function TreeItemRow({
     }
     clickTimeoutRef.current = window.setTimeout(() => {
       clickTimeoutRef.current = null;
-      if (singleClickExpandTreeItems && isFileSystem && itemPath && canExpand) {
-        onToggleExpand(itemPath);
-      }
-      const navigationResult = itemPath
-        ? isFavorite
-          ? onNavigateFavorite(itemPath)
-          : onNavigate(itemPath)
-        : undefined;
-      if (!navigationResult || typeof navigationResult.then !== "function") {
-        return;
-      }
-      void navigationResult.then((didNavigate) => {
-        if (!didNavigate) {
-          setOptimisticSelectedItemId(null);
-        }
-      });
+      activateTreeItem(singleClickExpandTreeItems);
     }, 180);
   }
 
@@ -856,9 +853,25 @@ function TreeItemRow({
       clickTimeoutRef.current = null;
     }
     setOptimisticSelectedItemId(item.id);
-    if (isFileSystem && itemPath) {
+    activateTreeItem(true);
+  }
+
+  function activateTreeItem(expandBeforeNavigate: boolean) {
+    if (!itemPath) {
+      return;
+    }
+    if (expandBeforeNavigate && isFileSystem && canExpand) {
       onToggleExpand(itemPath);
     }
+    const navigationResult = isFavorite ? onNavigateFavorite(itemPath) : onNavigate(itemPath);
+    if (!navigationResult || typeof navigationResult.then !== "function") {
+      return;
+    }
+    void navigationResult.then((didNavigate) => {
+      if (!didNavigate) {
+        setOptimisticSelectedItemId(null);
+      }
+    });
   }
 
   function handleActivateContextMenu(clientX: number, clientY: number) {

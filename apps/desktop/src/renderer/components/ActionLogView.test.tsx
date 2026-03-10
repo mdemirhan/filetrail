@@ -129,8 +129,22 @@ describe("ActionLogView", () => {
     );
 
     expect(screen.getByText("Action Log")).toBeInTheDocument();
+    expect(screen.getByText("File Trail")).toBeInTheDocument();
+    expect(screen.queryByText("Action History")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        /Review file mutations and launch actions with readable status, source, destination, and full failure detail\./i,
+      ),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("/Users/demo/a.txt")).toBeInTheDocument();
     expect(screen.getByText("/Users/demo/app.log")).toBeInTheDocument();
+
+    expect(screen.getByRole("heading", { name: "Action Log" })).toHaveStyle({
+      fontSize: "20px",
+    });
+    expect(screen.getByRole("heading", { name: "Action Log" })).not.toHaveStyle({
+      color: "rgb(218, 165, 32)",
+    });
 
     const rowButton = screen.getByText("/Users/demo/a.txt").closest("button");
     if (!(rowButton instanceof HTMLButtonElement)) {

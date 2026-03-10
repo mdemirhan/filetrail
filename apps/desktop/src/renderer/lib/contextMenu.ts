@@ -18,7 +18,6 @@ export type ContextMenuActionId =
   | "duplicate"
   | "newFolder"
   | "toggleFavorite"
-  | "toggleExpand"
   | "terminal"
   | "copyPath"
   | "trash";
@@ -69,7 +68,6 @@ export type ContextMenuIconName =
   | "rename"
   | "duplicate"
   | "newFolder"
-  | "toggleExpand"
   | "terminal"
   | "copyPath"
   | "trash"
@@ -92,10 +90,8 @@ export type ContextMenuItem =
 export function getContextMenuItems(input: {
   surface: ContextMenuSurface;
   favoriteToggleLabel?: string | null;
-  folderExpansionLabel?: "Expand" | "Collapse" | null;
 }): readonly ContextMenuItem[] {
   const favoriteToggleLabel = input.favoriteToggleLabel ?? "Add to Favorites";
-  const folderExpansionLabel = input.folderExpansionLabel ?? "Expand";
 
   if (input.surface === "search") {
     return [
@@ -111,21 +107,22 @@ export function getContextMenuItems(input: {
   if (input.surface === "treeFolder") {
     return [
       { id: "open", label: "Open", icon: "open" },
-      { id: "toggleExpand", label: folderExpansionLabel, icon: "toggleExpand" },
+      { type: "separator", key: "separator-tree-after-open" },
       { id: "showInfo", label: "Show Info", icon: "showInfo" },
       { type: "separator", key: "separator-tree-open" },
       { id: "toggleFavorite", label: favoriteToggleLabel, icon: "favorite" },
       { type: "separator", key: "separator-tree-favorite" },
-      { id: "terminal", label: "Open in Terminal", icon: "terminal" },
-      { id: "copyPath", label: "Copy Path", icon: "copyPath" },
-      { type: "separator", key: "separator-tree-copy-path" },
       { id: "copy", label: "Copy", icon: "copy" },
       { id: "cut", label: "Cut", icon: "cut" },
       { id: "paste", label: "Paste", icon: "paste" },
       { id: "move", label: "Move To…", icon: "move" },
       { id: "rename", label: "Rename", icon: "rename" },
       { id: "duplicate", label: "Duplicate", icon: "duplicate" },
+      { type: "separator", key: "separator-tree-new-folder" },
       { id: "newFolder", label: "New Folder", icon: "newFolder" },
+      { type: "separator", key: "separator-tree-copy-path" },
+      { id: "terminal", label: "Open in Terminal", icon: "terminal" },
+      { id: "copyPath", label: "Copy Path", icon: "copyPath" },
       { type: "separator", key: "separator-tree-write" },
       { id: "trash", label: "Move to Trash", icon: "trash", destructive: true },
     ];
@@ -133,15 +130,15 @@ export function getContextMenuItems(input: {
 
   if (input.surface === "favorite") {
     return [
-      { id: "open", label: "Open", icon: "open" },
       { id: "revealInTree", label: "Reveal in Tree", icon: "revealInTree" },
       { id: "showInfo", label: "Show Info", icon: "showInfo" },
       { type: "separator", key: "separator-favorite-open" },
       { id: "toggleFavorite", label: favoriteToggleLabel, icon: "favorite" },
       { type: "separator", key: "separator-favorite-toggle" },
-      { id: "paste", label: "Paste Into Favorite", icon: "paste" },
-      { id: "newFolder", label: "New Folder Inside Favorite", icon: "newFolder" },
-      { type: "separator", key: "separator-favorite-write" },
+      { id: "paste", label: "Paste", icon: "paste" },
+      { type: "separator", key: "separator-favorite-between-paste-and-new-folder" },
+      { id: "newFolder", label: "New Folder", icon: "newFolder" },
+      { type: "separator", key: "separator-favorite-copy-path" },
       { id: "terminal", label: "Open in Terminal", icon: "terminal" },
       { id: "copyPath", label: "Copy Path", icon: "copyPath" },
     ];
@@ -154,8 +151,8 @@ export function getContextMenuItems(input: {
     { type: "separator", key: "separator-open" },
     { id: "showInfo", label: "Show Info", icon: "showInfo" },
     { type: "separator", key: "separator-info" },
-    { id: "cut", label: "Cut", icon: "cut" },
     { id: "copy", label: "Copy", icon: "copy" },
+    { id: "cut", label: "Cut", icon: "cut" },
     { id: "paste", label: "Paste", icon: "paste" },
     { id: "move", label: "Move To…", icon: "move" },
     { id: "rename", label: "Rename", icon: "rename" },

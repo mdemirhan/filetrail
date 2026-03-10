@@ -140,6 +140,13 @@ describe("SettingsView", () => {
     );
   });
 
+  it("uses the header without a description row", () => {
+    renderSettingsView();
+
+    expect(screen.getByText("File Trail")).toBeInTheDocument();
+    expect(screen.queryByText("Application preferences and configuration")).not.toBeInTheDocument();
+  });
+
   it.each([
     ["light", "#edeef4"],
     ["dark", "#181b22"],

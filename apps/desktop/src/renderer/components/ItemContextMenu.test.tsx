@@ -169,6 +169,52 @@ describe("ItemContextMenu", () => {
     expect(screen.getByRole("button", { name: "Remove from Favorites" })).toBeInTheDocument();
   });
 
+  it("orders content actions with copy before cut", () => {
+    render(
+      <ItemContextMenu
+        anchorX={0}
+        anchorY={0}
+        surface="content"
+        submenuItems={submenuItems}
+        shortcutContext={shortcutContext}
+        open
+        onAction={() => undefined}
+        onSubmenuAction={() => undefined}
+      />,
+    );
+
+    const labels = screen
+      .getAllByRole("button")
+      .map((button) => button.textContent)
+      .filter((label) => label && !["Zed", "Visual Studio Code", "Finder", "Other…"].includes(label))
+      .map((label) => {
+        if (label?.startsWith("Open With")) {
+          return "Open With";
+        }
+        if (label?.startsWith("Show Info")) {
+          return "Show Info";
+        }
+        if (label?.startsWith("Copy Path")) {
+          return "Copy Path";
+        }
+        if (label?.startsWith("Open in Terminal")) {
+          return "Open in Terminal";
+        }
+        if (label?.startsWith("Open")) {
+          return "Open";
+        }
+        if (label?.startsWith("Copy")) {
+          return "Copy";
+        }
+        if (label?.startsWith("Cut")) {
+          return "Cut";
+        }
+        return label;
+      });
+
+    expect(labels.indexOf("Copy")).toBeLessThan(labels.indexOf("Cut"));
+  });
+
   it("shows only safe shortcut badges for tree folders", () => {
     render(
       <ItemContextMenu
@@ -176,7 +222,6 @@ describe("ItemContextMenu", () => {
         anchorY={0}
         surface="treeFolder"
         favoriteToggleLabel="Add to Favorites"
-        folderExpansionLabel="Collapse"
         submenuItems={submenuItems}
         shortcutContext={{
           ...shortcutContext,
@@ -190,6 +235,7 @@ describe("ItemContextMenu", () => {
     );
 
     expect(screen.getByRole("button", { name: "Open⌘O" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show Info⌘I" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open in Terminal⌘T" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy Path⌥⌘C" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
@@ -198,7 +244,8 @@ describe("ItemContextMenu", () => {
     expect(screen.queryByRole("button", { name: "Cut⌘X" })).toBeNull();
     expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "RenameF2" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Collapse" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Expand" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Collapse" })).toBeNull();
   });
 
   it("renders the narrowed favorite menu with only enabled shortcut badges", () => {
@@ -220,22 +267,23 @@ describe("ItemContextMenu", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Open⌘O" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reveal in Tree" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Paste Into Favorite" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Paste Into Favorite⌘V" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Show Info⌘I" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Open⌘O$/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Paste" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Paste⌘V" })).toBeNull();
     expect(screen.getByRole("button", { name: "Open in Terminal⌘T" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy Path⌥⌘C" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Copy$/ })).toBeNull();
   });
 
-  it("omits expand controls when the action is hidden for alias folders", () => {
+  it("orders tree folder actions with new folder before terminal and copy path", () => {
     render(
       <ItemContextMenu
         anchorX={0}
         anchorY={0}
         surface="treeFolder"
-        hiddenActionIds={["toggleExpand"]}
+        favoriteToggleLabel="Add to Favorites"
         submenuItems={submenuItems}
         shortcutContext={{
           ...shortcutContext,
@@ -248,8 +296,75 @@ describe("ItemContextMenu", () => {
       />,
     );
 
-    expect(screen.queryByRole("button", { name: "Expand" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Collapse" })).toBeNull();
+    expect(
+      screen
+        .getAllByRole("button")
+        .map((button) => button.textContent)
+        .filter((label) => label && !["Zed", "Visual Studio Code", "Finder", "Other…"].includes(label))
+        .map((label) => {
+          if (label?.startsWith("Open in Terminal")) {
+            return "Open in Terminal";
+          }
+          if (label?.startsWith("Copy Path")) {
+            return "Copy Path";
+          }
+          if (label?.startsWith("Show Info")) {
+            return "Show Info";
+          }
+          if (label?.startsWith("Open")) {
+            return "Open";
+          }
+          return label;
+        }),
+    ).toEqual([
+      "Open",
+      "Show Info",
+      "Add to Favorites",
+      "Copy",
+      "Cut",
+      "Paste",
+      "Move To…",
+      "Rename",
+      "Duplicate",
+      "New Folder",
+      "Open in Terminal",
+      "Copy Path",
+      "Move to Trash",
+    ]);
+  });
+
+  it("keeps favorite new-folder actions split from terminal and copy path", () => {
+    const { container } = render(
+      <ItemContextMenu
+        anchorX={0}
+        anchorY={0}
+        surface="favorite"
+        favoriteToggleLabel="Remove from Favorites"
+        submenuItems={submenuItems}
+        shortcutContext={{
+          ...shortcutContext,
+          focusedPane: "tree",
+          selectedTreeTargetKind: "favorite",
+        }}
+        open
+        onAction={() => undefined}
+        onSubmenuAction={() => undefined}
+      />,
+    );
+
+    expect(container.querySelectorAll(".context-menu-separator")).toHaveLength(4);
+    const pasteButton = screen.getByRole("button", { name: "Paste" });
+    const newFolderButton = screen.getByRole("button", { name: "New Folder" });
+    const terminalButton = screen.getByRole("button", { name: "Open in Terminal⌘T" });
+    const separatorAfterPaste = pasteButton.nextElementSibling;
+    const separatorAfterNewFolder = newFolderButton.nextElementSibling;
+
+    expect(separatorAfterPaste).not.toBeNull();
+    expect(separatorAfterPaste).toHaveClass("context-menu-separator");
+    expect(separatorAfterPaste?.nextElementSibling).toBe(newFolderButton);
+    expect(separatorAfterNewFolder).not.toBeNull();
+    expect(separatorAfterNewFolder).toHaveClass("context-menu-separator");
+    expect(separatorAfterNewFolder?.nextElementSibling).toBe(terminalButton);
   });
 
   it("hides the favorite toggle item when requested", () => {
@@ -290,7 +405,7 @@ describe("ItemContextMenu", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Show Info" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show Info⌘I" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open in Terminal⌘T" })).toBeInTheDocument();
     expect(container.querySelectorAll(".context-menu-separator")).toHaveLength(1);
   });

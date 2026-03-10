@@ -31,6 +31,7 @@ const TREE_SAFE_RENDERER_COMMANDS = new Set<RendererCommandType>([
 const TREE_SAFE_RAW_SHORTCUTS = new Set<RawExplorerShortcutId>(["copyPath", "openInTerminal"]);
 const CONTEXT_MENU_SHORTCUT_LABELS = {
   open: "⌘O",
+  showInfo: "⌘I",
   edit: "⌘E",
   cut: "⌘X",
   copy: "⌘C",
@@ -216,6 +217,9 @@ export function getContextMenuShortcutLabel(
 ): string | null {
   if (actionId === "open" && canHandleRendererCommand("openSelection", context)) {
     return CONTEXT_MENU_SHORTCUT_LABELS.open ?? null;
+  }
+  if (actionId === "showInfo" && canHandleRendererCommand("toggleInfoPanel", context)) {
+    return CONTEXT_MENU_SHORTCUT_LABELS.showInfo ?? null;
   }
   if (actionId === "edit" && canHandleRendererCommand("editSelection", context)) {
     return CONTEXT_MENU_SHORTCUT_LABELS.edit ?? null;

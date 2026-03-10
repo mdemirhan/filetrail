@@ -172,6 +172,37 @@ describe("TreePane", () => {
     vi.useRealTimers();
   });
 
+  it("navigates when a filesystem folder row is double clicked", () => {
+    vi.useFakeTimers();
+    const handleNavigate = vi.fn();
+    const handleToggleExpand = vi.fn();
+    renderTreePane({ onNavigate: handleNavigate, onToggleExpand: handleToggleExpand });
+
+    fireEvent.doubleClick(screen.getAllByRole("button", { name: "Documents" })[1]!);
+    vi.runAllTimers();
+
+    expect(handleNavigate).toHaveBeenCalledTimes(1);
+    expect(handleNavigate).toHaveBeenCalledWith("/Users/demo/Documents");
+    expect(handleToggleExpand).toHaveBeenCalledWith("/Users/demo/Documents");
+    vi.useRealTimers();
+  });
+
+  it("navigates when a favorite item is double clicked", () => {
+    vi.useFakeTimers();
+    const handleNavigateFavorite = vi.fn();
+    renderTreePane({
+      selectedTreeItemId: "favorite:/Users/demo/Documents",
+      onNavigateFavorite: handleNavigateFavorite,
+    });
+
+    fireEvent.doubleClick(screen.getAllByRole("button", { name: "Documents" })[0]!);
+    vi.runAllTimers();
+
+    expect(handleNavigateFavorite).toHaveBeenCalledTimes(1);
+    expect(handleNavigateFavorite).toHaveBeenCalledWith("/Users/demo/Documents");
+    vi.useRealTimers();
+  });
+
   it("toggles the favorites section from the expand affordance", () => {
     const handleToggleFavoritesExpanded = vi.fn();
     renderTreePane({ onToggleFavoritesExpanded: handleToggleFavoritesExpanded });
@@ -598,7 +629,7 @@ describe("TreePane", () => {
             toJSON: () => ({}),
           } as DOMRect;
         }
-        if (this.getAttribute("title") === "/Users/demo/Documents") {
+        if (this.getAttribute("data-tree-path") === "/Users/demo/Documents") {
           return {
             top: 80,
             bottom: 112,
@@ -628,6 +659,149 @@ describe("TreePane", () => {
     vi.runAllTimers();
 
     expect(scrollIntoViewSpy).not.toHaveBeenCalled();
+
+    getBoundingClientRectSpy.mockRestore();
+    scrollIntoViewSpy.mockRestore();
+    vi.useRealTimers();
+  });
+
+  it("scrolls the selected row into view when that row mounts after selection", () => {
+    vi.useFakeTimers();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    const scrollIntoViewSpy = vi
+      .spyOn(HTMLElement.prototype, "scrollIntoView")
+      .mockImplementation(() => undefined);
+    const getBoundingClientRectSpy = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function mockRect(this: HTMLElement) {
+        if (this.classList.contains("tree-scroll")) {
+          return {
+            top: 0,
+            bottom: 160,
+            left: 0,
+            right: 240,
+            width: 240,
+            height: 160,
+            x: 0,
+            y: 0,
+            toJSON: () => ({}),
+          } as DOMRect;
+        }
+        if (this.getAttribute("data-tree-path") === "/Users/demo/Documents") {
+          return {
+            top: 220,
+            bottom: 252,
+            left: 0,
+            right: 240,
+            width: 240,
+            height: 32,
+            x: 0,
+            y: 220,
+            toJSON: () => ({}),
+          } as DOMRect;
+        }
+        return {
+          top: 0,
+          bottom: 0,
+          left: 0,
+          right: 0,
+          width: 0,
+          height: 0,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        } as DOMRect;
+      });
+
+    const { rerender } = renderTreePane({
+      selectedTreeItemId: "fs:/Users/demo/Documents",
+      nodes: {
+        "/Users/demo": {
+          path: "/Users/demo",
+          name: "demo",
+          kind: "directory",
+          isHidden: false,
+          isSymlink: false,
+          expanded: false,
+          loading: false,
+          loaded: true,
+          error: null,
+          childPaths: ["/Users/demo/Documents"],
+        },
+        "/Users/demo/Documents": {
+          path: "/Users/demo/Documents",
+          name: "Documents",
+          kind: "directory",
+          isHidden: false,
+          isSymlink: false,
+          expanded: false,
+          loading: false,
+          loaded: false,
+          error: null,
+          childPaths: [],
+        },
+      },
+    });
+
+    vi.runAllTimers();
+    expect(scrollIntoViewSpy).not.toHaveBeenCalled();
+
+    rerender(
+      <TreePane
+        isFocused
+        rootPath="/Users/demo"
+        homePath="/Users/demo"
+        selectedTreeItemId="fs:/Users/demo/Documents"
+        compactTreeView={false}
+        singleClickExpandTreeItems={false}
+        favorites={[
+          { path: "/Users/demo/Desktop", icon: "desktop" },
+          { path: "/Users/demo/Documents", icon: "documents" },
+        ]}
+        favoritesPlacement="integrated"
+        favoritesPaneHeight={220}
+        activeLeftPaneSubview="tree"
+        favoritesExpanded
+        nodes={baseNodes}
+        onFocusChange={() => undefined}
+        onLeftPaneSubviewChange={() => undefined}
+        onFavoritesPaneHeightChange={() => undefined}
+        onGoHome={() => undefined}
+        onRerootHome={() => undefined}
+        onOpenLocation={() => undefined}
+        onQuickAccess={() => undefined}
+        foldersFirst
+        onToggleFoldersFirst={() => undefined}
+        infoPanelOpen
+        onToggleInfoPanel={() => undefined}
+        infoRowOpen
+        onToggleInfoRow={() => undefined}
+        theme="tomorrow-night"
+        themeMenuOpen={false}
+        themeButtonRef={themeButtonRef}
+        themeMenuRef={themeMenuRef}
+        onToggleThemeMenu={() => undefined}
+        onSelectTheme={() => undefined}
+        actionLogEnabled
+        onOpenActionLog={() => undefined}
+        onClearSelection={() => undefined}
+        onOpenHelp={() => undefined}
+        onOpenSettings={() => undefined}
+        includeHidden={false}
+        onToggleHidden={() => undefined}
+        onToggleExpand={() => undefined}
+        onNavigate={() => undefined}
+        onNavigateFavorite={() => undefined}
+        onToggleFavoritesExpanded={() => undefined}
+        typeaheadQuery=""
+      />,
+    );
+
+    vi.runAllTimers();
+    expect(scrollIntoViewSpy).toHaveBeenCalled();
 
     getBoundingClientRectSpy.mockRestore();
     scrollIntoViewSpy.mockRestore();

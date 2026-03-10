@@ -37,12 +37,14 @@ function resolveContextMenuShortcutContext(
   if (contextMenuState.targetKind === "treeFolder") {
     return {
       ...shortcutContext,
+      focusedPane: "tree",
       selectedTreeTargetKind: "filesystemFolder",
     };
   }
   if (contextMenuState.targetKind === "favorite") {
     return {
       ...shortcutContext,
+      focusedPane: "tree",
       selectedTreeTargetKind: "favorite",
     };
   }
@@ -191,7 +193,6 @@ export function AppDialogs({
           surface={contextMenuState.surface}
           disabledActionIds={contextMenuDisabledActionIds}
           favoriteToggleLabel={contextMenuFavoriteToggleLabel}
-          folderExpansionLabel={contextMenuState.folderExpansionLabel}
           hiddenActionIds={contextMenuHiddenActionIds}
           submenuItems={contextMenuSubmenuItems}
           shortcutContext={contextMenuShortcutContext}

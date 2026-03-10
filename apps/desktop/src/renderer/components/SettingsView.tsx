@@ -1684,10 +1684,10 @@ export function SettingsView({
         background: palette.page.bg,
         padding:
           layoutMode === "compact"
-            ? "20px 16px 16px"
+            ? "26px 16px 16px"
             : layoutMode === "narrow"
-              ? "24px 18px 18px"
-              : "28px 24px 20px",
+              ? "30px 18px 18px"
+              : "34px 24px 20px",
         minHeight: "100%",
         overflowY: "auto",
       }}
@@ -1726,17 +1726,6 @@ export function SettingsView({
             >
               Settings
             </h2>
-            <p
-              style={{
-                fontSize: "11.5px",
-                fontFamily: sans,
-                color: palette.header.desc,
-                fontWeight: 400,
-                margin: 0,
-              }}
-            >
-              Application preferences and configuration
-            </p>
           </div>
         </header>
 

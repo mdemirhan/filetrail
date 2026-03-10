@@ -229,13 +229,20 @@ export function HelpView({
       data-layout={layoutMode}
       style={{
         background: resolvedTheme.page,
-        padding: layoutMode === "compact" ? "20px 16px 16px" : "28px 24px 20px",
+        padding:
+          layoutMode === "compact"
+            ? "26px 16px 16px"
+            : layoutMode === "narrow"
+              ? "30px 18px 18px"
+              : "34px 24px 20px",
         minHeight: "100%",
         overflowY: "auto",
       }}
     >
-      <div style={{ marginBottom: "20px" }}>
+      <header className="help-header" style={{ marginBottom: "20px" }}>
+        <div className="help-header-left">
         <span
+          className="help-header-eyebrow"
           style={{
             fontSize: "10px",
             fontFamily: mono,
@@ -253,23 +260,14 @@ export function HelpView({
             fontFamily: sans,
             fontWeight: 700,
             color: resolvedTheme.title,
-            margin: "2px 0 3px",
+            margin: "2px 0 0",
             letterSpacing: "-0.02em",
           }}
         >
           Help &amp; Reference
         </h1>
-        <span
-          style={{
-            fontSize: "11.5px",
-            fontFamily: sans,
-            color: resolvedTheme.desc,
-            fontWeight: 400,
-          }}
-        >
-          Keyboard shortcuts and navigation guide
-        </span>
-      </div>
+        </div>
+      </header>
 
       <div
         role="tablist"

@@ -124,13 +124,19 @@ export function ActionLogView({
         height: "100%",
         overflowX: "hidden",
         overflowY: "auto",
-        padding: layoutMode === "compact" ? "16px 16px 24px" : "20px 20px 28px",
+        padding:
+          layoutMode === "compact"
+            ? "26px 16px 24px"
+            : layoutMode === "narrow"
+              ? "30px 18px 26px"
+              : "34px 20px 28px",
         background: palette.pageBg,
         color: palette.textPrimary,
         fontFamily: sans,
       }}
     >
       <div
+        className="action-log-page-header"
         style={{
           display: "flex",
           alignItems: layoutMode === "compact" ? "flex-start" : "center",
@@ -140,40 +146,32 @@ export function ActionLogView({
           marginBottom: "14px",
         }}
       >
-        <div>
-          <div
-            style={{
-              fontFamily: mono,
-              fontSize: "10px",
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              color: palette.kicker,
-              marginBottom: "6px",
-            }}
-          >
-            Action History
-          </div>
-          <h1
+        <div className="action-log-page-header-left">
+          <span
+            className="action-log-page-eyebrow"
             style={{
               margin: 0,
-              fontSize: layoutMode === "compact" ? "25px" : "30px",
+              color: palette.kicker,
+              fontFamily: mono,
+              fontSize: "10px",
+              fontWeight: 600,
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+            }}
+          >
+            File Trail
+          </span>
+          <h1
+            style={{
+              margin: "2px 0 0",
+              fontSize: "20px",
               lineHeight: 1.08,
-              letterSpacing: "-0.03em",
+              letterSpacing: "-0.02em",
+              color: palette.textPrimary,
             }}
           >
             Action Log
           </h1>
-          <p
-            style={{
-              margin: "8px 0 0",
-              maxWidth: "720px",
-              color: palette.textMuted,
-              lineHeight: 1.4,
-              fontSize: "13px",
-            }}
-          >
-            Review file mutations and launch actions with readable status, source, destination, and full failure detail.
-          </p>
         </div>
         <button
           type="button"

@@ -55,6 +55,13 @@ describe("HelpView", () => {
     );
   });
 
+  it("uses the compact header without a description row", () => {
+    renderHelpView();
+
+    expect(screen.getByText("FILE TRAIL")).toBeInTheDocument();
+    expect(screen.queryByText("Keyboard shortcuts and navigation guide")).not.toBeInTheDocument();
+  });
+
   it.each([
     ["light", "#edeef4"],
     ["dark", "#181b22"],

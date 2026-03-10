@@ -2154,7 +2154,7 @@ describe("App copy/paste integration", () => {
         fireEvent.contextMenu(favoriteButton);
       });
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Paste Into Favorite" }));
+        fireEvent.click(screen.getByRole("button", { name: "Paste" }));
       });
 
       await vi.waitFor(() => {
@@ -2199,6 +2199,59 @@ describe("App copy/paste integration", () => {
 
       expect(screen.getByRole("button", { name: "Open in Terminal⌘T" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Copy Path⌥⌘C" })).toBeInTheDocument();
+
+      unmount();
+    }
+  });
+
+  it("keeps tree and favorite context menus on tree-safe shortcut badges after a disabled menu click", async () => {
+    for (const targetTitle of ["tree:/Users/demo/Folder", "favorite:/Users/demo/Documents"]) {
+      const harness = createAppHarness({
+        directorySnapshots: {
+          "/Users/demo/Documents": {
+            path: "/Users/demo/Documents",
+            parentPath: "/Users/demo",
+            entries: [],
+          },
+        },
+      });
+
+      const { unmount } = render(
+        <FiletrailClientProvider value={harness.client}>
+          <App />
+        </FiletrailClientProvider>,
+      );
+
+      const targetButton = await screen.findByTitle(targetTitle);
+      await act(async () => {
+        fireEvent.contextMenu(targetButton);
+      });
+
+      const disabledButton =
+        screen.queryByRole("button", { name: "Paste" }) ??
+        screen.queryByRole("button", { name: "Paste" });
+      expect(disabledButton).not.toBeNull();
+
+      await act(async () => {
+        fireEvent.click(disabledButton!);
+      });
+
+      expect(screen.getByRole("button", { name: "Open in Terminal⌘T" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Copy Path⌥⌘C" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Show Info⌘I" })).toBeInTheDocument();
+      if (targetTitle.startsWith("tree:")) {
+        expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Copy⌘C" })).toBeNull();
+        expect(screen.getByRole("button", { name: "Cut" })).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Cut⌘X" })).toBeNull();
+        expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "RenameF2" })).toBeNull();
+      } else {
+        expect(screen.getByRole("button", { name: "Paste" })).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Paste⌘V" })).toBeNull();
+        expect(screen.getByRole("button", { name: "New Folder" })).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "New Folder⇧⌘N" })).toBeNull();
+      }
 
       unmount();
     }

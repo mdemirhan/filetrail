@@ -4459,7 +4459,8 @@ body.platform-macos .action-log-view {
 }
 
 .help-header,
-.settings-page-header {
+.settings-page-header,
+.action-log-page-header {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -4468,14 +4469,16 @@ body.platform-macos .action-log-view {
 }
 
 .help-header-left,
-.settings-page-header-left {
+.settings-page-header-left,
+.action-log-page-header-left {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
 .help-header-eyebrow,
-.settings-page-eyebrow {
+.settings-page-eyebrow,
+.action-log-page-eyebrow {
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: var(--mono-font-weight);
@@ -4485,7 +4488,9 @@ body.platform-macos .action-log-view {
 }
 
 .help-header h2,
-.settings-page-header h2 {
+.settings-page-header h2,
+.action-log-page-header h2,
+.action-log-page-header h1 {
   font-size: 22px;
   line-height: 1.12;
   letter-spacing: -0.02em;
@@ -4586,7 +4591,8 @@ body.platform-macos .settings-view[data-layout="narrow"] {
 }
 
 .help-view[data-layout="narrow"] .help-header,
-.settings-view[data-layout="narrow"] .settings-page-header {
+.settings-view[data-layout="narrow"] .settings-page-header,
+.action-log-view[data-layout="narrow"] .action-log-page-header {
   align-items: flex-start;
   flex-direction: column;
 }
@@ -4614,6 +4620,10 @@ body.platform-macos .settings-view[data-layout="compact"] {
 }
 
 .settings-view[data-layout="compact"] .settings-page-header h2 {
+  font-size: 20px;
+}
+
+.action-log-view[data-layout="compact"] .action-log-page-header h1 {
   font-size: 20px;
 }
 

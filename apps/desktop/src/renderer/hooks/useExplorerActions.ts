@@ -343,9 +343,6 @@ export function useExplorerActions(args: {
       return Array.from(hidden);
     }
     if (contextMenuState.surface === "treeFolder") {
-      if (contextMenuState.folderExpansionLabel === null) {
-        hidden.add("toggleExpand");
-      }
       return Array.from(hidden);
     }
     if (contextMenuState.surface === "search") {
@@ -395,9 +392,6 @@ export function useExplorerActions(args: {
         disabled.add("newFolder");
         disabled.add("trash");
       }
-      if (contextMenuState.folderExpansionLabel === null) {
-        disabled.add("toggleExpand");
-      }
       return Array.from(disabled);
     }
     if (isFavoriteContext) {
@@ -409,7 +403,6 @@ export function useExplorerActions(args: {
       disabled.add("rename");
       disabled.add("duplicate");
       disabled.add("trash");
-      disabled.add("toggleExpand");
       if (!contextMenuState.targetPath) {
         disabled.add("open");
         disabled.add("revealInTree");
@@ -458,7 +451,6 @@ export function useExplorerActions(args: {
     const items = getContextMenuItems({
       surface: contextMenuState.surface,
       favoriteToggleLabel: contextMenuFavoriteToggleLabel,
-      folderExpansionLabel: contextMenuState.folderExpansionLabel,
     });
     for (const item of items) {
       if (item.type === "separator" || item.id === "newFolder") {
@@ -1804,13 +1796,6 @@ export function useExplorerActions(args: {
       toggleFavoritePath(targetPath, {
         revealInTreeOnRemove: contextMenuSurface === "favorite",
       });
-      return;
-    }
-    if (actionId === "toggleExpand") {
-      const targetPath = paths[0];
-      if (targetPath) {
-        toggleTreeNode(targetPath);
-      }
       return;
     }
     if (actionId === "revealInTree") {
