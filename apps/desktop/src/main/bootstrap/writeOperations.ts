@@ -10,7 +10,6 @@ import {
 } from "@filetrail/contracts";
 import { WRITE_OPERATION_BUSY_ERROR, type WriteService } from "@filetrail/core";
 import { toErrorMessage } from "../ipc";
-import { createWriteOperationLogger } from "../writeOperationLog";
 
 // Filesystem operations used by write operations (rename, mkdir, path checks).
 // Callers inject an original-fs backed implementation to bypass Electron's ASAR
@@ -35,8 +34,20 @@ type PreparedCreateFolderOperation = {
   destinationPath: string;
 };
 
-export function createWriteOperationCoordinator(writeService: WriteService, fs: WriteOperationFs) {
-  const writeOperationLogger = createWriteOperationLogger();
+export function createWriteOperationCoordinator(
+  writeService: WriteService,
+  fs: WriteOperationFs,
+  options: {
+    recordWriteOperation?: (args: {
+      action: WriteOperationAction;
+      operationId: string;
+      result: WriteOperationResult;
+      sourcePaths: string[];
+      destinationPaths: string[];
+      metadata?: Record<string, string | number | boolean | null>;
+    }) => Promise<void>;
+  } = {},
+) {
   const writeOperationSenders = new Map<string, WriteOperationSender>();
   const copyPasteRequests = new Map<string, IpcRequest<"copyPaste:start">>();
   const localWriteOperationControllers = new Map<string, AbortController>();
@@ -44,7 +55,7 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
     string,
     {
       kind: string;
-      action: string;
+      action: WriteOperationAction;
       sourcePaths: string[];
       targetPaths: string[];
       metadata?: Record<string, string | number | boolean | null>;
@@ -65,27 +76,27 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
               transferMode: request.mode,
             }
           : null);
-      writeOperationLogger.log({
-        phase: "finished",
-        kind: metadata?.kind ?? "copyPaste",
-        action: metadata?.action ?? event.mode,
-        operationId: event.operationId,
-        sourcePaths: metadata?.sourcePaths ?? request?.sourcePaths ?? [],
-        targetPaths: metadata?.targetPaths ?? (request ? [request.destinationDirectoryPath] : []),
-        result: event.result
-          ? {
-              status: event.result.status,
-              completedItemCount: event.result.summary.completedItemCount,
-              failedItemCount: event.result.summary.failedItemCount,
-              skippedItemCount: event.result.summary.skippedItemCount,
-              cancelledItemCount: event.result.summary.cancelledItemCount,
-              error: event.result.error,
-            }
-          : {
-              status: event.status,
-            },
-        ...(logMetadata ? { metadata: logMetadata } : {}),
-      });
+      if (event.result && options.recordWriteOperation) {
+        void options.recordWriteOperation({
+          action: metadata?.action ?? action,
+          operationId: event.operationId,
+          result: {
+            operationId: event.result.operationId,
+            action,
+            status: event.result.status,
+            targetPath: event.result.destinationDirectoryPath,
+            startedAt: event.result.startedAt,
+            finishedAt: event.result.finishedAt,
+            summary: event.result.summary,
+            items: event.result.items,
+            error: event.result.error,
+          },
+          sourcePaths: metadata?.sourcePaths ?? request?.sourcePaths ?? [],
+          destinationPaths:
+            metadata?.targetPaths ?? (request ? [request.destinationDirectoryPath] : []),
+          ...(logMetadata ? { metadata: logMetadata } : {}),
+        });
+      }
       copyPasteRequests.delete(event.operationId);
       writeOperationMetadata.delete(event.operationId);
       if (activeWriteOperationId === event.operationId) {
@@ -160,15 +171,6 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
       targetPaths: args.targetPaths,
       ...(args.metadata ? { metadata: args.metadata } : {}),
     });
-    writeOperationLogger.log({
-      phase: "started",
-      kind: args.kind,
-      action: args.action,
-      operationId,
-      sourcePaths: args.sourcePaths,
-      targetPaths: args.targetPaths,
-      ...(args.metadata ? { metadata: args.metadata } : {}),
-    });
     emitLocalWriteOperationEvent({
       operationId,
       action: args.action,
@@ -198,27 +200,16 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
     }
     if (isTerminalStatus(event.status)) {
       const metadata = writeOperationMetadata.get(event.operationId);
-      writeOperationLogger.log({
-        phase: "finished",
-        kind: metadata?.kind ?? event.action,
-        action: metadata?.action ?? event.action,
-        operationId: event.operationId,
-        sourcePaths: metadata?.sourcePaths ?? [],
-        targetPaths: metadata?.targetPaths ?? [],
-        result: event.result
-          ? {
-              status: event.result.status,
-              completedItemCount: event.result.summary.completedItemCount,
-              failedItemCount: event.result.summary.failedItemCount,
-              skippedItemCount: event.result.summary.skippedItemCount,
-              cancelledItemCount: event.result.summary.cancelledItemCount,
-              error: event.result.error,
-            }
-          : {
-              status: event.status,
-            },
-        ...(metadata?.metadata ? { metadata: metadata.metadata } : {}),
-      });
+      if (event.result && options.recordWriteOperation) {
+        void options.recordWriteOperation({
+          action: metadata?.action ?? event.action,
+          operationId: event.operationId,
+          result: event.result,
+          sourcePaths: metadata?.sourcePaths ?? [],
+          destinationPaths: metadata?.targetPaths ?? [],
+          ...(metadata?.metadata ? { metadata: metadata.metadata } : {}),
+        });
+      }
       writeOperationSenders.delete(event.operationId);
       writeOperationMetadata.delete(event.operationId);
       localWriteOperationControllers.delete(event.operationId);
@@ -605,18 +596,6 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
   }
 
   function cancelWriteOperation(operationId: string): { ok: boolean } {
-    const metadata = writeOperationMetadata.get(operationId);
-    if (metadata) {
-      writeOperationLogger.log({
-        phase: "cancel_requested",
-        kind: metadata.kind,
-        action: metadata.action,
-        operationId,
-        sourcePaths: metadata.sourcePaths,
-        targetPaths: metadata.targetPaths,
-        ...(metadata.metadata ? { metadata: metadata.metadata } : {}),
-      });
-    }
     const localController = localWriteOperationControllers.get(operationId);
     if (localController) {
       localController.abort();
@@ -650,18 +629,6 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
         writeOperationMetadata.set(handle.operationId, {
           kind: "copyPaste",
           action: payload.action,
-          sourcePaths: payload.sourcePaths,
-          targetPaths: [payload.destinationDirectoryPath],
-          metadata: {
-            conflictResolution: payload.conflictResolution ?? "error",
-            transferMode: payload.mode,
-          },
-        });
-        writeOperationLogger.log({
-          phase: "started",
-          kind: "copyPaste",
-          action: payload.action,
-          operationId: handle.operationId,
           sourcePaths: payload.sourcePaths,
           targetPaths: [payload.destinationDirectoryPath],
           metadata: {

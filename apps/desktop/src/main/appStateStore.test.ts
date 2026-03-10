@@ -48,6 +48,7 @@ describe("appStateStore", () => {
       typeaheadDebounceMs: 1000,
       notificationsEnabled: true,
       notificationDurationSeconds: 4,
+      actionLogEnabled: true,
       propertiesOpen: false,
       detailRowOpen: true,
       terminalApp: null,
@@ -144,6 +145,7 @@ describe("appStateStore", () => {
       typeaheadDebounceMs: 1000,
       notificationsEnabled: true,
       notificationDurationSeconds: 4,
+      actionLogEnabled: true,
       terminalApp: {
         appPath: "/Applications/iTerm.app",
         appName: "iTerm",
@@ -235,6 +237,7 @@ describe("appStateStore", () => {
       typeaheadDebounceMs: 1000,
       notificationsEnabled: true,
       notificationDurationSeconds: 4,
+      actionLogEnabled: true,
       terminalApp: {
         appPath: "/Applications/iTerm.app",
         appName: "iTerm",

@@ -1519,6 +1519,7 @@ export function SettingsView({
   typeaheadDebounceMs,
   notificationsEnabled,
   notificationDurationSeconds,
+  actionLogEnabled,
   restoreLastVisitedFolderOnStartup,
   homePath,
   terminalApp,
@@ -1560,6 +1561,7 @@ export function SettingsView({
   onTypeaheadDebounceMsChange,
   onNotificationsEnabledChange,
   onNotificationDurationSecondsChange,
+  onActionLogEnabledChange,
   onRestoreLastVisitedFolderOnStartupChange,
   onBrowseTerminalApp,
   onClearTerminalApp,
@@ -1603,6 +1605,7 @@ export function SettingsView({
   typeaheadDebounceMs: number;
   notificationsEnabled: boolean;
   notificationDurationSeconds: number;
+  actionLogEnabled: boolean;
   restoreLastVisitedFolderOnStartup: boolean;
   homePath: string;
   terminalApp: ApplicationSelection | null;
@@ -1648,6 +1651,7 @@ export function SettingsView({
   onTypeaheadDebounceMsChange: (value: number) => void;
   onNotificationsEnabledChange: (value: boolean) => void;
   onNotificationDurationSecondsChange: (value: number) => void;
+  onActionLogEnabledChange: (value: boolean) => void;
   onRestoreLastVisitedFolderOnStartupChange: (value: boolean) => void;
   onBrowseTerminalApp: () => void;
   onClearTerminalApp: () => void;
@@ -2174,6 +2178,23 @@ export function SettingsView({
                 disabled={!notificationsEnabled}
                 onChange={(value) => onNotificationDurationSecondsChange(Number(value))}
                 formatOption={(value) => `${value} s`}
+              />
+            }
+          />
+        </SectionCard>
+
+        <SectionCard icon="🧾" title="Action Log" theme={palette}>
+          <SettingRow
+            title="Enable action log"
+            desc="Record file actions and launches, and show Action Log in the View menu and left toolbar."
+            theme={palette}
+            isLast
+            right={
+              <Toggle
+                checked={actionLogEnabled}
+                onToggle={() => onActionLogEnabledChange(!actionLogEnabled)}
+                theme={palette}
+                label="Enable action log"
               />
             }
           />

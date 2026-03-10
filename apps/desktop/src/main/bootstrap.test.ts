@@ -89,6 +89,16 @@ describe("toPreferencePatch", () => {
     });
   });
 
+  it("preserves action log preference fields", () => {
+    expect(
+      toPreferencePatch({
+        actionLogEnabled: false,
+      }),
+    ).toEqual({
+      actionLogEnabled: false,
+    });
+  });
+
   it("preserves default editor and file activation preferences", () => {
     expect(
       toPreferencePatch({

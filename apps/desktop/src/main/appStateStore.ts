@@ -59,6 +59,7 @@ export type AppStateStoreDependencies = {
   defaultTheme?: ThemeMode;
   fs?: AppStateStoreFileSystem;
   timer?: AppStateStoreTimer;
+  onReadError?: (error: unknown) => void;
   onPersistError?: (error: unknown) => void;
 };
 
@@ -87,6 +88,7 @@ export class AppStateStore {
   private readonly defaultTheme: ThemeMode;
   private readonly fileSystem: AppStateStoreFileSystem;
   private readonly timer: AppStateStoreTimer;
+  private readonly onReadError: (error: unknown) => void;
   private readonly onPersistError: (error: unknown) => void;
   private state: AppState;
   private persistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -96,12 +98,17 @@ export class AppStateStore {
     this.defaultTheme = dependencies.defaultTheme ?? DEFAULT_APP_PREFERENCES.theme;
     this.fileSystem = dependencies.fs ?? DEFAULT_FILE_SYSTEM;
     this.timer = dependencies.timer ?? DEFAULT_TIMER;
+    this.onReadError =
+      dependencies.onReadError ??
+      ((error) => {
+        console.error("[filetrail] failed reading app state", error);
+      });
     this.onPersistError =
       dependencies.onPersistError ??
       ((error) => {
         console.error("[filetrail] failed persisting app state", error);
       });
-    this.state = readState(filePath, this.fileSystem, this.defaultTheme);
+    this.state = readState(filePath, this.fileSystem, this.defaultTheme, this.onReadError);
   }
 
   getFilePath(): string {
@@ -182,6 +189,7 @@ function readState(
   filePath: string,
   fileSystem: AppStateStoreFileSystem,
   defaultTheme: ThemeMode,
+  onReadError: (error: unknown) => void,
 ): AppState {
   if (!fileSystem.existsSync(filePath)) {
     return {};
@@ -199,7 +207,8 @@ function readState(
       preferences,
       window,
     };
-  } catch {
+  } catch (error) {
+    onReadError(error);
     return {};
   }
 }
@@ -324,6 +333,10 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
         ? record.notificationDurationSeconds
         : currentDefaults.notificationDurationSeconds,
     ),
+    actionLogEnabled:
+      typeof record.actionLogEnabled === "boolean"
+        ? record.actionLogEnabled
+        : currentDefaults.actionLogEnabled,
     propertiesOpen:
       typeof record.propertiesOpen === "boolean"
         ? record.propertiesOpen

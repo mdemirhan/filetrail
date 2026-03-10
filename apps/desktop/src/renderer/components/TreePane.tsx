@@ -78,6 +78,9 @@ export function TreePane({
   themeMenuRef,
   onToggleThemeMenu,
   onSelectTheme,
+  actionLogEnabled,
+  onOpenActionLog,
+  onClearSelection,
   onOpenHelp,
   onOpenSettings,
   includeHidden,
@@ -97,7 +100,7 @@ export function TreePane({
   compactTreeView?: boolean;
   singleClickExpandTreeItems?: boolean;
   nodes: Record<string, TreeNodeState>;
-  selectedTreeItemId: TreeItemId;
+  selectedTreeItemId: TreeItemId | null;
   favorites: FavoritePreference[];
   favoritesPlacement: FavoritesPlacement;
   favoritesPaneHeight: number | null;
@@ -122,6 +125,9 @@ export function TreePane({
   themeMenuRef: React.RefObject<HTMLDivElement | null>;
   onToggleThemeMenu: () => void;
   onSelectTheme: (theme: ThemeMode) => void;
+  actionLogEnabled: boolean;
+  onOpenActionLog: () => void;
+  onClearSelection: () => void;
   onOpenHelp: () => void;
   onOpenSettings: () => void;
   includeHidden: boolean;
@@ -224,6 +230,9 @@ export function TreePane({
   }, []);
 
   useEffect(() => {
+    if (!selectedTreeItemId) {
+      return;
+    }
     const currentRow = rowRefs.current[selectedTreeItemId];
     if (!currentRow || typeof currentRow.scrollIntoView !== "function") {
       return;
@@ -259,6 +268,25 @@ export function TreePane({
     favoritesPaneHeight ?? FAVORITES_PANE_DEFAULT_HEIGHT,
     splitPaneHeight,
   );
+
+  function handlePaneMouseDownCapture(subview: "favorites" | "tree") {
+    return (event: React.MouseEvent<HTMLDivElement>) => {
+      onLeftPaneSubviewChange(subview);
+      const target = event.target;
+      if (
+        !(target instanceof Element) ||
+        target.closest(".tree-row, .favorites-pane-resizer")
+      ) {
+        return;
+      }
+      const scrollContainer = target.closest<HTMLElement>(".tree-scroll, .favorites-scroll");
+      if (scrollContainer && isScrollbarGutterHit(scrollContainer, event.clientX, event.clientY)) {
+        return;
+      }
+      setOptimisticSelectedItemId(null);
+      onClearSelection();
+    };
+  }
 
   return (
     <aside
@@ -382,6 +410,17 @@ export function TreePane({
             <ToolbarIcon name="infoRow" />
           </button>
           <div className="sidebar-rail-spacer" />
+          {actionLogEnabled ? (
+            <button
+              type="button"
+              className="sidebar-rail-button"
+              onClick={onOpenActionLog}
+              title="Action Log"
+              aria-label="Open action log"
+            >
+              <ToolbarIcon name="actionLog" />
+            </button>
+          ) : null}
           <button
             type="button"
             className="sidebar-rail-button"
@@ -456,7 +495,7 @@ export function TreePane({
                 className={`favorites-pane-section${activeLeftPaneSubview === "favorites" ? " active" : ""}`}
                 data-left-subview="favorites"
                 style={{ height: `${resolvedFavoritesPaneHeight}px` }}
-                onMouseDownCapture={() => onLeftPaneSubviewChange("favorites")}
+                onMouseDownCapture={handlePaneMouseDownCapture("favorites")}
               >
                 <div className="favorites-scroll">
                   <div className="tree-list favorites-list">
@@ -472,6 +511,7 @@ export function TreePane({
                         onToggleExpand={onToggleExpand}
                         onToggleFavoritesExpanded={onToggleFavoritesExpanded}
                         singleClickExpandTreeItems={singleClickExpandTreeItems}
+                        onClearSelection={onClearSelection}
                         onNavigate={onNavigate}
                         onNavigateFavorite={onNavigateFavorite}
                         onSelectFavoritesRoot={onSelectFavoritesRoot}
@@ -547,7 +587,7 @@ export function TreePane({
                   activeLeftPaneSubview === "tree" ? " active" : ""
                 }`}
                 data-left-subview="tree"
-                onMouseDownCapture={() => onLeftPaneSubviewChange("tree")}
+                onMouseDownCapture={handlePaneMouseDownCapture("tree")}
               >
                 <TreeList
                   items={filesystemPresentation.items}
@@ -560,6 +600,7 @@ export function TreePane({
                   onToggleExpand={onToggleExpand}
                   onToggleFavoritesExpanded={onToggleFavoritesExpanded}
                   singleClickExpandTreeItems={singleClickExpandTreeItems}
+                  onClearSelection={onClearSelection}
                   onNavigate={onNavigate}
                   onNavigateFavorite={onNavigateFavorite}
                   onSelectFavoritesRoot={onSelectFavoritesRoot}
@@ -573,7 +614,11 @@ export function TreePane({
               </div>
             </div>
           ) : (
-            <div className="sidebar-tree" data-left-subview="tree">
+            <div
+              className="sidebar-tree"
+              data-left-subview="tree"
+              onMouseDownCapture={handlePaneMouseDownCapture("tree")}
+            >
               <TreeList
                 items={integratedPresentation.items}
                 visibleItemIds={integratedPresentation.visibleItemIds}
@@ -585,6 +630,7 @@ export function TreePane({
                 onToggleExpand={onToggleExpand}
                 onToggleFavoritesExpanded={onToggleFavoritesExpanded}
                 singleClickExpandTreeItems={singleClickExpandTreeItems}
+                onClearSelection={onClearSelection}
                 onNavigate={onNavigate}
                 onNavigateFavorite={onNavigateFavorite}
                 onSelectFavoritesRoot={onSelectFavoritesRoot}
@@ -601,6 +647,17 @@ export function TreePane({
       </div>
     </aside>
   );
+}
+
+function isScrollbarGutterHit(container: HTMLElement, clientX: number, clientY: number): boolean {
+  const rect = container.getBoundingClientRect();
+  const verticalScrollbarWidth = Math.max(0, container.offsetWidth - container.clientWidth);
+  const horizontalScrollbarHeight = Math.max(0, container.offsetHeight - container.clientHeight);
+  const hitVerticalScrollbar =
+    verticalScrollbarWidth > 0 && clientX >= rect.right - verticalScrollbarWidth;
+  const hitHorizontalScrollbar =
+    horizontalScrollbarHeight > 0 && clientY >= rect.bottom - horizontalScrollbarHeight;
+  return hitVerticalScrollbar || hitHorizontalScrollbar;
 }
 
 function isElementFullyVisibleWithinContainer(element: HTMLElement, container: HTMLElement): boolean {
@@ -620,6 +677,7 @@ function TreeList({
   onToggleExpand,
   onToggleFavoritesExpanded,
   singleClickExpandTreeItems,
+  onClearSelection,
   onNavigate,
   onNavigateFavorite,
   onSelectFavoritesRoot,
@@ -631,13 +689,14 @@ function TreeList({
   items: Record<TreeItemId, TreePresentationItem>;
   visibleItemIds: TreeItemId[];
   isPaneFocused: boolean;
-  selectedTreeItemId: TreeItemId;
+  selectedTreeItemId: TreeItemId | null;
   clickTimeoutRef: React.RefObject<number | null>;
   optimisticSelectedItemId: TreeItemId | null;
   setOptimisticSelectedItemId: Dispatch<SetStateAction<TreeItemId | null>>;
   onToggleExpand: (path: string) => void;
   onToggleFavoritesExpanded: () => void;
   singleClickExpandTreeItems: boolean;
+  onClearSelection: () => void;
   onNavigate: (path: string) => Promise<boolean | void> | void;
   onNavigateFavorite: (path: string) => Promise<boolean | void> | void;
   onSelectFavoritesRoot?: (() => Promise<boolean | void> | void) | undefined;
@@ -670,6 +729,7 @@ function TreeList({
               onToggleExpand={onToggleExpand}
               onToggleFavoritesExpanded={onToggleFavoritesExpanded}
               singleClickExpandTreeItems={singleClickExpandTreeItems}
+              onClearSelection={onClearSelection}
               onNavigate={onNavigate}
               onNavigateFavorite={onNavigateFavorite}
               onSelectFavoritesRoot={onSelectFavoritesRoot}
@@ -695,6 +755,7 @@ function TreeItemRow({
   onToggleExpand,
   onToggleFavoritesExpanded,
   singleClickExpandTreeItems,
+  onClearSelection,
   onNavigate,
   onNavigateFavorite,
   onSelectFavoritesRoot,
@@ -705,13 +766,14 @@ function TreeItemRow({
 }: {
   item: TreePresentationItem;
   isPaneFocused: boolean;
-  selectedTreeItemId: TreeItemId;
+  selectedTreeItemId: TreeItemId | null;
   clickTimeoutRef: React.RefObject<number | null>;
   optimisticSelectedItemId: TreeItemId | null;
   setOptimisticSelectedItemId: Dispatch<SetStateAction<TreeItemId | null>>;
   onToggleExpand: (path: string) => void;
   onToggleFavoritesExpanded: () => void;
   singleClickExpandTreeItems: boolean;
+  onClearSelection: () => void;
   onNavigate: (path: string) => Promise<boolean | void> | void;
   onNavigateFavorite: (path: string) => Promise<boolean | void> | void;
   onSelectFavoritesRoot?: (() => Promise<boolean | void> | void) | undefined;
@@ -732,6 +794,85 @@ function TreeItemRow({
   const isFileSystem = item.kind === "filesystem";
   const itemPath = item.path;
 
+  function handleActivatePointerDown(metaKey: boolean, button: number) {
+    if (button !== 0) {
+      return;
+    }
+    onSubviewFocus();
+    if (metaKey && isCurrent) {
+      setOptimisticSelectedItemId(null);
+      return;
+    }
+    setOptimisticSelectedItemId(item.id);
+  }
+
+  function handleActivateClick(metaKey: boolean) {
+    onSubviewFocus();
+    if (metaKey && isCurrent) {
+      if (clickTimeoutRef.current !== null) {
+        window.clearTimeout(clickTimeoutRef.current);
+        clickTimeoutRef.current = null;
+      }
+      setOptimisticSelectedItemId(null);
+      onClearSelection();
+      return;
+    }
+    if (isFavoritesRoot) {
+      onSelectFavoritesRoot?.();
+      return;
+    }
+    if (clickTimeoutRef.current !== null) {
+      window.clearTimeout(clickTimeoutRef.current);
+    }
+    clickTimeoutRef.current = window.setTimeout(() => {
+      clickTimeoutRef.current = null;
+      if (singleClickExpandTreeItems && isFileSystem && itemPath && canExpand) {
+        onToggleExpand(itemPath);
+      }
+      const navigationResult = itemPath
+        ? isFavorite
+          ? onNavigateFavorite(itemPath)
+          : onNavigate(itemPath)
+        : undefined;
+      if (!navigationResult || typeof navigationResult.then !== "function") {
+        return;
+      }
+      void navigationResult.then((didNavigate) => {
+        if (!didNavigate) {
+          setOptimisticSelectedItemId(null);
+        }
+      });
+    }, 180);
+  }
+
+  function handleActivateDoubleClick() {
+    onSubviewFocus();
+    if (isFavoritesRoot) {
+      onToggleFavoritesExpanded();
+      return;
+    }
+    if (clickTimeoutRef.current !== null) {
+      window.clearTimeout(clickTimeoutRef.current);
+      clickTimeoutRef.current = null;
+    }
+    setOptimisticSelectedItemId(item.id);
+    if (isFileSystem && itemPath) {
+      onToggleExpand(itemPath);
+    }
+  }
+
+  function handleActivateContextMenu(clientX: number, clientY: number) {
+    if (!itemPath || isFavoritesRoot) {
+      return;
+    }
+    onSubviewFocus();
+    setOptimisticSelectedItemId(item.id);
+    onItemContextMenu?.(item, subview, {
+      x: clientX,
+      y: clientY,
+    });
+  }
+
   return (
     <div className="tree-branch">
       <div
@@ -740,6 +881,35 @@ function TreeItemRow({
         data-tree-path={itemPath ?? item.id}
         data-tree-kind={item.kind}
         style={{ paddingLeft: `${12 + item.depth * 16}px` }}
+        onPointerDown={(event) => {
+          const target = event.target;
+          if (target instanceof Element && target.closest(".tree-label, .tree-expand")) {
+            return;
+          }
+          handleActivatePointerDown(event.metaKey, event.button);
+        }}
+        onClick={(event) => {
+          const target = event.target;
+          if (target instanceof Element && target.closest(".tree-label, .tree-expand")) {
+            return;
+          }
+          handleActivateClick(event.metaKey);
+        }}
+        onDoubleClick={(event) => {
+          const target = event.target;
+          if (target instanceof Element && target.closest(".tree-label, .tree-expand")) {
+            return;
+          }
+          handleActivateDoubleClick();
+        }}
+        onContextMenu={(event) => {
+          const target = event.target;
+          if (target instanceof Element && target.closest(".tree-label, .tree-expand")) {
+            return;
+          }
+          event.preventDefault();
+          handleActivateContextMenu(event.clientX, event.clientY);
+        }}
       >
         <button
           type="button"
@@ -788,68 +958,14 @@ function TreeItemRow({
           className="tree-label"
           data-tree-item-id={item.id}
           onFocus={onSubviewFocus}
-          onPointerDown={(event) => {
-            if (event.button !== 0) {
-              return;
-            }
-            onSubviewFocus();
-            setOptimisticSelectedItemId(item.id);
-          }}
-          onClick={() => {
-            onSubviewFocus();
-            if (isFavoritesRoot) {
-              onSelectFavoritesRoot?.();
-              return;
-            }
-            if (clickTimeoutRef.current !== null) {
-              window.clearTimeout(clickTimeoutRef.current);
-            }
-            clickTimeoutRef.current = window.setTimeout(() => {
-              clickTimeoutRef.current = null;
-              if (singleClickExpandTreeItems && isFileSystem && itemPath && canExpand) {
-                onToggleExpand(itemPath);
-              }
-              const navigationResult = itemPath
-                ? isFavorite
-                  ? onNavigateFavorite(itemPath)
-                  : onNavigate(itemPath)
-                : undefined;
-              if (!navigationResult || typeof navigationResult.then !== "function") {
-                return;
-              }
-              void navigationResult.then((didNavigate) => {
-                if (!didNavigate) {
-                  setOptimisticSelectedItemId(null);
-                }
-              });
-            }, 180);
-          }}
+          onPointerDown={(event) => handleActivatePointerDown(event.metaKey, event.button)}
+          onClick={(event) => handleActivateClick(event.metaKey)}
           onDoubleClick={() => {
-            onSubviewFocus();
-            if (isFavoritesRoot) {
-              onToggleFavoritesExpanded();
-              return;
-            }
-            if (clickTimeoutRef.current !== null) {
-              window.clearTimeout(clickTimeoutRef.current);
-              clickTimeoutRef.current = null;
-            }
-            setOptimisticSelectedItemId(item.id);
-            if (isFileSystem && itemPath) {
-              onToggleExpand(itemPath);
-            }
+            handleActivateDoubleClick();
           }}
           onContextMenu={(event) => {
             event.preventDefault();
-            if (!itemPath || isFavoritesRoot) {
-              return;
-            }
-            onSubviewFocus();
-            setOptimisticSelectedItemId(item.id);
-            onItemContextMenu?.(item, subview, {
-              x: event.clientX,
-              y: event.clientY,
-            });
+            handleActivateContextMenu(event.clientX, event.clientY);
           }}
           title={itemPath ?? item.label}
         >

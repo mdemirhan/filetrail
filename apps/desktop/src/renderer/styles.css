@@ -3765,9 +3765,21 @@ body.resizing-panels-vertical * {
   stroke-width: 1.5;
 }
 
+.file-icon-folder-outline {
+  stroke: var(--accent-gold);
+  fill: none;
+  stroke-width: 1.5;
+}
+
 .file-icon-folder-stroke {
   stroke: var(--accent-gold);
   stroke-width: 1.5;
+}
+
+.file-icon-folder-cue {
+  fill: var(--text-tertiary);
+  stroke: var(--bg-elevated);
+  stroke-width: 1.25;
 }
 
 .file-icon-favorite {
@@ -4417,7 +4429,8 @@ body.resizing-panels-vertical * {
 }
 
 .help-view,
-.settings-view {
+.settings-view,
+.action-log-view {
   min-height: 0;
   height: 100%;
   background: var(--bg-base);
@@ -4427,7 +4440,8 @@ body.resizing-panels-vertical * {
 }
 
 body.platform-macos .help-view,
-body.platform-macos .settings-view {
+body.platform-macos .settings-view,
+body.platform-macos .action-log-view {
   padding-top: 58px;
 }
 

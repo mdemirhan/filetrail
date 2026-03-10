@@ -1,6 +1,32 @@
 import { copyPasteProgressEventSchema, ipcContractSchemas } from "./ipc";
 
 describe("ipc contracts", () => {
+  it("validates renderer log payloads", () => {
+    expect(
+      ipcContractSchemas["app:writeLog"].request.parse({
+        level: "error",
+        namespace: "filetrail.renderer",
+        message: "directory navigation failed",
+        error: "ENOENT",
+        context: {
+          path: "/Users/demo/missing",
+          retryCount: 1,
+          flags: ["initial-load"],
+        },
+      }),
+    ).toEqual({
+      level: "error",
+      namespace: "filetrail.renderer",
+      message: "directory navigation failed",
+      error: "ENOENT",
+      context: {
+        path: "/Users/demo/missing",
+        retryCount: 1,
+        flags: ["initial-load"],
+      },
+    });
+  });
+
   it("validates the folder size placeholder channels", () => {
     expect(
       ipcContractSchemas["folderSize:start"].response.parse({
@@ -71,6 +97,7 @@ describe("ipc contracts", () => {
           typeaheadDebounceMs: 1000,
           notificationsEnabled: true,
           notificationDurationSeconds: 4,
+          actionLogEnabled: true,
           propertiesOpen: false,
           detailRowOpen: true,
           terminalApp: null,
@@ -156,6 +183,7 @@ describe("ipc contracts", () => {
         typeaheadDebounceMs: 1000,
         notificationsEnabled: true,
         notificationDurationSeconds: 4,
+        actionLogEnabled: true,
         propertiesOpen: false,
         detailRowOpen: true,
         terminalApp: null,

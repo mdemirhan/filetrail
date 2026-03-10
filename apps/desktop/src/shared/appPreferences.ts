@@ -240,6 +240,7 @@ export type AppPreferences = {
   typeaheadDebounceMs: number;
   notificationsEnabled: boolean;
   notificationDurationSeconds: number;
+  actionLogEnabled: boolean;
   propertiesOpen: boolean;
   detailRowOpen: boolean;
   terminalApp: ApplicationSelection | null;
@@ -296,6 +297,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   typeaheadDebounceMs: 1000,
   notificationsEnabled: true,
   notificationDurationSeconds: 4,
+  actionLogEnabled: true,
   propertiesOpen: false,
   detailRowOpen: true,
   terminalApp: null,

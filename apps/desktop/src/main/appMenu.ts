@@ -6,6 +6,9 @@ import type { RendererCommandType } from "../shared/rendererCommands";
 // transitions so shortcuts, toolbar buttons, and menu items stay behaviorally aligned.
 export function createApplicationMenuTemplate(
   webContents: Pick<WebContents, "send">,
+  options: {
+    actionLogEnabled: boolean;
+  } = { actionLogEnabled: true },
 ): MenuItemConstructorOptions[] {
   const sendCommand = (type: RendererCommandType) => {
     webContents.send("filetrail:command", { type });
@@ -126,6 +129,15 @@ export function createApplicationMenuTemplate(
           accelerator: "CommandOrControl+Shift+I",
           click: () => sendCommand("toggleInfoRow"),
         },
+        ...(options.actionLogEnabled
+          ? [
+              { type: "separator" as const },
+              {
+                label: "Action Log",
+                click: () => sendCommand("openActionLog"),
+              },
+            ]
+          : []),
         { type: "separator" },
         {
           label: "Refresh",

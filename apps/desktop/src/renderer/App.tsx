@@ -1,6 +1,11 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { IpcRequest, IpcResponse, WriteOperationProgressEvent } from "@filetrail/contracts";
+import type {
+  ActionLogEntry,
+  IpcRequest,
+  IpcResponse,
+  WriteOperationProgressEvent,
+} from "@filetrail/contracts";
 
 import {
   ACCENT_OPTIONS,
@@ -20,6 +25,7 @@ import {
   clampZoomPercent,
 } from "../shared/appPreferences";
 import { AppDialogs } from "./components/AppDialogs";
+import { ActionLogView } from "./components/ActionLogView";
 import { ExplorerWorkspace } from "./components/ExplorerWorkspace";
 import { HelpView } from "./components/HelpView";
 import { InfoRow } from "./components/InfoRow";
@@ -36,7 +42,6 @@ import { useSearchSession } from "./hooks/useSearchSession";
 import { useWriteOperations } from "./hooks/useWriteOperations";
 import {
   type ContentSelectionState,
-  EMPTY_CONTENT_SELECTION,
   setSingleContentSelection as createSingleContentSelection,
 } from "./lib/contentSelection";
 import { buildPasteRequest } from "./lib/copyPasteClipboard";
@@ -82,6 +87,9 @@ export function App() {
   type SortDirection = IpcRequest<"directory:getSnapshot">["sortDirection"];
 
   const client = useFiletrailClient();
+  const [actionLogEntries, setActionLogEntries] = useState<ActionLogEntry[]>([]);
+  const [actionLogLoading, setActionLogLoading] = useState(false);
+  const [actionLogError, setActionLogError] = useState<string | null>(null);
   const {
     preferencesReady,
     setPreferencesReady,
@@ -141,6 +149,8 @@ export function App() {
     setNotificationsEnabled,
     notificationDurationSeconds,
     setNotificationDurationSeconds,
+    actionLogEnabled,
+    setActionLogEnabled,
     restoreLastVisitedFolderOnStartup,
     setRestoreLastVisitedFolderOnStartup,
     favorites,
@@ -555,6 +565,7 @@ export function App() {
     navigateToParentFolder,
     navigateTreeSelectionToParent,
     selectTreeItem,
+    clearTreeSelection,
     initializeTree,
     navigateTo,
     navigateTreeFileSystemPath,
@@ -837,6 +848,7 @@ export function App() {
     locationDialogOpen,
     mainView,
     setMainView,
+    openActionLogView,
     openSettingsView,
     openLocationSheet,
     focusFileSearch,
@@ -951,6 +963,7 @@ export function App() {
         typeaheadDebounceMs,
         notificationsEnabled,
         notificationDurationSeconds,
+        actionLogEnabled,
         propertiesOpen: infoPanelOpen,
         detailRowOpen: infoRowOpen,
         terminalApp,
@@ -1017,6 +1030,7 @@ export function App() {
     typeaheadDebounceMs,
     typeaheadEnabled,
     notificationDurationSeconds,
+    actionLogEnabled,
     openWithApplications,
     notificationsEnabled,
     openItemLimit,
@@ -1089,6 +1103,7 @@ export function App() {
         setTypeaheadDebounceMs(preferences.typeaheadDebounceMs);
         setNotificationsEnabled(preferences.notificationsEnabled);
         setNotificationDurationSeconds(preferences.notificationDurationSeconds);
+        setActionLogEnabled(preferences.actionLogEnabled);
         setInfoPanelOpen(preferences.propertiesOpen);
         setInfoRowOpen(preferences.detailRowOpen);
         setRestoreLastVisitedFolderOnStartup(preferences.restoreLastVisitedFolderOnStartup);
@@ -1288,6 +1303,51 @@ export function App() {
     setMainView("settings");
   }
 
+  function openActionLogView() {
+    if (!actionLogEnabled) {
+      return;
+    }
+    setLocationSheetOpen(false);
+    setLocationError(null);
+    setThemeMenuOpen(false);
+    setSearchPopoverOpen(false);
+    setMainView("action-log");
+  }
+
+  const refreshActionLog = useCallback(async () => {
+    if (!actionLogEnabled) {
+      setActionLogEntries([]);
+      setActionLogError(null);
+      return;
+    }
+    setActionLogLoading(true);
+    setActionLogError(null);
+    try {
+      const response = await client.invoke("actionLog:list", {});
+      setActionLogEntries(response.items);
+    } catch (error) {
+      logger.error("action log load failed", error);
+      setActionLogError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setActionLogLoading(false);
+    }
+  }, [actionLogEnabled, client]);
+
+  async function copyActionLogEntryText(text: string) {
+    await client.invoke("system:copyText", { text });
+  }
+
+  useEffect(() => {
+    if (!actionLogEnabled && mainView === "action-log") {
+      setMainView("explorer");
+      return;
+    }
+    if (mainView !== "action-log" || !actionLogEnabled) {
+      return;
+    }
+    void refreshActionLog();
+  }, [actionLogEnabled, mainView, refreshActionLog]);
+
   async function addFavoriteFromSettings() {
     const pickedPath = await browseForDirectoryPath(currentPath || homePath);
     if (!pickedPath || isFavoritePath(favorites, pickedPath)) {
@@ -1412,6 +1472,8 @@ export function App() {
               setTheme(nextTheme);
               setThemeMenuOpen(false);
             },
+            actionLogEnabled,
+            onOpenActionLog: openActionLogView,
             onOpenHelp: () => setMainView("help"),
             onOpenSettings: openSettingsView,
             includeHidden,
@@ -1424,6 +1486,7 @@ export function App() {
                 favoritePath: path,
                 persistOnError: true,
               }),
+            onClearSelection: clearTreeSelection,
             onSelectFavoritesRoot: () => selectTreeItem(getFavoritesRootItemId(), "skip"),
             onItemContextMenu: (item, subview, position) => {
               if (!item.path || item.kind === "favorites-root") {
@@ -1665,6 +1728,19 @@ export function App() {
                 theme={theme}
                 accent={accent}
               />
+            ) : mainView === "action-log" ? (
+              <ActionLogView
+                entries={actionLogEntries}
+                loading={actionLogLoading}
+                error={actionLogError}
+                theme={theme}
+                accent={accent}
+                layoutMode={singlePanelLayout}
+                onCopyEntryText={copyActionLogEntryText}
+                onRefresh={() => {
+                  void refreshActionLog();
+                }}
+              />
             ) : (
               <SettingsView
                 theme={theme}
@@ -1692,6 +1768,7 @@ export function App() {
                 typeaheadDebounceMs={typeaheadDebounceMs}
                 notificationsEnabled={notificationsEnabled}
                 notificationDurationSeconds={notificationDurationSeconds}
+                actionLogEnabled={actionLogEnabled}
                 restoreLastVisitedFolderOnStartup={restoreLastVisitedFolderOnStartup}
                 homePath={homePath}
                 terminalApp={terminalApp}
@@ -1733,6 +1810,7 @@ export function App() {
                 onTypeaheadDebounceMsChange={setTypeaheadDebounceMs}
                 onNotificationsEnabledChange={setNotificationsEnabled}
                 onNotificationDurationSecondsChange={setNotificationDurationSeconds}
+                onActionLogEnabledChange={setActionLogEnabled}
                 onRestoreLastVisitedFolderOnStartupChange={setRestoreLastVisitedFolderOnStartup}
                 onBrowseTerminalApp={() => {
                   void browseTerminalApplication();

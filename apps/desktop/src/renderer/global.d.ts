@@ -1,4 +1,5 @@
 import type {
+  AppLogEntry,
   IpcChannel,
   IpcRequestInput,
   IpcResponse,
@@ -13,6 +14,7 @@ declare global {
         channel: C,
         payload: IpcRequestInput<C>,
       ): Promise<IpcResponse<C>>;
+      log(entry: AppLogEntry): Promise<void>;
       onCommand(listener: (command: RendererCommand) => void): () => void;
       onWriteOperationProgress(listener: (event: WriteOperationProgressEvent) => void): () => void;
       onCopyPasteProgress(listener: (event: WriteOperationProgressEvent) => void): () => void;

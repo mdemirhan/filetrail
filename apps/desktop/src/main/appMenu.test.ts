@@ -179,6 +179,36 @@ describe("createApplicationMenuTemplate", () => {
     });
   });
 
+  it("shows Action Log in the View menu when enabled", () => {
+    const send = vi.fn();
+    const template = createApplicationMenuTemplate({ send } as never, {
+      actionLogEnabled: true,
+    });
+    const viewMenu = template.find((item) => item.label === "View");
+    const submenu = Array.isArray(viewMenu?.submenu) ? viewMenu.submenu : [];
+    const actionLogItem = submenu.find((item) => "label" in item && item.label === "Action Log");
+
+    expect(actionLogItem).toBeTruthy();
+    if (!actionLogItem || !("click" in actionLogItem) || typeof actionLogItem.click !== "function") {
+      throw new Error("Action Log menu item missing.");
+    }
+
+    actionLogItem.click(undefined as never, undefined as never, undefined as never);
+
+    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "openActionLog" });
+  });
+
+  it("hides Action Log in the View menu when disabled", () => {
+    const send = vi.fn();
+    const template = createApplicationMenuTemplate({ send } as never, {
+      actionLogEnabled: false,
+    });
+    const viewMenu = template.find((item) => item.label === "View");
+    const submenu = Array.isArray(viewMenu?.submenu) ? viewMenu.submenu : [];
+
+    expect(submenu.some((item) => "label" in item && item.label === "Action Log")).toBe(false);
+  });
+
   it("wires Toggle Info Panel to the renderer command channel", () => {
     const send = vi.fn();
     const template = createApplicationMenuTemplate({ send } as never);

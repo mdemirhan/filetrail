@@ -99,6 +99,7 @@ vi.mock("./components/TreePane", () => ({
     onNavigate,
     onNavigateFavorite,
     onSelectFavoritesRoot,
+    onClearSelection,
     onItemContextMenu,
     nodes,
     favorites,
@@ -114,6 +115,7 @@ vi.mock("./components/TreePane", () => ({
     onNavigate: (path: string) => Promise<boolean> | void;
     onNavigateFavorite: (path: string) => Promise<boolean> | void;
     onSelectFavoritesRoot?: () => Promise<boolean> | void;
+    onClearSelection?: () => void;
     onItemContextMenu?: (
       item: {
         id: string;
@@ -140,7 +142,7 @@ vi.mock("./components/TreePane", () => ({
     favorites: Array<{ path: string }>;
     favoritesPlacement: "integrated" | "separate";
     activeLeftPaneSubview: "favorites" | "tree";
-    selectedTreeItemId: string;
+    selectedTreeItemId: string | null;
     rootPath: string;
   }) => (
     <div ref={paneRef} data-testid="tree-pane-shell">
@@ -170,8 +172,19 @@ vi.mock("./components/TreePane", () => ({
       </button>
       <output data-testid="left-pane-subview">{activeLeftPaneSubview}</output>
       <output data-testid="favorites-placement">{favoritesPlacement}</output>
-      <output data-testid="tree-selection">{selectedTreeItemId}</output>
+      <output data-testid="tree-selection">{selectedTreeItemId ?? "none"}</output>
       <output data-testid="tree-root">{rootPath}</output>
+      <button
+        type="button"
+        data-testid="tree-clear-selection"
+        onClick={() => {
+          onLeftPaneSubviewChange("tree");
+          onFocusChange(true);
+          onClearSelection?.();
+        }}
+      >
+        Clear Tree Selection
+      </button>
       {favorites.map((favorite) => (
         <button
           key={`favorite:${favorite.path}`}
@@ -338,6 +351,9 @@ vi.mock("./components/HelpView", () => ({
     </div>
   ),
 }));
+vi.mock("./components/ActionLogView", () => ({
+  ActionLogView: () => <div data-testid="action-log-view">Action Log</div>,
+}));
 vi.mock("./components/SettingsView", () => ({
   SettingsView: () => (
     <div data-testid="settings-view">
@@ -418,6 +434,27 @@ describe("App copy/paste integration", () => {
     expect(within(initialToastViewport).getByText("Ready to paste")).toBeInTheDocument();
     expect(within(initialToastViewport).getByText("source.txt")).toBeInTheDocument();
     expect(document.activeElement).toBe(activeElementBeforeCopy);
+  });
+
+  it("clears the active content location when the tree selection is cleared", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    expect(await screen.findByTestId("content-current-path")).toHaveTextContent("/Users/demo");
+    expect(screen.getByTestId("tree-selection")).not.toHaveTextContent("none");
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("tree-clear-selection"));
+    });
+
+    expect(screen.getByTestId("tree-selection")).toHaveTextContent("none");
+    expect(screen.getByTestId("content-current-path")).toHaveTextContent("");
+    expect(screen.getByTestId("content-entry-count")).toHaveTextContent("0");
   });
 
   it("shows a cut toast without changing focus", async () => {
@@ -4136,7 +4173,7 @@ describe("App copy/paste integration", () => {
 
     expect(await screen.findByRole("button", { name: "Retry Failed Items" })).toBeInTheDocument();
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Retry Failed Items" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Retry Failed Items" }));
     });
 
     await vi.waitFor(() => {
@@ -4220,7 +4257,7 @@ describe("App copy/paste integration", () => {
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Retry Failed Items" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Retry Failed Items" }));
     });
 
     expect(await screen.findByRole("region", { name: "Paste In Progress" })).toBeInTheDocument();
@@ -4575,7 +4612,16 @@ function createAppHarness(
       if (channel === "app:clearCaches") {
         return { ok: true } as IpcResponse<C>;
       }
+      if (channel === "app:writeLog") {
+        return { ok: true } as IpcResponse<C>;
+      }
+      if (channel === "actionLog:list") {
+        return { items: [] } as IpcResponse<C>;
+      }
       throw new Error(`Unhandled channel in test harness: ${channel}`);
+    },
+    async log() {
+      return undefined;
     },
     onCommand(listener) {
       commandListener = listener;
@@ -4611,8 +4657,33 @@ function createAppHarness(
     },
     emitProgress(event) {
       if ("mode" in event) {
-        writeOperationProgressListener?.(event as WriteOperationProgressEvent);
-        copyPasteProgressListener?.(event as WriteOperationProgressEvent);
+        const action = event.action ?? (event.mode === "cut" ? "move_to" : "paste");
+        const normalizedEvent: WriteOperationProgressEvent = {
+          operationId: event.operationId,
+          action,
+          status: event.status,
+          completedItemCount: event.completedItemCount,
+          totalItemCount: event.totalItemCount,
+          completedByteCount: event.completedByteCount,
+          totalBytes: event.totalBytes,
+          currentSourcePath: event.currentSourcePath,
+          currentDestinationPath: event.currentDestinationPath,
+          result: event.result
+            ? {
+                operationId: event.result.operationId,
+                action,
+                status: event.result.status,
+                targetPath: event.result.destinationDirectoryPath,
+                startedAt: event.result.startedAt,
+                finishedAt: event.result.finishedAt,
+                summary: event.result.summary,
+                items: event.result.items,
+                error: event.result.error,
+              }
+            : null,
+        };
+        writeOperationProgressListener?.(normalizedEvent);
+        copyPasteProgressListener?.(normalizedEvent);
         return;
       }
       writeOperationProgressListener?.(event);

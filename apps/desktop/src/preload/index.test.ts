@@ -21,6 +21,7 @@ async function importPreload() {
   const [, api] = electronMock.exposeInMainWorld.mock.calls[0] ?? [];
   return api as {
     invoke: (channel: string, payload: unknown) => Promise<unknown>;
+    log: (entry: unknown) => Promise<void>;
     onCommand: (listener: (command: unknown) => void) => () => void;
     onWriteOperationProgress: (listener: (event: unknown) => void) => () => void;
     onCopyPasteProgress: (listener: (event: unknown) => void) => () => void;
@@ -43,6 +44,7 @@ describe("preload bridge", () => {
       "filetrail",
       expect.objectContaining({
         invoke: expect.any(Function),
+        log: expect.any(Function),
         onCommand: expect.any(Function),
         onWriteOperationProgress: expect.any(Function),
         onCopyPasteProgress: expect.any(Function),
@@ -71,6 +73,32 @@ describe("preload bridge", () => {
     const api = await importPreload();
 
     await expect(api.invoke("app:getHomeDirectory", {})).rejects.toThrow("boom");
+  });
+
+  it("forwards renderer log events through app:writeLog", async () => {
+    electronMock.invoke.mockResolvedValue({
+      ok: true,
+      payload: { ok: true },
+    });
+    const api = await importPreload();
+
+    await expect(
+      api.log({
+        level: "error",
+        namespace: "filetrail.renderer",
+        message: "boom",
+        error: "disk full",
+        context: { surface: "tree" },
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(electronMock.invoke).toHaveBeenCalledWith("app:writeLog", {
+      level: "error",
+      namespace: "filetrail.renderer",
+      message: "boom",
+      error: "disk full",
+      context: { surface: "tree" },
+    });
   });
 
   it("subscribes to renderer commands and unregisters the exact listener", async () => {

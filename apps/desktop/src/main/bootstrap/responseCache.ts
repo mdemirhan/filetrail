@@ -126,13 +126,14 @@ export async function withTiming<T>(
   label: string,
   path: string,
   load: () => Promise<T>,
+  logger: Pick<Console, "debug"> = console,
 ): Promise<T> {
   // Slow-path logging is enough for production debugging without flooding the console.
   const start = performance.now();
   const value = await load();
   const elapsedMs = performance.now() - start;
   if (debugTimingsEnabled || elapsedMs >= 120) {
-    console.log(`[filetrail] ${label} ${path} ${Math.round(elapsedMs)}ms`);
+    logger.debug(`[filetrail] ${label} ${path} ${Math.round(elapsedMs)}ms`);
   }
   return value;
 }

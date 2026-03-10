@@ -101,6 +101,7 @@ describe("appPreferences helpers", () => {
       typeaheadDebounceMs: 1000,
       notificationsEnabled: true,
       notificationDurationSeconds: 4,
+      actionLogEnabled: true,
       propertiesOpen: false,
       defaultTextEditor: {
         appPath: "/System/Applications/TextEdit.app",

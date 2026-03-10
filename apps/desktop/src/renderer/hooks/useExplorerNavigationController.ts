@@ -60,7 +60,7 @@ const logger = createRendererLogger("filetrail.renderer");
 export function useExplorerNavigationController(args: {
   client: ReturnType<typeof useFiletrailClient>;
   preferencesReady: boolean;
-  mainView: "explorer" | "help" | "settings";
+  mainView: "explorer" | "help" | "settings" | "action-log";
   locationDialogOpen: boolean;
   explorerFocusSuppressed: boolean;
   actionNotice: { title: string; message: string } | null;
@@ -83,8 +83,8 @@ export function useExplorerNavigationController(args: {
   favoritesPlacement: FavoritesPlacement;
   favoritesExpanded: boolean;
   setFavoritesExpanded: Dispatch<SetStateAction<boolean>>;
-  selectedTreeItemId: TreeItemId;
-  setSelectedTreeItemId: Dispatch<SetStateAction<TreeItemId>>;
+  selectedTreeItemId: TreeItemId | null;
+  setSelectedTreeItemId: Dispatch<SetStateAction<TreeItemId | null>>;
   currentPath: string;
   setCurrentPath: Dispatch<SetStateAction<string>>;
   currentEntries: DirectoryEntry[];
@@ -148,7 +148,7 @@ export function useExplorerNavigationController(args: {
   getInfoRequestRef: MutableRefObject<number>;
   treeRequestRef: MutableRefObject<Record<string, number>>;
   treeNodesRef: MutableRefObject<Record<string, TreeNodeState>>;
-  selectedTreeItemIdRef: MutableRefObject<TreeItemId>;
+  selectedTreeItemIdRef: MutableRefObject<TreeItemId | null>;
   treeRootPathRef: MutableRefObject<string>;
   metadataCacheRef: MutableRefObject<Map<string, DirectoryEntryMetadata>>;
   metadataInflightRef: MutableRefObject<Set<string>>;
@@ -334,9 +334,14 @@ export function useExplorerNavigationController(args: {
     });
   }
 
-  function setTreeSelection(itemId: TreeItemId) {
+  function setTreeSelection(itemId: TreeItemId | null) {
     selectedTreeItemIdRef.current = itemId;
     setSelectedTreeItemId(itemId);
+  }
+
+  function clearTreeSelection() {
+    setTreeSelection(null);
+    applyEmptyDirectorySnapshot();
   }
 
   function applyHistoryUpdate(path: string, historyMode: "push" | "replace" | "skip") {
@@ -1151,7 +1156,7 @@ export function useExplorerNavigationController(args: {
     const currentItemId = selectedTreeItemIdRef.current;
     if (favoritesPlacement === "separate" && leftPaneSubviewRef.current === "favorites") {
       const favoritePath = getFavoriteItemPath(currentItemId);
-      if (favoritePath) {
+      if (currentItemId && favoritePath) {
         await selectTreeItem(currentItemId, "push");
       }
       return;
@@ -1160,7 +1165,7 @@ export function useExplorerNavigationController(args: {
       return;
     }
     const favoritePath = getFavoriteItemPath(currentItemId);
-    if (favoritePath) {
+    if (currentItemId && favoritePath) {
       await selectTreeItem(currentItemId, "push");
       return;
     }
@@ -1769,6 +1774,7 @@ export function useExplorerNavigationController(args: {
     navigateToParentFolder,
     navigateTreeSelectionToParent,
     selectTreeItem,
+    clearTreeSelection,
     initializeTree,
     reinitializeTree,
     navigateTo,

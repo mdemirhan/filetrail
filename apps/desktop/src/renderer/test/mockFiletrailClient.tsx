@@ -15,6 +15,9 @@ export function createMockFiletrailClient(
       }
       return await handler(payload as never);
     },
+    async log() {
+      return undefined;
+    },
     onCommand: () => () => undefined,
     onWriteOperationProgress: () => () => undefined,
     onCopyPasteProgress: () => () => undefined,

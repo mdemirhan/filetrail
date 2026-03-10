@@ -38,6 +38,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       typeaheadDebounceMs={750}
       notificationsEnabled={true}
       notificationDurationSeconds={4}
+      actionLogEnabled={true}
       restoreLastVisitedFolderOnStartup={false}
       homePath="/Users/demo"
       terminalApp={null}
@@ -106,6 +107,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       onTypeaheadDebounceMsChange={() => undefined}
       onNotificationsEnabledChange={() => undefined}
       onNotificationDurationSecondsChange={() => undefined}
+      onActionLogEnabledChange={() => undefined}
       onRestoreLastVisitedFolderOnStartupChange={() => undefined}
       onBrowseTerminalApp={() => undefined}
       onClearTerminalApp={() => undefined}
@@ -352,6 +354,18 @@ describe("SettingsView", () => {
 
     expect(onNotificationsEnabledChange).toHaveBeenCalledWith(false);
     expect(onNotificationDurationSecondsChange).toHaveBeenCalledWith(6);
+  });
+
+  it("forwards action log preference changes", () => {
+    const onActionLogEnabledChange = vi.fn();
+    renderSettingsView({
+      actionLogEnabled: true,
+      onActionLogEnabledChange,
+    });
+
+    fireEvent.click(screen.getByLabelText("Enable action log"));
+
+    expect(onActionLogEnabledChange).toHaveBeenCalledWith(false);
   });
 
   it("renders configured Open With applications", () => {

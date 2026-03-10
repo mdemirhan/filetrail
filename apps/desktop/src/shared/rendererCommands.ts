@@ -4,6 +4,7 @@ export const RENDERER_COMMAND_TYPES = [
   "editPaste",
   "editSelectAll",
   "focusFileSearch",
+  "openActionLog",
   "openSelection",
   "editSelection",
   "openLocationSheet",

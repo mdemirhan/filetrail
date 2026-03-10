@@ -15,14 +15,24 @@ import "@fontsource/lexend/500.css";
 import "@fontsource/lexend/600.css";
 
 import { App } from "./App";
+import { createRendererLogger, installGlobalRendererErrorHandlers } from "./lib/logging";
 import "./styles.css";
+
+const logger = createRendererLogger("filetrail.renderer");
+
+installGlobalRendererErrorHandlers("filetrail.renderer");
 
 const rootElement = document.getElementById("root");
 if (!rootElement) {
+  logger.error("renderer bootstrap failed", new Error("Missing root element"));
   throw new Error("Missing root element");
 }
 
 document.body.classList.add("platform-macos");
+logger.info("renderer boot", {
+  strictMode: true,
+  platform: navigator.platform,
+});
 
 createRoot(rootElement).render(
   <StrictMode>

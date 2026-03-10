@@ -32,7 +32,16 @@ export function FileIcon({ entry }: { entry: Entry }) {
 export function FolderIcon({
   alias = false,
   className = "",
-}: { alias?: boolean; className?: string }) {
+  open = false,
+  variant = "filled",
+  showCue = false,
+}: {
+  alias?: boolean;
+  className?: string;
+  open?: boolean;
+  variant?: "filled" | "outline";
+  showCue?: boolean;
+}) {
   const iconClassName = className.length > 0 ? `file-icon folder ${className}` : "file-icon folder";
   if (alias) {
     return (
@@ -44,7 +53,7 @@ export function FolderIcon({
   }
   return (
     <span className={iconClassName} aria-hidden>
-      <FolderSvg />
+      <FolderSvg open={open} variant={variant} showCue={showCue} />
     </span>
   );
 }
@@ -83,7 +92,15 @@ export function FavoriteItemIcon({ icon }: { icon: FavoriteIconId }) {
   );
 }
 
-function FolderSvg({ open = false }: { open?: boolean }) {
+function FolderSvg({
+  open = false,
+  variant = "filled",
+  showCue = false,
+}: {
+  open?: boolean;
+  variant?: "filled" | "outline";
+  showCue?: boolean;
+}) {
   if (open) {
     return (
       <svg
@@ -103,6 +120,26 @@ function FolderSvg({ open = false }: { open?: boolean }) {
           className="file-icon-folder-open-fill"
           strokeLinecap="round"
         />
+      </svg>
+    );
+  }
+
+  if (variant === "outline") {
+    return (
+      <svg
+        className="file-icon-svg file-icon-folder"
+        viewBox="0 0 24 24"
+        fill="none"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path
+          d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6.93a2 2 0 0 1-1.66-.88l-.82-1.24A2 2 0 0 0 7.93 4H5a2 2 0 0 0-2 2v1z"
+          className="file-icon-folder-outline"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        {showCue ? <circle cx="17.5" cy="16.5" r="2.25" className="file-icon-folder-cue" /> : null}
       </svg>
     );
   }

@@ -1,7 +1,7 @@
 import type { RendererCommandType } from "../../shared/rendererCommands";
 import type { ContextMenuActionId } from "./contextMenu";
 
-type MainView = "explorer" | "help" | "settings";
+type MainView = "explorer" | "help" | "settings" | "action-log";
 type FocusedPane = "tree" | "content" | null;
 export type SelectedTreeTargetKind = "filesystemFolder" | "favorite" | "favoritesRoot" | null;
 
@@ -50,6 +50,7 @@ export const RENDERER_COMMAND_TREE_FOCUS_BUCKETS = {
   editPaste: "globalExplorer",
   editSelectAll: "globalExplorer",
   focusFileSearch: "globalExplorer",
+  openActionLog: "globalExplorer",
   openSelection: "contentOnly",
   editSelection: "contentOnly",
   openLocationSheet: "globalExplorer",
@@ -163,7 +164,7 @@ export function canHandleRendererCommand(
     return true;
   }
 
-  if (command === "openSettings") {
+  if (command === "openSettings" || command === "openActionLog") {
     return !context.locationSheetOpen && !context.actionNoticeOpen;
   }
 

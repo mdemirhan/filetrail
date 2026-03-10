@@ -99,19 +99,29 @@ export async function openPathsWithApplication(
 export async function openInTerminal(
   payload: IpcRequest<"system:openInTerminal">,
   terminalApp: { appPath: string; appName: string } | null,
-): Promise<IpcResponse<"system:openInTerminal">> {
+): Promise<
+  IpcResponse<"system:openInTerminal"> & {
+    targetPath: string;
+    terminalName: string;
+  }
+> {
+  const terminalName = resolveTerminalApplicationName(terminalApp);
+  const targetPath = await resolveTerminalTargetPath(payload.path);
   try {
     // Files open Terminal in their containing directory; directories open directly.
-    const targetPath = await resolveTerminalTargetPath(payload.path);
-    await execFileAsync("open", ["-a", resolveTerminalApplicationName(terminalApp), targetPath]);
+    await execFileAsync("open", ["-a", terminalName, targetPath]);
     return {
       ok: true,
       error: null,
+      targetPath,
+      terminalName,
     };
   } catch (error) {
     return {
       ok: false,
       error: toErrorMessage(error),
+      targetPath,
+      terminalName,
     };
   }
 }

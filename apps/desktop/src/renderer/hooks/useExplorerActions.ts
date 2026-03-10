@@ -88,7 +88,7 @@ function createOpenWithApplicationId(): string {
 
 export function useExplorerActions(args: {
   client: ReturnType<typeof useFiletrailClient>;
-  mainView: "explorer" | "help" | "settings";
+  mainView: "explorer" | "help" | "settings" | "action-log";
   focusedPane: "tree" | "content" | null;
   setFocusedPane: (value: "tree" | "content" | null) => void;
   setInfoPanelOpen: Dispatch<SetStateAction<boolean>>;
@@ -138,7 +138,7 @@ export function useExplorerActions(args: {
   contentSelection: ContentSelectionState;
   setContentSelection: Dispatch<SetStateAction<ContentSelectionState>>;
   currentPathRef: MutableRefObject<string>;
-  selectedTreeItemIdRef: MutableRefObject<string>;
+  selectedTreeItemIdRef: MutableRefObject<string | null>;
   isSearchModeRef: MutableRefObject<boolean>;
   selectedPathsInViewOrderRef: MutableRefObject<string[]>;
   selectedEntryRef: MutableRefObject<DirectoryEntry | null>;
@@ -1053,10 +1053,10 @@ export function useExplorerActions(args: {
 
   async function copyPathsToClipboard(paths: string[]) {
     await client.invoke(
-      "system:copyText" as never,
+      "system:copyText",
       {
         text: paths.map((path) => formatPathForShell(path)).join("\n"),
-      } as never,
+      },
     );
   }
 
@@ -1152,16 +1152,16 @@ export function useExplorerActions(args: {
       currentSourcePath: plan.sourcePaths[0] ?? null,
     });
     try {
-      const response = (await client.invoke(
-        "copyPaste:start" as never,
+      const response = await client.invoke(
+        "copyPaste:start",
         {
           mode: plan.mode,
           sourcePaths: plan.sourcePaths,
           destinationDirectoryPath: plan.destinationDirectoryPath,
           conflictResolution: plan.conflictResolution,
           action,
-        } as never,
-      )) as { operationId: string };
+        },
+      );
       if (clearClipboardOnStart) {
         applyCopyPasteClipboardState(clearCopyPasteClipboard());
       }
@@ -1266,13 +1266,13 @@ export function useExplorerActions(args: {
       currentSourcePath: request.sourcePaths[0] ?? null,
     });
     try {
-      const plan = (await client.invoke(
-        "copyPaste:plan" as never,
+      const plan = await client.invoke(
+        "copyPaste:plan",
         {
           ...request,
           action: "paste",
-        } as never,
-      )) as CopyPastePlan;
+        },
+      );
       const pendingAttempt = pendingPasteAttemptRef.current;
       if (!pendingAttempt || pendingAttempt.id !== pasteAttemptId || pendingAttempt.cancelled) {
         return;
@@ -1336,7 +1336,7 @@ export function useExplorerActions(args: {
       return;
     }
     try {
-      await client.invoke("writeOperation:cancel" as never, { operationId } as never);
+      await client.invoke("writeOperation:cancel", { operationId });
     } catch (error) {
       logger.error("copy paste cancel failed", error);
       showModalNotice(
@@ -1375,16 +1375,16 @@ export function useExplorerActions(args: {
     setWriteOperationProgressEvent(null);
     setCopyPasteDialogState(null);
     try {
-      const plan = (await client.invoke(
-        "copyPaste:plan" as never,
+      const plan = await client.invoke(
+        "copyPaste:plan",
         {
           mode: event.action === "move_to" ? "cut" : "copy",
           sourcePaths: failedSourcePaths,
           destinationDirectoryPath: result.targetPath ?? currentPathRef.current,
           conflictResolution: "error",
           action: event.action === "move_to" ? "move_to" : event.action,
-        } as never,
-      )) as CopyPastePlan;
+        },
+      );
       if (plan.conflicts.length > 0) {
         pendingPasteAttemptRef.current = null;
         applyWriteOperationCardState(null);
@@ -1501,7 +1501,7 @@ export function useExplorerActions(args: {
       return false;
     }
     try {
-      await client.invoke("system:copyText" as never, { text: path } as never);
+      await client.invoke("system:copyText", { text: path });
       return true;
     } catch (error) {
       logger.error("Info Panel copy path failed", error);
@@ -1515,12 +1515,12 @@ export function useExplorerActions(args: {
 
   async function openPathInTerminal(path: string) {
     try {
-      const response = (await client.invoke(
-        "system:openInTerminal" as never,
+      const response = await client.invoke(
+        "system:openInTerminal",
         {
           path,
-        } as never,
-      )) as { ok: boolean; error?: string | null };
+        },
+      );
       if (!response.ok) {
         throw new Error(response.error ?? "Unable to open Terminal for the selected path.");
       }
@@ -1538,11 +1538,7 @@ export function useExplorerActions(args: {
     failureMessage: string,
   ): Promise<{ appPath: string; appName: string } | null> {
     try {
-      const response = (await client.invoke("system:pickApplication" as never, {} as never)) as {
-        canceled: boolean;
-        appPath: string | null;
-        appName: string | null;
-      };
+      const response = await client.invoke("system:pickApplication", {});
       if (response.canceled || !response.appPath || !response.appName) {
         return null;
       }
@@ -1566,13 +1562,13 @@ export function useExplorerActions(args: {
     applicationName: string,
   ) {
     try {
-      const response = (await client.invoke(
-        "system:openPathsWithApplication" as never,
+      const response = await client.invoke(
+        "system:openPathsWithApplication",
         {
           applicationPath,
           paths,
-        } as never,
-      )) as { ok: boolean; error?: string | null };
+        },
+      );
       if (!response.ok) {
         throw new Error(response.error ?? `Unable to open with ${applicationName}.`);
       }
@@ -1936,9 +1932,7 @@ export function useExplorerActions(args: {
 
   async function resolveTargetPath(path: string): Promise<string | null> {
     try {
-      const response = (await client.invoke("path:resolve" as never, { path } as never)) as {
-        resolvedPath: string | null;
-      };
+      const response = await client.invoke("path:resolve", { path });
       return response.resolvedPath;
     } catch (error) {
       logger.error("resolve target path failed", error);
@@ -1948,10 +1942,7 @@ export function useExplorerActions(args: {
 
   async function openPathExternally(path: string) {
     try {
-      const response = (await client.invoke("system:openPath" as never, { path } as never)) as {
-        ok: boolean;
-        error?: string | null;
-      };
+      const response = await client.invoke("system:openPath", { path });
       if (!response.ok) {
         throw new Error(response.error ?? "Unable to open the selected item.");
       }
@@ -2032,16 +2023,16 @@ export function useExplorerActions(args: {
       currentSourcePath: paths[0] ?? null,
     });
     try {
-      const plan = (await client.invoke(
-        "copyPaste:plan" as never,
+      const plan = await client.invoke(
+        "copyPaste:plan",
         {
           mode: "copy",
           sourcePaths: paths,
           destinationDirectoryPath,
           conflictResolution: "error",
           action: "duplicate",
-        } as never,
-      )) as CopyPastePlan;
+        },
+      );
       const pendingAttempt = pendingPasteAttemptRef.current;
       if (!pendingAttempt || pendingAttempt.id !== pasteAttemptId || pendingAttempt.cancelled) {
         return;
@@ -2111,16 +2102,16 @@ export function useExplorerActions(args: {
       currentSourcePath: moveDialogState.sourcePaths[0] ?? null,
     });
     try {
-      const plan = (await client.invoke(
-        "copyPaste:plan" as never,
+      const plan = await client.invoke(
+        "copyPaste:plan",
         {
           mode: "cut",
           sourcePaths: moveDialogState.sourcePaths,
           destinationDirectoryPath,
           conflictResolution: "error",
           action: "move_to",
-        } as never,
-      )) as CopyPastePlan;
+        },
+      );
       const pendingAttempt = pendingPasteAttemptRef.current;
       if (!pendingAttempt || pendingAttempt.id !== pasteAttemptId || pendingAttempt.cancelled) {
         return;
@@ -2173,12 +2164,12 @@ export function useExplorerActions(args: {
   }
 
   async function browseForDirectoryPath(currentDirectoryPath: string): Promise<string | null> {
-    const response = (await client.invoke(
-      "system:pickDirectory" as never,
+    const response = await client.invoke(
+      "system:pickDirectory",
       {
         defaultPath: currentDirectoryPath.length > 0 ? currentDirectoryPath : null,
-      } as never,
-    )) as { canceled: boolean; path: string };
+      },
+    );
     return response.canceled ? null : response.path;
   }
 
@@ -2208,13 +2199,13 @@ export function useExplorerActions(args: {
       return;
     }
     try {
-      const response = (await client.invoke(
-        "writeOperation:rename" as never,
+      const response = await client.invoke(
+        "writeOperation:rename",
         {
           sourcePath: renameDialogState.sourcePath,
           destinationName: nextName,
-        } as never,
-      )) as { operationId: string };
+        },
+      );
       activeWriteOperationIdRef.current = response.operationId;
       applyWriteOperationCardState({
         action: "rename",
@@ -2314,13 +2305,13 @@ export function useExplorerActions(args: {
       return;
     }
     try {
-      const response = (await client.invoke(
-        "writeOperation:createFolder" as never,
+      const response = await client.invoke(
+        "writeOperation:createFolder",
         {
           parentDirectoryPath: newFolderDialogState.parentDirectoryPath,
           folderName,
-        } as never,
-      )) as { operationId: string };
+        },
+      );
       rememberPendingTreeSelectionPath(
         newFolderDialogState.selectInTreeOnSuccess
           ? buildChildPath(newFolderDialogState.parentDirectoryPath, folderName)
@@ -2357,12 +2348,12 @@ export function useExplorerActions(args: {
     }
     try {
       setCopyPasteDialogState(null);
-      const response = (await client.invoke(
-        "writeOperation:trash" as never,
+      const response = await client.invoke(
+        "writeOperation:trash",
         {
           paths,
-        } as never,
-      )) as { operationId: string };
+        },
+      );
       rememberPendingTreeSelectionPath(null);
       activeWriteOperationIdRef.current = response.operationId;
       applyWriteOperationCardState({

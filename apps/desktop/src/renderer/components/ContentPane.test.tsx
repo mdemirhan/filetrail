@@ -38,6 +38,78 @@ describe("ContentPane", () => {
   });
 
   it("renders a selection-empty state when no folder is selected", () => {
+    const { container } = render(
+      <ContentPane
+        isFocused
+        currentPath=""
+        entries={[]}
+        viewMode="list"
+        loading={false}
+        error={null}
+        includeHidden={false}
+        metadataByPath={{}}
+        sortBy="name"
+        sortDirection="asc"
+        onSelectPath={() => undefined}
+        onActivateEntry={() => undefined}
+        onSortChange={() => undefined}
+        onLayoutColumnsChange={() => undefined}
+        onVisiblePathsChange={() => undefined}
+        onNavigatePath={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+        onFocusChange={() => undefined}
+        typeaheadQuery=""
+      />,
+    );
+
+    expect(screen.getByText("Select a folder or favorite to view its contents.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "No folder selected" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(screen.getByRole("navigation", { name: "Folder path" })).toBeInTheDocument();
+    expect(container.querySelector(".file-icon-folder-outline")).not.toBeNull();
+    expect(container.querySelector(".file-icon-folder-cue")).not.toBeNull();
+  });
+
+  it("uses the open-folder empty-state icon when a selected folder has no items", () => {
+    const { container } = render(
+      <ContentPane
+        isFocused
+        currentPath="/Users/demo"
+        entries={[]}
+        viewMode="list"
+        loading={false}
+        error={null}
+        includeHidden={false}
+        metadataByPath={{}}
+        sortBy="name"
+        sortDirection="asc"
+        onSelectPath={() => undefined}
+        onActivateEntry={() => undefined}
+        onSortChange={() => undefined}
+        onLayoutColumnsChange={() => undefined}
+        onVisiblePathsChange={() => undefined}
+        onNavigatePath={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+        onFocusChange={() => undefined}
+        typeaheadQuery=""
+      />,
+    );
+
+    expect(container.querySelector(".file-icon-folder-open-fill")).not.toBeNull();
+    expect(container.querySelector(".file-icon-folder-cue")).toBeNull();
+  });
+
+  it("opens the path editor when the no-folder-selected breadcrumb is double-clicked", async () => {
     render(
       <ContentPane
         isFocused
@@ -66,8 +138,12 @@ describe("ContentPane", () => {
       />,
     );
 
-    expect(screen.getByText("No folder selected")).toBeInTheDocument();
-    expect(screen.getByText("Select a folder or favorite to view its contents.")).toBeInTheDocument();
+    act(() => {
+      fireEvent.doubleClick(screen.getByRole("button", { name: "No folder selected" }));
+    });
+    await act(async () => {});
+
+    expect(screen.getByLabelText("Current folder path")).toHaveValue("");
   });
 
   it("surfaces directory errors inline", () => {

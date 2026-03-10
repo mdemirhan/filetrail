@@ -31,6 +31,7 @@ const debugIpcErrorsEnabled = process.env.FILETRAIL_DEBUG === "1";
 export function registerIpcHandlers(
   ipcMain: Pick<IpcMain, "handle">,
   handlers: IpcHandlerMap,
+  logger: Pick<Console, "debug" | "error"> = console,
 ): void {
   // Every IPC channel is validated on both ingress and egress so renderer/main drift is
   // caught at runtime even when TypeScript boundaries are bypassed.
@@ -55,8 +56,12 @@ export function registerIpcHandlers(
       } catch (error) {
         // Filesystem access failures are expected when the user navigates into protected or
         // disappearing locations, so we keep those quiet unless explicit debug logging is on.
-        if (!isExpectedAccessError(error) || debugIpcErrorsEnabled) {
-          console.error(`[filetrail] ipc ${channel} failed`, error);
+        if (isExpectedAccessError(error)) {
+          if (debugIpcErrorsEnabled) {
+            logger.debug(`[filetrail] ipc ${channel} expected failure`, error);
+          }
+        } else {
+          logger.error(`[filetrail] ipc ${channel} failed`, error);
         }
         return {
           ok: false,

@@ -33,6 +33,8 @@ const ICON_NAMES = [
   "rerootHome",
   "infoRow",
   "foldersFirst",
+  "actionLog",
+  "copy",
   "clear",
   "stop",
 ] as const;

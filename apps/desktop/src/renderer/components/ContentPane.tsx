@@ -423,7 +423,11 @@ export function ContentPane({
                   <button
                     type="button"
                     className={`pathbar-segment${item.isActive ? " active" : ""}`}
+                    aria-disabled={item.segment.path.length === 0}
                     onClick={() => {
+                      if (item.segment.path.length === 0) {
+                        return;
+                      }
                       if (segmentClickTimeoutRef.current !== null) {
                         window.clearTimeout(segmentClickTimeoutRef.current);
                       }
@@ -443,7 +447,7 @@ export function ContentPane({
                       setPathbarExpanded(false);
                       setPathEditorOpen(true);
                     }}
-                    title={item.segment.path}
+                    title={item.segment.path || item.segment.label}
                   >
                     <span className="pathbar-segment-label">{item.segment.label}</span>
                   </button>
@@ -529,6 +533,9 @@ export function ContentPane({
 }
 
 function buildPathSegments(path: string): Array<PathbarSegment> {
+  if (path.trim().length === 0) {
+    return [{ label: "No folder selected", path: "" }];
+  }
   // The UI presents `/` as "Macintosh HD" to match the rest of the macOS-facing chrome,
   // but navigation still uses real absolute paths underneath.
   if (path === "/") {
@@ -1457,7 +1464,12 @@ function EmptyState({
   return (
     <div className="content-state content-empty">
       <div className="empty-state-icon" aria-hidden="true">
-        <FolderIcon className="empty-state-folder-icon" />
+        <FolderIcon
+          className="empty-state-folder-icon"
+          open={hasDirectoryPath}
+          variant={hasDirectoryPath ? "filled" : "outline"}
+          showCue={!hasDirectoryPath}
+        />
       </div>
       <strong className="empty-state-title">
         {hasDirectoryPath ? "This folder is empty" : "No folder selected"}

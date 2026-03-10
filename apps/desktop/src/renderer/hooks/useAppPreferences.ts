@@ -87,6 +87,9 @@ export function useAppPreferences() {
   const [notificationDurationSeconds, setNotificationDurationSeconds] = useState(
     DEFAULT_APP_PREFERENCES.notificationDurationSeconds,
   );
+  const [actionLogEnabled, setActionLogEnabled] = useState(
+    DEFAULT_APP_PREFERENCES.actionLogEnabled,
+  );
   const [restoreLastVisitedFolderOnStartup, setRestoreLastVisitedFolderOnStartup] = useState(
     DEFAULT_APP_PREFERENCES.restoreLastVisitedFolderOnStartup,
   );
@@ -220,6 +223,8 @@ export function useAppPreferences() {
     setNotificationsEnabled,
     notificationDurationSeconds,
     setNotificationDurationSeconds,
+    actionLogEnabled,
+    setActionLogEnabled,
     restoreLastVisitedFolderOnStartup,
     setRestoreLastVisitedFolderOnStartup,
     favorites,

@@ -12,6 +12,7 @@ import type { IpcResponse } from "@filetrail/contracts";
 import { appendSearchResults, filterSearchResults, sortSearchResults } from "../lib/searchResults";
 import { useFiletrailClient } from "../lib/filetrailClient";
 import { toDirectoryEntryFromSearchResult } from "../lib/explorerAppUtils";
+import { createRendererLogger } from "../lib/logging";
 import type {
   DirectoryEntry,
   SearchMatchScope,
@@ -35,6 +36,7 @@ type SearchResultsFilterScope = SearchResultsFilterScopePreference;
 type SearchStatus = IpcResponse<"search:getUpdate">["status"] | "idle";
 
 const SEARCH_POLL_INTERVAL_MS = 120;
+const logger = createRendererLogger("filetrail.renderer");
 
 export function useExplorerSearchController(args: {
   client: ReturnType<typeof useFiletrailClient>;
@@ -209,7 +211,11 @@ export function useExplorerSearchController(args: {
     }
     try {
       await client.invoke("search:cancel", { jobId: activeJobId });
-    } catch {}
+    } catch (error) {
+      logger.debug("search cancel failed during cleanup", error, {
+        jobId: activeJobId,
+      });
+    }
   }
 
   async function stopSearch() {
@@ -274,6 +280,10 @@ export function useExplorerSearchController(args: {
         if (searchSessionRef.current !== sessionId || searchJobIdRef.current !== jobId) {
           return;
         }
+        logger.error("search update failed", error, {
+          jobId,
+          cursor,
+        });
         searchJobIdRef.current = null;
         clearSearchPolling();
         setSearchStatus("error");
@@ -337,6 +347,10 @@ export function useExplorerSearchController(args: {
       if (searchSessionRef.current !== sessionId) {
         return;
       }
+      logger.error("search start failed", error, {
+        rootPath,
+        query: trimmedQuery,
+      });
       searchJobIdRef.current = null;
       clearSearchPolling();
       setSearchStatus("error");

@@ -35,12 +35,14 @@ describe("filetrailClient", () => {
   it("prefers an injected provider client over the preload bridge", () => {
     const providerClient: FiletrailClient = {
       invoke: vi.fn(),
+      log: vi.fn(async () => undefined),
       onCommand: vi.fn(() => () => undefined),
       onWriteOperationProgress: vi.fn(() => () => undefined),
       onCopyPasteProgress: vi.fn(() => () => undefined),
     };
     window.filetrail = {
       invoke: vi.fn(),
+      log: vi.fn(async () => undefined),
       onCommand: vi.fn(() => () => undefined),
       onWriteOperationProgress: vi.fn(() => () => undefined),
       onCopyPasteProgress: vi.fn(() => () => undefined),
@@ -59,6 +61,7 @@ describe("filetrailClient", () => {
   it("falls back to the preload bridge and keeps that client stable across rerenders", () => {
     const bridgeClient: FiletrailClient = {
       invoke: vi.fn(),
+      log: vi.fn(async () => undefined),
       onCommand: vi.fn(() => () => undefined),
       onWriteOperationProgress: vi.fn(() => () => undefined),
       onCopyPasteProgress: vi.fn(() => () => undefined),

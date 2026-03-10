@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 import type {
+  AppLogEntry,
   IpcChannel,
   IpcRequestInput,
   IpcResponse,
@@ -20,6 +21,7 @@ type IpcEnvelope =
 
 type InvokeApi = {
   invoke<C extends IpcChannel>(channel: C, payload: IpcRequestInput<C>): Promise<IpcResponse<C>>;
+  log(entry: AppLogEntry): Promise<void>;
   onCommand(listener: (command: RendererCommand) => void): () => void;
   onWriteOperationProgress(listener: (event: WriteOperationProgressEvent) => void): () => void;
   onCopyPasteProgress(listener: (event: WriteOperationProgressEvent) => void): () => void;
@@ -32,6 +34,9 @@ const api: InvokeApi = {
       throw new Error(envelope.error);
     }
     return envelope.payload as IpcResponse<C>;
+  },
+  log: async (entry) => {
+    await api.invoke("app:writeLog", entry);
   },
   onCommand: (listener) => {
     const handleCommand = (_event: unknown, command: RendererCommand) => {

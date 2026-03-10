@@ -136,8 +136,32 @@ export const writeOperationActionSchema = z.enum([
   "rename",
   "new_folder",
 ]);
+export const actionLogActionSchema = z.enum([
+  "open",
+  "open_with",
+  "open_in_terminal",
+  "paste",
+  "move_to",
+  "duplicate",
+  "trash",
+  "rename",
+  "new_folder",
+]);
+export const actionLogStatusSchema = z.enum(["completed", "failed", "cancelled", "partial"]);
+export const appLogLevelSchema = z.enum(["debug", "info", "warn", "error"]);
 export const sizeStatusSchema = z.enum(["ready", "deferred", "unavailable"]);
 const emptyRequestSchema = z.object({});
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(jsonValueSchema),
+    z.record(z.string(), jsonValueSchema),
+  ]),
+);
 
 export const treeChildSchema = z.object({
   path: z.string().min(1),
@@ -327,9 +351,47 @@ export const writeOperationProgressEventSchema = z.object({
   currentDestinationPath: z.string().nullable(),
   result: writeOperationResultSchema.nullable(),
 });
+export const actionLogItemSchema = z.object({
+  sourcePath: z.string().nullable(),
+  destinationPath: z.string().nullable(),
+  status: z.enum(["completed", "skipped", "failed", "cancelled"]),
+  error: z.string().nullable(),
+});
+export const actionLogEntrySchema = z.object({
+  id: z.string().min(1),
+  occurredAt: z.string().min(1),
+  action: actionLogActionSchema,
+  status: actionLogStatusSchema,
+  operationId: z.string().min(1).nullable(),
+  sourcePaths: z.array(z.string().min(1)),
+  destinationPaths: z.array(z.string().min(1)),
+  sourceSummary: z.string().min(1).nullable(),
+  destinationSummary: z.string().min(1).nullable(),
+  title: z.string().min(1),
+  message: z.string().min(1),
+  durationMs: z.number().int().nonnegative().nullable(),
+  error: z.string().nullable(),
+  summary: z.object({
+    totalItemCount: z.number().int().nonnegative(),
+    completedItemCount: z.number().int().nonnegative(),
+    failedItemCount: z.number().int().nonnegative(),
+    skippedItemCount: z.number().int().nonnegative(),
+    cancelledItemCount: z.number().int().nonnegative(),
+  }),
+  items: z.array(actionLogItemSchema),
+  metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
+});
 
 export const launchContextSchema = z.object({
   startupFolderPath: z.string().min(1).nullable(),
+});
+
+export const appLogEntrySchema = z.object({
+  level: appLogLevelSchema,
+  namespace: z.string().trim().min(1),
+  message: z.string().trim().min(1),
+  error: z.string().nullable().default(null),
+  context: z.record(z.string(), jsonValueSchema).default({}),
 });
 
 export const appPreferencesSchema = z.object({
@@ -360,6 +422,7 @@ export const appPreferencesSchema = z.object({
   typeaheadDebounceMs: z.number().int().min(250).max(1500),
   notificationsEnabled: z.boolean(),
   notificationDurationSeconds: z.number().int().min(2).max(10),
+  actionLogEnabled: z.boolean(),
   propertiesOpen: z.boolean(),
   detailRowOpen: z.boolean(),
   terminalApp: applicationSelectionSchema.nullable(),
@@ -428,6 +491,18 @@ export const ipcContractSchemas = {
     request: emptyRequestSchema,
     response: z.object({
       ok: z.literal(true),
+    }),
+  },
+  "app:writeLog": {
+    request: appLogEntrySchema,
+    response: z.object({
+      ok: z.literal(true),
+    }),
+  },
+  "actionLog:list": {
+    request: emptyRequestSchema,
+    response: z.object({
+      items: z.array(actionLogEntrySchema),
     }),
   },
   "tree:getChildren": {
@@ -702,6 +777,12 @@ export type CopyPasteProgressEvent = z.output<typeof copyPasteProgressEventSchem
 export type WriteOperationAction = z.output<typeof writeOperationActionSchema>;
 export type WriteOperationResult = z.output<typeof writeOperationResultSchema>;
 export type WriteOperationProgressEvent = z.output<typeof writeOperationProgressEventSchema>;
+export type ActionLogAction = z.output<typeof actionLogActionSchema>;
+export type ActionLogStatus = z.output<typeof actionLogStatusSchema>;
+export type ActionLogItem = z.output<typeof actionLogItemSchema>;
+export type ActionLogEntry = z.output<typeof actionLogEntrySchema>;
+export type AppLogLevel = z.output<typeof appLogLevelSchema>;
+export type AppLogEntry = z.output<typeof appLogEntrySchema>;
 
 // Validation failures are surfaced with a dedicated error type so transport bugs can be
 // distinguished from domain failures such as "path not found" or "search cancelled".

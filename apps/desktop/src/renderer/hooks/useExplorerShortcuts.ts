@@ -46,8 +46,9 @@ export function useExplorerShortcuts(args: {
   contextMenuState: ContextMenuState | null;
   setContextMenuState: Dispatch<SetStateAction<ContextMenuState | null>>;
   locationDialogOpen: boolean;
-  mainView: "explorer" | "help" | "settings";
-  setMainView: Dispatch<SetStateAction<"explorer" | "help" | "settings">>;
+  mainView: "explorer" | "help" | "settings" | "action-log";
+  setMainView: Dispatch<SetStateAction<"explorer" | "help" | "settings" | "action-log">>;
+  openActionLogView: () => void;
   openSettingsView: () => void;
   openLocationSheet: () => void;
   focusFileSearch: (selectContents?: boolean) => void;
@@ -133,6 +134,7 @@ export function useExplorerShortcuts(args: {
     locationDialogOpen,
     mainView,
     setMainView,
+    openActionLogView,
     openSettingsView,
     openLocationSheet,
     focusFileSearch,
@@ -1014,6 +1016,10 @@ export function useExplorerShortcuts(args: {
         openSettingsView();
         return;
       }
+      if (command.type === "openActionLog") {
+        openActionLogView();
+        return;
+      }
       if (command.type === "zoomIn") {
         setZoomPercent((value) => clampZoomPercent(value + 10));
         return;
@@ -1099,6 +1105,7 @@ export function useExplorerShortcuts(args: {
     openPaths,
     openRenameDialog,
     openSettingsView,
+    openActionLogView,
     refreshDirectory,
     resolveContentActionPaths,
     runGenericEditCommand,
@@ -1230,6 +1237,7 @@ export function useExplorerShortcuts(args: {
     locationDialogOpen,
     mainView,
     openSettingsView,
+    openActionLogView,
     rawShortcutBindings,
     setContextMenuState,
     setMainView,

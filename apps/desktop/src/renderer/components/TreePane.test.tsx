@@ -72,6 +72,9 @@ function renderTreePane(overrides: Partial<ComponentProps<typeof TreePane>> = {}
       themeMenuRef={themeMenuRef}
       onToggleThemeMenu={() => undefined}
       onSelectTheme={() => undefined}
+      actionLogEnabled
+      onOpenActionLog={() => undefined}
+      onClearSelection={() => undefined}
       onOpenHelp={() => undefined}
       onOpenSettings={() => undefined}
       includeHidden={false}
@@ -187,6 +190,168 @@ describe("TreePane", () => {
     expect(handleSelectFavoritesRoot).toHaveBeenCalledTimes(1);
   });
 
+  it("clears tree selection when pressing empty space in the tree pane", () => {
+    const handleClearSelection = vi.fn();
+    renderTreePane({
+      onClearSelection: handleClearSelection,
+      selectedTreeItemId: "fs:/Users/demo/Documents",
+    });
+
+    const treePane = document.querySelector(".sidebar-tree");
+    if (!(treePane instanceof HTMLDivElement)) {
+      throw new Error("Missing tree pane container.");
+    }
+
+    fireEvent.mouseDown(treePane);
+
+    expect(handleClearSelection).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears tree selection when pressing empty space inside the tree scroll area", () => {
+    const handleClearSelection = vi.fn();
+    renderTreePane({
+      onClearSelection: handleClearSelection,
+      selectedTreeItemId: "fs:/Users/demo/Documents",
+    });
+
+    const scrollArea = document.querySelector(".tree-scroll");
+    if (!(scrollArea instanceof HTMLDivElement)) {
+      throw new Error("Missing tree scroll area.");
+    }
+
+    fireEvent.mouseDown(scrollArea, { clientX: 12, clientY: 12 });
+
+    expect(handleClearSelection).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not clear tree selection when pressing the tree scrollbar gutter", () => {
+    const handleClearSelection = vi.fn();
+    renderTreePane({
+      onClearSelection: handleClearSelection,
+      selectedTreeItemId: "fs:/Users/demo/Documents",
+    });
+
+    const scrollArea = document.querySelector(".tree-scroll");
+    if (!(scrollArea instanceof HTMLDivElement)) {
+      throw new Error("Missing tree scroll area.");
+    }
+    Object.defineProperty(scrollArea, "clientWidth", { configurable: true, value: 180 });
+    Object.defineProperty(scrollArea, "offsetWidth", { configurable: true, value: 188 });
+    Object.defineProperty(scrollArea, "clientHeight", { configurable: true, value: 240 });
+    Object.defineProperty(scrollArea, "offsetHeight", { configurable: true, value: 248 });
+    vi.spyOn(scrollArea, "getBoundingClientRect").mockReturnValue({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 188,
+      bottom: 248,
+      width: 188,
+      height: 248,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    fireEvent.mouseDown(scrollArea, { clientX: 186, clientY: 20 });
+
+    expect(handleClearSelection).not.toHaveBeenCalled();
+  });
+
+  it("selects the row when pressing row whitespace outside the tree controls", () => {
+    vi.useFakeTimers();
+    const handleClearSelection = vi.fn();
+    const handleNavigate = vi.fn();
+    renderTreePane({
+      onClearSelection: handleClearSelection,
+      selectedTreeItemId: "fs:/Users/demo/Documents",
+      onNavigate: handleNavigate,
+    });
+
+    const row = screen.getAllByRole("button", { name: "Documents" })[1]?.closest(".tree-row");
+    if (!(row instanceof HTMLDivElement)) {
+      throw new Error("Missing tree row.");
+    }
+
+    fireEvent.mouseDown(row);
+    fireEvent.click(row);
+    vi.runAllTimers();
+
+    expect(handleClearSelection).not.toHaveBeenCalled();
+    expect(handleNavigate).toHaveBeenCalledWith("/Users/demo/Documents");
+    vi.useRealTimers();
+  });
+
+  it("clears favorites selection when pressing empty space in the separate favorites pane", () => {
+    const handleClearSelection = vi.fn();
+    renderTreePane({
+      favoritesPlacement: "separate",
+      activeLeftPaneSubview: "favorites",
+      selectedTreeItemId: "favorite:/Users/demo/Documents",
+      onClearSelection: handleClearSelection,
+    });
+
+    const favoritesPane = document.querySelector(".favorites-pane-section");
+    if (!(favoritesPane instanceof HTMLDivElement)) {
+      throw new Error("Missing favorites pane container.");
+    }
+
+    fireEvent.mouseDown(favoritesPane);
+
+    expect(handleClearSelection).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears favorites selection when pressing empty space inside the favorites scroll area", () => {
+    const handleClearSelection = vi.fn();
+    renderTreePane({
+      favoritesPlacement: "separate",
+      activeLeftPaneSubview: "favorites",
+      selectedTreeItemId: "favorite:/Users/demo/Documents",
+      onClearSelection: handleClearSelection,
+    });
+
+    const scrollArea = document.querySelector(".favorites-scroll");
+    if (!(scrollArea instanceof HTMLDivElement)) {
+      throw new Error("Missing favorites scroll area.");
+    }
+
+    fireEvent.mouseDown(scrollArea, { clientX: 12, clientY: 12 });
+
+    expect(handleClearSelection).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not clear favorites selection when pressing the favorites scrollbar gutter", () => {
+    const handleClearSelection = vi.fn();
+    renderTreePane({
+      favoritesPlacement: "separate",
+      activeLeftPaneSubview: "favorites",
+      selectedTreeItemId: "favorite:/Users/demo/Documents",
+      onClearSelection: handleClearSelection,
+    });
+
+    const scrollArea = document.querySelector(".favorites-scroll");
+    if (!(scrollArea instanceof HTMLDivElement)) {
+      throw new Error("Missing favorites scroll area.");
+    }
+    Object.defineProperty(scrollArea, "clientWidth", { configurable: true, value: 180 });
+    Object.defineProperty(scrollArea, "offsetWidth", { configurable: true, value: 188 });
+    Object.defineProperty(scrollArea, "clientHeight", { configurable: true, value: 240 });
+    Object.defineProperty(scrollArea, "offsetHeight", { configurable: true, value: 248 });
+    vi.spyOn(scrollArea, "getBoundingClientRect").mockReturnValue({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 188,
+      bottom: 248,
+      width: 188,
+      height: 248,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    fireEvent.mouseDown(scrollArea, { clientX: 186, clientY: 20 });
+
+    expect(handleClearSelection).not.toHaveBeenCalled();
+  });
+
   it("marks favorites rows with their tree kind for accent styling", () => {
     renderTreePane({ selectedTreeItemId: "favorites-root" });
 
@@ -275,6 +440,26 @@ describe("TreePane", () => {
     fireEvent.pointerDown(row, { button: 0 });
 
     expect(treeRow).toHaveClass("active");
+    vi.useRealTimers();
+  });
+
+  it("clears selection on Cmd-click when the clicked tree item is already selected", () => {
+    vi.useFakeTimers();
+    const handleClearSelection = vi.fn();
+    const handleNavigate = vi.fn();
+    renderTreePane({
+      selectedTreeItemId: "fs:/Users/demo/Documents",
+      onClearSelection: handleClearSelection,
+      onNavigate: handleNavigate,
+    });
+
+    const row = screen.getAllByRole("button", { name: "Documents" })[1]!;
+    fireEvent.pointerDown(row, { button: 0, metaKey: true });
+    fireEvent.click(row, { metaKey: true });
+    vi.runAllTimers();
+
+    expect(handleClearSelection).toHaveBeenCalledTimes(1);
+    expect(handleNavigate).not.toHaveBeenCalled();
     vi.useRealTimers();
   });
 

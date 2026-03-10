@@ -14,11 +14,13 @@ export function useExplorerNavigation() {
   type SortBy = IpcRequest<"directory:getSnapshot">["sortBy"];
   type SortDirection = IpcRequest<"directory:getSnapshot">["sortDirection"];
 
-  const [mainView, setMainView] = useState<"explorer" | "help" | "settings">("explorer");
+  const [mainView, setMainView] = useState<"explorer" | "help" | "settings" | "action-log">(
+    "explorer",
+  );
   const [treeRootPath, setTreeRootPath] = useState("");
   const [homePath, setHomePath] = useState("");
   const [treeNodes, setTreeNodes] = useState<Record<string, TreeNodeState>>({});
-  const [selectedTreeItemId, setSelectedTreeItemId] = useState<TreeItemId>("favorites-root");
+  const [selectedTreeItemId, setSelectedTreeItemId] = useState<TreeItemId | null>("favorites-root");
   const [currentPath, setCurrentPath] = useState("");
   const [currentEntries, setCurrentEntries] = useState<DirectoryEntry[]>([]);
   const [metadataByPath, setMetadataByPath] = useState<Record<string, DirectoryEntryMetadata>>({});
@@ -55,7 +57,7 @@ export function useExplorerNavigation() {
   const getInfoRequestRef = useRef(0);
   const treeRequestRef = useRef<Record<string, number>>({});
   const treeNodesRef = useRef<Record<string, TreeNodeState>>({});
-  const selectedTreeItemIdRef = useRef<TreeItemId>(selectedTreeItemId);
+  const selectedTreeItemIdRef = useRef<TreeItemId | null>(selectedTreeItemId);
   const treeRootPathRef = useRef(treeRootPath);
   const metadataCacheRef = useRef<Map<string, DirectoryEntryMetadata>>(new Map());
   const metadataInflightRef = useRef<Set<string>>(new Set());

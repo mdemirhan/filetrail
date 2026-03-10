@@ -20,6 +20,9 @@ function createHandlersThatFailOnSnapshot() {
     "app:getPreferences": async () => ({
       preferences: TEST_PREFERENCES,
     }),
+    "actionLog:list": async () => ({
+      items: [],
+    }),
     "app:getLaunchContext": async () => ({
       startupFolderPath: null,
     }),
@@ -27,6 +30,7 @@ function createHandlersThatFailOnSnapshot() {
       preferences: TEST_PREFERENCES,
     }),
     "app:clearCaches": async () => ({ ok: true as const }),
+    "app:writeLog": async () => ({ ok: true as const }),
     "directory:getSnapshot": async () => {
       const error = new Error(
         "ENOENT: no such file or directory, stat '/Users/demo/missing-folder'",
@@ -303,7 +307,7 @@ describe("registerIpcHandlers", () => {
 
   it("logs invalid-path IPC errors when debug mode is enabled", async () => {
     process.env.FILETRAIL_DEBUG = "1";
-    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const consoleDebugSpy = vi.spyOn(console, "debug").mockImplementation(() => undefined);
     const handle = vi.fn();
     const { registerIpcHandlers } = await import("./ipc");
 
@@ -315,9 +319,9 @@ describe("registerIpcHandlers", () => {
 
     await snapshotHandler?.({}, { path: "/Users/demo/missing-folder" });
 
-    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
-    expect(consoleErrorSpy.mock.calls[0]?.[0]).toContain(
-      "[filetrail] ipc directory:getSnapshot failed",
+    expect(consoleDebugSpy).toHaveBeenCalledTimes(1);
+    expect(consoleDebugSpy.mock.calls[0]?.[0]).toContain(
+      "[filetrail] ipc directory:getSnapshot expected failure",
     );
   });
 

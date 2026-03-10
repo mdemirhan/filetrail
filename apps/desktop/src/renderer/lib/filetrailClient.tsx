@@ -1,6 +1,7 @@
 import { createContext, useContext, useRef } from "react";
 
 import type {
+  AppLogEntry,
   IpcChannel,
   IpcRequestInput,
   IpcResponse,
@@ -10,6 +11,7 @@ import type { RendererCommand } from "../../shared/rendererCommands";
 
 export type FiletrailClient = {
   invoke<C extends IpcChannel>(channel: C, payload: IpcRequestInput<C>): Promise<IpcResponse<C>>;
+  log(entry: AppLogEntry): Promise<void>;
   onCommand(listener: (command: RendererCommand) => void): () => void;
   onWriteOperationProgress(listener: (event: WriteOperationProgressEvent) => void): () => void;
   onCopyPasteProgress(listener: (event: WriteOperationProgressEvent) => void): () => void;
@@ -23,6 +25,9 @@ const MISSING_CLIENT: FiletrailClient = {
   invoke: async () => {
     throw new Error(MISSING_PRELOAD_ERROR);
   },
+  log: async () => {
+    throw new Error(MISSING_PRELOAD_ERROR);
+  },
   onCommand: () => () => undefined,
   onWriteOperationProgress: () => () => undefined,
   onCopyPasteProgress: () => () => undefined,
@@ -34,6 +39,8 @@ function isFiletrailClient(value: unknown): value is FiletrailClient {
     value !== null &&
     "invoke" in value &&
     typeof (value as { invoke?: unknown }).invoke === "function" &&
+    "log" in value &&
+    typeof (value as { log?: unknown }).log === "function" &&
     "onCommand" in value &&
     typeof (value as { onCommand?: unknown }).onCommand === "function" &&
     "onWriteOperationProgress" in value &&
