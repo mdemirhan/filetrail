@@ -38,19 +38,19 @@ export function ToolbarIcon({
   if (name === "list") {
     return (
       <svg className="toolbar-icon" viewBox="0 0 16 16" aria-hidden="true" role="presentation">
-        <line x1="1" y1="3" x2="15" y2="3" />
-        <line x1="1" y1="8" x2="15" y2="8" />
-        <line x1="1" y1="13" x2="15" y2="13" />
+        <line x1="1.5" y1="3" x2="14.5" y2="3" />
+        <line x1="1.5" y1="8" x2="14.5" y2="8" />
+        <line x1="1.5" y1="13" x2="14.5" y2="13" />
       </svg>
     );
   }
   if (name === "details") {
     return (
       <svg className="toolbar-icon" viewBox="0 0 16 16" aria-hidden="true" role="presentation">
-        <rect x="1.5" y="1.5" width="5" height="5" rx="0.9" />
-        <rect x="9.5" y="1.5" width="5" height="5" rx="0.9" />
-        <rect x="1.5" y="9.5" width="5" height="5" rx="0.9" />
-        <rect x="9.5" y="9.5" width="5" height="5" rx="0.9" />
+        <rect x="1.5" y="1.5" width="13" height="13" rx="2" />
+        <line x1="1.5" y1="5" x2="14.5" y2="5" />
+        <line x1="5.5" y1="5" x2="5.5" y2="14.5" />
+        <line x1="1.5" y1="10" x2="14.5" y2="10" />
       </svg>
     );
   }

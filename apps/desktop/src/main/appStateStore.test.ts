@@ -89,6 +89,7 @@ describe("appStateStore", () => {
       treeRootPath: null,
       lastVisitedPath: null,
       lastVisitedFavoritePath: null,
+      lastGoToFolderPath: null,
       favorites: [],
       favoritesPlacement: "integrated",
       favoritesPaneHeight: null,
@@ -180,6 +181,7 @@ describe("appStateStore", () => {
       treeRootPath: "/Users/demo",
       lastVisitedPath: "/Users/demo/src",
       lastVisitedFavoritePath: "/Users/demo/Documents",
+      lastGoToFolderPath: "/Users/demo/src",
       favorites: [
         { path: "/Users/demo/Documents", icon: "documents" },
         { path: "/Applications", icon: "applications" },
@@ -273,6 +275,7 @@ describe("appStateStore", () => {
       treeRootPath: "/Users/demo",
       lastVisitedPath: "/Users/demo/src",
       lastVisitedFavoritePath: "/Users/demo/Documents",
+      lastGoToFolderPath: "/Users/demo/src",
       favorites: [
         { path: "/Users/demo/Documents", icon: "documents" },
         { path: "/Applications", icon: "applications" },

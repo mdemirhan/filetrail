@@ -39,6 +39,7 @@ export function GoToFolderDialog({
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const openRef = useRef(open);
   const [browseInProgress, setBrowseInProgress] = useState(false);
   const {
     draftValue,
@@ -54,6 +55,20 @@ export function GoToFolderDialog({
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [inputFocused, setInputFocused] = useState(false);
 
+  function focusInputAtEnd(): void {
+    const input = inputRef.current;
+    if (!input) {
+      return;
+    }
+    input.focus({ preventScroll: true });
+    const valueLength = input.value.length;
+    input.setSelectionRange(valueLength, valueLength);
+  }
+
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
+
   useLayoutEffect(() => {
     if (!open) {
       setBrowseInProgress(false);
@@ -66,8 +81,23 @@ export function GoToFolderDialog({
     if (!input) {
       return;
     }
-    input.focus();
-    input.setSelectionRange(currentPath.length, currentPath.length);
+    focusInputAtEnd();
+    const timeoutId = window.setTimeout(() => {
+      focusInputAtEnd();
+    }, 0);
+    const frameId = window.requestAnimationFrame(() => {
+      focusInputAtEnd();
+    });
+    const secondFrameId = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        focusInputAtEnd();
+      });
+    });
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.cancelAnimationFrame(frameId);
+      window.cancelAnimationFrame(secondFrameId);
+    };
   }, [currentPath, open]);
 
   useEffect(() => {
@@ -84,6 +114,19 @@ export function GoToFolderDialog({
     if (!open) {
       return;
     }
+    const onFocusIn = (event: FocusEvent) => {
+      const target = event.target;
+      const dialog = dialogRef.current;
+      if (!(target instanceof Node) || !dialog || dialog.contains(target)) {
+        return;
+      }
+      window.requestAnimationFrame(() => {
+        if (!openRef.current) {
+          return;
+        }
+        focusInputAtEnd();
+      });
+    };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) {
         return;
@@ -93,8 +136,12 @@ export function GoToFolderDialog({
         onClose();
       }
     };
+    document.addEventListener("focusin", onFocusIn, true);
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("focusin", onFocusIn, true);
+      window.removeEventListener("keydown", onKeyDown);
+    };
   }, [onClose, open]);
 
   useEffect(() => {
@@ -161,9 +208,16 @@ export function GoToFolderDialog({
         className="go-to-folder-dialog"
         aria-modal="true"
         aria-label={title}
+        tabIndex={-1}
         onCancel={(event) => {
           event.preventDefault();
           onClose();
+        }}
+        onFocus={(event) => {
+          if (event.target !== dialogRef.current) {
+            return;
+          }
+          focusInputAtEnd();
         }}
         onKeyDown={(event) => {
           if (event.defaultPrevented) {
@@ -242,6 +296,7 @@ export function GoToFolderDialog({
               aria-label={inputAriaLabel}
               spellCheck={false}
               autoComplete="off"
+              autoFocus
               value={draftValue}
               onChange={(event) => setValue(event.currentTarget.value, true)}
               onFocus={() => setInputFocused(true)}

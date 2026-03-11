@@ -41,6 +41,148 @@ describe("GoToFolderDialog", () => {
     vi.useRealTimers();
   });
 
+  it("refocuses the input and places the cursor at the end when reopened", () => {
+    const { rerender } = render(
+      <GoToFolderDialog
+        open
+        currentPath="/Users/demo"
+        submitting={false}
+        error={null}
+        tabSwitchesExplorerPanes={false}
+        onClose={() => undefined}
+        onSubmit={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+      />,
+    );
+
+    const input = screen.getByLabelText("Absolute path") as HTMLInputElement;
+    expect(input).toHaveFocus();
+    expect(input.selectionStart).toBe("/Users/demo".length);
+    expect(input.selectionEnd).toBe("/Users/demo".length);
+
+    rerender(
+      <GoToFolderDialog
+        open={false}
+        currentPath="/Users/demo"
+        submitting={false}
+        error={null}
+        tabSwitchesExplorerPanes={false}
+        onClose={() => undefined}
+        onSubmit={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+      />,
+    );
+
+    rerender(
+      <GoToFolderDialog
+        open
+        currentPath="/Users/demo"
+        submitting={false}
+        error={null}
+        tabSwitchesExplorerPanes={false}
+        onClose={() => undefined}
+        onSubmit={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+      />,
+    );
+
+    const reopenedInput = screen.getByLabelText("Absolute path") as HTMLInputElement;
+    expect(reopenedInput).toHaveFocus();
+    expect(reopenedInput.selectionStart).toBe("/Users/demo".length);
+    expect(reopenedInput.selectionEnd).toBe("/Users/demo".length);
+  });
+
+  it("reclaims focus when it escapes outside the dialog", async () => {
+    render(
+      <>
+        <button type="button">Outside</button>
+        <GoToFolderDialog
+          open
+          currentPath="/Users/demo"
+          submitting={false}
+          error={null}
+          tabSwitchesExplorerPanes={false}
+          onClose={() => undefined}
+          onSubmit={() => undefined}
+          onRequestPathSuggestions={async () => ({
+            inputPath: "",
+            basePath: null,
+            suggestions: [],
+          })}
+        />
+      </>,
+    );
+
+    const input = screen.getByLabelText("Absolute path") as HTMLInputElement;
+    expect(input).toHaveFocus();
+
+    const outsideButton = screen.getByRole("button", { name: "Outside" });
+    await act(async () => {
+      outsideButton.focus();
+      fireEvent.focusIn(outsideButton);
+    });
+
+    expect(input).toHaveFocus();
+    expect(input.selectionStart).toBe("/Users/demo".length);
+    expect(input.selectionEnd).toBe("/Users/demo".length);
+  });
+
+  it("keeps the input focused at the end when the seeded path changes while open", async () => {
+    const { rerender } = render(
+      <GoToFolderDialog
+        open
+        currentPath="/Users/demo/Folder"
+        submitting={false}
+        error={null}
+        tabSwitchesExplorerPanes={false}
+        onClose={() => undefined}
+        onSubmit={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+      />,
+    );
+
+    rerender(
+      <GoToFolderDialog
+        open
+        currentPath="/Users/demo/Remembered"
+        submitting={false}
+        error={null}
+        tabSwitchesExplorerPanes={false}
+        onClose={() => undefined}
+        onSubmit={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+      />,
+    );
+
+    await act(async () => {});
+
+    const input = screen.getByLabelText("Absolute path") as HTMLInputElement;
+    expect(input).toHaveFocus();
+    expect(input).toHaveValue("/Users/demo/Remembered");
+    expect(input.selectionStart).toBe("/Users/demo/Remembered".length);
+    expect(input.selectionEnd).toBe("/Users/demo/Remembered".length);
+  });
+
   it("accepts the highlighted suggestion first, then submits the accepted path", async () => {
     vi.useFakeTimers();
     const handleSubmit = vi.fn();

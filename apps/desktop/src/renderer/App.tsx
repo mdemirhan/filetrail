@@ -80,6 +80,7 @@ import { resolveExplorerToolbarLayout, resolveSinglePanelLayout } from "./lib/re
 import { resolveStartupNavigation } from "./lib/startupNavigation";
 import { getThemeAppearanceDefaults } from "./lib/theme";
 import { type ToastEntry, type ToastKind, createToastEntry, enqueueToast } from "./lib/toasts";
+import { expandHomeShortcut } from "./lib/pathUtils";
 
 const logger = createRendererLogger("filetrail.renderer");
 
@@ -91,6 +92,7 @@ export function App() {
   const [actionLogEntries, setActionLogEntries] = useState<ActionLogEntry[]>([]);
   const [actionLogLoading, setActionLogLoading] = useState(false);
   const [actionLogError, setActionLogError] = useState<string | null>(null);
+  const [locationSheetInitialPath, setLocationSheetInitialPath] = useState("");
   const {
     preferencesReady,
     setPreferencesReady,
@@ -154,6 +156,8 @@ export function App() {
     setActionLogEnabled,
     restoreLastVisitedFolderOnStartup,
     setRestoreLastVisitedFolderOnStartup,
+    lastGoToFolderPath,
+    setLastGoToFolderPath,
     favorites,
     setFavorites,
     favoritesPlacement,
@@ -640,6 +644,7 @@ export function App() {
     setLocationSubmitting,
     setLocationSheetOpen,
     setLocationError,
+    onLocationPathSubmitted: setLastGoToFolderPath,
     focusedPane,
     setFocusedPane,
     leftPaneSubview,
@@ -1041,6 +1046,7 @@ export function App() {
           getFavoriteItemPath(selectedTreeItemId) === currentPath
             ? getFavoriteItemPath(selectedTreeItemId)
             : null,
+        lastGoToFolderPath,
         favorites,
         favoritesPlacement,
         favoritesPaneHeight,
@@ -1089,6 +1095,7 @@ export function App() {
     notificationsEnabled,
     openItemLimit,
     restoreLastVisitedFolderOnStartup,
+    lastGoToFolderPath,
     favorites,
     favoritesPlacement,
     favoritesPaneHeight,
@@ -1163,6 +1170,7 @@ export function App() {
         setInfoPanelOpen(preferences.propertiesOpen);
         setInfoRowOpen(preferences.detailRowOpen);
         setRestoreLastVisitedFolderOnStartup(preferences.restoreLastVisitedFolderOnStartup);
+        setLastGoToFolderPath(preferences.lastGoToFolderPath);
         setFavorites(preferences.favorites);
         setFavoritesPlacement(preferences.favoritesPlacement);
         setFavoritesPaneHeight(preferences.favoritesPaneHeight);
@@ -1356,7 +1364,25 @@ export function App() {
     setMainView("explorer");
     setLocationError(null);
     setFocusedPane(null);
+    setLocationSheetInitialPath(currentPath);
     setLocationSheetOpen(true);
+    void (async () => {
+      const rememberedPath = lastGoToFolderPath?.trim() ?? "";
+      if (rememberedPath.length === 0 || rememberedPath === currentPath) {
+        return;
+      }
+      try {
+        const response = await client.invoke("item:getProperties", { path: rememberedPath });
+        if (
+          response.item &&
+          (response.item.kind === "directory" || response.item.kind === "symlink_directory")
+        ) {
+          setLocationSheetInitialPath(rememberedPath);
+        }
+      } catch {
+        return;
+      }
+    })();
   }
 
   function openSettingsView() {
@@ -1678,6 +1704,7 @@ export function App() {
                 requestPathSuggestions({
                   client,
                   includeHidden,
+                  homePath,
                   inputPath,
                 }),
               onTypeaheadInput: (key) => handleTypeaheadInput(key, "content"),
@@ -1942,12 +1969,12 @@ export function App() {
       )}
       <AppDialogs
         locationSheetOpen={locationSheetOpen}
-        currentPath={currentPath}
+        currentPath={locationSheetInitialPath || currentPath}
         locationSubmitting={locationSubmitting}
         locationError={locationError}
         tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
         onRequestPathSuggestions={(inputPath) =>
-          requestPathSuggestions({ client, includeHidden, inputPath })
+          requestPathSuggestions({ client, includeHidden, homePath, inputPath })
         }
         onCloseLocationSheet={() => setLocationSheetOpen(false)}
         onSubmitLocationPath={(path) => void submitLocationPath(path)}
@@ -2007,19 +2034,21 @@ export function App() {
 async function requestPathSuggestions(args: {
   client: ReturnType<typeof useFiletrailClient>;
   includeHidden: boolean;
+  homePath: string;
   inputPath: string;
 }): Promise<IpcResponse<"path:getSuggestions">> {
-  const { client, includeHidden, inputPath } = args;
+  const { client, includeHidden, homePath, inputPath } = args;
   const limit = 12;
+  const resolvedInputPath = expandHomeShortcut(inputPath.trim(), homePath);
   return (
     (await client
       .invoke("path:getSuggestions", {
-        inputPath,
+        inputPath: resolvedInputPath,
         includeHidden,
         limit,
       })
       .catch(() => null)) ?? {
-      inputPath,
+      inputPath: resolvedInputPath,
       basePath: null,
       suggestions: [],
     }

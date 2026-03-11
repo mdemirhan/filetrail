@@ -424,6 +424,10 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
       record.lastVisitedFavoritePath.length > 0
         ? record.lastVisitedFavoritePath
         : null,
+    lastGoToFolderPath:
+      typeof record.lastGoToFolderPath === "string" && record.lastGoToFolderPath.length > 0
+        ? record.lastGoToFolderPath
+        : currentDefaults.lastGoToFolderPath,
     favorites: sanitizeFavorites(record.favorites, record.favoritePaths, currentDefaults.favorites),
     favoritesPlacement:
       record.favoritesPlacement === "separate" || record.favoritesPlacement === "integrated"

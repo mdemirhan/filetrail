@@ -51,6 +51,7 @@ import { getFlowListColumnStep } from "../lib/flowListLayout";
 import { EXPLORER_LAYOUT } from "../lib/layoutTokens";
 import { createRendererLogger } from "../lib/logging";
 import { pageScrollElement, scrollElementByAmount } from "../lib/pagedScroll";
+import { expandHomeShortcut } from "../lib/pathUtils";
 import { findContentTypeaheadMatch } from "../lib/typeahead";
 
 const logger = createRendererLogger("filetrail.renderer");
@@ -117,6 +118,7 @@ export function useExplorerNavigationController(args: {
   setLocationSubmitting: Dispatch<SetStateAction<boolean>>;
   setLocationSheetOpen: Dispatch<SetStateAction<boolean>>;
   setLocationError: Dispatch<SetStateAction<string | null>>;
+  onLocationPathSubmitted: (path: string) => void;
   focusedPane: "tree" | "content" | null;
   setFocusedPane: Dispatch<SetStateAction<"tree" | "content" | null>>;
   leftPaneSubview: "favorites" | "tree";
@@ -225,6 +227,7 @@ export function useExplorerNavigationController(args: {
     setLocationSubmitting,
     setLocationSheetOpen,
     setLocationError,
+    onLocationPathSubmitted,
     focusedPane,
     setFocusedPane,
     leftPaneSubview,
@@ -1555,9 +1558,12 @@ export function useExplorerNavigationController(args: {
   async function submitLocationPath(path: string) {
     setLocationSubmitting(true);
     try {
-      const didNavigate = await navigateTo(path.trim(), "push");
+      const trimmedPath = path.trim();
+      const expandedPath = expandHomeShortcut(trimmedPath, homePath);
+      const didNavigate = await navigateTo(expandedPath, "push");
       if (didNavigate) {
         setLocationSheetOpen(false);
+        onLocationPathSubmitted(expandedPath);
       }
     } finally {
       setLocationSubmitting(false);

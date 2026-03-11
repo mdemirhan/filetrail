@@ -1,4 +1,4 @@
-import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
+import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type { IpcResponse } from "@filetrail/contracts";
 
@@ -75,7 +75,7 @@ export function usePathSuggestions(args: {
     [requestSuggestionsForInput],
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (debounceTimeoutRef.current !== null) {
       window.clearTimeout(debounceTimeoutRef.current);
       debounceTimeoutRef.current = null;

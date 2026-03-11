@@ -112,6 +112,7 @@ describe("appPreferences helpers", () => {
       treeRootPath: null,
       lastVisitedPath: null,
       lastVisitedFavoritePath: null,
+      lastGoToFolderPath: null,
       favoritesPlacement: "integrated",
       favoritesPaneHeight: null,
     });

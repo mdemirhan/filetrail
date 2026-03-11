@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import type { RefObject } from "react";
+import { useEffect, useState, type RefObject } from "react";
 
 import type {
   CopyPasteProgressEvent,
@@ -581,19 +581,29 @@ vi.mock("./components/GoToFolderDialog", () => ({
     onBrowse?: ((path: string) => Promise<string | null>) | null;
     onClose: () => void;
     onSubmit: (path: string) => void;
-  }) =>
-    open ? (
+  }) => {
+    const [value, setValue] = useState(currentPath);
+
+    useEffect(() => {
+      setValue(currentPath);
+    }, [currentPath]);
+
+    return open ? (
       <dialog aria-label={title ?? "Location"}>
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            const formData = new FormData(event.currentTarget);
-            onSubmit(String(formData.get("path") ?? ""));
+            onSubmit(value);
           }}
         >
           <label>
             {inputAriaLabel ?? "Path"}
-            <input name="path" aria-label={inputAriaLabel ?? "Path"} defaultValue={currentPath} />
+            <input
+              name="path"
+              aria-label={inputAriaLabel ?? "Path"}
+              value={value}
+              onChange={(event) => setValue(event.currentTarget.value)}
+            />
           </label>
           {error ? <div>{error}</div> : null}
           <button type="button" onClick={onClose}>
@@ -602,14 +612,10 @@ vi.mock("./components/GoToFolderDialog", () => ({
           {onBrowse ? (
             <button
               type="button"
-              onClick={async (event) => {
-                const form = event.currentTarget.closest("form");
-                const input = form?.querySelector<HTMLInputElement>('input[name="path"]');
-                const nextPath = await onBrowse(input?.value ?? currentPath);
-                if (nextPath && input) {
-                  fireEvent.change(input, {
-                    target: { value: nextPath },
-                  });
+              onClick={async () => {
+                const nextPath = await onBrowse(value);
+                if (nextPath) {
+                  setValue(nextPath);
                 }
               }}
             >
@@ -619,7 +625,8 @@ vi.mock("./components/GoToFolderDialog", () => ({
           <button type="submit">{submitLabel ?? "Open Folder"}</button>
         </form>
       </dialog>
-    ) : null,
+    ) : null;
+  },
 }));
 vi.mock("./components/HelpView", () => ({
   HelpView: () => (
@@ -1734,6 +1741,39 @@ describe("App copy/paste integration", () => {
       });
     });
     expect(screen.getByLabelText("Destination folder")).toHaveValue("/Users/demo/Folder");
+  });
+
+  it("expands ~ when submitting Move To", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceButton = await screen.findByTitle("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.click(sourceButton);
+    });
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "m", metaKey: true, shiftKey: true });
+    });
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("Destination folder"), {
+        target: { value: "~/Folder" },
+      });
+      fireEvent.click(screen.getByText("Move"));
+    });
+
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.find((call) => call.channel === "copyPaste:plan")?.payload,
+      ).toMatchObject({
+        destinationDirectoryPath: "/Users/demo/Folder",
+      });
+    });
   });
 
   it("keeps Move To open and shows an inline error for an invalid destination path", async () => {
@@ -3773,6 +3813,136 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "g", metaKey: true, shiftKey: true });
     });
     expect(await screen.findByLabelText("Path")).toBeInTheDocument();
+  });
+
+  it("remembers the last successful Go to Folder path and seeds it on the next open", async () => {
+    const harness = createAppHarness({
+      directorySnapshots: {
+        "/Users/demo/Remembered": {
+          path: "/Users/demo/Remembered",
+          parentPath: "/Users/demo",
+          entries: [],
+        },
+        "/Users/demo/Folder": {
+          path: "/Users/demo/Folder",
+          parentPath: "/Users/demo",
+          entries: [],
+        },
+      },
+      itemPropertiesByPath: {
+        "/Users/demo/Remembered": {
+          path: "/Users/demo/Remembered",
+          name: "Remembered",
+          extension: "",
+          kind: "directory",
+          kindLabel: "Folder",
+          isHidden: false,
+          isSymlink: false,
+          createdAt: null,
+          modifiedAt: null,
+          sizeBytes: null,
+          sizeStatus: "ready",
+          permissionMode: null,
+        },
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "g", metaKey: true, shiftKey: true });
+    });
+
+    const pathInput = await screen.findByLabelText("Path");
+    expect(pathInput).toHaveValue("/Users/demo");
+
+    await act(async () => {
+      fireEvent.change(pathInput, { target: { value: "/Users/demo/Remembered" } });
+      fireEvent.click(screen.getByText("Open Folder"));
+    });
+
+    await vi.waitFor(() => {
+      const persistedCall = [...harness.invocations].reverse().find((call) => {
+        if (call.channel !== "app:updatePreferences") {
+          return false;
+        }
+        return (
+          (call.payload as IpcRequestInput<"app:updatePreferences">).preferences.lastGoToFolderPath ===
+          "/Users/demo/Remembered"
+        );
+      });
+      expect(persistedCall).toBeDefined();
+    });
+
+    const folderTreeItem = await screen.findByTitle("tree:/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.click(folderTreeItem);
+    });
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "g", metaKey: true, shiftKey: true });
+    });
+
+    expect(await screen.findByLabelText("Path")).toHaveValue("/Users/demo/Remembered");
+  });
+
+  it("falls back to the current folder when the remembered Go to Folder path is no longer valid", async () => {
+    const harness = createAppHarness({
+      preferences: {
+        lastGoToFolderPath: "/Users/demo/Remembered",
+      },
+      itemPropertiesByPath: {
+        "/Users/demo/Remembered": "missing",
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "g", metaKey: true, shiftKey: true });
+    });
+
+    expect(await screen.findByLabelText("Path")).toHaveValue("/Users/demo");
+  });
+
+  it("expands ~ when submitting Go to Folder", async () => {
+    const harness = createAppHarness({
+      directorySnapshots: {
+        "/Users/demo/Folder": {
+          path: "/Users/demo/Folder",
+          parentPath: "/Users/demo",
+          entries: [],
+        },
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "g", metaKey: true, shiftKey: true });
+    });
+
+    const input = await screen.findByLabelText("Path");
+    await act(async () => {
+      fireEvent.change(input, { target: { value: "~/Folder" } });
+      fireEvent.click(screen.getByText("Open Folder"));
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/Folder");
+    });
   });
 
   it("allows Cmd+T in tree focus for the selected tree folder", async () => {

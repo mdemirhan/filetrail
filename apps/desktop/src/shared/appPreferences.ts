@@ -266,6 +266,7 @@ export type AppPreferences = {
   treeRootPath: string | null;
   lastVisitedPath: string | null;
   lastVisitedFavoritePath: string | null;
+  lastGoToFolderPath: string | null;
   favorites: FavoritePreference[];
   favoritesPlacement: FavoritesPlacement;
   favoritesPaneHeight: number | null;
@@ -324,6 +325,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   treeRootPath: null,
   lastVisitedPath: null,
   lastVisitedFavoritePath: null,
+  lastGoToFolderPath: null,
   favorites: [],
   favoritesPlacement: "integrated",
   favoritesPaneHeight: null,

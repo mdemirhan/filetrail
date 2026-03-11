@@ -13,3 +13,16 @@ export function isPathWithinRoot(path: string, rootPath: string): boolean {
   }
   return path === rootPath || path.startsWith(`${rootPath}/`);
 }
+
+export function expandHomeShortcut(path: string, homePath: string): string {
+  if (homePath.length === 0) {
+    return path;
+  }
+  if (path === "~") {
+    return homePath;
+  }
+  if (path.startsWith("~/")) {
+    return `${homePath}/${path.slice(2)}`;
+  }
+  return path;
+}

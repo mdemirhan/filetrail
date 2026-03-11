@@ -151,6 +151,9 @@ export function toPreferencePatch(
   if (value.lastVisitedFavoritePath !== undefined) {
     patch.lastVisitedFavoritePath = value.lastVisitedFavoritePath;
   }
+  if (value.lastGoToFolderPath !== undefined) {
+    patch.lastGoToFolderPath = value.lastGoToFolderPath;
+  }
   if (value.favorites !== undefined) {
     patch.favorites = value.favorites;
   }

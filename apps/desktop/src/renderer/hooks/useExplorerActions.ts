@@ -60,6 +60,7 @@ import { createFavorite, getFileSystemItemPath, isFavoritePath } from "../lib/fa
 import type { useFiletrailClient } from "../lib/filetrailClient";
 import type { InternalMoveSourceSurface } from "../lib/internalDragAndDrop";
 import { createRendererLogger } from "../lib/logging";
+import { expandHomeShortcut } from "../lib/pathUtils";
 import { type ToastEntry, type ToastKind, createToastEntry, enqueueToast } from "../lib/toasts";
 import type {
   ContextMenuState,
@@ -2430,12 +2431,13 @@ export function useExplorerActions(args: {
     if (!moveDialogState) {
       return;
     }
+    const resolvedDestinationDirectoryPath = expandHomeShortcut(destinationDirectoryPath.trim(), homePath);
     setMoveDialogState((current) =>
       current ? { ...current, submitting: true, error: null } : current,
     );
     const didStart = await startMoveToDestination(
       moveDialogState.sourcePaths,
-      destinationDirectoryPath,
+      resolvedDestinationDirectoryPath,
       {
         initiator: "move_dialog",
         validateDestinationBeforeAnalyze: true,
@@ -2470,7 +2472,10 @@ export function useExplorerActions(args: {
 
   async function browseForDirectoryPath(currentDirectoryPath: string): Promise<string | null> {
     const response = await client.invoke("system:pickDirectory", {
-      defaultPath: currentDirectoryPath.length > 0 ? currentDirectoryPath : null,
+      defaultPath:
+        currentDirectoryPath.length > 0
+          ? expandHomeShortcut(currentDirectoryPath, homePath)
+          : null,
     });
     return response.canceled ? null : response.path;
   }

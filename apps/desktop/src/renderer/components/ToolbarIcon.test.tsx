@@ -53,7 +53,8 @@ describe("ToolbarIcon", () => {
     expect(container.querySelectorAll("line")).toHaveLength(3);
 
     rerender(<ToolbarIcon name="details" />);
-    expect(container.querySelectorAll("rect")).toHaveLength(4);
+    expect(container.querySelectorAll("rect")).toHaveLength(1);
+    expect(container.querySelectorAll("line")).toHaveLength(3);
 
     rerender(<ToolbarIcon name="search" />);
     expect(container.querySelector("circle")).not.toBeNull();
