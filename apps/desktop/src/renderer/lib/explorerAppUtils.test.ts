@@ -1,10 +1,10 @@
-import type { WriteOperationResult } from "./explorerTypes";
 import {
   resolveExplorerTreeRootPath,
   resolvePasteDestinationPath,
   resolveWriteOperationRefreshPath,
   resolveWriteOperationTreeSelectionPath,
 } from "./explorerAppUtils";
+import type { WriteOperationResult } from "./explorerTypes";
 
 describe("explorerAppUtils", () => {
   it("roots the tree at home for paths inside home", () => {
@@ -76,9 +76,9 @@ describe("explorerAppUtils", () => {
     expect(resolveWriteOperationRefreshPath(result, "/Users/demo/tmp/old-name")).toBe(
       "/Users/demo/tmp",
     );
-    expect(
-      resolveWriteOperationTreeSelectionPath(result, "/Users/demo/tmp/old-name/child"),
-    ).toBe("/Users/demo/tmp");
+    expect(resolveWriteOperationTreeSelectionPath(result, "/Users/demo/tmp/old-name/child")).toBe(
+      "/Users/demo/tmp",
+    );
   });
 
   it("remaps tree selection after a rename when the selected node is inside the renamed folder", () => {
@@ -94,9 +94,9 @@ describe("explorerAppUtils", () => {
       ],
     } as WriteOperationResult;
 
-    expect(
-      resolveWriteOperationTreeSelectionPath(result, "/Users/demo/tmp/old-name/child"),
-    ).toBe("/Users/demo/tmp/new-name/child");
+    expect(resolveWriteOperationTreeSelectionPath(result, "/Users/demo/tmp/old-name/child")).toBe(
+      "/Users/demo/tmp/new-name/child",
+    );
   });
 
   it("remaps tree selection after a rename when the renamed folder itself is selected", () => {

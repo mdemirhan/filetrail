@@ -9,26 +9,26 @@ import {
 
 import type { IpcResponse } from "@filetrail/contracts";
 
-import { appendSearchResults, filterSearchResults, sortSearchResults } from "../lib/searchResults";
-import { useFiletrailClient } from "../lib/filetrailClient";
+import type {
+  SearchResultsFilterScopePreference,
+  SearchResultsSortByPreference,
+  SearchResultsSortDirectionPreference,
+} from "../../shared/appPreferences";
+import {
+  type ContentSelectionState,
+  EMPTY_CONTENT_SELECTION,
+  sanitizeContentSelection,
+} from "../lib/contentSelection";
 import { toDirectoryEntryFromSearchResult } from "../lib/explorerAppUtils";
-import { createRendererLogger } from "../lib/logging";
 import type {
   DirectoryEntry,
   SearchMatchScope,
   SearchPatternMode,
   SearchResultItem,
 } from "../lib/explorerTypes";
-import {
-  EMPTY_CONTENT_SELECTION,
-  sanitizeContentSelection,
-  type ContentSelectionState,
-} from "../lib/contentSelection";
-import type {
-  SearchResultsFilterScopePreference,
-  SearchResultsSortByPreference,
-  SearchResultsSortDirectionPreference,
-} from "../../shared/appPreferences";
+import type { useFiletrailClient } from "../lib/filetrailClient";
+import { createRendererLogger } from "../lib/logging";
+import { appendSearchResults, filterSearchResults, sortSearchResults } from "../lib/searchResults";
 
 type SearchResultsSortBy = SearchResultsSortByPreference;
 type SearchResultsSortDirection = SearchResultsSortDirectionPreference;

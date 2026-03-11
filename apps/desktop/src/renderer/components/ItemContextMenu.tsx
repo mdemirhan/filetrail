@@ -1,4 +1,4 @@
-import { type CSSProperties, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, Fragment, useEffect, useMemo, useState } from "react";
 
 import {
   type ContextMenuActionId,
@@ -8,10 +8,7 @@ import {
   type ContextMenuSurface,
   getContextMenuItems,
 } from "../lib/contextMenu";
-import {
-  getContextMenuShortcutLabel,
-  type ShortcutContext,
-} from "../lib/shortcutPolicy";
+import { type ShortcutContext, getContextMenuShortcutLabel } from "../lib/shortcutPolicy";
 
 export type { ContextMenuActionId, ContextMenuSubmenuAction, ContextMenuSubmenuItem };
 
@@ -103,15 +100,17 @@ export function ItemContextMenu({
           }
           const isActive = activeItemId === item.id;
           const isDisabled = disabledActionIdSet.has(item.id);
-          const shortcut = isDisabled ? null : getContextMenuShortcutLabel(item.id, shortcutContext);
-          return (
+          const shortcut = isDisabled
+            ? null
+            : getContextMenuShortcutLabel(item.id, shortcutContext);
+          const itemClassName = `context-menu-item${isActive ? " active" : ""}${isDisabled ? " disabled" : ""}${
+            item.destructive ? " destructive" : ""
+          }`;
+          const itemButton = (
             <button
-              key={item.id}
               type="button"
               aria-disabled={isDisabled}
-              className={`context-menu-item${isActive ? " active" : ""}${isDisabled ? " disabled" : ""}${
-                item.destructive ? " destructive" : ""
-              }`}
+              className={itemClassName}
               onMouseEnter={() => {
                 setActiveItemId(item.id);
               }}
@@ -133,26 +132,34 @@ export function ItemContextMenu({
               ) : shortcut ? (
                 <span className="context-menu-item-shortcut">{shortcut}</span>
               ) : null}
-              {item.hasSubmenu && submenuOpen && !isDisabled ? (
-                <div className="context-submenu">
-                  {submenuItems.map((submenuItem) => {
-                    if (submenuItem.type === "separator") {
-                      return <div key={submenuItem.key} className="context-menu-separator" />;
-                    }
-                    return (
-                      <button
-                        key={submenuItem.action.id}
-                        type="button"
-                        className="context-submenu-item"
-                        onClick={() => onSubmenuAction(submenuItem.action)}
-                      >
-                        {submenuItem.action.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : null}
             </button>
+          );
+
+          if (!item.hasSubmenu || isDisabled || !submenuOpen) {
+            return <Fragment key={item.id}>{itemButton}</Fragment>;
+          }
+
+          return (
+            <div key={item.id} className="context-menu-item-group">
+              {itemButton}
+              <div className="context-submenu">
+                {submenuItems.map((submenuItem) => {
+                  if (submenuItem.type === "separator") {
+                    return <div key={submenuItem.key} className="context-menu-separator" />;
+                  }
+                  return (
+                    <button
+                      key={submenuItem.action.id}
+                      type="button"
+                      className="context-submenu-item"
+                      onClick={() => onSubmenuAction(submenuItem.action)}
+                    >
+                      {submenuItem.action.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           );
         })}
       </div>

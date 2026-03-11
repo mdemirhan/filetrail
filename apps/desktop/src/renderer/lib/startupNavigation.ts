@@ -17,7 +17,10 @@ function resolvePersistedStartupRoot(
 export function resolveStartupNavigation(
   preferences: Pick<
     AppPreferences,
-    "restoreLastVisitedFolderOnStartup" | "lastVisitedPath" | "lastVisitedFavoritePath" | "treeRootPath"
+    | "restoreLastVisitedFolderOnStartup"
+    | "lastVisitedPath"
+    | "lastVisitedFavoritePath"
+    | "treeRootPath"
   >,
   homePath: string,
   startupFolderPath: string | null = null,
@@ -50,6 +53,8 @@ export function resolveStartupNavigation(
     startupPath,
     startupRootPath: resolvePersistedStartupRoot(preferences.treeRootPath, homePath, startupPath),
     startupFavoritePath:
-      preferences.lastVisitedFavoritePath === startupPath ? preferences.lastVisitedFavoritePath : null,
+      preferences.lastVisitedFavoritePath === startupPath
+        ? preferences.lastVisitedFavoritePath
+        : null,
   };
 }

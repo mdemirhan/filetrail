@@ -1,6 +1,6 @@
-import { formatDateTime, formatPermissionMode, formatSize } from "../lib/formatting";
-import { FileIcon } from "../lib/fileIcons";
 import type { DirectoryEntry, ItemProperties } from "../lib/explorerTypes";
+import { FileIcon } from "../lib/fileIcons";
+import { formatDateTime, formatPermissionMode, formatSize } from "../lib/formatting";
 
 export function InfoRow({
   open,

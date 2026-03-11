@@ -1,8 +1,8 @@
 import {
   accentTokensToCssVariables,
   generateAccentTokens,
-  getFavoriteAccentVariables,
   getAccentPalette,
+  getFavoriteAccentVariables,
   getToolbarAccentVariables,
 } from "./accent";
 

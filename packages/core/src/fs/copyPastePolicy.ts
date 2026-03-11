@@ -48,15 +48,28 @@ async function resolveNode(
   } else if (node.conflictClass === null) {
     action = "create";
   } else if (node.conflictClass === "directory_conflict") {
-    action = policy!.directory;
+    if (!policy?.directory) {
+      throw new Error("Missing directory conflict policy.");
+    }
+    action = policy.directory;
   } else if (node.conflictClass === "type_mismatch") {
-    action = policy!.mismatch;
+    if (!policy?.mismatch) {
+      throw new Error("Missing mismatch conflict policy.");
+    }
+    action = policy.mismatch;
   } else {
-    action = policy!.file;
+    if (!policy?.file) {
+      throw new Error("Missing file conflict policy.");
+    }
+    action = policy.file;
   }
   const destinationPath =
     action === "keep_both"
-      ? await resolveDuplicateName(basename(node.sourcePath), dirname(node.destinationPath), fileSystem)
+      ? await resolveDuplicateName(
+          basename(node.sourcePath),
+          dirname(node.destinationPath),
+          fileSystem,
+        )
       : node.destinationPath;
 
   const childAction =

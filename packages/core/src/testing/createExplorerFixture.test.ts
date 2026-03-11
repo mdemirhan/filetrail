@@ -1,4 +1,4 @@
-import { lstat, readFile, readlink, readdir } from "node:fs/promises";
+import { lstat, readFile, readdir, readlink } from "node:fs/promises";
 import { join } from "node:path";
 
 import { createExplorerFixture } from "./createExplorerFixture";

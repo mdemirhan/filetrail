@@ -3,7 +3,7 @@ import { basename, dirname } from "node:path";
 import { isAbortError } from "@filetrail/contracts";
 
 import { captureFingerprint, fingerprintsEqual } from "./copyPasteFingerprint";
-import { resolveSingleNodeWithAction, type ResolvedCopyPasteNode } from "./copyPastePolicy";
+import { type ResolvedCopyPasteNode, resolveSingleNodeWithAction } from "./copyPastePolicy";
 import type {
   CopyPasteAnalysisReport,
   CopyPasteItemResult,
@@ -186,7 +186,11 @@ async function executeResolvedNode(args: {
     };
   }
 
-  const runtimeConflict = await detectRuntimeConflict(currentNode, args.report.analysisId, args.fileSystem);
+  const runtimeConflict = await detectRuntimeConflict(
+    currentNode,
+    args.report.analysisId,
+    args.fileSystem,
+  );
   if (runtimeConflict) {
     args.emit({
       operationId: args.operationId,
@@ -323,8 +327,14 @@ async function detectRuntimeConflict(
   analysisId: string,
   fileSystem: WriteServiceFileSystem,
 ): Promise<CopyPasteRuntimeConflict | null> {
-  const currentSourceFingerprint = await captureFingerprint(fileSystem, resolvedNode.node.sourcePath);
-  const currentDestinationFingerprint = await captureFingerprint(fileSystem, resolvedNode.destinationPath);
+  const currentSourceFingerprint = await captureFingerprint(
+    fileSystem,
+    resolvedNode.node.sourcePath,
+  );
+  const currentDestinationFingerprint = await captureFingerprint(
+    fileSystem,
+    resolvedNode.destinationPath,
+  );
 
   if (!fingerprintsEqual(resolvedNode.node.sourceFingerprint, currentSourceFingerprint)) {
     return {
@@ -384,8 +394,7 @@ async function detectRuntimeConflict(
       sourceKind: resolvedNode.node.sourceKind,
       destinationKind: currentDestinationFingerprint.kind,
       conflictClass: resolvedNode.node.conflictClass,
-      reason:
-        !currentDestinationFingerprint.exists ? "destination_deleted" : "destination_changed",
+      reason: !currentDestinationFingerprint.exists ? "destination_deleted" : "destination_changed",
       sourceFingerprint: resolvedNode.node.sourceFingerprint,
       destinationFingerprint: resolvedNode.node.destinationFingerprint,
       currentSourceFingerprint,
@@ -420,7 +429,10 @@ async function cleanupMovedSourceNode(
     for (const child of resolvedNode.children) {
       await cleanupMovedSourceNode(child, fileSystem);
     }
-    const currentSourceFingerprint = await captureFingerprint(fileSystem, resolvedNode.node.sourcePath);
+    const currentSourceFingerprint = await captureFingerprint(
+      fileSystem,
+      resolvedNode.node.sourcePath,
+    );
     if (!fingerprintsEqual(resolvedNode.node.sourceFingerprint, currentSourceFingerprint)) {
       return;
     }
@@ -434,7 +446,10 @@ async function cleanupMovedSourceNode(
     }
     return;
   }
-  const currentSourceFingerprint = await captureFingerprint(fileSystem, resolvedNode.node.sourcePath);
+  const currentSourceFingerprint = await captureFingerprint(
+    fileSystem,
+    resolvedNode.node.sourcePath,
+  );
   if (!fingerprintsEqual(resolvedNode.node.sourceFingerprint, currentSourceFingerprint)) {
     return;
   }

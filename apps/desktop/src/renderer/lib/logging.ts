@@ -21,7 +21,12 @@ export function toErrorMessage(error: unknown): string {
 }
 
 export function createRendererLogger(namespace: string) {
-  function emit(level: AppLogLevel, message: string, detail?: unknown, context?: RendererLogContext): void {
+  function emit(
+    level: AppLogLevel,
+    message: string,
+    detail?: unknown,
+    context?: RendererLogContext,
+  ): void {
     const entry = normalizeRendererLogEntry(namespace, level, message, detail, context);
     const bridge = typeof window !== "undefined" ? window.filetrail : undefined;
     if (bridge?.log) {

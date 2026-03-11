@@ -7,16 +7,16 @@ import type {
   WriteOperationProgressEvent,
 } from "@filetrail/contracts";
 
-import {
-  EMPTY_COPY_PASTE_CLIPBOARD,
-  type CopyPasteClipboardState,
-} from "../lib/copyPasteClipboard";
 import type {
   ContextMenuScope,
   ContextMenuSourceSubview,
   ContextMenuSurface,
   ContextMenuTargetKind,
 } from "../lib/contextMenu";
+import {
+  type CopyPasteClipboardState,
+  EMPTY_COPY_PASTE_CLIPBOARD,
+} from "../lib/copyPasteClipboard";
 import type { ToastEntry } from "../lib/toasts";
 
 type ContextMenuState = {
@@ -32,13 +32,11 @@ type ContextMenuState = {
 };
 
 type CopyPasteAnalysisReport = NonNullable<IpcResponse<"copyPaste:analyzeGetUpdate">["report"]>;
-type CopyPastePolicy =
-  | {
-      file: "overwrite" | "skip" | "keep_both";
-      directory: "merge" | "skip" | "keep_both";
-      mismatch: "overwrite" | "skip" | "keep_both";
-    }
-  | null;
+type CopyPastePolicy = {
+  file: "overwrite" | "skip" | "keep_both";
+  directory: "merge" | "skip" | "keep_both";
+  mismatch: "overwrite" | "skip" | "keep_both";
+} | null;
 type CopyPasteDialogState =
   | {
       type: "analysis";

@@ -31,7 +31,12 @@ export type CopyPastePlanIssueCode =
   | "same_path"
   | "parent_into_child";
 export type CopyPastePlanWarningCode = "large_batch" | "cut_requires_delete";
-export type CopyPasteAnalysisJobStatus = "queued" | "analyzing" | "complete" | "cancelled" | "error";
+export type CopyPasteAnalysisJobStatus =
+  | "queued"
+  | "analyzing"
+  | "complete"
+  | "cancelled"
+  | "error";
 export type CopyPastePolicyFileAction = "overwrite" | "skip" | "keep_both";
 export type CopyPastePolicyDirectoryAction = "merge" | "skip" | "keep_both";
 export type CopyPastePolicyMismatchAction = "overwrite" | "skip" | "keep_both";

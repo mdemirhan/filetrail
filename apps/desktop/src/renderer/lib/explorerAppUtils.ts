@@ -1,8 +1,8 @@
 import type { WriteOperationProgressEvent } from "@filetrail/contracts";
 
 import type { ContextMenuState } from "../hooks/useWriteOperations";
-import type { DirectoryEntry, SearchResultItem, WriteOperationResult } from "./explorerTypes";
 import { parentDirectoryPath } from "./explorerNavigation";
+import type { DirectoryEntry, SearchResultItem, WriteOperationResult } from "./explorerTypes";
 
 export function formatPathForShell(path: string): string {
   if (!/\s/.test(path)) {
@@ -60,7 +60,10 @@ export function resolvePasteDestinationPath(args: {
     return null;
   }
   if (contextMenuState) {
-    if (contextMenuState.targetKind === "treeFolder" || contextMenuState.targetKind === "favorite") {
+    if (
+      contextMenuState.targetKind === "treeFolder" ||
+      contextMenuState.targetKind === "favorite"
+    ) {
       return contextMenuState.targetPath;
     }
     if (isDirectoryLikeEntry(contextMenuTargetEntry)) {
@@ -160,13 +163,21 @@ export function resolveWriteOperationTreeSelectionPath(
     if (!impactedItem?.sourcePath || !impactedItem.destinationPath) {
       return null;
     }
-    return replacePathPrefix(selectedTreePath, impactedItem.sourcePath, impactedItem.destinationPath);
+    return replacePathPrefix(
+      selectedTreePath,
+      impactedItem.sourcePath,
+      impactedItem.destinationPath,
+    );
   }
 
   return null;
 }
 
-export function replacePathPrefix(path: string, sourcePrefix: string, destinationPrefix: string): string {
+export function replacePathPrefix(
+  path: string,
+  sourcePrefix: string,
+  destinationPrefix: string,
+): string {
   if (path === sourcePrefix) {
     return destinationPrefix;
   }
@@ -176,7 +187,10 @@ export function replacePathPrefix(path: string, sourcePrefix: string, destinatio
   return `${destinationPrefix}${path.slice(sourcePrefix.length)}`;
 }
 
-function findDeepestMatchingSourcePath(result: WriteOperationResult, currentPath: string): string | null {
+function findDeepestMatchingSourcePath(
+  result: WriteOperationResult,
+  currentPath: string,
+): string | null {
   const matchingSourcePaths = result.items
     .map((item) => item.sourcePath)
     .filter((sourcePath): sourcePath is string => {

@@ -1,5 +1,5 @@
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
-import { ExplorerWorkerClient } from "@filetrail/core";
+import type { ExplorerWorkerClient } from "@filetrail/core";
 
 const CACHE_TTL_MS = 3_000;
 const directorySnapshotCache = new Map<string, { expiresAt: number; value: unknown }>();

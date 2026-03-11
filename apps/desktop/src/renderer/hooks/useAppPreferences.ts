@@ -1,18 +1,18 @@
 import { useEffect, useState } from "react";
 
 import {
-  DEFAULT_APP_PREFERENCES,
-  DEFAULT_DETAIL_COLUMN_VISIBILITY,
-  DEFAULT_DETAIL_COLUMN_WIDTHS,
   type AccentMode,
   type ApplicationSelection,
   type CopyPasteReviewDialogSize,
+  DEFAULT_APP_PREFERENCES,
+  DEFAULT_DETAIL_COLUMN_VISIBILITY,
+  DEFAULT_DETAIL_COLUMN_WIDTHS,
   type DetailColumnVisibility,
   type DetailColumnWidths,
   type ExplorerViewMode,
-  type FileActivationAction,
-  type FavoritesPlacement,
   type FavoritePreference,
+  type FavoritesPlacement,
+  type FileActivationAction,
   type OpenWithApplication,
   type ThemeMode,
   type UiFontFamily,
@@ -94,7 +94,9 @@ export function useAppPreferences() {
   const [restoreLastVisitedFolderOnStartup, setRestoreLastVisitedFolderOnStartup] = useState(
     DEFAULT_APP_PREFERENCES.restoreLastVisitedFolderOnStartup,
   );
-  const [favorites, setFavorites] = useState<FavoritePreference[]>(DEFAULT_APP_PREFERENCES.favorites);
+  const [favorites, setFavorites] = useState<FavoritePreference[]>(
+    DEFAULT_APP_PREFERENCES.favorites,
+  );
   const [favoritesPlacement, setFavoritesPlacement] = useState<FavoritesPlacement>(
     DEFAULT_APP_PREFERENCES.favoritesPlacement,
   );

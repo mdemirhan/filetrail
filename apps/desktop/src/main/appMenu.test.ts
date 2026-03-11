@@ -189,7 +189,11 @@ describe("createApplicationMenuTemplate", () => {
     const actionLogItem = submenu.find((item) => "label" in item && item.label === "Action Log");
 
     expect(actionLogItem).toBeTruthy();
-    if (!actionLogItem || !("click" in actionLogItem) || typeof actionLogItem.click !== "function") {
+    if (
+      !actionLogItem ||
+      !("click" in actionLogItem) ||
+      typeof actionLogItem.click !== "function"
+    ) {
       throw new Error("Action Log menu item missing.");
     }
 

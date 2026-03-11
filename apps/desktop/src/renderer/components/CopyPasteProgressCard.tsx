@@ -54,7 +54,7 @@ export function CopyPasteProgressCard({
   const clampedPercent = Math.max(0, Math.min(100, progressPercent));
 
   return (
-    <section className="copy-paste-progress-card" role="region" aria-label={title}>
+    <section className="copy-paste-progress-card" aria-label={title}>
       <div className="copy-paste-progress-card-top-rail" aria-hidden="true">
         <div
           className="copy-paste-progress-card-top-rail-fill"

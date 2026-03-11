@@ -181,10 +181,7 @@ describe("SettingsView", () => {
     renderSettingsView({ accent: "teal" });
 
     expect(screen.getByLabelText("Accent color Gold")).toBeInTheDocument();
-    expect(screen.getByLabelText("Accent color Teal")).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(screen.getByLabelText("Accent color Teal")).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("Teal")).toBeInTheDocument();
   });
 
@@ -386,7 +383,10 @@ describe("SettingsView", () => {
   it("renders configured favorites with compact icon pickers", () => {
     renderSettingsView();
 
-    expect(screen.getByLabelText("Favorite icon for Home")).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByLabelText("Favorite icon for Home")).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
     expect(screen.getByText("/Users/demo")).toBeInTheDocument();
     expect(screen.getByLabelText("Favorite icon for Applications")).toHaveAttribute(
       "aria-expanded",
@@ -397,7 +397,10 @@ describe("SettingsView", () => {
 
     const homeControls = screen.getByRole("button", { name: "Browse Home" }).parentElement;
     expect(homeControls).not.toBeNull();
-    expect(within(homeControls!).getByLabelText("Favorite icon for Home")).toBeInTheDocument();
+    if (!homeControls) {
+      throw new Error("Home controls wrapper missing.");
+    }
+    expect(within(homeControls).getByLabelText("Favorite icon for Home")).toBeInTheDocument();
   });
 
   it("forwards favorites placement changes", () => {

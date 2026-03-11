@@ -139,7 +139,7 @@ function formatArgs(args: unknown[]): string {
       }
       return inspect(value, {
         depth: 8,
-        breakLength: Infinity,
+        breakLength: Number.POSITIVE_INFINITY,
         compact: true,
         sorted: true,
       });

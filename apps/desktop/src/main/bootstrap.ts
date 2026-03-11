@@ -4,13 +4,13 @@ import { app, clipboard, ipcMain } from "electron";
 import type { AppLogEntry } from "@filetrail/contracts";
 import { ExplorerWorkerClient, createWriteService, getPathSuggestions } from "@filetrail/core";
 import type { AppPreferences } from "../shared/appPreferences";
-import { writeStructuredAppLogEntry, type AppLogger } from "./appLog";
-import type { AppStateStore } from "./appStateStore";
 import {
   createActionLogRecorder,
   createActionLogStore,
   resolveActionLogFilePath,
 } from "./actionLog";
+import { type AppLogger, writeStructuredAppLogEntry } from "./appLog";
+import type { AppStateStore } from "./appStateStore";
 import { toPreferencePatch } from "./bootstrap/preferencesPatch";
 import {
   clearResponseCaches,
@@ -86,141 +86,158 @@ export async function bootstrapMainProcess(
     writeCoordinator.shutdown();
   };
 
-  registerIpcHandlers(ipcMain, {
-    "app:getHomeDirectory": () => ({
-      path: app.getPath("home"),
-    }),
-    "app:getPreferences": () => ({
-      preferences: appStateStore.getPreferences(),
-    }),
-    "actionLog:list": async () => ({
-      items: await actionLogStore.list(),
-    }),
-    "app:getLaunchContext": () => launchContext,
-    "app:updatePreferences": (payload) => {
-      const preferences = appStateStore.updatePreferences(toPreferencePatch(payload.preferences));
-      onPreferencesChanged?.(preferences);
-      return { preferences };
-    },
-    "app:clearCaches": () => {
-      clearResponseCaches();
-      return { ok: true };
-    },
-    "app:writeLog": (payload) => {
-      writeStructuredAppLogEntry(logger, payload as AppLogEntry);
-      return { ok: true };
-    },
-    "tree:getChildren": (payload) =>
-      getCachedResponse("tree", payload, () =>
-        withTiming("tree:getChildren", payload.path, () =>
-          workerClient.request("tree:getChildren", payload),
+  registerIpcHandlers(
+    ipcMain,
+    {
+      "app:getHomeDirectory": () => ({
+        path: app.getPath("home"),
+      }),
+      "app:getPreferences": () => ({
+        preferences: appStateStore.getPreferences(),
+      }),
+      "actionLog:list": async () => ({
+        items: await actionLogStore.list(),
+      }),
+      "app:getLaunchContext": () => launchContext,
+      "app:updatePreferences": (payload) => {
+        const preferences = appStateStore.updatePreferences(toPreferencePatch(payload.preferences));
+        onPreferencesChanged?.(preferences);
+        return { preferences };
+      },
+      "app:clearCaches": () => {
+        clearResponseCaches();
+        return { ok: true };
+      },
+      "app:writeLog": (payload) => {
+        writeStructuredAppLogEntry(logger, payload as AppLogEntry);
+        return { ok: true };
+      },
+      "tree:getChildren": (payload) =>
+        getCachedResponse("tree", payload, () =>
+          withTiming(
+            "tree:getChildren",
+            payload.path,
+            () => workerClient.request("tree:getChildren", payload),
+            logger,
+          ),
+        ),
+      "directory:getSnapshot": (payload) =>
+        getCachedResponse("directory", payload, () =>
+          withTiming(
+            "directory:getSnapshot",
+            payload.path,
+            () => workerClient.request("directory:getSnapshot", payload),
+            logger,
+          ),
+        ),
+      "directory:getMetadataBatch": (payload) =>
+        withTiming(
+          "directory:getMetadataBatch",
+          payload.directoryPath,
+          () => getCachedMetadataBatch(workerClient, payload),
           logger,
         ),
-      ),
-    "directory:getSnapshot": (payload) =>
-      getCachedResponse("directory", payload, () =>
-        withTiming("directory:getSnapshot", payload.path, () =>
-          workerClient.request("directory:getSnapshot", payload),
+      "item:getProperties": (payload) =>
+        withTiming(
+          "item:getProperties",
+          payload.path,
+          () => workerClient.request("item:getProperties", payload),
           logger,
         ),
-      ),
-    "directory:getMetadataBatch": (payload) =>
-      withTiming("directory:getMetadataBatch", payload.directoryPath, () =>
-        getCachedMetadataBatch(workerClient, payload),
-        logger,
-      ),
-    "item:getProperties": (payload) =>
-      withTiming("item:getProperties", payload.path, () =>
-        workerClient.request("item:getProperties", payload),
-        logger,
-      ),
-    "path:getSuggestions": (payload) =>
-      withTiming("path:getSuggestions", payload.inputPath, () =>
-        getPathSuggestions(
+      "path:getSuggestions": (payload) =>
+        withTiming(
+          "path:getSuggestions",
           payload.inputPath,
-          payload.includeHidden,
-          payload.limit,
-          originalExplorerFileSystem,
+          () =>
+            getPathSuggestions(
+              payload.inputPath,
+              payload.includeHidden,
+              payload.limit,
+              originalExplorerFileSystem,
+            ),
+          logger,
         ),
-        logger,
-      ),
-    "path:resolve": (payload) =>
-      withTiming(
-        "path:resolve",
-        payload.path,
-        () => workerClient.request("path:resolve", payload),
-        logger,
-      ),
-    "search:start": (payload) =>
-      withTiming("search:start", payload.rootPath, () =>
-        workerClient.request("search:start", payload),
-        logger,
-      ),
-    "search:getUpdate": (payload) => workerClient.request("search:getUpdate", payload),
-    "search:cancel": (payload) => workerClient.request("search:cancel", payload),
-    ...writeCoordinator.handlers,
-    "folderSize:start": (payload) => folderSizeHandlers.start(payload),
-    "folderSize:getStatus": (payload) => folderSizeHandlers.getStatus(payload),
-    "folderSize:cancel": (payload) => folderSizeHandlers.cancel(payload),
-    "system:openPath": async (payload) => {
-      const startedAtMs = Date.now();
-      const response = await openPath(payload);
-      if (appStateStore.getPreferences().actionLogEnabled) {
-        void actionLogRecorder.recordOpenPath({
-          path: payload.path,
+      "path:resolve": (payload) =>
+        withTiming(
+          "path:resolve",
+          payload.path,
+          () => workerClient.request("path:resolve", payload),
+          logger,
+        ),
+      "search:start": (payload) =>
+        withTiming(
+          "search:start",
+          payload.rootPath,
+          () => workerClient.request("search:start", payload),
+          logger,
+        ),
+      "search:getUpdate": (payload) => workerClient.request("search:getUpdate", payload),
+      "search:cancel": (payload) => workerClient.request("search:cancel", payload),
+      ...writeCoordinator.handlers,
+      "folderSize:start": (payload) => folderSizeHandlers.start(payload),
+      "folderSize:getStatus": (payload) => folderSizeHandlers.getStatus(payload),
+      "folderSize:cancel": (payload) => folderSizeHandlers.cancel(payload),
+      "system:openPath": async (payload) => {
+        const startedAtMs = Date.now();
+        const response = await openPath(payload);
+        if (appStateStore.getPreferences().actionLogEnabled) {
+          void actionLogRecorder.recordOpenPath({
+            path: payload.path,
+            ok: response.ok,
+            error: response.error,
+            startedAtMs,
+            finishedAtMs: Date.now(),
+          });
+        }
+        return response;
+      },
+      "system:pickApplication": (_payload, event) => pickApplication(event),
+      "system:pickDirectory": (payload, event) => pickDirectory(payload, event),
+      "system:openPathsWithApplication": async (payload) => {
+        const startedAtMs = Date.now();
+        const response = await openPathsWithApplication(payload);
+        if (appStateStore.getPreferences().actionLogEnabled) {
+          void actionLogRecorder.recordOpenWithApplication({
+            applicationPath: payload.applicationPath,
+            applicationName: resolveApplicationDisplayName(payload.applicationPath),
+            paths: payload.paths,
+            ok: response.ok,
+            error: response.error,
+            startedAtMs,
+            finishedAtMs: Date.now(),
+          });
+        }
+        return response;
+      },
+      "system:openInTerminal": async (payload) => {
+        const startedAtMs = Date.now();
+        const terminalApp = appStateStore.getPreferences().terminalApp;
+        const terminalName = resolveTerminalApplicationName(terminalApp);
+        const response = await openInTerminal(payload, terminalApp);
+        if (appStateStore.getPreferences().actionLogEnabled) {
+          void actionLogRecorder.recordOpenInTerminal({
+            requestedPath: payload.path,
+            targetPath: response.targetPath,
+            terminalName: response.terminalName ?? terminalName,
+            ok: response.ok,
+            error: response.error,
+            startedAtMs,
+            finishedAtMs: Date.now(),
+          });
+        }
+        return {
           ok: response.ok,
           error: response.error,
-          startedAtMs,
-          finishedAtMs: Date.now(),
-        });
-      }
-      return response;
+        };
+      },
+      "system:copyText": (payload) => {
+        clipboard.writeText(payload.text);
+        return { ok: true };
+      },
+      "system:performEditAction": (payload, event) => performEditAction(payload, event.sender),
     },
-    "system:pickApplication": (_payload, event) => pickApplication(event),
-    "system:pickDirectory": (payload, event) => pickDirectory(payload, event),
-    "system:openPathsWithApplication": async (payload) => {
-      const startedAtMs = Date.now();
-      const response = await openPathsWithApplication(payload);
-      if (appStateStore.getPreferences().actionLogEnabled) {
-        void actionLogRecorder.recordOpenWithApplication({
-          applicationPath: payload.applicationPath,
-          applicationName: resolveApplicationDisplayName(payload.applicationPath),
-          paths: payload.paths,
-          ok: response.ok,
-          error: response.error,
-          startedAtMs,
-          finishedAtMs: Date.now(),
-        });
-      }
-      return response;
-    },
-    "system:openInTerminal": async (payload) => {
-      const startedAtMs = Date.now();
-      const terminalApp = appStateStore.getPreferences().terminalApp;
-      const terminalName = resolveTerminalApplicationName(terminalApp);
-      const response = await openInTerminal(payload, terminalApp);
-      if (appStateStore.getPreferences().actionLogEnabled) {
-        void actionLogRecorder.recordOpenInTerminal({
-          requestedPath: payload.path,
-          targetPath: response.targetPath,
-          terminalName: response.terminalName ?? terminalName,
-          ok: response.ok,
-          error: response.error,
-          startedAtMs,
-          finishedAtMs: Date.now(),
-        });
-      }
-      return {
-        ok: response.ok,
-        error: response.error,
-      };
-    },
-    "system:copyText": (payload) => {
-      clipboard.writeText(payload.text);
-      return { ok: true };
-    },
-    "system:performEditAction": (payload, event) => performEditAction(payload, event.sender),
-  }, logger);
+    logger,
+  );
 }
 
 export async function shutdownMainProcess(): Promise<void> {

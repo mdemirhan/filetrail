@@ -66,7 +66,9 @@ describe("ContentPane", () => {
       />,
     );
 
-    expect(screen.getByText("Select a folder or favorite to view its contents.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Select a folder or favorite to view its contents."),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "No folder selected" })).toHaveAttribute(
       "aria-disabled",
       "true",

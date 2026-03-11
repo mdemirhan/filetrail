@@ -1,14 +1,14 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import type {
   AccentMode,
   ApplicationSelection,
   DetailColumnVisibility,
-  FileActivationAction,
   FavoriteIconId,
-  FavoritesPlacement,
   FavoritePreference,
+  FavoritesPlacement,
+  FileActivationAction,
   OpenWithApplication,
   ThemeMode,
   UiFontFamily,
@@ -16,8 +16,8 @@ import type {
 } from "../../shared/appPreferences";
 import {
   DEFAULT_APP_PREFERENCES,
-  DEFAULT_TEXT_EDITOR,
   DEFAULT_TERMINAL_APPLICATION,
+  DEFAULT_TEXT_EDITOR,
   FAVORITE_ICON_OPTIONS,
   ZOOM_PERCENT_MAX,
   ZOOM_PERCENT_MIN,
@@ -25,8 +25,8 @@ import {
   clampZoomPercent,
 } from "../../shared/appPreferences";
 import { generateAccentTokens } from "../lib/accent";
-import { FavoriteItemIcon } from "../lib/fileIcons";
 import { getFavoriteLabel } from "../lib/favorites";
+import { FavoriteItemIcon } from "../lib/fileIcons";
 import { type ThemeCssBase, getThemeVariant, resolveThemeCssBase } from "../lib/themeVariants";
 import { uiMonoFontStack as mono, uiSansFontStack as sans } from "../lib/viewFonts";
 
@@ -370,11 +370,7 @@ function CheckboxChip({
   theme: ResolvedSettingsTheme;
 }) {
   return (
-    <button
-      type="button"
-      role="checkbox"
-      aria-checked={checked}
-      onClick={onToggle}
+    <label
       style={{
         display: "flex",
         alignItems: "center",
@@ -383,10 +379,21 @@ function CheckboxChip({
         border: "none",
         cursor: "pointer",
         padding: "4px 10px 4px 4px",
-        outline: "none",
         borderRadius: "4px",
       }}
     >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onToggle}
+        style={{
+          position: "absolute",
+          opacity: 0,
+          width: "1px",
+          height: "1px",
+          pointerEvents: "none",
+        }}
+      />
       <div
         style={{
           width: "16px",
@@ -403,6 +410,8 @@ function CheckboxChip({
       >
         {checked ? (
           <svg
+            aria-hidden="true"
+            focusable="false"
             width="10"
             height="10"
             viewBox="0 0 24 24"
@@ -426,7 +435,7 @@ function CheckboxChip({
       >
         {label}
       </span>
-    </button>
+    </label>
   );
 }
 
@@ -481,6 +490,8 @@ function SelectControl({
         ))}
       </select>
       <svg
+        aria-hidden="true"
+        focusable="false"
         width="10"
         height="10"
         viewBox="0 0 24 24"
@@ -574,6 +585,8 @@ function ThemeSelectControl({
         ))}
       </select>
       <svg
+        aria-hidden="true"
+        focusable="false"
         width="10"
         height="10"
         viewBox="0 0 24 24"
@@ -808,15 +821,20 @@ function AccentSelector({
         </span>
       ) : null}
       {open && !disabled ? (
-        <div
-          role="dialog"
+        <dialog
+          open
           aria-label={`${labelPrefix} options`}
+          onCancel={(event) => {
+            event.preventDefault();
+            setOpen(false);
+          }}
           style={{
             position: "absolute",
             top: "calc(100% + 10px)",
             right: 0,
             zIndex: 5,
             width: "228px",
+            margin: 0,
             padding: "10px",
             borderRadius: "12px",
             background: theme.card.bg,
@@ -864,7 +882,7 @@ function AccentSelector({
               );
             })}
           </div>
-        </div>
+        </dialog>
       ) : null}
     </div>
   );
@@ -883,7 +901,7 @@ function FavoriteIconPicker({
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const popupRef = useRef<HTMLDivElement | null>(null);
+  const popupRef = useRef<HTMLDialogElement | null>(null);
   const [open, setOpen] = useState(false);
   const [popupPosition, setPopupPosition] = useState({ left: 0, top: 0 });
 
@@ -892,7 +910,7 @@ function FavoriteIconPicker({
   const popupRows = Math.ceil(FAVORITE_ICON_OPTIONS.length / popupColumns);
   const popupHeight = 20 + popupRows * 34 + (popupRows - 1) * 8;
 
-  const updatePopupPosition = () => {
+  const updatePopupPosition = useCallback(() => {
     const trigger = triggerRef.current;
     if (!trigger) {
       return;
@@ -906,11 +924,9 @@ function FavoriteIconPicker({
     const maxLeft = Math.max(margin, viewportWidth - popupWidth - margin);
     const left = Math.min(Math.max(preferredLeft, margin), maxLeft);
     const fitsBelow = rect.bottom + gap + popupHeight <= viewportHeight - margin;
-    const top = fitsBelow
-      ? rect.bottom + gap
-      : Math.max(margin, rect.top - gap - popupHeight);
+    const top = fitsBelow ? rect.bottom + gap : Math.max(margin, rect.top - gap - popupHeight);
     setPopupPosition({ left, top });
-  };
+  }, [popupHeight, popupWidth]);
 
   useEffect(() => {
     if (!open) {
@@ -946,7 +962,7 @@ function FavoriteIconPicker({
       window.removeEventListener("scroll", handleWindowChange, true);
       window.removeEventListener("keydown", handleEscape);
     };
-  }, [open]);
+  }, [open, updatePopupPosition]);
 
   return (
     <div
@@ -987,16 +1003,21 @@ function FavoriteIconPicker({
       </button>
       {open
         ? createPortal(
-            <div
+            <dialog
               ref={popupRef}
-              role="dialog"
+              open
               aria-label={`${ariaLabel} options`}
+              onCancel={(event) => {
+                event.preventDefault();
+                setOpen(false);
+              }}
               style={{
                 position: "fixed",
                 top: `${popupPosition.top}px`,
                 left: `${popupPosition.left}px`,
                 zIndex: 1000,
                 width: `${popupWidth}px`,
+                margin: 0,
                 padding: "10px",
                 borderRadius: "12px",
                 background: theme.card.bg,
@@ -1041,7 +1062,7 @@ function FavoriteIconPicker({
                   </button>
                 );
               })}
-            </div>,
+            </dialog>,
             document.body,
           )
         : null}
@@ -1167,17 +1188,19 @@ function ApplicationSelectionDisplay({
       >
         {title}
       </div>
-      <div
-        role="group"
-        aria-label={ariaLabel}
+      <fieldset
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           gap: "12px",
           padding: "12px 0",
+          margin: 0,
+          border: 0,
+          minInlineSize: 0,
         }}
       >
+        <legend className="sr-only">{ariaLabel}</legend>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div
             style={{
@@ -1213,7 +1236,7 @@ function ApplicationSelectionDisplay({
         >
           {actions}
         </div>
-      </div>
+      </fieldset>
     </div>
   );
 }
@@ -2348,21 +2371,21 @@ export function SettingsView({
                   index === favorites.length - 1 ? "none" : `1px solid ${palette.separator}`,
               }}
             >
-            <div
-              style={{
-                minWidth: 0,
-                flex: 1,
-                display: "flex",
-                alignItems: "center",
-                gap: "12px",
-              }}
-            >
-              <FavoriteItemIcon icon={favorite.icon} />
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div
-                  style={{
-                    fontSize: "12.5px",
-                    fontFamily: sans,
+              <div
+                style={{
+                  minWidth: 0,
+                  flex: 1,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "12px",
+                }}
+              >
+                <FavoriteItemIcon icon={favorite.icon} />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div
+                    style={{
+                      fontSize: "12.5px",
+                      fontFamily: sans,
                       fontWeight: 500,
                       color: palette.label.primary,
                       marginBottom: "4px",

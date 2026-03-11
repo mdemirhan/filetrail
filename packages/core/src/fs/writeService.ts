@@ -8,9 +8,6 @@ import { executeCopyPasteFromAnalysis } from "./copyPasteExecution";
 import { resolveAnalysisWithPolicy } from "./copyPastePolicy";
 import {
   ANALYSIS_BUSY_ERROR,
-  DEFAULT_COPY_PASTE_POLICY,
-  DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
-  WRITE_OPERATION_BUSY_ERROR,
   type CopyPasteAnalysisReport,
   type CopyPasteAnalysisRequest,
   type CopyPasteAnalysisStartHandle,
@@ -22,7 +19,10 @@ import {
   type CopyPasteProgressEvent,
   type CopyPasteRequest,
   type CopyPasteRuntimeResolutionAction,
+  DEFAULT_COPY_PASTE_POLICY,
+  DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
   type RequiredCopyPasteAnalysisRequest,
+  WRITE_OPERATION_BUSY_ERROR,
   type WriteServiceDependencies,
   type WriteServiceFileSystem,
 } from "./writeServiceTypes";
@@ -198,8 +198,7 @@ export class WriteService {
     this.controllers.set(operationId, controller);
     this.activeOperationId = operationId;
 
-    const start =
-      "analysisId" in request ? request : this.createLegacyExecutionRequest(request);
+    const start = "analysisId" in request ? request : this.createLegacyExecutionRequest(request);
     this.emit({
       operationId,
       analysisId: start.analysisId,
@@ -491,6 +490,8 @@ function toLegacyPlan(
     canExecute:
       report.issues.length === 0 &&
       (conflictResolution === "skip" || conflicts.length === 0) &&
-      report.nodes.some((node) => conflictResolution === "skip" ? node.conflictClass === null : true),
+      report.nodes.some((node) =>
+        conflictResolution === "skip" ? node.conflictClass === null : true,
+      ),
   };
 }

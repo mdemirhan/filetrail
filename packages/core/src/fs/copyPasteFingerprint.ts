@@ -67,7 +67,10 @@ export async function pathExists(
   return fingerprint.exists;
 }
 
-async function readlinkSafe(fileSystem: WriteServiceFileSystem, path: string): Promise<string | null> {
+async function readlinkSafe(
+  fileSystem: WriteServiceFileSystem,
+  path: string,
+): Promise<string | null> {
   try {
     return await fileSystem.readlink(path);
   } catch {

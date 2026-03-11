@@ -1,11 +1,11 @@
+import { MockWriteServiceFileSystem } from "./testUtils";
 import {
   ANALYSIS_BUSY_ERROR,
-  createWriteService,
-  DEFAULT_COPY_PASTE_POLICY,
   type CopyPasteProgressEvent,
+  DEFAULT_COPY_PASTE_POLICY,
   WRITE_OPERATION_BUSY_ERROR,
+  createWriteService,
 } from "./writeService";
-import { MockWriteServiceFileSystem } from "./testUtils";
 
 describe("writeService analysis and runtime coordination", () => {
   it("runs and reports a copy/paste analysis job to completion", async () => {
@@ -89,12 +89,9 @@ describe("writeService analysis and runtime coordination", () => {
         conflictId: event.runtimeConflict?.conflictId ?? null,
       });
       if (event.status === "awaiting_resolution" && event.runtimeConflict) {
+        const conflictId = event.runtimeConflict.conflictId;
         setTimeout(() => {
-          service.resolveRuntimeConflict(
-            event.operationId,
-            event.runtimeConflict!.conflictId,
-            "overwrite",
-          );
+          service.resolveRuntimeConflict(event.operationId, conflictId, "overwrite");
         }, 0);
       }
     });
@@ -441,7 +438,9 @@ describe("writeService analysis and runtime coordination", () => {
     fileSystem.lstatImpl = async (path) => {
       if (path === "/target/file.txt" && !destinationSeenMissing) {
         destinationSeenMissing = true;
-        const error = new Error(`ENOENT: no such file or directory, lstat '${path}'`) as NodeJS.ErrnoException;
+        const error = new Error(
+          `ENOENT: no such file or directory, lstat '${path}'`,
+        ) as NodeJS.ErrnoException;
         error.code = "ENOENT";
         throw error;
       }

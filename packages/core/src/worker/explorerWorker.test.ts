@@ -130,7 +130,12 @@ describe("explorerWorker", () => {
     expect(explorerServiceMock.listTreeChildren).toHaveBeenCalledWith(
       "/Users/demo",
       false,
-      undefined,
+      expect.objectContaining({
+        lstat: expect.any(Function),
+        readdir: expect.any(Function),
+        realpath: expect.any(Function),
+        stat: expect.any(Function),
+      }),
     );
     expect(workerModuleMock.parentPort.postMessage).toHaveBeenLastCalledWith({
       id: "req-1",
@@ -148,7 +153,15 @@ describe("explorerWorker", () => {
     });
     await flushWorkerQueue();
 
-    expect(explorerServiceMock.resolvePathTarget).toHaveBeenCalledWith("/Users/demo", undefined);
+    expect(explorerServiceMock.resolvePathTarget).toHaveBeenCalledWith(
+      "/Users/demo",
+      expect.objectContaining({
+        lstat: expect.any(Function),
+        readdir: expect.any(Function),
+        realpath: expect.any(Function),
+        stat: expect.any(Function),
+      }),
+    );
     expect(workerModuleMock.parentPort.postMessage).toHaveBeenLastCalledWith({
       id: "req-2",
       ok: true,

@@ -2,11 +2,11 @@ import { dirname, join, resolve } from "node:path";
 import { shell } from "electron";
 
 import {
-  isAbortError,
   type IpcRequest,
   type WriteOperationAction,
   type WriteOperationProgressEvent,
   type WriteOperationResult,
+  isAbortError,
   writeOperationProgressEventSchema,
 } from "@filetrail/contracts";
 import { WRITE_OPERATION_BUSY_ERROR, type WriteService } from "@filetrail/core";
@@ -96,7 +96,9 @@ export function createWriteOperationCoordinator(
             (request && "sourcePaths" in request ? request.sourcePaths : []),
           destinationPaths:
             metadata?.targetPaths ??
-            (request && "destinationDirectoryPath" in request ? [request.destinationDirectoryPath] : []),
+            (request && "destinationDirectoryPath" in request
+              ? [request.destinationDirectoryPath]
+              : []),
           ...(logMetadata ? { metadata: logMetadata } : {}),
         });
       }
@@ -648,7 +650,7 @@ export function createWriteOperationCoordinator(
               });
         const transferMode =
           "analysisId" in payload
-            ? writeService.getCopyPasteAnalysisUpdate(payload.analysisId).report?.mode ?? null
+            ? (writeService.getCopyPasteAnalysisUpdate(payload.analysisId).report?.mode ?? null)
             : payload.mode;
         activeWriteOperationId = handle.operationId;
         copyPasteRequests.set(handle.operationId, payload);

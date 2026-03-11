@@ -1,9 +1,10 @@
 import {
   type Dispatch,
-  type KeyboardEvent as ReactKeyboardEvent,
   type MutableRefObject,
+  type KeyboardEvent as ReactKeyboardEvent,
   type RefObject,
   type SetStateAction,
+  useCallback,
   useEffect,
   useLayoutEffect,
 } from "react";
@@ -11,6 +12,7 @@ import {
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 import type { FavoritePreference, FavoritesPlacement } from "../../shared/appPreferences";
 
+import { SEARCH_RESULT_ROW_HEIGHT } from "../components/SearchResultsPane";
 import type { TreeNodeState } from "../components/TreePane";
 import type { ContentSelectionState } from "../lib/contentSelection";
 import { getDetailsRowHeight } from "../lib/detailsLayout";
@@ -19,10 +21,6 @@ import {
   isPathWithinRoot,
   resolveExplorerTreeRootPath,
 } from "../lib/explorerAppUtils";
-import type {
-  DirectoryEntry,
-  DirectoryEntryMetadata,
-} from "../lib/explorerTypes";
 import {
   getAncestorChain,
   getForcedVisibleHiddenChildPath,
@@ -30,29 +28,29 @@ import {
   getPageStepItemCount,
   getPagedSelectionIndex,
   getTreeSeedChain,
-  pathHasHiddenSegmentWithinRoot,
   parentDirectoryPath,
+  pathHasHiddenSegmentWithinRoot,
 } from "../lib/explorerNavigation";
 import { type ExplorerPane, resolveExplorerPaneRestoreTarget } from "../lib/explorerPaneFocus";
-import { useFiletrailClient } from "../lib/filetrailClient";
-import { getFlowListColumnStep } from "../lib/flowListLayout";
-import { EXPLORER_LAYOUT } from "../lib/layoutTokens";
-import { createRendererLogger } from "../lib/logging";
-import { pageScrollElement, scrollElementByAmount } from "../lib/pagedScroll";
-import { SEARCH_RESULT_ROW_HEIGHT } from "../components/SearchResultsPane";
+import type { DirectoryEntry, DirectoryEntryMetadata } from "../lib/explorerTypes";
 import {
+  type TreeItemId,
   buildTreePresentation,
   createFavoriteItemId,
   createFileSystemItemId,
   getFavoriteItemPath,
   getFavoriteLabel,
-  getFileSystemItemPath,
   getFavoritesRootItemId,
+  getFileSystemItemPath,
   getTrashPath,
   isFavoriteItemId,
   isFavoritesRootItemId,
-  type TreeItemId,
 } from "../lib/favorites";
+import type { useFiletrailClient } from "../lib/filetrailClient";
+import { getFlowListColumnStep } from "../lib/flowListLayout";
+import { EXPLORER_LAYOUT } from "../lib/layoutTokens";
+import { createRendererLogger } from "../lib/logging";
+import { pageScrollElement, scrollElementByAmount } from "../lib/pagedScroll";
 import { findContentTypeaheadMatch } from "../lib/typeahead";
 
 const logger = createRendererLogger("filetrail.renderer");
@@ -269,7 +267,7 @@ export function useExplorerNavigationController(args: {
   const hasCachedSearch = searchCommittedQuery.trim().length > 0;
   const isSearchMode = searchResultsVisible && hasCachedSearch;
 
-  function clearTypeahead() {
+  const clearTypeahead = useCallback(() => {
     if (typeaheadTimeoutRef.current) {
       clearTimeout(typeaheadTimeoutRef.current);
       typeaheadTimeoutRef.current = null;
@@ -278,9 +276,15 @@ export function useExplorerNavigationController(args: {
     typeaheadPaneRef.current = null;
     setTypeaheadQuery("");
     setTypeaheadPane(null);
-  }
+  }, [
+    setTypeaheadPane,
+    setTypeaheadQuery,
+    typeaheadPaneRef,
+    typeaheadQueryRef,
+    typeaheadTimeoutRef,
+  ]);
 
-  function focusContentPane() {
+  const focusContentPane = useCallback(() => {
     setFocusedPane("content");
     clearTypeahead();
     window.requestAnimationFrame(() => {
@@ -289,9 +293,9 @@ export function useExplorerNavigationController(args: {
         contentPaneRef.current?.focus({ preventScroll: true });
       });
     });
-  }
+  }, [clearTypeahead, contentPaneRef, setFocusedPane]);
 
-  function focusTreePane() {
+  const focusTreePane = useCallback(() => {
     setFocusedPane("tree");
     clearTypeahead();
     window.requestAnimationFrame(() => {
@@ -299,8 +303,8 @@ export function useExplorerNavigationController(args: {
         favoritesPlacement === "separate" ? lastLeftPaneSubviewRef.current : "tree";
       const selectedSelector =
         targetSubview === "favorites"
-          ? '.favorites-pane-section .tree-row.active .tree-label'
-          : '.sidebar-tree .tree-row.active .tree-label';
+          ? ".favorites-pane-section .tree-row.active .tree-label"
+          : ".sidebar-tree .tree-row.active .tree-label";
       const fallbackSelector =
         targetSubview === "favorites"
           ? ".favorites-pane-section .tree-label"
@@ -321,7 +325,7 @@ export function useExplorerNavigationController(args: {
         }
       });
     });
-  }
+  }, [clearTypeahead, favoritesPlacement, lastLeftPaneSubviewRef, treePaneRef, setFocusedPane]);
 
   function getTreePresentationState() {
     return buildTreePresentation({
@@ -405,21 +409,24 @@ export function useExplorerNavigationController(args: {
     };
   }
 
-  function restoreExplorerPaneFocus(preferredPane: ExplorerPane | null = null) {
-    const targetPane = resolveExplorerPaneRestoreTarget({
-      preferredPane,
-      lastFocusedPane: lastExplorerFocusPaneRef.current,
-      hasTreePane: treePaneRef.current !== null,
-      hasContentPane: contentPaneRef.current !== null,
-    });
-    if (targetPane === "tree") {
-      focusTreePane();
-      return;
-    }
-    if (targetPane === "content") {
-      focusContentPane();
-    }
-  }
+  const restoreExplorerPaneFocus = useCallback(
+    (preferredPane: ExplorerPane | null = null) => {
+      const targetPane = resolveExplorerPaneRestoreTarget({
+        preferredPane,
+        lastFocusedPane: lastExplorerFocusPaneRef.current,
+        hasTreePane: treePaneRef.current !== null,
+        hasContentPane: contentPaneRef.current !== null,
+      });
+      if (targetPane === "tree") {
+        focusTreePane();
+        return;
+      }
+      if (targetPane === "content") {
+        focusContentPane();
+      }
+    },
+    [contentPaneRef, focusContentPane, focusTreePane, lastExplorerFocusPaneRef, treePaneRef],
+  );
 
   function getFocusedScrollTarget(): {
     axis: "horizontal" | "vertical";
@@ -461,7 +468,9 @@ export function useExplorerNavigationController(args: {
         if (favoriteItemIds.length === 0) {
           return didScroll;
         }
-        const currentIndex = favoriteItemIds.findIndex((itemId) => itemId === selectedTreeItemIdRef.current);
+        const currentIndex = favoriteItemIds.findIndex(
+          (itemId) => itemId === selectedTreeItemIdRef.current,
+        );
         const stepItems = getPageStepItemCount(
           target.element.clientHeight,
           compactTreeView ? 25 : 32,
@@ -482,7 +491,9 @@ export function useExplorerNavigationController(args: {
       if (visibleItemIds.length === 0) {
         return didScroll;
       }
-      const currentIndex = visibleItemIds.findIndex((itemId) => itemId === selectedTreeItemIdRef.current);
+      const currentIndex = visibleItemIds.findIndex(
+        (itemId) => itemId === selectedTreeItemIdRef.current,
+      );
       const stepItems = getPageStepItemCount(
         target.element.clientHeight,
         compactTreeView ? 25 : 32,
@@ -774,7 +785,9 @@ export function useExplorerNavigationController(args: {
       setSearchResultsVisible(false);
     }
     const pendingPasteSelection =
-      pendingPasteSelectionRef.current?.directoryPath === path ? pendingPasteSelectionRef.current : null;
+      pendingPasteSelectionRef.current?.directoryPath === path
+        ? pendingPasteSelectionRef.current
+        : null;
     if (pendingPasteSelection) {
       pendingPasteSelectionRef.current = null;
     }
@@ -1213,11 +1226,19 @@ export function useExplorerNavigationController(args: {
       const currentIndex = favoriteItemIds.findIndex((itemId) => itemId === currentItemId);
       const safeCurrentIndex = currentIndex >= 0 ? currentIndex : 0;
       if (key === "Home") {
-        await selectTreeItem(favoriteItemIds[0]!, "push");
+        const firstFavoriteId = favoriteItemIds[0];
+        if (!firstFavoriteId) {
+          return false;
+        }
+        await selectTreeItem(firstFavoriteId, "push");
         return true;
       }
       if (key === "End") {
-        await selectTreeItem(favoriteItemIds.at(-1)!, "push");
+        const lastFavoriteId = favoriteItemIds.at(-1);
+        if (!lastFavoriteId) {
+          return false;
+        }
+        await selectTreeItem(lastFavoriteId, "push");
         return true;
       }
       if (key === "ArrowLeft" || key === "ArrowRight") {
@@ -1250,7 +1271,11 @@ export function useExplorerNavigationController(args: {
 
     const { items, visibleItemIds } = getTreePresentationState();
     if (visibleItemIds.length === 0) {
-      if (favoritesPlacement === "separate" && leftPaneSubviewRef.current === "tree" && key === "ArrowUp") {
+      if (
+        favoritesPlacement === "separate" &&
+        leftPaneSubviewRef.current === "tree" &&
+        key === "ArrowUp"
+      ) {
         const favoriteItemIds = getFavoriteItemIds();
         const lastFavoriteId = favoriteItemIds.at(-1);
         if (lastFavoriteId) {
@@ -1263,7 +1288,7 @@ export function useExplorerNavigationController(args: {
     }
     const currentItemId = selectedTreeItemIdRef.current;
     const currentIndex = visibleItemIds.findIndex((itemId) => itemId === currentItemId);
-    const safeCurrentId = currentIndex >= 0 ? currentItemId : visibleItemIds[0] ?? null;
+    const safeCurrentId = currentIndex >= 0 ? currentItemId : (visibleItemIds[0] ?? null);
     if (!safeCurrentId) {
       return false;
     }
@@ -1415,18 +1440,10 @@ export function useExplorerNavigationController(args: {
       return;
     }
     const reloadOptions = getSelectedTreeReloadOptions(targetPath);
-    await navigateTo(
-      targetPath,
-      "replace",
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      {
-        ...reloadOptions,
-        forceTreeReload: true,
-      },
-    );
+    await navigateTo(targetPath, "replace", undefined, undefined, undefined, undefined, {
+      ...reloadOptions,
+      forceTreeReload: true,
+    });
     if (options.treeSelectionPath) {
       await syncTreeToPath(options.treeSelectionPath, includeHidden, {
         forceReload: true,
@@ -1607,7 +1624,6 @@ export function useExplorerNavigationController(args: {
   }, [
     actionNotice,
     contextMenuState,
-    clearTypeahead,
     explorerFocusSuppressed,
     focusedPane,
     locationDialogOpen,

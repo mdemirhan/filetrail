@@ -205,10 +205,7 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
     this.ensureDirectory(path, true, options);
   }
 
-  addFile(
-    path: string,
-    options: Omit<Extract<SeedNode, { kind: "file" }>, "kind"> = {},
-  ): void {
+  addFile(path: string, options: Omit<Extract<SeedNode, { kind: "file" }>, "kind"> = {}): void {
     this.ensureDirectory(dirname(path), true);
     this.nodes.set(normalizePath(path), this.createNode({ kind: "file", ...options }));
   }
@@ -222,10 +219,7 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
     this.nodes.set(normalizePath(path), this.createNode({ kind: "symlink", target, ...options }));
   }
 
-  mutateNode(
-    path: string,
-    updater: (node: MockNode) => MockNode | void,
-  ): void {
+  mutateNode(path: string, updater: (node: MockNode) => MockNode | undefined): void {
     const normalized = normalizePath(path);
     const node = this.getNodeOrThrow(normalized);
     const next = updater({ ...node }) ?? node;
@@ -302,7 +296,7 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
   }): MockNode {
     return {
       kind: input.kind,
-      size: input.kind === "file" ? input.size ?? 0 : 0,
+      size: input.kind === "file" ? (input.size ?? 0) : 0,
       mode:
         input.mode ?? (input.kind === "directory" ? 0o755 : input.kind === "file" ? 0o644 : 0o777),
       mtimeMs: input.mtimeMs ?? this.bumpMtime(),

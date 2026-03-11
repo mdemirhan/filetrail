@@ -100,8 +100,7 @@ export function applyAppearance({
   root.dataset.accent = accent;
   root.dataset.favoriteAccent = favoriteAccent;
   root.dataset.accentFavoriteItems = accentFavoriteItems ? "true" : "false";
-  root.dataset.accentFavoriteText =
-    accentFavoriteItems && accentFavoriteText ? "true" : "false";
+  root.dataset.accentFavoriteText = accentFavoriteItems && accentFavoriteText ? "true" : "false";
   root.style.setProperty("--font-sans", UI_FONT_STACKS[uiFontFamily]);
   root.style.setProperty("--font-mono", '"Fira Code", "SFMono-Regular", ui-monospace, monospace');
   root.style.setProperty("--ui-font-size", `${uiFontSize}px`);

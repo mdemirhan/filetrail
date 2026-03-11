@@ -3,31 +3,32 @@ import {
   type MutableRefObject,
   type RefObject,
   type SetStateAction,
+  useCallback,
   useEffect,
   useMemo,
 } from "react";
 
 import { clampZoomPercent } from "../../shared/appPreferences";
+import type { ContentSelectionState } from "../lib/contentSelection";
 import { resolveNewFolderTargetPath } from "../lib/explorerAppUtils";
-import type { DirectoryEntry } from "../lib/explorerTypes";
-import { isKeyboardOwnedFormControl, resolveFocusedEditTarget } from "../lib/focusedEditTarget";
 import { parentDirectoryPath } from "../lib/explorerNavigation";
-import { useFiletrailClient } from "../lib/filetrailClient";
+import { getNextSelectionIndex } from "../lib/explorerNavigation";
+import type { DirectoryEntry } from "../lib/explorerTypes";
+import type { useFiletrailClient } from "../lib/filetrailClient";
+import { isKeyboardOwnedFormControl, resolveFocusedEditTarget } from "../lib/focusedEditTarget";
 import {
+  type RawExplorerShortcutId,
+  type ShortcutContext,
   canHandleExplorerKeyboardShortcuts,
   canHandleRawExplorerShortcut,
   canHandleRendererCommand,
-  type RawExplorerShortcutId,
-  type ShortcutContext,
 } from "../lib/shortcutPolicy";
 import {
   resolveEditSelectionPaths,
   resolveOpenInTerminalPaths,
   resolveOpenSelectionPaths,
 } from "../lib/shortcutTargets";
-import { getNextSelectionIndex } from "../lib/explorerNavigation";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
-import type { ContentSelectionState } from "../lib/contentSelection";
 import type { ContextMenuState } from "./useWriteOperations";
 
 type RawShortcutBinding = {
@@ -87,7 +88,10 @@ export function useExplorerShortcuts(args: {
     path: string,
     historyMode: "push" | "replace" | "skip",
   ) => Promise<void>;
-  navigateFavoritePath: (path: string, historyMode: "push" | "replace" | "skip") => Promise<boolean>;
+  navigateFavoritePath: (
+    path: string,
+    historyMode: "push" | "replace" | "skip",
+  ) => Promise<boolean>;
   openTreeNode: () => Promise<void>;
   toggleHiddenFiles: () => void;
   refreshDirectory: (options?: {
@@ -201,6 +205,31 @@ export function useExplorerShortcuts(args: {
     setZoomPercent,
   } = args;
 
+  const isTreeFocusTarget = useCallback(
+    (target: EventTarget | null): target is Node =>
+      target instanceof Node && !!treePaneRef.current?.contains(target),
+    [treePaneRef],
+  );
+
+  const isContentFocusTarget = useCallback(
+    (target: EventTarget | null): target is Node =>
+      target instanceof Node && !!contentPaneRef.current?.contains(target),
+    [contentPaneRef],
+  );
+
+  const focusTreePane = useCallback(() => {
+    treePaneRef.current?.focus({ preventScroll: true });
+  }, [treePaneRef]);
+
+  const focusContentPaneRef = useCallback(() => {
+    contentPaneRef.current?.focus({ preventScroll: true });
+  }, [contentPaneRef]);
+
+  const getLastExplorerFocusPane = useCallback(
+    () => lastExplorerFocusPaneRef.current,
+    [lastExplorerFocusPaneRef],
+  );
+
   const rawShortcutBindings = useMemo<readonly RawShortcutBinding[]>(
     () => [
       {
@@ -216,27 +245,24 @@ export function useExplorerShortcuts(args: {
           if (isAutocompleteContext) {
             return false;
           }
-          const isTreeFocusTarget =
-            target instanceof Node && !!treePaneRef.current?.contains(target);
-          const isContentFocusTarget =
-            target instanceof Node && !!contentPaneRef.current?.contains(target);
+          const treeFocusTarget = isTreeFocusTarget(target);
+          const contentFocusTarget = isContentFocusTarget(target);
           return (
-            isTreeFocusTarget ||
-            isContentFocusTarget ||
+            treeFocusTarget ||
+            contentFocusTarget ||
             (document.activeElement === document.body && focusedPane !== null)
           );
         },
         run: (keyboardEvent) => {
           const target = keyboardEvent.target;
-          const isTreeFocusTarget =
-            target instanceof Node && !!treePaneRef.current?.contains(target);
+          const treeFocusTarget = isTreeFocusTarget(target);
           keyboardEvent.preventDefault();
-          if (isTreeFocusTarget || focusedPane === "tree") {
-            contentPaneRef.current?.focus({ preventScroll: true });
+          if (treeFocusTarget || focusedPane === "tree") {
+            focusContentPaneRef();
             setFocusedPane("content");
             return;
           }
-          treePaneRef.current?.focus({ preventScroll: true });
+          focusTreePane();
           setFocusedPane("tree");
         },
       },
@@ -350,7 +376,7 @@ export function useExplorerShortcuts(args: {
           keyboardEvent.key === "1",
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
-          treePaneRef.current?.focus({ preventScroll: true });
+          focusTreePane();
           setFocusedPane("tree");
         },
       },
@@ -364,7 +390,7 @@ export function useExplorerShortcuts(args: {
           keyboardEvent.key === "2",
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
-          contentPaneRef.current?.focus({ preventScroll: true });
+          focusContentPaneRef();
           setFocusedPane("content");
         },
       },
@@ -529,9 +555,9 @@ export function useExplorerShortcuts(args: {
               ? contextMenuState.paths
               : focusedPane === "tree" && selectedTreeTargetPath
                 ? [selectedTreeTargetPath]
-              : selectedPathsInViewOrder.length > 0
-                ? selectedPathsInViewOrder
-                : [];
+                : selectedPathsInViewOrder.length > 0
+                  ? selectedPathsInViewOrder
+                  : [];
           if (pathsToCopy.length === 0) {
             return;
           }
@@ -550,7 +576,7 @@ export function useExplorerShortcuts(args: {
         run: (keyboardEvent) => {
           const pathsToOpen = resolveOpenInTerminalPaths({
             focusedPane,
-            lastFocusedPane: lastExplorerFocusPaneRef.current,
+            lastFocusedPane: getLastExplorerFocusPane(),
             contextMenuPaths: contextMenuState?.paths ?? [],
             selectedContentPaths: selectedPathsInViewOrder,
             selectedTreePath: selectedTreeTargetPath,
@@ -785,29 +811,47 @@ export function useExplorerShortcuts(args: {
     ],
     [
       activeContentEntries,
+      activateContentPaths,
       applySearchResultsSort,
       contentColumns,
       contentSelection.leadPath,
       contextMenuState,
       currentPath,
+      extendContentSelectionToPath,
+      focusFileSearch,
+      focusContentPaneRef,
       focusedPane,
+      focusTreePane,
+      getLastExplorerFocusPane,
+      goBack,
+      goForward,
       handlePagedPaneScroll,
+      handleTreeKeyboardAction,
       handleTypeaheadInput,
       hasCachedSearch,
+      isContentFocusTarget,
       isSearchMode,
+      isTreeFocusTarget,
       navigateTo,
+      navigateTreeSelectionToParent,
       openLocationSheet,
       openMoveDialog,
       openNewFolderDialog,
+      openPathInTerminal,
       openRenameDialog,
       openTreeNode,
       refreshDirectory,
       resolveContentActionPaths,
       runCopyClipboardAction,
       runCopyPathAction,
-      selectedTreeTargetPath,
+      selectAllContentEntries,
       selectedEntry,
       selectedPathsInViewOrder,
+      selectedTreeTargetPath,
+      setFocusedPane,
+      setInfoPanelOpen,
+      setInfoRowOpen,
+      setSingleContentSelection,
       showCachedSearchResults,
       startDuplicatePaths,
       startPasteFromClipboard,
@@ -816,76 +860,75 @@ export function useExplorerShortcuts(args: {
       toggleHiddenFiles,
       typeaheadEnabled,
       viewMode,
-      focusFileSearch,
-      goBack,
-      goForward,
-      selectAllContentEntries,
-      setSingleContentSelection,
-      activateContentPaths,
-      extendContentSelectionToPath,
-      handleTreeKeyboardAction,
-      navigateTreeSelectionToParent,
-      setFocusedPane,
-      setInfoPanelOpen,
-      setInfoRowOpen,
     ],
   );
 
-  const performNativeEditAction = (action: "cut" | "copy" | "paste" | "selectAll"): void => {
-    void client.invoke("system:performEditAction", { action });
-  };
+  const performNativeEditAction = useCallback(
+    (action: "cut" | "copy" | "paste" | "selectAll"): void => {
+      void client.invoke("system:performEditAction", { action });
+    },
+    [client],
+  );
 
-  const runGenericEditCommand = (
-    command: "editCut" | "editCopy" | "editPaste" | "editSelectAll",
-  ): void => {
-    const targetType = resolveFocusedEditTarget(document.activeElement);
-    if (targetType === "editable-text") {
-      performNativeEditAction(
-        command === "editCut"
-          ? "cut"
-          : command === "editCopy"
-            ? "copy"
-            : command === "editPaste"
-              ? "paste"
-              : "selectAll",
-      );
-      return;
-    }
-
-    if (targetType === "readonly-text") {
-      if (command === "editCopy" || command === "editSelectAll") {
-        performNativeEditAction(command === "editCopy" ? "copy" : "selectAll");
+  const runGenericEditCommand = useCallback(
+    (command: "editCut" | "editCopy" | "editPaste" | "editSelectAll"): void => {
+      const targetType = resolveFocusedEditTarget(document.activeElement);
+      if (targetType === "editable-text") {
+        performNativeEditAction(
+          command === "editCut"
+            ? "cut"
+            : command === "editCopy"
+              ? "copy"
+              : command === "editPaste"
+                ? "paste"
+                : "selectAll",
+        );
+        return;
       }
-      return;
-    }
 
-    if (command === "editSelectAll") {
-      if (canHandleExplorerKeyboardShortcuts(shortcutContext) && focusedPane === "content") {
-        selectAllContentEntries();
+      if (targetType === "readonly-text") {
+        if (command === "editCopy" || command === "editSelectAll") {
+          performNativeEditAction(command === "editCopy" ? "copy" : "selectAll");
+        }
+        return;
       }
-      return;
-    }
 
-    const fallbackCommand =
-      command === "editCopy"
-        ? "copySelection"
-        : command === "editCut"
-          ? "cutSelection"
-          : "pasteSelection";
-    if (!canHandleRendererCommand(fallbackCommand, shortcutContext)) {
-      return;
-    }
+      if (command === "editSelectAll") {
+        if (canHandleExplorerKeyboardShortcuts(shortcutContext) && focusedPane === "content") {
+          selectAllContentEntries();
+        }
+        return;
+      }
 
-    if (fallbackCommand === "copySelection") {
-      void runCopyClipboardAction("copy");
-      return;
-    }
-    if (fallbackCommand === "cutSelection") {
-      void runCopyClipboardAction("cut");
-      return;
-    }
-    void startPasteFromClipboard();
-  };
+      const fallbackCommand =
+        command === "editCopy"
+          ? "copySelection"
+          : command === "editCut"
+            ? "cutSelection"
+            : "pasteSelection";
+      if (!canHandleRendererCommand(fallbackCommand, shortcutContext)) {
+        return;
+      }
+
+      if (fallbackCommand === "copySelection") {
+        void runCopyClipboardAction("copy");
+        return;
+      }
+      if (fallbackCommand === "cutSelection") {
+        void runCopyClipboardAction("cut");
+        return;
+      }
+      void startPasteFromClipboard();
+    },
+    [
+      focusedPane,
+      performNativeEditAction,
+      runCopyClipboardAction,
+      selectAllContentEntries,
+      shortcutContext,
+      startPasteFromClipboard,
+    ],
+  );
 
   useEffect(() => {
     const unsubscribe = client.onCommand((command) => {
@@ -1036,9 +1079,9 @@ export function useExplorerShortcuts(args: {
             ? (contextMenuState?.paths ?? [])
             : focusedPane === "tree" && selectedTreeTargetPath
               ? [selectedTreeTargetPath]
-            : selectedPathsInViewOrder.length > 0
-              ? selectedPathsInViewOrder
-              : [];
+              : selectedPathsInViewOrder.length > 0
+                ? selectedPathsInViewOrder
+                : [];
         if (pathsToCopy.length > 0) {
           void runCopyPathAction(pathsToCopy);
         }
@@ -1233,7 +1276,6 @@ export function useExplorerShortcuts(args: {
     locationDialogOpen,
     mainView,
     openSettingsView,
-    openActionLogView,
     rawShortcutBindings,
     setContextMenuState,
     setMainView,

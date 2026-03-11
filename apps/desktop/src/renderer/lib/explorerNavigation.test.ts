@@ -1,10 +1,10 @@
 import {
   flattenVisibleTreePaths,
+  getAncestorChain,
+  getForcedVisibleHiddenChildPath,
+  getNextSelectionIndex,
   getPageStepItemCount,
   getPagedSelectionIndex,
-  getForcedVisibleHiddenChildPath,
-  getAncestorChain,
-  getNextSelectionIndex,
   getTreeSeedChain,
   parentDirectoryPath,
   pathHasHiddenSegmentWithinRoot,

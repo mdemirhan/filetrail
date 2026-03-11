@@ -13,10 +13,19 @@ import type { IpcRequest, IpcResponse, WriteOperationProgressEvent } from "@file
 
 import type {
   ApplicationSelection,
-  FileActivationAction,
   FavoritePreference,
+  FileActivationAction,
   OpenWithApplication,
 } from "../../shared/appPreferences";
+import {
+  type ContentSelectionState,
+  EMPTY_CONTENT_SELECTION,
+  setSingleContentSelection as createSingleContentSelection,
+  extendContentSelectionToPath as extendSelectionStateToPath,
+  sanitizeContentSelection,
+  selectAllContentEntries as selectAllSelectionStateEntries,
+  toggleContentSelection as toggleSelectionState,
+} from "../lib/contentSelection";
 import {
   type ContextMenuActionId,
   type ContextMenuSourceSubview,
@@ -24,15 +33,6 @@ import {
   type ContextMenuSubmenuItem,
   getContextMenuItems,
 } from "../lib/contextMenu";
-import {
-  type ContentSelectionState,
-  EMPTY_CONTENT_SELECTION,
-  setSingleContentSelection as createSingleContentSelection,
-  extendContentSelectionToPath as extendSelectionStateToPath,
-  selectAllContentEntries as selectAllSelectionStateEntries,
-  toggleContentSelection as toggleSelectionState,
-  sanitizeContentSelection,
-} from "../lib/contentSelection";
 import {
   type CopyPasteClipboardState,
   buildPasteRequest,
@@ -48,14 +48,14 @@ import {
   isEditableFileEntry,
   resolveNewFolderTargetPath,
   resolveWriteOperationRefreshPath,
-  resolveWriteOperationTreeSelectionPath,
   resolveWriteOperationSelectionDirectoryPath,
+  resolveWriteOperationTreeSelectionPath,
   shouldRenderCopyPasteResultDialog,
 } from "../lib/explorerAppUtils";
-import type { DirectoryEntry } from "../lib/explorerTypes";
 import { parentDirectoryPath } from "../lib/explorerNavigation";
-import { useFiletrailClient } from "../lib/filetrailClient";
+import type { DirectoryEntry } from "../lib/explorerTypes";
 import { createFavorite, getFileSystemItemPath, isFavoritePath } from "../lib/favorites";
+import type { useFiletrailClient } from "../lib/filetrailClient";
 import { createRendererLogger } from "../lib/logging";
 import { type ToastEntry, type ToastKind, createToastEntry, enqueueToast } from "../lib/toasts";
 import type {
@@ -148,7 +148,10 @@ export function useExplorerActions(args: {
     path: string,
     historyMode: "push" | "replace" | "skip",
   ) => Promise<void>;
-  navigateFavoritePath: (path: string, historyMode: "push" | "replace" | "skip") => Promise<boolean>;
+  navigateFavoritePath: (
+    path: string,
+    historyMode: "push" | "replace" | "skip",
+  ) => Promise<boolean>;
   toggleTreeNode: (path: string) => void;
   refreshDirectory: (options?: {
     path?: string;
@@ -483,6 +486,7 @@ export function useExplorerActions(args: {
     return Array.from(disabled);
   }, [
     canPasteAtResolvedDestination,
+    contextMenuFavoriteToggleLabel,
     contextMenuState,
     contextMenuTargetEntries,
     isSearchMode,
@@ -533,7 +537,7 @@ export function useExplorerActions(args: {
       syncContentSelectionRefs(nextSelection, activeContentEntries);
       return nextSelection;
     });
-  }, [activeContentEntries]);
+  }, [activeContentEntries, setContentSelection]);
 
   useEffect(() => {
     if (isSearchMode) {
@@ -608,6 +612,7 @@ export function useExplorerActions(args: {
     };
   }, [contextMenuState, setContextMenuState]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: write-operation progress should stay subscribed to stable refs without resubscribing on every ref.current mutation.
   useEffect(() => {
     const unsubscribe = client.onWriteOperationProgress((event) => {
       if (event.operationId !== activeWriteOperationIdRef.current) {
@@ -654,7 +659,9 @@ export function useExplorerActions(args: {
         const nextPath = event.result
           ? resolveWriteOperationRefreshPath(event.result, currentPathRef.current)
           : currentPathRef.current;
-        const nextTreeSelectionPath = event.result ? resolveCompletedTreeSelectionPath(event) : null;
+        const nextTreeSelectionPath = event.result
+          ? resolveCompletedTreeSelectionPath(event)
+          : null;
         pendingTreeSelectionPathRef.current = null;
         void refreshDirectory({
           path: nextPath,
@@ -663,7 +670,12 @@ export function useExplorerActions(args: {
       }
     });
     return unsubscribe;
-  }, [client, refreshDirectory, writeOperationCardState?.targetPath]);
+  }, [
+    client,
+    refreshDirectory,
+    setWriteOperationProgressEvent,
+    writeOperationCardState?.targetPath,
+  ]);
 
   function closeContextMenu() {
     setContextMenuState(null);
@@ -787,12 +799,14 @@ export function useExplorerActions(args: {
     });
   }
 
-  function openTreeItemContextMenu(input: {
-    path: string;
-    sourceSubview: ContextMenuSourceSubview;
-    targetKind: "treeFolder" | "favorite";
-    folderExpansionLabel: "Expand" | "Collapse" | null;
-  } & { position: { x: number; y: number } }) {
+  function openTreeItemContextMenu(
+    input: {
+      path: string;
+      sourceSubview: ContextMenuSourceSubview;
+      targetKind: "treeFolder" | "favorite";
+      folderExpansionLabel: "Expand" | "Collapse" | null;
+    } & { position: { x: number; y: number } },
+  ) {
     const resolvedPosition = resolveContextMenuPosition(input.position.x, input.position.y);
     setFocusedPane("tree");
     setContextMenuState({
@@ -1009,7 +1023,7 @@ export function useExplorerActions(args: {
           event.action === "move_to"
             ? "Move completed with some issues"
             : event.action === "duplicate"
-            ? "Duplicate completed with some issues"
+              ? "Duplicate completed with some issues"
               : event.action === "trash"
                 ? "Trash completed with some issues"
                 : "Paste completed with some issues",
@@ -1034,7 +1048,7 @@ export function useExplorerActions(args: {
                 : event.action === "rename"
                   ? "Rename failed"
                   : event.action === "new_folder"
-                  ? "Create folder failed"
+                    ? "Create folder failed"
                     : "Paste failed",
         ...(failureMessage ? { message: failureMessage } : {}),
       });
@@ -1069,12 +1083,9 @@ export function useExplorerActions(args: {
   }
 
   async function copyPathsToClipboard(paths: string[]) {
-    await client.invoke(
-      "system:copyText",
-      {
-        text: paths.map((path) => formatPathForShell(path)).join("\n"),
-      },
-    );
+    await client.invoke("system:copyText", {
+      text: paths.map((path) => formatPathForShell(path)).join("\n"),
+    });
   }
 
   async function runCopyPathAction(paths: string[]) {
@@ -1113,7 +1124,8 @@ export function useExplorerActions(args: {
       showWriteOperationBusyToast();
       return;
     }
-    const paths = explicitPaths && explicitPaths.length > 0 ? explicitPaths : resolveClipboardSourcePaths();
+    const paths =
+      explicitPaths && explicitPaths.length > 0 ? explicitPaths : resolveClipboardSourcePaths();
     if (paths.length === 0) {
       pushToast({
         kind: "warning",
@@ -1164,14 +1176,11 @@ export function useExplorerActions(args: {
       currentSourcePath: report.sourcePaths[0] ?? null,
     });
     try {
-      const response = await client.invoke(
-        "copyPaste:start",
-        {
-          analysisId: report.analysisId,
-          action,
-          policy,
-        },
-      );
+      const response = await client.invoke("copyPaste:start", {
+        analysisId: report.analysisId,
+        action,
+        policy,
+      });
       if (clearClipboardOnStart) {
         applyCopyPasteClipboardState(clearCopyPasteClipboard());
       }
@@ -1282,9 +1291,15 @@ export function useExplorerActions(args: {
 
     for (;;) {
       const pendingAttempt = pendingPasteAttemptRef.current;
-      if (!pendingAttempt || pendingAttempt.id !== args.pasteAttemptId || pendingAttempt.cancelled) {
+      if (
+        !pendingAttempt ||
+        pendingAttempt.id !== args.pasteAttemptId ||
+        pendingAttempt.cancelled
+      ) {
         if (activeAnalysisIdRef.current) {
-          await client.invoke("copyPaste:analyzeCancel", { analysisId: handle.analysisId }).catch(() => undefined);
+          await client
+            .invoke("copyPaste:analyzeCancel", { analysisId: handle.analysisId })
+            .catch(() => undefined);
           activeAnalysisIdRef.current = null;
         }
         return;
@@ -1347,11 +1362,7 @@ export function useExplorerActions(args: {
       });
       return;
     }
-    const request = buildPasteRequest(
-      copyPasteClipboardRef.current,
-      pasteDestinationPath,
-      "error",
-    );
+    const request = buildPasteRequest(copyPasteClipboardRef.current, pasteDestinationPath, "error");
     if (!request) {
       pushToast({
         kind: "warning",
@@ -1413,7 +1424,9 @@ export function useExplorerActions(args: {
         };
       }
       if (activeAnalysisId) {
-        await client.invoke("copyPaste:analyzeCancel", { analysisId: activeAnalysisId }).catch(() => undefined);
+        await client
+          .invoke("copyPaste:analyzeCancel", { analysisId: activeAnalysisId })
+          .catch(() => undefined);
         activeAnalysisIdRef.current = null;
         setCopyPasteDialogState(null);
         applyWriteOperationCardState(null);
@@ -1608,12 +1621,9 @@ export function useExplorerActions(args: {
 
   async function openPathInTerminal(path: string) {
     try {
-      const response = await client.invoke(
-        "system:openInTerminal",
-        {
-          path,
-        },
-      );
+      const response = await client.invoke("system:openInTerminal", {
+        path,
+      });
       if (!response.ok) {
         throw new Error(response.error ?? "Unable to open Terminal for the selected path.");
       }
@@ -1655,13 +1665,10 @@ export function useExplorerActions(args: {
     applicationName: string,
   ) {
     try {
-      const response = await client.invoke(
-        "system:openPathsWithApplication",
-        {
-          applicationPath,
-          paths,
-        },
-      );
+      const response = await client.invoke("system:openPathsWithApplication", {
+        applicationPath,
+        paths,
+      });
       if (!response.ok) {
         throw new Error(response.error ?? `Unable to open with ${applicationName}.`);
       }
@@ -1805,10 +1812,7 @@ export function useExplorerActions(args: {
       });
   }
 
-  async function openTreeContextTarget(
-    path: string,
-    surface: ContextMenuState["surface"] | null,
-  ) {
+  async function openTreeContextTarget(path: string, surface: ContextMenuState["surface"] | null) {
     if (surface === "favorite") {
       await navigateFavoritePath(path, "push");
       return;
@@ -1918,7 +1922,7 @@ export function useExplorerActions(args: {
       const targetPath = paths[0];
       const destinationDirectoryPath =
         contextMenuSurface === "treeFolder" && targetPath
-          ? parentDirectoryPath(targetPath) ?? currentPathRef.current
+          ? (parentDirectoryPath(targetPath) ?? currentPathRef.current)
           : currentPathRef.current;
       await startDuplicatePaths(paths, destinationDirectoryPath, {
         selectInTreeOnSuccess: contextMenuSurface === "treeFolder",
@@ -2210,12 +2214,9 @@ export function useExplorerActions(args: {
   }
 
   async function browseForDirectoryPath(currentDirectoryPath: string): Promise<string | null> {
-    const response = await client.invoke(
-      "system:pickDirectory",
-      {
-        defaultPath: currentDirectoryPath.length > 0 ? currentDirectoryPath : null,
-      },
-    );
+    const response = await client.invoke("system:pickDirectory", {
+      defaultPath: currentDirectoryPath.length > 0 ? currentDirectoryPath : null,
+    });
     return response.canceled ? null : response.path;
   }
 
@@ -2245,13 +2246,10 @@ export function useExplorerActions(args: {
       return;
     }
     try {
-      const response = await client.invoke(
-        "writeOperation:rename",
-        {
-          sourcePath: renameDialogState.sourcePath,
-          destinationName: nextName,
-        },
-      );
+      const response = await client.invoke("writeOperation:rename", {
+        sourcePath: renameDialogState.sourcePath,
+        destinationName: nextName,
+      });
       activeWriteOperationIdRef.current = response.operationId;
       applyWriteOperationCardState({
         action: "rename",
@@ -2342,13 +2340,10 @@ export function useExplorerActions(args: {
       return;
     }
     try {
-      const response = await client.invoke(
-        "writeOperation:createFolder",
-        {
-          parentDirectoryPath: newFolderDialogState.parentDirectoryPath,
-          folderName,
-        },
-      );
+      const response = await client.invoke("writeOperation:createFolder", {
+        parentDirectoryPath: newFolderDialogState.parentDirectoryPath,
+        folderName,
+      });
       rememberPendingTreeSelectionPath(
         newFolderDialogState.selectInTreeOnSuccess
           ? buildChildPath(newFolderDialogState.parentDirectoryPath, folderName)
@@ -2385,12 +2380,9 @@ export function useExplorerActions(args: {
     }
     try {
       setCopyPasteDialogState(null);
-      const response = await client.invoke(
-        "writeOperation:trash",
-        {
-          paths,
-        },
-      );
+      const response = await client.invoke("writeOperation:trash", {
+        paths,
+      });
       rememberPendingTreeSelectionPath(null);
       activeWriteOperationIdRef.current = response.operationId;
       applyWriteOperationCardState({

@@ -1,6 +1,6 @@
 import {
-  Fragment,
   type Dispatch,
+  Fragment,
   type SetStateAction,
   useCallback,
   useEffect,
@@ -10,21 +10,21 @@ import {
 } from "react";
 
 import {
-  THEME_GROUPS,
   type FavoritePreference,
   type FavoritesPlacement,
+  THEME_GROUPS,
   type ThemeMode,
   getThemeLabel,
 } from "../../shared/appPreferences";
-import { EXPLORER_LAYOUT } from "../lib/layoutTokens";
 import {
-  buildTreePresentation,
-  createFavoriteItemId,
   type TreeItemId,
   type TreePresentationItem,
+  buildTreePresentation,
+  createFavoriteItemId,
   getFavoriteLabel,
 } from "../lib/favorites";
 import { FavoriteItemIcon, TreeFolderIcon } from "../lib/fileIcons";
+import { EXPLORER_LAYOUT } from "../lib/layoutTokens";
 import { ToolbarIcon } from "./ToolbarIcon";
 
 const FAVORITES_PANE_DEFAULT_HEIGHT = 220;
@@ -134,14 +134,16 @@ export function TreePane({
   includeHidden: boolean;
   onToggleHidden: () => void;
   onToggleExpand: (path: string) => void;
-  onNavigate: (path: string) => Promise<boolean | void> | void;
-  onNavigateFavorite: (path: string) => Promise<boolean | void> | void;
-  onSelectFavoritesRoot?: (() => Promise<boolean | void> | void) | undefined;
-  onItemContextMenu?: ((
-    item: TreePresentationItem,
-    subview: "favorites" | "tree",
-    position: { x: number; y: number },
-  ) => void) | undefined;
+  onNavigate: (path: string) => Promise<boolean | undefined> | undefined;
+  onNavigateFavorite: (path: string) => Promise<boolean | undefined> | undefined;
+  onSelectFavoritesRoot?: (() => Promise<boolean | undefined> | undefined) | undefined;
+  onItemContextMenu?:
+    | ((
+        item: TreePresentationItem,
+        subview: "favorites" | "tree",
+        position: { x: number; y: number },
+      ) => void)
+    | undefined;
   onToggleFavoritesExpanded: () => void;
   typeaheadQuery?: string;
 }) {
@@ -194,6 +196,8 @@ export function TreePane({
   const lastScrolledPathRef = useRef<string | null>(null);
   const lastScrolledRowRef = useRef<HTMLDivElement | null>(null);
   const lastRegisteredSelectedRowRef = useRef<HTMLDivElement | null>(null);
+  const lastRegisteredSelectedItemIdRef = useRef(selectedTreeItemId);
+  const lastCommittedSelectedItemIdRef = useRef(selectedTreeItemId);
   const splitPaneRef = useRef<HTMLDivElement | null>(null);
   const splitResizeRef = useRef<{
     startY: number;
@@ -220,6 +224,10 @@ export function TreePane({
   );
 
   useEffect(() => {
+    if (lastRegisteredSelectedItemIdRef.current === selectedTreeItemId) {
+      return;
+    }
+    lastRegisteredSelectedItemIdRef.current = selectedTreeItemId;
     lastRegisteredSelectedRowRef.current = null;
   }, [selectedTreeItemId]);
 
@@ -238,6 +246,9 @@ export function TreePane({
 
   useEffect(() => {
     if (!selectedTreeItemId) {
+      return;
+    }
+    if (selectedRowRegistrationVersion < 0) {
       return;
     }
     const currentRow = rowRefs.current[selectedTreeItemId];
@@ -268,6 +279,10 @@ export function TreePane({
   }, [selectedRowRegistrationVersion, selectedTreeItemId]);
 
   useEffect(() => {
+    if (lastCommittedSelectedItemIdRef.current === selectedTreeItemId) {
+      return;
+    }
+    lastCommittedSelectedItemIdRef.current = selectedTreeItemId;
     setOptimisticSelectedItemId(null);
   }, [selectedTreeItemId]);
 
@@ -279,7 +294,11 @@ export function TreePane({
   const registerTreeRowRef = useCallback(
     (id: string, element: HTMLDivElement | null) => {
       rowRefs.current[id] = element;
-      if (id === selectedTreeItemId && element && lastRegisteredSelectedRowRef.current !== element) {
+      if (
+        id === selectedTreeItemId &&
+        element &&
+        lastRegisteredSelectedRowRef.current !== element
+      ) {
         lastRegisteredSelectedRowRef.current = element;
         setSelectedRowRegistrationVersion((current) => current + 1);
       }
@@ -291,10 +310,7 @@ export function TreePane({
     return (event: React.MouseEvent<HTMLDivElement>) => {
       onLeftPaneSubviewChange(subview);
       const target = event.target;
-      if (
-        !(target instanceof Element) ||
-        target.closest(".tree-row, .favorites-pane-resizer")
-      ) {
+      if (!(target instanceof Element) || target.closest(".tree-row, .favorites-pane-resizer")) {
         return;
       }
       const scrollContainer = target.closest<HTMLElement>(".tree-scroll, .favorites-scroll");
@@ -465,9 +481,7 @@ export function TreePane({
               <div ref={themeMenuRef} className="sidebar-rail-menu" tabIndex={-1}>
                 {THEME_GROUPS.map((group, groupIndex) => (
                   <Fragment key={group.value}>
-                    {groupIndex > 0 ? (
-                      <div className="sidebar-rail-menu-separator" role="separator" />
-                    ) : null}
+                    {groupIndex > 0 ? <hr className="sidebar-rail-menu-separator" /> : null}
                     {group.options.map((option) => (
                       <button
                         key={option.value}
@@ -672,7 +686,10 @@ function isScrollbarGutterHit(container: HTMLElement, clientX: number, clientY: 
   return hitVerticalScrollbar || hitHorizontalScrollbar;
 }
 
-function isElementFullyVisibleWithinContainer(element: HTMLElement, container: HTMLElement): boolean {
+function isElementFullyVisibleWithinContainer(
+  element: HTMLElement,
+  container: HTMLElement,
+): boolean {
   const elementRect = element.getBoundingClientRect();
   const containerRect = container.getBoundingClientRect();
   return elementRect.top >= containerRect.top && elementRect.bottom <= containerRect.bottom;
@@ -709,14 +726,16 @@ function TreeList({
   onToggleFavoritesExpanded: () => void;
   singleClickExpandTreeItems: boolean;
   onClearSelection: () => void;
-  onNavigate: (path: string) => Promise<boolean | void> | void;
-  onNavigateFavorite: (path: string) => Promise<boolean | void> | void;
-  onSelectFavoritesRoot?: (() => Promise<boolean | void> | void) | undefined;
-  onItemContextMenu?: ((
-    item: TreePresentationItem,
-    subview: "favorites" | "tree",
-    position: { x: number; y: number },
-  ) => void) | undefined;
+  onNavigate: (path: string) => Promise<boolean | undefined> | undefined;
+  onNavigateFavorite: (path: string) => Promise<boolean | undefined> | undefined;
+  onSelectFavoritesRoot?: (() => Promise<boolean | undefined> | undefined) | undefined;
+  onItemContextMenu?:
+    | ((
+        item: TreePresentationItem,
+        subview: "favorites" | "tree",
+        position: { x: number; y: number },
+      ) => void)
+    | undefined;
   subview: "favorites" | "tree";
   onSubviewFocus: () => void;
   registerRowRef: (id: string, element: HTMLDivElement | null) => void;
@@ -786,21 +805,27 @@ function TreeItemRow({
   onToggleFavoritesExpanded: () => void;
   singleClickExpandTreeItems: boolean;
   onClearSelection: () => void;
-  onNavigate: (path: string) => Promise<boolean | void> | void;
-  onNavigateFavorite: (path: string) => Promise<boolean | void> | void;
-  onSelectFavoritesRoot?: (() => Promise<boolean | void> | void) | undefined;
-  onItemContextMenu?: ((
-    item: TreePresentationItem,
-    subview: "favorites" | "tree",
-    position: { x: number; y: number },
-  ) => void) | undefined;
+  onNavigate: (path: string) => Promise<boolean | undefined> | undefined;
+  onNavigateFavorite: (path: string) => Promise<boolean | undefined> | undefined;
+  onSelectFavoritesRoot?: (() => Promise<boolean | undefined> | undefined) | undefined;
+  onItemContextMenu?:
+    | ((
+        item: TreePresentationItem,
+        subview: "favorites" | "tree",
+        position: { x: number; y: number },
+      ) => void)
+    | undefined;
   subview: "favorites" | "tree";
   onSubviewFocus: () => void;
   registerRowRef: (id: string, element: HTMLDivElement | null) => void;
 }) {
   const isCurrent = (optimisticSelectedItemId ?? selectedTreeItemId) === item.id;
   const canExpand =
-    item.kind === "favorites-root" ? item.canExpand : item.kind === "filesystem" ? !item.isSymlink : false;
+    item.kind === "favorites-root"
+      ? item.canExpand
+      : item.kind === "filesystem"
+        ? !item.isSymlink
+        : false;
   const isFavorite = item.kind === "favorite";
   const isFavoritesRoot = item.kind === "favorites-root";
   const isFileSystem = item.kind === "filesystem";
@@ -894,12 +919,26 @@ function TreeItemRow({
         data-tree-path={itemPath ?? item.id}
         data-tree-kind={item.kind}
         style={{ paddingLeft: `${12 + item.depth * 16}px` }}
+        tabIndex={-1}
         onPointerDown={(event) => {
           const target = event.target;
           if (target instanceof Element && target.closest(".tree-label, .tree-expand")) {
             return;
           }
           handleActivatePointerDown(event.metaKey, event.button);
+        }}
+        onKeyDown={(event) => {
+          const target = event.target;
+          if (
+            event.defaultPrevented ||
+            !(target instanceof Element) ||
+            target.closest(".tree-label, .tree-expand") ||
+            (event.key !== "Enter" && event.key !== " ")
+          ) {
+            return;
+          }
+          event.preventDefault();
+          handleActivateClick(event.metaKey);
         }}
         onClick={(event) => {
           const target = event.target;
@@ -1014,7 +1053,5 @@ function clampFavoritesPaneHeight(height: number, containerHeight: number): numb
     FAVORITES_PANE_MIN_HEIGHT,
     safeContainerHeight - FILESYSTEM_PANE_MIN_HEIGHT - EXPLORER_LAYOUT.resizerWidth,
   );
-  return Math.round(
-    Math.max(FAVORITES_PANE_MIN_HEIGHT, Math.min(maxFavoritesHeight, height)),
-  );
+  return Math.round(Math.max(FAVORITES_PANE_MIN_HEIGHT, Math.min(maxFavoritesHeight, height)));
 }

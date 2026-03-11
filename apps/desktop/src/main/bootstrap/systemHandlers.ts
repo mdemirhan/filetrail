@@ -5,9 +5,9 @@ import {
   BrowserWindow,
   type IpcMainInvokeEvent,
   type OpenDialogOptions,
+  type WebContents,
   dialog,
   shell,
-  type WebContents,
 } from "electron";
 
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";

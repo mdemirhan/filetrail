@@ -63,7 +63,9 @@ describe("favorites", () => {
       "fs:/Users/demo",
       "fs:/Users/demo/src",
     ]);
-    expect(presentation.items["favorites-root"]?.childIds).toEqual(["favorite:/Users/demo/Documents"]);
+    expect(presentation.items["favorites-root"]?.childIds).toEqual([
+      "favorite:/Users/demo/Documents",
+    ]);
     expect(presentation.items["favorites-root"]?.icon).toBe("star");
     expect(presentation.items["favorite:/Users/demo/Documents"]?.icon).toBe("documents");
     expect(presentation.items["fs:/Users/demo/src"]?.depth).toBe(1);

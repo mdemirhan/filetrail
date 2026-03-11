@@ -26,7 +26,7 @@ describe("filetrailClient", () => {
 
   afterEach(() => {
     if (originalFiletrail === undefined) {
-      delete window.filetrail;
+      Reflect.deleteProperty(window, "filetrail");
       return;
     }
     window.filetrail = originalFiletrail;
@@ -79,7 +79,7 @@ describe("filetrailClient", () => {
   });
 
   it("uses a missing-client fallback when the preload bridge is absent or invalid", async () => {
-    delete window.filetrail;
+    Reflect.deleteProperty(window, "filetrail");
     const seen: FiletrailClient[] = [];
     render(<ClientProbe onRender={(client) => seen.push(client)} />);
 

@@ -3,12 +3,12 @@ import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import {
-  actionLogEntrySchema,
   type ActionLogAction,
   type ActionLogEntry,
   type ActionLogItem,
   type WriteOperationAction,
   type WriteOperationResult,
+  actionLogEntrySchema,
 } from "@filetrail/contracts";
 import { readFileSize, resolveRotatedLogPath, rotateLogFiles } from "./logRotation";
 
@@ -126,7 +126,11 @@ export function createActionLogStore(
             if (parsed.success) {
               entries.push(parsed.data);
             } else {
-              onError(new Error(`[filetrail] action log entry validation failed: ${parsed.error.message}`));
+              onError(
+                new Error(
+                  `[filetrail] action log entry validation failed: ${parsed.error.message}`,
+                ),
+              );
             }
           } catch (error) {
             onError(error);
@@ -215,7 +219,9 @@ export function createActionLogRecorder(store: Pick<ActionLogStore, "append">): 
           items,
           error: args.ok ? null : args.error,
           durationMs: Math.max(0, Math.round(args.finishedAtMs - args.startedAtMs)),
-          title: args.ok ? `Opened With ${args.applicationName}` : `Open With ${args.applicationName} failed`,
+          title: args.ok
+            ? `Opened With ${args.applicationName}`
+            : `Open With ${args.applicationName} failed`,
           message: args.ok
             ? `Opened ${formatItemCount(args.paths.length)} with ${args.applicationName}.`
             : `Unable to open ${formatItemCount(args.paths.length)} with ${args.applicationName}.`,
@@ -227,7 +233,12 @@ export function createActionLogRecorder(store: Pick<ActionLogStore, "append">): 
       );
     },
     async recordOpenInTerminal(args) {
-      const item = createSingleActionLogItem(args.requestedPath, args.targetPath, args.ok, args.error);
+      const item = createSingleActionLogItem(
+        args.requestedPath,
+        args.targetPath,
+        args.ok,
+        args.error,
+      );
       await store.append(
         createNonWriteActionEntry({
           action: "open_in_terminal",
@@ -399,9 +410,7 @@ function buildWriteMessage(
   const sourceSummary = summarizePaths(sourcePaths);
   const destinationSummary = summarizePaths(destinationPaths);
   const completedLabel =
-    result.summary.completedItemCount > 0
-      ? `${result.summary.completedItemCount} completed`
-      : null;
+    result.summary.completedItemCount > 0 ? `${result.summary.completedItemCount} completed` : null;
   const failedLabel =
     result.summary.failedItemCount > 0 ? `${result.summary.failedItemCount} failed` : null;
   const skippedLabel =

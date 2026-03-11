@@ -27,7 +27,9 @@ describe("CopyPasteReviewDialog", () => {
     expect(rowPath).toBeInTheDocument();
     expect(screen.getByText("source/Folder/nested/")).toHaveClass("copy-paste-review-row-prefix");
     expect(screen.getByText("file.txt")).toHaveClass("copy-paste-review-row-basename");
-    expect(screen.queryByTitle("/Users/demo/tmp/source/Folder/nested/file.txt")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTitle("/Users/demo/tmp/source/Folder/nested/file.txt"),
+    ).not.toBeInTheDocument();
   });
 
   it("uses the persisted fixed bounds and keeps cancel to the left of continue", () => {

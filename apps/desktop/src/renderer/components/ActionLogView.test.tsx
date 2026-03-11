@@ -194,7 +194,9 @@ describe("ActionLogView", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /copy action log row for rename completed/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /copy action log row for rename completed/i }),
+    );
 
     expect(handleCopy).toHaveBeenCalledTimes(1);
     expect(handleCopy.mock.calls[0]?.[0]).toContain("Action Log Entry");

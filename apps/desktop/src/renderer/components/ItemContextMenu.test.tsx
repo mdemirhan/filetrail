@@ -2,8 +2,8 @@
 
 import { fireEvent, render, screen } from "@testing-library/react";
 
-import { type ContextMenuSubmenuItem, ItemContextMenu } from "./ItemContextMenu";
 import type { ShortcutContext } from "../lib/shortcutPolicy";
+import { type ContextMenuSubmenuItem, ItemContextMenu } from "./ItemContextMenu";
 
 describe("ItemContextMenu", () => {
   const shortcutContext: ShortcutContext = {
@@ -186,7 +186,9 @@ describe("ItemContextMenu", () => {
     const labels = screen
       .getAllByRole("button")
       .map((button) => button.textContent)
-      .filter((label) => label && !["Zed", "Visual Studio Code", "Finder", "Other…"].includes(label))
+      .filter(
+        (label) => label && !["Zed", "Visual Studio Code", "Finder", "Other…"].includes(label),
+      )
       .map((label) => {
         if (label?.startsWith("Open With")) {
           return "Open With";
@@ -300,7 +302,9 @@ describe("ItemContextMenu", () => {
       screen
         .getAllByRole("button")
         .map((button) => button.textContent)
-        .filter((label) => label && !["Zed", "Visual Studio Code", "Finder", "Other…"].includes(label))
+        .filter(
+          (label) => label && !["Zed", "Visual Studio Code", "Finder", "Other…"].includes(label),
+        )
         .map((label) => {
           if (label?.startsWith("Open in Terminal")) {
             return "Open in Terminal";

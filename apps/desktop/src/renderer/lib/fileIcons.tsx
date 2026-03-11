@@ -84,6 +84,7 @@ export function FavoriteItemIcon({ icon }: { icon: FavoriteIconId }) {
         className="file-icon-svg file-icon-favorite"
         viewBox="0 0 24 24"
         fill="none"
+        aria-hidden="true"
         focusable="false"
       >
         <path d={resolveFavoriteIconPath(icon)} className="file-icon-favorite-stroke" />

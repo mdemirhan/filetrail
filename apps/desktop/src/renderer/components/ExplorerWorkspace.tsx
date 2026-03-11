@@ -1,13 +1,13 @@
-import type { ComponentProps, KeyboardEvent as ReactKeyboardEvent, MutableRefObject } from "react";
+import type { ComponentProps, MutableRefObject, KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import type { IpcRequest } from "@filetrail/contracts";
 
 import type { ExplorerViewMode } from "../../shared/appPreferences";
-import { EXPLORER_LAYOUT } from "../lib/layoutTokens";
 import { parentDirectoryPath } from "../lib/explorerNavigation";
-import { ToolbarIcon } from "./ToolbarIcon";
+import { EXPLORER_LAYOUT } from "../lib/layoutTokens";
 import { InfoPanel } from "./GetInfoPanel";
 import { SearchWorkspace } from "./SearchWorkspace";
+import { ToolbarIcon } from "./ToolbarIcon";
 import { TreePane } from "./TreePane";
 
 type SortBy = IpcRequest<"directory:getSnapshot">["sortBy"];

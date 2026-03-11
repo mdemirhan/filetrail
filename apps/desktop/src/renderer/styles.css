@@ -1628,6 +1628,10 @@ body.platform-macos .window-toolbar-brand {
   background: var(--context-menu-separator);
 }
 
+.context-menu-item-group {
+  position: relative;
+}
+
 .context-menu-item,
 .context-submenu-item {
   display: flex;
@@ -2223,16 +2227,14 @@ body.platform-macos .window-toolbar-brand {
   max-height: none;
   padding: 0;
   overflow: hidden;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--ft-conflict-surface) 96%, transparent),
-      color-mix(in srgb, var(--ft-conflict-surface) 98%, black 2%)
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--ft-conflict-surface) 96%, transparent),
+    color-mix(in srgb, var(--ft-conflict-surface) 98%, black 2%)
+  );
   border-color: color-mix(in srgb, var(--ft-conflict-border) 88%, transparent);
-  box-shadow:
-    0 24px 80px rgba(0, 0, 0, 0.5),
-    0 0 0 1px color-mix(in srgb, white 3%, transparent) inset;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px color-mix(in srgb, white 3%, transparent)
+    inset;
 }
 
 .copy-paste-review-shell {
@@ -2332,8 +2334,11 @@ body.platform-macos .window-toolbar-brand {
 }
 
 .copy-paste-review-policy-group {
+  margin: 0;
   min-width: 0;
   padding: 0 8px;
+  border: 0;
+  min-inline-size: 0;
 }
 
 .copy-paste-review-policy-group + .copy-paste-review-policy-group {
@@ -2341,6 +2346,8 @@ body.platform-macos .window-toolbar-brand {
 }
 
 .copy-paste-review-policy-label {
+  display: block;
+  padding: 0;
   margin-bottom: 4px;
   color: var(--text-tertiary);
   font-size: 10px;
@@ -2370,9 +2377,7 @@ body.platform-macos .window-toolbar-brand {
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
-  transition:
-    background 140ms ease,
-    color 140ms ease;
+  transition: background 140ms ease, color 140ms ease;
 }
 
 .copy-paste-review-segmented button:hover {
@@ -2415,9 +2420,7 @@ body.platform-macos .window-toolbar-brand {
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
-  transition:
-    border-color 140ms ease,
-    color 140ms ease;
+  transition: border-color 140ms ease, color 140ms ease;
   border-bottom: 2px solid transparent;
 }
 
@@ -2516,10 +2519,12 @@ body.platform-macos .window-toolbar-brand {
   align-content: start;
   gap: 0;
   flex: 1 1 auto;
+  margin: 0;
   padding: 6px 0 10px;
   overflow: auto;
   min-height: 0;
   overflow-x: hidden;
+  list-style: none;
 }
 
 .copy-paste-review-row {
@@ -2632,12 +2637,11 @@ body.platform-macos .window-toolbar-brand {
   padding: 10px 18px;
   margin-top: 0;
   border-top: 1px solid color-mix(in srgb, var(--ft-conflict-border) 88%, transparent);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--ft-conflict-surface) 84%, transparent),
-      color-mix(in srgb, var(--ft-conflict-surface) 98%, var(--bg-base))
-    );
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--ft-conflict-surface) 84%, transparent),
+    color-mix(in srgb, var(--ft-conflict-surface) 98%, var(--bg-base))
+  );
 }
 
 .copy-paste-review-selection-summary {
@@ -4472,12 +4476,8 @@ body.resizing-panels-vertical * {
   color: var(--favorite-accent-solid);
 }
 
-:root[data-accent-favorite-text="true"]
-  .tree-row[data-tree-kind="favorite"]
-  .tree-label,
-:root[data-accent-favorite-text="true"]
-  .tree-row[data-tree-kind="favorites-root"]
-  .tree-label {
+:root[data-accent-favorite-text="true"] .tree-row[data-tree-kind="favorite"] .tree-label,
+:root[data-accent-favorite-text="true"] .tree-row[data-tree-kind="favorites-root"] .tree-label {
   color: var(--favorite-accent-text);
 }
 
@@ -4995,6 +4995,8 @@ body.resizing-panels-vertical * {
 
 .location-sheet {
   width: min(560px, calc(100vw - 32px));
+  margin: 0;
+  padding: 0;
   border: 1px solid var(--border-active);
   border-radius: var(--radius-lg);
   background: var(--bg-elevated);

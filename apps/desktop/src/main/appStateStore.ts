@@ -5,15 +5,15 @@ import {
   ACCENT_OPTIONS,
   type AppPreferences,
   type ApplicationSelection,
-  type FavoriteIconId,
-  type FavoritePreference,
-  FAVORITE_ICON_OPTIONS,
   DEFAULT_APP_PREFERENCES,
   DEFAULT_DETAIL_COLUMN_VISIBILITY,
   DEFAULT_DETAIL_COLUMN_WIDTHS,
   DEFAULT_OPEN_WITH_APPLICATIONS,
   DEFAULT_TEXT_EDITOR,
   DETAIL_COLUMN_KEYS,
+  FAVORITE_ICON_OPTIONS,
+  type FavoriteIconId,
+  type FavoritePreference,
   THEME_OPTIONS,
   TYPEAHEAD_DEBOUNCE_MAX_MS,
   TYPEAHEAD_DEBOUNCE_MIN_MS,
@@ -420,7 +420,8 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
         ? record.lastVisitedPath
         : null,
     lastVisitedFavoritePath:
-      typeof record.lastVisitedFavoritePath === "string" && record.lastVisitedFavoritePath.length > 0
+      typeof record.lastVisitedFavoritePath === "string" &&
+      record.lastVisitedFavoritePath.length > 0
         ? record.lastVisitedFavoritePath
         : null,
     favorites: sanitizeFavorites(record.favorites, record.favoritePaths, currentDefaults.favorites),

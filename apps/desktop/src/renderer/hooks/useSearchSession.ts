@@ -8,7 +8,7 @@ import {
   type SearchResultsSortByPreference,
   type SearchResultsSortDirectionPreference,
 } from "../../shared/appPreferences";
-import { EMPTY_CONTENT_SELECTION, type ContentSelectionState } from "../lib/contentSelection";
+import { type ContentSelectionState, EMPTY_CONTENT_SELECTION } from "../lib/contentSelection";
 
 type SearchResultItem = IpcResponse<"search:getUpdate">["items"][number];
 type SearchPatternMode = IpcRequest<"search:start">["patternMode"];

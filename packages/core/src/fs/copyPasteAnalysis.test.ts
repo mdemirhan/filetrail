@@ -141,9 +141,9 @@ describe("copyPasteAnalysis", () => {
     expect(report.summary.directoryConflictCount).toBe(2);
     expect(report.summary.fileConflictCount).toBe(1);
     expect(report.summary.mismatchConflictCount).toBe(1);
-    expect(topLevel?.children.find((child) => child.sourcePath.endsWith("logo.png"))?.conflictClass).toBe(
-      "file_conflict",
-    );
+    expect(
+      topLevel?.children.find((child) => child.sourcePath.endsWith("logo.png"))?.conflictClass,
+    ).toBe("file_conflict");
     expect(
       topLevel?.children
         .find((child) => child.sourcePath.endsWith("/icons"))

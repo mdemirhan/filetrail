@@ -1,14 +1,14 @@
+import { RENDERER_COMMAND_TYPES } from "../../shared/rendererCommands";
 import {
   RAW_EXPLORER_SHORTCUT_IDS,
   RAW_EXPLORER_SHORTCUT_TREE_FOCUS_BUCKETS,
   RENDERER_COMMAND_TREE_FOCUS_BUCKETS,
+  type ShortcutContext,
   canHandleExplorerKeyboardShortcuts,
   canHandleRawExplorerShortcut,
   canHandleRendererCommand,
   getContextMenuShortcutLabel,
-  type ShortcutContext,
 } from "./shortcutPolicy";
-import { RENDERER_COMMAND_TYPES } from "../../shared/rendererCommands";
 
 describe("shortcutPolicy", () => {
   function ctx(overrides: Partial<ShortcutContext> = {}): ShortcutContext {
@@ -42,9 +42,9 @@ describe("shortcutPolicy", () => {
   });
 
   it("keeps generic edit commands available regardless of the active view", () => {
-    expect(canHandleRendererCommand("editCopy", ctx({ focusedPane: "tree", mainView: "help" }))).toBe(
-      true,
-    );
+    expect(
+      canHandleRendererCommand("editCopy", ctx({ focusedPane: "tree", mainView: "help" })),
+    ).toBe(true);
     expect(
       canHandleRendererCommand(
         "editSelectAll",
@@ -60,7 +60,9 @@ describe("shortcutPolicy", () => {
   });
 
   it("blocks content-capturing commands while transient overlays are open", () => {
-    expect(canHandleRendererCommand("openSelection", ctx({ copyPasteModalOpen: true }))).toBe(false);
+    expect(canHandleRendererCommand("openSelection", ctx({ copyPasteModalOpen: true }))).toBe(
+      false,
+    );
     expect(canHandleRendererCommand("copySelection", ctx({ actionNoticeOpen: true }))).toBe(false);
     expect(canHandleRendererCommand("openSettings", ctx({ actionNoticeOpen: true }))).toBe(false);
   });
@@ -77,9 +79,9 @@ describe("shortcutPolicy", () => {
 
   it("keeps global renderer commands available when the tree is focused", () => {
     expect(canHandleRendererCommand("focusFileSearch", ctx({ focusedPane: "tree" }))).toBe(true);
-    expect(
-      canHandleRendererCommand("refreshOrApplySearchSort", ctx({ focusedPane: "tree" })),
-    ).toBe(true);
+    expect(canHandleRendererCommand("refreshOrApplySearchSort", ctx({ focusedPane: "tree" }))).toBe(
+      true,
+    );
   });
 
   it("blocks content-only raw shortcuts when the tree is focused", () => {
@@ -165,13 +167,19 @@ describe("shortcutPolicy", () => {
       "trashSelection",
     ] as const;
 
-    for (const selectedTreeTargetKind of ["filesystemFolder", "favorite", "favoritesRoot"] as const) {
+    for (const selectedTreeTargetKind of [
+      "filesystemFolder",
+      "favorite",
+      "favoritesRoot",
+    ] as const) {
       const currentContext = ctx({
         focusedPane: "tree",
         selectedTreeTargetKind,
       });
       expect(
-        dangerousRendererCommands.filter((command) => !canHandleRendererCommand(command, currentContext)),
+        dangerousRendererCommands.filter(
+          (command) => !canHandleRendererCommand(command, currentContext),
+        ),
       ).toEqual(dangerousRendererCommands);
     }
   });
@@ -188,13 +196,19 @@ describe("shortcutPolicy", () => {
       "trashSelection",
     ] as const;
 
-    for (const selectedTreeTargetKind of ["filesystemFolder", "favorite", "favoritesRoot"] as const) {
+    for (const selectedTreeTargetKind of [
+      "filesystemFolder",
+      "favorite",
+      "favoritesRoot",
+    ] as const) {
       const currentContext = ctx({
         focusedPane: "tree",
         selectedTreeTargetKind,
       });
       expect(
-        dangerousRawShortcutIds.filter((shortcutId) => !canHandleRawExplorerShortcut(shortcutId, currentContext)),
+        dangerousRawShortcutIds.filter(
+          (shortcutId) => !canHandleRawExplorerShortcut(shortcutId, currentContext),
+        ),
       ).toEqual(dangerousRawShortcutIds);
     }
   });

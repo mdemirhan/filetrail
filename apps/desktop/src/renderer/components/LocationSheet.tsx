@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type { IpcResponse } from "@filetrail/contracts";
 
@@ -42,7 +42,7 @@ export function LocationSheet({
   onSubmit: (path: string) => void;
   onRequestPathSuggestions: (inputPath: string) => Promise<IpcResponse<"path:getSuggestions">>;
 }) {
-  const dialogRef = useRef<HTMLElement | null>(null);
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [browseInProgress, setBrowseInProgress] = useState(false);
   const {
@@ -65,20 +65,18 @@ export function LocationSheet({
     onRequestPathSuggestions,
   });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) {
       setBrowseInProgress(false);
       return;
     }
     setBrowseInProgress(false);
-    window.requestAnimationFrame(() => {
-      const input = inputRef.current;
-      if (!input) {
-        return;
-      }
-      input.focus();
-      input.setSelectionRange(currentPath.length, currentPath.length);
-    });
+    const input = inputRef.current;
+    if (!input) {
+      return;
+    }
+    input.focus();
+    input.setSelectionRange(currentPath.length, currentPath.length);
   }, [currentPath, open]);
 
   useEffect(() => {
@@ -126,12 +124,16 @@ export function LocationSheet({
 
   return (
     <div className="location-sheet-backdrop" role="presentation">
-      <section
+      <dialog
         ref={dialogRef}
+        open
         className="location-sheet"
-        role="dialog"
         aria-modal="true"
         aria-label={title}
+        onCancel={(event) => {
+          event.preventDefault();
+          onClose();
+        }}
         onKeyDown={(event) => {
           if (event.defaultPrevented || event.key !== "Tab" || !tabSwitchesExplorerPanes) {
             return;
@@ -190,7 +192,6 @@ export function LocationSheet({
               id="location-sheet-input"
               className="location-sheet-input"
               autoComplete="off"
-              autoFocus
               spellCheck={false}
               value={displayedValue}
               onBlur={(event) => {
@@ -284,7 +285,7 @@ export function LocationSheet({
           </div>
           {error ? <div className="location-sheet-error">{error}</div> : null}
         </form>
-      </section>
+      </dialog>
     </div>
   );
 }

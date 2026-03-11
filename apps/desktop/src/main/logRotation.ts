@@ -17,9 +17,10 @@ export async function rotateLogFiles(filePath: string, maxFiles: number): Promis
   }
   await unlink(resolveRotatedLogPath(filePath, maxFiles - 1)).catch(() => undefined);
   for (let index = maxFiles - 2; index >= 1; index -= 1) {
-    await rename(resolveRotatedLogPath(filePath, index), resolveRotatedLogPath(filePath, index + 1)).catch(
-      () => undefined,
-    );
+    await rename(
+      resolveRotatedLogPath(filePath, index),
+      resolveRotatedLogPath(filePath, index + 1),
+    ).catch(() => undefined);
   }
   await rename(filePath, resolveRotatedLogPath(filePath, 1)).catch(() => undefined);
 }

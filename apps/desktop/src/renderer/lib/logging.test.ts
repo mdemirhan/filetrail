@@ -11,12 +11,11 @@ describe("logging helpers", () => {
 
   afterEach(() => {
     if (originalFiletrail === undefined) {
-      delete window.filetrail;
+      Reflect.deleteProperty(window, "filetrail");
     } else {
       window.filetrail = originalFiletrail;
     }
-    delete (window as Window & { __filetrailGlobalLogHandlersInstalled?: boolean })
-      .__filetrailGlobalLogHandlersInstalled;
+    Reflect.deleteProperty(window, "__filetrailGlobalLogHandlersInstalled");
     vi.restoreAllMocks();
   });
 

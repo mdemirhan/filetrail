@@ -3,7 +3,8 @@ import { MockWriteServiceFileSystem } from "./testUtils";
 import type { CopyPasteAnalysisNode, CopyPasteAnalysisReport } from "./writeServiceTypes";
 
 function createNode(
-  input: Partial<CopyPasteAnalysisNode> & Pick<CopyPasteAnalysisNode, "id" | "sourcePath" | "destinationPath">,
+  input: Partial<CopyPasteAnalysisNode> &
+    Pick<CopyPasteAnalysisNode, "id" | "sourcePath" | "destinationPath">,
 ): CopyPasteAnalysisNode {
   return {
     id: input.id,
@@ -13,28 +14,26 @@ function createNode(
     destinationKind: input.destinationKind ?? "missing",
     disposition: input.disposition ?? "new",
     conflictClass: input.conflictClass ?? null,
-    sourceFingerprint:
-      input.sourceFingerprint ?? {
-        exists: true,
-        kind: input.sourceKind ?? "file",
-        size: 1,
-        mtimeMs: 1,
-        mode: 0o644,
-        ino: 1,
-        dev: 1,
-        symlinkTarget: null,
-      },
-    destinationFingerprint:
-      input.destinationFingerprint ?? {
-        exists: input.destinationKind ? input.destinationKind !== "missing" : false,
-        kind: input.destinationKind ?? "missing",
-        size: null,
-        mtimeMs: null,
-        mode: null,
-        ino: null,
-        dev: null,
-        symlinkTarget: null,
-      },
+    sourceFingerprint: input.sourceFingerprint ?? {
+      exists: true,
+      kind: input.sourceKind ?? "file",
+      size: 1,
+      mtimeMs: 1,
+      mode: 0o644,
+      ino: 1,
+      dev: 1,
+      symlinkTarget: null,
+    },
+    destinationFingerprint: input.destinationFingerprint ?? {
+      exists: input.destinationKind ? input.destinationKind !== "missing" : false,
+      kind: input.destinationKind ?? "missing",
+      size: null,
+      mtimeMs: null,
+      mode: null,
+      ino: null,
+      dev: null,
+      symlinkTarget: null,
+    },
     children: input.children ?? [],
     issueCode: null,
     issueMessage: null,

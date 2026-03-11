@@ -1,7 +1,4 @@
-import {
-  resolveDuplicateName,
-  resolveKeepBothDestinationPath,
-} from "./copyPasteNames";
+import { resolveDuplicateName, resolveKeepBothDestinationPath } from "./copyPasteNames";
 import { MockWriteServiceFileSystem } from "./testUtils";
 
 describe("copyPasteNames", () => {

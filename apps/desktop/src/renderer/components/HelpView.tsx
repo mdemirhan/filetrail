@@ -241,31 +241,31 @@ export function HelpView({
     >
       <header className="help-header" style={{ marginBottom: "20px" }}>
         <div className="help-header-left">
-        <span
-          className="help-header-eyebrow"
-          style={{
-            fontSize: "10px",
-            fontFamily: mono,
-            fontWeight: 600,
-            color: resolvedTheme.subtitle,
-            letterSpacing: "0.1em",
-            textTransform: "uppercase",
-          }}
-        >
-          FILE TRAIL
-        </span>
-        <h1
-          style={{
-            fontSize: "20px",
-            fontFamily: sans,
-            fontWeight: 700,
-            color: resolvedTheme.title,
-            margin: "2px 0 0",
-            letterSpacing: "-0.02em",
-          }}
-        >
-          Help &amp; Reference
-        </h1>
+          <span
+            className="help-header-eyebrow"
+            style={{
+              fontSize: "10px",
+              fontFamily: mono,
+              fontWeight: 600,
+              color: resolvedTheme.subtitle,
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+            }}
+          >
+            FILE TRAIL
+          </span>
+          <h1
+            style={{
+              fontSize: "20px",
+              fontFamily: sans,
+              fontWeight: 700,
+              color: resolvedTheme.title,
+              margin: "2px 0 0",
+              letterSpacing: "-0.02em",
+            }}
+          >
+            Help &amp; Reference
+          </h1>
         </div>
       </header>
 

@@ -40,7 +40,10 @@ export async function buildCopyPasteAnalysisReport(args: {
   const warnings: CopyPasteAnalysisWarning[] = [];
   const nodes: CopyPasteAnalysisNode[] = [];
 
-  const destinationFingerprint = await captureFingerprint(fileSystem, request.destinationDirectoryPath);
+  const destinationFingerprint = await captureFingerprint(
+    fileSystem,
+    request.destinationDirectoryPath,
+  );
   if (!destinationFingerprint.exists) {
     issues.push({
       code: "destination_missing",
@@ -227,7 +230,11 @@ function resolveConflictClass(
   if (sourceKind === "directory" && destinationKind === "directory") {
     return "directory_conflict";
   }
-  if (sourceKind !== "directory" && destinationKind !== "directory" && sourceKind === destinationKind) {
+  if (
+    sourceKind !== "directory" &&
+    destinationKind !== "directory" &&
+    sourceKind === destinationKind
+  ) {
     return "file_conflict";
   }
   return "type_mismatch";

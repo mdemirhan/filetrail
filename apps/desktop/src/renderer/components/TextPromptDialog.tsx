@@ -26,7 +26,7 @@ export function TextPromptDialog({
   onSubmit: (value: string) => void;
 }) {
   const [draftValue, setDraftValue] = useState(value);
-  const dialogRef = useRef<HTMLElement | null>(null);
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const wasOpenRef = useRef(open);
   const focusedOpenRef = useRef(open);
@@ -87,12 +87,16 @@ export function TextPromptDialog({
 
   return (
     <div className="action-notice-backdrop" role="presentation">
-      <section
+      <dialog
         ref={dialogRef}
+        open
         className="action-notice-dialog copy-paste-dialog"
         aria-label={title}
-        role="dialog"
         aria-modal="true"
+        onCancel={(event) => {
+          event.preventDefault();
+          onCloseRef.current();
+        }}
         onMouseDown={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
           if (event.defaultPrevented || event.key !== "Tab") {
@@ -184,7 +188,7 @@ export function TextPromptDialog({
             </button>
           </div>
         </form>
-      </section>
+      </dialog>
     </div>
   );
 }

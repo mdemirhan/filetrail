@@ -3,8 +3,8 @@ import {
   formatPermissionMode,
   formatSize,
   pathSegments,
-  splitPermissionMode,
   splitDisplayName,
+  splitPermissionMode,
 } from "./formatting";
 
 describe("formatting helpers", () => {

@@ -173,9 +173,14 @@ export function canHandleRendererCommand(
     return false;
   }
 
-  if (context.focusedPane === "tree" && RENDERER_COMMAND_TREE_FOCUS_BUCKETS[command] === "contentOnly") {
+  if (
+    context.focusedPane === "tree" &&
+    RENDERER_COMMAND_TREE_FOCUS_BUCKETS[command] === "contentOnly"
+  ) {
     if (TREE_SAFE_RENDERER_COMMANDS.has(command)) {
-      return isSafeTreeTargetKind(context.selectedTreeTargetKind) && context.mainView === "explorer";
+      return (
+        isSafeTreeTargetKind(context.selectedTreeTargetKind) && context.mainView === "explorer"
+      );
     }
     return false;
   }
@@ -208,7 +213,9 @@ export function canHandleRawExplorerShortcut(
     return true;
   }
 
-  return TREE_SAFE_RAW_SHORTCUTS.has(shortcutId) && isSafeTreeTargetKind(context.selectedTreeTargetKind);
+  return (
+    TREE_SAFE_RAW_SHORTCUTS.has(shortcutId) && isSafeTreeTargetKind(context.selectedTreeTargetKind)
+  );
 }
 
 export function getContextMenuShortcutLabel(

@@ -7,7 +7,7 @@ import { resolveActionLogFilePath } from "./actionLog";
 import { createAppLogger, isDebugLoggingEnabled, resolveAppLogFilePath } from "./appLog";
 import { createApplicationMenuTemplate } from "./appMenu";
 import { type AppStateStore, createAppStateStore, resolveAppStatePath } from "./appStateStore";
-import { getMainProcessStatus, bootstrapMainProcess, shutdownMainProcess } from "./bootstrap";
+import { bootstrapMainProcess, getMainProcessStatus, shutdownMainProcess } from "./bootstrap";
 import { resolveBundledFdBinaryPath } from "./fdBinary";
 import { resolveStartupFolderPath } from "./launchContext";
 let mainWindowRef: BrowserWindow | null = null;
@@ -23,84 +23,82 @@ if (!hasSingleInstanceLock) {
 }
 
 if (hasSingleInstanceLock) {
-  app.whenReady().then(async () => {
-    const userDataPath = app.getPath("userData");
-    const appLogPath = resolveAppLogFilePath(userDataPath);
-    const actionLogPath = resolveActionLogFilePath(userDataPath);
-    const debugEnabled = isDebugLoggingEnabled();
-    const appLogger = createAppLogger(appLogPath, {
-      debugEnabled,
-    });
-    appLoggerRef = appLogger;
-    installProcessLoggingHandlers(appLogger);
-    const launchContext = {
-      startupFolderPath: resolveStartupFolderPath(process.argv, resolveLaunchWorkingDirectory(), {
-        appPath: app.getAppPath(),
-        argvOffset: process.defaultApp ? 2 : 1,
-      }),
-    };
-    const fdStatus = resolveFdStartupStatus();
-    appLogger.info("[filetrail] app start", {
-      appVersion: app.getVersion(),
-      electronVersion: process.versions.electron ?? null,
-      chromeVersion: process.versions.chrome ?? null,
-      nodeVersion: process.versions.node,
-      platform: process.platform,
-      arch: process.arch,
-      pid: process.pid,
-      userDataPath,
-      appLogPath,
-      actionLogPath,
-      startupFolderPath: launchContext.startupFolderPath,
-      debugEnabled,
-      fdBinaryPath: fdStatus.path,
-      fdBinaryError: fdStatus.error,
-    });
-    const appStateStore = createAppStateStore(resolveAppStatePath(userDataPath), {
-      defaultTheme: nativeTheme.shouldUseDarkColors ? "dark" : "light",
-      onReadError: (error) => {
-        appLogger.error("[filetrail] failed reading app state", error);
-      },
-      onPersistError: (error) => {
-        appLogger.error("[filetrail] failed persisting app state", error);
-      },
-    });
-    const iconPath = resolveAppIconPath();
-    if (iconPath && process.platform === "darwin") {
-      const icon = nativeImage.createFromPath(iconPath);
-      if (!icon.isEmpty()) {
-        app.dock.setIcon(icon);
+  app
+    .whenReady()
+    .then(async () => {
+      const userDataPath = app.getPath("userData");
+      const appLogPath = resolveAppLogFilePath(userDataPath);
+      const actionLogPath = resolveActionLogFilePath(userDataPath);
+      const debugEnabled = isDebugLoggingEnabled();
+      const appLogger = createAppLogger(appLogPath, {
+        debugEnabled,
+      });
+      appLoggerRef = appLogger;
+      installProcessLoggingHandlers(appLogger);
+      const launchContext = {
+        startupFolderPath: resolveStartupFolderPath(process.argv, resolveLaunchWorkingDirectory(), {
+          appPath: app.getAppPath(),
+          argvOffset: process.defaultApp ? 2 : 1,
+        }),
+      };
+      const fdStatus = resolveFdStartupStatus();
+      appLogger.info("[filetrail] app start", {
+        appVersion: app.getVersion(),
+        electronVersion: process.versions.electron ?? null,
+        chromeVersion: process.versions.chrome ?? null,
+        nodeVersion: process.versions.node,
+        platform: process.platform,
+        arch: process.arch,
+        pid: process.pid,
+        userDataPath,
+        appLogPath,
+        actionLogPath,
+        startupFolderPath: launchContext.startupFolderPath,
+        debugEnabled,
+        fdBinaryPath: fdStatus.path,
+        fdBinaryError: fdStatus.error,
+      });
+      const appStateStore = createAppStateStore(resolveAppStatePath(userDataPath), {
+        defaultTheme: nativeTheme.shouldUseDarkColors ? "dark" : "light",
+        onReadError: (error) => {
+          appLogger.error("[filetrail] failed reading app state", error);
+        },
+        onPersistError: (error) => {
+          appLogger.error("[filetrail] failed persisting app state", error);
+        },
+      });
+      const iconPath = resolveAppIconPath();
+      if (iconPath && process.platform === "darwin") {
+        const icon = nativeImage.createFromPath(iconPath);
+        if (!icon.isEmpty()) {
+          app.dock.setIcon(icon);
+        }
       }
-    }
-    appStateStoreRef = appStateStore;
-    await bootstrapMainProcess(
-      appStateStore,
-      launchContext,
-      appLogger,
-      (preferences) => {
+      appStateStoreRef = appStateStore;
+      await bootstrapMainProcess(appStateStore, launchContext, appLogger, (preferences) => {
         const window = mainWindowRef ?? BrowserWindow.getAllWindows()[0] ?? null;
         if (!window || window.isDestroyed()) {
           return;
         }
         applyWindowZoom(window, preferences.zoomPercent);
         applyApplicationMenu(window, preferences.actionLogEnabled);
-      },
-    );
-    mainWindowRef = createWindow();
-
-    app.on("activate", () => {
-      appLogger.info("[filetrail] app activate", {
-        openWindowCount: BrowserWindow.getAllWindows().length,
       });
-      if (BrowserWindow.getAllWindows().length === 0) {
-        mainWindowRef = createWindow();
-      }
+      mainWindowRef = createWindow();
+
+      app.on("activate", () => {
+        appLogger.info("[filetrail] app activate", {
+          openWindowCount: BrowserWindow.getAllWindows().length,
+        });
+        if (BrowserWindow.getAllWindows().length === 0) {
+          mainWindowRef = createWindow();
+        }
+      });
+    })
+    .catch(async (error) => {
+      appLoggerRef?.error("[filetrail] startup failed", error);
+      await appLoggerRef?.flush();
+      app.exit(1);
     });
-  }).catch(async (error) => {
-    appLoggerRef?.error("[filetrail] startup failed", error);
-    await appLoggerRef?.flush();
-    app.exit(1);
-  });
 
   app.on("before-quit", (event) => {
     if (shutdownInProgress) {

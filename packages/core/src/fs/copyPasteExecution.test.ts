@@ -30,12 +30,11 @@ async function createResolvedOperation(args: {
   });
   const resolvedNodes = await resolveAnalysisWithPolicy({
     report,
-    policy:
-      args.policy ?? {
-        file: "skip",
-        directory: "merge",
-        mismatch: "skip",
-      },
+    policy: args.policy ?? {
+      file: "skip",
+      directory: "merge",
+      mismatch: "skip",
+    },
     fileSystem: args.fileSystem,
   });
   return {
@@ -934,7 +933,9 @@ describe("copyPasteExecution", () => {
         await new Promise((resolve) => setTimeout(resolve, 20));
         signal?.throwIfAborted();
       }
-      partialCancelFileSystem.addFile(destinationPath, { size: sourcePath.endsWith("two.txt") ? 2 : 1 });
+      partialCancelFileSystem.addFile(destinationPath, {
+        size: sourcePath.endsWith("two.txt") ? 2 : 1,
+      });
     };
     const partialCancelOperation = await createResolvedOperation({
       fileSystem: partialCancelFileSystem,

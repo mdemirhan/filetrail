@@ -3,8 +3,8 @@ import { useRef, useState } from "react";
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 
 import { DEFAULT_APP_PREFERENCES } from "../../shared/appPreferences";
-import { EMPTY_CONTENT_SELECTION, type ContentSelectionState } from "../lib/contentSelection";
 import type { TreeNodeState } from "../components/TreePane";
+import { type ContentSelectionState, EMPTY_CONTENT_SELECTION } from "../lib/contentSelection";
 import type { TreeItemId } from "../lib/favorites";
 
 type DirectoryEntry = IpcResponse<"directory:getSnapshot">["entries"][number];

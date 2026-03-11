@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  type PointerEvent as ReactPointerEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 
@@ -6,7 +12,9 @@ import type { CopyPasteReviewDialogSize } from "../../shared/appPreferences";
 import { formatSize } from "../lib/formatting";
 
 type Policy = Extract<IpcRequest<"copyPaste:start">, { analysisId: string }>["policy"];
-type AnalysisNode = NonNullable<IpcResponse<"copyPaste:analyzeGetUpdate">["report"]>["nodes"][number];
+type AnalysisNode = NonNullable<
+  IpcResponse<"copyPaste:analyzeGetUpdate">["report"]
+>["nodes"][number];
 type AnalysisReport = NonNullable<IpcResponse<"copyPaste:analyzeGetUpdate">["report"]>;
 
 const REVIEW_DIALOG_MIN_WIDTH = 760;
@@ -42,15 +50,12 @@ export function CopyPasteReviewDialog({
     resolveInitialDialogFrame(persistedSize),
   );
   const dialogFrameRef = useRef(dialogFrame);
-  const interactionRef = useRef<
-    | {
-        mode: "move" | "resize";
-        startX: number;
-        startY: number;
-        startFrame: DialogFrame;
-      }
-    | null
-  >(null);
+  const interactionRef = useRef<{
+    mode: "move" | "resize";
+    startX: number;
+    startY: number;
+    startFrame: DialogFrame;
+  } | null>(null);
   const sharedAncestorPath = useMemo(
     () => findCommonAncestorPath([...report.sourcePaths, report.destinationDirectoryPath]),
     [report.destinationDirectoryPath, report.sourcePaths],
@@ -119,10 +124,7 @@ export function CopyPasteReviewDialog({
     });
   }
 
-  function beginPointerInteraction(
-    mode: "move" | "resize",
-    event: ReactPointerEvent<HTMLElement>,
-  ) {
+  function beginPointerInteraction(mode: "move" | "resize", event: ReactPointerEvent<HTMLElement>) {
     if (event.button !== 0) {
       return;
     }
@@ -200,14 +202,18 @@ export function CopyPasteReviewDialog({
                 <div className="action-notice-title">{title}</div>
                 <p className="action-notice-message copy-paste-review-message">
                   Conflicts detected pasting into{" "}
-                  <span className="copy-paste-review-path-pill">{report.destinationDirectoryPath}</span>
+                  <span className="copy-paste-review-path-pill">
+                    {report.destinationDirectoryPath}
+                  </span>
                 </p>
               </div>
             </div>
             <div className="copy-paste-review-summary">
               <span>{report.summary.totalNodeCount} items</span>
               <span className="is-accent">{report.summary.fileConflictCount} file conflicts</span>
-              <span className="is-accent">{report.summary.directoryConflictCount} folder conflicts</span>
+              <span className="is-accent">
+                {report.summary.directoryConflictCount} folder conflicts
+              </span>
               <span>{report.summary.mismatchConflictCount} mismatches</span>
               {report.summary.totalBytes !== null ? (
                 <span>{formatSize(report.summary.totalBytes, "ready")}</span>
@@ -248,7 +254,11 @@ export function CopyPasteReviewDialog({
           </div>
           <div className="copy-paste-review-body">
             <div className="copy-paste-review-toolbar">
-              <div className="copy-paste-review-tabs" role="tablist" aria-label="Conflict categories">
+              <div
+                className="copy-paste-review-tabs"
+                role="tablist"
+                aria-label="Conflict categories"
+              >
                 <TabButton
                   active={activeTab === "files"}
                   label={`Files (${counts.files})`}
@@ -283,19 +293,19 @@ export function CopyPasteReviewDialog({
                 <span>{filteredConflicts.length} shown</span>
                 <span>{describeTab(activeTab)}</span>
               </div>
-              <div className="copy-paste-review-list" role="list">
+              <ul className="copy-paste-review-list">
                 {filteredConflicts.length > 0 ? (
                   filteredConflicts.map((conflict) => (
                     <ConflictRow key={conflict.id} conflict={conflict} />
                   ))
                 ) : (
-                  <div className="copy-paste-review-empty">
+                  <li className="copy-paste-review-empty">
                     {searchQuery.trim().length > 0
                       ? "No conflicts match this filter."
                       : `No ${describeTab(activeTab).toLowerCase()} detected.`}
-                  </div>
+                  </li>
                 )}
-              </div>
+              </ul>
             </section>
           </div>
         </div>
@@ -355,9 +365,9 @@ function PolicyGroup<T extends string>({
   options: readonly [T, string][];
 }) {
   return (
-    <div className="copy-paste-review-policy-group">
-      <div className="copy-paste-review-policy-label">{label}</div>
-      <div className="copy-paste-review-segmented" role="group" aria-label={label}>
+    <fieldset className="copy-paste-review-policy-group">
+      <legend className="copy-paste-review-policy-label">{label}</legend>
+      <div className="copy-paste-review-segmented" aria-label={label}>
         {options.map(([optionValue, optionLabel]) => (
           <button
             key={optionValue}
@@ -369,7 +379,7 @@ function PolicyGroup<T extends string>({
           </button>
         ))}
       </div>
-    </div>
+    </fieldset>
   );
 }
 
@@ -397,7 +407,7 @@ function TabButton({
 
 function ConflictRow({ conflict }: { conflict: FlatConflict }) {
   return (
-    <article className="copy-paste-review-row" role="listitem">
+    <li className="copy-paste-review-row">
       <div className="copy-paste-review-row-icon" aria-hidden="true">
         {conflict.tab === "files" ? (
           <FileGlyph accent={iconAccentForName(conflict.name)} />
@@ -420,9 +430,7 @@ function ConflictRow({ conflict }: { conflict: FlatConflict }) {
           <span>{conflict.sourceSize}</span>
           <span className="copy-paste-review-row-size-arrow">→</span>
           <span
-            className={
-              conflict.sourceSize === conflict.destinationSize ? undefined : "is-accent"
-            }
+            className={conflict.sourceSize === conflict.destinationSize ? undefined : "is-accent"}
           >
             {conflict.destinationSize}
           </span>
@@ -430,7 +438,7 @@ function ConflictRow({ conflict }: { conflict: FlatConflict }) {
       ) : (
         <div className="copy-paste-review-row-detail">{formatRowDetail(conflict)}</div>
       )}
-    </article>
+    </li>
   );
 }
 
@@ -562,7 +570,9 @@ function findCommonAncestorPath(paths: string[]): string {
   if (normalizedPaths.length === 0) {
     return "";
   }
-  const splitPaths = normalizedPaths.map((value) => value.split("/").filter((segment, index) => segment.length > 0 || index === 0));
+  const splitPaths = normalizedPaths.map((value) =>
+    value.split("/").filter((segment, index) => segment.length > 0 || index === 0),
+  );
   const shortestLength = Math.min(...splitPaths.map((segments) => segments.length));
   const commonSegments: string[] = [];
   for (let index = 0; index < shortestLength; index += 1) {
@@ -596,7 +606,7 @@ function formatRowDetail(conflict: FlatConflict): string {
 }
 
 function iconAccentForName(fileName: string): string {
-  const extension = fileName.includes(".") ? fileName.split(".").pop()?.toLowerCase() ?? "" : "";
+  const extension = fileName.includes(".") ? (fileName.split(".").pop()?.toLowerCase() ?? "") : "";
   if (["kt", "kts"].includes(extension)) {
     return "var(--ft-conflict-icon-violet)";
   }
@@ -614,7 +624,12 @@ function iconAccentForName(fileName: string): string {
 
 function WarningGlyph() {
   return (
-    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" className="copy-paste-review-warning-glyph">
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+      className="copy-paste-review-warning-glyph"
+    >
       <path d="M8 1.75 14 13H2L8 1.75Z" />
       <path d="M8 5.25V8.75" />
       <circle cx="8" cy="11.35" r="0.85" fill="currentColor" stroke="none" />
@@ -631,9 +646,7 @@ function SearchGlyph() {
   );
 }
 
-function resolveInitialDialogFrame(
-  persistedSize: CopyPasteReviewDialogSize | null,
-): DialogFrame {
+function resolveInitialDialogFrame(persistedSize: CopyPasteReviewDialogSize | null): DialogFrame {
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
   const maxWidth = Math.max(520, viewportWidth - REVIEW_DIALOG_EDGE_MARGIN * 2);
@@ -685,10 +698,7 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function areFramesEqual(
-  left: DialogFrame,
-  right: DialogFrame,
-): boolean {
+function areFramesEqual(left: DialogFrame, right: DialogFrame): boolean {
   return (
     left.width === right.width &&
     left.height === right.height &&

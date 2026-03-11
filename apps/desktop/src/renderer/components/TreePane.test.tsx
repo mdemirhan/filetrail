@@ -35,6 +35,22 @@ const baseNodes: ComponentProps<typeof TreePane>["nodes"] = {
   },
 };
 
+function getNamedButton(name: string, index: number) {
+  const button = screen.getAllByRole("button", { name })[index];
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error(`Missing button "${name}" at index ${index}.`);
+  }
+  return button;
+}
+
+function getTreeRow(button: HTMLButtonElement) {
+  const row = button.closest(".tree-row");
+  if (!(row instanceof HTMLDivElement)) {
+    throw new Error("Missing tree row wrapper.");
+  }
+  return row;
+}
+
 function renderTreePane(overrides: Partial<ComponentProps<typeof TreePane>> = {}) {
   return render(
     <TreePane
@@ -131,8 +147,10 @@ describe("TreePane", () => {
     const handleToggleExpand = vi.fn();
     renderTreePane({ onNavigate: handleNavigate, onToggleExpand: handleToggleExpand });
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Documents" })[1]!);
-    vi.runAllTimers();
+    fireEvent.click(getNamedButton("Documents", 1));
+    act(() => {
+      vi.runAllTimers();
+    });
 
     expect(handleNavigate).toHaveBeenCalledWith("/Users/demo/Documents");
     expect(handleToggleExpand).not.toHaveBeenCalled();
@@ -149,8 +167,10 @@ describe("TreePane", () => {
       singleClickExpandTreeItems: true,
     });
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Documents" })[1]!);
-    vi.runAllTimers();
+    fireEvent.click(getNamedButton("Documents", 1));
+    act(() => {
+      vi.runAllTimers();
+    });
 
     expect(handleToggleExpand).toHaveBeenCalledWith("/Users/demo/Documents");
     expect(handleNavigate).toHaveBeenCalledWith("/Users/demo/Documents");
@@ -165,8 +185,10 @@ describe("TreePane", () => {
       onNavigateFavorite: handleNavigateFavorite,
     });
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Documents" })[0]!);
-    vi.runAllTimers();
+    fireEvent.click(getNamedButton("Documents", 0));
+    act(() => {
+      vi.runAllTimers();
+    });
 
     expect(handleNavigateFavorite).toHaveBeenCalledWith("/Users/demo/Documents");
     vi.useRealTimers();
@@ -178,8 +200,10 @@ describe("TreePane", () => {
     const handleToggleExpand = vi.fn();
     renderTreePane({ onNavigate: handleNavigate, onToggleExpand: handleToggleExpand });
 
-    fireEvent.doubleClick(screen.getAllByRole("button", { name: "Documents" })[1]!);
-    vi.runAllTimers();
+    fireEvent.doubleClick(getNamedButton("Documents", 1));
+    act(() => {
+      vi.runAllTimers();
+    });
 
     expect(handleNavigate).toHaveBeenCalledTimes(1);
     expect(handleNavigate).toHaveBeenCalledWith("/Users/demo/Documents");
@@ -195,8 +219,10 @@ describe("TreePane", () => {
       onNavigateFavorite: handleNavigateFavorite,
     });
 
-    fireEvent.doubleClick(screen.getAllByRole("button", { name: "Documents" })[0]!);
-    vi.runAllTimers();
+    fireEvent.doubleClick(getNamedButton("Documents", 0));
+    act(() => {
+      vi.runAllTimers();
+    });
 
     expect(handleNavigateFavorite).toHaveBeenCalledTimes(1);
     expect(handleNavigateFavorite).toHaveBeenCalledWith("/Users/demo/Documents");
@@ -304,7 +330,9 @@ describe("TreePane", () => {
 
     fireEvent.mouseDown(row);
     fireEvent.click(row);
-    vi.runAllTimers();
+    act(() => {
+      vi.runAllTimers();
+    });
 
     expect(handleClearSelection).not.toHaveBeenCalled();
     expect(handleNavigate).toHaveBeenCalledWith("/Users/demo/Documents");
@@ -391,7 +419,7 @@ describe("TreePane", () => {
       "favorites-root",
     );
     expect(
-      screen.getAllByRole("button", { name: "Documents" })[0]!.closest(".tree-row"),
+      screen.getAllByRole("button", { name: "Documents" })[0]?.closest(".tree-row"),
     ).toHaveAttribute("data-tree-kind", "favorite");
   });
 
@@ -404,8 +432,12 @@ describe("TreePane", () => {
 
     expect(screen.queryByRole("button", { name: "Favorites" })).toBeNull();
     expect(screen.getAllByRole("button", { name: "Documents" })).toHaveLength(2);
-    expect(screen.getAllByRole("button", { name: "Documents" })[0]!.closest(".favorites-pane-section")).not.toBeNull();
-    expect(screen.getAllByRole("button", { name: "Documents" })[1]!.closest(".filesystem-tree-section")).not.toBeNull();
+    expect(
+      screen.getAllByRole("button", { name: "Documents" })[0]?.closest(".favorites-pane-section"),
+    ).not.toBeNull();
+    expect(
+      screen.getAllByRole("button", { name: "Documents" })[1]?.closest(".filesystem-tree-section"),
+    ).not.toBeNull();
   });
 
   it("persists divider changes for the separate favorites pane", () => {
@@ -464,8 +496,8 @@ describe("TreePane", () => {
     vi.useFakeTimers();
     renderTreePane({ selectedTreeItemId: "favorites-root" });
 
-    const row = screen.getAllByRole("button", { name: "Documents" })[1]!;
-    const treeRow = row.closest(".tree-row")!;
+    const row = getNamedButton("Documents", 1);
+    const treeRow = getTreeRow(row);
     expect(treeRow).not.toHaveClass("active");
 
     fireEvent.pointerDown(row, { button: 0 });
@@ -484,10 +516,12 @@ describe("TreePane", () => {
       onNavigate: handleNavigate,
     });
 
-    const row = screen.getAllByRole("button", { name: "Documents" })[1]!;
+    const row = getNamedButton("Documents", 1);
     fireEvent.pointerDown(row, { button: 0, metaKey: true });
     fireEvent.click(row, { metaKey: true });
-    vi.runAllTimers();
+    act(() => {
+      vi.runAllTimers();
+    });
 
     expect(handleClearSelection).toHaveBeenCalledTimes(1);
     expect(handleNavigate).not.toHaveBeenCalled();
@@ -509,14 +543,16 @@ describe("TreePane", () => {
       onNavigateFavorite: handleNavigateFavorite,
     });
 
-    const row = screen.getAllByRole("button", { name: "Documents" })[0]!;
-    const treeRow = row.closest(".tree-row")!;
+    const row = getNamedButton("Documents", 0);
+    const treeRow = getTreeRow(row);
 
     fireEvent.pointerDown(row, { button: 0 });
     expect(treeRow).toHaveClass("active");
 
     fireEvent.click(row);
-    vi.runAllTimers();
+    act(() => {
+      vi.runAllTimers();
+    });
     expect(handleNavigateFavorite).toHaveBeenCalledWith("/Users/demo/Documents");
 
     await act(async () => resolveNav(false));
@@ -555,7 +591,7 @@ describe("TreePane", () => {
     const handleItemContextMenu = vi.fn();
     renderTreePane({ onItemContextMenu: handleItemContextMenu });
 
-    fireEvent.contextMenu(screen.getAllByRole("button", { name: "Documents" })[1]!);
+    fireEvent.contextMenu(getNamedButton("Documents", 1));
 
     expect(handleItemContextMenu).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -571,7 +607,7 @@ describe("TreePane", () => {
     const handleItemContextMenu = vi.fn();
     renderTreePane({ onItemContextMenu: handleItemContextMenu });
 
-    fireEvent.contextMenu(screen.getAllByRole("button", { name: "Documents" })[0]!);
+    fireEvent.contextMenu(getNamedButton("Documents", 0));
 
     expect(handleItemContextMenu).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -592,7 +628,7 @@ describe("TreePane", () => {
       selectedTreeItemId: "favorite:/Users/demo/Documents",
     });
 
-    fireEvent.contextMenu(screen.getAllByRole("button", { name: "Documents" })[0]!);
+    fireEvent.contextMenu(getNamedButton("Documents", 0));
 
     expect(handleItemContextMenu).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -656,7 +692,9 @@ describe("TreePane", () => {
       });
 
     renderTreePane({ selectedTreeItemId: "fs:/Users/demo/Documents" });
-    vi.runAllTimers();
+    act(() => {
+      vi.runAllTimers();
+    });
 
     expect(scrollIntoViewSpy).not.toHaveBeenCalled();
 
@@ -746,7 +784,9 @@ describe("TreePane", () => {
       },
     });
 
-    vi.runAllTimers();
+    act(() => {
+      vi.runAllTimers();
+    });
     expect(scrollIntoViewSpy).not.toHaveBeenCalled();
 
     rerender(

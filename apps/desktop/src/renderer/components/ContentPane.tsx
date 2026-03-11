@@ -3,28 +3,28 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 
 import {
+  DEFAULT_DETAIL_COLUMN_VISIBILITY,
+  DEFAULT_DETAIL_COLUMN_WIDTHS,
   type DetailColumnKey,
   type DetailColumnVisibility,
   type DetailColumnWidths,
-  DEFAULT_DETAIL_COLUMN_VISIBILITY,
-  DEFAULT_DETAIL_COLUMN_WIDTHS,
   clampDetailColumnWidth,
 } from "../../shared/appPreferences";
-import { usePathSuggestions } from "../hooks/usePathSuggestions";
 import { useElementSize } from "../hooks/useElementSize";
-import { FileIcon, FolderIcon } from "../lib/fileIcons";
-import { isKeyboardOwnedFormControl } from "../lib/focusedEditTarget";
+import { usePathSuggestions } from "../hooks/usePathSuggestions";
 import {
   DETAILS_LAYOUT,
   getDetailsRowHeight,
   getDetailsTableWidth,
   getVisibleDetailColumns,
 } from "../lib/detailsLayout";
+import { FileIcon, FolderIcon } from "../lib/fileIcons";
 import {
   COMPACT_FLOW_LIST_LAYOUT,
   FLOW_LIST_LAYOUT,
   getFlowListRevealScrollLeft,
 } from "../lib/flowListLayout";
+import { isKeyboardOwnedFormControl } from "../lib/focusedEditTarget";
 import {
   formatDateTime,
   formatPermissionMode,
@@ -140,6 +140,7 @@ export function ContentPane({
   const pathbarRef = useRef<HTMLElement | null>(null);
   const pathEditorShellRef = useRef<HTMLDivElement | null>(null);
   const segmentClickTimeoutRef = useRef<number | null>(null);
+  const lastCurrentPathRef = useRef(currentPath);
   const {
     draftValue,
     displayedValue,
@@ -170,6 +171,10 @@ export function ContentPane({
   // Navigating to a new folder resets all transient editor state so previews, expanded
   // breadcrumbs, and highlighted suggestions do not leak across locations.
   useEffect(() => {
+    if (lastCurrentPathRef.current === currentPath) {
+      return;
+    }
+    lastCurrentPathRef.current = currentPath;
     if (segmentClickTimeoutRef.current !== null) {
       window.clearTimeout(segmentClickTimeoutRef.current);
       segmentClickTimeoutRef.current = null;
@@ -788,7 +793,9 @@ function FlowListView({
   // the current column while additional columns live off-screen to the right.
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || !selectionLeadPath) {
+    const effectiveViewportWidth =
+      viewportWidth > 0 ? viewportWidth : (container?.clientWidth ?? 0);
+    if (!container || !selectionLeadPath || effectiveViewportWidth <= 0) {
       return;
     }
 
@@ -799,7 +806,7 @@ function FlowListView({
 
     const nextScrollLeft = getFlowListRevealScrollLeft({
       currentScrollLeft: container.scrollLeft,
-      viewportWidth: container.clientWidth,
+      viewportWidth: effectiveViewportWidth,
       itemIndex: selectedIndex,
       rowsPerColumn,
       compact: compactListView,
@@ -1029,7 +1036,16 @@ function DetailsView({
   // Keep the lead selection visible using the same row height contract virtualization uses.
   useLayoutEffect(() => {
     const container = containerRef.current;
-    if (!container || !selectionLeadPath) {
+    const effectiveViewportWidth =
+      viewportWidth > 0 ? viewportWidth : (container?.clientWidth ?? 0);
+    const effectiveViewportHeight =
+      viewportHeight > 0 ? viewportHeight : (container?.clientHeight ?? 0);
+    if (
+      !container ||
+      !selectionLeadPath ||
+      effectiveViewportWidth <= 0 ||
+      effectiveViewportHeight <= 0
+    ) {
       return;
     }
     const selectedIndex = entries.findIndex((entry) => entry.path === selectionLeadPath);
@@ -1039,14 +1055,14 @@ function DetailsView({
     const itemTop = selectedIndex * rowHeight;
     const itemBottom = itemTop + rowHeight;
     const viewTop = container.scrollTop;
-    const viewBottom = viewTop + container.clientHeight;
+    const viewBottom = viewTop + effectiveViewportHeight;
 
     if (itemTop < viewTop) {
       container.scrollTop = itemTop;
       return;
     }
     if (itemBottom > viewBottom) {
-      container.scrollTop = itemBottom - container.clientHeight;
+      container.scrollTop = itemBottom - effectiveViewportHeight;
     }
   }, [entries, rowHeight, selectionLeadPath, viewportHeight, viewportWidth]);
 

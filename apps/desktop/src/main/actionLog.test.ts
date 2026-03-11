@@ -1,8 +1,12 @@
 import { mkdtemp, readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { createActionLogRecorder, createActionLogStore, resolveActionLogFilePath } from "./actionLog";
+import {
+  createActionLogRecorder,
+  createActionLogStore,
+  resolveActionLogFilePath,
+} from "./actionLog";
 
 describe("actionLog", () => {
   it("appends and lists entries newest first", async () => {

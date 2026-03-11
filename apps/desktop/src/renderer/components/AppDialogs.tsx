@@ -5,7 +5,15 @@ import type {
   WriteOperationProgressEvent,
 } from "@filetrail/contracts";
 
+import type { CopyPasteReviewDialogSize } from "../../shared/appPreferences";
+import type {
+  ContextMenuState,
+  CopyPasteDialogState,
+  WriteOperationCardState,
+} from "../hooks/useWriteOperations";
 import { formatSize } from "../lib/formatting";
+import type { ShortcutContext } from "../lib/shortcutPolicy";
+import type { ToastEntry } from "../lib/toasts";
 import { ActionNoticeDialog } from "./ActionNoticeDialog";
 import { CopyPasteDialog } from "./CopyPasteDialog";
 import { CopyPasteProgressCard } from "./CopyPasteProgressCard";
@@ -17,17 +25,9 @@ import {
   type ContextMenuSubmenuItem,
   ItemContextMenu,
 } from "./ItemContextMenu";
-import type { ShortcutContext } from "../lib/shortcutPolicy";
 import { LocationSheet } from "./LocationSheet";
 import { TextPromptDialog } from "./TextPromptDialog";
 import { ToastViewport } from "./ToastViewport";
-import type {
-  ContextMenuState,
-  CopyPasteDialogState,
-  WriteOperationCardState,
-} from "../hooks/useWriteOperations";
-import type { ToastEntry } from "../lib/toasts";
-import type { CopyPasteReviewDialogSize } from "../../shared/appPreferences";
 
 type CopyPasteAnalysisReport = NonNullable<IpcResponse<"copyPaste:analyzeGetUpdate">["report"]>;
 type CopyPastePolicy = Extract<IpcRequest<"copyPaste:start">, { analysisId: string }>["policy"];
@@ -285,10 +285,15 @@ export function AppDialogs({
           persistedSize={copyPasteReviewDialogSize}
           onSizeChange={onCopyPasteReviewDialogSizeChange}
           onStart={() =>
-            onExecuteCopyLikePlan(copyPasteDialogState.report, copyPasteDialogState.policy, copyPasteDialogState.action, {
-              clearClipboardOnStart: copyPasteDialogState.clearClipboardOnStart,
-              pendingTreeSelectionPath: copyPasteDialogState.pendingTreeSelectionPath ?? null,
-            })
+            onExecuteCopyLikePlan(
+              copyPasteDialogState.report,
+              copyPasteDialogState.policy,
+              copyPasteDialogState.action,
+              {
+                clearClipboardOnStart: copyPasteDialogState.clearClipboardOnStart,
+                pendingTreeSelectionPath: copyPasteDialogState.pendingTreeSelectionPath ?? null,
+              },
+            )
           }
         />
       ) : null}
@@ -329,7 +334,10 @@ export function AppDialogs({
         <CopyPasteRuntimeConflictDialog
           title="Live Conflict Detected"
           message={`${writeOperationProgressEvent.runtimeConflict.sourcePath} now conflicts with ${writeOperationProgressEvent.runtimeConflict.destinationPath}.`}
-          actions={buildRuntimeConflictActions(writeOperationProgressEvent, onResolveRuntimeConflict)}
+          actions={buildRuntimeConflictActions(
+            writeOperationProgressEvent,
+            onResolveRuntimeConflict,
+          )}
           onCancel={onCancelWriteOperation}
         />
       ) : null}
@@ -363,7 +371,11 @@ export function AppDialogs({
           }
         />
       ) : null}
-      <ToastViewport toasts={toasts} onDismiss={onDismissToast} offsetBottom={showCopyPasteProgressCard ? 272 : 16} />
+      <ToastViewport
+        toasts={toasts}
+        onDismiss={onDismissToast}
+        offsetBottom={showCopyPasteProgressCard ? 272 : 16}
+      />
     </>
   );
 }
@@ -416,10 +428,10 @@ function formatWriteOperationByteLabel(state: WriteOperationCardState): string {
     : state.stage === "analyzing"
       ? "Preparing write plan"
       : state.stage === "queued"
-      ? "Waiting to begin"
-      : state.stage === "awaiting_resolution"
-        ? "Waiting for conflict resolution"
-      : "Tracking progress";
+        ? "Waiting to begin"
+        : state.stage === "awaiting_resolution"
+          ? "Waiting for conflict resolution"
+          : "Tracking progress";
 }
 
 function getWriteOperationTitle(
@@ -470,9 +482,15 @@ function buildRuntimeConflictActions(
     ];
   }
   return [
-    { label: "Overwrite", onClick: () => onResolveRuntimeConflict(conflict.conflictId, "overwrite") },
+    {
+      label: "Overwrite",
+      onClick: () => onResolveRuntimeConflict(conflict.conflictId, "overwrite"),
+    },
     { label: "Skip", onClick: () => onResolveRuntimeConflict(conflict.conflictId, "skip") },
-    { label: "Keep Both", onClick: () => onResolveRuntimeConflict(conflict.conflictId, "keep_both") },
+    {
+      label: "Keep Both",
+      onClick: () => onResolveRuntimeConflict(conflict.conflictId, "keep_both"),
+    },
   ];
 }
 

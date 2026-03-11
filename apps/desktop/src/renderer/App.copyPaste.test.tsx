@@ -38,7 +38,7 @@ vi.mock("./components/ContentPane", () => ({
     ) => void;
     onActivateEntry: (entry: { path: string; name: string }) => void;
   }) => (
-    <div data-testid="content-pane" onClick={() => onFocusChange(true)}>
+    <div data-testid="content-pane" onPointerDown={() => onFocusChange(true)}>
       <output data-testid="content-current-path">{currentPath}</output>
       <output data-testid="content-entry-count">{entries.length}</output>
       <label>
@@ -112,9 +112,9 @@ vi.mock("./components/TreePane", () => ({
     onFocusChange: (focused: boolean) => void;
     onLeftPaneSubviewChange: (value: "favorites" | "tree") => void;
     onRerootHome: () => void;
-    onNavigate: (path: string) => Promise<boolean> | void;
-    onNavigateFavorite: (path: string) => Promise<boolean> | void;
-    onSelectFavoritesRoot?: () => Promise<boolean> | void;
+    onNavigate: (path: string) => Promise<boolean> | undefined;
+    onNavigateFavorite: (path: string) => Promise<boolean> | undefined;
+    onSelectFavoritesRoot?: () => Promise<boolean> | undefined;
     onClearSelection?: () => void;
     onItemContextMenu?: (
       item: {
@@ -303,7 +303,7 @@ vi.mock("./components/LocationSheet", () => ({
     onSubmit: (path: string) => void;
   }) =>
     open ? (
-      <dialog role="dialog" aria-label={title ?? "Location"}>
+      <dialog aria-label={title ?? "Location"}>
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -482,9 +482,17 @@ describe("App copy/paste integration", () => {
       fireEvent.doubleClick(await screen.findByRole("button", { name: "Folder" }));
     });
 
-    expect(await screen.findByTestId("content-current-path")).toHaveTextContent("/Users/demo/Folder");
-    expect(screen.getByTitle("/Users/demo/Folder/inside-a.txt")).toHaveAttribute("data-selected", "false");
-    expect(screen.getByTitle("/Users/demo/Folder/inside-b.txt")).toHaveAttribute("data-selected", "false");
+    expect(await screen.findByTestId("content-current-path")).toHaveTextContent(
+      "/Users/demo/Folder",
+    );
+    expect(screen.getByTitle("/Users/demo/Folder/inside-a.txt")).toHaveAttribute(
+      "data-selected",
+      "false",
+    );
+    expect(screen.getByTitle("/Users/demo/Folder/inside-b.txt")).toHaveAttribute(
+      "data-selected",
+      "false",
+    );
   });
 
   it("does not auto-select the first item after tree navigation opens a folder", async () => {
@@ -512,9 +520,17 @@ describe("App copy/paste integration", () => {
       fireEvent.click(await screen.findByTitle("tree:/Users/demo/Folder"));
     });
 
-    expect(await screen.findByTestId("content-current-path")).toHaveTextContent("/Users/demo/Folder");
-    expect(screen.getByTitle("/Users/demo/Folder/inside-a.txt")).toHaveAttribute("data-selected", "false");
-    expect(screen.getByTitle("/Users/demo/Folder/inside-b.txt")).toHaveAttribute("data-selected", "false");
+    expect(await screen.findByTestId("content-current-path")).toHaveTextContent(
+      "/Users/demo/Folder",
+    );
+    expect(screen.getByTitle("/Users/demo/Folder/inside-a.txt")).toHaveAttribute(
+      "data-selected",
+      "false",
+    );
+    expect(screen.getByTitle("/Users/demo/Folder/inside-b.txt")).toHaveAttribute(
+      "data-selected",
+      "false",
+    );
   });
 
   it("does not auto-select the first item after favorite navigation opens a folder", async () => {
@@ -542,9 +558,17 @@ describe("App copy/paste integration", () => {
       fireEvent.click(await screen.findByTitle("favorite:/Users/demo/Documents"));
     });
 
-    expect(await screen.findByTestId("content-current-path")).toHaveTextContent("/Users/demo/Documents");
-    expect(screen.getByTitle("/Users/demo/Documents/inside-a.txt")).toHaveAttribute("data-selected", "false");
-    expect(screen.getByTitle("/Users/demo/Documents/inside-b.txt")).toHaveAttribute("data-selected", "false");
+    expect(await screen.findByTestId("content-current-path")).toHaveTextContent(
+      "/Users/demo/Documents",
+    );
+    expect(screen.getByTitle("/Users/demo/Documents/inside-a.txt")).toHaveAttribute(
+      "data-selected",
+      "false",
+    );
+    expect(screen.getByTitle("/Users/demo/Documents/inside-b.txt")).toHaveAttribute(
+      "data-selected",
+      "false",
+    );
   });
 
   it("shows a cut toast without changing focus", async () => {
@@ -715,7 +739,9 @@ describe("App copy/paste integration", () => {
     });
 
     const copyToastViewport = await screen.findByTestId("toast-viewport");
-    expect(within(copyToastViewport).getByText("Select at least one item to copy.")).toBeInTheDocument();
+    expect(
+      within(copyToastViewport).getByText("Select at least one item to copy."),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Ready to paste")).not.toBeInTheDocument();
     expectNoFileClipboardActions(harness);
 
@@ -724,7 +750,9 @@ describe("App copy/paste integration", () => {
     });
 
     const cutToastViewport = await screen.findByTestId("toast-viewport");
-    expect(within(cutToastViewport).getByText("Select at least one item to cut.")).toBeInTheDocument();
+    expect(
+      within(cutToastViewport).getByText("Select at least one item to cut."),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Ready to move")).not.toBeInTheDocument();
     expectNoFileClipboardActions(harness);
   });
@@ -752,10 +780,12 @@ describe("App copy/paste integration", () => {
 
     expect(harness.invocations.some((call) => call.channel === "system:copyText")).toBe(false);
     expect(harness.invocations.some((call) => call.channel === "system:openPath")).toBe(false);
-    expect(harness.invocations.some((call) => call.channel === "system:openPathsWithApplication")).toBe(
+    expect(
+      harness.invocations.some((call) => call.channel === "system:openPathsWithApplication"),
+    ).toBe(false);
+    expect(harness.invocations.some((call) => call.channel === "copyPaste:analyzeStart")).toBe(
       false,
     );
-    expect(harness.invocations.some((call) => call.channel === "copyPaste:analyzeStart")).toBe(false);
     expect(screen.queryByText("Move To")).not.toBeInTheDocument();
     expect(screen.queryByText("Rename")).not.toBeInTheDocument();
     expect(screen.queryByText("Move")).not.toBeInTheDocument();
@@ -2416,9 +2446,12 @@ describe("App copy/paste integration", () => {
         screen.queryByRole("button", { name: "Paste" }) ??
         screen.queryByRole("button", { name: "Paste" });
       expect(disabledButton).not.toBeNull();
+      if (!disabledButton) {
+        throw new Error("Disabled Paste button missing.");
+      }
 
       await act(async () => {
-        fireEvent.click(disabledButton!);
+        fireEvent.click(disabledButton);
       });
 
       expect(screen.getByRole("button", { name: "Open in Terminal⌘T" })).toBeInTheDocument();
@@ -2759,10 +2792,7 @@ describe("App copy/paste integration", () => {
         },
       },
       treeChildrenByPath: {
-        "/": [
-          createTreeChild("/Users", "directory"),
-          createTreeChild("/Volumes", "directory"),
-        ],
+        "/": [createTreeChild("/Users", "directory"), createTreeChild("/Volumes", "directory")],
         "/Volumes": [createTreeChild("/Volumes/Shared", "directory")],
         "/Volumes/Shared": [createTreeChild("/Volumes/Shared/Project", "directory")],
         "/Users/demo": [
@@ -2979,9 +3009,9 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { code: "KeyC", metaKey: true, altKey: true });
     });
 
-    expect(
-      harness.invocations.find((call) => call.channel === "system:copyText")?.payload,
-    ).toEqual({ text: "/Users/demo" });
+    expect(harness.invocations.find((call) => call.channel === "system:copyText")?.payload).toEqual(
+      { text: "/Users/demo" },
+    );
   });
 
   it("blocks the Copy menu command in tree focus", async () => {
@@ -3076,9 +3106,9 @@ describe("App copy/paste integration", () => {
       harness.emitCommand({ type: "copyPath" });
     });
 
-    expect(
-      harness.invocations.find((call) => call.channel === "system:copyText")?.payload,
-    ).toEqual({ text: "/Users/demo" });
+    expect(harness.invocations.find((call) => call.channel === "system:copyText")?.payload).toEqual(
+      { text: "/Users/demo" },
+    );
   });
 
   it("keeps dangerous renderer commands blocked in tree focus", async () => {
@@ -3578,10 +3608,7 @@ describe("App copy/paste integration", () => {
       "true",
     );
     expect(screen.getByRole("button", { name: "Cut" })).toHaveAttribute("aria-disabled", "true");
-    expect(screen.getByRole("button", { name: "Paste" })).toHaveAttribute(
-      "aria-disabled",
-      "true",
-    );
+    expect(screen.getByRole("button", { name: "Paste" })).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByRole("button", { name: "Copy Path" })).toHaveAttribute(
       "aria-disabled",
       "true",
@@ -4732,9 +4759,7 @@ function createAppHarness(
     ...args.directorySnapshots,
   };
   const treeChildrenByPath: Record<string, IpcResponse<"tree:getChildren">["children"]> = {
-    "/Users/demo": [
-      createTreeChild("/Users/demo/Folder", "directory"),
-    ],
+    "/Users/demo": [createTreeChild("/Users/demo/Folder", "directory")],
     ...args.treeChildrenByPath,
   };
   const invocations: Array<{ channel: IpcChannel; payload: unknown }> = [];
@@ -4750,8 +4775,9 @@ function createAppHarness(
           resolveCopyPasteStartPromise = resolve;
         })
       : null;
-  const analysisReport =
-    args.planResponse ? toAnalysisReport(args.planResponse) : toAnalysisReport(defaultPlanResponse());
+  const analysisReport = args.planResponse
+    ? toAnalysisReport(args.planResponse)
+    : toAnalysisReport(defaultPlanResponse());
 
   const client: FiletrailClient = {
     async invoke<C extends IpcChannel>(channel: C, payload: IpcRequestInput<C>) {
@@ -4783,8 +4809,7 @@ function createAppHarness(
       if (channel === "tree:getChildren") {
         return {
           path: (payload as IpcRequestInput<"tree:getChildren">).path,
-          children:
-            treeChildrenByPath[(payload as IpcRequestInput<"tree:getChildren">).path] ?? [],
+          children: treeChildrenByPath[(payload as IpcRequestInput<"tree:getChildren">).path] ?? [],
         } satisfies IpcResponse<"tree:getChildren"> as IpcResponse<C>;
       }
       if (channel === "directory:getSnapshot") {
@@ -5183,7 +5208,11 @@ function toAnalysisReport(
       destinationPath: item.destinationPath,
       sourceKind: item.kind,
       destinationKind:
-        item.status === "conflict" ? (item.kind === "directory" ? "directory" : item.kind) : "missing",
+        item.status === "conflict"
+          ? item.kind === "directory"
+            ? "directory"
+            : item.kind
+          : "missing",
       disposition: item.status === "ready" ? "new" : item.status,
       conflictClass:
         item.status === "conflict"
@@ -5203,7 +5232,12 @@ function toAnalysisReport(
       },
       destinationFingerprint: {
         exists: item.status === "conflict",
-        kind: item.status === "conflict" ? (item.kind === "directory" ? "directory" : item.kind) : "missing",
+        kind:
+          item.status === "conflict"
+            ? item.kind === "directory"
+              ? "directory"
+              : item.kind
+            : "missing",
         size: item.status === "conflict" ? item.sizeBytes : null,
         mtimeMs: item.status === "conflict" ? 1 : null,
         mode: item.status === "conflict" ? 0o644 : null,

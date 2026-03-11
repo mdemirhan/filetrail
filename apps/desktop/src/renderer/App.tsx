@@ -10,11 +10,11 @@ import type {
 import {
   ACCENT_OPTIONS,
   DEFAULT_APP_PREFERENCES,
-  DEFAULT_TEXT_EDITOR,
   DEFAULT_TERMINAL_APPLICATION,
-  type FavoritePreference,
+  DEFAULT_TEXT_EDITOR,
   type DetailColumnVisibility,
   type DetailColumnWidths,
+  type FavoritePreference,
   NOTIFICATION_DURATION_SECONDS_OPTIONS,
   THEME_OPTIONS,
   TYPEAHEAD_DEBOUNCE_OPTIONS,
@@ -24,8 +24,8 @@ import {
   clampOpenItemLimit,
   clampZoomPercent,
 } from "../shared/appPreferences";
-import { AppDialogs } from "./components/AppDialogs";
 import { ActionLogView } from "./components/ActionLogView";
+import { AppDialogs } from "./components/AppDialogs";
 import { ExplorerWorkspace } from "./components/ExplorerWorkspace";
 import { HelpView } from "./components/HelpView";
 import { InfoRow } from "./components/InfoRow";
@@ -57,7 +57,18 @@ import {
   shouldRenderCopyPasteResultDialog,
   toDirectoryEntryFromSearchResult,
 } from "./lib/explorerAppUtils";
-import { type DirectoryEntry } from "./lib/explorerTypes";
+import type { DirectoryEntry } from "./lib/explorerTypes";
+import {
+  createFavorite,
+  createFavoriteItemId,
+  createFileSystemItemId,
+  getDefaultFavorites,
+  getFavoriteItemPath,
+  getFavoritesRootItemId,
+  getFileSystemItemPath,
+  isFavoritePath,
+  isFavoritesRootItemId,
+} from "./lib/favorites";
 import { FileIcon } from "./lib/fileIcons";
 import { useFiletrailClient } from "./lib/filetrailClient";
 import { formatDateTime, formatPermissionMode, formatSize } from "./lib/formatting";
@@ -68,17 +79,6 @@ import { resolveExplorerToolbarLayout, resolveSinglePanelLayout } from "./lib/re
 import { resolveStartupNavigation } from "./lib/startupNavigation";
 import { getThemeAppearanceDefaults } from "./lib/theme";
 import { type ToastEntry, type ToastKind, createToastEntry, enqueueToast } from "./lib/toasts";
-import {
-  createFavorite,
-  createFileSystemItemId,
-  createFavoriteItemId,
-  getFavoriteItemPath,
-  getFavoritesRootItemId,
-  getFileSystemItemPath,
-  getDefaultFavorites,
-  isFavoritePath,
-  isFavoritesRootItemId,
-} from "./lib/favorites";
 
 const logger = createRendererLogger("filetrail.renderer");
 
@@ -513,15 +513,12 @@ export function App() {
     }
     return null;
   }, [selectedTreeItemId]);
-  const clipboardSourcePaths = useMemo(
-    () => {
-      if (copyPasteClipboard.type !== "ready" || copyPasteClipboard.sourcePaths.length === 0) {
-        return [];
-      }
-      return copyPasteClipboard.sourcePaths;
-    },
-    [copyPasteClipboard],
-  );
+  const clipboardSourcePaths = useMemo(() => {
+    if (copyPasteClipboard.type !== "ready" || copyPasteClipboard.sourcePaths.length === 0) {
+      return [];
+    }
+    return copyPasteClipboard.sourcePaths;
+  }, [copyPasteClipboard]);
   const pasteDestinationPath = useMemo(
     () =>
       resolvePasteDestinationPath({
@@ -837,7 +834,14 @@ export function App() {
       mainView,
       selectedTreeTargetKind,
     }),
-    [actionNotice, copyPasteModalOpen, focusedPane, locationDialogOpen, mainView, selectedTreeTargetKind],
+    [
+      actionNotice,
+      copyPasteModalOpen,
+      focusedPane,
+      locationDialogOpen,
+      mainView,
+      selectedTreeTargetKind,
+    ],
   );
 
   useExplorerShortcuts({
@@ -1060,6 +1064,7 @@ export function App() {
     fileActivationAction,
   ]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: startup bootstrapping should run once per client/pane wiring; including callback identities would cause repeated initialization.
   useEffect(() => {
     let cancelled = false;
     void Promise.all([
@@ -1152,10 +1157,17 @@ export function App() {
             : createFileSystemItemId(startupPath),
         );
         setLeftPaneSubview(
-          preferences.favoritesPlacement === "separate" && restoredFavoritePath ? "favorites" : "tree",
+          preferences.favoritesPlacement === "separate" && restoredFavoritePath
+            ? "favorites"
+            : "tree",
         );
         if (restoredFavoritePath) {
-          await loadTreeChildren(startupRootPath, preferences.includeHidden, false, startupRootPath);
+          await loadTreeChildren(
+            startupRootPath,
+            preferences.includeHidden,
+            false,
+            startupRootPath,
+          );
         }
         void navigateTo(
           startupPath,
@@ -1212,7 +1224,7 @@ export function App() {
       return;
     }
     setRestoredPaneWidths(null);
-  }, [panes.inspectorWidth, panes.treeWidth, restoredPaneWidths]);
+  }, [panes.inspectorWidth, panes.treeWidth, restoredPaneWidths, setRestoredPaneWidths]);
 
   useEffect(() => {
     if (!themeMenuOpen) {
@@ -1239,7 +1251,7 @@ export function App() {
       window.removeEventListener("mousedown", handlePointerDown);
       window.removeEventListener("keydown", handleEscape);
     };
-  }, [themeMenuOpen]);
+  }, [setThemeMenuOpen, themeMenuOpen]);
 
   useEffect(() => {
     if (!searchPopoverOpen) {
@@ -1256,7 +1268,7 @@ export function App() {
     return () => {
       window.removeEventListener("mousedown", handlePointerDown);
     };
-  }, [searchPopoverOpen]);
+  }, [searchPopoverOpen, setSearchPopoverOpen]);
 
   const effectiveThemeColors = useMemo(() => {
     const defaults = getThemeAppearanceDefaults(theme);
@@ -1353,7 +1365,7 @@ export function App() {
       return;
     }
     void refreshActionLog();
-  }, [actionLogEnabled, mainView, refreshActionLog]);
+  }, [actionLogEnabled, mainView, refreshActionLog, setMainView]);
 
   async function addFavoriteFromSettings() {
     const pickedPath = await browseForDirectoryPath(currentPath || homePath);
@@ -1372,7 +1384,11 @@ export function App() {
     if (!pickedPath) {
       return;
     }
-    if (favorites.some((favorite, favoriteIndex) => favoriteIndex !== index && favorite.path === pickedPath)) {
+    if (
+      favorites.some(
+        (favorite, favoriteIndex) => favoriteIndex !== index && favorite.path === pickedPath,
+      )
+    ) {
       return;
     }
     setFavorites((current) =>
@@ -1390,7 +1406,12 @@ export function App() {
   function moveFavoriteInSettings(index: number, direction: "up" | "down") {
     setFavorites((current) => {
       const targetIndex = direction === "up" ? index - 1 : index + 1;
-      if (index < 0 || index >= current.length || targetIndex < 0 || targetIndex >= current.length) {
+      if (
+        index < 0 ||
+        index >= current.length ||
+        targetIndex < 0 ||
+        targetIndex >= current.length
+      ) {
         return current;
       }
       const next = [...current];
@@ -1485,7 +1506,10 @@ export function App() {
             onOpenSettings: openSettingsView,
             includeHidden,
             onToggleHidden: toggleHiddenFiles,
-            onNavigate: (path) => navigateTreeFileSystemPath(path, "push"),
+            onNavigate: async (path) => {
+              await navigateTreeFileSystemPath(path, "push");
+              return undefined;
+            },
             onNavigateFavorite: (path) =>
               navigateTo(path, "push", undefined, undefined, undefined, undefined, {
                 syncTree: false,
@@ -1494,7 +1518,10 @@ export function App() {
                 persistOnError: true,
               }),
             onClearSelection: clearTreeSelection,
-            onSelectFavoritesRoot: () => selectTreeItem(getFavoritesRootItemId(), "skip"),
+            onSelectFavoritesRoot: async () => {
+              await selectTreeItem(getFavoritesRootItemId(), "skip");
+              return undefined;
+            },
             onItemContextMenu: (item, subview, position) => {
               if (!item.path || item.kind === "favorites-root") {
                 return;
