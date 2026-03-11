@@ -531,9 +531,7 @@ export function useExplorerShortcuts(args: {
                 ? [selectedTreeTargetPath]
               : selectedPathsInViewOrder.length > 0
                 ? selectedPathsInViewOrder
-                : currentPath
-                  ? [currentPath]
-                  : [];
+                : [];
           if (pathsToCopy.length === 0) {
             return;
           }
@@ -1040,9 +1038,7 @@ export function useExplorerShortcuts(args: {
               ? [selectedTreeTargetPath]
             : selectedPathsInViewOrder.length > 0
               ? selectedPathsInViewOrder
-              : currentPath
-                ? [currentPath]
-                : [];
+              : [];
         if (pathsToCopy.length > 0) {
           void runCopyPathAction(pathsToCopy);
         }

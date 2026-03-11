@@ -19,6 +19,23 @@ export default defineConfig({
     environment: "node",
     globals: true,
     setupFiles: ["./apps/desktop/src/renderer/test/setup.ts"],
+    coverage: {
+      provider: "v8",
+      include: [
+        "packages/core/src/fs/copyPasteAnalysis.ts",
+        "packages/core/src/fs/copyPasteExecution.ts",
+        "packages/core/src/fs/copyPasteFingerprint.ts",
+        "packages/core/src/fs/copyPasteNames.ts",
+        "packages/core/src/fs/copyPastePolicy.ts",
+        "packages/core/src/fs/writeService.ts",
+      ],
+      thresholds: {
+        statements: 95,
+        branches: 95,
+        functions: 95,
+        lines: 95,
+      },
+    },
   },
   resolve: {
     alias: [

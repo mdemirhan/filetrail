@@ -163,6 +163,8 @@ export function App() {
     setFavoritesExpanded,
     favoritesInitialized,
     setFavoritesInitialized,
+    copyPasteReviewDialogSize,
+    setCopyPasteReviewDialogSize,
     terminalApp,
     setTerminalApp,
     defaultTextEditor,
@@ -713,6 +715,7 @@ export function App() {
     openMoveDialog,
     removeOpenWithApplication,
     resolveContentActionPaths,
+    resolveRuntimeConflict,
     retryFailedCopyPasteItems,
     runContextMenuAction,
     runContextSubmenuAction,
@@ -729,6 +732,7 @@ export function App() {
     submitNewFolderDialog,
     submitRenameDialog,
     toggleContentSelection,
+    updateCopyPastePolicy,
   } = useExplorerActions({
     client,
     mainView,
@@ -819,7 +823,7 @@ export function App() {
     pendingTreeSelectionPathRef,
   });
   const copyPasteModalOpen =
-    copyPasteDialogState !== null ||
+    (copyPasteDialogState !== null && copyPasteDialogState.type !== "analysis") ||
     showCopyPasteResultDialog ||
     renameDialogState !== null ||
     newFolderDialogState !== null ||
@@ -993,6 +997,7 @@ export function App() {
         favoritesPaneHeight,
         favoritesExpanded,
         favoritesInitialized,
+        copyPasteReviewDialogSize,
       },
     });
   }, [
@@ -1040,6 +1045,7 @@ export function App() {
     favoritesPaneHeight,
     favoritesExpanded,
     favoritesInitialized,
+    copyPasteReviewDialogSize,
     terminalApp,
     defaultTextEditor,
     theme,
@@ -1112,6 +1118,7 @@ export function App() {
         setFavoritesPaneHeight(preferences.favoritesPaneHeight);
         setFavoritesExpanded(preferences.favoritesExpanded);
         setFavoritesInitialized(preferences.favoritesInitialized);
+        setCopyPasteReviewDialogSize(preferences.copyPasteReviewDialogSize);
         setTerminalApp(preferences.terminalApp);
         setDefaultTextEditor(preferences.defaultTextEditor);
         setOpenWithApplications(preferences.openWithApplications);
@@ -1881,9 +1888,10 @@ export function App() {
         onCloseNewFolderDialog={() => setNewFolderDialogState(null)}
         onSubmitNewFolderDialog={(value) => void submitNewFolderDialog(value)}
         copyPasteDialogState={copyPasteDialogState}
-        onExecuteCopyLikePlan={(plan, action, options) => {
-          void executeCopyLikePlan(plan, action, options);
+        onExecuteCopyLikePlan={(report, policy, action, options) => {
+          void executeCopyLikePlan(report, policy, action, options);
         }}
+        onUpdateCopyPastePolicy={updateCopyPastePolicy}
         onCloseCopyPasteDialog={dismissCopyPasteDialog}
         onConfirmTrashDialog={(paths) => {
           void startTrashPaths(paths);
@@ -1895,11 +1903,16 @@ export function App() {
         }}
         showCopyPasteResultDialog={showCopyPasteResultDialog}
         writeOperationProgressEvent={writeOperationProgressEvent}
+        onResolveRuntimeConflict={(conflictId, resolution) => {
+          void resolveRuntimeConflict(conflictId, resolution);
+        }}
         onRetryFailedCopyPasteItems={(event) => {
           void retryFailedCopyPasteItems(event);
         }}
         toasts={toasts}
         onDismissToast={dismissToast}
+        copyPasteReviewDialogSize={copyPasteReviewDialogSize}
+        onCopyPasteReviewDialogSizeChange={setCopyPasteReviewDialogSize}
       />
     </main>
   );

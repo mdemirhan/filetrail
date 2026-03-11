@@ -105,7 +105,11 @@ export function getNextSelectionIndex(args: {
     return itemCount - 1;
   }
 
-  const safeIndex = currentIndex < 0 ? 0 : currentIndex;
+  if (currentIndex < 0) {
+    return 0;
+  }
+
+  const safeIndex = currentIndex;
   const step = Math.max(1, columns);
 
   if (viewMode === "details") {

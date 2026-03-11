@@ -790,17 +790,11 @@ export function useExplorerNavigationController(args: {
             anchorPath: selectedPastePaths[0] ?? null,
             leadPath: selectedPastePaths.at(-1) ?? null,
           }
-        : entries[0]
-          ? {
-              paths: [entries[0].path],
-              anchorPath: entries[0].path,
-              leadPath: entries[0].path,
-            }
-          : {
-              paths: [],
-              anchorPath: null,
-              leadPath: null,
-            },
+        : {
+            paths: [],
+            anchorPath: null,
+            leadPath: null,
+          },
       entries,
     );
     setGetInfoItem(null);

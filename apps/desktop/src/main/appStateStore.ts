@@ -443,6 +443,21 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
       typeof record.favoritesInitialized === "boolean"
         ? record.favoritesInitialized
         : currentDefaults.favoritesInitialized,
+    copyPasteReviewDialogSize:
+      isPlainObject(record.copyPasteReviewDialogSize) &&
+      typeof record.copyPasteReviewDialogSize.width === "number" &&
+      Number.isFinite(record.copyPasteReviewDialogSize.width) &&
+      typeof record.copyPasteReviewDialogSize.height === "number" &&
+      Number.isFinite(record.copyPasteReviewDialogSize.height) &&
+      record.copyPasteReviewDialogSize.width >= 520 &&
+      record.copyPasteReviewDialogSize.width <= 3200 &&
+      record.copyPasteReviewDialogSize.height >= 420 &&
+      record.copyPasteReviewDialogSize.height <= 2400
+        ? {
+            width: Math.round(record.copyPasteReviewDialogSize.width),
+            height: Math.round(record.copyPasteReviewDialogSize.height),
+          }
+        : currentDefaults.copyPasteReviewDialogSize,
     singleClickExpandTreeItems:
       typeof record.singleClickExpandTreeItems === "boolean"
         ? record.singleClickExpandTreeItems

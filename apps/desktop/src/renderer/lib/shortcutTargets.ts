@@ -40,7 +40,7 @@ function resolveSelectionPaths(input: {
     if (input.selectedTreePath) {
       return [input.selectedTreePath];
     }
-    return input.currentPath ? [input.currentPath] : [];
+    return [];
   }
 
   return [...input.selectedContentPaths];

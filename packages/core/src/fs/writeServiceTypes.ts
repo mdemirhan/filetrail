@@ -18,6 +18,7 @@ export type CopyPasteConflictResolution = "error" | "skip";
 export type CopyPasteOperationStatus =
   | "queued"
   | "running"
+  | "awaiting_resolution"
   | "completed"
   | "failed"
   | "cancelled"
@@ -30,6 +31,14 @@ export type CopyPastePlanIssueCode =
   | "same_path"
   | "parent_into_child";
 export type CopyPastePlanWarningCode = "large_batch" | "cut_requires_delete";
+export type CopyPasteAnalysisJobStatus = "queued" | "analyzing" | "complete" | "cancelled" | "error";
+export type CopyPastePolicyFileAction = "overwrite" | "skip" | "keep_both";
+export type CopyPastePolicyDirectoryAction = "merge" | "skip" | "keep_both";
+export type CopyPastePolicyMismatchAction = "overwrite" | "skip" | "keep_both";
+export type CopyPasteRuntimeResolutionAction = "overwrite" | "skip" | "keep_both" | "merge";
+export type CopyPasteNodeKind = "missing" | "file" | "directory" | "symlink";
+export type CopyPasteConflictClass = "file_conflict" | "directory_conflict" | "type_mismatch";
+export type CopyPasteAnalysisNodeDisposition = "new" | "conflict" | "blocked";
 
 export type WriteServiceStats = {
   isDirectory: () => boolean;
@@ -37,6 +46,9 @@ export type WriteServiceStats = {
   isSymbolicLink: () => boolean;
   size: number;
   mode: number;
+  mtimeMs?: number;
+  ino?: number;
+  dev?: number;
 };
 
 export type WriteServiceFileSystem = {
@@ -61,6 +73,105 @@ export type CopyPasteRequest = {
   sourcePaths: string[];
   destinationDirectoryPath: string;
   conflictResolution?: CopyPasteConflictResolution;
+};
+
+export type CopyPastePolicy = {
+  file: CopyPastePolicyFileAction;
+  directory: CopyPastePolicyDirectoryAction;
+  mismatch: CopyPastePolicyMismatchAction;
+};
+
+export type RequiredCopyPasteRequest = Required<CopyPasteRequest>;
+
+export type CopyPasteAnalysisRequest = {
+  mode: CopyPasteMode;
+  sourcePaths: string[];
+  destinationDirectoryPath: string;
+};
+
+export type RequiredCopyPasteAnalysisRequest = {
+  mode: CopyPasteMode;
+  sourcePaths: string[];
+  destinationDirectoryPath: string;
+};
+
+export type CopyPasteExecutionRequest = {
+  analysisId: string;
+  policy: CopyPastePolicy;
+};
+
+export type NodeFingerprint = {
+  exists: boolean;
+  kind: CopyPasteNodeKind;
+  size: number | null;
+  mtimeMs: number | null;
+  mode: number | null;
+  ino: number | null;
+  dev: number | null;
+  symlinkTarget: string | null;
+};
+
+export type CopyPasteAnalysisIssue = {
+  code: CopyPastePlanIssueCode;
+  message: string;
+  sourcePath: string | null;
+  destinationPath: string | null;
+};
+
+export type CopyPasteAnalysisWarning = {
+  code: CopyPastePlanWarningCode;
+  message: string;
+};
+
+export type CopyPasteAnalysisNode = {
+  id: string;
+  sourcePath: string;
+  destinationPath: string;
+  sourceKind: Exclude<CopyPasteNodeKind, "missing">;
+  destinationKind: CopyPasteNodeKind;
+  disposition: CopyPasteAnalysisNodeDisposition;
+  conflictClass: CopyPasteConflictClass | null;
+  sourceFingerprint: NodeFingerprint;
+  destinationFingerprint: NodeFingerprint;
+  children: CopyPasteAnalysisNode[];
+  issueCode: CopyPastePlanIssueCode | null;
+  issueMessage: string | null;
+  totalNodeCount: number;
+  conflictNodeCount: number;
+};
+
+export type CopyPasteAnalysisSummary = {
+  topLevelItemCount: number;
+  totalNodeCount: number;
+  totalBytes: number | null;
+  fileConflictCount: number;
+  directoryConflictCount: number;
+  mismatchConflictCount: number;
+  blockedCount: number;
+};
+
+export type CopyPasteAnalysisReport = {
+  analysisId: string;
+  mode: CopyPasteMode;
+  sourcePaths: string[];
+  destinationDirectoryPath: string;
+  nodes: CopyPasteAnalysisNode[];
+  issues: CopyPasteAnalysisIssue[];
+  warnings: CopyPasteAnalysisWarning[];
+  summary: CopyPasteAnalysisSummary;
+};
+
+export type CopyPasteAnalysisStartHandle = {
+  analysisId: string;
+  status: Extract<CopyPasteAnalysisJobStatus, "queued" | "analyzing">;
+};
+
+export type CopyPasteAnalysisUpdate = {
+  analysisId: string;
+  status: CopyPasteAnalysisJobStatus;
+  done: boolean;
+  report: CopyPasteAnalysisReport | null;
+  error: string | null;
 };
 
 export type CopyPastePlanItem = {
@@ -111,6 +222,26 @@ export type CopyPastePlan = {
   canExecute: boolean;
 };
 
+export type CopyPasteRuntimeConflict = {
+  conflictId: string;
+  analysisId: string;
+  sourcePath: string;
+  destinationPath: string;
+  sourceKind: Exclude<CopyPasteNodeKind, "missing">;
+  destinationKind: CopyPasteNodeKind;
+  conflictClass: CopyPasteConflictClass;
+  reason:
+    | "destination_changed"
+    | "destination_created"
+    | "destination_deleted"
+    | "source_changed"
+    | "source_deleted";
+  sourceFingerprint: NodeFingerprint;
+  destinationFingerprint: NodeFingerprint;
+  currentSourceFingerprint: NodeFingerprint;
+  currentDestinationFingerprint: NodeFingerprint;
+};
+
 export type CopyPasteItemResult = {
   sourcePath: string;
   destinationPath: string;
@@ -121,7 +252,7 @@ export type CopyPasteItemResult = {
 export type CopyPasteOperationResult = {
   operationId: string;
   mode: CopyPasteMode;
-  status: CopyPasteOperationStatus;
+  status: Exclude<CopyPasteOperationStatus, "queued" | "running" | "awaiting_resolution">;
   destinationDirectoryPath: string;
   startedAt: string;
   finishedAt: string;
@@ -141,6 +272,7 @@ export type CopyPasteOperationResult = {
 
 export type CopyPasteProgressEvent = {
   operationId: string;
+  analysisId?: string | null;
   mode: CopyPasteMode;
   status: CopyPasteOperationStatus;
   completedItemCount: number;
@@ -149,6 +281,7 @@ export type CopyPasteProgressEvent = {
   totalBytes: number | null;
   currentSourcePath: string | null;
   currentDestinationPath: string | null;
+  runtimeConflict?: CopyPasteRuntimeConflict | null;
   result: CopyPasteOperationResult | null;
 };
 
@@ -158,16 +291,16 @@ export type CopyPasteOperationHandle = {
 };
 
 export const WRITE_OPERATION_BUSY_ERROR = "Another write operation is already running.";
+export const ANALYSIS_BUSY_ERROR = "Another copy/paste analysis is already running.";
 
 export type WriteServiceDependencies = {
   fileSystem?: WriteServiceFileSystem;
   now?: () => Date;
   createOperationId?: () => string;
+  createAnalysisId?: () => string;
   largeBatchItemThreshold?: number;
   largeBatchByteThreshold?: number;
 };
-
-export type RequiredCopyPasteRequest = Required<CopyPasteRequest>;
 
 export type PlannedTopLevelItem = CopyPastePlanItem & {
   sourceRealPath: string | null;
@@ -212,6 +345,12 @@ export type InternalCopyPastePlan = {
   warnings: CopyPastePlanWarning[];
   totalItemCount: number;
   totalBytes: number | null;
+};
+
+export const DEFAULT_COPY_PASTE_POLICY: CopyPastePolicy = {
+  file: "skip",
+  directory: "skip",
+  mismatch: "skip",
 };
 
 // Default implementation using node:fs. In Electron, callers should provide an

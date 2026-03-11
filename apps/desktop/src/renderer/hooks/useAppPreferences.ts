@@ -6,6 +6,7 @@ import {
   DEFAULT_DETAIL_COLUMN_WIDTHS,
   type AccentMode,
   type ApplicationSelection,
+  type CopyPasteReviewDialogSize,
   type DetailColumnVisibility,
   type DetailColumnWidths,
   type ExplorerViewMode,
@@ -106,6 +107,8 @@ export function useAppPreferences() {
   const [favoritesInitialized, setFavoritesInitialized] = useState(
     DEFAULT_APP_PREFERENCES.favoritesInitialized,
   );
+  const [copyPasteReviewDialogSize, setCopyPasteReviewDialogSize] =
+    useState<CopyPasteReviewDialogSize | null>(DEFAULT_APP_PREFERENCES.copyPasteReviewDialogSize);
   const [terminalApp, setTerminalApp] = useState<ApplicationSelection | null>(
     DEFAULT_APP_PREFERENCES.terminalApp,
   );
@@ -237,6 +240,8 @@ export function useAppPreferences() {
     setFavoritesExpanded,
     favoritesInitialized,
     setFavoritesInitialized,
+    copyPasteReviewDialogSize,
+    setCopyPasteReviewDialogSize,
     terminalApp,
     setTerminalApp,
     defaultTextEditor,

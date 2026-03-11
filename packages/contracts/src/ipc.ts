@@ -101,6 +101,10 @@ export const applicationSelectionSchema = z.object({
   appPath: z.string().trim().min(1),
   appName: z.string().trim().min(1),
 });
+export const copyPasteReviewDialogSizeSchema = z.object({
+  width: z.number().int().min(520).max(3200),
+  height: z.number().int().min(420).max(2400),
+});
 export const searchJobStatusSchema = z.enum([
   "running",
   "complete",
@@ -111,13 +115,30 @@ export const searchJobStatusSchema = z.enum([
 export const nativeEditActionSchema = z.enum(["cut", "copy", "paste", "selectAll"]);
 export const copyPasteModeSchema = z.enum(["copy", "cut"]);
 export const copyPasteConflictResolutionSchema = z.enum(["error", "skip"]);
+export const copyPasteAnalysisJobStatusSchema = z.enum([
+  "queued",
+  "analyzing",
+  "complete",
+  "cancelled",
+  "error",
+]);
 export const copyPasteOperationStatusSchema = z.enum([
   "queued",
   "running",
+  "awaiting_resolution",
   "completed",
   "failed",
   "cancelled",
   "partial",
+]);
+export const copyPastePolicyFileActionSchema = z.enum(["overwrite", "skip", "keep_both"]);
+export const copyPastePolicyDirectoryActionSchema = z.enum(["merge", "skip", "keep_both"]);
+export const copyPastePolicyMismatchActionSchema = z.enum(["overwrite", "skip", "keep_both"]);
+export const copyPasteRuntimeResolutionActionSchema = z.enum([
+  "overwrite",
+  "skip",
+  "keep_both",
+  "merge",
 ]);
 export const copyPastePlanItemStatusSchema = z.enum(["ready", "conflict", "blocked"]);
 export const copyPastePlanIssueCodeSchema = z.enum([
@@ -128,6 +149,13 @@ export const copyPastePlanIssueCodeSchema = z.enum([
   "parent_into_child",
 ]);
 export const copyPastePlanWarningCodeSchema = z.enum(["large_batch", "cut_requires_delete"]);
+export const copyPasteNodeKindSchema = z.enum(["missing", "file", "directory", "symlink"]);
+export const copyPasteConflictClassSchema = z.enum([
+  "file_conflict",
+  "directory_conflict",
+  "type_mismatch",
+]);
+export const copyPasteAnalysisNodeDispositionSchema = z.enum(["new", "conflict", "blocked"]);
 export const writeOperationActionSchema = z.enum([
   "paste",
   "move_to",
@@ -231,6 +259,21 @@ export const resolvedPathSchema = z.object({
   inputPath: z.string().min(1),
   resolvedPath: z.string().nullable(),
 });
+export const copyPastePolicySchema = z.object({
+  file: copyPastePolicyFileActionSchema,
+  directory: copyPastePolicyDirectoryActionSchema,
+  mismatch: copyPastePolicyMismatchActionSchema,
+});
+export const nodeFingerprintSchema = z.object({
+  exists: z.boolean(),
+  kind: copyPasteNodeKindSchema,
+  size: z.number().int().nonnegative().nullable(),
+  mtimeMs: z.number().nonnegative().nullable(),
+  mode: z.number().int().nonnegative().nullable(),
+  ino: z.number().int().nonnegative().nullable(),
+  dev: z.number().int().nonnegative().nullable(),
+  symlinkTarget: z.string().nullable(),
+});
 export const copyPastePlanItemSchema = z.object({
   sourcePath: z.string().min(1),
   destinationPath: z.string().min(1),
@@ -252,6 +295,79 @@ export const copyPastePlanIssueSchema = z.object({
 export const copyPastePlanWarningSchema = z.object({
   code: copyPastePlanWarningCodeSchema,
   message: z.string().min(1),
+});
+type CopyPasteAnalysisNodeContract = {
+  id: string;
+  sourcePath: string;
+  destinationPath: string;
+  sourceKind: "file" | "directory" | "symlink";
+  destinationKind: z.infer<typeof copyPasteNodeKindSchema>;
+  disposition: z.infer<typeof copyPasteAnalysisNodeDispositionSchema>;
+  conflictClass: z.infer<typeof copyPasteConflictClassSchema> | null;
+  sourceFingerprint: z.infer<typeof nodeFingerprintSchema>;
+  destinationFingerprint: z.infer<typeof nodeFingerprintSchema>;
+  children: CopyPasteAnalysisNodeContract[];
+  issueCode: z.infer<typeof copyPastePlanIssueCodeSchema> | null;
+  issueMessage: string | null;
+  totalNodeCount: number;
+  conflictNodeCount: number;
+};
+export const copyPasteAnalysisNodeSchema: z.ZodType<CopyPasteAnalysisNodeContract> = z.lazy(() =>
+  z.object({
+    id: z.string().min(1),
+    sourcePath: z.string().min(1),
+    destinationPath: z.string().min(1),
+    sourceKind: z.enum(["file", "directory", "symlink"]),
+    destinationKind: copyPasteNodeKindSchema,
+    disposition: copyPasteAnalysisNodeDispositionSchema,
+    conflictClass: copyPasteConflictClassSchema.nullable(),
+    sourceFingerprint: nodeFingerprintSchema,
+    destinationFingerprint: nodeFingerprintSchema,
+    children: z.array(copyPasteAnalysisNodeSchema),
+    issueCode: copyPastePlanIssueCodeSchema.nullable(),
+    issueMessage: z.string().nullable(),
+    totalNodeCount: z.number().int().nonnegative(),
+    conflictNodeCount: z.number().int().nonnegative(),
+  }),
+);
+export const copyPasteAnalysisSummarySchema = z.object({
+  topLevelItemCount: z.number().int().nonnegative(),
+  totalNodeCount: z.number().int().nonnegative(),
+  totalBytes: z.number().int().nonnegative().nullable(),
+  fileConflictCount: z.number().int().nonnegative(),
+  directoryConflictCount: z.number().int().nonnegative(),
+  mismatchConflictCount: z.number().int().nonnegative(),
+  blockedCount: z.number().int().nonnegative(),
+});
+export const copyPasteAnalysisReportSchema = z.object({
+  analysisId: z.string().min(1),
+  mode: copyPasteModeSchema,
+  sourcePaths: z.array(z.string().min(1)).min(1).max(500),
+  destinationDirectoryPath: z.string().min(1),
+  nodes: z.array(copyPasteAnalysisNodeSchema),
+  issues: z.array(copyPastePlanIssueSchema),
+  warnings: z.array(copyPastePlanWarningSchema),
+  summary: copyPasteAnalysisSummarySchema,
+});
+export const copyPasteRuntimeConflictSchema = z.object({
+  conflictId: z.string().min(1),
+  analysisId: z.string().min(1),
+  sourcePath: z.string().min(1),
+  destinationPath: z.string().min(1),
+  sourceKind: z.enum(["file", "directory", "symlink"]),
+  destinationKind: copyPasteNodeKindSchema,
+  conflictClass: copyPasteConflictClassSchema,
+  reason: z.enum([
+    "destination_changed",
+    "destination_created",
+    "destination_deleted",
+    "source_changed",
+    "source_deleted",
+  ]),
+  sourceFingerprint: nodeFingerprintSchema,
+  destinationFingerprint: nodeFingerprintSchema,
+  currentSourceFingerprint: nodeFingerprintSchema,
+  currentDestinationFingerprint: nodeFingerprintSchema,
 });
 export const copyPastePlanSchema = z.object({
   mode: copyPasteModeSchema,
@@ -303,6 +419,7 @@ export const copyPasteOperationResultSchema = z.object({
 export const copyPasteProgressEventSchema = z.object({
   action: writeOperationActionSchema.default("paste"),
   operationId: z.string().min(1),
+  analysisId: z.string().min(1).nullable().optional(),
   mode: copyPasteModeSchema,
   status: copyPasteOperationStatusSchema,
   completedItemCount: z.number().int().nonnegative(),
@@ -311,6 +428,7 @@ export const copyPasteProgressEventSchema = z.object({
   totalBytes: z.number().int().nonnegative().nullable(),
   currentSourcePath: z.string().nullable(),
   currentDestinationPath: z.string().nullable(),
+  runtimeConflict: copyPasteRuntimeConflictSchema.nullable().optional(),
   result: copyPasteOperationResultSchema.nullable(),
 });
 export const writeOperationItemResultSchema = z.object({
@@ -349,6 +467,7 @@ export const writeOperationProgressEventSchema = z.object({
   totalBytes: z.number().int().nonnegative().nullable(),
   currentSourcePath: z.string().nullable(),
   currentDestinationPath: z.string().nullable(),
+  runtimeConflict: copyPasteRuntimeConflictSchema.nullable().optional(),
   result: writeOperationResultSchema.nullable(),
 });
 export const actionLogItemSchema = z.object({
@@ -449,6 +568,7 @@ export const appPreferencesSchema = z.object({
   favoritesPaneHeight: z.number().int().min(96).max(2400).nullable(),
   favoritesExpanded: z.boolean(),
   favoritesInitialized: z.boolean(),
+  copyPasteReviewDialogSize: copyPasteReviewDialogSizeSchema.nullable(),
 });
 
 export const folderSizeJobStatusSchema = z.enum([
@@ -602,6 +722,40 @@ export const ipcContractSchemas = {
       ok: z.boolean(),
     }),
   },
+  "copyPaste:analyzeStart": {
+    request: z.object({
+      mode: copyPasteModeSchema,
+      sourcePaths: z.array(z.string().min(1)).min(1).max(500),
+      destinationDirectoryPath: z.string().min(1),
+      action: writeOperationActionSchema
+        .extract(["paste", "move_to", "duplicate"])
+        .default("paste"),
+    }),
+    response: z.object({
+      analysisId: z.string().min(1),
+      status: copyPasteAnalysisJobStatusSchema.extract(["queued", "analyzing"]),
+    }),
+  },
+  "copyPaste:analyzeGetUpdate": {
+    request: z.object({
+      analysisId: z.string().min(1),
+    }),
+    response: z.object({
+      analysisId: z.string().min(1),
+      status: copyPasteAnalysisJobStatusSchema,
+      done: z.boolean(),
+      report: copyPasteAnalysisReportSchema.nullable(),
+      error: z.string().nullable(),
+    }),
+  },
+  "copyPaste:analyzeCancel": {
+    request: z.object({
+      analysisId: z.string().min(1),
+    }),
+    response: z.object({
+      ok: z.boolean(),
+    }),
+  },
   "copyPaste:plan": {
     request: z.object({
       mode: copyPasteModeSchema,
@@ -615,15 +769,24 @@ export const ipcContractSchemas = {
     response: copyPastePlanSchema,
   },
   "copyPaste:start": {
-    request: z.object({
-      mode: copyPasteModeSchema,
-      sourcePaths: z.array(z.string().min(1)).min(1).max(500),
-      destinationDirectoryPath: z.string().min(1),
-      conflictResolution: copyPasteConflictResolutionSchema.default("error"),
-      action: writeOperationActionSchema
-        .extract(["paste", "move_to", "duplicate"])
-        .default("paste"),
-    }),
+    request: z.union([
+      z.object({
+        mode: copyPasteModeSchema,
+        sourcePaths: z.array(z.string().min(1)).min(1).max(500),
+        destinationDirectoryPath: z.string().min(1),
+        conflictResolution: copyPasteConflictResolutionSchema.default("error"),
+        action: writeOperationActionSchema
+          .extract(["paste", "move_to", "duplicate"])
+          .default("paste"),
+      }),
+      z.object({
+        analysisId: z.string().min(1),
+        action: writeOperationActionSchema
+          .extract(["paste", "move_to", "duplicate"])
+          .default("paste"),
+        policy: copyPastePolicySchema,
+      }),
+    ]),
     response: z.object({
       operationId: z.string().min(1),
       status: z.literal("queued"),
@@ -632,6 +795,16 @@ export const ipcContractSchemas = {
   "copyPaste:cancel": {
     request: z.object({
       operationId: z.string().min(1),
+    }),
+    response: z.object({
+      ok: z.boolean(),
+    }),
+  },
+  "copyPaste:resolveConflict": {
+    request: z.object({
+      operationId: z.string().min(1),
+      conflictId: z.string().min(1),
+      resolution: copyPasteRuntimeResolutionActionSchema,
     }),
     response: z.object({
       ok: z.boolean(),

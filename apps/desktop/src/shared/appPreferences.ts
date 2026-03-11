@@ -74,6 +74,10 @@ export type FavoritePreference = {
 
 export type FavoritesPlacement = "integrated" | "separate";
 export type FileActivationAction = "open" | "edit";
+export type CopyPasteReviewDialogSize = {
+  width: number;
+  height: number;
+};
 
 // These option lists are used for both UI rendering and validation-like lookups.
 // Keep them stable unless the corresponding persisted preference values are migrated.
@@ -267,6 +271,7 @@ export type AppPreferences = {
   favoritesPaneHeight: number | null;
   favoritesExpanded: boolean;
   favoritesInitialized: boolean;
+  copyPasteReviewDialogSize: CopyPasteReviewDialogSize | null;
 };
 
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {
@@ -324,6 +329,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   favoritesPaneHeight: null,
   favoritesExpanded: true,
   favoritesInitialized: false,
+  copyPasteReviewDialogSize: null,
 };
 
 // Pane widths are rounded before persistence so restored layouts remain stable and do not

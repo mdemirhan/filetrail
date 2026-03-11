@@ -9,7 +9,7 @@ import {
   ipcContractSchemas,
 } from "@filetrail/contracts";
 
-type IpcHandlerMap = {
+export type IpcHandlerMap = {
   [K in IpcChannel]: (
     payload: IpcRequest<K>,
     event: IpcMainInvokeEvent,
@@ -42,7 +42,11 @@ export function registerIpcHandlers(
         if (!request.success) {
           throw new IpcValidationError(`Invalid payload for ${channel}: ${request.error.message}`);
         }
-        const responsePayload = await handlers[channel](request.data as never, event);
+        const handler = handlers[channel];
+        if (!handler) {
+          throw new Error(`Missing IPC handler for ${channel}.`);
+        }
+        const responsePayload = await handler(request.data as never, event);
         const response = ipcContractSchemas[channel].response.safeParse(responsePayload);
         if (!response.success) {
           throw new IpcValidationError(

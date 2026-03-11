@@ -6,6 +6,7 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
+  useRef,
 } from "react";
 
 import type { IpcRequest, IpcResponse, WriteOperationProgressEvent } from "@filetrail/contracts";
@@ -51,7 +52,7 @@ import {
   resolveWriteOperationSelectionDirectoryPath,
   shouldRenderCopyPasteResultDialog,
 } from "../lib/explorerAppUtils";
-import type { DirectoryEntry, CopyPastePlan } from "../lib/explorerTypes";
+import type { DirectoryEntry } from "../lib/explorerTypes";
 import { parentDirectoryPath } from "../lib/explorerNavigation";
 import { useFiletrailClient } from "../lib/filetrailClient";
 import { createFavorite, getFileSystemItemPath, isFavoritePath } from "../lib/favorites";
@@ -66,6 +67,15 @@ import type {
 const logger = createRendererLogger("filetrail.renderer");
 
 const WRITE_OPERATION_BUSY_ERROR = "Another write operation is already running.";
+const ANALYSIS_POLL_INTERVAL_MS = 120;
+const DEFAULT_COPY_PASTE_POLICY: Extract<
+  IpcRequest<"copyPaste:start">,
+  { analysisId: string }
+>["policy"] = {
+  file: "skip",
+  directory: "skip",
+  mismatch: "skip",
+};
 const CONTEXT_MENU_WIDTH = 240;
 const CONTEXT_SUBMENU_WIDTH = 180;
 const CONTEXT_MENU_SAFE_MARGIN = 12;
@@ -84,6 +94,15 @@ const WRITE_LOCKED_CONTEXT_ACTION_IDS: ContextMenuActionId[] = [
 
 function createOpenWithApplicationId(): string {
   return `open-with-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+}
+
+type CopyPasteAnalysisReport = NonNullable<IpcResponse<"copyPaste:analyzeGetUpdate">["report"]>;
+type CopyPastePolicy = Extract<IpcRequest<"copyPaste:start">, { analysisId: string }>["policy"];
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
 }
 
 export function useExplorerActions(args: {
@@ -299,6 +318,7 @@ export function useExplorerActions(args: {
     pendingPasteSelectionRef,
     pendingTreeSelectionPathRef,
   } = args;
+  const activeAnalysisIdRef = useRef<string | null>(null);
 
   const isWriteOperationLocked = writeOperationCardState !== null;
   const canPasteAtResolvedDestination =
@@ -593,7 +613,11 @@ export function useExplorerActions(args: {
       if (event.operationId !== activeWriteOperationIdRef.current) {
         return;
       }
-      if (event.status === "queued" || event.status === "running") {
+      if (
+        event.status === "queued" ||
+        event.status === "running" ||
+        event.status === "awaiting_resolution"
+      ) {
         applyWriteOperationCardState({
           action: event.action,
           stage: event.status,
@@ -607,6 +631,7 @@ export function useExplorerActions(args: {
           totalBytes: event.totalBytes,
           currentSourcePath: event.currentSourcePath,
         });
+        setWriteOperationProgressEvent(event);
       }
       if (
         event.status === "completed" ||
@@ -1080,12 +1105,6 @@ export function useExplorerActions(args: {
     if (selectedPathsInViewOrderRef.current.length > 0) {
       return selectedPathsInViewOrderRef.current;
     }
-    if (selectedEntryRef.current) {
-      return [selectedEntryRef.current.path];
-    }
-    if (currentPathRef.current.length > 0) {
-      return [currentPathRef.current];
-    }
     return [];
   }
 
@@ -1112,7 +1131,8 @@ export function useExplorerActions(args: {
   }
 
   async function executeCopyLikePlan(
-    plan: CopyPastePlan,
+    report: CopyPasteAnalysisReport,
+    policy: CopyPastePolicy,
     action: "paste" | "move_to" | "duplicate",
     options: {
       pasteAttemptId?: number | null;
@@ -1136,22 +1156,20 @@ export function useExplorerActions(args: {
     applyWriteOperationCardState({
       action,
       stage: "starting",
-      targetPath: plan.destinationDirectoryPath,
+      targetPath: report.destinationDirectoryPath,
       completedItemCount: 0,
-      totalItemCount: plan.summary.totalItemCount,
+      totalItemCount: report.summary.totalNodeCount,
       completedByteCount: 0,
-      totalBytes: plan.summary.totalBytes,
-      currentSourcePath: plan.sourcePaths[0] ?? null,
+      totalBytes: report.summary.totalBytes,
+      currentSourcePath: report.sourcePaths[0] ?? null,
     });
     try {
       const response = await client.invoke(
         "copyPaste:start",
         {
-          mode: plan.mode,
-          sourcePaths: plan.sourcePaths,
-          destinationDirectoryPath: plan.destinationDirectoryPath,
-          conflictResolution: plan.conflictResolution,
+          analysisId: report.analysisId,
           action,
+          policy,
         },
       );
       if (clearClipboardOnStart) {
@@ -1167,11 +1185,12 @@ export function useExplorerActions(args: {
           action,
           status: "queued",
           completedItemCount: 0,
-          totalItemCount: plan.summary.totalItemCount,
+          totalItemCount: report.summary.totalNodeCount,
           completedByteCount: 0,
-          totalBytes: plan.summary.totalBytes,
-          currentSourcePath: plan.sourcePaths[0] ?? null,
+          totalBytes: report.summary.totalBytes,
+          currentSourcePath: report.sourcePaths[0] ?? null,
           currentDestinationPath: null,
+          runtimeConflict: null,
           result: null,
         });
         void cancelWriteOperation();
@@ -1182,26 +1201,28 @@ export function useExplorerActions(args: {
       applyWriteOperationCardState({
         action,
         stage: "queued",
-        targetPath: plan.destinationDirectoryPath,
+        targetPath: report.destinationDirectoryPath,
         completedItemCount: 0,
-        totalItemCount: plan.summary.totalItemCount,
+        totalItemCount: report.summary.totalNodeCount,
         completedByteCount: 0,
-        totalBytes: plan.summary.totalBytes,
-        currentSourcePath: plan.sourcePaths[0] ?? null,
+        totalBytes: report.summary.totalBytes,
+        currentSourcePath: report.sourcePaths[0] ?? null,
       });
       setWriteOperationProgressEvent({
         operationId: response.operationId,
         action,
         status: "queued",
         completedItemCount: 0,
-        totalItemCount: plan.summary.totalItemCount,
+        totalItemCount: report.summary.totalNodeCount,
         completedByteCount: 0,
-        totalBytes: plan.summary.totalBytes,
-        currentSourcePath: plan.sourcePaths[0] ?? null,
+        totalBytes: report.summary.totalBytes,
+        currentSourcePath: report.sourcePaths[0] ?? null,
         currentDestinationPath: null,
+        runtimeConflict: null,
         result: null,
       });
       setCopyPasteDialogState(null);
+      activeAnalysisIdRef.current = null;
       closeContextMenu();
     } catch (error) {
       rememberPendingTreeSelectionPath(null);
@@ -1224,9 +1245,97 @@ export function useExplorerActions(args: {
     }
   }
 
-  async function startPasteFromClipboard(
-    conflictResolution: IpcRequest<"copyPaste:plan">["conflictResolution"] = "error",
-  ) {
+  async function analyzeCopyLikeRequest(args: {
+    mode: "copy" | "cut";
+    sourcePaths: string[];
+    destinationDirectoryPath: string;
+    action: "paste" | "move_to" | "duplicate";
+    pasteAttemptId: number;
+    clearClipboardOnStart: boolean;
+    pendingTreeSelectionPath?: string | null;
+    onIssues?: (report: CopyPasteAnalysisReport) => void;
+  }) {
+    const handle = await client.invoke("copyPaste:analyzeStart", {
+      mode: args.mode,
+      sourcePaths: args.sourcePaths,
+      destinationDirectoryPath: args.destinationDirectoryPath,
+      action: args.action,
+    });
+    activeAnalysisIdRef.current = handle.analysisId;
+    setCopyPasteDialogState({
+      type: "analysis",
+      analysisId: handle.analysisId,
+      action: args.action,
+      clearClipboardOnStart: args.clearClipboardOnStart,
+      pendingTreeSelectionPath: args.pendingTreeSelectionPath ?? null,
+    });
+    applyWriteOperationCardState({
+      action: args.action,
+      stage: "analyzing",
+      targetPath: args.destinationDirectoryPath,
+      completedItemCount: 0,
+      totalItemCount: 0,
+      completedByteCount: 0,
+      totalBytes: null,
+      currentSourcePath: args.sourcePaths[0] ?? null,
+    });
+
+    for (;;) {
+      const pendingAttempt = pendingPasteAttemptRef.current;
+      if (!pendingAttempt || pendingAttempt.id !== args.pasteAttemptId || pendingAttempt.cancelled) {
+        if (activeAnalysisIdRef.current) {
+          await client.invoke("copyPaste:analyzeCancel", { analysisId: handle.analysisId }).catch(() => undefined);
+          activeAnalysisIdRef.current = null;
+        }
+        return;
+      }
+      const update = await client.invoke("copyPaste:analyzeGetUpdate", {
+        analysisId: handle.analysisId,
+      });
+      if (update.done) {
+        activeAnalysisIdRef.current = null;
+        if (update.status !== "complete" || !update.report) {
+          pendingPasteAttemptRef.current = null;
+          applyWriteOperationCardState(null);
+          setCopyPasteDialogState(null);
+          return;
+        }
+        if (update.report.issues.length > 0) {
+          pendingPasteAttemptRef.current = null;
+          applyWriteOperationCardState(null);
+          setCopyPasteDialogState(null);
+          args.onIssues?.(update.report);
+          return;
+        }
+        if (
+          update.report.summary.fileConflictCount > 0 ||
+          update.report.summary.directoryConflictCount > 0 ||
+          update.report.summary.mismatchConflictCount > 0
+        ) {
+          pendingPasteAttemptRef.current = null;
+          applyWriteOperationCardState(null);
+          setCopyPasteDialogState({
+            type: "review",
+            report: update.report,
+            policy: DEFAULT_COPY_PASTE_POLICY,
+            action: args.action,
+            clearClipboardOnStart: args.clearClipboardOnStart,
+            pendingTreeSelectionPath: args.pendingTreeSelectionPath ?? null,
+          });
+          return;
+        }
+        await executeCopyLikePlan(update.report, DEFAULT_COPY_PASTE_POLICY, args.action, {
+          pasteAttemptId: args.pasteAttemptId,
+          clearClipboardOnStart: args.clearClipboardOnStart,
+          pendingTreeSelectionPath: args.pendingTreeSelectionPath ?? null,
+        });
+        return;
+      }
+      await delay(ANALYSIS_POLL_INTERVAL_MS);
+    }
+  }
+
+  async function startPasteFromClipboard() {
     if (isWriteOperationInFlight()) {
       showWriteOperationBusyToast();
       return;
@@ -1241,7 +1350,7 @@ export function useExplorerActions(args: {
     const request = buildPasteRequest(
       copyPasteClipboardRef.current,
       pasteDestinationPath,
-      conflictResolution,
+      "error",
     );
     if (!request) {
       pushToast({
@@ -1258,40 +1367,18 @@ export function useExplorerActions(args: {
       currentSourcePath: request.sourcePaths[0] ?? null,
     });
     try {
-      const plan = await client.invoke(
-        "copyPaste:plan",
-        {
-          ...request,
-          action: "paste",
-        },
-      );
-      const pendingAttempt = pendingPasteAttemptRef.current;
-      if (!pendingAttempt || pendingAttempt.id !== pasteAttemptId || pendingAttempt.cancelled) {
-        return;
-      }
-      if (plan.conflicts.length > 0) {
-        pendingPasteAttemptRef.current = null;
-        applyWriteOperationCardState(null);
-        setCopyPasteDialogState({
-          type: "plan",
-          plan,
-          action: "paste",
-          clearClipboardOnStart: true,
-        });
-        return;
-      }
-      if (plan.issues.length > 0) {
-        pendingPasteAttemptRef.current = null;
-        applyWriteOperationCardState(null);
-        showModalNotice(
-          "Paste cannot continue",
-          plan.issues[0]?.message ?? "Paste cannot continue.",
-        );
-        return;
-      }
-      await executeCopyLikePlan(plan, "paste", {
+      await analyzeCopyLikeRequest({
+        mode: request.mode,
+        sourcePaths: request.sourcePaths,
+        destinationDirectoryPath: request.destinationDirectoryPath,
+        action: "paste",
         pasteAttemptId,
         clearClipboardOnStart: true,
+        onIssues: (report) =>
+          showModalNotice(
+            "Paste cannot continue",
+            report.issues[0]?.message ?? "Paste cannot continue.",
+          ),
       });
     } catch (error) {
       const pendingAttempt = pendingPasteAttemptRef.current;
@@ -1299,7 +1386,9 @@ export function useExplorerActions(args: {
         pendingPasteAttemptRef.current = null;
         return;
       }
+      activeAnalysisIdRef.current = null;
       pendingPasteAttemptRef.current = null;
+      setCopyPasteDialogState(null);
       applyWriteOperationCardState(null);
       logger.error("copy paste planning failed", error);
       showModalNotice(
@@ -1312,15 +1401,27 @@ export function useExplorerActions(args: {
   async function cancelWriteOperation() {
     const operationId = activeWriteOperationIdRef.current;
     if (!operationId) {
+      const activeAnalysisId = activeAnalysisIdRef.current;
       const pendingAttempt = pendingPasteAttemptRef.current;
-      if (!pendingAttempt) {
+      if (!pendingAttempt && !activeAnalysisId) {
         return;
       }
-      pendingPasteAttemptRef.current = {
-        ...pendingAttempt,
-        cancelled: true,
-      };
-      if (pendingAttempt.phase === "planning") {
+      if (pendingAttempt) {
+        pendingPasteAttemptRef.current = {
+          ...pendingAttempt,
+          cancelled: true,
+        };
+      }
+      if (activeAnalysisId) {
+        await client.invoke("copyPaste:analyzeCancel", { analysisId: activeAnalysisId }).catch(() => undefined);
+        activeAnalysisIdRef.current = null;
+        setCopyPasteDialogState(null);
+        applyWriteOperationCardState(null);
+        setWriteOperationProgressEvent(null);
+        pendingPasteAttemptRef.current = null;
+        return;
+      }
+      if (pendingAttempt?.phase === "planning") {
         pendingPasteAttemptRef.current = null;
         applyWriteOperationCardState(null);
         setWriteOperationProgressEvent(null);
@@ -1367,43 +1468,18 @@ export function useExplorerActions(args: {
     setWriteOperationProgressEvent(null);
     setCopyPasteDialogState(null);
     try {
-      const plan = await client.invoke(
-        "copyPaste:plan",
-        {
-          mode: event.action === "move_to" ? "cut" : "copy",
-          sourcePaths: failedSourcePaths,
-          destinationDirectoryPath: result.targetPath ?? currentPathRef.current,
-          conflictResolution: "error",
-          action: event.action === "move_to" ? "move_to" : event.action,
-        },
-      );
-      if (plan.conflicts.length > 0) {
-        pendingPasteAttemptRef.current = null;
-        applyWriteOperationCardState(null);
-        setCopyPasteDialogState({
-          type: "plan",
-          plan,
-          action: event.action === "move_to" ? "move_to" : "duplicate",
-          clearClipboardOnStart: false,
-        });
-        return;
-      }
-      if (plan.issues.length > 0) {
-        pendingPasteAttemptRef.current = null;
-        applyWriteOperationCardState(null);
-        showModalNotice(
-          "Paste cannot continue",
-          plan.issues[0]?.message ?? "Paste cannot continue.",
-        );
-        return;
-      }
-      const pendingAttempt = pendingPasteAttemptRef.current;
-      if (!pendingAttempt || pendingAttempt.id !== pasteAttemptId || pendingAttempt.cancelled) {
-        return;
-      }
-      await executeCopyLikePlan(plan, event.action === "move_to" ? "move_to" : "duplicate", {
+      await analyzeCopyLikeRequest({
+        mode: event.action === "move_to" ? "cut" : "copy",
+        sourcePaths: failedSourcePaths,
+        destinationDirectoryPath: result.targetPath ?? currentPathRef.current,
+        action: event.action,
         pasteAttemptId,
         clearClipboardOnStart: false,
+        onIssues: (report) =>
+          showModalNotice(
+            "Paste cannot continue",
+            report.issues[0]?.message ?? "Paste cannot continue.",
+          ),
       });
     } catch (error) {
       const pendingAttempt = pendingPasteAttemptRef.current;
@@ -1411,7 +1487,9 @@ export function useExplorerActions(args: {
         pendingPasteAttemptRef.current = null;
         return;
       }
+      activeAnalysisIdRef.current = null;
       pendingPasteAttemptRef.current = null;
+      setCopyPasteDialogState(null);
       applyWriteOperationCardState(null);
       logger.error("copy paste retry planning failed", error);
       showModalNotice(
@@ -1425,6 +1503,28 @@ export function useExplorerActions(args: {
     setCopyPasteDialogState(null);
     setWriteOperationProgressEvent(null);
     activeWriteOperationIdRef.current = null;
+    activeAnalysisIdRef.current = null;
+  }
+
+  function updateCopyPastePolicy(policy: CopyPastePolicy) {
+    setCopyPasteDialogState((current) =>
+      current && current.type === "review" ? { ...current, policy } : current,
+    );
+  }
+
+  async function resolveRuntimeConflict(
+    conflictId: string,
+    resolution: "overwrite" | "skip" | "keep_both" | "merge",
+  ) {
+    const operationId = activeWriteOperationIdRef.current;
+    if (!operationId) {
+      return;
+    }
+    await client.invoke("copyPaste:resolveConflict", {
+      operationId,
+      conflictId,
+      resolution,
+    });
   }
 
   function handleCopyPasteDialogEscape() {
@@ -1443,7 +1543,8 @@ export function useExplorerActions(args: {
     if (writeOperationProgressEvent) {
       if (
         writeOperationProgressEvent.status === "running" ||
-        writeOperationProgressEvent.status === "queued"
+        writeOperationProgressEvent.status === "queued" ||
+        writeOperationProgressEvent.status === "awaiting_resolution"
       ) {
         void cancelWriteOperation();
         return;
@@ -2008,40 +2109,25 @@ export function useExplorerActions(args: {
       currentSourcePath: paths[0] ?? null,
     });
     try {
-      const plan = await client.invoke(
-        "copyPaste:plan",
-        {
-          mode: "copy",
-          sourcePaths: paths,
-          destinationDirectoryPath,
-          conflictResolution: "error",
-          action: "duplicate",
-        },
-      );
-      const pendingAttempt = pendingPasteAttemptRef.current;
-      if (!pendingAttempt || pendingAttempt.id !== pasteAttemptId || pendingAttempt.cancelled) {
-        return;
-      }
-      if (plan.issues.length > 0) {
-        pendingPasteAttemptRef.current = null;
-        applyWriteOperationCardState(null);
-        showModalNotice(
-          "Duplicate cannot continue",
-          plan.issues[0]?.message ?? "Duplicate cannot continue.",
-        );
-        return;
-      }
-      const pendingTreeSelectionPath = options.selectInTreeOnSuccess
-        ? resolvePlannedTreeSelectionPath(plan)
-        : null;
-      await executeCopyLikePlan(plan, "duplicate", {
+      await analyzeCopyLikeRequest({
+        mode: "copy",
+        sourcePaths: paths,
+        destinationDirectoryPath,
+        action: "duplicate",
         pasteAttemptId,
         clearClipboardOnStart: false,
-        pendingTreeSelectionPath,
+        pendingTreeSelectionPath: options.selectInTreeOnSuccess ? destinationDirectoryPath : null,
+        onIssues: (report) =>
+          showModalNotice(
+            "Duplicate cannot continue",
+            report.issues[0]?.message ?? "Duplicate cannot continue.",
+          ),
       });
       closeContextMenu();
     } catch (error) {
+      activeAnalysisIdRef.current = null;
       pendingPasteAttemptRef.current = null;
+      setCopyPasteDialogState(null);
       applyWriteOperationCardState(null);
       logger.error("duplicate planning failed", error);
       showModalNotice(
@@ -2087,52 +2173,27 @@ export function useExplorerActions(args: {
       currentSourcePath: moveDialogState.sourcePaths[0] ?? null,
     });
     try {
-      const plan = await client.invoke(
-        "copyPaste:plan",
-        {
-          mode: "cut",
-          sourcePaths: moveDialogState.sourcePaths,
-          destinationDirectoryPath,
-          conflictResolution: "error",
-          action: "move_to",
-        },
-      );
-      const pendingAttempt = pendingPasteAttemptRef.current;
-      if (!pendingAttempt || pendingAttempt.id !== pasteAttemptId || pendingAttempt.cancelled) {
-        return;
-      }
-      if (plan.conflicts.length > 0) {
-        pendingPasteAttemptRef.current = null;
-        applyWriteOperationCardState(null);
-        setMoveDialogState(null);
-        setCopyPasteDialogState({
-          type: "plan",
-          plan,
-          action: "move_to",
-          clearClipboardOnStart: false,
-        });
-        return;
-      }
-      if (plan.issues.length > 0) {
-        pendingPasteAttemptRef.current = null;
-        applyWriteOperationCardState(null);
-        setMoveDialogState((current) =>
-          current
-            ? {
-                ...current,
-                submitting: false,
-                error: plan.issues[0]?.message ?? "Move cannot continue.",
-              }
-            : current,
-        );
-        return;
-      }
-      setMoveDialogState(null);
-      await executeCopyLikePlan(plan, "move_to", {
+      await analyzeCopyLikeRequest({
+        mode: "cut",
+        sourcePaths: moveDialogState.sourcePaths,
+        destinationDirectoryPath,
+        action: "move_to",
         pasteAttemptId,
         clearClipboardOnStart: false,
+        onIssues: (report) =>
+          setMoveDialogState((current) =>
+            current
+              ? {
+                  ...current,
+                  submitting: false,
+                  error: report.issues[0]?.message ?? "Move cannot continue.",
+                }
+              : current,
+          ),
       });
+      setMoveDialogState(null);
     } catch (error) {
+      activeAnalysisIdRef.current = null;
       pendingPasteAttemptRef.current = null;
       applyWriteOperationCardState(null);
       logger.error("move planning failed", error);
@@ -2235,15 +2296,6 @@ export function useExplorerActions(args: {
 
   function rememberPendingTreeSelectionPath(path: string | null) {
     pendingTreeSelectionPathRef.current = path;
-  }
-
-  function resolvePlannedTreeSelectionPath(plan: CopyPastePlan): string | null {
-    const sourcePath = plan.sourcePaths[0];
-    if (!sourcePath) {
-      return null;
-    }
-    const targetItem = plan.items.find((item) => item.sourcePath === sourcePath);
-    return targetItem?.destinationPath ?? null;
   }
 
   function resolveCompletedTreeSelectionPath(event: WriteOperationProgressEvent): string | null {
@@ -2418,6 +2470,7 @@ export function useExplorerActions(args: {
     removeOpenWithApplication,
     resolveContentActionPaths,
     retryFailedCopyPasteItems,
+    resolveRuntimeConflict,
     runContextMenuAction,
     runContextSubmenuAction,
     runCopyClipboardAction,
@@ -2436,6 +2489,7 @@ export function useExplorerActions(args: {
     syncContentSelectionRefs,
     toggleContentSelection,
     extendContentSelectionToPath,
+    updateCopyPastePolicy,
     activateContentEntry,
     activateContentPaths,
     addOpenWithApplication,

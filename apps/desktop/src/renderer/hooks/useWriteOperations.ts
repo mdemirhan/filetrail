@@ -31,11 +31,26 @@ type ContextMenuState = {
   folderExpansionLabel: "Expand" | "Collapse" | null;
 };
 
-type CopyPastePlan = IpcResponse<"copyPaste:plan">;
+type CopyPasteAnalysisReport = NonNullable<IpcResponse<"copyPaste:analyzeGetUpdate">["report"]>;
+type CopyPastePolicy =
+  | {
+      file: "overwrite" | "skip" | "keep_both";
+      directory: "merge" | "skip" | "keep_both";
+      mismatch: "overwrite" | "skip" | "keep_both";
+    }
+  | null;
 type CopyPasteDialogState =
   | {
-      type: "plan";
-      plan: CopyPastePlan;
+      type: "analysis";
+      analysisId: string;
+      action: "paste" | "move_to" | "duplicate";
+      clearClipboardOnStart: boolean;
+      pendingTreeSelectionPath?: string | null;
+    }
+  | {
+      type: "review";
+      report: CopyPasteAnalysisReport;
+      policy: NonNullable<CopyPastePolicy>;
       action: "paste" | "move_to" | "duplicate";
       clearClipboardOnStart: boolean;
       pendingTreeSelectionPath?: string | null;
@@ -49,7 +64,7 @@ type CopyPasteDialogState =
 
 type WriteOperationCardState = {
   action: WriteOperationAction;
-  stage: "starting" | "queued" | "running";
+  stage: "starting" | "queued" | "running" | "analyzing" | "awaiting_resolution";
   targetPath: string | null;
   completedItemCount: number;
   totalItemCount: number;

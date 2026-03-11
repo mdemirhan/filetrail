@@ -143,6 +143,7 @@ describe("ipc contracts", () => {
           favoritesPaneHeight: null,
           favoritesExpanded: true,
           favoritesInitialized: false,
+          copyPasteReviewDialogSize: null,
         },
       }),
     ).toEqual({
@@ -229,6 +230,7 @@ describe("ipc contracts", () => {
         favoritesPaneHeight: null,
         favoritesExpanded: true,
         favoritesInitialized: false,
+        copyPasteReviewDialogSize: null,
       },
     });
 

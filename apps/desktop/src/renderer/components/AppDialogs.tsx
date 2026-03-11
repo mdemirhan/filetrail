@@ -1,4 +1,5 @@
 import type {
+  IpcRequest,
   IpcResponse,
   WriteOperationAction,
   WriteOperationProgressEvent,
@@ -8,6 +9,8 @@ import { formatSize } from "../lib/formatting";
 import { ActionNoticeDialog } from "./ActionNoticeDialog";
 import { CopyPasteDialog } from "./CopyPasteDialog";
 import { CopyPasteProgressCard } from "./CopyPasteProgressCard";
+import { CopyPasteReviewDialog } from "./CopyPasteReviewDialog";
+import { CopyPasteRuntimeConflictDialog } from "./CopyPasteRuntimeConflictDialog";
 import {
   type ContextMenuActionId,
   type ContextMenuSubmenuAction,
@@ -24,8 +27,10 @@ import type {
   WriteOperationCardState,
 } from "../hooks/useWriteOperations";
 import type { ToastEntry } from "../lib/toasts";
+import type { CopyPasteReviewDialogSize } from "../../shared/appPreferences";
 
-type CopyPastePlan = IpcResponse<"copyPaste:plan">;
+type CopyPasteAnalysisReport = NonNullable<IpcResponse<"copyPaste:analyzeGetUpdate">["report"]>;
+type CopyPastePolicy = Extract<IpcRequest<"copyPaste:start">, { analysisId: string }>["policy"];
 
 function resolveContextMenuShortcutContext(
   shortcutContext: ShortcutContext,
@@ -82,6 +87,7 @@ export function AppDialogs({
   onSubmitNewFolderDialog,
   copyPasteDialogState,
   onExecuteCopyLikePlan,
+  onUpdateCopyPastePolicy,
   onCloseCopyPasteDialog,
   onConfirmTrashDialog,
   showCopyPasteProgressCard,
@@ -89,9 +95,12 @@ export function AppDialogs({
   onCancelWriteOperation,
   showCopyPasteResultDialog,
   writeOperationProgressEvent,
+  onResolveRuntimeConflict,
   onRetryFailedCopyPasteItems,
   toasts,
   onDismissToast,
+  copyPasteReviewDialogSize,
+  onCopyPasteReviewDialogSizeChange,
 }: {
   locationSheetOpen: boolean;
   currentPath: string;
@@ -136,10 +145,12 @@ export function AppDialogs({
   onSubmitNewFolderDialog: (value: string) => void;
   copyPasteDialogState: CopyPasteDialogState;
   onExecuteCopyLikePlan: (
-    plan: CopyPastePlan,
+    report: CopyPasteAnalysisReport,
+    policy: CopyPastePolicy,
     action: "paste" | "move_to" | "duplicate",
     options: { clearClipboardOnStart: boolean; pendingTreeSelectionPath?: string | null },
   ) => void;
+  onUpdateCopyPastePolicy: (policy: CopyPastePolicy) => void;
   onCloseCopyPasteDialog: () => void;
   onConfirmTrashDialog: (paths: string[]) => void;
   showCopyPasteProgressCard: boolean;
@@ -147,9 +158,15 @@ export function AppDialogs({
   onCancelWriteOperation: () => void;
   showCopyPasteResultDialog: boolean;
   writeOperationProgressEvent: WriteOperationProgressEvent | null;
+  onResolveRuntimeConflict: (
+    conflictId: string,
+    resolution: "overwrite" | "skip" | "keep_both" | "merge",
+  ) => void;
   onRetryFailedCopyPasteItems: (event: WriteOperationProgressEvent) => void;
   toasts: ToastEntry[];
   onDismissToast: (id: string) => void;
+  copyPasteReviewDialogSize: CopyPasteReviewDialogSize | null;
+  onCopyPasteReviewDialogSizeChange: (size: CopyPasteReviewDialogSize | null) => void;
 }) {
   const contextMenuShortcutContext = resolveContextMenuShortcutContext(
     shortcutContext,
@@ -236,8 +253,24 @@ export function AppDialogs({
         onClose={onCloseNewFolderDialog}
         onSubmit={(value) => onSubmitNewFolderDialog(value)}
       />
-      {copyPasteDialogState?.type === "plan" ? (
+      {copyPasteDialogState?.type === "analysis" ? (
         <CopyPasteDialog
+          title={
+            copyPasteDialogState.action === "move_to"
+              ? "Analyzing Move"
+              : copyPasteDialogState.action === "duplicate"
+                ? "Analyzing Duplicate"
+                : "Analyzing Paste"
+          }
+          message="Scanning the destination and building a recursive conflict report."
+          secondaryAction={{
+            label: "Cancel Analysis",
+            onClick: onCloseCopyPasteDialog,
+          }}
+        />
+      ) : null}
+      {copyPasteDialogState?.type === "review" ? (
+        <CopyPasteReviewDialog
           title={
             copyPasteDialogState.action === "move_to"
               ? "Move Requires Review"
@@ -245,33 +278,18 @@ export function AppDialogs({
                 ? "Duplicate Requires Review"
                 : "Paste Requires Review"
           }
-          message={
-            copyPasteDialogState.action === "move_to"
-              ? "Some destination items already exist. You can skip those conflicts or cancel the move."
-              : "Some destination items already exist. You can skip those conflicts or cancel."
+          report={copyPasteDialogState.report}
+          policy={copyPasteDialogState.policy}
+          onPolicyChange={onUpdateCopyPastePolicy}
+          onClose={onCloseCopyPasteDialog}
+          persistedSize={copyPasteReviewDialogSize}
+          onSizeChange={onCopyPasteReviewDialogSizeChange}
+          onStart={() =>
+            onExecuteCopyLikePlan(copyPasteDialogState.report, copyPasteDialogState.policy, copyPasteDialogState.action, {
+              clearClipboardOnStart: copyPasteDialogState.clearClipboardOnStart,
+              pendingTreeSelectionPath: copyPasteDialogState.pendingTreeSelectionPath ?? null,
+            })
           }
-          detailLines={buildCopyPastePlanDetailLines(copyPasteDialogState.plan)}
-          primaryAction={{
-            label: "Skip Conflicts",
-            onClick: () =>
-              onExecuteCopyLikePlan(
-                {
-                  ...copyPasteDialogState.plan,
-                  conflictResolution: "skip",
-                },
-                copyPasteDialogState.action,
-                {
-                  clearClipboardOnStart: copyPasteDialogState.clearClipboardOnStart,
-                  pendingTreeSelectionPath: copyPasteDialogState.pendingTreeSelectionPath ?? null,
-                },
-              ),
-            destructive:
-              copyPasteDialogState.action === "move_to" || copyPasteDialogState.plan.mode === "cut",
-          }}
-          secondaryAction={{
-            label: "Cancel",
-            onClick: onCloseCopyPasteDialog,
-          }}
         />
       ) : null}
       {copyPasteDialogState?.type === "confirmTrash" ? (
@@ -306,6 +324,15 @@ export function AppDialogs({
           onCancel={onCancelWriteOperation}
         />
       ) : null}
+      {writeOperationProgressEvent?.status === "awaiting_resolution" &&
+      writeOperationProgressEvent.runtimeConflict ? (
+        <CopyPasteRuntimeConflictDialog
+          title="Live Conflict Detected"
+          message={`${writeOperationProgressEvent.runtimeConflict.sourcePath} now conflicts with ${writeOperationProgressEvent.runtimeConflict.destinationPath}.`}
+          actions={buildRuntimeConflictActions(writeOperationProgressEvent, onResolveRuntimeConflict)}
+          onCancel={onCancelWriteOperation}
+        />
+      ) : null}
       {showCopyPasteResultDialog && writeOperationProgressEvent ? (
         <CopyPasteDialog
           title={getWriteOperationTitle(writeOperationProgressEvent.action, "result")}
@@ -336,32 +363,9 @@ export function AppDialogs({
           }
         />
       ) : null}
-      <ToastViewport
-        toasts={toasts}
-        onDismiss={onDismissToast}
-        offsetBottom={showCopyPasteProgressCard ? 272 : 16}
-      />
+      <ToastViewport toasts={toasts} onDismiss={onDismissToast} offsetBottom={showCopyPasteProgressCard ? 272 : 16} />
     </>
   );
-}
-
-function buildCopyPastePlanDetailLines(plan: CopyPastePlan): string[] {
-  const lines = [
-    `${plan.summary.topLevelItemCount} selected item${plan.summary.topLevelItemCount === 1 ? "" : "s"}`,
-    `${plan.summary.totalItemCount} filesystem write step${plan.summary.totalItemCount === 1 ? "" : "s"}`,
-  ];
-  if (plan.summary.totalBytes !== null) {
-    lines.push(`${formatSize(plan.summary.totalBytes, "ready")}`);
-  }
-  if (plan.conflicts.length > 0) {
-    lines.push(
-      `${plan.conflicts.length} conflicting destination item${plan.conflicts.length === 1 ? "" : "s"}`,
-    );
-  }
-  for (const issue of plan.issues.slice(0, 3)) {
-    lines.push(issue.message);
-  }
-  return lines;
 }
 
 function buildCopyPasteResultDetailLines(event: WriteOperationProgressEvent): string[] {
@@ -398,7 +402,7 @@ function getWriteOperationProgressPercent(state: WriteOperationCardState): numbe
     return (state.completedByteCount / state.totalBytes) * 100;
   }
   if (state.totalItemCount <= 0) {
-    return state.stage === "starting" ? 4 : 0;
+    return state.stage === "starting" || state.stage === "analyzing" ? 4 : 0;
   }
   return (state.completedItemCount / state.totalItemCount) * 100;
 }
@@ -409,8 +413,12 @@ function formatWriteOperationByteLabel(state: WriteOperationCardState): string {
   }
   return state.stage === "starting"
     ? "Preparing write plan"
-    : state.stage === "queued"
+    : state.stage === "analyzing"
+      ? "Preparing write plan"
+      : state.stage === "queued"
       ? "Waiting to begin"
+      : state.stage === "awaiting_resolution"
+        ? "Waiting for conflict resolution"
       : "Tracking progress";
 }
 
@@ -438,6 +446,34 @@ function getWriteOperationTitle(
 
 function isRetryableCopyAction(event: WriteOperationProgressEvent): boolean {
   return event.action === "paste" || event.action === "move_to" || event.action === "duplicate";
+}
+
+function buildRuntimeConflictActions(
+  event: WriteOperationProgressEvent,
+  onResolveRuntimeConflict: (
+    conflictId: string,
+    resolution: "overwrite" | "skip" | "keep_both" | "merge",
+  ) => void,
+) {
+  const conflict = event.runtimeConflict;
+  if (!conflict) {
+    return [];
+  }
+  if (conflict.conflictClass === "directory_conflict") {
+    return [
+      { label: "Merge", onClick: () => onResolveRuntimeConflict(conflict.conflictId, "merge") },
+      { label: "Skip", onClick: () => onResolveRuntimeConflict(conflict.conflictId, "skip") },
+      {
+        label: "Keep Both",
+        onClick: () => onResolveRuntimeConflict(conflict.conflictId, "keep_both"),
+      },
+    ];
+  }
+  return [
+    { label: "Overwrite", onClick: () => onResolveRuntimeConflict(conflict.conflictId, "overwrite") },
+    { label: "Skip", onClick: () => onResolveRuntimeConflict(conflict.conflictId, "skip") },
+    { label: "Keep Both", onClick: () => onResolveRuntimeConflict(conflict.conflictId, "keep_both") },
+  ];
 }
 
 function getPathLeafName(path: string): string {

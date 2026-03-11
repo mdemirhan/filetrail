@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_APP_PREFERENCES } from "../shared/appPreferences";
+import type { IpcHandlerMap } from "./ipc";
 
 const TEST_PREFERENCES = {
   ...DEFAULT_APP_PREFERENCES,
@@ -14,7 +15,7 @@ const TEST_PREFERENCES = {
   searchResultsFilterScope: "name" as const,
 };
 
-function createHandlersThatFailOnSnapshot() {
+function createHandlersThatFailOnSnapshot(): IpcHandlerMap {
   return {
     "app:getHomeDirectory": async () => ({ path: "/Users/demo" }),
     "app:getPreferences": async () => ({
@@ -128,16 +129,16 @@ function createHandlersThatFailOnSnapshot() {
     }),
     "writeOperation:trash": async () => ({ operationId: "write-op-3", status: "queued" as const }),
     "writeOperation:cancel": async () => ({ ok: true }),
-  } as const;
+  } as unknown as IpcHandlerMap;
 }
 
-function createHandlersThatFailOnMetadataOutside() {
+function createHandlersThatFailOnMetadataOutside(): IpcHandlerMap {
   return {
     ...createHandlersThatFailOnSnapshot(),
     "directory:getMetadataBatch": async () => {
       throw new Error("Path /Users/demo/Desktop is outside /Users/demo/Documents");
     },
-  } as const;
+  } as unknown as IpcHandlerMap;
 }
 
 describe("registerIpcHandlers", () => {

@@ -2,6 +2,7 @@ import { dirname, join, resolve } from "node:path";
 import { shell } from "electron";
 
 import {
+  isAbortError,
   type IpcRequest,
   type WriteOperationAction,
   type WriteOperationProgressEvent,
@@ -72,8 +73,7 @@ export function createWriteOperationCoordinator(
         metadata?.metadata ??
         (request
           ? {
-              conflictResolution: request.conflictResolution,
-              transferMode: request.mode,
+              transferMode: event.mode,
             }
           : null);
       if (event.result && options.recordWriteOperation) {
@@ -91,9 +91,12 @@ export function createWriteOperationCoordinator(
             items: event.result.items,
             error: event.result.error,
           },
-          sourcePaths: metadata?.sourcePaths ?? request?.sourcePaths ?? [],
+          sourcePaths:
+            metadata?.sourcePaths ??
+            (request && "sourcePaths" in request ? request.sourcePaths : []),
           destinationPaths:
-            metadata?.targetPaths ?? (request ? [request.destinationDirectoryPath] : []),
+            metadata?.targetPaths ??
+            (request && "destinationDirectoryPath" in request ? [request.destinationDirectoryPath] : []),
           ...(logMetadata ? { metadata: logMetadata } : {}),
         });
       }
@@ -119,6 +122,7 @@ export function createWriteOperationCoordinator(
         totalBytes: event.totalBytes,
         currentSourcePath: event.currentSourcePath,
         currentDestinationPath: event.currentDestinationPath,
+        runtimeConflict: event.runtimeConflict,
         result: event.result
           ? {
               operationId: event.result.operationId,
@@ -606,6 +610,18 @@ export function createWriteOperationCoordinator(
 
   return {
     handlers: {
+      "copyPaste:analyzeStart": (payload: IpcRequest<"copyPaste:analyzeStart">) => {
+        ensureNoWriteOperationInFlight();
+        return writeService.startCopyPasteAnalysis({
+          mode: payload.mode,
+          sourcePaths: payload.sourcePaths,
+          destinationDirectoryPath: payload.destinationDirectoryPath,
+        });
+      },
+      "copyPaste:analyzeGetUpdate": (payload: IpcRequest<"copyPaste:analyzeGetUpdate">) =>
+        writeService.getCopyPasteAnalysisUpdate(payload.analysisId),
+      "copyPaste:analyzeCancel": (payload: IpcRequest<"copyPaste:analyzeCancel">) =>
+        writeService.cancelCopyPasteAnalysis(payload.analysisId),
       "copyPaste:plan": (payload: IpcRequest<"copyPaste:plan">) =>
         writeService.planCopyPaste({
           mode: payload.mode,
@@ -618,22 +634,32 @@ export function createWriteOperationCoordinator(
         event: { sender: WriteOperationSender },
       ) => {
         ensureNoWriteOperationInFlight();
-        const handle = writeService.startCopyPaste({
-          mode: payload.mode,
-          sourcePaths: payload.sourcePaths,
-          destinationDirectoryPath: payload.destinationDirectoryPath,
-          conflictResolution: payload.conflictResolution,
-        });
+        const handle =
+          "analysisId" in payload
+            ? writeService.startCopyPaste({
+                analysisId: payload.analysisId,
+                policy: payload.policy,
+              })
+            : writeService.startCopyPaste({
+                mode: payload.mode,
+                sourcePaths: payload.sourcePaths,
+                destinationDirectoryPath: payload.destinationDirectoryPath,
+                conflictResolution: payload.conflictResolution,
+              });
+        const transferMode =
+          "analysisId" in payload
+            ? writeService.getCopyPasteAnalysisUpdate(payload.analysisId).report?.mode ?? null
+            : payload.mode;
         activeWriteOperationId = handle.operationId;
         copyPasteRequests.set(handle.operationId, payload);
         writeOperationMetadata.set(handle.operationId, {
           kind: "copyPaste",
           action: payload.action,
-          sourcePaths: payload.sourcePaths,
-          targetPaths: [payload.destinationDirectoryPath],
+          sourcePaths: "sourcePaths" in payload ? payload.sourcePaths : [],
+          targetPaths:
+            "destinationDirectoryPath" in payload ? [payload.destinationDirectoryPath] : [],
           metadata: {
-            conflictResolution: payload.conflictResolution ?? "error",
-            transferMode: payload.mode,
+            transferMode,
           },
         });
         writeOperationSenders.set(handle.operationId, event.sender);
@@ -641,6 +667,12 @@ export function createWriteOperationCoordinator(
       },
       "copyPaste:cancel": (payload: IpcRequest<"copyPaste:cancel">) =>
         cancelWriteOperation(payload.operationId),
+      "copyPaste:resolveConflict": (payload: IpcRequest<"copyPaste:resolveConflict">) =>
+        writeService.resolveRuntimeConflict(
+          payload.operationId,
+          payload.conflictId,
+          payload.resolution,
+        ),
       "writeOperation:rename": async (
         payload: IpcRequest<"writeOperation:rename">,
         event: { sender: WriteOperationSender },
@@ -712,13 +744,6 @@ async function pathExists(path: string, lstatFn: WriteOperationFs["lstat"]): Pro
   } catch {
     return false;
   }
-}
-
-function isAbortError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    (error.name === "AbortError" || error.message.toLowerCase().includes("aborted"))
-  );
 }
 
 function isTerminalStatus(

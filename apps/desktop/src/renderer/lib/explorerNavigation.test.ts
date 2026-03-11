@@ -85,6 +85,28 @@ describe("explorerNavigation", () => {
     ).toBe(7);
   });
 
+  it("starts from the first item when arrow navigation begins with no content selection", () => {
+    expect(
+      getNextSelectionIndex({
+        itemCount: 30,
+        currentIndex: -1,
+        key: "ArrowDown",
+        columns: 4,
+        viewMode: "list",
+      }),
+    ).toBe(0);
+
+    expect(
+      getNextSelectionIndex({
+        itemCount: 30,
+        currentIndex: -1,
+        key: "ArrowRight",
+        columns: 4,
+        viewMode: "list",
+      }),
+    ).toBe(0);
+  });
+
   it("computes paged step counts with one-item overlap", () => {
     expect(getPageStepItemCount(400, 56)).toBe(6);
     expect(getPageStepItemCount(120, 38)).toBe(2);
