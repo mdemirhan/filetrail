@@ -400,6 +400,10 @@ export const copyPasteItemResultSchema = z.object({
   destinationPath: z.string().min(1),
   status: z.enum(["completed", "skipped", "failed", "cancelled"]),
   error: z.string().nullable(),
+  skipReason: z
+    .enum(["planned_conflict_policy", "runtime_conflict_resolution"])
+    .nullable()
+    .optional(),
 });
 export const copyPasteOperationResultSchema = z.object({
   operationId: z.string().min(1),
@@ -441,6 +445,10 @@ export const writeOperationItemResultSchema = z.object({
   destinationPath: z.string().nullable(),
   status: z.enum(["completed", "skipped", "failed", "cancelled"]),
   error: z.string().nullable(),
+  skipReason: z
+    .enum(["planned_conflict_policy", "runtime_conflict_resolution"])
+    .nullable()
+    .optional(),
 });
 export const writeOperationResultSchema = z.object({
   operationId: z.string().min(1),
@@ -480,6 +488,10 @@ export const actionLogItemSchema = z.object({
   destinationPath: z.string().nullable(),
   status: z.enum(["completed", "skipped", "failed", "cancelled"]),
   error: z.string().nullable(),
+  skipReason: z
+    .enum(["planned_conflict_policy", "runtime_conflict_resolution"])
+    .nullable()
+    .optional(),
 });
 export const actionLogEntrySchema = z.object({
   id: z.string().min(1),

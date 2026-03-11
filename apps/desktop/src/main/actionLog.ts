@@ -183,6 +183,7 @@ export function createActionLogRecorder(store: Pick<ActionLogStore, "append">): 
           destinationPath: item.destinationPath,
           status: item.status,
           error: item.error,
+          skipReason: item.skipReason,
         })),
         metadata: { ...(args.metadata ?? {}) },
       });
@@ -314,6 +315,7 @@ function createSingleActionLogItem(
     destinationPath,
     status: ok ? "completed" : "failed",
     error: ok ? null : error,
+    skipReason: null,
   };
 }
 

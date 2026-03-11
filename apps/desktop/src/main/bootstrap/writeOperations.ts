@@ -233,12 +233,7 @@ export function createWriteOperationCoordinator(
     finishedAt: string;
     totalItemCount: number;
     completedItemCount: number;
-    items: Array<{
-      sourcePath: string | null;
-      destinationPath: string | null;
-      status: "completed" | "skipped" | "failed" | "cancelled";
-      error: string | null;
-    }>;
+    items: WriteOperationResult["items"];
     status: "completed" | "failed" | "cancelled" | "partial";
     error: string | null;
   }): WriteOperationResult {
@@ -315,6 +310,7 @@ export function createWriteOperationCoordinator(
             destinationPath,
             status: "completed",
             error: null,
+            skipReason: null,
           },
         ],
         status: "completed",
@@ -348,6 +344,7 @@ export function createWriteOperationCoordinator(
             destinationPath,
             status: cancelled ? "cancelled" : "failed",
             error: cancelled ? "Operation cancelled." : toErrorMessage(error),
+            skipReason: null,
           },
         ],
         status: cancelled ? "cancelled" : "failed",
@@ -424,6 +421,7 @@ export function createWriteOperationCoordinator(
             destinationPath,
             status: "completed",
             error: null,
+            skipReason: null,
           },
         ],
         status: "completed",
@@ -457,6 +455,7 @@ export function createWriteOperationCoordinator(
             destinationPath,
             status: cancelled ? "cancelled" : "failed",
             error: cancelled ? "Operation cancelled." : toErrorMessage(error),
+            skipReason: null,
           },
         ],
         status: cancelled ? "cancelled" : "failed",
@@ -511,6 +510,7 @@ export function createWriteOperationCoordinator(
           destinationPath: null,
           status: "cancelled",
           error: "Operation cancelled.",
+          skipReason: null,
         });
         break;
       }
@@ -534,6 +534,7 @@ export function createWriteOperationCoordinator(
           destinationPath: null,
           status: "completed",
           error: null,
+          skipReason: null,
         });
       } catch (error) {
         const isCancelled = isAbortError(error) || controller.signal.aborted;
@@ -544,6 +545,7 @@ export function createWriteOperationCoordinator(
             destinationPath: null,
             status: "cancelled",
             error: "Operation cancelled.",
+            skipReason: null,
           });
         } else {
           items.push({
@@ -551,6 +553,7 @@ export function createWriteOperationCoordinator(
             destinationPath: null,
             status: "failed",
             error: toErrorMessage(error),
+            skipReason: null,
           });
         }
         for (const remainingPath of paths.slice(index + 1)) {
@@ -559,6 +562,7 @@ export function createWriteOperationCoordinator(
             destinationPath: null,
             status: "cancelled",
             error: "Operation stopped before this item was processed.",
+            skipReason: null,
           });
         }
         break;

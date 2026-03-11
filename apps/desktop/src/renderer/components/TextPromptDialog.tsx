@@ -10,6 +10,7 @@ export function TextPromptDialog({
   value,
   placeholder,
   submitLabel,
+  selectAllOnOpen = false,
   error,
   onClose,
   onSubmit,
@@ -21,6 +22,7 @@ export function TextPromptDialog({
   value: string;
   placeholder?: string;
   submitLabel: string;
+  selectAllOnOpen?: boolean;
   error: string | null;
   onClose: () => void;
   onSubmit: (value: string) => void;
@@ -31,6 +33,7 @@ export function TextPromptDialog({
   const wasOpenRef = useRef(open);
   const focusedOpenRef = useRef(open);
   const onCloseRef = useRef(onClose);
+  const initialSelectionModeRef = useRef<"all" | "end" | null>(null);
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -59,10 +62,9 @@ export function TextPromptDialog({
     if (!input) {
       return;
     }
+    initialSelectionModeRef.current = selectAllOnOpen ? "all" : "end";
     input.focus({ preventScroll: true });
-    const caretIndex = input.value.length;
-    input.setSelectionRange(caretIndex, caretIndex);
-  }, [open]);
+  }, [open, selectAllOnOpen]);
 
   useEffect(() => {
     if (!open) {
@@ -146,8 +148,29 @@ export function TextPromptDialog({
           <input
             ref={inputRef}
             id="text-prompt-dialog-input"
+            autoFocus
             value={draftValue}
             placeholder={placeholder}
+            onFocus={(event) => {
+              const selectionMode = initialSelectionModeRef.current;
+              if (!selectionMode) {
+                return;
+              }
+              initialSelectionModeRef.current = null;
+              const input = event.currentTarget;
+              window.setTimeout(() => {
+                if (inputRef.current !== input || document.activeElement !== input) {
+                  return;
+                }
+                if (selectionMode === "all") {
+                  input.select();
+                  input.setSelectionRange(0, input.value.length);
+                  return;
+                }
+                const caretIndex = input.value.length;
+                input.setSelectionRange(caretIndex, caretIndex);
+              }, 0);
+            }}
             onChange={(event) => setDraftValue(event.currentTarget.value)}
             spellCheck={false}
             autoComplete="off"

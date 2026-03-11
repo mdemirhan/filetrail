@@ -145,7 +145,6 @@ vi.mock("./components/TreePane", () => ({
     onItemContextMenu,
     onItemDragEnter,
     onItemDragOver,
-    onItemDragLeave,
     onItemDrop,
     getItemDropIndicator,
     nodes,
@@ -202,25 +201,6 @@ vi.mock("./components/TreePane", () => ({
       subview: "favorites" | "tree",
     ) => void;
     onItemDragOver?: (
-      item: {
-        id: string;
-        kind: "favorite" | "filesystem";
-        label: string;
-        depth: number;
-        path: string | null;
-        parentId: string | null;
-        expanded: boolean;
-        canExpand: boolean;
-        loading: boolean;
-        error: string | null;
-        isSymlink: boolean;
-        childIds: string[];
-        icon?: string;
-      },
-      event: React.DragEvent<HTMLElement>,
-      subview: "favorites" | "tree",
-    ) => void;
-    onItemDragLeave?: (
       item: {
         id: string;
         kind: "favorite" | "filesystem";
@@ -381,13 +361,6 @@ vi.mock("./components/TreePane", () => ({
                 favoritesPlacement === "separate" ? "favorites" : "tree",
               )
             }
-            onDragLeave={(event) =>
-              onItemDragLeave?.(
-                item,
-                event,
-                favoritesPlacement === "separate" ? "favorites" : "tree",
-              )
-            }
             onDrop={(event) =>
               onItemDrop?.(item, event, favoritesPlacement === "separate" ? "favorites" : "tree")
             }
@@ -431,7 +404,6 @@ vi.mock("./components/TreePane", () => ({
             }}
             onDragEnter={(event) => onItemDragEnter?.(item, event, "tree")}
             onDragOver={(event) => onItemDragOver?.(item, event, "tree")}
-            onDragLeave={(event) => onItemDragLeave?.(item, event, "tree")}
             onDrop={(event) => onItemDrop?.(item, event, "tree")}
           >
             Tree {node.name}
@@ -3993,7 +3965,7 @@ describe("App copy/paste integration", () => {
     });
   });
 
-  it("offers Replace Folder for live directory conflicts", async () => {
+  it("shows structured details for live directory conflicts", async () => {
     const harness = createAppHarness();
 
     render(
@@ -4044,10 +4016,21 @@ describe("App copy/paste integration", () => {
       });
     });
 
-    expect(await screen.findByRole("button", { name: "Replace Folder" })).toBeInTheDocument();
     expect(
-      screen.getByText(/Replacing the folder will delete destination-only files and subfolders/i),
+      await screen.findByRole("dialog", { name: "Paste Paused: Destination Changed" }),
     ).toBeInTheDocument();
+    expect(screen.getByText("Source")).toBeInTheDocument();
+    expect(screen.getByText("Destination")).toBeInTheDocument();
+    expect(screen.getAllByText("/Users/demo/Folder").length).toBeGreaterThanOrEqual(2);
+    expect(
+      screen.getByText(/the destination item changed after planning/i),
+    ).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Replace Folder" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Merge Folders" })).toBeInTheDocument();
+    expect(
+      screen.getByText(/replace the destination folder with the source folder/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel Paste" })).toBeInTheDocument();
 
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Replace Folder" }));
@@ -4059,6 +4042,81 @@ describe("App copy/paste integration", () => {
       operationId: "copy-op-1",
       conflictId: "runtime-1",
       resolution: "overwrite",
+    });
+  });
+
+  it("offers only skip for runtime conflicts when the source item is missing", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "x", metaKey: true });
+    });
+    await selectItem("/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.map((call) => call.channel)).toContain("copyPaste:start");
+    });
+
+    await act(async () => {
+      harness.emitProgress({
+        operationId: "copy-op-1",
+        action: "move_to",
+        status: "awaiting_resolution",
+        completedItemCount: 0,
+        totalItemCount: 1,
+        completedByteCount: 0,
+        totalBytes: null,
+        currentSourcePath: "/Users/demo/source.txt",
+        currentDestinationPath: "/Users/demo/Folder/source.txt",
+        runtimeConflict: {
+          conflictId: "runtime-missing",
+          analysisId: "analysis-1",
+          sourcePath: "/Users/demo/source.txt",
+          destinationPath: "/Users/demo/Folder/source.txt",
+          sourceKind: "file",
+          destinationKind: "missing",
+          conflictClass: "file_conflict",
+          reason: "source_deleted",
+          sourceFingerprint: createNodeFingerprint("file"),
+          destinationFingerprint: createNodeFingerprint("missing"),
+          currentSourceFingerprint: createNodeFingerprint("missing"),
+          currentDestinationFingerprint: createNodeFingerprint("missing"),
+        },
+        result: null,
+      });
+    });
+
+    expect(
+      await screen.findByRole("dialog", { name: "Move Paused: Source Missing" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/the source item no longer exists at its original path/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Skip" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel Move" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Overwrite" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Keep Both" })).not.toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Skip" }));
+    });
+
+    expect(
+      harness.invocations.findLast((call) => call.channel === "copyPaste:resolveConflict")?.payload,
+    ).toEqual({
+      operationId: "copy-op-1",
+      conflictId: "runtime-missing",
+      resolution: "skip",
     });
   });
 
@@ -4795,7 +4853,7 @@ describe("App copy/paste integration", () => {
     expect(await screen.findByText("Clipboard is empty")).toBeInTheDocument();
   });
 
-  it("clears the clipboard after a skip-conflicts paste result", async () => {
+  it("clears the clipboard after an expected skip-conflicts paste result without opening a modal", async () => {
     const harness = createAppHarness();
 
     render(
@@ -4851,16 +4909,23 @@ describe("App copy/paste integration", () => {
               destinationPath: "/Users/demo/Folder/source.txt",
               status: "skipped",
               error: "Destination already exists.",
+              skipReason: "planned_conflict_policy",
             },
           ],
           error: null,
         },
       });
     });
-
-    await act(async () => {
-      fireEvent.click(await screen.findByRole("button", { name: "Close" }));
-    });
+    const toastViewport = await screen.findByTestId("toast-viewport");
+    const skipToastTitle = within(toastViewport).getByText("Nothing pasted");
+    const skipToast = skipToastTitle.closest(".toast-card");
+    expect(skipToast).not.toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Paste Result" })).not.toBeInTheDocument();
+    expect(
+      within(skipToast as HTMLElement).getByText(
+        "1 item skipped by the selected conflict handling.",
+      ),
+    ).toBeInTheDocument();
 
     const planCallsBeforeRetry = harness.invocations.filter(
       (call) => call.channel === "copyPaste:plan",
@@ -5429,7 +5494,7 @@ describe("App copy/paste integration", () => {
     });
   });
 
-  it("auto-merges pure folder collisions for move drag and drop", async () => {
+  it("requires review for pure folder collisions during move drag and drop", async () => {
     const harness = createAppHarness({
       directorySnapshots: {
         "/Users/demo": {
@@ -5482,10 +5547,16 @@ describe("App copy/paste integration", () => {
     const targetFolder = await screen.findByRole("button", { name: "test2" });
     await dragBetween(sourceFolder, targetFolder);
 
+    expect(await screen.findByRole("dialog", { name: "Move Requires Review" })).toBeInTheDocument();
+    expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Continue Move" }));
+    });
+
     await vi.waitFor(() => {
       expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(true);
     });
-    expect(screen.queryByText("Move Requires Review")).not.toBeInTheDocument();
     expect(
       harness.invocations.findLast((call) => call.channel === "copyPaste:start")?.payload,
     ).toMatchObject({
@@ -5494,7 +5565,180 @@ describe("App copy/paste integration", () => {
       destinationDirectoryPath: "/Users/demo/test2",
       policy: {
         file: "skip",
-        directory: "merge",
+        directory: "skip",
+        mismatch: "skip",
+      },
+    });
+  });
+
+  it("shows the same move review for cut/paste folder collisions", async () => {
+    const harness = createAppHarness({
+      planResponse: {
+        mode: "cut",
+        sourcePaths: ["/Users/demo/test3_1"],
+        destinationDirectoryPath: "/Users/demo/test2",
+        conflictResolution: "error",
+        items: [
+          {
+            sourcePath: "/Users/demo/test3_1",
+            destinationPath: "/Users/demo/test2/test3_1",
+            kind: "directory",
+            status: "conflict",
+            sizeBytes: null,
+          },
+        ],
+        conflicts: [],
+        issues: [],
+        warnings: [],
+        requiresConfirmation: {
+          largeBatch: false,
+          cutDelete: false,
+        },
+        summary: {
+          topLevelItemCount: 1,
+          totalItemCount: 1,
+          totalBytes: 0,
+          skippedConflictCount: 0,
+        },
+        canExecute: true,
+      },
+      directorySnapshots: {
+        "/Users/demo": {
+          path: "/Users/demo",
+          parentPath: "/Users",
+          entries: [
+            createDirectoryEntry("/Users/demo/test2", "directory"),
+            createDirectoryEntry("/Users/demo/test3_1", "directory"),
+          ],
+        },
+        "/Users/demo/test2": {
+          path: "/Users/demo/test2",
+          parentPath: "/Users/demo",
+          entries: [],
+        },
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/test3_1");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "x", metaKey: true });
+    });
+    await openDirectory("/Users/demo/test2");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    expect(await screen.findByRole("dialog", { name: "Move Requires Review" })).toBeInTheDocument();
+    expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Continue Move" }));
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(true);
+    });
+    expect(
+      harness.invocations.findLast((call) => call.channel === "copyPaste:start")?.payload,
+    ).toMatchObject({
+      action: "move_to",
+      sourcePaths: ["/Users/demo/test3_1"],
+      destinationDirectoryPath: "/Users/demo/test2",
+      policy: {
+        file: "skip",
+        directory: "skip",
+        mismatch: "skip",
+      },
+    });
+  });
+
+  it("shows the same move review for Move To folder collisions", async () => {
+    const harness = createAppHarness({
+      planResponse: {
+        mode: "cut",
+        sourcePaths: ["/Users/demo/test3_1"],
+        destinationDirectoryPath: "/Users/demo/test2",
+        conflictResolution: "error",
+        items: [
+          {
+            sourcePath: "/Users/demo/test3_1",
+            destinationPath: "/Users/demo/test2/test3_1",
+            kind: "directory",
+            status: "conflict",
+            sizeBytes: null,
+          },
+        ],
+        conflicts: [],
+        issues: [],
+        warnings: [],
+        requiresConfirmation: {
+          largeBatch: false,
+          cutDelete: false,
+        },
+        summary: {
+          topLevelItemCount: 1,
+          totalItemCount: 1,
+          totalBytes: 0,
+          skippedConflictCount: 0,
+        },
+        canExecute: true,
+      },
+      directorySnapshots: {
+        "/Users/demo": {
+          path: "/Users/demo",
+          parentPath: "/Users",
+          entries: [
+            createDirectoryEntry("/Users/demo/test2", "directory"),
+            createDirectoryEntry("/Users/demo/test3_1", "directory"),
+          ],
+        },
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/test3_1");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "m", metaKey: true, shiftKey: true });
+    });
+
+    await screen.findByText("Move");
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("Destination folder"), {
+        target: { value: "/Users/demo/test2" },
+      });
+      fireEvent.click(screen.getByText("Move"));
+    });
+
+    expect(await screen.findByRole("dialog", { name: "Move Requires Review" })).toBeInTheDocument();
+    expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Continue Move" }));
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(true);
+    });
+    expect(
+      harness.invocations.findLast((call) => call.channel === "copyPaste:start")?.payload,
+    ).toMatchObject({
+      action: "move_to",
+      sourcePaths: ["/Users/demo/test3_1"],
+      destinationDirectoryPath: "/Users/demo/test2",
+      policy: {
+        file: "skip",
+        directory: "skip",
         mismatch: "skip",
       },
     });
@@ -5624,6 +5868,157 @@ describe("App copy/paste integration", () => {
     expect(harness.invocations.some((call) => call.channel === "copyPaste:analyzeStart")).toBe(
       false,
     );
+  });
+
+  it("recursively reloads expanded source branches after a move remaps the current path", async () => {
+    const harness = createAppHarness({
+      directorySnapshots: {
+        "/Users/demo": {
+          path: "/Users/demo",
+          parentPath: "/Users",
+          entries: [
+            createDirectoryEntry("/Users/demo/tmp", "directory"),
+            createDirectoryEntry("/Users/demo/tmp2", "directory"),
+          ],
+        },
+        "/Users/demo/tmp": {
+          path: "/Users/demo/tmp",
+          parentPath: "/Users/demo",
+          entries: [createDirectoryEntry("/Users/demo/tmp/test1", "directory")],
+        },
+        "/Users/demo/tmp/test1": {
+          path: "/Users/demo/tmp/test1",
+          parentPath: "/Users/demo/tmp",
+          entries: [createDirectoryEntry("/Users/demo/tmp/test1/kotlin", "directory")],
+        },
+        "/Users/demo/tmp/test1/kotlin": {
+          path: "/Users/demo/tmp/test1/kotlin",
+          parentPath: "/Users/demo/tmp/test1",
+          entries: [
+            createDirectoryEntry("/Users/demo/tmp/test1/kotlin/composetest1", "directory"),
+            createDirectoryEntry("/Users/demo/tmp/test1/kotlin/eza", "directory"),
+          ],
+        },
+        "/Users/demo/tmp/test1/kotlin/composetest1": {
+          path: "/Users/demo/tmp/test1/kotlin/composetest1",
+          parentPath: "/Users/demo/tmp/test1/kotlin",
+          entries: [],
+        },
+        "/Users/demo/tmp2": {
+          path: "/Users/demo/tmp2",
+          parentPath: "/Users/demo",
+          entries: [createDirectoryEntry("/Users/demo/tmp2/test1", "directory")],
+        },
+        "/Users/demo/tmp2/test1": {
+          path: "/Users/demo/tmp2/test1",
+          parentPath: "/Users/demo/tmp2",
+          entries: [createDirectoryEntry("/Users/demo/tmp2/test1/kotlin", "directory")],
+        },
+        "/Users/demo/tmp2/test1/kotlin": {
+          path: "/Users/demo/tmp2/test1/kotlin",
+          parentPath: "/Users/demo/tmp2/test1",
+          entries: [createDirectoryEntry("/Users/demo/tmp2/test1/kotlin/composetest1", "directory")],
+        },
+        "/Users/demo/tmp2/test1/kotlin/composetest1": {
+          path: "/Users/demo/tmp2/test1/kotlin/composetest1",
+          parentPath: "/Users/demo/tmp2/test1/kotlin",
+          entries: [],
+        },
+      },
+      treeChildrenByPath: {
+        "/Users/demo": [
+          createTreeChild("/Users/demo/tmp", "directory"),
+          createTreeChild("/Users/demo/tmp2", "directory"),
+        ],
+        "/Users/demo/tmp": [createTreeChild("/Users/demo/tmp/test1", "directory")],
+        "/Users/demo/tmp/test1": [createTreeChild("/Users/demo/tmp/test1/kotlin", "directory")],
+        "/Users/demo/tmp/test1/kotlin": [
+          createTreeChild("/Users/demo/tmp/test1/kotlin/composetest1", "directory"),
+          createTreeChild("/Users/demo/tmp/test1/kotlin/eza", "directory"),
+        ],
+        "/Users/demo/tmp2": [createTreeChild("/Users/demo/tmp2/test1", "directory")],
+        "/Users/demo/tmp2/test1": [createTreeChild("/Users/demo/tmp2/test1/kotlin", "directory")],
+        "/Users/demo/tmp2/test1/kotlin": [
+          createTreeChild("/Users/demo/tmp2/test1/kotlin/composetest1", "directory"),
+        ],
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await openDirectory("/Users/demo/tmp");
+    await openDirectory("/Users/demo/tmp/test1");
+    await openDirectory("/Users/demo/tmp/test1/kotlin");
+    await openDirectory("/Users/demo/tmp/test1/kotlin/composetest1");
+
+    expect(screen.getByTestId("content-current-path")).toHaveTextContent(
+      "/Users/demo/tmp/test1/kotlin/composetest1",
+    );
+
+    const treeLoadCountBeforeMove = harness.invocations.filter(
+      (call) => call.channel === "tree:getChildren",
+    ).length;
+
+    await act(async () => {
+      harness.emitProgress({
+        operationId: "copy-op-1",
+        action: "move_to",
+        status: "completed",
+        completedItemCount: 1,
+        totalItemCount: 1,
+        completedByteCount: 0,
+        totalBytes: null,
+        currentSourcePath: null,
+        currentDestinationPath: null,
+        runtimeConflict: null,
+        result: {
+          operationId: "copy-op-1",
+          action: "move_to",
+          status: "completed",
+          targetPath: "/Users/demo/tmp2",
+          startedAt: "2026-03-11T00:00:00.000Z",
+          finishedAt: "2026-03-11T00:00:01.000Z",
+          summary: {
+            topLevelItemCount: 1,
+            totalItemCount: 1,
+            completedItemCount: 1,
+            failedItemCount: 0,
+            skippedItemCount: 0,
+            cancelledItemCount: 0,
+            completedByteCount: 0,
+            totalBytes: null,
+          },
+          items: [
+            {
+              sourcePath: "/Users/demo/tmp/test1",
+              destinationPath: "/Users/demo/tmp2/test1",
+              status: "completed",
+              error: null,
+              skipReason: null,
+            },
+          ],
+          error: null,
+        },
+      } satisfies WriteOperationProgressEvent);
+    });
+
+    await vi.waitFor(() => {
+      const treeLoadsAfterMove = harness.invocations
+        .slice(treeLoadCountBeforeMove)
+        .filter((call) => call.channel === "tree:getChildren")
+        .map((call) => (call.payload as IpcRequestInput<"tree:getChildren">).path);
+      expect(treeLoadsAfterMove).toEqual(
+        expect.arrayContaining([
+          "/Users/demo/tmp",
+          "/Users/demo/tmp/test1",
+          "/Users/demo/tmp/test1/kotlin",
+        ]),
+      );
+    });
   });
 });
 

@@ -51,6 +51,7 @@ import {
   resolveWriteOperationSelectionDirectoryPath,
   resolveWriteOperationTreeReloadPaths,
   resolveWriteOperationTreeSelectionPath,
+  isExpectedPlannedSkipResult,
   shouldRenderCopyPasteResultDialog,
 } from "../lib/explorerAppUtils";
 import { parentDirectoryPath } from "../lib/explorerNavigation";
@@ -76,14 +77,6 @@ const DEFAULT_COPY_PASTE_POLICY: Extract<
 >["policy"] = {
   file: "skip",
   directory: "skip",
-  mismatch: "skip",
-};
-const MOVE_DESTINATION_DEFAULT_POLICY: Extract<
-  IpcRequest<"copyPaste:start">,
-  { analysisId: string }
->["policy"] = {
-  file: "skip",
-  directory: "merge",
   mismatch: "skip",
 };
 const CONTEXT_MENU_WIDTH = 240;
@@ -128,6 +121,16 @@ function reportHasWarningCode(
   code: CopyPasteAnalysisReport["warnings"][number]["code"],
 ): boolean {
   return report.warnings.some((warning) => warning.code === code);
+}
+
+function getCopyLikeActionLabel(action: "paste" | "move_to" | "duplicate"): string {
+  if (action === "move_to") {
+    return "move";
+  }
+  if (action === "duplicate") {
+    return "duplicate";
+  }
+  return "paste";
 }
 
 export function useExplorerActions(args: {
@@ -949,6 +952,44 @@ export function useExplorerActions(args: {
     return `${firstName} and ${itemCount - 1} more`;
   }
 
+  function formatResultCountLabel(count: number, noun: string): string {
+    return `${count.toLocaleString()} ${noun}${count === 1 ? "" : "s"}`;
+  }
+
+  function formatPlannedSkipToastMessage(event: WriteOperationProgressEvent): string | null {
+    const result = event.result;
+    if (!result) {
+      return null;
+    }
+    const parts: string[] = [];
+    if (result.summary.completedItemCount > 0) {
+      parts.push(formatResultCountLabel(result.summary.completedItemCount, "item"));
+      parts[parts.length - 1] = `${parts.at(-1)} moved`;
+    }
+    if (result.summary.skippedItemCount > 0) {
+      parts.push(`${formatResultCountLabel(result.summary.skippedItemCount, "item")} skipped`);
+    }
+    if (parts.length > 0) {
+      return `${parts.join(", ")} by the selected conflict handling.`;
+    }
+    return null;
+  }
+
+  function getPlannedSkipToastTitle(
+    action: WriteOperationProgressEvent["action"],
+    completedItemCount: number,
+  ): string {
+    if (action === "move_to") {
+      return completedItemCount > 0 ? "Move finished with skipped items" : "Nothing moved";
+    }
+    if (action === "duplicate") {
+      return completedItemCount > 0
+        ? "Duplicate finished with skipped items"
+        : "Nothing duplicated";
+    }
+    return completedItemCount > 0 ? "Paste finished with skipped items" : "Nothing pasted";
+  }
+
   function formatClipboardItemSummary(paths: string[]): string {
     const firstPath = paths[0];
     if (!firstPath) {
@@ -1065,6 +1106,15 @@ export function useExplorerActions(args: {
       return;
     }
     if (event.status === "partial") {
+      if (isExpectedPlannedSkipResult(event)) {
+        const plannedSkipMessage = formatPlannedSkipToastMessage(event);
+        pushToast({
+          kind: "info",
+          title: getPlannedSkipToastTitle(event.action, result.summary.completedItemCount),
+          ...(plannedSkipMessage ? { message: plannedSkipMessage } : {}),
+        });
+        return;
+      }
       pushToast({
         kind: "warning",
         title:
@@ -1300,9 +1350,10 @@ export function useExplorerActions(args: {
         showWriteOperationBusyToast();
         return;
       }
+      const actionLabel = getCopyLikeActionLabel(action);
       showModalNotice(
-        "Unable to start paste",
-        "File Trail could not start the write operation. No files were written.",
+        `Unable to start ${actionLabel}`,
+        `File Trail could not start the ${actionLabel} operation. No files were written.`,
       );
     }
   }
@@ -1438,6 +1489,18 @@ export function useExplorerActions(args: {
       pushToast({
         kind: "warning",
         title: "Clipboard is empty",
+      });
+      return;
+    }
+    if (request.mode === "cut") {
+      await startMoveToDestination(request.sourcePaths, request.destinationDirectoryPath, {
+        clearClipboardOnStart: true,
+        onIssues: (report) =>
+          showModalNotice(
+            "Move cannot continue",
+            report.issues[0]?.message ?? "Move cannot continue.",
+          ),
+        onError: (message) => showModalNotice("Unable to prepare move", message),
       });
       return;
     }
@@ -2239,6 +2302,7 @@ export function useExplorerActions(args: {
       reviewLargeBatchWarning?: boolean;
       sourceSurface?: InternalMoveSourceSurface | null;
       validateDestinationBeforeAnalyze?: boolean;
+      clearClipboardOnStart?: boolean;
     } = {},
   ): Promise<boolean> {
     if (sourcePaths.length === 0 || destinationDirectoryPath.length === 0) {
@@ -2269,13 +2333,12 @@ export function useExplorerActions(args: {
         destinationDirectoryPath,
         action: "move_to",
         pasteAttemptId,
-        clearClipboardOnStart: false,
+        clearClipboardOnStart: options.clearClipboardOnStart ?? false,
         sourceSurface: options.sourceSurface ?? null,
         pendingTreeSelectionPath: options.pendingTreeSelectionPath ?? null,
-        defaultPolicy: MOVE_DESTINATION_DEFAULT_POLICY,
+        defaultPolicy: DEFAULT_COPY_PASTE_POLICY,
         shouldReviewReport: (report) =>
-          report.summary.fileConflictCount > 0 ||
-          report.summary.mismatchConflictCount > 0 ||
+          reportHasConflicts(report) ||
           (options.reviewLargeBatchWarning === true && reportHasWarningCode(report, "large_batch")),
         onIssues: options.onIssues,
       });

@@ -947,7 +947,7 @@ export function useExplorerNavigationController(args: {
       includeHiddenOverride || rootPath.length === 0
         ? null
         : getForcedVisibleHiddenChildPath(path, activePath);
-    if (currentNode?.loading) {
+    if (currentNode?.loading && !forceReload) {
       return;
     }
     if (
@@ -1431,7 +1431,20 @@ export function useExplorerNavigationController(args: {
     );
   }
 
-  async function refreshVisibleTreePath(path: string, activePath = currentPathRef.current) {
+  async function refreshVisibleTreePath(
+    path: string,
+    activePath = currentPathRef.current,
+    options: {
+      recursive?: boolean;
+      visitedPaths?: Set<string>;
+    } = {},
+  ) {
+    const recursive = options.recursive ?? false;
+    const visitedPaths = options.visitedPaths ?? new Set<string>();
+    if (visitedPaths.has(path)) {
+      return;
+    }
+    visitedPaths.add(path);
     const treeRootPath = treeRootPathRef.current;
     if (path.length === 0 || !isPathWithinRoot(path, treeRootPath)) {
       return;
@@ -1441,6 +1454,23 @@ export function useExplorerNavigationController(args: {
       return;
     }
     await loadTreeChildren(path, includeHidden, node.expanded, activePath, true);
+    if (!recursive) {
+      return;
+    }
+    const refreshedNode = treeNodesRef.current[path];
+    if (!refreshedNode?.expanded) {
+      return;
+    }
+    for (const childPath of refreshedNode.childPaths) {
+      const childNode = treeNodesRef.current[childPath];
+      if (!childNode?.expanded) {
+        continue;
+      }
+      await refreshVisibleTreePath(childPath, activePath, {
+        recursive: true,
+        visitedPaths,
+      });
+    }
   }
 
   async function refreshDirectory(
@@ -1467,8 +1497,12 @@ export function useExplorerNavigationController(args: {
       setTreeSelection(createFileSystemItemId(options.treeSelectionPath));
       setLeftPaneSubview("tree");
     }
+    const visitedTreeReloadPaths = new Set<string>();
     for (const extraTreeReloadPath of [...new Set(options.extraTreeReloadPaths ?? [])]) {
-      await refreshVisibleTreePath(extraTreeReloadPath, targetPath);
+      await refreshVisibleTreePath(extraTreeReloadPath, targetPath, {
+        recursive: true,
+        visitedPaths: visitedTreeReloadPaths,
+      });
     }
   }
 

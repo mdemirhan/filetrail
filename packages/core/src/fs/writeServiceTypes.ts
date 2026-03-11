@@ -252,6 +252,7 @@ export type CopyPasteItemResult = {
   destinationPath: string;
   status: "completed" | "skipped" | "failed" | "cancelled";
   error: string | null;
+  skipReason?: "planned_conflict_policy" | "runtime_conflict_resolution" | null;
 };
 
 export type CopyPasteOperationResult = {

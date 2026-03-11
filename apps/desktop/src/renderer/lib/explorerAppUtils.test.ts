@@ -1,11 +1,60 @@
+import type { WriteOperationProgressEvent } from "@filetrail/contracts";
+
 import {
+  isExpectedPlannedSkipResult,
   resolveExplorerTreeRootPath,
   resolvePasteDestinationPath,
   resolveWriteOperationRefreshPath,
   resolveWriteOperationTreeReloadPaths,
   resolveWriteOperationTreeSelectionPath,
+  shouldRenderCopyPasteResultDialog,
 } from "./explorerAppUtils";
 import type { WriteOperationResult } from "./explorerTypes";
+
+function createPartialSkipEvent(
+  skipReason: "planned_conflict_policy" | "runtime_conflict_resolution" | null,
+): WriteOperationProgressEvent {
+  return {
+    operationId: "copy-op-1",
+    action: "move_to",
+    status: "partial",
+    completedItemCount: 0,
+    totalItemCount: 0,
+    completedByteCount: 0,
+    totalBytes: null,
+    currentSourcePath: null,
+    currentDestinationPath: null,
+    runtimeConflict: null,
+    result: {
+      operationId: "copy-op-1",
+      action: "move_to",
+      status: "partial",
+      targetPath: "/target",
+      startedAt: "2026-03-11T00:00:00.000Z",
+      finishedAt: "2026-03-11T00:00:01.000Z",
+      summary: {
+        topLevelItemCount: 1,
+        totalItemCount: 0,
+        completedItemCount: 0,
+        failedItemCount: 0,
+        skippedItemCount: 1,
+        cancelledItemCount: 0,
+        completedByteCount: 0,
+        totalBytes: null,
+      },
+      items: [
+        {
+          sourcePath: "/source.txt",
+          destinationPath: "/target/source.txt",
+          status: "skipped",
+          error: "Skipped by the planned conflict handling.",
+          skipReason,
+        },
+      ],
+      error: null,
+    },
+  };
+}
 
 describe("explorerAppUtils", () => {
   it("roots the tree at home for paths inside home", () => {
@@ -118,7 +167,7 @@ describe("explorerAppUtils", () => {
     );
   });
 
-  it("reloads only impacted parent branches for a completed subtree move", () => {
+  it("reloads impacted destination branches as well as their parents for a completed subtree move", () => {
     const result = {
       action: "move_to",
       items: [
@@ -146,6 +195,21 @@ describe("explorerAppUtils", () => {
     expect(resolveWriteOperationTreeReloadPaths(result)).toEqual([
       "/Users/demo",
       "/Users/demo/target",
+      "/Users/demo/target/source-folder",
     ]);
+  });
+
+  it("treats planned skip partial results as expected", () => {
+    const event = createPartialSkipEvent("planned_conflict_policy");
+
+    expect(isExpectedPlannedSkipResult(event)).toBe(true);
+    expect(shouldRenderCopyPasteResultDialog(event)).toBe(false);
+  });
+
+  it("keeps the result dialog for runtime skip partial results", () => {
+    const event = createPartialSkipEvent("runtime_conflict_resolution");
+
+    expect(isExpectedPlannedSkipResult(event)).toBe(false);
+    expect(shouldRenderCopyPasteResultDialog(event)).toBe(true);
   });
 });

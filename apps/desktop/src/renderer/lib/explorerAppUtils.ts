@@ -25,8 +25,11 @@ export function shouldRenderCopyPasteResultDialog(
   if (event.action === "rename" || event.action === "new_folder") {
     return event.status === "failed";
   }
-  if (event.status === "failed" || event.status === "partial") {
+  if (event.status === "failed") {
     return true;
+  }
+  if (event.status === "partial") {
+    return !isExpectedPlannedSkipResult(event);
   }
   if (event.status !== "cancelled") {
     return false;
@@ -36,6 +39,22 @@ export function shouldRenderCopyPasteResultDialog(
     event.result.summary.failedItemCount > 0 ||
     event.result.summary.skippedItemCount > 0
   );
+}
+
+export function isExpectedPlannedSkipResult(event: WriteOperationProgressEvent): boolean {
+  if (!event.result || event.status !== "partial") {
+    return false;
+  }
+  const { result } = event;
+  if (result.summary.skippedItemCount === 0) {
+    return false;
+  }
+  if (result.summary.failedItemCount > 0 || result.summary.cancelledItemCount > 0) {
+    return false;
+  }
+  return result.items
+    .filter((item) => item.status === "skipped")
+    .every((item) => item.skipReason === "planned_conflict_policy");
 }
 
 export function resolvePasteDestinationPath(args: {
@@ -193,7 +212,7 @@ export function resolveWriteOperationTreeReloadPaths(result: WriteOperationResul
       parentPaths.add(parentPath);
     }
   }
-  return [...parentPaths].sort((left, right) =>
+  return [...new Set([...parentPaths, ...completedDestinationRoots])].sort((left, right) =>
     left.length === right.length ? left.localeCompare(right) : left.length - right.length,
   );
 }

@@ -254,6 +254,7 @@ export function AppDialogs({
         label="Folder name"
         value={newFolderDialogState?.initialName ?? "New Folder"}
         submitLabel="Create Folder"
+        selectAllOnOpen
         error={newFolderDialogState?.error ?? null}
         onClose={onCloseNewFolderDialog}
         onSubmit={(value) => onSubmitNewFolderDialog(value)}
@@ -339,12 +340,18 @@ export function AppDialogs({
       {writeOperationProgressEvent?.status === "awaiting_resolution" &&
       writeOperationProgressEvent.runtimeConflict ? (
         <CopyPasteRuntimeConflictDialog
-          title="Live Conflict Detected"
-          message={buildRuntimeConflictMessage(writeOperationProgressEvent.runtimeConflict)}
+          title={buildRuntimeConflictTitle(writeOperationProgressEvent)}
+          summary={buildRuntimeConflictSummary(writeOperationProgressEvent)}
+          sourcePath={writeOperationProgressEvent.runtimeConflict.sourcePath}
+          sourceDetail={buildRuntimeConflictSourceDetail(writeOperationProgressEvent)}
+          destinationPath={writeOperationProgressEvent.runtimeConflict.destinationPath}
+          destinationDetail={buildRuntimeConflictDestinationDetail(writeOperationProgressEvent)}
+          changeExplanation={buildRuntimeConflictChangeExplanation(writeOperationProgressEvent)}
           actions={buildRuntimeConflictActions(
             writeOperationProgressEvent,
             onResolveRuntimeConflict,
           )}
+          cancelLabel={getCancelWriteOperationLabel(writeOperationProgressEvent.action)}
           onCancel={onCancelWriteOperation}
         />
       ) : null}
@@ -478,42 +485,207 @@ function buildRuntimeConflictActions(
   if (!conflict) {
     return [];
   }
+  if (conflict.reason === "source_deleted") {
+    return [
+      {
+        label: conflict.sourceKind === "directory" ? "Skip Folder" : "Skip",
+        description: "Leave this item unchanged and continue with the rest of the operation.",
+        onClick: () => onResolveRuntimeConflict(conflict.conflictId, "skip"),
+      },
+    ];
+  }
   if (conflict.conflictClass === "directory_conflict") {
     return [
       {
         label: "Replace Folder",
         destructive: true,
+        description:
+          "Replace the destination folder with the source folder and continue. Destination-only contents will be removed.",
         onClick: () => onResolveRuntimeConflict(conflict.conflictId, "overwrite"),
       },
-      { label: "Merge", onClick: () => onResolveRuntimeConflict(conflict.conflictId, "merge") },
-      { label: "Skip", onClick: () => onResolveRuntimeConflict(conflict.conflictId, "skip") },
+      {
+        label: "Merge Folders",
+        description:
+          "Keep the destination folder and continue moving the source contents into it.",
+        onClick: () => onResolveRuntimeConflict(conflict.conflictId, "merge"),
+      },
       {
         label: "Keep Both",
+        description:
+          "Keep the existing destination folder and create a second folder with a new name.",
         onClick: () => onResolveRuntimeConflict(conflict.conflictId, "keep_both"),
+      },
+      {
+        label: "Skip Folder",
+        description: "Leave this folder unchanged and continue with the rest of the operation.",
+        onClick: () => onResolveRuntimeConflict(conflict.conflictId, "skip"),
       },
     ];
   }
   return [
     {
-      label: "Overwrite",
+      label: conflict.conflictClass === "type_mismatch" ? "Replace" : "Overwrite",
+      description:
+        "Replace the destination item with the source item and continue with the operation.",
       onClick: () => onResolveRuntimeConflict(conflict.conflictId, "overwrite"),
     },
-    { label: "Skip", onClick: () => onResolveRuntimeConflict(conflict.conflictId, "skip") },
     {
       label: "Keep Both",
+      description:
+        "Keep the destination item and create a second copy of the source item with a new name.",
       onClick: () => onResolveRuntimeConflict(conflict.conflictId, "keep_both"),
+    },
+    {
+      label: "Skip",
+      description: "Leave this item unchanged and continue with the rest of the operation.",
+      onClick: () => onResolveRuntimeConflict(conflict.conflictId, "skip"),
     },
   ];
 }
 
-function buildRuntimeConflictMessage(
-  conflict: NonNullable<WriteOperationProgressEvent["runtimeConflict"]>,
-): string {
-  const baseMessage = `${conflict.sourcePath} now conflicts with ${conflict.destinationPath}.`;
-  if (conflict.conflictClass !== "directory_conflict") {
-    return baseMessage;
+function buildRuntimeConflictTitle(event: WriteOperationProgressEvent): string {
+  const conflict = event.runtimeConflict;
+  if (!conflict) {
+    return "Operation Paused";
   }
-  return `${baseMessage} Replacing the folder will delete destination-only files and subfolders inside the conflicting destination folder before copying continues.`;
+  return `${getWriteOperationLabel(event.action)} Paused: ${formatRuntimeConflictReasonTitle(conflict.reason)}`;
+}
+
+function buildRuntimeConflictSummary(event: WriteOperationProgressEvent): string {
+  const conflict = event.runtimeConflict;
+  if (!conflict) {
+    return "The operation paused because the filesystem changed after planning.";
+  }
+  const sourceName = getPathLeafName(conflict.sourcePath);
+  const destinationName = getPathLeafName(conflict.destinationPath);
+  if (conflict.reason === "source_deleted") {
+    return `The source ${formatKindLabel(conflict.sourceKind)} "${sourceName}" is no longer available.`;
+  }
+  if (conflict.reason === "source_changed") {
+    return `The source ${formatKindLabel(conflict.sourceKind)} "${sourceName}" changed after the operation was planned.`;
+  }
+  if (conflict.reason === "destination_created") {
+    return `A destination ${formatKindLabel(conflict.destinationKind)} named "${destinationName}" appeared after the operation was planned.`;
+  }
+  if (conflict.reason === "destination_deleted") {
+    return `The destination item "${destinationName}" no longer matches the state that was reviewed earlier.`;
+  }
+  return `The destination ${formatKindLabel(conflict.destinationKind)} "${destinationName}" changed after the operation was planned.`;
+}
+
+function buildRuntimeConflictSourceDetail(event: WriteOperationProgressEvent): string {
+  const conflict = event.runtimeConflict;
+  if (!conflict) {
+    return "";
+  }
+  if (conflict.reason === "source_deleted") {
+    return `${formatKindLabel(conflict.sourceKind)} · missing now`;
+  }
+  if (conflict.reason === "source_changed") {
+    return `${formatKindLabel(conflict.sourceKind)} · changed after planning`;
+  }
+  return `${formatKindLabel(conflict.sourceKind)} · still present`;
+}
+
+function buildRuntimeConflictDestinationDetail(event: WriteOperationProgressEvent): string {
+  const conflict = event.runtimeConflict;
+  if (!conflict) {
+    return "";
+  }
+  if (conflict.reason === "destination_deleted") {
+    return "missing · deleted after planning";
+  }
+  if (conflict.reason === "destination_created") {
+    return `${formatKindLabel(conflict.destinationKind)} · created after planning`;
+  }
+  if (conflict.reason === "destination_changed") {
+    return `${formatKindLabel(conflict.destinationKind)} · changed after planning`;
+  }
+  return `${formatKindLabel(conflict.currentDestinationFingerprint.kind)} · current destination state`;
+}
+
+function buildRuntimeConflictChangeExplanation(event: WriteOperationProgressEvent): string {
+  const conflict = event.runtimeConflict;
+  if (!conflict) {
+    return "The filesystem changed after the operation was planned, so File Trail paused before continuing with an outdated decision.";
+  }
+  if (conflict.reason === "source_deleted") {
+    return "The source item no longer exists at its original path, so continuing without a new decision could fail or produce an incomplete move.";
+  }
+  if (conflict.reason === "source_changed") {
+    return "The source item is different from the version that was analyzed earlier, so the original plan may no longer reflect what will be moved.";
+  }
+  if (conflict.reason === "destination_created") {
+    return "The plan expected no item at the destination path, but something new appeared there before the write reached this step.";
+  }
+  if (conflict.reason === "destination_deleted") {
+    return "The destination item that existed during planning is gone now, so File Trail needs a new decision before continuing.";
+  }
+  return "The destination item changed after planning, so the original conflict choice may no longer be safe to apply automatically.";
+}
+
+function getCancelWriteOperationLabel(action: WriteOperationAction): string {
+  return `Cancel ${getWriteOperationLabel(action)}`;
+}
+
+function getWriteOperationLabel(action: WriteOperationAction): string {
+  if (action === "move_to") {
+    return "Move";
+  }
+  if (action === "duplicate") {
+    return "Duplicate";
+  }
+  if (action === "trash") {
+    return "Trash";
+  }
+  if (action === "rename") {
+    return "Rename";
+  }
+  if (action === "new_folder") {
+    return "Create Folder";
+  }
+  return "Paste";
+}
+
+function formatRuntimeConflictReasonTitle(
+  reason: NonNullable<WriteOperationProgressEvent["runtimeConflict"]>["reason"],
+): string {
+  if (reason === "destination_created") {
+    return "Destination Created";
+  }
+  if (reason === "destination_deleted") {
+    return "Destination Deleted";
+  }
+  if (reason === "source_changed") {
+    return "Source Changed";
+  }
+  if (reason === "source_deleted") {
+    return "Source Missing";
+  }
+  return "Destination Changed";
+}
+
+function formatKindLabel(
+  kind:
+    | "file"
+    | "directory"
+    | "symlink"
+    | "symlink_directory"
+    | "missing",
+): string {
+  if (kind === "directory") {
+    return "folder";
+  }
+  if (kind === "symlink_directory") {
+    return "symlink folder";
+  }
+  if (kind === "symlink") {
+    return "symlink";
+  }
+  if (kind === "missing") {
+    return "item";
+  }
+  return "file";
 }
 
 function getPathLeafName(path: string): string {

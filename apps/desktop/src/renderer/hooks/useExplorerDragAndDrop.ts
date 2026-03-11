@@ -19,6 +19,11 @@ type ActiveDropTarget = {
   path: string;
   validity: Exclude<DropIndicatorState, null>;
 };
+type ActiveTreeDropElement = {
+  surface: InternalDropTargetSurface;
+  path: string;
+  element: HTMLElement;
+};
 
 function createDragPreviewElement(session: InternalDragSession): HTMLDivElement {
   const root = document.createElement("div");
@@ -71,9 +76,11 @@ export function useExplorerDragAndDrop(args: {
     onToggleTreeNode,
   } = args;
   const [activeDropTarget, setActiveDropTarget] = useState<ActiveDropTarget | null>(null);
+  const [dragActive, setDragActive] = useState(false);
   const dragSessionRef = useRef<InternalDragSession | null>(null);
   const dragPreviewRef = useRef<HTMLDivElement | null>(null);
   const treeHoverExpandRef = useRef<{ path: string; timerId: number } | null>(null);
+  const activeTreeDropElementRef = useRef<ActiveTreeDropElement | null>(null);
 
   const entriesByPath = useMemo(
     () => new Map(activeEntries.map((entry) => [entry.path, entry])),
@@ -105,9 +112,20 @@ export function useExplorerDragAndDrop(args: {
     treeHoverExpandRef.current = null;
   }
 
+  function clearTreeDropElementIndicator() {
+    const activeTreeDropElement = activeTreeDropElementRef.current;
+    if (!activeTreeDropElement) {
+      return;
+    }
+    activeTreeDropElement.element.dataset.dropTargetState = "none";
+    activeTreeDropElementRef.current = null;
+  }
+
   function clearDragSession() {
     clearTreeHoverExpand();
+    clearTreeDropElementIndicator();
     setActiveDropTarget(null);
+    setDragActive(false);
     dragSessionRef.current = null;
     dragPreviewRef.current?.remove();
     dragPreviewRef.current = null;
@@ -119,6 +137,40 @@ export function useExplorerDragAndDrop(args: {
     validity: Exclude<DropIndicatorState, null>,
   ) {
     setActiveDropTarget({ surface, path, validity });
+  }
+
+  function syncTreeDropElementIndicator(
+    event: React.DragEvent<HTMLElement>,
+    surface: InternalDropTargetSurface,
+    path: string,
+    validity: Exclude<DropIndicatorState, null>,
+  ) {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      clearTreeDropElementIndicator();
+      return;
+    }
+    const row = target.closest<HTMLElement>(".tree-row");
+    if (!row) {
+      clearTreeDropElementIndicator();
+      return;
+    }
+    const activeTreeDropElement = activeTreeDropElementRef.current;
+    if (
+      activeTreeDropElement &&
+      (activeTreeDropElement.element !== row ||
+        activeTreeDropElement.path !== path ||
+        activeTreeDropElement.surface !== surface)
+    ) {
+      activeTreeDropElement.element.dataset.dropTargetState = "none";
+      activeTreeDropElementRef.current = null;
+    }
+    row.dataset.dropTargetState = validity;
+    activeTreeDropElementRef.current = {
+      surface,
+      path,
+      element: row,
+    };
   }
 
   function scheduleTreeHoverExpand(item: TreePresentationItem) {
@@ -163,6 +215,7 @@ export function useExplorerDragAndDrop(args: {
       return;
     }
     dragSessionRef.current = session;
+    setDragActive(true);
     const dragPreview = createDragPreviewElement(session);
     dragPreviewRef.current = dragPreview;
     event.dataTransfer.effectAllowed = "move";
@@ -334,6 +387,7 @@ export function useExplorerDragAndDrop(args: {
       path: item.path,
       targetSupportsMove,
     });
+    syncTreeDropElementIndicator(event, targetSurface, item.path, validity);
     setDropIndicator(targetSurface, item.path, validity);
     applyDropEffect(event, validity);
     if (subview === "tree" && validity === "valid") {
@@ -349,17 +403,6 @@ export function useExplorerDragAndDrop(args: {
     subview: "favorites" | "tree",
   ) {
     handleTreeDragEnter(item, event, subview);
-  }
-
-  function handleTreeDragLeave(item: TreePresentationItem) {
-    clearTreeHoverExpand();
-    if (!item.path) {
-      return;
-    }
-    const targetSurface = item.kind === "favorite" ? "favorite" : "tree";
-    if (activeDropTarget?.surface === targetSurface && activeDropTarget.path === item.path) {
-      setActiveDropTarget(null);
-    }
   }
 
   async function handleTreeDrop(
@@ -381,6 +424,7 @@ export function useExplorerDragAndDrop(args: {
   }
 
   return {
+    dragActive,
     getContentItemDropIndicator,
     getTreeItemDropIndicator,
     handleContentDragEnter,
@@ -391,7 +435,6 @@ export function useExplorerDragAndDrop(args: {
     handleDragEnd,
     handleSearchDragStart: handleDragStart,
     handleTreeDragEnter,
-    handleTreeDragLeave,
     handleTreeDragOver,
     handleTreeDrop,
   };

@@ -49,6 +49,7 @@ export type TreeNodeState = {
 export function TreePane({
   paneRef,
   isFocused,
+  dragActive = false,
   rootPath,
   homePath,
   compactTreeView = false,
@@ -93,7 +94,6 @@ export function TreePane({
   onItemContextMenu,
   onItemDragEnter,
   onItemDragOver,
-  onItemDragLeave,
   onItemDrop,
   getItemDropIndicator,
   onToggleFavoritesExpanded,
@@ -101,6 +101,7 @@ export function TreePane({
 }: {
   paneRef?: React.RefObject<HTMLElement | null>;
   isFocused: boolean;
+  dragActive?: boolean;
   rootPath: string;
   homePath: string;
   compactTreeView?: boolean;
@@ -163,13 +164,6 @@ export function TreePane({
         subview: "favorites" | "tree",
       ) => void)
     | undefined;
-  onItemDragLeave?:
-    | ((
-        item: TreePresentationItem,
-        event: React.DragEvent<HTMLElement>,
-        subview: "favorites" | "tree",
-      ) => void)
-    | undefined;
   onItemDrop?:
     | ((
         item: TreePresentationItem,
@@ -225,6 +219,10 @@ export function TreePane({
         icon: favorite.icon,
       })),
     [favorites, homePath],
+  );
+  const favoriteItemsById = useMemo(
+    () => new Map(favoriteItems.map((item) => [item.id, item])),
+    [favoriteItems],
   );
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const clickTimeoutRef = useRef<number | null>(null);
@@ -355,6 +353,64 @@ export function TreePane({
       }
       setOptimisticSelectedItemId(null);
       onClearSelection();
+    };
+  }
+
+  function resolveDragTargetItem(
+    event: React.DragEvent<HTMLElement>,
+    items: Map<string, TreePresentationItem> | Record<string, TreePresentationItem>,
+  ): TreePresentationItem | null {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return null;
+    }
+    const row = target.closest<HTMLElement>(".tree-row[data-tree-item-id]");
+    const itemId = row?.dataset.treeItemId;
+    if (!itemId) {
+      return null;
+    }
+    if (items instanceof Map) {
+      return items.get(itemId) ?? null;
+    }
+    return items[itemId] ?? null;
+  }
+
+  function handlePaneDragEnterCapture(
+    items: Map<string, TreePresentationItem> | Record<string, TreePresentationItem>,
+    subview: "favorites" | "tree",
+  ) {
+    return (event: React.DragEvent<HTMLDivElement>) => {
+      const item = resolveDragTargetItem(event, items);
+      if (!item || item.kind === "favorites-root") {
+        return;
+      }
+      onItemDragEnter?.(item, event, subview);
+    };
+  }
+
+  function handlePaneDragOverCapture(
+    items: Map<string, TreePresentationItem> | Record<string, TreePresentationItem>,
+    subview: "favorites" | "tree",
+  ) {
+    return (event: React.DragEvent<HTMLDivElement>) => {
+      const item = resolveDragTargetItem(event, items);
+      if (!item || item.kind === "favorites-root") {
+        return;
+      }
+      onItemDragOver?.(item, event, subview);
+    };
+  }
+
+  function handlePaneDropCapture(
+    items: Map<string, TreePresentationItem> | Record<string, TreePresentationItem>,
+    subview: "favorites" | "tree",
+  ) {
+    return (event: React.DragEvent<HTMLDivElement>) => {
+      const item = resolveDragTargetItem(event, items);
+      if (!item || item.kind === "favorites-root") {
+        return;
+      }
+      onItemDrop?.(item, event, subview);
     };
   }
 
@@ -561,9 +617,13 @@ export function TreePane({
             <div ref={splitPaneRef} className="sidebar-split-pane">
               <div
                 className={`favorites-pane-section${activeLeftPaneSubview === "favorites" ? " active" : ""}`}
+                data-drag-active={dragActive ? "true" : "false"}
                 data-left-subview="favorites"
                 style={{ height: `${resolvedFavoritesPaneHeight}px` }}
                 onMouseDownCapture={handlePaneMouseDownCapture("favorites")}
+                onDragEnterCapture={handlePaneDragEnterCapture(favoriteItemsById, "favorites")}
+                onDragOverCapture={handlePaneDragOverCapture(favoriteItemsById, "favorites")}
+                onDropCapture={handlePaneDropCapture(favoriteItemsById, "favorites")}
               >
                 <div className="favorites-scroll">
                   <div className="tree-list favorites-list">
@@ -586,7 +646,6 @@ export function TreePane({
                         onItemContextMenu={onItemContextMenu}
                         onItemDragEnter={onItemDragEnter}
                         onItemDragOver={onItemDragOver}
-                        onItemDragLeave={onItemDragLeave}
                         onItemDrop={onItemDrop}
                         getItemDropIndicator={getItemDropIndicator}
                         subview="favorites"
@@ -657,8 +716,15 @@ export function TreePane({
                 className={`sidebar-tree filesystem-tree-section${
                   activeLeftPaneSubview === "tree" ? " active" : ""
                 }`}
+                data-drag-active={dragActive ? "true" : "false"}
                 data-left-subview="tree"
                 onMouseDownCapture={handlePaneMouseDownCapture("tree")}
+                onDragEnterCapture={handlePaneDragEnterCapture(
+                  filesystemPresentation.items,
+                  "tree",
+                )}
+                onDragOverCapture={handlePaneDragOverCapture(filesystemPresentation.items, "tree")}
+                onDropCapture={handlePaneDropCapture(filesystemPresentation.items, "tree")}
               >
                 <TreeList
                   items={filesystemPresentation.items}
@@ -678,7 +744,6 @@ export function TreePane({
                   onItemContextMenu={onItemContextMenu}
                   onItemDragEnter={onItemDragEnter}
                   onItemDragOver={onItemDragOver}
-                  onItemDragLeave={onItemDragLeave}
                   onItemDrop={onItemDrop}
                   getItemDropIndicator={getItemDropIndicator}
                   subview="tree"
@@ -690,8 +755,12 @@ export function TreePane({
           ) : (
             <div
               className="sidebar-tree"
+              data-drag-active={dragActive ? "true" : "false"}
               data-left-subview="tree"
               onMouseDownCapture={handlePaneMouseDownCapture("tree")}
+              onDragEnterCapture={handlePaneDragEnterCapture(integratedPresentation.items, "tree")}
+              onDragOverCapture={handlePaneDragOverCapture(integratedPresentation.items, "tree")}
+              onDropCapture={handlePaneDropCapture(integratedPresentation.items, "tree")}
             >
               <TreeList
                 items={integratedPresentation.items}
@@ -759,7 +828,6 @@ function TreeList({
   onItemContextMenu,
   onItemDragEnter,
   onItemDragOver,
-  onItemDragLeave,
   onItemDrop,
   getItemDropIndicator,
   subview,
@@ -795,13 +863,6 @@ function TreeList({
       ) => void)
     | undefined;
   onItemDragOver?:
-    | ((
-        item: TreePresentationItem,
-        event: React.DragEvent<HTMLElement>,
-        subview: "favorites" | "tree",
-      ) => void)
-    | undefined;
-  onItemDragLeave?:
     | ((
         item: TreePresentationItem,
         event: React.DragEvent<HTMLElement>,
@@ -849,7 +910,6 @@ function TreeList({
               onItemContextMenu={onItemContextMenu}
               onItemDragEnter={onItemDragEnter}
               onItemDragOver={onItemDragOver}
-              onItemDragLeave={onItemDragLeave}
               onItemDrop={onItemDrop}
               getItemDropIndicator={getItemDropIndicator}
               subview={subview}
@@ -880,7 +940,6 @@ function TreeItemRow({
   onItemContextMenu,
   onItemDragEnter,
   onItemDragOver,
-  onItemDragLeave,
   onItemDrop,
   getItemDropIndicator,
   subview,
@@ -921,13 +980,6 @@ function TreeItemRow({
         subview: "favorites" | "tree",
       ) => void)
     | undefined;
-  onItemDragLeave?:
-    | ((
-        item: TreePresentationItem,
-        event: React.DragEvent<HTMLElement>,
-        subview: "favorites" | "tree",
-      ) => void)
-    | undefined;
   onItemDrop?:
     | ((
         item: TreePresentationItem,
@@ -954,7 +1006,6 @@ function TreeItemRow({
   const isFileSystem = item.kind === "filesystem";
   const itemPath = item.path;
   const dropIndicator = getItemDropIndicator?.(item, subview) ?? null;
-  const isDroppableTarget = !isFavoritesRoot;
 
   function handleActivatePointerDown(metaKey: boolean, button: number) {
     if (button !== 0) {
@@ -1036,43 +1087,12 @@ function TreeItemRow({
     });
   }
 
-  function handleDragTargetEnter(event: React.DragEvent<HTMLElement>) {
-    if (!isDroppableTarget) {
-      return;
-    }
-    event.stopPropagation();
-    onItemDragEnter?.(item, event, subview);
-  }
-
-  function handleDragTargetOver(event: React.DragEvent<HTMLElement>) {
-    if (!isDroppableTarget) {
-      return;
-    }
-    event.stopPropagation();
-    onItemDragOver?.(item, event, subview);
-  }
-
-  function handleDragTargetLeave(event: React.DragEvent<HTMLElement>) {
-    if (!isDroppableTarget) {
-      return;
-    }
-    event.stopPropagation();
-    onItemDragLeave?.(item, event, subview);
-  }
-
-  function handleDragTargetDrop(event: React.DragEvent<HTMLElement>) {
-    if (!isDroppableTarget) {
-      return;
-    }
-    event.stopPropagation();
-    onItemDrop?.(item, event, subview);
-  }
-
   return (
     <div className="tree-branch">
       <div
         ref={(element) => registerRowRef(item.id, element)}
         className={`tree-row${isCurrent ? " active" : ""}${isCurrent && !isPaneFocused ? " inactive" : ""}`}
+        data-tree-item-id={item.id}
         data-drop-target-state={dropIndicator ?? "none"}
         data-tree-path={itemPath ?? item.id}
         data-tree-kind={item.kind}
@@ -1120,10 +1140,6 @@ function TreeItemRow({
           event.preventDefault();
           handleActivateContextMenu(event.clientX, event.clientY);
         }}
-        onDragEnter={isDroppableTarget ? handleDragTargetEnter : undefined}
-        onDragOver={isDroppableTarget ? handleDragTargetOver : undefined}
-        onDragLeave={isDroppableTarget ? handleDragTargetLeave : undefined}
-        onDrop={isDroppableTarget ? handleDragTargetDrop : undefined}
       >
         <button
           type="button"
@@ -1131,10 +1147,6 @@ function TreeItemRow({
             !canExpand && !item.loading ? " empty" : ""
           }`}
           onFocus={onSubviewFocus}
-          onDragEnter={isDroppableTarget ? handleDragTargetEnter : undefined}
-          onDragOver={isDroppableTarget ? handleDragTargetOver : undefined}
-          onDragLeave={isDroppableTarget ? handleDragTargetLeave : undefined}
-          onDrop={isDroppableTarget ? handleDragTargetDrop : undefined}
           onClick={() => {
             onSubviewFocus();
             if (isFavoritesRoot) {
@@ -1176,10 +1188,6 @@ function TreeItemRow({
           className="tree-label"
           data-tree-item-id={item.id}
           onFocus={onSubviewFocus}
-          onDragEnter={isDroppableTarget ? handleDragTargetEnter : undefined}
-          onDragOver={isDroppableTarget ? handleDragTargetOver : undefined}
-          onDragLeave={isDroppableTarget ? handleDragTargetLeave : undefined}
-          onDrop={isDroppableTarget ? handleDragTargetDrop : undefined}
           onPointerDown={(event) => handleActivatePointerDown(event.metaKey, event.button)}
           onClick={(event) => handleActivateClick(event.metaKey)}
           onDoubleClick={() => {
@@ -1199,6 +1207,11 @@ function TreeItemRow({
           <span className="tree-label-text">{item.label}</span>
           {item.isSymlink ? <span className="tree-label-badge">Alias</span> : null}
         </button>
+        {dropIndicator === "valid" ? (
+          <span className="tree-drop-target-badge" aria-hidden="true">
+            Drop Here
+          </span>
+        ) : null}
       </div>
       {item.loading ? (
         <div className="tree-loading" style={{ paddingLeft: `${44 + item.depth * 16}px` }}>

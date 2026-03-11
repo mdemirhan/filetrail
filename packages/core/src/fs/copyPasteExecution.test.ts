@@ -718,6 +718,7 @@ describe("copyPasteExecution", () => {
         items: [
           expect.objectContaining({
             status: "skipped",
+            skipReason: "planned_conflict_policy",
           }),
         ],
       },
@@ -917,7 +918,17 @@ describe("copyPasteExecution", () => {
       },
     });
 
-    expect(changedSourceEvents.at(-1)?.status).toBe("partial");
+    expect(changedSourceEvents.at(-1)).toMatchObject({
+      status: "partial",
+      result: {
+        items: [
+          expect.objectContaining({
+            status: "skipped",
+            skipReason: "runtime_conflict_resolution",
+          }),
+        ],
+      },
+    });
   });
 
   it("handles destination changes for overwrite conflicts without re-prompting and preserves non-empty cut folders", async () => {

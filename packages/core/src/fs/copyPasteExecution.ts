@@ -92,7 +92,11 @@ export async function executeCopyPasteFromAnalysis(args: {
         sourcePath: node.node.sourcePath,
         destinationPath: node.destinationPath,
         status: stepResult.itemStatus,
-        error: stepResult.itemStatus === "skipped" ? "Skipped by conflict policy." : null,
+        error:
+          stepResult.itemStatus === "skipped"
+            ? formatSkippedItemMessage(stepResult.skipReason)
+            : null,
+        skipReason: stepResult.skipReason,
       });
     } catch (error) {
       if (isAbortError(error) || args.signal.aborted) {
@@ -102,6 +106,7 @@ export async function executeCopyPasteFromAnalysis(args: {
           destinationPath: node.destinationPath,
           status: "cancelled",
           error: "Operation cancelled.",
+          skipReason: null,
         });
       } else {
         const message = toErrorMessage(error);
@@ -111,6 +116,7 @@ export async function executeCopyPasteFromAnalysis(args: {
           destinationPath: node.destinationPath,
           status: "failed",
           error: message,
+          skipReason: null,
         });
       }
       break;
@@ -177,6 +183,7 @@ async function executeResolvedNode(args: {
   completedItemCount: number;
   completedByteCount: number;
   itemStatus: "completed" | "skipped";
+  skipReason: "planned_conflict_policy" | "runtime_conflict_resolution" | null;
 }> {
   let currentNode = args.resolvedNode;
   if (currentNode.action === "skip") {
@@ -184,6 +191,7 @@ async function executeResolvedNode(args: {
       completedItemCount: args.completedItemCount,
       completedByteCount: args.completedByteCount,
       itemStatus: "skipped",
+      skipReason: "planned_conflict_policy",
     };
   }
 
@@ -222,6 +230,7 @@ async function executeResolvedNode(args: {
         completedItemCount: args.completedItemCount,
         completedByteCount: args.completedByteCount,
         itemStatus: "skipped",
+        skipReason: "runtime_conflict_resolution",
       };
     }
   }
@@ -269,6 +278,7 @@ async function executeResolvedNode(args: {
       completedItemCount: args.completedItemCount,
       completedByteCount: args.completedByteCount,
       itemStatus: "completed",
+      skipReason: null,
     };
   }
 
@@ -313,7 +323,17 @@ async function executeResolvedNode(args: {
     completedItemCount: args.completedItemCount,
     completedByteCount: args.completedByteCount,
     itemStatus: "completed",
+    skipReason: null,
   };
+}
+
+function formatSkippedItemMessage(
+  skipReason: "planned_conflict_policy" | "runtime_conflict_resolution" | null,
+): string {
+  if (skipReason === "runtime_conflict_resolution") {
+    return "Skipped after a runtime conflict was resolved.";
+  }
+  return "Skipped by the planned conflict handling.";
 }
 
 async function detectRuntimeConflict(

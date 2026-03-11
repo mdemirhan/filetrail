@@ -842,6 +842,7 @@ export function App() {
     copyPasteModalOpen ||
     isWriteOperationLocked;
   const {
+    dragActive,
     getContentItemDropIndicator,
     getTreeItemDropIndicator,
     handleContentDragEnter,
@@ -852,7 +853,6 @@ export function App() {
     handleDragEnd,
     handleSearchDragStart,
     handleTreeDragEnter,
-    handleTreeDragLeave,
     handleTreeDragOver,
     handleTreeDrop,
   } = useExplorerDragAndDrop({
@@ -1506,6 +1506,7 @@ export function App() {
           treePaneProps={{
             paneRef: treePaneRef,
             isFocused: focusedPane === "tree",
+            dragActive,
             homePath,
             selectedTreeItemId,
             compactTreeView,
@@ -1580,7 +1581,6 @@ export function App() {
             },
             onItemDragEnter: handleTreeDragEnter,
             onItemDragOver: handleTreeDragOver,
-            onItemDragLeave: handleTreeDragLeave,
             onItemDrop: handleTreeDrop,
             getItemDropIndicator: (item, subview) =>
               getTreeItemDropIndicator(item.path, item.kind === "favorite" ? "favorite" : "tree"),
