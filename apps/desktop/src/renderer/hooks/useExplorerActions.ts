@@ -1249,11 +1249,13 @@ export function useExplorerActions(args: {
       clearClipboardOnStart?: boolean;
       sourceSurface?: InternalMoveSourceSurface | null;
       pendingTreeSelectionPath?: string | null;
+      initiator?: "clipboard" | "drag_drop" | "move_dialog" | null;
     } = {},
   ) {
     const pasteAttemptId = options.pasteAttemptId ?? null;
     const clearClipboardOnStart = options.clearClipboardOnStart ?? false;
     const sourceSurface = options.sourceSurface ?? null;
+    const initiator = options.initiator ?? null;
     rememberPendingTreeSelectionPath(options.pendingTreeSelectionPath ?? null);
     if (pasteAttemptId !== null) {
       const pendingAttempt = pendingPasteAttemptRef.current;
@@ -1280,6 +1282,7 @@ export function useExplorerActions(args: {
         analysisId: report.analysisId,
         action,
         policy,
+        initiator,
       });
       if (action === "move_to" && sourceSurface) {
         moveOperationSourceSurfaceRef.current.set(response.operationId, sourceSurface);
@@ -1366,6 +1369,7 @@ export function useExplorerActions(args: {
       clearClipboardOnStart: boolean;
       sourceSurface?: InternalMoveSourceSurface | null;
       pendingTreeSelectionPath?: string | null;
+      initiator?: "clipboard" | "drag_drop" | "move_dialog" | null;
     },
   ) {
     void executeCopyLikePlan(report, policy, action, options);
@@ -1383,6 +1387,7 @@ export function useExplorerActions(args: {
     defaultPolicy?: CopyPastePolicy;
     shouldReviewReport?: (report: CopyPasteAnalysisReport) => boolean;
     onIssues?: ((report: CopyPasteAnalysisReport) => void) | undefined;
+    initiator?: "clipboard" | "drag_drop" | "move_dialog" | null;
   }) {
     const defaultPolicy = args.defaultPolicy ?? DEFAULT_COPY_PASTE_POLICY;
     const handle = await client.invoke("copyPaste:analyzeStart", {
@@ -1397,6 +1402,7 @@ export function useExplorerActions(args: {
       analysisId: handle.analysisId,
       action: args.action,
       clearClipboardOnStart: args.clearClipboardOnStart,
+      initiator: args.initiator ?? null,
       sourceSurface: args.sourceSurface ?? null,
       pendingTreeSelectionPath: args.pendingTreeSelectionPath ?? null,
     });
@@ -1457,6 +1463,7 @@ export function useExplorerActions(args: {
             clearClipboardOnStart: args.clearClipboardOnStart,
             sourceSurface: args.sourceSurface ?? null,
             pendingTreeSelectionPath: args.pendingTreeSelectionPath ?? null,
+            initiator: args.initiator ?? null,
           });
           return;
         }
@@ -1465,6 +1472,7 @@ export function useExplorerActions(args: {
           clearClipboardOnStart: args.clearClipboardOnStart,
           sourceSurface: args.sourceSurface ?? null,
           pendingTreeSelectionPath: args.pendingTreeSelectionPath ?? null,
+          initiator: args.initiator ?? null,
         });
         return;
       }
@@ -1495,6 +1503,7 @@ export function useExplorerActions(args: {
     if (request.mode === "cut") {
       await startMoveToDestination(request.sourcePaths, request.destinationDirectoryPath, {
         clearClipboardOnStart: true,
+        initiator: "clipboard",
         onIssues: (report) =>
           showModalNotice(
             "Move cannot continue",
@@ -1519,6 +1528,7 @@ export function useExplorerActions(args: {
         action: "paste",
         pasteAttemptId,
         clearClipboardOnStart: true,
+        initiator: "clipboard",
         onIssues: (report) =>
           showModalNotice(
             "Paste cannot continue",
@@ -2303,6 +2313,7 @@ export function useExplorerActions(args: {
       sourceSurface?: InternalMoveSourceSurface | null;
       validateDestinationBeforeAnalyze?: boolean;
       clearClipboardOnStart?: boolean;
+      initiator?: "clipboard" | "drag_drop" | "move_dialog" | null;
     } = {},
   ): Promise<boolean> {
     if (sourcePaths.length === 0 || destinationDirectoryPath.length === 0) {
@@ -2336,6 +2347,7 @@ export function useExplorerActions(args: {
         clearClipboardOnStart: options.clearClipboardOnStart ?? false,
         sourceSurface: options.sourceSurface ?? null,
         pendingTreeSelectionPath: options.pendingTreeSelectionPath ?? null,
+        initiator: options.initiator ?? null,
         defaultPolicy: DEFAULT_COPY_PASTE_POLICY,
         shouldReviewReport: (report) =>
           reportHasConflicts(report) ||
@@ -2385,6 +2397,7 @@ export function useExplorerActions(args: {
       moveDialogState.sourcePaths,
       destinationDirectoryPath,
       {
+        initiator: "move_dialog",
         onIssues: (report) =>
           setMoveDialogState((current) =>
             current

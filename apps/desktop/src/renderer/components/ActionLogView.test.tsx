@@ -36,6 +36,9 @@ const ENTRIES: ActionLogEntry[] = [
         error: null,
       },
     ],
+    initiator: "move_dialog",
+    requestedDestinationPath: "/Users/demo",
+    runtimeConflicts: [],
     metadata: {},
   },
   {
@@ -67,6 +70,9 @@ const ENTRIES: ActionLogEntry[] = [
         error: "Application not found",
       },
     ],
+    initiator: null,
+    requestedDestinationPath: null,
+    runtimeConflicts: [],
     metadata: {
       applicationName: "Zed",
     },
@@ -154,6 +160,8 @@ describe("ActionLogView", () => {
 
     expect(screen.getByText(/write-op-1/)).toBeInTheDocument();
     expect(screen.getAllByText("/Users/demo/b.txt").length).toBeGreaterThan(1);
+    expect(screen.getByText(/Initiated via: Move dialog/)).toBeInTheDocument();
+    expect(screen.getByText(/Requested destination: \/Users\/demo/)).toBeInTheDocument();
   });
 
   it("filters entries by result and query", () => {
@@ -202,7 +210,98 @@ describe("ActionLogView", () => {
     expect(handleCopy.mock.calls[0]?.[0]).toContain("Action Log Entry");
     expect(handleCopy.mock.calls[0]?.[0]).toContain("Title: Rename completed");
     expect(handleCopy.mock.calls[0]?.[0]).toContain("/Users/demo/a.txt");
+    expect(handleCopy.mock.calls[0]?.[0]).toContain("Initiated via: Move dialog");
     expect(await screen.findByText("Copied")).toBeInTheDocument();
     expect(screen.queryByText(/write-op-1/)).not.toBeInTheDocument();
+  });
+
+  it("renders and searches runtime conflict history and skip provenance", () => {
+    const entries: ActionLogEntry[] = [
+      {
+        id: "entry-3",
+        occurredAt: "2026-03-10T08:00:00.000Z",
+        action: "move_to",
+        status: "partial",
+        operationId: "write-op-9",
+        sourcePaths: ["/Users/demo/source"],
+        destinationPaths: ["/Users/demo/target/item"],
+        sourceSummary: "/Users/demo/source",
+        destinationSummary: "/Users/demo/target/item",
+        title: "Move partially completed",
+        message: "Move finished: 1 completed, 1 skipped.",
+        durationMs: 33,
+        error: null,
+        summary: {
+          totalItemCount: 2,
+          completedItemCount: 1,
+          failedItemCount: 0,
+          skippedItemCount: 1,
+          cancelledItemCount: 0,
+        },
+        items: [
+          {
+            sourcePath: "/Users/demo/source/a.txt",
+            destinationPath: "/Users/demo/target/a.txt",
+            status: "completed",
+            error: null,
+            skipReason: null,
+          },
+          {
+            sourcePath: "/Users/demo/source/b.txt",
+            destinationPath: "/Users/demo/target/b.txt",
+            status: "skipped",
+            error: null,
+            skipReason: "runtime_conflict_resolution",
+          },
+        ],
+        initiator: "drag_drop",
+        requestedDestinationPath: "/Users/demo/target",
+        runtimeConflicts: [
+          {
+            conflictId: "conflict-1",
+            sourcePath: "/Users/demo/source/b.txt",
+            destinationPath: "/Users/demo/target/b.txt",
+            sourceKind: "file",
+            destinationKind: "file",
+            conflictClass: "file_conflict",
+            reason: "destination_changed",
+            resolution: "skip",
+          },
+        ],
+        metadata: {
+          transferMode: "cut",
+        },
+      },
+    ];
+
+    render(
+      <ActionLogView
+        entries={entries}
+        loading={false}
+        error={null}
+        theme="dark"
+        accent="gold"
+        onCopyEntryText={() => undefined}
+        onRefresh={() => undefined}
+      />,
+    );
+
+    const rowButton = screen.getByText("/Users/demo/source").closest("button");
+    if (!(rowButton instanceof HTMLButtonElement)) {
+      throw new Error("Missing move action log row button.");
+    }
+    fireEvent.click(rowButton);
+
+    expect(screen.getByText("Runtime Conflicts")).toBeInTheDocument();
+    expect(screen.getByText(/Initiated via: Drag and drop/)).toBeInTheDocument();
+    expect(screen.getByText("Skipped after runtime conflict resolution")).toBeInTheDocument();
+    expect(screen.getByText("Destination changed")).toBeInTheDocument();
+    expect(screen.getByText("Resolution: Skip")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Search action log"), {
+      target: { value: "runtime conflict resolution" },
+    });
+
+    expect(screen.getAllByText("/Users/demo/source").length).toBeGreaterThan(0);
   });
 });

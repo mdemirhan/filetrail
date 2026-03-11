@@ -145,6 +145,11 @@ export const copyPasteRuntimeResolutionActionSchema = z.enum([
   "keep_both",
   "merge",
 ]);
+export const writeOperationInitiatorSchema = z.enum([
+  "clipboard",
+  "drag_drop",
+  "move_dialog",
+]);
 export const copyPastePlanItemStatusSchema = z.enum(["ready", "conflict", "blocked"]);
 export const copyPastePlanIssueCodeSchema = z.enum([
   "destination_missing",
@@ -493,6 +498,22 @@ export const actionLogItemSchema = z.object({
     .nullable()
     .optional(),
 });
+export const actionLogRuntimeConflictSchema = z.object({
+  conflictId: z.string().min(1),
+  sourcePath: z.string().min(1),
+  destinationPath: z.string().min(1),
+  sourceKind: z.enum(["file", "directory", "symlink"]),
+  destinationKind: copyPasteNodeKindSchema,
+  conflictClass: copyPasteConflictClassSchema,
+  reason: z.enum([
+    "destination_changed",
+    "destination_created",
+    "destination_deleted",
+    "source_changed",
+    "source_deleted",
+  ]),
+  resolution: copyPasteRuntimeResolutionActionSchema.nullable().default(null),
+});
 export const actionLogEntrySchema = z.object({
   id: z.string().min(1),
   occurredAt: z.string().min(1),
@@ -515,6 +536,9 @@ export const actionLogEntrySchema = z.object({
     cancelledItemCount: z.number().int().nonnegative(),
   }),
   items: z.array(actionLogItemSchema),
+  initiator: writeOperationInitiatorSchema.nullable().default(null),
+  requestedDestinationPath: z.string().min(1).nullable().default(null),
+  runtimeConflicts: z.array(actionLogRuntimeConflictSchema).default([]),
   metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
 });
 
@@ -795,6 +819,7 @@ export const ipcContractSchemas = {
         action: writeOperationActionSchema
           .extract(["paste", "move_to", "duplicate"])
           .default("paste"),
+        initiator: writeOperationInitiatorSchema.nullable().optional(),
       }),
       z.object({
         analysisId: z.string().min(1),
@@ -802,6 +827,7 @@ export const ipcContractSchemas = {
           .extract(["paste", "move_to", "duplicate"])
           .default("paste"),
         policy: copyPastePolicySchema,
+        initiator: writeOperationInitiatorSchema.nullable().optional(),
       }),
     ]),
     response: z.object({
@@ -964,12 +990,15 @@ export type IpcResponse<C extends IpcChannel> = z.output<IpcContractSchemas[C]["
 export type CopyPastePlan = z.output<typeof copyPastePlanSchema>;
 export type CopyPasteOperationResult = z.output<typeof copyPasteOperationResultSchema>;
 export type CopyPasteProgressEvent = z.output<typeof copyPasteProgressEventSchema>;
+export type CopyPasteRuntimeResolutionAction = z.output<typeof copyPasteRuntimeResolutionActionSchema>;
 export type WriteOperationAction = z.output<typeof writeOperationActionSchema>;
+export type WriteOperationInitiator = z.output<typeof writeOperationInitiatorSchema>;
 export type WriteOperationResult = z.output<typeof writeOperationResultSchema>;
 export type WriteOperationProgressEvent = z.output<typeof writeOperationProgressEventSchema>;
 export type ActionLogAction = z.output<typeof actionLogActionSchema>;
 export type ActionLogStatus = z.output<typeof actionLogStatusSchema>;
 export type ActionLogItem = z.output<typeof actionLogItemSchema>;
+export type ActionLogRuntimeConflict = z.output<typeof actionLogRuntimeConflictSchema>;
 export type ActionLogEntry = z.output<typeof actionLogEntrySchema>;
 export type AppLogLevel = z.output<typeof appLogLevelSchema>;
 export type AppLogEntry = z.output<typeof appLogEntrySchema>;

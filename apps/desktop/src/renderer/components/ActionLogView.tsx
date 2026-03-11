@@ -83,11 +83,24 @@ export function ActionLogView({
           entry.title,
           entry.message,
           entry.error ?? "",
+          entry.initiator ? formatInitiatorLabel(entry.initiator) : "",
+          entry.requestedDestinationPath ?? "",
           entry.sourceSummary ?? "",
           entry.destinationSummary ?? "",
           ...entry.sourcePaths,
           ...entry.destinationPaths,
-          ...entry.items.map((item) => item.error ?? ""),
+          ...entry.items.flatMap((item) => [
+            item.error ?? "",
+            item.skipReason ? formatSkipReasonLabel(item.skipReason) : "",
+          ]),
+          ...Object.entries(entry.metadata).flatMap(([key, value]) => [key, String(value)]),
+          ...entry.runtimeConflicts.flatMap((conflict) => [
+            conflict.sourcePath,
+            conflict.destinationPath,
+            formatConflictClassLabel(conflict.conflictClass),
+            formatRuntimeConflictReasonLabel(conflict.reason),
+            conflict.resolution ? formatRuntimeResolutionLabel(conflict.resolution) : "",
+          ]),
         ]
           .join("\n")
           .toLowerCase()
@@ -589,6 +602,12 @@ export function ActionLogView({
                           `Items: ${formatSummary(entry)}`,
                           entry.durationMs !== null ? `Duration: ${entry.durationMs} ms` : null,
                           entry.operationId ? `Operation ID: ${entry.operationId}` : null,
+                          entry.initiator
+                            ? `Initiated via: ${formatInitiatorLabel(entry.initiator)}`
+                            : null,
+                          entry.requestedDestinationPath
+                            ? `Requested destination: ${entry.requestedDestinationPath}`
+                            : null,
                           `Timestamp: ${formatDateTime(entry.occurredAt)}`,
                         ]
                           .filter((value): value is string => value !== null)
@@ -605,6 +624,50 @@ export function ActionLogView({
                           palette={palette}
                           tone="error"
                         />
+                      </div>
+                    ) : null}
+
+                    {entry.runtimeConflicts.length > 0 ? (
+                      <div style={{ marginTop: "12px" }}>
+                        <div style={sectionTitleStyle(palette)}>Runtime Conflicts</div>
+                        <div style={{ display: "grid", gap: "8px", marginTop: "8px" }}>
+                          {entry.runtimeConflicts.map((conflict) => (
+                            <div
+                              key={`${entry.id}-${conflict.conflictId}`}
+                              style={{
+                                display: "grid",
+                                gap: "8px",
+                                padding: "10px",
+                                borderRadius: "10px",
+                                border: `1px solid ${palette.line}`,
+                                background: palette.itemBg,
+                              }}
+                            >
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                                <span style={chipStyle(palette)}>
+                                  {formatConflictClassLabel(conflict.conflictClass)}
+                                </span>
+                                <span style={chipStyle(palette)}>
+                                  {formatRuntimeConflictReasonLabel(conflict.reason)}
+                                </span>
+                                <span style={chipStyle(palette)}>
+                                  Resolution:{" "}
+                                  {conflict.resolution
+                                    ? formatRuntimeResolutionLabel(conflict.resolution)
+                                    : "None"}
+                                </span>
+                              </div>
+                              <div>
+                                <div style={eyebrowStyle(palette)}>Source</div>
+                                <div style={pathValueStyle(palette)}>{conflict.sourcePath}</div>
+                              </div>
+                              <div>
+                                <div style={eyebrowStyle(palette)}>Destination</div>
+                                <div style={pathValueStyle(palette)}>{conflict.destinationPath}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     ) : null}
 
@@ -655,6 +718,18 @@ export function ActionLogView({
                                 <div style={{ marginTop: "6px" }}>
                                   <StatusBadge status={item.status} palette={palette} compact />
                                 </div>
+                                {item.skipReason ? (
+                                  <div
+                                    style={{
+                                      marginTop: "8px",
+                                      color: palette.textSecondary,
+                                      fontSize: "12px",
+                                      lineHeight: 1.4,
+                                    }}
+                                  >
+                                    {formatSkipReasonLabel(item.skipReason)}
+                                  </div>
+                                ) : null}
                               </div>
                               <div>
                                 <div style={eyebrowStyle(palette)}>Source</div>
@@ -804,6 +879,71 @@ function formatActionStatusLabel(status: ActionLogStatus | "skipped"): string {
     return "Failed";
   }
   return "Completed";
+}
+
+function formatInitiatorLabel(initiator: ActionLogEntry["initiator"]): string {
+  if (initiator === "drag_drop") {
+    return "Drag and drop";
+  }
+  if (initiator === "move_dialog") {
+    return "Move dialog";
+  }
+  if (initiator === "clipboard") {
+    return "Clipboard paste";
+  }
+  return "Unknown";
+}
+
+function formatSkipReasonLabel(skipReason: NonNullable<ActionLogEntry["items"][number]["skipReason"]>): string {
+  if (skipReason === "planned_conflict_policy") {
+    return "Skipped by planned conflict policy";
+  }
+  return "Skipped after runtime conflict resolution";
+}
+
+function formatConflictClassLabel(
+  conflictClass: ActionLogEntry["runtimeConflicts"][number]["conflictClass"],
+): string {
+  if (conflictClass === "directory_conflict") {
+    return "Folder conflict";
+  }
+  if (conflictClass === "type_mismatch") {
+    return "Type mismatch";
+  }
+  return "File conflict";
+}
+
+function formatRuntimeConflictReasonLabel(
+  reason: ActionLogEntry["runtimeConflicts"][number]["reason"],
+): string {
+  if (reason === "destination_changed") {
+    return "Destination changed";
+  }
+  if (reason === "destination_created") {
+    return "Destination created";
+  }
+  if (reason === "destination_deleted") {
+    return "Destination deleted";
+  }
+  if (reason === "source_changed") {
+    return "Source changed";
+  }
+  return "Source deleted";
+}
+
+function formatRuntimeResolutionLabel(
+  resolution: NonNullable<ActionLogEntry["runtimeConflicts"][number]["resolution"]>,
+): string {
+  if (resolution === "keep_both") {
+    return "Keep both";
+  }
+  if (resolution === "merge") {
+    return "Merge";
+  }
+  if (resolution === "overwrite") {
+    return "Overwrite";
+  }
+  return "Skip";
 }
 
 function formatSummary(entry: ActionLogEntry): string {
@@ -1392,6 +1532,12 @@ function formatActionLogEntryForClipboard(entry: ActionLogEntry): string {
   if (entry.operationId) {
     lines.push(`Operation ID: ${entry.operationId}`);
   }
+  if (entry.initiator) {
+    lines.push(`Initiated via: ${formatInitiatorLabel(entry.initiator)}`);
+  }
+  if (entry.requestedDestinationPath) {
+    lines.push(`Requested destination: ${entry.requestedDestinationPath}`);
+  }
   if (entry.error) {
     lines.push(`Error: ${entry.error}`);
   }
@@ -1419,9 +1565,25 @@ function formatActionLogEntryForClipboard(entry: ActionLogEntry): string {
       lines.push(
         `- [${formatActionStatusLabel(item.status)}] ${item.sourcePath ?? "None"} -> ${item.destinationPath ?? "None"}`,
       );
+      if (item.skipReason) {
+        lines.push(`  Skip reason: ${formatSkipReasonLabel(item.skipReason)}`);
+      }
       if (item.error) {
         lines.push(`  Error: ${item.error}`);
       }
+    }
+  }
+  if (entry.runtimeConflicts.length > 0) {
+    lines.push("", "Runtime Conflicts:");
+    for (const conflict of entry.runtimeConflicts) {
+      lines.push(
+        `- ${formatConflictClassLabel(conflict.conflictClass)}: ${formatRuntimeConflictReasonLabel(conflict.reason)}`,
+      );
+      lines.push(`  Source: ${conflict.sourcePath}`);
+      lines.push(`  Destination: ${conflict.destinationPath}`);
+      lines.push(
+        `  Resolution: ${conflict.resolution ? formatRuntimeResolutionLabel(conflict.resolution) : "None"}`,
+      );
     }
   }
   return lines.join("\n");

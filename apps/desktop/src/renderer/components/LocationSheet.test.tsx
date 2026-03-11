@@ -39,7 +39,7 @@ describe("LocationSheet", () => {
   });
 
   it("focuses the input when opened", async () => {
-    render(
+    const { container } = render(
       <LocationSheet
         open
         currentPath="/Users/demo"
@@ -58,6 +58,8 @@ describe("LocationSheet", () => {
 
     await act(async () => {});
 
+    expect(container.firstElementChild).toHaveClass("action-notice-backdrop");
+    expect(container.firstElementChild).toHaveClass("location-sheet-backdrop");
     expect(screen.getByLabelText("Absolute path")).toHaveFocus();
   });
 

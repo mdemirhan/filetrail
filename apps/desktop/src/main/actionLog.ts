@@ -6,8 +6,10 @@ import {
   type ActionLogAction,
   type ActionLogEntry,
   type ActionLogItem,
+  type ActionLogRuntimeConflict,
   type WriteOperationAction,
   type WriteOperationResult,
+  type WriteOperationInitiator,
   actionLogEntrySchema,
 } from "@filetrail/contracts";
 import { readFileSize, resolveRotatedLogPath, rotateLogFiles } from "./logRotation";
@@ -32,6 +34,9 @@ type ActionLogRecorder = {
     result: WriteOperationResult;
     sourcePaths: string[];
     destinationPaths: string[];
+    initiator?: WriteOperationInitiator | null;
+    requestedDestinationPath?: string | null;
+    runtimeConflicts?: ActionLogRuntimeConflict[];
     metadata?: ActionLogMetadata | null;
   }) => Promise<void>;
   recordOpenPath: (args: {
@@ -185,6 +190,9 @@ export function createActionLogRecorder(store: Pick<ActionLogStore, "append">): 
           error: item.error,
           skipReason: item.skipReason,
         })),
+        initiator: args.initiator ?? null,
+        requestedDestinationPath: args.requestedDestinationPath ?? null,
+        runtimeConflicts: [...(args.runtimeConflicts ?? [])],
         metadata: { ...(args.metadata ?? {}) },
       });
     },
@@ -300,6 +308,9 @@ function createNonWriteActionEntry(args: {
       cancelledItemCount,
     },
     items: args.items,
+    initiator: null,
+    requestedDestinationPath: null,
+    runtimeConflicts: [],
     metadata: args.metadata,
   };
 }

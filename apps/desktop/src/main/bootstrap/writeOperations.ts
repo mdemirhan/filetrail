@@ -2,8 +2,10 @@ import { dirname, join, resolve } from "node:path";
 import { shell } from "electron";
 
 import {
+  type ActionLogRuntimeConflict,
   type IpcRequest,
   type WriteOperationAction,
+  type WriteOperationInitiator,
   type WriteOperationProgressEvent,
   type WriteOperationResult,
   isAbortError,
@@ -45,6 +47,9 @@ export function createWriteOperationCoordinator(
       result: WriteOperationResult;
       sourcePaths: string[];
       destinationPaths: string[];
+      initiator?: WriteOperationInitiator | null;
+      requestedDestinationPath?: string | null;
+      runtimeConflicts?: ActionLogRuntimeConflict[];
       metadata?: Record<string, string | number | boolean | null>;
     }) => Promise<void>;
   } = {},
@@ -59,6 +64,9 @@ export function createWriteOperationCoordinator(
       action: WriteOperationAction;
       sourcePaths: string[];
       targetPaths: string[];
+      initiator: WriteOperationInitiator | null;
+      requestedDestinationPath: string | null;
+      runtimeConflicts: Map<string, ActionLogRuntimeConflict>;
       metadata?: Record<string, string | number | boolean | null>;
     }
   >();
@@ -68,6 +76,15 @@ export function createWriteOperationCoordinator(
     const request = copyPasteRequests.get(event.operationId);
     const action = request?.action ?? "paste";
     const metadata = writeOperationMetadata.get(event.operationId);
+    if (event.runtimeConflict && metadata) {
+      metadata.runtimeConflicts.set(
+        event.runtimeConflict.conflictId,
+        mergeRuntimeConflictRecord(
+          metadata.runtimeConflicts.get(event.runtimeConflict.conflictId) ?? null,
+          event.runtimeConflict,
+        ),
+      );
+    }
     if (isTerminalStatus(event.status)) {
       const logMetadata =
         metadata?.metadata ??
@@ -99,6 +116,13 @@ export function createWriteOperationCoordinator(
             (request && "destinationDirectoryPath" in request
               ? [request.destinationDirectoryPath]
               : []),
+          initiator: metadata?.initiator ?? request?.initiator ?? null,
+          requestedDestinationPath:
+            metadata?.requestedDestinationPath ??
+            (request && "destinationDirectoryPath" in request
+              ? request.destinationDirectoryPath
+              : null),
+          runtimeConflicts: metadata ? Array.from(metadata.runtimeConflicts.values()) : [],
           ...(logMetadata ? { metadata: logMetadata } : {}),
         });
       }
@@ -175,6 +199,9 @@ export function createWriteOperationCoordinator(
       action: args.action,
       sourcePaths: args.sourcePaths,
       targetPaths: args.targetPaths,
+      initiator: null,
+      requestedDestinationPath: args.targetPaths[0] ?? null,
+      runtimeConflicts: new Map(),
       ...(args.metadata ? { metadata: args.metadata } : {}),
     });
     emitLocalWriteOperationEvent({
@@ -213,6 +240,9 @@ export function createWriteOperationCoordinator(
           result: event.result,
           sourcePaths: metadata?.sourcePaths ?? [],
           destinationPaths: metadata?.targetPaths ?? [],
+          initiator: metadata?.initiator ?? null,
+          requestedDestinationPath: metadata?.requestedDestinationPath ?? null,
+          runtimeConflicts: metadata ? Array.from(metadata.runtimeConflicts.values()) : [],
           ...(metadata?.metadata ? { metadata: metadata.metadata } : {}),
         });
       }
@@ -664,6 +694,13 @@ export function createWriteOperationCoordinator(
           sourcePaths: "sourcePaths" in payload ? payload.sourcePaths : [],
           targetPaths:
             "destinationDirectoryPath" in payload ? [payload.destinationDirectoryPath] : [],
+          initiator: payload.initiator ?? null,
+          requestedDestinationPath:
+            "destinationDirectoryPath" in payload
+              ? payload.destinationDirectoryPath
+              : (writeService.getCopyPasteAnalysisUpdate(payload.analysisId).report
+                  ?.destinationDirectoryPath ?? null),
+          runtimeConflicts: new Map(),
           metadata: {
             transferMode,
           },
@@ -673,12 +710,21 @@ export function createWriteOperationCoordinator(
       },
       "copyPaste:cancel": (payload: IpcRequest<"copyPaste:cancel">) =>
         cancelWriteOperation(payload.operationId),
-      "copyPaste:resolveConflict": (payload: IpcRequest<"copyPaste:resolveConflict">) =>
-        writeService.resolveRuntimeConflict(
+      "copyPaste:resolveConflict": (payload: IpcRequest<"copyPaste:resolveConflict">) => {
+        const metadata = writeOperationMetadata.get(payload.operationId);
+        const currentConflict = metadata?.runtimeConflicts.get(payload.conflictId) ?? null;
+        if (metadata && currentConflict) {
+          metadata.runtimeConflicts.set(payload.conflictId, {
+            ...currentConflict,
+            resolution: payload.resolution,
+          });
+        }
+        return writeService.resolveRuntimeConflict(
           payload.operationId,
           payload.conflictId,
           payload.resolution,
-        ),
+        );
+      },
       "writeOperation:rename": async (
         payload: IpcRequest<"writeOperation:rename">,
         event: { sender: WriteOperationSender },
@@ -740,6 +786,22 @@ export function createWriteOperationCoordinator(
       writeOperationMetadata.clear();
       activeWriteOperationId = null;
     },
+  };
+}
+
+function mergeRuntimeConflictRecord(
+  current: ActionLogRuntimeConflict | null,
+  runtimeConflict: NonNullable<WriteOperationProgressEvent["runtimeConflict"]>,
+): ActionLogRuntimeConflict {
+  return {
+    conflictId: runtimeConflict.conflictId,
+    sourcePath: runtimeConflict.sourcePath,
+    destinationPath: runtimeConflict.destinationPath,
+    sourceKind: runtimeConflict.sourceKind,
+    destinationKind: runtimeConflict.destinationKind,
+    conflictClass: runtimeConflict.conflictClass,
+    reason: runtimeConflict.reason,
+    resolution: current?.resolution ?? null,
   };
 }
 

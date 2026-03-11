@@ -123,7 +123,7 @@ export function LocationSheet({
   }
 
   return (
-    <div className="location-sheet-backdrop" role="presentation">
+    <div className="action-notice-backdrop location-sheet-backdrop" role="presentation">
       <dialog
         ref={dialogRef}
         open

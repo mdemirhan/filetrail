@@ -58,6 +58,7 @@ export function useExplorerDragAndDrop(args: {
     sourcePaths: string[],
     destinationDirectoryPath: string,
     options: {
+      initiator?: "clipboard" | "drag_drop" | "move_dialog" | null;
       pendingTreeSelectionPath?: string | null;
       reviewLargeBatchWarning?: boolean;
       sourceSurface?: InternalMoveSourceSurface | null;
@@ -308,6 +309,7 @@ export function useExplorerDragAndDrop(args: {
       session.sourceItems.map((item) => item.path),
       path,
       {
+        initiator: "drag_drop",
         pendingTreeSelectionPath: options.selectTargetInTree ? path : null,
         sourceSurface: session.sourceSurface,
         validateDestinationBeforeAnalyze: false,
