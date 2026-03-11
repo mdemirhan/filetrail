@@ -2398,6 +2398,7 @@ export function useExplorerActions(args: {
       destinationDirectoryPath,
       {
         initiator: "move_dialog",
+        validateDestinationBeforeAnalyze: true,
         onIssues: (report) =>
           setMoveDialogState((current) =>
             current

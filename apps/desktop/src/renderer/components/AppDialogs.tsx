@@ -20,13 +20,13 @@ import { CopyPasteDialog } from "./CopyPasteDialog";
 import { CopyPasteProgressCard } from "./CopyPasteProgressCard";
 import { CopyPasteReviewDialog } from "./CopyPasteReviewDialog";
 import { CopyPasteRuntimeConflictDialog } from "./CopyPasteRuntimeConflictDialog";
+import { GoToFolderDialog } from "./GoToFolderDialog";
 import {
   type ContextMenuActionId,
   type ContextMenuSubmenuAction,
   type ContextMenuSubmenuItem,
   ItemContextMenu,
 } from "./ItemContextMenu";
-import { LocationSheet } from "./LocationSheet";
 import { TextPromptDialog } from "./TextPromptDialog";
 import { ToastViewport } from "./ToastViewport";
 
@@ -181,7 +181,7 @@ export function AppDialogs({
 
   return (
     <>
-      <LocationSheet
+      <GoToFolderDialog
         open={locationSheetOpen}
         currentPath={currentPath}
         submitting={locationSubmitting}
@@ -191,20 +191,17 @@ export function AppDialogs({
         onClose={onCloseLocationSheet}
         onSubmit={(path) => onSubmitLocationPath(path)}
       />
-      <LocationSheet
+      <GoToFolderDialog
         open={moveDialogState !== null}
         currentPath={moveDialogState?.currentPath ?? currentPath}
         submitting={moveDialogState?.submitting ?? false}
         error={moveDialogState?.error ?? null}
         title="Move To"
-        eyebrow="Destination"
-        label="Destination folder"
+        inputAriaLabel="Destination folder"
         submitLabel="Move"
-        placeholder={currentPath}
-        tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
-        enableSuggestions={false}
         browseLabel="Browse"
         onBrowse={onBrowseForDirectoryPath}
+        tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
         onRequestPathSuggestions={onRequestPathSuggestions}
         onClose={onCloseMoveDialog}
         onSubmit={(path) => onSubmitMoveDialog(path)}

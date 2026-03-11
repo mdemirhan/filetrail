@@ -558,6 +558,69 @@ vi.mock("./components/LocationSheet", () => ({
       </dialog>
     ) : null,
 }));
+vi.mock("./components/GoToFolderDialog", () => ({
+  GoToFolderDialog: ({
+    open,
+    title,
+    inputAriaLabel,
+    currentPath,
+    submitLabel,
+    browseLabel,
+    error,
+    onBrowse,
+    onClose,
+    onSubmit,
+  }: {
+    open: boolean;
+    title?: string;
+    inputAriaLabel?: string;
+    currentPath: string;
+    submitLabel?: string;
+    browseLabel?: string;
+    error: string | null;
+    onBrowse?: ((path: string) => Promise<string | null>) | null;
+    onClose: () => void;
+    onSubmit: (path: string) => void;
+  }) =>
+    open ? (
+      <dialog aria-label={title ?? "Location"}>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            const formData = new FormData(event.currentTarget);
+            onSubmit(String(formData.get("path") ?? ""));
+          }}
+        >
+          <label>
+            {inputAriaLabel ?? "Path"}
+            <input name="path" aria-label={inputAriaLabel ?? "Path"} defaultValue={currentPath} />
+          </label>
+          {error ? <div>{error}</div> : null}
+          <button type="button" onClick={onClose}>
+            Cancel
+          </button>
+          {onBrowse ? (
+            <button
+              type="button"
+              onClick={async (event) => {
+                const form = event.currentTarget.closest("form");
+                const input = form?.querySelector<HTMLInputElement>('input[name="path"]');
+                const nextPath = await onBrowse(input?.value ?? currentPath);
+                if (nextPath && input) {
+                  fireEvent.change(input, {
+                    target: { value: nextPath },
+                  });
+                }
+              }}
+            >
+              {browseLabel ?? "Browse"}
+            </button>
+          ) : null}
+          <button type="submit">{submitLabel ?? "Open Folder"}</button>
+        </form>
+      </dialog>
+    ) : null,
+}));
 vi.mock("./components/HelpView", () => ({
   HelpView: () => (
     <div data-testid="help-view">
@@ -1671,6 +1734,40 @@ describe("App copy/paste integration", () => {
       });
     });
     expect(screen.getByLabelText("Destination folder")).toHaveValue("/Users/demo/Folder");
+  });
+
+  it("keeps Move To open and shows an inline error for an invalid destination path", async () => {
+    const harness = createAppHarness({
+      itemPropertiesByPath: {
+        "/Users/demo/DoesNotExist": "missing",
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceButton = await screen.findByTitle("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.click(sourceButton);
+    });
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "m", metaKey: true, shiftKey: true });
+    });
+
+    await screen.findByText("Move");
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("Destination folder"), {
+        target: { value: "/Users/demo/DoesNotExist" },
+      });
+      fireEvent.click(screen.getByText("Move"));
+    });
+
+    expect(await screen.findByText("Drop target must be an existing folder.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Move To")).toBeInTheDocument();
+    expect(harness.invocations.some((call) => call.channel === "copyPaste:plan")).toBe(false);
   });
 
   it("blocks content-pane shortcuts while Move To is open", async () => {
@@ -6028,6 +6125,10 @@ function createAppHarness(
     preferences?: Partial<IpcResponse<"app:getPreferences">["preferences"]>;
     directorySnapshots?: Record<string, IpcResponse<"directory:getSnapshot">>;
     treeChildrenByPath?: Record<string, IpcResponse<"tree:getChildren">["children"]>;
+    itemPropertiesByPath?: Record<
+      string,
+      "missing" | NonNullable<IpcResponse<"item:getProperties">["item"]>
+    >;
     copyTextError?: Error;
     pickApplicationResponse?: IpcResponse<"system:pickApplication">;
     pickDirectoryResponse?: IpcResponse<"system:pickDirectory">;
@@ -6142,6 +6243,16 @@ function createAppHarness(
       }
       if (channel === "item:getProperties") {
         const targetPath = (payload as IpcRequestInput<"item:getProperties">).path;
+        if (Object.prototype.hasOwnProperty.call(args.itemPropertiesByPath ?? {}, targetPath)) {
+          const item =
+            ((args.itemPropertiesByPath ?? {}) as Record<
+              string,
+              "missing" | NonNullable<IpcResponse<"item:getProperties">["item"]>
+            >)[targetPath] ?? "missing";
+          return {
+            item: item === "missing" ? null : item,
+          } as IpcResponse<C>;
+        }
         const entry =
           Object.values(directorySnapshots)
             .flatMap((snapshot) => snapshot.entries)
