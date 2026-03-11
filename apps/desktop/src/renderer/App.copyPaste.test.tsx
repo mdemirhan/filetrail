@@ -1765,9 +1765,270 @@ describe("App copy/paste integration", () => {
       fireEvent.click(screen.getByText("Move"));
     });
 
-    expect(await screen.findByText("Drop target must be an existing folder.")).toBeInTheDocument();
+    expect(await screen.findByText("Destination must be an existing folder.")).toBeInTheDocument();
     expect(screen.getByLabelText("Move To")).toBeInTheDocument();
     expect(harness.invocations.some((call) => call.channel === "copyPaste:plan")).toBe(false);
+  });
+
+  it("keeps Move To open and shows an inline error when the destination is not a folder", async () => {
+    const harness = createAppHarness({
+      itemPropertiesByPath: {
+        "/Users/demo/source.txt": {
+          path: "/Users/demo/source.txt",
+          name: "source.txt",
+          extension: "txt",
+          kind: "file",
+          kindLabel: "File",
+          isHidden: false,
+          isSymlink: false,
+          createdAt: null,
+          modifiedAt: null,
+          sizeBytes: null,
+          sizeStatus: "ready",
+          permissionMode: null,
+        },
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceButton = await screen.findByTitle("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.click(sourceButton);
+    });
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "m", metaKey: true, shiftKey: true });
+    });
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("Destination folder"), {
+        target: { value: "/Users/demo/source.txt" },
+      });
+      fireEvent.click(screen.getByText("Move"));
+    });
+
+    expect(await screen.findByText("Destination must be an existing folder.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Move To")).toBeInTheDocument();
+    expect(harness.invocations.some((call) => call.channel === "copyPaste:plan")).toBe(false);
+  });
+
+  it("keeps Move To open when analysis reports same-path issues", async () => {
+    const harness = createAppHarness({
+      planResponse: {
+        mode: "cut",
+        sourcePaths: ["/Users/demo/source.txt"],
+        destinationDirectoryPath: "/Users/demo",
+        conflictResolution: "error",
+        items: [],
+        conflicts: [],
+        issues: [
+          {
+            code: "same_path",
+            message: "Cannot paste /Users/demo/source.txt onto itself.",
+            sourcePath: "/Users/demo/source.txt",
+            destinationPath: "/Users/demo/source.txt",
+          },
+        ],
+        warnings: [],
+        requiresConfirmation: {
+          largeBatch: false,
+          cutDelete: false,
+        },
+        summary: {
+          topLevelItemCount: 1,
+          totalItemCount: 1,
+          totalBytes: 5,
+          skippedConflictCount: 0,
+        },
+        canExecute: false,
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceButton = await screen.findByTitle("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.click(sourceButton);
+    });
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "m", metaKey: true, shiftKey: true });
+    });
+
+    await screen.findByText("Move");
+    await act(async () => {
+      fireEvent.click(screen.getByText("Move"));
+    });
+
+    expect(await screen.findByText("Source and destination cannot be the same.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Move To")).toBeInTheDocument();
+    expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
+  });
+
+  it("keeps Move To open when analysis reports missing sources", async () => {
+    const harness = createAppHarness({
+      planResponse: {
+        mode: "cut",
+        sourcePaths: ["/Users/demo/source.txt"],
+        destinationDirectoryPath: "/Users/demo/Folder",
+        conflictResolution: "error",
+        items: [],
+        conflicts: [],
+        issues: [
+          {
+            code: "source_missing",
+            message: "Source does not exist: /Users/demo/source.txt",
+            sourcePath: "/Users/demo/source.txt",
+            destinationPath: "/Users/demo/Folder/source.txt",
+          },
+        ],
+        warnings: [],
+        requiresConfirmation: {
+          largeBatch: false,
+          cutDelete: false,
+        },
+        summary: {
+          topLevelItemCount: 1,
+          totalItemCount: 1,
+          totalBytes: 5,
+          skippedConflictCount: 0,
+        },
+        canExecute: false,
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceButton = await screen.findByTitle("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.click(sourceButton);
+    });
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "m", metaKey: true, shiftKey: true });
+    });
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("Destination folder"), {
+        target: { value: "/Users/demo/Folder" },
+      });
+      fireEvent.click(screen.getByText("Move"));
+    });
+
+    expect(await screen.findByText("A source item no longer exists.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Move To")).toBeInTheDocument();
+    expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
+  });
+
+  it("keeps Move To open when analysis reports parent-into-child issues", async () => {
+    const harness = createAppHarness({
+      directorySnapshots: {
+        "/Users/demo": {
+          path: "/Users/demo",
+          parentPath: "/Users",
+          entries: [
+            createDirectoryEntry("/Users/demo/testParent", "directory"),
+            createDirectoryEntry("/Users/demo/Folder", "directory"),
+          ],
+        },
+      },
+      planResponse: {
+        mode: "cut",
+        sourcePaths: ["/Users/demo/testParent"],
+        destinationDirectoryPath: "/Users/demo/Folder",
+        conflictResolution: "error",
+        items: [],
+        conflicts: [],
+        issues: [
+          {
+            code: "parent_into_child",
+            message: "Cannot paste /Users/demo/testParent into its own descendant.",
+            sourcePath: "/Users/demo/testParent",
+            destinationPath: "/Users/demo/testParent/child",
+          },
+        ],
+        warnings: [],
+        requiresConfirmation: {
+          largeBatch: false,
+          cutDelete: false,
+        },
+        summary: {
+          topLevelItemCount: 1,
+          totalItemCount: 1,
+          totalBytes: 0,
+          skippedConflictCount: 0,
+        },
+        canExecute: false,
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceFolder = await screen.findByRole("button", { name: "testParent" });
+    await act(async () => {
+      fireEvent.click(sourceFolder);
+    });
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "m", metaKey: true, shiftKey: true });
+    });
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("Destination folder"), {
+        target: { value: "/Users/demo/Folder" },
+      });
+      fireEvent.click(screen.getByText("Move"));
+    });
+
+    expect(
+      await screen.findByText("You can't place a folder into its own descendant."),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Move To")).toBeInTheDocument();
+    expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
+  });
+
+  it("keeps Move To open and shows an inline error when start is rejected as busy", async () => {
+    const harness = createAppHarness({
+      copyPasteStartError: new Error("Another write operation is already running."),
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceButton = await screen.findByTitle("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.click(sourceButton);
+    });
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "m", metaKey: true, shiftKey: true });
+    });
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("Destination folder"), {
+        target: { value: "/Users/demo/Folder" },
+      });
+      fireEvent.click(screen.getByText("Move"));
+    });
+
+    expect(await screen.findByText("Wait for the current write to finish.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Move To")).toBeInTheDocument();
+    expect(screen.queryByText("Move couldn't start")).not.toBeInTheDocument();
   });
 
   it("blocks content-pane shortcuts while Move To is open", async () => {
@@ -3876,10 +4137,8 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
-    expect(
-      await screen.findByRole("dialog", { name: "Paste cannot continue" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Cannot paste an item onto itself.")).toBeInTheDocument();
+    expect(await screen.findByText("Paste couldn't start")).toBeInTheDocument();
+    expect(screen.getByText("Source and destination cannot be the same.")).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Paste Requires Review" })).not.toBeInTheDocument();
   });
 
@@ -4377,16 +4636,10 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
+    expect(await screen.findByText("Paste couldn't start")).toBeInTheDocument();
     expect(
-      await screen.findByRole("dialog", { name: "Unable to prepare paste" }),
+      screen.getByText("File Trail couldn't prepare the paste operation. No files were written."),
     ).toBeInTheDocument();
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "OK" }));
-    });
-    await vi.waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: "Unable to prepare paste" })).toBeNull();
-    });
     await selectItem("/Users/demo/Folder");
 
     const planCallsBeforeRetry = harness.invocations.filter(
@@ -4452,16 +4705,8 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
-    expect(
-      await screen.findByRole("dialog", { name: "Paste cannot continue" }),
-    ).toBeInTheDocument();
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "OK" }));
-    });
-    await vi.waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: "Paste cannot continue" })).toBeNull();
-    });
+    expect(await screen.findByText("Paste couldn't start")).toBeInTheDocument();
+    expect(screen.getByText("Destination folder does not exist.")).toBeInTheDocument();
     await selectItem("/Users/demo/Folder");
 
     const planCallsBeforeRetry = harness.invocations.filter(
@@ -4477,6 +4722,74 @@ describe("App copy/paste integration", () => {
       );
     });
     expect(screen.queryByText("Clipboard is empty")).not.toBeInTheDocument();
+  });
+
+  it("shows a toast when analysis finishes with an error before paste starts", async () => {
+    const harness = createAppHarness({
+      analysisUpdateResponse: {
+        analysisId: "analysis-1",
+        status: "error",
+        done: true,
+        report: null,
+        error: "Planner unavailable.",
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+    await selectItem("/Users/demo/Folder");
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    expect(await screen.findByText("Paste couldn't start")).toBeInTheDocument();
+    expect(screen.getByText("Planner unavailable.")).toBeInTheDocument();
+    expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
+  });
+
+  it("does not show a failure notice when analysis is explicitly cancelled before paste starts", async () => {
+    const harness = createAppHarness({
+      analysisUpdateResponse: {
+        analysisId: "analysis-1",
+        status: "cancelled",
+        done: true,
+        report: null,
+        error: null,
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+    await selectItem("/Users/demo/Folder");
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.some((call) => call.channel === "copyPaste:analyzeGetUpdate")).toBe(
+        true,
+      );
+    });
+    expect(screen.queryByText("Paste couldn't start")).not.toBeInTheDocument();
+    expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
   });
 
   it("keeps the cut clipboard cleared after a cancelled cut/paste operation", async () => {
@@ -4626,7 +4939,8 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
-    expect(await screen.findByText("Wait for the current write to finish")).toBeInTheDocument();
+    expect(await screen.findByText("Paste couldn't start")).toBeInTheDocument();
+    expect(screen.getByText("Wait for the current write to finish.")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Paste In Progress" })).not.toBeInTheDocument();
   });
 
@@ -5468,6 +5782,53 @@ describe("App copy/paste integration", () => {
     });
   });
 
+  it("shows a toast when drag and drop move planning is blocked before start", async () => {
+    const harness = createAppHarness({
+      planResponse: {
+        mode: "cut",
+        sourcePaths: ["/Users/demo/source.txt"],
+        destinationDirectoryPath: "/Users/demo/Folder",
+        conflictResolution: "error",
+        items: [],
+        conflicts: [],
+        issues: [
+          {
+            code: "source_missing",
+            message: "Source does not exist: /Users/demo/source.txt",
+            sourcePath: "/Users/demo/source.txt",
+            destinationPath: "/Users/demo/Folder/source.txt",
+          },
+        ],
+        warnings: [],
+        requiresConfirmation: {
+          largeBatch: false,
+          cutDelete: false,
+        },
+        summary: {
+          topLevelItemCount: 1,
+          totalItemCount: 1,
+          totalBytes: 5,
+          skippedConflictCount: 0,
+        },
+        canExecute: false,
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceButton = await screen.findByRole("button", { name: "source.txt" });
+    const treeTarget = await screen.findByTitle("tree:/Users/demo/Folder");
+    await dragBetween(sourceButton, treeTarget);
+
+    expect(await screen.findByText("Move couldn't start")).toBeInTheDocument();
+    expect(screen.getByText("A source item no longer exists.")).toBeInTheDocument();
+    expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
+  });
+
   it("auto-starts drag moves when the only review signal is a large batch warning", async () => {
     const harness = createAppHarness({
       planResponse: {
@@ -5645,6 +6006,7 @@ describe("App copy/paste integration", () => {
     await dragBetween(sourceFolder, targetFolder);
 
     expect(await screen.findByRole("dialog", { name: "Move Requires Review" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Move To")).toBeNull();
     expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
 
     await act(async () => {
@@ -6122,6 +6484,7 @@ describe("App copy/paste integration", () => {
 function createAppHarness(
   args: {
     planResponse?: IpcResponse<"copyPaste:plan">;
+    analysisUpdateResponse?: IpcResponse<"copyPaste:analyzeGetUpdate">;
     preferences?: Partial<IpcResponse<"app:getPreferences">["preferences"]>;
     directorySnapshots?: Record<string, IpcResponse<"directory:getSnapshot">>;
     treeChildrenByPath?: Record<string, IpcResponse<"tree:getChildren">["children"]>;
@@ -6289,6 +6652,7 @@ function createAppHarness(
             resolveCopyPastePlanPromises.push(resolve);
           });
         }
+        // Explicit thrown planner failures intentionally win over canned terminal updates.
         if (args.copyPastePlanError) {
           throw args.copyPastePlanError;
         }
@@ -6321,13 +6685,13 @@ function createAppHarness(
         if (args.copyPastePlanError) {
           throw args.copyPastePlanError;
         }
-        return {
+        return (args.analysisUpdateResponse ?? {
           analysisId: "analysis-1",
           status: "complete",
           done: true,
           report: analysisReport,
           error: null,
-        } as IpcResponse<C>;
+        }) as IpcResponse<C>;
       }
       if (channel === "copyPaste:analyzeCancel") {
         return { ok: true } as IpcResponse<C>;

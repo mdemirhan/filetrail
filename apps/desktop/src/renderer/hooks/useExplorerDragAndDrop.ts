@@ -3,7 +3,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { DirectoryEntry } from "../lib/explorerTypes";
 import type { TreePresentationItem } from "../lib/favorites";
 import { getTrashPath } from "../lib/favorites";
-import type { useFiletrailClient } from "../lib/filetrailClient";
 import {
   type InternalDragSession,
   type InternalDropTargetSurface,
@@ -49,7 +48,6 @@ function createDragPreviewElement(session: InternalDragSession): HTMLDivElement 
 }
 
 export function useExplorerDragAndDrop(args: {
-  client: ReturnType<typeof useFiletrailClient>;
   activeEntries: DirectoryEntry[];
   selectedPathsInViewOrder: string[];
   homePath: string;
@@ -68,7 +66,6 @@ export function useExplorerDragAndDrop(args: {
   onToggleTreeNode: (path: string) => void;
 }) {
   const {
-    client,
     activeEntries,
     selectedPathsInViewOrder,
     homePath,
@@ -266,15 +263,6 @@ export function useExplorerDragAndDrop(args: {
     event.dataTransfer.dropEffect = "none";
   }
 
-  async function confirmTargetPath(path: string): Promise<boolean> {
-    try {
-      const response = await client.invoke("item:getProperties", { path });
-      return response.item?.kind === "directory" && response.item.isSymlink === false;
-    } catch {
-      return false;
-    }
-  }
-
   async function handleDrop(
     surface: InternalDropTargetSurface,
     path: string | null,
@@ -299,12 +287,7 @@ export function useExplorerDragAndDrop(args: {
     }
     event.preventDefault();
     clearTreeHoverExpand();
-    const confirmedTargetPath =
-      options.validateWithItemProperties === false ? true : await confirmTargetPath(path);
     clearDragSession();
-    if (!confirmedTargetPath) {
-      return;
-    }
     await onMoveToDestination(
       session.sourceItems.map((item) => item.path),
       path,
@@ -312,7 +295,7 @@ export function useExplorerDragAndDrop(args: {
         initiator: "drag_drop",
         pendingTreeSelectionPath: options.selectTargetInTree ? path : null,
         sourceSurface: session.sourceSurface,
-        validateDestinationBeforeAnalyze: false,
+        validateDestinationBeforeAnalyze: options.validateWithItemProperties !== false,
       },
     );
   }
