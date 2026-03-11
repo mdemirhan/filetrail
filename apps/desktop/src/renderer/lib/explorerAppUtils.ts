@@ -173,6 +173,31 @@ export function resolveWriteOperationTreeSelectionPath(
   return null;
 }
 
+export function resolveWriteOperationTreeReloadPaths(result: WriteOperationResult): string[] {
+  const completedSourceRoots = collapseNestedPaths(
+    result.items
+      .filter((item) => item.status === "completed")
+      .map((item) => item.sourcePath)
+      .filter((path): path is string => typeof path === "string" && path.length > 0),
+  );
+  const completedDestinationRoots = collapseNestedPaths(
+    result.items
+      .filter((item) => item.status === "completed")
+      .map((item) => item.destinationPath)
+      .filter((path): path is string => typeof path === "string" && path.length > 0),
+  );
+  const parentPaths = new Set<string>();
+  for (const path of [...completedSourceRoots, ...completedDestinationRoots]) {
+    const parentPath = parentDirectoryPath(path);
+    if (parentPath) {
+      parentPaths.add(parentPath);
+    }
+  }
+  return [...parentPaths].sort((left, right) =>
+    left.length === right.length ? left.localeCompare(right) : left.length - right.length,
+  );
+}
+
 export function replacePathPrefix(
   path: string,
   sourcePrefix: string,
@@ -221,6 +246,19 @@ function findDeepestMatchingSourceItem(
     )
     .sort((left, right) => right.sourcePath.length - left.sourcePath.length);
   return matchingItems[0] ?? null;
+}
+
+function collapseNestedPaths(paths: string[]): string[] {
+  const roots: string[] = [];
+  for (const path of [...new Set(paths)].sort((left, right) =>
+    left.length === right.length ? left.localeCompare(right) : left.length - right.length,
+  )) {
+    if (roots.some((rootPath) => path === rootPath || path.startsWith(`${rootPath}/`))) {
+      continue;
+    }
+    roots.push(path);
+  }
+  return roots;
 }
 
 export function isDirectoryLikeEntry(entry: DirectoryEntry | null): entry is DirectoryEntry {

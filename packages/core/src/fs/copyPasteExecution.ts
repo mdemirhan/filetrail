@@ -14,6 +14,7 @@ import type {
   CopyPasteProgressEvent,
   CopyPasteRuntimeConflict,
   CopyPasteRuntimeResolutionAction,
+  NodeFingerprint,
   WriteServiceFileSystem,
 } from "./writeServiceTypes";
 
@@ -257,16 +258,9 @@ async function executeResolvedNode(args: {
       });
     }
     for (const child of currentNode.children) {
-      const childDestinationPath =
-        currentNode.action === "keep_both"
-          ? `${currentNode.destinationPath}/${basename(child.node.sourcePath)}`
-          : child.destinationPath;
       const childResult = await executeResolvedNode({
         ...args,
-        resolvedNode: {
-          ...child,
-          destinationPath: childDestinationPath,
-        },
+        resolvedNode: child,
       });
       args.completedItemCount = childResult.completedItemCount;
       args.completedByteCount = childResult.completedByteCount;
@@ -414,7 +408,7 @@ async function removeDestinationIfPresent(
   }
   await fileSystem.rm(destinationPath, {
     recursive: destinationFingerprint.kind === "directory",
-    force: false,
+    force: true,
   });
 }
 
@@ -433,12 +427,22 @@ async function cleanupMovedSourceNode(
       fileSystem,
       resolvedNode.node.sourcePath,
     );
-    if (!fingerprintsEqual(resolvedNode.node.sourceFingerprint, currentSourceFingerprint)) {
+    if (
+      !canRemoveMovedSourceDirectory(resolvedNode.node.sourceFingerprint, currentSourceFingerprint)
+    ) {
+      return;
+    }
+    try {
+      const remainingEntries = await fileSystem.readdir(resolvedNode.node.sourcePath);
+      if (remainingEntries.length > 0) {
+        return;
+      }
+    } catch {
       return;
     }
     try {
       await fileSystem.rm(resolvedNode.node.sourcePath, {
-        recursive: false,
+        recursive: true,
         force: false,
       });
     } catch {
@@ -457,6 +461,25 @@ async function cleanupMovedSourceNode(
     recursive: false,
     force: false,
   });
+}
+
+function canRemoveMovedSourceDirectory(
+  originalFingerprint: NodeFingerprint,
+  currentFingerprint: NodeFingerprint,
+): boolean {
+  return (
+    currentFingerprint.exists &&
+    currentFingerprint.kind === "directory" &&
+    originalFingerprint.kind === "directory" &&
+    originalFingerprint.mode === currentFingerprint.mode &&
+    originalFingerprint.symlinkTarget === currentFingerprint.symlinkTarget &&
+    (originalFingerprint.ino === null ||
+      currentFingerprint.ino === null ||
+      originalFingerprint.ino === currentFingerprint.ino) &&
+    (originalFingerprint.dev === null ||
+      currentFingerprint.dev === null ||
+      originalFingerprint.dev === currentFingerprint.dev)
+  );
 }
 
 function countExecutableSteps(nodes: ResolvedCopyPasteNode[]): number {

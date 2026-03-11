@@ -209,6 +209,38 @@ describe("writeService", () => {
     await expect(lstat(join(root, "source", "notes.txt"))).rejects.toThrow();
   });
 
+  it("removes nested source directories after a successful cut on the real filesystem", async () => {
+    const root = await mkdtemp(join(tmpdir(), "filetrail-write-cut-tree-"));
+    await mkdir(join(root, "source", "nested", "deeper"), { recursive: true });
+    await mkdir(join(root, "target"), { recursive: true });
+    await writeFile(join(root, "source", "nested", "deeper", "alpha.txt"), "alpha", "utf8");
+    await writeFile(join(root, "source", "beta.txt"), "beta", "utf8");
+
+    const service = createWriteService({
+      createOperationId: () => "cut-tree-op",
+    });
+    const events: CopyPasteProgressEvent[] = [];
+    service.subscribe((event) => {
+      events.push(event);
+    });
+
+    service.startCopyPaste({
+      mode: "cut",
+      sourcePaths: [join(root, "source")],
+      destinationDirectoryPath: join(root, "target"),
+    });
+
+    const terminal = await waitForTerminalEvent(events, "cut-tree-op");
+    expect(terminal.result?.status).toBe("completed");
+    await expect(
+      readFile(join(root, "target", "source", "nested", "deeper", "alpha.txt"), "utf8"),
+    ).resolves.toBe("alpha");
+    await expect(readFile(join(root, "target", "source", "beta.txt"), "utf8")).resolves.toBe(
+      "beta",
+    );
+    await expect(lstat(join(root, "source"))).rejects.toThrow();
+  });
+
   it("supports cooperative cancellation and reports partial completion", async () => {
     const service = createWriteService({
       createOperationId: () => "cancel-op",

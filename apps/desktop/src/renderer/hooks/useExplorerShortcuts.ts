@@ -97,6 +97,7 @@ export function useExplorerShortcuts(args: {
   refreshDirectory: (options?: {
     path?: string;
     treeSelectionPath?: string | null;
+    extraTreeReloadPaths?: string[];
   }) => Promise<void>;
   applySearchResultsSort: () => void;
   runCopyClipboardAction: (mode: "copy" | "cut") => Promise<void>;

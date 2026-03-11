@@ -9,9 +9,9 @@ import {
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 
 import type { CopyPasteReviewDialogSize } from "../../shared/appPreferences";
-import { formatSize } from "../lib/formatting";
 
 type Policy = Extract<IpcRequest<"copyPaste:start">, { analysisId: string }>["policy"];
+type CopyLikeAction = IpcRequest<"copyPaste:analyzeStart">["action"];
 type AnalysisNode = NonNullable<
   IpcResponse<"copyPaste:analyzeGetUpdate">["report"]
 >["nodes"][number];
@@ -25,6 +25,7 @@ const REVIEW_DIALOG_EDGE_MARGIN = 24;
 type DialogFrame = CopyPasteReviewDialogSize & { x: number; y: number };
 
 export function CopyPasteReviewDialog({
+  action = "paste",
   title,
   report,
   policy,
@@ -34,6 +35,7 @@ export function CopyPasteReviewDialog({
   onClose,
   onStart,
 }: {
+  action?: CopyLikeAction;
   title: string;
   report: AnalysisReport;
   policy: Policy;
@@ -44,8 +46,6 @@ export function CopyPasteReviewDialog({
   onStart: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
-  const [activeTab, setActiveTab] = useState<ConflictTab>("files");
-  const [searchQuery, setSearchQuery] = useState("");
   const [dialogFrame, setDialogFrame] = useState<DialogFrame>(() =>
     resolveInitialDialogFrame(persistedSize),
   );
@@ -61,38 +61,41 @@ export function CopyPasteReviewDialog({
     [report.destinationDirectoryPath, report.sourcePaths],
   );
 
-  const conflicts = useMemo(
-    () => flattenConflictNodes(report.nodes, sharedAncestorPath),
-    [report.nodes, sharedAncestorPath],
+  const previewNodes = useMemo(
+    () => buildPlanPreviewNodes(report.nodes, sharedAncestorPath, policy),
+    [policy, report.nodes, sharedAncestorPath],
   );
-  const counts = useMemo(() => summarizeConflicts(conflicts), [conflicts]);
-  const filteredConflicts = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLowerCase();
-    return conflicts.filter((conflict) => {
-      if (conflict.tab !== activeTab) {
-        return false;
-      }
-      if (normalizedQuery.length === 0) {
-        return true;
-      }
-      return [
-        conflict.displayPath,
-        conflict.name,
-        conflict.displayPrefix,
-        conflict.displayName,
-        conflict.sourcePath,
-        conflict.destinationPath,
-        conflict.detail,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(normalizedQuery);
-    });
-  }, [activeTab, conflicts, searchQuery]);
+  const planTreeKey = useMemo(
+    () =>
+      [
+        report.analysisId,
+        policy.file,
+        policy.directory,
+        policy.mismatch,
+        report.summary.totalNodeCount,
+      ].join(":"),
+    [
+      policy.directory,
+      policy.file,
+      policy.mismatch,
+      report.analysisId,
+      report.summary.totalNodeCount,
+    ],
+  );
+  const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(
+    () => new Set(collectExpandableNodeIds(previewNodes)),
+  );
 
   useEffect(() => {
     dialogRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (planTreeKey.length === 0) {
+      return;
+    }
+    setExpandedNodeIds(new Set(collectExpandableNodeIds(previewNodes)));
+  }, [planTreeKey, previewNodes]);
 
   useEffect(() => {
     dialogFrameRef.current = dialogFrame;
@@ -173,6 +176,18 @@ export function CopyPasteReviewDialog({
     window.addEventListener("pointercancel", finishInteraction);
   }
 
+  function toggleNodeExpansion(nodeId: string) {
+    setExpandedNodeIds((current) => {
+      const next = new Set(current);
+      if (next.has(nodeId)) {
+        next.delete(nodeId);
+      } else {
+        next.add(nodeId);
+      }
+      return next;
+    });
+  }
+
   return (
     <div className="action-notice-backdrop" role="presentation">
       <dialog
@@ -208,17 +223,6 @@ export function CopyPasteReviewDialog({
                 </p>
               </div>
             </div>
-            <div className="copy-paste-review-summary">
-              <span>{report.summary.totalNodeCount} items</span>
-              <span className="is-accent">{report.summary.fileConflictCount} file conflicts</span>
-              <span className="is-accent">
-                {report.summary.directoryConflictCount} folder conflicts
-              </span>
-              <span>{report.summary.mismatchConflictCount} mismatches</span>
-              {report.summary.totalBytes !== null ? (
-                <span>{formatSize(report.summary.totalBytes, "ready")}</span>
-              ) : null}
-            </div>
             <section className="copy-paste-review-policy-bar" aria-label="Conflict policies">
               <PolicyGroup
                 label="File Conflicts"
@@ -236,6 +240,7 @@ export function CopyPasteReviewDialog({
                 onChange={(value) => onPolicyChange({ ...policy, directory: value })}
                 options={[
                   ["skip", "Skip"],
+                  ["overwrite", "Replace Folder"],
                   ["merge", "Merge"],
                   ["keep_both", "Keep Both"],
                 ]}
@@ -253,57 +258,20 @@ export function CopyPasteReviewDialog({
             </section>
           </div>
           <div className="copy-paste-review-body">
-            <div className="copy-paste-review-toolbar">
-              <div
-                className="copy-paste-review-tabs"
-                role="tablist"
-                aria-label="Conflict categories"
-              >
-                <TabButton
-                  active={activeTab === "files"}
-                  label={`Files (${counts.files})`}
-                  onClick={() => setActiveTab("files")}
-                />
-                <TabButton
-                  active={activeTab === "folders"}
-                  label={`Folders (${counts.folders})`}
-                  onClick={() => setActiveTab("folders")}
-                />
-                <TabButton
-                  active={activeTab === "mismatches"}
-                  label={`Mismatches (${counts.mismatches})`}
-                  onClick={() => setActiveTab("mismatches")}
-                />
-              </div>
-              <label className="copy-paste-review-search">
-                <span className="copy-paste-review-search-icon" aria-hidden="true">
-                  <SearchGlyph />
-                </span>
-                <input
-                  type="search"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Filter..."
-                  aria-label="Filter conflicts"
-                />
-              </label>
-            </div>
             <section className="copy-paste-review-list-panel">
-              <div className="copy-paste-review-list-header">
-                <span>{filteredConflicts.length} shown</span>
-                <span>{describeTab(activeTab)}</span>
-              </div>
-              <ul className="copy-paste-review-list">
-                {filteredConflicts.length > 0 ? (
-                  filteredConflicts.map((conflict) => (
-                    <ConflictRow key={conflict.id} conflict={conflict} />
+              <ul className="copy-paste-review-tree" role="tree" aria-label="Destination plan">
+                {previewNodes.length > 0 ? (
+                  previewNodes.map((row) => (
+                    <PlanTreeNode
+                      key={row.id}
+                      node={row}
+                      expandedNodeIds={expandedNodeIds}
+                      onToggle={toggleNodeExpansion}
+                      searchActive={false}
+                    />
                   ))
                 ) : (
-                  <li className="copy-paste-review-empty">
-                    {searchQuery.trim().length > 0
-                      ? "No conflicts match this filter."
-                      : `No ${describeTab(activeTab).toLowerCase()} detected.`}
-                  </li>
+                  <li className="copy-paste-review-empty">No planned changes.</li>
                 )}
               </ul>
             </section>
@@ -311,16 +279,20 @@ export function CopyPasteReviewDialog({
         </div>
         <div className="action-notice-actions copy-paste-review-actions">
           <span className="copy-paste-review-selection-summary">
-            Files: {formatPolicyLabel(policy.file).toLowerCase()} · Folders:{" "}
-            {formatPolicyLabel(policy.directory).toLowerCase()} · Mismatches:{" "}
-            {formatPolicyLabel(policy.mismatch).toLowerCase()}
+            Files: {formatPolicyLabel("file", policy.file).toLowerCase()} · Folders:{" "}
+            {formatPolicyLabel("directory", policy.directory).toLowerCase()} · Mismatches:{" "}
+            {formatPolicyLabel("mismatch", policy.mismatch).toLowerCase()}
           </span>
           <div className="copy-paste-review-action-buttons">
             <button type="button" className="tb-btn" onClick={onClose}>
               Cancel
             </button>
             <button type="button" className="tb-btn primary" onClick={onStart}>
-              {report.mode === "cut" ? "Continue Move" : "Continue Paste"}
+              {report.mode === "cut"
+                ? "Continue Move"
+                : action === "duplicate"
+                  ? "Continue Duplicate"
+                  : "Continue Paste"}
             </button>
           </div>
         </div>
@@ -336,21 +308,23 @@ export function CopyPasteReviewDialog({
   );
 }
 
-type ConflictTab = "files" | "folders" | "mismatches";
+type SummaryBucket = "added" | "replaced" | "skipped" | "keepBoth" | "merged";
+type Tone = "accent" | "success" | "warning" | "muted" | "neutral" | "danger";
+type PreviewKind = "file" | "folder" | "mismatch";
 
-type FlatConflict = {
+type PlanPreviewNode = {
   id: string;
-  tab: ConflictTab;
+  kind: PreviewKind;
+  depth: number;
   displayPath: string;
   name: string;
-  displayPrefix: string;
   displayName: string;
   sourcePath: string;
   destinationPath: string;
-  detail: string;
-  nestedConflictCount: number;
-  sourceSize: string | null;
-  destinationSize: string | null;
+  actionLabel: string;
+  summaryBucket: SummaryBucket;
+  badgeTone: Tone;
+  children: PlanPreviewNode[];
 };
 
 function PolicyGroup<T extends string>({
@@ -383,163 +357,262 @@ function PolicyGroup<T extends string>({
   );
 }
 
-function TabButton({
-  active,
-  label,
-  onClick,
+function PlanTreeNode({
+  node,
+  expandedNodeIds,
+  onToggle,
+  searchActive,
 }: {
-  active: boolean;
-  label: string;
-  onClick: () => void;
+  node: PlanPreviewNode;
+  expandedNodeIds: Set<string>;
+  onToggle: (nodeId: string) => void;
+  searchActive: boolean;
 }) {
-  return (
-    <button
-      type="button"
-      className={active ? "copy-paste-review-tab is-active" : "copy-paste-review-tab"}
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-    >
-      {label}
-    </button>
-  );
-}
+  const isExpandable = node.children.length > 0;
+  const isExpanded = searchActive || expandedNodeIds.has(node.id);
 
-function ConflictRow({ conflict }: { conflict: FlatConflict }) {
   return (
-    <li className="copy-paste-review-row">
-      <div className="copy-paste-review-row-icon" aria-hidden="true">
-        {conflict.tab === "files" ? (
-          <FileGlyph accent={iconAccentForName(conflict.name)} />
-        ) : conflict.tab === "folders" ? (
-          <FolderGlyph />
-        ) : (
-          <MismatchGlyph />
-        )}
-      </div>
-      <div className="copy-paste-review-row-nameplate">
-        <span className="copy-paste-review-row-path" title={conflict.displayPath}>
-          {conflict.displayPrefix.length > 0 ? (
-            <span className="copy-paste-review-row-prefix">{conflict.displayPrefix}</span>
-          ) : null}
-          <span className="copy-paste-review-row-basename">{conflict.displayName}</span>
-        </span>
-      </div>
-      {conflict.tab === "files" && conflict.sourceSize && conflict.destinationSize ? (
-        <div className="copy-paste-review-row-size">
-          <span>{conflict.sourceSize}</span>
-          <span className="copy-paste-review-row-size-arrow">→</span>
-          <span
-            className={conflict.sourceSize === conflict.destinationSize ? undefined : "is-accent"}
-          >
-            {conflict.destinationSize}
+    <li
+      className="copy-paste-review-tree-item"
+      role="treeitem"
+      aria-level={node.depth + 1}
+      aria-expanded={isExpandable ? isExpanded : undefined}
+    >
+      <div className="copy-paste-review-row" style={{ paddingLeft: `${node.depth * 18}px` }}>
+        <div className="copy-paste-review-row-leading">
+          {isExpandable ? (
+            <button
+              type="button"
+              className="copy-paste-review-row-toggle"
+              aria-label={`${isExpanded ? "Collapse" : "Expand"} ${node.displayName}`}
+              aria-expanded={isExpanded}
+              onClick={() => onToggle(node.id)}
+            >
+              <TreeChevron expanded={isExpanded} />
+            </button>
+          ) : (
+            <span className="copy-paste-review-row-toggle-spacer" aria-hidden="true" />
+          )}
+        </div>
+        <div className="copy-paste-review-row-icon" aria-hidden="true">
+          {node.kind === "file" ? (
+            <FileGlyph accent={iconAccentForName(node.name)} />
+          ) : node.kind === "folder" ? (
+            <FolderGlyph />
+          ) : (
+            <MismatchGlyph />
+          )}
+        </div>
+        <div className="copy-paste-review-row-nameplate">
+          <span className="copy-paste-review-row-path" title={node.displayPath}>
+            {node.displayName}
           </span>
         </div>
-      ) : (
-        <div className="copy-paste-review-row-detail">{formatRowDetail(conflict)}</div>
-      )}
+        <div className="copy-paste-review-row-meta">
+          <span className={`copy-paste-review-row-badge is-${node.badgeTone}`}>
+            {node.actionLabel}
+          </span>
+        </div>
+      </div>
+      {isExpandable && isExpanded ? (
+        <ul className="copy-paste-review-tree-group">
+          {node.children.map((child) => (
+            <PlanTreeNode
+              key={child.id}
+              node={child}
+              expandedNodeIds={expandedNodeIds}
+              onToggle={onToggle}
+              searchActive={searchActive}
+            />
+          ))}
+        </ul>
+      ) : null}
     </li>
   );
 }
 
-function flattenConflictNodes(nodes: AnalysisNode[], sharedAncestorPath: string): FlatConflict[] {
-  const conflicts: FlatConflict[] = [];
-
-  const visit = (node: AnalysisNode) => {
-    if (node.conflictClass !== null) {
-      const displayPath = trimSharedAncestor(node.sourcePath, sharedAncestorPath);
-      const { prefix, name } = splitDisplayPath(displayPath);
-      conflicts.push({
-        id: node.id,
-        tab: conflictTabForNode(node),
-        displayPath,
-        name,
-        displayPrefix: prefix,
-        displayName: name,
-        sourcePath: node.sourcePath,
-        destinationPath: node.destinationPath,
-        detail: formatConflict(node),
-        nestedConflictCount: Math.max(0, node.conflictNodeCount - 1),
-        sourceSize: formatNodeSize(node.sourceFingerprint.size),
-        destinationSize: formatNodeSize(node.destinationFingerprint.size),
-      });
-    }
-    node.children.forEach(visit);
-  };
-
-  nodes.forEach(visit);
-  return conflicts;
+function buildPlanPreviewNodes(
+  nodes: AnalysisNode[],
+  sharedAncestorPath: string,
+  policy: Policy,
+  depth = 0,
+): PlanPreviewNode[] {
+  return nodes.map((node) => buildPlanPreviewNode(node, sharedAncestorPath, policy, depth));
 }
 
-function splitDisplayPath(displayPath: string): { prefix: string; name: string } {
+function buildPlanPreviewNode(
+  node: AnalysisNode,
+  sharedAncestorPath: string,
+  policy: Policy,
+  depth: number,
+): PlanPreviewNode {
+  const displayPath = trimSharedAncestor(node.sourcePath, sharedAncestorPath);
+  const name = splitDisplayPath(displayPath);
+  const action = resolvePreviewAction(node, policy);
+  const children =
+    node.sourceKind === "directory" && action.expandChildren
+      ? node.children.map((child) =>
+          buildPlanPreviewNode(child, sharedAncestorPath, policy, depth + 1),
+        )
+      : [];
+
+  return {
+    id: node.id,
+    kind: previewKindForNode(node),
+    depth,
+    displayPath,
+    name,
+    displayName: name,
+    sourcePath: node.sourcePath,
+    destinationPath: node.destinationPath,
+    actionLabel: action.label,
+    summaryBucket: action.summaryBucket,
+    badgeTone: action.badgeTone,
+    children,
+  };
+}
+
+function collectExpandableNodeIds(nodes: PlanPreviewNode[]): string[] {
+  const nodeIds: string[] = [];
+  for (const node of nodes) {
+    if (node.children.length > 0) {
+      nodeIds.push(node.id);
+      nodeIds.push(...collectExpandableNodeIds(node.children));
+    }
+  }
+  return nodeIds;
+}
+
+function previewKindForNode(node: AnalysisNode): PreviewKind {
+  if (node.conflictClass === "type_mismatch") {
+    return "mismatch";
+  }
+  return node.sourceKind === "directory" ? "folder" : "file";
+}
+
+function resolvePreviewAction(node: AnalysisNode, policy: Policy) {
+  if (node.conflictClass === null) {
+    if (node.sourceKind === "directory") {
+      return {
+        label: "Add",
+        summaryBucket: "added" as const,
+        badgeTone: "success" as const,
+        expandChildren: false,
+      };
+    }
+    return {
+      label: "Add",
+      summaryBucket: "added" as const,
+      badgeTone: "success" as const,
+      expandChildren: false,
+    };
+  }
+
+  if (node.conflictClass === "directory_conflict") {
+    if (policy.directory === "merge") {
+      return {
+        label: "Merge",
+        summaryBucket: "merged" as const,
+        badgeTone: "neutral" as const,
+        expandChildren: true,
+      };
+    }
+    if (policy.directory === "overwrite") {
+      return {
+        label: "Replace Folder",
+        summaryBucket: "replaced" as const,
+        badgeTone: "danger" as const,
+        expandChildren: false,
+      };
+    }
+    if (policy.directory === "keep_both") {
+      return {
+        label: "Keep Both",
+        summaryBucket: "keepBoth" as const,
+        badgeTone: "warning" as const,
+        expandChildren: false,
+      };
+    }
+    return {
+      label: "Skip Folder",
+      summaryBucket: "skipped" as const,
+      badgeTone: "muted" as const,
+      expandChildren: false,
+    };
+  }
+
+  if (node.conflictClass === "type_mismatch") {
+    if (policy.mismatch === "overwrite") {
+      return {
+        label: "Replace",
+        summaryBucket: "replaced" as const,
+        badgeTone: "accent" as const,
+        expandChildren: false,
+      };
+    }
+    if (policy.mismatch === "keep_both") {
+      return {
+        label: "Keep Both",
+        summaryBucket: "keepBoth" as const,
+        badgeTone: "warning" as const,
+        expandChildren: false,
+      };
+    }
+    return {
+      label: "Skip",
+      summaryBucket: "skipped" as const,
+      badgeTone: "muted" as const,
+      expandChildren: false,
+    };
+  }
+
+  if (policy.file === "overwrite") {
+    return {
+      label: "Replace File",
+      summaryBucket: "replaced" as const,
+      badgeTone: "danger" as const,
+      expandChildren: false,
+    };
+  }
+  if (policy.file === "keep_both") {
+    return {
+      label: "Keep Both",
+      summaryBucket: "keepBoth" as const,
+      badgeTone: "warning" as const,
+      expandChildren: false,
+    };
+  }
+  return {
+    label: "Skip",
+    summaryBucket: "skipped" as const,
+    badgeTone: "muted" as const,
+    expandChildren: false,
+  };
+}
+
+function splitDisplayPath(displayPath: string): string {
   const normalizedPath = normalizePath(displayPath);
   const separatorIndex = normalizedPath.lastIndexOf("/");
   if (separatorIndex < 0) {
-    return { prefix: "", name: normalizedPath };
+    return normalizedPath;
   }
-  return {
-    prefix: normalizedPath.slice(0, separatorIndex + 1),
-    name: normalizedPath.slice(separatorIndex + 1),
-  };
-}
-
-function summarizeConflicts(conflicts: FlatConflict[]) {
-  return conflicts.reduce(
-    (summary, conflict) => {
-      summary[conflict.tab] += 1;
-      return summary;
-    },
-    { files: 0, folders: 0, mismatches: 0 } satisfies Record<ConflictTab, number>,
-  );
-}
-
-function conflictTabForNode(node: AnalysisNode): ConflictTab {
-  if (node.conflictClass === "directory_conflict") {
-    return "folders";
-  }
-  if (node.conflictClass === "type_mismatch") {
-    return "mismatches";
-  }
-  return "files";
-}
-
-function describeTab(tab: ConflictTab): string {
-  if (tab === "folders") {
-    return "Folder conflicts";
-  }
-  if (tab === "mismatches") {
-    return "Type mismatches";
-  }
-  return "File conflicts";
+  return normalizedPath.slice(separatorIndex + 1);
 }
 
 function formatPolicyLabel(
+  kind: "file" | "directory" | "mismatch",
   value: Policy["file"] | Policy["directory"] | Policy["mismatch"],
 ): string {
   if (value === "keep_both") {
     return "Keep Both";
   }
   if (value === "overwrite") {
-    return "Overwrite";
+    return kind === "directory" ? "Replace Folder" : "Overwrite";
   }
   if (value === "merge") {
     return "Merge";
   }
   return "Skip";
-}
-
-function formatConflict(node: AnalysisNode): string {
-  if (node.conflictClass === "directory_conflict") {
-    return "Folder exists";
-  }
-  if (node.conflictClass === "type_mismatch") {
-    return `${capitalize(node.sourceKind)} → ${capitalize(node.destinationKind)}`;
-  }
-  return "File exists";
-}
-
-function capitalize(value: string): string {
-  return value.slice(0, 1).toUpperCase() + value.slice(1);
 }
 
 function basename(filePath: string): string {
@@ -591,20 +664,6 @@ function findCommonAncestorPath(paths: string[]): string {
   return commonSegments.join("/");
 }
 
-function formatNodeSize(size: number | null): string | null {
-  if (size === null) {
-    return null;
-  }
-  return formatSize(size, "ready");
-}
-
-function formatRowDetail(conflict: FlatConflict): string {
-  if (conflict.tab === "folders") {
-    return `${conflict.nestedConflictCount} nested`;
-  }
-  return conflict.detail;
-}
-
 function iconAccentForName(fileName: string): string {
   const extension = fileName.includes(".") ? (fileName.split(".").pop()?.toLowerCase() ?? "") : "";
   if (["kt", "kts"].includes(extension)) {
@@ -637,11 +696,10 @@ function WarningGlyph() {
   );
 }
 
-function SearchGlyph() {
+function TreeChevron({ expanded }: { expanded: boolean }) {
   return (
     <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <circle cx="7" cy="7" r="4.75" />
-      <path d="M10.6 10.6L14 14" />
+      <path d={expanded ? "M4.25 6.25L8 10L11.75 6.25" : "M6.25 4.25L10 8L6.25 11.75"} />
     </svg>
   );
 }
@@ -735,7 +793,12 @@ function FileGlyph({ accent }: { accent: string }) {
 
 function FolderGlyph() {
   return (
-    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+      style={{ color: "var(--ft-conflict-icon-gold)" }}
+    >
       <path d="M1.75 4.25C1.75 3.69772 2.19772 3.25 2.75 3.25H5.75L7.1 4.85H13.25C13.8023 4.85 14.25 5.29772 14.25 5.85V12.25C14.25 12.8023 13.8023 13.25 13.25 13.25H2.75C2.19772 13.25 1.75 12.8023 1.75 12.25V4.25Z" />
     </svg>
   );

@@ -38,7 +38,7 @@ export type CopyPasteAnalysisJobStatus =
   | "cancelled"
   | "error";
 export type CopyPastePolicyFileAction = "overwrite" | "skip" | "keep_both";
-export type CopyPastePolicyDirectoryAction = "merge" | "skip" | "keep_both";
+export type CopyPastePolicyDirectoryAction = "overwrite" | "merge" | "skip" | "keep_both";
 export type CopyPastePolicyMismatchAction = "overwrite" | "skip" | "keep_both";
 export type CopyPasteRuntimeResolutionAction = "overwrite" | "skip" | "keep_both" | "merge";
 export type CopyPasteNodeKind = "missing" | "file" | "directory" | "symlink";

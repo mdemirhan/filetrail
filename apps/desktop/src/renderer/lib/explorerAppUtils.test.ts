@@ -2,6 +2,7 @@ import {
   resolveExplorerTreeRootPath,
   resolvePasteDestinationPath,
   resolveWriteOperationRefreshPath,
+  resolveWriteOperationTreeReloadPaths,
   resolveWriteOperationTreeSelectionPath,
 } from "./explorerAppUtils";
 import type { WriteOperationResult } from "./explorerTypes";
@@ -115,5 +116,36 @@ describe("explorerAppUtils", () => {
     expect(resolveWriteOperationTreeSelectionPath(result, "/Users/demo/tmp/old-name")).toBe(
       "/Users/demo/tmp/new-name",
     );
+  });
+
+  it("reloads only impacted parent branches for a completed subtree move", () => {
+    const result = {
+      action: "move_to",
+      items: [
+        {
+          sourcePath: "/Users/demo/source-folder",
+          destinationPath: "/Users/demo/target/source-folder",
+          status: "completed",
+          error: null,
+        },
+        {
+          sourcePath: "/Users/demo/source-folder/child.txt",
+          destinationPath: "/Users/demo/target/source-folder/child.txt",
+          status: "completed",
+          error: null,
+        },
+        {
+          sourcePath: "/Users/demo/source-folder/nested/deep.txt",
+          destinationPath: "/Users/demo/target/source-folder/nested/deep.txt",
+          status: "completed",
+          error: null,
+        },
+      ],
+    } as WriteOperationResult;
+
+    expect(resolveWriteOperationTreeReloadPaths(result)).toEqual([
+      "/Users/demo",
+      "/Users/demo/target",
+    ]);
   });
 });

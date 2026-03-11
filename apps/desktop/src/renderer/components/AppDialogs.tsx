@@ -86,7 +86,7 @@ export function AppDialogs({
   onCloseNewFolderDialog,
   onSubmitNewFolderDialog,
   copyPasteDialogState,
-  onExecuteCopyLikePlan,
+  onRequestCopyLikePlanStart,
   onUpdateCopyPastePolicy,
   onCloseCopyPasteDialog,
   onConfirmTrashDialog,
@@ -144,7 +144,7 @@ export function AppDialogs({
   onCloseNewFolderDialog: () => void;
   onSubmitNewFolderDialog: (value: string) => void;
   copyPasteDialogState: CopyPasteDialogState;
-  onExecuteCopyLikePlan: (
+  onRequestCopyLikePlanStart: (
     report: CopyPasteAnalysisReport,
     policy: CopyPastePolicy,
     action: "paste" | "move_to" | "duplicate",
@@ -271,6 +271,7 @@ export function AppDialogs({
       ) : null}
       {copyPasteDialogState?.type === "review" ? (
         <CopyPasteReviewDialog
+          action={copyPasteDialogState.action}
           title={
             copyPasteDialogState.action === "move_to"
               ? "Move Requires Review"
@@ -285,7 +286,7 @@ export function AppDialogs({
           persistedSize={copyPasteReviewDialogSize}
           onSizeChange={onCopyPasteReviewDialogSizeChange}
           onStart={() =>
-            onExecuteCopyLikePlan(
+            onRequestCopyLikePlanStart(
               copyPasteDialogState.report,
               copyPasteDialogState.policy,
               copyPasteDialogState.action,
@@ -333,7 +334,7 @@ export function AppDialogs({
       writeOperationProgressEvent.runtimeConflict ? (
         <CopyPasteRuntimeConflictDialog
           title="Live Conflict Detected"
-          message={`${writeOperationProgressEvent.runtimeConflict.sourcePath} now conflicts with ${writeOperationProgressEvent.runtimeConflict.destinationPath}.`}
+          message={buildRuntimeConflictMessage(writeOperationProgressEvent.runtimeConflict)}
           actions={buildRuntimeConflictActions(
             writeOperationProgressEvent,
             onResolveRuntimeConflict,
@@ -473,6 +474,11 @@ function buildRuntimeConflictActions(
   }
   if (conflict.conflictClass === "directory_conflict") {
     return [
+      {
+        label: "Replace Folder",
+        destructive: true,
+        onClick: () => onResolveRuntimeConflict(conflict.conflictId, "overwrite"),
+      },
       { label: "Merge", onClick: () => onResolveRuntimeConflict(conflict.conflictId, "merge") },
       { label: "Skip", onClick: () => onResolveRuntimeConflict(conflict.conflictId, "skip") },
       {
@@ -492,6 +498,16 @@ function buildRuntimeConflictActions(
       onClick: () => onResolveRuntimeConflict(conflict.conflictId, "keep_both"),
     },
   ];
+}
+
+function buildRuntimeConflictMessage(
+  conflict: NonNullable<WriteOperationProgressEvent["runtimeConflict"]>,
+): string {
+  const baseMessage = `${conflict.sourcePath} now conflicts with ${conflict.destinationPath}.`;
+  if (conflict.conflictClass !== "directory_conflict") {
+    return baseMessage;
+  }
+  return `${baseMessage} Replacing the folder will delete destination-only files and subfolders inside the conflicting destination folder before copying continues.`;
 }
 
 function getPathLeafName(path: string): string {

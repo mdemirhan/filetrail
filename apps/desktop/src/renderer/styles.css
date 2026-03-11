@@ -2322,10 +2322,35 @@ body.platform-macos .window-toolbar-brand {
   color: var(--ft-conflict-accent);
 }
 
+.copy-paste-review-summary span.is-success {
+  border-color: color-mix(in srgb, var(--success) 36%, var(--ft-conflict-border));
+  background: color-mix(in srgb, var(--success) 10%, var(--bg-hover));
+  color: var(--success);
+}
+
+.copy-paste-review-summary span.is-warning {
+  border-color: color-mix(in srgb, var(--warning) 36%, var(--ft-conflict-border));
+  background: color-mix(in srgb, var(--warning) 10%, var(--bg-hover));
+  color: var(--warning);
+}
+
+.copy-paste-review-summary span.is-muted {
+  border-color: color-mix(in srgb, var(--text-tertiary) 22%, var(--ft-conflict-border));
+  background: color-mix(in srgb, var(--text-tertiary) 8%, var(--bg-hover));
+  color: var(--text-tertiary);
+}
+
+.copy-paste-review-summary span.is-danger {
+  border-color: color-mix(in srgb, var(--danger) 36%, var(--ft-conflict-border));
+  background: color-mix(in srgb, var(--danger) 10%, var(--bg-hover));
+  color: var(--danger);
+}
+
 .copy-paste-review-policy-bar {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px;
   padding: 10px 12px;
   margin-top: 12px;
   border: 1px solid var(--ft-conflict-border);
@@ -2333,16 +2358,27 @@ body.platform-macos .window-toolbar-brand {
   background: color-mix(in srgb, var(--bg-hover) 40%, var(--ft-conflict-panel));
 }
 
+.copy-paste-review-policy-warning {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 34%, var(--ft-conflict-border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--danger) 8%, var(--ft-conflict-panel));
+  color: color-mix(in srgb, var(--danger) 72%, var(--text-primary));
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .copy-paste-review-policy-group {
   margin: 0;
-  min-width: 0;
-  padding: 0 8px;
+  padding: 0;
   border: 0;
-  min-inline-size: 0;
+  min-inline-size: fit-content;
+  flex: 0 0 auto;
 }
 
 .copy-paste-review-policy-group + .copy-paste-review-policy-group {
-  border-left: 1px solid color-mix(in srgb, var(--ft-conflict-border) 88%, transparent);
+  border-left: 0;
 }
 
 .copy-paste-review-policy-label {
@@ -2358,7 +2394,7 @@ body.platform-macos .window-toolbar-brand {
 
 .copy-paste-review-segmented {
   display: inline-flex;
-  width: 100%;
+  width: auto;
   padding: 2px;
   border: 1px solid var(--ft-conflict-border);
   border-radius: 6px;
@@ -2366,7 +2402,7 @@ body.platform-macos .window-toolbar-brand {
 }
 
 .copy-paste-review-segmented button {
-  flex: 1 1 0;
+  flex: 0 0 auto;
   min-height: 32px;
   padding: 0 8px;
   border: 0;
@@ -2377,6 +2413,7 @@ body.platform-macos .window-toolbar-brand {
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
+  white-space: nowrap;
   transition: background 140ms ease, color 140ms ease;
 }
 
@@ -2404,33 +2441,12 @@ body.platform-macos .window-toolbar-brand {
   margin-bottom: 2px;
 }
 
-.copy-paste-review-tabs {
-  display: inline-flex;
-  align-items: stretch;
-  gap: 0;
-}
-
-.copy-paste-review-tab {
-  min-height: 28px;
-  padding: 5px 12px;
-  border: 0;
-  background: transparent;
+.copy-paste-review-tree-label {
   color: var(--text-tertiary);
-  font: inherit;
   font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: border-color 140ms ease, color 140ms ease;
-  border-bottom: 2px solid transparent;
-}
-
-.copy-paste-review-tab:hover {
-  color: var(--text-secondary);
-}
-
-.copy-paste-review-tab.is-active {
-  color: var(--text-primary);
-  border-bottom-color: var(--ft-conflict-accent);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
 }
 
 .copy-paste-review-search {
@@ -2514,28 +2530,80 @@ body.platform-macos .window-toolbar-brand {
   font-weight: 600;
 }
 
-.copy-paste-review-list {
+.copy-paste-review-tree,
+.copy-paste-review-tree-group {
   display: grid;
   align-content: start;
   gap: 0;
-  flex: 1 1 auto;
+  list-style: none;
   margin: 0;
+  padding: 0;
+}
+
+.copy-paste-review-tree {
+  flex: 1 1 auto;
   padding: 6px 0 10px;
   overflow: auto;
   min-height: 0;
   overflow-x: hidden;
-  list-style: none;
+}
+
+.copy-paste-review-tree-item {
+  min-width: 0;
 }
 
 .copy-paste-review-row {
   display: grid;
-  grid-template-columns: 14px minmax(0, 1fr) minmax(92px, auto);
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
-  min-height: 30px;
+  min-height: 34px;
   padding: 5px 10px;
   width: 100%;
   min-width: 0;
+}
+
+.copy-paste-review-row-leading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+}
+
+.copy-paste-review-row-toggle,
+.copy-paste-review-row-toggle-spacer {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.copy-paste-review-row-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.copy-paste-review-row-toggle:hover {
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-hover) 78%, transparent);
+}
+
+.copy-paste-review-row-toggle:focus-visible {
+  outline: 1px solid var(--accent-blue-border);
+  outline-offset: 1px;
+}
+
+.copy-paste-review-row-toggle svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  stroke-width: 1.35;
 }
 
 .copy-paste-review-row-icon {
@@ -2556,9 +2624,7 @@ body.platform-macos .window-toolbar-brand {
 }
 
 .copy-paste-review-row-nameplate {
-  display: block;
   min-width: 0;
-  flex: 1 1 auto;
   overflow: hidden;
 }
 
@@ -2573,48 +2639,56 @@ body.platform-macos .window-toolbar-brand {
   text-align: left;
 }
 
-.copy-paste-review-row-prefix {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-secondary);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  direction: rtl;
-  unicode-bidi: plaintext;
+.copy-paste-review-row-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 108px;
 }
 
-.copy-paste-review-row-basename {
-  flex: 0 0 auto;
-  color: var(--text-primary);
-}
-
-.copy-paste-review-row-size,
-.copy-paste-review-row-detail {
+.copy-paste-review-row-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
-  color: var(--text-tertiary);
+  min-height: 22px;
+  padding: 0 9px;
+  border: 1px solid var(--ft-conflict-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-hover) 54%, var(--bg-elevated));
+  color: var(--text-secondary);
   font-size: 10px;
-  font-variant-numeric: tabular-nums;
-  justify-self: end;
-  text-align: right;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   white-space: nowrap;
-  min-width: 92px;
 }
 
-.copy-paste-review-row-size .is-accent,
-.copy-paste-review-row-detail {
+.copy-paste-review-row-badge.is-accent {
+  border-color: color-mix(in srgb, var(--ft-conflict-accent) 36%, var(--ft-conflict-border));
+  background: color-mix(in srgb, var(--ft-conflict-accent) 10%, var(--bg-hover));
   color: var(--ft-conflict-accent);
 }
 
-.copy-paste-review-row-detail {
-  justify-content: flex-end;
-  min-width: 72px;
+.copy-paste-review-row-badge.is-success {
+  border-color: color-mix(in srgb, var(--icon-green) 42%, var(--ft-conflict-border));
+  background: color-mix(in srgb, var(--icon-green) 14%, var(--bg-hover));
+  color: var(--icon-green);
 }
 
-.copy-paste-review-row-size-arrow {
-  opacity: 0.55;
+.copy-paste-review-row-badge.is-warning {
+  border-color: color-mix(in srgb, var(--warning) 58%, var(--ft-conflict-border));
+  background: color-mix(in srgb, var(--warning) 16%, var(--bg-hover));
+  color: color-mix(in srgb, var(--warning) 78%, var(--text-primary) 22%);
+}
+
+.copy-paste-review-row-badge.is-muted {
+  border-color: color-mix(in srgb, var(--text-tertiary) 22%, var(--ft-conflict-border));
+  background: color-mix(in srgb, var(--text-tertiary) 8%, var(--bg-hover));
+  color: var(--text-tertiary);
+}
+
+.copy-paste-review-row-badge.is-danger {
+  border-color: color-mix(in srgb, var(--danger) 36%, var(--ft-conflict-border));
+  background: color-mix(in srgb, var(--danger) 10%, var(--bg-hover));
+  color: var(--danger);
 }
 
 .copy-paste-review-empty {
@@ -2716,11 +2790,13 @@ body.platform-macos .window-toolbar-brand {
   }
 
   .copy-paste-review-policy-bar {
-    grid-template-columns: minmax(0, 1fr);
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .copy-paste-review-policy-group {
     padding: 0;
+    min-inline-size: 0;
   }
 
   .copy-paste-review-policy-group + .copy-paste-review-policy-group {
@@ -2733,11 +2809,6 @@ body.platform-macos .window-toolbar-brand {
   .copy-paste-review-toolbar {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .copy-paste-review-tabs {
-    gap: 10px;
-    overflow-x: auto;
   }
 
   .copy-paste-review-search {
@@ -2774,11 +2845,9 @@ body.platform-macos .window-toolbar-brand {
   .copy-paste-review-message,
   .copy-paste-review-summary span,
   .copy-paste-review-segmented button,
-  .copy-paste-review-tab,
   .copy-paste-review-search input,
   .copy-paste-review-row-path,
-  .copy-paste-review-row-size,
-  .copy-paste-review-row-detail {
+  .copy-paste-review-row-badge {
     font-size: 11px;
   }
 }

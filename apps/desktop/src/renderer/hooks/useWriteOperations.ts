@@ -34,7 +34,7 @@ type ContextMenuState = {
 type CopyPasteAnalysisReport = NonNullable<IpcResponse<"copyPaste:analyzeGetUpdate">["report"]>;
 type CopyPastePolicy = {
   file: "overwrite" | "skip" | "keep_both";
-  directory: "merge" | "skip" | "keep_both";
+  directory: "overwrite" | "merge" | "skip" | "keep_both";
   mismatch: "overwrite" | "skip" | "keep_both";
 } | null;
 type CopyPasteDialogState =

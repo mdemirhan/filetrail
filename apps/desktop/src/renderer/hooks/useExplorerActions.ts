@@ -49,6 +49,7 @@ import {
   resolveNewFolderTargetPath,
   resolveWriteOperationRefreshPath,
   resolveWriteOperationSelectionDirectoryPath,
+  resolveWriteOperationTreeReloadPaths,
   resolveWriteOperationTreeSelectionPath,
   shouldRenderCopyPasteResultDialog,
 } from "../lib/explorerAppUtils";
@@ -156,6 +157,7 @@ export function useExplorerActions(args: {
   refreshDirectory: (options?: {
     path?: string;
     treeSelectionPath?: string | null;
+    extraTreeReloadPaths?: string[];
   }) => Promise<void>;
   contentSelection: ContentSelectionState;
   setContentSelection: Dispatch<SetStateAction<ContentSelectionState>>;
@@ -662,10 +664,14 @@ export function useExplorerActions(args: {
         const nextTreeSelectionPath = event.result
           ? resolveCompletedTreeSelectionPath(event)
           : null;
+        const nextTreeReloadPaths = event.result
+          ? resolveWriteOperationTreeReloadPaths(event.result)
+          : [];
         pendingTreeSelectionPathRef.current = null;
         void refreshDirectory({
           path: nextPath,
           treeSelectionPath: nextTreeSelectionPath,
+          extraTreeReloadPaths: nextTreeReloadPaths,
         });
       }
     });
@@ -1252,6 +1258,15 @@ export function useExplorerActions(args: {
         "File Trail could not start the write operation. No files were written.",
       );
     }
+  }
+
+  function requestCopyLikePlanStart(
+    report: CopyPasteAnalysisReport,
+    policy: CopyPastePolicy,
+    action: "paste" | "move_to" | "duplicate",
+    options: { clearClipboardOnStart: boolean; pendingTreeSelectionPath?: string | null },
+  ) {
+    void executeCopyLikePlan(report, policy, action, options);
   }
 
   async function analyzeCopyLikeRequest(args: {
@@ -2448,6 +2463,7 @@ export function useExplorerActions(args: {
     dismissToast,
     editPaths,
     executeCopyLikePlan,
+    requestCopyLikePlanStart,
     handleContentSelectionGesture,
     handleCopyPasteDialogEscape,
     moveOpenWithApplication,

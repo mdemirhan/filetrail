@@ -1,3 +1,5 @@
+import { vi } from "vitest";
+
 import { buildCopyPasteAnalysisReport } from "./copyPasteAnalysis";
 import { executeCopyPasteFromAnalysis } from "./copyPasteExecution";
 import { resolveAnalysisWithPolicy } from "./copyPastePolicy";
@@ -11,7 +13,7 @@ async function createResolvedOperation(args: {
   destinationDirectoryPath: string;
   policy?: {
     file: "overwrite" | "skip" | "keep_both";
-    directory: "merge" | "skip" | "keep_both";
+    directory: "overwrite" | "merge" | "skip" | "keep_both";
     mismatch: "overwrite" | "skip" | "keep_both";
   };
 }) {
@@ -127,6 +129,60 @@ describe("copyPasteExecution", () => {
     });
   });
 
+  it("treats a destination that vanishes during overwrite deletion as already removed", async () => {
+    const fileSystem = new MockWriteServiceFileSystem({
+      "/source": { kind: "directory" },
+      "/source/file.txt": { kind: "file", size: 5 },
+      "/target": { kind: "directory" },
+      "/target/file.txt": { kind: "file", size: 2 },
+    });
+    const { report, resolvedNodes } = await createResolvedOperation({
+      fileSystem,
+      sourcePaths: ["/source/file.txt"],
+      destinationDirectoryPath: "/target",
+      policy: {
+        file: "overwrite",
+        directory: "merge",
+        mismatch: "skip",
+      },
+    });
+    const originalRm = fileSystem.rm.bind(fileSystem);
+    let removedOnce = false;
+    fileSystem.rmImpl = async (path, options) => {
+      if (path === "/target/file.txt" && removedOnce === false) {
+        removedOnce = true;
+        fileSystem.nodes.delete("/target/file.txt");
+        if (options?.force) {
+          return;
+        }
+        throw Object.assign(new Error("ENOENT: /target/file.txt"), { code: "ENOENT", path });
+      }
+      await originalRm(path, options);
+    };
+
+    await executeCopyPasteFromAnalysis({
+      operationId: "copy-op-enoent",
+      report,
+      mode: "copy",
+      policy: {
+        file: "overwrite",
+        directory: "merge",
+        mismatch: "skip",
+      },
+      fileSystem,
+      now: () => new Date("2026-03-11T00:00:00.000Z"),
+      signal: new AbortController().signal,
+      resolvedNodes,
+      emit: () => undefined,
+      requestResolution: async () => null,
+    });
+
+    expect(fileSystem.readNode("/target/file.txt")).toMatchObject({
+      kind: "file",
+      size: 5,
+    });
+  });
+
   it("merges existing folders and applies nested file actions", async () => {
     const fileSystem = new MockWriteServiceFileSystem({
       "/source": { kind: "directory" },
@@ -167,6 +223,147 @@ describe("copyPasteExecution", () => {
 
     expect(fileSystem.readNode("/target/Folder/new.txt")?.size).toBe(1);
     expect(fileSystem.readNode("/target/Folder/shared.txt")).toMatchObject({
+      size: 8,
+      mode: 0o755,
+    });
+  });
+
+  it("copies directories with hidden files and hidden folders", async () => {
+    const fileSystem = new MockWriteServiceFileSystem({
+      "/source": { kind: "directory" },
+      "/source/Folder": { kind: "directory" },
+      "/source/Folder/.env": { kind: "file", size: 7 },
+      "/source/Folder/.config": { kind: "directory" },
+      "/source/Folder/.config/settings.json": { kind: "file", size: 11 },
+      "/source/Folder/visible.txt": { kind: "file", size: 5 },
+      "/target": { kind: "directory" },
+    });
+    const { report, resolvedNodes } = await createResolvedOperation({
+      fileSystem,
+      mode: "copy",
+      sourcePaths: ["/source/Folder"],
+      destinationDirectoryPath: "/target",
+      policy: {
+        file: "overwrite",
+        directory: "merge",
+        mismatch: "skip",
+      },
+    });
+
+    await executeCopyPasteFromAnalysis({
+      operationId: "copy-op-hidden-1",
+      report,
+      mode: "copy",
+      policy: {
+        file: "overwrite",
+        directory: "merge",
+        mismatch: "skip",
+      },
+      fileSystem,
+      now: () => new Date("2026-03-11T00:00:00.000Z"),
+      signal: new AbortController().signal,
+      resolvedNodes,
+      emit: () => undefined,
+      requestResolution: async () => null,
+    });
+
+    expect(fileSystem.exists("/target/Folder/.env")).toBe(true);
+    expect(fileSystem.exists("/target/Folder/.config")).toBe(true);
+    expect(fileSystem.exists("/target/Folder/.config/settings.json")).toBe(true);
+    expect(fileSystem.exists("/target/Folder/visible.txt")).toBe(true);
+  });
+
+  it("replaces conflicting folders and deletes destination-only nested items", async () => {
+    const fileSystem = new MockWriteServiceFileSystem({
+      "/source": { kind: "directory" },
+      "/source/Folder": { kind: "directory" },
+      "/source/Folder/shared.txt": { kind: "file", size: 8, mode: 0o755 },
+      "/target": { kind: "directory" },
+      "/target/Folder": { kind: "directory" },
+      "/target/Folder/shared.txt": { kind: "file", size: 2, mode: 0o644 },
+      "/target/Folder/destination-only.txt": { kind: "file", size: 3, mode: 0o600 },
+      "/target/Folder/nested": { kind: "directory" },
+      "/target/Folder/nested/left-behind.txt": { kind: "file", size: 1, mode: 0o600 },
+    });
+    const { report, resolvedNodes } = await createResolvedOperation({
+      fileSystem,
+      sourcePaths: ["/source/Folder"],
+      destinationDirectoryPath: "/target",
+      policy: {
+        file: "overwrite",
+        directory: "overwrite",
+        mismatch: "skip",
+      },
+    });
+
+    await executeCopyPasteFromAnalysis({
+      operationId: "copy-op-1",
+      report,
+      mode: "copy",
+      policy: {
+        file: "overwrite",
+        directory: "overwrite",
+        mismatch: "skip",
+      },
+      fileSystem,
+      now: () => new Date("2026-03-11T00:00:00.000Z"),
+      signal: new AbortController().signal,
+      resolvedNodes,
+      emit: () => undefined,
+      requestResolution: async () => null,
+    });
+
+    expect(fileSystem.exists("/target/Folder/shared.txt")).toBe(true);
+    expect(fileSystem.readNode("/target/Folder/shared.txt")).toMatchObject({
+      size: 8,
+      mode: 0o755,
+    });
+    expect(fileSystem.exists("/target/Folder/destination-only.txt")).toBe(false);
+    expect(fileSystem.exists("/target/Folder/nested/left-behind.txt")).toBe(false);
+  });
+
+  it("does not prompt for nested descendant conflicts under a replaced folder", async () => {
+    const fileSystem = new MockWriteServiceFileSystem({
+      "/source": { kind: "directory" },
+      "/source/Folder": { kind: "directory" },
+      "/source/Folder/nested": { kind: "directory" },
+      "/source/Folder/nested/deep.txt": { kind: "file", size: 8, mode: 0o755 },
+      "/target": { kind: "directory" },
+      "/target/Folder": { kind: "directory" },
+      "/target/Folder/nested": { kind: "directory" },
+      "/target/Folder/nested/deep.txt": { kind: "file", size: 2, mode: 0o644 },
+    });
+    const { report, resolvedNodes } = await createResolvedOperation({
+      fileSystem,
+      sourcePaths: ["/source/Folder"],
+      destinationDirectoryPath: "/target",
+      policy: {
+        file: "overwrite",
+        directory: "overwrite",
+        mismatch: "skip",
+      },
+    });
+    const requestResolution = vi.fn(async () => "overwrite" as const);
+
+    await executeCopyPasteFromAnalysis({
+      operationId: "copy-op-1",
+      report,
+      mode: "copy",
+      policy: {
+        file: "overwrite",
+        directory: "overwrite",
+        mismatch: "skip",
+      },
+      fileSystem,
+      now: () => new Date("2026-03-11T00:00:00.000Z"),
+      signal: new AbortController().signal,
+      resolvedNodes,
+      emit: () => undefined,
+      requestResolution,
+    });
+
+    expect(requestResolution).not.toHaveBeenCalled();
+    expect(fileSystem.readNode("/target/Folder/nested/deep.txt")).toMatchObject({
       size: 8,
       mode: 0o755,
     });
@@ -723,7 +920,7 @@ describe("copyPasteExecution", () => {
     expect(changedSourceEvents.at(-1)?.status).toBe("partial");
   });
 
-  it("handles destination changes for pre-existing conflicts and preserves non-empty cut folders", async () => {
+  it("handles destination changes for overwrite conflicts without re-prompting and preserves non-empty cut folders", async () => {
     const changedDestinationFileSystem = new MockWriteServiceFileSystem({
       "/source": { kind: "directory" },
       "/source/file.txt": { kind: "file", size: 5 },
@@ -757,15 +954,14 @@ describe("copyPasteExecution", () => {
       signal: new AbortController().signal,
       resolvedNodes: changedDestinationOperation.resolvedNodes,
       emit: (event) => changedDestinationEvents.push(event),
-      requestResolution: async (conflict) => {
-        expect(conflict.reason).toBe("destination_deleted");
-        return "overwrite";
+      requestResolution: async () => {
+        throw new Error("Overwrite should not re-prompt for destination drift.");
       },
     });
 
     expect(changedDestinationFileSystem.exists("/target/file.txt")).toBe(true);
     expect(changedDestinationEvents.some((event) => event.status === "awaiting_resolution")).toBe(
-      true,
+      false,
     );
 
     const cutFolderFileSystem = new MockWriteServiceFileSystem({
@@ -1109,6 +1305,99 @@ describe("copyPasteExecution", () => {
     });
 
     expect(baseFileSystem.exists("/target/file.txt")).toBe(true);
+  });
+
+  it("moves directories with hidden files and hidden folders during cut", async () => {
+    const fileSystem = new MockWriteServiceFileSystem({
+      "/source": { kind: "directory" },
+      "/source/Folder": { kind: "directory" },
+      "/source/Folder/.env": { kind: "file", size: 7 },
+      "/source/Folder/.config": { kind: "directory" },
+      "/source/Folder/.config/settings.json": { kind: "file", size: 11 },
+      "/source/Folder/visible.txt": { kind: "file", size: 5 },
+      "/target": { kind: "directory" },
+    });
+    const operation = await createResolvedOperation({
+      fileSystem,
+      mode: "cut",
+      sourcePaths: ["/source/Folder"],
+      destinationDirectoryPath: "/target",
+      policy: {
+        file: "overwrite",
+        directory: "merge",
+        mismatch: "skip",
+      },
+    });
+
+    await executeCopyPasteFromAnalysis({
+      operationId: "cut-op-hidden-1",
+      report: operation.report,
+      mode: "cut",
+      policy: {
+        file: "overwrite",
+        directory: "merge",
+        mismatch: "skip",
+      },
+      fileSystem,
+      now: () => new Date("2026-03-11T00:00:00.000Z"),
+      signal: new AbortController().signal,
+      resolvedNodes: operation.resolvedNodes,
+      emit: () => undefined,
+      requestResolution: async () => null,
+    });
+
+    expect(fileSystem.exists("/target/Folder/.env")).toBe(true);
+    expect(fileSystem.exists("/target/Folder/.config")).toBe(true);
+    expect(fileSystem.exists("/target/Folder/.config/settings.json")).toBe(true);
+    expect(fileSystem.exists("/target/Folder/visible.txt")).toBe(true);
+    expect(fileSystem.exists("/source/Folder")).toBe(false);
+  });
+
+  it("removes emptied cut source folders when child deletions only change parent mtime", async () => {
+    const fileSystem = new MockWriteServiceFileSystem({
+      "/source": { kind: "directory" },
+      "/source/Folder": { kind: "directory" },
+      "/source/Folder/file.txt": { kind: "file", size: 5 },
+      "/target": { kind: "directory" },
+    });
+    fileSystem.rmImpl = async (path, options) => {
+      const delegate = fileSystem.rmImpl;
+      fileSystem.rmImpl = null;
+      try {
+        await fileSystem.rm(path, options);
+      } finally {
+        fileSystem.rmImpl = delegate;
+      }
+      if (path === "/source/Folder/file.txt") {
+        fileSystem.mutateNode("/source/Folder", (node) => node);
+      }
+    };
+    const operation = await createResolvedOperation({
+      fileSystem,
+      mode: "cut",
+      sourcePaths: ["/source/Folder"],
+      destinationDirectoryPath: "/target",
+    });
+
+    await executeCopyPasteFromAnalysis({
+      operationId: "copy-op-3",
+      report: operation.report,
+      mode: "cut",
+      policy: {
+        file: "skip",
+        directory: "merge",
+        mismatch: "skip",
+      },
+      fileSystem,
+      now: () => new Date("2026-03-11T00:00:00.000Z"),
+      signal: new AbortController().signal,
+      resolvedNodes: operation.resolvedNodes,
+      emit: () => undefined,
+      requestResolution: async () => null,
+    });
+
+    expect(fileSystem.exists("/source/Folder")).toBe(false);
+    expect(fileSystem.exists("/target/Folder/file.txt")).toBe(true);
   });
 
   it("preserves cut source directories when the source folder changes before cleanup", async () => {

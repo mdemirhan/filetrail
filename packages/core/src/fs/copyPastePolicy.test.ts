@@ -146,6 +146,26 @@ describe("copyPastePolicy", () => {
           conflictClass: "file_conflict",
           disposition: "conflict",
         }),
+        createNode({
+          id: "dir/nested",
+          sourcePath: "/source/Folder/nested",
+          destinationPath: "/target/Folder/nested",
+          sourceKind: "directory",
+          destinationKind: "directory",
+          conflictClass: "directory_conflict",
+          disposition: "conflict",
+          children: [
+            createNode({
+              id: "dir/nested/deep.txt",
+              sourcePath: "/source/Folder/nested/deep.txt",
+              destinationPath: "/target/Folder/nested/deep.txt",
+              sourceKind: "file",
+              destinationKind: "file",
+              conflictClass: "file_conflict",
+              disposition: "conflict",
+            }),
+          ],
+        }),
       ],
     });
 
@@ -194,7 +214,29 @@ describe("copyPastePolicy", () => {
     expect(keepBoth.action).toBe("keep_both");
     expect(keepBoth.destinationPath).toBe("/target/Folder copy 2");
     expect(keepBoth.children[0]?.action).toBe("create");
-    expect(keepBoth.children[0]?.destinationPath).toBe("/target/Folder/a.txt");
+    expect(keepBoth.children[0]?.destinationPath).toBe("/target/Folder copy 2/a.txt");
+    expect(keepBoth.children[1]?.action).toBe("create");
+    expect(keepBoth.children[1]?.destinationPath).toBe("/target/Folder copy 2/nested");
+    expect(keepBoth.children[1]?.children[0]?.destinationPath).toBe(
+      "/target/Folder copy 2/nested/deep.txt",
+    );
+
+    const [overwrite] = await resolveAnalysisWithPolicy({
+      report: createReport([directoryNode]),
+      policy: {
+        file: "overwrite",
+        directory: "overwrite",
+        mismatch: "skip",
+      },
+      fileSystem,
+    });
+    if (!overwrite) {
+      throw new Error("Expected overwrite resolution.");
+    }
+    expect(overwrite.action).toBe("overwrite");
+    expect(overwrite.destinationPath).toBe("/target/Folder");
+    expect(overwrite.children[0]?.action).toBe("create");
+    expect(overwrite.children[0]?.destinationPath).toBe("/target/Folder/a.txt");
   });
 
   it("uses mismatch policy for type conflicts", async () => {
@@ -268,13 +310,24 @@ describe("copyPastePolicy", () => {
       disposition: "conflict",
       children: [
         createNode({
-          id: "runtime-dir/a.txt",
-          sourcePath: "/source/Folder/a.txt",
-          destinationPath: "/target/Folder/a.txt",
-          sourceKind: "file",
-          destinationKind: "file",
-          conflictClass: "file_conflict",
+          id: "runtime-dir/nested",
+          sourcePath: "/source/Folder/nested",
+          destinationPath: "/target/Folder/nested",
+          sourceKind: "directory",
+          destinationKind: "directory",
+          conflictClass: "directory_conflict",
           disposition: "conflict",
+          children: [
+            createNode({
+              id: "runtime-dir/nested/deep.txt",
+              sourcePath: "/source/Folder/nested/deep.txt",
+              destinationPath: "/target/Folder/nested/deep.txt",
+              sourceKind: "file",
+              destinationKind: "file",
+              conflictClass: "file_conflict",
+              disposition: "conflict",
+            }),
+          ],
         }),
       ],
     });
@@ -287,5 +340,6 @@ describe("copyPastePolicy", () => {
 
     expect(resolved.action).toBe("overwrite");
     expect(resolved.children[0]?.action).toBe("create");
+    expect(resolved.children[0]?.children[0]?.action).toBe("create");
   });
 });

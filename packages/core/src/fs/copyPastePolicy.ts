@@ -41,7 +41,9 @@ async function resolveNode(
   policy: CopyPastePolicy | null,
   fileSystem: WriteServiceFileSystem,
   explicitAction?: ResolvedCopyPasteNode["action"],
+  destinationPathOverride?: string,
 ): Promise<ResolvedCopyPasteNode> {
+  const baseDestinationPath = destinationPathOverride ?? node.destinationPath;
   let action: ResolvedCopyPasteNode["action"];
   if (explicitAction) {
     action = explicitAction;
@@ -67,26 +69,65 @@ async function resolveNode(
     action === "keep_both"
       ? await resolveDuplicateName(
           basename(node.sourcePath),
-          dirname(node.destinationPath),
+          dirname(baseDestinationPath),
           fileSystem,
         )
-      : node.destinationPath;
+      : baseDestinationPath;
+
+  const shouldNormalizeDestination =
+    action === "create" ||
+    action === "keep_both" ||
+    action === "overwrite" ||
+    destinationPath !== node.destinationPath;
+  const normalizedNode = shouldNormalizeDestination
+    ? {
+        ...node,
+        destinationPath,
+        disposition: "new" as const,
+        conflictClass: null,
+        destinationKind: "missing" as const,
+        destinationFingerprint: {
+          exists: false,
+          kind: "missing" as const,
+          size: null,
+          mtimeMs: null,
+          mode: null,
+          ino: null,
+          dev: null,
+          symlinkTarget: null,
+        },
+      }
+    : node;
 
   const childAction =
-    action === "keep_both" || action === "overwrite"
+    explicitAction === "create" || action === "keep_both" || action === "overwrite"
       ? "create"
       : action === "merge" || action === "create"
         ? undefined
         : action;
   const children: ResolvedCopyPasteNode[] = [];
   for (const child of node.children) {
-    children.push(await resolveNode(child, policy, fileSystem, childAction));
+    children.push(
+      await resolveNode(
+        child,
+        policy,
+        fileSystem,
+        childAction,
+        joinChildDestinationPath(destinationPath, child.sourcePath),
+      ),
+    );
   }
 
   return {
-    node,
+    node: normalizedNode,
     action,
     destinationPath,
     children,
   };
+}
+
+function joinChildDestinationPath(parentDestinationPath: string, childSourcePath: string): string {
+  return parentDestinationPath === "/"
+    ? `/${basename(childSourcePath)}`
+    : `${parentDestinationPath}/${basename(childSourcePath)}`;
 }

@@ -3369,6 +3369,152 @@ describe("App copy/paste integration", () => {
     expect(screen.queryByRole("dialog", { name: "Confirm Cut/Paste" })).not.toBeInTheDocument();
   });
 
+  it("reloads the visible source tree branch after a folder move completes", async () => {
+    const harness = createAppHarness({
+      planResponse: {
+        mode: "cut",
+        sourcePaths: ["/Users/demo/Source Folder"],
+        destinationDirectoryPath: "/Users/demo/Target",
+        conflictResolution: "error",
+        items: [
+          {
+            sourcePath: "/Users/demo/Source Folder",
+            destinationPath: "/Users/demo/Target/Source Folder",
+            kind: "directory",
+            status: "ready",
+            sizeBytes: 0,
+          },
+          {
+            sourcePath: "/Users/demo/Source Folder/nested.txt",
+            destinationPath: "/Users/demo/Target/Source Folder/nested.txt",
+            kind: "file",
+            status: "ready",
+            sizeBytes: 5,
+          },
+        ],
+        conflicts: [],
+        issues: [],
+        warnings: [{ code: "cut_requires_delete", message: "Cut will remove the source item." }],
+        requiresConfirmation: {
+          largeBatch: false,
+          cutDelete: true,
+        },
+        summary: {
+          topLevelItemCount: 1,
+          totalItemCount: 2,
+          totalBytes: 5,
+          skippedConflictCount: 0,
+        },
+        canExecute: true,
+      },
+      directorySnapshots: {
+        "/Users/demo": {
+          path: "/Users/demo",
+          parentPath: "/Users",
+          entries: [
+            createDirectoryEntry("/Users/demo/Source Folder", "directory"),
+            createDirectoryEntry("/Users/demo/Target", "directory"),
+          ],
+        },
+        "/Users/demo/Target": {
+          path: "/Users/demo/Target",
+          parentPath: "/Users/demo",
+          entries: [],
+        },
+      },
+      treeChildrenByPath: {
+        "/Users/demo": [
+          createTreeChild("/Users/demo/Source Folder", "directory"),
+          createTreeChild("/Users/demo/Target", "directory"),
+        ],
+        "/Users/demo/Target": [],
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/Source Folder");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "x", metaKey: true });
+    });
+    await openDirectory("/Users/demo/Target");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.map((call) => call.channel)).toContain("copyPaste:start");
+    });
+
+    const sourceParentReloadCountBeforeCompletion = harness.invocations.filter(
+      (call) =>
+        call.channel === "tree:getChildren" &&
+        (call.payload as IpcRequestInput<"tree:getChildren">).path === "/Users/demo",
+    ).length;
+
+    await act(async () => {
+      harness.emitProgress({
+        operationId: "copy-op-1",
+        mode: "cut",
+        status: "completed",
+        completedItemCount: 2,
+        totalItemCount: 2,
+        completedByteCount: 5,
+        totalBytes: 5,
+        currentSourcePath: "/Users/demo/Source Folder",
+        currentDestinationPath: "/Users/demo/Target/Source Folder",
+        result: {
+          operationId: "copy-op-1",
+          mode: "cut",
+          status: "completed",
+          destinationDirectoryPath: "/Users/demo/Target",
+          startedAt: "2026-03-11T10:00:00.000Z",
+          finishedAt: "2026-03-11T10:00:01.000Z",
+          summary: {
+            topLevelItemCount: 1,
+            totalItemCount: 2,
+            completedItemCount: 2,
+            failedItemCount: 0,
+            skippedItemCount: 0,
+            cancelledItemCount: 0,
+            completedByteCount: 5,
+            totalBytes: 5,
+          },
+          items: [
+            {
+              sourcePath: "/Users/demo/Source Folder",
+              destinationPath: "/Users/demo/Target/Source Folder",
+              status: "completed",
+              error: null,
+            },
+            {
+              sourcePath: "/Users/demo/Source Folder/nested.txt",
+              destinationPath: "/Users/demo/Target/Source Folder/nested.txt",
+              status: "completed",
+              error: null,
+            },
+          ],
+          error: null,
+        },
+      });
+    });
+
+    await vi.waitFor(() => {
+      const sourceParentReloadCountAfterCompletion = harness.invocations.filter(
+        (call) =>
+          call.channel === "tree:getChildren" &&
+          (call.payload as IpcRequestInput<"tree:getChildren">).path === "/Users/demo",
+      ).length;
+      expect(sourceParentReloadCountAfterCompletion).toBeGreaterThan(
+        sourceParentReloadCountBeforeCompletion,
+      );
+    });
+  });
+
   it("shows a modal dialog for non-recoverable planning issues", async () => {
     const harness = createAppHarness({
       planResponse: {
@@ -3526,6 +3672,148 @@ describe("App copy/paste integration", () => {
     ).toMatchObject({
       width: expect.any(Number),
       height: expect.any(Number),
+    });
+  });
+
+  it("requires confirmation before starting Replace Folder from the review dialog", async () => {
+    const harness = createAppHarness({
+      planResponse: {
+        mode: "copy",
+        sourcePaths: ["/Users/demo/Folder"],
+        destinationDirectoryPath: "/Users/demo",
+        conflictResolution: "error",
+        items: [
+          {
+            sourcePath: "/Users/demo/Folder",
+            destinationPath: "/Users/demo/Folder",
+            kind: "directory",
+            status: "conflict",
+            sizeBytes: null,
+          },
+        ],
+        conflicts: [
+          {
+            sourcePath: "/Users/demo/Folder",
+            destinationPath: "/Users/demo/Folder",
+            reason: "destination_exists",
+          },
+        ],
+        issues: [],
+        warnings: [],
+        requiresConfirmation: {
+          largeBatch: false,
+          cutDelete: false,
+        },
+        summary: {
+          topLevelItemCount: 1,
+          totalItemCount: 1,
+          totalBytes: null,
+          skippedConflictCount: 0,
+        },
+        canExecute: true,
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "d", metaKey: true });
+    });
+
+    await screen.findByRole("dialog", { name: "Duplicate Requires Review" });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Replace Folder" }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Continue Duplicate" }));
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.map((call) => call.channel)).toContain("copyPaste:start");
+    });
+    expect(
+      harness.invocations.findLast((call) => call.channel === "copyPaste:start")?.payload,
+    ).toMatchObject({
+      action: "duplicate",
+      policy: {
+        file: "skip",
+        directory: "overwrite",
+        mismatch: "skip",
+      },
+    });
+  });
+
+  it("offers Replace Folder for live directory conflicts", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+    await selectItem("/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.map((call) => call.channel)).toContain("copyPaste:start");
+    });
+
+    await act(async () => {
+      harness.emitProgress({
+        operationId: "copy-op-1",
+        action: "paste",
+        status: "awaiting_resolution",
+        completedItemCount: 0,
+        totalItemCount: 1,
+        completedByteCount: 0,
+        totalBytes: null,
+        currentSourcePath: "/Users/demo/Folder",
+        currentDestinationPath: "/Users/demo/Folder",
+        runtimeConflict: {
+          conflictId: "runtime-1",
+          analysisId: "analysis-1",
+          sourcePath: "/Users/demo/Folder",
+          destinationPath: "/Users/demo/Folder",
+          sourceKind: "directory",
+          destinationKind: "directory",
+          conflictClass: "directory_conflict",
+          reason: "destination_changed",
+          sourceFingerprint: createNodeFingerprint("directory"),
+          destinationFingerprint: createNodeFingerprint("directory"),
+          currentSourceFingerprint: createNodeFingerprint("directory"),
+          currentDestinationFingerprint: createNodeFingerprint("directory"),
+        },
+        result: null,
+      });
+    });
+
+    expect(await screen.findByRole("button", { name: "Replace Folder" })).toBeInTheDocument();
+    expect(
+      screen.getByText(/Replacing the folder will delete destination-only files and subfolders/i),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Replace Folder" }));
+    });
+
+    expect(
+      harness.invocations.findLast((call) => call.channel === "copyPaste:resolveConflict")?.payload,
+    ).toEqual({
+      operationId: "copy-op-1",
+      conflictId: "runtime-1",
+      resolution: "overwrite",
     });
   });
 
@@ -5197,6 +5485,12 @@ function defaultPlanResponse(): IpcResponse<"copyPaste:plan"> {
 function toAnalysisReport(
   plan: IpcResponse<"copyPaste:plan">,
 ): NonNullable<IpcResponse<"copyPaste:analyzeGetUpdate">["report"]> {
+  const fileConflictCount = plan.items.filter(
+    (item) => item.status === "conflict" && item.kind !== "directory",
+  ).length;
+  const directoryConflictCount = plan.items.filter(
+    (item) => item.status === "conflict" && item.kind === "directory",
+  ).length;
   return {
     analysisId: "analysis-1",
     mode: plan.mode,
@@ -5257,11 +5551,33 @@ function toAnalysisReport(
       topLevelItemCount: plan.summary.topLevelItemCount,
       totalNodeCount: plan.summary.totalItemCount,
       totalBytes: plan.summary.totalBytes,
-      fileConflictCount: plan.conflicts.length,
-      directoryConflictCount: 0,
+      fileConflictCount,
+      directoryConflictCount,
       mismatchConflictCount: 0,
       blockedCount: 0,
     },
+  };
+}
+
+function createNodeFingerprint(kind: "missing" | "file" | "directory" | "symlink"): {
+  exists: boolean;
+  kind: "missing" | "file" | "directory" | "symlink";
+  size: number | null;
+  mtimeMs: number | null;
+  mode: number | null;
+  ino: number | null;
+  dev: number | null;
+  symlinkTarget: string | null;
+} {
+  return {
+    exists: kind !== "missing",
+    kind,
+    size: kind === "file" ? 5 : null,
+    mtimeMs: kind === "missing" ? null : 1,
+    mode: kind === "missing" ? null : 0o755,
+    ino: null,
+    dev: null,
+    symlinkTarget: null,
   };
 }
 

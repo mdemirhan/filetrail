@@ -1431,8 +1431,24 @@ export function useExplorerNavigationController(args: {
     );
   }
 
+  async function refreshVisibleTreePath(path: string, activePath = currentPathRef.current) {
+    const treeRootPath = treeRootPathRef.current;
+    if (path.length === 0 || !isPathWithinRoot(path, treeRootPath)) {
+      return;
+    }
+    const node = treeNodesRef.current[path];
+    if (!node) {
+      return;
+    }
+    await loadTreeChildren(path, includeHidden, node.expanded, activePath, true);
+  }
+
   async function refreshDirectory(
-    options: { path?: string; treeSelectionPath?: string | null } = {},
+    options: {
+      path?: string;
+      treeSelectionPath?: string | null;
+      extraTreeReloadPaths?: string[];
+    } = {},
   ) {
     await client.invoke("app:clearCaches", {});
     const targetPath = options.path ?? currentPathRef.current;
@@ -1450,6 +1466,9 @@ export function useExplorerNavigationController(args: {
       });
       setTreeSelection(createFileSystemItemId(options.treeSelectionPath));
       setLeftPaneSubview("tree");
+    }
+    for (const extraTreeReloadPath of [...new Set(options.extraTreeReloadPaths ?? [])]) {
+      await refreshVisibleTreePath(extraTreeReloadPath, targetPath);
     }
   }
 

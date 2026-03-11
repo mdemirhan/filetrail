@@ -132,7 +132,12 @@ export const copyPasteOperationStatusSchema = z.enum([
   "partial",
 ]);
 export const copyPastePolicyFileActionSchema = z.enum(["overwrite", "skip", "keep_both"]);
-export const copyPastePolicyDirectoryActionSchema = z.enum(["merge", "skip", "keep_both"]);
+export const copyPastePolicyDirectoryActionSchema = z.enum([
+  "overwrite",
+  "merge",
+  "skip",
+  "keep_both",
+]);
 export const copyPastePolicyMismatchActionSchema = z.enum(["overwrite", "skip", "keep_both"]);
 export const copyPasteRuntimeResolutionActionSchema = z.enum([
   "overwrite",

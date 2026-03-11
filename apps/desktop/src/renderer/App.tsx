@@ -697,7 +697,6 @@ export function App() {
     dismissCopyPasteDialog,
     dismissToast,
     editPaths,
-    executeCopyLikePlan,
     extendContentSelectionToPath,
     handleContentSelectionGesture,
     handleCopyPasteDialogEscape,
@@ -710,6 +709,7 @@ export function App() {
     openPaths,
     openRenameDialog,
     openMoveDialog,
+    requestCopyLikePlanStart,
     removeOpenWithApplication,
     resolveContentActionPaths,
     resolveRuntimeConflict,
@@ -1915,9 +1915,7 @@ export function App() {
         onCloseNewFolderDialog={() => setNewFolderDialogState(null)}
         onSubmitNewFolderDialog={(value) => void submitNewFolderDialog(value)}
         copyPasteDialogState={copyPasteDialogState}
-        onExecuteCopyLikePlan={(report, policy, action, options) => {
-          void executeCopyLikePlan(report, policy, action, options);
-        }}
+        onRequestCopyLikePlanStart={requestCopyLikePlanStart}
         onUpdateCopyPastePolicy={updateCopyPastePolicy}
         onCloseCopyPasteDialog={dismissCopyPasteDialog}
         onConfirmTrashDialog={(paths) => {

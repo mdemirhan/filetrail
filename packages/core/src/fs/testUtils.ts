@@ -37,6 +37,22 @@ type MockNode = {
   target: string | null;
 };
 
+export type MockFileSystemSnapshotEntry =
+  | {
+      kind: "file";
+      size: number;
+      mode: number;
+    }
+  | {
+      kind: "directory";
+      mode: number;
+    }
+  | {
+      kind: "symlink";
+      mode: number;
+      target: string;
+    };
+
 export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
   readonly nodes = new Map<string, MockNode>();
   readonly realpathOverrides = new Map<string, string>();
@@ -343,4 +359,32 @@ function toStats(node: MockNode): WriteServiceStats {
 
 function createFsError(code: string, path: string): Error & { code: string; path: string } {
   return Object.assign(new Error(`${code}: ${path}`), { code, path });
+}
+
+export function snapshotMockFileSystem(
+  fileSystem: MockWriteServiceFileSystem,
+): Record<string, MockFileSystemSnapshotEntry> {
+  return Object.fromEntries(
+    [...fileSystem.nodes.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([path, node]) => [
+        path,
+        node.kind === "file"
+          ? {
+              kind: "file" as const,
+              size: node.size,
+              mode: node.mode,
+            }
+          : node.kind === "directory"
+            ? {
+                kind: "directory" as const,
+                mode: node.mode,
+              }
+            : {
+                kind: "symlink" as const,
+                mode: node.mode,
+                target: node.target ?? "",
+              },
+      ]),
+  );
 }

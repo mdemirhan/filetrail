@@ -57,6 +57,28 @@ describe("ipc contracts", () => {
     expect(parsed.foldersFirst).toBe(true);
   });
 
+  it("accepts overwrite as a folder conflict policy", () => {
+    expect(
+      ipcContractSchemas["copyPaste:start"].request.parse({
+        analysisId: "analysis-1",
+        action: "paste",
+        policy: {
+          file: "skip",
+          directory: "overwrite",
+          mismatch: "skip",
+        },
+      }),
+    ).toEqual({
+      analysisId: "analysis-1",
+      action: "paste",
+      policy: {
+        file: "skip",
+        directory: "overwrite",
+        mismatch: "skip",
+      },
+    });
+  });
+
   it("validates app preference payloads", () => {
     expect(
       ipcContractSchemas["app:getPreferences"].response.parse({
