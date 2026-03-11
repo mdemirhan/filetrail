@@ -17,6 +17,7 @@ import {
   type CopyPasteClipboardState,
   EMPTY_COPY_PASTE_CLIPBOARD,
 } from "../lib/copyPasteClipboard";
+import type { InternalMoveSourceSurface } from "../lib/internalDragAndDrop";
 import type { ToastEntry } from "../lib/toasts";
 
 type ContextMenuState = {
@@ -43,6 +44,7 @@ type CopyPasteDialogState =
       analysisId: string;
       action: "paste" | "move_to" | "duplicate";
       clearClipboardOnStart: boolean;
+      sourceSurface?: InternalMoveSourceSurface | null;
       pendingTreeSelectionPath?: string | null;
     }
   | {
@@ -51,6 +53,7 @@ type CopyPasteDialogState =
       policy: NonNullable<CopyPastePolicy>;
       action: "paste" | "move_to" | "duplicate";
       clearClipboardOnStart: boolean;
+      sourceSurface?: InternalMoveSourceSurface | null;
       pendingTreeSelectionPath?: string | null;
     }
   | {

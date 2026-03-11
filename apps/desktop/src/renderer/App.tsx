@@ -33,6 +33,7 @@ import { SettingsView } from "./components/SettingsView";
 import { useAppPreferences } from "./hooks/useAppPreferences";
 import { useElementSize } from "./hooks/useElementSize";
 import { useExplorerActions } from "./hooks/useExplorerActions";
+import { useExplorerDragAndDrop } from "./hooks/useExplorerDragAndDrop";
 import { useExplorerNavigation } from "./hooks/useExplorerNavigation";
 import { useExplorerNavigationController } from "./hooks/useExplorerNavigationController";
 import { useExplorerPaneLayout } from "./hooks/useExplorerPaneLayout";
@@ -723,6 +724,7 @@ export function App() {
     showCopyPasteProgressCard,
     showCopyPasteResultDialog,
     startDuplicatePaths,
+    startMoveToDestination,
     startPasteFromClipboard,
     startTrashPaths,
     submitMoveDialog,
@@ -779,6 +781,14 @@ export function App() {
       }),
     toggleTreeNode,
     refreshDirectory,
+    restartActiveSearch: async () => {
+      if (searchCommittedQuery.trim().length === 0) {
+        return;
+      }
+      await startSearch(searchCommittedQuery, {
+        rootPath: searchRootPath || currentPath,
+      });
+    },
     contentSelection,
     setContentSelection,
     currentPathRef,
@@ -825,6 +835,35 @@ export function App() {
     renameDialogState !== null ||
     newFolderDialogState !== null ||
     moveDialogState !== null;
+  const dragDropBlocked =
+    mainView !== "explorer" ||
+    actionNotice !== null ||
+    locationDialogOpen ||
+    copyPasteModalOpen ||
+    isWriteOperationLocked;
+  const {
+    getContentItemDropIndicator,
+    getTreeItemDropIndicator,
+    handleContentDragEnter,
+    handleContentDragLeave,
+    handleContentDragOver,
+    handleContentDragStart,
+    handleContentDrop,
+    handleDragEnd,
+    handleSearchDragStart,
+    handleTreeDragEnter,
+    handleTreeDragLeave,
+    handleTreeDragOver,
+    handleTreeDrop,
+  } = useExplorerDragAndDrop({
+    client,
+    activeEntries: activeContentEntries,
+    selectedPathsInViewOrder,
+    homePath,
+    blocked: dragDropBlocked,
+    onMoveToDestination: startMoveToDestination,
+    onToggleTreeNode: toggleTreeNode,
+  });
   const shortcutContext = useMemo(
     () => ({
       actionNoticeOpen: actionNotice !== null,
@@ -1539,6 +1578,12 @@ export function App() {
                 position,
               });
             },
+            onItemDragEnter: handleTreeDragEnter,
+            onItemDragOver: handleTreeDragOver,
+            onItemDragLeave: handleTreeDragLeave,
+            onItemDrop: handleTreeDrop,
+            getItemDropIndicator: (item, subview) =>
+              getTreeItemDropIndicator(item.path, item.kind === "favorite" ? "favorite" : "tree"),
             onToggleExpand: toggleTreeNode,
             onToggleFavoritesExpanded: () => setFavoritesExpanded((value) => !value),
             typeaheadQuery: focusedPane === "tree" ? typeaheadQuery : "",
@@ -1590,6 +1635,9 @@ export function App() {
               onItemContextMenu: (path, position) => {
                 openItemContextMenu(path, position, "search");
               },
+              onItemDragStart: (item, event) =>
+                handleSearchDragStart(toDirectoryEntryFromSearchResult(item), "search", event),
+              onItemDragEnd: handleDragEnd,
               onFocusChange: (focused) => setFocusedPane(focused ? "content" : null),
               onTypeaheadInput: (key) => handleTypeaheadInput(key, "content"),
               typeaheadQuery: focusedPane === "content" ? typeaheadQuery : "",
@@ -1630,6 +1678,13 @@ export function App() {
               onItemContextMenu: (path, position) => {
                 openItemContextMenu(path, position, "content");
               },
+              onItemDragStart: (entry, event) => handleContentDragStart(entry, "content", event),
+              onItemDragEnd: handleDragEnd,
+              onItemDragEnter: handleContentDragEnter,
+              onItemDragOver: handleContentDragOver,
+              onItemDragLeave: handleContentDragLeave,
+              onItemDrop: handleContentDrop,
+              getItemDropIndicator: getContentItemDropIndicator,
               compactListView,
               compactDetailsView,
               highlightHoveredItems,

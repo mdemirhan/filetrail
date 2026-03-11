@@ -56,6 +56,8 @@ export function SearchResultsPane({
   onClearSelection = () => undefined,
   onActivateResult,
   onItemContextMenu = () => undefined,
+  onItemDragStart,
+  onItemDragEnd,
   onFocusChange,
   onTypeaheadInput,
   typeaheadQuery,
@@ -91,6 +93,10 @@ export function SearchResultsPane({
   onClearSelection?: () => void;
   onActivateResult: (item: SearchResultItem) => void;
   onItemContextMenu?: (path: string | null, position: { x: number; y: number }) => void;
+  onItemDragStart?:
+    | ((item: SearchResultItem, event: React.DragEvent<HTMLElement>) => void)
+    | undefined;
+  onItemDragEnd?: ((event: React.DragEvent<HTMLElement>) => void) | undefined;
   onFocusChange: (focused: boolean) => void;
   onTypeaheadInput?: (key: string) => void;
   typeaheadQuery?: string;
@@ -440,15 +446,17 @@ export function SearchResultsPane({
                     selectedPathSet.has(result.path) && !isFocused ? " inactive" : ""
                   }`}
                   data-selectable-entry-path={result.path}
-                  draggable={false}
+                  draggable={Boolean(onItemDragStart)}
                   onPointerDown={(event) => {
                     if (event.button !== 0) {
                       return;
                     }
-                    onSelectionGesture(result.path, {
-                      metaKey: event.metaKey,
-                      shiftKey: event.shiftKey,
-                    });
+                    if (event.metaKey || event.shiftKey || !selectedPathSet.has(result.path)) {
+                      onSelectionGesture(result.path, {
+                        metaKey: event.metaKey,
+                        shiftKey: event.shiftKey,
+                      });
+                    }
                     scrollRef.current?.focus();
                   }}
                   onContextMenu={(event) => {
@@ -459,6 +467,8 @@ export function SearchResultsPane({
                       y: event.clientY,
                     });
                   }}
+                  onDragStart={(event) => onItemDragStart?.(result, event)}
+                  onDragEnd={(event) => onItemDragEnd?.(event)}
                   onDoubleClick={() => onActivateResult(result)}
                   title={result.path}
                   aria-selected={selectedPathSet.has(result.path)}

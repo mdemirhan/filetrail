@@ -19,15 +19,44 @@ vi.mock("./components/ContentPane", () => ({
     onFocusChange,
     onClearSelection,
     onItemContextMenu,
+    onItemDragStart,
+    onItemDragEnd,
+    onItemDragEnter,
+    onItemDragOver,
+    onItemDragLeave,
+    onItemDrop,
+    getItemDropIndicator,
     onSelectionGesture,
     onActivateEntry,
     selectedPaths,
   }: {
     currentPath: string;
-    entries: Array<{ path: string; name: string }>;
+    entries: Array<{ path: string; name: string; kind: string; isSymlink?: boolean }>;
     onFocusChange: (focused: boolean) => void;
     onClearSelection?: () => void;
     onItemContextMenu?: (path: string | null, position: { x: number; y: number }) => void;
+    onItemDragStart?: (
+      entry: { path: string; name: string; kind: string; isSymlink?: boolean },
+      event: React.DragEvent<HTMLElement>,
+    ) => void;
+    onItemDragEnd?: (event: React.DragEvent<HTMLElement>) => void;
+    onItemDragEnter?: (
+      entry: { path: string; name: string; kind: string; isSymlink?: boolean },
+      event: React.DragEvent<HTMLElement>,
+    ) => void;
+    onItemDragOver?: (
+      entry: { path: string; name: string; kind: string; isSymlink?: boolean },
+      event: React.DragEvent<HTMLElement>,
+    ) => void;
+    onItemDragLeave?: (
+      entry: { path: string; name: string; kind: string; isSymlink?: boolean },
+      event: React.DragEvent<HTMLElement>,
+    ) => void;
+    onItemDrop?: (
+      entry: { path: string; name: string; kind: string; isSymlink?: boolean },
+      event: React.DragEvent<HTMLElement>,
+    ) => void;
+    getItemDropIndicator?: (path: string) => "valid" | "invalid" | null;
     selectedPaths: string[];
     onSelectionGesture: (
       path: string,
@@ -36,7 +65,12 @@ vi.mock("./components/ContentPane", () => ({
         shiftKey: boolean;
       },
     ) => void;
-    onActivateEntry: (entry: { path: string; name: string }) => void;
+    onActivateEntry: (entry: {
+      path: string;
+      name: string;
+      kind: string;
+      isSymlink?: boolean;
+    }) => void;
   }) => (
     <div data-testid="content-pane" onPointerDown={() => onFocusChange(true)}>
       <output data-testid="content-current-path">{currentPath}</output>
@@ -70,7 +104,9 @@ vi.mock("./components/ContentPane", () => ({
           key={entry.path}
           type="button"
           title={entry.path}
+          data-drop-target-state={getItemDropIndicator?.(entry.path) ?? "none"}
           data-selected={selectedPaths.includes(entry.path) ? "true" : "false"}
+          draggable={Boolean(onItemDragStart)}
           onClick={(event) => {
             onFocusChange(true);
             onSelectionGesture(entry.path, {
@@ -82,6 +118,12 @@ vi.mock("./components/ContentPane", () => ({
             event.preventDefault();
             onItemContextMenu?.(entry.path, { x: 120, y: 140 });
           }}
+          onDragStart={(event) => onItemDragStart?.(entry, event)}
+          onDragEnd={(event) => onItemDragEnd?.(event)}
+          onDragEnter={(event) => onItemDragEnter?.(entry, event)}
+          onDragOver={(event) => onItemDragOver?.(entry, event)}
+          onDragLeave={(event) => onItemDragLeave?.(entry, event)}
+          onDrop={(event) => onItemDrop?.(entry, event)}
           onDoubleClick={() => onActivateEntry(entry)}
         >
           {entry.name}
@@ -101,6 +143,11 @@ vi.mock("./components/TreePane", () => ({
     onSelectFavoritesRoot,
     onClearSelection,
     onItemContextMenu,
+    onItemDragEnter,
+    onItemDragOver,
+    onItemDragLeave,
+    onItemDrop,
+    getItemDropIndicator,
     nodes,
     favorites,
     favoritesPlacement,
@@ -135,6 +182,100 @@ vi.mock("./components/TreePane", () => ({
       subview: "favorites" | "tree",
       position: { x: number; y: number },
     ) => void;
+    onItemDragEnter?: (
+      item: {
+        id: string;
+        kind: "favorite" | "filesystem";
+        label: string;
+        depth: number;
+        path: string | null;
+        parentId: string | null;
+        expanded: boolean;
+        canExpand: boolean;
+        loading: boolean;
+        error: string | null;
+        isSymlink: boolean;
+        childIds: string[];
+        icon?: string;
+      },
+      event: React.DragEvent<HTMLElement>,
+      subview: "favorites" | "tree",
+    ) => void;
+    onItemDragOver?: (
+      item: {
+        id: string;
+        kind: "favorite" | "filesystem";
+        label: string;
+        depth: number;
+        path: string | null;
+        parentId: string | null;
+        expanded: boolean;
+        canExpand: boolean;
+        loading: boolean;
+        error: string | null;
+        isSymlink: boolean;
+        childIds: string[];
+        icon?: string;
+      },
+      event: React.DragEvent<HTMLElement>,
+      subview: "favorites" | "tree",
+    ) => void;
+    onItemDragLeave?: (
+      item: {
+        id: string;
+        kind: "favorite" | "filesystem";
+        label: string;
+        depth: number;
+        path: string | null;
+        parentId: string | null;
+        expanded: boolean;
+        canExpand: boolean;
+        loading: boolean;
+        error: string | null;
+        isSymlink: boolean;
+        childIds: string[];
+        icon?: string;
+      },
+      event: React.DragEvent<HTMLElement>,
+      subview: "favorites" | "tree",
+    ) => void;
+    onItemDrop?: (
+      item: {
+        id: string;
+        kind: "favorite" | "filesystem";
+        label: string;
+        depth: number;
+        path: string | null;
+        parentId: string | null;
+        expanded: boolean;
+        canExpand: boolean;
+        loading: boolean;
+        error: string | null;
+        isSymlink: boolean;
+        childIds: string[];
+        icon?: string;
+      },
+      event: React.DragEvent<HTMLElement>,
+      subview: "favorites" | "tree",
+    ) => void;
+    getItemDropIndicator?: (
+      item: {
+        id: string;
+        kind: "favorite" | "filesystem";
+        label: string;
+        depth: number;
+        path: string | null;
+        parentId: string | null;
+        expanded: boolean;
+        canExpand: boolean;
+        loading: boolean;
+        error: string | null;
+        isSymlink: boolean;
+        childIds: string[];
+        icon?: string;
+      },
+      subview: "favorites" | "tree",
+    ) => "valid" | "invalid" | null;
     nodes: Record<
       string,
       { path: string; name: string; isSymlink?: boolean; expanded?: boolean; childPaths?: string[] }
@@ -185,93 +326,197 @@ vi.mock("./components/TreePane", () => ({
       >
         Clear Tree Selection
       </button>
-      {favorites.map((favorite) => (
-        <button
-          key={`favorite:${favorite.path}`}
-          type="button"
-          title={`favorite:${favorite.path}`}
-          onClick={() => {
-            onLeftPaneSubviewChange(favoritesPlacement === "separate" ? "favorites" : "tree");
-            onFocusChange(true);
-            void onNavigateFavorite(favorite.path);
-          }}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            onLeftPaneSubviewChange(favoritesPlacement === "separate" ? "favorites" : "tree");
-            onFocusChange(true);
-            onItemContextMenu?.(
-              {
-                id: `favorite:${favorite.path}`,
-                kind: "favorite",
-                label: favorite.path.split("/").at(-1) ?? favorite.path,
-                depth: 0,
-                path: favorite.path,
-                parentId: null,
-                expanded: false,
-                canExpand: false,
-                loading: false,
-                error: null,
-                isSymlink: false,
-                childIds: [],
-                icon: "folder",
-              },
-              favoritesPlacement === "separate" ? "favorites" : "tree",
-              { x: 120, y: 140 },
-            );
-          }}
-        >
-          Favorite {favorite.path}
-        </button>
-      ))}
-      {Object.values(nodes).map((node) => (
-        <button
-          key={`tree:${node.path}`}
-          type="button"
-          title={`tree:${node.path}`}
-          data-expanded={node.expanded ? "true" : "false"}
-          onClick={() => {
-            onLeftPaneSubviewChange("tree");
-            onFocusChange(true);
-            void onNavigate(node.path);
-          }}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            onLeftPaneSubviewChange("tree");
-            onFocusChange(true);
-            onItemContextMenu?.(
-              {
-                id: `fs:${node.path}`,
-                kind: "filesystem",
-                label: node.name,
-                depth: 0,
-                path: node.path,
-                parentId: null,
-                expanded: Boolean(node.expanded),
-                canExpand: !node.isSymlink && (node.childPaths?.length ?? 0) > 0,
-                loading: false,
-                error: null,
-                isSymlink: Boolean(node.isSymlink),
-                childIds: node.childPaths ?? [],
-              },
-              "tree",
-              { x: 120, y: 140 },
-            );
-          }}
-        >
-          Tree {node.name}
-        </button>
-      ))}
+      {favorites.map((favorite) => {
+        const item = {
+          id: `favorite:${favorite.path}`,
+          kind: "favorite" as const,
+          label: favorite.path.split("/").at(-1) ?? favorite.path,
+          depth: 0,
+          path: favorite.path,
+          parentId: null,
+          expanded: false,
+          canExpand: false,
+          loading: false,
+          error: null,
+          isSymlink: false,
+          childIds: [],
+          icon: "folder",
+        };
+        return (
+          <button
+            key={`favorite:${favorite.path}`}
+            type="button"
+            title={`favorite:${favorite.path}`}
+            data-drop-target-state={
+              getItemDropIndicator?.(
+                item,
+                favoritesPlacement === "separate" ? "favorites" : "tree",
+              ) ?? "none"
+            }
+            onClick={() => {
+              onLeftPaneSubviewChange(favoritesPlacement === "separate" ? "favorites" : "tree");
+              onFocusChange(true);
+              void onNavigateFavorite(favorite.path);
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              onLeftPaneSubviewChange(favoritesPlacement === "separate" ? "favorites" : "tree");
+              onFocusChange(true);
+              onItemContextMenu?.(item, favoritesPlacement === "separate" ? "favorites" : "tree", {
+                x: 120,
+                y: 140,
+              });
+            }}
+            onDragEnter={(event) =>
+              onItemDragEnter?.(
+                item,
+                event,
+                favoritesPlacement === "separate" ? "favorites" : "tree",
+              )
+            }
+            onDragOver={(event) =>
+              onItemDragOver?.(
+                item,
+                event,
+                favoritesPlacement === "separate" ? "favorites" : "tree",
+              )
+            }
+            onDragLeave={(event) =>
+              onItemDragLeave?.(
+                item,
+                event,
+                favoritesPlacement === "separate" ? "favorites" : "tree",
+              )
+            }
+            onDrop={(event) =>
+              onItemDrop?.(item, event, favoritesPlacement === "separate" ? "favorites" : "tree")
+            }
+          >
+            Favorite {favorite.path}
+          </button>
+        );
+      })}
+      {Object.values(nodes).map((node) => {
+        const item = {
+          id: `fs:${node.path}`,
+          kind: "filesystem" as const,
+          label: node.name,
+          depth: 0,
+          path: node.path,
+          parentId: null,
+          expanded: Boolean(node.expanded),
+          canExpand: !node.isSymlink && (node.childPaths?.length ?? 0) > 0,
+          loading: false,
+          error: null,
+          isSymlink: Boolean(node.isSymlink),
+          childIds: node.childPaths ?? [],
+        };
+        return (
+          <button
+            key={`tree:${node.path}`}
+            type="button"
+            title={`tree:${node.path}`}
+            data-expanded={node.expanded ? "true" : "false"}
+            data-drop-target-state={getItemDropIndicator?.(item, "tree") ?? "none"}
+            onClick={() => {
+              onLeftPaneSubviewChange("tree");
+              onFocusChange(true);
+              void onNavigate(node.path);
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              onLeftPaneSubviewChange("tree");
+              onFocusChange(true);
+              onItemContextMenu?.(item, "tree", { x: 120, y: 140 });
+            }}
+            onDragEnter={(event) => onItemDragEnter?.(item, event, "tree")}
+            onDragOver={(event) => onItemDragOver?.(item, event, "tree")}
+            onDragLeave={(event) => onItemDragLeave?.(item, event, "tree")}
+            onDrop={(event) => onItemDrop?.(item, event, "tree")}
+          >
+            Tree {node.name}
+          </button>
+        );
+      })}
     </div>
   ),
 }));
 vi.mock("./components/SearchResultsPane", () => ({
   SEARCH_RESULT_ROW_HEIGHT: 32,
-  SearchResultsPane: () => (
+  SearchResultsPane: ({
+    results,
+    selectedPaths,
+    onFocusChange,
+    onSelectionGesture,
+    onActivateResult,
+    onItemContextMenu,
+    onItemDragStart,
+    onItemDragEnd,
+  }: {
+    results: Array<{
+      path: string;
+      name: string;
+      kind: string;
+      extension: string;
+      isHidden: boolean;
+      isSymlink: boolean;
+      relativeParentPath: string;
+    }>;
+    selectedPaths: string[];
+    onFocusChange: (focused: boolean) => void;
+    onSelectionGesture: (
+      path: string,
+      modifiers: {
+        metaKey: boolean;
+        shiftKey: boolean;
+      },
+    ) => void;
+    onActivateResult: (item: { path: string; name: string }) => void;
+    onItemContextMenu?: (path: string | null, position: { x: number; y: number }) => void;
+    onItemDragStart?: (
+      item: {
+        path: string;
+        name: string;
+        kind: string;
+        extension: string;
+        isHidden: boolean;
+        isSymlink: boolean;
+        relativeParentPath: string;
+      },
+      event: React.DragEvent<HTMLElement>,
+    ) => void;
+    onItemDragEnd?: (event: React.DragEvent<HTMLElement>) => void;
+  }) => (
     <div data-testid="search-results-pane">
       <label>
         Filter search results
         <input aria-label="Filter search results" defaultValue="source" />
       </label>
+      {results.map((result) => (
+        <button
+          key={result.path}
+          type="button"
+          title={`search:${result.path}`}
+          data-selected={selectedPaths.includes(result.path) ? "true" : "false"}
+          draggable={Boolean(onItemDragStart)}
+          onClick={(event) => {
+            onFocusChange(true);
+            onSelectionGesture(result.path, {
+              metaKey: event.metaKey,
+              shiftKey: event.shiftKey,
+            });
+          }}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            onItemContextMenu?.(result.path, { x: 120, y: 140 });
+          }}
+          onDragStart={(event) => onItemDragStart?.(result, event)}
+          onDragEnd={(event) => onItemDragEnd?.(event)}
+          onDoubleClick={() => onActivateResult(result)}
+        >
+          Search {result.name}
+        </button>
+      ))}
     </div>
   ),
 }));
@@ -4991,6 +5236,395 @@ describe("App copy/paste integration", () => {
     expect(within(pastedToast as HTMLElement).getByText("source.txt")).toBeInTheDocument();
     expect(document.querySelectorAll(".toast-card")).toHaveLength(2);
   });
+
+  it("moves a content selection to the tree with drag and drop", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceButton = await screen.findByRole("button", { name: "source.txt" });
+    const treeTarget = await screen.findByTitle("tree:/Users/demo/Folder");
+    const dataTransfer = await dragBetween(sourceButton, treeTarget);
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.some((call) => call.channel === "copyPaste:analyzeStart")).toBe(
+        true,
+      );
+    });
+    expect(
+      harness.invocations.find((call) => call.channel === "copyPaste:analyzeStart")?.payload,
+    ).toMatchObject({
+      mode: "cut",
+      sourcePaths: ["/Users/demo/source.txt"],
+      destinationDirectoryPath: "/Users/demo/Folder",
+      action: "move_to",
+    });
+    expect(
+      harness.invocations.findLast((call) => call.channel === "copyPaste:start")?.payload,
+    ).toMatchObject({
+      action: "move_to",
+      sourcePaths: ["/Users/demo/source.txt"],
+      destinationDirectoryPath: "/Users/demo/Folder",
+    });
+    expect(dataTransfer.setDragImage).toHaveBeenCalledTimes(1);
+  });
+
+  it("moves a content selection to a favorite with drag and drop", async () => {
+    const harness = createAppHarness({
+      preferences: {
+        favoritesInitialized: true,
+        favorites: [{ path: "/Users/demo/Folder", icon: "folder" }],
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceButton = await screen.findByRole("button", { name: "source.txt" });
+    const favoriteTarget = await screen.findByTitle("favorite:/Users/demo/Folder");
+    await dragBetween(sourceButton, favoriteTarget);
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.some((call) => call.channel === "copyPaste:analyzeStart")).toBe(
+        true,
+      );
+    });
+    expect(
+      harness.invocations.find((call) => call.channel === "copyPaste:analyzeStart")?.payload,
+    ).toMatchObject({
+      mode: "cut",
+      sourcePaths: ["/Users/demo/source.txt"],
+      destinationDirectoryPath: "/Users/demo/Folder",
+      action: "move_to",
+    });
+  });
+
+  it("auto-starts drag moves when the only review signal is a large batch warning", async () => {
+    const harness = createAppHarness({
+      planResponse: {
+        mode: "cut",
+        sourcePaths: ["/Users/demo/source.txt"],
+        destinationDirectoryPath: "/Users/demo/Folder",
+        conflictResolution: "error",
+        items: [
+          {
+            sourcePath: "/Users/demo/source.txt",
+            destinationPath: "/Users/demo/Folder/source.txt",
+            kind: "file",
+            status: "ready",
+            sizeBytes: 5,
+          },
+        ],
+        conflicts: [],
+        issues: [],
+        warnings: [{ code: "large_batch", message: "This operation will write 200 items." }],
+        requiresConfirmation: {
+          largeBatch: true,
+          cutDelete: false,
+        },
+        summary: {
+          topLevelItemCount: 1,
+          totalItemCount: 200,
+          totalBytes: 5,
+          skippedConflictCount: 0,
+        },
+        canExecute: true,
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceButton = await screen.findByRole("button", { name: "source.txt" });
+    const treeTarget = await screen.findByTitle("tree:/Users/demo/Folder");
+    await dragBetween(sourceButton, treeTarget);
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(true);
+    });
+    expect(screen.queryByText("Move Requires Review")).not.toBeInTheDocument();
+  });
+
+  it("keeps the full content selection when dragging one selected item", async () => {
+    const harness = createAppHarness({
+      directorySnapshots: {
+        "/Users/demo": {
+          path: "/Users/demo",
+          parentPath: "/Users",
+          entries: [
+            createDirectoryEntry("/Users/demo/source.txt", "file"),
+            createDirectoryEntry("/Users/demo/second.txt", "file"),
+            createDirectoryEntry("/Users/demo/Folder", "directory"),
+          ],
+        },
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const firstSource = await screen.findByRole("button", { name: "source.txt" });
+    const secondSource = await screen.findByRole("button", { name: "second.txt" });
+    const treeTarget = await screen.findByTitle("tree:/Users/demo/Folder");
+
+    await act(async () => {
+      fireEvent.click(firstSource);
+      fireEvent.click(secondSource, { metaKey: true });
+    });
+    await dragBetween(firstSource, treeTarget);
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.some((call) => call.channel === "copyPaste:analyzeStart")).toBe(
+        true,
+      );
+    });
+    expect(
+      harness.invocations.find((call) => call.channel === "copyPaste:analyzeStart")?.payload,
+    ).toMatchObject({
+      mode: "cut",
+      sourcePaths: ["/Users/demo/source.txt", "/Users/demo/second.txt"],
+      destinationDirectoryPath: "/Users/demo/Folder",
+      action: "move_to",
+    });
+  });
+
+  it("moves a content selection onto another folder row in the content pane", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceButton = await screen.findByRole("button", { name: "source.txt" });
+    const folderButton = await screen.findByRole("button", { name: "Folder" });
+    await dragBetween(sourceButton, folderButton);
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.some((call) => call.channel === "copyPaste:analyzeStart")).toBe(
+        true,
+      );
+    });
+    expect(
+      harness.invocations.find((call) => call.channel === "copyPaste:analyzeStart")?.payload,
+    ).toMatchObject({
+      mode: "cut",
+      sourcePaths: ["/Users/demo/source.txt"],
+      destinationDirectoryPath: "/Users/demo/Folder",
+      action: "move_to",
+    });
+  });
+
+  it("auto-merges pure folder collisions for move drag and drop", async () => {
+    const harness = createAppHarness({
+      directorySnapshots: {
+        "/Users/demo": {
+          path: "/Users/demo",
+          parentPath: "/Users",
+          entries: [
+            createDirectoryEntry("/Users/demo/test2", "directory"),
+            createDirectoryEntry("/Users/demo/test3_1", "directory"),
+          ],
+        },
+      },
+      planResponse: {
+        mode: "cut",
+        sourcePaths: ["/Users/demo/test3_1"],
+        destinationDirectoryPath: "/Users/demo/test2",
+        conflictResolution: "error",
+        items: [
+          {
+            sourcePath: "/Users/demo/test3_1",
+            destinationPath: "/Users/demo/test2/test3_1",
+            kind: "directory",
+            status: "conflict",
+            sizeBytes: null,
+          },
+        ],
+        conflicts: [],
+        issues: [],
+        warnings: [],
+        requiresConfirmation: {
+          largeBatch: false,
+          cutDelete: false,
+        },
+        summary: {
+          topLevelItemCount: 1,
+          totalItemCount: 1,
+          totalBytes: 0,
+          skippedConflictCount: 0,
+        },
+        canExecute: true,
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceFolder = await screen.findByRole("button", { name: "test3_1" });
+    const targetFolder = await screen.findByRole("button", { name: "test2" });
+    await dragBetween(sourceFolder, targetFolder);
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(true);
+    });
+    expect(screen.queryByText("Move Requires Review")).not.toBeInTheDocument();
+    expect(
+      harness.invocations.findLast((call) => call.channel === "copyPaste:start")?.payload,
+    ).toMatchObject({
+      action: "move_to",
+      sourcePaths: ["/Users/demo/test3_1"],
+      destinationDirectoryPath: "/Users/demo/test2",
+      policy: {
+        file: "skip",
+        directory: "merge",
+        mismatch: "skip",
+      },
+    });
+  });
+
+  it("moves a search selection to the tree and reruns the active search after completion", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await openSearchResults();
+    const searchResult = await screen.findByTitle("search:/Users/demo/source.txt");
+    const treeTarget = await screen.findByTitle("tree:/Users/demo/Folder");
+    await dragBetween(searchResult, treeTarget);
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(true);
+    });
+
+    await act(async () => {
+      harness.emitProgress({
+        operationId: "copy-op-1",
+        mode: "cut",
+        status: "completed",
+        completedItemCount: 1,
+        totalItemCount: 1,
+        completedByteCount: 5,
+        totalBytes: 5,
+        currentSourcePath: null,
+        currentDestinationPath: null,
+        result: {
+          operationId: "copy-op-1",
+          mode: "cut",
+          status: "completed",
+          destinationDirectoryPath: "/Users/demo/Folder",
+          startedAt: "2026-03-09T00:00:00.000Z",
+          finishedAt: "2026-03-09T00:00:01.000Z",
+          summary: {
+            topLevelItemCount: 1,
+            totalItemCount: 1,
+            completedItemCount: 1,
+            failedItemCount: 0,
+            skippedItemCount: 0,
+            cancelledItemCount: 0,
+            completedByteCount: 5,
+            totalBytes: 5,
+          },
+          items: [
+            {
+              sourcePath: "/Users/demo/source.txt",
+              destinationPath: "/Users/demo/Folder/source.txt",
+              status: "completed",
+              error: null,
+            },
+          ],
+          error: null,
+        },
+      });
+
+      await vi.waitFor(() => {
+        expect(harness.invocations.filter((call) => call.channel === "search:start")).toHaveLength(
+          2,
+        );
+      });
+    });
+  });
+
+  it("rejects dropping a search selection onto search results", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await openSearchResults();
+    const searchResult = await screen.findByTitle("search:/Users/demo/source.txt");
+    await dragBetween(searchResult, searchResult);
+
+    expect(harness.invocations.some((call) => call.channel === "copyPaste:analyzeStart")).toBe(
+      false,
+    );
+    expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
+  });
+
+  it("rejects invalid drag targets like symlink folders and Trash favorites", async () => {
+    const harness = createAppHarness({
+      directorySnapshots: {
+        "/Users/demo": {
+          path: "/Users/demo",
+          parentPath: "/Users",
+          entries: [
+            createDirectoryEntry("/Users/demo/source.txt", "file"),
+            createDirectoryEntry("/Users/demo/Folder", "directory"),
+            createDirectoryEntry("/Users/demo/Link", "symlink_directory", { isSymlink: true }),
+          ],
+        },
+      },
+      treeChildrenByPath: {
+        "/Users/demo": [
+          createTreeChild("/Users/demo/Folder", "directory"),
+          createTreeChild("/Users/demo/Link", "symlink_directory"),
+        ],
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceButton = await screen.findByRole("button", { name: "source.txt" });
+    const symlinkTarget = await screen.findByRole("button", { name: "Link" });
+    await dragBetween(sourceButton, symlinkTarget);
+    expect(harness.invocations.some((call) => call.channel === "copyPaste:analyzeStart")).toBe(
+      false,
+    );
+
+    const trashFavorite = await screen.findByTitle("favorite:/Users/demo/.Trash");
+    await dragBetween(sourceButton, trashFavorite);
+    expect(harness.invocations.some((call) => call.channel === "copyPaste:analyzeStart")).toBe(
+      false,
+    );
+  });
 });
 
 function createAppHarness(
@@ -5110,6 +5744,34 @@ function createAppHarness(
           directoryPath: (payload as IpcRequestInput<"directory:getMetadataBatch">).directoryPath,
           items: [],
         } satisfies IpcResponse<"directory:getMetadataBatch"> as IpcResponse<C>;
+      }
+      if (channel === "item:getProperties") {
+        const targetPath = (payload as IpcRequestInput<"item:getProperties">).path;
+        const entry =
+          Object.values(directorySnapshots)
+            .flatMap((snapshot) => snapshot.entries)
+            .find((candidate) => candidate.path === targetPath) ??
+          Object.values(treeChildrenByPath)
+            .flat()
+            .find((candidate) => candidate.path === targetPath);
+        const kind = entry?.kind ?? (targetPath === "/Users/demo" ? "directory" : "directory");
+        const name = targetPath.split("/").at(-1) ?? targetPath;
+        return {
+          item: {
+            path: targetPath,
+            name,
+            extension: kind === "file" ? (name.split(".").at(-1) ?? "") : "",
+            kind,
+            kindLabel: kind === "directory" ? "Folder" : "File",
+            isHidden: false,
+            isSymlink: entry?.isSymlink ?? false,
+            createdAt: null,
+            modifiedAt: null,
+            sizeBytes: null,
+            sizeStatus: "ready",
+            permissionMode: null,
+          },
+        } satisfies IpcResponse<"item:getProperties"> as IpcResponse<C>;
       }
       if (channel === "copyPaste:plan") {
         copyPastePlanCallCount += 1;
@@ -5369,6 +6031,41 @@ async function selectItem(path: string): Promise<void> {
   await act(async () => {
     fireEvent.click(button);
   });
+}
+
+function createMockDataTransfer(): DataTransfer {
+  const store = new Map<string, string>();
+  return {
+    dropEffect: "none",
+    effectAllowed: "all",
+    files: [] as unknown as FileList,
+    items: [] as unknown as DataTransferItemList,
+    types: [],
+    clearData: vi.fn((format?: string) => {
+      if (format) {
+        store.delete(format);
+        return;
+      }
+      store.clear();
+    }),
+    getData: vi.fn((format: string) => store.get(format) ?? ""),
+    setData: vi.fn((format: string, value: string) => {
+      store.set(format, value);
+    }),
+    setDragImage: vi.fn(),
+  } as unknown as DataTransfer;
+}
+
+async function dragBetween(source: HTMLElement, target: HTMLElement): Promise<DataTransfer> {
+  const dataTransfer = createMockDataTransfer();
+  await act(async () => {
+    fireEvent.dragStart(source, { dataTransfer });
+    fireEvent.dragEnter(target, { dataTransfer });
+    fireEvent.dragOver(target, { dataTransfer });
+    fireEvent.drop(target, { dataTransfer });
+    fireEvent.dragEnd(source, { dataTransfer });
+  });
+  return dataTransfer;
 }
 
 async function focusTreePane(): Promise<void> {

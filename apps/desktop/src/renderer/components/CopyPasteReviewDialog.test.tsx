@@ -117,6 +117,26 @@ describe("CopyPasteReviewDialog", () => {
     expect(screen.queryByText(/destination folder/i)).toBeNull();
   });
 
+  it("does not describe warning-only reviews as conflicts", () => {
+    render(
+      <CopyPasteReviewDialog
+        title="Move Requires Review"
+        report={createLargeBatchWarningReport()}
+        policy={{ file: "skip", directory: "merge", mismatch: "skip" }}
+        persistedSize={null}
+        onPolicyChange={() => undefined}
+        onSizeChange={() => undefined}
+        onClose={() => undefined}
+        onStart={() => undefined}
+      />,
+    );
+
+    expect(
+      screen.getByText(/this operation is large and needs confirmation before writing into/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Conflict policies")).toBeNull();
+  });
+
   it("shows effective file actions without subtitle rows", () => {
     const { rerender } = render(
       <CopyPasteReviewDialog
@@ -436,6 +456,67 @@ function createFolderConflictReport(): AnalysisReport {
       totalBytes: null,
       fileConflictCount: 0,
       directoryConflictCount: 1,
+      mismatchConflictCount: 0,
+      blockedCount: 0,
+    },
+  };
+}
+
+function createLargeBatchWarningReport(): AnalysisReport {
+  return {
+    analysisId: "analysis-large-batch",
+    mode: "cut",
+    sourcePaths: ["/Users/demo/tmp/test2"],
+    destinationDirectoryPath: "/Users/demo/tmp/test1",
+    nodes: [
+      {
+        id: "node-large-1",
+        sourcePath: "/Users/demo/tmp/test2",
+        destinationPath: "/Users/demo/tmp/test1/test2",
+        sourceKind: "directory",
+        destinationKind: "missing",
+        disposition: "new",
+        conflictClass: null,
+        sourceFingerprint: {
+          exists: true,
+          kind: "directory",
+          size: null,
+          mtimeMs: 1,
+          mode: 0o755,
+          ino: null,
+          dev: null,
+          symlinkTarget: null,
+        },
+        destinationFingerprint: {
+          exists: false,
+          kind: "missing",
+          size: null,
+          mtimeMs: null,
+          mode: null,
+          ino: null,
+          dev: null,
+          symlinkTarget: null,
+        },
+        children: [],
+        issueCode: null,
+        issueMessage: null,
+        totalNodeCount: 120,
+        conflictNodeCount: 0,
+      },
+    ],
+    issues: [],
+    warnings: [
+      {
+        code: "large_batch",
+        message: "This operation will write 120 items.",
+      },
+    ],
+    summary: {
+      topLevelItemCount: 1,
+      totalNodeCount: 120,
+      totalBytes: 1024,
+      fileConflictCount: 0,
+      directoryConflictCount: 0,
       mismatchConflictCount: 0,
       blockedCount: 0,
     },

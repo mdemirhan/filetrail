@@ -91,6 +91,13 @@ export function ContentPane({
   onFocusChange,
   onTypeaheadInput,
   onItemContextMenu = () => undefined,
+  onItemDragStart,
+  onItemDragEnd,
+  onItemDragEnter,
+  onItemDragOver,
+  onItemDragLeave,
+  onItemDrop,
+  getItemDropIndicator,
   compactListView = false,
   compactDetailsView = false,
   highlightHoveredItems = true,
@@ -125,6 +132,21 @@ export function ContentPane({
   onFocusChange: (focused: boolean) => void;
   onTypeaheadInput?: (key: string) => void;
   onItemContextMenu?: (path: string | null, position: { x: number; y: number }) => void;
+  onItemDragStart?:
+    | ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void)
+    | undefined;
+  onItemDragEnd?: ((event: React.DragEvent<HTMLElement>) => void) | undefined;
+  onItemDragEnter?:
+    | ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void)
+    | undefined;
+  onItemDragOver?:
+    | ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void)
+    | undefined;
+  onItemDragLeave?:
+    | ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void)
+    | undefined;
+  onItemDrop?: ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void) | undefined;
+  getItemDropIndicator?: ((path: string) => "valid" | "invalid" | null) | undefined;
   compactListView?: boolean;
   compactDetailsView?: boolean;
   highlightHoveredItems?: boolean;
@@ -497,6 +519,13 @@ export function ContentPane({
             onClearSelection={onClearSelection}
             onVisiblePathsChange={onVisiblePathsChange}
             onItemContextMenu={onItemContextMenu}
+            onItemDragStart={onItemDragStart}
+            onItemDragEnd={onItemDragEnd}
+            onItemDragEnter={onItemDragEnter}
+            onItemDragOver={onItemDragOver}
+            onItemDragLeave={onItemDragLeave}
+            onItemDrop={onItemDrop}
+            getItemDropIndicator={getItemDropIndicator}
             compactListView={compactListView}
             highlightHoveredItems={highlightHoveredItems}
             typeaheadQuery={typeaheadQuery ?? ""}
@@ -524,6 +553,13 @@ export function ContentPane({
             onClearSelection={onClearSelection}
             onVisiblePathsChange={onVisiblePathsChange}
             onItemContextMenu={onItemContextMenu}
+            onItemDragStart={onItemDragStart}
+            onItemDragEnd={onItemDragEnd}
+            onItemDragEnter={onItemDragEnter}
+            onItemDragOver={onItemDragOver}
+            onItemDragLeave={onItemDragLeave}
+            onItemDrop={onItemDrop}
+            getItemDropIndicator={getItemDropIndicator}
             compactDetailsView={compactDetailsView}
             highlightHoveredItems={highlightHoveredItems}
             detailColumns={detailColumns}
@@ -707,6 +743,13 @@ function FlowListView({
   onLayoutColumnsChange,
   onVisiblePathsChange,
   onItemContextMenu = () => undefined,
+  onItemDragStart,
+  onItemDragEnd,
+  onItemDragEnter,
+  onItemDragOver,
+  onItemDragLeave,
+  onItemDrop,
+  getItemDropIndicator,
   compactListView = false,
   highlightHoveredItems = true,
   typeaheadQuery,
@@ -727,6 +770,21 @@ function FlowListView({
   onLayoutColumnsChange: (columns: number) => void;
   onVisiblePathsChange: (paths: string[]) => void;
   onItemContextMenu?: (path: string | null, position: { x: number; y: number }) => void;
+  onItemDragStart?:
+    | ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void)
+    | undefined;
+  onItemDragEnd?: ((event: React.DragEvent<HTMLElement>) => void) | undefined;
+  onItemDragEnter?:
+    | ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void)
+    | undefined;
+  onItemDragOver?:
+    | ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void)
+    | undefined;
+  onItemDragLeave?:
+    | ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void)
+    | undefined;
+  onItemDrop?: ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void) | undefined;
+  getItemDropIndicator?: ((path: string) => "valid" | "invalid" | null) | undefined;
   compactListView?: boolean;
   highlightHoveredItems?: boolean;
   typeaheadQuery?: string;
@@ -889,45 +947,64 @@ function FlowListView({
               gridTemplateColumns: `repeat(${columnCount}, ${listLayout.itemWidth}px)`,
             }}
           >
-            {row.map((entry) => (
-              <button
-                key={entry.path}
-                type="button"
-                className={`flow-item${selectedPathSet.has(entry.path) ? " active" : ""}${
-                  selectedPathSet.has(entry.path) && !isFocused ? " inactive" : ""
-                }`}
-                data-selectable-entry-path={entry.path}
-                draggable={false}
-                onPointerDown={(event) => {
-                  if (event.button !== 0) {
-                    return;
+            {row.map((entry) => {
+              const canAcceptDrop =
+                entry.kind === "directory" || entry.kind === "symlink_directory";
+              return (
+                <button
+                  key={entry.path}
+                  type="button"
+                  className={`flow-item${selectedPathSet.has(entry.path) ? " active" : ""}${
+                    selectedPathSet.has(entry.path) && !isFocused ? " inactive" : ""
+                  }`}
+                  data-drop-target-state={
+                    canAcceptDrop ? (getItemDropIndicator?.(entry.path) ?? "none") : "none"
                   }
-                  onSelectionGesture(entry.path, {
-                    metaKey: event.metaKey,
-                    shiftKey: event.shiftKey,
-                  });
-                  containerRef.current?.focus();
-                }}
-                onContextMenu={(event) => {
-                  event.preventDefault();
-                  containerRef.current?.focus();
-                  onItemContextMenu(entry.path, {
-                    x: event.clientX,
-                    y: event.clientY,
-                  });
-                }}
-                onDoubleClick={() => onActivateEntry(entry)}
-                title={entry.name}
-                aria-selected={selectedPathSet.has(entry.path)}
-              >
-                <FileIcon entry={entry} />
-                <FileNameLabel
-                  className="flow-item-label"
-                  name={entry.name}
-                  extension={entry.extension}
-                />
-              </button>
-            ))}
+                  data-selectable-entry-path={entry.path}
+                  draggable={Boolean(onItemDragStart)}
+                  onPointerDown={(event) => {
+                    if (event.button !== 0) {
+                      return;
+                    }
+                    if (event.metaKey || event.shiftKey || !selectedPathSet.has(entry.path)) {
+                      onSelectionGesture(entry.path, {
+                        metaKey: event.metaKey,
+                        shiftKey: event.shiftKey,
+                      });
+                    }
+                    containerRef.current?.focus();
+                  }}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    containerRef.current?.focus();
+                    onItemContextMenu(entry.path, {
+                      x: event.clientX,
+                      y: event.clientY,
+                    });
+                  }}
+                  onDragStart={(event) => onItemDragStart?.(entry, event)}
+                  onDragEnd={(event) => onItemDragEnd?.(event)}
+                  onDragEnter={
+                    canAcceptDrop ? (event) => onItemDragEnter?.(entry, event) : undefined
+                  }
+                  onDragOver={canAcceptDrop ? (event) => onItemDragOver?.(entry, event) : undefined}
+                  onDragLeave={
+                    canAcceptDrop ? (event) => onItemDragLeave?.(entry, event) : undefined
+                  }
+                  onDrop={canAcceptDrop ? (event) => onItemDrop?.(entry, event) : undefined}
+                  onDoubleClick={() => onActivateEntry(entry)}
+                  title={entry.name}
+                  aria-selected={selectedPathSet.has(entry.path)}
+                >
+                  <FileIcon entry={entry} />
+                  <FileNameLabel
+                    className="flow-item-label"
+                    name={entry.name}
+                    extension={entry.extension}
+                  />
+                </button>
+              );
+            })}
           </div>
         ))}
       </div>
@@ -956,6 +1033,13 @@ function DetailsView({
   onLayoutColumnsChange,
   onVisiblePathsChange,
   onItemContextMenu = () => undefined,
+  onItemDragStart,
+  onItemDragEnd,
+  onItemDragEnter,
+  onItemDragOver,
+  onItemDragLeave,
+  onItemDrop,
+  getItemDropIndicator,
   compactDetailsView = false,
   highlightHoveredItems = true,
   detailColumns = DEFAULT_DETAIL_COLUMN_VISIBILITY,
@@ -983,6 +1067,21 @@ function DetailsView({
   onLayoutColumnsChange: (columns: number) => void;
   onVisiblePathsChange: (paths: string[]) => void;
   onItemContextMenu?: (path: string | null, position: { x: number; y: number }) => void;
+  onItemDragStart?:
+    | ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void)
+    | undefined;
+  onItemDragEnd?: ((event: React.DragEvent<HTMLElement>) => void) | undefined;
+  onItemDragEnter?:
+    | ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void)
+    | undefined;
+  onItemDragOver?:
+    | ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void)
+    | undefined;
+  onItemDragLeave?:
+    | ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void)
+    | undefined;
+  onItemDrop?: ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void) | undefined;
+  getItemDropIndicator?: ((path: string) => "valid" | "invalid" | null) | undefined;
   compactDetailsView?: boolean;
   highlightHoveredItems?: boolean;
   detailColumns?: DetailColumnVisibility;
@@ -1206,6 +1305,7 @@ function DetailsView({
         >
           {visibleEntries.map((entry) => {
             const metadata = metadataByPath[entry.path];
+            const canAcceptDrop = entry.kind === "directory" || entry.kind === "symlink_directory";
             return (
               <button
                 key={entry.path}
@@ -1213,16 +1313,21 @@ function DetailsView({
                 className={`details-row${selectedPathSet.has(entry.path) ? " active" : ""}${
                   selectedPathSet.has(entry.path) && !isFocused ? " inactive" : ""
                 }`}
+                data-drop-target-state={
+                  canAcceptDrop ? (getItemDropIndicator?.(entry.path) ?? "none") : "none"
+                }
                 data-selectable-entry-path={entry.path}
-                draggable={false}
+                draggable={Boolean(onItemDragStart)}
                 onPointerDown={(event) => {
                   if (event.button !== 0) {
                     return;
                   }
-                  onSelectionGesture(entry.path, {
-                    metaKey: event.metaKey,
-                    shiftKey: event.shiftKey,
-                  });
+                  if (event.metaKey || event.shiftKey || !selectedPathSet.has(entry.path)) {
+                    onSelectionGesture(entry.path, {
+                      metaKey: event.metaKey,
+                      shiftKey: event.shiftKey,
+                    });
+                  }
                   containerRef.current?.focus();
                 }}
                 onContextMenu={(event) => {
@@ -1233,6 +1338,12 @@ function DetailsView({
                     y: event.clientY,
                   });
                 }}
+                onDragStart={(event) => onItemDragStart?.(entry, event)}
+                onDragEnd={(event) => onItemDragEnd?.(event)}
+                onDragEnter={canAcceptDrop ? (event) => onItemDragEnter?.(entry, event) : undefined}
+                onDragOver={canAcceptDrop ? (event) => onItemDragOver?.(entry, event) : undefined}
+                onDragLeave={canAcceptDrop ? (event) => onItemDragLeave?.(entry, event) : undefined}
+                onDrop={canAcceptDrop ? (event) => onItemDrop?.(entry, event) : undefined}
                 onDoubleClick={() => onActivateEntry(entry)}
                 title={entry.path}
                 aria-selected={selectedPathSet.has(entry.path)}

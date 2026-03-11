@@ -60,6 +60,26 @@ export function CopyPasteReviewDialog({
     () => findCommonAncestorPath([...report.sourcePaths, report.destinationDirectoryPath]),
     [report.destinationDirectoryPath, report.sourcePaths],
   );
+  const hasConflicts = useMemo(
+    () =>
+      report.summary.fileConflictCount > 0 ||
+      report.summary.directoryConflictCount > 0 ||
+      report.summary.mismatchConflictCount > 0,
+    [
+      report.summary.directoryConflictCount,
+      report.summary.fileConflictCount,
+      report.summary.mismatchConflictCount,
+    ],
+  );
+  const hasLargeBatchWarning = useMemo(
+    () => report.warnings.some((warning) => warning.code === "large_batch"),
+    [report.warnings],
+  );
+  const reviewMessage = hasConflicts
+    ? "Conflicts detected pasting into"
+    : hasLargeBatchWarning
+      ? "This operation is large and needs confirmation before writing into"
+      : "Review the plan before writing into";
 
   const previewNodes = useMemo(
     () => buildPlanPreviewNodes(report.nodes, sharedAncestorPath, policy),
@@ -216,46 +236,48 @@ export function CopyPasteReviewDialog({
               <div className="copy-paste-review-title-block">
                 <div className="action-notice-title">{title}</div>
                 <p className="action-notice-message copy-paste-review-message">
-                  Conflicts detected pasting into{" "}
+                  {reviewMessage}{" "}
                   <span className="copy-paste-review-path-pill">
                     {report.destinationDirectoryPath}
                   </span>
                 </p>
               </div>
             </div>
-            <section className="copy-paste-review-policy-bar" aria-label="Conflict policies">
-              <PolicyGroup
-                label="File Conflicts"
-                value={policy.file}
-                onChange={(value) => onPolicyChange({ ...policy, file: value })}
-                options={[
-                  ["skip", "Skip"],
-                  ["overwrite", "Overwrite"],
-                  ["keep_both", "Keep Both"],
-                ]}
-              />
-              <PolicyGroup
-                label="Folder Conflicts"
-                value={policy.directory}
-                onChange={(value) => onPolicyChange({ ...policy, directory: value })}
-                options={[
-                  ["skip", "Skip"],
-                  ["overwrite", "Replace Folder"],
-                  ["merge", "Merge"],
-                  ["keep_both", "Keep Both"],
-                ]}
-              />
-              <PolicyGroup
-                label="Mismatches"
-                value={policy.mismatch}
-                onChange={(value) => onPolicyChange({ ...policy, mismatch: value })}
-                options={[
-                  ["skip", "Skip"],
-                  ["overwrite", "Overwrite"],
-                  ["keep_both", "Keep Both"],
-                ]}
-              />
-            </section>
+            {hasConflicts ? (
+              <section className="copy-paste-review-policy-bar" aria-label="Conflict policies">
+                <PolicyGroup
+                  label="File Conflicts"
+                  value={policy.file}
+                  onChange={(value) => onPolicyChange({ ...policy, file: value })}
+                  options={[
+                    ["skip", "Skip"],
+                    ["overwrite", "Overwrite"],
+                    ["keep_both", "Keep Both"],
+                  ]}
+                />
+                <PolicyGroup
+                  label="Folder Conflicts"
+                  value={policy.directory}
+                  onChange={(value) => onPolicyChange({ ...policy, directory: value })}
+                  options={[
+                    ["skip", "Skip"],
+                    ["overwrite", "Replace Folder"],
+                    ["merge", "Merge"],
+                    ["keep_both", "Keep Both"],
+                  ]}
+                />
+                <PolicyGroup
+                  label="Mismatches"
+                  value={policy.mismatch}
+                  onChange={(value) => onPolicyChange({ ...policy, mismatch: value })}
+                  options={[
+                    ["skip", "Skip"],
+                    ["overwrite", "Overwrite"],
+                    ["keep_both", "Keep Both"],
+                  ]}
+                />
+              </section>
+            ) : null}
           </div>
           <div className="copy-paste-review-body">
             <section className="copy-paste-review-list-panel">

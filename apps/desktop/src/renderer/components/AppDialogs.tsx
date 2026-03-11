@@ -12,6 +12,7 @@ import type {
   WriteOperationCardState,
 } from "../hooks/useWriteOperations";
 import { formatSize } from "../lib/formatting";
+import type { InternalMoveSourceSurface } from "../lib/internalDragAndDrop";
 import type { ShortcutContext } from "../lib/shortcutPolicy";
 import type { ToastEntry } from "../lib/toasts";
 import { ActionNoticeDialog } from "./ActionNoticeDialog";
@@ -148,7 +149,11 @@ export function AppDialogs({
     report: CopyPasteAnalysisReport,
     policy: CopyPastePolicy,
     action: "paste" | "move_to" | "duplicate",
-    options: { clearClipboardOnStart: boolean; pendingTreeSelectionPath?: string | null },
+    options: {
+      clearClipboardOnStart: boolean;
+      sourceSurface?: InternalMoveSourceSurface | null;
+      pendingTreeSelectionPath?: string | null;
+    },
   ) => void;
   onUpdateCopyPastePolicy: (policy: CopyPastePolicy) => void;
   onCloseCopyPasteDialog: () => void;
@@ -292,6 +297,7 @@ export function AppDialogs({
               copyPasteDialogState.action,
               {
                 clearClipboardOnStart: copyPasteDialogState.clearClipboardOnStart,
+                sourceSurface: copyPasteDialogState.sourceSurface ?? null,
                 pendingTreeSelectionPath: copyPasteDialogState.pendingTreeSelectionPath ?? null,
               },
             )
