@@ -53,6 +53,35 @@ describe("appStateStore", () => {
       actionLogEnabled: true,
       propertiesOpen: false,
       detailRowOpen: true,
+      topToolbarItems: [
+        "back",
+        "forward",
+        "topSeparator",
+        "up",
+        "down",
+        "refresh",
+        "topSeparator",
+        "view",
+        "sort",
+        "search",
+      ],
+      leftToolbarItems: {
+        main: [
+          "home",
+          "root",
+          "applications",
+          "trash",
+          "leftSeparator",
+          "rerootHome",
+          "goToFolder",
+          "leftSeparator",
+          "foldersFirst",
+          "hidden",
+          "infoPanel",
+          "infoRow",
+        ],
+        utility: ["actionLog", "help", "leftSeparator", "theme", "settings"],
+      },
       terminalApp: null,
       defaultTextEditor: {
         appPath: "/System/Applications/TextEdit.app",
@@ -152,6 +181,11 @@ describe("appStateStore", () => {
       notificationsEnabled: true,
       notificationDurationSeconds: 4,
       actionLogEnabled: true,
+      topToolbarItems: ["back", "search", "copyPath"],
+      leftToolbarItems: {
+        main: ["home", "copyPath"],
+        utility: ["settings", "openInTerminal"],
+      },
       terminalApp: {
         appPath: "/Applications/iTerm.app",
         appName: "iTerm",
@@ -248,6 +282,11 @@ describe("appStateStore", () => {
       notificationsEnabled: true,
       notificationDurationSeconds: 4,
       actionLogEnabled: true,
+      topToolbarItems: ["back", "search", "copyPath"],
+      leftToolbarItems: {
+        main: ["home", "copyPath"],
+        utility: ["settings", "openInTerminal"],
+      },
       terminalApp: {
         appPath: "/Applications/iTerm.app",
         appName: "iTerm",
@@ -315,6 +354,11 @@ describe("appStateStore", () => {
       accentFavoriteText: "nope" as never,
       favoriteAccent: "bad-accent" as never,
       zoomPercent: 999,
+      topToolbarItems: ["back", "search", "search", "theme"] as never,
+      leftToolbarItems: {
+        main: ["home", "search", "copyPath"],
+        utility: ["copyPath", "theme", "sort"],
+      } as never,
       uiFontFamily: "bad-font" as never,
       uiFontSize: 999,
       uiFontWeight: 123 as never,
@@ -367,6 +411,11 @@ describe("appStateStore", () => {
     expect(reloaded.getPreferences().accentFavoriteText).toBe(false);
     expect(reloaded.getPreferences().favoriteAccent).toBe("#58b9e8");
     expect(reloaded.getPreferences().zoomPercent).toBe(150);
+    expect(reloaded.getPreferences().topToolbarItems).toEqual(["back", "search"]);
+    expect(reloaded.getPreferences().leftToolbarItems).toEqual({
+      main: ["home", "copyPath"],
+      utility: ["theme"],
+    });
     expect(reloaded.getPreferences().treeWidth).toBe(220);
     expect(reloaded.getPreferences().inspectorWidth).toBe(480);
     expect(reloaded.getPreferences().accent).toBe("#d4845a");

@@ -124,6 +124,22 @@ describe("ipc contracts", () => {
           actionLogEnabled: true,
           propertiesOpen: false,
           detailRowOpen: true,
+          topToolbarItems: ["back", "forward", "up", "down", "refresh", "view", "sort", "search"],
+          leftToolbarItems: {
+            main: [
+              "home",
+              "root",
+              "applications",
+              "trash",
+              "rerootHome",
+              "goToFolder",
+              "foldersFirst",
+              "hidden",
+              "infoPanel",
+              "infoRow",
+            ],
+            utility: ["actionLog", "help", "theme", "settings"],
+          },
           terminalApp: null,
           defaultTextEditor: {
             appPath: "/System/Applications/TextEdit.app",
@@ -214,6 +230,22 @@ describe("ipc contracts", () => {
         actionLogEnabled: true,
         propertiesOpen: false,
         detailRowOpen: true,
+        topToolbarItems: ["back", "forward", "up", "down", "refresh", "view", "sort", "search"],
+        leftToolbarItems: {
+          main: [
+            "home",
+            "root",
+            "applications",
+            "trash",
+            "rerootHome",
+            "goToFolder",
+            "foldersFirst",
+            "hidden",
+            "infoPanel",
+            "infoRow",
+          ],
+          utility: ["actionLog", "help", "theme", "settings"],
+        },
         terminalApp: null,
         defaultTextEditor: {
           appPath: "/System/Applications/TextEdit.app",
@@ -306,6 +338,11 @@ describe("ipc contracts", () => {
           tabSwitchesExplorerPanes: false,
           typeaheadEnabled: false,
           typeaheadDebounceMs: 1000,
+          topToolbarItems: ["back", "search", "copyPath"],
+          leftToolbarItems: {
+            main: ["home", "copyPath"],
+            utility: ["settings", "theme"],
+          },
           terminalApp: {
             appPath: "/Applications/iTerm.app",
             appName: "iTerm",
@@ -377,6 +414,11 @@ describe("ipc contracts", () => {
         tabSwitchesExplorerPanes: false,
         typeaheadEnabled: false,
         typeaheadDebounceMs: 1000,
+        topToolbarItems: ["back", "search", "copyPath"],
+        leftToolbarItems: {
+          main: ["home", "copyPath"],
+          utility: ["settings", "theme"],
+        },
         terminalApp: {
           appPath: "/Applications/iTerm.app",
           appName: "iTerm",

@@ -3,6 +3,10 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { type ComponentProps, createRef } from "react";
 
+import {
+  DEFAULT_LEFT_TOOLBAR_ITEMS,
+  type LeftToolbarItems,
+} from "../../shared/toolbarItems";
 import { TreePane } from "./TreePane";
 
 const themeButtonRef = createRef<HTMLButtonElement>();
@@ -82,6 +86,12 @@ function renderTreePane(overrides: Partial<ComponentProps<typeof TreePane>> = {}
       onToggleInfoPanel={() => undefined}
       infoRowOpen
       onToggleInfoRow={() => undefined}
+      leftToolbarItems={
+        {
+          main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
+          utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
+        } satisfies LeftToolbarItems
+      }
       theme="tomorrow-night"
       themeMenuOpen={false}
       themeButtonRef={themeButtonRef}
@@ -100,6 +110,8 @@ function renderTreePane(overrides: Partial<ComponentProps<typeof TreePane>> = {}
       onNavigateFavorite={() => undefined}
       onToggleFavoritesExpanded={() => undefined}
       typeaheadQuery=""
+      canRunRendererCommand={() => true}
+      onRendererCommand={() => undefined}
       {...overrides}
     />,
   );
@@ -492,6 +504,87 @@ describe("TreePane", () => {
     expect(handleOpenHelp).toHaveBeenCalledTimes(1);
   });
 
+  it("renders configured renderer-command items in the left rail", () => {
+    const handleRendererCommand = vi.fn();
+    renderTreePane({
+      leftToolbarItems: {
+        main: ["openSelection"],
+        utility: [],
+      },
+      onRendererCommand: handleRendererCommand,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+
+    expect(handleRendererCommand).toHaveBeenCalledWith("openSelection");
+  });
+
+  it("runs navigation actions from configurable left rail nav buttons", () => {
+    const handleGoBack = vi.fn();
+    const handleGoForward = vi.fn();
+    const handleNavigateToParent = vi.fn();
+    const handleNavigateDown = vi.fn();
+    renderTreePane({
+      leftToolbarItems: {
+        main: ["back", "forward", "up", "down"],
+        utility: [],
+      },
+      canGoBack: true,
+      onGoBack: handleGoBack,
+      canGoForward: true,
+      onGoForward: handleGoForward,
+      canNavigateToParent: true,
+      onNavigateToParent: handleNavigateToParent,
+      canNavigateDown: true,
+      onNavigateDown: handleNavigateDown,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("button", { name: "Forward" }));
+    fireEvent.click(screen.getByRole("button", { name: "Navigate Up" }));
+    fireEvent.click(screen.getByRole("button", { name: "Navigate Down" }));
+
+    expect(handleGoBack).toHaveBeenCalledTimes(1);
+    expect(handleGoForward).toHaveBeenCalledTimes(1);
+    expect(handleNavigateToParent).toHaveBeenCalledTimes(1);
+    expect(handleNavigateDown).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps unavailable configured left rail actions visible but disabled", () => {
+    renderTreePane({
+      leftToolbarItems: {
+        main: ["copyPath"],
+        utility: [],
+      },
+      canRunRendererCommand: () => false,
+    });
+
+    expect(screen.getByRole("button", { name: "Copy Path" })).toBeDisabled();
+  });
+
+  it("shows keyboard shortcuts in left rail tooltips when available", () => {
+    renderTreePane({
+      leftToolbarItems: {
+        main: ["back", "up", "copyPath"],
+        utility: [],
+      },
+      canGoBack: true,
+      onGoBack: () => undefined,
+      canNavigateToParent: true,
+      onNavigateToParent: () => undefined,
+    });
+
+    expect(screen.getByRole("button", { name: "Back" })).toHaveAttribute("title", "Back (Cmd+Left)");
+    expect(screen.getByRole("button", { name: "Navigate Up" })).toHaveAttribute(
+      "title",
+      "Navigate Up (Cmd+Up)",
+    );
+    expect(screen.getByRole("button", { name: "Copy Path" })).toHaveAttribute(
+      "title",
+      "Copy Path (Cmd+Option+C)",
+    );
+  });
+
   it("highlights a folder immediately on pointer down before the click timeout", () => {
     vi.useFakeTimers();
     renderTreePane({ selectedTreeItemId: "favorites-root" });
@@ -819,6 +912,10 @@ describe("TreePane", () => {
         onToggleInfoPanel={() => undefined}
         infoRowOpen
         onToggleInfoRow={() => undefined}
+        leftToolbarItems={{
+          main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
+          utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
+        }}
         theme="tomorrow-night"
         themeMenuOpen={false}
         themeButtonRef={themeButtonRef}
@@ -837,6 +934,8 @@ describe("TreePane", () => {
         onNavigateFavorite={() => undefined}
         onToggleFavoritesExpanded={() => undefined}
         typeaheadQuery=""
+        canRunRendererCommand={() => true}
+        onRendererCommand={() => undefined}
       />,
     );
 

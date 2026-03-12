@@ -13,6 +13,7 @@ import {
   getThemeLabel,
   getUiFontLabel,
 } from "./appPreferences";
+import { DEFAULT_LEFT_TOOLBAR_ITEMS, DEFAULT_TOP_TOOLBAR_ITEMS } from "./toolbarItems";
 
 describe("appPreferences helpers", () => {
   it("clamps numeric preferences and rounds to whole pixels", () => {
@@ -105,6 +106,11 @@ describe("appPreferences helpers", () => {
       notificationDurationSeconds: 4,
       actionLogEnabled: true,
       propertiesOpen: false,
+      topToolbarItems: DEFAULT_TOP_TOOLBAR_ITEMS,
+      leftToolbarItems: {
+        main: DEFAULT_LEFT_TOOLBAR_ITEMS.main,
+        utility: DEFAULT_LEFT_TOOLBAR_ITEMS.utility,
+      },
       defaultTextEditor: {
         appPath: "/System/Applications/TextEdit.app",
         appName: "TextEdit",

@@ -16,6 +16,12 @@ import {
   type ThemeMode,
   getThemeLabel,
 } from "../../shared/appPreferences";
+import type { RendererCommandType } from "../../shared/rendererCommands";
+import {
+  getToolbarItemDefinition,
+  type LeftToolbarItems,
+  type ToolbarItemId,
+} from "../../shared/toolbarItems";
 import {
   type TreeItemId,
   type TreePresentationItem,
@@ -30,6 +36,10 @@ import { ToolbarIcon } from "./ToolbarIcon";
 const FAVORITES_PANE_DEFAULT_HEIGHT = 220;
 const FAVORITES_PANE_MIN_HEIGHT = 116;
 const FILESYSTEM_PANE_MIN_HEIGHT = 140;
+
+function formatToolbarTooltip(label: string, shortcutLabel?: string) {
+  return shortcutLabel ? `${label} (${shortcutLabel})` : label;
+}
 
 export type TreeNodeState = {
   path: string;
@@ -65,6 +75,14 @@ export function TreePane({
   onLeftPaneSubviewChange,
   onFavoritesPaneHeightChange,
   onGoHome,
+  canGoBack,
+  onGoBack,
+  canGoForward,
+  onGoForward,
+  canNavigateToParent,
+  onNavigateToParent,
+  canNavigateDown,
+  onNavigateDown,
   onRerootHome,
   onOpenLocation,
   onQuickAccess,
@@ -74,6 +92,7 @@ export function TreePane({
   infoPanelOpen,
   onToggleInfoRow,
   infoRowOpen,
+  leftToolbarItems,
   theme,
   themeMenuOpen,
   themeButtonRef,
@@ -98,6 +117,8 @@ export function TreePane({
   getItemDropIndicator,
   onToggleFavoritesExpanded,
   typeaheadQuery,
+  canRunRendererCommand,
+  onRendererCommand,
 }: {
   paneRef?: React.RefObject<HTMLElement | null>;
   isFocused: boolean;
@@ -117,6 +138,14 @@ export function TreePane({
   onLeftPaneSubviewChange: (value: "favorites" | "tree") => void;
   onFavoritesPaneHeightChange: (value: number) => void;
   onGoHome: () => void;
+  canGoBack?: boolean;
+  onGoBack?: () => void;
+  canGoForward?: boolean;
+  onGoForward?: () => void;
+  canNavigateToParent?: boolean;
+  onNavigateToParent?: () => void;
+  canNavigateDown?: boolean;
+  onNavigateDown?: () => void;
   onRerootHome: () => void;
   onOpenLocation?: () => void;
   onQuickAccess: (location: "root" | "applications" | "trash") => void;
@@ -126,6 +155,7 @@ export function TreePane({
   infoPanelOpen: boolean;
   onToggleInfoRow: () => void;
   infoRowOpen: boolean;
+  leftToolbarItems: LeftToolbarItems;
   theme: ThemeMode;
   themeMenuOpen: boolean;
   themeButtonRef: React.RefObject<HTMLButtonElement | null>;
@@ -176,6 +206,8 @@ export function TreePane({
     | undefined;
   onToggleFavoritesExpanded: () => void;
   typeaheadQuery?: string;
+  canRunRendererCommand: (command: RendererCommandType) => boolean;
+  onRendererCommand: (command: RendererCommandType) => void;
 }) {
   const integratedPresentation = useMemo(
     () =>
@@ -241,6 +273,10 @@ export function TreePane({
   const [optimisticSelectedItemId, setOptimisticSelectedItemId] = useState<TreeItemId | null>(null);
   const [splitPaneHeight, setSplitPaneHeight] = useState(0);
   const [selectedRowRegistrationVersion, setSelectedRowRegistrationVersion] = useState(0);
+  const getToolbarTooltip = (itemId: ToolbarItemId, labelOverride?: string) => {
+    const definition = getToolbarItemDefinition(itemId);
+    return formatToolbarTooltip(labelOverride ?? definition.label, definition.shortcutLabel);
+  };
 
   useEffect(
     () => () => {
@@ -414,6 +450,319 @@ export function TreePane({
     };
   }
 
+  function renderLeftToolbarItem(itemId: ToolbarItemId) {
+    if (itemId === "leftSeparator") {
+      return <div key={itemId} className="sidebar-rail-separator" role="separator" aria-orientation="horizontal" />;
+    }
+    if (itemId === "back") {
+      return (
+        <button
+          key={itemId}
+          type="button"
+          className="sidebar-rail-button"
+          onClick={onGoBack}
+          disabled={!canGoBack || !onGoBack}
+          title={getToolbarTooltip(itemId)}
+          aria-label="Back"
+        >
+          <ToolbarIcon name="back" />
+        </button>
+      );
+    }
+    if (itemId === "forward") {
+      return (
+        <button
+          key={itemId}
+          type="button"
+          className="sidebar-rail-button"
+          onClick={onGoForward}
+          disabled={!canGoForward || !onGoForward}
+          title={getToolbarTooltip(itemId)}
+          aria-label="Forward"
+        >
+          <ToolbarIcon name="forward" />
+        </button>
+      );
+    }
+    if (itemId === "home") {
+      return (
+        <button
+          key={itemId}
+          type="button"
+          className="sidebar-rail-button"
+          onClick={onGoHome}
+          title={getToolbarTooltip(itemId)}
+          aria-label="Quick access Home"
+        >
+          <ToolbarIcon name="home" />
+        </button>
+      );
+    }
+    if (itemId === "up") {
+      return (
+        <button
+          key={itemId}
+          type="button"
+          className="sidebar-rail-button"
+          onClick={onNavigateToParent}
+          disabled={!canNavigateToParent || !onNavigateToParent}
+          title={getToolbarTooltip(itemId)}
+          aria-label="Navigate Up"
+        >
+          <ToolbarIcon name="up" />
+        </button>
+      );
+    }
+    if (itemId === "down") {
+      return (
+        <button
+          key={itemId}
+          type="button"
+          className="sidebar-rail-button"
+          onClick={onNavigateDown}
+          disabled={!canNavigateDown || !onNavigateDown}
+          title={getToolbarTooltip(itemId)}
+          aria-label="Navigate Down"
+        >
+          <ToolbarIcon name="down" />
+        </button>
+      );
+    }
+    if (itemId === "root") {
+      return (
+        <button
+          key={itemId}
+          type="button"
+          className="sidebar-rail-button"
+          onClick={() => onQuickAccess("root")}
+          title={getToolbarTooltip(itemId)}
+          aria-label="Quick access Macintosh HD"
+        >
+          <ToolbarIcon name="drive" />
+        </button>
+      );
+    }
+    if (itemId === "applications") {
+      return (
+        <button
+          key={itemId}
+          type="button"
+          className="sidebar-rail-button"
+          onClick={() => onQuickAccess("applications")}
+          title={getToolbarTooltip(itemId)}
+          aria-label="Quick access Applications"
+        >
+          <ToolbarIcon name="applications" />
+        </button>
+      );
+    }
+    if (itemId === "trash") {
+      return (
+        <button
+          key={itemId}
+          type="button"
+          className="sidebar-rail-button"
+          onClick={() => onQuickAccess("trash")}
+          title={getToolbarTooltip(itemId)}
+          aria-label="Quick access Trash"
+        >
+          <ToolbarIcon name="trash" />
+        </button>
+      );
+    }
+    if (itemId === "rerootHome") {
+      return (
+        <button
+          key={itemId}
+          type="button"
+          className="sidebar-rail-button"
+          onClick={onRerootHome}
+          title={getToolbarTooltip(itemId)}
+          aria-label="Root tree at Home"
+        >
+          <ToolbarIcon name="rerootHome" />
+        </button>
+      );
+    }
+    if (itemId === "foldersFirst") {
+      return (
+        <button
+          key={itemId}
+          type="button"
+          className={`sidebar-rail-button${foldersFirst ? " active" : ""}`}
+          onClick={onToggleFoldersFirst}
+          title={foldersFirst ? "Folders first" : "Mixed file and folder order"}
+          aria-label="Toggle folders first"
+          aria-pressed={foldersFirst}
+        >
+          <ToolbarIcon name="foldersFirst" />
+        </button>
+      );
+    }
+    if (itemId === "hidden") {
+      return (
+        <button
+          key={itemId}
+          type="button"
+          className={`sidebar-rail-button${includeHidden ? " active" : ""}`}
+          onClick={onToggleHidden}
+          title={getToolbarTooltip(itemId)}
+          aria-label="Toggle hidden files"
+          aria-pressed={includeHidden}
+        >
+          <ToolbarIcon name="hidden" />
+        </button>
+      );
+    }
+    if (itemId === "infoPanel") {
+      return (
+        <button
+          key={itemId}
+          type="button"
+          className={`sidebar-rail-button${infoPanelOpen ? " active" : ""}`}
+          onClick={onToggleInfoPanel}
+          title={getToolbarTooltip(itemId)}
+          aria-label="Toggle Info Panel"
+          aria-pressed={infoPanelOpen}
+        >
+          <ToolbarIcon name="drawer" />
+        </button>
+      );
+    }
+    if (itemId === "infoRow") {
+      return (
+        <button
+          key={itemId}
+          type="button"
+          className={`sidebar-rail-button${infoRowOpen ? " active" : ""}`}
+          onClick={onToggleInfoRow}
+          title={getToolbarTooltip(itemId)}
+          aria-label="Toggle Info Row"
+          aria-pressed={infoRowOpen}
+        >
+          <ToolbarIcon name="infoRow" />
+        </button>
+      );
+    }
+    if (itemId === "actionLog") {
+      return (
+        <button
+          key={itemId}
+          type="button"
+          className="sidebar-rail-button"
+          onClick={onOpenActionLog}
+          disabled={!actionLogEnabled}
+          title={getToolbarTooltip(itemId)}
+          aria-label="Open action log"
+        >
+          <ToolbarIcon name="actionLog" />
+        </button>
+      );
+    }
+    if (itemId === "help") {
+      return (
+        <button
+          key={itemId}
+          type="button"
+          className="sidebar-rail-button"
+          onClick={onOpenHelp}
+          title={getToolbarTooltip(itemId)}
+          aria-label="Open help"
+        >
+          <ToolbarIcon name="help" />
+        </button>
+      );
+    }
+    if (itemId === "theme") {
+      return (
+        <div key={itemId} className="sidebar-rail-menu-anchor">
+          <button
+            ref={themeButtonRef}
+            type="button"
+            className={`sidebar-rail-button${themeMenuOpen ? " active" : ""}`}
+            onClick={onToggleThemeMenu}
+            title={`Theme: ${getThemeLabel(theme)}`}
+            aria-label="Choose theme"
+            aria-haspopup="listbox"
+            aria-expanded={themeMenuOpen}
+          >
+            <ToolbarIcon name="theme" />
+          </button>
+          {themeMenuOpen ? (
+            <div ref={themeMenuRef} className="sidebar-rail-menu" tabIndex={-1}>
+              {THEME_GROUPS.map((group, groupIndex) => (
+                <Fragment key={group.value}>
+                  {groupIndex > 0 ? <hr className="sidebar-rail-menu-separator" /> : null}
+                  {group.options.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`sidebar-rail-menu-item${theme === option.value ? " active" : ""}`}
+                      onClick={() => onSelectTheme(option.value)}
+                      aria-pressed={theme === option.value}
+                    >
+                      <span>{option.label}</span>
+                      {theme === option.value ? (
+                        <span className="sidebar-rail-menu-check">✓</span>
+                      ) : null}
+                    </button>
+                  ))}
+                </Fragment>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      );
+    }
+    if (itemId === "settings") {
+      return (
+        <button
+          key={itemId}
+          type="button"
+          className="sidebar-rail-button"
+          onClick={onOpenSettings}
+          title={getToolbarTooltip(itemId)}
+          aria-label="Open settings"
+        >
+          <ToolbarIcon name="settings" />
+        </button>
+      );
+    }
+    if (itemId === "goToFolder") {
+      return (
+        <button
+          key={itemId}
+          type="button"
+          className="sidebar-rail-button"
+          onClick={onOpenLocation}
+          disabled={!onOpenLocation}
+          title={getToolbarTooltip(itemId)}
+          aria-label="Go to Folder"
+        >
+          <ToolbarIcon name="location" />
+        </button>
+      );
+    }
+
+    const definition = getToolbarItemDefinition(itemId);
+    if (!definition.commandType) {
+      return null;
+    }
+    return (
+      <button
+        key={itemId}
+        type="button"
+        className="sidebar-rail-button"
+        onClick={() => onRendererCommand(definition.commandType!)}
+        disabled={!canRunRendererCommand(definition.commandType)}
+        title={formatToolbarTooltip(definition.label, definition.shortcutLabel)}
+        aria-label={definition.label}
+      >
+        <ToolbarIcon name={definition.icon} />
+      </button>
+    );
+  }
+
   return (
     <aside
       ref={paneRef}
@@ -441,167 +790,21 @@ export function TreePane({
     >
       <div className="sidebar-shell">
         <aside className="sidebar-rail">
-          <button
-            type="button"
-            className="sidebar-rail-button"
-            onClick={onGoHome}
-            title="Home"
-            aria-label="Quick access Home"
-          >
-            <ToolbarIcon name="home" />
-          </button>
-          <button
-            type="button"
-            className="sidebar-rail-button"
-            onClick={() => onQuickAccess("root")}
-            title="Macintosh HD"
-            aria-label="Quick access Macintosh HD"
-          >
-            <ToolbarIcon name="drive" />
-          </button>
-          <button
-            type="button"
-            className="sidebar-rail-button"
-            onClick={() => onQuickAccess("applications")}
-            title="Applications"
-            aria-label="Quick access Applications"
-          >
-            <ToolbarIcon name="applications" />
-          </button>
-          <button
-            type="button"
-            className="sidebar-rail-button"
-            onClick={() => onQuickAccess("trash")}
-            title="Trash"
-            aria-label="Quick access Trash"
-          >
-            <ToolbarIcon name="trash" />
-          </button>
-          <span className="sidebar-rail-separator" />
-          <button
-            type="button"
-            className="sidebar-rail-button"
-            onClick={onRerootHome}
-            title="Root tree at Home"
-            aria-label="Root tree at Home"
-          >
-            <ToolbarIcon name="rerootHome" />
-          </button>
-          <span className="sidebar-rail-separator" />
-          <button
-            type="button"
-            className="sidebar-rail-button"
-            onClick={onOpenLocation}
-            title="Go to Folder (Cmd+Shift+G)"
-            aria-label="Go to Folder"
-          >
-            <ToolbarIcon name="location" />
-          </button>
-          <span className="sidebar-rail-separator" />
-          <button
-            type="button"
-            className={`sidebar-rail-button${foldersFirst ? " active" : ""}`}
-            onClick={onToggleFoldersFirst}
-            title={foldersFirst ? "Folders first" : "Mixed file and folder order"}
-            aria-label="Toggle folders first"
-            aria-pressed={foldersFirst}
-          >
-            <ToolbarIcon name="foldersFirst" />
-          </button>
-          <button
-            type="button"
-            className={`sidebar-rail-button${includeHidden ? " active" : ""}`}
-            onClick={onToggleHidden}
-            title="Toggle hidden files"
-            aria-label="Toggle hidden files"
-          >
-            <ToolbarIcon name="hidden" />
-          </button>
-          <button
-            type="button"
-            className={`sidebar-rail-button${infoPanelOpen ? " active" : ""}`}
-            onClick={onToggleInfoPanel}
-            title="Toggle Info Panel (Cmd+I)"
-            aria-label="Toggle Info Panel"
-          >
-            <ToolbarIcon name="drawer" />
-          </button>
-          <button
-            type="button"
-            className={`sidebar-rail-button${infoRowOpen ? " active" : ""}`}
-            onClick={onToggleInfoRow}
-            title="Toggle Info Row (Cmd+Shift+I)"
-            aria-label="Toggle Info Row"
-          >
-            <ToolbarIcon name="infoRow" />
-          </button>
-          <div className="sidebar-rail-spacer" />
-          {actionLogEnabled ? (
-            <button
-              type="button"
-              className="sidebar-rail-button"
-              onClick={onOpenActionLog}
-              title="Action Log"
-              aria-label="Open action log"
-            >
-              <ToolbarIcon name="actionLog" />
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className="sidebar-rail-button"
-            onClick={onOpenHelp}
-            title="Help"
-            aria-label="Open help"
-          >
-            <ToolbarIcon name="help" />
-          </button>
-          <div className="sidebar-rail-menu-anchor">
-            <button
-              ref={themeButtonRef}
-              type="button"
-              className={`sidebar-rail-button${themeMenuOpen ? " active" : ""}`}
-              onClick={onToggleThemeMenu}
-              title={`Theme: ${getThemeLabel(theme)}`}
-              aria-label="Choose theme"
-              aria-haspopup="listbox"
-              aria-expanded={themeMenuOpen}
-            >
-              <ToolbarIcon name="theme" />
-            </button>
-            {themeMenuOpen ? (
-              <div ref={themeMenuRef} className="sidebar-rail-menu" tabIndex={-1}>
-                {THEME_GROUPS.map((group, groupIndex) => (
-                  <Fragment key={group.value}>
-                    {groupIndex > 0 ? <hr className="sidebar-rail-menu-separator" /> : null}
-                    {group.options.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        className={`sidebar-rail-menu-item${theme === option.value ? " active" : ""}`}
-                        onClick={() => onSelectTheme(option.value)}
-                        aria-pressed={theme === option.value}
-                      >
-                        <span>{option.label}</span>
-                        {theme === option.value ? (
-                          <span className="sidebar-rail-menu-check">✓</span>
-                        ) : null}
-                      </button>
-                    ))}
-                  </Fragment>
-                ))}
-              </div>
-            ) : null}
+          <div className="sidebar-rail-group sidebar-rail-group-main">
+            {leftToolbarItems.main
+              .filter((itemId) => itemId !== "settings")
+              .map((itemId, index) => (
+                <Fragment key={`${itemId}-${index}`}>{renderLeftToolbarItem(itemId)}</Fragment>
+              ))}
           </div>
-          <button
-            type="button"
-            className="sidebar-rail-button"
-            onClick={onOpenSettings}
-            title="Settings (Cmd+,)"
-            aria-label="Open settings"
-          >
-            <ToolbarIcon name="settings" />
-          </button>
+          <div className="sidebar-rail-group sidebar-rail-group-utility">
+            {leftToolbarItems.utility
+              .filter((itemId) => itemId !== "settings")
+              .map((itemId, index) => (
+                <Fragment key={`${itemId}-${index}`}>{renderLeftToolbarItem(itemId)}</Fragment>
+              ))}
+            {renderLeftToolbarItem("settings")}
+          </div>
         </aside>
         <div className="sidebar-main">
           <div className="sidebar-header">

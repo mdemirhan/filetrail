@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type DragEvent as ReactDragEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import type {
@@ -10,8 +10,10 @@ import type {
   FavoritesPlacement,
   FileActivationAction,
   IconThemeMode,
+  LeftToolbarItems,
   OpenWithApplication,
   ThemeMode,
+  ToolbarItemId,
   UiFontFamily,
   UiFontWeight,
 } from "../../shared/appPreferences";
@@ -27,11 +29,18 @@ import {
   clampZoomPercent,
   normalizeAccentColor,
 } from "../../shared/appPreferences";
+import {
+  DEFAULT_LEFT_TOOLBAR_ITEMS,
+  getToolbarItemDefinition,
+  getToolbarItemsForLeftZone,
+  getToolbarItemsForSurface,
+} from "../../shared/toolbarItems";
 import { generateAccentTokens } from "../lib/accent";
 import { getFavoriteLabel } from "../lib/favorites";
 import { FavoriteItemIcon } from "../lib/fileIcons";
 import { type ThemeCssBase, getThemeVariant, resolveThemeCssBase } from "../lib/themeVariants";
 import { uiMonoFontStack as mono, uiSansFontStack as sans } from "../lib/viewFonts";
+import { ToolbarIcon } from "./ToolbarIcon";
 
 const settingsBaseThemes = {
   light: {
@@ -197,6 +206,106 @@ const settingsBaseThemes = {
 } as const satisfies Record<ThemeCssBase, unknown>;
 
 type ResolvedSettingsTheme = ReturnType<typeof resolveSettingsTheme>;
+
+const TOP_TOOLBAR_AVAILABLE_ITEM_ORDER: ToolbarItemId[] = [
+  "topSeparator",
+  "back",
+  "forward",
+  "up",
+  "down",
+  "goToFolder",
+  "refresh",
+  "view",
+  "sort",
+  "foldersFirst",
+  "hidden",
+  "infoPanel",
+  "infoRow",
+  "openSelection",
+  "editSelection",
+  "copySelection",
+  "cutSelection",
+  "pasteSelection",
+  "renameSelection",
+  "moveSelection",
+  "duplicateSelection",
+  "newFolder",
+  "trashSelection",
+  "openInTerminal",
+  "copyPath",
+];
+
+const LEFT_MAIN_AVAILABLE_ITEM_ORDER: ToolbarItemId[] = [
+  "leftSeparator",
+  "home",
+  "root",
+  "applications",
+  "trash",
+  "rerootHome",
+  "goToFolder",
+  "refresh",
+  "foldersFirst",
+  "hidden",
+  "infoPanel",
+  "infoRow",
+  "openSelection",
+  "editSelection",
+  "copySelection",
+  "cutSelection",
+  "pasteSelection",
+  "renameSelection",
+  "moveSelection",
+  "duplicateSelection",
+  "newFolder",
+  "trashSelection",
+  "openInTerminal",
+  "copyPath",
+  "actionLog",
+  "help",
+  "theme",
+];
+
+const LEFT_UTILITY_AVAILABLE_ITEM_ORDER: ToolbarItemId[] = [
+  "leftSeparator",
+  "actionLog",
+  "help",
+  "theme",
+  "home",
+  "root",
+  "applications",
+  "trash",
+  "rerootHome",
+  "goToFolder",
+  "refresh",
+  "foldersFirst",
+  "hidden",
+  "infoPanel",
+  "infoRow",
+  "openSelection",
+  "editSelection",
+  "copySelection",
+  "cutSelection",
+  "pasteSelection",
+  "renameSelection",
+  "moveSelection",
+  "duplicateSelection",
+  "newFolder",
+  "trashSelection",
+  "openInTerminal",
+  "copyPath",
+];
+
+function sortToolbarAvailableItems(items: ToolbarItemId[], order: readonly ToolbarItemId[]) {
+  const orderMap = new Map(order.map((itemId, index) => [itemId, index]));
+  return [...items].sort((left, right) => {
+    const leftIndex = orderMap.get(left) ?? Number.MAX_SAFE_INTEGER;
+    const rightIndex = orderMap.get(right) ?? Number.MAX_SAFE_INTEGER;
+    if (leftIndex !== rightIndex) {
+      return leftIndex - rightIndex;
+    }
+    return getToolbarItemDefinition(left).label.localeCompare(getToolbarItemDefinition(right).label);
+  });
+}
 
 function resolveSettingsTheme(theme: ThemeMode, accent: AccentMode) {
   const base = resolveSettingsBaseTheme(theme);
@@ -1534,6 +1643,519 @@ function ActionButton({
   );
 }
 
+function ToolbarSurfaceEditor({
+  title,
+  items,
+  availableItems,
+  lockedItems = [],
+  theme,
+  onReorderItem,
+  onRemoveItem,
+  onAddItem,
+  onReset,
+}: {
+  title: string;
+  items: ToolbarItemId[];
+  availableItems: ToolbarItemId[];
+  lockedItems?: ToolbarItemId[];
+  theme: ResolvedSettingsTheme;
+  onReorderItem: (sourceIndex: number, targetIndex: number) => void;
+  onRemoveItem: (index: number) => void;
+  onAddItem: (itemId: ToolbarItemId) => void;
+  onReset?: () => void;
+}) {
+  const lockedItemSet = new Set(lockedItems);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const activeSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const dragCounterRef = useRef<Record<number, number>>({});
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [hoveredActiveIndex, setHoveredActiveIndex] = useState<number | null>(null);
+  const [hoveredAvailableId, setHoveredAvailableId] = useState<ToolbarItemId | null>(null);
+  const [tooltip, setTooltip] = useState<{ label: string; x: number; y: number } | null>(null);
+
+  const itemDefinitions = items.map((itemId, index) => ({
+    definition: getToolbarItemDefinition(itemId),
+    index,
+  }));
+  const availableDefinitions = availableItems.map((itemId) => getToolbarItemDefinition(itemId));
+
+  const getKindAppearance = useCallback(
+    (itemId: ToolbarItemId) => {
+      const definition = getToolbarItemDefinition(itemId);
+      if (lockedItemSet.has(itemId)) {
+        return {
+          icon: theme.label.secondary,
+          hover: theme.separator,
+          badge: theme.label.secondary,
+        };
+      }
+      if (definition.kind === "composite" || definition.kind === "menu") {
+        return {
+          icon: theme.accent.border,
+          hover: theme.accent.softBg,
+          badge: theme.accent.border,
+        };
+      }
+      if (definition.kind === "toggle") {
+        return {
+          icon: theme.accent.pathCrumbHover,
+          hover: theme.accent.softBg,
+          badge: theme.accent.pathCrumbHover,
+        };
+      }
+      return {
+        icon: theme.accent.solid,
+        hover: theme.accent.softBg,
+        badge: theme.accent.solid,
+      };
+    },
+    [lockedItemSet, theme],
+  );
+
+  const hideTooltip = useCallback(() => setTooltip(null), []);
+  const showTooltip = useCallback((label: string, element: HTMLElement) => {
+    const rect = element.getBoundingClientRect();
+    const containerRect = rootRef.current?.getBoundingClientRect() ?? { left: 0, top: 0 };
+    setTooltip({
+      label,
+      x: rect.left - containerRect.left + rect.width / 2,
+      y: rect.bottom - containerRect.top + 8,
+    });
+  }, []);
+
+  const getInsertSide = useCallback(
+    (index: number) => {
+      if (draggedIndex === null || dragOverIndex !== index || draggedIndex === index) {
+        return null;
+      }
+      return draggedIndex < index ? "right" : "left";
+    },
+    [draggedIndex, dragOverIndex],
+  );
+
+  const handleDragStart = useCallback(
+    (event: ReactDragEvent<HTMLButtonElement>, index: number) => {
+      const itemId = items[index];
+      if (!itemId || lockedItemSet.has(itemId)) {
+        event.preventDefault();
+        return;
+      }
+      setDraggedIndex(index);
+      event.dataTransfer.effectAllowed = "move";
+      const ghost = document.createElement("div");
+      ghost.style.cssText = [
+        "position:absolute",
+        "top:-1000px",
+        "width:40px",
+        "height:38px",
+        `background:${theme.input.bg}`,
+        `border:1px solid ${theme.input.border}`,
+        "border-radius:8px",
+      ].join(";");
+      document.body.appendChild(ghost);
+      event.dataTransfer.setDragImage(ghost, 20, 19);
+      window.setTimeout(() => ghost.remove(), 0);
+    },
+    [items, lockedItemSet, theme.input.bg, theme.input.border],
+  );
+
+  const handleDrop = useCallback(
+    (event: ReactDragEvent<HTMLButtonElement>, targetIndex: number) => {
+      event.preventDefault();
+      event.stopPropagation();
+      dragCounterRef.current = {};
+      if (draggedIndex === null || draggedIndex === targetIndex) {
+        setDraggedIndex(null);
+        setDragOverIndex(null);
+        return;
+      }
+      onReorderItem(draggedIndex, targetIndex);
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+    },
+    [draggedIndex, onReorderItem],
+  );
+
+  return (
+    <div
+      role="group"
+      aria-label={title}
+      ref={rootRef}
+      onDragOver={(event) => {
+        if (draggedIndex === null) {
+          return;
+        }
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+      }}
+      onDrop={(event) => {
+        if (draggedIndex === null) {
+          return;
+        }
+        event.preventDefault();
+        dragCounterRef.current = {};
+        if (
+          activeSurfaceRef.current &&
+          event.target instanceof Node &&
+          activeSurfaceRef.current.contains(event.target)
+        ) {
+          return;
+        }
+        const itemId = items[draggedIndex];
+        if (itemId && !lockedItemSet.has(itemId)) {
+          onRemoveItem(draggedIndex);
+        }
+        setDraggedIndex(null);
+        setDragOverIndex(null);
+        hideTooltip();
+      }}
+      style={{
+        display: "grid",
+        gap: "10px",
+        position: "relative",
+      }}
+    >
+      {tooltip ? (
+        <div
+          style={{
+            position: "absolute",
+            left: tooltip.x,
+            top: tooltip.y,
+            transform: "translateX(-50%)",
+            background: theme.page.bg,
+            border: `1px solid ${theme.input.border}`,
+            color: theme.label.primary,
+            fontSize: "11px",
+            fontFamily: sans,
+            fontWeight: 500,
+            padding: "4px 10px",
+            borderRadius: "6px",
+            whiteSpace: "nowrap",
+            pointerEvents: "none",
+            zIndex: 12,
+            boxShadow: theme.card.shadow,
+          }}
+        >
+          {tooltip.label}
+        </div>
+      ) : null}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: "10px",
+        }}
+      >
+        <div>
+          <div
+            style={{
+              fontSize: "18px",
+              fontFamily: sans,
+              fontWeight: 600,
+              color: theme.section.title,
+              letterSpacing: "-0.02em",
+              marginBottom: "3px",
+            }}
+          >
+            {title}
+          </div>
+          <div
+            style={{
+              fontSize: "11px",
+              fontFamily: mono,
+              color: theme.label.secondary,
+            }}
+          >
+            {items.length} items · drag to reorder
+          </div>
+        </div>
+        {onReset ? <ActionButton label="Reset" theme={theme} onClick={onReset} /> : null}
+      </div>
+
+      <div
+        ref={activeSurfaceRef}
+        style={{
+          padding: "14px",
+          background: theme.input.bg,
+          borderRadius: "12px",
+          border: `1px solid ${theme.input.border}`,
+          overflowX: "auto",
+        }}
+      >
+        <div style={{ display: "flex", gap: "5px", flexWrap: "nowrap", minHeight: "40px" }}>
+          {itemDefinitions.map(({ definition, index }) => {
+            const itemId = definition.id;
+            const locked = lockedItemSet.has(itemId);
+            const isHovered = hoveredActiveIndex === index && draggedIndex === null;
+            const isDragged = draggedIndex === index;
+            const insertSide = getInsertSide(index);
+            const appearance = getKindAppearance(itemId);
+            const swatchBorder = isHovered && !locked ? appearance.hover : theme.separator;
+            return (
+              <div
+                key={`${title}-${itemId}-${index}`}
+                onMouseEnter={(event) => {
+                  setHoveredActiveIndex(index);
+                  showTooltip(definition.label, event.currentTarget);
+                }}
+                onMouseLeave={() => {
+                  setHoveredActiveIndex((current) => (current === index ? null : current));
+                  hideTooltip();
+                }}
+                style={{ position: "relative", display: "flex", alignItems: "center", flexShrink: 0 }}
+              >
+                {insertSide === "left" ? (
+                  <div
+                    style={{
+                      width: "3px",
+                      height: "26px",
+                      background: theme.accent.solid,
+                      borderRadius: "999px",
+                      margin: "0 -1px",
+                      boxShadow: `0 0 10px ${theme.accent.softBg}`,
+                    }}
+                  />
+                ) : null}
+                <div style={{ position: "relative", flexShrink: 0 }}>
+                  <button
+                    type="button"
+                    draggable={!locked}
+                    aria-label={definition.label}
+                    onDragStart={(event) => handleDragStart(event, index)}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = "move";
+                      if (draggedIndex !== null && draggedIndex !== index) {
+                        setDragOverIndex(index);
+                      }
+                    }}
+                    onDragEnter={() => {
+                      dragCounterRef.current[index] = (dragCounterRef.current[index] ?? 0) + 1;
+                      if (draggedIndex !== null && draggedIndex !== index) {
+                        setDragOverIndex(index);
+                      }
+                    }}
+                    onDragLeave={() => {
+                      dragCounterRef.current[index] = Math.max(
+                        0,
+                        (dragCounterRef.current[index] ?? 1) - 1,
+                      );
+                      if (dragCounterRef.current[index] === 0 && dragOverIndex === index) {
+                        setDragOverIndex(null);
+                      }
+                    }}
+                    onDrop={(event) => handleDrop(event, index)}
+                    onDragEnd={() => {
+                      setDraggedIndex(null);
+                      setDragOverIndex(null);
+                      dragCounterRef.current = {};
+                      setHoveredActiveIndex(null);
+                    }}
+                    style={{
+                      width: "40px",
+                      height: "38px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      borderRadius: "8px",
+                      border: `1px solid ${swatchBorder}`,
+                      background: isHovered && !locked ? appearance.hover : theme.page.bg,
+                      color: appearance.icon,
+                      cursor: locked ? "default" : "grab",
+                      opacity: isDragged ? 0.22 : 1,
+                      transition: "all 0.12s ease",
+                      padding: 0,
+                      flexShrink: 0,
+                    }}
+                  >
+                    <ToolbarIcon name={definition.icon} />
+                  </button>
+                  {isHovered && !locked ? (
+                    <button
+                      type="button"
+                      aria-label={`Remove ${definition.label} from ${title}`}
+                      onClick={() => {
+                        onRemoveItem(index);
+                        hideTooltip();
+                      }}
+                      style={{
+                        position: "absolute",
+                        top: "-6px",
+                        right: "-6px",
+                        width: "18px",
+                        height: "18px",
+                        borderRadius: "999px",
+                        border: "none",
+                        background: "#dc2626",
+                        color: "#fff",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: "pointer",
+                        boxShadow: "0 2px 8px rgba(0,0,0,0.35)",
+                        fontSize: "10px",
+                        fontWeight: 800,
+                        padding: 0,
+                        zIndex: 2,
+                      }}
+                    >
+                      x
+                    </button>
+                  ) : null}
+                  {locked ? (
+                    <div
+                      style={{
+                        position: "absolute",
+                        bottom: "-3px",
+                        right: "-3px",
+                        width: "13px",
+                        height: "13px",
+                        borderRadius: "999px",
+                        background: appearance.badge,
+                        color: theme.page.bg,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "7px",
+                        fontWeight: 700,
+                      }}
+                    >
+                      L
+                    </div>
+                  ) : null}
+                </div>
+                {insertSide === "right" ? (
+                  <div
+                    style={{
+                      width: "3px",
+                      height: "26px",
+                      background: theme.accent.solid,
+                      borderRadius: "999px",
+                      margin: "0 -1px",
+                      boxShadow: `0 0 10px ${theme.accent.softBg}`,
+                    }}
+                  />
+                ) : null}
+              </div>
+            );
+          })}
+          {itemDefinitions.length === 0 ? (
+            <div
+              style={{
+                padding: "8px 10px",
+                fontSize: "11px",
+                fontFamily: mono,
+                color: theme.label.secondary,
+                whiteSpace: "nowrap",
+              }}
+            >
+              No items configured.
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", margin: "6px 0 2px" }}>
+        <div style={{ flex: 1, height: "1px", background: theme.separator }} />
+      </div>
+
+      <div style={{ display: "grid", gap: "12px" }}>
+        {availableDefinitions.length === 0 ? (
+          <div
+            style={{
+              padding: "18px 14px",
+              textAlign: "center",
+              color: theme.label.secondary,
+              fontSize: "12px",
+              fontFamily: mono,
+              background: theme.input.bg,
+              borderRadius: "10px",
+              border: `1px solid ${theme.separator}`,
+            }}
+          >
+            All items are already added.
+          </div>
+        ) : (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, 42px)",
+              gap: "5px",
+              justifyContent: "start",
+            }}
+          >
+            {availableDefinitions.map((definition) => {
+              const appearance = getKindAppearance(definition.id);
+              const isHovered = hoveredAvailableId === definition.id;
+              return (
+                <button
+                  key={`${title}-add-${definition.id}`}
+                  type="button"
+                  aria-label={`Add ${definition.label} to ${title}`}
+                  onClick={() => {
+                    onAddItem(definition.id);
+                    hideTooltip();
+                  }}
+                  onMouseEnter={(event) => {
+                    setHoveredAvailableId(definition.id);
+                    showTooltip(definition.label, event.currentTarget);
+                  }}
+                  onMouseLeave={() => {
+                    setHoveredAvailableId(null);
+                    hideTooltip();
+                  }}
+                  style={{
+                    position: "relative",
+                    width: "42px",
+                    height: "40px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: "8px",
+                    border: `1px solid ${isHovered ? appearance.hover : theme.separator}`,
+                    background: isHovered ? appearance.hover : theme.input.bg,
+                    color: isHovered ? appearance.icon : theme.label.secondary,
+                    cursor: "pointer",
+                    transition: "all 0.12s ease",
+                    transform: isHovered ? "translateY(-1px)" : "none",
+                    padding: 0,
+                  }}
+                >
+                  <ToolbarIcon name={definition.icon} />
+                  {isHovered ? (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "-4px",
+                        right: "-4px",
+                        width: "14px",
+                        height: "14px",
+                        borderRadius: "999px",
+                        background: theme.accent.solid,
+                        color: theme.page.bg,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        boxShadow: "0 2px 6px rgba(0,0,0,0.28)",
+                        fontSize: "10px",
+                        fontWeight: 700,
+                      }}
+                    >
+                      +
+                    </div>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ApplicationSelectionDisplay({
   title,
   ariaLabel,
@@ -1922,6 +2544,8 @@ export function SettingsView({
   notificationsEnabled,
   notificationDurationSeconds,
   actionLogEnabled,
+  topToolbarItems,
+  leftToolbarItems,
   restoreLastVisitedFolderOnStartup,
   homePath,
   terminalApp,
@@ -1966,6 +2590,11 @@ export function SettingsView({
   onNotificationsEnabledChange,
   onNotificationDurationSecondsChange,
   onActionLogEnabledChange,
+  onTopToolbarItemsChange,
+  onLeftToolbarItemsChange,
+  onResetTopToolbar,
+  onResetLeftToolbar,
+  onResetToolbars,
   onRestoreLastVisitedFolderOnStartupChange,
   onBrowseTerminalApp,
   onClearTerminalApp,
@@ -2012,6 +2641,8 @@ export function SettingsView({
   notificationsEnabled: boolean;
   notificationDurationSeconds: number;
   actionLogEnabled: boolean;
+  topToolbarItems: ToolbarItemId[];
+  leftToolbarItems: LeftToolbarItems;
   restoreLastVisitedFolderOnStartup: boolean;
   homePath: string;
   terminalApp: ApplicationSelection | null;
@@ -2060,6 +2691,11 @@ export function SettingsView({
   onNotificationsEnabledChange: (value: boolean) => void;
   onNotificationDurationSecondsChange: (value: number) => void;
   onActionLogEnabledChange: (value: boolean) => void;
+  onTopToolbarItemsChange: (value: ToolbarItemId[]) => void;
+  onLeftToolbarItemsChange: (value: LeftToolbarItems) => void;
+  onResetTopToolbar: () => void;
+  onResetLeftToolbar: () => void;
+  onResetToolbars: () => void;
   onRestoreLastVisitedFolderOnStartupChange: (value: boolean) => void;
   onBrowseTerminalApp: () => void;
   onClearTerminalApp: () => void;
@@ -2083,6 +2719,141 @@ export function SettingsView({
   const isDefaultTextEditorSelection =
     defaultTextEditor.appPath === DEFAULT_TEXT_EDITOR.appPath &&
     defaultTextEditor.appName === DEFAULT_TEXT_EDITOR.appName;
+  const customizableTopToolbarItems = topToolbarItems.filter((itemId) => itemId !== "search");
+  const customizableLeftMainItems = leftToolbarItems.main.filter((itemId) => itemId !== "settings");
+  const customizableLeftUtilityItems = leftToolbarItems.utility.filter((itemId) => itemId !== "settings");
+  const topToolbarAvailableItems = getToolbarItemsForSurface("top")
+    .map((item) => item.id)
+    .filter((itemId) => {
+      if (itemId === "search" || itemId === "settings") {
+        return false;
+      }
+      const definition = getToolbarItemDefinition(itemId);
+      return definition.allowDuplicates || !customizableTopToolbarItems.includes(itemId);
+    });
+  const leftToolbarConfigured = new Set([
+    ...customizableLeftMainItems,
+    ...customizableLeftUtilityItems,
+    "settings",
+  ]);
+  const leftMainAvailableItems = getToolbarItemsForLeftZone("main")
+    .map((item) => item.id)
+    .filter((itemId) => {
+      if (itemId === "settings") {
+        return false;
+      }
+      const definition = getToolbarItemDefinition(itemId);
+      return definition.allowDuplicates || !leftToolbarConfigured.has(itemId);
+    });
+  const leftUtilityAvailableItems = getToolbarItemsForLeftZone("utility")
+    .map((item) => item.id)
+    .filter((itemId) => {
+      if (itemId === "settings") {
+        return false;
+      }
+      const definition = getToolbarItemDefinition(itemId);
+      return definition.allowDuplicates || !leftToolbarConfigured.has(itemId);
+    });
+  const sortedTopToolbarAvailableItems = sortToolbarAvailableItems(
+    topToolbarAvailableItems,
+    TOP_TOOLBAR_AVAILABLE_ITEM_ORDER,
+  );
+  const sortedLeftMainAvailableItems = sortToolbarAvailableItems(
+    leftMainAvailableItems,
+    LEFT_MAIN_AVAILABLE_ITEM_ORDER,
+  );
+  const sortedLeftUtilityAvailableItems = sortToolbarAvailableItems(
+    leftUtilityAvailableItems,
+    LEFT_UTILITY_AVAILABLE_ITEM_ORDER,
+  );
+
+  const reorderToolbarItems = useCallback(
+    (items: ToolbarItemId[], sourceIndex: number, targetIndex: number) => {
+      if (
+        sourceIndex < 0 ||
+        sourceIndex >= items.length ||
+        targetIndex < 0 ||
+        targetIndex >= items.length ||
+        sourceIndex === targetIndex
+      ) {
+        return items;
+      }
+      const nextItems = [...items];
+      const [movedItem] = nextItems.splice(sourceIndex, 1);
+      if (!movedItem) {
+        return items;
+      }
+      nextItems.splice(targetIndex, 0, movedItem);
+      return nextItems;
+    },
+    [],
+  );
+  const handleTopToolbarMove = useCallback(
+    (sourceIndex: number, targetIndex: number) => {
+      onTopToolbarItemsChange([...reorderToolbarItems(customizableTopToolbarItems, sourceIndex, targetIndex), "search"]);
+    },
+    [customizableTopToolbarItems, onTopToolbarItemsChange, reorderToolbarItems],
+  );
+  const handleTopToolbarRemove = useCallback(
+    (index: number) => {
+      if (index < 0 || index >= customizableTopToolbarItems.length) {
+        return;
+      }
+      onTopToolbarItemsChange([
+        ...customizableTopToolbarItems.filter((_, candidateIndex) => candidateIndex !== index),
+        "search",
+      ]);
+    },
+    [customizableTopToolbarItems, onTopToolbarItemsChange],
+  );
+  const handleTopToolbarAdd = useCallback(
+    (itemId: ToolbarItemId) => {
+      const definition = getToolbarItemDefinition(itemId);
+      if (
+        itemId === "search" ||
+        itemId === "settings" ||
+        (!definition.allowDuplicates && customizableTopToolbarItems.includes(itemId))
+      ) {
+        return;
+      }
+      onTopToolbarItemsChange([...customizableTopToolbarItems, itemId, "search"]);
+    },
+    [customizableTopToolbarItems, onTopToolbarItemsChange],
+  );
+  const updateLeftToolbarZone = useCallback(
+    (zone: "main" | "utility", updater: (items: ToolbarItemId[]) => ToolbarItemId[]) => {
+      const currentItems =
+        zone === "main" ? customizableLeftMainItems : customizableLeftUtilityItems;
+      const nextItems = updater(currentItems);
+      onLeftToolbarItemsChange({
+        ...leftToolbarItems,
+        [zone]: zone === "utility" ? [...nextItems, "settings"] : nextItems,
+      });
+    },
+    [customizableLeftMainItems, customizableLeftUtilityItems, leftToolbarItems, onLeftToolbarItemsChange],
+  );
+  const handleLeftToolbarMove = useCallback(
+    (zone: "main" | "utility", sourceIndex: number, targetIndex: number) => {
+      updateLeftToolbarZone(zone, (items) => reorderToolbarItems(items, sourceIndex, targetIndex));
+    },
+    [reorderToolbarItems, updateLeftToolbarZone],
+  );
+  const handleLeftToolbarRemove = useCallback(
+    (zone: "main" | "utility", index: number) => {
+      updateLeftToolbarZone(zone, (items) => items.filter((_, candidateIndex) => candidateIndex !== index));
+    },
+    [updateLeftToolbarZone],
+  );
+  const handleLeftToolbarAdd = useCallback(
+    (zone: "main" | "utility", itemId: ToolbarItemId) => {
+      const definition = getToolbarItemDefinition(itemId);
+      if (itemId === "settings" || (!definition.allowDuplicates && leftToolbarConfigured.has(itemId))) {
+        return;
+      }
+      updateLeftToolbarZone(zone, (items) => [...items, itemId]);
+    },
+    [leftToolbarConfigured, updateLeftToolbarZone],
+  );
 
   return (
     <div
@@ -2103,7 +2874,7 @@ export function SettingsView({
       <div
         className="settings-page"
         style={{
-          maxWidth: "640px",
+          maxWidth: "704px",
           margin: "0 auto",
         }}
       >
@@ -2956,6 +3727,63 @@ export function SettingsView({
               </div>
             </div>
           ))}
+        </SectionCard>
+
+        <SectionCard
+          icon="⌘"
+          title="Toolbars"
+          theme={palette}
+          resetButton={<ActionButton label="Reset All" theme={palette} onClick={onResetToolbars} />}
+        >
+          <div style={{ display: "grid", gap: "22px", paddingTop: "6px" }}>
+            <ToolbarSurfaceEditor
+              title="Top toolbar"
+              items={customizableTopToolbarItems}
+              availableItems={sortedTopToolbarAvailableItems}
+              theme={palette}
+              onReorderItem={handleTopToolbarMove}
+              onRemoveItem={handleTopToolbarRemove}
+              onAddItem={handleTopToolbarAdd}
+              onReset={onResetTopToolbar}
+            />
+
+            <div style={{ height: "1px", background: palette.separator }} />
+            <ToolbarSurfaceEditor
+              title="Left rail"
+              items={customizableLeftMainItems}
+              availableItems={sortedLeftMainAvailableItems}
+              theme={palette}
+              onReorderItem={(sourceIndex, targetIndex) =>
+                handleLeftToolbarMove("main", sourceIndex, targetIndex)
+              }
+              onRemoveItem={(index) => handleLeftToolbarRemove("main", index)}
+              onAddItem={(itemId) => handleLeftToolbarAdd("main", itemId)}
+              onReset={() =>
+                onLeftToolbarItemsChange({
+                  ...leftToolbarItems,
+                  main: DEFAULT_LEFT_TOOLBAR_ITEMS.main.filter((itemId) => itemId !== "settings"),
+                })
+              }
+            />
+            <div style={{ height: "1px", background: palette.separator }} />
+            <ToolbarSurfaceEditor
+              title="Bottom utility"
+              items={customizableLeftUtilityItems}
+              availableItems={sortedLeftUtilityAvailableItems}
+              theme={palette}
+              onReorderItem={(sourceIndex, targetIndex) =>
+                handleLeftToolbarMove("utility", sourceIndex, targetIndex)
+              }
+              onRemoveItem={(index) => handleLeftToolbarRemove("utility", index)}
+              onAddItem={(itemId) => handleLeftToolbarAdd("utility", itemId)}
+              onReset={() =>
+                onLeftToolbarItemsChange({
+                  ...leftToolbarItems,
+                  utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility.filter((itemId) => itemId !== "settings"), "settings"],
+                })
+              }
+            />
+          </div>
         </SectionCard>
 
         <div className="settings-footer-note" style={{ textAlign: "center", padding: "8px 0 4px" }}>

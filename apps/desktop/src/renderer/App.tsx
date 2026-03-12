@@ -24,6 +24,7 @@ import {
   clampOpenItemLimit,
   clampZoomPercent,
 } from "../shared/appPreferences";
+import { DEFAULT_LEFT_TOOLBAR_ITEMS, DEFAULT_TOP_TOOLBAR_ITEMS } from "../shared/toolbarItems";
 import { ActionLogView } from "./components/ActionLogView";
 import { AppDialogs } from "./components/AppDialogs";
 import { ExplorerWorkspace } from "./components/ExplorerWorkspace";
@@ -74,9 +75,12 @@ import { FileIcon } from "./lib/fileIcons";
 import { useFiletrailClient } from "./lib/filetrailClient";
 import { formatDateTime, formatPermissionMode, formatSize } from "./lib/formatting";
 import { REFERENCE_ITEMS, SHORTCUT_ITEMS } from "./lib/helpContent";
+import { parentDirectoryPath } from "./lib/explorerNavigation";
 import { EXPLORER_LAYOUT } from "./lib/layoutTokens";
 import { createRendererLogger } from "./lib/logging";
+import { canRunToolbarRendererCommand } from "./lib/rendererCommandAvailability";
 import { resolveExplorerToolbarLayout, resolveSinglePanelLayout } from "./lib/responsiveLayout";
+import { canHandleRendererCommand } from "./lib/shortcutPolicy";
 import { resolveStartupNavigation } from "./lib/startupNavigation";
 import { getThemeAppearanceDefaults } from "./lib/theme";
 import { type ToastEntry, type ToastKind, createToastEntry, enqueueToast } from "./lib/toasts";
@@ -158,6 +162,10 @@ export function App() {
     setNotificationDurationSeconds,
     actionLogEnabled,
     setActionLogEnabled,
+    topToolbarItems,
+    setTopToolbarItems,
+    leftToolbarItems,
+    setLeftToolbarItems,
     restoreLastVisitedFolderOnStartup,
     setRestoreLastVisitedFolderOnStartup,
     lastGoToFolderPath,
@@ -897,8 +905,37 @@ export function App() {
       selectedTreeTargetKind,
     ],
   );
+  const canRunRendererCommand = useCallback(
+    (commandType: Parameters<typeof canHandleRendererCommand>[0]) =>
+      canRunToolbarRendererCommand(commandType, {
+        shortcutContext,
+        currentPath,
+        selectedPathsInViewOrder,
+        activeContentEntries,
+        selectedEntry,
+        selectedTreeTargetPath,
+        copyPasteClipboard,
+        pasteDestinationPath,
+        isSearchMode,
+        openItemLimit,
+        writeOperationLocked: isWriteOperationLocked,
+      }),
+    [
+      shortcutContext,
+      currentPath,
+      selectedPathsInViewOrder,
+      activeContentEntries,
+      selectedEntry,
+      selectedTreeTargetPath,
+      copyPasteClipboard,
+      pasteDestinationPath,
+      isSearchMode,
+      openItemLimit,
+      isWriteOperationLocked,
+    ],
+  );
 
-  useExplorerShortcuts({
+  const { runRendererCommand } = useExplorerShortcuts({
     client,
     shortcutContext,
     actionNotice,
@@ -1028,6 +1065,8 @@ export function App() {
         notificationsEnabled,
         notificationDurationSeconds,
         actionLogEnabled,
+        topToolbarItems,
+        leftToolbarItems,
         propertiesOpen: infoPanelOpen,
         detailRowOpen: infoRowOpen,
         terminalApp,
@@ -1099,6 +1138,8 @@ export function App() {
     typeaheadEnabled,
     notificationDurationSeconds,
     actionLogEnabled,
+    topToolbarItems,
+    leftToolbarItems,
     openWithApplications,
     notificationsEnabled,
     openItemLimit,
@@ -1177,6 +1218,8 @@ export function App() {
         setNotificationsEnabled(preferences.notificationsEnabled);
         setNotificationDurationSeconds(preferences.notificationDurationSeconds);
         setActionLogEnabled(preferences.actionLogEnabled);
+        setTopToolbarItems(preferences.topToolbarItems);
+        setLeftToolbarItems(preferences.leftToolbarItems);
         setInfoPanelOpen(preferences.propertiesOpen);
         setInfoRowOpen(preferences.detailRowOpen);
         setRestoreLastVisitedFolderOnStartup(preferences.restoreLastVisitedFolderOnStartup);
@@ -1564,6 +1607,14 @@ export function App() {
             onLeftPaneSubviewChange: setLeftPaneSubview,
             onFavoritesPaneHeightChange: setFavoritesPaneHeight,
             onGoHome: goHome,
+            canGoBack,
+            onGoBack: goBack,
+            canGoForward,
+            onGoForward: goForward,
+            canNavigateToParent: parentDirectoryPath(currentPath) !== null,
+            onNavigateToParent: navigateToParentFolder,
+            canNavigateDown: focusedPane === "tree" || selectedEntry !== null,
+            onNavigateDown: navigateDownAction,
             onRerootHome: rerootTreeAtHome,
             onOpenLocation: openLocationSheet,
             onQuickAccess: goQuickAccess,
@@ -1573,6 +1624,7 @@ export function App() {
             onToggleInfoPanel: () => setInfoPanelOpen((value) => !value),
             infoRowOpen,
             onToggleInfoRow: () => setInfoRowOpen((value) => !value),
+            leftToolbarItems,
             theme,
             themeMenuOpen,
             themeButtonRef,
@@ -1629,6 +1681,8 @@ export function App() {
             onToggleExpand: toggleTreeNode,
             onToggleFavoritesExpanded: () => setFavoritesExpanded((value) => !value),
             typeaheadQuery: focusedPane === "tree" ? typeaheadQuery : "",
+            canRunRendererCommand,
+            onRendererCommand: runRendererCommand,
           }}
           searchWorkspaceProps={{
             isSearchMode,
@@ -1774,6 +1828,7 @@ export function App() {
             copyPathDisabled: isWriteOperationLocked,
           }}
           currentPath={currentPath}
+          topToolbarItems={topToolbarItems}
           explorerToolbarLayout={explorerToolbarLayout}
           canGoBack={canGoBack}
           canGoForward={canGoForward}
@@ -1847,6 +1902,8 @@ export function App() {
           onSearchRecursiveChange={updateSearchRecursive}
           searchIncludeHidden={searchIncludeHidden}
           onSearchIncludeHiddenChange={updateSearchIncludeHidden}
+          canRunRendererCommand={canRunRendererCommand}
+          onRendererCommand={runRendererCommand}
           onPaneResizeKey={handlePaneResizeKey}
         />
       ) : (
@@ -1902,10 +1959,12 @@ export function App() {
                 typeaheadDebounceMs={typeaheadDebounceMs}
                 notificationsEnabled={notificationsEnabled}
                 notificationDurationSeconds={notificationDurationSeconds}
-                actionLogEnabled={actionLogEnabled}
-                restoreLastVisitedFolderOnStartup={restoreLastVisitedFolderOnStartup}
-                homePath={homePath}
-                terminalApp={terminalApp}
+              actionLogEnabled={actionLogEnabled}
+              topToolbarItems={topToolbarItems}
+              leftToolbarItems={leftToolbarItems}
+              restoreLastVisitedFolderOnStartup={restoreLastVisitedFolderOnStartup}
+              homePath={homePath}
+              terminalApp={terminalApp}
                 defaultTextEditor={defaultTextEditor}
                 favorites={favorites}
                 favoritesPlacement={favoritesPlacement}
@@ -1944,12 +2003,28 @@ export function App() {
                 onTabSwitchesExplorerPanesChange={setTabSwitchesExplorerPanes}
                 onTypeaheadEnabledChange={setTypeaheadEnabled}
                 onTypeaheadDebounceMsChange={setTypeaheadDebounceMs}
-                onNotificationsEnabledChange={setNotificationsEnabled}
-                onNotificationDurationSecondsChange={setNotificationDurationSeconds}
-                onActionLogEnabledChange={setActionLogEnabled}
-                onRestoreLastVisitedFolderOnStartupChange={setRestoreLastVisitedFolderOnStartup}
-                onBrowseTerminalApp={() => {
-                  void browseTerminalApplication();
+              onNotificationsEnabledChange={setNotificationsEnabled}
+              onNotificationDurationSecondsChange={setNotificationDurationSeconds}
+              onActionLogEnabledChange={setActionLogEnabled}
+              onTopToolbarItemsChange={setTopToolbarItems}
+              onLeftToolbarItemsChange={setLeftToolbarItems}
+              onResetTopToolbar={() => setTopToolbarItems([...DEFAULT_TOP_TOOLBAR_ITEMS])}
+              onResetLeftToolbar={() =>
+                setLeftToolbarItems({
+                  main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
+                  utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
+                })
+              }
+              onResetToolbars={() => {
+                setTopToolbarItems([...DEFAULT_TOP_TOOLBAR_ITEMS]);
+                setLeftToolbarItems({
+                  main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
+                  utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
+                });
+              }}
+              onRestoreLastVisitedFolderOnStartupChange={setRestoreLastVisitedFolderOnStartup}
+              onBrowseTerminalApp={() => {
+                void browseTerminalApplication();
                 }}
                 onClearTerminalApp={() => setTerminalApp(null)}
                 onBrowseDefaultTextEditor={() => {

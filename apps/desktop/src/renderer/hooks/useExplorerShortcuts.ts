@@ -29,6 +29,7 @@ import {
   resolveOpenSelectionPaths,
 } from "../lib/shortcutTargets";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
+import type { RendererCommandType } from "../../shared/rendererCommands";
 import type { ContextMenuState } from "./useWriteOperations";
 
 type RawShortcutBinding = {
@@ -931,21 +932,21 @@ export function useExplorerShortcuts(args: {
     ],
   );
 
-  useEffect(() => {
-    const unsubscribe = client.onCommand((command) => {
+  const runRendererCommand = useCallback(
+    (commandType: RendererCommandType) => {
       if (
-        command.type === "editCut" ||
-        command.type === "editCopy" ||
-        command.type === "editPaste" ||
-        command.type === "editSelectAll"
+        commandType === "editCut" ||
+        commandType === "editCopy" ||
+        commandType === "editPaste" ||
+        commandType === "editSelectAll"
       ) {
-        runGenericEditCommand(command.type);
+        runGenericEditCommand(commandType);
         return;
       }
-      if (!canHandleRendererCommand(command.type, shortcutContext)) {
+      if (!canHandleRendererCommand(commandType, shortcutContext)) {
         return;
       }
-      if (command.type === "openSelection") {
+      if (commandType === "openSelection") {
         const pathsToOpen = resolveOpenSelectionPaths({
           focusedPane,
           lastFocusedPane: lastExplorerFocusPaneRef.current,
@@ -970,7 +971,7 @@ export function useExplorerShortcuts(args: {
         }
         return;
       }
-      if (command.type === "editSelection") {
+      if (commandType === "editSelection") {
         const pathsToEdit = resolveEditSelectionPaths({
           focusedPane,
           lastFocusedPane: lastExplorerFocusPaneRef.current,
@@ -983,7 +984,7 @@ export function useExplorerShortcuts(args: {
         }
         return;
       }
-      if (command.type === "openInTerminal") {
+      if (commandType === "openInTerminal") {
         const pathsToOpen = resolveOpenInTerminalPaths({
           focusedPane,
           lastFocusedPane: lastExplorerFocusPaneRef.current,
@@ -998,28 +999,28 @@ export function useExplorerShortcuts(args: {
         }
         return;
       }
-      if (command.type === "moveSelection") {
+      if (commandType === "moveSelection") {
         const paths = resolveContentActionPaths();
         if (paths.length > 0) {
           openMoveDialog(paths);
         }
         return;
       }
-      if (command.type === "renameSelection") {
+      if (commandType === "renameSelection") {
         const paths = resolveContentActionPaths();
         if (paths.length === 1) {
           openRenameDialog(paths);
         }
         return;
       }
-      if (command.type === "duplicateSelection") {
+      if (commandType === "duplicateSelection") {
         const paths = resolveContentActionPaths();
         if (paths.length > 0) {
           void startDuplicatePaths(paths);
         }
         return;
       }
-      if (command.type === "newFolder") {
+      if (commandType === "newFolder") {
         const targetPath = resolveNewFolderTargetPath({
           currentPath,
           selectedEntry,
@@ -1031,50 +1032,50 @@ export function useExplorerShortcuts(args: {
         }
         return;
       }
-      if (command.type === "trashSelection") {
+      if (commandType === "trashSelection") {
         const paths = resolveContentActionPaths();
         if (paths.length > 0) {
           void startTrashPaths(paths);
         }
         return;
       }
-      if (command.type === "copySelection") {
+      if (commandType === "copySelection") {
         void runCopyClipboardAction("copy");
         return;
       }
-      if (command.type === "cutSelection") {
+      if (commandType === "cutSelection") {
         void runCopyClipboardAction("cut");
         return;
       }
-      if (command.type === "pasteSelection") {
+      if (commandType === "pasteSelection") {
         void startPasteFromClipboard();
         return;
       }
-      if (command.type === "openLocationSheet") {
+      if (commandType === "openLocationSheet") {
         openLocationSheet();
         return;
       }
-      if (command.type === "openSettings") {
+      if (commandType === "openSettings") {
         openSettingsView();
         return;
       }
-      if (command.type === "openActionLog") {
+      if (commandType === "openActionLog") {
         openActionLogView();
         return;
       }
-      if (command.type === "zoomIn") {
+      if (commandType === "zoomIn") {
         setZoomPercent((value) => clampZoomPercent(value + 10));
         return;
       }
-      if (command.type === "zoomOut") {
+      if (commandType === "zoomOut") {
         setZoomPercent((value) => clampZoomPercent(value - 10));
         return;
       }
-      if (command.type === "resetZoom") {
+      if (commandType === "resetZoom") {
         setZoomPercent(100);
         return;
       }
-      if (command.type === "copyPath") {
+      if (commandType === "copyPath") {
         const pathsToCopy =
           (contextMenuState?.paths.length ?? 0) > 0
             ? (contextMenuState?.paths ?? [])
@@ -1088,7 +1089,7 @@ export function useExplorerShortcuts(args: {
         }
         return;
       }
-      if (command.type === "refreshOrApplySearchSort") {
+      if (commandType === "refreshOrApplySearchSort") {
         if (isSearchMode) {
           applySearchResultsSort();
           return;
@@ -1096,15 +1097,15 @@ export function useExplorerShortcuts(args: {
         void refreshDirectory();
         return;
       }
-      if (command.type === "toggleInfoPanel") {
+      if (commandType === "toggleInfoPanel") {
         setInfoPanelOpen((value) => !value);
         return;
       }
-      if (command.type === "toggleInfoRow") {
+      if (commandType === "toggleInfoRow") {
         setInfoRowOpen((value) => !value);
         return;
       }
-      if (command.type !== "focusFileSearch") {
+      if (commandType !== "focusFileSearch") {
         return;
       }
       setMainView("explorer");
@@ -1123,54 +1124,60 @@ export function useExplorerShortcuts(args: {
           searchPointerIntentRef.current = false;
         });
       });
+    },
+    [
+      applyContentSelection,
+      applySearchResultsSort,
+      cachedSearchSelectionRef,
+      clearTypeahead,
+      contextMenuState,
+      currentPath,
+      editPaths,
+      focusedPane,
+      lastExplorerFocusPaneRef,
+      isSearchMode,
+      navigateFavoritePath,
+      navigateTreeFileSystemPath,
+      openActionLogView,
+      openLocationSheet,
+      openMoveDialog,
+      openNewFolderDialog,
+      openPathInTerminal,
+      openPaths,
+      openRenameDialog,
+      openSettingsView,
+      refreshDirectory,
+      resolveContentActionPaths,
+      runGenericEditCommand,
+      runCopyClipboardAction,
+      runCopyPathAction,
+      searchCommittedQueryRef,
+      searchInputRef,
+      searchPointerIntentRef,
+      searchResultEntries,
+      selectedEntry,
+      selectedPathsInViewOrder,
+      selectedTreeTargetPath,
+      setFocusedPane,
+      setInfoPanelOpen,
+      setInfoRowOpen,
+      setMainView,
+      setSearchPopoverOpen,
+      setSearchResultsVisible,
+      setZoomPercent,
+      shortcutContext,
+      startDuplicatePaths,
+      startPasteFromClipboard,
+      startTrashPaths,
+    ],
+  );
+
+  useEffect(() => {
+    const unsubscribe = client.onCommand((command) => {
+      runRendererCommand(command.type);
     });
     return unsubscribe;
-  }, [
-    applyContentSelection,
-    applySearchResultsSort,
-    cachedSearchSelectionRef,
-    clearTypeahead,
-    client,
-    contextMenuState,
-    currentPath,
-    editPaths,
-    focusedPane,
-    lastExplorerFocusPaneRef,
-    isSearchMode,
-    navigateFavoritePath,
-    openLocationSheet,
-    openMoveDialog,
-    openNewFolderDialog,
-    openPathInTerminal,
-    openPaths,
-    openRenameDialog,
-    openSettingsView,
-    openActionLogView,
-    refreshDirectory,
-    resolveContentActionPaths,
-    runGenericEditCommand,
-    runCopyClipboardAction,
-    runCopyPathAction,
-    selectedTreeTargetPath,
-    searchCommittedQueryRef,
-    searchInputRef,
-    searchPointerIntentRef,
-    searchResultEntries,
-    selectedEntry,
-    selectedPathsInViewOrder,
-    setFocusedPane,
-    setInfoPanelOpen,
-    setInfoRowOpen,
-    setMainView,
-    setSearchPopoverOpen,
-    setSearchResultsVisible,
-    setZoomPercent,
-    shortcutContext,
-    startDuplicatePaths,
-    startPasteFromClipboard,
-    startTrashPaths,
-    navigateTreeFileSystemPath,
-  ]);
+  }, [client, runRendererCommand]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1282,4 +1289,8 @@ export function useExplorerShortcuts(args: {
     setMainView,
     shortcutContext,
   ]);
+
+  return {
+    runRendererCommand,
+  };
 }

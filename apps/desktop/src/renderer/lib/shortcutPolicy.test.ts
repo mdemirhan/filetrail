@@ -77,6 +77,13 @@ describe("shortcutPolicy", () => {
     expect(canHandleRendererCommand("newFolder", ctx({ focusedPane: "tree" }))).toBe(false);
   });
 
+  it("blocks content-only renderer commands when no explorer pane is focused", () => {
+    expect(canHandleRendererCommand("newFolder", ctx({ focusedPane: null }))).toBe(false);
+    expect(canHandleRendererCommand("copySelection", ctx({ focusedPane: null }))).toBe(false);
+    expect(canHandleRendererCommand("openSelection", ctx({ focusedPane: null }))).toBe(false);
+    expect(canHandleRendererCommand("copyPath", ctx({ focusedPane: null }))).toBe(false);
+  });
+
   it("keeps global renderer commands available when the tree is focused", () => {
     expect(canHandleRendererCommand("focusFileSearch", ctx({ focusedPane: "tree" }))).toBe(true);
     expect(canHandleRendererCommand("refreshOrApplySearchSort", ctx({ focusedPane: "tree" }))).toBe(

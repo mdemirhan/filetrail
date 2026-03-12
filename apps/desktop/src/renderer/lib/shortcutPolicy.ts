@@ -173,14 +173,17 @@ export function canHandleRendererCommand(
     return false;
   }
 
-  if (
-    context.focusedPane === "tree" &&
-    RENDERER_COMMAND_TREE_FOCUS_BUCKETS[command] === "contentOnly"
-  ) {
-    if (TREE_SAFE_RENDERER_COMMANDS.has(command)) {
-      return (
-        isSafeTreeTargetKind(context.selectedTreeTargetKind) && context.mainView === "explorer"
-      );
+  if (RENDERER_COMMAND_TREE_FOCUS_BUCKETS[command] === "contentOnly") {
+    if (context.focusedPane === "content") {
+      return context.mainView === "explorer";
+    }
+    if (context.focusedPane === "tree") {
+      if (TREE_SAFE_RENDERER_COMMANDS.has(command)) {
+        return (
+          isSafeTreeTargetKind(context.selectedTreeTargetKind) && context.mainView === "explorer"
+        );
+      }
+      return false;
     }
     return false;
   }

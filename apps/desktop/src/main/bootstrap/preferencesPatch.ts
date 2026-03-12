@@ -100,6 +100,12 @@ export function toPreferencePatch(
   if (value.detailRowOpen !== undefined) {
     patch.detailRowOpen = value.detailRowOpen;
   }
+  if (value.topToolbarItems !== undefined) {
+    patch.topToolbarItems = value.topToolbarItems;
+  }
+  if (value.leftToolbarItems !== undefined) {
+    patch.leftToolbarItems = value.leftToolbarItems;
+  }
   if (value.terminalApp !== undefined) {
     patch.terminalApp = value.terminalApp;
   }

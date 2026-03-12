@@ -99,6 +99,24 @@ describe("toPreferencePatch", () => {
     });
   });
 
+  it("preserves toolbar layout preferences", () => {
+    expect(
+      toPreferencePatch({
+        topToolbarItems: ["back", "search", "copyPath"],
+        leftToolbarItems: {
+          main: ["home", "copyPath"],
+          utility: ["settings", "theme"],
+        },
+      }),
+    ).toEqual({
+      topToolbarItems: ["back", "search", "copyPath"],
+      leftToolbarItems: {
+        main: ["home", "copyPath"],
+        utility: ["settings", "theme"],
+      },
+    });
+  });
+
   it("preserves default editor and file activation preferences", () => {
     expect(
       toPreferencePatch({

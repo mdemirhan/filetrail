@@ -1,39 +1,9 @@
+import type { ToolbarIconName } from "../../shared/toolbarItems";
+
 export function ToolbarIcon({
   name,
 }: {
-  name:
-    | "back"
-    | "forward"
-    | "home"
-    | "up"
-    | "down"
-    | "location"
-    | "hidden"
-    | "refresh"
-    | "list"
-    | "details"
-    | "drawer"
-    | "sidebar"
-    | "edit"
-    | "chevron"
-    | "open"
-    | "theme"
-    | "close"
-    | "sortAsc"
-    | "sortDesc"
-    | "actionLog"
-    | "help"
-    | "settings"
-    | "search"
-    | "applications"
-    | "drive"
-    | "trash"
-    | "rerootHome"
-    | "infoRow"
-    | "foldersFirst"
-    | "copy"
-    | "clear"
-    | "stop";
+  name: ToolbarIconName;
 }) {
   if (name === "list") {
     return (
@@ -75,6 +45,20 @@ export function ToolbarIcon({
     return (
       <svg className="toolbar-icon" viewBox="0 0 16 16" aria-hidden="true" role="presentation">
         <rect x="4" y="4" width="8" height="8" rx="1.5" />
+      </svg>
+    );
+  }
+  if (name === "separatorVertical") {
+    return (
+      <svg className="toolbar-icon" viewBox="0 0 16 16" aria-hidden="true" role="presentation">
+        <line x1="8" y1="2.5" x2="8" y2="13.5" />
+      </svg>
+    );
+  }
+  if (name === "separatorHorizontal") {
+    return (
+      <svg className="toolbar-icon" viewBox="0 0 16 16" aria-hidden="true" role="presentation">
+        <line x1="2.5" y1="8" x2="13.5" y2="8" />
       </svg>
     );
   }
@@ -129,6 +113,24 @@ export function ToolbarIcon({
     }
     if (name === "copy") {
       return "M9 9h11v11H9zM5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1";
+    }
+    if (name === "cut") {
+      return "M9.5 4.5a2.5 2.5 0 1 1 0 5a2.5 2.5 0 0 1 0-5m7 10a2.5 2.5 0 1 1 0 5a2.5 2.5 0 0 1 0-5M8 8l8 8M16 8l-8 8";
+    }
+    if (name === "paste") {
+      return "M9 4h6M10 2h4a1 1 0 0 1 1 1v2H9V3a1 1 0 0 1 1-1m-3 4h10a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2m3 5h6m-6 4h6";
+    }
+    if (name === "move") {
+      return "M15 5h6v6M9 19H3v-6M21 5L9 17M3 9V3h6";
+    }
+    if (name === "duplicate") {
+      return "M8 8h11v11H8zM5 5h11v11H5z";
+    }
+    if (name === "newFolder") {
+      return "M3 7h6l2 2h10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM16 13v6M13 16h6";
+    }
+    if (name === "terminal") {
+      return "M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m3 4l3 3-3 3m5 2h4";
     }
     return "M5 12h14M12 5l7 7-7 7";
   })();

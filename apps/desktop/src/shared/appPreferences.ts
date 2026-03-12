@@ -1,3 +1,10 @@
+import {
+  DEFAULT_LEFT_TOOLBAR_ITEMS,
+  DEFAULT_TOP_TOOLBAR_ITEMS,
+  type LeftToolbarItems,
+  type ToolbarItemId,
+} from "./toolbarItems";
+
 export type ThemeMode =
   | "dark"
   | "tomorrow-night"
@@ -67,6 +74,7 @@ export type CopyPasteReviewDialogSize = {
   width: number;
   height: number;
 };
+export type { LeftToolbarItems, LeftToolbarZone, ToolbarItemDefinition, ToolbarItemId } from "./toolbarItems";
 
 // These option lists are used for both UI rendering and validation-like lookups.
 // Keep them stable unless the corresponding persisted preference values are migrated.
@@ -247,6 +255,8 @@ export type AppPreferences = {
   actionLogEnabled: boolean;
   propertiesOpen: boolean;
   detailRowOpen: boolean;
+  topToolbarItems: ToolbarItemId[];
+  leftToolbarItems: LeftToolbarItems;
   terminalApp: ApplicationSelection | null;
   defaultTextEditor: ApplicationSelection;
   openWithApplications: OpenWithApplication[];
@@ -308,6 +318,11 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   actionLogEnabled: true,
   propertiesOpen: false,
   detailRowOpen: true,
+  topToolbarItems: [...DEFAULT_TOP_TOOLBAR_ITEMS],
+  leftToolbarItems: {
+    main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
+    utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
+  },
   terminalApp: null,
   defaultTextEditor: { ...DEFAULT_TEXT_EDITOR },
   openWithApplications: DEFAULT_OPEN_WITH_APPLICATIONS.map((entry) => ({ ...entry })),

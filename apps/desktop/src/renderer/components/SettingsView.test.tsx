@@ -4,6 +4,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 
 import { THEME_OPTIONS, type ThemeMode } from "../../shared/appPreferences";
+import { DEFAULT_LEFT_TOOLBAR_ITEMS, DEFAULT_TOP_TOOLBAR_ITEMS } from "../../shared/toolbarItems";
 import { SettingsView } from "./SettingsView";
 
 function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsView>> = {}) {
@@ -41,6 +42,11 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       notificationsEnabled={true}
       notificationDurationSeconds={4}
       actionLogEnabled={true}
+      topToolbarItems={[...DEFAULT_TOP_TOOLBAR_ITEMS]}
+      leftToolbarItems={{
+        main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
+        utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
+      }}
       restoreLastVisitedFolderOnStartup={false}
       homePath="/Users/demo"
       terminalApp={null}
@@ -116,6 +122,11 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       onNotificationsEnabledChange={() => undefined}
       onNotificationDurationSecondsChange={() => undefined}
       onActionLogEnabledChange={() => undefined}
+      onTopToolbarItemsChange={() => undefined}
+      onLeftToolbarItemsChange={() => undefined}
+      onResetTopToolbar={() => undefined}
+      onResetLeftToolbar={() => undefined}
+      onResetToolbars={() => undefined}
       onRestoreLastVisitedFolderOnStartupChange={() => undefined}
       onBrowseTerminalApp={() => undefined}
       onClearTerminalApp={() => undefined}
@@ -142,7 +153,7 @@ describe("SettingsView", () => {
   it("exposes the selected layout mode on the root element", () => {
     renderSettingsView({ layoutMode: "compact" });
 
-    expect(screen.getByText("Settings").closest(".settings-view")).toHaveAttribute(
+    expect(screen.getByRole("heading", { name: "Settings" }).closest(".settings-view")).toHaveAttribute(
       "data-layout",
       "compact",
     );
@@ -167,7 +178,7 @@ describe("SettingsView", () => {
     (theme, expectedBackground) => {
       renderSettingsView({ theme });
 
-      expect(screen.getByText("Settings").closest(".settings-view")).toHaveStyle({
+      expect(screen.getByRole("heading", { name: "Settings" }).closest(".settings-view")).toHaveStyle({
         background: expectedBackground,
       });
     },
@@ -176,7 +187,7 @@ describe("SettingsView", () => {
   it("renders the provided theme labels in the theme selector", () => {
     renderSettingsView();
 
-    const themeSelect = screen.getByLabelText("Theme");
+    const themeSelect = screen.getAllByLabelText("Theme")[0];
     expect(themeSelect).toHaveTextContent("Light");
     expect(themeSelect).toHaveTextContent("Dark");
     expect(themeSelect).toHaveTextContent("Tomorrow Night");
@@ -290,6 +301,202 @@ describe("SettingsView", () => {
     expect(onAccentFavoriteItemsChange).toHaveBeenCalledWith(false);
     expect(onAccentFavoriteTextChange).toHaveBeenCalledWith(true);
     expect(onFavoriteAccentChange).toHaveBeenCalledWith("#2cb5a0");
+  });
+
+  it("updates the top toolbar editor and reset action", () => {
+    const onTopToolbarItemsChange = vi.fn();
+    const onResetTopToolbar = vi.fn();
+    renderSettingsView({
+      topToolbarItems: ["back", "search"],
+      onTopToolbarItemsChange,
+      onResetTopToolbar,
+    });
+
+    const topToolbarEditor = screen.getByRole("group", { name: "Top toolbar" });
+
+    fireEvent.click(within(topToolbarEditor).getByRole("button", { name: "Add Copy to Top toolbar" }));
+    fireEvent.mouseEnter(within(topToolbarEditor).getByRole("button", { name: "Back" }));
+    fireEvent.click(
+      within(topToolbarEditor).getByRole("button", { name: "Remove Back from Top toolbar" }),
+    );
+    fireEvent.click(within(topToolbarEditor).getByRole("button", { name: "Reset" }));
+
+    expect(onTopToolbarItemsChange).toHaveBeenNthCalledWith(1, ["back", "copySelection", "search"]);
+    expect(onTopToolbarItemsChange).toHaveBeenNthCalledWith(2, ["search"]);
+    expect(onResetTopToolbar).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows adding repeatable separators and restores grouped defaults on reset", () => {
+    const onTopToolbarItemsChange = vi.fn();
+    const onLeftToolbarItemsChange = vi.fn();
+    renderSettingsView({
+      topToolbarItems: ["back", "topSeparator", "search"],
+      leftToolbarItems: {
+        main: ["home", "leftSeparator"],
+        utility: ["leftSeparator", "settings"],
+      },
+      onTopToolbarItemsChange,
+      onLeftToolbarItemsChange,
+    });
+
+    fireEvent.click(
+      within(screen.getByRole("group", { name: "Top toolbar" })).getByRole("button", {
+        name: "Add Separator to Top toolbar",
+      }),
+    );
+    fireEvent.click(
+      within(screen.getByRole("group", { name: "Left rail" })).getByRole("button", {
+        name: "Add Separator to Left rail",
+      }),
+    );
+    fireEvent.click(
+      within(screen.getByRole("group", { name: "Bottom utility" })).getByRole("button", {
+        name: "Add Separator to Bottom utility",
+      }),
+    );
+
+    expect(onTopToolbarItemsChange).toHaveBeenCalledWith(["back", "topSeparator", "topSeparator", "search"]);
+    expect(onLeftToolbarItemsChange).toHaveBeenNthCalledWith(1, {
+      main: ["home", "leftSeparator", "leftSeparator"],
+      utility: ["leftSeparator", "settings"],
+    });
+    expect(onLeftToolbarItemsChange).toHaveBeenNthCalledWith(2, {
+      main: ["home", "leftSeparator"],
+      utility: ["leftSeparator", "leftSeparator", "settings"],
+    });
+  });
+
+  it("removes a toolbar item when it is dropped outside the active toolbar strip", () => {
+    const onTopToolbarItemsChange = vi.fn();
+    renderSettingsView({
+      topToolbarItems: ["back", "search"],
+      onTopToolbarItemsChange,
+    });
+
+    const topToolbarEditor = screen.getByRole("group", { name: "Top toolbar" });
+    const backButton = within(topToolbarEditor).getByRole("button", { name: "Back" });
+    const dataTransfer = {
+      effectAllowed: "move",
+      dropEffect: "move",
+      setDragImage: () => undefined,
+    };
+
+    fireEvent.dragStart(backButton, { dataTransfer });
+    fireEvent.drop(topToolbarEditor, { dataTransfer });
+
+    expect(onTopToolbarItemsChange).toHaveBeenCalledWith(["search"]);
+  });
+
+  it("updates left rail zones and supports toolbar resets", () => {
+    const onLeftToolbarItemsChange = vi.fn();
+    const onResetLeftToolbar = vi.fn();
+    const onResetToolbars = vi.fn();
+    renderSettingsView({
+      leftToolbarItems: {
+        main: ["home", "help"],
+        utility: ["settings"],
+      },
+      onLeftToolbarItemsChange,
+      onResetLeftToolbar,
+      onResetToolbars,
+    });
+
+    const leftRailEditor = screen.getByRole("group", { name: "Left rail" });
+    const utilityZoneEditor = screen.getByRole("group", { name: "Bottom utility" });
+
+    fireEvent.click(within(leftRailEditor).getByRole("button", { name: "Add Action Log to Left rail" }));
+    fireEvent.click(
+      within(utilityZoneEditor).getByRole("button", { name: "Add Trash to Bottom utility" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Reset All" }));
+    fireEvent.click(within(leftRailEditor).getByRole("button", { name: "Reset" }));
+
+    expect(onLeftToolbarItemsChange).toHaveBeenNthCalledWith(1, {
+      main: ["home", "help", "actionLog"],
+      utility: ["settings"],
+    });
+    expect(onLeftToolbarItemsChange).toHaveBeenNthCalledWith(2, {
+      main: ["home", "help"],
+      utility: ["trash", "settings"],
+    });
+    expect(onResetToolbars).toHaveBeenCalledTimes(1);
+    expect(onResetLeftToolbar).toHaveBeenCalledTimes(0);
+  });
+
+  it("keeps search and settings out of the customizable lists", () => {
+    renderSettingsView();
+
+    expect(screen.queryByRole("button", { name: "Add Search to Top toolbar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add Settings to Top toolbar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add Settings to Bottom utility" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add Home to Top toolbar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add Macintosh HD to Top toolbar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add Applications to Top toolbar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add Trash to Top toolbar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add Root Tree At Home to Top toolbar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add Action Log to Top toolbar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add Help to Top toolbar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add Back to Left rail" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add Forward to Left rail" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add Navigate Up to Left rail" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add Navigate Down to Left rail" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add Back to Bottom utility" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add Forward to Bottom utility" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add Navigate Up to Bottom utility" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add Navigate Down to Bottom utility" })).toBeNull();
+  });
+
+  it("shows toolbar actions in a stable grouped order across the add lists", () => {
+    renderSettingsView({
+      topToolbarItems: ["back", "search"],
+      leftToolbarItems: {
+        main: ["home"],
+        utility: ["settings"],
+      },
+    });
+
+    const topToolbarEditor = screen.getByRole("group", { name: "Top toolbar" });
+    const leftRailEditor = screen.getByRole("group", { name: "Left rail" });
+    const utilityEditor = screen.getByRole("group", { name: "Bottom utility" });
+
+    expect(within(topToolbarEditor).getByRole("button", { name: "Add Copy to Top toolbar" })).toBeInTheDocument();
+    expect(within(topToolbarEditor).getByRole("button", { name: "Add Cut to Top toolbar" })).toBeInTheDocument();
+    expect(within(topToolbarEditor).getByRole("button", { name: "Add Paste to Top toolbar" })).toBeInTheDocument();
+    expect(within(leftRailEditor).getByRole("button", { name: "Add Copy to Left rail" })).toBeInTheDocument();
+    expect(within(leftRailEditor).getByRole("button", { name: "Add Cut to Left rail" })).toBeInTheDocument();
+    expect(within(leftRailEditor).getByRole("button", { name: "Add Paste to Left rail" })).toBeInTheDocument();
+    expect(within(utilityEditor).getByRole("button", { name: "Add Copy to Bottom utility" })).toBeInTheDocument();
+    expect(within(utilityEditor).getByRole("button", { name: "Add Cut to Bottom utility" })).toBeInTheDocument();
+    expect(within(utilityEditor).getByRole("button", { name: "Add Paste to Bottom utility" })).toBeInTheDocument();
+
+    const topToolbarAddButtons = Array.from(topToolbarEditor.querySelectorAll('button[aria-label^="Add "]'));
+    const leftRailAddButtons = Array.from(leftRailEditor.querySelectorAll('button[aria-label^="Add "]'));
+    const utilityAddButtons = Array.from(utilityEditor.querySelectorAll('button[aria-label^="Add "]'));
+
+    expect(topToolbarAddButtons.slice(0, 6).map((button) => button.getAttribute("aria-label"))).toEqual([
+      "Add Separator to Top toolbar",
+      "Add Forward to Top toolbar",
+      "Add Navigate Up to Top toolbar",
+      "Add Navigate Down to Top toolbar",
+      "Add Go To Folder to Top toolbar",
+      "Add Refresh to Top toolbar",
+    ]);
+    expect(leftRailAddButtons[0]).toHaveAttribute("aria-label", "Add Separator to Left rail");
+    expect(utilityAddButtons[0]).toHaveAttribute("aria-label", "Add Separator to Bottom utility");
+    expect(leftRailAddButtons.slice(0, 6).map((button) => button.getAttribute("aria-label"))).toEqual([
+      "Add Separator to Left rail",
+      "Add Macintosh HD to Left rail",
+      "Add Applications to Left rail",
+      "Add Trash to Left rail",
+      "Add Root Tree At Home to Left rail",
+      "Add Go To Folder to Left rail",
+    ]);
+    expect(utilityAddButtons.slice(0, 4).map((button) => button.getAttribute("aria-label"))).toEqual([
+      "Add Separator to Bottom utility",
+      "Add Action Log to Bottom utility",
+      "Add Help to Bottom utility",
+      "Add Theme to Bottom utility",
+    ]);
   });
 
   it("renders the icon theme picker with 4 theme cards", () => {

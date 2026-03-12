@@ -980,6 +980,7 @@ body.platform-macos .window-toolbar-brand {
 }
 
 .titlebar-actions {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -987,6 +988,34 @@ body.platform-macos .window-toolbar-brand {
   justify-content: flex-start;
   min-width: 0;
   overflow: visible;
+}
+
+.titlebar-actions-main {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.titlebar-action-item {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.titlebar-actions-measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: max-content;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .toolbar-group {
@@ -3330,10 +3359,37 @@ body.resizing-panels-vertical * {
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  overflow: visible;
+  min-height: 0;
+  overflow: hidden;
   padding: 10px 0;
   background: color-mix(in srgb, var(--toolbar-bg) 88%, black);
   border-right: 1px solid var(--border);
+}
+
+.sidebar-rail-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+}
+
+.sidebar-rail-group-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sidebar-rail-group-main::-webkit-scrollbar {
+  display: none;
+}
+
+.sidebar-rail-group-utility {
+  flex: 0 0 auto;
+  padding-top: 6px;
 }
 
 .sidebar-rail-button {
@@ -3359,10 +3415,6 @@ body.resizing-panels-vertical * {
   height: 1px;
   background: var(--border);
   margin: 6px 0;
-}
-
-.sidebar-rail-spacer {
-  flex: 1;
 }
 
 .sidebar-rail-menu-anchor {

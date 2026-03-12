@@ -30,6 +30,7 @@ import {
   clampZoomPercent,
   normalizeAccentColor,
 } from "../shared/appPreferences";
+import { sanitizeLeftToolbarItems, sanitizeTopToolbarItems } from "../shared/toolbarItems";
 
 export type StoredWindowState = {
   x?: number;
@@ -353,6 +354,17 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
       typeof record.detailRowOpen === "boolean"
         ? record.detailRowOpen
         : currentDefaults.detailRowOpen,
+    topToolbarItems:
+      record.topToolbarItems !== undefined
+        ? sanitizeTopToolbarItems(record.topToolbarItems)
+        : [...currentDefaults.topToolbarItems],
+    leftToolbarItems:
+      record.leftToolbarItems !== undefined
+        ? sanitizeLeftToolbarItems(record.leftToolbarItems)
+        : {
+            main: [...currentDefaults.leftToolbarItems.main],
+            utility: [...currentDefaults.leftToolbarItems.utility],
+          },
     terminalApp: sanitizeTerminalApplicationSelection(record.terminalApp),
     defaultTextEditor: sanitizeApplicationSelection(
       record.defaultTextEditor,

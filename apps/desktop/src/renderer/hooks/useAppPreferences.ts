@@ -14,6 +14,7 @@ import {
   type FavoritesPlacement,
   type FileActivationAction,
   type IconThemeMode,
+  type LeftToolbarItems,
   type OpenWithApplication,
   type ThemeMode,
   type UiFontFamily,
@@ -95,6 +96,10 @@ export function useAppPreferences() {
   );
   const [actionLogEnabled, setActionLogEnabled] = useState(
     DEFAULT_APP_PREFERENCES.actionLogEnabled,
+  );
+  const [topToolbarItems, setTopToolbarItems] = useState(DEFAULT_APP_PREFERENCES.topToolbarItems);
+  const [leftToolbarItems, setLeftToolbarItems] = useState<LeftToolbarItems>(
+    DEFAULT_APP_PREFERENCES.leftToolbarItems,
   );
   const [restoreLastVisitedFolderOnStartup, setRestoreLastVisitedFolderOnStartup] = useState(
     DEFAULT_APP_PREFERENCES.restoreLastVisitedFolderOnStartup,
@@ -248,6 +253,10 @@ export function useAppPreferences() {
     setNotificationDurationSeconds,
     actionLogEnabled,
     setActionLogEnabled,
+    topToolbarItems,
+    setTopToolbarItems,
+    leftToolbarItems,
+    setLeftToolbarItems,
     restoreLastVisitedFolderOnStartup,
     setRestoreLastVisitedFolderOnStartup,
     lastGoToFolderPath,
