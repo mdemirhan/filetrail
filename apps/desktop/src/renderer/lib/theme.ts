@@ -1,5 +1,6 @@
 import type {
   AccentMode,
+  IconThemeMode,
   ThemeMode,
   UiFontFamily,
   UiFontWeight,
@@ -64,6 +65,7 @@ export function getThemeAppearanceDefaults(theme: ThemeMode): {
 
 export function applyAppearance({
   theme,
+  iconTheme,
   accent,
   accentToolbarButtons,
   accentFavoriteItems,
@@ -77,6 +79,7 @@ export function applyAppearance({
   textMutedOverride,
 }: {
   theme: ThemeMode;
+  iconTheme: IconThemeMode;
   accent: AccentMode;
   accentToolbarButtons: boolean;
   accentFavoriteItems: boolean;
@@ -97,6 +100,7 @@ export function applyAppearance({
   const root = document.documentElement;
   root.dataset.theme = resolveThemeCssBase(theme);
   root.dataset.themeVariant = theme;
+  root.dataset.iconTheme = iconTheme;
   root.dataset.accent = accent;
   root.dataset.favoriteAccent = favoriteAccent;
   root.dataset.accentFavoriteItems = accentFavoriteItems ? "true" : "false";

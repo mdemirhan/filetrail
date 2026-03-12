@@ -22,6 +22,7 @@ describe("theme helpers", () => {
   it("applies theme and typography variables to the document root", () => {
     applyAppearance({
       theme: "dark",
+      iconTheme: "classic",
       accent: "teal",
       accentToolbarButtons: true,
       accentFavoriteItems: true,
@@ -37,6 +38,7 @@ describe("theme helpers", () => {
 
     expect(document.documentElement.dataset.theme).toBe("dark");
     expect(document.documentElement.dataset.themeVariant).toBe("dark");
+    expect(document.documentElement.dataset.iconTheme).toBe("classic");
     expect(document.documentElement.dataset.accent).toBe("teal");
     expect(document.documentElement.dataset.favoriteAccent).toBe("coral");
     expect(document.documentElement.dataset.accentFavoriteItems).toBe("true");
@@ -74,6 +76,7 @@ describe("theme helpers", () => {
   it("restores theme toolbar defaults when accent toolbar buttons are disabled", () => {
     applyAppearance({
       theme: "dark",
+      iconTheme: "classic",
       accent: "rose",
       accentToolbarButtons: false,
       accentFavoriteItems: false,
@@ -101,6 +104,7 @@ describe("theme helpers", () => {
   it("maps variant themes onto a css base and applies palette overrides", () => {
     applyAppearance({
       theme: "obsidian",
+      iconTheme: "classic",
       accent: "gold",
       accentToolbarButtons: false,
       accentFavoriteItems: false,
@@ -140,6 +144,7 @@ describe("theme helpers", () => {
       expect(() =>
         applyAppearance({
           theme: "dark",
+          iconTheme: "classic",
           accent: "gold",
           accentToolbarButtons: false,
           accentFavoriteItems: false,

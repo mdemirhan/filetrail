@@ -13,6 +13,7 @@ import {
   type FavoritePreference,
   type FavoritesPlacement,
   type FileActivationAction,
+  type IconThemeMode,
   type OpenWithApplication,
   type ThemeMode,
   type UiFontFamily,
@@ -23,6 +24,7 @@ import { applyAppearance } from "../lib/theme";
 export function useAppPreferences() {
   const [preferencesReady, setPreferencesReady] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>(DEFAULT_APP_PREFERENCES.theme);
+  const [iconTheme, setIconTheme] = useState<IconThemeMode>(DEFAULT_APP_PREFERENCES.iconTheme);
   const [accent, setAccent] = useState<AccentMode>(DEFAULT_APP_PREFERENCES.accent);
   const [accentToolbarButtons, setAccentToolbarButtons] = useState(
     DEFAULT_APP_PREFERENCES.accentToolbarButtons,
@@ -130,6 +132,7 @@ export function useAppPreferences() {
   useEffect(() => {
     applyAppearance({
       theme,
+      iconTheme,
       accent,
       accentToolbarButtons,
       accentFavoriteItems,
@@ -148,6 +151,7 @@ export function useAppPreferences() {
     accentFavoriteItems,
     accentFavoriteText,
     favoriteAccent,
+    iconTheme,
     textMutedOverride,
     textPrimaryOverride,
     textSecondaryOverride,
@@ -158,6 +162,7 @@ export function useAppPreferences() {
   ]);
 
   function resetAppearanceSettings() {
+    setIconTheme(DEFAULT_APP_PREFERENCES.iconTheme);
     setAccent(DEFAULT_APP_PREFERENCES.accent);
     setZoomPercent(DEFAULT_APP_PREFERENCES.zoomPercent);
     setUiFontFamily(DEFAULT_APP_PREFERENCES.uiFontFamily);
@@ -177,6 +182,8 @@ export function useAppPreferences() {
     setPreferencesReady,
     theme,
     setTheme,
+    iconTheme,
+    setIconTheme,
     accent,
     setAccent,
     accentToolbarButtons,

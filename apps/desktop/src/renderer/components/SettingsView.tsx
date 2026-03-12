@@ -9,6 +9,7 @@ import type {
   FavoritePreference,
   FavoritesPlacement,
   FileActivationAction,
+  IconThemeMode,
   OpenWithApplication,
   ThemeMode,
   UiFontFamily,
@@ -21,6 +22,7 @@ import {
   FAVORITE_ICON_OPTIONS,
   ZOOM_PERCENT_MAX,
   ZOOM_PERCENT_MIN,
+  ICON_THEME_OPTIONS,
   clampOpenItemLimit,
   clampZoomPercent,
 } from "../../shared/appPreferences";
@@ -604,6 +606,225 @@ function ThemeSelectControl({
       >
         <path d="M6 9l6 6 6-6" />
       </svg>
+    </div>
+  );
+}
+
+// ── Icon Theme Picker with inline preview ──────────────────────────
+
+const DOC_PATH = "M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z";
+const DOC_FOLD = "M14 2v6h6";
+const FOLDER_PATH =
+  "M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6.93a2 2 0 0 1-1.66-.88l-.82-1.24A2 2 0 0 0 7.93 4H5a2 2 0 0 0-2 2v1z";
+const STAR_PATH =
+  "M12 4.5l2.2 4.45 4.9.7-3.55 3.46.84 4.89L12 15.7 7.6 18l.84-4.89L4.9 9.65l4.9-.7z";
+const COLORBLOCK_BOTTOM = "M4.25 11v9a2 2 0 002 2h11.5a2 2 0 002-2v-9z";
+
+/** Representative file colors for preview mini-icons. */
+const PREVIEW_FILES = [
+  { color: "#3178C6", label: "TS" },
+  { color: "#3776AB", label: "PY" },
+  { color: "#4CAF50", label: "IMG" },
+] as const;
+
+function MiniDocClassic({ color, label }: { color: string; label: string }) {
+  const fillBg = `${color}14`; // ~8% opacity
+  return (
+    <svg viewBox="0 0 24 24" fill="none" width="14" height="14">
+      <path d={DOC_PATH} fill={fillBg} stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
+      <path d={DOC_FOLD} fill={fillBg} stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
+      <text
+        x="12"
+        y="17"
+        textAnchor="middle"
+        fill={color}
+        fontSize="6.5"
+        fontWeight="700"
+        fontFamily="system-ui"
+      >
+        {label}
+      </text>
+    </svg>
+  );
+}
+
+function MiniDocColorblock({ color }: { color: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" width="14" height="14">
+      <path
+        d={DOC_PATH}
+        fill="white"
+        stroke={color}
+        strokeWidth="0.5"
+        strokeOpacity="0.35"
+        strokeLinejoin="round"
+      />
+      <path d={COLORBLOCK_BOTTOM} fill={color} />
+      <path
+        d={DOC_FOLD}
+        fill={color}
+        fillOpacity="0.12"
+        stroke={color}
+        strokeWidth="0.5"
+        strokeOpacity="0.25"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function MiniDocMonoline({ color }: { color: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" width="14" height="14">
+      <path d={DOC_PATH} fill="none" stroke={color} strokeWidth="0.9" strokeLinejoin="round" />
+      <path d={DOC_FOLD} fill="none" stroke={color} strokeWidth="0.9" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function MiniDocVivid({ color }: { color: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" width="14" height="14">
+      <path d={DOC_PATH} fill={color} />
+      <path d={DOC_FOLD} fill="white" fillOpacity="0.3" />
+    </svg>
+  );
+}
+
+function MiniFolder({
+  accentSolid,
+  mode,
+}: {
+  accentSolid: string;
+  mode: "classic" | "monoline" | "vivid";
+}) {
+  const fill =
+    mode === "monoline" ? "none" : mode === "vivid" ? `${accentSolid}4D` : `${accentSolid}2E`;
+  const sw = mode === "vivid" ? 1.75 : 1.5;
+  return (
+    <svg viewBox="0 0 24 24" fill="none" width="14" height="14">
+      <path
+        d={FOLDER_PATH}
+        fill={fill}
+        stroke={accentSolid}
+        strokeWidth={sw}
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function MiniStar({
+  accentSolid,
+  mode,
+}: {
+  accentSolid: string;
+  mode: "classic" | "monoline" | "vivid";
+}) {
+  const sw = mode === "vivid" ? 1.85 : mode === "monoline" ? 1.5 : 1.7;
+  const fill = mode === "vivid" ? accentSolid : "none";
+  const fillOp = mode === "vivid" ? 0.15 : 1;
+  return (
+    <svg viewBox="0 0 24 24" fill="none" width="14" height="14">
+      <path
+        d={STAR_PATH}
+        fill={fill}
+        fillOpacity={fillOp}
+        stroke={accentSolid}
+        strokeWidth={sw}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function IconThemePicker({
+  value,
+  theme,
+  onChange,
+}: {
+  value: IconThemeMode;
+  theme: ResolvedSettingsTheme;
+  onChange: (value: IconThemeMode) => void;
+}) {
+  const accent = theme.accent.solid;
+
+  const docRenderers: Record<IconThemeMode, (file: (typeof PREVIEW_FILES)[number]) => ReactNode> = {
+    classic: (f) => <MiniDocClassic key={f.label} color={f.color} label={f.label} />,
+    colorblock: (f) => <MiniDocColorblock key={f.label} color={f.color} />,
+    monoline: (f) => <MiniDocMonoline key={f.label} color={f.color} />,
+    vivid: (f) => <MiniDocVivid key={f.label} color={f.color} />,
+  };
+
+  const folderMode = (t: string): "classic" | "monoline" | "vivid" =>
+    t === "monoline" ? "monoline" : t === "vivid" ? "vivid" : "classic";
+
+  return (
+    <div
+      style={{
+        padding: "10px 0",
+        borderBottom: `1px solid ${theme.separator}`,
+      }}
+    >
+      <div
+        style={{
+          fontSize: "12.5px",
+          fontFamily: sans,
+          fontWeight: 500,
+          color: theme.label.primary,
+          marginBottom: "8px",
+        }}
+      >
+        Icon theme
+      </div>
+      <div style={{ display: "flex", gap: "6px" }}>
+        {ICON_THEME_OPTIONS.map((option) => {
+          const selected = option.value === value;
+          const mode = folderMode(option.value);
+          return (
+            <button
+              key={option.value}
+              type="button"
+              aria-label={`Icon theme: ${option.label}`}
+              aria-pressed={selected}
+              onClick={() => onChange(option.value)}
+              style={{
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "5px",
+                padding: "7px 4px 8px",
+                borderRadius: "8px",
+                border: selected ? `2px solid ${accent}` : `1px solid ${theme.card.border}`,
+                background: selected ? theme.accent.softBg : theme.card.bg,
+                cursor: "pointer",
+                outline: "none",
+                // Prevent layout shift between 1px and 2px border
+                margin: selected ? "0" : "1px",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: "10px",
+                  fontFamily: mono,
+                  fontWeight: 600,
+                  color: selected ? accent : theme.label.secondary,
+                  letterSpacing: "0.02em",
+                }}
+              >
+                {option.label}
+              </span>
+              <span style={{ display: "flex", gap: "2px", alignItems: "center" }}>
+                <MiniFolder accentSolid={accent} mode={mode} />
+                {PREVIEW_FILES.map((f) => docRenderers[option.value](f))}
+                <MiniStar accentSolid={accent} mode={mode} />
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -1518,6 +1739,7 @@ function SectionCard({
 
 export function SettingsView({
   theme,
+  iconTheme,
   accent,
   accentToolbarButtons,
   accentFavoriteItems,
@@ -1560,6 +1782,7 @@ export function SettingsView({
   typeaheadDebounceOptions,
   notificationDurationSecondsOptions,
   onThemeChange,
+  onIconThemeChange,
   onAccentChange,
   onAccentToolbarButtonsChange,
   onAccentFavoriteItemsChange,
@@ -1604,6 +1827,7 @@ export function SettingsView({
   onOpenItemLimitChange,
 }: {
   theme: ThemeMode;
+  iconTheme: IconThemeMode;
   accent: AccentMode;
   accentToolbarButtons: boolean;
   accentFavoriteItems: boolean;
@@ -1650,6 +1874,7 @@ export function SettingsView({
   typeaheadDebounceOptions: ReadonlyArray<number>;
   notificationDurationSecondsOptions: ReadonlyArray<number>;
   onThemeChange: (value: ThemeMode) => void;
+  onIconThemeChange: (value: IconThemeMode) => void;
   onAccentChange: (value: AccentMode) => void;
   onAccentToolbarButtonsChange: (value: boolean) => void;
   onAccentFavoriteItemsChange: (value: boolean) => void;
@@ -1794,6 +2019,8 @@ export function SettingsView({
               />
             }
           />
+
+          <IconThemePicker value={iconTheme} theme={palette} onChange={onIconThemeChange} />
 
           <SettingRow
             title="Accent color"

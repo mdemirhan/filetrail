@@ -98,6 +98,8 @@ export function App() {
     setPreferencesReady,
     theme,
     setTheme,
+    iconTheme,
+    setIconTheme,
     accent,
     setAccent,
     accentToolbarButtons,
@@ -995,6 +997,7 @@ export function App() {
     void client.invoke("app:updatePreferences", {
       preferences: {
         theme,
+        iconTheme,
         accent,
         accentToolbarButtons,
         accentFavoriteItems,
@@ -1078,6 +1081,7 @@ export function App() {
     accentFavoriteItems,
     accentFavoriteText,
     favoriteAccent,
+    iconTheme,
     zoomPercent,
     searchIncludeHidden,
     searchResultsSortBy,
@@ -1130,6 +1134,7 @@ export function App() {
         }
         const preferences = preferencesResponse.preferences;
         setTheme(preferences.theme);
+        setIconTheme(preferences.iconTheme);
         setAccent(preferences.accent);
         setAccentToolbarButtons(preferences.accentToolbarButtons);
         setAccentFavoriteItems(preferences.accentFavoriteItems);
@@ -1866,6 +1871,7 @@ export function App() {
             ) : (
               <SettingsView
                 theme={theme}
+                iconTheme={iconTheme}
                 accent={accent}
                 accentToolbarButtons={accentToolbarButtons}
                 accentFavoriteItems={accentFavoriteItems}
@@ -1908,6 +1914,7 @@ export function App() {
                 typeaheadDebounceOptions={[...TYPEAHEAD_DEBOUNCE_OPTIONS]}
                 notificationDurationSecondsOptions={[...NOTIFICATION_DURATION_SECONDS_OPTIONS]}
                 onThemeChange={setTheme}
+                onIconThemeChange={setIconTheme}
                 onAccentChange={setAccent}
                 onAccentToolbarButtonsChange={setAccentToolbarButtons}
                 onAccentFavoriteItemsChange={setAccentFavoriteItems}

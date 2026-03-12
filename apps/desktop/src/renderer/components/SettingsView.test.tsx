@@ -10,6 +10,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
   return render(
     <SettingsView
       theme="dark"
+      iconTheme="classic"
       accent="gold"
       accentToolbarButtons={true}
       accentFavoriteItems={false}
@@ -83,6 +84,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       typeaheadDebounceOptions={[750]}
       notificationDurationSecondsOptions={[4, 6]}
       onThemeChange={() => undefined}
+      onIconThemeChange={() => undefined}
       onAccentChange={() => undefined}
       onAccentToolbarButtonsChange={() => undefined}
       onAccentFavoriteItemsChange={() => undefined}
@@ -222,6 +224,20 @@ describe("SettingsView", () => {
     expect(onAccentFavoriteItemsChange).toHaveBeenCalledWith(false);
     expect(onAccentFavoriteTextChange).toHaveBeenCalledWith(true);
     expect(onFavoriteAccentChange).toHaveBeenCalledWith("teal");
+  });
+
+  it("renders the icon theme picker with 4 theme cards", () => {
+    const onIconThemeChange = vi.fn();
+    renderSettingsView({ iconTheme: "monoline", onIconThemeChange });
+
+    const monolineCard = screen.getByLabelText("Icon theme: Monoline");
+    expect(monolineCard).toHaveAttribute("aria-pressed", "true");
+
+    const classicCard = screen.getByLabelText("Icon theme: Classic");
+    expect(classicCard).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(classicCard);
+    expect(onIconThemeChange).toHaveBeenCalledWith("classic");
   });
 
   it("forwards single-click tree expansion preference changes", () => {

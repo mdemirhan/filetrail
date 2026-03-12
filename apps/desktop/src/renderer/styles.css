@@ -4764,6 +4764,50 @@ body.resizing-panels-vertical * {
   color: var(--favorite-accent-text);
 }
 
+/* ── Monoline icon theme: stroke-only folders ── */
+:root[data-icon-theme="monoline"] .file-icon-folder-fill,
+:root[data-icon-theme="monoline"] .file-icon-folder-open-fill {
+  fill: none;
+}
+
+/* ── Vivid icon theme: bolder folders ── */
+:root[data-icon-theme="vivid"] .file-icon-folder-fill,
+:root[data-icon-theme="vivid"] .file-icon-folder-open-fill {
+  stroke-width: 1.75;
+}
+
+:root[data-icon-theme="vivid"] .file-icon-folder-outline,
+:root[data-icon-theme="vivid"] .file-icon-folder-stroke {
+  stroke-width: 1.75;
+}
+
+/* ── Monoline icon theme: thinner favorite strokes ── */
+:root[data-icon-theme="monoline"] .file-icon-favorite-stroke {
+  stroke-width: 1.5;
+}
+
+/* ── Vivid icon theme: bolder favorite strokes ── */
+:root[data-icon-theme="vivid"] .file-icon-favorite-stroke {
+  stroke-width: 1.85;
+}
+
+/* ── Vivid icon theme: subtle fill only on closed-path favorites ──
+   Open stroke paths (downloads, code, desktop, terminal, etc.) would create
+   blobs if filled, so restrict fill to icons with fully closed outlines.
+   Uses currentColor to respect the existing color cascade. */
+:root[data-icon-theme="vivid"] .favorite-icon-home .file-icon-favorite-stroke,
+:root[data-icon-theme="vivid"] .favorite-icon-applications .file-icon-favorite-stroke,
+:root[data-icon-theme="vivid"] .favorite-icon-folder .file-icon-favorite-stroke,
+:root[data-icon-theme="vivid"] .favorite-icon-star .file-icon-favorite-stroke,
+:root[data-icon-theme="vivid"] .favorite-icon-music .file-icon-favorite-stroke,
+:root[data-icon-theme="vivid"] .favorite-icon-photos .file-icon-favorite-stroke,
+:root[data-icon-theme="vivid"] .favorite-icon-cloud .file-icon-favorite-stroke,
+:root[data-icon-theme="vivid"] .favorite-icon-projects .file-icon-favorite-stroke,
+:root[data-icon-theme="vivid"] .favorite-icon-camera .file-icon-favorite-stroke {
+  fill: currentColor;
+  fill-opacity: 0.15;
+}
+
 .alias-badge {
   position: absolute;
   right: -5px;
@@ -4857,11 +4901,152 @@ body.resizing-panels-vertical * {
   fill: color-mix(in srgb, var(--accent-blue) 10%, transparent);
 }
 
+.file-icon.document.web {
+  color: var(--icon-orange);
+}
+.file-icon.document.web .file-icon-document-fill,
+.file-icon.document.web .file-icon-document-fold {
+  stroke: var(--icon-orange);
+  fill: color-mix(in srgb, var(--icon-orange) 10%, transparent);
+}
+
+.file-icon.document.data {
+  color: var(--icon-cyan);
+}
+.file-icon.document.data .file-icon-document-fill,
+.file-icon.document.data .file-icon-document-fold {
+  stroke: var(--icon-cyan);
+  fill: color-mix(in srgb, var(--icon-cyan) 10%, transparent);
+}
+
+.file-icon.document.markdown {
+  color: var(--icon-indigo);
+}
+.file-icon.document.markdown .file-icon-document-fill,
+.file-icon.document.markdown .file-icon-document-fold {
+  stroke: var(--icon-indigo);
+  fill: color-mix(in srgb, var(--icon-indigo) 10%, transparent);
+}
+
+.file-icon.document.shell {
+  color: var(--icon-green);
+}
+.file-icon.document.shell .file-icon-document-fill,
+.file-icon.document.shell .file-icon-document-fold {
+  stroke: var(--icon-green);
+  fill: color-mix(in srgb, var(--icon-green) 10%, transparent);
+}
+
+.file-icon.document.config {
+  color: var(--icon-cyan);
+}
+.file-icon.document.config .file-icon-document-fill,
+.file-icon.document.config .file-icon-document-fold {
+  stroke: var(--icon-cyan);
+  fill: color-mix(in srgb, var(--icon-cyan) 10%, transparent);
+}
+
+.file-icon.document.svg {
+  color: var(--icon-orange);
+}
+.file-icon.document.svg .file-icon-document-fill,
+.file-icon.document.svg .file-icon-document-fold {
+  stroke: var(--icon-orange);
+  fill: color-mix(in srgb, var(--icon-orange) 10%, transparent);
+}
+
+.file-icon.document.audio {
+  color: var(--icon-pink);
+}
+.file-icon.document.audio .file-icon-document-fill,
+.file-icon.document.audio .file-icon-document-fold {
+  stroke: var(--icon-pink);
+  fill: color-mix(in srgb, var(--icon-pink) 10%, transparent);
+}
+
+.file-icon.document.font {
+  color: var(--icon-violet);
+}
+.file-icon.document.font .file-icon-document-fill,
+.file-icon.document.font .file-icon-document-fold {
+  stroke: var(--icon-violet);
+  fill: color-mix(in srgb, var(--icon-violet) 10%, transparent);
+}
+
+.file-icon.document.binary {
+  color: var(--icon-neutral);
+}
+.file-icon.document.binary .file-icon-document-fill,
+.file-icon.document.binary .file-icon-document-fold {
+  stroke: var(--icon-neutral);
+  fill: color-mix(in srgb, var(--icon-neutral) 8%, transparent);
+}
+
 .file-icon-document-text {
   fill: currentColor;
   font-size: 5.2px;
   font-weight: var(--mono-font-weight);
   font-family: var(--font-mono);
+}
+
+/* ─── Colorblock Icon Theme ─────────────────────────────────────────
+   Colorblock icons carry their own inline colors (per-type color blocks with white
+   symbols), so we override the classic CSS-driven coloring when this theme is active. */
+
+.file-icon.document.colorblock {
+  color: unset;
+}
+
+.file-icon.document.colorblock .file-icon-colorblock-fill {
+  /* The fill is set inline per icon type; this class exists for potential theme overrides. */
+}
+
+.file-icon.document.colorblock .file-icon-document-text {
+  fill: white;
+  font-size: 5.2px;
+  font-weight: var(--mono-font-weight);
+  font-family: var(--font-mono);
+}
+
+/* In dark themes, reduce colorblock opacity slightly so they don't overpower the UI. */
+:root[data-theme="dark"] .file-icon.document.colorblock .file-icon-colorblock-fill,
+:root[data-theme="tomorrow-night"] .file-icon.document.colorblock .file-icon-colorblock-fill,
+:root[data-theme="catppuccin-mocha"] .file-icon.document.colorblock .file-icon-colorblock-fill {
+  opacity: 0.88;
+}
+
+/* ─── Monoline Icon Theme ──────────────────────────────────────────
+   Pure outline icons — no fills, just colored strokes. Inline colors per type. */
+
+.file-icon.document.monoline {
+  color: unset;
+}
+
+.file-icon.document.monoline .file-icon-document-text {
+  font-size: 5.2px;
+  font-weight: var(--mono-font-weight);
+  font-family: var(--font-mono);
+}
+
+/* ─── Vivid Icon Theme ─────────────────────────────────────────────
+   Full-bleed color fills the entire document. White symbols on saturated body. */
+
+.file-icon.document.vivid {
+  color: unset;
+}
+
+.file-icon.document.vivid .file-icon-document-text {
+  fill: white;
+  font-size: 5.2px;
+  font-weight: var(--mono-font-weight);
+  font-family: var(--font-mono);
+}
+
+/* In dark themes, reduce vivid saturation slightly to avoid overpowering the UI. */
+:root[data-theme="dark"] .file-icon.document.vivid .file-icon-vivid-fill,
+:root[data-theme="tomorrow-night"] .file-icon.document.vivid .file-icon-vivid-fill,
+:root[data-theme="catppuccin-mocha"] .file-icon.document.vivid .file-icon-vivid-fill {
+  opacity: 0.88;
 }
 
 .get-info-panel {

@@ -1,10 +1,26 @@
 import type { IpcResponse } from "@filetrail/contracts";
 import type { FavoriteIconId } from "../../shared/appPreferences";
+import {
+  ColorblockDocumentSvg,
+  resolveColorblockIconType,
+  resolveColorblockIconTypeByName,
+} from "./iconThemeColorblock";
+import {
+  MonolineDocumentSvg,
+  resolveMonolineIconType,
+  resolveMonolineIconTypeByName,
+} from "./iconThemeMonoline";
+import {
+  VividDocumentSvg,
+  resolveVividIconType,
+  resolveVividIconTypeByName,
+} from "./iconThemeVivid";
 
 type Entry = IpcResponse<"directory:getSnapshot">["entries"][number];
 
-// Icon rendering is intentionally lightweight and CSS-driven. We classify entries into a
-// small visual vocabulary here and let theme styles handle the final appearance.
+// Icon rendering is intentionally lightweight and CSS-driven. Classic mode classifies
+// entries into a small visual vocabulary and lets CSS handle the final appearance.
+// Colorblock mode uses per-extension classification with colored blocks and symbols.
 export function FileIcon({ entry }: { entry: Entry }) {
   const type = resolveIconType(entry);
   if (type === "folder") {
@@ -22,6 +38,42 @@ export function FileIcon({ entry }: { entry: Entry }) {
       </span>
     );
   }
+  // Non-classic themes: per-extension classification with inline colored SVGs.
+  if (typeof document !== "undefined") {
+    const activeIconTheme = document.documentElement.dataset.iconTheme;
+    const isSymlink = entry.kind === "symlink_file";
+    if (activeIconTheme === "colorblock") {
+      const extension = entry.extension.toLowerCase();
+      const cbType = resolveColorblockIconTypeByName(entry.name) ?? resolveColorblockIconType(extension);
+      return (
+        <span className={`file-icon document colorblock${isSymlink ? " alias" : ""}`} aria-hidden>
+          <ColorblockDocumentSvg iconType={cbType} label={resolveDocumentLabel(entry)} />
+          {isSymlink && <span className="alias-badge">↗</span>}
+        </span>
+      );
+    }
+    if (activeIconTheme === "monoline") {
+      const extension = entry.extension.toLowerCase();
+      const mlType = resolveMonolineIconTypeByName(entry.name) ?? resolveMonolineIconType(extension);
+      return (
+        <span className={`file-icon document monoline${isSymlink ? " alias" : ""}`} aria-hidden>
+          <MonolineDocumentSvg iconType={mlType} label={resolveDocumentLabel(entry)} />
+          {isSymlink && <span className="alias-badge">↗</span>}
+        </span>
+      );
+    }
+    if (activeIconTheme === "vivid") {
+      const extension = entry.extension.toLowerCase();
+      const vType = resolveVividIconTypeByName(entry.name) ?? resolveVividIconType(extension);
+      return (
+        <span className={`file-icon document vivid${isSymlink ? " alias" : ""}`} aria-hidden>
+          <VividDocumentSvg iconType={vType} label={resolveDocumentLabel(entry)} />
+          {isSymlink && <span className="alias-badge">↗</span>}
+        </span>
+      );
+    }
+  }
+  // Classic theme (default): broader category classification with CSS-driven colors.
   return (
     <span className={`file-icon document ${type}`} aria-hidden>
       <DocumentSvg label={resolveDocumentLabel(entry)} />
@@ -194,15 +246,22 @@ function resolveDocumentLabel(entry: Entry): string {
     return "AL";
   }
   const extension = entry.extension.toUpperCase();
-  if (extension.length === 0) {
-    return "TXT";
+  if (extension.length > 0) {
+    return extension.slice(0, 4);
   }
-  return extension.slice(0, 4);
+  // Name-based labels for extensionless files that have specific classifications.
+  const lower = entry.name.toLowerCase();
+  if (lower === "dockerfile" || lower.startsWith("dockerfile.")) return "DOCK";
+  if (lower === "makefile" || lower === "cmakelists.txt" || lower === "rakefile") return "MAKE";
+  if (lower === "gemfile" || lower === "podfile") return "DEPS";
+  if (lower === "license" || lower.startsWith("license.")) return "LIC";
+  if (lower === "changelog" || lower.startsWith("changelog.")) return "LOG";
+  return "TXT";
 }
 
 function resolveIconType(entry: Entry): string {
-  // The classification is intentionally coarse. It exists to provide enough visual grouping
-  // for common file types without introducing a large per-extension icon registry.
+  // Classic classification: broader than single-language granularity but covers all common
+  // file families. CSS maps each category to a distinct color.
   if (entry.kind === "directory") {
     return "folder";
   }
@@ -210,27 +269,109 @@ function resolveIconType(entry: Entry): string {
     return "alias-folder";
   }
   const extension = entry.extension.toLowerCase();
+  const name = entry.name.toLowerCase();
+
+  // Code languages
   if (
-    ["ts", "tsx", "js", "jsx", "json", "css", "html", "md", "py", "rs", "go"].includes(extension)
+    [
+      "ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs",
+      "py", "pyw", "pyi", "rs", "go", "java", "jar", "class",
+      "c", "h", "cpp", "hpp", "cc", "cxx", "hxx",
+      "cs", "csx", "rb", "erb", "rake", "php", "phtml",
+      "swift", "kt", "kts", "dart",
+      "lua", "r", "rmd", "scala", "sc", "pl", "pm",
+      "ex", "exs", "hs", "lhs", "zig", "jl",
+      "tex", "sty", "bib", "cls",
+    ].includes(extension)
   ) {
     return "code";
   }
-  if (["png", "jpg", "jpeg", "gif", "webp", "svg", "heic"].includes(extension)) {
+  // Web markup & styling
+  if (["html", "htm", "css", "scss", "less", "sass"].includes(extension)) {
+    return "web";
+  }
+  // Data & structured formats
+  if (
+    [
+      "json", "jsonc", "json5", "ndjson", "jsonl",
+      "yaml", "yml", "toml", "sql",
+      "xml", "xsl", "xslt", "xsd", "plist",
+      "xls", "xlsx", "csv", "tsv", "ods", "numbers",
+      "ppt", "pptx", "odp", "keynote",
+      "graphql", "gql", "proto",
+      "db", "sqlite", "sqlite3",
+    ].includes(extension)
+  ) {
+    return "data";
+  }
+  // Markdown / documentation
+  if (["md", "mdx"].includes(extension)) {
+    return "markdown";
+  }
+  // Shell scripts
+  if (["sh", "bash", "zsh", "fish"].includes(extension)) {
+    return "shell";
+  }
+  // Dockerfiles (name-based)
+  if (name === "dockerfile" || name.startsWith("dockerfile.")) {
+    return "config";
+  }
+  // Config files
+  if (
+    ["env", "ini", "cfg", "conf", "pem", "crt", "cer", "key", "p12", "pfx"].includes(extension) ||
+    name === ".env" || name.startsWith(".env.") ||
+    name === ".gitignore" || name === ".gitattributes" || name === ".editorconfig"
+  ) {
+    return "config";
+  }
+  if (
+    name === "makefile" || name === "cmakelists.txt" || name === "rakefile" ||
+    name === "gemfile" || name === "podfile"
+  ) {
+    return "config";
+  }
+  // Images (raster)
+  if (["png", "jpg", "jpeg", "gif", "webp", "heic", "ico", "bmp", "tiff", "avif", "raw", "psd", "ai", "cr2", "nef", "arw"].includes(extension)) {
     return "image";
   }
-  if (["mov", "mp4", "mkv", "avi"].includes(extension)) {
+  // SVG (vector)
+  if (extension === "svg") {
+    return "svg";
+  }
+  // Video
+  if (["mov", "mp4", "mkv", "avi", "webm", "flv", "wmv", "m4v"].includes(extension)) {
     return "video";
   }
-  if (["zip", "tar", "gz", "xz", "rar"].includes(extension)) {
+  // Audio
+  if (["mp3", "wav", "flac", "aac", "m4a", "ogg", "mid", "midi", "aiff", "wma"].includes(extension)) {
+    return "audio";
+  }
+  // Archives
+  if (["zip", "tar", "gz", "xz", "rar", "7z", "bz2", "iso", "deb", "rpm", "pkg", "cab"].includes(extension)) {
     return "archive";
   }
+  // PDF
   if (extension === "pdf") {
     return "pdf";
   }
-  if (extension === "app") {
+  // Applications
+  if (["app", "dmg"].includes(extension)) {
     return "app";
   }
-  if (["txt", "rtf", "log"].includes(extension)) {
+  // Fonts
+  if (["ttf", "otf", "woff", "woff2"].includes(extension)) {
+    return "font";
+  }
+  // Binary / executable
+  if (["exe", "bin", "dll", "dylib", "so", "wasm", "wat"].includes(extension)) {
+    return "binary";
+  }
+  // Plain text & documents
+  if (["txt", "rtf", "log", "doc", "docx", "odt", "pages", "epub", "mobi"].includes(extension)) {
+    return "text";
+  }
+  // Name-based text
+  if (name === "license" || name.startsWith("license.") || name === "changelog" || name.startsWith("changelog.")) {
     return "text";
   }
   return "generic";

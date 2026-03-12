@@ -10,6 +10,9 @@ export function toPreferencePatch(
   if (value.theme !== undefined) {
     patch.theme = value.theme;
   }
+  if (value.iconTheme !== undefined) {
+    patch.iconTheme = value.iconTheme;
+  }
   if (value.accent !== undefined) {
     patch.accent = value.accent;
   }

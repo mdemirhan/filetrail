@@ -24,6 +24,7 @@ export type AccentMode =
   | "coral"
   | "indigo"
   | "lime";
+export type IconThemeMode = "classic" | "colorblock" | "monoline" | "vivid";
 export type ExplorerViewMode = "list" | "details";
 export type UiFontFamily = "dm-sans" | "lexend" | "fira-code" | "jetbrains-mono";
 export type UiFontWeight = 400 | 500 | 600;
@@ -107,6 +108,12 @@ export const THEME_GROUPS = [
     label: "Light Themes",
     options: THEME_OPTIONS.filter((option) => option.group === "light"),
   },
+] as const;
+export const ICON_THEME_OPTIONS = [
+  { value: "classic", label: "Classic" },
+  { value: "colorblock", label: "Color Block" },
+  { value: "monoline", label: "Monoline" },
+  { value: "vivid", label: "Vivid" },
 ] as const;
 export const ACCENT_OPTIONS = [
   { value: "gold", label: "Gold", primary: "#daa520", dark: "#b8860b" },
@@ -218,6 +225,7 @@ export const OPEN_ITEM_LIMIT_MAX = 50;
 // otherwise older saved preferences will either be dropped or fail validation.
 export type AppPreferences = {
   theme: ThemeMode;
+  iconTheme: IconThemeMode;
   accent: AccentMode;
   accentToolbarButtons: boolean;
   accentFavoriteItems: boolean;
@@ -277,6 +285,7 @@ export type AppPreferences = {
 
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   theme: "dark",
+  iconTheme: "classic",
   accent: "copper",
   accentToolbarButtons: false,
   accentFavoriteItems: true,
@@ -379,6 +388,10 @@ export function clampDetailColumnWidth(key: DetailColumnKey, value: number): num
 
 export function getThemeLabel(theme: ThemeMode): string {
   return THEME_OPTIONS.find((option) => option.value === theme)?.label ?? theme;
+}
+
+export function getIconThemeLabel(iconTheme: IconThemeMode): string {
+  return ICON_THEME_OPTIONS.find((option) => option.value === iconTheme)?.label ?? iconTheme;
 }
 
 export function getAccentLabel(accent: AccentMode): string {

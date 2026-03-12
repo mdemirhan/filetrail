@@ -13,6 +13,7 @@ describe("appStateStore", () => {
 
     expect(store.getPreferences()).toEqual({
       theme: "tomorrow-night",
+      iconTheme: "classic",
       accent: "copper",
       accentToolbarButtons: false,
       accentFavoriteItems: true,
@@ -112,6 +113,7 @@ describe("appStateStore", () => {
 
     store.updatePreferences({
       theme: "dark",
+      iconTheme: "colorblock",
       accent: "teal",
       accentToolbarButtons: false,
       accentFavoriteItems: true,
@@ -206,6 +208,7 @@ describe("appStateStore", () => {
     });
     expect(reloaded.getPreferences()).toEqual({
       theme: "dark",
+      iconTheme: "colorblock",
       accent: "teal",
       accentToolbarButtons: false,
       accentFavoriteItems: true,

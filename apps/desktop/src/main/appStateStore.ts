@@ -14,6 +14,7 @@ import {
   FAVORITE_ICON_OPTIONS,
   type FavoriteIconId,
   type FavoritePreference,
+  ICON_THEME_OPTIONS,
   THEME_OPTIONS,
   TYPEAHEAD_DEBOUNCE_MAX_MS,
   TYPEAHEAD_DEBOUNCE_MIN_MS,
@@ -242,6 +243,11 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
       THEME_OPTIONS.some((option) => option.value === record.theme)
         ? (record.theme as AppPreferences["theme"])
         : defaultTheme,
+    iconTheme:
+      typeof record.iconTheme === "string" &&
+      ICON_THEME_OPTIONS.some((option) => option.value === record.iconTheme)
+        ? (record.iconTheme as AppPreferences["iconTheme"])
+        : currentDefaults.iconTheme,
     accent:
       typeof record.accent === "string" &&
       ACCENT_OPTIONS.some((option) => option.value === record.accent)

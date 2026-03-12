@@ -84,6 +84,7 @@ describe("ipc contracts", () => {
       ipcContractSchemas["app:getPreferences"].response.parse({
         preferences: {
           theme: "dark",
+          iconTheme: "classic",
           accent: "gold",
           accentToolbarButtons: false,
           accentFavoriteItems: true,
@@ -172,6 +173,7 @@ describe("ipc contracts", () => {
     ).toEqual({
       preferences: {
         theme: "dark",
+        iconTheme: "classic",
         accent: "gold",
         accentToolbarButtons: false,
         accentFavoriteItems: true,
@@ -262,6 +264,7 @@ describe("ipc contracts", () => {
       ipcContractSchemas["app:updatePreferences"].request.parse({
         preferences: {
           theme: "obsidian",
+          iconTheme: "colorblock",
           accent: "lime",
           accentToolbarButtons: false,
           accentFavoriteItems: true,
@@ -331,6 +334,7 @@ describe("ipc contracts", () => {
     ).toEqual({
       preferences: {
         theme: "obsidian",
+        iconTheme: "colorblock",
         accent: "lime",
         accentToolbarButtons: false,
         accentFavoriteItems: true,

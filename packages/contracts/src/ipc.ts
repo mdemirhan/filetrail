@@ -40,6 +40,7 @@ export const accentModeSchema = z.enum([
   "lime",
 ]);
 export const uiFontFamilySchema = z.enum(["dm-sans", "lexend", "fira-code", "jetbrains-mono"]);
+export const iconThemeModeSchema = z.enum(["classic", "colorblock", "monoline", "vivid"]);
 export const colorOverrideSchema = z
   .string()
   .regex(/^#[0-9a-fA-F]{6}$/)
@@ -556,6 +557,7 @@ export const appLogEntrySchema = z.object({
 
 export const appPreferencesSchema = z.object({
   theme: themeModeSchema,
+  iconTheme: iconThemeModeSchema,
   accent: accentModeSchema,
   accentToolbarButtons: z.boolean(),
   accentFavoriteItems: z.boolean(),
