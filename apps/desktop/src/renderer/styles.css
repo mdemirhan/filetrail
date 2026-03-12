@@ -3215,12 +3215,16 @@ body.resizing-panels-vertical * {
   overflow: visible;
 }
 
-.pane-header-focused {
-  background: color-mix(in srgb, var(--bg-base) 92%, var(--bg-hover));
+/* Pane focus indicator — semi-transparent accent tint over each pane's
+   natural background, giving a subtle per-pane character. */
+.pane-header-focused,
+.pane-header-focused .search-results-bar-primary,
+.sidebar-header-focused {
+  background: var(--ft-accent-soft-bg);
 }
 
 .pane-header-focused > span {
-  color: var(--text-tertiary);
+  color: var(--ft-accent-solid-dark);
 }
 
 .content-header {
@@ -4212,9 +4216,11 @@ body.resizing-panels-vertical * {
 }
 
 .search-results-bar-primary {
-  min-height: 41px;
+  height: var(--breadcrumb-row-height);
+  min-height: var(--breadcrumb-row-height);
   border-bottom: 1px solid var(--srbar-separator);
   gap: 12px;
+  background: var(--toolbar-bg);
 }
 
 .search-results-bar-secondary {

@@ -853,7 +853,7 @@ export function TreePane({
           </div>
         </aside>
         <div className="sidebar-main">
-          <div className="sidebar-header">
+          <div className={`sidebar-header${isFocused ? " sidebar-header-focused" : ""}`}>
             <span className="sidebar-title">Folders</span>
           </div>
           {typeaheadQuery ? (
