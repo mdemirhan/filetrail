@@ -9,6 +9,12 @@ import {
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 
 import type { CopyPasteReviewDialogSize } from "../../shared/appPreferences";
+import {
+  formatHintSize,
+  formatRelativeDuration,
+  formatShortDateTime,
+  formatSizeComparison,
+} from "../lib/formatting";
 
 type Policy = Extract<IpcRequest<"copyPaste:start">, { analysisId: string }>["policy"];
 type CopyLikeAction = IpcRequest<"copyPaste:analyzeStart">["action"];
@@ -105,6 +111,28 @@ export function CopyPasteReviewDialog({
   const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(
     () => new Set(collectExpandableNodeIds(previewNodes)),
   );
+  const [activeFilters, setActiveFilters] = useState<Set<SummaryBucket>>(new Set());
+
+  const bucketCounts = useMemo(() => countBuckets(previewNodes), [previewNodes]);
+  const availableBuckets = useMemo(
+    () =>
+      (["added", "replaced", "skipped", "keepBoth", "merged"] as const).filter(
+        (bucket) => (bucketCounts.get(bucket) ?? 0) > 0,
+      ),
+    [bucketCounts],
+  );
+  const filteredPreviewNodes = useMemo(
+    () => (activeFilters.size === 0 ? previewNodes : filterTree(previewNodes, activeFilters)),
+    [previewNodes, activeFilters],
+  );
+
+  useEffect(() => {
+    setActiveFilters((current) => {
+      if (current.size === 0) return current;
+      const pruned = new Set([...current].filter((bucket) => availableBuckets.includes(bucket)));
+      return pruned.size === current.size ? current : pruned;
+    });
+  }, [availableBuckets]);
 
   useEffect(() => {
     dialogRef.current?.focus();
@@ -196,6 +224,19 @@ export function CopyPasteReviewDialog({
     window.addEventListener("pointercancel", finishInteraction);
   }
 
+  function toggleFilter(bucket: SummaryBucket) {
+    setActiveFilters((current) => {
+      const next = new Set(current);
+      if (next.has(bucket)) {
+        next.delete(bucket);
+      } else {
+        next.add(bucket);
+      }
+      return next;
+    });
+    setExpandedNodeIds(new Set(collectExpandableNodeIds(previewNodes)));
+  }
+
   function toggleNodeExpansion(nodeId: string) {
     setExpandedNodeIds((current) => {
       const next = new Set(current);
@@ -280,20 +321,39 @@ export function CopyPasteReviewDialog({
             ) : null}
           </div>
           <div className="copy-paste-review-body">
+            {availableBuckets.length > 1 ? (
+              <div className="copy-paste-review-filter-bar" role="toolbar" aria-label="Filter by action">
+                {availableBuckets.map((bucket) => (
+                  <button
+                    key={bucket}
+                    type="button"
+                    className={`copy-paste-review-filter-chip is-${toneForBucket(bucket)}${activeFilters.has(bucket) ? " is-active" : ""}`}
+                    aria-pressed={activeFilters.has(bucket)}
+                    onClick={() => toggleFilter(bucket)}
+                  >
+                    {labelForBucket(bucket)}
+                    <span className="copy-paste-review-filter-count">
+                      {bucketCounts.get(bucket) ?? 0}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <section className="copy-paste-review-list-panel">
               <ul className="copy-paste-review-tree" role="tree" aria-label="Destination plan">
-                {previewNodes.length > 0 ? (
-                  previewNodes.map((row) => (
+                {filteredPreviewNodes.length > 0 ? (
+                  filteredPreviewNodes.map((row) => (
                     <PlanTreeNode
                       key={row.id}
                       node={row}
                       expandedNodeIds={expandedNodeIds}
                       onToggle={toggleNodeExpansion}
-                      searchActive={false}
                     />
                   ))
                 ) : (
-                  <li className="copy-paste-review-empty">No planned changes.</li>
+                  <li className="copy-paste-review-empty">
+                    {activeFilters.size > 0 ? "No items match the active filters." : "No planned changes."}
+                  </li>
                 )}
               </ul>
             </section>
@@ -346,6 +406,7 @@ type PlanPreviewNode = {
   actionLabel: string;
   summaryBucket: SummaryBucket;
   badgeTone: Tone;
+  hint: Array<{ text: string; tone?: "gain" | "loss" | "danger" }> | null;
   children: PlanPreviewNode[];
 };
 
@@ -383,15 +444,13 @@ function PlanTreeNode({
   node,
   expandedNodeIds,
   onToggle,
-  searchActive,
 }: {
   node: PlanPreviewNode;
   expandedNodeIds: Set<string>;
   onToggle: (nodeId: string) => void;
-  searchActive: boolean;
 }) {
   const isExpandable = node.children.length > 0;
-  const isExpanded = searchActive || expandedNodeIds.has(node.id);
+  const isExpanded = expandedNodeIds.has(node.id);
 
   return (
     <li
@@ -429,6 +488,17 @@ function PlanTreeNode({
           <span className="copy-paste-review-row-path" title={node.displayPath}>
             {node.displayName}
           </span>
+          {node.hint ? (
+            <span
+              className={`copy-paste-review-row-hint${node.summaryBucket === "skipped" ? " is-muted" : ""}`}
+            >
+              {node.hint.map((seg, i) => (
+                <span key={i} className={seg.tone ? `is-${seg.tone}` : undefined}>
+                  {seg.text}
+                </span>
+              ))}
+            </span>
+          ) : null}
         </div>
         <div className="copy-paste-review-row-meta">
           <span className={`copy-paste-review-row-badge is-${node.badgeTone}`}>
@@ -444,7 +514,6 @@ function PlanTreeNode({
               node={child}
               expandedNodeIds={expandedNodeIds}
               onToggle={onToggle}
-              searchActive={searchActive}
             />
           ))}
         </ul>
@@ -490,6 +559,7 @@ function buildPlanPreviewNode(
     actionLabel: action.label,
     summaryBucket: action.summaryBucket,
     badgeTone: action.badgeTone,
+    hint: stripTonesForBucket(buildHintSegments(node, policy), action.summaryBucket),
     children,
   };
 }
@@ -503,6 +573,66 @@ function collectExpandableNodeIds(nodes: PlanPreviewNode[]): string[] {
     }
   }
   return nodeIds;
+}
+
+function labelForBucket(bucket: SummaryBucket): string {
+  switch (bucket) {
+    case "added":
+      return "Add";
+    case "replaced":
+      return "Replace";
+    case "skipped":
+      return "Skip";
+    case "keepBoth":
+      return "Keep Both";
+    case "merged":
+      return "Merge";
+  }
+}
+
+function toneForBucket(bucket: SummaryBucket): Tone {
+  switch (bucket) {
+    case "added":
+      return "success";
+    case "replaced":
+      return "danger";
+    case "skipped":
+      return "muted";
+    case "keepBoth":
+      return "warning";
+    case "merged":
+      return "neutral";
+  }
+}
+
+function countBuckets(nodes: PlanPreviewNode[]): Map<SummaryBucket, number> {
+  const counts = new Map<SummaryBucket, number>();
+  function walk(list: PlanPreviewNode[]) {
+    for (const node of list) {
+      counts.set(node.summaryBucket, (counts.get(node.summaryBucket) ?? 0) + 1);
+      walk(node.children);
+    }
+  }
+  walk(nodes);
+  return counts;
+}
+
+function filterTree(
+  nodes: PlanPreviewNode[],
+  activeBuckets: Set<SummaryBucket>,
+): PlanPreviewNode[] {
+  const result: PlanPreviewNode[] = [];
+  for (const node of nodes) {
+    const filteredChildren = filterTree(node.children, activeBuckets);
+    const selfMatches = activeBuckets.has(node.summaryBucket);
+    if (selfMatches || filteredChildren.length > 0) {
+      result.push({
+        ...node,
+        children: filteredChildren,
+      });
+    }
+  }
+  return result;
 }
 
 function previewKindForNode(node: AnalysisNode): PreviewKind {
@@ -610,6 +740,187 @@ function resolvePreviewAction(node: AnalysisNode, policy: Policy) {
     badgeTone: "muted" as const,
     expandChildren: false,
   };
+}
+
+type HintSegment = { text: string; tone?: "gain" | "loss" | "danger" };
+
+function stripTonesForBucket(
+  segments: HintSegment[] | null,
+  bucket: SummaryBucket,
+): HintSegment[] | null {
+  if (!segments || bucket === "replaced" || bucket === "merged") return segments;
+  return segments.map(({ text }) => ({ text }));
+}
+
+function buildHintSegments(node: AnalysisNode, policy: Policy): HintSegment[] | null {
+  if (node.conflictClass === null) {
+    if (node.sourceKind === "directory") return null;
+    return buildSourceOnlyHint(node);
+  }
+
+  if (node.conflictClass === "file_conflict") {
+    return buildFileHintSegments(node, policy);
+  }
+
+  if (node.conflictClass === "directory_conflict") {
+    return buildDirectoryHintSegments(node, policy);
+  }
+
+  if (node.conflictClass === "type_mismatch") {
+    const destKind = node.destinationKind;
+    const srcKind = node.sourceKind;
+    if (policy.mismatch === "overwrite") {
+      return [{ text: `${destKind} → ${srcKind}` }];
+    }
+    return [{ text: `${destKind} ≠ ${srcKind}` }];
+  }
+
+  return null;
+}
+
+function buildFileHintSegments(node: AnalysisNode, policy: Policy): HintSegment[] | null {
+  const segments: HintSegment[] = [];
+
+  const sizeSegments = buildSizeHint(node);
+  const modifiedSegments = buildModifiedHint(node);
+
+  if (sizeSegments) {
+    segments.push(...sizeSegments);
+  }
+  if (modifiedSegments) {
+    if (segments.length > 0) segments.push({ text: ", " });
+    segments.push(...modifiedSegments);
+  }
+
+  return segments.length > 0 ? segments : null;
+}
+
+function buildSizeHint(node: AnalysisNode): HintSegment[] | null {
+  const srcBytes = node.sourceFingerprint.size;
+  const destBytes = node.destinationFingerprint.size;
+  if (srcBytes === null && destBytes === null) {
+    return null;
+  }
+
+  const srcSize = formatHintSize(srcBytes);
+  const destSize = formatHintSize(destBytes);
+
+  if (srcBytes !== null && destBytes !== null && srcBytes === destBytes) {
+    return [{ text: "Size: " }, { text: "Same" }, { text: ` (${srcSize})` }];
+  }
+
+  if (srcBytes !== null && destBytes !== null) {
+    const label = srcBytes > destBytes ? "Larger" : "Smaller";
+    const tone = srcBytes > destBytes ? "gain" : "loss";
+    const comparison = formatSizeComparison(srcBytes, destBytes);
+    let detail = `${destSize} → ${srcSize}`;
+    if (comparison?.delta) {
+      detail += ` (${comparison.delta})`;
+    }
+    return [{ text: "Size: " }, { text: label, tone }, { text: ` (${detail})` }];
+  }
+
+  if (srcSize !== null) {
+    return [{ text: `Size: ${srcSize}` }];
+  }
+
+  return null;
+}
+
+function buildModifiedHint(node: AnalysisNode): HintSegment[] | null {
+  const srcMs = node.sourceFingerprint.mtimeMs;
+  const destMs = node.destinationFingerprint.mtimeMs;
+  if (srcMs === null && destMs === null) {
+    return null;
+  }
+
+  if (srcMs !== null && destMs !== null && srcMs === destMs) {
+    const dateStr = formatShortDateTime(srcMs);
+    return [{ text: "Modified: " }, { text: "Same" }, { text: ` (${dateStr})` }];
+  }
+
+  if (srcMs !== null && destMs !== null) {
+    const delta = srcMs - destMs;
+    const label = delta > 0 ? "Newer" : "Older";
+    const tone = delta > 0 ? "gain" : "loss";
+    const duration = formatRelativeDuration(delta);
+    const dateStr = formatShortDateTime(srcMs);
+    return [
+      { text: "Modified: " },
+      { text: label, tone },
+      { text: ` (${duration}, ${dateStr})` },
+    ];
+  }
+
+  if (srcMs !== null) {
+    const dateStr = formatShortDateTime(srcMs);
+    return [{ text: `Modified: ${dateStr}` }];
+  }
+
+  return null;
+}
+
+function buildSourceOnlyHint(node: AnalysisNode): HintSegment[] | null {
+  const segments: HintSegment[] = [];
+  const srcBytes = node.sourceFingerprint.size;
+  if (srcBytes !== null) {
+    segments.push({ text: `Size: ${formatHintSize(srcBytes)}` });
+  }
+  const srcMs = node.sourceFingerprint.mtimeMs;
+  if (srcMs !== null) {
+    if (segments.length > 0) segments.push({ text: ", " });
+    segments.push({ text: `Modified: ${formatShortDateTime(srcMs)}` });
+  }
+  return segments.length > 0 ? segments : null;
+}
+
+function buildDirectoryHintSegments(node: AnalysisNode, policy: Policy): HintSegment[] | null {
+  const srcCount = node.totalNodeCount - 1;
+  const destCount = node.destinationTotalNodeCount;
+
+  if (policy.directory === "overwrite") {
+    const segments: HintSegment[] = [];
+    if (destCount !== null) {
+      segments.push({
+        text: `${destCount} ${destCount === 1 ? "item" : "items"} → `,
+        tone: "danger",
+      });
+    }
+    segments.push({
+      text: `${srcCount} ${srcCount === 1 ? "item" : "items"}`,
+      tone: "danger",
+    });
+    return segments;
+  }
+
+  if (policy.directory === "merge") {
+    const newCount = node.totalNodeCount - node.conflictNodeCount;
+    const conflictCount = node.conflictNodeCount - 1;
+    const segments: HintSegment[] = [];
+    segments.push({
+      text: `${newCount} new`,
+      ...(newCount > 0 ? { tone: "gain" as const } : {}),
+    });
+    if (conflictCount > 0) {
+      segments.push({ text: " · " });
+      segments.push({
+        text: `${conflictCount} ${conflictCount === 1 ? "conflict" : "conflicts"}`,
+        tone: "danger",
+      });
+    }
+    return segments;
+  }
+
+  if (policy.directory === "skip") {
+    return null;
+  }
+
+  if (policy.directory === "keep_both") {
+    if (srcCount === 0) return null;
+    return [{ text: `${srcCount} ${srcCount === 1 ? "item" : "items"} copy` }];
+  }
+
+  return null;
 }
 
 function splitDisplayPath(displayPath: string): string {

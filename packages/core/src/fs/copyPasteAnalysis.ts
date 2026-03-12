@@ -202,6 +202,15 @@ async function analyzeNode(args: {
     }
   }
 
+  let destinationTotalNodeCount: number | null = null;
+  if (conflictClass === "directory_conflict") {
+    destinationTotalNodeCount = await countDirectoryItems(
+      args.fileSystem,
+      args.destinationPath,
+      args.signal,
+    );
+  }
+
   return {
     id: args.id,
     sourcePath: args.sourcePath,
@@ -217,7 +226,31 @@ async function analyzeNode(args: {
     issueMessage: null,
     totalNodeCount,
     conflictNodeCount,
+    destinationTotalNodeCount,
   };
+}
+
+async function countDirectoryItems(
+  fileSystem: WriteServiceFileSystem,
+  directoryPath: string,
+  signal?: AbortSignal,
+): Promise<number> {
+  try {
+    signal?.throwIfAborted();
+    const entries = await fileSystem.readdir(directoryPath);
+    let count = entries.length;
+    for (const entry of entries) {
+      signal?.throwIfAborted();
+      const entryPath = join(directoryPath, entry);
+      const stats = await fileSystem.lstat(entryPath);
+      if (stats.isDirectory()) {
+        count += await countDirectoryItems(fileSystem, entryPath, signal);
+      }
+    }
+    return count;
+  } catch {
+    return 0;
+  }
 }
 
 function resolveConflictClass(

@@ -2598,6 +2598,82 @@ body.platform-macos .window-toolbar-brand {
   padding: 12px 10px 0;
 }
 
+.copy-paste-review-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  padding: 0 2px 8px;
+}
+
+.copy-paste-review-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--ft-conflict-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
+}
+
+.copy-paste-review-filter-chip:hover {
+  background: color-mix(in srgb, var(--bg-hover) 54%, transparent);
+  color: var(--text-secondary);
+}
+
+.copy-paste-review-filter-chip.is-active.is-success {
+  border-color: color-mix(in srgb, var(--icon-green) 42%, var(--ft-conflict-border));
+  background: color-mix(in srgb, var(--icon-green) 14%, var(--bg-hover));
+  color: var(--icon-green);
+}
+
+.copy-paste-review-filter-chip.is-active.is-danger {
+  border-color: color-mix(in srgb, var(--danger) 36%, var(--ft-conflict-border));
+  background: color-mix(in srgb, var(--danger) 10%, var(--bg-hover));
+  color: var(--danger);
+}
+
+.copy-paste-review-filter-chip.is-active.is-muted {
+  border-color: color-mix(in srgb, var(--text-tertiary) 32%, var(--ft-conflict-border));
+  background: color-mix(in srgb, var(--text-tertiary) 12%, var(--bg-hover));
+  color: var(--text-secondary);
+}
+
+.copy-paste-review-filter-chip.is-active.is-warning {
+  border-color: color-mix(in srgb, var(--warning) 58%, var(--ft-conflict-border));
+  background: color-mix(in srgb, var(--warning) 16%, var(--bg-hover));
+  color: color-mix(in srgb, var(--warning) 78%, var(--text-primary) 22%);
+}
+
+.copy-paste-review-filter-chip.is-active.is-neutral {
+  border-color: color-mix(in srgb, var(--ft-conflict-accent) 36%, var(--ft-conflict-border));
+  background: color-mix(in srgb, var(--ft-conflict-accent) 10%, var(--bg-hover));
+  color: var(--ft-conflict-accent);
+}
+
+.copy-paste-review-filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .copy-paste-review-toolbar {
   display: flex;
   align-items: center;
@@ -2801,6 +2877,44 @@ body.platform-macos .window-toolbar-brand {
   font-size: 12px;
   white-space: nowrap;
   text-align: left;
+}
+
+.copy-paste-review-row-hint {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding-top: 1px;
+}
+
+.copy-paste-review-row-hint .is-gain {
+  color: var(--icon-sky);
+  font-weight: 600;
+}
+
+.copy-paste-review-row-hint .is-loss {
+  color: var(--icon-orange);
+  font-weight: 600;
+}
+
+.copy-paste-review-row-hint .is-danger {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.copy-paste-review-row-hint.is-muted {
+  opacity: 0.5;
+}
+
+.copy-paste-review-row-hint.is-muted .is-gain,
+.copy-paste-review-row-hint.is-muted .is-loss,
+.copy-paste-review-row-hint.is-muted .is-danger {
+  color: inherit;
+  font-weight: inherit;
 }
 
 .copy-paste-review-row-meta {
@@ -3013,6 +3127,10 @@ body.platform-macos .window-toolbar-brand {
   .copy-paste-review-row-path,
   .copy-paste-review-row-badge {
     font-size: 11px;
+  }
+
+  .copy-paste-review-row-hint {
+    font-size: 10px;
   }
 }
 

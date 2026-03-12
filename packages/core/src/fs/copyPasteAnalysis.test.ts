@@ -312,6 +312,275 @@ describe("copyPasteAnalysis", () => {
     );
   });
 
+  describe("destinationTotalNodeCount", () => {
+    it("counts destination items recursively for a directory conflict", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/Photos": { kind: "directory" },
+        "/source/Photos/a.png": { kind: "file", size: 10 },
+        "/target": { kind: "directory" },
+        "/target/Photos": { kind: "directory" },
+        "/target/Photos/x.png": { kind: "file", size: 5 },
+        "/target/Photos/y.png": { kind: "file", size: 5 },
+        "/target/Photos/sub": { kind: "directory" },
+        "/target/Photos/sub/z.png": { kind: "file", size: 5 },
+      });
+
+      const report = await buildCopyPasteAnalysisReport({
+        analysisId: "dest-count-1",
+        request: {
+          mode: "copy",
+          sourcePaths: ["/source/Photos"],
+          destinationDirectoryPath: "/target",
+        },
+        fileSystem,
+        thresholds: { largeBatchItemThreshold: 100, largeBatchByteThreshold: 10000 },
+      });
+
+      const node = report.nodes[0];
+      expect(node?.conflictClass).toBe("directory_conflict");
+      // destination has: x.png, y.png, sub, sub/z.png = 4 items
+      expect(node?.destinationTotalNodeCount).toBe(4);
+    });
+
+    it("counts hidden dotfiles in the destination directory", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/folder": { kind: "directory" },
+        "/source/folder/file.txt": { kind: "file", size: 1 },
+        "/target": { kind: "directory" },
+        "/target/folder": { kind: "directory" },
+        "/target/folder/.hidden": { kind: "file", size: 1 },
+        "/target/folder/.config": { kind: "directory" },
+        "/target/folder/.config/settings": { kind: "file", size: 1 },
+      });
+
+      const report = await buildCopyPasteAnalysisReport({
+        analysisId: "dest-count-hidden",
+        request: {
+          mode: "copy",
+          sourcePaths: ["/source/folder"],
+          destinationDirectoryPath: "/target",
+        },
+        fileSystem,
+        thresholds: { largeBatchItemThreshold: 100, largeBatchByteThreshold: 10000 },
+      });
+
+      // .hidden, .config, .config/settings = 3 items
+      expect(report.nodes[0]?.destinationTotalNodeCount).toBe(3);
+    });
+
+    it("returns 0 for an empty destination directory", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/folder": { kind: "directory" },
+        "/source/folder/file.txt": { kind: "file", size: 1 },
+        "/target": { kind: "directory" },
+        "/target/folder": { kind: "directory" },
+      });
+
+      const report = await buildCopyPasteAnalysisReport({
+        analysisId: "dest-count-empty",
+        request: {
+          mode: "copy",
+          sourcePaths: ["/source/folder"],
+          destinationDirectoryPath: "/target",
+        },
+        fileSystem,
+        thresholds: { largeBatchItemThreshold: 100, largeBatchByteThreshold: 10000 },
+      });
+
+      expect(report.nodes[0]?.destinationTotalNodeCount).toBe(0);
+    });
+
+    it("counts symlinks as items in the destination", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/folder": { kind: "directory" },
+        "/source/folder/f.txt": { kind: "file", size: 1 },
+        "/target": { kind: "directory" },
+        "/target/folder": { kind: "directory" },
+        "/target/folder/link": { kind: "symlink", target: "/elsewhere" },
+      });
+
+      const report = await buildCopyPasteAnalysisReport({
+        analysisId: "dest-count-symlink",
+        request: {
+          mode: "copy",
+          sourcePaths: ["/source/folder"],
+          destinationDirectoryPath: "/target",
+        },
+        fileSystem,
+        thresholds: { largeBatchItemThreshold: 100, largeBatchByteThreshold: 10000 },
+      });
+
+      expect(report.nodes[0]?.destinationTotalNodeCount).toBe(1);
+    });
+
+    it("returns null for file conflict nodes", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/file.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+        "/target/file.txt": { kind: "file", size: 10 },
+      });
+
+      const report = await buildCopyPasteAnalysisReport({
+        analysisId: "dest-count-file",
+        request: {
+          mode: "copy",
+          sourcePaths: ["/source/file.txt"],
+          destinationDirectoryPath: "/target",
+        },
+        fileSystem,
+        thresholds: { largeBatchItemThreshold: 100, largeBatchByteThreshold: 10000 },
+      });
+
+      expect(report.nodes[0]?.conflictClass).toBe("file_conflict");
+      expect(report.nodes[0]?.destinationTotalNodeCount).toBeNull();
+    });
+
+    it("returns null for type mismatch nodes", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/item": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+        "/target/item": { kind: "directory" },
+      });
+
+      const report = await buildCopyPasteAnalysisReport({
+        analysisId: "dest-count-mismatch",
+        request: {
+          mode: "copy",
+          sourcePaths: ["/source/item"],
+          destinationDirectoryPath: "/target",
+        },
+        fileSystem,
+        thresholds: { largeBatchItemThreshold: 100, largeBatchByteThreshold: 10000 },
+      });
+
+      expect(report.nodes[0]?.conflictClass).toBe("type_mismatch");
+      expect(report.nodes[0]?.destinationTotalNodeCount).toBeNull();
+    });
+
+    it("returns null for new items with no conflict", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/file.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+      });
+
+      const report = await buildCopyPasteAnalysisReport({
+        analysisId: "dest-count-new",
+        request: {
+          mode: "copy",
+          sourcePaths: ["/source/file.txt"],
+          destinationDirectoryPath: "/target",
+        },
+        fileSystem,
+        thresholds: { largeBatchItemThreshold: 100, largeBatchByteThreshold: 10000 },
+      });
+
+      expect(report.nodes[0]?.conflictClass).toBeNull();
+      expect(report.nodes[0]?.destinationTotalNodeCount).toBeNull();
+    });
+
+    it("gracefully returns 0 when destination readdir fails", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/folder": { kind: "directory" },
+        "/source/folder/f.txt": { kind: "file", size: 1 },
+        "/target": { kind: "directory" },
+        "/target/folder": { kind: "directory" },
+        "/target/folder/a.txt": { kind: "file", size: 1 },
+      });
+
+      const failingReaddir = async (path: string): Promise<string[]> => {
+        if (path === "/target/folder") {
+          throw new Error("EACCES: permission denied");
+        }
+        // Temporarily remove override to use default behavior
+        fileSystem.readdirImpl = undefined;
+        try {
+          return await fileSystem.readdir(path);
+        } finally {
+          fileSystem.readdirImpl = failingReaddir;
+        }
+      };
+      fileSystem.readdirImpl = failingReaddir;
+
+      const report = await buildCopyPasteAnalysisReport({
+        analysisId: "dest-count-fail",
+        request: {
+          mode: "copy",
+          sourcePaths: ["/source/folder"],
+          destinationDirectoryPath: "/target",
+        },
+        fileSystem,
+        thresholds: { largeBatchItemThreshold: 100, largeBatchByteThreshold: 10000 },
+      });
+
+      expect(report.nodes[0]?.conflictClass).toBe("directory_conflict");
+      expect(report.nodes[0]?.destinationTotalNodeCount).toBe(0);
+    });
+
+    it("handles deeply nested destination trees", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/root": { kind: "directory" },
+        "/source/root/f.txt": { kind: "file", size: 1 },
+        "/target": { kind: "directory" },
+        "/target/root": { kind: "directory" },
+        "/target/root/a": { kind: "directory" },
+        "/target/root/a/b": { kind: "directory" },
+        "/target/root/a/b/c": { kind: "directory" },
+        "/target/root/a/b/c/deep.txt": { kind: "file", size: 1 },
+        "/target/root/sibling.txt": { kind: "file", size: 1 },
+      });
+
+      const report = await buildCopyPasteAnalysisReport({
+        analysisId: "dest-count-deep",
+        request: {
+          mode: "copy",
+          sourcePaths: ["/source/root"],
+          destinationDirectoryPath: "/target",
+        },
+        fileSystem,
+        thresholds: { largeBatchItemThreshold: 100, largeBatchByteThreshold: 10000 },
+      });
+
+      // a, a/b, a/b/c, a/b/c/deep.txt, sibling.txt = 5
+      expect(report.nodes[0]?.destinationTotalNodeCount).toBe(5);
+    });
+
+    it("counts mixed file types correctly in destination", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/dir": { kind: "directory" },
+        "/source/dir/x.txt": { kind: "file", size: 1 },
+        "/target": { kind: "directory" },
+        "/target/dir": { kind: "directory" },
+        "/target/dir/file.txt": { kind: "file", size: 1 },
+        "/target/dir/sub": { kind: "directory" },
+        "/target/dir/link": { kind: "symlink", target: "/elsewhere" },
+      });
+
+      const report = await buildCopyPasteAnalysisReport({
+        analysisId: "dest-count-mixed",
+        request: {
+          mode: "copy",
+          sourcePaths: ["/source/dir"],
+          destinationDirectoryPath: "/target",
+        },
+        fileSystem,
+        thresholds: { largeBatchItemThreshold: 100, largeBatchByteThreshold: 10000 },
+      });
+
+      // file.txt, sub, link = 3
+      expect(report.nodes[0]?.destinationTotalNodeCount).toBe(3);
+    });
+  });
+
   it("handles symlink sources as first-class nodes", async () => {
     const fileSystem = new MockWriteServiceFileSystem({
       "/source": { kind: "directory" },

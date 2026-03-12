@@ -351,6 +351,7 @@ type CopyPasteAnalysisNodeContract = {
   issueMessage: string | null;
   totalNodeCount: number;
   conflictNodeCount: number;
+  destinationTotalNodeCount: number | null;
 };
 export const copyPasteAnalysisNodeSchema: z.ZodType<CopyPasteAnalysisNodeContract> = z.lazy(() =>
   z.object({
@@ -368,6 +369,7 @@ export const copyPasteAnalysisNodeSchema: z.ZodType<CopyPasteAnalysisNodeContrac
     issueMessage: z.string().nullable(),
     totalNodeCount: z.number().int().nonnegative(),
     conflictNodeCount: z.number().int().nonnegative(),
+    destinationTotalNodeCount: z.number().int().nonnegative().nullable(),
   }),
 );
 export const copyPasteAnalysisSummarySchema = z.object({
