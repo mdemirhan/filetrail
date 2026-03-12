@@ -934,7 +934,33 @@ function AccentSelector({
 }) {
   const selected = accentOptions.find((option) => option.value === accent);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const popupRef = useRef<HTMLDialogElement | null>(null);
   const [open, setOpen] = useState(false);
+  const [popupPosition, setPopupPosition] = useState({ left: 0, top: 0 });
+
+  const popupColumns = 6;
+  const popupWidth = 20 + popupColumns * 28 + (popupColumns - 1) * 8;
+  const popupRows = Math.ceil(accentOptions.length / popupColumns);
+  const popupHeight = 20 + popupRows * 28 + (popupRows - 1) * 8;
+
+  const updatePopupPosition = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) {
+      return;
+    }
+    const rect = trigger.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const margin = 12;
+    const gap = 10;
+    const preferredLeft = rect.right - popupWidth;
+    const maxLeft = Math.max(margin, viewportWidth - popupWidth - margin);
+    const left = Math.min(Math.max(preferredLeft, margin), maxLeft);
+    const fitsBelow = rect.bottom + gap + popupHeight <= viewportHeight - margin;
+    const top = fitsBelow ? rect.bottom + gap : Math.max(margin, rect.top - gap - popupHeight);
+    setPopupPosition({ left, top });
+  }, [popupHeight, popupWidth]);
 
   useEffect(() => {
     if (!open) {
@@ -942,16 +968,35 @@ function AccentSelector({
     }
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
-      if (!(target instanceof Node) || containerRef.current?.contains(target)) {
+      if (
+        !(target instanceof Node) ||
+        containerRef.current?.contains(target) ||
+        popupRef.current?.contains(target)
+      ) {
         return;
       }
       setOpen(false);
     };
+    const handleWindowChange = () => {
+      updatePopupPosition();
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+    updatePopupPosition();
     window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("resize", handleWindowChange);
+    window.addEventListener("scroll", handleWindowChange, true);
+    window.addEventListener("keydown", handleEscape);
     return () => {
       window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("resize", handleWindowChange);
+      window.removeEventListener("scroll", handleWindowChange, true);
+      window.removeEventListener("keydown", handleEscape);
     };
-  }, [open]);
+  }, [open, updatePopupPosition]);
 
   if (mode === "inline") {
     return (
@@ -1008,12 +1053,18 @@ function AccentSelector({
       style={{ display: "inline-flex", position: "relative", alignItems: "center", gap: "8px" }}
     >
       <button
+        ref={triggerRef}
         type="button"
         aria-label={`${labelPrefix} ${selected?.label ?? accent}`}
         aria-haspopup="dialog"
         aria-expanded={open}
         disabled={disabled}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          if (!open) {
+            updatePopupPosition();
+          }
+          setOpen((current) => !current);
+        }}
         style={{
           width: "30px",
           height: "30px",
@@ -1041,70 +1092,74 @@ function AccentSelector({
           {selected?.label ?? accent}
         </span>
       ) : null}
-      {open && !disabled ? (
-        <dialog
-          open
-          aria-label={`${labelPrefix} options`}
-          onCancel={(event) => {
-            event.preventDefault();
-            setOpen(false);
-          }}
-          style={{
-            position: "absolute",
-            top: "calc(100% + 10px)",
-            right: 0,
-            zIndex: 5,
-            width: "228px",
-            margin: 0,
-            padding: "10px",
-            borderRadius: "12px",
-            background: theme.card.bg,
-            border: `1px solid ${theme.input.border}`,
-            boxShadow: theme.card.shadow,
-            display: "grid",
-          }}
-        >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(6, 28px)",
-              gridAutoRows: "28px",
-              gap: "8px",
-              justifyContent: "start",
-            }}
-          >
-            {accentOptions.map((option) => {
-              const active = option.value === accent;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  aria-label={`${labelPrefix} ${option.label}`}
-                  aria-pressed={active}
-                  onClick={() => {
-                    onChange(option.value);
-                    setOpen(false);
-                  }}
-                  style={{
-                    width: "28px",
-                    height: "28px",
-                    borderRadius: "999px",
-                    border: `1px solid ${active ? theme.accent.border : theme.color.swatchBorder}`,
-                    background: option.primary,
-                    boxShadow: active
-                      ? `0 0 0 2px ${theme.card.bg}, 0 0 0 4px ${theme.accent.focusBorder}`
-                      : "inset 0 0 0 1px rgba(255,255,255,0.08)",
-                    cursor: "pointer",
-                    transition:
-                      "box-shadow 0.14s ease, border-color 0.14s ease, transform 0.14s ease",
-                    outline: "none",
-                  }}
-                />
-              );
-            })}
-          </div>
-        </dialog>
-      ) : null}
+      {open && !disabled
+        ? createPortal(
+            <dialog
+              ref={popupRef}
+              open
+              aria-label={`${labelPrefix} options`}
+              onCancel={(event) => {
+                event.preventDefault();
+                setOpen(false);
+              }}
+              style={{
+                position: "fixed",
+                top: `${popupPosition.top}px`,
+                left: `${popupPosition.left}px`,
+                zIndex: 1000,
+                width: `${popupWidth}px`,
+                margin: 0,
+                padding: "10px",
+                borderRadius: "12px",
+                background: theme.card.bg,
+                border: `1px solid ${theme.input.border}`,
+                boxShadow: theme.card.shadow,
+                display: "grid",
+              }}
+            >
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(6, 28px)",
+                  gridAutoRows: "28px",
+                  gap: "8px",
+                  justifyContent: "start",
+                }}
+              >
+                {accentOptions.map((option) => {
+                  const active = option.value === accent;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      aria-label={`${labelPrefix} ${option.label}`}
+                      aria-pressed={active}
+                      onClick={() => {
+                        onChange(option.value);
+                        setOpen(false);
+                      }}
+                      style={{
+                        width: "28px",
+                        height: "28px",
+                        borderRadius: "999px",
+                        border: `1px solid ${active ? theme.accent.border : theme.color.swatchBorder}`,
+                        background: option.primary,
+                        boxShadow: active
+                          ? `0 0 0 2px ${theme.card.bg}, 0 0 0 4px ${theme.accent.focusBorder}`
+                          : "inset 0 0 0 1px rgba(255,255,255,0.08)",
+                        cursor: "pointer",
+                        transition:
+                          "box-shadow 0.14s ease, border-color 0.14s ease, transform 0.14s ease",
+                        outline: "none",
+                      }}
+                    />
+                  );
+                })}
+              </div>
+            </dialog>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
@@ -1742,6 +1797,7 @@ export function SettingsView({
   iconTheme,
   accent,
   accentToolbarButtons,
+  toolbarAccent,
   accentFavoriteItems,
   accentFavoriteText,
   favoriteAccent,
@@ -1785,6 +1841,7 @@ export function SettingsView({
   onIconThemeChange,
   onAccentChange,
   onAccentToolbarButtonsChange,
+  onToolbarAccentChange,
   onAccentFavoriteItemsChange,
   onAccentFavoriteTextChange,
   onFavoriteAccentChange,
@@ -1830,6 +1887,7 @@ export function SettingsView({
   iconTheme: IconThemeMode;
   accent: AccentMode;
   accentToolbarButtons: boolean;
+  toolbarAccent: AccentMode;
   accentFavoriteItems: boolean;
   accentFavoriteText: boolean;
   favoriteAccent: AccentMode;
@@ -1877,6 +1935,7 @@ export function SettingsView({
   onIconThemeChange: (value: IconThemeMode) => void;
   onAccentChange: (value: AccentMode) => void;
   onAccentToolbarButtonsChange: (value: boolean) => void;
+  onToolbarAccentChange: (value: AccentMode) => void;
   onAccentFavoriteItemsChange: (value: boolean) => void;
   onAccentFavoriteTextChange: (value: boolean) => void;
   onFavoriteAccentChange: (value: AccentMode) => void;
@@ -2044,12 +2103,23 @@ export function SettingsView({
             desc="Use the selected accent for primary toolbar actions."
             theme={palette}
             right={
-              <Toggle
-                checked={accentToolbarButtons}
-                onToggle={() => onAccentToolbarButtonsChange(!accentToolbarButtons)}
-                theme={palette}
-                label="Accent toolbar buttons"
-              />
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <AccentSelector
+                  accent={toolbarAccent}
+                  accentOptions={accentOptions}
+                  theme={palette}
+                  disabled={!accentToolbarButtons}
+                  labelPrefix="Toolbar accent"
+                  showSelectedLabel={false}
+                  onChange={onToolbarAccentChange}
+                />
+                <Toggle
+                  checked={accentToolbarButtons}
+                  onToggle={() => onAccentToolbarButtonsChange(!accentToolbarButtons)}
+                  theme={palette}
+                  label="Accent toolbar buttons"
+                />
+              </div>
             }
           />
 

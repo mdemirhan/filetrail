@@ -13,6 +13,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       iconTheme="classic"
       accent="gold"
       accentToolbarButtons={true}
+      toolbarAccent="teal"
       accentFavoriteItems={false}
       accentFavoriteText={false}
       favoriteAccent="coral"
@@ -87,6 +88,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       onIconThemeChange={() => undefined}
       onAccentChange={() => undefined}
       onAccentToolbarButtonsChange={() => undefined}
+      onToolbarAccentChange={() => undefined}
       onAccentFavoriteItemsChange={() => undefined}
       onAccentFavoriteTextChange={() => undefined}
       onFavoriteAccentChange={() => undefined}
@@ -189,13 +191,21 @@ describe("SettingsView", () => {
 
   it("forwards toolbar accent toggle changes", () => {
     const onAccentToolbarButtonsChange = vi.fn();
+    const onToolbarAccentChange = vi.fn();
     renderSettingsView({
       accentToolbarButtons: true,
+      toolbarAccent: "teal",
       onAccentToolbarButtonsChange,
+      onToolbarAccentChange,
     });
 
+    fireEvent.click(screen.getByLabelText("Toolbar accent Teal"));
+    const toolbarAccentDialog = screen.getByRole("dialog", { name: "Toolbar accent options" });
+    expect(toolbarAccentDialog.parentElement).toBe(document.body);
+    fireEvent.click(screen.getByLabelText("Toolbar accent Gold"));
     fireEvent.click(screen.getByLabelText("Accent toolbar buttons"));
 
+    expect(onToolbarAccentChange).toHaveBeenCalledWith("gold");
     expect(onAccentToolbarButtonsChange).toHaveBeenCalledWith(false);
   });
 
@@ -216,6 +226,8 @@ describe("SettingsView", () => {
     fireEvent.click(screen.getByLabelText("Accent favorite text"));
     fireEvent.click(screen.getByLabelText("Favorite accent Coral"));
     const favoriteAccentDialog = screen.getByRole("dialog", { name: "Favorite accent options" });
+    expect(favoriteAccentDialog.parentElement).toBe(document.body);
+    expect(favoriteAccentDialog).toHaveStyle({ position: "fixed", zIndex: "1000" });
     expect(favoriteAccentDialog.firstElementChild).toHaveStyle({
       gridTemplateColumns: "repeat(6, 28px)",
     });
@@ -258,6 +270,14 @@ describe("SettingsView", () => {
     });
 
     expect(screen.getByLabelText("Favorite accent Coral")).toBeDisabled();
+  });
+
+  it("disables the toolbar accent swatch when toolbar accents are off", () => {
+    renderSettingsView({
+      accentToolbarButtons: false,
+    });
+
+    expect(screen.getByLabelText("Toolbar accent Teal")).toBeDisabled();
   });
 
   it("forwards hovered item highlight toggle changes", () => {

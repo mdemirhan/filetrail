@@ -228,6 +228,7 @@ export type AppPreferences = {
   iconTheme: IconThemeMode;
   accent: AccentMode;
   accentToolbarButtons: boolean;
+  toolbarAccent: AccentMode;
   accentFavoriteItems: boolean;
   accentFavoriteText: boolean;
   favoriteAccent: AccentMode;
@@ -288,6 +289,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   iconTheme: "classic",
   accent: "copper",
   accentToolbarButtons: false,
+  toolbarAccent: "copper",
   accentFavoriteItems: true,
   accentFavoriteText: false,
   favoriteAccent: "sky",

@@ -58,6 +58,7 @@ describe("appPreferences helpers", () => {
       theme: "dark",
       accent: "copper",
       accentToolbarButtons: false,
+      toolbarAccent: "copper",
       accentFavoriteItems: true,
       favoriteAccent: "sky",
       zoomPercent: 100,

@@ -68,6 +68,7 @@ export function applyAppearance({
   iconTheme,
   accent,
   accentToolbarButtons,
+  toolbarAccent,
   accentFavoriteItems,
   accentFavoriteText,
   favoriteAccent,
@@ -82,6 +83,7 @@ export function applyAppearance({
   iconTheme: IconThemeMode;
   accent: AccentMode;
   accentToolbarButtons: boolean;
+  toolbarAccent: AccentMode;
   accentFavoriteItems: boolean;
   accentFavoriteText: boolean;
   favoriteAccent: AccentMode;
@@ -102,6 +104,7 @@ export function applyAppearance({
   root.dataset.themeVariant = theme;
   root.dataset.iconTheme = iconTheme;
   root.dataset.accent = accent;
+  root.dataset.toolbarAccent = toolbarAccent;
   root.dataset.favoriteAccent = favoriteAccent;
   root.dataset.accentFavoriteItems = accentFavoriteItems ? "true" : "false";
   root.dataset.accentFavoriteText = accentFavoriteItems && accentFavoriteText ? "true" : "false";
@@ -129,13 +132,14 @@ export function applyAppearance({
   for (const [propertyName, value] of Object.entries(favoriteAccentVariables)) {
     root.style.setProperty(propertyName, value);
   }
+  const toolbarAccentTokens = generateAccentTokens(toolbarAccent, theme);
   if (accentToolbarButtons) {
-    const toolbarAccentVariables = getToolbarAccentVariables(accentTokens);
+    const toolbarAccentVariables = getToolbarAccentVariables(toolbarAccentTokens);
     for (const [propertyName, value] of Object.entries(toolbarAccentVariables)) {
       root.style.setProperty(propertyName, value);
     }
   } else {
-    for (const propertyName of Object.keys(getToolbarAccentVariables(accentTokens))) {
+    for (const propertyName of Object.keys(getToolbarAccentVariables(toolbarAccentTokens))) {
       root.style.removeProperty(propertyName);
     }
   }

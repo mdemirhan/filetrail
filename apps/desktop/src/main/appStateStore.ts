@@ -257,6 +257,11 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
       typeof record.accentToolbarButtons === "boolean"
         ? record.accentToolbarButtons
         : currentDefaults.accentToolbarButtons,
+    toolbarAccent:
+      typeof record.toolbarAccent === "string" &&
+      ACCENT_OPTIONS.some((option) => option.value === record.toolbarAccent)
+        ? (record.toolbarAccent as AppPreferences["toolbarAccent"])
+        : currentDefaults.toolbarAccent,
     accentFavoriteItems:
       typeof record.accentFavoriteItems === "boolean"
         ? record.accentFavoriteItems

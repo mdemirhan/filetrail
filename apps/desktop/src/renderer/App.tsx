@@ -104,6 +104,8 @@ export function App() {
     setAccent,
     accentToolbarButtons,
     setAccentToolbarButtons,
+    toolbarAccent,
+    setToolbarAccent,
     accentFavoriteItems,
     setAccentFavoriteItems,
     accentFavoriteText,
@@ -1000,6 +1002,7 @@ export function App() {
         iconTheme,
         accent,
         accentToolbarButtons,
+        toolbarAccent,
         accentFavoriteItems,
         accentFavoriteText,
         favoriteAccent,
@@ -1078,6 +1081,7 @@ export function App() {
     detailColumnWidths,
     accent,
     accentToolbarButtons,
+    toolbarAccent,
     accentFavoriteItems,
     accentFavoriteText,
     favoriteAccent,
@@ -1137,6 +1141,7 @@ export function App() {
         setIconTheme(preferences.iconTheme);
         setAccent(preferences.accent);
         setAccentToolbarButtons(preferences.accentToolbarButtons);
+        setToolbarAccent(preferences.toolbarAccent);
         setAccentFavoriteItems(preferences.accentFavoriteItems);
         setAccentFavoriteText(preferences.accentFavoriteText);
         setFavoriteAccent(preferences.favoriteAccent);
@@ -1874,6 +1879,7 @@ export function App() {
                 iconTheme={iconTheme}
                 accent={accent}
                 accentToolbarButtons={accentToolbarButtons}
+                toolbarAccent={toolbarAccent}
                 accentFavoriteItems={accentFavoriteItems}
                 accentFavoriteText={accentFavoriteText}
                 favoriteAccent={favoriteAccent}
@@ -1917,6 +1923,7 @@ export function App() {
                 onIconThemeChange={setIconTheme}
                 onAccentChange={setAccent}
                 onAccentToolbarButtonsChange={setAccentToolbarButtons}
+                onToolbarAccentChange={setToolbarAccent}
                 onAccentFavoriteItemsChange={setAccentFavoriteItems}
                 onAccentFavoriteTextChange={setAccentFavoriteText}
                 onFavoriteAccentChange={setFavoriteAccent}

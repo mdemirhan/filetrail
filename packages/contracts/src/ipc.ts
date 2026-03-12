@@ -560,6 +560,7 @@ export const appPreferencesSchema = z.object({
   iconTheme: iconThemeModeSchema,
   accent: accentModeSchema,
   accentToolbarButtons: z.boolean(),
+  toolbarAccent: accentModeSchema,
   accentFavoriteItems: z.boolean(),
   accentFavoriteText: z.boolean(),
   favoriteAccent: accentModeSchema,

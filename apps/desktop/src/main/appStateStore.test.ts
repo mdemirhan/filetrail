@@ -16,6 +16,7 @@ describe("appStateStore", () => {
       iconTheme: "classic",
       accent: "copper",
       accentToolbarButtons: false,
+      toolbarAccent: "copper",
       accentFavoriteItems: true,
       accentFavoriteText: false,
       favoriteAccent: "sky",
@@ -116,6 +117,7 @@ describe("appStateStore", () => {
       iconTheme: "colorblock",
       accent: "teal",
       accentToolbarButtons: false,
+      toolbarAccent: "gold",
       accentFavoriteItems: true,
       accentFavoriteText: true,
       favoriteAccent: "coral",
@@ -211,6 +213,7 @@ describe("appStateStore", () => {
       iconTheme: "colorblock",
       accent: "teal",
       accentToolbarButtons: false,
+      toolbarAccent: "gold",
       accentFavoriteItems: true,
       accentFavoriteText: true,
       favoriteAccent: "coral",
@@ -307,6 +310,7 @@ describe("appStateStore", () => {
     store.updatePreferences({
       accent: "bad-accent" as never,
       accentToolbarButtons: "nope" as never,
+      toolbarAccent: "bad-accent" as never,
       accentFavoriteItems: "nope" as never,
       accentFavoriteText: "nope" as never,
       favoriteAccent: "bad-accent" as never,
@@ -358,6 +362,7 @@ describe("appStateStore", () => {
     });
     expect(reloaded.getPreferences().accent).toBe("copper");
     expect(reloaded.getPreferences().accentToolbarButtons).toBe(false);
+    expect(reloaded.getPreferences().toolbarAccent).toBe("copper");
     expect(reloaded.getPreferences().accentFavoriteItems).toBe(true);
     expect(reloaded.getPreferences().accentFavoriteText).toBe(false);
     expect(reloaded.getPreferences().favoriteAccent).toBe("sky");

@@ -29,6 +29,9 @@ export function useAppPreferences() {
   const [accentToolbarButtons, setAccentToolbarButtons] = useState(
     DEFAULT_APP_PREFERENCES.accentToolbarButtons,
   );
+  const [toolbarAccent, setToolbarAccent] = useState<AccentMode>(
+    DEFAULT_APP_PREFERENCES.toolbarAccent,
+  );
   const [accentFavoriteItems, setAccentFavoriteItems] = useState(
     DEFAULT_APP_PREFERENCES.accentFavoriteItems,
   );
@@ -135,6 +138,7 @@ export function useAppPreferences() {
       iconTheme,
       accent,
       accentToolbarButtons,
+      toolbarAccent,
       accentFavoriteItems,
       accentFavoriteText,
       favoriteAccent,
@@ -148,6 +152,7 @@ export function useAppPreferences() {
   }, [
     accent,
     accentToolbarButtons,
+    toolbarAccent,
     accentFavoriteItems,
     accentFavoriteText,
     favoriteAccent,
@@ -172,6 +177,7 @@ export function useAppPreferences() {
     setTextSecondaryOverride(null);
     setTextMutedOverride(null);
     setAccentToolbarButtons(DEFAULT_APP_PREFERENCES.accentToolbarButtons);
+    setToolbarAccent(DEFAULT_APP_PREFERENCES.toolbarAccent);
     setAccentFavoriteItems(DEFAULT_APP_PREFERENCES.accentFavoriteItems);
     setAccentFavoriteText(DEFAULT_APP_PREFERENCES.accentFavoriteText);
     setFavoriteAccent(DEFAULT_APP_PREFERENCES.favoriteAccent);
@@ -188,6 +194,8 @@ export function useAppPreferences() {
     setAccent,
     accentToolbarButtons,
     setAccentToolbarButtons,
+    toolbarAccent,
+    setToolbarAccent,
     accentFavoriteItems,
     setAccentFavoriteItems,
     accentFavoriteText,

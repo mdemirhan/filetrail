@@ -19,6 +19,9 @@ export function toPreferencePatch(
   if (value.accentToolbarButtons !== undefined) {
     patch.accentToolbarButtons = value.accentToolbarButtons;
   }
+  if (value.toolbarAccent !== undefined) {
+    patch.toolbarAccent = value.toolbarAccent;
+  }
   if (value.accentFavoriteItems !== undefined) {
     patch.accentFavoriteItems = value.accentFavoriteItems;
   }

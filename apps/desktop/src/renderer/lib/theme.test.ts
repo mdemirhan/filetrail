@@ -25,6 +25,7 @@ describe("theme helpers", () => {
       iconTheme: "classic",
       accent: "teal",
       accentToolbarButtons: true,
+      toolbarAccent: "gold",
       accentFavoriteItems: true,
       accentFavoriteText: true,
       favoriteAccent: "coral",
@@ -40,6 +41,7 @@ describe("theme helpers", () => {
     expect(document.documentElement.dataset.themeVariant).toBe("dark");
     expect(document.documentElement.dataset.iconTheme).toBe("classic");
     expect(document.documentElement.dataset.accent).toBe("teal");
+    expect(document.documentElement.dataset.toolbarAccent).toBe("gold");
     expect(document.documentElement.dataset.favoriteAccent).toBe("coral");
     expect(document.documentElement.dataset.accentFavoriteItems).toBe("true");
     expect(document.documentElement.dataset.accentFavoriteText).toBe("true");
@@ -52,17 +54,17 @@ describe("theme helpers", () => {
     expect(document.documentElement.style.getPropertyValue("--ft-accent-solid")).toBe("#2cb5a0");
     expect(document.documentElement.style.getPropertyValue("--accent-blue")).toBe("#2cb5a0");
     expect(document.documentElement.style.getPropertyValue("--tb-primary-bg")).toBe(
-      "rgba(44, 181, 160, 0.12)",
+      "rgba(218, 165, 32, 0.12)",
     );
     expect(document.documentElement.style.getPropertyValue("--toolbar-nav-icon-active")).toBe(
-      "#2cb5a0",
+      "#daa520",
     );
     expect(document.documentElement.style.getPropertyValue("--toolbar-toggle-active-bg")).toBe(
-      "rgba(44, 181, 160, 0.16)",
+      "rgba(218, 165, 32, 0.16)",
     );
-    expect(document.documentElement.style.getPropertyValue("--sidebar-rail-icon")).toBe("#2cb5a0");
+    expect(document.documentElement.style.getPropertyValue("--sidebar-rail-icon")).toBe("#daa520");
     expect(document.documentElement.style.getPropertyValue("--sidebar-rail-active-bg")).toBe(
-      "rgba(44, 181, 160, 0.16)",
+      "rgba(218, 165, 32, 0.16)",
     );
     expect(document.documentElement.style.getPropertyValue("--favorite-accent-solid")).toBe(
       "#e8806a",
@@ -79,6 +81,7 @@ describe("theme helpers", () => {
       iconTheme: "classic",
       accent: "rose",
       accentToolbarButtons: false,
+      toolbarAccent: "gold",
       accentFavoriteItems: false,
       accentFavoriteText: true,
       favoriteAccent: "gold",
@@ -107,6 +110,7 @@ describe("theme helpers", () => {
       iconTheme: "classic",
       accent: "gold",
       accentToolbarButtons: false,
+      toolbarAccent: "gold",
       accentFavoriteItems: false,
       accentFavoriteText: false,
       favoriteAccent: "gold",
@@ -147,6 +151,7 @@ describe("theme helpers", () => {
           iconTheme: "classic",
           accent: "gold",
           accentToolbarButtons: false,
+          toolbarAccent: "gold",
           accentFavoriteItems: false,
           accentFavoriteText: false,
           favoriteAccent: "gold",
