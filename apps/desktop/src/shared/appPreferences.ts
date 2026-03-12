@@ -11,19 +11,7 @@ export type ThemeMode =
   | "warm-paper"
   | "stone"
   | "sand";
-export type AccentMode =
-  | "gold"
-  | "teal"
-  | "blue"
-  | "violet"
-  | "rose"
-  | "emerald"
-  | "copper"
-  | "sky"
-  | "lavender"
-  | "coral"
-  | "indigo"
-  | "lime";
+export type AccentMode = string;
 export type IconThemeMode = "classic" | "colorblock" | "monoline" | "vivid";
 export type ExplorerViewMode = "list" | "details";
 export type UiFontFamily = "dm-sans" | "lexend" | "fira-code" | "jetbrains-mono";
@@ -116,18 +104,21 @@ export const ICON_THEME_OPTIONS = [
   { value: "vivid", label: "Vivid" },
 ] as const;
 export const ACCENT_OPTIONS = [
-  { value: "gold", label: "Gold", primary: "#daa520", dark: "#b8860b" },
-  { value: "teal", label: "Teal", primary: "#2cb5a0", dark: "#1e9a87" },
-  { value: "blue", label: "Blue", primary: "#4a9eff", dark: "#2d7fd4" },
-  { value: "violet", label: "Violet", primary: "#9580ff", dark: "#7a62e0" },
-  { value: "rose", label: "Rose", primary: "#e8729a", dark: "#c75a80" },
-  { value: "emerald", label: "Emerald", primary: "#3dbf7a", dark: "#2a9e62" },
-  { value: "copper", label: "Copper", primary: "#d4845a", dark: "#b86e48" },
-  { value: "sky", label: "Sky", primary: "#58b9e8", dark: "#3a9acb" },
-  { value: "lavender", label: "Lavender", primary: "#a78bfa", dark: "#7c5fd6" },
-  { value: "coral", label: "Coral", primary: "#e8806a", dark: "#c86850" },
-  { value: "indigo", label: "Indigo", primary: "#6366f1", dark: "#4f46e5" },
-  { value: "lime", label: "Lime", primary: "#84b840", dark: "#6a9830" },
+  { id: "gold", value: "#daa520", label: "Gold", primary: "#daa520", dark: "#b8860b" },
+  { id: "copper", value: "#d4845a", label: "Copper", primary: "#d4845a", dark: "#b86e48" },
+  { id: "coral", value: "#e8806a", label: "Coral", primary: "#e8806a", dark: "#c86850" },
+  { id: "ruby", value: "#d84a4a", label: "Ruby", primary: "#d84a4a", dark: "#b63838" },
+  { id: "rose", value: "#e8729a", label: "Rose", primary: "#e8729a", dark: "#c75a80" },
+  { id: "violet", value: "#9580ff", label: "Violet", primary: "#9580ff", dark: "#7a62e0" },
+  { id: "lavender", value: "#a78bfa", label: "Lavender", primary: "#a78bfa", dark: "#7c5fd6" },
+  { id: "indigo", value: "#6366f1", label: "Indigo", primary: "#6366f1", dark: "#4f46e5" },
+  { id: "slate", value: "#8094b8", label: "Slate", primary: "#8094b8", dark: "#617699" },
+  { id: "blue", value: "#4a9eff", label: "Blue", primary: "#4a9eff", dark: "#2d7fd4" },
+  { id: "sky", value: "#58b9e8", label: "Sky", primary: "#58b9e8", dark: "#3a9acb" },
+  { id: "aqua", value: "#23c7d9", label: "Aqua", primary: "#23c7d9", dark: "#149dae" },
+  { id: "teal", value: "#2cb5a0", label: "Teal", primary: "#2cb5a0", dark: "#1e9a87" },
+  { id: "emerald", value: "#3dbf7a", label: "Emerald", primary: "#3dbf7a", dark: "#2a9e62" },
+  { id: "lime", value: "#84b840", label: "Lime", primary: "#84b840", dark: "#6a9830" },
 ] as const;
 
 export const UI_FONT_OPTIONS = [
@@ -287,12 +278,12 @@ export type AppPreferences = {
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   theme: "dark",
   iconTheme: "classic",
-  accent: "copper",
+  accent: "#d4845a",
   accentToolbarButtons: false,
-  toolbarAccent: "copper",
+  toolbarAccent: "#d4845a",
   accentFavoriteItems: true,
   accentFavoriteText: false,
-  favoriteAccent: "sky",
+  favoriteAccent: "#58b9e8",
   zoomPercent: 100,
   uiFontFamily: "lexend",
   uiFontSize: 13,
@@ -397,7 +388,19 @@ export function getIconThemeLabel(iconTheme: IconThemeMode): string {
 }
 
 export function getAccentLabel(accent: AccentMode): string {
-  return ACCENT_OPTIONS.find((option) => option.value === accent)?.label ?? accent;
+  const normalized = normalizeAccentColor(accent);
+  if (!normalized) {
+    return accent;
+  }
+  return ACCENT_OPTIONS.find((option) => option.value === normalized)?.label ?? "Custom";
+}
+
+export function normalizeAccentColor(value: string): string | null {
+  const trimmed = value.trim();
+  if (!/^#[0-9a-fA-F]{6}$/.test(trimmed)) {
+    return null;
+  }
+  return trimmed.toLowerCase();
 }
 
 export function getUiFontLabel(font: UiFontFamily): string {

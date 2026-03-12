@@ -25,20 +25,7 @@ export const themeModeSchema = z.enum([
   "stone",
   "sand",
 ]);
-export const accentModeSchema = z.enum([
-  "gold",
-  "teal",
-  "blue",
-  "violet",
-  "rose",
-  "emerald",
-  "copper",
-  "sky",
-  "lavender",
-  "coral",
-  "indigo",
-  "lime",
-]);
+export const accentModeSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 export const uiFontFamilySchema = z.enum(["dm-sans", "lexend", "fira-code", "jetbrains-mono"]);
 export const iconThemeModeSchema = z.enum(["classic", "colorblock", "monoline", "vivid"]);
 export const colorOverrideSchema = z

@@ -45,10 +45,11 @@ describe("appPreferences helpers", () => {
   it("resolves known labels and falls back to the raw stored value", () => {
     expect(getThemeLabel("tomorrow-night")).toBe("Tomorrow Night");
     expect(getThemeLabel("midnight")).toBe("Midnight");
-    expect(getAccentLabel("lavender")).toBe("Lavender");
-    expect(getAccentLabel("emerald")).toBe("Emerald");
+    expect(getAccentLabel("#a78bfa")).toBe("Lavender");
+    expect(getAccentLabel("#3dbf7a")).toBe("Emerald");
     expect(getUiFontLabel("jetbrains-mono")).toBe("JetBrains Mono");
     expect(getThemeLabel("aurora" as never)).toBe("aurora");
+    expect(getAccentLabel("#112233")).toBe("Custom");
     expect(getAccentLabel("sunset" as never)).toBe("sunset");
     expect(getUiFontLabel("mono" as never)).toBe("mono");
   });
@@ -56,11 +57,11 @@ describe("appPreferences helpers", () => {
   it("ships expected defaults for the persisted preference shape", () => {
     expect(DEFAULT_APP_PREFERENCES).toMatchObject({
       theme: "dark",
-      accent: "copper",
+      accent: "#d4845a",
       accentToolbarButtons: false,
-      toolbarAccent: "copper",
+      toolbarAccent: "#d4845a",
       accentFavoriteItems: true,
-      favoriteAccent: "sky",
+      favoriteAccent: "#58b9e8",
       zoomPercent: 100,
       uiFontFamily: "lexend",
       uiFontSize: 13,

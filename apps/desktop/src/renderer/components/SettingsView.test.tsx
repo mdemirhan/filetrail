@@ -11,12 +11,12 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
     <SettingsView
       theme="dark"
       iconTheme="classic"
-      accent="gold"
+      accent="#daa520"
       accentToolbarButtons={true}
-      toolbarAccent="teal"
+      toolbarAccent="#2cb5a0"
       accentFavoriteItems={false}
       accentFavoriteText={false}
-      favoriteAccent="coral"
+      favoriteAccent="#e8806a"
       zoomPercent={100}
       uiFontFamily="lexend"
       uiFontSize={13}
@@ -75,9 +75,13 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       openItemLimit={5}
       themeOptions={THEME_OPTIONS}
       accentOptions={[
-        { value: "gold", label: "Gold", primary: "#daa520" },
-        { value: "teal", label: "Teal", primary: "#2cb5a0" },
-        { value: "coral", label: "Coral", primary: "#e8806a" },
+        { value: "#daa520", label: "Gold", primary: "#daa520" },
+        { value: "#d4845a", label: "Copper", primary: "#d4845a" },
+        { value: "#e8806a", label: "Coral", primary: "#e8806a" },
+        { value: "#d84a4a", label: "Ruby", primary: "#d84a4a" },
+        { value: "#8094b8", label: "Slate", primary: "#8094b8" },
+        { value: "#23c7d9", label: "Aqua", primary: "#23c7d9" },
+        { value: "#2cb5a0", label: "Teal", primary: "#2cb5a0" },
       ]}
       uiFontOptions={[{ value: "lexend", label: "Lexend" }]}
       uiFontSizeOptions={[13]}
@@ -182,11 +186,28 @@ describe("SettingsView", () => {
   });
 
   it("renders the supplied accent options and selected label", () => {
-    renderSettingsView({ accent: "teal" });
+    renderSettingsView({ accent: "#2cb5a0" });
 
     expect(screen.getByLabelText("Accent color Gold")).toBeInTheDocument();
     expect(screen.getByLabelText("Accent color Teal")).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("Teal")).toBeInTheDocument();
+  });
+
+  it("shows a custom accent picker for non-preset colors", () => {
+    const onAccentChange = vi.fn();
+    renderSettingsView({
+      accent: "#112233",
+      onAccentChange,
+    });
+
+    expect(screen.getByText("Custom")).toBeInTheDocument();
+    expect(screen.queryByText("Custom color")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Accent color Custom"));
+    fireEvent.change(screen.getByLabelText("Accent color Custom value"), {
+      target: { value: "#123456" },
+    });
+
+    expect(onAccentChange).toHaveBeenCalledWith("#123456");
   });
 
   it("forwards toolbar accent toggle changes", () => {
@@ -194,7 +215,7 @@ describe("SettingsView", () => {
     const onToolbarAccentChange = vi.fn();
     renderSettingsView({
       accentToolbarButtons: true,
-      toolbarAccent: "teal",
+      toolbarAccent: "#2cb5a0",
       onAccentToolbarButtonsChange,
       onToolbarAccentChange,
     });
@@ -205,8 +226,41 @@ describe("SettingsView", () => {
     fireEvent.click(screen.getByLabelText("Toolbar accent Gold"));
     fireEvent.click(screen.getByLabelText("Accent toolbar buttons"));
 
-    expect(onToolbarAccentChange).toHaveBeenCalledWith("gold");
+    expect(onToolbarAccentChange).toHaveBeenCalledWith("#daa520");
     expect(onAccentToolbarButtonsChange).toHaveBeenCalledWith(false);
+  });
+
+  it("supports custom toolbar accent colors from the popover", () => {
+    const onToolbarAccentChange = vi.fn();
+    renderSettingsView({
+      accentToolbarButtons: true,
+      toolbarAccent: "#2cb5a0",
+      onToolbarAccentChange,
+    });
+
+    fireEvent.click(screen.getByLabelText("Toolbar accent Teal"));
+    fireEvent.click(screen.getByLabelText("Toolbar accent Custom"));
+    expect(screen.queryByText("Custom color")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Toolbar accent Custom value"), {
+      target: { value: "#123456" },
+    });
+
+    expect(onToolbarAccentChange).toHaveBeenCalledWith("#123456");
+    expect(screen.getByRole("dialog", { name: "Toolbar accent options" })).toBeInTheDocument();
+  });
+
+  it("closes the toolbar accent popover on outside click", () => {
+    renderSettingsView({
+      accentToolbarButtons: true,
+      toolbarAccent: "#2cb5a0",
+    });
+
+    fireEvent.click(screen.getByLabelText("Toolbar accent Teal"));
+    expect(screen.getByRole("dialog", { name: "Toolbar accent options" })).toBeInTheDocument();
+
+    fireEvent.pointerDown(document.body);
+
+    expect(screen.queryByRole("dialog", { name: "Toolbar accent options" })).not.toBeInTheDocument();
   });
 
   it("forwards favorite accent preference changes", () => {
@@ -216,7 +270,7 @@ describe("SettingsView", () => {
     renderSettingsView({
       accentFavoriteItems: true,
       accentFavoriteText: false,
-      favoriteAccent: "coral",
+      favoriteAccent: "#e8806a",
       onAccentFavoriteItemsChange,
       onAccentFavoriteTextChange,
       onFavoriteAccentChange,
@@ -229,13 +283,13 @@ describe("SettingsView", () => {
     expect(favoriteAccentDialog.parentElement).toBe(document.body);
     expect(favoriteAccentDialog).toHaveStyle({ position: "fixed", zIndex: "1000" });
     expect(favoriteAccentDialog.firstElementChild).toHaveStyle({
-      gridTemplateColumns: "repeat(6, 28px)",
+      gridTemplateColumns: "repeat(8, 28px)",
     });
     fireEvent.click(screen.getByLabelText("Favorite accent Teal"));
 
     expect(onAccentFavoriteItemsChange).toHaveBeenCalledWith(false);
     expect(onAccentFavoriteTextChange).toHaveBeenCalledWith(true);
-    expect(onFavoriteAccentChange).toHaveBeenCalledWith("teal");
+    expect(onFavoriteAccentChange).toHaveBeenCalledWith("#2cb5a0");
   });
 
   it("renders the icon theme picker with 4 theme cards", () => {

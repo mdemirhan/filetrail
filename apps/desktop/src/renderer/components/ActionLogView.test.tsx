@@ -87,7 +87,7 @@ describe("ActionLogView", () => {
         loading={false}
         error={null}
         theme="dark"
-        accent="gold"
+        accent="#daa520"
         onCopyEntryText={() => undefined}
         onRefresh={() => undefined}
       />,
@@ -104,7 +104,7 @@ describe("ActionLogView", () => {
         loading={false}
         error={null}
         theme="dark"
-        accent="gold"
+        accent="#daa520"
         onCopyEntryText={() => undefined}
         onRefresh={() => undefined}
       />,
@@ -128,7 +128,7 @@ describe("ActionLogView", () => {
         loading={false}
         error={null}
         theme="dark"
-        accent="gold"
+        accent="#daa520"
         onCopyEntryText={() => undefined}
         onRefresh={() => undefined}
       />,
@@ -171,7 +171,7 @@ describe("ActionLogView", () => {
         loading={false}
         error={null}
         theme="dark"
-        accent="gold"
+        accent="#daa520"
         onCopyEntryText={() => undefined}
         onRefresh={() => undefined}
       />,
@@ -196,7 +196,7 @@ describe("ActionLogView", () => {
         loading={false}
         error={null}
         theme="dark"
-        accent="gold"
+        accent="#daa520"
         onCopyEntryText={handleCopy}
         onRefresh={() => undefined}
       />,
@@ -280,7 +280,7 @@ describe("ActionLogView", () => {
         loading={false}
         error={null}
         theme="dark"
-        accent="gold"
+        accent="#daa520"
         onCopyEntryText={() => undefined}
         onRefresh={() => undefined}
       />,

@@ -14,12 +14,12 @@ describe("appStateStore", () => {
     expect(store.getPreferences()).toEqual({
       theme: "tomorrow-night",
       iconTheme: "classic",
-      accent: "copper",
+      accent: "#d4845a",
       accentToolbarButtons: false,
-      toolbarAccent: "copper",
+      toolbarAccent: "#d4845a",
       accentFavoriteItems: true,
       accentFavoriteText: false,
-      favoriteAccent: "sky",
+      favoriteAccent: "#58b9e8",
       zoomPercent: 100,
       uiFontFamily: "lexend",
       uiFontSize: 13,
@@ -115,12 +115,12 @@ describe("appStateStore", () => {
     store.updatePreferences({
       theme: "dark",
       iconTheme: "colorblock",
-      accent: "teal",
+      accent: "#2cb5a0",
       accentToolbarButtons: false,
-      toolbarAccent: "gold",
+      toolbarAccent: "#daa520",
       accentFavoriteItems: true,
       accentFavoriteText: true,
-      favoriteAccent: "coral",
+      favoriteAccent: "#e8806a",
       zoomPercent: 115,
       uiFontFamily: "lexend",
       uiFontSize: 14,
@@ -211,12 +211,12 @@ describe("appStateStore", () => {
     expect(reloaded.getPreferences()).toEqual({
       theme: "dark",
       iconTheme: "colorblock",
-      accent: "teal",
+      accent: "#2cb5a0",
       accentToolbarButtons: false,
-      toolbarAccent: "gold",
+      toolbarAccent: "#daa520",
       accentFavoriteItems: true,
       accentFavoriteText: true,
-      favoriteAccent: "coral",
+      favoriteAccent: "#e8806a",
       zoomPercent: 115,
       uiFontFamily: "lexend",
       uiFontSize: 14,
@@ -360,16 +360,16 @@ describe("appStateStore", () => {
     const reloaded = createAppStateStore(filePath, {
       defaultTheme: "dark",
     });
-    expect(reloaded.getPreferences().accent).toBe("copper");
+    expect(reloaded.getPreferences().accent).toBe("#d4845a");
     expect(reloaded.getPreferences().accentToolbarButtons).toBe(false);
-    expect(reloaded.getPreferences().toolbarAccent).toBe("copper");
+    expect(reloaded.getPreferences().toolbarAccent).toBe("#d4845a");
     expect(reloaded.getPreferences().accentFavoriteItems).toBe(true);
     expect(reloaded.getPreferences().accentFavoriteText).toBe(false);
-    expect(reloaded.getPreferences().favoriteAccent).toBe("sky");
+    expect(reloaded.getPreferences().favoriteAccent).toBe("#58b9e8");
     expect(reloaded.getPreferences().zoomPercent).toBe(150);
     expect(reloaded.getPreferences().treeWidth).toBe(220);
     expect(reloaded.getPreferences().inspectorWidth).toBe(480);
-    expect(reloaded.getPreferences().accent).toBe("copper");
+    expect(reloaded.getPreferences().accent).toBe("#d4845a");
     expect(reloaded.getPreferences().uiFontFamily).toBe("lexend");
     expect(reloaded.getPreferences().uiFontSize).toBe(15);
     expect(reloaded.getPreferences().uiFontWeight).toBe(500);

@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 
 import {
-  ACCENT_OPTIONS,
   type AccentMode,
+  DEFAULT_APP_PREFERENCES,
   type ThemeMode,
   getThemeLabel,
+  normalizeAccentColor,
 } from "../../shared/appPreferences";
 import { generateAccentTokens } from "../lib/accent";
 import { type ThemeCssBase, getThemeVariant, resolveThemeCssBase } from "../lib/themeVariants";
@@ -705,16 +706,15 @@ function resolveThemeMode(theme: ThemeMode | undefined): ThemeMode {
 
 function resolveAccentMode(accent: AccentMode | undefined): AccentMode {
   if (accent) {
-    return accent;
+    return normalizeAccentColor(accent) ?? DEFAULT_APP_PREFERENCES.accent;
   }
   if (typeof document !== "undefined") {
     const documentAccent = document.documentElement.dataset.accent as AccentMode | undefined;
-    const resolvedDocumentAccent = ACCENT_OPTIONS.find((option) => option.value === documentAccent);
-    if (resolvedDocumentAccent) {
-      return resolvedDocumentAccent.value;
+    if (documentAccent) {
+      return normalizeAccentColor(documentAccent) ?? DEFAULT_APP_PREFERENCES.accent;
     }
   }
-  return "gold";
+  return DEFAULT_APP_PREFERENCES.accent;
 }
 
 function isPresent<T>(value: T | undefined): value is T {

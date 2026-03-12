@@ -25,6 +25,7 @@ import {
   ICON_THEME_OPTIONS,
   clampOpenItemLimit,
   clampZoomPercent,
+  normalizeAccentColor,
 } from "../../shared/appPreferences";
 import { generateAccentTokens } from "../lib/accent";
 import { getFavoriteLabel } from "../lib/favorites";
@@ -933,16 +934,109 @@ function AccentSelector({
   onChange: (value: AccentMode) => void;
 }) {
   const selected = accentOptions.find((option) => option.value === accent);
+  const isCustom = !selected;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const popupRef = useRef<HTMLDialogElement | null>(null);
+  const inlineCustomInputRef = useRef<HTMLInputElement | null>(null);
+  const popupCustomInputRef = useRef<HTMLInputElement | null>(null);
   const [open, setOpen] = useState(false);
   const [popupPosition, setPopupPosition] = useState({ left: 0, top: 0 });
 
-  const popupColumns = 6;
+  const popupColumns = 8;
   const popupWidth = 20 + popupColumns * 28 + (popupColumns - 1) * 8;
-  const popupRows = Math.ceil(accentOptions.length / popupColumns);
+  const popupRows = Math.ceil((accentOptions.length + 1) / popupColumns);
   const popupHeight = 20 + popupRows * 28 + (popupRows - 1) * 8;
+
+  const customButtonShadow = `conic-gradient(from 210deg, #d84a4a, #f0b236, #23c7d9, #9580ff, #e8729a, #d84a4a)`;
+  const customPickerValue =
+    normalizeAccentColor(accent) ?? selected?.primary ?? accentOptions[0]?.value ?? "#d4845a";
+
+  const openColorPicker = useCallback((input: HTMLInputElement | null) => {
+    if (!input) {
+      return;
+    }
+    if (typeof input.showPicker === "function") {
+      input.showPicker();
+      return;
+    }
+    input.click();
+  }, []);
+
+  const renderCustomSwatch = ({
+    inputRef,
+    closeOnChange = false,
+  }: {
+    inputRef: { current: HTMLInputElement | null };
+    closeOnChange?: boolean;
+  }) => {
+    const active = isCustom;
+    return (
+      <button
+        type="button"
+        aria-label={`${labelPrefix} Custom`}
+        aria-pressed={active}
+        disabled={disabled}
+        onClick={() => openColorPicker(inputRef.current)}
+        style={{
+          width: "28px",
+          height: "28px",
+          borderRadius: "999px",
+          border: "none",
+          background: customButtonShadow,
+          boxShadow: active
+            ? `0 0 0 2px ${theme.card.bg}, 0 0 0 4px ${theme.accent.focusBorder}`
+            : `inset 0 0 0 1px ${theme.color.swatchBorder}`,
+          cursor: disabled ? "default" : "pointer",
+          transition: "box-shadow 0.14s ease, border-color 0.14s ease, transform 0.14s ease",
+          opacity: disabled ? 0.5 : 1,
+          outline: "none",
+          padding: active ? "3px" : 0,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          position: "relative",
+          overflow: "hidden",
+        }}
+      >
+        {active ? (
+          <span
+            aria-hidden="true"
+            style={{
+              width: "100%",
+              height: "100%",
+              borderRadius: "999px",
+              background: customPickerValue,
+              boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.18)",
+            }}
+          />
+        ) : null}
+        <input
+          ref={inputRef}
+          type="color"
+          aria-label={`${labelPrefix} Custom value`}
+          value={customPickerValue}
+          disabled={disabled}
+          onChange={(event) => {
+            const next = normalizeAccentColor(event.currentTarget.value);
+            if (!next) {
+              return;
+            }
+            onChange(next);
+            if (closeOnChange) {
+              setOpen(false);
+            }
+          }}
+          style={{
+            position: "absolute",
+            inset: 0,
+            opacity: 0,
+            pointerEvents: "none",
+          }}
+        />
+      </button>
+    );
+  };
 
   const updatePopupPosition = useCallback(() => {
     const trigger = triggerRef.current;
@@ -1001,7 +1095,14 @@ function AccentSelector({
   if (mode === "inline") {
     return (
       <div style={{ display: "grid", gap: "8px", width: "100%" }}>
-        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(8, 28px)",
+            gridAutoRows: "28px",
+            gap: "8px",
+          }}
+        >
           {accentOptions.map((option) => {
             const active = option.value === accent;
             return (
@@ -1030,6 +1131,7 @@ function AccentSelector({
               />
             );
           })}
+          {renderCustomSwatch({ inputRef: inlineCustomInputRef })}
         </div>
         {showSelectedLabel ? (
           <span
@@ -1040,7 +1142,7 @@ function AccentSelector({
               color: theme.label.secondary,
             }}
           >
-            {selected?.label ?? accent}
+            {selected?.label ?? "Custom"}
           </span>
         ) : null}
       </div>
@@ -1055,7 +1157,7 @@ function AccentSelector({
       <button
         ref={triggerRef}
         type="button"
-        aria-label={`${labelPrefix} ${selected?.label ?? accent}`}
+        aria-label={`${labelPrefix} ${selected?.label ?? "Custom"}`}
         aria-haspopup="dialog"
         aria-expanded={open}
         disabled={disabled}
@@ -1069,8 +1171,8 @@ function AccentSelector({
           width: "30px",
           height: "30px",
           borderRadius: "999px",
-          border: `1px solid ${selected ? theme.accent.border : theme.color.swatchBorder}`,
-          background: selected?.primary ?? theme.input.bg,
+          border: `1px solid ${selected || isCustom ? theme.accent.border : theme.color.swatchBorder}`,
+          background: selected?.primary ?? customPickerValue,
           boxShadow: `0 0 0 2px ${theme.card.bg}, 0 0 0 4px ${
             open ? theme.accent.focusBorder : "transparent"
           }`,
@@ -1089,7 +1191,7 @@ function AccentSelector({
             color: theme.label.secondary,
           }}
         >
-          {selected?.label ?? accent}
+          {selected?.label ?? "Custom"}
         </span>
       ) : null}
       {open && !disabled
@@ -1100,7 +1202,6 @@ function AccentSelector({
               aria-label={`${labelPrefix} options`}
               onCancel={(event) => {
                 event.preventDefault();
-                setOpen(false);
               }}
               style={{
                 position: "fixed",
@@ -1120,7 +1221,7 @@ function AccentSelector({
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(6, 28px)",
+                  gridTemplateColumns: "repeat(8, 28px)",
                   gridAutoRows: "28px",
                   gap: "8px",
                   justifyContent: "start",
@@ -1155,6 +1256,7 @@ function AccentSelector({
                     />
                   );
                 })}
+                {renderCustomSwatch({ inputRef: popupCustomInputRef })}
               </div>
             </dialog>,
             document.body,
@@ -1285,7 +1387,6 @@ function FavoriteIconPicker({
               aria-label={`${ariaLabel} options`}
               onCancel={(event) => {
                 event.preventDefault();
-                setOpen(false);
               }}
               style={{
                 position: "fixed",
@@ -2085,7 +2186,7 @@ export function SettingsView({
             title="Accent color"
             theme={palette}
             right={
-              <div style={{ width: "228px", maxWidth: "100%" }}>
+              <div style={{ width: "280px", maxWidth: "100%" }}>
                 <AccentSelector
                   accent={accent}
                   accentOptions={accentOptions}

@@ -2,7 +2,6 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import {
-  ACCENT_OPTIONS,
   type AppPreferences,
   type ApplicationSelection,
   DEFAULT_APP_PREFERENCES,
@@ -29,6 +28,7 @@ import {
   clampPaneWidth,
   clampTypeaheadDebounceMs,
   clampZoomPercent,
+  normalizeAccentColor,
 } from "../shared/appPreferences";
 
 export type StoredWindowState = {
@@ -249,18 +249,16 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
         ? (record.iconTheme as AppPreferences["iconTheme"])
         : currentDefaults.iconTheme,
     accent:
-      typeof record.accent === "string" &&
-      ACCENT_OPTIONS.some((option) => option.value === record.accent)
-        ? (record.accent as AppPreferences["accent"])
+      typeof record.accent === "string"
+        ? (normalizeAccentColor(record.accent) ?? currentDefaults.accent)
         : currentDefaults.accent,
     accentToolbarButtons:
       typeof record.accentToolbarButtons === "boolean"
         ? record.accentToolbarButtons
         : currentDefaults.accentToolbarButtons,
     toolbarAccent:
-      typeof record.toolbarAccent === "string" &&
-      ACCENT_OPTIONS.some((option) => option.value === record.toolbarAccent)
-        ? (record.toolbarAccent as AppPreferences["toolbarAccent"])
+      typeof record.toolbarAccent === "string"
+        ? (normalizeAccentColor(record.toolbarAccent) ?? currentDefaults.toolbarAccent)
         : currentDefaults.toolbarAccent,
     accentFavoriteItems:
       typeof record.accentFavoriteItems === "boolean"
@@ -271,9 +269,8 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
         ? record.accentFavoriteText
         : currentDefaults.accentFavoriteText,
     favoriteAccent:
-      typeof record.favoriteAccent === "string" &&
-      ACCENT_OPTIONS.some((option) => option.value === record.favoriteAccent)
-        ? (record.favoriteAccent as AppPreferences["favoriteAccent"])
+      typeof record.favoriteAccent === "string"
+        ? (normalizeAccentColor(record.favoriteAccent) ?? currentDefaults.favoriteAccent)
         : currentDefaults.favoriteAccent,
     zoomPercent: clampZoomPercent(
       typeof record.zoomPercent === "number" ? record.zoomPercent : currentDefaults.zoomPercent,

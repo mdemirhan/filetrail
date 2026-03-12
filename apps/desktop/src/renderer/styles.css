@@ -4854,7 +4854,7 @@ body.resizing-panels-vertical * {
 }
 
 .file-icon.document.app {
-  color: var(--accent-blue);
+  color: #3b82f6;
 }
 
 .file-icon.document.generic .file-icon-document-fill,
@@ -4897,8 +4897,8 @@ body.resizing-panels-vertical * {
 
 .file-icon.document.app .file-icon-document-fill,
 .file-icon.document.app .file-icon-document-fold {
-  stroke: var(--accent-blue);
-  fill: color-mix(in srgb, var(--accent-blue) 10%, transparent);
+  stroke: #3b82f6;
+  fill: rgba(59, 130, 246, 0.1);
 }
 
 .file-icon.document.web {

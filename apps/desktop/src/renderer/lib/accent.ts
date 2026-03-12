@@ -1,5 +1,5 @@
 import { ACCENT_OPTIONS, type AccentMode, type ThemeMode } from "../../shared/appPreferences";
-import { withAlpha } from "./colorUtils";
+import { darkenHex, withAlpha } from "./colorUtils";
 import { type ThemeCssBase, resolveThemeCssBase } from "./themeVariants";
 
 type AccentThemeProfile = {
@@ -144,12 +144,16 @@ const ACCENT_THEME_PROFILES: Record<ThemeCssBase, AccentThemeProfile> = {
   },
 };
 
-const ACCENT_PALETTES = Object.fromEntries(
-  ACCENT_OPTIONS.map((accent) => [accent.value, accent]),
-) as Record<AccentMode, (typeof ACCENT_OPTIONS)[number]>;
-
 export function getAccentPalette(accent: AccentMode) {
-  return ACCENT_PALETTES[accent];
+  return (
+    ACCENT_OPTIONS.find((option) => option.value === accent) ?? {
+      id: "custom",
+      value: accent,
+      label: "Custom",
+      primary: accent,
+      dark: darkenHex(accent, 0.18),
+    }
+  );
 }
 
 export function generateAccentTokens(accent: AccentMode, theme: ThemeMode): AccentTokens {

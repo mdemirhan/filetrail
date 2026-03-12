@@ -23,12 +23,12 @@ describe("theme helpers", () => {
     applyAppearance({
       theme: "dark",
       iconTheme: "classic",
-      accent: "teal",
+      accent: "#2cb5a0",
       accentToolbarButtons: true,
-      toolbarAccent: "gold",
+      toolbarAccent: "#daa520",
       accentFavoriteItems: true,
       accentFavoriteText: true,
-      favoriteAccent: "coral",
+      favoriteAccent: "#e8806a",
       uiFontFamily: "lexend",
       uiFontSize: 14,
       uiFontWeight: 500,
@@ -40,9 +40,9 @@ describe("theme helpers", () => {
     expect(document.documentElement.dataset.theme).toBe("dark");
     expect(document.documentElement.dataset.themeVariant).toBe("dark");
     expect(document.documentElement.dataset.iconTheme).toBe("classic");
-    expect(document.documentElement.dataset.accent).toBe("teal");
-    expect(document.documentElement.dataset.toolbarAccent).toBe("gold");
-    expect(document.documentElement.dataset.favoriteAccent).toBe("coral");
+    expect(document.documentElement.dataset.accent).toBe("#2cb5a0");
+    expect(document.documentElement.dataset.toolbarAccent).toBe("#daa520");
+    expect(document.documentElement.dataset.favoriteAccent).toBe("#e8806a");
     expect(document.documentElement.dataset.accentFavoriteItems).toBe("true");
     expect(document.documentElement.dataset.accentFavoriteText).toBe("true");
     expect(document.documentElement.style.getPropertyValue("--font-sans")).toContain("Lexend");
@@ -79,12 +79,12 @@ describe("theme helpers", () => {
     applyAppearance({
       theme: "dark",
       iconTheme: "classic",
-      accent: "rose",
+      accent: "#e8729a",
       accentToolbarButtons: false,
-      toolbarAccent: "gold",
+      toolbarAccent: "#daa520",
       accentFavoriteItems: false,
       accentFavoriteText: true,
-      favoriteAccent: "gold",
+      favoriteAccent: "#daa520",
       uiFontFamily: "lexend",
       uiFontSize: 13,
       uiFontWeight: 500,
@@ -108,12 +108,12 @@ describe("theme helpers", () => {
     applyAppearance({
       theme: "obsidian",
       iconTheme: "classic",
-      accent: "gold",
+      accent: "#daa520",
       accentToolbarButtons: false,
-      toolbarAccent: "gold",
+      toolbarAccent: "#daa520",
       accentFavoriteItems: false,
       accentFavoriteText: false,
-      favoriteAccent: "gold",
+      favoriteAccent: "#daa520",
       uiFontFamily: "lexend",
       uiFontSize: 13,
       uiFontWeight: 500,
@@ -149,12 +149,12 @@ describe("theme helpers", () => {
         applyAppearance({
           theme: "dark",
           iconTheme: "classic",
-          accent: "gold",
+          accent: "#daa520",
           accentToolbarButtons: false,
-          toolbarAccent: "gold",
+          toolbarAccent: "#daa520",
           accentFavoriteItems: false,
           accentFavoriteText: false,
-          favoriteAccent: "gold",
+          favoriteAccent: "#daa520",
           uiFontFamily: "lexend",
           uiFontSize: 13,
           uiFontWeight: 500,

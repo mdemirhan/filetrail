@@ -5,7 +5,7 @@ import type { IpcHandlerMap } from "./ipc";
 const TEST_PREFERENCES = {
   ...DEFAULT_APP_PREFERENCES,
   theme: "tomorrow-night" as const,
-  accent: "gold" as const,
+  accent: "#daa520" as const,
   uiFontFamily: "lexend" as const,
   uiFontWeight: 500 as const,
   searchPatternMode: "regex" as const,

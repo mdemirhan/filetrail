@@ -7,9 +7,10 @@ import {
 } from "./accent";
 
 describe("accent helpers", () => {
-  it("looks up palettes by persisted accent id", () => {
-    expect(getAccentPalette("teal")).toEqual({
-      value: "teal",
+  it("looks up palettes by persisted accent color", () => {
+    expect(getAccentPalette("#2cb5a0")).toEqual({
+      id: "teal",
+      value: "#2cb5a0",
       label: "Teal",
       primary: "#2cb5a0",
       dark: "#1e9a87",
@@ -17,11 +18,11 @@ describe("accent helpers", () => {
   });
 
   it("generates light and dark accent tokens from the selected theme base", () => {
-    const lightTokens = generateAccentTokens("teal", "light");
-    const variantTokens = generateAccentTokens("teal", "obsidian");
+    const lightTokens = generateAccentTokens("#2cb5a0", "light");
+    const variantTokens = generateAccentTokens("#2cb5a0", "obsidian");
 
     expect(lightTokens).toMatchObject({
-      id: "teal",
+      id: "#2cb5a0",
       name: "Teal",
       primary: "#2cb5a0",
       solidDark: "#1e9a87",
@@ -39,7 +40,7 @@ describe("accent helpers", () => {
   });
 
   it("maps accent tokens into CSS variable groups for shared and toolbar styling", () => {
-    const tokens = generateAccentTokens("rose", "tomorrow-night");
+    const tokens = generateAccentTokens("#e8729a", "tomorrow-night");
 
     expect(accentTokensToCssVariables(tokens)).toMatchObject({
       "--accent": "#e8729a",
