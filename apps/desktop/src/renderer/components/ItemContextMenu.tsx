@@ -203,20 +203,28 @@ function ContextMenuIcon({ name }: { name: ContextMenuIconName }) {
       </svg>
     );
   }
-  if (name === "edit") {
-    return (
-      <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M12 20h9" />
-        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z" />
-      </svg>
-    );
-  }
   if (name === "showInfo") {
     return (
       <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
         <circle cx="12" cy="12" r="10" />
         <line x1="12" y1="16" x2="12" y2="12" />
         <line x1="12" y1="8" x2="12.01" y2="8" />
+      </svg>
+    );
+  }
+  if (name === "favorite") {
+    return (
+      <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="m12 17.27-5.18 3.05 1.39-5.88L3 9.97l6.01-.5L12 4l2.99 5.47 6.01.5-5.21 4.47 1.39 5.88Z" />
+      </svg>
+    );
+  }
+  /* Icons below are converged with toolbar (same SVG in both surfaces) */
+  if (name === "edit") {
+    return (
+      <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z" />
       </svg>
     );
   }
@@ -241,16 +249,14 @@ function ContextMenuIcon({ name }: { name: ContextMenuIconName }) {
   if (name === "paste") {
     return (
       <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-2" />
-        <path d="M9 4h5l1 2H8l1-2z" />
-        <rect x="4" y="8" width="10" height="12" rx="2" ry="2" />
+        <path d="M9 4h6M10 2h4a1 1 0 0 1 1 1v2H9V3a1 1 0 0 1 1-1m-3 4h10a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2m3 5h6m-6 4h6" />
       </svg>
     );
   }
   if (name === "move") {
     return (
       <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M5 12h14M12 5l7 7-7 7" />
+        <path d="M3 12h8M8 9l3 3-3 3M14 8h6l2 2v8a2 2 0 0 1-2 2h-8a2 2 0 0 1-2-2v-2" />
       </svg>
     );
   }
@@ -278,18 +284,10 @@ function ContextMenuIcon({ name }: { name: ContextMenuIconName }) {
       </svg>
     );
   }
-  if (name === "favorite") {
-    return (
-      <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="m12 17.27-5.18 3.05 1.39-5.88L3 9.97l6.01-.5L12 4l2.99 5.47 6.01.5-5.21 4.47 1.39 5.88Z" />
-      </svg>
-    );
-  }
   if (name === "terminal") {
     return (
       <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-        <polyline points="4 17 10 11 4 5" />
-        <line x1="12" y1="19" x2="20" y2="19" />
+        <path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m3 4l3 3-3 3m5 2h4" />
       </svg>
     );
   }
@@ -301,10 +299,10 @@ function ContextMenuIcon({ name }: { name: ContextMenuIconName }) {
       </svg>
     );
   }
+  // trash (default fallback) — converged with toolbar
   return (
     <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-      <polyline points="3 6 5 6 21 6" />
-      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <path d="M8 6h8M10 6V4h4v2M6 6h12l-1 13a2 2 0 0 1-2 1.85H9A2 2 0 0 1 7 19L6 6M10 10v6M14 10v6" />
     </svg>
   );
 }

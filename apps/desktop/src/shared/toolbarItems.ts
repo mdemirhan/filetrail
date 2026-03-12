@@ -39,6 +39,8 @@ export type ToolbarIconName =
   | "duplicate"
   | "newFolder"
   | "terminal"
+  | "copyPath"
+  | "rename"
   | "separatorVertical"
   | "separatorHorizontal";
 
@@ -332,7 +334,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
   {
     id: "renameSelection",
     label: "Rename",
-    icon: "edit",
+    icon: "rename",
     kind: "button",
     surfaces: ["top", "left"],
     commandType: "renameSelection",
@@ -404,7 +406,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
   {
     id: "copyPath",
     label: "Copy Path",
-    icon: "copy",
+    icon: "copyPath",
     kind: "button",
     surfaces: ["top", "left"],
     commandType: "copyPath",

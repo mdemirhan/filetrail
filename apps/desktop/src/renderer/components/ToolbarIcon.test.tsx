@@ -35,6 +35,14 @@ const ICON_NAMES = [
   "foldersFirst",
   "actionLog",
   "copy",
+  "cut",
+  "paste",
+  "move",
+  "duplicate",
+  "newFolder",
+  "terminal",
+  "copyPath",
+  "rename",
   "clear",
   "stop",
 ] as const;
@@ -67,8 +75,27 @@ describe("ToolbarIcon", () => {
     expect(container.querySelector("rect")).not.toBeNull();
   });
 
-  it("falls back to the generic arrow path for the open icon", () => {
+  it("renders the external-open icon for the open action", () => {
     const { container } = render(<ToolbarIcon name="open" />);
-    expect(container.querySelector("path")).toHaveAttribute("d", "M5 12h14M12 5l7 7-7 7");
+    expect(container.querySelector("path")).toHaveAttribute(
+      "d",
+      "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3",
+    );
+  });
+
+  it("renders distinct icons for copy vs copyPath", () => {
+    const { container: copyContainer } = render(<ToolbarIcon name="copy" />);
+    const { container: copyPathContainer } = render(<ToolbarIcon name="copyPath" />);
+    const copySvg = copyContainer.querySelector("svg")!.innerHTML;
+    const copyPathSvg = copyPathContainer.querySelector("svg")!.innerHTML;
+    expect(copySvg).not.toBe(copyPathSvg);
+  });
+
+  it("renders distinct icons for edit vs rename", () => {
+    const { container: editContainer } = render(<ToolbarIcon name="edit" />);
+    const { container: renameContainer } = render(<ToolbarIcon name="rename" />);
+    const editSvg = editContainer.querySelector("svg")!.innerHTML;
+    const renameSvg = renameContainer.querySelector("svg")!.innerHTML;
+    expect(editSvg).not.toBe(renameSvg);
   });
 });
