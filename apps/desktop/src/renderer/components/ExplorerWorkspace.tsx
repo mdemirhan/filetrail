@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -7,6 +8,7 @@ import {
   type MutableRefObject,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
+import { createPortal } from "react-dom";
 
 import type { IpcRequest } from "@filetrail/contracts";
 
@@ -30,6 +32,19 @@ const TOP_TOOLBAR_ITEM_GAP_PX = 4;
 
 function formatToolbarTooltip(label: string, shortcutLabel?: string) {
   return shortcutLabel ? `${label} (${shortcutLabel})` : label;
+}
+
+function getSortByLabel(sortBy: SortBy) {
+  if (sortBy === "size") {
+    return "Size";
+  }
+  if (sortBy === "modified") {
+    return "Date Modified";
+  }
+  if (sortBy === "kind") {
+    return "Kind";
+  }
+  return "Name";
 }
 
 export function resolveVisibleTopToolbarCount(
@@ -177,6 +192,8 @@ export function ExplorerWorkspace({
 }) {
   const titlebarActionsMainRef = useRef<HTMLDivElement | null>(null);
   const titlebarActionsMeasureRef = useRef<HTMLDivElement | null>(null);
+  const sortMenuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const sortMenuRef = useRef<HTMLDivElement | null>(null);
   const baseTopToolbarItems = useMemo(
     () =>
       topToolbarItems.filter(
@@ -187,6 +204,11 @@ export function ExplorerWorkspace({
     [explorerToolbarLayout, topToolbarItems],
   );
   const [visibleTopToolbarCount, setVisibleTopToolbarCount] = useState(baseTopToolbarItems.length);
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const [sortMenuViewportPosition, setSortMenuViewportPosition] = useState<{
+    left: number;
+    top: number;
+  } | null>(null);
 
   useLayoutEffect(() => {
     const mainContainer = titlebarActionsMainRef.current;
@@ -214,6 +236,63 @@ export function ExplorerWorkspace({
     };
   }, [baseTopToolbarItems]);
 
+  useLayoutEffect(() => {
+    if (!sortMenuOpen) {
+      setSortMenuViewportPosition(null);
+      return;
+    }
+    const updateSortMenuPosition = () => {
+      const button = sortMenuButtonRef.current;
+      if (!(button instanceof HTMLButtonElement)) {
+        return;
+      }
+      const rect = button.getBoundingClientRect();
+      const menuWidth = 164;
+      setSortMenuViewportPosition({
+        left: Math.max(12, Math.min(rect.left, window.innerWidth - menuWidth - 12)),
+        top: rect.bottom + 8,
+      });
+    };
+    updateSortMenuPosition();
+    window.addEventListener("resize", updateSortMenuPosition);
+    window.addEventListener("scroll", updateSortMenuPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateSortMenuPosition);
+      window.removeEventListener("scroll", updateSortMenuPosition, true);
+    };
+  }, [sortMenuOpen]);
+
+  useEffect(() => {
+    if (!sortMenuOpen) {
+      return;
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+      if (sortMenuRef.current?.contains(target) || sortMenuButtonRef.current?.contains(target)) {
+        return;
+      }
+      setSortMenuOpen(false);
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSortMenuOpen(false);
+      }
+    };
+    window.addEventListener("pointerdown", handlePointerDown, true);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown, true);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [sortMenuOpen]);
+
+  useEffect(() => {
+    setSortMenuOpen(false);
+  }, [visibleTopToolbarCount, explorerToolbarLayout]);
+
   const visibleTopToolbarItems = useMemo(
     () => normalizeTopToolbarItems(baseTopToolbarItems.slice(0, visibleTopToolbarCount)),
     [baseTopToolbarItems, visibleTopToolbarCount],
@@ -223,7 +302,7 @@ export function ExplorerWorkspace({
     return formatToolbarTooltip(labelOverride ?? definition.label, definition.shortcutLabel);
   };
 
-  function renderTopToolbarItem(itemId: ToolbarItemId) {
+  function renderTopToolbarItem(itemId: ToolbarItemId, mode: "interactive" | "measure" = "interactive") {
     if (itemId === "topSeparator") {
       return <div key={itemId} className="titlebar-divider" role="separator" aria-orientation="vertical" />;
     }
@@ -315,6 +394,40 @@ export function ExplorerWorkspace({
       );
     }
     if (itemId === "sort") {
+      const sortLabel = getSortByLabel(sortBy);
+      const sortMenu =
+        mode === "interactive" && sortMenuOpen && sortMenuViewportPosition
+          ? createPortal(
+              <div
+                ref={sortMenuRef}
+                className="toolbar-sort-menu"
+                role="menu"
+                style={{
+                  position: "fixed",
+                  left: `${sortMenuViewportPosition.left}px`,
+                  top: `${sortMenuViewportPosition.top}px`,
+                }}
+              >
+                {(["name", "size", "modified", "kind"] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={`toolbar-sort-menu-item${sortBy === value ? " active" : ""}`}
+                    onClick={() => {
+                      onSortChange(value);
+                      setSortMenuOpen(false);
+                    }}
+                    role="menuitemradio"
+                    aria-checked={sortBy === value}
+                  >
+                    <span>{getSortByLabel(value)}</span>
+                    {sortBy === value ? <span className="toolbar-sort-menu-check">✓</span> : null}
+                  </button>
+                ))}
+              </div>,
+              document.body,
+            )
+          : null;
       return (
         <div key={itemId} className="toolbar-group">
           <fieldset className="toolbar-select-group">
@@ -322,25 +435,33 @@ export function ExplorerWorkspace({
             <button
               type="button"
               className="tb-btn tb-btn-icon"
-              onClick={() => onSortChange(sortBy)}
+              onClick={mode === "interactive" ? () => onSortChange(sortBy) : undefined}
+              tabIndex={mode === "interactive" ? undefined : -1}
               title={sortDirection === "asc" ? "Ascending sort" : "Descending sort"}
               aria-label={sortDirection === "asc" ? "Ascending sort" : "Descending sort"}
             >
               <ToolbarIcon name={sortDirection === "asc" ? "sortAsc" : "sortDesc"} />
             </button>
-            <select
-              className="toolbar-select"
-              value={sortBy}
-              onChange={(event) => onSortChange(event.currentTarget.value as SortBy)}
-              title="Sort by"
-              aria-label="Sort by"
-            >
-              <option value="name">Name</option>
-              <option value="size">Size</option>
-              <option value="modified">Date Modified</option>
-              <option value="kind">Kind</option>
-            </select>
+            {mode === "interactive" ? (
+              <button
+                ref={sortMenuButtonRef}
+                type="button"
+                className={`toolbar-select toolbar-sort-trigger${sortMenuOpen ? " open" : ""}`}
+                onClick={() => setSortMenuOpen((value) => !value)}
+                title="Sort by"
+                aria-label="Sort by"
+                aria-haspopup="menu"
+                aria-expanded={sortMenuOpen}
+              >
+                {sortLabel}
+              </button>
+            ) : (
+              <div className="toolbar-select toolbar-select-static" aria-hidden="true">
+                {sortLabel}
+              </div>
+            )}
           </fieldset>
+          {sortMenu}
         </div>
       );
     }
@@ -621,6 +742,14 @@ export function ExplorerWorkspace({
     );
   }
 
+  function renderMeasuredTopToolbarActionItem(itemId: ToolbarItemId, key: string) {
+    return (
+      <div key={key} className="titlebar-action-item" data-top-toolbar-item={itemId}>
+        {renderTopToolbarItem(itemId, "measure")}
+      </div>
+    );
+  }
+
   return (
     <section className="workspace explorer-workspace">
       <header ref={toolbarRef} className="window-toolbar">
@@ -636,7 +765,7 @@ export function ExplorerWorkspace({
           {renderTopToolbarItem("search")}
           <div ref={titlebarActionsMeasureRef} className="titlebar-actions-measure" aria-hidden="true">
             {baseTopToolbarItems.map((itemId, index) =>
-              renderTopToolbarActionItem(itemId, `${itemId}-measure-${index}`),
+              renderMeasuredTopToolbarActionItem(itemId, `${itemId}-measure-${index}`),
             )}
           </div>
         </div>

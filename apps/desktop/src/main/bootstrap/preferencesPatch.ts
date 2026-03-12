@@ -55,6 +55,12 @@ export function toPreferencePatch(
   if (value.viewMode !== undefined) {
     patch.viewMode = value.viewMode;
   }
+  if (value.sortBy !== undefined) {
+    patch.sortBy = value.sortBy;
+  }
+  if (value.sortDirection !== undefined) {
+    patch.sortDirection = value.sortDirection;
+  }
   if (value.foldersFirst !== undefined) {
     patch.foldersFirst = value.foldersFirst;
   }

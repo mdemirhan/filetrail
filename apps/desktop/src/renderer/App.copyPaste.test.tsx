@@ -1374,6 +1374,34 @@ describe("App copy/paste integration", () => {
     });
   });
 
+  it("restores the saved explorer sort on startup", async () => {
+    const harness = createAppHarness({
+      preferences: {
+        restoreLastVisitedFolderOnStartup: true,
+        lastVisitedPath: "/Users/demo",
+        sortBy: "modified",
+        sortDirection: "desc",
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await screen.findByTestId("content-pane");
+
+    const startupSnapshotCall = harness.invocations.find(
+      (call) => call.channel === "directory:getSnapshot",
+    );
+    expect(startupSnapshotCall?.payload).toMatchObject({
+      path: "/Users/demo",
+      sortBy: "modified",
+      sortDirection: "desc",
+    });
+  });
+
   it("restores favorite tree selection when the remembered location is a favorite root", async () => {
     const harness = createAppHarness({
       preferences: {

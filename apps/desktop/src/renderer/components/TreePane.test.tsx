@@ -483,10 +483,21 @@ describe("TreePane", () => {
       favorites: [],
     });
 
+    const darkThemeButton = screen.getByRole("button", { name: /Dark/i });
+    expect(darkThemeButton.closest(".sidebar-rail-menu-portal")?.parentElement).toBe(document.body);
     expect(screen.getByRole("button", { name: /Dark/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Tomorrow Night/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Catppuccin Mocha/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Light/i })).toBeInTheDocument();
+  });
+
+  it("uses the rail theme button as a menu trigger", () => {
+    const handleToggleThemeMenu = vi.fn();
+    renderTreePane({ onToggleThemeMenu: handleToggleThemeMenu });
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose theme" }));
+
+    expect(handleToggleThemeMenu).toHaveBeenCalledTimes(1);
   });
 
   it("shows the transient typeahead query", () => {

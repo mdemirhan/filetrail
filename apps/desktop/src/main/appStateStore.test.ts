@@ -28,6 +28,8 @@ describe("appStateStore", () => {
       textSecondaryOverride: null,
       textMutedOverride: null,
       viewMode: "list",
+      sortBy: "name",
+      sortDirection: "asc",
       foldersFirst: true,
       compactListView: false,
       compactDetailsView: false,
@@ -158,6 +160,8 @@ describe("appStateStore", () => {
       textSecondaryOverride: "#cccccc",
       textMutedOverride: "#999999",
       viewMode: "details",
+      sortBy: "modified",
+      sortDirection: "desc",
       foldersFirst: false,
       compactListView: true,
       compactDetailsView: true,
@@ -259,6 +263,8 @@ describe("appStateStore", () => {
       textSecondaryOverride: "#cccccc",
       textMutedOverride: "#999999",
       viewMode: "details",
+      sortBy: "modified",
+      sortDirection: "desc",
       foldersFirst: false,
       compactListView: true,
       compactDetailsView: true,
@@ -354,6 +360,8 @@ describe("appStateStore", () => {
       accentFavoriteText: "nope" as never,
       favoriteAccent: "bad-accent" as never,
       zoomPercent: 999,
+      sortBy: "oops" as never,
+      sortDirection: "sideways" as never,
       topToolbarItems: ["back", "search", "search", "theme"] as never,
       leftToolbarItems: {
         main: ["home", "search", "copyPath"],
@@ -411,6 +419,8 @@ describe("appStateStore", () => {
     expect(reloaded.getPreferences().accentFavoriteText).toBe(false);
     expect(reloaded.getPreferences().favoriteAccent).toBe("#58b9e8");
     expect(reloaded.getPreferences().zoomPercent).toBe(150);
+    expect(reloaded.getPreferences().sortBy).toBe("name");
+    expect(reloaded.getPreferences().sortDirection).toBe("asc");
     expect(reloaded.getPreferences().topToolbarItems).toEqual(["back", "search"]);
     expect(reloaded.getPreferences().leftToolbarItems).toEqual({
       main: ["home", "copyPath"],

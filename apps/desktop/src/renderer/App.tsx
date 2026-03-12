@@ -1051,6 +1051,8 @@ export function App() {
         textSecondaryOverride,
         textMutedOverride,
         viewMode,
+        sortBy,
+        sortDirection,
         foldersFirst,
         compactListView,
         compactDetailsView,
@@ -1162,6 +1164,8 @@ export function App() {
     treeRootPath,
     uiFontWeight,
     viewMode,
+    sortBy,
+    sortDirection,
     fileActivationAction,
   ]);
 
@@ -1222,6 +1226,8 @@ export function App() {
         setLeftToolbarItems(preferences.leftToolbarItems);
         setInfoPanelOpen(preferences.propertiesOpen);
         setInfoRowOpen(preferences.detailRowOpen);
+        setSortBy(preferences.sortBy);
+        setSortDirection(preferences.sortDirection);
         setRestoreLastVisitedFolderOnStartup(preferences.restoreLastVisitedFolderOnStartup);
         setLastGoToFolderPath(preferences.lastGoToFolderPath);
         setFavorites(preferences.favorites);
@@ -1279,8 +1285,8 @@ export function App() {
           startupPath,
           "replace",
           preferences.includeHidden,
-          undefined,
-          undefined,
+          preferences.sortBy,
+          preferences.sortDirection,
           preferences.foldersFirst,
           restoredFavoritePath
             ? {
@@ -1300,8 +1306,8 @@ export function App() {
             homeResponse.path,
             "replace",
             preferences.includeHidden,
-            undefined,
-            undefined,
+            preferences.sortBy,
+            preferences.sortDirection,
             preferences.foldersFirst,
           ).finally(() => {
             if (!cancelled) {

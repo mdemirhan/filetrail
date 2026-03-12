@@ -68,6 +68,8 @@ describe("appPreferences helpers", () => {
       uiFontSize: 13,
       uiFontWeight: 500,
       viewMode: "list",
+      sortBy: "name",
+      sortDirection: "asc",
       foldersFirst: true,
       singleClickExpandTreeItems: false,
       highlightHoveredItems: false,

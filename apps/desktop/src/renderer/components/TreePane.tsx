@@ -4,10 +4,12 @@ import {
   type SetStateAction,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 
 import {
   type FavoritePreference,
@@ -273,6 +275,10 @@ export function TreePane({
   const [optimisticSelectedItemId, setOptimisticSelectedItemId] = useState<TreeItemId | null>(null);
   const [splitPaneHeight, setSplitPaneHeight] = useState(0);
   const [selectedRowRegistrationVersion, setSelectedRowRegistrationVersion] = useState(0);
+  const [themeMenuViewportPosition, setThemeMenuViewportPosition] = useState<{
+    left: number;
+    bottom: number;
+  } | null>(null);
   const getToolbarTooltip = (itemId: ToolbarItemId, labelOverride?: string) => {
     const definition = getToolbarItemDefinition(itemId);
     return formatToolbarTooltip(labelOverride ?? definition.label, definition.shortcutLabel);
@@ -313,6 +319,32 @@ export function TreePane({
       window.removeEventListener("resize", measureSplitPane);
     };
   }, []);
+
+  useLayoutEffect(() => {
+    if (!themeMenuOpen) {
+      setThemeMenuViewportPosition(null);
+      return;
+    }
+    const updateThemeMenuPosition = () => {
+      const button = themeButtonRef.current;
+      if (!(button instanceof HTMLButtonElement)) {
+        return;
+      }
+      const rect = button.getBoundingClientRect();
+      const menuWidth = 176;
+      setThemeMenuViewportPosition({
+        left: Math.max(12, Math.min(rect.right + 10, window.innerWidth - menuWidth - 12)),
+        bottom: Math.max(window.innerHeight - rect.bottom, 8),
+      });
+    };
+    updateThemeMenuPosition();
+    window.addEventListener("resize", updateThemeMenuPosition);
+    window.addEventListener("scroll", updateThemeMenuPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateThemeMenuPosition);
+      window.removeEventListener("scroll", updateThemeMenuPosition, true);
+    };
+  }, [themeButtonRef, themeMenuOpen]);
 
   useEffect(() => {
     if (!selectedTreeItemId) {
@@ -674,6 +706,42 @@ export function TreePane({
       );
     }
     if (itemId === "theme") {
+      const themeMenu =
+        themeMenuOpen && themeMenuViewportPosition
+          ? createPortal(
+              <div
+                ref={themeMenuRef}
+                className="sidebar-rail-menu sidebar-rail-menu-portal"
+                tabIndex={-1}
+                style={{
+                  position: "fixed",
+                  left: `${themeMenuViewportPosition.left}px`,
+                  bottom: `${themeMenuViewportPosition.bottom}px`,
+                }}
+              >
+                {THEME_GROUPS.map((group, groupIndex) => (
+                  <Fragment key={group.value}>
+                    {groupIndex > 0 ? <hr className="sidebar-rail-menu-separator" /> : null}
+                    {group.options.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={`sidebar-rail-menu-item${theme === option.value ? " active" : ""}`}
+                        onClick={() => onSelectTheme(option.value)}
+                        aria-pressed={theme === option.value}
+                      >
+                        <span>{option.label}</span>
+                        {theme === option.value ? (
+                          <span className="sidebar-rail-menu-check">✓</span>
+                        ) : null}
+                      </button>
+                    ))}
+                  </Fragment>
+                ))}
+              </div>,
+              document.body,
+            )
+          : null;
       return (
         <div key={itemId} className="sidebar-rail-menu-anchor">
           <button
@@ -688,29 +756,7 @@ export function TreePane({
           >
             <ToolbarIcon name="theme" />
           </button>
-          {themeMenuOpen ? (
-            <div ref={themeMenuRef} className="sidebar-rail-menu" tabIndex={-1}>
-              {THEME_GROUPS.map((group, groupIndex) => (
-                <Fragment key={group.value}>
-                  {groupIndex > 0 ? <hr className="sidebar-rail-menu-separator" /> : null}
-                  {group.options.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className={`sidebar-rail-menu-item${theme === option.value ? " active" : ""}`}
-                      onClick={() => onSelectTheme(option.value)}
-                      aria-pressed={theme === option.value}
-                    >
-                      <span>{option.label}</span>
-                      {theme === option.value ? (
-                        <span className="sidebar-rail-menu-check">✓</span>
-                      ) : null}
-                    </button>
-                  ))}
-                </Fragment>
-              ))}
-            </div>
-          ) : null}
+          {themeMenu}
         </div>
       );
     }

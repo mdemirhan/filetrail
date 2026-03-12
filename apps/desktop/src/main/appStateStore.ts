@@ -295,6 +295,17 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
     textSecondaryOverride: normalizeColorOverride(record.textSecondaryOverride),
     textMutedOverride: normalizeColorOverride(record.textMutedOverride),
     viewMode: record.viewMode === "details" ? "details" : "list",
+    sortBy:
+      record.sortBy === "modified" ||
+      record.sortBy === "kind" ||
+      record.sortBy === "size" ||
+      record.sortBy === "name"
+        ? record.sortBy
+        : currentDefaults.sortBy,
+    sortDirection:
+      record.sortDirection === "desc" || record.sortDirection === "asc"
+        ? record.sortDirection
+        : currentDefaults.sortDirection,
     foldersFirst:
       typeof record.foldersFirst === "boolean" ? record.foldersFirst : currentDefaults.foldersFirst,
     compactListView:

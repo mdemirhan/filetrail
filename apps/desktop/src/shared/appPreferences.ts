@@ -239,6 +239,8 @@ export type AppPreferences = {
   textSecondaryOverride: string | null;
   textMutedOverride: string | null;
   viewMode: ExplorerViewMode;
+  sortBy: "name" | "modified" | "kind" | "size";
+  sortDirection: "asc" | "desc";
   foldersFirst: boolean;
   compactListView: boolean;
   compactDetailsView: boolean;
@@ -302,6 +304,8 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   textSecondaryOverride: null,
   textMutedOverride: null,
   viewMode: "list",
+  sortBy: "name",
+  sortDirection: "asc",
   foldersFirst: true,
   compactListView: false,
   compactDetailsView: false,

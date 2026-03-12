@@ -601,6 +601,8 @@ export const appPreferencesSchema = z.object({
   textSecondaryOverride: colorOverrideSchema,
   textMutedOverride: colorOverrideSchema,
   viewMode: explorerViewModeSchema,
+  sortBy: directorySortBySchema,
+  sortDirection: sortDirectionSchema,
   foldersFirst: z.boolean(),
   compactListView: z.boolean(),
   compactDetailsView: z.boolean(),

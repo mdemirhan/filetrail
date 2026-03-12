@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { createRef, type ComponentProps } from "react";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -179,5 +179,18 @@ describe("ExplorerWorkspace", () => {
     });
 
     expect(screen.getByRole("button", { name: "Copy" })).toBeEnabled();
+  });
+
+  it("opens the sort menu and applies a selected sort option", () => {
+    const handleSortChange = vi.fn();
+    renderExplorerWorkspace({
+      topToolbarItems: ["sort", "search"],
+      onSortChange: handleSortChange,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Sort by" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Size" }));
+
+    expect(handleSortChange).toHaveBeenCalledWith("size");
   });
 });
