@@ -39,6 +39,7 @@ export async function buildCopyPasteAnalysisReport(args: {
   const issues: CopyPasteAnalysisIssue[] = [];
   const warnings: CopyPasteAnalysisWarning[] = [];
   const nodes: CopyPasteAnalysisNode[] = [];
+  const destinationItemCountCache = new Map<string, number | null>();
 
   const destinationFingerprint = await captureFingerprint(
     fileSystem,
@@ -130,6 +131,7 @@ export async function buildCopyPasteAnalysisReport(args: {
         sourcePath,
         destinationPath,
         fileSystem,
+        destinationItemCountCache,
         ...(args.signal ? { signal: args.signal } : {}),
       }),
     );
@@ -169,6 +171,7 @@ async function analyzeNode(args: {
   sourcePath: string;
   destinationPath: string;
   fileSystem: WriteServiceFileSystem;
+  destinationItemCountCache: Map<string, number | null>;
   signal?: AbortSignal;
 }): Promise<CopyPasteAnalysisNode> {
   args.signal?.throwIfAborted();
@@ -194,6 +197,7 @@ async function analyzeNode(args: {
         sourcePath: childSourcePath,
         destinationPath: childDestinationPath,
         fileSystem: args.fileSystem,
+        destinationItemCountCache: args.destinationItemCountCache,
         ...(args.signal ? { signal: args.signal } : {}),
       });
       children.push(childNode);
@@ -207,6 +211,7 @@ async function analyzeNode(args: {
     destinationTotalNodeCount = await countDirectoryItems(
       args.fileSystem,
       args.destinationPath,
+      args.destinationItemCountCache,
       args.signal,
     );
   }
@@ -233,8 +238,13 @@ async function analyzeNode(args: {
 async function countDirectoryItems(
   fileSystem: WriteServiceFileSystem,
   directoryPath: string,
+  cache: Map<string, number | null>,
   signal?: AbortSignal,
-): Promise<number> {
+): Promise<number | null> {
+  if (cache.has(directoryPath)) {
+    return cache.get(directoryPath) ?? null;
+  }
+
   try {
     signal?.throwIfAborted();
     const entries = await fileSystem.readdir(directoryPath);
@@ -244,13 +254,27 @@ async function countDirectoryItems(
       const entryPath = join(directoryPath, entry);
       const stats = await fileSystem.lstat(entryPath);
       if (stats.isDirectory()) {
-        count += await countDirectoryItems(fileSystem, entryPath, signal);
+        const nestedCount = await countDirectoryItems(fileSystem, entryPath, cache, signal);
+        if (nestedCount === null) {
+          cache.set(directoryPath, null);
+          return null;
+        }
+        count += nestedCount;
       }
     }
+    cache.set(directoryPath, count);
     return count;
-  } catch {
-    return 0;
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
+    cache.set(directoryPath, null);
+    return null;
   }
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
 }
 
 function resolveConflictClass(

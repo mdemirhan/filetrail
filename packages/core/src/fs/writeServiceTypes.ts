@@ -143,6 +143,7 @@ export type CopyPasteAnalysisNode = {
   issueMessage: string | null;
   totalNodeCount: number;
   conflictNodeCount: number;
+  destinationTotalNodeCount: number | null;
 };
 
 export type CopyPasteAnalysisSummary = {

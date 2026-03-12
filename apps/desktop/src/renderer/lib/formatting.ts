@@ -114,53 +114,6 @@ export function splitDisplayName(
   };
 }
 
-export function formatRelativeAge(
-  sourceMs: number | null,
-  destMs: number | null,
-): string | null {
-  if (sourceMs === null || destMs === null) {
-    return null;
-  }
-  const delta = sourceMs - destMs;
-  if (delta === 0) {
-    return "same age";
-  }
-  const absDelta = Math.abs(delta);
-  const direction = delta > 0 ? "newer" : "older";
-
-  if (absDelta < 1000) {
-    return `${absDelta} ms ${direction}`;
-  }
-
-  const seconds = Math.floor(absDelta / 1000);
-  if (seconds < 60) {
-    return `${seconds} ${seconds === 1 ? "second" : "seconds"} ${direction}`;
-  }
-
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) {
-    return `${minutes} ${minutes === 1 ? "min" : "min"} ${direction}`;
-  }
-
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) {
-    return `${hours} ${hours === 1 ? "hour" : "hours"} ${direction}`;
-  }
-
-  const days = Math.floor(hours / 24);
-  if (days < 30) {
-    return `${days} ${days === 1 ? "day" : "days"} ${direction}`;
-  }
-
-  const months = Math.floor(days / 30);
-  if (months < 12) {
-    return `${months} ${months === 1 ? "month" : "months"} ${direction}`;
-  }
-
-  const years = Math.floor(days / 365);
-  return `${years} ${years === 1 ? "year" : "years"} ${direction}`;
-}
-
 export function formatRelativeDuration(deltaMs: number): string {
   const absDelta = Math.abs(deltaMs);
 

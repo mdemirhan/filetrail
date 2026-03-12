@@ -485,7 +485,7 @@ describe("copyPasteAnalysis", () => {
       expect(report.nodes[0]?.destinationTotalNodeCount).toBeNull();
     });
 
-    it("gracefully returns 0 when destination readdir fails", async () => {
+    it("returns null when destination readdir fails", async () => {
       const fileSystem = new MockWriteServiceFileSystem({
         "/source": { kind: "directory" },
         "/source/folder": { kind: "directory" },
@@ -500,7 +500,7 @@ describe("copyPasteAnalysis", () => {
           throw new Error("EACCES: permission denied");
         }
         // Temporarily remove override to use default behavior
-        fileSystem.readdirImpl = undefined;
+        fileSystem.readdirImpl = null;
         try {
           return await fileSystem.readdir(path);
         } finally {
@@ -521,7 +521,7 @@ describe("copyPasteAnalysis", () => {
       });
 
       expect(report.nodes[0]?.conflictClass).toBe("directory_conflict");
-      expect(report.nodes[0]?.destinationTotalNodeCount).toBe(0);
+      expect(report.nodes[0]?.destinationTotalNodeCount).toBeNull();
     });
 
     it("handles deeply nested destination trees", async () => {
@@ -578,6 +578,76 @@ describe("copyPasteAnalysis", () => {
 
       // file.txt, sub, link = 3
       expect(report.nodes[0]?.destinationTotalNodeCount).toBe(3);
+    });
+
+    it("reuses cached counts for nested destination conflicts", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/root": { kind: "directory" },
+        "/source/root/sub": { kind: "directory" },
+        "/source/root/sub/file.txt": { kind: "file", size: 1 },
+        "/target": { kind: "directory" },
+        "/target/root": { kind: "directory" },
+        "/target/root/sub": { kind: "directory" },
+        "/target/root/sub/existing.txt": { kind: "file", size: 1 },
+      });
+
+      const targetReadCounts = new Map<string, number>();
+      const countingReaddir = async (path: string): Promise<string[]> => {
+        if (path.startsWith("/target/")) {
+          targetReadCounts.set(path, (targetReadCounts.get(path) ?? 0) + 1);
+        }
+        fileSystem.readdirImpl = null;
+        try {
+          return await fileSystem.readdir(path);
+        } finally {
+          fileSystem.readdirImpl = countingReaddir;
+        }
+      };
+      fileSystem.readdirImpl = countingReaddir;
+
+      const report = await buildCopyPasteAnalysisReport({
+        analysisId: "dest-count-cache",
+        request: {
+          mode: "copy",
+          sourcePaths: ["/source/root"],
+          destinationDirectoryPath: "/target",
+        },
+        fileSystem,
+        thresholds: { largeBatchItemThreshold: 100, largeBatchByteThreshold: 10000 },
+      });
+
+      expect(report.nodes[0]?.destinationTotalNodeCount).toBe(2);
+      expect(report.nodes[0]?.children[0]?.destinationTotalNodeCount).toBe(1);
+      expect(targetReadCounts.get("/target/root")).toBe(1);
+      expect(targetReadCounts.get("/target/root/sub")).toBe(1);
+    });
+
+    it("propagates aborts while counting destination items", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/folder": { kind: "directory" },
+        "/source/folder/file.txt": { kind: "file", size: 1 },
+        "/target": { kind: "directory" },
+        "/target/folder": { kind: "directory" },
+        "/target/folder/existing.txt": { kind: "file", size: 1 },
+      });
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        buildCopyPasteAnalysisReport({
+          analysisId: "dest-count-abort",
+          request: {
+            mode: "copy",
+            sourcePaths: ["/source/folder"],
+            destinationDirectoryPath: "/target",
+          },
+          fileSystem,
+          thresholds: { largeBatchItemThreshold: 100, largeBatchByteThreshold: 10000 },
+          signal: controller.signal,
+        }),
+      ).rejects.toMatchObject({ name: "AbortError" });
     });
   });
 

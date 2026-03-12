@@ -2,7 +2,6 @@ import {
   formatDateTime,
   formatHintSize,
   formatPermissionMode,
-  formatRelativeAge,
   formatRelativeDuration,
   formatShortDateTime,
   formatSize,
@@ -48,110 +47,6 @@ describe("formatting helpers", () => {
     expect(splitDisplayName("long filename.txt", "txt")).toEqual({
       stem: "long filename",
       extensionSuffix: ".txt",
-    });
-  });
-
-  describe("formatRelativeAge", () => {
-    it("returns null when both are null", () => {
-      expect(formatRelativeAge(null, null)).toBeNull();
-    });
-
-    it("returns null when source is null", () => {
-      expect(formatRelativeAge(null, 1000)).toBeNull();
-    });
-
-    it("returns null when destination is null", () => {
-      expect(formatRelativeAge(1000, null)).toBeNull();
-    });
-
-    it("returns same age when delta is exactly 0", () => {
-      expect(formatRelativeAge(5000, 5000)).toBe("same age");
-    });
-
-    it("returns 1 ms newer", () => {
-      expect(formatRelativeAge(5001, 5000)).toBe("1 ms newer");
-    });
-
-    it("returns 500 ms older", () => {
-      expect(formatRelativeAge(5000, 5500)).toBe("500 ms older");
-    });
-
-    it("returns 999 ms newer", () => {
-      expect(formatRelativeAge(5999, 5000)).toBe("999 ms newer");
-    });
-
-    it("returns 1 second newer at exactly 1000 ms", () => {
-      expect(formatRelativeAge(6000, 5000)).toBe("1 second newer");
-    });
-
-    it("returns 2 seconds newer", () => {
-      expect(formatRelativeAge(7000, 5000)).toBe("2 seconds newer");
-    });
-
-    it("returns 30 seconds older", () => {
-      expect(formatRelativeAge(5000, 35000)).toBe("30 seconds older");
-    });
-
-    it("returns 59 seconds newer", () => {
-      expect(formatRelativeAge(64000, 5000)).toBe("59 seconds newer");
-    });
-
-    it("returns 1 min newer at exactly 60 seconds", () => {
-      expect(formatRelativeAge(65000, 5000)).toBe("1 min newer");
-    });
-
-    it("floors 90 seconds to 1 min newer", () => {
-      expect(formatRelativeAge(95000, 5000)).toBe("1 min newer");
-    });
-
-    it("returns 45 min newer", () => {
-      const delta = 45 * 60 * 1000;
-      expect(formatRelativeAge(5000 + delta, 5000)).toBe("45 min newer");
-    });
-
-    it("returns 1 hour newer", () => {
-      const delta = 60 * 60 * 1000;
-      expect(formatRelativeAge(5000 + delta, 5000)).toBe("1 hour newer");
-    });
-
-    it("returns 23 hours older", () => {
-      const delta = 23 * 60 * 60 * 1000;
-      expect(formatRelativeAge(5000, 5000 + delta)).toBe("23 hours older");
-    });
-
-    it("returns 1 day newer", () => {
-      const delta = 24 * 60 * 60 * 1000;
-      expect(formatRelativeAge(5000 + delta, 5000)).toBe("1 day newer");
-    });
-
-    it("returns 29 days newer", () => {
-      const delta = 29 * 24 * 60 * 60 * 1000;
-      expect(formatRelativeAge(5000 + delta, 5000)).toBe("29 days newer");
-    });
-
-    it("returns 1 month newer at 30 days", () => {
-      const delta = 30 * 24 * 60 * 60 * 1000;
-      expect(formatRelativeAge(5000 + delta, 5000)).toBe("1 month newer");
-    });
-
-    it("returns 6 months older", () => {
-      const delta = 6 * 30 * 24 * 60 * 60 * 1000;
-      expect(formatRelativeAge(5000, 5000 + delta)).toBe("6 months older");
-    });
-
-    it("returns 1 year newer at 365 days", () => {
-      const delta = 365 * 24 * 60 * 60 * 1000;
-      expect(formatRelativeAge(5000 + delta, 5000)).toBe("1 year newer");
-    });
-
-    it("returns 2 years older", () => {
-      const delta = 730 * 24 * 60 * 60 * 1000;
-      expect(formatRelativeAge(5000, 5000 + delta)).toBe("2 years older");
-    });
-
-    it("returns 10 years newer for large delta", () => {
-      const delta = 3650 * 24 * 60 * 60 * 1000;
-      expect(formatRelativeAge(5000 + delta, 5000)).toBe("10 years newer");
     });
   });
 

@@ -39,6 +39,7 @@ function createNode(
     issueMessage: null,
     totalNodeCount: input.totalNodeCount ?? 1,
     conflictNodeCount: input.conflictNodeCount ?? (input.conflictClass ? 1 : 0),
+    destinationTotalNodeCount: input.destinationTotalNodeCount ?? null,
   };
 }
 

@@ -7309,6 +7309,8 @@ function toAnalysisReport(
       issueMessage: null,
       totalNodeCount: 1,
       conflictNodeCount: item.status === "conflict" ? 1 : 0,
+      destinationTotalNodeCount:
+        item.status === "conflict" && item.kind === "directory" ? 0 : null,
     })),
     issues: plan.issues,
     warnings: plan.warnings,
