@@ -261,8 +261,6 @@ export function TreePane({
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const clickTimeoutRef = useRef<number | null>(null);
   const scrollFrameRef = useRef<number | null>(null);
-  const lastScrolledPathRef = useRef<string | null>(null);
-  const lastScrolledRowRef = useRef<HTMLDivElement | null>(null);
   const lastRegisteredSelectedRowRef = useRef<HTMLDivElement | null>(null);
   const lastRegisteredSelectedItemIdRef = useRef(selectedTreeItemId);
   const lastCommittedSelectedItemIdRef = useRef(selectedTreeItemId);
@@ -279,6 +277,25 @@ export function TreePane({
     left: number;
     bottom: number;
   } | null>(null);
+  const treeVisibilityVersion = useMemo(
+    () =>
+      [
+        includeHidden ? "hidden:on" : "hidden:off",
+        favoritesPlacement,
+        favoritesExpanded ? "favorites:expanded" : "favorites:collapsed",
+        favoriteItems.map((item) => item.id).join("\0"),
+        filesystemPresentation.visibleItemIds.join("\0"),
+        integratedPresentation.visibleItemIds.join("\0"),
+      ].join("|"),
+    [
+      favoriteItems,
+      favoritesExpanded,
+      favoritesPlacement,
+      filesystemPresentation.visibleItemIds,
+      includeHidden,
+      integratedPresentation.visibleItemIds,
+    ],
+  );
   const getToolbarTooltip = (itemId: ToolbarItemId, labelOverride?: string) => {
     const definition = getToolbarItemDefinition(itemId);
     return formatToolbarTooltip(labelOverride ?? definition.label, definition.shortcutLabel);
@@ -350,17 +367,8 @@ export function TreePane({
     if (!selectedTreeItemId) {
       return;
     }
-    if (selectedRowRegistrationVersion < 0) {
-      return;
-    }
     const currentRow = rowRefs.current[selectedTreeItemId];
     if (!currentRow || typeof currentRow.scrollIntoView !== "function") {
-      return;
-    }
-    if (
-      lastScrolledPathRef.current === selectedTreeItemId &&
-      lastScrolledRowRef.current === currentRow
-    ) {
       return;
     }
     const scrollContainer = currentRow.closest<HTMLElement>(".tree-scroll, .favorites-scroll");
@@ -368,8 +376,6 @@ export function TreePane({
       if (!scrollContainer || !isElementFullyVisibleWithinContainer(currentRow, scrollContainer)) {
         currentRow.scrollIntoView({ block: "nearest" });
       }
-      lastScrolledPathRef.current = selectedTreeItemId;
-      lastScrolledRowRef.current = currentRow;
       scrollFrameRef.current = null;
     });
     return () => {
@@ -378,7 +384,7 @@ export function TreePane({
         scrollFrameRef.current = null;
       }
     };
-  }, [selectedRowRegistrationVersion, selectedTreeItemId]);
+  }, [selectedRowRegistrationVersion, selectedTreeItemId, treeVisibilityVersion]);
 
   useEffect(() => {
     if (lastCommittedSelectedItemIdRef.current === selectedTreeItemId) {

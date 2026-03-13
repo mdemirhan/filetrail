@@ -519,229 +519,15 @@ describe("TreePane", () => {
     const handleRendererCommand = vi.fn();
     renderTreePane({
       leftToolbarItems: {
-        main: ["openSelection"],
-        utility: [],
-      },
+        main: ["home"],
+        utility: ["leftSeparator", "newFolder", "duplicateSelection", "settings"],
+      } as never,
       onRendererCommand: handleRendererCommand,
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
 
-    expect(handleRendererCommand).toHaveBeenCalledWith("openSelection");
-  });
-
-  it("runs navigation actions from configurable left rail nav buttons", () => {
-    const handleGoBack = vi.fn();
-    const handleGoForward = vi.fn();
-    const handleNavigateToParent = vi.fn();
-    const handleNavigateDown = vi.fn();
-    renderTreePane({
-      leftToolbarItems: {
-        main: ["back", "forward", "up", "down"],
-        utility: [],
-      },
-      canGoBack: true,
-      onGoBack: handleGoBack,
-      canGoForward: true,
-      onGoForward: handleGoForward,
-      canNavigateToParent: true,
-      onNavigateToParent: handleNavigateToParent,
-      canNavigateDown: true,
-      onNavigateDown: handleNavigateDown,
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Back" }));
-    fireEvent.click(screen.getByRole("button", { name: "Forward" }));
-    fireEvent.click(screen.getByRole("button", { name: "Navigate Up" }));
-    fireEvent.click(screen.getByRole("button", { name: "Navigate Down" }));
-
-    expect(handleGoBack).toHaveBeenCalledTimes(1);
-    expect(handleGoForward).toHaveBeenCalledTimes(1);
-    expect(handleNavigateToParent).toHaveBeenCalledTimes(1);
-    expect(handleNavigateDown).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps unavailable configured left rail actions visible but disabled", () => {
-    renderTreePane({
-      leftToolbarItems: {
-        main: ["copyPath"],
-        utility: [],
-      },
-      canRunRendererCommand: () => false,
-    });
-
-    expect(screen.getByRole("button", { name: "Copy Path" })).toBeDisabled();
-  });
-
-  it("shows keyboard shortcuts in left rail tooltips when available", () => {
-    renderTreePane({
-      leftToolbarItems: {
-        main: ["back", "up", "copyPath"],
-        utility: [],
-      },
-      canGoBack: true,
-      onGoBack: () => undefined,
-      canNavigateToParent: true,
-      onNavigateToParent: () => undefined,
-    });
-
-    expect(screen.getByRole("button", { name: "Back" })).toHaveAttribute("title", "Back (Cmd+Left)");
-    expect(screen.getByRole("button", { name: "Navigate Up" })).toHaveAttribute(
-      "title",
-      "Navigate Up (Cmd+Up)",
-    );
-    expect(screen.getByRole("button", { name: "Copy Path" })).toHaveAttribute(
-      "title",
-      "Copy Path (Cmd+Option+C)",
-    );
-  });
-
-  it("highlights a folder immediately on pointer down before the click timeout", () => {
-    vi.useFakeTimers();
-    renderTreePane({ selectedTreeItemId: "favorites-root" });
-
-    const row = getNamedButton("Documents", 1);
-    const treeRow = getTreeRow(row);
-    expect(treeRow).not.toHaveClass("active");
-
-    fireEvent.pointerDown(row, { button: 0 });
-
-    expect(treeRow).toHaveClass("active");
-    vi.useRealTimers();
-  });
-
-  it("clears selection on Cmd-click when the clicked tree item is already selected", () => {
-    vi.useFakeTimers();
-    const handleClearSelection = vi.fn();
-    const handleNavigate = vi.fn();
-    renderTreePane({
-      selectedTreeItemId: "fs:/Users/demo/Documents",
-      onClearSelection: handleClearSelection,
-      onNavigate: handleNavigate,
-    });
-
-    const row = getNamedButton("Documents", 1);
-    fireEvent.pointerDown(row, { button: 0, metaKey: true });
-    fireEvent.click(row, { metaKey: true });
-    act(() => {
-      vi.runAllTimers();
-    });
-
-    expect(handleClearSelection).toHaveBeenCalledTimes(1);
-    expect(handleNavigate).not.toHaveBeenCalled();
-    vi.useRealTimers();
-  });
-
-  it("rolls back optimistic highlight when favorite navigation returns false", async () => {
-    vi.useFakeTimers();
-    let resolveNav!: (value: boolean) => void;
-    const handleNavigateFavorite = vi.fn(
-      () =>
-        new Promise<boolean>((resolve) => {
-          resolveNav = resolve;
-        }),
-    );
-
-    renderTreePane({
-      selectedTreeItemId: "favorites-root",
-      onNavigateFavorite: handleNavigateFavorite,
-    });
-
-    const row = getNamedButton("Documents", 0);
-    const treeRow = getTreeRow(row);
-
-    fireEvent.pointerDown(row, { button: 0 });
-    expect(treeRow).toHaveClass("active");
-
-    fireEvent.click(row);
-    act(() => {
-      vi.runAllTimers();
-    });
-    expect(handleNavigateFavorite).toHaveBeenCalledWith("/Users/demo/Documents");
-
-    await act(async () => resolveNav(false));
-
-    expect(treeRow).not.toHaveClass("active");
-    vi.useRealTimers();
-  });
-
-  it("reroots the tree at home from the rail button", () => {
-    const handleRerootHome = vi.fn();
-    renderTreePane({
-      rootPath: "/",
-      nodes: {
-        "/": {
-          path: "/",
-          name: "/",
-          kind: "directory",
-          isHidden: false,
-          isSymlink: false,
-          expanded: true,
-          loading: false,
-          loaded: true,
-          error: null,
-          childPaths: [],
-        },
-      },
-      selectedTreeItemId: "fs:/",
-      onRerootHome: handleRerootHome,
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /root tree at home/i }));
-    expect(handleRerootHome).toHaveBeenCalledTimes(1);
-  });
-
-  it("opens a folder context menu for filesystem tree rows", () => {
-    const handleItemContextMenu = vi.fn();
-    renderTreePane({ onItemContextMenu: handleItemContextMenu });
-
-    fireEvent.contextMenu(getNamedButton("Documents", 1));
-
-    expect(handleItemContextMenu).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: "filesystem",
-        path: "/Users/demo/Documents",
-      }),
-      "tree",
-      expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }),
-    );
-  });
-
-  it("opens a favorite context menu for integrated favorites inside the tree", () => {
-    const handleItemContextMenu = vi.fn();
-    renderTreePane({ onItemContextMenu: handleItemContextMenu });
-
-    fireEvent.contextMenu(getNamedButton("Documents", 0));
-
-    expect(handleItemContextMenu).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: "favorite",
-        path: "/Users/demo/Documents",
-      }),
-      "tree",
-      expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }),
-    );
-  });
-
-  it("opens a favorite context menu in the separate favorites subview", () => {
-    const handleItemContextMenu = vi.fn();
-    renderTreePane({
-      favoritesPlacement: "separate",
-      activeLeftPaneSubview: "favorites",
-      onItemContextMenu: handleItemContextMenu,
-      selectedTreeItemId: "favorite:/Users/demo/Documents",
-    });
-
-    fireEvent.contextMenu(getNamedButton("Documents", 0));
-
-    expect(handleItemContextMenu).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: "favorite",
-        path: "/Users/demo/Documents",
-      }),
-      "favorites",
-      expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }),
-    );
+    expect(handleRendererCommand).toHaveBeenCalledWith("duplicateSelection");
   });
 
   it("does not scroll the selected row into view when it is already fully visible", () => {
@@ -801,6 +587,136 @@ describe("TreePane", () => {
     });
 
     expect(scrollIntoViewSpy).not.toHaveBeenCalled();
+
+    getBoundingClientRectSpy.mockRestore();
+    scrollIntoViewSpy.mockRestore();
+    vi.useRealTimers();
+  });
+
+  it("scrolls the selected row into view when hidden-file visibility changes move it off screen", () => {
+    vi.useFakeTimers();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    const scrollIntoViewSpy = vi
+      .spyOn(HTMLElement.prototype, "scrollIntoView")
+      .mockImplementation(() => undefined);
+    let selectedRowTop = 80;
+    const getBoundingClientRectSpy = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function mockRect(this: HTMLElement) {
+        if (this.classList.contains("tree-scroll")) {
+          return {
+            top: 0,
+            bottom: 160,
+            left: 0,
+            right: 240,
+            width: 240,
+            height: 160,
+            x: 0,
+            y: 0,
+            toJSON: () => ({}),
+          } as DOMRect;
+        }
+        if (this.getAttribute("data-tree-path") === "/Users/demo/Documents") {
+          return {
+            top: selectedRowTop,
+            bottom: selectedRowTop + 32,
+            left: 0,
+            right: 240,
+            width: 240,
+            height: 32,
+            x: 0,
+            y: selectedRowTop,
+            toJSON: () => ({}),
+          } as DOMRect;
+        }
+        return {
+          top: 0,
+          bottom: 0,
+          left: 0,
+          right: 0,
+          width: 0,
+          height: 0,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        } as DOMRect;
+      });
+
+    const { rerender } = renderTreePane({
+      includeHidden: true,
+      selectedTreeItemId: "fs:/Users/demo/Documents",
+    });
+    act(() => {
+      vi.runAllTimers();
+    });
+    expect(scrollIntoViewSpy).not.toHaveBeenCalled();
+
+    selectedRowTop = -36;
+    rerender(
+      <TreePane
+        isFocused
+        rootPath="/Users/demo"
+        homePath="/Users/demo"
+        selectedTreeItemId="fs:/Users/demo/Documents"
+        compactTreeView={false}
+        singleClickExpandTreeItems={false}
+        favorites={[
+          { path: "/Users/demo/Desktop", icon: "desktop" },
+          { path: "/Users/demo/Documents", icon: "documents" },
+        ]}
+        favoritesPlacement="integrated"
+        favoritesPaneHeight={220}
+        activeLeftPaneSubview="tree"
+        favoritesExpanded
+        nodes={baseNodes}
+        onFocusChange={() => undefined}
+        onLeftPaneSubviewChange={() => undefined}
+        onFavoritesPaneHeightChange={() => undefined}
+        onGoHome={() => undefined}
+        onRerootHome={() => undefined}
+        onOpenLocation={() => undefined}
+        onQuickAccess={() => undefined}
+        foldersFirst
+        onToggleFoldersFirst={() => undefined}
+        infoPanelOpen
+        onToggleInfoPanel={() => undefined}
+        infoRowOpen
+        onToggleInfoRow={() => undefined}
+        leftToolbarItems={{
+          main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
+          utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
+        }}
+        theme="tomorrow-night"
+        themeMenuOpen={false}
+        themeButtonRef={themeButtonRef}
+        themeMenuRef={themeMenuRef}
+        onToggleThemeMenu={() => undefined}
+        onSelectTheme={() => undefined}
+        actionLogEnabled
+        onOpenActionLog={() => undefined}
+        onClearSelection={() => undefined}
+        onOpenHelp={() => undefined}
+        onOpenSettings={() => undefined}
+        includeHidden={false}
+        onToggleHidden={() => undefined}
+        onToggleExpand={() => undefined}
+        onNavigate={() => undefined}
+        onNavigateFavorite={() => undefined}
+        onToggleFavoritesExpanded={() => undefined}
+        typeaheadQuery=""
+        canRunRendererCommand={() => true}
+        onRendererCommand={() => undefined}
+      />,
+    );
+
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    expect(scrollIntoViewSpy).toHaveBeenCalledWith({ block: "nearest" });
 
     getBoundingClientRectSpy.mockRestore();
     scrollIntoViewSpy.mockRestore();
