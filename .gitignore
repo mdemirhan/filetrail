@@ -13,6 +13,7 @@ apps/desktop/out
 apps/desktop/assets/icons/build
 apps/desktop/.home/
 apps/desktop/.electron-gyp/
+packages/native-fs/build/Release/
 .env
 .env.*
 !.env.example
