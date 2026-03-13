@@ -3242,8 +3242,10 @@ body.platform-macos .window-toolbar-brand {
 .tree-label:focus-visible,
 .flow-item:focus-visible,
 .details-row:focus-visible,
-.details-header-button:focus-visible {
+.details-header-button:focus-visible,
+.search-result-row:focus-visible {
   outline: none;
+  border-color: transparent;
   box-shadow: none;
 }
 
