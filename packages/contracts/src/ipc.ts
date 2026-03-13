@@ -945,6 +945,8 @@ export const ipcContractSchemas = {
   "folderSize:start": {
     request: z.object({
       path: z.string().min(1),
+      recalculate: z.boolean().optional(),
+      probeOnly: z.boolean().optional(),
     }),
     response: z.object({
       jobId: z.string().min(1),

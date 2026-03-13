@@ -5427,6 +5427,11 @@ body.resizing-panels-vertical * {
 }
 
 .get-info-name {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
   max-width: 100%;
   color: var(--get-info-hero-name);
   font-size: 14px;
@@ -5434,7 +5439,7 @@ body.resizing-panels-vertical * {
   line-height: 1.3;
   text-align: center;
   letter-spacing: -0.01em;
-  word-break: break-word;
+  word-break: break-all;
 }
 
 .get-info-kind-badge {
@@ -5607,6 +5612,10 @@ body.resizing-panels-vertical * {
 }
 
 .get-info-current-crumb {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
   color: var(--get-info-hero-name);
   font-weight: 600;
 }
@@ -5670,13 +5679,17 @@ body.resizing-panels-vertical * {
   display: flex;
   align-items: center;
   gap: 12px;
-  flex-shrink: 0;
+  min-width: 0;
+  max-width: 240px;
 }
 
 .dt-name {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dt-type {
@@ -5691,7 +5704,7 @@ body.resizing-panels-vertical * {
 
 .dt-meta {
   display: grid;
-  grid-template-columns: repeat(3, max-content) minmax(0, 1fr);
+  grid-template-columns: auto auto auto minmax(0, 1fr);
   align-items: start;
   gap: 24px;
   min-width: 0;
@@ -5717,6 +5730,9 @@ body.resizing-panels-vertical * {
   color: var(--text-secondary);
   font-family: var(--font-mono);
   font-weight: var(--mono-font-weight);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .dt-val.pth {
@@ -5729,6 +5745,101 @@ body.resizing-panels-vertical * {
 
 .dt-pair-path {
   min-width: 0;
+}
+
+/* ── Folder Size Interactive States ──────────────────────────────── */
+
+.folder-size-calculate-btn {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 0.12s ease;
+}
+
+.folder-size-calculate-btn:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.folder-size-calculating {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.folder-size-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--text-dim);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: folder-size-spin 0.6s linear infinite;
+}
+
+@keyframes folder-size-spin {
+  to { transform: rotate(360deg); }
+}
+
+.folder-size-cancel-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--text-dim);
+  color: var(--bg-base);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.folder-size-cancel-btn:hover {
+  background: var(--text-secondary);
+}
+
+.folder-size-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.folder-size-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.12s ease;
+}
+
+.folder-size-refresh-btn:hover {
+  color: var(--accent);
+}
+
+.folder-size-refresh-btn .get-info-icon,
+.folder-size-refresh-icon {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
 }
 
 .location-sheet-backdrop {

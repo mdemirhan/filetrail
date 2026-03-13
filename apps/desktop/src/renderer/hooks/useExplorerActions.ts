@@ -1845,7 +1845,7 @@ export function useExplorerActions(args: {
       return false;
     }
     try {
-      await client.invoke("system:copyText", { text: path });
+      await client.invoke("system:copyText", { text: formatPathForShell(path) });
       return true;
     } catch (error) {
       logger.error("Info Panel copy path failed", error);

@@ -28,21 +28,144 @@ export function resetResponseCacheState(): void {
   folderSizeJobs.clear();
 }
 
-export function createFolderSizeHandlers() {
+export function createFolderSizeHandlers(native: {
+  getFolderSize: (path: string) => Promise<string>;
+  cancelFolderSize: () => void;
+}) {
+  const folderSizeCache = new Map<string, number>();
+  let activeJobId: string | null = null;
+  let queuedJobId: string | null = null;
+
+  function generateJobId(): string {
+    return `folder-size-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+  }
+
+  function processQueue(): void {
+    if (!queuedJobId) return;
+    const nextJobId = queuedJobId;
+    queuedJobId = null;
+    const job = folderSizeJobs.get(nextJobId);
+    if (job && job.status === "queued") {
+      runJob(nextJobId, job.path);
+    }
+  }
+
+  function runJob(jobId: string, path: string): void {
+    activeJobId = jobId;
+    folderSizeJobs.set(jobId, {
+      jobId,
+      path,
+      status: "running",
+      sizeBytes: null,
+      error: null,
+    });
+
+    native
+      .getFolderSize(path)
+      .then((jsonString) => {
+        const result = JSON.parse(jsonString) as { total: number; dirs: Record<string, number> };
+        folderSizeCache.set(path, result.total);
+        for (const [dirPath, dirSize] of Object.entries(result.dirs)) {
+          folderSizeCache.set(dirPath, dirSize);
+        }
+        folderSizeJobs.set(jobId, {
+          jobId,
+          path,
+          status: "ready",
+          sizeBytes: result.total,
+          error: null,
+        });
+      })
+      .catch((err: unknown) => {
+        const job = folderSizeJobs.get(jobId);
+        if (job && job.status === "cancelled") {
+          // Already marked as cancelled by the cancel handler
+        } else {
+          const message = err instanceof Error ? err.message : "Unknown error";
+          folderSizeJobs.set(jobId, {
+            jobId,
+            path,
+            status: "error",
+            sizeBytes: null,
+            error: message,
+          });
+        }
+      })
+      .finally(() => {
+        if (activeJobId === jobId) {
+          activeJobId = null;
+        }
+        processQueue();
+      });
+  }
+
   return {
     start(payload: IpcRequest<"folderSize:start">): IpcResponse<"folderSize:start"> {
-      // Folder sizes are deferred for now because recursive sizing is much more expensive
-      // than the rest of the metadata path and should not block basic inspection UI.
-      const jobId = `folder-size-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-      folderSizeJobs.set(jobId, {
-        jobId,
-        path: payload.path,
-        status: "deferred",
-        sizeBytes: null,
-        error: null,
-      });
-      return { jobId, status: "deferred" };
+      if (payload.recalculate) {
+        folderSizeCache.delete(payload.path);
+      }
+
+      const cached = folderSizeCache.get(payload.path);
+      if (cached !== undefined) {
+        const jobId = generateJobId();
+        folderSizeJobs.set(jobId, {
+          jobId,
+          path: payload.path,
+          status: "ready",
+          sizeBytes: cached,
+          error: null,
+        });
+        return { jobId, status: "ready" };
+      }
+
+      // probeOnly: return deferred without starting a walk. Used by the
+      // renderer to check the main-process cache without side effects.
+      if (payload.probeOnly) {
+        const jobId = generateJobId();
+        folderSizeJobs.set(jobId, {
+          jobId,
+          path: payload.path,
+          status: "deferred",
+          sizeBytes: null,
+          error: null,
+        });
+        return { jobId, status: "deferred" };
+      }
+
+      const jobId = generateJobId();
+
+      if (activeJobId) {
+        // Cancel the active walk so the new one can start promptly.
+        // The native cancel sets a volatile flag checked each fts_read
+        // iteration, so the active walk aborts quickly. We queue the new
+        // job and it will be picked up in the active job's .finally().
+        native.cancelFolderSize();
+        const activeJob = folderSizeJobs.get(activeJobId);
+        if (activeJob) {
+          folderSizeJobs.set(activeJobId, { ...activeJob, status: "cancelled" });
+        }
+
+        if (queuedJobId) {
+          const oldQueued = folderSizeJobs.get(queuedJobId);
+          if (oldQueued) {
+            folderSizeJobs.set(queuedJobId, { ...oldQueued, status: "cancelled" });
+          }
+        }
+        queuedJobId = jobId;
+        folderSizeJobs.set(jobId, {
+          jobId,
+          path: payload.path,
+          status: "queued",
+          sizeBytes: null,
+          error: null,
+        });
+        return { jobId, status: "queued" };
+      }
+
+      runJob(jobId, payload.path);
+      return { jobId, status: "running" };
     },
+
     getStatus(payload: IpcRequest<"folderSize:getStatus">): IpcResponse<"folderSize:getStatus"> {
       const job = folderSizeJobs.get(payload.jobId);
       return {
@@ -52,15 +175,27 @@ export function createFolderSizeHandlers() {
         error: job ? job.error : "Unknown folder size job.",
       };
     },
+
     cancel(payload: IpcRequest<"folderSize:cancel">): IpcResponse<"folderSize:cancel"> {
       const job = folderSizeJobs.get(payload.jobId);
       if (job) {
-        folderSizeJobs.set(payload.jobId, {
-          ...job,
-          status: "cancelled",
-        });
+        folderSizeJobs.set(payload.jobId, { ...job, status: "cancelled" });
+        if (job.jobId === activeJobId) {
+          native.cancelFolderSize();
+        }
+        if (job.jobId === queuedJobId) {
+          queuedJobId = null;
+        }
       }
       return { ok: true };
+    },
+
+    clearCache(): void {
+      folderSizeCache.clear();
+    },
+
+    getCachedSize(path: string): number | undefined {
+      return folderSizeCache.get(path);
     },
   };
 }

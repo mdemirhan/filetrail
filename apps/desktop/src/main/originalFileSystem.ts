@@ -32,8 +32,10 @@ const originalFs = require("original-fs") as typeof import("node:fs");
 const addon = require("@filetrail/native-fs") as {
   nativeCopyFile: (src: string, dst: string) => Promise<void>;
   nativeGetFileIcon: (path: string, size: number) => Promise<Buffer | null>;
+  nativeFolderSize: (folderPath: string) => Promise<string>;
+  nativeFolderSizeCancel: () => void;
 };
-const { nativeCopyFile, nativeGetFileIcon } = addon;
+const { nativeCopyFile, nativeGetFileIcon, nativeFolderSize, nativeFolderSizeCancel } = addon;
 
 const {
   promises: { chmod, lstat, lutimes, mkdir, readdir, readlink, realpath, rename, rm, stat, symlink, utimes },
@@ -94,3 +96,9 @@ export const originalRename = (oldPath: string, newPath: string): Promise<void> 
 
 /** Get macOS file icon as PNG buffer using NSWorkspace. */
 export const getFileIcon = nativeGetFileIcon;
+
+/** Recursive folder size calculation using fts(3). Returns JSON string. */
+export const getFolderSize = nativeFolderSize;
+
+/** Cancel the active folder size calculation. */
+export const cancelFolderSize = nativeFolderSizeCancel;

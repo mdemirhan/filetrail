@@ -1,3 +1,6 @@
+import type { ReactNode } from "react";
+
+import type { FolderSizeEntry } from "../hooks/useFolderSizeCache";
 import type { DirectoryEntry, ItemProperties } from "../lib/explorerTypes";
 import { FileIcon } from "../lib/fileIcons";
 import { formatDateTime, formatPermissionMode, formatSize } from "../lib/formatting";
@@ -5,15 +8,21 @@ import { formatDateTime, formatPermissionMode, formatSize } from "../lib/formatt
 export function InfoRow({
   open,
   currentPath,
-  currentEntries,
   selectedEntry,
   item,
+  folderSizeEntry,
+  onCalculateFolderSize,
+  onRecalculateFolderSize,
+  onCancelFolderSize,
 }: {
   open: boolean;
   currentPath: string;
-  currentEntries: DirectoryEntry[];
   selectedEntry: DirectoryEntry | null;
   item: ItemProperties | null;
+  folderSizeEntry?: FolderSizeEntry | undefined;
+  onCalculateFolderSize?: (() => void) | undefined;
+  onRecalculateFolderSize?: (() => void) | undefined;
+  onCancelFolderSize?: (() => void) | undefined;
 }) {
   const activeEntry =
     selectedEntry ??
@@ -44,13 +53,24 @@ export function InfoRow({
         : activeEntry.extension
           ? `${activeEntry.extension.toUpperCase()} File`
           : "File");
-  const sizeLabel = isDirectoryLike
-    ? activeEntry.path === currentPath
-      ? `${currentEntries.length} items`
-      : "—"
-    : activeItem
-      ? formatSize(activeItem.sizeBytes, activeItem.sizeStatus)
-      : "—";
+  const showFolderSizeInteraction =
+    isDirectoryLike && folderSizeEntry && onCalculateFolderSize && onCancelFolderSize;
+
+  let sizeLabel: ReactNode;
+  if (showFolderSizeInteraction) {
+    sizeLabel = (
+      <InfoRowFolderSize
+        entry={folderSizeEntry}
+        onCalculate={onCalculateFolderSize}
+        onRecalculate={onRecalculateFolderSize ?? onCalculateFolderSize}
+        onCancel={onCancelFolderSize}
+      />
+    );
+  } else if (isDirectoryLike) {
+    sizeLabel = "—";
+  } else {
+    sizeLabel = activeItem ? formatSize(activeItem.sizeBytes, activeItem.sizeStatus) : "—";
+  }
   const modifiedLabel = activeItem ? formatDateTime(activeItem.modifiedAt) : "—";
   const permissionsLabel = activeItem ? formatPermissionMode(activeItem.permissionMode) : "—";
 
@@ -86,5 +106,56 @@ export function InfoRow({
         </div>
       </div>
     </div>
+  );
+}
+
+function InfoRowFolderSize({
+  entry,
+  onCalculate,
+  onRecalculate,
+  onCancel,
+}: {
+  entry: FolderSizeEntry;
+  onCalculate: () => void;
+  onRecalculate: () => void;
+  onCancel: () => void;
+}) {
+  if (entry.status === "ready") {
+    return (
+      <span className="folder-size-value">
+        {formatSize(entry.sizeBytes, "ready")}
+        <button
+          type="button"
+          className="folder-size-refresh-btn"
+          onClick={onRecalculate}
+          aria-label="Recalculate folder size"
+        >
+          <svg className="folder-size-refresh-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M1 4v6h6" />
+            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+          </svg>
+        </button>
+      </span>
+    );
+  }
+  if (entry.status === "calculating") {
+    return (
+      <span className="folder-size-calculating">
+        <span className="folder-size-spinner" />
+        <button
+          type="button"
+          className="folder-size-cancel-btn"
+          onClick={onCancel}
+          aria-label="Cancel folder size calculation"
+        >
+          ×
+        </button>
+      </span>
+    );
+  }
+  return (
+    <button type="button" className="folder-size-calculate-btn" onClick={onCalculate}>
+      Calculate
+    </button>
   );
 }

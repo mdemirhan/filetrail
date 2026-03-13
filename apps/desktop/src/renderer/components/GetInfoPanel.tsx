@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import type { IpcResponse } from "@filetrail/contracts";
 
+import type { FolderSizeEntry } from "../hooks/useFolderSizeCache";
 import { FileIcon } from "../lib/fileIcons";
 import { formatDateTime, formatSize, pathSegments, splitPermissionMode } from "../lib/formatting";
 
@@ -18,6 +19,10 @@ export function InfoPanel({
   onOpenInTerminal,
   onCopyPath,
   copyPathDisabled = false,
+  folderSizeEntry,
+  onCalculateFolderSize,
+  onRecalculateFolderSize,
+  onCancelFolderSize,
 }: {
   loading: boolean;
   item: ItemProperties | null;
@@ -27,6 +32,10 @@ export function InfoPanel({
   onOpenInTerminal: () => void;
   onCopyPath: () => Promise<boolean> | boolean;
   copyPathDisabled?: boolean | undefined;
+  folderSizeEntry?: FolderSizeEntry | undefined;
+  onCalculateFolderSize?: (() => void) | undefined;
+  onRecalculateFolderSize?: (() => void) | undefined;
+  onCancelFolderSize?: (() => void) | undefined;
 }) {
   const [copied, setCopied] = useState(false);
   const permissionParts = useMemo(() => splitPermissionMode(item?.permissionMode ?? null), [item]);
@@ -70,6 +79,10 @@ export function InfoPanel({
           onNavigateToPath={onNavigateToPath}
           onOpen={onOpen}
           onOpenInTerminal={onOpenInTerminal}
+          folderSizeEntry={folderSizeEntry}
+          onCalculateFolderSize={onCalculateFolderSize}
+          onRecalculateFolderSize={onRecalculateFolderSize}
+          onCancelFolderSize={onCancelFolderSize}
         />
       ) : (
         <div className="get-info-empty">Select a file or folder to show its info.</div>
@@ -87,6 +100,10 @@ function GetInfoPanelContent({
   onNavigateToPath,
   onOpen,
   onOpenInTerminal,
+  folderSizeEntry,
+  onCalculateFolderSize,
+  onRecalculateFolderSize,
+  onCancelFolderSize,
 }: {
   copied: boolean;
   item: ItemProperties;
@@ -96,16 +113,37 @@ function GetInfoPanelContent({
   onNavigateToPath: (path: string) => void;
   onOpen: () => void;
   onOpenInTerminal: () => void;
+  folderSizeEntry?: FolderSizeEntry | undefined;
+  onCalculateFolderSize?: (() => void) | undefined;
+  onRecalculateFolderSize?: (() => void) | undefined;
+  onCancelFolderSize?: (() => void) | undefined;
 }) {
   const directoryLike = item.kind === "directory" || item.kind === "symlink_directory";
-  // Display rules:
-  // - folders show `-` for size because recursive folder sizing is deferred
-  // - missing timestamps/permissions stay visually muted to distinguish them from real values
-  const metadataRows = [
+
+  let sizeValue: ReactNode;
+  let sizeMuted = false;
+  if (directoryLike && folderSizeEntry && onCalculateFolderSize && onCancelFolderSize) {
+    sizeValue = (
+      <FolderSizeCell
+        entry={folderSizeEntry}
+        onCalculate={onCalculateFolderSize}
+        onRecalculate={onRecalculateFolderSize ?? onCalculateFolderSize}
+        onCancel={onCancelFolderSize}
+      />
+    );
+    sizeMuted = folderSizeEntry.status === "idle" || folderSizeEntry.status === "error";
+  } else if (directoryLike) {
+    sizeValue = "-";
+    sizeMuted = true;
+  } else {
+    sizeValue = formatSize(item.sizeBytes, item.sizeStatus);
+  }
+
+  const metadataRows: { label: string; value: ReactNode; muted: boolean }[] = [
     {
       label: "Size",
-      value: directoryLike ? "-" : formatSize(item.sizeBytes, item.sizeStatus),
-      muted: directoryLike,
+      value: sizeValue,
+      muted: sizeMuted,
     },
     {
       label: "Created",
@@ -142,7 +180,7 @@ function GetInfoPanelContent({
             }}
           />
         </div>
-        <div className="get-info-name">{item.name}</div>
+        <div className="get-info-name" title={item.name}>{item.name}</div>
         <div className="get-info-kind-badge">{item.kindLabel}</div>
       </div>
 
@@ -226,10 +264,58 @@ function GetInfoActionButton({
   );
 }
 
+function FolderSizeCell({
+  entry,
+  onCalculate,
+  onRecalculate,
+  onCancel,
+}: {
+  entry: FolderSizeEntry;
+  onCalculate: () => void;
+  onRecalculate: () => void;
+  onCancel: () => void;
+}) {
+  if (entry.status === "ready") {
+    return (
+      <span className="folder-size-value">
+        {formatSize(entry.sizeBytes, "ready")}
+        <button
+          type="button"
+          className="folder-size-refresh-btn"
+          onClick={onRecalculate}
+          aria-label="Recalculate folder size"
+        >
+          <InfoPanelGlyph name="refresh" />
+        </button>
+      </span>
+    );
+  }
+  if (entry.status === "calculating") {
+    return (
+      <span className="folder-size-calculating">
+        <span className="folder-size-spinner" />
+        <button
+          type="button"
+          className="folder-size-cancel-btn"
+          onClick={onCancel}
+          aria-label="Cancel folder size calculation"
+        >
+          ×
+        </button>
+      </span>
+    );
+  }
+  return (
+    <button type="button" className="folder-size-calculate-btn" onClick={onCalculate}>
+      Calculate
+    </button>
+  );
+}
+
 function InfoPanelGlyph({
   name,
 }: {
-  name: "open" | "terminal" | "copy" | "check" | "close";
+  name: "open" | "terminal" | "copy" | "check" | "close" | "refresh";
 }) {
   // Inline glyphs keep the panel self-contained and visually consistent with its custom chrome.
   if (name === "open") {
@@ -262,6 +348,14 @@ function InfoPanelGlyph({
     return (
       <svg className="get-info-icon" viewBox="0 0 24 24" aria-hidden="true">
         <path d="M5 12l4 4L19 6" />
+      </svg>
+    );
+  }
+  if (name === "refresh") {
+    return (
+      <svg className="get-info-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M1 4v6h6" />
+        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
       </svg>
     );
   }

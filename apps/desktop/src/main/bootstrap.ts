@@ -53,7 +53,7 @@ export async function bootstrapMainProcess(
   // files inside app bundles are copied as regular files instead of being
   // treated as virtual directories. This applies to copy/paste, rename,
   // mkdir, and all other filesystem operations that need the real filesystem.
-  const { originalExplorerFileSystem, originalFileSystem, originalRename } = await import(
+  const { originalExplorerFileSystem, originalFileSystem, originalRename, getFolderSize, cancelFolderSize } = await import(
     "./originalFileSystem"
   );
   const writeService = createWriteService({ fileSystem: originalFileSystem });
@@ -82,7 +82,7 @@ export async function bootstrapMainProcess(
           : Promise.resolve(),
     },
   );
-  const folderSizeHandlers = createFolderSizeHandlers();
+  const folderSizeHandlers = createFolderSizeHandlers({ getFolderSize, cancelFolderSize });
   activeWorkerClient = workerClient;
   disposeWriteCoordinator?.();
   disposeWriteCoordinator = () => {

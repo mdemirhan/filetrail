@@ -186,6 +186,9 @@ static napi_value native_copy_file(napi_env env, napi_callback_info info) {
 /* Defined in native_fileicon.m — registers nativeGetFileIcon on exports. */
 extern napi_value register_file_icon(napi_env env, napi_value exports);
 
+/* Defined in native_foldersize.c — registers nativeFolderSize/Cancel on exports. */
+extern napi_value register_folder_size(napi_env env, napi_value exports);
+
 static napi_value init(napi_env env, napi_value exports) {
   napi_value fn;
   napi_create_function(env, "nativeCopyFile", NAPI_AUTO_LENGTH,
@@ -193,6 +196,7 @@ static napi_value init(napi_env env, napi_value exports) {
   napi_set_named_property(env, exports, "nativeCopyFile", fn);
 
   register_file_icon(env, exports);
+  register_folder_size(env, exports);
 
   return exports;
 }

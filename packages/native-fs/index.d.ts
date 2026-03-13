@@ -27,3 +27,28 @@ export function nativeCopyFile(sourcePath: string, destinationPath: string): Pro
  * @returns A promise that resolves with PNG data, or `null` if the icon cannot be retrieved.
  */
 export function nativeGetFileIcon(path: string, size: number): Promise<Buffer | null>;
+
+/**
+ * Recursively calculates the total size of a folder using `fts(3)`.
+ *
+ * Returns a JSON string: `{"total":N,"dirs":{"path1":N,"path2":N,...}}`
+ * where `total` is the root folder size in bytes and `dirs` maps each
+ * sub-directory path to its accumulated size.
+ *
+ * Runs on a libuv thread pool thread — non-blocking. At most one calculation
+ * can be active at a time; starting a new one while another is running is
+ * undefined behavior (the JS caller must serialize).
+ *
+ * @param folderPath - Absolute path to the folder to size.
+ * @returns A promise that resolves with a JSON string.
+ * @throws An error with `code: "ECANCELLED"` if cancelled via `nativeFolderSizeCancel()`.
+ */
+export function nativeFolderSize(folderPath: string): Promise<string>;
+
+/**
+ * Cancels the currently active folder size calculation, if any.
+ *
+ * The running `nativeFolderSize` promise will reject with `code: "ECANCELLED"`.
+ * Safe to call when no calculation is active (no-op).
+ */
+export function nativeFolderSizeCancel(): void;

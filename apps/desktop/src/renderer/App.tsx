@@ -40,6 +40,7 @@ import { useExplorerNavigationController } from "./hooks/useExplorerNavigationCo
 import { useExplorerPaneLayout } from "./hooks/useExplorerPaneLayout";
 import { useExplorerSearchController } from "./hooks/useExplorerSearchController";
 import { useExplorerShortcuts } from "./hooks/useExplorerShortcuts";
+import { useFolderSizeCache } from "./hooks/useFolderSizeCache";
 import { useSearchSession } from "./hooks/useSearchSession";
 import { useWriteOperations } from "./hooks/useWriteOperations";
 import {
@@ -93,6 +94,7 @@ export function App() {
   type SortDirection = IpcRequest<"directory:getSnapshot">["sortDirection"];
 
   const client = useFiletrailClient();
+  const folderSizeCache = useFolderSizeCache(client);
   const [actionLogEntries, setActionLogEntries] = useState<ActionLogEntry[]>([]);
   const [actionLogLoading, setActionLogLoading] = useState(false);
   const [actionLogError, setActionLogError] = useState<string | null>(null);
@@ -1584,6 +1586,20 @@ export function App() {
     }
   }
 
+  // Derive folder size paths for the info panel and info row.
+  // The info panel always shows the getInfoItem (which is the selected or inspected item).
+  // The info row shows the selected entry, falling back to the current directory.
+  const infoPanelFolderSizePath =
+    getInfoItem && (getInfoItem.kind === "directory" || getInfoItem.kind === "symlink_directory")
+      ? getInfoItem.path
+      : null;
+  const infoRowActiveEntry = selectedEntry ?? (currentPath ? { path: currentPath, kind: "directory" as const } : null);
+  const infoRowFolderSizePath =
+    infoRowActiveEntry &&
+    (infoRowActiveEntry.kind === "directory" || infoRowActiveEntry.kind === "symlink_directory")
+      ? infoRowActiveEntry.path
+      : null;
+
   return (
     <main className="app-shell">
       {mainView === "explorer" ? (
@@ -1802,9 +1818,12 @@ export function App() {
               <InfoRow
                 open={infoRowOpen}
                 currentPath={currentPath}
-                currentEntries={currentEntries}
                 selectedEntry={selectedEntry}
                 item={getInfoItem}
+                folderSizeEntry={infoRowFolderSizePath ? folderSizeCache.getEntry(infoRowFolderSizePath) : undefined}
+                onCalculateFolderSize={infoRowFolderSizePath ? () => void folderSizeCache.calculateFolderSize(infoRowFolderSizePath) : undefined}
+                onRecalculateFolderSize={infoRowFolderSizePath ? () => folderSizeCache.recalculateFolderSize(infoRowFolderSizePath) : undefined}
+                onCancelFolderSize={infoRowFolderSizePath ? () => void folderSizeCache.cancelFolderSize(infoRowFolderSizePath) : undefined}
               />
             ),
             statusLabel: isSearchMode
@@ -1836,6 +1855,10 @@ export function App() {
             },
             onCopyPath: () => (getInfoItem ? copyGetInfoPath(getInfoItem.path) : false),
             copyPathDisabled: isWriteOperationLocked,
+            folderSizeEntry: infoPanelFolderSizePath ? folderSizeCache.getEntry(infoPanelFolderSizePath) : undefined,
+            onCalculateFolderSize: infoPanelFolderSizePath ? () => void folderSizeCache.calculateFolderSize(infoPanelFolderSizePath) : undefined,
+            onRecalculateFolderSize: infoPanelFolderSizePath ? () => folderSizeCache.recalculateFolderSize(infoPanelFolderSizePath) : undefined,
+            onCancelFolderSize: infoPanelFolderSizePath ? () => void folderSizeCache.cancelFolderSize(infoPanelFolderSizePath) : undefined,
           }}
           currentPath={currentPath}
           topToolbarItems={topToolbarItems}
