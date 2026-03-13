@@ -31,8 +31,9 @@ const originalFs = require("original-fs") as typeof import("node:fs");
 // on macOS — the build step compiles it, so a missing addon means a broken build.
 const addon = require("@filetrail/native-fs") as {
   nativeCopyFile: (src: string, dst: string) => Promise<void>;
+  nativeGetFileIcon: (path: string, size: number) => Promise<Buffer | null>;
 };
-const { nativeCopyFile } = addon;
+const { nativeCopyFile, nativeGetFileIcon } = addon;
 
 const {
   promises: { chmod, lstat, lutimes, mkdir, readdir, readlink, realpath, rename, rm, stat, symlink, utimes },
@@ -90,3 +91,6 @@ export const originalExplorerFileSystem: ExplorerFileSystem = {
 /** Rename backed by original-fs for write operations (rename, etc.). */
 export const originalRename = (oldPath: string, newPath: string): Promise<void> =>
   rename(oldPath, newPath);
+
+/** Get macOS file icon as PNG buffer using NSWorkspace. */
+export const getFileIcon = nativeGetFileIcon;

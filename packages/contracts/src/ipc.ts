@@ -8,6 +8,7 @@ export const explorerEntryKindSchema = z.enum([
   "file",
   "symlink_directory",
   "symlink_file",
+  "bundle",
   "other",
 ]);
 
@@ -201,6 +202,7 @@ export const writeOperationActionSchema = z.enum([
   "move_to",
   "duplicate",
   "trash",
+  "delete_immediately",
   "rename",
   "new_folder",
 ]);
@@ -212,6 +214,7 @@ export const actionLogActionSchema = z.enum([
   "move_to",
   "duplicate",
   "trash",
+  "delete_immediately",
   "rename",
   "new_folder",
 ]);
@@ -922,6 +925,15 @@ export const ipcContractSchemas = {
       status: z.literal("queued"),
     }),
   },
+  "writeOperation:deleteImmediately": {
+    request: z.object({
+      paths: z.array(z.string().min(1)).min(1).max(500),
+    }),
+    response: z.object({
+      operationId: z.string().min(1),
+      status: z.literal("queued"),
+    }),
+  },
   "writeOperation:cancel": {
     request: z.object({
       operationId: z.string().min(1),
@@ -1017,6 +1029,22 @@ export const ipcContractSchemas = {
     }),
     response: z.object({
       ok: z.boolean(),
+    }),
+  },
+  "system:emptyTrash": {
+    request: emptyRequestSchema,
+    response: z.object({
+      ok: z.boolean(),
+      error: z.string().nullable(),
+    }),
+  },
+  "system:getFileIcon": {
+    request: z.object({
+      path: z.string().min(1),
+      size: z.number().int().min(16).max(512),
+    }),
+    response: z.object({
+      pngBase64: z.string().nullable(),
     }),
   },
 } as const;

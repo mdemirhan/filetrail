@@ -91,6 +91,7 @@ export function AppDialogs({
   onUpdateCopyPastePolicy,
   onCloseCopyPasteDialog,
   onConfirmTrashDialog,
+  onConfirmDeleteImmediatelyDialog,
   showCopyPasteProgressCard,
   writeOperationCardState,
   onCancelWriteOperation,
@@ -159,6 +160,7 @@ export function AppDialogs({
   onUpdateCopyPastePolicy: (policy: CopyPastePolicy) => void;
   onCloseCopyPasteDialog: () => void;
   onConfirmTrashDialog: (paths: string[]) => void;
+  onConfirmDeleteImmediatelyDialog: (paths: string[]) => void;
   showCopyPasteProgressCard: boolean;
   writeOperationCardState: WriteOperationCardState | null;
   onCancelWriteOperation: () => void;
@@ -311,6 +313,21 @@ export function AppDialogs({
           primaryAction={{
             label: "Move to Trash",
             onClick: () => onConfirmTrashDialog(copyPasteDialogState.paths),
+            destructive: true,
+          }}
+          secondaryAction={{
+            label: "Cancel",
+            onClick: onCloseCopyPasteDialog,
+          }}
+        />
+      ) : null}
+      {copyPasteDialogState?.type === "confirmDeleteImmediately" ? (
+        <CopyPasteDialog
+          title="Delete Immediately?"
+          message={`Permanently delete ${copyPasteDialogState.itemLabel}? This action cannot be undone.`}
+          primaryAction={{
+            label: "Delete",
+            onClick: () => onConfirmDeleteImmediatelyDialog(copyPasteDialogState.paths),
             destructive: true,
           }}
           secondaryAction={{
@@ -477,6 +494,9 @@ function getWriteOperationTitle(
   }
   if (action === "trash") {
     return phase === "progress" ? "Move to Trash In Progress" : "Trash Result";
+  }
+  if (action === "delete_immediately") {
+    return phase === "progress" ? "Delete In Progress" : "Delete Result";
   }
   if (action === "rename") {
     return phase === "progress" ? "Rename In Progress" : "Rename Result";
@@ -660,6 +680,9 @@ function getWriteOperationLabel(action: WriteOperationAction): string {
   }
   if (action === "new_folder") {
     return "Create Folder";
+  }
+  if (action === "delete_immediately") {
+    return "Delete";
   }
   return "Paste";
 }

@@ -72,6 +72,7 @@ describe("AppDialogs", () => {
         onUpdateCopyPastePolicy={() => undefined}
         onCloseCopyPasteDialog={() => undefined}
         onConfirmTrashDialog={() => undefined}
+        onConfirmDeleteImmediatelyDialog={() => undefined}
         showCopyPasteProgressCard={false}
         writeOperationCardState={null}
         onCancelWriteOperation={() => undefined}

@@ -745,6 +745,7 @@ export function App() {
     startMoveToDestination,
     startPasteFromClipboard,
     startTrashPaths,
+    startDeleteImmediatelyPaths,
     submitMoveDialog,
     submitNewFolderDialog,
     submitRenameDialog,
@@ -2106,6 +2107,9 @@ export function App() {
         onCloseCopyPasteDialog={dismissCopyPasteDialog}
         onConfirmTrashDialog={(paths) => {
           void startTrashPaths(paths);
+        }}
+        onConfirmDeleteImmediatelyDialog={(paths) => {
+          void startDeleteImmediatelyPaths(paths);
         }}
         showCopyPasteProgressCard={showCopyPasteProgressCard}
         writeOperationCardState={writeOperationCardState}

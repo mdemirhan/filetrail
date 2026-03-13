@@ -33,6 +33,7 @@ describe("createWriteOperationCoordinator", () => {
         stat: vi.fn(),
         mkdir: vi.fn(),
         rename: vi.fn(),
+        rm: vi.fn(),
       },
       { recordWriteOperation },
     );

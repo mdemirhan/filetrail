@@ -56,7 +56,7 @@ import {
 } from "../lib/explorerAppUtils";
 import { parentDirectoryPath } from "../lib/explorerNavigation";
 import type { DirectoryEntry } from "../lib/explorerTypes";
-import { createFavorite, getFileSystemItemPath, isFavoritePath } from "../lib/favorites";
+import { createFavorite, getFileSystemItemPath, getTrashPath, isFavoritePath, isPathInsideTrash } from "../lib/favorites";
 import type { useFiletrailClient } from "../lib/filetrailClient";
 import type { InternalMoveSourceSurface } from "../lib/internalDragAndDrop";
 import { createRendererLogger } from "../lib/logging";
@@ -427,6 +427,10 @@ export function useExplorerActions(args: {
       return null;
     }
     if (contextMenuState.surface === "favorite") {
+      // Trash is a permanent favorite — cannot be removed.
+      if (targetPath === getTrashPath(homePath)) {
+        return null;
+      }
       return "Remove from Favorites";
     }
     if (contextMenuState.surface !== "content" && contextMenuState.surface !== "treeFolder") {
@@ -449,24 +453,44 @@ export function useExplorerActions(args: {
     if (contextMenuFavoriteToggleLabel === null) {
       hidden.add("toggleFavorite");
     }
+    if (contextMenuState.surface === "trash") {
+      // "Show Package Contents" is only visible for bundle entries (.app, .framework, etc.)
+      const hasBundle = contextMenuTargetEntries.some((entry) => entry.kind === "bundle");
+      if (!hasBundle) {
+        hidden.add("showPackageContents");
+      }
+      return Array.from(hidden);
+    }
     if (contextMenuState.surface === "favorite") {
       return Array.from(hidden);
     }
     if (contextMenuState.surface === "treeFolder") {
+      // "Delete Immediately" is only shown for tree items inside the Trash.
+      const targetPath = contextMenuState.targetPath;
+      if (!targetPath || !isPathInsideTrash(targetPath, homePath)) {
+        hidden.add("deleteImmediately");
+      }
       return Array.from(hidden);
     }
     if (contextMenuState.surface === "search") {
       hidden.add("toggleFavorite");
     }
+    // "Show Package Contents" is only visible for bundle entries (.app, .framework, etc.)
+    const hasBundle = contextMenuTargetEntries.some((entry) => entry.kind === "bundle");
+    if (!hasBundle) {
+      hidden.add("showPackageContents");
+    }
     return Array.from(hidden);
-  }, [contextMenuFavoriteToggleLabel, contextMenuState]);
+  }, [contextMenuFavoriteToggleLabel, contextMenuState, contextMenuTargetEntries]);
 
   const contextMenuDisabledActionIds = useMemo(() => {
     if (!contextMenuState) {
       return [] as ContextMenuActionId[];
     }
     const disabled = new Set<ContextMenuActionId>();
-    const isContentContext = contextMenuState.surface === "content" && !isSearchMode;
+    const isContentContext =
+      (contextMenuState.surface === "content" || contextMenuState.surface === "trash") &&
+      !isSearchMode;
     const isTreeFolderContext = contextMenuState.surface === "treeFolder";
     const isFavoriteContext = contextMenuState.surface === "favorite";
     const hasOnlyEditableFiles =
@@ -892,11 +916,14 @@ export function useExplorerActions(args: {
     window.requestAnimationFrame(() => {
       contentPaneRef.current?.focus({ preventScroll: true });
     });
+    // Inside Trash, items get the full content menu plus "Delete Immediately".
+    const resolvedSurface =
+      surface === "content" && isPathInsideTrash(currentPath, homePath) ? "trash" : surface;
     setContextMenuState({
       ...resolvedPosition,
       paths: contextPaths,
       targetPath: path,
-      surface,
+      surface: resolvedSurface,
       targetKind: "contentEntry",
       sourceSubview: null,
       scope: contextPaths.length > 0 ? "selection" : "background",
@@ -986,11 +1013,7 @@ export function useExplorerActions(args: {
     action: CopyLikeAction,
     outcome: Extract<CopyLikePreStartOutcome, { status: "blocked" | "error" }>,
   ) {
-    pushToast({
-      kind: outcome.status === "error" ? "error" : "warning",
-      title: getCopyLikePreStartFailureTitle(action),
-      message: outcome.message,
-    });
+    showModalNotice(getCopyLikePreStartFailureTitle(action), outcome.message);
   }
 
   function applyCopyPasteClipboardState(nextClipboard: CopyPasteClipboardState) {
@@ -1423,7 +1446,8 @@ export function useExplorerActions(args: {
       }
       return {
         status: "error",
-        message: getCopyLikeStartFailureMessage(action),
+        message:
+          error instanceof Error ? error.message : getCopyLikeStartFailureMessage(action),
       };
     }
   }
@@ -1580,7 +1604,10 @@ export function useExplorerActions(args: {
       logger.error("copy paste planning failed", error);
       return {
         status: "error",
-        message: getCopyLikePreparationFailureMessage(args.action),
+        message:
+          error instanceof Error
+            ? error.message
+            : getCopyLikePreparationFailureMessage(args.action),
       };
     }
   }
@@ -2036,6 +2063,10 @@ export function useExplorerActions(args: {
   }
 
   function toggleFavoritePath(path: string, options?: { revealInTreeOnRemove?: boolean }) {
+    // Trash is a permanent favorite — cannot be toggled off.
+    if (path === getTrashPath(homePath)) {
+      return;
+    }
     const shouldRemove = isFavoritePath(favorites, path);
     setFavorites((current) =>
       shouldRemove
@@ -2171,6 +2202,27 @@ export function useExplorerActions(args: {
       await startTrashPaths(paths);
       return;
     }
+    if (actionId === "showPackageContents") {
+      const firstPath = paths[0];
+      if (firstPath) {
+        await navigateTo(firstPath, "push");
+      }
+      return;
+    }
+    if (actionId === "deleteImmediately") {
+      if (paths.length > 0) {
+        setCopyPasteDialogState({
+          type: "confirmDeleteImmediately",
+          paths,
+          itemLabel: formatItemSummaryFromPathCount(paths[0] ?? "item", paths.length),
+        });
+      }
+      return;
+    }
+    if (actionId === "emptyTrash") {
+      await client.invoke("system:emptyTrash", {});
+      return;
+    }
     if (actionId === "terminal") {
       const firstPath = paths[0];
       if (firstPath) {
@@ -2206,6 +2258,10 @@ export function useExplorerActions(args: {
   }
 
   async function openEntry(entry: DirectoryEntry) {
+    if (entry.kind === "bundle") {
+      await openPathExternally(entry.path);
+      return;
+    }
     if (entry.kind === "directory") {
       await navigateTo(entry.path, "push");
       return;
@@ -2662,7 +2718,49 @@ export function useExplorerActions(args: {
         showWriteOperationBusyToast();
         return;
       }
-      showModalNotice("Move to Trash", "File Trail could not move the selected items to Trash.");
+      showModalNotice(
+        "Move to Trash",
+        error instanceof Error ? error.message : "File Trail could not move the selected items to Trash.",
+      );
+    }
+  }
+
+  async function startDeleteImmediatelyPaths(paths: string[]) {
+    if (paths.length === 0) {
+      return;
+    }
+    if (isWriteOperationInFlight()) {
+      showWriteOperationBusyToast();
+      return;
+    }
+    try {
+      setCopyPasteDialogState(null);
+      const response = await client.invoke("writeOperation:deleteImmediately", {
+        paths,
+      });
+      rememberPendingTreeSelectionPath(null);
+      activeWriteOperationIdRef.current = response.operationId;
+      applyWriteOperationCardState({
+        action: "delete_immediately",
+        stage: "queued",
+        targetPath: null,
+        completedItemCount: 0,
+        totalItemCount: paths.length,
+        completedByteCount: 0,
+        totalBytes: null,
+        currentSourcePath: paths[0] ?? null,
+      });
+      closeContextMenu();
+    } catch (error) {
+      logger.error("delete immediately failed", error);
+      if (error instanceof Error && error.message.includes(WRITE_OPERATION_BUSY_ERROR)) {
+        showWriteOperationBusyToast();
+        return;
+      }
+      showModalNotice(
+        "Delete Immediately",
+        error instanceof Error ? error.message : "File Trail could not permanently delete the selected items.",
+      );
     }
   }
 
@@ -2738,6 +2836,7 @@ export function useExplorerActions(args: {
     startMoveToDestination,
     startPasteFromClipboard,
     startTrashPaths,
+    startDeleteImmediatelyPaths,
     submitMoveDialog,
     submitNewFolderDialog,
     submitRenameDialog,

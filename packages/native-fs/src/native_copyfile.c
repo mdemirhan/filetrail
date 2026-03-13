@@ -183,11 +183,17 @@ static napi_value native_copy_file(napi_env env, napi_callback_info info) {
 
 /* ── Module initialization ───────────────────────────────────────── */
 
+/* Defined in native_fileicon.m — registers nativeGetFileIcon on exports. */
+extern napi_value register_file_icon(napi_env env, napi_value exports);
+
 static napi_value init(napi_env env, napi_value exports) {
   napi_value fn;
   napi_create_function(env, "nativeCopyFile", NAPI_AUTO_LENGTH,
                        native_copy_file, NULL, &fn);
   napi_set_named_property(env, exports, "nativeCopyFile", fn);
+
+  register_file_icon(env, exports);
+
   return exports;
 }
 

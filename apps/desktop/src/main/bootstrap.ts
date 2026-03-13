@@ -22,6 +22,8 @@ import {
 } from "./bootstrap/responseCache";
 import {
   openInTerminal,
+  emptyTrash,
+  getFileIconHandler,
   openPath,
   openPathsWithApplication,
   performEditAction,
@@ -71,6 +73,7 @@ export async function bootstrapMainProcess(
       stat: originalFileSystem.stat,
       mkdir: (path) => originalFileSystem.mkdir(path),
       rename: originalRename,
+      rm: (path, options) => originalFileSystem.rm(path, options),
     },
     {
       recordWriteOperation: (args) =>
@@ -235,6 +238,8 @@ export async function bootstrapMainProcess(
         return { ok: true };
       },
       "system:performEditAction": (payload, event) => performEditAction(payload, event.sender),
+      "system:emptyTrash": () => emptyTrash(),
+      "system:getFileIcon": (payload) => getFileIconHandler(payload),
     },
     logger,
   );

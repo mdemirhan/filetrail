@@ -12,6 +12,7 @@ import {
 
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 import { toErrorMessage } from "../ipc";
+import { getFileIcon } from "../originalFileSystem";
 
 const execFileAsync = promisify(execFile);
 
@@ -167,5 +168,27 @@ async function resolveTerminalTargetPath(path: string): Promise<string> {
     return stats.isDirectory() ? path : dirname(path);
   } catch {
     return dirname(path);
+  }
+}
+
+export async function emptyTrash(): Promise<IpcResponse<"system:emptyTrash">> {
+  try {
+    await execFileAsync("osascript", ["-e", 'tell application "Finder" to empty trash']);
+    return { ok: true, error: null };
+  } catch (error) {
+    return { ok: false, error: toErrorMessage(error) };
+  }
+}
+
+export async function getFileIconHandler(
+  payload: IpcRequest<"system:getFileIcon">,
+): Promise<IpcResponse<"system:getFileIcon">> {
+  try {
+    const buffer = await getFileIcon(payload.path, payload.size);
+    return {
+      pngBase64: buffer ? buffer.toString("base64") : null,
+    };
+  } catch {
+    return { pngBase64: null };
   }
 }

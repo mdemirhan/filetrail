@@ -143,6 +143,11 @@ export function isFavoritePath(favorites: FavoritePreference[], path: string): b
   return favorites.some((favorite) => favorite.path === path);
 }
 
+export function isPathInsideTrash(path: string, homePath: string): boolean {
+  const trashPath = getTrashPath(homePath);
+  return trashPath.length > 0 && (path === trashPath || path.startsWith(`${trashPath}/`));
+}
+
 export function buildTreePresentation(args: {
   favorites: FavoritePreference[];
   favoritesExpanded: boolean;

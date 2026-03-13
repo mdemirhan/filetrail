@@ -38,6 +38,26 @@ const DEFAULT_FILE_SYSTEM: ExplorerFileSystem = {
 
 type EntryKind = IpcResponse<"directory:getSnapshot">["entries"][number]["kind"];
 
+// macOS treats directories with these extensions as opaque "packages" — they should behave
+// like files (double-click launches / opens) rather than browsable folders.
+const MACOS_PACKAGE_EXTENSIONS = new Set([
+  ".app",
+  ".framework",
+  ".bundle",
+  ".plugin",
+  ".kext",
+  ".xpc",
+  ".xcodeproj",
+  ".playground",
+  ".prefPane",
+  ".appex",
+]);
+
+export function isMacOSPackageName(name: string): boolean {
+  const dot = name.lastIndexOf(".");
+  return dot > 0 && MACOS_PACKAGE_EXTENSIONS.has(name.slice(dot).toLowerCase());
+}
+
 // Tree loading only returns navigable folders, not every entry in the directory.
 export async function listTreeChildren(
   path: string,
@@ -149,7 +169,7 @@ export async function getItemProperties(
   const stats = await fileSystem.stat(resolvedPath);
   const symlinkStats = await safeLstat(resolvedPath, fileSystem);
   const isSymlink = symlinkStats?.isSymbolicLink?.() ?? false;
-  const kind = deriveKindFromStats(stats, isSymlink);
+  const kind = deriveKindFromStats(stats, isSymlink, resolvedPath);
   return {
     item: {
       path: resolvedPath,
@@ -260,13 +280,14 @@ async function readDirectoryEntryMetadata(
   const stats = await fileSystem.stat(path);
   const symlinkStats = await safeLstat(path, fileSystem);
   const isSymlink = symlinkStats?.isSymbolicLink?.() ?? false;
-  const kind = deriveKindFromStats(stats, isSymlink);
+  const kind = deriveKindFromStats(stats, isSymlink, path);
+  const isDir = stats.isDirectory();
   return {
     path,
     kindLabel: getKindLabel(kind, path),
     modifiedAt: toIsoStringOrNull(stats.mtime),
-    sizeBytes: stats.isDirectory() ? null : stats.size,
-    sizeStatus: stats.isDirectory() ? "deferred" : "ready",
+    sizeBytes: isDir ? null : stats.size,
+    sizeStatus: isDir ? "deferred" : "ready",
     permissionMode: normalizePermissionMode(stats.mode),
   };
 }
@@ -277,8 +298,10 @@ async function classifyEntry(
   fileSystem: ExplorerFileSystem,
 ): Promise<EntryKind> {
   // Symlinks need a follow-up stat to determine whether the target behaves like a file or folder.
+  // macOS package directories (.app, .framework, etc.) are classified as "bundle" so consumers
+  // treat them as atomic items rather than browsable folders.
   if (dirent.isDirectory()) {
-    return "directory";
+    return isMacOSPackageName(basename(path)) ? "bundle" : "directory";
   }
   if (dirent.isFile()) {
     return "file";
@@ -286,7 +309,7 @@ async function classifyEntry(
   if (dirent.isSymbolicLink()) {
     try {
       const stats = await fileSystem.stat(path);
-      return deriveKindFromStats(stats, true);
+      return deriveKindFromStats(stats, true, path);
     } catch {
       return "other";
     }
@@ -294,8 +317,11 @@ async function classifyEntry(
   return "other";
 }
 
-function deriveKindFromStats(stats: FileSystemStats, isSymlink: boolean): EntryKind {
+function deriveKindFromStats(stats: FileSystemStats, isSymlink: boolean, path?: string): EntryKind {
   if (stats.isDirectory()) {
+    if (path && isMacOSPackageName(basename(path))) {
+      return "bundle";
+    }
     return isSymlink ? "symlink_directory" : "directory";
   }
   if (stats.isFile()) {
@@ -485,6 +511,14 @@ function getKindLabel(kind: EntryKind, path: string): string {
   }
   if (kind === "symlink_file") {
     return "Alias File";
+  }
+  if (kind === "bundle") {
+    const ext = extname(path).replace(/^\./, "").toLowerCase();
+    if (ext === "app") return "Application";
+    if (ext === "framework") return "Framework";
+    if (ext === "xcodeproj") return "Xcode Project";
+    if (ext === "playground") return "Playground";
+    return "Bundle";
   }
   if (kind === "file") {
     const extension = extname(path).replace(/^\./, "").toLowerCase();

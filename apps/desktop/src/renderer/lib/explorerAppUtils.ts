@@ -142,7 +142,7 @@ export function resolveWriteOperationRefreshPath(
   result: WriteOperationResult,
   currentPath: string,
 ): string {
-  if (result.action === "trash") {
+  if (result.action === "trash" || result.action === "delete_immediately") {
     const impactedPath = findDeepestMatchingSourcePath(result, currentPath);
     if (!impactedPath) {
       return currentPath;
@@ -169,7 +169,7 @@ export function resolveWriteOperationTreeSelectionPath(
     return null;
   }
 
-  if (result.action === "trash") {
+  if (result.action === "trash" || result.action === "delete_immediately") {
     const impactedPath = findDeepestMatchingSourcePath(result, selectedTreePath);
     if (!impactedPath) {
       return null;

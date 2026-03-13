@@ -4884,6 +4884,18 @@ body.resizing-panels-vertical * {
   height: 18px;
 }
 
+.file-icon.native-app-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.file-icon-native-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  -webkit-user-drag: none;
+}
+
 .file-icon-svg {
   width: 100%;
   height: 100%;

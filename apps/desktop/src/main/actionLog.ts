@@ -381,6 +381,9 @@ function getActionLabel(action: WriteOperationAction): string {
   if (action === "duplicate") {
     return "Duplicate";
   }
+  if (action === "delete_immediately") {
+    return "Delete Immediately";
+  }
   return "Rename";
 }
 

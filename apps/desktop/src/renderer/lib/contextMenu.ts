@@ -1,4 +1,4 @@
-export type ContextMenuSurface = "content" | "search" | "treeFolder" | "favorite";
+export type ContextMenuSurface = "content" | "search" | "treeFolder" | "favorite" | "trash";
 export type ContextMenuTargetKind = "contentEntry" | "treeFolder" | "favorite";
 export type ContextMenuScope = "selection" | "background";
 export type ContextMenuSourceSubview = "tree" | "favorites" | null;
@@ -8,6 +8,7 @@ export type ContextMenuActionId =
   | "revealInTree"
   | "open"
   | "openWith"
+  | "showPackageContents"
   | "edit"
   | "showInfo"
   | "cut"
@@ -20,7 +21,9 @@ export type ContextMenuActionId =
   | "toggleFavorite"
   | "terminal"
   | "copyPath"
-  | "trash";
+  | "trash"
+  | "deleteImmediately"
+  | "emptyTrash";
 
 export type ContextMenuSubmenuAction =
   | {
@@ -59,6 +62,7 @@ export type ContextMenuIconName =
   | "revealInTree"
   | "open"
   | "openWith"
+  | "showPackageContents"
   | "edit"
   | "showInfo"
   | "cut"
@@ -71,6 +75,8 @@ export type ContextMenuIconName =
   | "terminal"
   | "copyPath"
   | "trash"
+  | "deleteImmediately"
+  | "emptyTrash"
   | "favorite";
 
 export type ContextMenuItem =
@@ -104,6 +110,13 @@ export function getContextMenuItems(input: {
     ];
   }
 
+  if (input.surface === "trash") {
+    return [
+      ...getContextMenuItems({ surface: "content", favoriteToggleLabel }),
+      { id: "deleteImmediately", label: "Delete Immediately", icon: "deleteImmediately", destructive: true },
+    ];
+  }
+
   if (input.surface === "treeFolder") {
     return [
       { id: "open", label: "Open", icon: "open" },
@@ -125,6 +138,7 @@ export function getContextMenuItems(input: {
       { id: "copyPath", label: "Copy Path", icon: "copyPath" },
       { type: "separator", key: "separator-tree-write" },
       { id: "trash", label: "Move to Trash", icon: "trash", destructive: true },
+      { id: "deleteImmediately", label: "Delete Immediately", icon: "deleteImmediately", destructive: true },
     ];
   }
 
@@ -146,6 +160,7 @@ export function getContextMenuItems(input: {
 
   return [
     { id: "open", label: "Open", icon: "open" },
+    { id: "showPackageContents", label: "Show Package Contents", icon: "showPackageContents" },
     { id: "openWith", label: "Open With", icon: "openWith", hasSubmenu: true },
     { id: "edit", label: "Edit", icon: "edit" },
     { type: "separator", key: "separator-open" },

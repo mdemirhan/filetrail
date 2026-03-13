@@ -334,6 +334,7 @@ describe("ItemContextMenu", () => {
       "Open in Terminal",
       "Copy Path",
       "Move to Trash",
+      "Delete Immediately",
     ]);
   });
 

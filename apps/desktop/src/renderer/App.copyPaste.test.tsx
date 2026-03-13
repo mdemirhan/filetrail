@@ -4835,9 +4835,10 @@ describe("App copy/paste integration", () => {
     });
 
     expect(await screen.findByText("Paste couldn't start")).toBeInTheDocument();
-    expect(
-      screen.getByText("File Trail couldn't prepare the paste operation. No files were written."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("planner unavailable")).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "OK" }));
+    });
     await selectItem("/Users/demo/Folder");
 
     const planCallsBeforeRetry = harness.invocations.filter(
@@ -4905,6 +4906,9 @@ describe("App copy/paste integration", () => {
 
     expect(await screen.findByText("Paste couldn't start")).toBeInTheDocument();
     expect(screen.getByText("Destination folder does not exist.")).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "OK" }));
+    });
     await selectItem("/Users/demo/Folder");
 
     const planCallsBeforeRetry = harness.invocations.filter(

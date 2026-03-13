@@ -1503,8 +1503,8 @@ function formatDetailSize(
   entry: DirectoryEntry,
   metadata: DirectoryEntryMetadata | undefined,
 ): string {
-  // Directories show `-` by design. Empty string is reserved for metadata that is still loading.
-  if (entry.kind === "directory" || entry.kind === "symlink_directory") {
+  // Directories and bundles show `-` by design. Empty string is reserved for metadata that is still loading.
+  if (entry.kind === "directory" || entry.kind === "symlink_directory" || entry.kind === "bundle") {
     return "-";
   }
   if (!metadata || metadata.sizeStatus !== "ready" || metadata.sizeBytes === null) {

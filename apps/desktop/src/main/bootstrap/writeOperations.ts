@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { shell } from "electron";
 
@@ -22,6 +23,7 @@ type WriteOperationFs = {
   stat: (path: string) => Promise<{ isDirectory(): boolean }>;
   mkdir: (path: string) => Promise<void>;
   rename: (oldPath: string, newPath: string) => Promise<void>;
+  rm: (path: string, options: { recursive: boolean; force: boolean }) => Promise<void>;
 };
 
 type WriteOperationSender = {
@@ -72,6 +74,19 @@ export function createWriteOperationCoordinator(
   >();
   let activeWriteOperationId: string | null = null;
   let localWriteOperationSequence = 0;
+
+  // ~/.Trash is a protected system directory — it must never be deleted, renamed,
+  // moved, or trashed.  Items *inside* Trash are fine; this only guards the
+  // top-level Trash folder itself.
+  const trashPath = resolve(homedir(), ".Trash");
+  function assertNotProtectedPath(paths: readonly string[]): void {
+    for (const path of paths) {
+      if (resolve(path) === trashPath) {
+        throw new Error("The Trash folder is a protected system directory and cannot be modified.");
+      }
+    }
+  }
+
   const writeServiceUnsubscribe = writeService.subscribe((event) => {
     const request = copyPasteRequests.get(event.operationId);
     const action = request?.action ?? "paste";
@@ -399,6 +414,7 @@ export function createWriteOperationCoordinator(
     payload: IpcRequest<"writeOperation:rename">,
   ): Promise<PreparedRenameOperation> {
     const sourcePath = resolve(payload.sourcePath);
+    assertNotProtectedPath([sourcePath]);
     const destinationName = payload.destinationName.trim();
     const destinationPath = join(dirname(sourcePath), destinationName);
     await fs.lstat(sourcePath);
@@ -635,6 +651,99 @@ export function createWriteOperationCoordinator(
     });
   }
 
+  async function executeDeleteImmediatelyOperation(
+    payload: IpcRequest<"writeOperation:deleteImmediately">,
+    operationId: string,
+    controller: AbortController,
+  ): Promise<void> {
+    const paths = payload.paths.map((path) => resolve(path));
+    const startedAt = new Date().toISOString();
+    const items: WriteOperationResult["items"] = [];
+    let completedItemCount = 0;
+    let cancelled = false;
+    for (const [index, path] of paths.entries()) {
+      if (controller.signal.aborted) {
+        cancelled = true;
+        items.push({
+          sourcePath: path,
+          destinationPath: null,
+          status: "cancelled",
+          error: "Operation cancelled.",
+          skipReason: null,
+        });
+        break;
+      }
+      emitLocalWriteOperationEvent({
+        operationId,
+        action: "delete_immediately",
+        status: "running",
+        completedItemCount,
+        totalItemCount: paths.length,
+        completedByteCount: 0,
+        totalBytes: null,
+        currentSourcePath: path,
+        currentDestinationPath: null,
+        result: null,
+      });
+      try {
+        await fs.rm(path, { recursive: true, force: true });
+        completedItemCount += 1;
+        items.push({
+          sourcePath: path,
+          destinationPath: null,
+          status: "completed",
+          error: null,
+          skipReason: null,
+        });
+      } catch (error) {
+        items.push({
+          sourcePath: path,
+          destinationPath: null,
+          status: "failed",
+          error: error instanceof Error ? error.message : String(error),
+          skipReason: null,
+        });
+      }
+    }
+    const failedItemCount = items.filter((item) => item.status === "failed").length;
+    const status: WriteOperationResult["status"] = cancelled
+      ? "cancelled"
+      : failedItemCount === paths.length
+        ? "failed"
+        : failedItemCount > 0
+          ? "partial"
+          : "completed";
+    const result: WriteOperationResult = createLocalWriteOperationResult({
+      operationId,
+      action: "delete_immediately",
+      targetPath: null,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      totalItemCount: paths.length,
+      completedItemCount,
+      items,
+      status,
+      error:
+        status === "cancelled"
+          ? "Operation cancelled."
+          : failedItemCount > 0
+            ? (items.find((item) => item.status === "failed")?.error ?? "Delete failed.")
+            : null,
+    });
+    emitLocalWriteOperationEvent({
+      operationId,
+      action: "delete_immediately",
+      status,
+      completedItemCount,
+      totalItemCount: paths.length,
+      completedByteCount: 0,
+      totalBytes: null,
+      currentSourcePath: null,
+      currentDestinationPath: null,
+      result,
+    });
+  }
+
   function cancelWriteOperation(operationId: string): { ok: boolean } {
     const localController = localWriteOperationControllers.get(operationId);
     if (localController) {
@@ -647,6 +756,9 @@ export function createWriteOperationCoordinator(
   return {
     handlers: {
       "copyPaste:analyzeStart": (payload: IpcRequest<"copyPaste:analyzeStart">) => {
+        if (payload.mode === "cut") {
+          assertNotProtectedPath(payload.sourcePaths);
+        }
         ensureNoWriteOperationInFlight();
         return writeService.startCopyPasteAnalysis({
           mode: payload.mode,
@@ -658,17 +770,24 @@ export function createWriteOperationCoordinator(
         writeService.getCopyPasteAnalysisUpdate(payload.analysisId),
       "copyPaste:analyzeCancel": (payload: IpcRequest<"copyPaste:analyzeCancel">) =>
         writeService.cancelCopyPasteAnalysis(payload.analysisId),
-      "copyPaste:plan": (payload: IpcRequest<"copyPaste:plan">) =>
-        writeService.planCopyPaste({
+      "copyPaste:plan": (payload: IpcRequest<"copyPaste:plan">) => {
+        if (payload.mode === "cut") {
+          assertNotProtectedPath(payload.sourcePaths);
+        }
+        return writeService.planCopyPaste({
           mode: payload.mode,
           sourcePaths: payload.sourcePaths,
           destinationDirectoryPath: payload.destinationDirectoryPath,
           conflictResolution: payload.conflictResolution,
-        }),
+        });
+      },
       "copyPaste:start": (
         payload: IpcRequest<"copyPaste:start">,
         event: { sender: WriteOperationSender },
       ) => {
+        if ("sourcePaths" in payload && payload.mode === "cut") {
+          assertNotProtectedPath(payload.sourcePaths);
+        }
         ensureNoWriteOperationInFlight();
         const handle =
           "analysisId" in payload
@@ -763,6 +882,7 @@ export function createWriteOperationCoordinator(
         payload: IpcRequest<"writeOperation:trash">,
         event: { sender: WriteOperationSender },
       ) => {
+        assertNotProtectedPath(payload.paths);
         ensureNoWriteOperationInFlight();
         return queueLocalWriteOperation({
           action: "trash",
@@ -773,6 +893,23 @@ export function createWriteOperationCoordinator(
           sender: event.sender,
           execute: (operationId, controller) =>
             executeTrashOperation(payload, operationId, controller),
+        });
+      },
+      "writeOperation:deleteImmediately": (
+        payload: IpcRequest<"writeOperation:deleteImmediately">,
+        event: { sender: WriteOperationSender },
+      ) => {
+        assertNotProtectedPath(payload.paths);
+        ensureNoWriteOperationInFlight();
+        return queueLocalWriteOperation({
+          action: "delete_immediately",
+          kind: "deleteImmediately",
+          sourcePaths: payload.paths,
+          targetPaths: [],
+          metadata: null,
+          sender: event.sender,
+          execute: (operationId, controller) =>
+            executeDeleteImmediatelyOperation(payload, operationId, controller),
         });
       },
       "writeOperation:cancel": (payload: IpcRequest<"writeOperation:cancel">) =>

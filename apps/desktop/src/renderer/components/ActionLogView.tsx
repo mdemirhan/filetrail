@@ -842,6 +842,9 @@ function formatActionLabel(action: ActionLogAction): string {
   if (action === "rename") {
     return "Rename";
   }
+  if (action === "delete_immediately") {
+    return "Delete Immediately";
+  }
   return "Open";
 }
 

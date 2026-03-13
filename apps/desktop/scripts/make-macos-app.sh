@@ -39,10 +39,10 @@ if [[ ! -d "./node_modules/electron/dist/Electron.app" ]]; then
   exit 1
 fi
 
-echo "[1/5] Building macOS icon assets..."
+echo "[1/6] Building macOS icon assets..."
 bash ./scripts/build-app-icon.sh
 
-echo "[2/5] Building native-fs addon for ${ARCH}..."
+echo "[2/6] Building native-fs addon for ${ARCH}..."
 NATIVE_FS_DIR="${APP_DIR}/../../packages/native-fs"
 (cd "${NATIVE_FS_DIR}" && npx node-gyp rebuild --arch="${ARCH}")
 # Verify the addon loads correctly — only when building for the host arch,
@@ -58,10 +58,10 @@ else
   echo "  Skipping runtime verification (cross-arch build: host=${HOST_ARCH}, target=${ARCH})"
 fi
 
-echo "[3/5] Building app bundles..."
+echo "[3/6] Building app bundles..."
 bun run build
 
-echo "[4/5] Packaging macOS app for ${ARCH}..."
+echo "[4/6] Packaging macOS app for ${ARCH}..."
 APP_NAME="File Trail"
 APP_SLUG="FileTrail"
 OUT_DIR="${APP_DIR}/out/${APP_SLUG}-darwin-${ARCH}"
@@ -125,7 +125,12 @@ else
   exit 1
 fi
 
-echo "[5/5] Building distributables..."
+echo "[5/6] Ad-hoc code signing..."
+# Ad-hoc signing gives the app a valid code signature so macOS does not block
+# filesystem access to protected paths (e.g. ~/.Trash) for unsigned apps.
+codesign --force --deep --sign - "${APP_BUNDLE}"
+
+echo "[6/6] Building distributables..."
 ZIP_PATH="${OUT_DIR}/${APP_SLUG}-${ARCH}.zip"
 DMG_PATH="${OUT_DIR}/${APP_SLUG}-${ARCH}.dmg"
 

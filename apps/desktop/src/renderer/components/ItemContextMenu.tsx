@@ -299,6 +299,28 @@ function ContextMenuIcon({ name }: { name: ContextMenuIconName }) {
       </svg>
     );
   }
+  if (name === "showPackageContents") {
+    return (
+      <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="3" y="3" width="18" height="18" rx="2" />
+        <path d="M9 3v18M3 9h6" />
+      </svg>
+    );
+  }
+  if (name === "deleteImmediately") {
+    return (
+      <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M8 6h8M10 6V4h4v2M6 6h12l-1 13a2 2 0 0 1-2 1.85H9A2 2 0 0 1 7 19L6 6M10 10v6M14 10v6" />
+      </svg>
+    );
+  }
+  if (name === "emptyTrash") {
+    return (
+      <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M8 6h8M10 6V4h4v2M6 6h12l-1 13a2 2 0 0 1-2 1.85H9A2 2 0 0 1 7 19L6 6M10 10v6M14 10v6" />
+      </svg>
+    );
+  }
   // trash (default fallback) — converged with toolbar
   return (
     <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">

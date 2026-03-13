@@ -63,6 +63,11 @@ type CopyPasteDialogState =
       paths: string[];
       itemLabel: string;
     }
+  | {
+      type: "confirmDeleteImmediately";
+      paths: string[];
+      itemLabel: string;
+    }
   | null;
 
 type WriteOperationCardState = {

@@ -36,7 +36,7 @@ import {
   getToolbarItemsForSurface,
 } from "../../shared/toolbarItems";
 import { generateAccentTokens } from "../lib/accent";
-import { getFavoriteLabel } from "../lib/favorites";
+import { getFavoriteLabel, getTrashPath } from "../lib/favorites";
 import { FavoriteItemIcon } from "../lib/fileIcons";
 import { type ThemeCssBase, getThemeVariant, resolveThemeCssBase } from "../lib/themeVariants";
 import { uiMonoFontStack as mono, uiSansFontStack as sans } from "../lib/viewFonts";
@@ -3614,6 +3614,7 @@ export function SettingsView({
                   label="Remove"
                   ariaLabel={`Remove ${getFavoriteLabel(favorite.path, homePath)}`}
                   theme={palette}
+                  disabled={favorite.path === getTrashPath(homePath)}
                   onClick={() => onRemoveFavorite(index)}
                 />
               </div>

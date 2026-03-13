@@ -1,5 +1,8 @@
+import { useEffect, useState } from "react";
+
 import type { IpcResponse } from "@filetrail/contracts";
 import type { FavoriteIconId } from "../../shared/appPreferences";
+import { useFiletrailClient } from "./filetrailClient";
 import {
   ColorblockDocumentSvg,
   resolveColorblockIconType,
@@ -17,6 +20,10 @@ import {
 } from "./iconThemeVivid";
 
 type Entry = IpcResponse<"directory:getSnapshot">["entries"][number];
+
+// In-memory LRU cache for native app icons (base64 PNG data).
+const nativeIconCache = new Map<string, string | null>();
+const NATIVE_ICON_CACHE_MAX = 256;
 
 // Icon rendering is intentionally lightweight and CSS-driven. Classic mode classifies
 // entries into a small visual vocabulary and lets CSS handle the final appearance.
@@ -37,6 +44,10 @@ export function FileIcon({ entry }: { entry: Entry }) {
         <span className="alias-badge">↗</span>
       </span>
     );
+  }
+  // macOS .app bundles get native icons loaded from NSWorkspace.
+  if (entry.kind === "bundle" && entry.extension.toLowerCase() === "app") {
+    return <NativeAppIcon path={entry.path} />;
   }
   // Non-classic themes: per-extension classification with inline colored SVGs.
   if (typeof document !== "undefined") {
@@ -77,6 +88,56 @@ export function FileIcon({ entry }: { entry: Entry }) {
   return (
     <span className={`file-icon document ${type}`} aria-hidden>
       <DocumentSvg label={resolveDocumentLabel(entry)} />
+    </span>
+  );
+}
+
+function NativeAppIcon({ path }: { path: string }) {
+  const client = useFiletrailClient();
+  const [iconSrc, setIconSrc] = useState<string | null>(() => {
+    const cached = nativeIconCache.get(path);
+    return cached ?? null;
+  });
+
+  useEffect(() => {
+    if (nativeIconCache.has(path)) {
+      const cached = nativeIconCache.get(path)!;
+      setIconSrc(cached);
+      return;
+    }
+    let cancelled = false;
+    client.invoke("system:getFileIcon", { path, size: 64 }).then((res) => {
+      if (cancelled) return;
+      const base64 = res.pngBase64;
+      // Evict oldest entry if cache is full.
+      if (nativeIconCache.size >= NATIVE_ICON_CACHE_MAX) {
+        const firstKey = nativeIconCache.keys().next().value;
+        if (firstKey !== undefined) nativeIconCache.delete(firstKey);
+      }
+      nativeIconCache.set(path, base64);
+      setIconSrc(base64);
+    }).catch(() => {
+      if (!cancelled) setIconSrc(null);
+    });
+    return () => { cancelled = true; };
+  }, [path, client]);
+
+  if (iconSrc) {
+    return (
+      <span className="file-icon native-app-icon" aria-hidden>
+        <img
+          src={`data:image/png;base64,${iconSrc}`}
+          alt=""
+          className="file-icon-native-img"
+          draggable={false}
+        />
+      </span>
+    );
+  }
+  // Fallback: generic app document icon while loading or on failure.
+  return (
+    <span className="file-icon document app" aria-hidden>
+      <DocumentSvg label="APP" />
     </span>
   );
 }
@@ -267,6 +328,10 @@ function resolveIconType(entry: Entry): string {
   }
   if (entry.kind === "symlink_directory") {
     return "alias-folder";
+  }
+  // macOS bundles (.app, .framework, etc.) render as document-style icons.
+  if (entry.kind === "bundle") {
+    return "app";
   }
   const extension = entry.extension.toLowerCase();
   const name = entry.name.toLowerCase();
