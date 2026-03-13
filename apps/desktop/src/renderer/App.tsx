@@ -1807,10 +1807,13 @@ export function App() {
               />
             ),
             statusLabel: isSearchMode
-              ? searchStatus === "running"
-                ? `${filteredSearchResults.length} / ${searchResults.length} matches so far`
-                : `${filteredSearchResults.length} / ${searchResults.length} matches`
-              : `${currentEntries.length} items`,
+              ? (searchStatus === "running"
+                  ? `${filteredSearchResults.length} / ${searchResults.length} matches so far`
+                  : `${filteredSearchResults.length} / ${searchResults.length} matches`) +
+                (contentSelection.paths.length > 0 ? ` (${contentSelection.paths.length} selected)` : "")
+              : contentSelection.paths.length > 0
+                ? `${contentSelection.paths.length} of ${currentEntries.length} selected`
+                : `${currentEntries.length} items`,
             statusPathLabel: isSearchMode ? `Search root: ${searchRootPath}` : currentPath,
           }}
           infoPanelProps={{
