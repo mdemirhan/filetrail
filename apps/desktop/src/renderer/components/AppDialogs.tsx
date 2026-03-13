@@ -357,7 +357,7 @@ export function AppDialogs({
       {showCopyPasteResultDialog && writeOperationProgressEvent ? (
         <CopyPasteDialog
           title={getWriteOperationTitle(writeOperationProgressEvent.action, "result")}
-          message={writeOperationProgressEvent.result?.error ?? "The write operation has finished."}
+          message={buildCopyPasteResultMessage(writeOperationProgressEvent)}
           detailLines={buildCopyPasteResultDetailLines(writeOperationProgressEvent)}
           primaryAction={
             isRetryableCopyAction(writeOperationProgressEvent) &&
@@ -393,13 +393,31 @@ export function AppDialogs({
   );
 }
 
+function buildCopyPasteResultMessage(event: WriteOperationProgressEvent): string {
+  const result = event.result;
+  if (!result) {
+    return "The write operation has finished.";
+  }
+  if (result.error) {
+    return result.error;
+  }
+  const { completedItemCount, failedItemCount, skippedItemCount } = result.summary;
+  if (skippedItemCount > 0 && completedItemCount === 0 && failedItemCount === 0) {
+    return "All items were skipped by conflict policy.";
+  }
+  if (failedItemCount > 0) {
+    return "The operation completed with some failures.";
+  }
+  return "The operation completed successfully.";
+}
+
 function buildCopyPasteResultDetailLines(event: WriteOperationProgressEvent): string[] {
   const result = event.result;
   if (!result) {
     return [];
   }
   const lines = [
-    `${result.summary.completedItemCount} of ${result.summary.totalItemCount} steps completed`,
+    `${result.summary.completedItemCount} of ${result.summary.totalItemCount} items completed`,
   ];
   if (result.summary.failedItemCount > 0) {
     lines.push(

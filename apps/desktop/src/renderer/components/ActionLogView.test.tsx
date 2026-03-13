@@ -32,6 +32,7 @@ const ENTRIES: ActionLogEntry[] = [
       {
         sourcePath: "/Users/demo/a.txt",
         destinationPath: "/Users/demo/b.txt",
+        sourceKind: "file",
         status: "completed",
         error: null,
       },
@@ -66,6 +67,7 @@ const ENTRIES: ActionLogEntry[] = [
       {
         sourcePath: "/Users/demo/app.log",
         destinationPath: "/Applications/Zed.app",
+        sourceKind: null,
         status: "failed",
         error: "Application not found",
       },
@@ -242,6 +244,7 @@ describe("ActionLogView", () => {
           {
             sourcePath: "/Users/demo/source/a.txt",
             destinationPath: "/Users/demo/target/a.txt",
+            sourceKind: "file",
             status: "completed",
             error: null,
             skipReason: null,
@@ -249,6 +252,7 @@ describe("ActionLogView", () => {
           {
             sourcePath: "/Users/demo/source/b.txt",
             destinationPath: "/Users/demo/target/b.txt",
+            sourceKind: "file",
             status: "skipped",
             error: null,
             skipReason: "runtime_conflict_resolution",
@@ -294,7 +298,10 @@ describe("ActionLogView", () => {
 
     expect(screen.getByText("Runtime Conflicts")).toBeInTheDocument();
     expect(screen.getByText(/Initiated via: Drag and drop/)).toBeInTheDocument();
-    expect(screen.getByText("Skipped after runtime conflict resolution")).toBeInTheDocument();
+    // Skipped section is collapsed by default — expand it to see item details
+    const skippedSectionButton = screen.getByText(/Skipped \(1\)/);
+    fireEvent.click(skippedSectionButton);
+    expect(screen.getAllByText("/Users/demo/source/b.txt").length).toBeGreaterThan(0);
     expect(screen.getByText("Destination changed")).toBeInTheDocument();
     expect(screen.getByText("Resolution: Skip")).toBeInTheDocument();
 

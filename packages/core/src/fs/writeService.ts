@@ -372,7 +372,8 @@ export class WriteService {
                 items: report.nodes.map((node) => ({
                   sourcePath: node.sourcePath,
                   destinationPath: node.destinationPath,
-                  status: "failed",
+                  sourceKind: node.sourceKind,
+                  status: "failed" as const,
                   error: message,
                 })),
                 error: message,

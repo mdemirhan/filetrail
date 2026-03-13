@@ -523,6 +523,7 @@ export const writeOperationProgressEventSchema = z.object({
 export const actionLogItemSchema = z.object({
   sourcePath: z.string().nullable(),
   destinationPath: z.string().nullable(),
+  sourceKind: z.enum(["file", "directory", "symlink"]).nullable().default(null),
   status: z.enum(["completed", "skipped", "failed", "cancelled"]),
   error: z.string().nullable(),
   skipReason: z

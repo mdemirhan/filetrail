@@ -1,6 +1,6 @@
 import { type CSSProperties, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 
-import type { ActionLogAction, ActionLogEntry, ActionLogStatus } from "@filetrail/contracts";
+import type { ActionLogAction, ActionLogEntry, ActionLogItem, ActionLogStatus } from "@filetrail/contracts";
 
 import type { AccentMode, ThemeMode } from "../../shared/appPreferences";
 import { generateAccentTokens } from "../lib/accent";
@@ -56,6 +56,9 @@ export function ActionLogView({
   const [actionFilter, setActionFilter] = useState<"all" | ActionLogAction>("all");
   const [statusFilter, setStatusFilter] = useState<"all" | ActionLogStatus>("all");
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
+  // Track which item category sections are collapsed per entry.
+  // Key format: `${entryId}:${category}`. Default: failures expanded, others collapsed.
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [copyFeedback, setCopyFeedback] = useState<{
     entryId: string;
     status: "copied" | "failed";
@@ -694,88 +697,65 @@ export function ActionLogView({
                     {entry.items.length > 0 ? (
                       <div style={{ marginTop: "12px" }}>
                         <div style={sectionTitleStyle(palette)}>Items</div>
-                        <div style={{ display: "grid", gap: "8px", marginTop: "8px" }}>
-                          {entry.items.map((item, itemIndex) => (
-                            <div
-                              key={`${entry.id}-${itemIndex}`}
-                              style={{
-                                display: "grid",
-                                gridTemplateColumns:
-                                  layoutMode === "compact"
-                                    ? "1fr"
-                                    : layoutMode === "narrow"
-                                      ? "110px minmax(0, 1fr)"
-                                      : "110px minmax(0, 1fr) minmax(0, 1fr)",
-                                gap: "10px",
-                                padding: "10px",
-                                borderRadius: "10px",
-                                border: `1px solid ${palette.line}`,
-                                background: palette.itemBg,
-                              }}
-                            >
-                              <div>
-                                <div style={eyebrowStyle(palette)}>Item</div>
-                                <div style={{ marginTop: "6px" }}>
-                                  <StatusBadge status={item.status} palette={palette} compact />
-                                </div>
-                                {item.skipReason ? (
-                                  <div
-                                    style={{
-                                      marginTop: "8px",
-                                      color: palette.textSecondary,
-                                      fontSize: "12px",
-                                      lineHeight: 1.4,
-                                    }}
-                                  >
-                                    {formatSkipReasonLabel(item.skipReason)}
+                        {(
+                          [
+                            { key: "failed", label: "Failures", items: entry.items.filter((i) => i.status === "failed") },
+                            { key: "skipped", label: "Skipped", items: entry.items.filter((i) => i.status === "skipped") },
+                            { key: "completed", label: "Succeeded", items: entry.items.filter((i) => i.status === "completed") },
+                            { key: "cancelled", label: "Cancelled", items: entry.items.filter((i) => i.status === "cancelled") },
+                          ] as const
+                        )
+                          .filter((cat) => cat.items.length > 0)
+                          .map((cat) => {
+                            const sectionKey = `${entry.id}:${cat.key}`;
+                            // Failures expanded by default, others collapsed
+                            const isCollapsed = collapsedSections[sectionKey] ?? cat.key !== "failed";
+                            return (
+                              <div key={cat.key} style={{ marginTop: "8px" }}>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setCollapsedSections((prev) => ({
+                                      ...prev,
+                                      [sectionKey]: !isCollapsed,
+                                    }))
+                                  }
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "6px",
+                                    padding: "4px 0",
+                                    background: "none",
+                                    border: "none",
+                                    cursor: "pointer",
+                                    color: palette.textSecondary,
+                                    fontSize: "11px",
+                                    fontWeight: 600,
+                                    fontFamily: mono,
+                                    letterSpacing: "0.04em",
+                                    textTransform: "uppercase",
+                                  }}
+                                >
+                                  <span style={{ fontSize: "9px", lineHeight: 1 }}>
+                                    {isCollapsed ? "\u25B6" : "\u25BC"}
+                                  </span>
+                                  {cat.label} ({cat.items.length})
+                                </button>
+                                {!isCollapsed ? (
+                                  <div style={{ display: "grid", gap: "8px", marginTop: "4px" }}>
+                                    {cat.items.map((item, itemIndex) => (
+                                      <ItemRow
+                                        key={`${entry.id}-${cat.key}-${itemIndex}`}
+                                        item={item}
+                                        layoutMode={layoutMode}
+                                        palette={palette}
+                                      />
+                                    ))}
                                   </div>
                                 ) : null}
                               </div>
-                              <div>
-                                <div style={eyebrowStyle(palette)}>Source</div>
-                                <div style={pathValueStyle(palette)}>
-                                  {item.sourcePath ?? "None"}
-                                </div>
-                              </div>
-                              {layoutMode === "narrow" ? null : (
-                                <div>
-                                  <div style={eyebrowStyle(palette)}>Destination</div>
-                                  <div style={pathValueStyle(palette)}>
-                                    {item.destinationPath ?? "None"}
-                                  </div>
-                                  {item.error ? (
-                                    <div
-                                      style={{
-                                        marginTop: "8px",
-                                        color: palette.error,
-                                        fontSize: "12px",
-                                      }}
-                                    >
-                                      {item.error}
-                                    </div>
-                                  ) : null}
-                                </div>
-                              )}
-                              {layoutMode === "narrow" && item.destinationPath ? (
-                                <div>
-                                  <div style={eyebrowStyle(palette)}>Destination</div>
-                                  <div style={pathValueStyle(palette)}>{item.destinationPath}</div>
-                                  {item.error ? (
-                                    <div
-                                      style={{
-                                        marginTop: "8px",
-                                        color: palette.error,
-                                        fontSize: "12px",
-                                      }}
-                                    >
-                                      {item.error}
-                                    </div>
-                                  ) : null}
-                                </div>
-                              ) : null}
-                            </div>
-                          ))}
-                        </div>
+                            );
+                          })}
                       </div>
                     ) : null}
                   </div>
@@ -901,6 +881,12 @@ function formatSkipReasonLabel(skipReason: NonNullable<ActionLogEntry["items"][n
   return "Skipped after runtime conflict resolution";
 }
 
+function formatSourceKindLabel(kind: NonNullable<ActionLogItem["sourceKind"]>): string {
+  if (kind === "directory") return "Folder";
+  if (kind === "symlink") return "Symlink";
+  return "File";
+}
+
 function formatConflictClassLabel(
   conflictClass: ActionLogEntry["runtimeConflicts"][number]["conflictClass"],
 ): string {
@@ -947,6 +933,14 @@ function formatRuntimeResolutionLabel(
 }
 
 function formatSummary(entry: ActionLogEntry): string {
+  if (
+    entry.summary.totalItemCount === 0 &&
+    entry.summary.failedItemCount === 0 &&
+    entry.summary.skippedItemCount === 0 &&
+    entry.summary.cancelledItemCount === 0
+  ) {
+    return "No items";
+  }
   const parts = [`${entry.summary.completedItemCount}/${entry.summary.totalItemCount}`];
   if (entry.summary.failedItemCount > 0) {
     parts.push(`${entry.summary.failedItemCount} failed`);
@@ -1154,6 +1148,70 @@ function StatusBadge({
     >
       {formatActionStatusLabel(status)}
     </span>
+  );
+}
+
+function ItemRow({
+  item,
+  layoutMode,
+  palette,
+}: {
+  item: ActionLogItem;
+  layoutMode: LayoutMode;
+  palette: ReturnType<typeof resolveActionLogTheme>;
+}) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns:
+          layoutMode === "compact"
+            ? "1fr"
+            : layoutMode === "narrow"
+              ? "110px minmax(0, 1fr)"
+              : "110px minmax(0, 1fr) minmax(0, 1fr)",
+        gap: "10px",
+        padding: "10px",
+        borderRadius: "10px",
+        border: `1px solid ${palette.line}`,
+        background: palette.itemBg,
+      }}
+    >
+      <div>
+        <div style={eyebrowStyle(palette)}>
+          {item.sourceKind ? formatSourceKindLabel(item.sourceKind) : "Item"}
+        </div>
+        <div style={{ marginTop: "6px" }}>
+          <StatusBadge status={item.status} palette={palette} compact />
+        </div>
+      </div>
+      <div>
+        <div style={eyebrowStyle(palette)}>Source</div>
+        <div style={pathValueStyle(palette)}>{item.sourcePath ?? "None"}</div>
+      </div>
+      {layoutMode === "narrow" ? null : (
+        <div>
+          <div style={eyebrowStyle(palette)}>Destination</div>
+          <div style={pathValueStyle(palette)}>{item.destinationPath ?? "None"}</div>
+          {item.error ? (
+            <div style={{ marginTop: "8px", color: palette.error, fontSize: "12px" }}>
+              {item.error}
+            </div>
+          ) : null}
+        </div>
+      )}
+      {layoutMode === "narrow" && item.destinationPath ? (
+        <div>
+          <div style={eyebrowStyle(palette)}>Destination</div>
+          <div style={pathValueStyle(palette)}>{item.destinationPath}</div>
+          {item.error ? (
+            <div style={{ marginTop: "8px", color: palette.error, fontSize: "12px" }}>
+              {item.error}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -1560,16 +1618,26 @@ function formatActionLogEntryForClipboard(entry: ActionLogEntry): string {
     }
   }
   if (entry.items.length > 0) {
-    lines.push("", "Per-item Results:");
-    for (const item of entry.items) {
-      lines.push(
-        `- [${formatActionStatusLabel(item.status)}] ${item.sourcePath ?? "None"} -> ${item.destinationPath ?? "None"}`,
-      );
-      if (item.skipReason) {
-        lines.push(`  Skip reason: ${formatSkipReasonLabel(item.skipReason)}`);
-      }
-      if (item.error) {
-        lines.push(`  Error: ${item.error}`);
+    const categories: Array<{ label: string; items: ActionLogItem[] }> = [
+      { label: "Failures", items: entry.items.filter((i) => i.status === "failed") },
+      { label: "Skipped", items: entry.items.filter((i) => i.status === "skipped") },
+      { label: "Succeeded", items: entry.items.filter((i) => i.status === "completed") },
+      { label: "Cancelled", items: entry.items.filter((i) => i.status === "cancelled") },
+    ];
+    for (const cat of categories) {
+      if (cat.items.length === 0) continue;
+      lines.push("", `${cat.label} (${cat.items.length}):`);
+      for (const item of cat.items) {
+        const kindTag = item.sourceKind ? `[${formatSourceKindLabel(item.sourceKind)}] ` : "";
+        lines.push(
+          `- ${kindTag}${item.sourcePath ?? "None"} -> ${item.destinationPath ?? "None"}`,
+        );
+        if (item.skipReason) {
+          lines.push(`  Skip reason: ${formatSkipReasonLabel(item.skipReason)}`);
+        }
+        if (item.error) {
+          lines.push(`  Error: ${item.error}`);
+        }
       }
     }
   }

@@ -37,6 +37,11 @@ export async function executeCopyPasteFromAnalysis(args: {
   let completedByteCount = 0;
   const totalItemCount = countExecutableSteps(args.resolvedNodes);
   const totalBytes = args.report.summary.totalBytes;
+  const destinationFingerprint = await captureFingerprint(
+    args.fileSystem,
+    args.report.destinationDirectoryPath,
+  );
+  const destinationDev = destinationFingerprint.dev;
   const itemResults: CopyPasteItemResult[] = [];
   let encounteredError: Error | null = null;
   let cancelled = false;
@@ -62,6 +67,7 @@ export async function executeCopyPasteFromAnalysis(args: {
       itemResults.push({
         sourcePath: node.node.sourcePath,
         destinationPath: node.destinationPath,
+        sourceKind: node.node.sourceKind,
         status: "cancelled",
         error: "Operation cancelled.",
       });
@@ -78,6 +84,7 @@ export async function executeCopyPasteFromAnalysis(args: {
         requestResolution: args.requestResolution,
         operationId: args.operationId,
         mode: args.mode,
+        destinationDev,
         totalItemCount,
         totalBytes,
         completedItemCount,
@@ -85,25 +92,23 @@ export async function executeCopyPasteFromAnalysis(args: {
       });
       completedItemCount = stepResult.completedItemCount;
       completedByteCount = stepResult.completedByteCount;
-      if (args.mode === "cut" && stepResult.itemStatus !== "skipped") {
-        await cleanupMovedSourceNode(node, args.fileSystem);
-      }
       itemResults.push({
         sourcePath: node.node.sourcePath,
         destinationPath: node.destinationPath,
+        sourceKind: node.node.sourceKind,
         status: stepResult.itemStatus,
-        error:
-          stepResult.itemStatus === "skipped"
-            ? formatSkippedItemMessage(stepResult.skipReason)
-            : null,
+        error: stepResult.itemStatus === "skipped" ? null : stepResult.error,
         skipReason: stepResult.skipReason,
       });
+      // Surface non-success children (failed, skipped) so they appear in the action log
+      itemResults.push(...stepResult.childItems);
     } catch (error) {
       if (isAbortError(error) || args.signal.aborted) {
         cancelled = true;
         itemResults.push({
           sourcePath: node.node.sourcePath,
           destinationPath: node.destinationPath,
+          sourceKind: node.node.sourceKind,
           status: "cancelled",
           error: "Operation cancelled.",
           skipReason: null,
@@ -114,6 +119,7 @@ export async function executeCopyPasteFromAnalysis(args: {
         itemResults.push({
           sourcePath: node.node.sourcePath,
           destinationPath: node.destinationPath,
+          sourceKind: node.node.sourceKind,
           status: "failed",
           error: message,
           skipReason: null,
@@ -134,9 +140,7 @@ export async function executeCopyPasteFromAnalysis(args: {
     mode: args.mode,
     startedAt,
     finishedAt: args.now().toISOString(),
-    completedItemCount,
     completedByteCount,
-    totalItemCount,
     totalBytes,
     items: itemResults,
     status,
@@ -163,6 +167,16 @@ export async function executeCopyPasteFromAnalysis(args: {
   });
 }
 
+type ExecuteNodeResult = {
+  completedItemCount: number;
+  completedByteCount: number;
+  itemStatus: "completed" | "skipped" | "failed";
+  skipReason: "planned_conflict_policy" | "runtime_conflict_resolution" | null;
+  error: string | null;
+  /** Non-success child items to surface in the action log (failed, skipped). */
+  childItems: CopyPasteItemResult[];
+};
+
 async function executeResolvedNode(args: {
   resolvedNode: ResolvedCopyPasteNode;
   report: CopyPasteAnalysisReport;
@@ -175,16 +189,12 @@ async function executeResolvedNode(args: {
   ) => Promise<CopyPasteRuntimeResolutionAction | null>;
   operationId: string;
   mode: CopyPasteMode;
+  destinationDev: number | null;
   totalItemCount: number;
   totalBytes: number | null;
   completedItemCount: number;
   completedByteCount: number;
-}): Promise<{
-  completedItemCount: number;
-  completedByteCount: number;
-  itemStatus: "completed" | "skipped";
-  skipReason: "planned_conflict_policy" | "runtime_conflict_resolution" | null;
-}> {
+}): Promise<ExecuteNodeResult> {
   let currentNode = args.resolvedNode;
   if (currentNode.action === "skip") {
     return {
@@ -192,6 +202,8 @@ async function executeResolvedNode(args: {
       completedByteCount: args.completedByteCount,
       itemStatus: "skipped",
       skipReason: "planned_conflict_policy",
+      error: null,
+      childItems: [],
     };
   }
 
@@ -231,8 +243,27 @@ async function executeResolvedNode(args: {
         completedByteCount: args.completedByteCount,
         itemStatus: "skipped",
         skipReason: "runtime_conflict_resolution",
+        error: null,
+        childItems: [],
       };
     }
+  }
+
+  // Same-filesystem rename fast path: use rename(2) for cut operations when
+  // source and destination are on the same device. Skipped for merge actions
+  // (can't atomically rename a directory into an existing one).
+  const canRename =
+    args.mode === "cut" &&
+    args.fileSystem.rename &&
+    args.destinationDev !== null &&
+    currentNode.node.sourceFingerprint.dev === args.destinationDev &&
+    currentNode.action !== "merge";
+  if (canRename) {
+    const renameResult = await tryRenameForCut(currentNode, args);
+    if (renameResult) {
+      return renameResult;
+    }
+    // EXDEV fallback: rename failed, fall through to copy+delete path
   }
 
   if (currentNode.node.sourceKind === "directory") {
@@ -266,19 +297,61 @@ async function executeResolvedNode(args: {
         result: null,
       });
     }
+    let hasChildFailure = false;
+    const bubbledChildItems: CopyPasteItemResult[] = [];
     for (const child of currentNode.children) {
+      args.signal.throwIfAborted();
       const childResult = await executeResolvedNode({
         ...args,
         resolvedNode: child,
       });
       args.completedItemCount = childResult.completedItemCount;
       args.completedByteCount = childResult.completedByteCount;
+      if (childResult.itemStatus === "failed") {
+        hasChildFailure = true;
+      }
+      // Bubble up all child items so they appear in the action log
+      if (child.node.sourceKind !== "directory") {
+        bubbledChildItems.push({
+          sourcePath: child.node.sourcePath,
+          destinationPath: child.destinationPath,
+          sourceKind: child.node.sourceKind,
+          status: childResult.itemStatus,
+          error: childResult.itemStatus === "skipped" ? null : childResult.error,
+          skipReason: childResult.skipReason,
+        });
+      }
+      // Also bubble up any grandchild items
+      bubbledChildItems.push(...childResult.childItems);
+    }
+    // Preserve directory timestamps AFTER children are processed, since writing
+    // children into the directory updates its mtime on the real filesystem.
+    if (
+      currentNode.action === "create" ||
+      currentNode.action === "keep_both" ||
+      currentNode.action === "overwrite"
+    ) {
+      await preserveTimestampsIfSupported(
+        args.fileSystem,
+        currentNode.destinationPath,
+        currentNode.node.sourceFingerprint.mtimeMs,
+      );
+    }
+    let dirDeleteError: string | null = null;
+    if (args.mode === "cut") {
+      dirDeleteError = await tryRemoveEmptySourceDirectory(
+        currentNode.node.sourcePath,
+        currentNode.node.sourceFingerprint,
+        args.fileSystem,
+      );
     }
     return {
       completedItemCount: args.completedItemCount,
       completedByteCount: args.completedByteCount,
-      itemStatus: "completed",
+      itemStatus: dirDeleteError !== null || hasChildFailure ? "failed" : "completed",
       skipReason: null,
+      error: dirDeleteError,
+      childItems: bubbledChildItems,
     };
   }
 
@@ -289,6 +362,17 @@ async function executeResolvedNode(args: {
     const linkTarget = await args.fileSystem.readlink(currentNode.node.sourcePath);
     await args.fileSystem.mkdir(dirname(currentNode.destinationPath), { recursive: true });
     await args.fileSystem.symlink(linkTarget, currentNode.destinationPath);
+    await preserveSymlinkTimestampsIfSupported(
+      args.fileSystem,
+      currentNode.destinationPath,
+      currentNode.node.sourceFingerprint.mtimeMs,
+    );
+  } else if (args.fileSystem.copyFile) {
+    await args.fileSystem.mkdir(dirname(currentNode.destinationPath), { recursive: true });
+    await args.fileSystem.copyFile(
+      currentNode.node.sourcePath,
+      currentNode.destinationPath,
+    );
   } else {
     await args.fileSystem.copyFileStream(
       currentNode.node.sourcePath,
@@ -300,11 +384,80 @@ async function executeResolvedNode(args: {
       currentNode.destinationPath,
       currentNode.node.sourceFingerprint.mode,
     );
+    await preserveTimestampsIfSupported(
+      args.fileSystem,
+      currentNode.destinationPath,
+      currentNode.node.sourceFingerprint.mtimeMs,
+    );
   }
   args.completedItemCount += 1;
   if (currentNode.node.sourceFingerprint.size !== null) {
     args.completedByteCount += currentNode.node.sourceFingerprint.size;
   }
+  let deleteError: string | null = null;
+  if (args.mode === "cut") {
+    deleteError = await tryDeleteMovedSource(
+      currentNode.node.sourcePath,
+      currentNode.node.sourceFingerprint,
+      args.fileSystem,
+    );
+  }
+  args.emit({
+    operationId: args.operationId,
+    analysisId: args.report.analysisId,
+    mode: args.mode,
+    status: "running",
+    completedItemCount: args.completedItemCount,
+    totalItemCount: args.totalItemCount,
+    completedByteCount: args.completedByteCount,
+    totalBytes: args.totalBytes,
+    currentSourcePath: currentNode.node.sourcePath,
+    currentDestinationPath: currentNode.destinationPath,
+    runtimeConflict: null,
+    result: null,
+  });
+  return {
+    completedItemCount: args.completedItemCount,
+    completedByteCount: args.completedByteCount,
+    itemStatus: deleteError !== null ? "failed" : "completed",
+    skipReason: null,
+    error: deleteError,
+    childItems: [],
+  };
+}
+
+async function tryRenameForCut(
+  currentNode: ResolvedCopyPasteNode,
+  args: {
+    fileSystem: WriteServiceFileSystem;
+    signal: AbortSignal;
+    report: CopyPasteAnalysisReport;
+    operationId: string;
+    mode: CopyPasteMode;
+    emit: (event: CopyPasteProgressEvent) => void;
+    totalItemCount: number;
+    totalBytes: number | null;
+    completedItemCount: number;
+    completedByteCount: number;
+  },
+): Promise<ExecuteNodeResult | null> {
+  try {
+    if (currentNode.action === "overwrite") {
+      await removeDestinationIfPresent(currentNode.destinationPath, args.fileSystem);
+    }
+    await args.fileSystem.mkdir(dirname(currentNode.destinationPath), { recursive: true });
+    await args.fileSystem.rename!(currentNode.node.sourcePath, currentNode.destinationPath);
+  } catch (error) {
+    const nodeError = error as NodeJS.ErrnoException;
+    if (nodeError.code === "EXDEV") {
+      return null; // Fall through to copy+delete path
+    }
+    throw error;
+  }
+  // Rename succeeded — count all items in the subtree as completed
+  const subtreeItemCount = countExecutableSteps([currentNode]);
+  args.completedItemCount += subtreeItemCount;
+  args.completedByteCount += sumSubtreeBytes([currentNode]);
   args.emit({
     operationId: args.operationId,
     analysisId: args.report.analysisId,
@@ -324,16 +477,9 @@ async function executeResolvedNode(args: {
     completedByteCount: args.completedByteCount,
     itemStatus: "completed",
     skipReason: null,
+    error: null,
+    childItems: [],
   };
-}
-
-function formatSkippedItemMessage(
-  skipReason: "planned_conflict_policy" | "runtime_conflict_resolution" | null,
-): string {
-  if (skipReason === "runtime_conflict_resolution") {
-    return "Skipped after a runtime conflict was resolved.";
-  }
-  return "Skipped by the planned conflict handling.";
 }
 
 async function detectRuntimeConflict(
@@ -432,6 +578,56 @@ async function removeDestinationIfPresent(
   });
 }
 
+/** Attempts to delete the source after a successful copy in cut mode.
+ *  Returns null on success, or an error message if deletion failed. */
+async function tryDeleteMovedSource(
+  sourcePath: string,
+  originalFingerprint: NodeFingerprint,
+  fileSystem: WriteServiceFileSystem,
+): Promise<string | null> {
+  const currentFingerprint = await captureFingerprint(fileSystem, sourcePath);
+  if (!currentFingerprint.exists) {
+    // Source was already deleted externally — nothing to do.
+    return null;
+  }
+  if (!fingerprintsEqual(originalFingerprint, currentFingerprint)) {
+    // Source was modified since analysis — preserve it.
+    return "Source was modified after copy — preserved at source.";
+  }
+  try {
+    await fileSystem.rm(sourcePath, { recursive: false, force: false });
+    return null;
+  } catch (error) {
+    return `Failed to remove source after copy: ${toErrorMessage(error)}`;
+  }
+}
+
+/** Attempts to remove an empty source directory after its children were moved.
+ *  Returns null on success or intentional skip, or an error message if rm failed. */
+async function tryRemoveEmptySourceDirectory(
+  sourcePath: string,
+  originalFingerprint: NodeFingerprint,
+  fileSystem: WriteServiceFileSystem,
+): Promise<string | null> {
+  const currentFingerprint = await captureFingerprint(fileSystem, sourcePath);
+  if (!currentFingerprint.exists) {
+    return null;
+  }
+  if (!canRemoveMovedSourceDirectory(originalFingerprint, currentFingerprint)) {
+    return null;
+  }
+  const remainingEntries = await fileSystem.readdir(sourcePath);
+  if (remainingEntries.length > 0) {
+    return null;
+  }
+  try {
+    await fileSystem.rm(sourcePath, { recursive: true, force: false });
+    return null;
+  } catch (error) {
+    return `Failed to remove empty source directory: ${toErrorMessage(error)}`;
+  }
+}
+
 async function cleanupMovedSourceNode(
   resolvedNode: ResolvedCopyPasteNode,
   fileSystem: WriteServiceFileSystem,
@@ -522,20 +718,38 @@ function countExecutableSteps(nodes: ResolvedCopyPasteNode[]): number {
   return total;
 }
 
+function sumSubtreeBytes(nodes: ResolvedCopyPasteNode[]): number {
+  let total = 0;
+  const stack = [...nodes];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node || node.action === "skip") {
+      continue;
+    }
+    if (node.node.sourceFingerprint.size !== null && node.node.sourceKind !== "directory") {
+      total += node.node.sourceFingerprint.size;
+    }
+    stack.push(...node.children);
+  }
+  return total;
+}
+
 function createOperationResult(args: {
   operationId: string;
   report: CopyPasteAnalysisReport;
   mode: CopyPasteMode;
   startedAt: string;
   finishedAt: string;
-  completedItemCount: number;
   completedByteCount: number;
-  totalItemCount: number;
   totalBytes: number | null;
   items: CopyPasteItemResult[];
   status: Exclude<CopyPasteOperationStatus, "queued" | "running" | "awaiting_resolution">;
   error: string | null;
 }): CopyPasteOperationResult {
+  const completedItemCount = args.items.filter((item) => item.status === "completed").length;
+  const failedItemCount = args.items.filter((item) => item.status === "failed").length;
+  const skippedItemCount = args.items.filter((item) => item.status === "skipped").length;
+  const cancelledItemCount = args.items.filter((item) => item.status === "cancelled").length;
   return {
     operationId: args.operationId,
     mode: args.mode,
@@ -545,11 +759,11 @@ function createOperationResult(args: {
     finishedAt: args.finishedAt,
     summary: {
       topLevelItemCount: args.items.length,
-      totalItemCount: args.totalItemCount,
-      completedItemCount: args.completedItemCount,
-      failedItemCount: args.items.filter((item) => item.status === "failed").length,
-      skippedItemCount: args.items.filter((item) => item.status === "skipped").length,
-      cancelledItemCount: args.items.filter((item) => item.status === "cancelled").length,
+      totalItemCount: completedItemCount + failedItemCount + skippedItemCount + cancelledItemCount,
+      completedItemCount,
+      failedItemCount,
+      skippedItemCount,
+      cancelledItemCount,
       completedByteCount: args.completedByteCount,
       totalBytes: args.totalBytes,
     },
@@ -571,7 +785,7 @@ function resolveTerminalStatus(args: {
       ? "partial"
       : "failed";
   }
-  if (args.itemResults.some((item) => item.status === "skipped")) {
+  if (args.itemResults.some((item) => item.status === "skipped" || item.status === "failed")) {
     return "partial";
   }
   return "completed";
@@ -591,6 +805,44 @@ async function preserveModeIfSupported(
   }
   try {
     await fileSystem.chmod(destinationPath, mode);
+  } catch (error) {
+    const nodeError = error as NodeJS.ErrnoException;
+    if (nodeError.code === "ENOTSUP" || nodeError.code === "EOPNOTSUPP") {
+      return;
+    }
+    throw error;
+  }
+}
+
+async function preserveTimestampsIfSupported(
+  fileSystem: WriteServiceFileSystem,
+  destinationPath: string,
+  mtimeMs: number | null | undefined,
+): Promise<void> {
+  if (!fileSystem.utimes || mtimeMs == null) {
+    return;
+  }
+  try {
+    await fileSystem.utimes(destinationPath, mtimeMs, mtimeMs);
+  } catch (error) {
+    const nodeError = error as NodeJS.ErrnoException;
+    if (nodeError.code === "ENOTSUP" || nodeError.code === "EOPNOTSUPP") {
+      return;
+    }
+    throw error;
+  }
+}
+
+async function preserveSymlinkTimestampsIfSupported(
+  fileSystem: WriteServiceFileSystem,
+  destinationPath: string,
+  mtimeMs: number | null | undefined,
+): Promise<void> {
+  if (!fileSystem.lutimes || mtimeMs == null) {
+    return;
+  }
+  try {
+    await fileSystem.lutimes(destinationPath, mtimeMs, mtimeMs);
   } catch (error) {
     const nodeError = error as NodeJS.ErrnoException;
     if (nodeError.code === "ENOTSUP" || nodeError.code === "EOPNOTSUPP") {

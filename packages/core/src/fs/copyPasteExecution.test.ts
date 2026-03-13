@@ -568,7 +568,7 @@ describe("copyPasteExecution", () => {
       "/source/slow.txt": { kind: "file", size: 5 },
       "/target": { kind: "directory" },
     });
-    fileSystem.copyFileImpl = async (_sourcePath, destinationPath, signal) => {
+    fileSystem.copyFileStreamImpl = async (_sourcePath, destinationPath, signal) => {
       await new Promise((resolve) => setTimeout(resolve, 20));
       signal?.throwIfAborted();
       fileSystem.addFile(destinationPath, { size: 5 });
@@ -641,7 +641,7 @@ describe("copyPasteExecution", () => {
       "/source/file.txt": { kind: "file", size: 5 },
       "/target": { kind: "directory" },
     });
-    changedSourceFileSystem.copyFileImpl = async (sourcePath, destinationPath) => {
+    changedSourceFileSystem.copyFileStreamImpl = async (sourcePath, destinationPath) => {
       changedSourceFileSystem.addFile(destinationPath, { size: 5 });
       changedSourceFileSystem.mutateNode(sourcePath, (node) => ({
         ...node,
@@ -767,7 +767,7 @@ describe("copyPasteExecution", () => {
       "/source/two.txt": { kind: "file", size: 2 },
       "/target": { kind: "directory" },
     });
-    partialFileSystem.copyFileImpl = async (sourcePath, destinationPath) => {
+    partialFileSystem.copyFileStreamImpl = async (sourcePath, destinationPath) => {
       if (sourcePath.endsWith("two.txt")) {
         throw new Error("Disk full");
       }
@@ -809,7 +809,7 @@ describe("copyPasteExecution", () => {
       "/source/one.txt": { kind: "file", size: 1 },
       "/target": { kind: "directory" },
     });
-    failedFileSystem.copyFileImpl = async () => {
+    failedFileSystem.copyFileStreamImpl = async () => {
       throw new Error("Permission denied");
     };
     const failedOperation = await createResolvedOperation({
@@ -1135,7 +1135,7 @@ describe("copyPasteExecution", () => {
       "/source/two.txt": { kind: "file", size: 2 },
       "/target": { kind: "directory" },
     });
-    partialCancelFileSystem.copyFileImpl = async (sourcePath, destinationPath, signal) => {
+    partialCancelFileSystem.copyFileStreamImpl = async (sourcePath, destinationPath, signal) => {
       if (sourcePath.endsWith("two.txt")) {
         await new Promise((resolve) => setTimeout(resolve, 20));
         signal?.throwIfAborted();
@@ -1418,7 +1418,7 @@ describe("copyPasteExecution", () => {
       "/source/Folder/file.txt": { kind: "file", size: 5 },
       "/target": { kind: "directory" },
     });
-    fileSystem.copyFileImpl = async (sourcePath, destinationPath) => {
+    fileSystem.copyFileStreamImpl = async (sourcePath, destinationPath) => {
       fileSystem.addFile(destinationPath, { size: 5 });
       if (sourcePath.endsWith("file.txt")) {
         fileSystem.mutateNode("/source/Folder", (node) => ({
@@ -1453,5 +1453,2206 @@ describe("copyPasteExecution", () => {
 
     expect(fileSystem.exists("/source/Folder")).toBe(true);
     expect(fileSystem.exists("/target/Folder/file.txt")).toBe(true);
+  });
+
+  describe("per-file cut flow", () => {
+    it("deletes source file immediately after successful copy", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 3 },
+        "/source/b.txt": { kind: "file", size: 4 },
+        "/target": { kind: "directory" },
+      });
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt", "/source/b.txt"],
+        destinationDirectoryPath: "/target",
+      });
+      const sourceExistedDuringSecondCopy: boolean[] = [];
+      fileSystem.copyFileStreamImpl = async (sourcePath, destinationPath) => {
+        if (sourcePath === "/source/b.txt") {
+          sourceExistedDuringSecondCopy.push(fileSystem.exists("/source/a.txt"));
+        }
+        fileSystem.addFile(destinationPath, {
+          size: fileSystem.readNode(sourcePath)!.size,
+        });
+      };
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "cut-inline-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(sourceExistedDuringSecondCopy).toEqual([false]);
+      expect(fileSystem.exists("/source/a.txt")).toBe(false);
+      expect(fileSystem.exists("/source/b.txt")).toBe(false);
+      expect(fileSystem.exists("/target/a.txt")).toBe(true);
+      expect(fileSystem.exists("/target/b.txt")).toBe(true);
+    });
+
+    it("deletes source symlink immediately after successful copy", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/link": { kind: "symlink", target: "actual.txt" },
+        "/target": { kind: "directory" },
+      });
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/link"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "cut-symlink-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(fileSystem.exists("/source/link")).toBe(false);
+      expect(fileSystem.readNode("/target/link")).toMatchObject({
+        kind: "symlink",
+        target: "actual.txt",
+      });
+    });
+
+    it("mid-cancel leaves clean partition — no duplicates", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/dir": { kind: "directory" },
+        "/source/dir/a.txt": { kind: "file", size: 1 },
+        "/source/dir/b.txt": { kind: "file", size: 2 },
+        "/source/dir/c.txt": { kind: "file", size: 3 },
+        "/target": { kind: "directory" },
+      });
+      const controller = new AbortController();
+      let copyCount = 0;
+      fileSystem.copyFileStreamImpl = async (sourcePath, destinationPath, signal) => {
+        signal?.throwIfAborted();
+        copyCount++;
+        fileSystem.addFile(destinationPath, {
+          size: fileSystem.readNode(sourcePath)!.size,
+        });
+        if (copyCount === 2) {
+          controller.abort();
+        }
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/dir"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "cut-cancel-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: controller.signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      // Copied files at destination only
+      expect(fileSystem.exists("/target/dir/a.txt")).toBe(true);
+      expect(fileSystem.exists("/source/dir/a.txt")).toBe(false);
+      expect(fileSystem.exists("/target/dir/b.txt")).toBe(true);
+      expect(fileSystem.exists("/source/dir/b.txt")).toBe(false);
+      // Uncopied file at source only
+      expect(fileSystem.exists("/source/dir/c.txt")).toBe(true);
+      expect(fileSystem.exists("/target/dir/c.txt")).toBe(false);
+    });
+
+    it("mid-cancel with nested directories — partial tree at source, moved subtree at destination", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/dir": { kind: "directory" },
+        "/source/dir/sub1": { kind: "directory" },
+        "/source/dir/sub1/a.txt": { kind: "file", size: 1 },
+        "/source/dir/sub1/b.txt": { kind: "file", size: 2 },
+        "/source/dir/sub2": { kind: "directory" },
+        "/source/dir/sub2/c.txt": { kind: "file", size: 3 },
+        "/target": { kind: "directory" },
+      });
+      const controller = new AbortController();
+      let copyCount = 0;
+      fileSystem.copyFileStreamImpl = async (sourcePath, destinationPath, signal) => {
+        signal?.throwIfAborted();
+        copyCount++;
+        fileSystem.addFile(destinationPath, {
+          size: fileSystem.readNode(sourcePath)!.size,
+        });
+        if (copyCount === 2) {
+          controller.abort();
+        }
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/dir"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "cut-nested-cancel-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: controller.signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      // sub1 files moved to destination
+      expect(fileSystem.exists("/target/dir/sub1/a.txt")).toBe(true);
+      expect(fileSystem.exists("/source/dir/sub1/a.txt")).toBe(false);
+      expect(fileSystem.exists("/target/dir/sub1/b.txt")).toBe(true);
+      expect(fileSystem.exists("/source/dir/sub1/b.txt")).toBe(false);
+      // sub1 directory should be removed (empty after children moved)
+      expect(fileSystem.exists("/source/dir/sub1")).toBe(false);
+      // sub2 remains at source untouched
+      expect(fileSystem.exists("/source/dir/sub2/c.txt")).toBe(true);
+      expect(fileSystem.exists("/target/dir/sub2/c.txt")).toBe(false);
+      expect(fileSystem.exists("/source/dir/sub2")).toBe(true);
+      // Parent source dir preserved (still has sub2)
+      expect(fileSystem.exists("/source/dir")).toBe(true);
+    });
+
+    it("preserves source file when source mutated after copy", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.copyFileStreamImpl = async (sourcePath, destinationPath) => {
+        fileSystem.addFile(destinationPath, { size: 5 });
+        fileSystem.mutateNode(sourcePath, (node) => ({
+          ...node,
+          size: 99,
+        }));
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "cut-mutated-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(fileSystem.exists("/source/a.txt")).toBe(true);
+      expect(fileSystem.readNode("/source/a.txt")!.size).toBe(99);
+      expect(fileSystem.exists("/target/a.txt")).toBe(true);
+    });
+
+    it("preserves source file when source deleted externally after copy", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.copyFileStreamImpl = async (sourcePath, destinationPath) => {
+        fileSystem.addFile(destinationPath, { size: 5 });
+        fileSystem.nodes.delete(sourcePath);
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "cut-external-delete-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(fileSystem.exists("/source/a.txt")).toBe(false);
+      expect(fileSystem.exists("/target/a.txt")).toBe(true);
+    });
+
+    it("removes empty source directory after all children deleted", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/dir": { kind: "directory" },
+        "/source/dir/a.txt": { kind: "file", size: 1 },
+        "/source/dir/b.txt": { kind: "file", size: 2 },
+        "/target": { kind: "directory" },
+      });
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/dir"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "cut-rmdir-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(fileSystem.exists("/source/dir")).toBe(false);
+      expect(fileSystem.exists("/source")).toBe(true);
+      expect(fileSystem.exists("/target/dir/a.txt")).toBe(true);
+      expect(fileSystem.exists("/target/dir/b.txt")).toBe(true);
+    });
+
+    it("preserves non-empty source directory when some children skipped", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/dir": { kind: "directory" },
+        "/source/dir/a.txt": { kind: "file", size: 1 },
+        "/source/dir/b.txt": { kind: "file", size: 2 },
+        "/target": { kind: "directory" },
+        "/target/dir": { kind: "directory" },
+        "/target/dir/b.txt": { kind: "file", size: 3 },
+      });
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/dir"],
+        destinationDirectoryPath: "/target",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "cut-partial-skip-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(fileSystem.exists("/source/dir")).toBe(true);
+      expect(fileSystem.exists("/source/dir/b.txt")).toBe(true);
+      expect(fileSystem.exists("/source/dir/a.txt")).toBe(false);
+      expect(fileSystem.exists("/target/dir/a.txt")).toBe(true);
+    });
+
+    it("preserves source directory when directory mode changed externally", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/dir": { kind: "directory", mode: 0o755 },
+        "/source/dir/a.txt": { kind: "file", size: 1 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.copyFileStreamImpl = async (sourcePath, destinationPath) => {
+        fileSystem.addFile(destinationPath, {
+          size: fileSystem.readNode(sourcePath)!.size,
+        });
+        fileSystem.mutateNode("/source/dir", (node) => ({
+          ...node,
+          mode: 0o700,
+        }));
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/dir"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "cut-dir-changed-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(fileSystem.exists("/source/dir")).toBe(true);
+      expect(fileSystem.exists("/source/dir/a.txt")).toBe(false);
+      expect(fileSystem.exists("/target/dir/a.txt")).toBe(true);
+    });
+
+    it("empty source directory rm failure reports item as failed", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/dir": { kind: "directory" },
+        "/source/dir/a.txt": { kind: "file", size: 1 },
+        "/target": { kind: "directory" },
+      });
+      const rmImplFn: typeof fileSystem.rmImpl = async (path, options) => {
+        if (path === "/source/dir") {
+          throw Object.assign(new Error("EPERM"), { code: "EPERM", path });
+        }
+        fileSystem.rmImpl = null;
+        try {
+          await fileSystem.rm(path, options);
+        } finally {
+          fileSystem.rmImpl = rmImplFn;
+        }
+      };
+      fileSystem.rmImpl = rmImplFn;
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/dir"],
+        destinationDirectoryPath: "/target",
+      });
+      const events: CopyPasteProgressEvent[] = [];
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "cut-rmdir-fail-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: (event) => events.push(event),
+        requestResolution: async () => null,
+      });
+
+      // Operation reports partial — directory item failed (source dir couldn't be removed)
+      expect(events.at(-1)?.status).toBe("partial");
+      const result = events.at(-1)?.result;
+      expect(result?.items[0]?.status).toBe("failed");
+      expect(result?.items[0]?.error).toContain("Failed to remove empty source directory");
+      // Children were moved successfully
+      expect(fileSystem.exists("/target/dir/a.txt")).toBe(true);
+      expect(fileSystem.exists("/source/dir/a.txt")).toBe(false);
+      // Empty source directory remains (rm failed)
+      expect(fileSystem.exists("/source/dir")).toBe(true);
+    });
+
+    it("inline deletion rm failure reports item as failed but continues operation", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 1 },
+        "/source/b.txt": { kind: "file", size: 2 },
+        "/target": { kind: "directory" },
+      });
+      const rmImplFn: typeof fileSystem.rmImpl = async (path, options) => {
+        if (path === "/source/a.txt") {
+          throw Object.assign(new Error("EPERM"), { code: "EPERM", path });
+        }
+        fileSystem.rmImpl = null;
+        try {
+          await fileSystem.rm(path, options);
+        } finally {
+          fileSystem.rmImpl = rmImplFn;
+        }
+      };
+      fileSystem.rmImpl = rmImplFn;
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt", "/source/b.txt"],
+        destinationDirectoryPath: "/target",
+      });
+      const events: CopyPasteProgressEvent[] = [];
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "cut-rm-fail-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: (event) => events.push(event),
+        requestResolution: async () => null,
+      });
+
+      // Operation reports partial — a.txt failed (source deletion), b.txt completed
+      expect(events.at(-1)?.status).toBe("partial");
+      const result = events.at(-1)?.result;
+      expect(result?.items[0]?.status).toBe("failed");
+      expect(result?.items[0]?.error).toContain("Failed to remove source");
+      expect(result?.items[1]?.status).toBe("completed");
+      // Both files are at destination (copies succeeded)
+      expect(fileSystem.exists("/target/a.txt")).toBe(true);
+      expect(fileSystem.exists("/target/b.txt")).toBe(true);
+      // a.txt source remains (delete failed), b.txt source removed
+      expect(fileSystem.exists("/source/a.txt")).toBe(true);
+      expect(fileSystem.exists("/source/b.txt")).toBe(false);
+    });
+
+    it("handles nested directory cut with mixed actions", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/dir": { kind: "directory" },
+        "/source/dir/new.txt": { kind: "file", size: 1 },
+        "/source/dir/conflict.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+        "/target/dir": { kind: "directory" },
+        "/target/dir/conflict.txt": { kind: "file", size: 3 },
+      });
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/dir"],
+        destinationDirectoryPath: "/target",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "cut-mixed-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      // new.txt moved (source deleted)
+      expect(fileSystem.exists("/source/dir/new.txt")).toBe(false);
+      expect(fileSystem.exists("/target/dir/new.txt")).toBe(true);
+      // conflict.txt skipped (source preserved)
+      expect(fileSystem.exists("/source/dir/conflict.txt")).toBe(true);
+      expect(fileSystem.readNode("/target/dir/conflict.txt")!.size).toBe(3);
+      // Source directory preserved (conflict.txt still there)
+      expect(fileSystem.exists("/source/dir")).toBe(true);
+    });
+
+    it("source rm called only once per file — no redundant cleanup pass", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+      });
+      const rmCalls: string[] = [];
+      const rmImplFn: typeof fileSystem.rmImpl = async (path, options) => {
+        rmCalls.push(path);
+        fileSystem.rmImpl = null;
+        try {
+          await fileSystem.rm(path, options);
+        } finally {
+          fileSystem.rmImpl = rmImplFn;
+        }
+      };
+      fileSystem.rmImpl = rmImplFn;
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "cut-no-double-rm-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(rmCalls.filter((p) => p === "/source/a.txt")).toHaveLength(1);
+    });
+
+    it("cut with runtime conflict resolved as skip preserves source", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+      });
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+      fileSystem.addFile("/target/a.txt", { size: 2 });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "cut-runtime-skip-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => "skip",
+      });
+
+      expect(fileSystem.exists("/source/a.txt")).toBe(true);
+      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(2);
+    });
+
+    it("cut with runtime conflict resolved as overwrite deletes source inline", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+      });
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+      fileSystem.addFile("/target/a.txt", { size: 2 });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "cut-runtime-overwrite-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => "overwrite",
+      });
+
+      expect(fileSystem.exists("/source/a.txt")).toBe(false);
+      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(5);
+    });
+
+    it("nested child file deletion failure propagates to parent directory status", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/dir": { kind: "directory" },
+        "/source/dir/a.txt": { kind: "file", size: 1 },
+        "/source/dir/b.txt": { kind: "file", size: 2 },
+        "/target": { kind: "directory" },
+      });
+      const rmImplFn: typeof fileSystem.rmImpl = async (path, options) => {
+        if (path === "/source/dir/a.txt") {
+          throw Object.assign(new Error("EPERM"), { code: "EPERM", path });
+        }
+        fileSystem.rmImpl = null;
+        try {
+          await fileSystem.rm(path, options);
+        } finally {
+          fileSystem.rmImpl = rmImplFn;
+        }
+      };
+      fileSystem.rmImpl = rmImplFn;
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/dir"],
+        destinationDirectoryPath: "/target",
+      });
+      const events: CopyPasteProgressEvent[] = [];
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "nested-child-fail-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: (event) => events.push(event),
+        requestResolution: async () => null,
+      });
+
+      // Parent directory reports partial because nested child failed
+      expect(events.at(-1)?.status).toBe("partial");
+      const result = events.at(-1)?.result;
+      expect(result?.items[0]?.status).toBe("failed");
+      // Filesystem state: a.txt source preserved (rm failed), b.txt moved
+      expect(fileSystem.exists("/source/dir/a.txt")).toBe(true);
+      expect(fileSystem.exists("/source/dir/b.txt")).toBe(false);
+      expect(fileSystem.exists("/target/dir/a.txt")).toBe(true);
+      expect(fileSystem.exists("/target/dir/b.txt")).toBe(true);
+    });
+
+    it("mutated source file reports as failed, not completed", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.copyFileStreamImpl = async (sourcePath, destinationPath) => {
+        fileSystem.addFile(destinationPath, { size: 5 });
+        fileSystem.mutateNode(sourcePath, (node) => ({
+          ...node,
+          size: 99,
+        }));
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+      const events: CopyPasteProgressEvent[] = [];
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "cut-mutated-status-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: (event) => events.push(event),
+        requestResolution: async () => null,
+      });
+
+      // Item reports failed because source was preserved (modified after copy)
+      expect(events.at(-1)?.status).toBe("partial");
+      const result = events.at(-1)?.result;
+      expect(result?.items[0]?.status).toBe("failed");
+      expect(result?.items[0]?.error).toContain("Source was modified after copy");
+      // Filesystem correctness: both exist
+      expect(fileSystem.exists("/source/a.txt")).toBe(true);
+      expect(fileSystem.exists("/target/a.txt")).toBe(true);
+    });
+
+  });
+
+  describe("same-filesystem rename optimization", () => {
+    it("uses rename for same-dev cut file", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableRename();
+      let copyFileStreamCalled = false;
+      fileSystem.copyFileStreamImpl = async () => {
+        copyFileStreamCalled = true;
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "rename-file-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(copyFileStreamCalled).toBe(false);
+      expect(fileSystem.exists("/source/a.txt")).toBe(false);
+      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(5);
+    });
+
+    it("uses rename for same-dev cut symlink", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/link": { kind: "symlink", target: "actual.txt" },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableRename();
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/link"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "rename-symlink-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(fileSystem.exists("/source/link")).toBe(false);
+      expect(fileSystem.readNode("/target/link")).toMatchObject({
+        kind: "symlink",
+        target: "actual.txt",
+      });
+    });
+
+    it("uses rename for same-dev cut directory (moves entire subtree atomically)", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/dir": { kind: "directory" },
+        "/source/dir/a.txt": { kind: "file", size: 3 },
+        "/source/dir/sub": { kind: "directory" },
+        "/source/dir/sub/b.txt": { kind: "file", size: 7 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableRename();
+      let copyFileStreamCalled = false;
+      fileSystem.copyFileStreamImpl = async () => {
+        copyFileStreamCalled = true;
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/dir"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "rename-dir-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(copyFileStreamCalled).toBe(false);
+      expect(fileSystem.exists("/source/dir")).toBe(false);
+      expect(fileSystem.exists("/source/dir/a.txt")).toBe(false);
+      expect(fileSystem.exists("/source/dir/sub/b.txt")).toBe(false);
+      expect(fileSystem.readNode("/target/dir")!.kind).toBe("directory");
+      expect(fileSystem.readNode("/target/dir/a.txt")!.size).toBe(3);
+      expect(fileSystem.readNode("/target/dir/sub/b.txt")!.size).toBe(7);
+    });
+
+    it("falls back to copy+delete for cross-dev cut", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory", dev: 1 },
+        "/source/a.txt": { kind: "file", size: 5, dev: 1 },
+        "/target": { kind: "directory", dev: 2 },
+      });
+      fileSystem.enableRename();
+      let copyFileStreamCalled = false;
+      fileSystem.copyFileStreamImpl = async (sourcePath, destinationPath, signal) => {
+        signal?.throwIfAborted();
+        copyFileStreamCalled = true;
+        fileSystem.addFile(destinationPath, { size: fileSystem.readNode(sourcePath)!.size });
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "rename-cross-dev-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(copyFileStreamCalled).toBe(true);
+      expect(fileSystem.exists("/source/a.txt")).toBe(false);
+      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(5);
+    });
+
+    it("falls back to copy+delete on EXDEV error", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableRename();
+      fileSystem.renameImpl = async () => {
+        throw Object.assign(new Error("EXDEV"), { code: "EXDEV", path: "/source/a.txt" });
+      };
+      let copyFileStreamCalled = false;
+      fileSystem.copyFileStreamImpl = async (sourcePath, destinationPath, signal) => {
+        signal?.throwIfAborted();
+        copyFileStreamCalled = true;
+        fileSystem.addFile(destinationPath, { size: fileSystem.readNode(sourcePath)!.size });
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "rename-exdev-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(copyFileStreamCalled).toBe(true);
+      expect(fileSystem.exists("/source/a.txt")).toBe(false);
+      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(5);
+    });
+
+    it("does NOT use rename for copy mode (only cut)", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableRename();
+      let copyFileStreamCalled = false;
+      fileSystem.copyFileStreamImpl = async (sourcePath, destinationPath, signal) => {
+        signal?.throwIfAborted();
+        copyFileStreamCalled = true;
+        fileSystem.addFile(destinationPath, { size: fileSystem.readNode(sourcePath)!.size });
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "copy",
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "rename-copy-mode-1",
+        report,
+        mode: "copy",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(copyFileStreamCalled).toBe(true);
+      expect(fileSystem.exists("/source/a.txt")).toBe(true);
+      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(5);
+    });
+
+    it("does NOT use rename when fileSystem.rename is absent", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+      });
+      // rename NOT enabled
+      let copyFileStreamCalled = false;
+      fileSystem.copyFileStreamImpl = async (sourcePath, destinationPath, signal) => {
+        signal?.throwIfAborted();
+        copyFileStreamCalled = true;
+        fileSystem.addFile(destinationPath, { size: fileSystem.readNode(sourcePath)!.size });
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "rename-absent-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(copyFileStreamCalled).toBe(true);
+      expect(fileSystem.exists("/source/a.txt")).toBe(false);
+      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(5);
+    });
+
+    it("merges directories instead of renaming when action is merge", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/dir": { kind: "directory" },
+        "/source/dir/a.txt": { kind: "file", size: 3 },
+        "/source/dir/b.txt": { kind: "file", size: 4 },
+        "/target": { kind: "directory" },
+        "/target/dir": { kind: "directory" },
+        "/target/dir/existing.txt": { kind: "file", size: 9 },
+      });
+      fileSystem.enableRename();
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/dir"],
+        destinationDirectoryPath: "/target",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "rename-merge-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      // existing.txt preserved (merge, not replace)
+      expect(fileSystem.readNode("/target/dir/existing.txt")!.size).toBe(9);
+      // Children moved individually via rename
+      expect(fileSystem.exists("/source/dir/a.txt")).toBe(false);
+      expect(fileSystem.exists("/source/dir/b.txt")).toBe(false);
+      expect(fileSystem.readNode("/target/dir/a.txt")!.size).toBe(3);
+      expect(fileSystem.readNode("/target/dir/b.txt")!.size).toBe(4);
+    });
+
+    it("rename with overwrite removes destination first", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 10 },
+        "/target": { kind: "directory" },
+        "/target/a.txt": { kind: "file", size: 2 },
+      });
+      fileSystem.enableRename();
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+        policy: { file: "overwrite", directory: "merge", mismatch: "overwrite" },
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "rename-overwrite-1",
+        report,
+        mode: "cut",
+        policy: { file: "overwrite", directory: "merge", mismatch: "overwrite" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(fileSystem.exists("/source/a.txt")).toBe(false);
+      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(10);
+    });
+
+    it("rename with keep_both uses alternate destination name", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 8 },
+        "/target": { kind: "directory" },
+        "/target/a.txt": { kind: "file", size: 2 },
+      });
+      fileSystem.enableRename();
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+        policy: { file: "keep_both", directory: "merge", mismatch: "keep_both" },
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "rename-keepboth-1",
+        report,
+        mode: "cut",
+        policy: { file: "keep_both", directory: "merge", mismatch: "keep_both" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(fileSystem.exists("/source/a.txt")).toBe(false);
+      // Original destination unchanged
+      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(2);
+      // Renamed to alternate path
+      expect(fileSystem.readNode("/target/a copy.txt")!.size).toBe(8);
+    });
+
+    it("rename preserves inode (atomic move, not copy)", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 5, mode: 0o755 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableRename();
+      const originalIno = fileSystem.readNode("/source/a.txt")!.ino;
+      const originalMtimeMs = fileSystem.readNode("/source/a.txt")!.mtimeMs;
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "rename-preserve-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      const destNode = fileSystem.readNode("/target/a.txt")!;
+      expect(destNode.ino).toBe(originalIno);
+      expect(destNode.mode).toBe(0o755);
+      expect(destNode.mtimeMs).toBe(originalMtimeMs);
+    });
+
+    it("mixed-dev batch: some items renamed, others copy+deleted", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source1": { kind: "directory", dev: 1 },
+        "/source1/a.txt": { kind: "file", size: 3, dev: 1 },
+        "/source2": { kind: "directory", dev: 2 },
+        "/source2/b.txt": { kind: "file", size: 7, dev: 2 },
+        "/target": { kind: "directory", dev: 1 },
+      });
+      fileSystem.enableRename();
+      let copyFileStreamCalled = false;
+      fileSystem.copyFileStreamImpl = async (sourcePath, destinationPath, signal) => {
+        signal?.throwIfAborted();
+        copyFileStreamCalled = true;
+        fileSystem.addFile(destinationPath, { size: fileSystem.readNode(sourcePath)!.size });
+      };
+      const originalInoA = fileSystem.readNode("/source1/a.txt")!.ino;
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source1/a.txt", "/source2/b.txt"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "rename-mixed-dev-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      // a.txt renamed (same dev) — inode preserved
+      expect(fileSystem.readNode("/target/a.txt")!.ino).toBe(originalInoA);
+      expect(fileSystem.exists("/source1/a.txt")).toBe(false);
+      // b.txt copied+deleted (cross dev)
+      expect(copyFileStreamCalled).toBe(true);
+      expect(fileSystem.exists("/source2/b.txt")).toBe(false);
+      expect(fileSystem.readNode("/target/b.txt")!.size).toBe(7);
+    });
+
+    it("EXDEV fallback still performs inline source deletion", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableRename();
+      fileSystem.renameImpl = async () => {
+        throw Object.assign(new Error("EXDEV"), { code: "EXDEV", path: "/source/a.txt" });
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "rename-exdev-inline-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      // Source deleted via inline deletion (Phase 1), not rename
+      expect(fileSystem.exists("/source/a.txt")).toBe(false);
+      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(5);
+    });
+
+    it("rename of directory with overwrite action removes destination directory first", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/dir": { kind: "directory" },
+        "/source/dir/a.txt": { kind: "file", size: 3 },
+        "/target": { kind: "directory" },
+        "/target/dir": { kind: "directory" },
+        "/target/dir/old.txt": { kind: "file", size: 1 },
+      });
+      fileSystem.enableRename();
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/dir"],
+        destinationDirectoryPath: "/target",
+        policy: { file: "overwrite", directory: "overwrite", mismatch: "overwrite" },
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "rename-dir-overwrite-1",
+        report,
+        mode: "cut",
+        policy: { file: "overwrite", directory: "overwrite", mismatch: "overwrite" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(fileSystem.exists("/source/dir")).toBe(false);
+      expect(fileSystem.readNode("/target/dir/a.txt")!.size).toBe(3);
+      // old.txt gone because directory was overwritten (replaced), not merged
+      expect(fileSystem.exists("/target/dir/old.txt")).toBe(false);
+    });
+
+    it("cancellation between rename operations", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 3 },
+        "/source/b.txt": { kind: "file", size: 4 },
+        "/source/c.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableRename();
+      const controller = new AbortController();
+      let renameCount = 0;
+      fileSystem.renameImpl = async (oldPath, newPath) => {
+        renameCount++;
+        const size = fileSystem.readNode(oldPath)?.size ?? 0;
+        fileSystem.nodes.delete(oldPath);
+        fileSystem.addFile(newPath, { size });
+        if (renameCount === 1) {
+          controller.abort();
+        }
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt", "/source/b.txt", "/source/c.txt"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "rename-cancel-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: controller.signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      // First file moved
+      expect(fileSystem.exists("/target/a.txt")).toBe(true);
+      // Remaining at source
+      expect(fileSystem.exists("/source/b.txt")).toBe(true);
+      expect(fileSystem.exists("/source/c.txt")).toBe(true);
+    });
+
+    it("rename with runtime conflict resolved as skip preserves source", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableRename();
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+      // Create destination after analysis (triggers runtime conflict)
+      fileSystem.addFile("/target/a.txt", { size: 99 });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "rename-runtime-skip-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => "skip",
+      });
+
+      expect(fileSystem.exists("/source/a.txt")).toBe(true);
+      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(99);
+    });
+
+    it("rename with runtime conflict resolved as overwrite uses rename", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableRename();
+      let copyFileStreamCalled = false;
+      fileSystem.copyFileStreamImpl = async () => {
+        copyFileStreamCalled = true;
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+      // Create destination after analysis (triggers runtime conflict)
+      fileSystem.addFile("/target/a.txt", { size: 99 });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "rename-runtime-overwrite-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => "overwrite",
+      });
+
+      expect(copyFileStreamCalled).toBe(false);
+      expect(fileSystem.exists("/source/a.txt")).toBe(false);
+      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(5);
+    });
+
+    it("directory rename reports correct byte progress for subtree", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/dir": { kind: "directory" },
+        "/source/dir/a.txt": { kind: "file", size: 100 },
+        "/source/dir/b.txt": { kind: "file", size: 200 },
+        "/source/dir/sub": { kind: "directory" },
+        "/source/dir/sub/c.txt": { kind: "file", size: 300 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableRename();
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/dir"],
+        destinationDirectoryPath: "/target",
+      });
+      const events: CopyPasteProgressEvent[] = [];
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "rename-byte-progress-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: (event) => events.push(event),
+        requestResolution: async () => null,
+      });
+
+      const result = events.at(-1)?.result;
+      // completedByteCount must sum all file sizes in the subtree (100 + 200 + 300 = 600)
+      expect(result?.summary.completedByteCount).toBe(600);
+    });
+  });
+
+  describe("native copyFile and utimes", () => {
+    it("uses copyFile when available, skips copyFileStream and chmod", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 5, mode: 0o755 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableCopyFile();
+      let copyFileStreamCalled = false;
+      fileSystem.copyFileStreamImpl = async () => {
+        copyFileStreamCalled = true;
+      };
+      let chmodCalled = false;
+      fileSystem.chmodImpl = async () => {
+        chmodCalled = true;
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "native-copy-1",
+        report,
+        mode: "copy",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(copyFileStreamCalled).toBe(false);
+      expect(chmodCalled).toBe(false);
+      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(5);
+    });
+
+    it("falls back to copyFileStream when copyFile absent", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+      });
+      // copyFile NOT enabled
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "native-fallback-1",
+        report,
+        mode: "copy",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(5);
+    });
+
+    it("copyFileStream fallback preserves mtime via utimes", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 5, mtimeMs: 5555 },
+        "/target": { kind: "directory" },
+      });
+      // No copyFile — exercises copyFileStream path. Enable utimes.
+      fileSystem.enableUtimes();
+
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "stream-utimes-1",
+        report,
+        mode: "copy",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(fileSystem.readNode("/target/a.txt")!.mtimeMs).toBe(5555);
+    });
+
+    it("copyFile preserves mode and mtime", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 5, mode: 0o755, mtimeMs: 9999 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableCopyFile();
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "native-preserve-1",
+        report,
+        mode: "copy",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      const dest = fileSystem.readNode("/target/a.txt")!;
+      expect(dest.mode).toBe(0o755);
+      expect(dest.mtimeMs).toBe(9999);
+    });
+
+    it("copyFile error propagates and fails the operation", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableCopyFile();
+      fileSystem.copyFileImpl = async () => {
+        throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+
+      const events: CopyPasteProgressEvent[] = [];
+      await executeCopyPasteFromAnalysis({
+        operationId: "native-error-1",
+        report,
+        mode: "copy",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: (event) => events.push(event),
+        requestResolution: async () => null,
+      });
+
+      const finalEvent = events[events.length - 1]!;
+      expect(finalEvent.result!.status).toBe("failed");
+      expect(finalEvent.result!.error).toContain("EACCES");
+    });
+
+    it("utimes called for directories after mkdir + chmod", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/dir": { kind: "directory", mtimeMs: 5555 },
+        "/source/dir/a.txt": { kind: "file", size: 3 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableUtimes();
+      const utimesCalls: Array<{ path: string; mtimeMs: number }> = [];
+      fileSystem.utimesImpl = async (path, _atimeMs, mtimeMs) => {
+        utimesCalls.push({ path, mtimeMs });
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        sourcePaths: ["/source/dir"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "utimes-dir-1",
+        report,
+        mode: "copy",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(utimesCalls.some((c) => c.path === "/target/dir" && c.mtimeMs === 5555)).toBe(true);
+    });
+
+    it("lutimes called for symlinks after symlink creation", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/link": { kind: "symlink", target: "actual.txt", mtimeMs: 7777 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableLutimes();
+      const lutimesCalls: Array<{ path: string; mtimeMs: number }> = [];
+      fileSystem.lutimesImpl = async (path, _atimeMs, mtimeMs) => {
+        lutimesCalls.push({ path, mtimeMs });
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        sourcePaths: ["/source/link"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "lutimes-symlink-1",
+        report,
+        mode: "copy",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(lutimesCalls.some((c) => c.path === "/target/link" && c.mtimeMs === 7777)).toBe(true);
+    });
+
+    it("symlink uses lutimes not utimes (does not follow symlink target)", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/link": { kind: "symlink", target: "actual.txt", mtimeMs: 7777 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableUtimes();
+      fileSystem.enableLutimes();
+      const utimesCalls: string[] = [];
+      const lutimesCalls: string[] = [];
+      fileSystem.utimesImpl = async (path) => {
+        utimesCalls.push(path);
+      };
+      fileSystem.lutimesImpl = async (path) => {
+        lutimesCalls.push(path);
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        sourcePaths: ["/source/link"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "symlink-lutimes-not-utimes",
+        report,
+        mode: "copy",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      // lutimes called for the symlink, utimes NOT called
+      expect(lutimesCalls).toContain("/target/link");
+      expect(utimesCalls).not.toContain("/target/link");
+    });
+
+    it("utimes not called when absent (no-op)", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/dir": { kind: "directory", mtimeMs: 5555 },
+        "/source/dir/a.txt": { kind: "file", size: 3 },
+        "/target": { kind: "directory" },
+      });
+      // utimes NOT enabled
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        sourcePaths: ["/source/dir"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "utimes-absent-1",
+        report,
+        mode: "copy",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      // No error — utimes silently skipped
+      expect(fileSystem.readNode("/target/dir")!.kind).toBe("directory");
+    });
+
+    it("utimes ENOTSUP silently ignored", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/dir": { kind: "directory", mtimeMs: 5555 },
+        "/source/dir/a.txt": { kind: "file", size: 3 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableUtimes();
+      fileSystem.utimesImpl = async () => {
+        throw Object.assign(new Error("ENOTSUP"), { code: "ENOTSUP" });
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        sourcePaths: ["/source/dir"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "utimes-enotsup-1",
+        report,
+        mode: "copy",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(fileSystem.readNode("/target/dir")!.kind).toBe("directory");
+    });
+
+    it("utimes EOPNOTSUPP silently ignored", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/link": { kind: "symlink", target: "actual.txt", mtimeMs: 7777 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableUtimes();
+      fileSystem.utimesImpl = async () => {
+        throw Object.assign(new Error("EOPNOTSUPP"), { code: "EOPNOTSUPP" });
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        sourcePaths: ["/source/link"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "utimes-eopnotsupp-1",
+        report,
+        mode: "copy",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(fileSystem.readNode("/target/link")!.kind).toBe("symlink");
+    });
+
+    it("utimes other errors propagate", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/dir": { kind: "directory", mtimeMs: 5555 },
+        "/source/dir/a.txt": { kind: "file", size: 3 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableUtimes();
+      fileSystem.utimesImpl = async () => {
+        throw Object.assign(new Error("EPERM"), { code: "EPERM" });
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        sourcePaths: ["/source/dir"],
+        destinationDirectoryPath: "/target",
+      });
+
+      const events: CopyPasteProgressEvent[] = [];
+      await executeCopyPasteFromAnalysis({
+        operationId: "utimes-eperm-1",
+        report,
+        mode: "copy",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: (event) => events.push(event),
+        requestResolution: async () => null,
+      });
+
+      const finalEvent = events[events.length - 1]!;
+      expect(finalEvent.result!.status).toBe("failed");
+      expect(finalEvent.result!.error).toContain("EPERM");
+    });
+
+    it("copyFile + cut: inline source deletion still works", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableCopyFile();
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "native-cut-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(fileSystem.exists("/source/a.txt")).toBe(false);
+      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(5);
+    });
+
+    it("copyFile + rename: rename takes priority for same-dev cut", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableCopyFile();
+      fileSystem.enableRename();
+      let copyFileCalled = false;
+      fileSystem.copyFileImpl = async () => {
+        copyFileCalled = true;
+      };
+      const originalIno = fileSystem.readNode("/source/a.txt")!.ino;
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "rename-vs-native-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(copyFileCalled).toBe(false);
+      expect(fileSystem.readNode("/target/a.txt")!.ino).toBe(originalIno);
+    });
+
+    it("copyFile with overwrite: destination removed before native copy", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 10 },
+        "/target": { kind: "directory" },
+        "/target/a.txt": { kind: "file", size: 2 },
+      });
+      fileSystem.enableCopyFile();
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+        policy: { file: "overwrite", directory: "merge", mismatch: "overwrite" },
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "native-overwrite-1",
+        report,
+        mode: "copy",
+        policy: { file: "overwrite", directory: "merge", mismatch: "overwrite" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(10);
+    });
+
+    it("copyFile with keep_both: correct alternate destination path used", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 8 },
+        "/target": { kind: "directory" },
+        "/target/a.txt": { kind: "file", size: 2 },
+      });
+      fileSystem.enableCopyFile();
+      const copyFilePaths: string[] = [];
+      fileSystem.copyFileImpl = async (sourcePath, destinationPath) => {
+        copyFilePaths.push(destinationPath);
+        fileSystem.addFile(destinationPath, { size: fileSystem.readNode(sourcePath)!.size });
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+        policy: { file: "keep_both", directory: "merge", mismatch: "keep_both" },
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "native-keepboth-1",
+        report,
+        mode: "copy",
+        policy: { file: "keep_both", directory: "merge", mismatch: "keep_both" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(copyFilePaths).toEqual(["/target/a copy.txt"]);
+      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(2);
+      expect(fileSystem.readNode("/target/a copy.txt")!.size).toBe(8);
+    });
+
+    it("utimes uses source mtimeMs for both atime and mtime parameters", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/dir": { kind: "directory", mtimeMs: 1234567890 },
+        "/source/dir/a.txt": { kind: "file", size: 3 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableUtimes();
+      const utimesArgs: Array<{ path: string; atimeMs: number; mtimeMs: number }> = [];
+      fileSystem.utimesImpl = async (path, atimeMs, mtimeMs) => {
+        utimesArgs.push({ path, atimeMs, mtimeMs });
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        sourcePaths: ["/source/dir"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "utimes-args-1",
+        report,
+        mode: "copy",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      const dirCall = utimesArgs.find((c) => c.path === "/target/dir");
+      expect(dirCall).toBeDefined();
+      expect(dirCall!.atimeMs).toBe(1234567890);
+      expect(dirCall!.mtimeMs).toBe(1234567890);
+    });
+  });
+
+  describe("cross-phase integration", () => {
+    it("rename + inline cut: rename moves file, no copy or separate delete", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source/a.txt": { kind: "file", size: 10, dev: 1 },
+        "/target": { kind: "directory", dev: 1 },
+      });
+      fileSystem.enableRename();
+      fileSystem.enableCopyFile();
+
+      let copyFileCalled = false;
+      let copyFileStreamCalled = false;
+      fileSystem.copyFileImpl = async () => {
+        copyFileCalled = true;
+      };
+      fileSystem.copyFileStreamImpl = async () => {
+        copyFileStreamCalled = true;
+      };
+
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "cross-rename-cut",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(copyFileCalled).toBe(false);
+      expect(copyFileStreamCalled).toBe(false);
+      expect(fileSystem.exists("/source/a.txt")).toBe(false);
+      expect(fileSystem.exists("/target/a.txt")).toBe(true);
+    });
+
+    it("EXDEV fallback + inline cut: copy then inline delete", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source/a.txt": { kind: "file", size: 10, dev: 1 },
+        "/target": { kind: "directory", dev: 1 },
+      });
+      fileSystem.enableRename();
+
+      // Force EXDEV on rename despite same dev
+      fileSystem.renameImpl = async () => {
+        throw Object.assign(new Error("EXDEV"), { code: "EXDEV" });
+      };
+
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "cross-exdev-cut",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      // Fell back to copy+delete
+      expect(fileSystem.exists("/source/a.txt")).toBe(false);
+      expect(fileSystem.exists("/target/a.txt")).toBe(true);
+    });
+
+    it("copyFile + inline cut: native copy then inline delete", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source/a.txt": { kind: "file", size: 10, dev: 1 },
+        "/target": { kind: "directory", dev: 2 },
+      });
+      fileSystem.enableCopyFile();
+
+      let copyFileCalled = false;
+      let copyFileStreamCalled = false;
+      fileSystem.copyFileStreamImpl = async () => {
+        copyFileStreamCalled = true;
+      };
+      fileSystem.copyFileImpl = async (src, dst) => {
+        copyFileCalled = true;
+        // Manually do the file copy since we can't delegate to the mock's own copyFile
+        const srcNode = fileSystem.readNode(src)!;
+        fileSystem.addFile(dst, { size: srcNode.size, mode: srcNode.mode });
+      };
+
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "cross-copyfile-cut",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(copyFileCalled).toBe(true);
+      expect(copyFileStreamCalled).toBe(false);
+      expect(fileSystem.exists("/source/a.txt")).toBe(false);
+      expect(fileSystem.exists("/target/a.txt")).toBe(true);
+    });
+
+    it("rename + copyFile: rename prioritized over copyFile for same-dev cut", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source/a.txt": { kind: "file", size: 10, dev: 1 },
+        "/target": { kind: "directory", dev: 1 },
+      });
+      fileSystem.enableRename();
+      fileSystem.enableCopyFile();
+
+      let renameCalled = false;
+      let copyFileCalled = false;
+      const renameSize = fileSystem.readNode("/source/a.txt")!.size;
+      fileSystem.renameImpl = async (oldPath, newPath) => {
+        renameCalled = true;
+        const size = fileSystem.readNode(oldPath)?.size ?? 0;
+        fileSystem.nodes.delete(oldPath);
+        fileSystem.addFile(newPath, { size });
+      };
+      fileSystem.copyFileImpl = async () => {
+        copyFileCalled = true;
+      };
+
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "cross-rename-vs-copyfile",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(renameCalled).toBe(true);
+      expect(copyFileCalled).toBe(false);
+    });
+
+    it("merge + rename children + copyFile fallback: mixed paths in single operation", async () => {
+      // src/dir has children, dst/dir exists — merge mode
+      // Some children on same dev (rename), some on different dev (copyFile)
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source/dir": { kind: "directory", dev: 1 },
+        "/source/dir/same-dev.txt": { kind: "file", size: 5, dev: 1 },
+        "/source/dir/cross-dev.txt": { kind: "file", size: 8, dev: 2 },
+        "/target": { kind: "directory", dev: 1 },
+        "/target/dir": { kind: "directory", dev: 1 },
+        "/target/dir/existing.txt": { kind: "file", size: 3, dev: 1 },
+      });
+      fileSystem.enableRename();
+      fileSystem.enableCopyFile();
+
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/dir"],
+        destinationDirectoryPath: "/target",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "cross-merge-mixed",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      // existing.txt still at destination (merge preserves it)
+      expect(fileSystem.exists("/target/dir/existing.txt")).toBe(true);
+      // same-dev.txt moved via rename
+      expect(fileSystem.exists("/target/dir/same-dev.txt")).toBe(true);
+      expect(fileSystem.exists("/source/dir/same-dev.txt")).toBe(false);
+      // cross-dev.txt copied via copyFile then deleted inline
+      expect(fileSystem.exists("/target/dir/cross-dev.txt")).toBe(true);
+      expect(fileSystem.exists("/source/dir/cross-dev.txt")).toBe(false);
+    });
   });
 });

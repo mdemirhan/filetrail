@@ -2,13 +2,16 @@ import { createReadStream, createWriteStream } from "node:fs";
 import {
   chmod,
   lstat,
+  lutimes,
   mkdir,
   readdir,
   readlink,
   realpath,
+  rename,
   rm,
   stat,
   symlink,
+  utimes,
 } from "node:fs/promises";
 import { dirname } from "node:path";
 import { pipeline } from "node:stream/promises";
@@ -63,14 +66,24 @@ export type WriteServiceFileSystem = {
   readdir: (path: string) => Promise<string[]>;
   readlink: (path: string) => Promise<string>;
   chmod?: (path: string, mode: number) => Promise<void>;
+  rename?: (oldPath: string, newPath: string) => Promise<void>;
   mkdir: (path: string, options?: { recursive?: boolean }) => Promise<void>;
   rm: (path: string, options?: { recursive?: boolean; force?: boolean }) => Promise<void>;
   symlink: (target: string, path: string) => Promise<void>;
+  /** Copies a file preserving metadata (mode, timestamps, xattrs). When provided,
+   *  used instead of `copyFileStream` + `chmod` for file copies. */
+  copyFile?: (sourcePath: string, destinationPath: string) => Promise<void>;
   copyFileStream: (
     sourcePath: string,
     destinationPath: string,
     signal?: AbortSignal,
   ) => Promise<void>;
+  /** Sets access and modification times on a path (follows symlinks). Used to
+   *  preserve timestamps on directories and regular files after creation. */
+  utimes?: (path: string, atimeMs: number, mtimeMs: number) => Promise<void>;
+  /** Like `utimes` but operates on the symlink itself, not its target. Used to
+   *  preserve timestamps on symlinks after creation. */
+  lutimes?: (path: string, atimeMs: number, mtimeMs: number) => Promise<void>;
 };
 
 export type CopyPasteRequest = {
@@ -251,6 +264,7 @@ export type CopyPasteRuntimeConflict = {
 export type CopyPasteItemResult = {
   sourcePath: string;
   destinationPath: string;
+  sourceKind: "file" | "directory" | "symlink";
   status: "completed" | "skipped" | "failed" | "cancelled";
   error: string | null;
   skipReason?: "planned_conflict_policy" | "runtime_conflict_resolution" | null;
@@ -373,6 +387,9 @@ export const DEFAULT_WRITE_SERVICE_FILE_SYSTEM: WriteServiceFileSystem = {
   chmod: async (path, mode) => {
     await chmod(path, mode);
   },
+  rename: async (oldPath, newPath) => {
+    await rename(oldPath, newPath);
+  },
   mkdir: async (path, options) => {
     await mkdir(path, options);
   },
@@ -385,5 +402,11 @@ export const DEFAULT_WRITE_SERVICE_FILE_SYSTEM: WriteServiceFileSystem = {
   copyFileStream: async (sourcePath, destinationPath, signal) => {
     await mkdir(dirname(destinationPath), { recursive: true });
     await pipeline(createReadStream(sourcePath), createWriteStream(destinationPath), { signal });
+  },
+  utimes: async (path, atimeMs, mtimeMs) => {
+    await utimes(path, atimeMs / 1000, mtimeMs / 1000);
+  },
+  lutimes: async (path, atimeMs, mtimeMs) => {
+    await lutimes(path, atimeMs / 1000, mtimeMs / 1000);
   },
 };

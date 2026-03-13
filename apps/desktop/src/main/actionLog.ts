@@ -183,13 +183,7 @@ export function createActionLogRecorder(store: Pick<ActionLogStore, "append">): 
           skippedItemCount: args.result.summary.skippedItemCount,
           cancelledItemCount: args.result.summary.cancelledItemCount,
         },
-        items: args.result.items.map((item) => ({
-          sourcePath: item.sourcePath,
-          destinationPath: item.destinationPath,
-          status: item.status,
-          error: item.error,
-          skipReason: item.skipReason,
-        })),
+        items: capActionLogItems(args.result.items),
         initiator: args.initiator ?? null,
         requestedDestinationPath: args.requestedDestinationPath ?? null,
         runtimeConflicts: [...(args.runtimeConflicts ?? [])],
@@ -324,6 +318,7 @@ function createSingleActionLogItem(
   return {
     sourcePath,
     destinationPath,
+    sourceKind: null,
     status: ok ? "completed" : "failed",
     error: ok ? null : error,
     skipReason: null,
@@ -457,4 +452,34 @@ function buildWriteMessage(
   return counts.length > 0
     ? `${getActionLabel(action)} finished: ${counts.join(", ")}.`
     : `${getActionLabel(action)} finished.`;
+}
+
+/** Hard cap on items stored per action log entry. Summaries remain accurate. */
+const MAX_ACTION_LOG_ITEMS = 5000;
+
+function capActionLogItems(
+  items: ReadonlyArray<{
+    sourcePath: string | null;
+    destinationPath: string | null;
+    sourceKind?: string | null | undefined;
+    status: string;
+    error: string | null;
+    skipReason?: string | null | undefined;
+  }>,
+): ActionLogItem[] {
+  const mapped = items.map((item) => ({
+    sourcePath: item.sourcePath,
+    destinationPath: item.destinationPath,
+    sourceKind: (item.sourceKind ?? null) as ActionLogItem["sourceKind"],
+    status: item.status as ActionLogItem["status"],
+    error: item.error,
+    skipReason: (item.skipReason ?? null) as ActionLogItem["skipReason"],
+  }));
+  if (mapped.length <= MAX_ACTION_LOG_ITEMS) {
+    return mapped;
+  }
+  console.warn(
+    `[filetrail] action log items capped at ${MAX_ACTION_LOG_ITEMS} (${mapped.length} total). Summaries reflect all items.`,
+  );
+  return mapped.slice(0, MAX_ACTION_LOG_ITEMS);
 }

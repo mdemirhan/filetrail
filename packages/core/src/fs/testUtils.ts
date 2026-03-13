@@ -56,8 +56,12 @@ export type MockFileSystemSnapshotEntry =
 export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
   readonly nodes = new Map<string, MockNode>();
   readonly realpathOverrides = new Map<string, string>();
-  copyFileImpl: WriteServiceFileSystem["copyFileStream"] | null = null;
+  copyFileStreamImpl: WriteServiceFileSystem["copyFileStream"] | null = null;
+  copyFileImpl: NonNullable<WriteServiceFileSystem["copyFile"]> | null = null;
+  utimesImpl: NonNullable<WriteServiceFileSystem["utimes"]> | null = null;
+  lutimesImpl: NonNullable<WriteServiceFileSystem["lutimes"]> | null = null;
   chmodImpl: WriteServiceFileSystem["chmod"] | null = null;
+  renameImpl: NonNullable<WriteServiceFileSystem["rename"]> | null = null;
   mkdirImpl: WriteServiceFileSystem["mkdir"] | null = null;
   rmImpl: WriteServiceFileSystem["rm"] | null = null;
   symlinkImpl: WriteServiceFileSystem["symlink"] | null = null;
@@ -190,13 +194,128 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
     this.nodes.set(normalizePath(path), this.createNode({ kind: "symlink", target }));
   }
 
+  /** Enables the `rename` method, opting this mock into same-filesystem rename support. */
+  enableRename(): void {
+    // Use Object.defineProperty to add the optional `rename` property without
+    // conflicting with exactOptionalPropertyTypes (which forbids `T | undefined`
+    // on optional interface members).
+    const renameFn = async (oldPath: string, newPath: string): Promise<void> => {
+      if (this.renameImpl) {
+        return this.renameImpl(oldPath, newPath);
+      }
+      const normalizedOld = normalizePath(oldPath);
+      const normalizedNew = normalizePath(newPath);
+      const sourceNode = this.getNodeOrThrow(normalizedOld);
+
+      // Check if cross-device (source dev vs destination parent dev)
+      const destParent = dirname(normalizedNew);
+      const parentNode = this.getNodeOrThrow(destParent);
+      if (sourceNode.dev !== parentNode.dev) {
+        throw createFsError("EXDEV", normalizedOld);
+      }
+
+      // Collect all paths under the source (for directories)
+      const pathsToMove: [string, MockNode][] = [];
+      for (const [path, node] of this.nodes.entries()) {
+        if (path === normalizedOld || path.startsWith(`${normalizedOld}/`)) {
+          pathsToMove.push([path, node]);
+        }
+      }
+
+      // Delete old paths
+      for (const [path] of pathsToMove) {
+        this.nodes.delete(path);
+      }
+
+      // Insert new paths
+      for (const [path, node] of pathsToMove) {
+        const newNodePath =
+          path === normalizedOld
+            ? normalizedNew
+            : `${normalizedNew}${path.slice(normalizedOld.length)}`;
+        this.nodes.set(newNodePath, node);
+      }
+    };
+    Object.defineProperty(this, "rename", {
+      value: renameFn,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  }
+
+  /** Enables the `copyFile` method, opting this mock into native file copy support. */
+  enableCopyFile(): void {
+    const copyFileFn = async (sourcePath: string, destinationPath: string): Promise<void> => {
+      if (this.copyFileImpl) {
+        return this.copyFileImpl(sourcePath, destinationPath);
+      }
+      const source = this.getNodeOrThrow(sourcePath);
+      if (source.kind !== "file") {
+        throw createFsError("EISDIR", sourcePath);
+      }
+      this.ensureDirectory(dirname(destinationPath), true);
+      this.nodes.set(
+        normalizePath(destinationPath),
+        this.createNode({
+          kind: "file",
+          size: source.size,
+          mode: source.mode,
+          mtimeMs: source.mtimeMs,
+        }),
+      );
+    };
+    Object.defineProperty(this, "copyFile", {
+      value: copyFileFn,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  }
+
+  /** Enables the `utimes` method, opting this mock into timestamp preservation support. */
+  enableUtimes(): void {
+    const utimesFn = async (path: string, _atimeMs: number, mtimeMs: number): Promise<void> => {
+      if (this.utimesImpl) {
+        return this.utimesImpl(path, _atimeMs, mtimeMs);
+      }
+      const normalized = normalizePath(path);
+      const node = this.getNodeOrThrow(normalized);
+      node.mtimeMs = mtimeMs;
+    };
+    Object.defineProperty(this, "utimes", {
+      value: utimesFn,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  }
+
+  /** Enables the `lutimes` method, opting this mock into symlink timestamp preservation support. */
+  enableLutimes(): void {
+    const lutimesFn = async (path: string, _atimeMs: number, mtimeMs: number): Promise<void> => {
+      if (this.lutimesImpl) {
+        return this.lutimesImpl(path, _atimeMs, mtimeMs);
+      }
+      const normalized = normalizePath(path);
+      const node = this.getNodeOrThrow(normalized);
+      node.mtimeMs = mtimeMs;
+    };
+    Object.defineProperty(this, "lutimes", {
+      value: lutimesFn,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  }
+
   async copyFileStream(
     sourcePath: string,
     destinationPath: string,
     signal?: AbortSignal,
   ): Promise<void> {
-    if (this.copyFileImpl) {
-      return this.copyFileImpl(sourcePath, destinationPath, signal);
+    if (this.copyFileStreamImpl) {
+      return this.copyFileStreamImpl(sourcePath, destinationPath, signal);
     }
     signal?.throwIfAborted();
     const source = this.getNodeOrThrow(sourcePath);
