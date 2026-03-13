@@ -1,0 +1,19 @@
+{
+  "name": "@filetrail/native-fs",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "types": "index.d.ts",
+  "scripts": {
+    "build": "node-gyp rebuild",
+    "prebuild:arm64": "prebuildify --napi --arch arm64 --strip",
+    "prebuild:x64": "prebuildify --napi --arch x64 --strip"
+  },
+  "dependencies": {
+    "node-gyp-build": "^4.8.4"
+  },
+  "devDependencies": {
+    "node-gyp": "^11.1.0",
+    "prebuildify": "^6.0.1"
+  }
+}

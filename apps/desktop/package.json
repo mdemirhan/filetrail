@@ -7,7 +7,8 @@
   "scripts": {
     "build": "bun run ./scripts/build.ts",
     "build:icon": "bash ./scripts/build-app-icon.sh",
-    "prestart": "bun run build:icon && bun run build",
+    "build:native": "cd ../../packages/native-fs && npx node-gyp rebuild",
+    "prestart": "bun run build:native && bun run build:icon && bun run build",
     "start": "electron .",
     "start:verbose": "electron . --verbose",
     "make:mac": "bash ./scripts/make-macos-app.sh",
@@ -16,6 +17,7 @@
   },
   "dependencies": {
     "@filetrail/contracts": "workspace:*",
+    "@filetrail/native-fs": "workspace:*",
     "@fontsource/dm-sans": "^5.2.8",
     "@fontsource/fira-code": "latest",
     "@fontsource/inter": "^5.2.8",

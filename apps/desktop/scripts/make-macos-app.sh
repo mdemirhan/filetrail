@@ -39,13 +39,29 @@ if [[ ! -d "./node_modules/electron/dist/Electron.app" ]]; then
   exit 1
 fi
 
-echo "[1/4] Building macOS icon assets..."
+echo "[1/5] Building macOS icon assets..."
 bash ./scripts/build-app-icon.sh
 
-echo "[2/4] Building app bundles..."
+echo "[2/5] Building native-fs addon for ${ARCH}..."
+NATIVE_FS_DIR="${APP_DIR}/../../packages/native-fs"
+(cd "${NATIVE_FS_DIR}" && npx node-gyp rebuild --arch="${ARCH}")
+# Verify the addon loads correctly — only when building for the host arch,
+# since the running node process cannot dlopen a cross-arch .node binary.
+HOST_ARCH="$(uname -m)"
+case "${HOST_ARCH}" in x86_64) HOST_ARCH="x64" ;; aarch64) HOST_ARCH="arm64" ;; esac
+if [[ "${ARCH}" == "${HOST_ARCH}" ]]; then
+  node -e "require('${NATIVE_FS_DIR}')" || {
+    echo "native-fs addon failed to load after build." >&2
+    exit 1
+  }
+else
+  echo "  Skipping runtime verification (cross-arch build: host=${HOST_ARCH}, target=${ARCH})"
+fi
+
+echo "[3/5] Building app bundles..."
 bun run build
 
-echo "[3/4] Packaging macOS app for ${ARCH}..."
+echo "[4/5] Packaging macOS app for ${ARCH}..."
 APP_NAME="File Trail"
 APP_SLUG="FileTrail"
 OUT_DIR="${APP_DIR}/out/${APP_SLUG}-darwin-${ARCH}"
@@ -78,7 +94,38 @@ mkdir -p "${RESOURCES_APP}"
 cp "${APP_DIR}/package.json" "${RESOURCES_APP}/package.json"
 ditto "${APP_DIR}/dist" "${RESOURCES_APP}/dist"
 
-echo "[4/4] Building distributables..."
+# Copy native-fs addon into the app bundle. The addon provides copyfile(3)
+# with CoW clones and full metadata preservation. Required on macOS.
+NATIVE_FS_SRC="${APP_DIR}/node_modules/@filetrail/native-fs"
+NATIVE_FS_DST="${RESOURCES_APP}/node_modules/@filetrail/native-fs"
+mkdir -p "${NATIVE_FS_DST}"
+cp "${NATIVE_FS_SRC}/package.json" "${NATIVE_FS_DST}/package.json"
+cp "${NATIVE_FS_SRC}/index.js" "${NATIVE_FS_DST}/index.js"
+# Copy prebuilds if they exist, otherwise copy the node-gyp build output
+if [[ -d "${NATIVE_FS_SRC}/prebuilds" ]]; then
+  ditto "${NATIVE_FS_SRC}/prebuilds" "${NATIVE_FS_DST}/prebuilds"
+elif [[ -d "${NATIVE_FS_SRC}/build/Release" ]]; then
+  mkdir -p "${NATIVE_FS_DST}/build/Release"
+  cp "${NATIVE_FS_SRC}/build/Release/native-fs.node" "${NATIVE_FS_DST}/build/Release/native-fs.node"
+else
+  echo "native-fs addon not found — prebuilds/ and build/Release/ both missing." >&2
+  exit 1
+fi
+# node-gyp-build loader must be available at runtime
+if [[ -d "${NATIVE_FS_SRC}/node_modules/node-gyp-build" ]]; then
+  mkdir -p "${NATIVE_FS_DST}/node_modules"
+  ditto "${NATIVE_FS_SRC}/node_modules/node-gyp-build" \
+        "${NATIVE_FS_DST}/node_modules/node-gyp-build"
+elif [[ -d "${APP_DIR}/node_modules/node-gyp-build" ]]; then
+  mkdir -p "${RESOURCES_APP}/node_modules/node-gyp-build"
+  ditto "${APP_DIR}/node_modules/node-gyp-build" \
+        "${RESOURCES_APP}/node_modules/node-gyp-build"
+else
+  echo "node-gyp-build not found — required to load native-fs addon." >&2
+  exit 1
+fi
+
+echo "[5/5] Building distributables..."
 ZIP_PATH="${OUT_DIR}/${APP_SLUG}-${ARCH}.zip"
 DMG_PATH="${OUT_DIR}/${APP_SLUG}-${ARCH}.dmg"
 

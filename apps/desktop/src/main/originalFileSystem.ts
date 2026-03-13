@@ -26,8 +26,16 @@ import type { WriteServiceFileSystem, WriteServiceStats } from "@filetrail/core"
 const require = createRequire(import.meta.url);
 const originalFs = require("original-fs") as typeof import("node:fs");
 
+// Load the native copyfile(3) addon. This provides CoW clones on APFS and full
+// metadata preservation (timestamps, xattrs, ACLs, flags). The addon is required
+// on macOS — the build step compiles it, so a missing addon means a broken build.
+const addon = require("@filetrail/native-fs") as {
+  nativeCopyFile: (src: string, dst: string) => Promise<void>;
+};
+const { nativeCopyFile } = addon;
+
 const {
-  promises: { chmod, lstat, mkdir, readdir, readlink, realpath, rename, rm, stat, symlink },
+  promises: { chmod, lstat, lutimes, mkdir, readdir, readlink, realpath, rename, rm, stat, symlink, utimes },
   createReadStream,
   createWriteStream,
 } = originalFs;
@@ -42,6 +50,9 @@ export const originalFileSystem: WriteServiceFileSystem = {
   chmod: async (path, mode) => {
     await chmod(path, mode);
   },
+  rename: async (oldPath, newPath) => {
+    await rename(oldPath, newPath);
+  },
   mkdir: async (path, options) => {
     await mkdir(path, options);
   },
@@ -51,9 +62,19 @@ export const originalFileSystem: WriteServiceFileSystem = {
   symlink: async (target, path) => {
     await symlink(target, path);
   },
+  copyFile: async (sourcePath, destinationPath) => {
+    await mkdir(dirname(destinationPath), { recursive: true });
+    await nativeCopyFile(sourcePath, destinationPath);
+  },
   copyFileStream: async (sourcePath, destinationPath, signal) => {
     await mkdir(dirname(destinationPath), { recursive: true });
     await pipeline(createReadStream(sourcePath), createWriteStream(destinationPath), { signal });
+  },
+  utimes: async (path, atimeMs, mtimeMs) => {
+    await utimes(path, atimeMs / 1000, mtimeMs / 1000);
+  },
+  lutimes: async (path, atimeMs, mtimeMs) => {
+    await lutimes(path, atimeMs / 1000, mtimeMs / 1000);
   },
 };
 
