@@ -76,6 +76,29 @@ File Trail has a much deeper customization surface than a typical file explorer.
 
 File Trail is currently focused on macOS.
 
+## Download
+
+If you just want to use File Trail, you do not need to build it from source. Download a packaged release from the GitHub releases page:
+
+[Download from GitHub Releases](https://github.com/mdemirhan/filetrail/releases)
+
+Releases include downloadable macOS ZIP builds for the supported Mac architectures:
+
+- `x64` for Intel Macs
+- `arm64` for Apple Silicon Macs
+
+If your Mac has an Apple Silicon chip like M1, M2, M3, or newer, choose `arm64`. If your Mac is Intel-based, choose `x64`.
+
+### Install steps
+
+1. Open the [releases page](https://github.com/mdemirhan/filetrail/releases).
+2. Download the ZIP file that matches your Mac:
+   - choose `arm64` for Apple Silicon
+   - choose `x64` for Intel
+3. Unzip the archive.
+4. Move `File Trail.app` into your `Applications` folder.
+5. Launch the app.
+
 ## Development
 
 ### Requirements
