@@ -4726,22 +4726,30 @@ describe("App copy/paste integration", () => {
     expect(await screen.findByRole("region", { name: "Paste In Progress" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
 
-    const invocationCountBeforeBlockedCopy = harness.invocations.length;
+    // Filter out background folder-size probe calls (probeOnly) which are
+    // fire-and-forget and don't count as user-initiated write operations.
+    const nonProbeInvocations = () =>
+      harness.invocations.filter(
+        (inv) =>
+          !(inv.channel === "folderSize:start" && (inv.payload as { probeOnly?: boolean })?.probeOnly),
+      );
+
+    const invocationCountBeforeBlockedCopy = nonProbeInvocations().length;
     await act(async () => {
       fireEvent.keyDown(window, { key: "x", metaKey: true });
     });
     expect(await screen.findByText("Wait for the current write to finish")).toBeInTheDocument();
-    expect(harness.invocations).toHaveLength(invocationCountBeforeBlockedCopy);
+    expect(nonProbeInvocations()).toHaveLength(invocationCountBeforeBlockedCopy);
 
     await act(async () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
-    expect(harness.invocations).toHaveLength(invocationCountBeforeBlockedCopy);
+    expect(nonProbeInvocations()).toHaveLength(invocationCountBeforeBlockedCopy);
 
     await act(async () => {
       fireEvent.keyDown(window, { key: "c", metaKey: true, altKey: true });
     });
-    expect(harness.invocations).toHaveLength(invocationCountBeforeBlockedCopy);
+    expect(nonProbeInvocations()).toHaveLength(invocationCountBeforeBlockedCopy);
 
     const sourceButton = await screen.findByRole("button", { name: "source.txt" });
     await act(async () => {

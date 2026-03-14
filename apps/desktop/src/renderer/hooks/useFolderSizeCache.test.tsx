@@ -164,7 +164,7 @@ describe("useFolderSizeCache", () => {
     );
   });
 
-  it("probeCache fires after debounce on first getEntry for unknown path", async () => {
+  it("probeCache fires immediately on first getEntry for unknown path", async () => {
     const startHandler = vi.fn(async () => ({
       jobId: "probe-1",
       status: "deferred" as const,
@@ -190,12 +190,7 @@ describe("useFolderSizeCache", () => {
       result.current.getEntry("/test");
     });
 
-    // Probe is debounced — not fired yet
-    expect(startHandler).not.toHaveBeenCalled();
-
-    // Advance past the debounce delay
     await act(async () => {
-      vi.advanceTimersByTime(200);
       await Promise.resolve();
     });
 
@@ -204,17 +199,21 @@ describe("useFolderSizeCache", () => {
     );
   });
 
-  it("debounced probe batches all paths during rapid navigation", async () => {
-    const startHandler = vi.fn(async () => ({
-      jobId: "probe-1",
-      status: "deferred" as const,
-    }));
+  it("re-probes paths that previously returned deferred", async () => {
+    let callCount = 0;
+    const startHandler = vi.fn(async () => {
+      callCount++;
+      // First probe: deferred (not cached yet). Second probe: ready (parent walk populated cache).
+      return callCount === 1
+        ? { jobId: "probe-1", status: "deferred" as const }
+        : { jobId: "probe-2", status: "ready" as const };
+    });
     const getStatusHandler = vi.fn(async () => ({
-      jobId: "probe-1",
-      status: "deferred" as const,
-      sizeBytes: null,
-      diskBytes: null,
-      fileCount: null,
+      jobId: "probe-2",
+      status: "ready" as const,
+      sizeBytes: 5000,
+      diskBytes: 6000,
+      fileCount: 10,
       error: null,
     }));
     const cancelHandler = vi.fn(async () => ({ ok: true }));
@@ -226,30 +225,32 @@ describe("useFolderSizeCache", () => {
 
     const { result } = renderHook(() => useFolderSizeCache(client));
 
-    // Simulate rapid keyboard navigation through 3 directories
+    // First probe — returns deferred
     act(() => {
-      result.current.getEntry("/dir-a");
-      result.current.getEntry("/dir-b");
-      result.current.getEntry("/dir-c");
+      result.current.getEntry("/test");
     });
-
-    // No probes fired yet (debounced)
-    expect(startHandler).not.toHaveBeenCalled();
-
-    // Advance past debounce — all 3 paths get probed in one batch
     await act(async () => {
-      vi.advanceTimersByTime(200);
+      await Promise.resolve();
+    });
+    expect(result.current.getEntry("/test").status).toBe("idle");
+
+    // Second probe — returns ready (simulating parent walk completed)
+    act(() => {
+      result.current.getEntry("/test");
+    });
+    await act(async () => {
+      await Promise.resolve();
       await Promise.resolve();
     });
 
-    const probeCalls = startHandler.mock.calls.filter(
-      (call: unknown[]) => (call[0] as { probeOnly?: boolean }).probeOnly === true,
-    );
-    expect(probeCalls).toHaveLength(3);
-    const probedPaths = probeCalls.map((call: unknown[]) => (call[0] as { path: string }).path);
-    expect(probedPaths).toContain("/dir-a");
-    expect(probedPaths).toContain("/dir-b");
-    expect(probedPaths).toContain("/dir-c");
+    const entry = result.current.getEntry("/test");
+    expect(entry.status).toBe("ready");
+    // At least 2 probes: first returned deferred, second returned ready.
+    // The third getEntry above may fire another probe (a no-op since the
+    // entry is now in the renderer cache from the second probe's result).
+    expect(startHandler.mock.calls.filter(
+      (c: unknown[]) => (c[0] as { probeOnly?: boolean }).probeOnly === true,
+    ).length).toBeGreaterThanOrEqual(2);
   });
 
   it("polling stops on error status", async () => {
