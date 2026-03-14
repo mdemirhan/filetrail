@@ -164,7 +164,7 @@ describe("useFolderSizeCache", () => {
     );
   });
 
-  it("probeCache fires on first getEntry for unknown path", async () => {
+  it("probeCache fires after debounce on first getEntry for unknown path", async () => {
     const startHandler = vi.fn(async () => ({
       jobId: "probe-1",
       status: "deferred" as const,
@@ -186,12 +186,16 @@ describe("useFolderSizeCache", () => {
 
     const { result } = renderHook(() => useFolderSizeCache(client));
 
-    // First call triggers probe
     act(() => {
       result.current.getEntry("/test");
     });
 
+    // Probe is debounced — not fired yet
+    expect(startHandler).not.toHaveBeenCalled();
+
+    // Advance past the debounce delay
     await act(async () => {
+      vi.advanceTimersByTime(200);
       await Promise.resolve();
     });
 
@@ -200,7 +204,7 @@ describe("useFolderSizeCache", () => {
     );
   });
 
-  it("probeCache does not fire twice for same path", async () => {
+  it("debounced probe batches all paths during rapid navigation", async () => {
     const startHandler = vi.fn(async () => ({
       jobId: "probe-1",
       status: "deferred" as const,
@@ -222,28 +226,30 @@ describe("useFolderSizeCache", () => {
 
     const { result } = renderHook(() => useFolderSizeCache(client));
 
+    // Simulate rapid keyboard navigation through 3 directories
     act(() => {
-      result.current.getEntry("/test");
+      result.current.getEntry("/dir-a");
+      result.current.getEntry("/dir-b");
+      result.current.getEntry("/dir-c");
     });
 
+    // No probes fired yet (debounced)
+    expect(startHandler).not.toHaveBeenCalled();
+
+    // Advance past debounce — all 3 paths get probed in one batch
     await act(async () => {
+      vi.advanceTimersByTime(200);
       await Promise.resolve();
     });
 
-    // Second access
-    act(() => {
-      result.current.getEntry("/test");
-    });
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    // probeOnly called only once
     const probeCalls = startHandler.mock.calls.filter(
       (call: unknown[]) => (call[0] as { probeOnly?: boolean }).probeOnly === true,
     );
-    expect(probeCalls).toHaveLength(1);
+    expect(probeCalls).toHaveLength(3);
+    const probedPaths = probeCalls.map((call: unknown[]) => (call[0] as { path: string }).path);
+    expect(probedPaths).toContain("/dir-a");
+    expect(probedPaths).toContain("/dir-b");
+    expect(probedPaths).toContain("/dir-c");
   });
 
   it("polling stops on error status", async () => {

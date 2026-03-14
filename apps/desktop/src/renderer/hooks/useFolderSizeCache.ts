@@ -9,12 +9,28 @@ export type FolderSizeEntry =
   | { status: "error"; message: string };
 
 const POLL_INTERVAL_MS = 200;
+const PROBE_DEBOUNCE_MS = 150;
 
 export function useFolderSizeCache(client: FiletrailClient) {
-  const [cache, setCache] = useState<Map<string, FolderSizeEntry>>(() => new Map());
-  const pollTimers = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
-  // Track paths that have already been probed so we don't re-probe on every render.
-  const probedPaths = useRef<Set<string>>(new Set());
+  // The cache lives in a ref so reads are free (no re-renders). We bump a
+  // version counter only when the UI needs to repaint — i.e. when a
+  // user-visible entry changes (calculation completes, cancel, etc.).
+  const cacheRef = useRef(new Map<string, FolderSizeEntry>());
+  const [, setVersion] = useState(0);
+  const bumpVersion = useCallback(() => setVersion((v) => v + 1), []);
+
+  const pollTimers = useRef(new Map<string, ReturnType<typeof setInterval>>());
+  const probedPaths = useRef(new Set<string>());
+  const pendingProbes = useRef(new Set<string>());
+  const probeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const updateEntry = useCallback(
+    (path: string, entry: FolderSizeEntry) => {
+      cacheRef.current.set(path, entry);
+      bumpVersion();
+    },
+    [bumpVersion],
+  );
 
   const stopPolling = useCallback((path: string) => {
     const timer = pollTimers.current.get(path);
@@ -22,14 +38,6 @@ export function useFolderSizeCache(client: FiletrailClient) {
       clearInterval(timer);
       pollTimers.current.delete(path);
     }
-  }, []);
-
-  const updateEntry = useCallback((path: string, entry: FolderSizeEntry) => {
-    setCache((prev) => {
-      const next = new Map(prev);
-      next.set(path, entry);
-      return next;
-    });
   }, []);
 
   const startPolling = useCallback(
@@ -99,7 +107,7 @@ export function useFolderSizeCache(client: FiletrailClient) {
 
   const cancelFolderSize = useCallback(
     async (path: string) => {
-      const entry = cache.get(path);
+      const entry = cacheRef.current.get(path);
       if (entry?.status === "calculating" && entry.jobId) {
         stopPolling(path);
         try {
@@ -110,26 +118,25 @@ export function useFolderSizeCache(client: FiletrailClient) {
       }
       updateEntry(path, { status: "idle" });
     },
-    [cache, client, stopPolling, updateEntry],
+    [client, stopPolling, updateEntry],
   );
 
   /**
-   * Probe the main process cache for a path. If a cached size exists (e.g.
-   * from a parent folder walk), the renderer cache is populated immediately
-   * without starting a new calculation. Called once per unique path.
+   * Probe the main process cache for paths. Paths are collected into a
+   * pending set and flushed in a single debounced batch. This avoids
+   * firing an IPC call per directory during rapid keyboard navigation
+   * while still probing every unique path eventually.
    */
-  const probeCache = useCallback(
-    (path: string) => {
-      if (probedPaths.current.has(path)) return;
-      probedPaths.current.add(path);
-
-      // Fire-and-forget: ask the main process if it already has this size
-      // cached (e.g. from a parent folder walk). probeOnly ensures no real
-      // calculation is started — it only reads the cache.
+  const flushProbes = useCallback(() => {
+    const paths = [...pendingProbes.current];
+    pendingProbes.current.clear();
+    for (const path of paths) {
       void (async () => {
         try {
           const result = await client.invoke("folderSize:start", { path, probeOnly: true });
           if (result.status === "ready") {
+            // Cache hit — mark as probed so we don't re-probe.
+            probedPaths.current.add(path);
             const status = await client.invoke("folderSize:getStatus", { jobId: result.jobId });
             if (status.status === "ready" && status.sizeBytes !== null) {
               updateEntry(path, {
@@ -140,26 +147,36 @@ export function useFolderSizeCache(client: FiletrailClient) {
               });
             }
           }
-          // If not ready (deferred), do nothing — user can click Calculate.
+          // If "deferred" — don't mark as probed. The main process may
+          // populate the cache later (e.g. from a parent folder walk),
+          // so the next getEntry call should try again.
         } catch {
           // Silently ignore probe failures.
         }
       })();
+    }
+  }, [client, updateEntry]);
+
+  const scheduleProbe = useCallback(
+    (path: string) => {
+      if (probedPaths.current.has(path) || pendingProbes.current.has(path)) return;
+      pendingProbes.current.add(path);
+      if (probeTimer.current) clearTimeout(probeTimer.current);
+      probeTimer.current = setTimeout(flushProbes, PROBE_DEBOUNCE_MS);
     },
-    [client, updateEntry],
+    [flushProbes],
   );
 
   const getEntry = useCallback(
     (path: string): FolderSizeEntry => {
-      const entry = cache.get(path);
+      const entry = cacheRef.current.get(path);
       if (!entry) {
-        // First time seeing this path — probe the main process cache.
-        probeCache(path);
+        scheduleProbe(path);
         return { status: "idle" };
       }
       return entry;
     },
-    [cache, probeCache],
+    [scheduleProbe],
   );
 
   return { getEntry, calculateFolderSize, recalculateFolderSize, cancelFolderSize };
