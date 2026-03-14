@@ -1,10 +1,19 @@
+vi.mock("electron", () => ({
+  BrowserWindow: { getFocusedWindow: vi.fn() },
+  dialog: { showOpenDialog: vi.fn() },
+  shell: { openPath: vi.fn() },
+}));
+vi.mock("./originalFileSystem", () => ({
+  getFileIcon: vi.fn(),
+}));
+
+import { toPreferencePatch } from "./bootstrap/preferencesPatch";
 import {
   openPathsWithApplication,
   performEditAction,
   resolveApplicationDisplayName,
   resolveTerminalApplicationName,
-  toPreferencePatch,
-} from "./bootstrap";
+} from "./bootstrap/systemHandlers";
 
 describe("toPreferencePatch", () => {
   it("preserves search result sorting fields", () => {

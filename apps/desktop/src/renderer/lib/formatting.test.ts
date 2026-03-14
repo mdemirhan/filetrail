@@ -1,5 +1,6 @@
 import {
   formatDateTime,
+  formatFolderSizeDetail,
   formatHintSize,
   formatPermissionMode,
   formatRelativeDuration,
@@ -171,6 +172,46 @@ describe("formatting helpers", () => {
       // 1100000 and 1101000 both → "1.0 MB", diff = 1000 → 1000 B
       const result = formatSizeComparison(1101000, 1100000);
       expect(result!.delta).toBe("+1000 B");
+    });
+  });
+
+  describe("formatFolderSizeDetail", () => {
+    it("returns disk info when logical and disk sizes differ", () => {
+      const result = formatFolderSizeDetail(1048576, 1572864, 500);
+      expect(result.size).toBe("1.0 MB");
+      expect(result.disk).toBe("1.5 MB on disk");
+      expect(result.items).toMatch(/500/);
+      expect(result.items).toMatch(/items$/);
+    });
+
+    it("returns null disk when logical and disk sizes format the same", () => {
+      const result = formatFolderSizeDetail(1048576, 1048576, 100);
+      expect(result.size).toBe("1.0 MB");
+      expect(result.disk).toBeNull();
+      expect(result.items).toMatch(/100/);
+      expect(result.items).toMatch(/items$/);
+    });
+
+    it("formats file count with thousands separator", () => {
+      const result = formatFolderSizeDetail(1048576, 2097152, 43016);
+      expect(result.items).toMatch(/items$/);
+      // The exact separator is locale-dependent; just verify the number is present
+      expect(result.items).toMatch(/43/);
+    });
+
+    it("returns disk info when sizes differ in their formatted representation", () => {
+      // 1 GB vs 1.24 GB
+      const result = formatFolderSizeDetail(1073741824, 1331691110, 43016);
+      expect(result.size).toBe("1.0 GB");
+      expect(result.disk).toBe("1.2 GB on disk");
+    });
+
+    it("handles zero values", () => {
+      const result = formatFolderSizeDetail(0, 0, 0);
+      expect(result.size).toBe("0 B");
+      expect(result.disk).toBeNull();
+      expect(result.items).toMatch(/0/);
+      expect(result.items).toMatch(/items$/);
     });
   });
 });

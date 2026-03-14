@@ -961,6 +961,8 @@ export const ipcContractSchemas = {
       jobId: z.string().min(1),
       status: folderSizeJobStatusSchema,
       sizeBytes: z.number().int().nonnegative().nullable(),
+      diskBytes: z.number().int().nonnegative().nullable(),
+      fileCount: z.number().int().nonnegative().nullable(),
       error: z.string().nullable(),
     }),
   },

@@ -12,6 +12,8 @@ const folderSizeJobs = new Map<
     path: string;
     status: "queued" | "running" | "deferred" | "ready" | "cancelled" | "error";
     sizeBytes: number | null;
+    diskBytes: number | null;
+    fileCount: number | null;
     error: string | null;
   }
 >();
@@ -32,7 +34,7 @@ export function createFolderSizeHandlers(native: {
   getFolderSize: (path: string) => Promise<string>;
   cancelFolderSize: () => void;
 }) {
-  const folderSizeCache = new Map<string, number>();
+  const folderSizeCache = new Map<string, { sizeBytes: number; diskBytes: number; fileCount: number }>();
   let activeJobId: string | null = null;
   let queuedJobId: string | null = null;
 
@@ -57,22 +59,39 @@ export function createFolderSizeHandlers(native: {
       path,
       status: "running",
       sizeBytes: null,
+      diskBytes: null,
+      fileCount: null,
       error: null,
     });
 
     native
       .getFolderSize(path)
       .then((jsonString) => {
-        const result = JSON.parse(jsonString) as { total: number; dirs: Record<string, number> };
-        folderSizeCache.set(path, result.total);
-        for (const [dirPath, dirSize] of Object.entries(result.dirs)) {
-          folderSizeCache.set(dirPath, dirSize);
+        const result = JSON.parse(jsonString) as {
+          total: number;
+          diskTotal: number;
+          fileCount: number;
+          dirs: Record<string, [number, number, number]>;
+        };
+        folderSizeCache.set(path, {
+          sizeBytes: result.total,
+          diskBytes: result.diskTotal,
+          fileCount: result.fileCount,
+        });
+        for (const [dirPath, dirStats] of Object.entries(result.dirs)) {
+          folderSizeCache.set(dirPath, {
+            sizeBytes: dirStats[0],
+            diskBytes: dirStats[1],
+            fileCount: dirStats[2],
+          });
         }
         folderSizeJobs.set(jobId, {
           jobId,
           path,
           status: "ready",
           sizeBytes: result.total,
+          diskBytes: result.diskTotal,
+          fileCount: result.fileCount,
           error: null,
         });
       })
@@ -87,6 +106,8 @@ export function createFolderSizeHandlers(native: {
             path,
             status: "error",
             sizeBytes: null,
+            diskBytes: null,
+            fileCount: null,
             error: message,
           });
         }
@@ -112,7 +133,9 @@ export function createFolderSizeHandlers(native: {
           jobId,
           path: payload.path,
           status: "ready",
-          sizeBytes: cached,
+          sizeBytes: cached.sizeBytes,
+          diskBytes: cached.diskBytes,
+          fileCount: cached.fileCount,
           error: null,
         });
         return { jobId, status: "ready" };
@@ -127,6 +150,8 @@ export function createFolderSizeHandlers(native: {
           path: payload.path,
           status: "deferred",
           sizeBytes: null,
+          diskBytes: null,
+          fileCount: null,
           error: null,
         });
         return { jobId, status: "deferred" };
@@ -157,6 +182,8 @@ export function createFolderSizeHandlers(native: {
           path: payload.path,
           status: "queued",
           sizeBytes: null,
+          diskBytes: null,
+          fileCount: null,
           error: null,
         });
         return { jobId, status: "queued" };
@@ -172,6 +199,8 @@ export function createFolderSizeHandlers(native: {
         jobId: payload.jobId,
         status: job?.status ?? "error",
         sizeBytes: job?.sizeBytes ?? null,
+        diskBytes: job?.diskBytes ?? null,
+        fileCount: job?.fileCount ?? null,
         error: job ? job.error : "Unknown folder size job.",
       };
     },
@@ -195,7 +224,7 @@ export function createFolderSizeHandlers(native: {
     },
 
     getCachedSize(path: string): number | undefined {
-      return folderSizeCache.get(path);
+      return folderSizeCache.get(path)?.sizeBytes;
     },
   };
 }

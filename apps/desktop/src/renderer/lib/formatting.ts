@@ -162,6 +162,20 @@ export function formatShortDateTime(ms: number): string {
   }).format(date);
 }
 
+export function formatFolderSizeDetail(
+  sizeBytes: number,
+  diskBytes: number,
+  fileCount: number,
+): { size: string; disk: string | null; items: string } {
+  const size = formatSize(sizeBytes, "ready");
+  const disk = formatSize(diskBytes, "ready");
+  return {
+    size,
+    disk: disk !== size ? `${disk} on disk` : null,
+    items: `${fileCount.toLocaleString()} items`,
+  };
+}
+
 export function formatHintSize(sizeBytes: number | null): string | null {
   if (sizeBytes === null) {
     return null;

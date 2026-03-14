@@ -4,7 +4,13 @@ import type { IpcResponse } from "@filetrail/contracts";
 
 import type { FolderSizeEntry } from "../hooks/useFolderSizeCache";
 import { FileIcon } from "../lib/fileIcons";
-import { formatDateTime, formatSize, pathSegments, splitPermissionMode } from "../lib/formatting";
+import {
+  formatDateTime,
+  formatFolderSizeDetail,
+  formatSize,
+  pathSegments,
+  splitPermissionMode,
+} from "../lib/formatting";
 
 type ItemProperties = IpcResponse<"item:getProperties">["item"];
 
@@ -276,9 +282,13 @@ function FolderSizeCell({
   onCancel: () => void;
 }) {
   if (entry.status === "ready") {
+    const detail = formatFolderSizeDetail(entry.sizeBytes, entry.diskBytes, entry.fileCount);
     return (
       <span className="folder-size-value">
-        {formatSize(entry.sizeBytes, "ready")}
+        <span className="folder-size-detail">
+          <span>{detail.size}{detail.disk ? ` (${detail.disk})` : ""}</span>
+          <span className="folder-size-items">{detail.items}</span>
+        </span>
         <button
           type="button"
           className="folder-size-refresh-btn"

@@ -29,11 +29,14 @@ export function nativeCopyFile(sourcePath: string, destinationPath: string): Pro
 export function nativeGetFileIcon(path: string, size: number): Promise<Buffer | null>;
 
 /**
- * Recursively calculates the total size of a folder using `fts(3)`.
+ * Recursively calculates the total size of a folder using `getattrlistbulk(2)`.
  *
- * Returns a JSON string: `{"total":N,"dirs":{"path1":N,"path2":N,...}}`
- * where `total` is the root folder size in bytes and `dirs` maps each
- * sub-directory path to its accumulated size.
+ * Returns a JSON string:
+ * `{"total":N,"diskTotal":N,"fileCount":N,"dirs":{"path":[sizeBytes,diskBytes,fileCount],...}}`
+ * where `total` is the root folder logical size in bytes, `diskTotal` is the
+ * allocated disk space, `fileCount` is the total number of regular files and
+ * symlinks, and `dirs` maps each sub-directory path to an array of
+ * `[sizeBytes, diskBytes, fileCount]`.
  *
  * Runs on a libuv thread pool thread — non-blocking. At most one calculation
  * can be active at a time; starting a new one while another is running is

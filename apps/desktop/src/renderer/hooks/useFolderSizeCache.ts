@@ -5,7 +5,7 @@ import type { FiletrailClient } from "../lib/filetrailClient";
 export type FolderSizeEntry =
   | { status: "idle" }
   | { status: "calculating"; jobId: string }
-  | { status: "ready"; sizeBytes: number }
+  | { status: "ready"; sizeBytes: number; diskBytes: number; fileCount: number }
   | { status: "error"; message: string };
 
 const POLL_INTERVAL_MS = 200;
@@ -40,7 +40,12 @@ export function useFolderSizeCache(client: FiletrailClient) {
           const result = await client.invoke("folderSize:getStatus", { jobId });
           if (result.status === "ready" && result.sizeBytes !== null) {
             stopPolling(path);
-            updateEntry(path, { status: "ready", sizeBytes: result.sizeBytes });
+            updateEntry(path, {
+              status: "ready",
+              sizeBytes: result.sizeBytes,
+              diskBytes: result.diskBytes ?? result.sizeBytes,
+              fileCount: result.fileCount ?? 0,
+            });
           } else if (result.status === "error") {
             stopPolling(path);
             updateEntry(path, { status: "error", message: result.error ?? "Unknown error" });
@@ -66,7 +71,12 @@ export function useFolderSizeCache(client: FiletrailClient) {
         if (result.status === "ready") {
           const status = await client.invoke("folderSize:getStatus", { jobId: result.jobId });
           if (status.status === "ready" && status.sizeBytes !== null) {
-            updateEntry(path, { status: "ready", sizeBytes: status.sizeBytes });
+            updateEntry(path, {
+              status: "ready",
+              sizeBytes: status.sizeBytes,
+              diskBytes: status.diskBytes ?? status.sizeBytes,
+              fileCount: status.fileCount ?? 0,
+            });
           } else {
             updateEntry(path, { status: "calculating", jobId: result.jobId });
             startPolling(path, result.jobId);
@@ -122,7 +132,12 @@ export function useFolderSizeCache(client: FiletrailClient) {
           if (result.status === "ready") {
             const status = await client.invoke("folderSize:getStatus", { jobId: result.jobId });
             if (status.status === "ready" && status.sizeBytes !== null) {
-              updateEntry(path, { status: "ready", sizeBytes: status.sizeBytes });
+              updateEntry(path, {
+                status: "ready",
+                sizeBytes: status.sizeBytes,
+                diskBytes: status.diskBytes ?? status.sizeBytes,
+                fileCount: status.fileCount ?? 0,
+              });
             }
           }
           // If not ready (deferred), do nothing — user can click Calculate.

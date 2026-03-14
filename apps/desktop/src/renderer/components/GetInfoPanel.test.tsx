@@ -125,4 +125,180 @@ describe("InfoPanel", () => {
     expect(screen.getAllByText("Not available")).toHaveLength(2);
     expect(screen.getByText("Unavailable")).toBeInTheDocument();
   });
+
+  it("shows Calculate button when folder size is idle", () => {
+    render(
+      <InfoPanel
+        loading={false}
+        item={{
+          ...baseItem,
+          path: "/Users/demo/projects",
+          name: "projects",
+          extension: "",
+          kind: "directory",
+          kindLabel: "Folder",
+          sizeBytes: null,
+          sizeStatus: "deferred",
+          createdAt: null,
+          modifiedAt: null,
+          permissionMode: null,
+        }}
+        onClose={() => undefined}
+        onNavigateToPath={() => undefined}
+        onOpen={() => undefined}
+        onOpenInTerminal={() => undefined}
+        onCopyPath={() => true}
+        folderSizeEntry={{ status: "idle" }}
+        onCalculateFolderSize={() => undefined}
+        onRecalculateFolderSize={() => undefined}
+        onCancelFolderSize={() => undefined}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Calculate" })).toBeInTheDocument();
+  });
+
+  it("shows spinner when folder size is calculating", () => {
+    render(
+      <InfoPanel
+        loading={false}
+        item={{
+          ...baseItem,
+          path: "/Users/demo/projects",
+          name: "projects",
+          extension: "",
+          kind: "directory",
+          kindLabel: "Folder",
+          sizeBytes: null,
+          sizeStatus: "deferred",
+          createdAt: null,
+          modifiedAt: null,
+          permissionMode: null,
+        }}
+        onClose={() => undefined}
+        onNavigateToPath={() => undefined}
+        onOpen={() => undefined}
+        onOpenInTerminal={() => undefined}
+        onCopyPath={() => true}
+        folderSizeEntry={{ status: "calculating", jobId: "job-1" }}
+        onCalculateFolderSize={() => undefined}
+        onRecalculateFolderSize={() => undefined}
+        onCancelFolderSize={() => undefined}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Cancel folder size calculation" })).toBeInTheDocument();
+  });
+
+  it("shows formatted size with disk info and item count when ready", () => {
+    render(
+      <InfoPanel
+        loading={false}
+        item={{
+          ...baseItem,
+          path: "/Users/demo/projects",
+          name: "projects",
+          extension: "",
+          kind: "directory",
+          kindLabel: "Folder",
+          sizeBytes: null,
+          sizeStatus: "deferred",
+          createdAt: null,
+          modifiedAt: null,
+          permissionMode: null,
+        }}
+        onClose={() => undefined}
+        onNavigateToPath={() => undefined}
+        onOpen={() => undefined}
+        onOpenInTerminal={() => undefined}
+        onCopyPath={() => true}
+        folderSizeEntry={{
+          status: "ready",
+          sizeBytes: 1048576,
+          diskBytes: 1572864,
+          fileCount: 43016,
+        }}
+        onCalculateFolderSize={() => undefined}
+        onRecalculateFolderSize={() => undefined}
+        onCancelFolderSize={() => undefined}
+      />,
+    );
+
+    // Size text should include the logical size and disk size
+    expect(screen.getByText(/1\.0 MB/)).toBeInTheDocument();
+    expect(screen.getByText(/on disk/)).toBeInTheDocument();
+    // Item count
+    const itemsText = screen.getByText(/items/);
+    expect(itemsText).toBeInTheDocument();
+    // Recalculate button present
+    expect(screen.getByRole("button", { name: "Recalculate folder size" })).toBeInTheDocument();
+  });
+
+  it("Calculate button calls onCalculateFolderSize", () => {
+    const onCalculate = vi.fn();
+    render(
+      <InfoPanel
+        loading={false}
+        item={{
+          ...baseItem,
+          path: "/Users/demo/projects",
+          name: "projects",
+          extension: "",
+          kind: "directory",
+          kindLabel: "Folder",
+          sizeBytes: null,
+          sizeStatus: "deferred",
+          createdAt: null,
+          modifiedAt: null,
+          permissionMode: null,
+        }}
+        onClose={() => undefined}
+        onNavigateToPath={() => undefined}
+        onOpen={() => undefined}
+        onOpenInTerminal={() => undefined}
+        onCopyPath={() => true}
+        folderSizeEntry={{ status: "idle" }}
+        onCalculateFolderSize={onCalculate}
+        onRecalculateFolderSize={() => undefined}
+        onCancelFolderSize={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Calculate" }));
+    expect(onCalculate).toHaveBeenCalledTimes(1);
+  });
+
+  it("Cancel button calls onCancelFolderSize", () => {
+    const onCancel = vi.fn();
+    render(
+      <InfoPanel
+        loading={false}
+        item={{
+          ...baseItem,
+          path: "/Users/demo/projects",
+          name: "projects",
+          extension: "",
+          kind: "directory",
+          kindLabel: "Folder",
+          sizeBytes: null,
+          sizeStatus: "deferred",
+          createdAt: null,
+          modifiedAt: null,
+          permissionMode: null,
+        }}
+        onClose={() => undefined}
+        onNavigateToPath={() => undefined}
+        onOpen={() => undefined}
+        onOpenInTerminal={() => undefined}
+        onCopyPath={() => true}
+        folderSizeEntry={{ status: "calculating", jobId: "job-1" }}
+        onCalculateFolderSize={() => undefined}
+        onRecalculateFolderSize={() => undefined}
+        onCancelFolderSize={onCancel}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel folder size calculation" }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
 });

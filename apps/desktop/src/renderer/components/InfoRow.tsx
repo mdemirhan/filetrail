@@ -3,7 +3,12 @@ import type { ReactNode } from "react";
 import type { FolderSizeEntry } from "../hooks/useFolderSizeCache";
 import type { DirectoryEntry, ItemProperties } from "../lib/explorerTypes";
 import { FileIcon } from "../lib/fileIcons";
-import { formatDateTime, formatPermissionMode, formatSize } from "../lib/formatting";
+import {
+  formatDateTime,
+  formatFolderSizeDetail,
+  formatPermissionMode,
+  formatSize,
+} from "../lib/formatting";
 
 export function InfoRow({
   open,
@@ -99,10 +104,6 @@ export function InfoRow({
             <div className="dt-lbl">Permissions</div>
             <div className="dt-val">{permissionsLabel}</div>
           </div>
-          <div className="dt-pair dt-pair-path">
-            <div className="dt-lbl">Path</div>
-            <div className="dt-val pth">{activeEntry.path}</div>
-          </div>
         </div>
       </div>
     </div>
@@ -121,9 +122,12 @@ function InfoRowFolderSize({
   onCancel: () => void;
 }) {
   if (entry.status === "ready") {
+    const detail = formatFolderSizeDetail(entry.sizeBytes, entry.diskBytes, entry.fileCount);
     return (
       <span className="folder-size-value">
-        {formatSize(entry.sizeBytes, "ready")}
+        <span className="folder-size-detail">
+          {detail.size}{detail.disk ? ` (${detail.disk})` : ""} &middot; {detail.items}
+        </span>
         <button
           type="button"
           className="folder-size-refresh-btn"

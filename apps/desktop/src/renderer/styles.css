@@ -5706,7 +5706,7 @@ body.resizing-panels-vertical * {
 
 .dt-meta {
   display: grid;
-  grid-template-columns: auto auto auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: start;
   gap: 24px;
   min-width: 0;
@@ -5737,17 +5737,6 @@ body.resizing-panels-vertical * {
   text-overflow: ellipsis;
 }
 
-.dt-val.pth {
-  min-width: 0;
-  font-size: 10px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dt-pair-path {
-  min-width: 0;
-}
 
 /* ── Folder Size Interactive States ──────────────────────────────── */
 
@@ -5831,6 +5820,15 @@ body.resizing-panels-vertical * {
 
 .folder-size-refresh-btn:hover {
   color: var(--accent);
+}
+
+.folder-size-detail {
+  display: inline;
+}
+
+.folder-size-items {
+  color: var(--text-dim);
+  font-size: 10px;
 }
 
 .folder-size-refresh-btn .get-info-icon,
@@ -6476,14 +6474,6 @@ body.platform-macos .settings-view[data-layout="compact"] {
     gap: 14px 20px;
   }
 
-  .dt-pair-path {
-    grid-column: 1 / -1;
-  }
-
-  .dt-val.pth {
-    white-space: normal;
-    word-break: break-all;
-  }
 }
 
 .settings-panel {

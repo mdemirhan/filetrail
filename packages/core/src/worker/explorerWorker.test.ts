@@ -130,12 +130,9 @@ describe("explorerWorker", () => {
     expect(explorerServiceMock.listTreeChildren).toHaveBeenCalledWith(
       "/Users/demo",
       false,
-      expect.objectContaining({
-        lstat: expect.any(Function),
-        readdir: expect.any(Function),
-        realpath: expect.any(Function),
-        stat: expect.any(Function),
-      }),
+      // original-fs is unavailable in the test environment, so the worker
+      // passes undefined (falls back to default node:fs inside the service).
+      undefined,
     );
     expect(workerModuleMock.parentPort.postMessage).toHaveBeenLastCalledWith({
       id: "req-1",
@@ -155,12 +152,7 @@ describe("explorerWorker", () => {
 
     expect(explorerServiceMock.resolvePathTarget).toHaveBeenCalledWith(
       "/Users/demo",
-      expect.objectContaining({
-        lstat: expect.any(Function),
-        readdir: expect.any(Function),
-        realpath: expect.any(Function),
-        stat: expect.any(Function),
-      }),
+      undefined,
     );
     expect(workerModuleMock.parentPort.postMessage).toHaveBeenLastCalledWith({
       id: "req-2",

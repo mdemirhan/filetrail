@@ -38,11 +38,31 @@ describe("ipc contracts", () => {
       status: "deferred",
     });
 
+    expect(
+      ipcContractSchemas["folderSize:getStatus"].response.parse({
+        jobId: "job-1",
+        status: "ready",
+        sizeBytes: 1000,
+        diskBytes: 1200,
+        fileCount: 42,
+        error: null,
+      }),
+    ).toEqual({
+      jobId: "job-1",
+      status: "ready",
+      sizeBytes: 1000,
+      diskBytes: 1200,
+      fileCount: 42,
+      error: null,
+    });
+
     expect(() =>
       ipcContractSchemas["folderSize:getStatus"].response.parse({
         jobId: "job-1",
         status: "unknown",
         sizeBytes: null,
+        diskBytes: null,
+        fileCount: null,
         error: null,
       }),
     ).toThrow();
