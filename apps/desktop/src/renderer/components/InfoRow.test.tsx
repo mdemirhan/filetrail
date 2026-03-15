@@ -52,6 +52,30 @@ const fileEntry = {
   isSymlink: false,
 };
 
+const bundleItem = {
+  path: "/Applications/File Trail.app",
+  name: "File Trail.app",
+  extension: "app",
+  kind: "bundle" as const,
+  kindLabel: "Application",
+  isHidden: false,
+  isSymlink: false,
+  createdAt: "2026-03-01T09:00:00.000Z",
+  modifiedAt: "2026-03-02T10:30:00.000Z",
+  sizeBytes: null,
+  sizeStatus: "deferred" as const,
+  permissionMode: 0o755,
+};
+
+const bundleEntry = {
+  path: "/Applications/File Trail.app",
+  name: "File Trail.app",
+  extension: "app",
+  kind: "bundle" as const,
+  isHidden: false,
+  isSymlink: false,
+};
+
 describe("InfoRow", () => {
   it("shows Calculate when folder size is idle", () => {
     render(
@@ -122,6 +146,46 @@ describe("InfoRow", () => {
 
     expect(screen.getByText("2.0 KB")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Calculate" })).not.toBeInTheDocument();
+  });
+
+  it("shows Calculate for bundle entries", () => {
+    render(
+      <InfoRow
+        open
+        currentPath="/Applications"
+        selectedEntry={bundleEntry}
+        item={bundleItem}
+        folderSizeEntry={{ status: "idle" }}
+        onCalculateFolderSize={() => undefined}
+        onCancelFolderSize={() => undefined}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Calculate" })).toBeInTheDocument();
+    expect(screen.queryByText("Not yet available")).not.toBeInTheDocument();
+  });
+
+  it("shows cached bundle size when ready", () => {
+    render(
+      <InfoRow
+        open
+        currentPath="/Applications"
+        selectedEntry={bundleEntry}
+        item={bundleItem}
+        folderSizeEntry={{
+          status: "ready",
+          sizeBytes: 1048576,
+          diskBytes: 1572864,
+          fileCount: 500,
+        }}
+        onCalculateFolderSize={() => undefined}
+        onRecalculateFolderSize={() => undefined}
+        onCancelFolderSize={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText(/1\.0 MB/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Recalculate folder size" })).toBeInTheDocument();
   });
 
   it("Calculate button triggers onCalculateFolderSize", () => {

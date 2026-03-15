@@ -19,6 +19,18 @@ const baseItem = {
   permissionMode: 0o644,
 };
 
+const bundleItem = {
+  ...baseItem,
+  path: "/Applications/File Trail.app",
+  name: "File Trail.app",
+  extension: "app",
+  kind: "bundle" as const,
+  kindLabel: "Application",
+  sizeBytes: null,
+  sizeStatus: "deferred" as const,
+  permissionMode: 0o755,
+};
+
 describe("InfoPanel", () => {
   it("shows loading and empty states", () => {
     const { rerender } = render(
@@ -158,6 +170,27 @@ describe("InfoPanel", () => {
     expect(screen.getByRole("button", { name: "Calculate" })).toBeInTheDocument();
   });
 
+  it("shows Calculate button for bundles instead of deferred placeholder text", () => {
+    render(
+      <InfoPanel
+        loading={false}
+        item={bundleItem}
+        onClose={() => undefined}
+        onNavigateToPath={() => undefined}
+        onOpen={() => undefined}
+        onOpenInTerminal={() => undefined}
+        onCopyPath={() => true}
+        folderSizeEntry={{ status: "idle" }}
+        onCalculateFolderSize={() => undefined}
+        onRecalculateFolderSize={() => undefined}
+        onCancelFolderSize={() => undefined}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Calculate" })).toBeInTheDocument();
+    expect(screen.queryByText("Not yet available")).not.toBeInTheDocument();
+  });
+
   it("shows spinner when folder size is calculating", () => {
     render(
       <InfoPanel
@@ -231,6 +264,32 @@ describe("InfoPanel", () => {
     const itemsText = screen.getByText(/items/);
     expect(itemsText).toBeInTheDocument();
     // Recalculate button present
+    expect(screen.getByRole("button", { name: "Recalculate folder size" })).toBeInTheDocument();
+  });
+
+  it("shows cached bundle size when ready", () => {
+    render(
+      <InfoPanel
+        loading={false}
+        item={bundleItem}
+        onClose={() => undefined}
+        onNavigateToPath={() => undefined}
+        onOpen={() => undefined}
+        onOpenInTerminal={() => undefined}
+        onCopyPath={() => true}
+        folderSizeEntry={{
+          status: "ready",
+          sizeBytes: 1048576,
+          diskBytes: 1572864,
+          fileCount: 43016,
+        }}
+        onCalculateFolderSize={() => undefined}
+        onRecalculateFolderSize={() => undefined}
+        onCancelFolderSize={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText(/1\.0 MB/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Recalculate folder size" })).toBeInTheDocument();
   });
 

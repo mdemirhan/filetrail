@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { FolderSizeEntry } from "../hooks/useFolderSizeCache";
+import { isFolderSizeEligibleKind } from "../lib/explorerAppUtils";
 import type { DirectoryEntry, ItemProperties } from "../lib/explorerTypes";
 import { FileIcon } from "../lib/fileIcons";
 import {
@@ -47,8 +48,7 @@ export function InfoRow({
   }
 
   const activeItem = item?.path === activeEntry.path ? item : null;
-  const isDirectoryLike =
-    activeEntry.kind === "directory" || activeEntry.kind === "symlink_directory";
+  const showFolderSizeForEntry = isFolderSizeEligibleKind(activeEntry.kind);
   const kindLabel =
     activeItem?.kindLabel ??
     (activeEntry.kind === "directory"
@@ -59,7 +59,7 @@ export function InfoRow({
           ? `${activeEntry.extension.toUpperCase()} File`
           : "File");
   const showFolderSizeInteraction =
-    isDirectoryLike && folderSizeEntry && onCalculateFolderSize && onCancelFolderSize;
+    showFolderSizeForEntry && folderSizeEntry && onCalculateFolderSize && onCancelFolderSize;
 
   let sizeLabel: ReactNode;
   if (showFolderSizeInteraction) {
@@ -71,7 +71,7 @@ export function InfoRow({
         onCancel={onCancelFolderSize}
       />
     );
-  } else if (isDirectoryLike) {
+  } else if (showFolderSizeForEntry) {
     sizeLabel = "—";
   } else {
     sizeLabel = activeItem ? formatSize(activeItem.sizeBytes, activeItem.sizeStatus) : "—";

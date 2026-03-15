@@ -54,6 +54,7 @@ import {
   getPathLeafName,
   isDirectoryLikeEntry,
   isEditableFileEntry,
+  isFolderSizeEligibleKind,
   resolveNewFolderTargetPath,
   resolvePasteDestinationPath,
   resolveWriteOperationSelectionDirectoryPath,
@@ -1590,13 +1591,10 @@ export function App() {
   // The info panel always shows the getInfoItem (which is the selected or inspected item).
   // The info row shows the selected entry, falling back to the current directory.
   const infoPanelFolderSizePath =
-    getInfoItem && (getInfoItem.kind === "directory" || getInfoItem.kind === "symlink_directory")
-      ? getInfoItem.path
-      : null;
+    getInfoItem && isFolderSizeEligibleKind(getInfoItem.kind) ? getInfoItem.path : null;
   const infoRowActiveEntry = selectedEntry ?? (currentPath ? { path: currentPath, kind: "directory" as const } : null);
   const infoRowFolderSizePath =
-    infoRowActiveEntry &&
-    (infoRowActiveEntry.kind === "directory" || infoRowActiveEntry.kind === "symlink_directory")
+    infoRowActiveEntry && isFolderSizeEligibleKind(infoRowActiveEntry.kind)
       ? infoRowActiveEntry.path
       : null;
 

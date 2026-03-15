@@ -284,6 +284,10 @@ export function isDirectoryLikeEntry(entry: DirectoryEntry | null): entry is Dir
   return entry?.kind === "directory" || entry?.kind === "symlink_directory";
 }
 
+export function isFolderSizeEligibleKind(kind: DirectoryEntry["kind"] | null | undefined): boolean {
+  return kind === "directory" || kind === "symlink_directory" || kind === "bundle";
+}
+
 export function isEditableFileEntry(entry: DirectoryEntry | null): entry is DirectoryEntry {
   return entry?.kind === "file" || entry?.kind === "symlink_file";
 }

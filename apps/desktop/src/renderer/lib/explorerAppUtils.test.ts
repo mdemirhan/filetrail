@@ -1,6 +1,7 @@
 import type { WriteOperationProgressEvent } from "@filetrail/contracts";
 
 import {
+  isFolderSizeEligibleKind,
   isExpectedPlannedSkipResult,
   resolveExplorerTreeRootPath,
   resolvePasteDestinationPath,
@@ -66,6 +67,10 @@ describe("explorerAppUtils", () => {
   it("roots the tree at slash for paths above home", () => {
     expect(resolveExplorerTreeRootPath("/Users", "/Users/demo")).toBe("/");
     expect(resolveExplorerTreeRootPath("/Applications", "/Users/demo")).toBe("/");
+  });
+
+  it("treats bundles as eligible for folder size controls without making them navigable folders", () => {
+    expect(isFolderSizeEligibleKind("bundle")).toBe(true);
   });
 
   it("pastes a copied folder back into the current directory instead of into itself", () => {

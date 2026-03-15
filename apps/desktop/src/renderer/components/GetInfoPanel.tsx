@@ -3,6 +3,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { IpcResponse } from "@filetrail/contracts";
 
 import type { FolderSizeEntry } from "../hooks/useFolderSizeCache";
+import { isFolderSizeEligibleKind } from "../lib/explorerAppUtils";
 import { FileIcon } from "../lib/fileIcons";
 import {
   formatDateTime,
@@ -124,11 +125,11 @@ function GetInfoPanelContent({
   onRecalculateFolderSize?: (() => void) | undefined;
   onCancelFolderSize?: (() => void) | undefined;
 }) {
-  const directoryLike = item.kind === "directory" || item.kind === "symlink_directory";
+  const showFolderSizeForItem = isFolderSizeEligibleKind(item.kind);
 
   let sizeValue: ReactNode;
   let sizeMuted = false;
-  if (directoryLike && folderSizeEntry && onCalculateFolderSize && onCancelFolderSize) {
+  if (showFolderSizeForItem && folderSizeEntry && onCalculateFolderSize && onCancelFolderSize) {
     sizeValue = (
       <FolderSizeCell
         entry={folderSizeEntry}
@@ -138,7 +139,7 @@ function GetInfoPanelContent({
       />
     );
     sizeMuted = folderSizeEntry.status === "idle" || folderSizeEntry.status === "error";
-  } else if (directoryLike) {
+  } else if (showFolderSizeForItem) {
     sizeValue = "-";
     sizeMuted = true;
   } else {
