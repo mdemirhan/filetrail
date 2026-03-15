@@ -6,9 +6,11 @@ import {
 
 describe("toolbarItems", () => {
   it("sanitizes top toolbar items, removes duplicates, and restores locked search", () => {
-    expect(
-      sanitizeTopToolbarItems(["back", "search", "back", "theme", "openSelection"]),
-    ).toEqual(["back", "search", "openSelection"]);
+    expect(sanitizeTopToolbarItems(["back", "search", "back", "theme", "openSelection"])).toEqual([
+      "back",
+      "search",
+      "openSelection",
+    ]);
 
     expect(sanitizeTopToolbarItems(["back", "forward"])).toEqual(["back", "forward", "search"]);
   });

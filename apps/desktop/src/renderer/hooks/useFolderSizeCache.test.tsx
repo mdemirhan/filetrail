@@ -248,9 +248,11 @@ describe("useFolderSizeCache", () => {
     // At least 2 probes: first returned deferred, second returned ready.
     // The third getEntry above may fire another probe (a no-op since the
     // entry is now in the renderer cache from the second probe's result).
-    expect(startHandler.mock.calls.filter(
-      (c: unknown[]) => (c[0] as { probeOnly?: boolean }).probeOnly === true,
-    ).length).toBeGreaterThanOrEqual(2);
+    expect(
+      startHandler.mock.calls.filter(
+        (c: unknown[]) => (c[0] as { probeOnly?: boolean }).probeOnly === true,
+      ).length,
+    ).toBeGreaterThanOrEqual(2);
   });
 
   it("polling stops on error status", async () => {

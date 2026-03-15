@@ -1,12 +1,22 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import type { ComponentProps } from "react";
 
 import type { IpcResponse } from "@filetrail/contracts";
 
 import { CopyPasteReviewDialog } from "./CopyPasteReviewDialog";
 
 type AnalysisReport = NonNullable<IpcResponse<"copyPaste:analyzeGetUpdate">["report"]>;
+type ReviewPolicy = ComponentProps<typeof CopyPasteReviewDialog>["policy"];
+
+function expectDefined<T>(value: T | null | undefined): NonNullable<T> {
+  expect(value).toBeDefined();
+  if (value == null) {
+    throw new Error("Expected value to be defined.");
+  }
+  return value;
+}
 
 describe("CopyPasteReviewDialog", () => {
   it("renders a single destination tree with basename-only rows and trimmed path tooltips", () => {
@@ -437,15 +447,12 @@ describe("CopyPasteReviewDialog", () => {
   });
 
   describe("contextual hint lines", () => {
-    function renderWithPolicy(
-      report: AnalysisReport,
-      policy: { file: string; directory: string; mismatch: string },
-    ) {
+    function renderWithPolicy(report: AnalysisReport, policy: ReviewPolicy) {
       return render(
         <CopyPasteReviewDialog
           title="Paste Requires Review"
           report={report}
-          policy={policy as any}
+          policy={policy}
           persistedSize={null}
           onPolicyChange={() => undefined}
           onSizeChange={() => undefined}
@@ -654,7 +661,7 @@ describe("CopyPasteReviewDialog", () => {
         directory: "skip",
         mismatch: "skip",
       });
-      const hintEl = getHintElement(container)!;
+      const hintEl = expectDefined(getHintElement(container));
       expect(hintEl.querySelectorAll(".is-ok").length).toBe(0);
       expect(hintEl.querySelectorAll(".is-gain").length).toBe(0);
       expect(hintEl.querySelectorAll(".is-loss").length).toBe(0);
@@ -673,11 +680,11 @@ describe("CopyPasteReviewDialog", () => {
         directory: "skip",
         mismatch: "skip",
       });
-      const hintEl = getHintElement(container)!;
+      const hintEl = expectDefined(getHintElement(container));
       const gainSpans = hintEl.querySelectorAll(".is-gain");
       expect(gainSpans.length).toBe(2);
-      expect(gainSpans[0]!.textContent).toBe("Larger");
-      expect(gainSpans[1]!.textContent).toBe("Newer");
+      expect(expectDefined(gainSpans[0]).textContent).toBe("Larger");
+      expect(expectDefined(gainSpans[1]).textContent).toBe("Newer");
     });
 
     it("applies is-loss tone to Smaller and Older labels", () => {
@@ -692,11 +699,11 @@ describe("CopyPasteReviewDialog", () => {
         directory: "skip",
         mismatch: "skip",
       });
-      const hintEl = getHintElement(container)!;
+      const hintEl = expectDefined(getHintElement(container));
       const lossSpans = hintEl.querySelectorAll(".is-loss");
       expect(lossSpans.length).toBe(2);
-      expect(lossSpans[0]!.textContent).toBe("Smaller");
-      expect(lossSpans[1]!.textContent).toBe("Older");
+      expect(expectDefined(lossSpans[0]).textContent).toBe("Smaller");
+      expect(expectDefined(lossSpans[1]).textContent).toBe("Older");
     });
 
     it("mutes the hint row for Skip file policy", () => {
@@ -711,7 +718,7 @@ describe("CopyPasteReviewDialog", () => {
         directory: "skip",
         mismatch: "skip",
       });
-      const hintEl = getHintElement(container)!;
+      const hintEl = expectDefined(getHintElement(container));
       expect(hintEl.classList.contains("is-muted")).toBe(true);
       expect(hintEl.querySelectorAll(".is-gain").length).toBe(0);
       expect(hintEl.querySelectorAll(".is-loss").length).toBe(0);
@@ -729,7 +736,7 @@ describe("CopyPasteReviewDialog", () => {
         directory: "skip",
         mismatch: "skip",
       });
-      const hintEl = getHintElement(container)!;
+      const hintEl = expectDefined(getHintElement(container));
       expect(hintEl.querySelectorAll(".is-gain").length).toBe(0);
       expect(hintEl.querySelectorAll(".is-loss").length).toBe(0);
       expect(hintEl.textContent).toContain("Same");
@@ -755,11 +762,11 @@ describe("CopyPasteReviewDialog", () => {
         directory: "overwrite",
         mismatch: "skip",
       });
-      const hintEl = getHintElement(container)!;
+      const hintEl = expectDefined(getHintElement(container));
       const dangerSpans = hintEl.querySelectorAll(".is-danger");
       expect(dangerSpans.length).toBe(2);
-      expect(dangerSpans[0]!.textContent).toBe("3 items → ");
-      expect(dangerSpans[1]!.textContent).toBe("0 items");
+      expect(expectDefined(dangerSpans[0]).textContent).toBe("3 items → ");
+      expect(expectDefined(dangerSpans[1]).textContent).toBe("0 items");
     });
 
     it("omits dest part for Replace Folder when destinationTotalNodeCount is null", () => {
@@ -780,10 +787,10 @@ describe("CopyPasteReviewDialog", () => {
         directory: "overwrite",
         mismatch: "skip",
       });
-      const hintEl = getHintElement(container)!;
+      const hintEl = expectDefined(getHintElement(container));
       const dangerSpans = hintEl.querySelectorAll(".is-danger");
       expect(dangerSpans.length).toBe(1);
-      expect(dangerSpans[0]!.textContent).toBe("4 items");
+      expect(expectDefined(dangerSpans[0]).textContent).toBe("4 items");
     });
 
     it("shows new count and conflict count for Merge", () => {
@@ -841,14 +848,14 @@ describe("CopyPasteReviewDialog", () => {
         directory: "merge",
         mismatch: "skip",
       });
-      const hintEl = getHintElement(container)!;
+      const hintEl = expectDefined(getHintElement(container));
       // new = 5-3 = 2, conflicts = 3-1 = 2
       const gainSpans = hintEl.querySelectorAll(".is-gain");
       expect(gainSpans.length).toBe(1);
-      expect(gainSpans[0]!.textContent).toBe("2 new");
+      expect(expectDefined(gainSpans[0]).textContent).toBe("2 new");
       const dangerSpans = hintEl.querySelectorAll(".is-danger");
       expect(dangerSpans.length).toBe(1);
-      expect(dangerSpans[0]!.textContent).toBe("2 conflicts");
+      expect(expectDefined(dangerSpans[0]).textContent).toBe("2 conflicts");
     });
 
     it("uses regular color for new count when it is 0 in Merge", () => {
@@ -858,12 +865,12 @@ describe("CopyPasteReviewDialog", () => {
         directory: "merge",
         mismatch: "skip",
       });
-      const hintEl = getHintElement(container)!;
+      const hintEl = expectDefined(getHintElement(container));
       // totalNodeCount=2, conflictNodeCount=2: new = 0, conflicts = 1
       expect(hintEl.querySelectorAll(".is-gain").length).toBe(0);
       const dangerSpans = hintEl.querySelectorAll(".is-danger");
       expect(dangerSpans.length).toBe(1);
-      expect(dangerSpans[0]!.textContent).toBe("1 conflict");
+      expect(expectDefined(dangerSpans[0]).textContent).toBe("1 conflict");
     });
 
     it("uses regular color for new count and omits conflicts when 0 conflicts in Merge", () => {
@@ -877,11 +884,11 @@ describe("CopyPasteReviewDialog", () => {
         directory: "merge",
         mismatch: "skip",
       });
-      const hintEl = getHintElement(container)!;
+      const hintEl = expectDefined(getHintElement(container));
       // new = 3, conflicts = 0
       const gainSpans = hintEl.querySelectorAll(".is-gain");
       expect(gainSpans.length).toBe(1);
-      expect(gainSpans[0]!.textContent).toBe("3 new");
+      expect(expectDefined(gainSpans[0]).textContent).toBe("3 new");
       expect(hintEl.querySelectorAll(".is-danger").length).toBe(0);
     });
 
@@ -970,10 +977,11 @@ describe("CopyPasteReviewDialog", () => {
         destMtimeMs: null,
       });
       // Override to make it an Add item
-      report.nodes[0]!.conflictClass = null;
-      report.nodes[0]!.disposition = "new" as any;
-      report.nodes[0]!.destinationKind = "missing";
-      report.nodes[0]!.destinationFingerprint = {
+      const node = expectDefined(report.nodes[0]);
+      node.conflictClass = null;
+      node.disposition = "new";
+      node.destinationKind = "missing";
+      node.destinationFingerprint = {
         exists: false,
         kind: "missing",
         size: null,
@@ -992,7 +1000,7 @@ describe("CopyPasteReviewDialog", () => {
       const hint = getHintText(container);
       expect(hint).toContain("Size: 2.0 KB");
       expect(hint).toContain("Modified: ");
-      const hintEl = getHintElement(container)!;
+      const hintEl = expectDefined(getHintElement(container));
       expect(hintEl.querySelectorAll(".is-gain").length).toBe(0);
       expect(hintEl.querySelectorAll(".is-loss").length).toBe(0);
     });

@@ -153,10 +153,9 @@ describe("SettingsView", () => {
   it("exposes the selected layout mode on the root element", () => {
     renderSettingsView({ layoutMode: "compact" });
 
-    expect(screen.getByRole("heading", { name: "Settings" }).closest(".settings-view")).toHaveAttribute(
-      "data-layout",
-      "compact",
-    );
+    expect(
+      screen.getByRole("heading", { name: "Settings" }).closest(".settings-view"),
+    ).toHaveAttribute("data-layout", "compact");
   });
 
   it("uses the header without a description row", () => {
@@ -178,7 +177,9 @@ describe("SettingsView", () => {
     (theme, expectedBackground) => {
       renderSettingsView({ theme });
 
-      expect(screen.getByRole("heading", { name: "Settings" }).closest(".settings-view")).toHaveStyle({
+      expect(
+        screen.getByRole("heading", { name: "Settings" }).closest(".settings-view"),
+      ).toHaveStyle({
         background: expectedBackground,
       });
     },
@@ -271,7 +272,9 @@ describe("SettingsView", () => {
 
     fireEvent.pointerDown(document.body);
 
-    expect(screen.queryByRole("dialog", { name: "Toolbar accent options" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "Toolbar accent options" }),
+    ).not.toBeInTheDocument();
   });
 
   it("forwards favorite accent preference changes", () => {
@@ -314,7 +317,9 @@ describe("SettingsView", () => {
 
     const topToolbarEditor = screen.getByRole("group", { name: "Top toolbar" });
 
-    fireEvent.click(within(topToolbarEditor).getByRole("button", { name: "Add Copy to Top toolbar" }));
+    fireEvent.click(
+      within(topToolbarEditor).getByRole("button", { name: "Add Copy to Top toolbar" }),
+    );
     fireEvent.mouseEnter(within(topToolbarEditor).getByRole("button", { name: "Back" }));
     fireEvent.click(
       within(topToolbarEditor).getByRole("button", { name: "Remove Back from Top toolbar" }),
@@ -355,7 +360,12 @@ describe("SettingsView", () => {
       }),
     );
 
-    expect(onTopToolbarItemsChange).toHaveBeenCalledWith(["back", "topSeparator", "topSeparator", "search"]);
+    expect(onTopToolbarItemsChange).toHaveBeenCalledWith([
+      "back",
+      "topSeparator",
+      "topSeparator",
+      "search",
+    ]);
     expect(onLeftToolbarItemsChange).toHaveBeenNthCalledWith(1, {
       main: ["home", "leftSeparator", "leftSeparator"],
       utility: ["leftSeparator", "settings"],
@@ -404,7 +414,9 @@ describe("SettingsView", () => {
     const leftRailEditor = screen.getByRole("group", { name: "Left rail" });
     const utilityZoneEditor = screen.getByRole("group", { name: "Bottom utility" });
 
-    fireEvent.click(within(leftRailEditor).getByRole("button", { name: "Add Action Log to Left rail" }));
+    fireEvent.click(
+      within(leftRailEditor).getByRole("button", { name: "Add Action Log to Left rail" }),
+    );
     fireEvent.click(
       within(utilityZoneEditor).getByRole("button", { name: "Add Trash to Bottom utility" }),
     );
@@ -433,7 +445,9 @@ describe("SettingsView", () => {
     expect(screen.queryByRole("button", { name: "Add Macintosh HD to Top toolbar" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add Applications to Top toolbar" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add Trash to Top toolbar" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add Root Tree At Home to Top toolbar" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Add Root Tree At Home to Top toolbar" }),
+    ).toBeNull();
     expect(screen.queryByRole("button", { name: "Add Action Log to Top toolbar" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add Help to Top toolbar" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add Back to Left rail" })).toBeNull();
@@ -443,7 +457,9 @@ describe("SettingsView", () => {
     expect(screen.queryByRole("button", { name: "Add Back to Bottom utility" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add Forward to Bottom utility" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add Navigate Up to Bottom utility" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add Navigate Down to Bottom utility" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Add Navigate Down to Bottom utility" }),
+    ).toBeNull();
   });
 
   it("shows toolbar actions in a stable grouped order across the add lists", () => {
@@ -459,21 +475,47 @@ describe("SettingsView", () => {
     const leftRailEditor = screen.getByRole("group", { name: "Left rail" });
     const utilityEditor = screen.getByRole("group", { name: "Bottom utility" });
 
-    expect(within(topToolbarEditor).getByRole("button", { name: "Add Copy to Top toolbar" })).toBeInTheDocument();
-    expect(within(topToolbarEditor).getByRole("button", { name: "Add Cut to Top toolbar" })).toBeInTheDocument();
-    expect(within(topToolbarEditor).getByRole("button", { name: "Add Paste to Top toolbar" })).toBeInTheDocument();
-    expect(within(leftRailEditor).getByRole("button", { name: "Add Copy to Left rail" })).toBeInTheDocument();
-    expect(within(leftRailEditor).getByRole("button", { name: "Add Cut to Left rail" })).toBeInTheDocument();
-    expect(within(leftRailEditor).getByRole("button", { name: "Add Paste to Left rail" })).toBeInTheDocument();
-    expect(within(utilityEditor).getByRole("button", { name: "Add Copy to Bottom utility" })).toBeInTheDocument();
-    expect(within(utilityEditor).getByRole("button", { name: "Add Cut to Bottom utility" })).toBeInTheDocument();
-    expect(within(utilityEditor).getByRole("button", { name: "Add Paste to Bottom utility" })).toBeInTheDocument();
+    expect(
+      within(topToolbarEditor).getByRole("button", { name: "Add Copy to Top toolbar" }),
+    ).toBeInTheDocument();
+    expect(
+      within(topToolbarEditor).getByRole("button", { name: "Add Cut to Top toolbar" }),
+    ).toBeInTheDocument();
+    expect(
+      within(topToolbarEditor).getByRole("button", { name: "Add Paste to Top toolbar" }),
+    ).toBeInTheDocument();
+    expect(
+      within(leftRailEditor).getByRole("button", { name: "Add Copy to Left rail" }),
+    ).toBeInTheDocument();
+    expect(
+      within(leftRailEditor).getByRole("button", { name: "Add Cut to Left rail" }),
+    ).toBeInTheDocument();
+    expect(
+      within(leftRailEditor).getByRole("button", { name: "Add Paste to Left rail" }),
+    ).toBeInTheDocument();
+    expect(
+      within(utilityEditor).getByRole("button", { name: "Add Copy to Bottom utility" }),
+    ).toBeInTheDocument();
+    expect(
+      within(utilityEditor).getByRole("button", { name: "Add Cut to Bottom utility" }),
+    ).toBeInTheDocument();
+    expect(
+      within(utilityEditor).getByRole("button", { name: "Add Paste to Bottom utility" }),
+    ).toBeInTheDocument();
 
-    const topToolbarAddButtons = Array.from(topToolbarEditor.querySelectorAll('button[aria-label^="Add "]'));
-    const leftRailAddButtons = Array.from(leftRailEditor.querySelectorAll('button[aria-label^="Add "]'));
-    const utilityAddButtons = Array.from(utilityEditor.querySelectorAll('button[aria-label^="Add "]'));
+    const topToolbarAddButtons = Array.from(
+      topToolbarEditor.querySelectorAll('button[aria-label^="Add "]'),
+    );
+    const leftRailAddButtons = Array.from(
+      leftRailEditor.querySelectorAll('button[aria-label^="Add "]'),
+    );
+    const utilityAddButtons = Array.from(
+      utilityEditor.querySelectorAll('button[aria-label^="Add "]'),
+    );
 
-    expect(topToolbarAddButtons.slice(0, 6).map((button) => button.getAttribute("aria-label"))).toEqual([
+    expect(
+      topToolbarAddButtons.slice(0, 6).map((button) => button.getAttribute("aria-label")),
+    ).toEqual([
       "Add Separator to Top toolbar",
       "Add Forward to Top toolbar",
       "Add Navigate Up to Top toolbar",
@@ -483,7 +525,9 @@ describe("SettingsView", () => {
     ]);
     expect(leftRailAddButtons[0]).toHaveAttribute("aria-label", "Add Separator to Left rail");
     expect(utilityAddButtons[0]).toHaveAttribute("aria-label", "Add Separator to Bottom utility");
-    expect(leftRailAddButtons.slice(0, 6).map((button) => button.getAttribute("aria-label"))).toEqual([
+    expect(
+      leftRailAddButtons.slice(0, 6).map((button) => button.getAttribute("aria-label")),
+    ).toEqual([
       "Add Separator to Left rail",
       "Add Macintosh HD to Left rail",
       "Add Applications to Left rail",
@@ -491,7 +535,9 @@ describe("SettingsView", () => {
       "Add Root Tree At Home to Left rail",
       "Add Go To Folder to Left rail",
     ]);
-    expect(utilityAddButtons.slice(0, 4).map((button) => button.getAttribute("aria-label"))).toEqual([
+    expect(
+      utilityAddButtons.slice(0, 4).map((button) => button.getAttribute("aria-label")),
+    ).toEqual([
       "Add Separator to Bottom utility",
       "Add Action Log to Bottom utility",
       "Add Help to Bottom utility",

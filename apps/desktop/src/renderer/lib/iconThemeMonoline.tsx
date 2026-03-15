@@ -68,7 +68,15 @@ export const MONOLINE_DEFS = {
     symbol: (
       <>
         <circle cx="12" cy="16.5" r="1.1" fill="none" stroke="#0EA5E9" strokeWidth="0.7" />
-        <ellipse cx="12" cy="16.5" rx="5.2" ry="1.8" fill="none" stroke="#0EA5E9" strokeWidth="0.7" />
+        <ellipse
+          cx="12"
+          cy="16.5"
+          rx="5.2"
+          ry="1.8"
+          fill="none"
+          stroke="#0EA5E9"
+          strokeWidth="0.7"
+        />
         <ellipse
           cx="12"
           cy="16.5"
@@ -110,8 +118,24 @@ export const MONOLINE_DEFS = {
         />
         <circle cx="9.7" cy="13.7" r="0.5" fill="none" stroke="#306998" strokeWidth="0.5" />
         <circle cx="14.3" cy="19.3" r="0.5" fill="none" stroke="#306998" strokeWidth="0.5" />
-        <line x1="8" y1="16.5" x2="11.5" y2="16.5" stroke="#306998" strokeWidth="0.6" strokeLinecap="round" />
-        <line x1="12.5" y1="16.5" x2="16" y2="16.5" stroke="#306998" strokeWidth="0.6" strokeLinecap="round" />
+        <line
+          x1="8"
+          y1="16.5"
+          x2="11.5"
+          y2="16.5"
+          stroke="#306998"
+          strokeWidth="0.6"
+          strokeLinecap="round"
+        />
+        <line
+          x1="12.5"
+          y1="16.5"
+          x2="16"
+          y2="16.5"
+          stroke="#306998"
+          strokeWidth="0.6"
+          strokeLinecap="round"
+        />
       </>
     ),
   },
@@ -146,10 +170,36 @@ export const MONOLINE_DEFS = {
     color: "#E76F00",
     symbol: (
       <>
-        <rect x="8.5" y="14" width="5.5" height="5.5" rx="0.8" fill="none" stroke="#E76F00" strokeWidth="1" />
-        <path d="M14 15.5h1.5a1 1 0 011 1v0a1 1 0 01-1 1H14" fill="none" stroke="#E76F00" strokeWidth="0.9" />
-        <path d="M10 13.5v-1.5" stroke="#E76F00" strokeWidth="0.6" fill="none" strokeLinecap="round" />
-        <path d="M11.5 13v-1.5" stroke="#E76F00" strokeWidth="0.6" fill="none" strokeLinecap="round" />
+        <rect
+          x="8.5"
+          y="14"
+          width="5.5"
+          height="5.5"
+          rx="0.8"
+          fill="none"
+          stroke="#E76F00"
+          strokeWidth="1"
+        />
+        <path
+          d="M14 15.5h1.5a1 1 0 011 1v0a1 1 0 01-1 1H14"
+          fill="none"
+          stroke="#E76F00"
+          strokeWidth="0.9"
+        />
+        <path
+          d="M10 13.5v-1.5"
+          stroke="#E76F00"
+          strokeWidth="0.6"
+          fill="none"
+          strokeLinecap="round"
+        />
+        <path
+          d="M11.5 13v-1.5"
+          stroke="#E76F00"
+          strokeWidth="0.6"
+          fill="none"
+          strokeLinecap="round"
+        />
       </>
     ),
   },
@@ -204,8 +254,20 @@ export const MONOLINE_DEFS = {
     color: "#7F52FF",
     symbol: (
       <>
-        <polygon points="8,12 16,16.5 8,21" fill="none" stroke="#7F52FF" strokeWidth="0.8" strokeLinejoin="round" />
-        <polygon points="8,12 16,12 8,21" fill="none" stroke="#7F52FF" strokeWidth="0.8" strokeLinejoin="round" />
+        <polygon
+          points="8,12 16,16.5 8,21"
+          fill="none"
+          stroke="#7F52FF"
+          strokeWidth="0.8"
+          strokeLinejoin="round"
+        />
+        <polygon
+          points="8,12 16,12 8,21"
+          fill="none"
+          stroke="#7F52FF"
+          strokeWidth="0.8"
+          strokeLinejoin="round"
+        />
       </>
     ),
   },
@@ -213,9 +275,33 @@ export const MONOLINE_DEFS = {
     color: "#0175C2",
     symbol: (
       <>
-        <rect x="8" y="14.5" width="7" height="5" rx="0.5" fill="none" stroke="#0175C2" strokeWidth="0.8" />
-        <polygon points="15,14 18,17 15,20" fill="none" stroke="#0175C2" strokeWidth="0.8" strokeLinejoin="round" />
-        <rect x="8" y="12" width="5" height="2" rx="0.5" fill="none" stroke="#0175C2" strokeWidth="0.7" />
+        <rect
+          x="8"
+          y="14.5"
+          width="7"
+          height="5"
+          rx="0.5"
+          fill="none"
+          stroke="#0175C2"
+          strokeWidth="0.8"
+        />
+        <polygon
+          points="15,14 18,17 15,20"
+          fill="none"
+          stroke="#0175C2"
+          strokeWidth="0.8"
+          strokeLinejoin="round"
+        />
+        <rect
+          x="8"
+          y="12"
+          width="5"
+          height="2"
+          rx="0.5"
+          fill="none"
+          stroke="#0175C2"
+          strokeWidth="0.7"
+        />
       </>
     ),
   },
@@ -254,7 +340,15 @@ export const MONOLINE_DEFS = {
     color: "#083FA1",
     symbol: (
       <>
-        <text x="10" y="18" textAnchor="middle" dominantBaseline="central" fill="#083FA1" fontSize="9" fontWeight="900">
+        <text
+          x="10"
+          y="18"
+          textAnchor="middle"
+          dominantBaseline="central"
+          fill="#083FA1"
+          fontSize="9"
+          fontWeight="900"
+        >
           M
         </text>
         <path
@@ -272,9 +366,33 @@ export const MONOLINE_DEFS = {
     color: "#CB171E",
     symbol: (
       <>
-        <line x1="7" y1="14" x2="13" y2="14" stroke="#CB171E" strokeWidth="1.1" strokeLinecap="round" />
-        <line x1="9" y1="16.3" x2="17" y2="16.3" stroke="#CB171E" strokeWidth="1.1" strokeLinecap="round" />
-        <line x1="9" y1="18.6" x2="14" y2="18.6" stroke="#CB171E" strokeWidth="1.1" strokeLinecap="round" />
+        <line
+          x1="7"
+          y1="14"
+          x2="13"
+          y2="14"
+          stroke="#CB171E"
+          strokeWidth="1.1"
+          strokeLinecap="round"
+        />
+        <line
+          x1="9"
+          y1="16.3"
+          x2="17"
+          y2="16.3"
+          stroke="#CB171E"
+          strokeWidth="1.1"
+          strokeLinecap="round"
+        />
+        <line
+          x1="9"
+          y1="18.6"
+          x2="14"
+          y2="18.6"
+          stroke="#CB171E"
+          strokeWidth="1.1"
+          strokeLinecap="round"
+        />
         <circle cx="7" cy="16.3" r="0.7" fill="none" stroke="#CB171E" strokeWidth="0.6" />
         <circle cx="7" cy="18.6" r="0.7" fill="none" stroke="#CB171E" strokeWidth="0.6" />
       </>
@@ -289,8 +407,22 @@ export const MONOLINE_DEFS = {
     symbol: (
       <>
         <ellipse cx="12" cy="13.5" rx="4" ry="1.5" fill="none" stroke="#336791" strokeWidth="1" />
-        <path d="M8 13.5v6c0 .83 1.79 1.5 4 1.5s4-.67 4-1.5v-6" fill="none" stroke="#336791" strokeWidth="1" />
-        <ellipse cx="12" cy="16" rx="4" ry="1.2" fill="none" stroke="#336791" strokeWidth="0.5" opacity="0.4" />
+        <path
+          d="M8 13.5v6c0 .83 1.79 1.5 4 1.5s4-.67 4-1.5v-6"
+          fill="none"
+          stroke="#336791"
+          strokeWidth="1"
+        />
+        <ellipse
+          cx="12"
+          cy="16"
+          rx="4"
+          ry="1.2"
+          fill="none"
+          stroke="#336791"
+          strokeWidth="0.5"
+          opacity="0.4"
+        />
       </>
     ),
   },
@@ -306,7 +438,15 @@ export const MONOLINE_DEFS = {
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        <line x1="13" y1="19" x2="17" y2="19" stroke="#4EAA25" strokeWidth="1.3" strokeLinecap="round" />
+        <line
+          x1="13"
+          y1="19"
+          x2="17"
+          y2="19"
+          stroke="#4EAA25"
+          strokeWidth="1.3"
+          strokeLinecap="round"
+        />
       </>
     ),
   },
@@ -314,12 +454,63 @@ export const MONOLINE_DEFS = {
     color: "#2496ED",
     symbol: (
       <>
-        <rect x="7.5" y="14.5" width="2.5" height="1.8" rx="0.3" fill="none" stroke="#2496ED" strokeWidth="0.7" />
-        <rect x="10.5" y="14.5" width="2.5" height="1.8" rx="0.3" fill="none" stroke="#2496ED" strokeWidth="0.7" />
-        <rect x="13.5" y="14.5" width="2.5" height="1.8" rx="0.3" fill="none" stroke="#2496ED" strokeWidth="0.7" />
-        <rect x="7.5" y="12.2" width="2.5" height="1.8" rx="0.3" fill="none" stroke="#2496ED" strokeWidth="0.7" />
-        <rect x="10.5" y="12.2" width="2.5" height="1.8" rx="0.3" fill="none" stroke="#2496ED" strokeWidth="0.7" />
-        <path d="M6 17c0 2.5 3 3.5 6 3.5s6-1 6-3.5" stroke="#2496ED" strokeWidth="0.8" fill="none" strokeLinecap="round" />
+        <rect
+          x="7.5"
+          y="14.5"
+          width="2.5"
+          height="1.8"
+          rx="0.3"
+          fill="none"
+          stroke="#2496ED"
+          strokeWidth="0.7"
+        />
+        <rect
+          x="10.5"
+          y="14.5"
+          width="2.5"
+          height="1.8"
+          rx="0.3"
+          fill="none"
+          stroke="#2496ED"
+          strokeWidth="0.7"
+        />
+        <rect
+          x="13.5"
+          y="14.5"
+          width="2.5"
+          height="1.8"
+          rx="0.3"
+          fill="none"
+          stroke="#2496ED"
+          strokeWidth="0.7"
+        />
+        <rect
+          x="7.5"
+          y="12.2"
+          width="2.5"
+          height="1.8"
+          rx="0.3"
+          fill="none"
+          stroke="#2496ED"
+          strokeWidth="0.7"
+        />
+        <rect
+          x="10.5"
+          y="12.2"
+          width="2.5"
+          height="1.8"
+          rx="0.3"
+          fill="none"
+          stroke="#2496ED"
+          strokeWidth="0.7"
+        />
+        <path
+          d="M6 17c0 2.5 3 3.5 6 3.5s6-1 6-3.5"
+          stroke="#2496ED"
+          strokeWidth="0.8"
+          fill="none"
+          strokeLinecap="round"
+        />
       </>
     ),
   },
@@ -352,7 +543,13 @@ export const MONOLINE_DEFS = {
     symbol: (
       <>
         <circle cx="9" cy="14" r="1.3" fill="none" stroke="#16A34A" strokeWidth="0.7" />
-        <path d="M6 20l4-5 2.5 2.5L15 14.5 18 20z" fill="none" stroke="#16A34A" strokeWidth="0.8" strokeLinejoin="round" />
+        <path
+          d="M6 20l4-5 2.5 2.5L15 14.5 18 20z"
+          fill="none"
+          stroke="#16A34A"
+          strokeWidth="0.8"
+          strokeLinejoin="round"
+        />
       </>
     ),
   },
@@ -360,11 +557,33 @@ export const MONOLINE_DEFS = {
     color: "#F59E0B",
     symbol: (
       <>
-        <path d="M7 19c2-8 9-8 11 0" fill="none" stroke="#F59E0B" strokeWidth="1.2" strokeLinecap="round" />
+        <path
+          d="M7 19c2-8 9-8 11 0"
+          fill="none"
+          stroke="#F59E0B"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+        />
         <circle cx="7" cy="19" r="1" fill="none" stroke="#F59E0B" strokeWidth="0.7" />
         <circle cx="18" cy="19" r="1" fill="none" stroke="#F59E0B" strokeWidth="0.7" />
-        <line x1="7" y1="19" x2="9" y2="13" stroke="#F59E0B" strokeWidth="0.5" strokeDasharray="1 0.8" />
-        <line x1="18" y1="19" x2="15" y2="13" stroke="#F59E0B" strokeWidth="0.5" strokeDasharray="1 0.8" />
+        <line
+          x1="7"
+          y1="19"
+          x2="9"
+          y2="13"
+          stroke="#F59E0B"
+          strokeWidth="0.5"
+          strokeDasharray="1 0.8"
+        />
+        <line
+          x1="18"
+          y1="19"
+          x2="15"
+          y2="13"
+          stroke="#F59E0B"
+          strokeWidth="0.5"
+          strokeDasharray="1 0.8"
+        />
         <circle cx="9" cy="13" r="0.7" fill="none" stroke="#F59E0B" strokeWidth="0.5" />
         <circle cx="15" cy="13" r="0.7" fill="none" stroke="#F59E0B" strokeWidth="0.5" />
       </>
@@ -375,7 +594,13 @@ export const MONOLINE_DEFS = {
     symbol: (
       <>
         <circle cx="12" cy="16.5" r="4.5" fill="none" stroke="#9333EA" strokeWidth="1" />
-        <polygon points="10.5,14 10.5,19 15.5,16.5" fill="none" stroke="#9333EA" strokeWidth="0.8" strokeLinejoin="round" />
+        <polygon
+          points="10.5,14 10.5,19 15.5,16.5"
+          fill="none"
+          stroke="#9333EA"
+          strokeWidth="0.8"
+          strokeLinejoin="round"
+        />
       </>
     ),
   },
@@ -399,9 +624,35 @@ export const MONOLINE_DEFS = {
     color: "#D97706",
     symbol: (
       <>
-        <rect x="7" y="13" width="10" height="7" rx="1" fill="none" stroke="#D97706" strokeWidth="1" />
-        <line x1="12" y1="13" x2="12" y2="20" stroke="#D97706" strokeWidth="0.7" strokeDasharray="1.2 1" />
-        <rect x="10" y="15.5" width="4" height="2.5" rx="0.5" fill="none" stroke="#D97706" strokeWidth="0.7" />
+        <rect
+          x="7"
+          y="13"
+          width="10"
+          height="7"
+          rx="1"
+          fill="none"
+          stroke="#D97706"
+          strokeWidth="1"
+        />
+        <line
+          x1="12"
+          y1="13"
+          x2="12"
+          y2="20"
+          stroke="#D97706"
+          strokeWidth="0.7"
+          strokeDasharray="1.2 1"
+        />
+        <rect
+          x="10"
+          y="15.5"
+          width="4"
+          height="2.5"
+          rx="0.5"
+          fill="none"
+          stroke="#D97706"
+          strokeWidth="0.7"
+        />
         <line x1="12" y1="15.5" x2="12" y2="18" stroke="#D97706" strokeWidth="0.6" />
       </>
     ),
@@ -410,10 +661,42 @@ export const MONOLINE_DEFS = {
     color: "#737373",
     symbol: (
       <>
-        <line x1="7.5" y1="14" x2="16.5" y2="14" stroke="#737373" strokeWidth="1" strokeLinecap="round" />
-        <line x1="7.5" y1="16.3" x2="14" y2="16.3" stroke="#737373" strokeWidth="1" strokeLinecap="round" />
-        <line x1="7.5" y1="18.6" x2="16.5" y2="18.6" stroke="#737373" strokeWidth="1" strokeLinecap="round" />
-        <line x1="7.5" y1="20.9" x2="12" y2="20.9" stroke="#737373" strokeWidth="1" strokeLinecap="round" />
+        <line
+          x1="7.5"
+          y1="14"
+          x2="16.5"
+          y2="14"
+          stroke="#737373"
+          strokeWidth="1"
+          strokeLinecap="round"
+        />
+        <line
+          x1="7.5"
+          y1="16.3"
+          x2="14"
+          y2="16.3"
+          stroke="#737373"
+          strokeWidth="1"
+          strokeLinecap="round"
+        />
+        <line
+          x1="7.5"
+          y1="18.6"
+          x2="16.5"
+          y2="18.6"
+          stroke="#737373"
+          strokeWidth="1"
+          strokeLinecap="round"
+        />
+        <line
+          x1="7.5"
+          y1="20.9"
+          x2="12"
+          y2="20.9"
+          stroke="#737373"
+          strokeWidth="1"
+          strokeLinecap="round"
+        />
       </>
     ),
   },
@@ -442,10 +725,47 @@ export const MONOLINE_DEFS = {
     color: "#3B82F6",
     symbol: (
       <>
-        <rect x="7.5" y="13" width="3.5" height="3.5" rx="0.8" fill="none" stroke="#3B82F6" strokeWidth="0.8" />
-        <rect x="13" y="13" width="3.5" height="3.5" rx="0.8" fill="none" stroke="#3B82F6" strokeWidth="0.8" />
-        <rect x="7.5" y="18" width="3.5" height="3.5" rx="0.8" fill="none" stroke="#3B82F6" strokeWidth="0.8" />
-        <rect x="13" y="18" width="3.5" height="3.5" rx="0.8" fill="none" stroke="#3B82F6" strokeWidth="0.8" opacity="0.6" />
+        <rect
+          x="7.5"
+          y="13"
+          width="3.5"
+          height="3.5"
+          rx="0.8"
+          fill="none"
+          stroke="#3B82F6"
+          strokeWidth="0.8"
+        />
+        <rect
+          x="13"
+          y="13"
+          width="3.5"
+          height="3.5"
+          rx="0.8"
+          fill="none"
+          stroke="#3B82F6"
+          strokeWidth="0.8"
+        />
+        <rect
+          x="7.5"
+          y="18"
+          width="3.5"
+          height="3.5"
+          rx="0.8"
+          fill="none"
+          stroke="#3B82F6"
+          strokeWidth="0.8"
+        />
+        <rect
+          x="13"
+          y="18"
+          width="3.5"
+          height="3.5"
+          rx="0.8"
+          fill="none"
+          stroke="#3B82F6"
+          strokeWidth="0.8"
+          opacity="0.6"
+        />
       </>
     ),
   },
@@ -470,7 +790,13 @@ export const MONOLINE_DEFS = {
   elixir: {
     color: "#6B4F9E",
     symbol: (
-      <path d="M12 12c-1.5 2-2.5 4.5-1.5 6.5.7 1.4 2 1.8 3.2 1 1.2-.8 1.5-2.8.3-5.2L12 12z" fill="none" stroke="#6B4F9E" strokeWidth="0.9" strokeLinejoin="round" />
+      <path
+        d="M12 12c-1.5 2-2.5 4.5-1.5 6.5.7 1.4 2 1.8 3.2 1 1.2-.8 1.5-2.8.3-5.2L12 12z"
+        fill="none"
+        stroke="#6B4F9E"
+        strokeWidth="0.9"
+        strokeLinejoin="round"
+      />
     ),
   },
   haskell: {
@@ -480,7 +806,13 @@ export const MONOLINE_DEFS = {
   zig: {
     color: "#F7A41D",
     symbol: (
-      <path d="M8 13h3l-2 7h3l5-7h-3l2-7h-3z" fill="none" stroke="#F7A41D" strokeWidth="0.8" strokeLinejoin="round" />
+      <path
+        d="M8 13h3l-2 7h3l5-7h-3l2-7h-3z"
+        fill="none"
+        stroke="#F7A41D"
+        strokeWidth="0.8"
+        strokeLinejoin="round"
+      />
     ),
   },
   julia: {
@@ -500,7 +832,13 @@ export const MONOLINE_DEFS = {
   wasm: {
     color: "#654FF0",
     symbol: (
-      <polygon points="12,12.5 16.5,14.8 15,19.5 9,19.5 7.5,14.8" fill="none" stroke="#654FF0" strokeWidth="0.8" strokeLinejoin="round" />
+      <polygon
+        points="12,12.5 16.5,14.8 15,19.5 9,19.5 7.5,14.8"
+        fill="none"
+        stroke="#654FF0"
+        strokeWidth="0.8"
+        strokeLinejoin="round"
+      />
     ),
   },
 
@@ -513,7 +851,16 @@ export const MONOLINE_DEFS = {
     color: "#217346",
     symbol: (
       <>
-        <rect x="7" y="13" width="10" height="8" rx="0.5" fill="none" stroke="#217346" strokeWidth="0.8" />
+        <rect
+          x="7"
+          y="13"
+          width="10"
+          height="8"
+          rx="0.5"
+          fill="none"
+          stroke="#217346"
+          strokeWidth="0.8"
+        />
         <line x1="7" y1="15.7" x2="17" y2="15.7" stroke="#217346" strokeWidth="0.6" />
         <line x1="7" y1="18.4" x2="17" y2="18.4" stroke="#217346" strokeWidth="0.6" />
         <line x1="10.3" y1="13" x2="10.3" y2="21" stroke="#217346" strokeWidth="0.6" />
@@ -525,10 +872,42 @@ export const MONOLINE_DEFS = {
     color: "#2B579A",
     symbol: (
       <>
-        <line x1="7.5" y1="13.5" x2="16.5" y2="13.5" stroke="#2B579A" strokeWidth="1.4" strokeLinecap="round" />
-        <line x1="7.5" y1="16" x2="14" y2="16" stroke="#2B579A" strokeWidth="0.8" strokeLinecap="round" />
-        <line x1="7.5" y1="18" x2="16.5" y2="18" stroke="#2B579A" strokeWidth="0.8" strokeLinecap="round" />
-        <line x1="7.5" y1="20" x2="12" y2="20" stroke="#2B579A" strokeWidth="0.8" strokeLinecap="round" />
+        <line
+          x1="7.5"
+          y1="13.5"
+          x2="16.5"
+          y2="13.5"
+          stroke="#2B579A"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+        />
+        <line
+          x1="7.5"
+          y1="16"
+          x2="14"
+          y2="16"
+          stroke="#2B579A"
+          strokeWidth="0.8"
+          strokeLinecap="round"
+        />
+        <line
+          x1="7.5"
+          y1="18"
+          x2="16.5"
+          y2="18"
+          stroke="#2B579A"
+          strokeWidth="0.8"
+          strokeLinecap="round"
+        />
+        <line
+          x1="7.5"
+          y1="20"
+          x2="12"
+          y2="20"
+          stroke="#2B579A"
+          strokeWidth="0.8"
+          strokeLinecap="round"
+        />
       </>
     ),
   },
@@ -536,8 +915,23 @@ export const MONOLINE_DEFS = {
     color: "#D04423",
     symbol: (
       <>
-        <rect x="7" y="12.5" width="10" height="7" rx="0.8" fill="none" stroke="#D04423" strokeWidth="1" />
-        <polygon points="11,14.5 11,18 14,16.25" fill="none" stroke="#D04423" strokeWidth="0.8" strokeLinejoin="round" />
+        <rect
+          x="7"
+          y="12.5"
+          width="10"
+          height="7"
+          rx="0.8"
+          fill="none"
+          stroke="#D04423"
+          strokeWidth="1"
+        />
+        <polygon
+          points="11,14.5 11,18 14,16.25"
+          fill="none"
+          stroke="#D04423"
+          strokeWidth="0.8"
+          strokeLinejoin="round"
+        />
       </>
     ),
   },
@@ -546,8 +940,18 @@ export const MONOLINE_DEFS = {
     symbol: (
       <>
         <ellipse cx="12" cy="13.5" rx="4" ry="1.3" fill="none" stroke="#003B57" strokeWidth="0.9" />
-        <path d="M8 13.5v3c0 .72 1.79 1.3 4 1.3s4-.58 4-1.3v-3" fill="none" stroke="#003B57" strokeWidth="0.9" />
-        <path d="M8 16.5v3c0 .72 1.79 1.3 4 1.3s4-.58 4-1.3v-3" fill="none" stroke="#003B57" strokeWidth="0.9" />
+        <path
+          d="M8 13.5v3c0 .72 1.79 1.3 4 1.3s4-.58 4-1.3v-3"
+          fill="none"
+          stroke="#003B57"
+          strokeWidth="0.9"
+        />
+        <path
+          d="M8 16.5v3c0 .72 1.79 1.3 4 1.3s4-.58 4-1.3v-3"
+          fill="none"
+          stroke="#003B57"
+          strokeWidth="0.9"
+        />
       </>
     ),
   },
@@ -555,8 +959,21 @@ export const MONOLINE_DEFS = {
     color: "#2D8C3C",
     symbol: (
       <>
-        <path d="M12 12.5l-4 2v3c0 1.8 1.8 3.2 4 3.7 2.2-.5 4-1.9 4-3.7v-3z" fill="none" stroke="#2D8C3C" strokeWidth="1" strokeLinejoin="round" />
-        <path d="M10 16.5l1.5 1.5 3-3" stroke="#2D8C3C" strokeWidth="1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d="M12 12.5l-4 2v3c0 1.8 1.8 3.2 4 3.7 2.2-.5 4-1.9 4-3.7v-3z"
+          fill="none"
+          stroke="#2D8C3C"
+          strokeWidth="1"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M10 16.5l1.5 1.5 3-3"
+          stroke="#2D8C3C"
+          strokeWidth="1"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </>
     ),
   },
@@ -564,7 +981,12 @@ export const MONOLINE_DEFS = {
     color: "#7B5427",
     symbol: (
       <>
-        <path d="M7 13v7c1.5-1 3-1.5 5-1.5s3.5.5 5 1.5V13c-1.5-1-3-1.5-5-1.5S8.5 12 7 13z" fill="none" stroke="#7B5427" strokeWidth="0.9" />
+        <path
+          d="M7 13v7c1.5-1 3-1.5 5-1.5s3.5.5 5 1.5V13c-1.5-1-3-1.5-5-1.5S8.5 12 7 13z"
+          fill="none"
+          stroke="#7B5427"
+          strokeWidth="0.9"
+        />
         <line x1="12" y1="11.5" x2="12" y2="19.5" stroke="#7B5427" strokeWidth="0.6" />
       </>
     ),
@@ -577,7 +999,13 @@ export const MONOLINE_DEFS = {
     color: "#E10098",
     symbol: (
       <>
-        <polygon points="12,13 15.5,14.8 15.5,18.5 12,20.3 8.5,18.5 8.5,14.8" fill="none" stroke="#E10098" strokeWidth="0.8" strokeLinejoin="round" />
+        <polygon
+          points="12,13 15.5,14.8 15.5,18.5 12,20.3 8.5,18.5 8.5,14.8"
+          fill="none"
+          stroke="#E10098"
+          strokeWidth="0.8"
+          strokeLinejoin="round"
+        />
         <circle cx="12" cy="13" r="0.8" fill="none" stroke="#E10098" strokeWidth="0.7" />
         <circle cx="15.5" cy="14.8" r="0.8" fill="none" stroke="#E10098" strokeWidth="0.7" />
         <circle cx="15.5" cy="18.5" r="0.8" fill="none" stroke="#E10098" strokeWidth="0.7" />
@@ -591,9 +1019,36 @@ export const MONOLINE_DEFS = {
     color: "#4285F4",
     symbol: (
       <>
-        <rect x="8" y="13" width="8" height="2.3" rx="0.4" fill="none" stroke="#4285F4" strokeWidth="0.7" />
-        <rect x="8" y="15.8" width="8" height="2.3" rx="0.4" fill="none" stroke="#4285F4" strokeWidth="0.7" />
-        <rect x="8" y="18.6" width="8" height="2.3" rx="0.4" fill="none" stroke="#4285F4" strokeWidth="0.7" />
+        <rect
+          x="8"
+          y="13"
+          width="8"
+          height="2.3"
+          rx="0.4"
+          fill="none"
+          stroke="#4285F4"
+          strokeWidth="0.7"
+        />
+        <rect
+          x="8"
+          y="15.8"
+          width="8"
+          height="2.3"
+          rx="0.4"
+          fill="none"
+          stroke="#4285F4"
+          strokeWidth="0.7"
+        />
+        <rect
+          x="8"
+          y="18.6"
+          width="8"
+          height="2.3"
+          rx="0.4"
+          fill="none"
+          stroke="#4285F4"
+          strokeWidth="0.7"
+        />
       </>
     ),
   },
@@ -861,7 +1316,12 @@ export function resolveMonolineIconTypeByName(name: string): MonolineIconType | 
   if (lower === ".gitignore" || lower === ".gitattributes" || lower === ".editorconfig") {
     return "config";
   }
-  if (lower === "license" || lower.startsWith("license.") || lower === "changelog" || lower.startsWith("changelog.")) {
+  if (
+    lower === "license" ||
+    lower.startsWith("license.") ||
+    lower === "changelog" ||
+    lower.startsWith("changelog.")
+  ) {
     return "text";
   }
   return null;
@@ -895,13 +1355,7 @@ export function MonolineDocumentSvg({
         strokeLinejoin="round"
       />
       {/* Fold corner — stroke only */}
-      <path
-        d="M14 2v6h6"
-        fill="none"
-        stroke={color}
-        strokeWidth="0.9"
-        strokeLinejoin="round"
-      />
+      <path d="M14 2v6h6" fill="none" stroke={color} strokeWidth="0.9" strokeLinejoin="round" />
       {/* Symbol */}
       {def.symbol}
       {/* Fallback: show text label when there is no symbol (generic type) */}

@@ -187,7 +187,9 @@ function GetInfoPanelContent({
             }}
           />
         </div>
-        <div className="get-info-name" title={item.name}>{item.name}</div>
+        <div className="get-info-name" title={item.name}>
+          {item.name}
+        </div>
         <div className="get-info-kind-badge">{item.kindLabel}</div>
       </div>
 
@@ -287,7 +289,10 @@ function FolderSizeCell({
     return (
       <span className="folder-size-value">
         <span className="folder-size-detail">
-          <span>{detail.size}{detail.disk ? ` (${detail.disk})` : ""}</span>
+          <span>
+            {detail.size}
+            {detail.disk ? ` (${detail.disk})` : ""}
+          </span>
           <span className="folder-size-items">{detail.items}</span>
         </span>
         <button

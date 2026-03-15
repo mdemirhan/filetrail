@@ -55,7 +55,8 @@ export function FileIcon({ entry }: { entry: Entry }) {
     const isSymlink = entry.kind === "symlink_file";
     if (activeIconTheme === "colorblock") {
       const extension = entry.extension.toLowerCase();
-      const cbType = resolveColorblockIconTypeByName(entry.name) ?? resolveColorblockIconType(extension);
+      const cbType =
+        resolveColorblockIconTypeByName(entry.name) ?? resolveColorblockIconType(extension);
       return (
         <span className={`file-icon document colorblock${isSymlink ? " alias" : ""}`} aria-hidden>
           <ColorblockDocumentSvg iconType={cbType} label={resolveDocumentLabel(entry)} />
@@ -65,7 +66,8 @@ export function FileIcon({ entry }: { entry: Entry }) {
     }
     if (activeIconTheme === "monoline") {
       const extension = entry.extension.toLowerCase();
-      const mlType = resolveMonolineIconTypeByName(entry.name) ?? resolveMonolineIconType(extension);
+      const mlType =
+        resolveMonolineIconTypeByName(entry.name) ?? resolveMonolineIconType(extension);
       return (
         <span className={`file-icon document monoline${isSymlink ? " alias" : ""}`} aria-hidden>
           <MonolineDocumentSvg iconType={mlType} label={resolveDocumentLabel(entry)} />
@@ -100,26 +102,31 @@ function NativeAppIcon({ path }: { path: string }) {
   });
 
   useEffect(() => {
-    if (nativeIconCache.has(path)) {
-      const cached = nativeIconCache.get(path)!;
+    const cached = nativeIconCache.get(path);
+    if (cached !== undefined) {
       setIconSrc(cached);
       return;
     }
     let cancelled = false;
-    client.invoke("system:getFileIcon", { path, size: 64 }).then((res) => {
-      if (cancelled) return;
-      const base64 = res.pngBase64;
-      // Evict oldest entry if cache is full.
-      if (nativeIconCache.size >= NATIVE_ICON_CACHE_MAX) {
-        const firstKey = nativeIconCache.keys().next().value;
-        if (firstKey !== undefined) nativeIconCache.delete(firstKey);
-      }
-      nativeIconCache.set(path, base64);
-      setIconSrc(base64);
-    }).catch(() => {
-      if (!cancelled) setIconSrc(null);
-    });
-    return () => { cancelled = true; };
+    client
+      .invoke("system:getFileIcon", { path, size: 64 })
+      .then((res) => {
+        if (cancelled) return;
+        const base64 = res.pngBase64;
+        // Evict oldest entry if cache is full.
+        if (nativeIconCache.size >= NATIVE_ICON_CACHE_MAX) {
+          const firstKey = nativeIconCache.keys().next().value;
+          if (firstKey !== undefined) nativeIconCache.delete(firstKey);
+        }
+        nativeIconCache.set(path, base64);
+        setIconSrc(base64);
+      })
+      .catch(() => {
+        if (!cancelled) setIconSrc(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [path, client]);
 
   if (iconSrc) {
@@ -339,14 +346,57 @@ function resolveIconType(entry: Entry): string {
   // Code languages
   if (
     [
-      "ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs",
-      "py", "pyw", "pyi", "rs", "go", "java", "jar", "class",
-      "c", "h", "cpp", "hpp", "cc", "cxx", "hxx",
-      "cs", "csx", "rb", "erb", "rake", "php", "phtml",
-      "swift", "kt", "kts", "dart",
-      "lua", "r", "rmd", "scala", "sc", "pl", "pm",
-      "ex", "exs", "hs", "lhs", "zig", "jl",
-      "tex", "sty", "bib", "cls",
+      "ts",
+      "tsx",
+      "mts",
+      "cts",
+      "js",
+      "jsx",
+      "mjs",
+      "cjs",
+      "py",
+      "pyw",
+      "pyi",
+      "rs",
+      "go",
+      "java",
+      "jar",
+      "class",
+      "c",
+      "h",
+      "cpp",
+      "hpp",
+      "cc",
+      "cxx",
+      "hxx",
+      "cs",
+      "csx",
+      "rb",
+      "erb",
+      "rake",
+      "php",
+      "phtml",
+      "swift",
+      "kt",
+      "kts",
+      "dart",
+      "lua",
+      "r",
+      "rmd",
+      "scala",
+      "sc",
+      "pl",
+      "pm",
+      "ex",
+      "exs",
+      "hs",
+      "lhs",
+      "zig",
+      "jl",
+      "tex",
+      "sty",
+      "bib",
+      "cls",
     ].includes(extension)
   ) {
     return "code";
@@ -358,13 +408,36 @@ function resolveIconType(entry: Entry): string {
   // Data & structured formats
   if (
     [
-      "json", "jsonc", "json5", "ndjson", "jsonl",
-      "yaml", "yml", "toml", "sql",
-      "xml", "xsl", "xslt", "xsd", "plist",
-      "xls", "xlsx", "csv", "tsv", "ods", "numbers",
-      "ppt", "pptx", "odp", "keynote",
-      "graphql", "gql", "proto",
-      "db", "sqlite", "sqlite3",
+      "json",
+      "jsonc",
+      "json5",
+      "ndjson",
+      "jsonl",
+      "yaml",
+      "yml",
+      "toml",
+      "sql",
+      "xml",
+      "xsl",
+      "xslt",
+      "xsd",
+      "plist",
+      "xls",
+      "xlsx",
+      "csv",
+      "tsv",
+      "ods",
+      "numbers",
+      "ppt",
+      "pptx",
+      "odp",
+      "keynote",
+      "graphql",
+      "gql",
+      "proto",
+      "db",
+      "sqlite",
+      "sqlite3",
     ].includes(extension)
   ) {
     return "data";
@@ -384,19 +457,44 @@ function resolveIconType(entry: Entry): string {
   // Config files
   if (
     ["env", "ini", "cfg", "conf", "pem", "crt", "cer", "key", "p12", "pfx"].includes(extension) ||
-    name === ".env" || name.startsWith(".env.") ||
-    name === ".gitignore" || name === ".gitattributes" || name === ".editorconfig"
+    name === ".env" ||
+    name.startsWith(".env.") ||
+    name === ".gitignore" ||
+    name === ".gitattributes" ||
+    name === ".editorconfig"
   ) {
     return "config";
   }
   if (
-    name === "makefile" || name === "cmakelists.txt" || name === "rakefile" ||
-    name === "gemfile" || name === "podfile"
+    name === "makefile" ||
+    name === "cmakelists.txt" ||
+    name === "rakefile" ||
+    name === "gemfile" ||
+    name === "podfile"
   ) {
     return "config";
   }
   // Images (raster)
-  if (["png", "jpg", "jpeg", "gif", "webp", "heic", "ico", "bmp", "tiff", "avif", "raw", "psd", "ai", "cr2", "nef", "arw"].includes(extension)) {
+  if (
+    [
+      "png",
+      "jpg",
+      "jpeg",
+      "gif",
+      "webp",
+      "heic",
+      "ico",
+      "bmp",
+      "tiff",
+      "avif",
+      "raw",
+      "psd",
+      "ai",
+      "cr2",
+      "nef",
+      "arw",
+    ].includes(extension)
+  ) {
     return "image";
   }
   // SVG (vector)
@@ -408,11 +506,17 @@ function resolveIconType(entry: Entry): string {
     return "video";
   }
   // Audio
-  if (["mp3", "wav", "flac", "aac", "m4a", "ogg", "mid", "midi", "aiff", "wma"].includes(extension)) {
+  if (
+    ["mp3", "wav", "flac", "aac", "m4a", "ogg", "mid", "midi", "aiff", "wma"].includes(extension)
+  ) {
     return "audio";
   }
   // Archives
-  if (["zip", "tar", "gz", "xz", "rar", "7z", "bz2", "iso", "deb", "rpm", "pkg", "cab"].includes(extension)) {
+  if (
+    ["zip", "tar", "gz", "xz", "rar", "7z", "bz2", "iso", "deb", "rpm", "pkg", "cab"].includes(
+      extension,
+    )
+  ) {
     return "archive";
   }
   // PDF
@@ -436,7 +540,12 @@ function resolveIconType(entry: Entry): string {
     return "text";
   }
   // Name-based text
-  if (name === "license" || name.startsWith("license.") || name === "changelog" || name.startsWith("changelog.")) {
+  if (
+    name === "license" ||
+    name.startsWith("license.") ||
+    name === "changelog" ||
+    name.startsWith("changelog.")
+  ) {
     return "text";
   }
   return "generic";

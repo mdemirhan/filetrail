@@ -37,7 +37,7 @@ describe("GoToFolderDialog", () => {
     await act(async () => {});
 
     expect(screen.getByText("2 matches")).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: /demo/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /demo/i })).toBeInTheDocument();
     vi.useRealTimers();
   });
 
@@ -132,6 +132,9 @@ describe("GoToFolderDialog", () => {
     await act(async () => {
       outsideButton.focus();
       fireEvent.focusIn(outsideButton);
+      await new Promise<void>((resolve) => {
+        window.requestAnimationFrame(() => resolve());
+      });
     });
 
     expect(input).toHaveFocus();

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen } from "@testing-library/react";
-import { createRef, type ComponentProps } from "react";
+import { type ComponentProps, createRef } from "react";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 vi.mock("./TreePane", () => ({
@@ -66,8 +66,10 @@ afterAll(() => {
   if (originalClientWidth) {
     Object.defineProperty(HTMLElement.prototype, "clientWidth", originalClientWidth);
   } else {
-    // @ts-expect-error restoring test shim
-    delete HTMLElement.prototype.clientWidth;
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+      configurable: true,
+      value: undefined,
+    });
   }
   HTMLElement.prototype.getBoundingClientRect = originalGetBoundingClientRect;
   globalThis.ResizeObserver = originalResizeObserver;

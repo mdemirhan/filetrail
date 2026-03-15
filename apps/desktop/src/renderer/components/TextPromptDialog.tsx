@@ -148,7 +148,6 @@ export function TextPromptDialog({
           <input
             ref={inputRef}
             id="text-prompt-dialog-input"
-            autoFocus
             value={draftValue}
             placeholder={placeholder}
             onFocus={(event) => {

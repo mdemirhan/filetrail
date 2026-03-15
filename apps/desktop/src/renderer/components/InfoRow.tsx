@@ -126,7 +126,8 @@ function InfoRowFolderSize({
     return (
       <span className="folder-size-value">
         <span className="folder-size-detail">
-          {detail.size}{detail.disk ? ` (${detail.disk})` : ""} &middot; {detail.items}
+          {detail.size}
+          {detail.disk ? ` (${detail.disk})` : ""} &middot; {detail.items}
         </span>
         <button
           type="button"

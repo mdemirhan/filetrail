@@ -369,10 +369,7 @@ async function executeResolvedNode(args: {
     );
   } else if (args.fileSystem.copyFile) {
     await args.fileSystem.mkdir(dirname(currentNode.destinationPath), { recursive: true });
-    await args.fileSystem.copyFile(
-      currentNode.node.sourcePath,
-      currentNode.destinationPath,
-    );
+    await args.fileSystem.copyFile(currentNode.node.sourcePath, currentNode.destinationPath);
   } else {
     await args.fileSystem.copyFileStream(
       currentNode.node.sourcePath,
@@ -446,7 +443,11 @@ async function tryRenameForCut(
       await removeDestinationIfPresent(currentNode.destinationPath, args.fileSystem);
     }
     await args.fileSystem.mkdir(dirname(currentNode.destinationPath), { recursive: true });
-    await args.fileSystem.rename!(currentNode.node.sourcePath, currentNode.destinationPath);
+    const rename = args.fileSystem.rename;
+    if (!rename) {
+      return null;
+    }
+    await rename(currentNode.node.sourcePath, currentNode.destinationPath);
   } catch (error) {
     const nodeError = error as NodeJS.ErrnoException;
     if (nodeError.code === "EXDEV") {

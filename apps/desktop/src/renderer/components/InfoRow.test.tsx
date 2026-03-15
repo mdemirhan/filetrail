@@ -106,7 +106,9 @@ describe("InfoRow", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Cancel folder size calculation" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Cancel folder size calculation" }),
+    ).toBeInTheDocument();
   });
 
   it("shows formatted size with disk and items when ready", () => {
@@ -135,14 +137,7 @@ describe("InfoRow", () => {
   });
 
   it("shows regular size for file entries (no Calculate button)", () => {
-    render(
-      <InfoRow
-        open
-        currentPath="/Users/demo"
-        selectedEntry={fileEntry}
-        item={fileItem}
-      />,
-    );
+    render(<InfoRow open currentPath="/Users/demo" selectedEntry={fileEntry} item={fileItem} />);
 
     expect(screen.getByText("2.0 KB")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Calculate" })).not.toBeInTheDocument();

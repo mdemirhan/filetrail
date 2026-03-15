@@ -34,7 +34,10 @@ export function createFolderSizeHandlers(native: {
   getFolderSize: (path: string) => Promise<string>;
   cancelFolderSize: () => void;
 }) {
-  const folderSizeCache = new Map<string, { sizeBytes: number; diskBytes: number; fileCount: number }>();
+  const folderSizeCache = new Map<
+    string,
+    { sizeBytes: number; diskBytes: number; fileCount: number }
+  >();
   let activeJobId: string | null = null;
   let queuedJobId: string | null = null;
 

@@ -96,13 +96,9 @@ function RuntimeConflictSection({
 }) {
   return (
     <div>
-      <div className="action-notice-title copy-paste-runtime-conflict-section-title">
-        {label}
-      </div>
+      <div className="action-notice-title copy-paste-runtime-conflict-section-title">{label}</div>
       <p className="action-notice-message copy-paste-runtime-conflict-path">{path}</p>
-      <p className="action-notice-message copy-paste-runtime-conflict-detail">
-        {detail}
-      </p>
+      <p className="action-notice-message copy-paste-runtime-conflict-detail">{detail}</p>
     </div>
   );
 }

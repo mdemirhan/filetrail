@@ -1,14 +1,9 @@
 import type { RendererCommandType } from "../../shared/rendererCommands";
-import type { ShortcutContext } from "./shortcutPolicy";
 import type { CopyPasteClipboardState } from "./copyPasteClipboard";
-import {
-  hasClipboardItems,
-} from "./copyPasteClipboard";
-import {
-  isEditableFileEntry,
-  resolveNewFolderTargetPath,
-} from "./explorerAppUtils";
+import { hasClipboardItems } from "./copyPasteClipboard";
+import { isEditableFileEntry, resolveNewFolderTargetPath } from "./explorerAppUtils";
 import type { DirectoryEntry } from "./explorerTypes";
+import type { ShortcutContext } from "./shortcutPolicy";
 import { canHandleRendererCommand } from "./shortcutPolicy";
 
 const WRITE_LOCKED_RENDERER_COMMANDS = new Set<RendererCommandType>([

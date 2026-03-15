@@ -6,6 +6,22 @@ import { resolveAnalysisWithPolicy } from "./copyPastePolicy";
 import { MockWriteServiceFileSystem } from "./testUtils";
 import type { CopyPasteProgressEvent } from "./writeServiceTypes";
 
+function expectDefined<T>(value: T | null | undefined): NonNullable<T> {
+  expect(value).toBeDefined();
+  if (value == null) {
+    throw new Error("Expected value to be defined.");
+  }
+  return value;
+}
+
+function expectNode(fileSystem: MockWriteServiceFileSystem, path: string) {
+  return expectDefined(fileSystem.readNode(path));
+}
+
+function expectLastEvent(events: CopyPasteProgressEvent[]) {
+  return expectDefined(events.at(-1));
+}
+
 async function createResolvedOperation(args: {
   fileSystem: MockWriteServiceFileSystem;
   mode?: "copy" | "cut";
@@ -1475,7 +1491,7 @@ describe("copyPasteExecution", () => {
           sourceExistedDuringSecondCopy.push(fileSystem.exists("/source/a.txt"));
         }
         fileSystem.addFile(destinationPath, {
-          size: fileSystem.readNode(sourcePath)!.size,
+          size: expectNode(fileSystem, sourcePath).size,
         });
       };
 
@@ -1547,7 +1563,7 @@ describe("copyPasteExecution", () => {
         signal?.throwIfAborted();
         copyCount++;
         fileSystem.addFile(destinationPath, {
-          size: fileSystem.readNode(sourcePath)!.size,
+          size: expectNode(fileSystem, sourcePath).size,
         });
         if (copyCount === 2) {
           controller.abort();
@@ -1600,7 +1616,7 @@ describe("copyPasteExecution", () => {
         signal?.throwIfAborted();
         copyCount++;
         fileSystem.addFile(destinationPath, {
-          size: fileSystem.readNode(sourcePath)!.size,
+          size: expectNode(fileSystem, sourcePath).size,
         });
         if (copyCount === 2) {
           controller.abort();
@@ -1675,7 +1691,7 @@ describe("copyPasteExecution", () => {
       });
 
       expect(fileSystem.exists("/source/a.txt")).toBe(true);
-      expect(fileSystem.readNode("/source/a.txt")!.size).toBe(99);
+      expect(expectNode(fileSystem, "/source/a.txt").size).toBe(99);
       expect(fileSystem.exists("/target/a.txt")).toBe(true);
     });
 
@@ -1793,7 +1809,7 @@ describe("copyPasteExecution", () => {
       });
       fileSystem.copyFileStreamImpl = async (sourcePath, destinationPath) => {
         fileSystem.addFile(destinationPath, {
-          size: fileSystem.readNode(sourcePath)!.size,
+          size: expectNode(fileSystem, sourcePath).size,
         });
         fileSystem.mutateNode("/source/dir", (node) => ({
           ...node,
@@ -1967,7 +1983,7 @@ describe("copyPasteExecution", () => {
       expect(fileSystem.exists("/target/dir/new.txt")).toBe(true);
       // conflict.txt skipped (source preserved)
       expect(fileSystem.exists("/source/dir/conflict.txt")).toBe(true);
-      expect(fileSystem.readNode("/target/dir/conflict.txt")!.size).toBe(3);
+      expect(expectNode(fileSystem, "/target/dir/conflict.txt").size).toBe(3);
       // Source directory preserved (conflict.txt still there)
       expect(fileSystem.exists("/source/dir")).toBe(true);
     });
@@ -2040,7 +2056,7 @@ describe("copyPasteExecution", () => {
       });
 
       expect(fileSystem.exists("/source/a.txt")).toBe(true);
-      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(2);
+      expect(expectNode(fileSystem, "/target/a.txt").size).toBe(2);
     });
 
     it("cut with runtime conflict resolved as overwrite deletes source inline", async () => {
@@ -2071,7 +2087,7 @@ describe("copyPasteExecution", () => {
       });
 
       expect(fileSystem.exists("/source/a.txt")).toBe(false);
-      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(5);
+      expect(expectNode(fileSystem, "/target/a.txt").size).toBe(5);
     });
 
     it("nested child file deletion failure propagates to parent directory status", async () => {
@@ -2169,7 +2185,6 @@ describe("copyPasteExecution", () => {
       expect(fileSystem.exists("/source/a.txt")).toBe(true);
       expect(fileSystem.exists("/target/a.txt")).toBe(true);
     });
-
   });
 
   describe("same-filesystem rename optimization", () => {
@@ -2206,7 +2221,7 @@ describe("copyPasteExecution", () => {
 
       expect(copyFileStreamCalled).toBe(false);
       expect(fileSystem.exists("/source/a.txt")).toBe(false);
-      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(5);
+      expect(expectNode(fileSystem, "/target/a.txt").size).toBe(5);
     });
 
     it("uses rename for same-dev cut symlink", async () => {
@@ -2281,9 +2296,9 @@ describe("copyPasteExecution", () => {
       expect(fileSystem.exists("/source/dir")).toBe(false);
       expect(fileSystem.exists("/source/dir/a.txt")).toBe(false);
       expect(fileSystem.exists("/source/dir/sub/b.txt")).toBe(false);
-      expect(fileSystem.readNode("/target/dir")!.kind).toBe("directory");
-      expect(fileSystem.readNode("/target/dir/a.txt")!.size).toBe(3);
-      expect(fileSystem.readNode("/target/dir/sub/b.txt")!.size).toBe(7);
+      expect(expectNode(fileSystem, "/target/dir").kind).toBe("directory");
+      expect(expectNode(fileSystem, "/target/dir/a.txt").size).toBe(3);
+      expect(expectNode(fileSystem, "/target/dir/sub/b.txt").size).toBe(7);
     });
 
     it("falls back to copy+delete for cross-dev cut", async () => {
@@ -2297,7 +2312,7 @@ describe("copyPasteExecution", () => {
       fileSystem.copyFileStreamImpl = async (sourcePath, destinationPath, signal) => {
         signal?.throwIfAborted();
         copyFileStreamCalled = true;
-        fileSystem.addFile(destinationPath, { size: fileSystem.readNode(sourcePath)!.size });
+        fileSystem.addFile(destinationPath, { size: expectNode(fileSystem, sourcePath).size });
       };
       const { report, resolvedNodes } = await createResolvedOperation({
         fileSystem,
@@ -2321,7 +2336,7 @@ describe("copyPasteExecution", () => {
 
       expect(copyFileStreamCalled).toBe(true);
       expect(fileSystem.exists("/source/a.txt")).toBe(false);
-      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(5);
+      expect(expectNode(fileSystem, "/target/a.txt").size).toBe(5);
     });
 
     it("falls back to copy+delete on EXDEV error", async () => {
@@ -2338,7 +2353,7 @@ describe("copyPasteExecution", () => {
       fileSystem.copyFileStreamImpl = async (sourcePath, destinationPath, signal) => {
         signal?.throwIfAborted();
         copyFileStreamCalled = true;
-        fileSystem.addFile(destinationPath, { size: fileSystem.readNode(sourcePath)!.size });
+        fileSystem.addFile(destinationPath, { size: expectNode(fileSystem, sourcePath).size });
       };
       const { report, resolvedNodes } = await createResolvedOperation({
         fileSystem,
@@ -2362,7 +2377,7 @@ describe("copyPasteExecution", () => {
 
       expect(copyFileStreamCalled).toBe(true);
       expect(fileSystem.exists("/source/a.txt")).toBe(false);
-      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(5);
+      expect(expectNode(fileSystem, "/target/a.txt").size).toBe(5);
     });
 
     it("does NOT use rename for copy mode (only cut)", async () => {
@@ -2376,7 +2391,7 @@ describe("copyPasteExecution", () => {
       fileSystem.copyFileStreamImpl = async (sourcePath, destinationPath, signal) => {
         signal?.throwIfAborted();
         copyFileStreamCalled = true;
-        fileSystem.addFile(destinationPath, { size: fileSystem.readNode(sourcePath)!.size });
+        fileSystem.addFile(destinationPath, { size: expectNode(fileSystem, sourcePath).size });
       };
       const { report, resolvedNodes } = await createResolvedOperation({
         fileSystem,
@@ -2400,7 +2415,7 @@ describe("copyPasteExecution", () => {
 
       expect(copyFileStreamCalled).toBe(true);
       expect(fileSystem.exists("/source/a.txt")).toBe(true);
-      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(5);
+      expect(expectNode(fileSystem, "/target/a.txt").size).toBe(5);
     });
 
     it("does NOT use rename when fileSystem.rename is absent", async () => {
@@ -2414,7 +2429,7 @@ describe("copyPasteExecution", () => {
       fileSystem.copyFileStreamImpl = async (sourcePath, destinationPath, signal) => {
         signal?.throwIfAborted();
         copyFileStreamCalled = true;
-        fileSystem.addFile(destinationPath, { size: fileSystem.readNode(sourcePath)!.size });
+        fileSystem.addFile(destinationPath, { size: expectNode(fileSystem, sourcePath).size });
       };
       const { report, resolvedNodes } = await createResolvedOperation({
         fileSystem,
@@ -2438,7 +2453,7 @@ describe("copyPasteExecution", () => {
 
       expect(copyFileStreamCalled).toBe(true);
       expect(fileSystem.exists("/source/a.txt")).toBe(false);
-      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(5);
+      expect(expectNode(fileSystem, "/target/a.txt").size).toBe(5);
     });
 
     it("merges directories instead of renaming when action is merge", async () => {
@@ -2474,12 +2489,12 @@ describe("copyPasteExecution", () => {
       });
 
       // existing.txt preserved (merge, not replace)
-      expect(fileSystem.readNode("/target/dir/existing.txt")!.size).toBe(9);
+      expect(expectNode(fileSystem, "/target/dir/existing.txt").size).toBe(9);
       // Children moved individually via rename
       expect(fileSystem.exists("/source/dir/a.txt")).toBe(false);
       expect(fileSystem.exists("/source/dir/b.txt")).toBe(false);
-      expect(fileSystem.readNode("/target/dir/a.txt")!.size).toBe(3);
-      expect(fileSystem.readNode("/target/dir/b.txt")!.size).toBe(4);
+      expect(expectNode(fileSystem, "/target/dir/a.txt").size).toBe(3);
+      expect(expectNode(fileSystem, "/target/dir/b.txt").size).toBe(4);
     });
 
     it("rename with overwrite removes destination first", async () => {
@@ -2512,7 +2527,7 @@ describe("copyPasteExecution", () => {
       });
 
       expect(fileSystem.exists("/source/a.txt")).toBe(false);
-      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(10);
+      expect(expectNode(fileSystem, "/target/a.txt").size).toBe(10);
     });
 
     it("rename with keep_both uses alternate destination name", async () => {
@@ -2546,9 +2561,9 @@ describe("copyPasteExecution", () => {
 
       expect(fileSystem.exists("/source/a.txt")).toBe(false);
       // Original destination unchanged
-      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(2);
+      expect(expectNode(fileSystem, "/target/a.txt").size).toBe(2);
       // Renamed to alternate path
-      expect(fileSystem.readNode("/target/a copy.txt")!.size).toBe(8);
+      expect(expectNode(fileSystem, "/target/a copy.txt").size).toBe(8);
     });
 
     it("rename preserves inode (atomic move, not copy)", async () => {
@@ -2558,8 +2573,8 @@ describe("copyPasteExecution", () => {
         "/target": { kind: "directory" },
       });
       fileSystem.enableRename();
-      const originalIno = fileSystem.readNode("/source/a.txt")!.ino;
-      const originalMtimeMs = fileSystem.readNode("/source/a.txt")!.mtimeMs;
+      const originalIno = expectNode(fileSystem, "/source/a.txt").ino;
+      const originalMtimeMs = expectNode(fileSystem, "/source/a.txt").mtimeMs;
       const { report, resolvedNodes } = await createResolvedOperation({
         fileSystem,
         mode: "cut",
@@ -2580,7 +2595,7 @@ describe("copyPasteExecution", () => {
         requestResolution: async () => null,
       });
 
-      const destNode = fileSystem.readNode("/target/a.txt")!;
+      const destNode = expectNode(fileSystem, "/target/a.txt");
       expect(destNode.ino).toBe(originalIno);
       expect(destNode.mode).toBe(0o755);
       expect(destNode.mtimeMs).toBe(originalMtimeMs);
@@ -2599,9 +2614,9 @@ describe("copyPasteExecution", () => {
       fileSystem.copyFileStreamImpl = async (sourcePath, destinationPath, signal) => {
         signal?.throwIfAborted();
         copyFileStreamCalled = true;
-        fileSystem.addFile(destinationPath, { size: fileSystem.readNode(sourcePath)!.size });
+        fileSystem.addFile(destinationPath, { size: expectNode(fileSystem, sourcePath).size });
       };
-      const originalInoA = fileSystem.readNode("/source1/a.txt")!.ino;
+      const originalInoA = expectNode(fileSystem, "/source1/a.txt").ino;
       const { report, resolvedNodes } = await createResolvedOperation({
         fileSystem,
         mode: "cut",
@@ -2623,12 +2638,12 @@ describe("copyPasteExecution", () => {
       });
 
       // a.txt renamed (same dev) — inode preserved
-      expect(fileSystem.readNode("/target/a.txt")!.ino).toBe(originalInoA);
+      expect(expectNode(fileSystem, "/target/a.txt").ino).toBe(originalInoA);
       expect(fileSystem.exists("/source1/a.txt")).toBe(false);
       // b.txt copied+deleted (cross dev)
       expect(copyFileStreamCalled).toBe(true);
       expect(fileSystem.exists("/source2/b.txt")).toBe(false);
-      expect(fileSystem.readNode("/target/b.txt")!.size).toBe(7);
+      expect(expectNode(fileSystem, "/target/b.txt").size).toBe(7);
     });
 
     it("EXDEV fallback still performs inline source deletion", async () => {
@@ -2663,7 +2678,7 @@ describe("copyPasteExecution", () => {
 
       // Source deleted via inline deletion (Phase 1), not rename
       expect(fileSystem.exists("/source/a.txt")).toBe(false);
-      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(5);
+      expect(expectNode(fileSystem, "/target/a.txt").size).toBe(5);
     });
 
     it("rename of directory with overwrite action removes destination directory first", async () => {
@@ -2698,7 +2713,7 @@ describe("copyPasteExecution", () => {
       });
 
       expect(fileSystem.exists("/source/dir")).toBe(false);
-      expect(fileSystem.readNode("/target/dir/a.txt")!.size).toBe(3);
+      expect(expectNode(fileSystem, "/target/dir/a.txt").size).toBe(3);
       // old.txt gone because directory was overwritten (replaced), not merged
       expect(fileSystem.exists("/target/dir/old.txt")).toBe(false);
     });
@@ -2780,7 +2795,7 @@ describe("copyPasteExecution", () => {
       });
 
       expect(fileSystem.exists("/source/a.txt")).toBe(true);
-      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(99);
+      expect(expectNode(fileSystem, "/target/a.txt").size).toBe(99);
     });
 
     it("rename with runtime conflict resolved as overwrite uses rename", async () => {
@@ -2818,7 +2833,7 @@ describe("copyPasteExecution", () => {
 
       expect(copyFileStreamCalled).toBe(false);
       expect(fileSystem.exists("/source/a.txt")).toBe(false);
-      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(5);
+      expect(expectNode(fileSystem, "/target/a.txt").size).toBe(5);
     });
 
     it("directory rename reports correct byte progress for subtree", async () => {
@@ -2896,7 +2911,7 @@ describe("copyPasteExecution", () => {
 
       expect(copyFileStreamCalled).toBe(false);
       expect(chmodCalled).toBe(false);
-      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(5);
+      expect(expectNode(fileSystem, "/target/a.txt").size).toBe(5);
     });
 
     it("falls back to copyFileStream when copyFile absent", async () => {
@@ -2925,7 +2940,7 @@ describe("copyPasteExecution", () => {
         requestResolution: async () => null,
       });
 
-      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(5);
+      expect(expectNode(fileSystem, "/target/a.txt").size).toBe(5);
     });
 
     it("copyFileStream fallback preserves mtime via utimes", async () => {
@@ -2956,7 +2971,7 @@ describe("copyPasteExecution", () => {
         requestResolution: async () => null,
       });
 
-      expect(fileSystem.readNode("/target/a.txt")!.mtimeMs).toBe(5555);
+      expect(expectNode(fileSystem, "/target/a.txt").mtimeMs).toBe(5555);
     });
 
     it("copyFile preserves mode and mtime", async () => {
@@ -2985,7 +3000,7 @@ describe("copyPasteExecution", () => {
         requestResolution: async () => null,
       });
 
-      const dest = fileSystem.readNode("/target/a.txt")!;
+      const dest = expectNode(fileSystem, "/target/a.txt");
       expect(dest.mode).toBe(0o755);
       expect(dest.mtimeMs).toBe(9999);
     });
@@ -3020,9 +3035,9 @@ describe("copyPasteExecution", () => {
         requestResolution: async () => null,
       });
 
-      const finalEvent = events[events.length - 1]!;
-      expect(finalEvent.result!.status).toBe("failed");
-      expect(finalEvent.result!.error).toContain("EACCES");
+      const finalEvent = expectLastEvent(events);
+      expect(finalEvent.result?.status).toBe("failed");
+      expect(finalEvent.result?.error).toContain("EACCES");
     });
 
     it("utimes called for directories after mkdir + chmod", async () => {
@@ -3160,7 +3175,7 @@ describe("copyPasteExecution", () => {
       });
 
       // No error — utimes silently skipped
-      expect(fileSystem.readNode("/target/dir")!.kind).toBe("directory");
+      expect(expectNode(fileSystem, "/target/dir").kind).toBe("directory");
     });
 
     it("utimes ENOTSUP silently ignored", async () => {
@@ -3193,7 +3208,7 @@ describe("copyPasteExecution", () => {
         requestResolution: async () => null,
       });
 
-      expect(fileSystem.readNode("/target/dir")!.kind).toBe("directory");
+      expect(expectNode(fileSystem, "/target/dir").kind).toBe("directory");
     });
 
     it("utimes EOPNOTSUPP silently ignored", async () => {
@@ -3225,7 +3240,7 @@ describe("copyPasteExecution", () => {
         requestResolution: async () => null,
       });
 
-      expect(fileSystem.readNode("/target/link")!.kind).toBe("symlink");
+      expect(expectNode(fileSystem, "/target/link").kind).toBe("symlink");
     });
 
     it("utimes other errors propagate", async () => {
@@ -3259,9 +3274,9 @@ describe("copyPasteExecution", () => {
         requestResolution: async () => null,
       });
 
-      const finalEvent = events[events.length - 1]!;
-      expect(finalEvent.result!.status).toBe("failed");
-      expect(finalEvent.result!.error).toContain("EPERM");
+      const finalEvent = expectLastEvent(events);
+      expect(finalEvent.result?.status).toBe("failed");
+      expect(finalEvent.result?.error).toContain("EPERM");
     });
 
     it("copyFile + cut: inline source deletion still works", async () => {
@@ -3292,7 +3307,7 @@ describe("copyPasteExecution", () => {
       });
 
       expect(fileSystem.exists("/source/a.txt")).toBe(false);
-      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(5);
+      expect(expectNode(fileSystem, "/target/a.txt").size).toBe(5);
     });
 
     it("copyFile + rename: rename takes priority for same-dev cut", async () => {
@@ -3307,7 +3322,7 @@ describe("copyPasteExecution", () => {
       fileSystem.copyFileImpl = async () => {
         copyFileCalled = true;
       };
-      const originalIno = fileSystem.readNode("/source/a.txt")!.ino;
+      const originalIno = expectNode(fileSystem, "/source/a.txt").ino;
       const { report, resolvedNodes } = await createResolvedOperation({
         fileSystem,
         mode: "cut",
@@ -3329,7 +3344,7 @@ describe("copyPasteExecution", () => {
       });
 
       expect(copyFileCalled).toBe(false);
-      expect(fileSystem.readNode("/target/a.txt")!.ino).toBe(originalIno);
+      expect(expectNode(fileSystem, "/target/a.txt").ino).toBe(originalIno);
     });
 
     it("copyFile with overwrite: destination removed before native copy", async () => {
@@ -3360,7 +3375,7 @@ describe("copyPasteExecution", () => {
         requestResolution: async () => null,
       });
 
-      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(10);
+      expect(expectNode(fileSystem, "/target/a.txt").size).toBe(10);
     });
 
     it("copyFile with keep_both: correct alternate destination path used", async () => {
@@ -3374,7 +3389,7 @@ describe("copyPasteExecution", () => {
       const copyFilePaths: string[] = [];
       fileSystem.copyFileImpl = async (sourcePath, destinationPath) => {
         copyFilePaths.push(destinationPath);
-        fileSystem.addFile(destinationPath, { size: fileSystem.readNode(sourcePath)!.size });
+        fileSystem.addFile(destinationPath, { size: expectNode(fileSystem, sourcePath).size });
       };
       const { report, resolvedNodes } = await createResolvedOperation({
         fileSystem,
@@ -3397,8 +3412,8 @@ describe("copyPasteExecution", () => {
       });
 
       expect(copyFilePaths).toEqual(["/target/a copy.txt"]);
-      expect(fileSystem.readNode("/target/a.txt")!.size).toBe(2);
-      expect(fileSystem.readNode("/target/a copy.txt")!.size).toBe(8);
+      expect(expectNode(fileSystem, "/target/a.txt").size).toBe(2);
+      expect(expectNode(fileSystem, "/target/a copy.txt").size).toBe(8);
     });
 
     it("utimes uses source mtimeMs for both atime and mtime parameters", async () => {
@@ -3432,10 +3447,9 @@ describe("copyPasteExecution", () => {
         requestResolution: async () => null,
       });
 
-      const dirCall = utimesArgs.find((c) => c.path === "/target/dir");
-      expect(dirCall).toBeDefined();
-      expect(dirCall!.atimeMs).toBe(1234567890);
-      expect(dirCall!.mtimeMs).toBe(1234567890);
+      const dirCall = expectDefined(utimesArgs.find((c) => c.path === "/target/dir"));
+      expect(dirCall.atimeMs).toBe(1234567890);
+      expect(dirCall.mtimeMs).toBe(1234567890);
     });
   });
 
@@ -3535,7 +3549,7 @@ describe("copyPasteExecution", () => {
       fileSystem.copyFileImpl = async (src, dst) => {
         copyFileCalled = true;
         // Manually do the file copy since we can't delegate to the mock's own copyFile
-        const srcNode = fileSystem.readNode(src)!;
+        const srcNode = expectNode(fileSystem, src);
         fileSystem.addFile(dst, { size: srcNode.size, mode: srcNode.mode });
       };
 
@@ -3575,7 +3589,7 @@ describe("copyPasteExecution", () => {
 
       let renameCalled = false;
       let copyFileCalled = false;
-      const renameSize = fileSystem.readNode("/source/a.txt")!.size;
+      const renameSize = expectNode(fileSystem, "/source/a.txt").size;
       fileSystem.renameImpl = async (oldPath, newPath) => {
         renameCalled = true;
         const size = fileSystem.readNode(oldPath)?.size ?? 0;

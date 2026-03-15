@@ -74,7 +74,12 @@ export type CopyPasteReviewDialogSize = {
   width: number;
   height: number;
 };
-export type { LeftToolbarItems, LeftToolbarZone, ToolbarItemDefinition, ToolbarItemId } from "./toolbarItems";
+export type {
+  LeftToolbarItems,
+  LeftToolbarZone,
+  ToolbarItemDefinition,
+  ToolbarItemId,
+} from "./toolbarItems";
 
 // These option lists are used for both UI rendering and validation-like lookups.
 // Keep them stable unless the corresponding persisted preference values are migrated.

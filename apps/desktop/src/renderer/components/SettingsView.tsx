@@ -1,4 +1,11 @@
-import { type DragEvent as ReactDragEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import {
+  type DragEvent as ReactDragEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 
 import type {
@@ -22,9 +29,9 @@ import {
   DEFAULT_TERMINAL_APPLICATION,
   DEFAULT_TEXT_EDITOR,
   FAVORITE_ICON_OPTIONS,
+  ICON_THEME_OPTIONS,
   ZOOM_PERCENT_MAX,
   ZOOM_PERCENT_MIN,
-  ICON_THEME_OPTIONS,
   clampOpenItemLimit,
   clampZoomPercent,
   normalizeAccentColor,
@@ -303,7 +310,9 @@ function sortToolbarAvailableItems(items: ToolbarItemId[], order: readonly Toolb
     if (leftIndex !== rightIndex) {
       return leftIndex - rightIndex;
     }
-    return getToolbarItemDefinition(left).label.localeCompare(getToolbarItemDefinition(right).label);
+    return getToolbarItemDefinition(left).label.localeCompare(
+      getToolbarItemDefinition(right).label,
+    );
   });
 }
 
@@ -740,7 +749,7 @@ const PREVIEW_FILES = [
 function MiniDocClassic({ color, label }: { color: string; label: string }) {
   const fillBg = `${color}14`; // ~8% opacity
   return (
-    <svg viewBox="0 0 24 24" fill="none" width="14" height="14">
+    <svg viewBox="0 0 24 24" fill="none" width="14" height="14" aria-hidden="true">
       <path d={DOC_PATH} fill={fillBg} stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
       <path d={DOC_FOLD} fill={fillBg} stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
       <text
@@ -760,7 +769,7 @@ function MiniDocClassic({ color, label }: { color: string; label: string }) {
 
 function MiniDocColorblock({ color }: { color: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" width="14" height="14">
+    <svg viewBox="0 0 24 24" fill="none" width="14" height="14" aria-hidden="true">
       <path
         d={DOC_PATH}
         fill="white"
@@ -785,7 +794,7 @@ function MiniDocColorblock({ color }: { color: string }) {
 
 function MiniDocMonoline({ color }: { color: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" width="14" height="14">
+    <svg viewBox="0 0 24 24" fill="none" width="14" height="14" aria-hidden="true">
       <path d={DOC_PATH} fill="none" stroke={color} strokeWidth="0.9" strokeLinejoin="round" />
       <path d={DOC_FOLD} fill="none" stroke={color} strokeWidth="0.9" strokeLinejoin="round" />
     </svg>
@@ -794,7 +803,7 @@ function MiniDocMonoline({ color }: { color: string }) {
 
 function MiniDocVivid({ color }: { color: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" width="14" height="14">
+    <svg viewBox="0 0 24 24" fill="none" width="14" height="14" aria-hidden="true">
       <path d={DOC_PATH} fill={color} />
       <path d={DOC_FOLD} fill="white" fillOpacity="0.3" />
     </svg>
@@ -812,7 +821,7 @@ function MiniFolder({
     mode === "monoline" ? "none" : mode === "vivid" ? `${accentSolid}4D` : `${accentSolid}2E`;
   const sw = mode === "vivid" ? 1.75 : 1.5;
   return (
-    <svg viewBox="0 0 24 24" fill="none" width="14" height="14">
+    <svg viewBox="0 0 24 24" fill="none" width="14" height="14" aria-hidden="true">
       <path
         d={FOLDER_PATH}
         fill={fill}
@@ -835,7 +844,7 @@ function MiniStar({
   const fill = mode === "vivid" ? accentSolid : "none";
   const fillOp = mode === "vivid" ? 0.15 : 1;
   return (
-    <svg viewBox="0 0 24 24" fill="none" width="14" height="14">
+    <svg viewBox="0 0 24 24" fill="none" width="14" height="14" aria-hidden="true">
       <path
         d={STAR_PATH}
         fill={fill}
@@ -1057,7 +1066,8 @@ function AccentSelector({
   const popupRows = Math.ceil((accentOptions.length + 1) / popupColumns);
   const popupHeight = 20 + popupRows * 28 + (popupRows - 1) * 8;
 
-  const customButtonShadow = `conic-gradient(from 210deg, #d84a4a, #f0b236, #23c7d9, #9580ff, #e8729a, #d84a4a)`;
+  const customButtonShadow =
+    "conic-gradient(from 210deg, #d84a4a, #f0b236, #23c7d9, #9580ff, #e8729a, #d84a4a)";
   const customPickerValue =
     normalizeAccentColor(accent) ?? selected?.primary ?? accentOptions[0]?.value ?? "#d4845a";
 
@@ -1665,7 +1675,7 @@ function ToolbarSurfaceEditor({
   onReset?: () => void;
 }) {
   const lockedItemSet = new Set(lockedItems);
-  const rootRef = useRef<HTMLDivElement | null>(null);
+  const rootRef = useRef<HTMLFieldSetElement | null>(null);
   const activeSurfaceRef = useRef<HTMLDivElement | null>(null);
   const dragCounterRef = useRef<Record<number, number>>({});
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -1778,8 +1788,7 @@ function ToolbarSurfaceEditor({
   );
 
   return (
-    <div
-      role="group"
+    <fieldset
       aria-label={title}
       ref={rootRef}
       onDragOver={(event) => {
@@ -1814,6 +1823,10 @@ function ToolbarSurfaceEditor({
         display: "grid",
         gap: "10px",
         position: "relative",
+        border: 0,
+        margin: 0,
+        minWidth: 0,
+        padding: 0,
       }}
     >
       {tooltip ? (
@@ -1904,7 +1917,12 @@ function ToolbarSurfaceEditor({
                   setHoveredActiveIndex((current) => (current === index ? null : current));
                   hideTooltip();
                 }}
-                style={{ position: "relative", display: "flex", alignItems: "center", flexShrink: 0 }}
+                style={{
+                  position: "relative",
+                  display: "flex",
+                  alignItems: "center",
+                  flexShrink: 0,
+                }}
               >
                 {insertSide === "left" ? (
                   <div
@@ -2152,7 +2170,7 @@ function ToolbarSurfaceEditor({
           </div>
         )}
       </div>
-    </div>
+    </fieldset>
   );
 }
 
@@ -2721,7 +2739,9 @@ export function SettingsView({
     defaultTextEditor.appName === DEFAULT_TEXT_EDITOR.appName;
   const customizableTopToolbarItems = topToolbarItems.filter((itemId) => itemId !== "search");
   const customizableLeftMainItems = leftToolbarItems.main.filter((itemId) => itemId !== "settings");
-  const customizableLeftUtilityItems = leftToolbarItems.utility.filter((itemId) => itemId !== "settings");
+  const customizableLeftUtilityItems = leftToolbarItems.utility.filter(
+    (itemId) => itemId !== "settings",
+  );
   const topToolbarAvailableItems = getToolbarItemsForSurface("top")
     .map((item) => item.id)
     .filter((itemId) => {
@@ -2790,7 +2810,10 @@ export function SettingsView({
   );
   const handleTopToolbarMove = useCallback(
     (sourceIndex: number, targetIndex: number) => {
-      onTopToolbarItemsChange([...reorderToolbarItems(customizableTopToolbarItems, sourceIndex, targetIndex), "search"]);
+      onTopToolbarItemsChange([
+        ...reorderToolbarItems(customizableTopToolbarItems, sourceIndex, targetIndex),
+        "search",
+      ]);
     },
     [customizableTopToolbarItems, onTopToolbarItemsChange, reorderToolbarItems],
   );
@@ -2830,7 +2853,12 @@ export function SettingsView({
         [zone]: zone === "utility" ? [...nextItems, "settings"] : nextItems,
       });
     },
-    [customizableLeftMainItems, customizableLeftUtilityItems, leftToolbarItems, onLeftToolbarItemsChange],
+    [
+      customizableLeftMainItems,
+      customizableLeftUtilityItems,
+      leftToolbarItems,
+      onLeftToolbarItemsChange,
+    ],
   );
   const handleLeftToolbarMove = useCallback(
     (zone: "main" | "utility", sourceIndex: number, targetIndex: number) => {
@@ -2840,14 +2868,19 @@ export function SettingsView({
   );
   const handleLeftToolbarRemove = useCallback(
     (zone: "main" | "utility", index: number) => {
-      updateLeftToolbarZone(zone, (items) => items.filter((_, candidateIndex) => candidateIndex !== index));
+      updateLeftToolbarZone(zone, (items) =>
+        items.filter((_, candidateIndex) => candidateIndex !== index),
+      );
     },
     [updateLeftToolbarZone],
   );
   const handleLeftToolbarAdd = useCallback(
     (zone: "main" | "utility", itemId: ToolbarItemId) => {
       const definition = getToolbarItemDefinition(itemId);
-      if (itemId === "settings" || (!definition.allowDuplicates && leftToolbarConfigured.has(itemId))) {
+      if (
+        itemId === "settings" ||
+        (!definition.allowDuplicates && leftToolbarConfigured.has(itemId))
+      ) {
         return;
       }
       updateLeftToolbarZone(zone, (items) => [...items, itemId]);
@@ -3780,7 +3813,10 @@ export function SettingsView({
               onReset={() =>
                 onLeftToolbarItemsChange({
                   ...leftToolbarItems,
-                  utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility.filter((itemId) => itemId !== "settings"), "settings"],
+                  utility: [
+                    ...DEFAULT_LEFT_TOOLBAR_ITEMS.utility.filter((itemId) => itemId !== "settings"),
+                    "settings",
+                  ],
                 })
               }
             />

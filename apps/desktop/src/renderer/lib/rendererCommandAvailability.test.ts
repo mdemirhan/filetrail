@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { EMPTY_COPY_PASTE_CLIPBOARD, setCopyPasteClipboard } from "./copyPasteClipboard";
-import { canRunToolbarRendererCommand, type RendererCommandAvailabilityContext } from "./rendererCommandAvailability";
+import {
+  type RendererCommandAvailabilityContext,
+  canRunToolbarRendererCommand,
+} from "./rendererCommandAvailability";
 import type { ShortcutContext } from "./shortcutPolicy";
 
 function file(path: string) {
@@ -90,7 +93,11 @@ describe("canRunToolbarRendererCommand", () => {
       canRunToolbarRendererCommand(
         "pasteSelection",
         availabilityContext({
-          copyPasteClipboard: setCopyPasteClipboard("copy", ["/Users/demo/file.txt"], "2026-03-12T00:00:00.000Z"),
+          copyPasteClipboard: setCopyPasteClipboard(
+            "copy",
+            ["/Users/demo/file.txt"],
+            "2026-03-12T00:00:00.000Z",
+          ),
           pasteDestinationPath: null,
         }),
       ),
@@ -100,7 +107,11 @@ describe("canRunToolbarRendererCommand", () => {
       canRunToolbarRendererCommand(
         "pasteSelection",
         availabilityContext({
-          copyPasteClipboard: setCopyPasteClipboard("copy", ["/Users/demo/file.txt"], "2026-03-12T00:00:00.000Z"),
+          copyPasteClipboard: setCopyPasteClipboard(
+            "copy",
+            ["/Users/demo/file.txt"],
+            "2026-03-12T00:00:00.000Z",
+          ),
         }),
       ),
     ).toBe(true);
@@ -280,7 +291,11 @@ describe("canRunToolbarRendererCommand", () => {
   it("disables write-locked commands while a write operation is in flight", () => {
     const context = availabilityContext({
       writeOperationLocked: true,
-      copyPasteClipboard: setCopyPasteClipboard("copy", ["/Users/demo/file.txt"], "2026-03-12T00:00:00.000Z"),
+      copyPasteClipboard: setCopyPasteClipboard(
+        "copy",
+        ["/Users/demo/file.txt"],
+        "2026-03-12T00:00:00.000Z",
+      ),
     });
 
     expect(canRunToolbarRendererCommand("copySelection", context)).toBe(false);

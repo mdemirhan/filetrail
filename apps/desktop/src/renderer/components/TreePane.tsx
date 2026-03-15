@@ -20,9 +20,9 @@ import {
 } from "../../shared/appPreferences";
 import type { RendererCommandType } from "../../shared/rendererCommands";
 import {
-  getToolbarItemDefinition,
   type LeftToolbarItems,
   type ToolbarItemId,
+  getToolbarItemDefinition,
 } from "../../shared/toolbarItems";
 import {
   type TreeItemId,
@@ -364,6 +364,8 @@ export function TreePane({
   }, [themeButtonRef, themeMenuOpen]);
 
   useEffect(() => {
+    void selectedRowRegistrationVersion;
+    void treeVisibilityVersion;
     if (!selectedTreeItemId) {
       return;
     }
@@ -490,7 +492,7 @@ export function TreePane({
 
   function renderLeftToolbarItem(itemId: ToolbarItemId) {
     if (itemId === "leftSeparator") {
-      return <div key={itemId} className="sidebar-rail-separator" role="separator" aria-orientation="horizontal" />;
+      return <div key={itemId} className="sidebar-rail-separator" aria-hidden="true" />;
     }
     if (itemId === "back") {
       return (
@@ -797,7 +799,8 @@ export function TreePane({
     }
 
     const definition = getToolbarItemDefinition(itemId);
-    if (!definition.commandType) {
+    const commandType = definition.commandType;
+    if (!commandType) {
       return null;
     }
     return (
@@ -805,14 +808,25 @@ export function TreePane({
         key={itemId}
         type="button"
         className="sidebar-rail-button"
-        onClick={() => onRendererCommand(definition.commandType!)}
-        disabled={!canRunRendererCommand(definition.commandType)}
+        onClick={() => onRendererCommand(commandType)}
+        disabled={!canRunRendererCommand(commandType)}
         title={formatToolbarTooltip(definition.label, definition.shortcutLabel)}
         aria-label={definition.label}
       >
         <ToolbarIcon name={definition.icon} />
       </button>
     );
+  }
+
+  function renderToolbarItems(items: readonly ToolbarItemId[]) {
+    const keyCounts = new Map<string, number>();
+    return items
+      .filter((itemId) => itemId !== "settings")
+      .map((itemId) => {
+        const keyCount = (keyCounts.get(itemId) ?? 0) + 1;
+        keyCounts.set(itemId, keyCount);
+        return <Fragment key={`${itemId}:${keyCount}`}>{renderLeftToolbarItem(itemId)}</Fragment>;
+      });
   }
 
   return (
@@ -843,18 +857,10 @@ export function TreePane({
       <div className="sidebar-shell">
         <aside className="sidebar-rail">
           <div className="sidebar-rail-group sidebar-rail-group-main">
-            {leftToolbarItems.main
-              .filter((itemId) => itemId !== "settings")
-              .map((itemId, index) => (
-                <Fragment key={`${itemId}-${index}`}>{renderLeftToolbarItem(itemId)}</Fragment>
-              ))}
+            {renderToolbarItems(leftToolbarItems.main)}
           </div>
           <div className="sidebar-rail-group sidebar-rail-group-utility">
-            {leftToolbarItems.utility
-              .filter((itemId) => itemId !== "settings")
-              .map((itemId, index) => (
-                <Fragment key={`${itemId}-${index}`}>{renderLeftToolbarItem(itemId)}</Fragment>
-              ))}
+            {renderToolbarItems(leftToolbarItems.utility)}
             {renderLeftToolbarItem("settings")}
           </div>
         </aside>

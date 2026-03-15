@@ -3,10 +3,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { type ComponentProps, createRef } from "react";
 
-import {
-  DEFAULT_LEFT_TOOLBAR_ITEMS,
-  type LeftToolbarItems,
-} from "../../shared/toolbarItems";
+import { DEFAULT_LEFT_TOOLBAR_ITEMS, type LeftToolbarItems } from "../../shared/toolbarItems";
 import { TreePane } from "./TreePane";
 
 const themeButtonRef = createRef<HTMLButtonElement>();

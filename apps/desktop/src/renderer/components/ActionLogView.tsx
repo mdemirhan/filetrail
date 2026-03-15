@@ -1,6 +1,11 @@
 import { type CSSProperties, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 
-import type { ActionLogAction, ActionLogEntry, ActionLogItem, ActionLogStatus } from "@filetrail/contracts";
+import type {
+  ActionLogAction,
+  ActionLogEntry,
+  ActionLogItem,
+  ActionLogStatus,
+} from "@filetrail/contracts";
 
 import type { AccentMode, ThemeMode } from "../../shared/appPreferences";
 import { generateAccentTokens } from "../lib/accent";
@@ -666,7 +671,9 @@ export function ActionLogView({
                               </div>
                               <div>
                                 <div style={eyebrowStyle(palette)}>Destination</div>
-                                <div style={pathValueStyle(palette)}>{conflict.destinationPath}</div>
+                                <div style={pathValueStyle(palette)}>
+                                  {conflict.destinationPath}
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -699,17 +706,34 @@ export function ActionLogView({
                         <div style={sectionTitleStyle(palette)}>Items</div>
                         {(
                           [
-                            { key: "failed", label: "Failures", items: entry.items.filter((i) => i.status === "failed") },
-                            { key: "skipped", label: "Skipped", items: entry.items.filter((i) => i.status === "skipped") },
-                            { key: "completed", label: "Succeeded", items: entry.items.filter((i) => i.status === "completed") },
-                            { key: "cancelled", label: "Cancelled", items: entry.items.filter((i) => i.status === "cancelled") },
+                            {
+                              key: "failed",
+                              label: "Failures",
+                              items: entry.items.filter((i) => i.status === "failed"),
+                            },
+                            {
+                              key: "skipped",
+                              label: "Skipped",
+                              items: entry.items.filter((i) => i.status === "skipped"),
+                            },
+                            {
+                              key: "completed",
+                              label: "Succeeded",
+                              items: entry.items.filter((i) => i.status === "completed"),
+                            },
+                            {
+                              key: "cancelled",
+                              label: "Cancelled",
+                              items: entry.items.filter((i) => i.status === "cancelled"),
+                            },
                           ] as const
                         )
                           .filter((cat) => cat.items.length > 0)
                           .map((cat) => {
                             const sectionKey = `${entry.id}:${cat.key}`;
                             // Failures expanded by default, others collapsed
-                            const isCollapsed = collapsedSections[sectionKey] ?? cat.key !== "failed";
+                            const isCollapsed =
+                              collapsedSections[sectionKey] ?? cat.key !== "failed";
                             return (
                               <div key={cat.key} style={{ marginTop: "8px" }}>
                                 <button
@@ -877,7 +901,9 @@ function formatInitiatorLabel(initiator: ActionLogEntry["initiator"]): string {
   return "Unknown";
 }
 
-function formatSkipReasonLabel(skipReason: NonNullable<ActionLogEntry["items"][number]["skipReason"]>): string {
+function formatSkipReasonLabel(
+  skipReason: NonNullable<ActionLogEntry["items"][number]["skipReason"]>,
+): string {
   if (skipReason === "planned_conflict_policy") {
     return "Skipped by planned conflict policy";
   }
@@ -1632,9 +1658,7 @@ function formatActionLogEntryForClipboard(entry: ActionLogEntry): string {
       lines.push("", `${cat.label} (${cat.items.length}):`);
       for (const item of cat.items) {
         const kindTag = item.sourceKind ? `[${formatSourceKindLabel(item.sourceKind)}] ` : "";
-        lines.push(
-          `- ${kindTag}${item.sourcePath ?? "None"} -> ${item.destinationPath ?? "None"}`,
-        );
+        lines.push(`- ${kindTag}${item.sourcePath ?? "None"} -> ${item.destinationPath ?? "None"}`);
         if (item.skipReason) {
           lines.push(`  Skip reason: ${formatSkipReasonLabel(item.skipReason)}`);
         }

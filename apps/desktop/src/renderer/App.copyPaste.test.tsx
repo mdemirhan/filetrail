@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { useEffect, useState, type RefObject } from "react";
+import { type RefObject, useEffect, useState } from "react";
 
 import type {
   CopyPasteProgressEvent,
@@ -1935,7 +1935,9 @@ describe("App copy/paste integration", () => {
       fireEvent.click(screen.getByText("Move"));
     });
 
-    expect(await screen.findByText("Source and destination cannot be the same.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Source and destination cannot be the same."),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("Move To")).toBeInTheDocument();
     expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
   });
@@ -3899,8 +3901,8 @@ describe("App copy/paste integration", () => {
           return false;
         }
         return (
-          (call.payload as IpcRequestInput<"app:updatePreferences">).preferences.lastGoToFolderPath ===
-          "/Users/demo/Remembered"
+          (call.payload as IpcRequestInput<"app:updatePreferences">).preferences
+            .lastGoToFolderPath === "/Users/demo/Remembered"
         );
       });
       expect(persistedCall).toBeDefined();
@@ -4576,9 +4578,7 @@ describe("App copy/paste integration", () => {
     expect(screen.getByText("Source")).toBeInTheDocument();
     expect(screen.getByText("Destination")).toBeInTheDocument();
     expect(screen.getAllByText("/Users/demo/Folder").length).toBeGreaterThanOrEqual(2);
-    expect(
-      screen.getByText(/the destination item changed after planning/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/the destination item changed after planning/i)).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Replace Folder" })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Merge Folders" })).toBeInTheDocument();
     expect(
@@ -4731,7 +4731,10 @@ describe("App copy/paste integration", () => {
     const nonProbeInvocations = () =>
       harness.invocations.filter(
         (inv) =>
-          !(inv.channel === "folderSize:start" && (inv.payload as { probeOnly?: boolean })?.probeOnly),
+          !(
+            inv.channel === "folderSize:start" &&
+            (inv.payload as { probeOnly?: boolean })?.probeOnly
+          ),
       );
 
     const invocationCountBeforeBlockedCopy = nonProbeInvocations().length;
@@ -4994,9 +4997,9 @@ describe("App copy/paste integration", () => {
     });
 
     await vi.waitFor(() => {
-      expect(harness.invocations.some((call) => call.channel === "copyPaste:analyzeGetUpdate")).toBe(
-        true,
-      );
+      expect(
+        harness.invocations.some((call) => call.channel === "copyPaste:analyzeGetUpdate"),
+      ).toBe(true);
     });
     expect(screen.queryByText("Paste couldn't start")).not.toBeInTheDocument();
     expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
@@ -6586,7 +6589,9 @@ describe("App copy/paste integration", () => {
         "/Users/demo/tmp2/test1/kotlin": {
           path: "/Users/demo/tmp2/test1/kotlin",
           parentPath: "/Users/demo/tmp2/test1",
-          entries: [createDirectoryEntry("/Users/demo/tmp2/test1/kotlin/composetest1", "directory")],
+          entries: [
+            createDirectoryEntry("/Users/demo/tmp2/test1/kotlin/composetest1", "directory"),
+          ],
         },
         "/Users/demo/tmp2/test1/kotlin/composetest1": {
           path: "/Users/demo/tmp2/test1/kotlin/composetest1",
@@ -6818,10 +6823,12 @@ function createAppHarness(
         const targetPath = (payload as IpcRequestInput<"item:getProperties">).path;
         if (Object.prototype.hasOwnProperty.call(args.itemPropertiesByPath ?? {}, targetPath)) {
           const item =
-            ((args.itemPropertiesByPath ?? {}) as Record<
-              string,
-              "missing" | NonNullable<IpcResponse<"item:getProperties">["item"]>
-            >)[targetPath] ?? "missing";
+            (
+              (args.itemPropertiesByPath ?? {}) as Record<
+                string,
+                "missing" | NonNullable<IpcResponse<"item:getProperties">["item"]>
+              >
+            )[targetPath] ?? "missing";
           return {
             item: item === "missing" ? null : item,
           } as IpcResponse<C>;
@@ -7321,8 +7328,7 @@ function toAnalysisReport(
       issueMessage: null,
       totalNodeCount: 1,
       conflictNodeCount: item.status === "conflict" ? 1 : 0,
-      destinationTotalNodeCount:
-        item.status === "conflict" && item.kind === "directory" ? 0 : null,
+      destinationTotalNodeCount: item.status === "conflict" && item.kind === "directory" ? 0 : null,
     })),
     issues: plan.issues,
     warnings: plan.warnings,

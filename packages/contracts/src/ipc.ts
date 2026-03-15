@@ -176,11 +176,7 @@ export const copyPasteRuntimeResolutionActionSchema = z.enum([
   "keep_both",
   "merge",
 ]);
-export const writeOperationInitiatorSchema = z.enum([
-  "clipboard",
-  "drag_drop",
-  "move_dialog",
-]);
+export const writeOperationInitiatorSchema = z.enum(["clipboard", "drag_drop", "move_dialog"]);
 export const copyPastePlanItemStatusSchema = z.enum(["ready", "conflict", "blocked"]);
 export const copyPastePlanIssueCodeSchema = z.enum([
   "destination_missing",
@@ -1062,7 +1058,9 @@ export type IpcResponse<C extends IpcChannel> = z.output<IpcContractSchemas[C]["
 export type CopyPastePlan = z.output<typeof copyPastePlanSchema>;
 export type CopyPasteOperationResult = z.output<typeof copyPasteOperationResultSchema>;
 export type CopyPasteProgressEvent = z.output<typeof copyPasteProgressEventSchema>;
-export type CopyPasteRuntimeResolutionAction = z.output<typeof copyPasteRuntimeResolutionActionSchema>;
+export type CopyPasteRuntimeResolutionAction = z.output<
+  typeof copyPasteRuntimeResolutionActionSchema
+>;
 export type WriteOperationAction = z.output<typeof writeOperationActionSchema>;
 export type WriteOperationInitiator = z.output<typeof writeOperationInitiatorSchema>;
 export type WriteOperationResult = z.output<typeof writeOperationResultSchema>;

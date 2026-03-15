@@ -46,17 +46,23 @@ import {
   getPathLeafName,
   isDirectoryLikeEntry,
   isEditableFileEntry,
+  isExpectedPlannedSkipResult,
   resolveNewFolderTargetPath,
   resolveWriteOperationRefreshPath,
   resolveWriteOperationSelectionDirectoryPath,
   resolveWriteOperationTreeReloadPaths,
   resolveWriteOperationTreeSelectionPath,
-  isExpectedPlannedSkipResult,
   shouldRenderCopyPasteResultDialog,
 } from "../lib/explorerAppUtils";
 import { parentDirectoryPath } from "../lib/explorerNavigation";
 import type { DirectoryEntry } from "../lib/explorerTypes";
-import { createFavorite, getFileSystemItemPath, getTrashPath, isFavoritePath, isPathInsideTrash } from "../lib/favorites";
+import {
+  createFavorite,
+  getFileSystemItemPath,
+  getTrashPath,
+  isFavoritePath,
+  isPathInsideTrash,
+} from "../lib/favorites";
 import type { useFiletrailClient } from "../lib/filetrailClient";
 import type { InternalMoveSourceSurface } from "../lib/internalDragAndDrop";
 import { createRendererLogger } from "../lib/logging";
@@ -443,7 +449,7 @@ export function useExplorerActions(args: {
       return null;
     }
     return isFavoritePath(favorites, targetPath) ? "Remove from Favorites" : "Add to Favorites";
-  }, [contextMenuState, contextMenuTargetEntries, favorites, isSearchMode]);
+  }, [contextMenuState, contextMenuTargetEntries, favorites, homePath, isSearchMode]);
 
   const contextMenuHiddenActionIds = useMemo(() => {
     if (!contextMenuState) {
@@ -481,7 +487,7 @@ export function useExplorerActions(args: {
       hidden.add("showPackageContents");
     }
     return Array.from(hidden);
-  }, [contextMenuFavoriteToggleLabel, contextMenuState, contextMenuTargetEntries]);
+  }, [contextMenuFavoriteToggleLabel, contextMenuState, contextMenuTargetEntries, homePath]);
 
   const contextMenuDisabledActionIds = useMemo(() => {
     if (!contextMenuState) {
@@ -1446,8 +1452,7 @@ export function useExplorerActions(args: {
       }
       return {
         status: "error",
-        message:
-          error instanceof Error ? error.message : getCopyLikeStartFailureMessage(action),
+        message: error instanceof Error ? error.message : getCopyLikeStartFailureMessage(action),
       };
     }
   }
@@ -1636,10 +1641,14 @@ export function useExplorerActions(args: {
       return;
     }
     if (request.mode === "cut") {
-      const outcome = await startMoveToDestination(request.sourcePaths, request.destinationDirectoryPath, {
-        clearClipboardOnStart: true,
-        initiator: "clipboard",
-      });
+      const outcome = await startMoveToDestination(
+        request.sourcePaths,
+        request.destinationDirectoryPath,
+        {
+          clearClipboardOnStart: true,
+          initiator: "clipboard",
+        },
+      );
       if (outcome.status === "blocked" || outcome.status === "error") {
         surfaceCopyLikePreStartFailureToast("move_to", outcome);
       }
@@ -2487,7 +2496,10 @@ export function useExplorerActions(args: {
     if (!moveDialogState) {
       return;
     }
-    const resolvedDestinationDirectoryPath = expandHomeShortcut(destinationDirectoryPath.trim(), homePath);
+    const resolvedDestinationDirectoryPath = expandHomeShortcut(
+      destinationDirectoryPath.trim(),
+      homePath,
+    );
     setMoveDialogState((current) =>
       current ? { ...current, submitting: true, error: null } : current,
     );
@@ -2529,9 +2541,7 @@ export function useExplorerActions(args: {
   async function browseForDirectoryPath(currentDirectoryPath: string): Promise<string | null> {
     const response = await client.invoke("system:pickDirectory", {
       defaultPath:
-        currentDirectoryPath.length > 0
-          ? expandHomeShortcut(currentDirectoryPath, homePath)
-          : null,
+        currentDirectoryPath.length > 0 ? expandHomeShortcut(currentDirectoryPath, homePath) : null,
     });
     return response.canceled ? null : response.path;
   }
@@ -2720,7 +2730,9 @@ export function useExplorerActions(args: {
       }
       showModalNotice(
         "Move to Trash",
-        error instanceof Error ? error.message : "File Trail could not move the selected items to Trash.",
+        error instanceof Error
+          ? error.message
+          : "File Trail could not move the selected items to Trash.",
       );
     }
   }
@@ -2759,7 +2771,9 @@ export function useExplorerActions(args: {
       }
       showModalNotice(
         "Delete Immediately",
-        error instanceof Error ? error.message : "File Trail could not permanently delete the selected items.",
+        error instanceof Error
+          ? error.message
+          : "File Trail could not permanently delete the selected items.",
       );
     }
   }

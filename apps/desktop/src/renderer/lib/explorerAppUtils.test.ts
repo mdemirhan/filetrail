@@ -1,8 +1,8 @@
 import type { WriteOperationProgressEvent } from "@filetrail/contracts";
 
 import {
-  isFolderSizeEligibleKind,
   isExpectedPlannedSkipResult,
+  isFolderSizeEligibleKind,
   resolveExplorerTreeRootPath,
   resolvePasteDestinationPath,
   resolveWriteOperationRefreshPath,

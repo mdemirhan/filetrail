@@ -38,15 +38,11 @@ export function GoToFolderDialog({
 }) {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const listRef = useRef<HTMLDivElement | null>(null);
+  const listRef = useRef<HTMLUListElement | null>(null);
   const openRef = useRef(open);
+  const focusInputAtEndRef = useRef<() => void>(() => undefined);
   const [browseInProgress, setBrowseInProgress] = useState(false);
-  const {
-    draftValue,
-    suggestions,
-    setValue,
-    clearSuggestions,
-  } = usePathSuggestions({
+  const { draftValue, suggestions, setValue, clearSuggestions } = usePathSuggestions({
     open,
     initialInput: currentPath,
     inputRef,
@@ -55,7 +51,7 @@ export function GoToFolderDialog({
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [inputFocused, setInputFocused] = useState(false);
 
-  function focusInputAtEnd(): void {
+  focusInputAtEndRef.current = () => {
     const input = inputRef.current;
     if (!input) {
       return;
@@ -63,7 +59,7 @@ export function GoToFolderDialog({
     input.focus({ preventScroll: true });
     const valueLength = input.value.length;
     input.setSelectionRange(valueLength, valueLength);
-  }
+  };
 
   useEffect(() => {
     openRef.current = open;
@@ -81,16 +77,16 @@ export function GoToFolderDialog({
     if (!input) {
       return;
     }
-    focusInputAtEnd();
+    focusInputAtEndRef.current();
     const timeoutId = window.setTimeout(() => {
-      focusInputAtEnd();
+      focusInputAtEndRef.current();
     }, 0);
     const frameId = window.requestAnimationFrame(() => {
-      focusInputAtEnd();
+      focusInputAtEndRef.current();
     });
     const secondFrameId = window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
-        focusInputAtEnd();
+        focusInputAtEndRef.current();
       });
     });
     return () => {
@@ -98,7 +94,7 @@ export function GoToFolderDialog({
       window.cancelAnimationFrame(frameId);
       window.cancelAnimationFrame(secondFrameId);
     };
-  }, [currentPath, open]);
+  }, [open]);
 
   useEffect(() => {
     if (!open) {
@@ -124,7 +120,7 @@ export function GoToFolderDialog({
         if (!openRef.current) {
           return;
         }
-        focusInputAtEnd();
+        focusInputAtEndRef.current();
       });
     };
     const onKeyDown = (event: KeyboardEvent) => {
@@ -158,7 +154,7 @@ export function GoToFolderDialog({
     return null;
   }
 
-  const selectedSuggestion = selectedIndex >= 0 ? suggestions[selectedIndex] ?? null : null;
+  const selectedSuggestion = selectedIndex >= 0 ? (suggestions[selectedIndex] ?? null) : null;
   const canSubmit = draftValue.trim().length > 0 && !submitting;
 
   async function handleBrowse(): Promise<void> {
@@ -167,7 +163,9 @@ export function GoToFolderDialog({
     }
     setBrowseInProgress(true);
     try {
-      const pickedPath = await onBrowse(draftValue.trim().length > 0 ? draftValue.trim() : currentPath);
+      const pickedPath = await onBrowse(
+        draftValue.trim().length > 0 ? draftValue.trim() : currentPath,
+      );
       if (!pickedPath) {
         return;
       }
@@ -217,7 +215,7 @@ export function GoToFolderDialog({
           if (event.target !== dialogRef.current) {
             return;
           }
-          focusInputAtEnd();
+          focusInputAtEndRef.current();
         }}
         onKeyDown={(event) => {
           if (event.defaultPrevented) {
@@ -256,12 +254,7 @@ export function GoToFolderDialog({
           <div className="go-to-folder-header-copy">
             <h2>{title}</h2>
           </div>
-          <button
-            type="button"
-            className="go-to-folder-close"
-            onClick={onClose}
-            aria-label="Close"
-          >
+          <button type="button" className="go-to-folder-close" onClick={onClose} aria-label="Close">
             <svg viewBox="0 0 14 14" fill="none" aria-hidden="true">
               <path d="M1 1l12 12M13 1L1 13" />
             </svg>
@@ -296,7 +289,6 @@ export function GoToFolderDialog({
               aria-label={inputAriaLabel}
               spellCheck={false}
               autoComplete="off"
-              autoFocus
               value={draftValue}
               onChange={(event) => setValue(event.currentTarget.value, true)}
               onFocus={() => setInputFocused(true)}
@@ -372,37 +364,35 @@ export function GoToFolderDialog({
                   {suggestions.length} match{suggestions.length === 1 ? "" : "es"}
                 </span>
               </div>
-              <div
+              <ul
                 ref={listRef}
                 className="go-to-folder-suggestions-list"
-                role="listbox"
                 aria-label="Folder suggestions"
               >
                 {suggestions.map((suggestion, index) => {
                   const isSelected = selectedIndex === index;
                   return (
-                    <button
-                      key={suggestion.path}
-                      type="button"
-                      role="option"
-                      aria-selected={isSelected}
-                      data-go-to-folder-index={index}
-                      className={`go-to-folder-suggestion${isSelected ? " is-selected" : ""}`}
-                      onClick={() => acceptSuggestion(suggestion, index)}
-                      onMouseEnter={() => setSelectedIndex(index)}
-                    >
-                      <span className="go-to-folder-suggestion-icon" aria-hidden="true">
-                        <svg viewBox="0 0 14 14" fill="none">
-                          <path d="M1.5 3l3-1.5h8v10.5H4.5l-3-1.5V3z" />
-                          <path d="M4.5 1.5v10.5" />
-                        </svg>
-                      </span>
-                      <span className="go-to-folder-suggestion-name">{suggestion.name}</span>
-                      <span className="go-to-folder-suggestion-path">{suggestion.path}</span>
-                    </button>
+                    <li key={suggestion.path}>
+                      <button
+                        type="button"
+                        data-go-to-folder-index={index}
+                        className={`go-to-folder-suggestion${isSelected ? " is-selected" : ""}`}
+                        onClick={() => acceptSuggestion(suggestion, index)}
+                        onMouseEnter={() => setSelectedIndex(index)}
+                      >
+                        <span className="go-to-folder-suggestion-icon" aria-hidden="true">
+                          <svg viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                            <path d="M1.5 3l3-1.5h8v10.5H4.5l-3-1.5V3z" />
+                            <path d="M4.5 1.5v10.5" />
+                          </svg>
+                        </span>
+                        <span className="go-to-folder-suggestion-name">{suggestion.name}</span>
+                        <span className="go-to-folder-suggestion-path">{suggestion.path}</span>
+                      </button>
+                    </li>
                   );
                 })}
-              </div>
+              </ul>
             </>
           ) : (
             <div className="go-to-folder-empty-state">

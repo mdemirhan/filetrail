@@ -23,9 +23,7 @@ vi.mock("./TextPromptDialog", () => ({
 }));
 
 describe("AppDialogs", () => {
-  function renderAppDialogs(
-    overrides: Partial<Parameters<typeof AppDialogs>[0]> = {},
-  ) {
+  function renderAppDialogs(overrides: Partial<Parameters<typeof AppDialogs>[0]> = {}) {
     return render(
       <AppDialogs
         locationSheetOpen={false}

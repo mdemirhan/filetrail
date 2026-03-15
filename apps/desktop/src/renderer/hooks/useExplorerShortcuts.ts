@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import { clampZoomPercent } from "../../shared/appPreferences";
+import type { RendererCommandType } from "../../shared/rendererCommands";
 import type { ContentSelectionState } from "../lib/contentSelection";
 import { resolveNewFolderTargetPath } from "../lib/explorerAppUtils";
 import { parentDirectoryPath } from "../lib/explorerNavigation";
@@ -29,7 +30,6 @@ import {
   resolveOpenSelectionPaths,
 } from "../lib/shortcutTargets";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
-import type { RendererCommandType } from "../../shared/rendererCommands";
 import type { ContextMenuState } from "./useWriteOperations";
 
 type RawShortcutBinding = {

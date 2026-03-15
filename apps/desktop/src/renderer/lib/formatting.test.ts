@@ -12,6 +12,14 @@ import {
   splitPermissionMode,
 } from "./formatting";
 
+function expectDefined<T>(value: T | null | undefined): NonNullable<T> {
+  expect(value).toBeDefined();
+  if (value == null) {
+    throw new Error("Expected value to be defined.");
+  }
+  return value;
+}
+
 describe("formatting helpers", () => {
   it("formats invalid dates defensively", () => {
     expect(formatDateTime("bad-date")).toBe("Not available");
@@ -152,26 +160,26 @@ describe("formatting helpers", () => {
     it("returns delta when same formatted size but different bytes (src larger)", () => {
       // 1100000 and 1101000 both format to "1.0 MB"
       const result = formatSizeComparison(1101000, 1100000);
-      expect(result).not.toBeNull();
-      expect(result!.src).toBe("1.0 MB");
-      expect(result!.dest).toBe("1.0 MB");
-      expect(result!.delta).not.toBeNull();
-      expect(result!.delta!.startsWith("+")).toBe(true);
+      const value = expectDefined(result);
+      expect(value.src).toBe("1.0 MB");
+      expect(value.dest).toBe("1.0 MB");
+      expect(value.delta).not.toBeNull();
+      expect(expectDefined(value.delta).startsWith("+")).toBe(true);
     });
 
     it("returns delta when same formatted size but different bytes (dest larger)", () => {
       const result = formatSizeComparison(1100000, 1101000);
-      expect(result).not.toBeNull();
-      expect(result!.src).toBe("1.0 MB");
-      expect(result!.dest).toBe("1.0 MB");
-      expect(result!.delta).not.toBeNull();
-      expect(result!.delta!.startsWith("-")).toBe(true);
+      const value = expectDefined(result);
+      expect(value.src).toBe("1.0 MB");
+      expect(value.dest).toBe("1.0 MB");
+      expect(value.delta).not.toBeNull();
+      expect(expectDefined(value.delta).startsWith("-")).toBe(true);
     });
 
     it("computes correct delta for ambiguous 1.0 MB values", () => {
       // 1100000 and 1101000 both → "1.0 MB", diff = 1000 → 1000 B
       const result = formatSizeComparison(1101000, 1100000);
-      expect(result!.delta).toBe("+1000 B");
+      expect(expectDefined(result).delta).toBe("+1000 B");
     });
   });
 

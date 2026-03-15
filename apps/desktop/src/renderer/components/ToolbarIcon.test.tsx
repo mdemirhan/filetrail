@@ -4,6 +4,14 @@ import { render } from "@testing-library/react";
 
 import { ToolbarIcon } from "./ToolbarIcon";
 
+function expectDefined<T>(value: T | null | undefined): NonNullable<T> {
+  expect(value).toBeDefined();
+  if (value == null) {
+    throw new Error("Expected value to be defined.");
+  }
+  return value;
+}
+
 const ICON_NAMES = [
   "back",
   "forward",
@@ -86,16 +94,16 @@ describe("ToolbarIcon", () => {
   it("renders distinct icons for copy vs copyPath", () => {
     const { container: copyContainer } = render(<ToolbarIcon name="copy" />);
     const { container: copyPathContainer } = render(<ToolbarIcon name="copyPath" />);
-    const copySvg = copyContainer.querySelector("svg")!.innerHTML;
-    const copyPathSvg = copyPathContainer.querySelector("svg")!.innerHTML;
+    const copySvg = expectDefined(copyContainer.querySelector("svg")).innerHTML;
+    const copyPathSvg = expectDefined(copyPathContainer.querySelector("svg")).innerHTML;
     expect(copySvg).not.toBe(copyPathSvg);
   });
 
   it("renders distinct icons for edit vs rename", () => {
     const { container: editContainer } = render(<ToolbarIcon name="edit" />);
     const { container: renameContainer } = render(<ToolbarIcon name="rename" />);
-    const editSvg = editContainer.querySelector("svg")!.innerHTML;
-    const renameSvg = renameContainer.querySelector("svg")!.innerHTML;
+    const editSvg = expectDefined(editContainer.querySelector("svg")).innerHTML;
+    const renameSvg = expectDefined(renameContainer.querySelector("svg")).innerHTML;
     expect(editSvg).not.toBe(renameSvg);
   });
 });

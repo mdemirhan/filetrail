@@ -6,6 +6,14 @@ import { render, screen } from "@testing-library/react";
 
 import { FavoriteItemIcon, FileIcon, FolderIcon, TreeFolderIcon } from "./fileIcons";
 
+function expectDefined<T>(value: T | null | undefined): NonNullable<T> {
+  expect(value).toBeDefined();
+  if (value == null) {
+    throw new Error("Expected value to be defined.");
+  }
+  return value;
+}
+
 function createEntry(
   overrides: Partial<{
     path: string;
@@ -154,7 +162,12 @@ describe("fileIcons", () => {
         document.documentElement.dataset.iconTheme = theme;
         const { container } = render(
           <FileIcon
-            entry={createEntry({ kind: "symlink_file", isSymlink: true, extension: "ts", name: "link.ts" })}
+            entry={createEntry({
+              kind: "symlink_file",
+              isSymlink: true,
+              extension: "ts",
+              name: "link.ts",
+            })}
           />,
         );
         expect(container.querySelector(`.file-icon.document.${theme}.alias`)).not.toBeNull();
@@ -254,7 +267,10 @@ describe("vivid favorite fill allowlist", () => {
     expect(vividFillSelectors).not.toBeNull();
 
     const iconsWithFill = new Set(
-      vividFillSelectors!.map((s) => s.match(/\.favorite-icon-(\w+)/)![1]),
+      expectDefined(vividFillSelectors).map((selector) => {
+        const match = expectDefined(selector.match(/\.favorite-icon-(\w+)/));
+        return expectDefined(match[1]);
+      }),
     );
 
     expect(iconsWithFill).toEqual(CLOSED_PATH_FAVORITES);
@@ -264,10 +280,29 @@ describe("vivid favorite fill allowlist", () => {
     // If a new icon is added to FavoriteIconId, this test forces a decision:
     // is it closed-path (safe to fill) or open-path (stroke only)?
     const ALL_FAVORITE_ICONS: ReadonlyArray<string> = [
-      "home", "applications", "desktop", "documents", "downloads", "trash",
-      "folder", "star", "drive", "code", "terminal", "globe", "music",
-      "photos", "videos", "archive", "cloud", "server", "projects", "books",
-      "camera", "toolbox", "network",
+      "home",
+      "applications",
+      "desktop",
+      "documents",
+      "downloads",
+      "trash",
+      "folder",
+      "star",
+      "drive",
+      "code",
+      "terminal",
+      "globe",
+      "music",
+      "photos",
+      "videos",
+      "archive",
+      "cloud",
+      "server",
+      "projects",
+      "books",
+      "camera",
+      "toolbox",
+      "network",
     ];
 
     const covered = new Set([...CLOSED_PATH_FAVORITES, ...OPEN_PATH_FAVORITES]);
@@ -282,9 +317,13 @@ describe("vivid favorite fill allowlist", () => {
 
   it("FavoriteItemIcon renders targetable class structure for CSS", () => {
     const { container, rerender } = render(<FavoriteItemIcon icon="home" />);
-    expect(container.querySelector(".favorite-icon-home .file-icon-favorite-stroke")).not.toBeNull();
+    expect(
+      container.querySelector(".favorite-icon-home .file-icon-favorite-stroke"),
+    ).not.toBeNull();
 
     rerender(<FavoriteItemIcon icon="downloads" />);
-    expect(container.querySelector(".favorite-icon-downloads .file-icon-favorite-stroke")).not.toBeNull();
+    expect(
+      container.querySelector(".favorite-icon-downloads .file-icon-favorite-stroke"),
+    ).not.toBeNull();
   });
 });

@@ -6,6 +6,14 @@ import { join } from "node:path";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const addon = require("../build/Release/native-fs.node") as typeof import("../index");
 
+function expectDefined<T>(value: T | null | undefined): NonNullable<T> {
+  expect(value).toBeDefined();
+  if (value == null) {
+    throw new Error("Expected value to be defined.");
+  }
+  return value;
+}
+
 describe("nativeFolderSize", () => {
   let root: string;
 
@@ -57,20 +65,17 @@ describe("nativeFolderSize", () => {
     expect(dirPaths).not.toContain(root); // root itself excluded
 
     // sub/deep has d.txt = [100, diskBytes, 1]
-    const deep = result.dirs[join(root, "sub", "deep")]!;
-    expect(deep).toBeDefined();
+    const deep = expectDefined(result.dirs[join(root, "sub", "deep")]);
     expect(deep[0]).toBe(100); // logical
     expect(deep[2]).toBe(1); // file count
 
     // sub has c.txt(5) + deep(100) = 105 total, 2 files
-    const sub = result.dirs[join(root, "sub")]!;
-    expect(sub).toBeDefined();
+    const sub = expectDefined(result.dirs[join(root, "sub")]);
     expect(sub[0]).toBe(105); // recursive logical
     expect(sub[2]).toBe(2); // recursive file count (c.txt + d.txt)
 
     // empty has 0 bytes, 0 files
-    const empty = result.dirs[join(root, "empty")]!;
-    expect(empty).toBeDefined();
+    const empty = expectDefined(result.dirs[join(root, "empty")]);
     expect(empty[0]).toBe(0);
     expect(empty[2]).toBe(0);
   });

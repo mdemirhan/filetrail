@@ -61,6 +61,7 @@ import {
   shouldRenderCopyPasteResultDialog,
   toDirectoryEntryFromSearchResult,
 } from "./lib/explorerAppUtils";
+import { parentDirectoryPath } from "./lib/explorerNavigation";
 import type { DirectoryEntry } from "./lib/explorerTypes";
 import {
   createFavorite,
@@ -77,16 +78,15 @@ import { FileIcon } from "./lib/fileIcons";
 import { useFiletrailClient } from "./lib/filetrailClient";
 import { formatDateTime, formatPermissionMode, formatSize } from "./lib/formatting";
 import { REFERENCE_ITEMS, SHORTCUT_ITEMS } from "./lib/helpContent";
-import { parentDirectoryPath } from "./lib/explorerNavigation";
 import { EXPLORER_LAYOUT } from "./lib/layoutTokens";
 import { createRendererLogger } from "./lib/logging";
+import { expandHomeShortcut } from "./lib/pathUtils";
 import { canRunToolbarRendererCommand } from "./lib/rendererCommandAvailability";
 import { resolveExplorerToolbarLayout, resolveSinglePanelLayout } from "./lib/responsiveLayout";
-import { canHandleRendererCommand } from "./lib/shortcutPolicy";
+import type { canHandleRendererCommand } from "./lib/shortcutPolicy";
 import { resolveStartupNavigation } from "./lib/startupNavigation";
 import { getThemeAppearanceDefaults } from "./lib/theme";
 import { type ToastEntry, type ToastKind, createToastEntry, enqueueToast } from "./lib/toasts";
-import { expandHomeShortcut } from "./lib/pathUtils";
 
 const logger = createRendererLogger("filetrail.renderer");
 
@@ -1592,7 +1592,8 @@ export function App() {
   // The info row shows the selected entry, falling back to the current directory.
   const infoPanelFolderSizePath =
     getInfoItem && isFolderSizeEligibleKind(getInfoItem.kind) ? getInfoItem.path : null;
-  const infoRowActiveEntry = selectedEntry ?? (currentPath ? { path: currentPath, kind: "directory" as const } : null);
+  const infoRowActiveEntry =
+    selectedEntry ?? (currentPath ? { path: currentPath, kind: "directory" as const } : null);
   const infoRowFolderSizePath =
     infoRowActiveEntry && isFolderSizeEligibleKind(infoRowActiveEntry.kind)
       ? infoRowActiveEntry.path
@@ -1818,17 +1819,35 @@ export function App() {
                 currentPath={currentPath}
                 selectedEntry={selectedEntry}
                 item={getInfoItem}
-                folderSizeEntry={infoRowFolderSizePath ? folderSizeCache.getEntry(infoRowFolderSizePath) : undefined}
-                onCalculateFolderSize={infoRowFolderSizePath ? () => void folderSizeCache.calculateFolderSize(infoRowFolderSizePath) : undefined}
-                onRecalculateFolderSize={infoRowFolderSizePath ? () => folderSizeCache.recalculateFolderSize(infoRowFolderSizePath) : undefined}
-                onCancelFolderSize={infoRowFolderSizePath ? () => void folderSizeCache.cancelFolderSize(infoRowFolderSizePath) : undefined}
+                folderSizeEntry={
+                  infoRowFolderSizePath
+                    ? folderSizeCache.getEntry(infoRowFolderSizePath)
+                    : undefined
+                }
+                onCalculateFolderSize={
+                  infoRowFolderSizePath
+                    ? () => void folderSizeCache.calculateFolderSize(infoRowFolderSizePath)
+                    : undefined
+                }
+                onRecalculateFolderSize={
+                  infoRowFolderSizePath
+                    ? () => folderSizeCache.recalculateFolderSize(infoRowFolderSizePath)
+                    : undefined
+                }
+                onCancelFolderSize={
+                  infoRowFolderSizePath
+                    ? () => void folderSizeCache.cancelFolderSize(infoRowFolderSizePath)
+                    : undefined
+                }
               />
             ),
             statusLabel: isSearchMode
               ? (searchStatus === "running"
                   ? `${filteredSearchResults.length} / ${searchResults.length} matches so far`
                   : `${filteredSearchResults.length} / ${searchResults.length} matches`) +
-                (contentSelection.paths.length > 0 ? ` (${contentSelection.paths.length} selected)` : "")
+                (contentSelection.paths.length > 0
+                  ? ` (${contentSelection.paths.length} selected)`
+                  : "")
               : contentSelection.paths.length > 0
                 ? `${contentSelection.paths.length} of ${currentEntries.length} selected`
                 : `${currentEntries.length} items`,
@@ -1853,10 +1872,18 @@ export function App() {
             },
             onCopyPath: () => (getInfoItem ? copyGetInfoPath(getInfoItem.path) : false),
             copyPathDisabled: isWriteOperationLocked,
-            folderSizeEntry: infoPanelFolderSizePath ? folderSizeCache.getEntry(infoPanelFolderSizePath) : undefined,
-            onCalculateFolderSize: infoPanelFolderSizePath ? () => void folderSizeCache.calculateFolderSize(infoPanelFolderSizePath) : undefined,
-            onRecalculateFolderSize: infoPanelFolderSizePath ? () => folderSizeCache.recalculateFolderSize(infoPanelFolderSizePath) : undefined,
-            onCancelFolderSize: infoPanelFolderSizePath ? () => void folderSizeCache.cancelFolderSize(infoPanelFolderSizePath) : undefined,
+            folderSizeEntry: infoPanelFolderSizePath
+              ? folderSizeCache.getEntry(infoPanelFolderSizePath)
+              : undefined,
+            onCalculateFolderSize: infoPanelFolderSizePath
+              ? () => void folderSizeCache.calculateFolderSize(infoPanelFolderSizePath)
+              : undefined,
+            onRecalculateFolderSize: infoPanelFolderSizePath
+              ? () => folderSizeCache.recalculateFolderSize(infoPanelFolderSizePath)
+              : undefined,
+            onCancelFolderSize: infoPanelFolderSizePath
+              ? () => void folderSizeCache.cancelFolderSize(infoPanelFolderSizePath)
+              : undefined,
           }}
           currentPath={currentPath}
           topToolbarItems={topToolbarItems}
@@ -1990,12 +2017,12 @@ export function App() {
                 typeaheadDebounceMs={typeaheadDebounceMs}
                 notificationsEnabled={notificationsEnabled}
                 notificationDurationSeconds={notificationDurationSeconds}
-              actionLogEnabled={actionLogEnabled}
-              topToolbarItems={topToolbarItems}
-              leftToolbarItems={leftToolbarItems}
-              restoreLastVisitedFolderOnStartup={restoreLastVisitedFolderOnStartup}
-              homePath={homePath}
-              terminalApp={terminalApp}
+                actionLogEnabled={actionLogEnabled}
+                topToolbarItems={topToolbarItems}
+                leftToolbarItems={leftToolbarItems}
+                restoreLastVisitedFolderOnStartup={restoreLastVisitedFolderOnStartup}
+                homePath={homePath}
+                terminalApp={terminalApp}
                 defaultTextEditor={defaultTextEditor}
                 favorites={favorites}
                 favoritesPlacement={favoritesPlacement}
@@ -2034,28 +2061,28 @@ export function App() {
                 onTabSwitchesExplorerPanesChange={setTabSwitchesExplorerPanes}
                 onTypeaheadEnabledChange={setTypeaheadEnabled}
                 onTypeaheadDebounceMsChange={setTypeaheadDebounceMs}
-              onNotificationsEnabledChange={setNotificationsEnabled}
-              onNotificationDurationSecondsChange={setNotificationDurationSeconds}
-              onActionLogEnabledChange={setActionLogEnabled}
-              onTopToolbarItemsChange={setTopToolbarItems}
-              onLeftToolbarItemsChange={setLeftToolbarItems}
-              onResetTopToolbar={() => setTopToolbarItems([...DEFAULT_TOP_TOOLBAR_ITEMS])}
-              onResetLeftToolbar={() =>
-                setLeftToolbarItems({
-                  main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
-                  utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
-                })
-              }
-              onResetToolbars={() => {
-                setTopToolbarItems([...DEFAULT_TOP_TOOLBAR_ITEMS]);
-                setLeftToolbarItems({
-                  main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
-                  utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
-                });
-              }}
-              onRestoreLastVisitedFolderOnStartupChange={setRestoreLastVisitedFolderOnStartup}
-              onBrowseTerminalApp={() => {
-                void browseTerminalApplication();
+                onNotificationsEnabledChange={setNotificationsEnabled}
+                onNotificationDurationSecondsChange={setNotificationDurationSeconds}
+                onActionLogEnabledChange={setActionLogEnabled}
+                onTopToolbarItemsChange={setTopToolbarItems}
+                onLeftToolbarItemsChange={setLeftToolbarItems}
+                onResetTopToolbar={() => setTopToolbarItems([...DEFAULT_TOP_TOOLBAR_ITEMS])}
+                onResetLeftToolbar={() =>
+                  setLeftToolbarItems({
+                    main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
+                    utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
+                  })
+                }
+                onResetToolbars={() => {
+                  setTopToolbarItems([...DEFAULT_TOP_TOOLBAR_ITEMS]);
+                  setLeftToolbarItems({
+                    main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
+                    utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
+                  });
+                }}
+                onRestoreLastVisitedFolderOnStartupChange={setRestoreLastVisitedFolderOnStartup}
+                onBrowseTerminalApp={() => {
+                  void browseTerminalApplication();
                 }}
                 onClearTerminalApp={() => setTerminalApp(null)}
                 onBrowseDefaultTextEditor={() => {

@@ -220,7 +220,9 @@ describe("InfoPanel", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Cancel folder size calculation" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Cancel folder size calculation" }),
+    ).toBeInTheDocument();
   });
 
   it("shows formatted size with disk info and item count when ready", () => {

@@ -542,8 +542,7 @@ function buildRuntimeConflictActions(
       },
       {
         label: "Merge Folders",
-        description:
-          "Keep the destination folder and continue moving the source contents into it.",
+        description: "Keep the destination folder and continue moving the source contents into it.",
         onClick: () => onResolveRuntimeConflict(conflict.conflictId, "merge"),
       },
       {
@@ -706,12 +705,7 @@ function formatRuntimeConflictReasonTitle(
 }
 
 function formatKindLabel(
-  kind:
-    | "file"
-    | "directory"
-    | "symlink"
-    | "symlink_directory"
-    | "missing",
+  kind: "file" | "directory" | "symlink" | "symlink_directory" | "missing",
 ): string {
   if (kind === "directory") {
     return "folder";

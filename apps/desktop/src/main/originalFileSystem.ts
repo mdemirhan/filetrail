@@ -38,7 +38,20 @@ const addon = require("@filetrail/native-fs") as {
 const { nativeCopyFile, nativeGetFileIcon, nativeFolderSize, nativeFolderSizeCancel } = addon;
 
 const {
-  promises: { chmod, lstat, lutimes, mkdir, readdir, readlink, realpath, rename, rm, stat, symlink, utimes },
+  promises: {
+    chmod,
+    lstat,
+    lutimes,
+    mkdir,
+    readdir,
+    readlink,
+    realpath,
+    rename,
+    rm,
+    stat,
+    symlink,
+    utimes,
+  },
   createReadStream,
   createWriteStream,
 } = originalFs;

@@ -21,9 +21,9 @@ import {
   withTiming,
 } from "./bootstrap/responseCache";
 import {
-  openInTerminal,
   emptyTrash,
   getFileIconHandler,
+  openInTerminal,
   openPath,
   openPathsWithApplication,
   performEditAction,
@@ -53,9 +53,13 @@ export async function bootstrapMainProcess(
   // files inside app bundles are copied as regular files instead of being
   // treated as virtual directories. This applies to copy/paste, rename,
   // mkdir, and all other filesystem operations that need the real filesystem.
-  const { originalExplorerFileSystem, originalFileSystem, originalRename, getFolderSize, cancelFolderSize } = await import(
-    "./originalFileSystem"
-  );
+  const {
+    originalExplorerFileSystem,
+    originalFileSystem,
+    originalRename,
+    getFolderSize,
+    cancelFolderSize,
+  } = await import("./originalFileSystem");
   const writeService = createWriteService({ fileSystem: originalFileSystem });
   const actionLogStore = createActionLogStore(
     resolveActionLogFilePath(dirname(appStateStore.getFilePath())),

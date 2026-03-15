@@ -113,7 +113,12 @@ export function getContextMenuItems(input: {
   if (input.surface === "trash") {
     return [
       ...getContextMenuItems({ surface: "content", favoriteToggleLabel }),
-      { id: "deleteImmediately", label: "Delete Immediately", icon: "deleteImmediately", destructive: true },
+      {
+        id: "deleteImmediately",
+        label: "Delete Immediately",
+        icon: "deleteImmediately",
+        destructive: true,
+      },
     ];
   }
 
@@ -138,7 +143,12 @@ export function getContextMenuItems(input: {
       { id: "copyPath", label: "Copy Path", icon: "copyPath" },
       { type: "separator", key: "separator-tree-write" },
       { id: "trash", label: "Move to Trash", icon: "trash", destructive: true },
-      { id: "deleteImmediately", label: "Delete Immediately", icon: "deleteImmediately", destructive: true },
+      {
+        id: "deleteImmediately",
+        label: "Delete Immediately",
+        icon: "deleteImmediately",
+        destructive: true,
+      },
     ];
   }
 

@@ -471,12 +471,13 @@ export function getToolbarItemsForSurface(surface: ToolbarSurface): ToolbarItemD
 }
 
 export function getToolbarItemsForLeftZone(zone: LeftToolbarZone): ToolbarItemDefinition[] {
-  return TOOLBAR_ITEM_DEFINITIONS.filter(
-    (item) => {
-      const definition = item as ToolbarItemDefinition;
-      return definition.surfaces.includes("left") && (!definition.leftZones || definition.leftZones.includes(zone));
-    },
-  );
+  return TOOLBAR_ITEM_DEFINITIONS.filter((item) => {
+    const definition = item as ToolbarItemDefinition;
+    return (
+      definition.surfaces.includes("left") &&
+      (!definition.leftZones || definition.leftZones.includes(zone))
+    );
+  });
 }
 
 export function isToolbarItemAllowedOnSurface(id: ToolbarItemId, surface: ToolbarSurface): boolean {

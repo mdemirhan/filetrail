@@ -5737,7 +5737,6 @@ body.resizing-panels-vertical * {
   text-overflow: ellipsis;
 }
 
-
 /* ── Folder Size Interactive States ──────────────────────────────── */
 
 .folder-size-calculate-btn {
@@ -5775,7 +5774,9 @@ body.resizing-panels-vertical * {
 }
 
 @keyframes folder-size-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .folder-size-cancel-btn {
@@ -5943,8 +5944,8 @@ body.resizing-panels-vertical * {
 
 .go-to-folder-input-shell.is-focused {
   border-color: var(--ft-accent-solid);
-  box-shadow: 0 0 0 1px var(--ft-accent-solid),
-    0 0 16px color-mix(in srgb, var(--ft-accent-solid) 25%, transparent);
+  box-shadow: 0 0 0 1px var(--ft-accent-solid), 0 0 16px
+    color-mix(in srgb, var(--ft-accent-solid) 25%, transparent);
 }
 
 .go-to-folder-input-icon {
@@ -6473,7 +6474,6 @@ body.platform-macos .settings-view[data-layout="compact"] {
     width: 100%;
     gap: 14px 20px;
   }
-
 }
 
 .settings-panel {

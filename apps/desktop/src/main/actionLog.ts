@@ -8,8 +8,8 @@ import {
   type ActionLogItem,
   type ActionLogRuntimeConflict,
   type WriteOperationAction,
-  type WriteOperationResult,
   type WriteOperationInitiator,
+  type WriteOperationResult,
   actionLogEntrySchema,
 } from "@filetrail/contracts";
 import { readFileSize, resolveRotatedLogPath, rotateLogFiles } from "./logRotation";

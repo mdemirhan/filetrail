@@ -98,8 +98,15 @@ export const VIVID_DEFS = {
     color: "#306998",
     symbol: (
       <>
-        <path d="M12 10.5h-2.5a1.5 1.5 0 00-1.5 1.5v1.5h2.5a1.5 1.5 0 001.5-1.5V10.5z" fill="white" opacity="0.75" />
-        <path d="M12 17.5h2.5a1.5 1.5 0 001.5-1.5V14.5h-2.5a1.5 1.5 0 00-1.5 1.5V17.5z" fill="white" />
+        <path
+          d="M12 10.5h-2.5a1.5 1.5 0 00-1.5 1.5v1.5h2.5a1.5 1.5 0 001.5-1.5V10.5z"
+          fill="white"
+          opacity="0.75"
+        />
+        <path
+          d="M12 17.5h2.5a1.5 1.5 0 001.5-1.5V14.5h-2.5a1.5 1.5 0 00-1.5 1.5V17.5z"
+          fill="white"
+        />
         <circle cx="9.7" cy="11.2" r="0.5" fill="#306998" />
         <circle cx="14.3" cy="16.8" r="0.5" fill="#306998" />
         <rect x="8" y="13.5" width="3.5" height="1" rx="0.3" fill="white" opacity="0.6" />
@@ -136,8 +143,22 @@ export const VIVID_DEFS = {
     color: "#E76F00",
     symbol: (
       <>
-        <rect x="8.5" y="11.5" width="5.5" height="5.5" rx="0.8" fill="none" stroke="white" strokeWidth="1" />
-        <path d="M14 13h1.5a1 1 0 011 1v0a1 1 0 01-1 1H14" fill="none" stroke="white" strokeWidth="0.9" />
+        <rect
+          x="8.5"
+          y="11.5"
+          width="5.5"
+          height="5.5"
+          rx="0.8"
+          fill="none"
+          stroke="white"
+          strokeWidth="1"
+        />
+        <path
+          d="M14 13h1.5a1 1 0 011 1v0a1 1 0 01-1 1H14"
+          fill="none"
+          stroke="white"
+          strokeWidth="0.9"
+        />
         <path d="M10 11v-1.5" stroke="white" strokeWidth="0.6" strokeLinecap="round" />
         <path d="M11.5 10.5v-1.5" stroke="white" strokeWidth="0.6" strokeLinecap="round" />
       </>
@@ -159,7 +180,13 @@ export const VIVID_DEFS = {
     color: "#CC342D",
     symbol: (
       <>
-        <polygon points="12,10 7.5,14 9,17.5 15,17.5 16.5,14" fill="none" stroke="white" strokeWidth="1" strokeLinejoin="round" />
+        <polygon
+          points="12,10 7.5,14 9,17.5 15,17.5 16.5,14"
+          fill="none"
+          stroke="white"
+          strokeWidth="1"
+          strokeLinejoin="round"
+        />
         <line x1="7.5" y1="14" x2="16.5" y2="14" stroke="white" strokeWidth="0.7" />
         <line x1="12" y1="10" x2="9.5" y2="14" stroke="white" strokeWidth="0.5" />
         <line x1="12" y1="10" x2="14.5" y2="14" stroke="white" strokeWidth="0.5" />
@@ -235,10 +262,25 @@ export const VIVID_DEFS = {
     color: "#083FA1",
     symbol: (
       <>
-        <text x="10" y="15.5" textAnchor="middle" dominantBaseline="central" fill="white" fontSize="9" fontWeight="900">
+        <text
+          x="10"
+          y="15.5"
+          textAnchor="middle"
+          dominantBaseline="central"
+          fill="white"
+          fontSize="9"
+          fontWeight="900"
+        >
           M
         </text>
-        <path d="M15 12.5v4M13.5 15L15 16.5l1.5-1.5" stroke="white" strokeWidth="1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d="M15 12.5v4M13.5 15L15 16.5l1.5-1.5"
+          stroke="white"
+          strokeWidth="1"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </>
     ),
   },
@@ -246,9 +288,33 @@ export const VIVID_DEFS = {
     color: "#CB171E",
     symbol: (
       <>
-        <line x1="7" y1="11.5" x2="13" y2="11.5" stroke="white" strokeWidth="1.1" strokeLinecap="round" />
-        <line x1="9" y1="13.8" x2="17" y2="13.8" stroke="white" strokeWidth="1.1" strokeLinecap="round" />
-        <line x1="9" y1="16.1" x2="14" y2="16.1" stroke="white" strokeWidth="1.1" strokeLinecap="round" />
+        <line
+          x1="7"
+          y1="11.5"
+          x2="13"
+          y2="11.5"
+          stroke="white"
+          strokeWidth="1.1"
+          strokeLinecap="round"
+        />
+        <line
+          x1="9"
+          y1="13.8"
+          x2="17"
+          y2="13.8"
+          stroke="white"
+          strokeWidth="1.1"
+          strokeLinecap="round"
+        />
+        <line
+          x1="9"
+          y1="16.1"
+          x2="14"
+          y2="16.1"
+          stroke="white"
+          strokeWidth="1.1"
+          strokeLinecap="round"
+        />
         <circle cx="7" cy="13.8" r="0.7" fill="white" opacity="0.5" />
         <circle cx="7" cy="16.1" r="0.7" fill="white" opacity="0.5" />
       </>
@@ -263,8 +329,22 @@ export const VIVID_DEFS = {
     symbol: (
       <>
         <ellipse cx="12" cy="11" rx="4" ry="1.5" fill="none" stroke="white" strokeWidth="1" />
-        <path d="M8 11v6c0 .83 1.79 1.5 4 1.5s4-.67 4-1.5v-6" fill="none" stroke="white" strokeWidth="1" />
-        <ellipse cx="12" cy="13.5" rx="4" ry="1.2" fill="none" stroke="white" strokeWidth="0.5" opacity="0.4" />
+        <path
+          d="M8 11v6c0 .83 1.79 1.5 4 1.5s4-.67 4-1.5v-6"
+          fill="none"
+          stroke="white"
+          strokeWidth="1"
+        />
+        <ellipse
+          cx="12"
+          cy="13.5"
+          rx="4"
+          ry="1.2"
+          fill="none"
+          stroke="white"
+          strokeWidth="0.5"
+          opacity="0.4"
+        />
       </>
     ),
   },
@@ -272,8 +352,23 @@ export const VIVID_DEFS = {
     color: "#4EAA25",
     symbol: (
       <>
-        <path d="M8 11.5l3.5 2.5L8 16.5" stroke="white" strokeWidth="1.3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-        <line x1="13" y1="16.5" x2="17" y2="16.5" stroke="white" strokeWidth="1.3" strokeLinecap="round" />
+        <path
+          d="M8 11.5l3.5 2.5L8 16.5"
+          stroke="white"
+          strokeWidth="1.3"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <line
+          x1="13"
+          y1="16.5"
+          x2="17"
+          y2="16.5"
+          stroke="white"
+          strokeWidth="1.3"
+          strokeLinecap="round"
+        />
       </>
     ),
   },
@@ -286,7 +381,13 @@ export const VIVID_DEFS = {
         <rect x="13.5" y="12" width="2.5" height="1.8" rx="0.3" fill="white" />
         <rect x="7.5" y="9.7" width="2.5" height="1.8" rx="0.3" fill="white" />
         <rect x="10.5" y="9.7" width="2.5" height="1.8" rx="0.3" fill="white" />
-        <path d="M6 14.5c0 2.5 3 3.5 6 3.5s6-1 6-3.5" stroke="white" strokeWidth="0.8" fill="none" strokeLinecap="round" />
+        <path
+          d="M6 14.5c0 2.5 3 3.5 6 3.5s6-1 6-3.5"
+          stroke="white"
+          strokeWidth="0.8"
+          fill="none"
+          strokeLinecap="round"
+        />
       </>
     ),
   },
@@ -325,11 +426,33 @@ export const VIVID_DEFS = {
     color: "#F59E0B",
     symbol: (
       <>
-        <path d="M7 16.5c2-8 9-8 11 0" fill="none" stroke="white" strokeWidth="1.2" strokeLinecap="round" />
+        <path
+          d="M7 16.5c2-8 9-8 11 0"
+          fill="none"
+          stroke="white"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+        />
         <circle cx="7" cy="16.5" r="1" fill="white" />
         <circle cx="18" cy="16.5" r="1" fill="white" />
-        <line x1="7" y1="16.5" x2="9" y2="10.5" stroke="white" strokeWidth="0.5" strokeDasharray="1 0.8" />
-        <line x1="18" y1="16.5" x2="15" y2="10.5" stroke="white" strokeWidth="0.5" strokeDasharray="1 0.8" />
+        <line
+          x1="7"
+          y1="16.5"
+          x2="9"
+          y2="10.5"
+          stroke="white"
+          strokeWidth="0.5"
+          strokeDasharray="1 0.8"
+        />
+        <line
+          x1="18"
+          y1="16.5"
+          x2="15"
+          y2="10.5"
+          stroke="white"
+          strokeWidth="0.5"
+          strokeDasharray="1 0.8"
+        />
         <circle cx="9" cy="10.5" r="0.7" fill="white" opacity="0.6" />
         <circle cx="15" cy="10.5" r="0.7" fill="white" opacity="0.6" />
       </>
@@ -364,8 +487,25 @@ export const VIVID_DEFS = {
     color: "#D97706",
     symbol: (
       <>
-        <rect x="7" y="10.5" width="10" height="7" rx="1" fill="none" stroke="white" strokeWidth="1" />
-        <line x1="12" y1="10.5" x2="12" y2="17.5" stroke="white" strokeWidth="0.7" strokeDasharray="1.2 1" />
+        <rect
+          x="7"
+          y="10.5"
+          width="10"
+          height="7"
+          rx="1"
+          fill="none"
+          stroke="white"
+          strokeWidth="1"
+        />
+        <line
+          x1="12"
+          y1="10.5"
+          x2="12"
+          y2="17.5"
+          stroke="white"
+          strokeWidth="0.7"
+          strokeDasharray="1.2 1"
+        />
         <rect x="10" y="13" width="4" height="2.5" rx="0.5" fill="white" />
         <line x1="12" y1="13" x2="12" y2="15.5" stroke="#D97706" strokeWidth="0.6" />
       </>
@@ -375,17 +515,58 @@ export const VIVID_DEFS = {
     color: "#737373",
     symbol: (
       <>
-        <line x1="7.5" y1="11.5" x2="16.5" y2="11.5" stroke="white" strokeWidth="1" strokeLinecap="round" />
-        <line x1="7.5" y1="13.8" x2="14" y2="13.8" stroke="white" strokeWidth="1" strokeLinecap="round" />
-        <line x1="7.5" y1="16.1" x2="16.5" y2="16.1" stroke="white" strokeWidth="1" strokeLinecap="round" />
-        <line x1="7.5" y1="18.4" x2="12" y2="18.4" stroke="white" strokeWidth="1" strokeLinecap="round" />
+        <line
+          x1="7.5"
+          y1="11.5"
+          x2="16.5"
+          y2="11.5"
+          stroke="white"
+          strokeWidth="1"
+          strokeLinecap="round"
+        />
+        <line
+          x1="7.5"
+          y1="13.8"
+          x2="14"
+          y2="13.8"
+          stroke="white"
+          strokeWidth="1"
+          strokeLinecap="round"
+        />
+        <line
+          x1="7.5"
+          y1="16.1"
+          x2="16.5"
+          y2="16.1"
+          stroke="white"
+          strokeWidth="1"
+          strokeLinecap="round"
+        />
+        <line
+          x1="7.5"
+          y1="18.4"
+          x2="12"
+          y2="18.4"
+          stroke="white"
+          strokeWidth="1"
+          strokeLinecap="round"
+        />
       </>
     ),
   },
   font: {
     color: "#7C3AED",
     symbol: (
-      <text x="12" y="15.5" textAnchor="middle" dominantBaseline="central" fill="white" fontSize="8" fontWeight="300" fontStyle="italic">
+      <text
+        x="12"
+        y="15.5"
+        textAnchor="middle"
+        dominantBaseline="central"
+        fill="white"
+        fontSize="8"
+        fontWeight="300"
+        fontStyle="italic"
+      >
         Aa
       </text>
     ),
@@ -426,7 +607,10 @@ export const VIVID_DEFS = {
   elixir: {
     color: "#6B4F9E",
     symbol: (
-      <path d="M12 9.5c-1.5 2-2.5 4.5-1.5 6.5.7 1.4 2 1.8 3.2 1 1.2-.8 1.5-2.8.3-5.2L12 9.5z" fill="white" />
+      <path
+        d="M12 9.5c-1.5 2-2.5 4.5-1.5 6.5.7 1.4 2 1.8 3.2 1 1.2-.8 1.5-2.8.3-5.2L12 9.5z"
+        fill="white"
+      />
     ),
   },
   haskell: {
@@ -435,9 +619,7 @@ export const VIVID_DEFS = {
   },
   zig: {
     color: "#F7A41D",
-    symbol: (
-      <path d="M8 10.5h3l-2 7h3l5-7h-3l2-7h-3z" fill="white" />
-    ),
+    symbol: <path d="M8 10.5h3l-2 7h3l5-7h-3l2-7h-3z" fill="white" />,
   },
   julia: {
     color: "#9558B2",
@@ -455,9 +637,7 @@ export const VIVID_DEFS = {
   },
   wasm: {
     color: "#654FF0",
-    symbol: (
-      <polygon points="12,10 16.5,12.3 15,17 9,17 7.5,12.3" fill="white" />
-    ),
+    symbol: <polygon points="12,10 16.5,12.3 15,17 9,17 7.5,12.3" fill="white" />,
   },
 
   // ── Document Categories ────────────
@@ -469,7 +649,16 @@ export const VIVID_DEFS = {
     color: "#217346",
     symbol: (
       <>
-        <rect x="7" y="10.5" width="10" height="8" rx="0.5" fill="none" stroke="white" strokeWidth="0.8" />
+        <rect
+          x="7"
+          y="10.5"
+          width="10"
+          height="8"
+          rx="0.5"
+          fill="none"
+          stroke="white"
+          strokeWidth="0.8"
+        />
         <line x1="7" y1="13.2" x2="17" y2="13.2" stroke="white" strokeWidth="0.6" />
         <line x1="7" y1="15.9" x2="17" y2="15.9" stroke="white" strokeWidth="0.6" />
         <line x1="10.3" y1="10.5" x2="10.3" y2="18.5" stroke="white" strokeWidth="0.6" />
@@ -481,10 +670,42 @@ export const VIVID_DEFS = {
     color: "#2B579A",
     symbol: (
       <>
-        <line x1="7.5" y1="11" x2="16.5" y2="11" stroke="white" strokeWidth="1.4" strokeLinecap="round" />
-        <line x1="7.5" y1="13.5" x2="14" y2="13.5" stroke="white" strokeWidth="0.8" strokeLinecap="round" />
-        <line x1="7.5" y1="15.5" x2="16.5" y2="15.5" stroke="white" strokeWidth="0.8" strokeLinecap="round" />
-        <line x1="7.5" y1="17.5" x2="12" y2="17.5" stroke="white" strokeWidth="0.8" strokeLinecap="round" />
+        <line
+          x1="7.5"
+          y1="11"
+          x2="16.5"
+          y2="11"
+          stroke="white"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+        />
+        <line
+          x1="7.5"
+          y1="13.5"
+          x2="14"
+          y2="13.5"
+          stroke="white"
+          strokeWidth="0.8"
+          strokeLinecap="round"
+        />
+        <line
+          x1="7.5"
+          y1="15.5"
+          x2="16.5"
+          y2="15.5"
+          stroke="white"
+          strokeWidth="0.8"
+          strokeLinecap="round"
+        />
+        <line
+          x1="7.5"
+          y1="17.5"
+          x2="12"
+          y2="17.5"
+          stroke="white"
+          strokeWidth="0.8"
+          strokeLinecap="round"
+        />
       </>
     ),
   },
@@ -492,7 +713,16 @@ export const VIVID_DEFS = {
     color: "#D04423",
     symbol: (
       <>
-        <rect x="7" y="10" width="10" height="7" rx="0.8" fill="none" stroke="white" strokeWidth="1" />
+        <rect
+          x="7"
+          y="10"
+          width="10"
+          height="7"
+          rx="0.8"
+          fill="none"
+          stroke="white"
+          strokeWidth="1"
+        />
         <polygon points="11,12 11,15.5 14,13.75" fill="white" />
       </>
     ),
@@ -502,8 +732,18 @@ export const VIVID_DEFS = {
     symbol: (
       <>
         <ellipse cx="12" cy="11" rx="4" ry="1.3" fill="none" stroke="white" strokeWidth="0.9" />
-        <path d="M8 11v3c0 .72 1.79 1.3 4 1.3s4-.58 4-1.3v-3" fill="none" stroke="white" strokeWidth="0.9" />
-        <path d="M8 14v3c0 .72 1.79 1.3 4 1.3s4-.58 4-1.3v-3" fill="none" stroke="white" strokeWidth="0.9" />
+        <path
+          d="M8 11v3c0 .72 1.79 1.3 4 1.3s4-.58 4-1.3v-3"
+          fill="none"
+          stroke="white"
+          strokeWidth="0.9"
+        />
+        <path
+          d="M8 14v3c0 .72 1.79 1.3 4 1.3s4-.58 4-1.3v-3"
+          fill="none"
+          stroke="white"
+          strokeWidth="0.9"
+        />
       </>
     ),
   },
@@ -511,8 +751,21 @@ export const VIVID_DEFS = {
     color: "#2D8C3C",
     symbol: (
       <>
-        <path d="M12 10l-4 2v3c0 1.8 1.8 3.2 4 3.7 2.2-.5 4-1.9 4-3.7v-3z" fill="none" stroke="white" strokeWidth="1" strokeLinejoin="round" />
-        <path d="M10 14l1.5 1.5 3-3" stroke="white" strokeWidth="1" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d="M12 10l-4 2v3c0 1.8 1.8 3.2 4 3.7 2.2-.5 4-1.9 4-3.7v-3z"
+          fill="none"
+          stroke="white"
+          strokeWidth="1"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M10 14l1.5 1.5 3-3"
+          stroke="white"
+          strokeWidth="1"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </>
     ),
   },
@@ -520,7 +773,12 @@ export const VIVID_DEFS = {
     color: "#7B5427",
     symbol: (
       <>
-        <path d="M7 10.5v7c1.5-1 3-1.5 5-1.5s3.5.5 5 1.5V10.5c-1.5-1-3-1.5-5-1.5S8.5 9.5 7 10.5z" fill="none" stroke="white" strokeWidth="0.9" />
+        <path
+          d="M7 10.5v7c1.5-1 3-1.5 5-1.5s3.5.5 5 1.5V10.5c-1.5-1-3-1.5-5-1.5S8.5 9.5 7 10.5z"
+          fill="none"
+          stroke="white"
+          strokeWidth="0.9"
+        />
         <line x1="12" y1="9" x2="12" y2="17" stroke="white" strokeWidth="0.6" />
       </>
     ),
@@ -533,7 +791,13 @@ export const VIVID_DEFS = {
     color: "#E10098",
     symbol: (
       <>
-        <polygon points="12,10.5 15.5,12.3 15.5,16 12,17.8 8.5,16 8.5,12.3" fill="none" stroke="white" strokeWidth="0.8" strokeLinejoin="round" />
+        <polygon
+          points="12,10.5 15.5,12.3 15.5,16 12,17.8 8.5,16 8.5,12.3"
+          fill="none"
+          stroke="white"
+          strokeWidth="0.8"
+          strokeLinejoin="round"
+        />
         <circle cx="12" cy="10.5" r="0.8" fill="white" />
         <circle cx="15.5" cy="12.3" r="0.8" fill="white" />
         <circle cx="15.5" cy="16" r="0.8" fill="white" />
@@ -817,7 +1081,12 @@ export function resolveVividIconTypeByName(name: string): VividIconType | null {
   if (lower === ".gitignore" || lower === ".gitattributes" || lower === ".editorconfig") {
     return "config";
   }
-  if (lower === "license" || lower.startsWith("license.") || lower === "changelog" || lower.startsWith("changelog.")) {
+  if (
+    lower === "license" ||
+    lower.startsWith("license.") ||
+    lower === "changelog" ||
+    lower.startsWith("changelog.")
+  ) {
     return "text";
   }
   return null;

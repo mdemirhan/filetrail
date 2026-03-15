@@ -322,7 +322,11 @@ export function CopyPasteReviewDialog({
           </div>
           <div className="copy-paste-review-body">
             {availableBuckets.length > 1 ? (
-              <div className="copy-paste-review-filter-bar" role="toolbar" aria-label="Filter by action">
+              <div
+                className="copy-paste-review-filter-bar"
+                role="toolbar"
+                aria-label="Filter by action"
+              >
                 {availableBuckets.map((bucket) => (
                   <button
                     key={bucket}
@@ -352,7 +356,9 @@ export function CopyPasteReviewDialog({
                   ))
                 ) : (
                   <li className="copy-paste-review-empty">
-                    {activeFilters.size > 0 ? "No items match the active filters." : "No planned changes."}
+                    {activeFilters.size > 0
+                      ? "No items match the active filters."
+                      : "No planned changes."}
                   </li>
                 )}
               </ul>
@@ -451,6 +457,7 @@ function PlanTreeNode({
 }) {
   const isExpandable = node.children.length > 0;
   const isExpanded = expandedNodeIds.has(node.id);
+  const hintSegmentCounts = new Map<string, number>();
 
   return (
     <li
@@ -492,11 +499,19 @@ function PlanTreeNode({
             <span
               className={`copy-paste-review-row-hint${node.summaryBucket === "skipped" ? " is-muted" : ""}`}
             >
-              {node.hint.map((seg, i) => (
-                <span key={i} className={seg.tone ? `is-${seg.tone}` : undefined}>
-                  {seg.text}
-                </span>
-              ))}
+              {node.hint.map((seg) => {
+                const keyBase = `${seg.tone ?? "plain"}:${seg.text}`;
+                const keyCount = (hintSegmentCounts.get(keyBase) ?? 0) + 1;
+                hintSegmentCounts.set(keyBase, keyCount);
+                return (
+                  <span
+                    key={`${keyBase}:${keyCount}`}
+                    className={seg.tone ? `is-${seg.tone}` : undefined}
+                  >
+                    {seg.text}
+                  </span>
+                );
+              })}
             </span>
           ) : null}
         </div>
@@ -845,11 +860,7 @@ function buildModifiedHint(node: AnalysisNode): HintSegment[] | null {
     const tone = delta > 0 ? "gain" : "loss";
     const duration = formatRelativeDuration(delta);
     const dateStr = formatShortDateTime(srcMs);
-    return [
-      { text: "Modified: " },
-      { text: label, tone },
-      { text: ` (${duration}, ${dateStr})` },
-    ];
+    return [{ text: "Modified: " }, { text: label, tone }, { text: ` (${duration}, ${dateStr})` }];
   }
 
   if (srcMs !== null) {

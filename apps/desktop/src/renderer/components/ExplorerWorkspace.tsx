@@ -1,12 +1,12 @@
 import {
+  type ComponentProps,
+  type MutableRefObject,
+  type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  type ComponentProps,
-  type MutableRefObject,
-  type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { createPortal } from "react-dom";
 
@@ -14,7 +14,7 @@ import type { IpcRequest } from "@filetrail/contracts";
 
 import type { ExplorerViewMode } from "../../shared/appPreferences";
 import type { RendererCommandType } from "../../shared/rendererCommands";
-import { getToolbarItemDefinition, type ToolbarItemId } from "../../shared/toolbarItems";
+import { type ToolbarItemId, getToolbarItemDefinition } from "../../shared/toolbarItems";
 import { parentDirectoryPath } from "../lib/explorerNavigation";
 import { EXPLORER_LAYOUT } from "../lib/layoutTokens";
 import { InfoPanel } from "./GetInfoPanel";
@@ -199,7 +199,8 @@ export function ExplorerWorkspace({
       topToolbarItems.filter(
         (itemId) =>
           itemId !== "search" &&
-          (explorerToolbarLayout !== "minimal" || getToolbarItemDefinition(itemId).topVisibleInMinimal !== false),
+          (explorerToolbarLayout !== "minimal" ||
+            getToolbarItemDefinition(itemId).topVisibleInMinimal !== false),
       ),
     [explorerToolbarLayout, topToolbarItems],
   );
@@ -209,20 +210,31 @@ export function ExplorerWorkspace({
     left: number;
     top: number;
   } | null>(null);
+  const toolbarMeasurementKey = baseTopToolbarItems.join(":");
+  const sortMenuResetKey = `${explorerToolbarLayout}:${visibleTopToolbarCount}`;
 
   useLayoutEffect(() => {
+    void toolbarMeasurementKey;
     const mainContainer = titlebarActionsMainRef.current;
     const measureContainer = titlebarActionsMeasureRef.current;
-    if (!(mainContainer instanceof HTMLDivElement) || !(measureContainer instanceof HTMLDivElement)) {
+    if (
+      !(mainContainer instanceof HTMLDivElement) ||
+      !(measureContainer instanceof HTMLDivElement)
+    ) {
       return;
     }
 
     const updateVisibleCount = () => {
-      const itemWidths = Array.from(measureContainer.querySelectorAll<HTMLElement>("[data-top-toolbar-item]")).map(
-        (item) => Math.ceil(item.getBoundingClientRect().width),
+      const itemWidths = Array.from(
+        measureContainer.querySelectorAll<HTMLElement>("[data-top-toolbar-item]"),
+      ).map((item) => Math.ceil(item.getBoundingClientRect().width));
+      const nextVisibleCount = resolveVisibleTopToolbarCount(
+        itemWidths,
+        Math.floor(mainContainer.clientWidth),
       );
-      const nextVisibleCount = resolveVisibleTopToolbarCount(itemWidths, Math.floor(mainContainer.clientWidth));
-      setVisibleTopToolbarCount((currentCount) => (currentCount === nextVisibleCount ? currentCount : nextVisibleCount));
+      setVisibleTopToolbarCount((currentCount) =>
+        currentCount === nextVisibleCount ? currentCount : nextVisibleCount,
+      );
     };
 
     updateVisibleCount();
@@ -234,7 +246,7 @@ export function ExplorerWorkspace({
     return () => {
       observer.disconnect();
     };
-  }, [baseTopToolbarItems]);
+  }, [toolbarMeasurementKey]);
 
   useLayoutEffect(() => {
     if (!sortMenuOpen) {
@@ -290,8 +302,9 @@ export function ExplorerWorkspace({
   }, [sortMenuOpen]);
 
   useEffect(() => {
+    void sortMenuResetKey;
     setSortMenuOpen(false);
-  }, [visibleTopToolbarCount, explorerToolbarLayout]);
+  }, [sortMenuResetKey]);
 
   const visibleTopToolbarItems = useMemo(
     () => normalizeTopToolbarItems(baseTopToolbarItems.slice(0, visibleTopToolbarCount)),
@@ -302,9 +315,12 @@ export function ExplorerWorkspace({
     return formatToolbarTooltip(labelOverride ?? definition.label, definition.shortcutLabel);
   };
 
-  function renderTopToolbarItem(itemId: ToolbarItemId, mode: "interactive" | "measure" = "interactive") {
+  function renderTopToolbarItem(
+    itemId: ToolbarItemId,
+    mode: "interactive" | "measure" = "interactive",
+  ) {
     if (itemId === "topSeparator") {
-      return <div key={itemId} className="titlebar-divider" role="separator" aria-orientation="vertical" />;
+      return <div key={itemId} className="titlebar-divider" aria-hidden="true" />;
     }
     if (itemId === "back") {
       return (
@@ -382,7 +398,9 @@ export function ExplorerWorkspace({
             </button>
             <button
               type="button"
-              className={viewMode === "details" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
+              className={
+                viewMode === "details" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"
+              }
               onClick={() => onViewModeChange("details")}
               title="Details view"
               aria-label="Details view"
@@ -569,7 +587,9 @@ export function ExplorerWorkspace({
                   <div className="toolbar-search-option-row toolbar-search-option-row-secondary">
                     <button
                       type="button"
-                      className={searchRecursive ? "toolbar-search-pill active" : "toolbar-search-pill"}
+                      className={
+                        searchRecursive ? "toolbar-search-pill active" : "toolbar-search-pill"
+                      }
                       onClick={() => onSearchRecursiveChange(!searchRecursive)}
                       aria-pressed={searchRecursive}
                     >
@@ -612,7 +632,8 @@ export function ExplorerWorkspace({
       );
     }
     if (itemId === "root" || itemId === "applications" || itemId === "trash") {
-      const location = itemId === "root" ? "root" : itemId === "applications" ? "applications" : "trash";
+      const location =
+        itemId === "root" ? "root" : itemId === "applications" ? "applications" : "trash";
       return (
         <button
           key={itemId}
@@ -645,7 +666,9 @@ export function ExplorerWorkspace({
         <button
           key={itemId}
           type="button"
-          className={treePaneProps.foldersFirst ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
+          className={
+            treePaneProps.foldersFirst ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"
+          }
           onClick={treePaneProps.onToggleFoldersFirst}
           title={treePaneProps.foldersFirst ? "Folders first" : "Mixed file and folder order"}
           aria-label="Toggle folders first"
@@ -660,7 +683,9 @@ export function ExplorerWorkspace({
         <button
           key={itemId}
           type="button"
-          className={treePaneProps.includeHidden ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
+          className={
+            treePaneProps.includeHidden ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"
+          }
           onClick={treePaneProps.onToggleHidden}
           title={getToolbarTooltip(itemId)}
           aria-label="Toggle hidden files"
@@ -716,7 +741,8 @@ export function ExplorerWorkspace({
     }
 
     const definition = getToolbarItemDefinition(itemId);
-    if (!definition.commandType) {
+    const commandType = definition.commandType;
+    if (!commandType) {
       return null;
     }
     return (
@@ -724,8 +750,8 @@ export function ExplorerWorkspace({
         key={itemId}
         type="button"
         className="tb-btn tb-btn-icon"
-        disabled={!canRunRendererCommand(definition.commandType)}
-        onClick={() => onRendererCommand(definition.commandType!)}
+        disabled={!canRunRendererCommand(commandType)}
+        onClick={() => onRendererCommand(commandType)}
         title={formatToolbarTooltip(definition.label, definition.shortcutLabel)}
         aria-label={definition.label}
       >
@@ -763,7 +789,11 @@ export function ExplorerWorkspace({
             )}
           </div>
           {renderTopToolbarItem("search")}
-          <div ref={titlebarActionsMeasureRef} className="titlebar-actions-measure" aria-hidden="true">
+          <div
+            ref={titlebarActionsMeasureRef}
+            className="titlebar-actions-measure"
+            aria-hidden="true"
+          >
             {baseTopToolbarItems.map((itemId, index) =>
               renderMeasuredTopToolbarActionItem(itemId, `${itemId}-measure-${index}`),
             )}
