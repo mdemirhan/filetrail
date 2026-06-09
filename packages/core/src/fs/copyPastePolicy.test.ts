@@ -1,6 +1,10 @@
 import { resolveAnalysisWithPolicy, resolveSingleNodeWithAction } from "./copyPastePolicy";
 import { MockWriteServiceFileSystem } from "./testUtils";
-import type { CopyPasteAnalysisNode, CopyPasteAnalysisReport } from "./writeServiceTypes";
+import type {
+  CopyPasteAnalysisNode,
+  CopyPasteAnalysisReport,
+  CopyPastePolicy,
+} from "./writeServiceTypes";
 
 function createNode(
   input: Partial<CopyPasteAnalysisNode> &
@@ -268,6 +272,79 @@ describe("copyPastePolicy", () => {
       throw new Error("Expected mismatch resolution.");
     }
     expect(resolved.action).toBe("overwrite");
+  });
+
+  it.each([
+    ["directory", "directory_conflict", {}, "Missing directory conflict policy."],
+    ["mismatch", "type_mismatch", { directory: "merge" }, "Missing mismatch conflict policy."],
+    [
+      "file",
+      "file_conflict",
+      { directory: "merge", mismatch: "skip" },
+      "Missing file conflict policy.",
+    ],
+  ] as const)(
+    "rejects incomplete %s conflict policy",
+    async (_name, conflictClass, policy, expectedMessage) => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/target": { kind: "directory" },
+      });
+      const node = createNode({
+        id: `missing-${conflictClass}`,
+        sourcePath: "/source/item",
+        destinationPath: "/target/item",
+        sourceKind: conflictClass === "directory_conflict" ? "directory" : "file",
+        destinationKind: conflictClass === "type_mismatch" ? "directory" : "file",
+        conflictClass,
+        disposition: "conflict",
+      });
+
+      await expect(
+        resolveAnalysisWithPolicy({
+          report: createReport([node]),
+          policy: policy as CopyPastePolicy,
+          fileSystem,
+        }),
+      ).rejects.toThrow(expectedMessage);
+    },
+  );
+
+  it("joins child destinations under filesystem root without duplicate separators", async () => {
+    const fileSystem = new MockWriteServiceFileSystem({
+      "/Folder copy": { kind: "directory" },
+    });
+    const directoryNode = createNode({
+      id: "root-dir",
+      sourcePath: "/source/Folder",
+      destinationPath: "/Folder",
+      sourceKind: "directory",
+      destinationKind: "directory",
+      conflictClass: "directory_conflict",
+      disposition: "conflict",
+      children: [
+        createNode({
+          id: "root-dir/a.txt",
+          sourcePath: "/source/Folder/a.txt",
+          destinationPath: "/Folder/a.txt",
+        }),
+      ],
+    });
+
+    const [resolved] = await resolveAnalysisWithPolicy({
+      report: createReport([directoryNode]),
+      policy: {
+        file: "skip",
+        directory: "keep_both",
+        mismatch: "skip",
+      },
+      fileSystem,
+    });
+
+    if (!resolved) {
+      throw new Error("Expected root destination resolution.");
+    }
+    expect(resolved.destinationPath).toBe("/Folder copy 2");
+    expect(resolved.children[0]?.destinationPath).toBe("/Folder copy 2/a.txt");
   });
 
   it("allows explicit runtime actions to override the stored policy", async () => {

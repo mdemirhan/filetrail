@@ -197,6 +197,56 @@ describe("explorerService", () => {
     ]);
   });
 
+  it("keeps dangling symlinks in sorted directory snapshots without failing navigation", async () => {
+    const fakeFileSystem = {
+      readdir: vi.fn(async () => [
+        fakeDirent("dangling", { symbolicLink: true }),
+        fakeDirent("notes.txt", { file: true }),
+      ]),
+      stat: vi.fn(async (path: string) => {
+        if (path === "/workspace") {
+          return fakeStats(true, false, 0);
+        }
+        if (path.endsWith("notes.txt")) {
+          return fakeStats(false, true, 12, false, new Date("2024-02-01T00:00:00.000Z"));
+        }
+        throw new Error("missing target");
+      }),
+      lstat: vi.fn(async (path: string) =>
+        path.endsWith("dangling")
+          ? fakeStats(false, false, 7, true, new Date("2024-01-01T00:00:00.000Z"))
+          : fakeStats(false, true, 12, false, new Date("2024-02-01T00:00:00.000Z")),
+      ),
+      realpath: vi.fn(async (path: string) => path),
+    };
+
+    const modified = await listDirectorySnapshot(
+      "/workspace",
+      true,
+      "modified",
+      "asc",
+      false,
+      fakeFileSystem,
+    );
+    const size = await listDirectorySnapshot(
+      "/workspace",
+      true,
+      "size",
+      "asc",
+      false,
+      fakeFileSystem,
+    );
+
+    expect(modified.entries.map((entry) => [entry.name, entry.kind])).toEqual([
+      ["dangling", "other"],
+      ["notes.txt", "file"],
+    ]);
+    expect(size.entries.map((entry) => [entry.name, entry.kind])).toEqual([
+      ["notes.txt", "file"],
+      ["dangling", "other"],
+    ]);
+  });
+
   it("rejects metadata requests for paths outside the requested directory", async () => {
     const fakeFileSystem = {
       readdir: vi.fn(),
@@ -437,6 +487,36 @@ describe("explorerService", () => {
     });
   });
 
+  it("returns unavailable item properties for dangling symlinks", async () => {
+    const fakeFileSystem = {
+      readdir: vi.fn(),
+      stat: vi.fn(async () => {
+        throw new Error("missing target");
+      }),
+      lstat: vi.fn(async () =>
+        fakeStats(false, false, 7, true, new Date("2024-01-03T00:00:00.000Z")),
+      ),
+      realpath: vi.fn(async (path: string) => path),
+    };
+
+    const response = await getItemProperties("/Users/demo/dangling", fakeFileSystem);
+
+    expect(response.item).toEqual({
+      path: "/Users/demo/dangling",
+      name: "dangling",
+      extension: "",
+      kind: "other",
+      kindLabel: "Item",
+      isHidden: false,
+      isSymlink: true,
+      createdAt: "2024-01-01T00:00:00.000Z",
+      modifiedAt: "2024-01-03T00:00:00.000Z",
+      sizeBytes: null,
+      sizeStatus: "unavailable",
+      permissionMode: 0o644,
+    });
+  });
+
   it("skips broken and non-directory suggestion entries while applying the result limit", async () => {
     const fakeFileSystem = {
       readdir: vi.fn(async () => [
@@ -499,6 +579,50 @@ describe("explorerService", () => {
         path: "/workspace/alpha.txt",
         kindLabel: "TXT File",
         sizeBytes: 2,
+        sizeStatus: "ready",
+      }),
+    ]);
+  });
+
+  it("returns unavailable metadata for dangling symlinks instead of failing the batch", async () => {
+    const fakeFileSystem = {
+      readdir: vi.fn(),
+      stat: vi.fn(async (path: string) => {
+        if (path === "/workspace") {
+          return fakeStats(true, false, 0);
+        }
+        if (path.endsWith("notes.txt")) {
+          return fakeStats(false, true, 12);
+        }
+        throw new Error("missing target");
+      }),
+      lstat: vi.fn(async (path: string) =>
+        path.endsWith("dangling")
+          ? fakeStats(false, false, 7, true, new Date("2024-01-03T00:00:00.000Z"))
+          : fakeStats(false, true, 12),
+      ),
+      realpath: vi.fn(async (path: string) => path),
+    };
+
+    const response = await getDirectoryMetadataBatch(
+      "/workspace",
+      ["/workspace/dangling", "/workspace/notes.txt"],
+      fakeFileSystem,
+    );
+
+    expect(response.items).toEqual([
+      {
+        path: "/workspace/dangling",
+        kindLabel: "Item",
+        modifiedAt: "2024-01-03T00:00:00.000Z",
+        sizeBytes: null,
+        sizeStatus: "unavailable",
+        permissionMode: 0o644,
+      },
+      expect.objectContaining({
+        path: "/workspace/notes.txt",
+        kindLabel: "TXT File",
+        sizeBytes: 12,
         sizeStatus: "ready",
       }),
     ]);

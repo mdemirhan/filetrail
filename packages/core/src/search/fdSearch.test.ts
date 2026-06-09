@@ -112,7 +112,7 @@ describe("fdSearch", () => {
     });
   });
 
-  it("marks cancelled jobs and terminates the running process", () => {
+  it("terminates cancelled jobs and removes them without requiring another update poll", () => {
     const process = createMockProcess();
     const runtime = new FdSearchRuntime("/tmp/fd", {
       spawn: vi.fn(() => process as never),
@@ -129,15 +129,10 @@ describe("fdSearch", () => {
 
     expect(runtime.cancelSearch(started.jobId)).toEqual({ ok: true });
     expect(process.kill).toHaveBeenCalledWith("SIGTERM");
-    expect(runtime.getUpdate(started.jobId, 0)).toEqual({
-      jobId: started.jobId,
-      status: "cancelled",
-      items: [],
-      nextCursor: 0,
-      done: true,
-      truncated: false,
-      error: null,
-    });
+    expect(() => runtime.getUpdate(started.jobId, 0)).toThrow(
+      `Unknown search job: ${started.jobId}`,
+    );
+    expect(runtime.cancelSearch(started.jobId)).toEqual({ ok: true });
   });
 
   it("surfaces stderr content for failed searches", () => {

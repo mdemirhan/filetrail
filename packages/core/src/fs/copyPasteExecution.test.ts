@@ -2339,6 +2339,49 @@ describe("copyPasteExecution", () => {
       expect(expectNode(fileSystem, "/target/a.txt").size).toBe(5);
     });
 
+    it("treats externally removed source directories as already cleaned up in cut mode", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/dir": { kind: "directory" },
+        "/source/dir/a.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.rmImpl = async (path) => {
+        if (path === "/source/dir/a.txt") {
+          fileSystem.nodes.delete("/source/dir/a.txt");
+          fileSystem.nodes.delete("/source/dir");
+          return;
+        }
+        if (!fileSystem.nodes.delete(path)) {
+          throw Object.assign(new Error(`ENOENT: ${path}`), { code: "ENOENT", path });
+        }
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/dir"],
+        destinationDirectoryPath: "/target",
+      });
+      const events: CopyPasteProgressEvent[] = [];
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "cut-source-dir-already-gone-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: (event) => events.push(event),
+        requestResolution: async () => null,
+      });
+
+      expect(expectLastEvent(events).status).toBe("completed");
+      expect(fileSystem.exists("/source/dir")).toBe(false);
+      expect(expectNode(fileSystem, "/target/dir/a.txt").size).toBe(5);
+    });
+
     it("falls back to copy+delete on EXDEV error", async () => {
       const fileSystem = new MockWriteServiceFileSystem({
         "/source": { kind: "directory" },
@@ -2378,6 +2421,44 @@ describe("copyPasteExecution", () => {
       expect(copyFileStreamCalled).toBe(true);
       expect(fileSystem.exists("/source/a.txt")).toBe(false);
       expect(expectNode(fileSystem, "/target/a.txt").size).toBe(5);
+    });
+
+    it("reports non-EXDEV rename errors as operation failures", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableRename();
+      fileSystem.renameImpl = async () => {
+        throw Object.assign(new Error("EPERM"), { code: "EPERM", path: "/source/a.txt" });
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+      const events: CopyPasteProgressEvent[] = [];
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "rename-eperm-1",
+        report,
+        mode: "cut",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: (event) => events.push(event),
+        requestResolution: async () => null,
+      });
+
+      const finalEvent = expectLastEvent(events);
+      expect(finalEvent.status).toBe("failed");
+      expect(finalEvent.result?.error).toContain("EPERM");
+      expect(fileSystem.exists("/source/a.txt")).toBe(true);
+      expect(fileSystem.exists("/target/a.txt")).toBe(false);
     });
 
     it("does NOT use rename for copy mode (only cut)", async () => {
@@ -2836,6 +2917,84 @@ describe("copyPasteExecution", () => {
       expect(expectNode(fileSystem, "/target/a.txt").size).toBe(5);
     });
 
+    it("classifies a runtime-created destination directory for a file as a type mismatch", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+      });
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+      fileSystem.addDirectory("/target/a.txt");
+      const events: CopyPasteProgressEvent[] = [];
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "runtime-created-type-mismatch-1",
+        report,
+        mode: "copy",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: (event) => events.push(event),
+        requestResolution: async (conflict) => {
+          expect(conflict.reason).toBe("destination_created");
+          expect(conflict.conflictClass).toBe("type_mismatch");
+          return "skip";
+        },
+      });
+
+      expect(events.some((event) => event.status === "awaiting_resolution")).toBe(true);
+      expect(expectLastEvent(events).status).toBe("partial");
+    });
+
+    it.each([
+      ["destination_deleted", (fs: MockWriteServiceFileSystem) => fs.nodes.delete("/target/a.txt")],
+      [
+        "destination_changed",
+        (fs: MockWriteServiceFileSystem) => fs.mutateNode("/target/a.txt", (node) => node),
+      ],
+    ] as const)(
+      "prompts when an overwrite destination is %s after analysis",
+      async (reason, mutate) => {
+        const fileSystem = new MockWriteServiceFileSystem({
+          "/source": { kind: "directory" },
+          "/source/a.txt": { kind: "file", size: 5 },
+          "/target": { kind: "directory" },
+          "/target/a.txt": { kind: "file", size: 99 },
+        });
+        const { report, resolvedNodes } = await createResolvedOperation({
+          fileSystem,
+          sourcePaths: ["/source/a.txt"],
+          destinationDirectoryPath: "/target",
+          policy: { file: "overwrite", directory: "merge", mismatch: "overwrite" },
+        });
+        mutate(fileSystem);
+
+        await executeCopyPasteFromAnalysis({
+          operationId: `runtime-${reason}-1`,
+          report,
+          mode: "copy",
+          policy: { file: "overwrite", directory: "merge", mismatch: "overwrite" },
+          fileSystem,
+          now: () => new Date("2026-03-11T00:00:00.000Z"),
+          signal: new AbortController().signal,
+          resolvedNodes,
+          emit: () => undefined,
+          requestResolution: async (conflict) => {
+            expect(conflict.reason).toBe(reason);
+            return "skip";
+          },
+        });
+
+        expect(fileSystem.exists("/source/a.txt")).toBe(true);
+      },
+    );
+
     it("directory rename reports correct byte progress for subtree", async () => {
       const fileSystem = new MockWriteServiceFileSystem({
         "/source": { kind: "directory" },
@@ -3105,6 +3264,78 @@ describe("copyPasteExecution", () => {
       });
 
       expect(lutimesCalls.some((c) => c.path === "/target/link" && c.mtimeMs === 7777)).toBe(true);
+    });
+
+    it.each(["ENOTSUP", "EOPNOTSUPP"] as const)(
+      "lutimes %s errors are ignored for symlink timestamp preservation",
+      async (code) => {
+        const fileSystem = new MockWriteServiceFileSystem({
+          "/source": { kind: "directory" },
+          "/source/link": { kind: "symlink", target: "actual.txt", mtimeMs: 7777 },
+          "/target": { kind: "directory" },
+        });
+        fileSystem.enableLutimes();
+        fileSystem.lutimesImpl = async () => {
+          throw Object.assign(new Error(code), { code });
+        };
+        const { report, resolvedNodes } = await createResolvedOperation({
+          fileSystem,
+          sourcePaths: ["/source/link"],
+          destinationDirectoryPath: "/target",
+        });
+        const events: CopyPasteProgressEvent[] = [];
+
+        await executeCopyPasteFromAnalysis({
+          operationId: `lutimes-${code.toLowerCase()}-1`,
+          report,
+          mode: "copy",
+          policy: { file: "skip", directory: "merge", mismatch: "skip" },
+          fileSystem,
+          now: () => new Date("2026-03-11T00:00:00.000Z"),
+          signal: new AbortController().signal,
+          resolvedNodes,
+          emit: (event) => events.push(event),
+          requestResolution: async () => null,
+        });
+
+        expect(expectLastEvent(events).status).toBe("completed");
+        expect(expectNode(fileSystem, "/target/link").kind).toBe("symlink");
+      },
+    );
+
+    it("lutimes other errors fail the symlink copy", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/link": { kind: "symlink", target: "actual.txt", mtimeMs: 7777 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableLutimes();
+      fileSystem.lutimesImpl = async () => {
+        throw Object.assign(new Error("EPERM"), { code: "EPERM" });
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        sourcePaths: ["/source/link"],
+        destinationDirectoryPath: "/target",
+      });
+      const events: CopyPasteProgressEvent[] = [];
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "lutimes-eperm-1",
+        report,
+        mode: "copy",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: (event) => events.push(event),
+        requestResolution: async () => null,
+      });
+
+      const finalEvent = expectLastEvent(events);
+      expect(finalEvent.status).toBe("failed");
+      expect(finalEvent.result?.error).toContain("EPERM");
     });
 
     it("symlink uses lutimes not utimes (does not follow symlink target)", async () => {

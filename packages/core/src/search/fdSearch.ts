@@ -141,12 +141,17 @@ export class FdSearchRuntime {
 
   cancelSearch(jobId: string): IpcResponse<"search:cancel"> {
     const job = this.jobs.get(jobId);
-    if (!job || job.done) {
+    if (!job) {
+      return { ok: true };
+    }
+    if (job.done) {
+      this.jobs.delete(jobId);
       return { ok: true };
     }
     job.status = "cancelled";
     job.done = true;
     job.process.kill("SIGTERM");
+    this.jobs.delete(jobId);
     return { ok: true };
   }
 

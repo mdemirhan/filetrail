@@ -112,7 +112,9 @@ export async function listDirectorySnapshot(
       const entryPath = resolve(directoryPath, dirent.name);
       const kind = await classifyEntry(dirent, entryPath, fileSystem);
       const stats =
-        sortBy === "modified" || sortBy === "size" ? await fileSystem.stat(entryPath) : null;
+        sortBy === "modified" || sortBy === "size"
+          ? await readBestEffortStats(entryPath, fileSystem)
+          : null;
       return {
         path: entryPath,
         name: dirent.name,
@@ -121,7 +123,7 @@ export async function listDirectorySnapshot(
         isHidden: isHiddenName(dirent.name),
         isSymlink: kind === "symlink_directory" || kind === "symlink_file",
         sortModifiedAt: stats ? stats.mtime.getTime() : null,
-        sortSizeBytes: stats ? (stats.isDirectory() ? null : stats.size) : null,
+        sortSizeBytes: stats && (kind === "file" || kind === "symlink_file") ? stats.size : null,
       };
     }),
   );
@@ -166,10 +168,12 @@ export async function getItemProperties(
   fileSystem: ExplorerFileSystem = DEFAULT_FILE_SYSTEM,
 ): Promise<IpcResponse<"item:getProperties">> {
   const resolvedPath = resolve(path);
-  const stats = await fileSystem.stat(resolvedPath);
   const symlinkStats = await safeLstat(resolvedPath, fileSystem);
+  const stats = await safeStat(resolvedPath, fileSystem);
+  const metadataStats = stats ?? symlinkStats;
   const isSymlink = symlinkStats?.isSymbolicLink?.() ?? false;
-  const kind = deriveKindFromStats(stats, isSymlink, resolvedPath);
+  const kind = stats ? deriveKindFromStats(stats, isSymlink, resolvedPath) : "other";
+  const isDir = stats?.isDirectory() ?? false;
   return {
     item: {
       path: resolvedPath,
@@ -179,11 +183,11 @@ export async function getItemProperties(
       kindLabel: getKindLabel(kind, resolvedPath),
       isHidden: isHiddenName(basename(resolvedPath)),
       isSymlink,
-      createdAt: toIsoStringOrNull(stats.birthtime),
-      modifiedAt: toIsoStringOrNull(stats.mtime),
-      sizeBytes: stats.isDirectory() ? null : stats.size,
-      sizeStatus: stats.isDirectory() ? "deferred" : "ready",
-      permissionMode: normalizePermissionMode(stats.mode),
+      createdAt: toIsoStringOrNull(metadataStats?.birthtime),
+      modifiedAt: toIsoStringOrNull(metadataStats?.mtime),
+      sizeBytes: stats && !isDir ? stats.size : null,
+      sizeStatus: stats ? (isDir ? "deferred" : "ready") : "unavailable",
+      permissionMode: normalizePermissionMode(metadataStats?.mode),
     },
   };
 }
@@ -277,19 +281,27 @@ async function readDirectoryEntryMetadata(
   fileSystem: ExplorerFileSystem,
 ): Promise<IpcResponse<"directory:getMetadataBatch">["items"][number]> {
   // Directory sizes are intentionally deferred; everything else is cheap enough for bulk reads.
-  const stats = await fileSystem.stat(path);
   const symlinkStats = await safeLstat(path, fileSystem);
+  const stats = await safeStat(path, fileSystem);
+  const metadataStats = stats ?? symlinkStats;
   const isSymlink = symlinkStats?.isSymbolicLink?.() ?? false;
-  const kind = deriveKindFromStats(stats, isSymlink, path);
-  const isDir = stats.isDirectory();
+  const kind = stats ? deriveKindFromStats(stats, isSymlink, path) : "other";
+  const isDir = stats?.isDirectory() ?? false;
   return {
     path,
     kindLabel: getKindLabel(kind, path),
-    modifiedAt: toIsoStringOrNull(stats.mtime),
-    sizeBytes: isDir ? null : stats.size,
-    sizeStatus: isDir ? "deferred" : "ready",
-    permissionMode: normalizePermissionMode(stats.mode),
+    modifiedAt: toIsoStringOrNull(metadataStats?.mtime),
+    sizeBytes: stats && !isDir ? stats.size : null,
+    sizeStatus: stats ? (isDir ? "deferred" : "ready") : "unavailable",
+    permissionMode: normalizePermissionMode(metadataStats?.mode),
   };
+}
+
+async function readBestEffortStats(
+  path: string,
+  fileSystem: ExplorerFileSystem,
+): Promise<FileSystemStats | null> {
+  return (await safeStat(path, fileSystem)) ?? (await safeLstat(path, fileSystem));
 }
 
 async function classifyEntry(
@@ -405,6 +417,17 @@ async function safeLstat(
 ): Promise<(FileSystemStats & { isSymbolicLink?: () => boolean }) | null> {
   try {
     return (await fileSystem.lstat(path)) as FileSystemStats & { isSymbolicLink?: () => boolean };
+  } catch {
+    return null;
+  }
+}
+
+async function safeStat(
+  path: string,
+  fileSystem: ExplorerFileSystem,
+): Promise<FileSystemStats | null> {
+  try {
+    return await fileSystem.stat(path);
   } catch {
     return null;
   }

@@ -1507,7 +1507,7 @@ function formatDetailSize(
   if (entry.kind === "directory" || entry.kind === "symlink_directory" || entry.kind === "bundle") {
     return "-";
   }
-  if (!metadata || metadata.sizeStatus !== "ready" || metadata.sizeBytes === null) {
+  if (!metadata || metadata.sizeStatus === "deferred") {
     return "";
   }
   return formatSize(metadata.sizeBytes, metadata.sizeStatus);

@@ -307,7 +307,16 @@ describe("ContentPane", () => {
         includeHidden={false}
         selectedPaths={[]}
         selectionLeadPath={null}
-        metadataByPath={{}}
+        metadataByPath={{
+          "/Users/demo/alpha.txt": {
+            path: "/Users/demo/alpha.txt",
+            kindLabel: "TXT File",
+            modifiedAt: null,
+            sizeBytes: null,
+            sizeStatus: "unavailable",
+            permissionMode: null,
+          },
+        }}
         detailColumns={{
           size: true,
           modified: true,
@@ -333,6 +342,7 @@ describe("ContentPane", () => {
     );
 
     expect(screen.getByRole("button", { name: /Folder/ })).toHaveTextContent("-");
+    expect(screen.getByRole("button", { name: /alpha\.txt/ })).toHaveTextContent("Unavailable");
     expect(screen.queryByText("Not yet available")).not.toBeInTheDocument();
     expect(screen.queryByText("Not available")).not.toBeInTheDocument();
   });

@@ -629,57 +629,6 @@ async function tryRemoveEmptySourceDirectory(
   }
 }
 
-async function cleanupMovedSourceNode(
-  resolvedNode: ResolvedCopyPasteNode,
-  fileSystem: WriteServiceFileSystem,
-): Promise<void> {
-  if (resolvedNode.action === "skip") {
-    return;
-  }
-  if (resolvedNode.node.sourceKind === "directory") {
-    for (const child of resolvedNode.children) {
-      await cleanupMovedSourceNode(child, fileSystem);
-    }
-    const currentSourceFingerprint = await captureFingerprint(
-      fileSystem,
-      resolvedNode.node.sourcePath,
-    );
-    if (
-      !canRemoveMovedSourceDirectory(resolvedNode.node.sourceFingerprint, currentSourceFingerprint)
-    ) {
-      return;
-    }
-    try {
-      const remainingEntries = await fileSystem.readdir(resolvedNode.node.sourcePath);
-      if (remainingEntries.length > 0) {
-        return;
-      }
-    } catch {
-      return;
-    }
-    try {
-      await fileSystem.rm(resolvedNode.node.sourcePath, {
-        recursive: true,
-        force: false,
-      });
-    } catch {
-      // Preserve partially moved directories when skipped or changed children remain.
-    }
-    return;
-  }
-  const currentSourceFingerprint = await captureFingerprint(
-    fileSystem,
-    resolvedNode.node.sourcePath,
-  );
-  if (!fingerprintsEqual(resolvedNode.node.sourceFingerprint, currentSourceFingerprint)) {
-    return;
-  }
-  await fileSystem.rm(resolvedNode.node.sourcePath, {
-    recursive: false,
-    force: false,
-  });
-}
-
 function canRemoveMovedSourceDirectory(
   originalFingerprint: NodeFingerprint,
   currentFingerprint: NodeFingerprint,
