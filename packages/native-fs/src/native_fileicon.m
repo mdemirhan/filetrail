@@ -4,15 +4,21 @@
  * Exposes a single function: nativeGetFileIcon(path, size) → Promise<Buffer>
  *
  * Uses NSWorkspace to get the macOS file icon for any path, renders it as PNG
- * at the requested pixel size. The work runs on a libuv thread pool thread so
- * the main thread is never blocked.
+ * at the requested pixel size. The async work item runs on a libuv thread pool
+ * thread, but the AppKit work itself is dispatched to the main queue (see
+ * execute_get_icon) — the pool thread only waits for the result.
  */
 
 #include <node_api.h>
+#include <dispatch/dispatch.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 
 #import <AppKit/AppKit.h>
+
+/* How long the pool thread waits for the main queue to render an icon. */
+#define ICON_RENDER_TIMEOUT_SEC 10
 
 /* ── Async work data ─────────────────────────────────────────────── */
 
@@ -26,17 +32,34 @@ typedef struct {
   int failed;        /* non-zero on error */
 } icon_work_t;
 
-/* ── Execute on libuv thread pool ────────────────────────────────── */
+/* ── Main-thread icon rendering ──────────────────────────────────── */
 
-static void execute_get_icon(napi_env env, void *data) {
-  (void)env;
-  icon_work_t *work = (icon_work_t *)data;
-  work->failed = 1;
-  work->png_data = NULL;
-  work->png_length = 0;
+/* Context shared between the libuv pool thread and the main-queue block.
+   Refcounted (initial count 2: waiter + block) so that if the timed wait
+   gives up, the late-running block still has valid memory to write to and
+   the last owner frees everything. */
+typedef struct {
+  atomic_int refs;
+  char *path;        /* owned copy */
+  int size;
+  void *png_data;    /* malloc'd PNG bytes, set by the block */
+  size_t png_length;
+  dispatch_semaphore_t sem;
+} icon_render_ctx_t;
 
+static void icon_ctx_release(icon_render_ctx_t *ctx) {
+  if (atomic_fetch_sub(&ctx->refs, 1) == 1) {
+    free(ctx->path);
+    free(ctx->png_data);
+    dispatch_release(ctx->sem);
+    free(ctx);
+  }
+}
+
+/* Runs on the main queue. AppKit only. */
+static void render_icon(icon_render_ctx_t *ctx) {
   @autoreleasepool {
-    NSString *nsPath = [NSString stringWithUTF8String:work->path];
+    NSString *nsPath = [NSString stringWithUTF8String:ctx->path];
     if (!nsPath) {
       return;
     }
@@ -45,14 +68,14 @@ static void execute_get_icon(napi_env env, void *data) {
       return;
     }
 
-    NSSize targetSize = NSMakeSize(work->size, work->size);
+    NSSize targetSize = NSMakeSize(ctx->size, ctx->size);
     [icon setSize:targetSize];
 
     /* Render into a bitmap at the exact pixel dimensions requested. */
     NSBitmapImageRep *bitmapRep = [[NSBitmapImageRep alloc]
         initWithBitmapDataPlanes:NULL
-                      pixelsWide:work->size
-                      pixelsHigh:work->size
+                      pixelsWide:ctx->size
+                      pixelsHigh:ctx->size
                    bitsPerSample:8
                  samplesPerPixel:4
                         hasAlpha:YES
@@ -68,7 +91,7 @@ static void execute_get_icon(napi_env env, void *data) {
     [NSGraphicsContext saveGraphicsState];
     [NSGraphicsContext setCurrentContext:
         [NSGraphicsContext graphicsContextWithBitmapImageRep:bitmapRep]];
-    [icon drawInRect:NSMakeRect(0, 0, work->size, work->size)
+    [icon drawInRect:NSMakeRect(0, 0, ctx->size, ctx->size)
             fromRect:NSZeroRect
            operation:NSCompositingOperationSourceOver
             fraction:1.0];
@@ -76,19 +99,67 @@ static void execute_get_icon(napi_env env, void *data) {
 
     NSData *pngData = [bitmapRep representationUsingType:NSBitmapImageFileTypePNG
                                               properties:@{}];
+    [bitmapRep release];
     if (!pngData || [pngData length] == 0) {
       return;
     }
 
-    work->png_length = [pngData length];
-    work->png_data = malloc(work->png_length);
-    if (!work->png_data) {
-      work->png_length = 0;
+    void *bytes = malloc([pngData length]);
+    if (!bytes) {
       return;
     }
-    memcpy(work->png_data, [pngData bytes], work->png_length);
+    memcpy(bytes, [pngData bytes], [pngData length]);
+    ctx->png_data = bytes;
+    ctx->png_length = [pngData length];
+  }
+}
+
+/* ── Execute on libuv thread pool ────────────────────────────────── */
+
+static void execute_get_icon(napi_env env, void *data) {
+  (void)env;
+  icon_work_t *work = (icon_work_t *)data;
+  work->failed = 1;
+  work->png_data = NULL;
+  work->png_length = 0;
+
+  /* AppKit (NSWorkspace, NSGraphicsContext drawing) is only safe on the main
+     thread, so the rendering is dispatched to the main queue and awaited with
+     a timed semaphore. A timed wait — not dispatch_sync — because the main
+     queue is only drained when the main thread pumps a CFRunLoop (Electron
+     does; plain Node does not): on timeout we resolve null instead of
+     deadlocking, and the refcounted ctx keeps a late-running block from
+     touching freed memory. */
+  icon_render_ctx_t *ctx = (icon_render_ctx_t *)calloc(1, sizeof(icon_render_ctx_t));
+  if (!ctx) {
+    return;
+  }
+  ctx->path = strdup(work->path);
+  if (!ctx->path) {
+    free(ctx);
+    return;
+  }
+  ctx->size = work->size;
+  ctx->sem = dispatch_semaphore_create(0);
+  atomic_init(&ctx->refs, 2); /* this thread + the block */
+
+  dispatch_async(dispatch_get_main_queue(), ^{
+    render_icon(ctx);
+    dispatch_semaphore_signal(ctx->sem);
+    icon_ctx_release(ctx);
+  });
+
+  long timed_out = dispatch_semaphore_wait(
+      ctx->sem,
+      dispatch_time(DISPATCH_TIME_NOW, ICON_RENDER_TIMEOUT_SEC * NSEC_PER_SEC));
+  if (!timed_out && ctx->png_data) {
+    /* Transfer PNG ownership to the work item. */
+    work->png_data = ctx->png_data;
+    work->png_length = ctx->png_length;
+    ctx->png_data = NULL;
     work->failed = 0;
   }
+  icon_ctx_release(ctx);
 }
 
 /* ── Resolve back on the main thread ─────────────────────────────── */

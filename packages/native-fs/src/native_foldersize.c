@@ -17,7 +17,7 @@
  *
  * The walk runs on a libuv thread pool thread (which spawns worker pthreads
  * internally). At most one walk is active at a time (enforced by JS caller).
- * Cancel sets a volatile flag checked by all workers each iteration.
+ * Cancel sets an atomic flag checked by all workers each iteration.
  */
 
 #include <node_api.h>
@@ -74,17 +74,25 @@ static void drl_init(dir_record_list_t *l) {
   l->capacity = 0;
 }
 
-static void drl_push(dir_record_list_t *l, const char *path,
-                     int64_t bytes, int64_t disk_bytes, int64_t file_count) {
+/* Returns 1 on success, 0 on allocation failure (list left unchanged). */
+static int drl_push(dir_record_list_t *l, const char *path,
+                    int64_t bytes, int64_t disk_bytes, int64_t file_count) {
   if (l->count == l->capacity) {
-    l->capacity = l->capacity ? l->capacity * 2 : 256;
-    l->items = realloc(l->items, (size_t)l->capacity * sizeof(dir_record_t));
+    int new_capacity = l->capacity ? l->capacity * 2 : 256;
+    dir_record_t *new_items =
+        realloc(l->items, (size_t)new_capacity * sizeof(dir_record_t));
+    if (!new_items) return 0;
+    l->items = new_items;
+    l->capacity = new_capacity;
   }
-  l->items[l->count].path = strdup(path);
+  char *path_copy = strdup(path);
+  if (!path_copy) return 0;
+  l->items[l->count].path = path_copy;
   l->items[l->count].direct_bytes = bytes;
   l->items[l->count].direct_disk_bytes = disk_bytes;
   l->items[l->count].direct_file_count = file_count;
   l->count++;
+  return 1;
 }
 
 static void drl_free_contents(dir_record_list_t *l) {
@@ -174,10 +182,11 @@ typedef struct {
   pthread_cond_t cond;
   int finished;
   dev_t root_dev;
-  volatile int *cancelled;
+  atomic_int *cancelled;
+  atomic_int failed;       /* set on allocation failure; walk aborts with ENOMEM */
 } work_queue_t;
 
-static void wq_init(work_queue_t *wq, dev_t dev, volatile int *cancelled) {
+static void wq_init(work_queue_t *wq, dev_t dev, atomic_int *cancelled) {
   wq->head = NULL;
   pthread_mutex_init(&wq->lock, NULL);
   atomic_store(&wq->active, 0);
@@ -185,24 +194,40 @@ static void wq_init(work_queue_t *wq, dev_t dev, volatile int *cancelled) {
   wq->finished = 0;
   wq->root_dev = dev;
   wq->cancelled = cancelled;
+  atomic_store(&wq->failed, 0);
 }
 
-static void wq_push(work_queue_t *wq, int fd, const char *path) {
+/* Abort the walk: all workers stop at the next cancelled/failed check. */
+static void wq_fail(work_queue_t *wq) {
+  atomic_store(&wq->failed, 1);
+  pthread_mutex_lock(&wq->lock);
+  pthread_cond_broadcast(&wq->cond);
+  pthread_mutex_unlock(&wq->lock);
+}
+
+/* Returns 1 on success (queue owns fd), 0 on allocation failure. */
+static int wq_push(work_queue_t *wq, int fd, const char *path) {
   dir_node_t *node = malloc(sizeof(dir_node_t));
+  if (!node) return 0;
   node->fd = fd;
   node->path = strdup(path);
+  if (!node->path) {
+    free(node);
+    return 0;
+  }
   pthread_mutex_lock(&wq->lock);
   node->next = wq->head;
   wq->head = node;
   pthread_cond_signal(&wq->cond);
   pthread_mutex_unlock(&wq->lock);
+  return 1;
 }
 
 /* Returns 1 and fills fd_out/path_out on success, 0 when all work is done. */
 static int wq_pop(work_queue_t *wq, int *fd_out, char **path_out) {
   pthread_mutex_lock(&wq->lock);
   for (;;) {
-    if (*wq->cancelled || wq->finished) {
+    if (atomic_load(wq->cancelled) || atomic_load(&wq->failed) || wq->finished) {
       pthread_mutex_unlock(&wq->lock);
       return 0;
     }
@@ -250,10 +275,9 @@ static void wq_destroy(work_queue_t *wq) {
 /* ── Shared attrlist (read-only, safe across threads) ────────────── */
 
 static struct attrlist g_attrlist;
-static int g_attrlist_ready = 0;
+static pthread_once_t g_attrlist_once = PTHREAD_ONCE_INIT;
 
-static void ensure_attrlist(void) {
-  if (g_attrlist_ready) return;
+static void init_attrlist(void) {
   memset(&g_attrlist, 0, sizeof(g_attrlist));
   g_attrlist.bitmapcount = ATTR_BIT_MAP_COUNT;
   /* Attributes returned in bitmap bit order (lowest first):
@@ -262,7 +286,6 @@ static void ensure_attrlist(void) {
   /* File attrs in bit order: ATTR_FILE_ALLOCSIZE (bit 2, 0x04)
      then ATTR_FILE_DATALENGTH (bit 9, 0x200). */
   g_attrlist.fileattr = ATTR_FILE_ALLOCSIZE | ATTR_FILE_DATALENGTH;
-  g_attrlist_ready = 1;
 }
 
 /* ── Process one directory with getattrlistbulk ──────────────────── */
@@ -281,7 +304,7 @@ static process_dir_result_t process_dir(int dirfd, const char *dir_path,
   int64_t direct_file_count = 0;
 
   for (;;) {
-    if (*wq->cancelled) break;
+    if (atomic_load(wq->cancelled) || atomic_load(&wq->failed)) break;
 
     int count = getattrlistbulk(dirfd, &g_attrlist, buf, BULK_BUF_SIZE, 0);
     if (count <= 0) break;
@@ -346,11 +369,19 @@ static process_dir_result_t process_dir(int dirfd, const char *dir_path,
             size_t dir_len = strlen(dir_path);
             size_t name_len = strlen(name);
             char *child_path = malloc(dir_len + 1 + name_len + 1);
-            memcpy(child_path, dir_path, dir_len);
-            child_path[dir_len] = '/';
-            memcpy(child_path + dir_len + 1, name, name_len + 1);
-            wq_push(wq, subfd, child_path);
-            free(child_path);
+            if (!child_path) {
+              close(subfd);
+              wq_fail(wq);
+            } else {
+              memcpy(child_path, dir_path, dir_len);
+              child_path[dir_len] = '/';
+              memcpy(child_path + dir_len + 1, name, name_len + 1);
+              if (!wq_push(wq, subfd, child_path)) {
+                close(subfd);
+                wq_fail(wq);
+              }
+              free(child_path);
+            }
           } else {
             close(subfd);
           }
@@ -362,7 +393,9 @@ static process_dir_result_t process_dir(int dirfd, const char *dir_path,
   }
 
   close(dirfd);
-  drl_push(local_dirs, dir_path, direct_bytes, direct_disk_bytes, direct_file_count);
+  if (!drl_push(local_dirs, dir_path, direct_bytes, direct_disk_bytes, direct_file_count)) {
+    wq_fail(wq);
+  }
 
   process_dir_result_t result;
   result.direct_bytes = direct_bytes;
@@ -384,7 +417,13 @@ typedef struct {
 static void *worker_fn(void *arg) {
   thread_arg_t *ta = (thread_arg_t *)arg;
   char *buf = malloc(BULK_BUF_SIZE);
-  if (!buf) return NULL;
+  if (!buf) {
+    /* Never popped anything, so queue accounting is untouched; flag the
+       failure so the whole walk aborts with ENOMEM instead of silently
+       running with fewer workers. */
+    wq_fail(ta->wq);
+    return NULL;
+  }
 
   int fd;
   char *path;
@@ -526,7 +565,7 @@ typedef struct {
   napi_async_work work;
   napi_deferred deferred;
   char *root_path;
-  volatile int cancelled;
+  atomic_int cancelled; /* written from the JS thread, read by worker pthreads */
   int errnum;
   int64_t total_bytes;
   int64_t disk_total;
@@ -543,7 +582,7 @@ static void execute_folder_size(napi_env env, void *data) {
   (void)env;
   folder_size_work_t *w = (folder_size_work_t *)data;
 
-  ensure_attrlist();
+  pthread_once(&g_attrlist_once, init_attrlist);
 
   int root_fd = open(w->root_path, O_RDONLY | O_DIRECTORY);
   if (root_fd < 0) {
@@ -560,7 +599,12 @@ static void execute_folder_size(napi_env env, void *data) {
 
   work_queue_t wq;
   wq_init(&wq, root_stat.st_dev, &w->cancelled);
-  wq_push(&wq, root_fd, w->root_path);
+  if (!wq_push(&wq, root_fd, w->root_path)) {
+    w->errnum = ENOMEM;
+    close(root_fd);
+    wq_destroy(&wq);
+    return;
+  }
 
   /* Spawn worker threads. */
   thread_arg_t args[NUM_THREADS];
@@ -590,7 +634,9 @@ static void execute_folder_size(napi_env env, void *data) {
   }
 
   /* Aggregate per-directory recursive sizes and build output list. */
-  if (!w->cancelled) {
+  if (atomic_load(&wq.failed)) {
+    w->errnum = ENOMEM;
+  } else if (!atomic_load(&w->cancelled)) {
     aggregate_dir_sizes(args, NUM_THREADS, w->root_path, &w->dirs, &w->dir_count);
   }
 
@@ -682,7 +728,7 @@ static void complete_folder_size(napi_env env, napi_status status, void *data) {
     active_work = NULL;
   }
 
-  if (status == napi_cancelled || w->cancelled) {
+  if (status == napi_cancelled || atomic_load(&w->cancelled)) {
     napi_value err_msg;
     napi_create_string_utf8(env, "Folder size calculation cancelled", NAPI_AUTO_LENGTH, &err_msg);
     napi_value error;
@@ -700,6 +746,7 @@ static void complete_folder_size(napi_env env, napi_status status, void *data) {
     case EACCES:  code = "EACCES";  break;
     case EPERM:   code = "EPERM";   break;
     case ENOTDIR: code = "ENOTDIR"; break;
+    case ENOMEM:  code = "ENOMEM";  break;
     default:      code = "UNKNOWN"; break;
     }
 
@@ -770,6 +817,7 @@ static napi_value native_folder_size(napi_env env, napi_callback_info info) {
     return NULL;
   }
   w->root_path = root_path;
+  atomic_init(&w->cancelled, 0);
 
   napi_value promise;
   napi_create_promise(env, &w->deferred, &promise);
@@ -791,7 +839,7 @@ static napi_value native_folder_size_cancel(napi_env env, napi_callback_info inf
   (void)info;
   (void)env;
   if (active_work) {
-    active_work->cancelled = 1;
+    atomic_store(&active_work->cancelled, 1);
   }
   return NULL;
 }

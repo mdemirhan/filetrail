@@ -39,8 +39,9 @@ export function nativeGetFileIcon(path: string, size: number): Promise<Buffer | 
  * `[sizeBytes, diskBytes, fileCount]`.
  *
  * Runs on a libuv thread pool thread — non-blocking. At most one calculation
- * can be active at a time; starting a new one while another is running is
- * undefined behavior (the JS caller must serialize).
+ * runs at a time; concurrent calls are queued and start after the active one
+ * settles. To start a new calculation immediately, cancel the active one
+ * first via `nativeFolderSizeCancel()`.
  *
  * @param folderPath - Absolute path to the folder to size.
  * @returns A promise that resolves with a JSON string.
@@ -52,6 +53,7 @@ export function nativeFolderSize(folderPath: string): Promise<string>;
  * Cancels the currently active folder size calculation, if any.
  *
  * The running `nativeFolderSize` promise will reject with `code: "ECANCELLED"`.
- * Safe to call when no calculation is active (no-op).
+ * Queued (not yet started) calculations are unaffected. Safe to call when no
+ * calculation is active (no-op).
  */
 export function nativeFolderSizeCancel(): void;

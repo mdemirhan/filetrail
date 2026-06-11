@@ -6,6 +6,10 @@ import { join } from "node:path";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const addon = require("../build/Release/native-fs.node") as typeof import("../index");
 
+// Load the JS wrapper (adds single-flight serialization for nativeFolderSize).
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const wrapper = require("../index.js") as typeof import("../index");
+
 function expectDefined<T>(value: T | null | undefined): NonNullable<T> {
   expect(value).toBeDefined();
   if (value == null) {
@@ -109,6 +113,77 @@ describe("nativeFolderSize", () => {
       expect(Object.keys(result.dirs)).toHaveLength(0);
     } finally {
       rmSync(emptyDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("nativeFolderSize wrapper (single-flight)", () => {
+  interface FolderSizeResult {
+    total: number;
+    diskTotal: number;
+    fileCount: number;
+    dirs: Record<string, [number, number, number]>;
+  }
+
+  function makeTree(prefix: string, fileCount: number, fileSize: number): string {
+    const dir = mkdtempSync(join(tmpdir(), prefix));
+    for (let i = 0; i < fileCount; i++) {
+      writeFileSync(join(dir, `f${i}.txt`), "x".repeat(fileSize));
+    }
+    return dir;
+  }
+
+  it("serializes concurrent calls and returns correct per-call results", async () => {
+    const rootA = makeTree("native-fs-sf-a-", 3, 10);
+    const rootB = makeTree("native-fs-sf-b-", 5, 20);
+    try {
+      const [jsonA, jsonB] = await Promise.all([
+        wrapper.nativeFolderSize(rootA),
+        wrapper.nativeFolderSize(rootB),
+      ]);
+      const resultA = JSON.parse(jsonA) as FolderSizeResult;
+      const resultB = JSON.parse(jsonB) as FolderSizeResult;
+
+      expect(resultA.fileCount).toBe(3);
+      expect(resultA.total).toBe(30);
+      expect(resultB.fileCount).toBe(5);
+      expect(resultB.total).toBe(100);
+    } finally {
+      rmSync(rootA, { recursive: true, force: true });
+      rmSync(rootB, { recursive: true, force: true });
+    }
+  });
+
+  it("cancel then immediate restart cancels only the active call", async () => {
+    const root = makeTree("native-fs-sf-c-", 4, 25);
+    try {
+      const first = wrapper.nativeFolderSize(root);
+      wrapper.nativeFolderSizeCancel();
+      const second = wrapper.nativeFolderSize(root);
+
+      await expect(first).rejects.toMatchObject({ code: "ECANCELLED" });
+
+      const result = JSON.parse(await second) as FolderSizeResult;
+      expect(result.fileCount).toBe(4);
+      expect(result.total).toBe(100);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("queues many concurrent calls without corrupting results", async () => {
+    const root = makeTree("native-fs-sf-q-", 2, 7);
+    try {
+      const results = await Promise.all(
+        Array.from({ length: 4 }, () => wrapper.nativeFolderSize(root)),
+      );
+      for (const json of results) {
+        const result = JSON.parse(json) as FolderSizeResult;
+        expect(result.fileCount).toBe(2);
+        expect(result.total).toBe(14);
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 });
