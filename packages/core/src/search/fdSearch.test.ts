@@ -112,6 +112,82 @@ describe("fdSearch", () => {
     });
   });
 
+  it("keeps getUpdate idempotent after a completed job has been drained", () => {
+    const process = createMockProcess();
+    const runtime = new FdSearchRuntime("/tmp/fd", {
+      spawn: vi.fn(() => process as never),
+    });
+
+    const started = runtime.startSearch({
+      rootPath: "/Users/demo/project",
+      query: "*.tsx",
+      patternMode: "glob",
+      matchScope: "name",
+      recursive: true,
+      includeHidden: false,
+    });
+
+    process.stdout.write(
+      Buffer.from(
+        "/Users/demo/project/src/App.tsx\0/Users/demo/project/src/lib/utils.tsx\0",
+        "utf8",
+      ),
+    );
+    process.emit("close", 0, null);
+
+    // The first poll after completion returns every remaining item with done:true.
+    const finalUpdate = runtime.getUpdate(started.jobId, 0);
+    expect(finalUpdate.done).toBe(true);
+    expect(finalUpdate.items).toHaveLength(2);
+    expect(finalUpdate.nextCursor).toBe(2);
+
+    // Subsequent polls must not throw "Unknown search job".
+    expect(runtime.getUpdate(started.jobId, finalUpdate.nextCursor)).toEqual({
+      jobId: started.jobId,
+      status: "complete",
+      items: [],
+      nextCursor: 2,
+      done: true,
+      truncated: false,
+      error: null,
+    });
+    expect(runtime.getUpdate(started.jobId, 0)).toEqual({
+      jobId: started.jobId,
+      status: "complete",
+      items: [],
+      nextCursor: 0,
+      done: true,
+      truncated: false,
+      error: null,
+    });
+  });
+
+  it("reassembles entries that are split across stdout chunks", () => {
+    const process = createMockProcess();
+    const runtime = new FdSearchRuntime("/tmp/fd", {
+      spawn: vi.fn(() => process as never),
+    });
+
+    const started = runtime.startSearch({
+      rootPath: "/Users/demo/project",
+      query: "*.tsx",
+      patternMode: "glob",
+      matchScope: "name",
+      recursive: true,
+      includeHidden: false,
+    });
+
+    process.stdout.write(Buffer.from("/Users/demo/project/src/Ap", "utf8"));
+    process.stdout.write(Buffer.from("p.tsx\0/Users/demo/project/src/lib/uti", "utf8"));
+    process.stdout.write(Buffer.from("ls.tsx\0", "utf8"));
+
+    const update = runtime.getUpdate(started.jobId, 0);
+    expect(update.items.map((item) => item.path)).toEqual([
+      "/Users/demo/project/src/App.tsx",
+      "/Users/demo/project/src/lib/utils.tsx",
+    ]);
+  });
+
   it("terminates cancelled jobs and removes them without requiring another update poll", () => {
     const process = createMockProcess();
     const runtime = new FdSearchRuntime("/tmp/fd", {

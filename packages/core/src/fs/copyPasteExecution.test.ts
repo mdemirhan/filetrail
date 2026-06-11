@@ -22,6 +22,22 @@ function expectLastEvent(events: CopyPasteProgressEvent[]) {
   return expectDefined(events.at(-1));
 }
 
+/** Replaces `rm` with a recording implementation that still deletes nodes. */
+function recordRmCalls(
+  fileSystem: MockWriteServiceFileSystem,
+): Array<{ path: string; recursive: boolean }> {
+  const rmCalls: Array<{ path: string; recursive: boolean }> = [];
+  fileSystem.rmImpl = async (path, options) => {
+    rmCalls.push({ path, recursive: Boolean(options?.recursive) });
+    for (const key of Array.from(fileSystem.nodes.keys())) {
+      if (key === path || key.startsWith(`${path}/`)) {
+        fileSystem.nodes.delete(key);
+      }
+    }
+  };
+  return rmCalls;
+}
+
 async function createResolvedOperation(args: {
   fileSystem: MockWriteServiceFileSystem;
   mode?: "copy" | "cut";
@@ -2799,6 +2815,191 @@ describe("copyPasteExecution", () => {
       expect(fileSystem.exists("/target/dir/old.txt")).toBe(false);
     });
 
+    it("rename overwrite of an existing file replaces it atomically without pre-delete", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 10 },
+        "/target": { kind: "directory" },
+        "/target/a.txt": { kind: "file", size: 2 },
+      });
+      fileSystem.enableRename();
+      const rmCalls = recordRmCalls(fileSystem);
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+        policy: { file: "overwrite", directory: "merge", mismatch: "overwrite" },
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "rename-overwrite-atomic-1",
+        report,
+        mode: "cut",
+        policy: { file: "overwrite", directory: "merge", mismatch: "overwrite" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      // rename(2) replaces an existing file atomically — no rm beforehand.
+      expect(rmCalls).toEqual([]);
+      expect(fileSystem.exists("/source/a.txt")).toBe(false);
+      expect(expectNode(fileSystem, "/target/a.txt").size).toBe(10);
+    });
+
+    it("rename overwrite of an empty destination directory skips the pre-delete", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/dir": { kind: "directory" },
+        "/source/dir/a.txt": { kind: "file", size: 3 },
+        "/target": { kind: "directory" },
+        "/target/dir": { kind: "directory" },
+      });
+      fileSystem.enableRename();
+      const rmCalls = recordRmCalls(fileSystem);
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/dir"],
+        destinationDirectoryPath: "/target",
+        policy: { file: "overwrite", directory: "overwrite", mismatch: "overwrite" },
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "rename-overwrite-empty-dir-1",
+        report,
+        mode: "cut",
+        policy: { file: "overwrite", directory: "overwrite", mismatch: "overwrite" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      // rename(2) replaces an empty destination directory atomically.
+      expect(rmCalls).toEqual([]);
+      expect(fileSystem.exists("/source/dir")).toBe(false);
+      expect(expectNode(fileSystem, "/target/dir/a.txt").size).toBe(3);
+    });
+
+    it("rename overwrite of a directory by a file pre-deletes the destination", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/item": { kind: "file", size: 6 },
+        "/target": { kind: "directory" },
+        "/target/item": { kind: "directory" },
+        "/target/item/old.txt": { kind: "file", size: 1 },
+      });
+      fileSystem.enableRename();
+      const rmCalls = recordRmCalls(fileSystem);
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/item"],
+        destinationDirectoryPath: "/target",
+        policy: { file: "overwrite", directory: "overwrite", mismatch: "overwrite" },
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "rename-overwrite-file-over-dir-1",
+        report,
+        mode: "cut",
+        policy: { file: "overwrite", directory: "overwrite", mismatch: "overwrite" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      // Cross-type replacement: rename cannot replace a directory with a file.
+      expect(rmCalls).toEqual([{ path: "/target/item", recursive: true }]);
+      expect(fileSystem.exists("/source/item")).toBe(false);
+      expect(expectNode(fileSystem, "/target/item")).toMatchObject({ kind: "file", size: 6 });
+    });
+
+    it("rename overwrite of a file by a directory pre-deletes the destination", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/item": { kind: "directory" },
+        "/source/item/a.txt": { kind: "file", size: 4 },
+        "/target": { kind: "directory" },
+        "/target/item": { kind: "file", size: 9 },
+      });
+      fileSystem.enableRename();
+      const rmCalls = recordRmCalls(fileSystem);
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/item"],
+        destinationDirectoryPath: "/target",
+        policy: { file: "overwrite", directory: "overwrite", mismatch: "overwrite" },
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "rename-overwrite-dir-over-file-1",
+        report,
+        mode: "cut",
+        policy: { file: "overwrite", directory: "overwrite", mismatch: "overwrite" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      // Cross-type replacement: rename cannot replace a file with a directory.
+      expect(rmCalls).toEqual([{ path: "/target/item", recursive: false }]);
+      expect(fileSystem.exists("/source/item")).toBe(false);
+      expect(expectNode(fileSystem, "/target/item").kind).toBe("directory");
+      expect(expectNode(fileSystem, "/target/item/a.txt").size).toBe(4);
+    });
+
+    it("rename overwrite skips pre-delete when the destination vanished before execution", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 10 },
+        "/target": { kind: "directory" },
+        "/target/a.txt": { kind: "file", size: 2 },
+      });
+      fileSystem.enableRename();
+      const rmCalls = recordRmCalls(fileSystem);
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+        policy: { file: "overwrite", directory: "merge", mismatch: "overwrite" },
+      });
+      // Destination disappears between analysis and execution.
+      fileSystem.nodes.delete("/target/a.txt");
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "rename-overwrite-vanished-1",
+        report,
+        mode: "cut",
+        policy: { file: "overwrite", directory: "merge", mismatch: "overwrite" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(rmCalls).toEqual([]);
+      expect(fileSystem.exists("/source/a.txt")).toBe(false);
+      expect(expectNode(fileSystem, "/target/a.txt").size).toBe(10);
+    });
+
     it("cancellation between rename operations", async () => {
       const fileSystem = new MockWriteServiceFileSystem({
         "/source": { kind: "directory" },
@@ -3034,7 +3235,7 @@ describe("copyPasteExecution", () => {
   });
 
   describe("native copyFile and utimes", () => {
-    it("uses copyFile when available, skips copyFileStream and chmod", async () => {
+    it("uses copyFile when available, skips copyFileStream, and re-applies mode", async () => {
       const fileSystem = new MockWriteServiceFileSystem({
         "/source": { kind: "directory" },
         "/source/a.txt": { kind: "file", size: 5, mode: 0o755 },
@@ -3045,9 +3246,9 @@ describe("copyPasteExecution", () => {
       fileSystem.copyFileStreamImpl = async () => {
         copyFileStreamCalled = true;
       };
-      let chmodCalled = false;
-      fileSystem.chmodImpl = async () => {
-        chmodCalled = true;
+      const chmodCalls: Array<{ path: string; mode: number }> = [];
+      fileSystem.chmodImpl = async (path, mode) => {
+        chmodCalls.push({ path, mode });
       };
       const { report, resolvedNodes } = await createResolvedOperation({
         fileSystem,
@@ -3069,7 +3270,8 @@ describe("copyPasteExecution", () => {
       });
 
       expect(copyFileStreamCalled).toBe(false);
-      expect(chmodCalled).toBe(false);
+      // Mode preservation runs after the native copy too (same values, harmless).
+      expect(chmodCalls).toEqual([{ path: "/target/a.txt", mode: 0o755 }]);
       expect(expectNode(fileSystem, "/target/a.txt").size).toBe(5);
     });
 
@@ -3140,6 +3342,7 @@ describe("copyPasteExecution", () => {
         "/target": { kind: "directory" },
       });
       fileSystem.enableCopyFile();
+      fileSystem.enableUtimes();
       const { report, resolvedNodes } = await createResolvedOperation({
         fileSystem,
         sourcePaths: ["/source/a.txt"],
@@ -3148,6 +3351,42 @@ describe("copyPasteExecution", () => {
 
       await executeCopyPasteFromAnalysis({
         operationId: "native-preserve-1",
+        report,
+        mode: "copy",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        fileSystem,
+        now: () => new Date("2026-03-11T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      const dest = expectNode(fileSystem, "/target/a.txt");
+      expect(dest.mode).toBe(0o755);
+      expect(dest.mtimeMs).toBe(9999);
+    });
+
+    it("native copyFile path re-applies mode and mtime even when the copy drops metadata", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 5, mode: 0o755, mtimeMs: 9999 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableCopyFile();
+      fileSystem.enableUtimes();
+      // Simulate a native copy that transfers content but not metadata.
+      fileSystem.copyFileImpl = async (sourcePath, destinationPath) => {
+        fileSystem.addFile(destinationPath, { size: expectNode(fileSystem, sourcePath).size });
+      };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem,
+        sourcePaths: ["/source/a.txt"],
+        destinationDirectoryPath: "/target",
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "native-preserve-2",
         report,
         mode: "copy",
         policy: { file: "skip", directory: "merge", mismatch: "skip" },

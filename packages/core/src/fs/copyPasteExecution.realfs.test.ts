@@ -267,6 +267,57 @@ describe("copyPasteExecution real filesystem", () => {
       expect(dstStat.ino).toBe(originalIno);
     });
 
+    it("rename overwrite replaces an existing destination file atomically", async () => {
+      const srcDir = join(testDir, "src");
+      const dstDir = join(testDir, "dst");
+      await mkdir(srcDir, { recursive: true });
+      await mkdir(dstDir, { recursive: true });
+      await writeFile(join(srcDir, "data.txt"), "new content");
+      await writeFile(join(dstDir, "data.txt"), "old content");
+
+      const srcStat = await stat(join(srcDir, "data.txt"));
+      const originalIno = srcStat.ino;
+
+      // Record rm calls — rename(2) must replace the file without a pre-delete.
+      const rmPaths: string[] = [];
+      const fileSystem: WriteServiceFileSystem = {
+        ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+        rm: async (path, options) => {
+          rmPaths.push(path);
+          await DEFAULT_WRITE_SERVICE_FILE_SYSTEM.rm(path, options);
+        },
+      };
+
+      const { report, resolvedNodes } = await createResolvedOperationRealFs({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: [join(srcDir, "data.txt")],
+        destinationDirectoryPath: dstDir,
+        policy: { file: "overwrite", directory: "merge", mismatch: "overwrite" },
+      });
+
+      await executeCopyPasteFromAnalysis({
+        operationId: "realfs-rename-overwrite-1",
+        report,
+        mode: "cut",
+        policy: { file: "overwrite", directory: "merge", mismatch: "overwrite" },
+        fileSystem,
+        now: () => new Date(),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: () => undefined,
+        requestResolution: async () => null,
+      });
+
+      expect(rmPaths).toEqual([]);
+      expect(await fileExists(join(srcDir, "data.txt"))).toBe(false);
+      const content = await readFile(join(dstDir, "data.txt"), "utf-8");
+      expect(content).toBe("new content");
+      // Same inode as the source = atomic rename, not copy.
+      const dstStat = await stat(join(dstDir, "data.txt"));
+      expect(dstStat.ino).toBe(originalIno);
+    });
+
     it("rename preserves mtime on real filesystem (file)", async () => {
       const srcDir = join(testDir, "src");
       const dstDir = join(testDir, "dst");

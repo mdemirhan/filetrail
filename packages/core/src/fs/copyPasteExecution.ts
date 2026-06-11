@@ -367,15 +367,19 @@ async function executeResolvedNode(args: {
       currentNode.destinationPath,
       currentNode.node.sourceFingerprint.mtimeMs,
     );
-  } else if (args.fileSystem.copyFile) {
-    await args.fileSystem.mkdir(dirname(currentNode.destinationPath), { recursive: true });
-    await args.fileSystem.copyFile(currentNode.node.sourcePath, currentNode.destinationPath);
   } else {
-    await args.fileSystem.copyFileStream(
-      currentNode.node.sourcePath,
-      currentNode.destinationPath,
-      args.signal,
-    );
+    if (args.fileSystem.copyFile) {
+      await args.fileSystem.mkdir(dirname(currentNode.destinationPath), { recursive: true });
+      await args.fileSystem.copyFile(currentNode.node.sourcePath, currentNode.destinationPath);
+    } else {
+      await args.fileSystem.copyFileStream(
+        currentNode.node.sourcePath,
+        currentNode.destinationPath,
+        args.signal,
+      );
+    }
+    // Applied after both copy paths. Native copyFile (copyfile(3) COPYFILE_ALL)
+    // already carries metadata, so chmod/utimes simply re-apply the same values.
     await preserveModeIfSupported(
       args.fileSystem,
       currentNode.destinationPath,
@@ -439,14 +443,14 @@ async function tryRenameForCut(
   },
 ): Promise<ExecuteNodeResult | null> {
   try {
-    if (currentNode.action === "overwrite") {
-      await removeDestinationIfPresent(currentNode.destinationPath, args.fileSystem);
-    }
-    await args.fileSystem.mkdir(dirname(currentNode.destinationPath), { recursive: true });
     const rename = args.fileSystem.rename;
     if (!rename) {
       return null;
     }
+    if (currentNode.action === "overwrite") {
+      await removeDestinationIfRenameCannotReplace(currentNode, args.fileSystem);
+    }
+    await args.fileSystem.mkdir(dirname(currentNode.destinationPath), { recursive: true });
     await rename(currentNode.node.sourcePath, currentNode.destinationPath);
   } catch (error) {
     const nodeError = error as NodeJS.ErrnoException;
@@ -575,6 +579,36 @@ async function removeDestinationIfPresent(
   }
   await fileSystem.rm(destinationPath, {
     recursive: destinationFingerprint.kind === "directory",
+    force: true,
+  });
+}
+
+/** Pre-deletes an overwrite destination only when rename(2) cannot atomically
+ *  replace it: a non-empty destination directory, or a cross-type replacement
+ *  (file over directory / directory over file). For file-over-file and
+ *  directory-over-empty-directory replacements, rename swaps the destination
+ *  atomically, so no pre-delete is needed. */
+async function removeDestinationIfRenameCannotReplace(
+  currentNode: ResolvedCopyPasteNode,
+  fileSystem: WriteServiceFileSystem,
+): Promise<void> {
+  const destinationFingerprint = await captureFingerprint(fileSystem, currentNode.destinationPath);
+  if (!destinationFingerprint.exists) {
+    return;
+  }
+  const sourceIsDirectory = currentNode.node.sourceKind === "directory";
+  const destinationIsDirectory = destinationFingerprint.kind === "directory";
+  if (!sourceIsDirectory && !destinationIsDirectory) {
+    return;
+  }
+  if (sourceIsDirectory && destinationIsDirectory) {
+    const destinationEntries = await fileSystem.readdir(currentNode.destinationPath);
+    if (destinationEntries.length === 0) {
+      return;
+    }
+  }
+  await fileSystem.rm(currentNode.destinationPath, {
+    recursive: destinationIsDirectory,
     force: true,
   });
 }

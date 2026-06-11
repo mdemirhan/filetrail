@@ -43,6 +43,17 @@ type SearchJob = {
   done: boolean;
 };
 
+/** Compact terminal record kept after a finished job has been fully drained via
+ *  `getUpdate`, so late or duplicate polls stay idempotent instead of throwing. */
+type FinishedSearchJob = {
+  status: SearchJobStatus;
+  truncated: boolean;
+  error: string | null;
+  itemCount: number;
+};
+
+const MAX_FINISHED_JOB_RECORDS = 64;
+
 export type FdSearchRuntimeDependencies = {
   spawn: SpawnLike;
 };
@@ -71,6 +82,7 @@ export class FdSearchRuntime {
   private readonly fdBinaryPath: string;
   private readonly spawn: SpawnLike;
   private readonly jobs = new Map<string, SearchJob>();
+  private readonly finishedJobs = new Map<string, FinishedSearchJob>();
   private sequence = 0;
 
   constructor(fdBinaryPath: string, dependencies: FdSearchRuntimeDependencies) {
@@ -118,6 +130,18 @@ export class FdSearchRuntime {
   getUpdate(jobId: string, cursor: number): SearchUpdateResponse {
     const job = this.jobs.get(jobId);
     if (!job) {
+      const finished = this.finishedJobs.get(jobId);
+      if (finished) {
+        return {
+          jobId,
+          status: finished.status,
+          items: [],
+          nextCursor: Math.max(0, Math.min(cursor, finished.itemCount)),
+          done: true,
+          truncated: finished.truncated,
+          error: finished.error,
+        };
+      }
       throw new Error(`Unknown search job: ${jobId}`);
     }
     const safeCursor = Math.max(0, Math.min(cursor, job.items.length));
@@ -134,7 +158,11 @@ export class FdSearchRuntime {
       error: job.error,
     };
     if (done) {
+      // The final response above already carries every remaining item, so the
+      // job can be released — but remember its terminal state so later polls
+      // stay idempotent instead of failing with "Unknown search job".
       this.jobs.delete(jobId);
+      this.rememberFinishedJob(jobId, job);
     }
     return response;
   }
@@ -164,6 +192,23 @@ export class FdSearchRuntime {
       }
     }
     this.jobs.clear();
+    this.finishedJobs.clear();
+  }
+
+  private rememberFinishedJob(jobId: string, job: SearchJob): void {
+    this.finishedJobs.set(jobId, {
+      status: job.status,
+      truncated: job.truncated,
+      error: job.error,
+      itemCount: job.items.length,
+    });
+    while (this.finishedJobs.size > MAX_FINISHED_JOB_RECORDS) {
+      const oldestJobId = this.finishedJobs.keys().next().value;
+      if (oldestJobId === undefined) {
+        break;
+      }
+      this.finishedJobs.delete(oldestJobId);
+    }
   }
 
   private handleStdout(jobId: string, chunk: Buffer): void {
@@ -171,19 +216,27 @@ export class FdSearchRuntime {
     if (!job || job.done) {
       return;
     }
-    job.stdoutBuffer = Buffer.concat([job.stdoutBuffer, chunk]);
-    let separatorIndex = job.stdoutBuffer.indexOf(0);
+    // Complete records are parsed out of each chunk immediately; only the
+    // unterminated tail is carried over, so accumulation stays linear instead
+    // of re-copying every previously received byte on each chunk.
+    const buffer = job.stdoutBuffer.length > 0 ? Buffer.concat([job.stdoutBuffer, chunk]) : chunk;
+    let start = 0;
+    let separatorIndex = buffer.indexOf(0, start);
     while (separatorIndex >= 0) {
-      const entry = job.stdoutBuffer.subarray(0, separatorIndex).toString("utf8");
-      job.stdoutBuffer = job.stdoutBuffer.subarray(separatorIndex + 1);
+      const entry = buffer.subarray(start, separatorIndex).toString("utf8");
+      start = separatorIndex + 1;
       if (entry.length > 0) {
         this.appendItem(job, entry);
         if (job.truncated) {
+          job.stdoutBuffer = Buffer.alloc(0);
           return;
         }
       }
-      separatorIndex = job.stdoutBuffer.indexOf(0);
+      separatorIndex = buffer.indexOf(0, start);
     }
+    // Copy the tail so the retained buffer does not pin the full chunk.
+    job.stdoutBuffer =
+      start < buffer.length ? Buffer.from(buffer.subarray(start)) : Buffer.alloc(0);
   }
 
   private handleStderr(jobId: string, chunk: string): void {
