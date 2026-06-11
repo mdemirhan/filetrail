@@ -39,6 +39,32 @@ describe("actionLog", () => {
     expect(items[0]?.error).toBe("Application not found");
   });
 
+  it("caps listed entries to the newest maxListEntries", async () => {
+    const root = await mkdtemp(join(tmpdir(), "filetrail-action-log-cap-"));
+    const store = createActionLogStore(resolveActionLogFilePath(root), {
+      maxBytes: 700,
+      maxFiles: 4,
+      maxListEntries: 2,
+    });
+    const recorder = createActionLogRecorder(store);
+
+    for (let index = 0; index < 5; index += 1) {
+      await recorder.recordOpenPath({
+        path: `/Users/demo/file-${index}.txt`,
+        ok: true,
+        error: null,
+        startedAtMs: Date.parse("2026-03-10T09:00:00.000Z") + index * 60_000,
+        finishedAtMs: Date.parse("2026-03-10T09:00:00.010Z") + index * 60_000,
+      });
+    }
+
+    const items = await store.list();
+
+    expect(items).toHaveLength(2);
+    expect(items[0]?.sourcePaths).toEqual(["/Users/demo/file-4.txt"]);
+    expect(items[1]?.sourcePaths).toEqual(["/Users/demo/file-3.txt"]);
+  });
+
   it("rotates files when the active log exceeds the size limit", async () => {
     const root = await mkdtemp(join(tmpdir(), "filetrail-action-log-rotate-"));
     const store = createActionLogStore(resolveActionLogFilePath(root), {

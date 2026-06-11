@@ -9,6 +9,8 @@ vi.mock("./originalFileSystem", () => ({
 
 import { toPreferencePatch } from "./bootstrap/preferencesPatch";
 import {
+  isValidApplicationBundlePath,
+  openInTerminal,
   openPathsWithApplication,
   performEditAction,
   resolveApplicationDisplayName,
@@ -174,13 +176,70 @@ describe("resolveTerminalApplicationName", () => {
     expect(resolveTerminalApplicationName(null)).toBe("Terminal");
   });
 
-  it("uses the configured terminal app override", () => {
+  it("uses the configured terminal app display name", () => {
     expect(
       resolveTerminalApplicationName({
         appPath: "/Applications/iTerm.app",
         appName: "iTerm",
       }),
-    ).toBe("/Applications/iTerm.app");
+    ).toBe("iTerm");
+  });
+
+  it("derives the display name from the bundle path when the name is empty", () => {
+    expect(
+      resolveTerminalApplicationName({
+        appPath: "/Applications/iTerm.app",
+        appName: "  ",
+      }),
+    ).toBe("iTerm");
+  });
+
+  it("falls back to Terminal when the override has no usable values", () => {
+    expect(
+      resolveTerminalApplicationName({
+        appPath: "  ",
+        appName: "",
+      }),
+    ).toBe("Terminal");
+  });
+});
+
+describe("isValidApplicationBundlePath", () => {
+  it("accepts absolute paths to .app bundles", () => {
+    expect(isValidApplicationBundlePath("/Applications/Zed.app")).toBe(true);
+    expect(isValidApplicationBundlePath("/Applications/Visual Studio Code.app")).toBe(true);
+  });
+
+  it("rejects relative paths and bare application names", () => {
+    expect(isValidApplicationBundlePath("Finder")).toBe(false);
+    expect(isValidApplicationBundlePath("Applications/Zed.app")).toBe(false);
+    expect(isValidApplicationBundlePath("")).toBe(false);
+  });
+
+  it("rejects paths with parent directory segments", () => {
+    expect(isValidApplicationBundlePath("/Applications/../tmp/Evil.app")).toBe(false);
+    expect(isValidApplicationBundlePath("/Applications/Safari.app/../../usr/bin/say")).toBe(false);
+  });
+
+  it("rejects absolute paths that are not .app bundles", () => {
+    expect(isValidApplicationBundlePath("/usr/bin/say")).toBe(false);
+    expect(isValidApplicationBundlePath("/Applications/Zed.app/Contents/MacOS/zed")).toBe(false);
+  });
+});
+
+describe("openInTerminal", () => {
+  it("rejects terminal overrides that are not absolute .app bundle paths", async () => {
+    const response = await openInTerminal(
+      { path: "/Users/demo" },
+      {
+        appPath: "Applications/iTerm.app",
+        appName: "iTerm",
+      },
+    );
+
+    expect(response.ok).toBe(false);
+    expect(response.error).toContain("Invalid application path");
+    expect(response.terminalName).toBe("iTerm");
   });
 });
 
@@ -220,7 +279,7 @@ describe("openPathsWithApplication", () => {
     await expect(
       openPathsWithApplication(
         {
-          applicationPath: "Finder",
+          applicationPath: "/Applications/Zed.app",
           paths: ["/Users/demo/file.txt"],
         },
         async () => {
@@ -231,6 +290,38 @@ describe("openPathsWithApplication", () => {
       ok: false,
       error: "Application not found",
     });
+  });
+
+  it("rejects application paths that are not absolute .app bundles", async () => {
+    const runOpenCommand = vi.fn(async () => undefined);
+
+    const response = await openPathsWithApplication(
+      {
+        applicationPath: "Finder",
+        paths: ["/Users/demo/file.txt"],
+      },
+      runOpenCommand,
+    );
+
+    expect(response.ok).toBe(false);
+    expect(response.error).toContain("Invalid application path");
+    expect(runOpenCommand).not.toHaveBeenCalled();
+  });
+
+  it("rejects application paths containing parent directory segments", async () => {
+    const runOpenCommand = vi.fn(async () => undefined);
+
+    const response = await openPathsWithApplication(
+      {
+        applicationPath: "/Applications/../private/Evil.app",
+        paths: ["/Users/demo/file.txt"],
+      },
+      runOpenCommand,
+    );
+
+    expect(response.ok).toBe(false);
+    expect(response.error).toContain("Invalid application path");
+    expect(runOpenCommand).not.toHaveBeenCalled();
   });
 });
 

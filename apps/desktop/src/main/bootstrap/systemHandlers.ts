@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { basename, dirname } from "node:path";
+import { basename, dirname, isAbsolute, normalize, sep } from "node:path";
 import { promisify } from "node:util";
 import {
   BrowserWindow,
@@ -83,6 +83,12 @@ export async function openPathsWithApplication(
     paths,
   ) => execFileAsync("open", ["-a", applicationPath, ...paths]).then(() => undefined),
 ): Promise<IpcResponse<"system:openPathsWithApplication">> {
+  if (!isValidApplicationBundlePath(payload.applicationPath)) {
+    return {
+      ok: false,
+      error: buildInvalidApplicationPathMessage(payload.applicationPath),
+    };
+  }
   try {
     await runOpenCommand(payload.applicationPath, [...payload.paths]);
     return {
@@ -107,10 +113,24 @@ export async function openInTerminal(
   }
 > {
   const terminalName = resolveTerminalApplicationName(terminalApp);
+  const launchApplicationPath = terminalApp ? terminalApp.appPath.trim() : "";
   const targetPath = await resolveTerminalTargetPath(payload.path);
+  if (launchApplicationPath.length > 0 && !isValidApplicationBundlePath(launchApplicationPath)) {
+    return {
+      ok: false,
+      error: buildInvalidApplicationPathMessage(launchApplicationPath),
+      targetPath,
+      terminalName,
+    };
+  }
   try {
     // Files open Terminal in their containing directory; directories open directly.
-    await execFileAsync("open", ["-a", terminalName, targetPath]);
+    // `open -a` accepts a full bundle path; fall back to the default Terminal app.
+    await execFileAsync("open", [
+      "-a",
+      launchApplicationPath.length > 0 ? launchApplicationPath : "Terminal",
+      targetPath,
+    ]);
     return {
       ok: true,
       error: null,
@@ -150,8 +170,27 @@ export function resolveTerminalApplicationName(
   if (!terminalApp) {
     return "Terminal";
   }
+  const appName = terminalApp.appName.trim();
+  if (appName.length > 0) {
+    return appName;
+  }
   const appPath = terminalApp.appPath.trim();
-  return appPath.length > 0 ? appPath : "Terminal";
+  return appPath.length > 0 ? resolveApplicationDisplayName(appPath) : "Terminal";
+}
+
+export function isValidApplicationBundlePath(applicationPath: string): boolean {
+  const trimmed = applicationPath.trim();
+  if (trimmed.length === 0 || !isAbsolute(trimmed)) {
+    return false;
+  }
+  if (trimmed.split(sep).includes("..")) {
+    return false;
+  }
+  return normalize(trimmed).toLowerCase().endsWith(".app");
+}
+
+function buildInvalidApplicationPathMessage(applicationPath: string): string {
+  return `Invalid application path: ${applicationPath}. Expected an absolute path to a .app bundle.`;
 }
 
 export function resolveApplicationDisplayName(applicationPath: string): string {

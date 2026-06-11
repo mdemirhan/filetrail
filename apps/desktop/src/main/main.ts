@@ -151,6 +151,7 @@ function createWindow(): BrowserWindow {
       preload: fileURLToPath(new URL("../preload/index.cjs", import.meta.url)),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
     },
     ...(iconPath ? { icon: iconPath } : {}),
   });
@@ -183,9 +184,18 @@ function createWindow(): BrowserWindow {
     }, WINDOW_STATE_SAVE_DELAY_MS);
   };
 
+  const rendererEntryUrl = resolveRendererEntryUrl();
+
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
+    if (isAllowedExternalUrl(url)) {
+      void shell.openExternal(url);
+    }
     return { action: "deny" };
+  });
+  mainWindow.webContents.on("will-navigate", (event, navigationUrl) => {
+    if (navigationUrl !== rendererEntryUrl) {
+      event.preventDefault();
+    }
   });
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
     appLoggerRef?.error("[filetrail] renderer process gone", {
@@ -208,13 +218,7 @@ function createWindow(): BrowserWindow {
     mainWindow.show();
   });
 
-  const rendererUrl = process.env.FILETRAIL_RENDERER_URL;
-  if (rendererUrl && rendererUrl.length > 0) {
-    void mainWindow.loadURL(rendererUrl);
-  } else {
-    const rendererPath = fileURLToPath(new URL("../renderer/index.html", import.meta.url));
-    void mainWindow.loadURL(pathToFileURL(rendererPath).toString());
-  }
+  void mainWindow.loadURL(rendererEntryUrl);
 
   if (process.env.FILETRAIL_OPEN_DEVTOOLS === "1") {
     mainWindow.webContents.openDevTools({ mode: "detach" });
@@ -236,6 +240,24 @@ function createWindow(): BrowserWindow {
   mainWindow.on("close", persistWindowState);
 
   return mainWindow;
+}
+
+function resolveRendererEntryUrl(): string {
+  const rendererUrl = process.env.FILETRAIL_RENDERER_URL;
+  if (rendererUrl && rendererUrl.length > 0) {
+    return rendererUrl;
+  }
+  const rendererPath = fileURLToPath(new URL("../renderer/index.html", import.meta.url));
+  return pathToFileURL(rendererPath).toString();
+}
+
+function isAllowedExternalUrl(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl);
+    return parsed.protocol === "https:" || parsed.protocol === "mailto:";
+  } catch {
+    return false;
+  }
 }
 
 function applyWindowZoom(mainWindow: BrowserWindow, zoomPercent: number): void {

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { setImmediate as yieldToEventLoop } from "node:timers/promises";
 
 import {
   type ActionLogAction,
@@ -17,6 +18,7 @@ import { readFileSize, resolveRotatedLogPath, rotateLogFiles } from "./logRotati
 type ActionLogStoreDependencies = {
   maxBytes?: number;
   maxFiles?: number;
+  maxListEntries?: number;
   onError?: (error: unknown) => void;
 };
 
@@ -68,6 +70,8 @@ type ActionLogRecorder = {
 
 const DEFAULT_ACTION_LOG_MAX_BYTES = 5 * 1024 * 1024;
 const DEFAULT_ACTION_LOG_MAX_FILES = 10;
+/** Hard cap on entries returned by list() so large rotated logs stay bounded. */
+const DEFAULT_ACTION_LOG_MAX_LIST_ENTRIES = 2000;
 
 export function resolveActionLogFilePath(userDataPath: string): string {
   return join(userDataPath, "logs", "action-log.jsonl");
@@ -79,6 +83,10 @@ export function createActionLogStore(
 ): ActionLogStore {
   const maxBytes = dependencies.maxBytes ?? DEFAULT_ACTION_LOG_MAX_BYTES;
   const maxFiles = Math.max(1, dependencies.maxFiles ?? DEFAULT_ACTION_LOG_MAX_FILES);
+  const maxListEntries = Math.max(
+    1,
+    dependencies.maxListEntries ?? DEFAULT_ACTION_LOG_MAX_LIST_ENTRIES,
+  );
   const onError =
     dependencies.onError ??
     ((error: unknown) => {
@@ -110,6 +118,7 @@ export function createActionLogStore(
     async list() {
       await writeQueue;
       const entries: ActionLogEntry[] = [];
+      // Live file first, then rotated files from newest to oldest.
       const files = [
         filePath,
         ...Array.from({ length: maxFiles - 1 }, (_, index) => index + 1).map((index) =>
@@ -117,6 +126,10 @@ export function createActionLogStore(
         ),
       ];
       for (const candidatePath of files) {
+        // Older files can only contain older entries, so stop once the cap is met.
+        if (entries.length >= maxListEntries) {
+          break;
+        }
         const raw = await readFile(candidatePath, "utf8").catch(() => null);
         if (!raw) {
           continue;
@@ -141,8 +154,12 @@ export function createActionLogStore(
             onError(error);
           }
         }
+        // Keep the main process responsive between potentially large files.
+        await yieldToEventLoop();
       }
-      return entries.sort((left, right) => right.occurredAt.localeCompare(left.occurredAt));
+      return entries
+        .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt))
+        .slice(0, maxListEntries);
     },
   };
 }
