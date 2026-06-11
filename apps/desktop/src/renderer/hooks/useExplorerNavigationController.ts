@@ -1,20 +1,14 @@
 import {
-  type Dispatch,
-  type MutableRefObject,
   type KeyboardEvent as ReactKeyboardEvent,
-  type RefObject,
-  type SetStateAction,
   useCallback,
   useEffect,
   useLayoutEffect,
 } from "react";
 
-import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
-import type { FavoritePreference, FavoritesPlacement } from "../../shared/appPreferences";
+import type { IpcRequest } from "@filetrail/contracts";
 
 import { SEARCH_RESULT_ROW_HEIGHT } from "../components/SearchResultsPane";
 import type { TreeNodeState } from "../components/TreePane";
-import type { ContentSelectionState } from "../lib/contentSelection";
 import { getDetailsRowHeight } from "../lib/detailsLayout";
 import {
   createTreeNode,
@@ -46,159 +40,75 @@ import {
   isFavoriteItemId,
   isFavoritesRootItemId,
 } from "../lib/favorites";
-import type { useFiletrailClient } from "../lib/filetrailClient";
 import { getFlowListColumnStep } from "../lib/flowListLayout";
 import { EXPLORER_LAYOUT } from "../lib/layoutTokens";
 import { createRendererLogger } from "../lib/logging";
 import { pageScrollElement, scrollElementByAmount } from "../lib/pagedScroll";
 import { expandHomeShortcut } from "../lib/pathUtils";
 import { findContentTypeaheadMatch } from "../lib/typeahead";
+import type {
+  ExplorerServices,
+  NavigationStore,
+  PreferencesStore,
+  SearchStore,
+  SelectionActions,
+  WriteOperationsStore,
+} from "../state/explorerStores";
 
 const logger = createRendererLogger("filetrail.renderer");
 
 export function useExplorerNavigationController(args: {
-  client: ReturnType<typeof useFiletrailClient>;
-  preferencesReady: boolean;
-  mainView: "explorer" | "help" | "settings" | "action-log";
-  locationDialogOpen: boolean;
-  explorerFocusSuppressed: boolean;
-  actionNotice: { title: string; message: string } | null;
-  contextMenuState: { paths: string[]; targetPath: string | null } | null;
-  searchShellRef: RefObject<HTMLDivElement | null>;
-  searchPointerIntentRef: MutableRefObject<boolean>;
-  treePaneRef: RefObject<HTMLElement | null>;
-  contentPaneRef: RefObject<HTMLElement | null>;
-  typeaheadTimeoutRef: MutableRefObject<ReturnType<typeof setTimeout> | null>;
-  typeaheadQueryRef: MutableRefObject<string>;
-  typeaheadPaneRef: MutableRefObject<"tree" | "content" | null>;
-  typeaheadDebounceMs: number;
-  typeaheadEnabled: boolean;
-  homePath: string;
-  treeRootPath: string;
-  setTreeRootPath: Dispatch<SetStateAction<string>>;
-  treeNodes: Record<string, TreeNodeState>;
-  setTreeNodes: Dispatch<SetStateAction<Record<string, TreeNodeState>>>;
-  favorites: FavoritePreference[];
-  favoritesPlacement: FavoritesPlacement;
-  favoritesExpanded: boolean;
-  setFavoritesExpanded: Dispatch<SetStateAction<boolean>>;
-  selectedTreeItemId: TreeItemId | null;
-  setSelectedTreeItemId: Dispatch<SetStateAction<TreeItemId | null>>;
-  currentPath: string;
-  setCurrentPath: Dispatch<SetStateAction<string>>;
-  currentEntries: DirectoryEntry[];
-  setCurrentEntries: Dispatch<SetStateAction<DirectoryEntry[]>>;
-  activeContentEntries: DirectoryEntry[];
-  metadataByPath: Record<string, DirectoryEntryMetadata>;
-  setMetadataByPath: Dispatch<SetStateAction<Record<string, DirectoryEntryMetadata>>>;
-  directoryLoading: boolean;
-  setDirectoryLoading: Dispatch<SetStateAction<boolean>>;
-  setDirectoryError: Dispatch<SetStateAction<string | null>>;
-  sortBy: IpcRequest<"directory:getSnapshot">["sortBy"];
-  setSortBy: Dispatch<SetStateAction<IpcRequest<"directory:getSnapshot">["sortBy"]>>;
-  sortDirection: IpcRequest<"directory:getSnapshot">["sortDirection"];
-  setSortDirection: Dispatch<SetStateAction<IpcRequest<"directory:getSnapshot">["sortDirection"]>>;
-  foldersFirst: boolean;
-  setFoldersFirst: Dispatch<SetStateAction<boolean>>;
-  includeHidden: boolean;
-  setIncludeHidden: Dispatch<SetStateAction<boolean>>;
-  viewMode: "list" | "details";
-  compactListView: boolean;
-  compactDetailsView: boolean;
-  compactTreeView: boolean;
-  contentSelection: ContentSelectionState;
-  contentColumns: number;
-  setVisiblePaths: Dispatch<SetStateAction<string[]>>;
-  visiblePaths: string[];
-  historyPaths: string[];
-  setHistoryPaths: Dispatch<SetStateAction<string[]>>;
-  historyIndex: number;
-  setHistoryIndex: Dispatch<SetStateAction<number>>;
-  locationSubmitting: boolean;
-  setLocationSubmitting: Dispatch<SetStateAction<boolean>>;
-  setLocationSheetOpen: Dispatch<SetStateAction<boolean>>;
-  setLocationError: Dispatch<SetStateAction<string | null>>;
-  onLocationPathSubmitted: (path: string) => void;
-  focusedPane: "tree" | "content" | null;
-  setFocusedPane: Dispatch<SetStateAction<"tree" | "content" | null>>;
-  leftPaneSubview: "favorites" | "tree";
-  setLeftPaneSubview: Dispatch<SetStateAction<"favorites" | "tree">>;
-  typeaheadQuery: string;
-  typeaheadPane: "tree" | "content" | null;
-  setTypeaheadPane: Dispatch<SetStateAction<"tree" | "content" | null>>;
-  setTypeaheadQuery: Dispatch<SetStateAction<string>>;
-  infoTargetPathOverride: string | null;
-  setInfoTargetPathOverride: Dispatch<SetStateAction<string | null>>;
-  infoPanelOpen: boolean;
-  infoRowOpen: boolean;
-  setGetInfoLoading: Dispatch<SetStateAction<boolean>>;
-  setGetInfoItem: Dispatch<SetStateAction<IpcResponse<"item:getProperties">["item"] | null>>;
-  panes: {
-    setTreeWidth: Dispatch<SetStateAction<number>>;
-    setInspectorWidth: Dispatch<SetStateAction<number>>;
+  services: ExplorerServices;
+  navigation: NavigationStore;
+  preferences: PreferencesStore;
+  search: SearchStore;
+  writeOperations: WriteOperationsStore;
+  selection: SelectionActions;
+  derived: {
+    activeContentEntries: DirectoryEntry[];
+    locationDialogOpen: boolean;
+    explorerFocusSuppressed: boolean;
   };
-  searchCommittedQuery: string;
-  searchResultsVisible: boolean;
-  setSearchResultsVisible: Dispatch<SetStateAction<boolean>>;
-  searchResultsVisibleRef: MutableRefObject<boolean>;
-  isSearchModeRef: MutableRefObject<boolean>;
-  applyContentSelection: (selection: ContentSelectionState, entries: DirectoryEntry[]) => void;
-  setSingleContentSelection: (path: string) => void;
-  directoryRequestRef: MutableRefObject<number>;
-  getInfoRequestRef: MutableRefObject<number>;
-  treeRequestRef: MutableRefObject<Record<string, number>>;
-  treeNodesRef: MutableRefObject<Record<string, TreeNodeState>>;
-  selectedTreeItemIdRef: MutableRefObject<TreeItemId | null>;
-  treeRootPathRef: MutableRefObject<string>;
-  metadataCacheRef: MutableRefObject<Map<string, DirectoryEntryMetadata>>;
-  metadataInflightRef: MutableRefObject<Set<string>>;
-  currentPathRef: MutableRefObject<string>;
-  selectedPathsInViewOrderRef: MutableRefObject<string[]>;
-  selectedEntryRef: MutableRefObject<DirectoryEntry | null>;
-  lastExplorerFocusPaneRef: MutableRefObject<"tree" | "content" | null>;
-  leftPaneSubviewRef: MutableRefObject<"favorites" | "tree">;
-  lastLeftPaneSubviewRef: MutableRefObject<"favorites" | "tree">;
-  pendingPasteSelectionRef: MutableRefObject<{
-    directoryPath: string;
-    selectedPaths: string[];
-  } | null>;
+  callbacks: {
+    onLocationPathSubmitted: (path: string) => void;
+  };
 }) {
   type SortBy = IpcRequest<"directory:getSnapshot">["sortBy"];
   type SortDirection = IpcRequest<"directory:getSnapshot">["sortDirection"];
 
   const {
+    services,
+    navigation,
+    preferences,
+    search,
+    writeOperations,
+    selection,
+    derived,
+    callbacks,
+  } = args;
+  const {
     client,
-    preferencesReady,
-    mainView,
-    locationDialogOpen,
-    explorerFocusSuppressed,
-    actionNotice,
-    contextMenuState,
+    panes,
     searchShellRef,
-    searchPointerIntentRef,
     treePaneRef,
     contentPaneRef,
     typeaheadTimeoutRef,
     typeaheadQueryRef,
     typeaheadPaneRef,
-    typeaheadDebounceMs,
-    typeaheadEnabled,
+  } = services;
+  const {
+    mainView,
     homePath,
     treeRootPath,
     setTreeRootPath,
     treeNodes,
     setTreeNodes,
-    favorites,
-    favoritesPlacement,
-    favoritesExpanded,
-    setFavoritesExpanded,
     selectedTreeItemId,
     setSelectedTreeItemId,
     currentPath,
     setCurrentPath,
     currentEntries,
     setCurrentEntries,
-    activeContentEntries,
     metadataByPath,
     setMetadataByPath,
     directoryLoading,
@@ -208,14 +118,6 @@ export function useExplorerNavigationController(args: {
     setSortBy,
     sortDirection,
     setSortDirection,
-    foldersFirst,
-    setFoldersFirst,
-    includeHidden,
-    setIncludeHidden,
-    viewMode,
-    compactListView,
-    compactDetailsView,
-    compactTreeView,
     contentSelection,
     contentColumns,
     setVisiblePaths,
@@ -227,7 +129,6 @@ export function useExplorerNavigationController(args: {
     setLocationSubmitting,
     setLocationSheetOpen,
     setLocationError,
-    onLocationPathSubmitted,
     focusedPane,
     setFocusedPane,
     leftPaneSubview,
@@ -242,14 +143,6 @@ export function useExplorerNavigationController(args: {
     infoRowOpen,
     setGetInfoLoading,
     setGetInfoItem,
-    panes,
-    searchCommittedQuery,
-    searchResultsVisible,
-    setSearchResultsVisible,
-    searchResultsVisibleRef,
-    isSearchModeRef,
-    applyContentSelection,
-    setSingleContentSelection,
     directoryRequestRef,
     getInfoRequestRef,
     treeRequestRef,
@@ -259,44 +152,48 @@ export function useExplorerNavigationController(args: {
     metadataCacheRef,
     metadataInflightRef,
     currentPathRef,
+    isSearchModeRef,
     selectedPathsInViewOrderRef,
     selectedEntryRef,
     lastExplorerFocusPaneRef,
     leftPaneSubviewRef,
     lastLeftPaneSubviewRef,
-    pendingPasteSelectionRef,
-  } = args;
+  } = navigation;
+  const {
+    preferencesReady,
+    typeaheadDebounceMs,
+    typeaheadEnabled,
+    favorites,
+    favoritesPlacement,
+    favoritesExpanded,
+    setFavoritesExpanded,
+    foldersFirst,
+    setFoldersFirst,
+    includeHidden,
+    setIncludeHidden,
+    viewMode,
+    compactListView,
+    compactDetailsView,
+    compactTreeView,
+  } = preferences;
+  const {
+    searchCommittedQuery,
+    searchResultsVisible,
+    setSearchResultsVisible,
+    searchResultsVisibleRef,
+    searchPointerIntentRef,
+  } = search;
+  const { actionNotice, contextMenuState, pendingPasteSelectionRef } = writeOperations;
+  const { applyContentSelection, setSingleContentSelection } = selection;
+  const { activeContentEntries, locationDialogOpen, explorerFocusSuppressed } = derived;
+  const { onLocationPathSubmitted } = callbacks;
 
   const hasCachedSearch = searchCommittedQuery.trim().length > 0;
   const isSearchMode = searchResultsVisible && hasCachedSearch;
 
-  const clearTypeahead = useCallback(() => {
-    if (typeaheadTimeoutRef.current) {
-      clearTimeout(typeaheadTimeoutRef.current);
-      typeaheadTimeoutRef.current = null;
-    }
-    typeaheadQueryRef.current = "";
-    typeaheadPaneRef.current = null;
-    setTypeaheadQuery("");
-    setTypeaheadPane(null);
-  }, [
-    setTypeaheadPane,
-    setTypeaheadQuery,
-    typeaheadPaneRef,
-    typeaheadQueryRef,
-    typeaheadTimeoutRef,
-  ]);
-
-  const focusContentPane = useCallback(() => {
-    setFocusedPane("content");
-    clearTypeahead();
-    window.requestAnimationFrame(() => {
-      contentPaneRef.current?.focus({ preventScroll: true });
-      window.requestAnimationFrame(() => {
-        contentPaneRef.current?.focus({ preventScroll: true });
-      });
-    });
-  }, [clearTypeahead, contentPaneRef, setFocusedPane]);
+  // Typeahead/content-focus actions live in the shared selection store; they
+  // are re-exported from this controller's return value for its consumers.
+  const { clearTypeahead, focusContentPane } = selection;
 
   const focusTreePane = useCallback(() => {
     setFocusedPane("tree");

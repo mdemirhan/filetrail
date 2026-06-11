@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type {
   ActionLogEntry,
@@ -87,8 +87,22 @@ import type { canHandleRendererCommand } from "./lib/shortcutPolicy";
 import { resolveStartupNavigation } from "./lib/startupNavigation";
 import { getThemeAppearanceDefaults } from "./lib/theme";
 import { type ToastEntry, type ToastKind, createToastEntry, enqueueToast } from "./lib/toasts";
+import { ExplorerStoreProvider } from "./state/explorerStoreContext";
+import { useExplorerServices, useSelectionActions } from "./state/explorerStores";
 
 const logger = createRendererLogger("filetrail.renderer");
+
+const PREFERENCES_PERSIST_DEBOUNCE_MS = 300;
+
+type PreferencesPersistPayload = IpcRequest<"app:updatePreferences">["preferences"];
+
+function arePreferencesPersistPayloadsEqual(
+  previous: PreferencesPersistPayload,
+  next: PreferencesPersistPayload,
+): boolean {
+  const keys = Object.keys(next) as Array<keyof PreferencesPersistPayload>;
+  return keys.every((key) => Object.is(previous[key], next[key]));
+}
 
 export function App() {
   type SortBy = IpcRequest<"directory:getSnapshot">["sortBy"];
@@ -100,6 +114,10 @@ export function App() {
   const [actionLogLoading, setActionLogLoading] = useState(false);
   const [actionLogError, setActionLogError] = useState<string | null>(null);
   const [locationSheetInitialPath, setLocationSheetInitialPath] = useState("");
+  const preferences = useAppPreferences();
+  const navigation = useExplorerNavigation();
+  const search = useSearchSession();
+  const writeOperations = useWriteOperations();
   const {
     preferencesReady,
     setPreferencesReady,
@@ -196,7 +214,7 @@ export function App() {
     openItemLimit,
     setOpenItemLimit,
     resetAppearanceSettings,
-  } = useAppPreferences();
+  } = preferences;
   const {
     mainView,
     setMainView,
@@ -270,12 +288,13 @@ export function App() {
     metadataInflightRef,
     currentPathRef,
     isSearchModeRef,
+    activeContentEntriesRef,
     selectedPathsInViewOrderRef,
     selectedEntryRef,
     lastExplorerFocusPaneRef,
     leftPaneSubviewRef,
     lastLeftPaneSubviewRef,
-  } = useExplorerNavigation();
+  } = navigation;
   const {
     searchDraftQuery,
     setSearchDraftQuery,
@@ -325,7 +344,7 @@ export function App() {
     searchResultsSortDirectionRef,
     browseSelectionRef,
     cachedSearchSelectionRef,
-  } = useSearchSession();
+  } = search;
   const {
     contextMenuState,
     setContextMenuState,
@@ -356,7 +375,7 @@ export function App() {
     writeOperationLockedRef,
     pendingPasteSelectionRef,
     pendingTreeSelectionPathRef,
-  } = useWriteOperations();
+  } = writeOperations;
   const treePaneRef = useRef<HTMLElement | null>(null);
   const contentPaneRef = useRef<HTMLElement | null>(null);
   const toolbarRef = useRef<HTMLElement | null>(null);
@@ -376,39 +395,18 @@ export function App() {
   });
   const { width: toolbarWidth } = useElementSize(toolbarRef);
   const { width: singlePanelWidth } = useElementSize(singlePanelRef);
-  function applyContentSelectionBridge(
-    selection: ContentSelectionState,
-    entries: DirectoryEntry[],
-  ) {
-    selectedPathsInViewOrderRef.current = entries
-      .filter((entry) => selection.paths.includes(entry.path))
-      .map((entry) => entry.path);
-    selectedEntryRef.current =
-      entries.find((entry) => entry.path === selection.leadPath) ??
-      entries.find((entry) => selection.paths.includes(entry.path)) ??
-      null;
-    setContentSelection(selection);
-  }
-  function clearTypeaheadBridge() {
-    if (typeaheadTimeoutRef.current) {
-      clearTimeout(typeaheadTimeoutRef.current);
-      typeaheadTimeoutRef.current = null;
-    }
-    typeaheadQueryRef.current = "";
-    typeaheadPaneRef.current = null;
-    setTypeaheadQuery("");
-    setTypeaheadPane(null);
-  }
-  function focusContentPaneBridge() {
-    setFocusedPane("content");
-    clearTypeaheadBridge();
-    window.requestAnimationFrame(() => {
-      contentPaneRef.current?.focus({ preventScroll: true });
-      window.requestAnimationFrame(() => {
-        contentPaneRef.current?.focus({ preventScroll: true });
-      });
-    });
-  }
+  const services = useExplorerServices({
+    client,
+    panes,
+    treePaneRef,
+    contentPaneRef,
+    searchInputRef,
+    searchShellRef,
+    typeaheadTimeoutRef,
+    typeaheadQueryRef,
+    typeaheadPaneRef,
+  });
+  const selectionActions = useSelectionActions({ navigation, services });
   const {
     applySearchResultsSort,
     clearCommittedSearch,
@@ -430,52 +428,10 @@ export function App() {
     updateSearchResultsFilterScope,
     updateSearchResultsSortBy,
   } = useExplorerSearchController({
-    client,
-    currentPath,
-    currentEntries,
-    contentSelection,
-    applyContentSelection: applyContentSelectionBridge,
-    focusContentPane: focusContentPaneBridge,
-    searchInputRef,
-    searchCommittedQuery,
-    setSearchCommittedQuery,
-    searchRootPath,
-    setSearchRootPath,
-    searchPatternMode,
-    setSearchPatternMode,
-    searchMatchScope,
-    setSearchMatchScope,
-    searchRecursive,
-    setSearchRecursive,
-    searchIncludeHidden,
-    setSearchIncludeHidden,
-    searchResultsSortBy,
-    setSearchResultsSortBy,
-    searchResultsSortDirection,
-    setSearchResultsSortDirection,
-    setSearchPopoverOpen,
-    searchResultsVisible,
-    setSearchResultsVisible,
-    searchResults,
-    setSearchResults,
-    setSearchResultsScrollTop,
-    setSearchResultsFilterQuery,
-    debouncedSearchResultsFilterQuery,
-    setDebouncedSearchResultsFilterQuery,
-    searchResultsFilterScope,
-    setSearchResultsFilterScope,
-    setSearchStatus,
-    setSearchError,
-    setSearchTruncated,
-    searchPollTimeoutRef,
-    searchSessionRef,
-    searchJobIdRef,
-    searchCommittedQueryRef,
-    searchResultsVisibleRef,
-    searchResultsSortByRef,
-    searchResultsSortDirectionRef,
-    browseSelectionRef,
-    cachedSearchSelectionRef,
+    services,
+    navigation,
+    search,
+    selection: selectionActions,
   });
   const activeContentEntries = useMemo(
     () => (isSearchMode ? searchResultEntries : currentEntries),
@@ -496,9 +452,16 @@ export function App() {
       null,
     [activeContentEntries, contentSelection.leadPath, selectedPathSet],
   );
-  function setSingleContentSelectionBridge(path: string) {
-    applyContentSelectionBridge(createSingleContentSelection(path), activeContentEntries);
-  }
+  // Keep the shadow refs in sync with the memos above; callbacks that need the
+  // freshest values within the same tick (selection actions, shortcut handlers)
+  // read these refs instead of re-deriving the same state.
+  useLayoutEffect(() => {
+    activeContentEntriesRef.current = activeContentEntries;
+  }, [activeContentEntries, activeContentEntriesRef]);
+  useLayoutEffect(() => {
+    selectedPathsInViewOrderRef.current = selectedPathsInViewOrder;
+    selectedEntryRef.current = selectedEntry;
+  }, [selectedEntry, selectedEntryRef, selectedPathsInViewOrder, selectedPathsInViewOrderRef]);
   const contextMenuTargetEntries = useMemo(
     // Content-menu target entries are resolved from the visible content listing only.
     // Tree and favorite menus intentionally do not rely on this memo.
@@ -598,106 +561,31 @@ export function App() {
     submitLocationPath,
     handlePaneResizeKey,
   } = useExplorerNavigationController({
-    client,
-    preferencesReady,
-    mainView,
-    locationDialogOpen,
-    explorerFocusSuppressed,
-    actionNotice,
-    contextMenuState,
-    searchShellRef,
-    searchPointerIntentRef,
-    treePaneRef,
-    contentPaneRef,
-    typeaheadTimeoutRef,
-    typeaheadQueryRef,
-    typeaheadPaneRef,
-    typeaheadDebounceMs,
-    typeaheadEnabled,
-    homePath,
-    treeRootPath,
-    setTreeRootPath,
-    treeNodes,
-    setTreeNodes,
-    favorites,
-    favoritesPlacement,
-    favoritesExpanded,
-    setFavoritesExpanded,
-    selectedTreeItemId,
-    setSelectedTreeItemId,
-    currentPath,
-    setCurrentPath,
-    currentEntries,
-    setCurrentEntries,
-    activeContentEntries,
-    metadataByPath,
-    setMetadataByPath,
-    directoryLoading,
-    setDirectoryLoading,
-    setDirectoryError,
-    sortBy,
-    setSortBy,
-    sortDirection,
-    setSortDirection,
-    foldersFirst,
-    setFoldersFirst,
-    includeHidden,
-    setIncludeHidden,
-    viewMode,
-    compactListView,
-    compactDetailsView,
-    compactTreeView,
-    contentSelection,
-    contentColumns,
-    setVisiblePaths,
-    visiblePaths,
-    historyPaths,
-    setHistoryPaths,
-    historyIndex,
-    setHistoryIndex,
-    locationSubmitting,
-    setLocationSubmitting,
-    setLocationSheetOpen,
-    setLocationError,
-    onLocationPathSubmitted: setLastGoToFolderPath,
-    focusedPane,
-    setFocusedPane,
-    leftPaneSubview,
-    setLeftPaneSubview,
-    typeaheadQuery,
-    typeaheadPane,
-    setTypeaheadPane,
-    setTypeaheadQuery,
-    infoTargetPathOverride,
-    setInfoTargetPathOverride,
-    infoPanelOpen,
-    infoRowOpen,
-    setGetInfoLoading,
-    setGetInfoItem,
-    panes,
-    searchCommittedQuery,
-    searchResultsVisible,
-    setSearchResultsVisible,
-    searchResultsVisibleRef,
-    isSearchModeRef,
-    applyContentSelection: applyContentSelectionBridge,
-    setSingleContentSelection: setSingleContentSelectionBridge,
-    directoryRequestRef,
-    getInfoRequestRef,
-    treeRequestRef,
-    treeNodesRef,
-    selectedTreeItemIdRef,
-    treeRootPathRef,
-    metadataCacheRef,
-    metadataInflightRef,
-    currentPathRef,
-    selectedPathsInViewOrderRef,
-    selectedEntryRef,
-    lastExplorerFocusPaneRef,
-    leftPaneSubviewRef,
-    lastLeftPaneSubviewRef,
-    pendingPasteSelectionRef,
+    services,
+    navigation,
+    preferences,
+    search,
+    writeOperations,
+    selection: selectionActions,
+    derived: {
+      activeContentEntries,
+      locationDialogOpen,
+      explorerFocusSuppressed,
+    },
+    callbacks: {
+      onLocationPathSubmitted: setLastGoToFolderPath,
+    },
   });
+  const navigateFavoritePath = useCallback(
+    (path: string, historyMode: "push" | "replace" | "skip") =>
+      navigateTo(path, historyMode, undefined, undefined, undefined, undefined, {
+        syncTree: false,
+        treeSelectionMode: "favorite",
+        favoritePath: path,
+        persistOnError: true,
+      }),
+    [navigateTo],
+  );
   const {
     addOpenWithApplication,
     activateContentEntry,
@@ -755,101 +643,39 @@ export function App() {
     toggleContentSelection,
     updateCopyPastePolicy,
   } = useExplorerActions({
-    client,
-    mainView,
-    focusedPane,
-    setFocusedPane,
-    setInfoPanelOpen,
-    setInfoTargetPathOverride,
-    setGetInfoItem,
-    setGetInfoLoading,
-    getInfoRequestRef,
-    homePath,
-    currentPath,
-    currentEntries,
-    activeContentEntries,
-    selectedEntry,
-    selectedPathsInViewOrder,
-    selectedPathSet,
-    contextMenuTargetEntries,
-    contextMenuTargetEntry,
-    favorites,
-    setFavorites,
-    pasteDestinationPath,
-    isSearchMode,
-    openItemLimit,
-    notificationsEnabled,
-    notificationDurationSeconds,
-    fileActivationAction,
-    defaultTextEditor,
-    setDefaultTextEditor,
-    setTerminalApp,
-    openWithApplications,
-    setOpenWithApplications,
-    contentPaneRef,
-    searchInputRef,
-    setSearchPopoverOpen,
-    clearTypeahead,
-    focusContentPane,
-    restoreExplorerPaneFocus,
-    navigateTo,
-    navigateTreeFileSystemPath,
-    navigateFavoritePath: (path, historyMode) =>
-      navigateTo(path, historyMode, undefined, undefined, undefined, undefined, {
-        syncTree: false,
-        treeSelectionMode: "favorite",
-        favoritePath: path,
-        persistOnError: true,
-      }),
-    toggleTreeNode,
-    refreshDirectory,
-    restartActiveSearch: async () => {
-      if (searchCommittedQuery.trim().length === 0) {
-        return;
-      }
-      await startSearch(searchCommittedQuery, {
-        rootPath: searchRootPath || currentPath,
-      });
+    services,
+    navigation,
+    preferences,
+    search,
+    writeOperations,
+    selection: selectionActions,
+    derived: {
+      activeContentEntries,
+      selectedPathsInViewOrder,
+      selectedPathSet,
+      contextMenuTargetEntries,
+      contextMenuTargetEntry,
+      pasteDestinationPath,
+      isSearchMode,
     },
-    contentSelection,
-    setContentSelection,
-    currentPathRef,
-    selectedTreeItemIdRef,
-    isSearchModeRef,
-    selectedPathsInViewOrderRef,
-    selectedEntryRef,
-    lastExplorerFocusPaneRef,
-    browseSelectionRef,
-    cachedSearchSelectionRef,
-    contextMenuState,
-    setContextMenuState,
-    actionNotice,
-    setActionNotice,
-    toasts,
-    setToasts,
-    copyPasteClipboard,
-    setCopyPasteClipboardState,
-    copyPasteDialogState,
-    setCopyPasteDialogState,
-    writeOperationCardState,
-    setWriteOperationCardState,
-    writeOperationProgressEvent,
-    setWriteOperationProgressEvent,
-    renameDialogState,
-    setRenameDialogState,
-    newFolderDialogState,
-    setNewFolderDialogState,
-    moveDialogState,
-    setMoveDialogState,
-    actionNoticeReturnFocusPaneRef,
-    activeWriteOperationIdRef,
-    nextPasteAttemptIdRef,
-    pendingPasteAttemptRef,
-    nextToastIdRef,
-    copyPasteClipboardRef,
-    writeOperationLockedRef,
-    pendingPasteSelectionRef,
-    pendingTreeSelectionPathRef,
+    navActions: {
+      restoreExplorerPaneFocus,
+      navigateTo,
+      navigateTreeFileSystemPath,
+      navigateFavoritePath,
+      toggleTreeNode,
+      refreshDirectory,
+    },
+    callbacks: {
+      restartActiveSearch: async () => {
+        if (searchCommittedQuery.trim().length === 0) {
+          return;
+        }
+        await startSearch(searchCommittedQuery, {
+          rootPath: searchRootPath || currentPath,
+        });
+      },
+    },
   });
   const copyPasteModalOpen =
     (copyPasteDialogState !== null && copyPasteDialogState.type !== "analysis") ||
@@ -940,88 +766,65 @@ export function App() {
   );
 
   const { runRendererCommand } = useExplorerShortcuts({
-    client,
-    shortcutContext,
-    actionNotice,
-    dismissActionNotice,
-    copyPasteModalOpen,
-    handleCopyPasteDialogEscape,
-    contextMenuState,
-    setContextMenuState,
-    locationDialogOpen,
-    mainView,
-    setMainView,
-    openActionLogView,
-    openSettingsView,
-    openLocationSheet,
-    focusFileSearch,
-    focusedPane,
-    setFocusedPane,
-    lastExplorerFocusPaneRef,
-    treePaneRef,
-    contentPaneRef,
-    searchInputRef,
-    clearTypeahead,
-    setSearchPopoverOpen,
-    setSearchResultsVisible,
-    searchPointerIntentRef,
-    searchCommittedQueryRef,
-    cachedSearchSelectionRef,
-    searchResultEntries,
-    applyContentSelection,
-    selectedTreeTargetPath,
-    selectedPathsInViewOrder,
-    currentPath,
-    selectedEntry,
-    activeContentEntries,
-    contentSelection,
-    contentColumns,
-    isSearchMode,
-    hasCachedSearch,
-    tabSwitchesExplorerPanes,
-    typeaheadEnabled,
-    viewMode,
-    showCachedSearchResults,
-    hideSearchResults,
-    goBack,
-    goForward,
-    navigateTo,
-    navigateTreeFileSystemPath,
-    navigateFavoritePath: (path, historyMode) =>
-      navigateTo(path, historyMode, undefined, undefined, undefined, undefined, {
-        syncTree: false,
-        treeSelectionMode: "favorite",
-        favoritePath: path,
-        persistOnError: true,
-      }),
-    openTreeNode,
-    toggleHiddenFiles,
-    refreshDirectory,
-    applySearchResultsSort,
-    runCopyClipboardAction,
-    startPasteFromClipboard,
-    resolveContentActionPaths,
-    startDuplicatePaths,
-    startTrashPaths,
-    openMoveDialog,
-    openRenameDialog,
-    openNewFolderDialog,
-    runCopyPathAction,
-    openPaths,
-    editPaths,
-    openPathInTerminal,
-    focusContentPane,
-    handlePagedPaneScroll,
-    handleTypeaheadInput,
-    handleTreeKeyboardAction,
-    navigateTreeSelectionToParent,
-    activateContentPaths,
-    extendContentSelectionToPath,
-    setSingleContentSelection,
-    selectAllContentEntries,
-    setInfoPanelOpen,
-    setInfoRowOpen,
-    setZoomPercent,
+    services,
+    navigation,
+    preferences,
+    search,
+    writeOperations,
+    derived: {
+      shortcutContext,
+      copyPasteModalOpen,
+      locationDialogOpen,
+      searchResultEntries,
+      selectedTreeTargetPath,
+      selectedPathsInViewOrder,
+      selectedEntry,
+      activeContentEntries,
+      isSearchMode,
+      hasCachedSearch,
+    },
+    actions: {
+      dismissActionNotice,
+      handleCopyPasteDialogEscape,
+      openActionLogView,
+      openSettingsView,
+      openLocationSheet,
+      focusFileSearch,
+      clearTypeahead,
+      applyContentSelection,
+      showCachedSearchResults,
+      hideSearchResults,
+      goBack,
+      goForward,
+      navigateTo,
+      navigateTreeFileSystemPath,
+      navigateFavoritePath,
+      openTreeNode,
+      toggleHiddenFiles,
+      refreshDirectory,
+      applySearchResultsSort,
+      runCopyClipboardAction,
+      startPasteFromClipboard,
+      resolveContentActionPaths,
+      startDuplicatePaths,
+      startTrashPaths,
+      openMoveDialog,
+      openRenameDialog,
+      openNewFolderDialog,
+      runCopyPathAction,
+      openPaths,
+      editPaths,
+      openPathInTerminal,
+      focusContentPane,
+      handlePagedPaneScroll,
+      handleTypeaheadInput,
+      handleTreeKeyboardAction,
+      navigateTreeSelectionToParent,
+      activateContentPaths,
+      extendContentSelectionToPath,
+      setSingleContentSelection,
+      selectAllContentEntries,
+    },
   });
 
   useEffect(
@@ -1033,89 +836,28 @@ export function App() {
     [],
   );
 
-  useEffect(() => {
-    if (!preferencesReady) {
-      return;
-    }
-    void client.invoke("app:updatePreferences", {
-      preferences: {
-        theme,
-        iconTheme,
-        accent,
-        accentToolbarButtons,
-        toolbarAccent,
-        accentFavoriteItems,
-        accentFavoriteText,
-        favoriteAccent,
-        zoomPercent,
-        uiFontFamily,
-        uiFontSize,
-        uiFontWeight,
-        textPrimaryOverride,
-        textSecondaryOverride,
-        textMutedOverride,
-        viewMode,
-        sortBy,
-        sortDirection,
-        foldersFirst,
-        compactListView,
-        compactDetailsView,
-        compactTreeView,
-        singleClickExpandTreeItems,
-        highlightHoveredItems,
-        detailColumns,
-        detailColumnWidths,
-        tabSwitchesExplorerPanes,
-        typeaheadEnabled,
-        typeaheadDebounceMs,
-        notificationsEnabled,
-        notificationDurationSeconds,
-        actionLogEnabled,
-        topToolbarItems,
-        leftToolbarItems,
-        propertiesOpen: infoPanelOpen,
-        detailRowOpen: infoRowOpen,
-        terminalApp,
-        defaultTextEditor,
-        openWithApplications,
-        fileActivationAction,
-        openItemLimit,
-        includeHidden,
-        searchPatternMode,
-        searchMatchScope,
-        searchRecursive,
-        searchIncludeHidden,
-        searchResultsSortBy,
-        searchResultsSortDirection,
-        searchResultsFilterScope,
-        treeWidth: panes.treeWidth,
-        inspectorWidth: panes.inspectorWidth,
-        restoreLastVisitedFolderOnStartup,
-        treeRootPath: treeRootPath || null,
-        lastVisitedPath: currentPath || null,
-        lastVisitedFavoritePath:
-          getFavoriteItemPath(selectedTreeItemId) === currentPath
-            ? getFavoriteItemPath(selectedTreeItemId)
-            : null,
-        lastGoToFolderPath,
-        favorites,
-        favoritesPlacement,
-        favoritesPaneHeight,
-        favoritesExpanded,
-        favoritesInitialized,
-        copyPasteReviewDialogSize,
-      },
-    });
-  }, [
-    client,
-    currentPath,
-    selectedTreeItemId,
-    includeHidden,
-    panes.inspectorWidth,
-    panes.treeWidth,
-    preferencesReady,
-    infoPanelOpen,
-    infoRowOpen,
+  // Snapshot the full preferences payload on every render so the debounced
+  // persist below always writes the latest values without depending on each
+  // individual field.
+  const preferencesPersistPayload: PreferencesPersistPayload = {
+    theme,
+    iconTheme,
+    accent,
+    accentToolbarButtons,
+    toolbarAccent,
+    accentFavoriteItems,
+    accentFavoriteText,
+    favoriteAccent,
+    zoomPercent,
+    uiFontFamily,
+    uiFontSize,
+    uiFontWeight,
+    textPrimaryOverride,
+    textSecondaryOverride,
+    textMutedOverride,
+    viewMode,
+    sortBy,
+    sortDirection,
     foldersFirst,
     compactListView,
     compactDetailsView,
@@ -1124,32 +866,38 @@ export function App() {
     highlightHoveredItems,
     detailColumns,
     detailColumnWidths,
-    accent,
-    accentToolbarButtons,
-    toolbarAccent,
-    accentFavoriteItems,
-    accentFavoriteText,
-    favoriteAccent,
-    iconTheme,
-    zoomPercent,
-    searchIncludeHidden,
-    searchResultsSortBy,
-    searchResultsSortDirection,
-    searchResultsFilterScope,
-    searchMatchScope,
-    searchPatternMode,
-    searchRecursive,
     tabSwitchesExplorerPanes,
-    typeaheadDebounceMs,
     typeaheadEnabled,
+    typeaheadDebounceMs,
+    notificationsEnabled,
     notificationDurationSeconds,
     actionLogEnabled,
     topToolbarItems,
     leftToolbarItems,
+    propertiesOpen: infoPanelOpen,
+    detailRowOpen: infoRowOpen,
+    terminalApp,
+    defaultTextEditor,
     openWithApplications,
-    notificationsEnabled,
+    fileActivationAction,
     openItemLimit,
+    includeHidden,
+    searchPatternMode,
+    searchMatchScope,
+    searchRecursive,
+    searchIncludeHidden,
+    searchResultsSortBy,
+    searchResultsSortDirection,
+    searchResultsFilterScope,
+    treeWidth: panes.treeWidth,
+    inspectorWidth: panes.inspectorWidth,
     restoreLastVisitedFolderOnStartup,
+    treeRootPath: treeRootPath || null,
+    lastVisitedPath: currentPath || null,
+    lastVisitedFavoritePath:
+      getFavoriteItemPath(selectedTreeItemId) === currentPath
+        ? getFavoriteItemPath(selectedTreeItemId)
+        : null,
     lastGoToFolderPath,
     favorites,
     favoritesPlacement,
@@ -1157,21 +905,51 @@ export function App() {
     favoritesExpanded,
     favoritesInitialized,
     copyPasteReviewDialogSize,
-    terminalApp,
-    defaultTextEditor,
-    theme,
-    uiFontFamily,
-    uiFontSize,
-    textMutedOverride,
-    textPrimaryOverride,
-    textSecondaryOverride,
-    treeRootPath,
-    uiFontWeight,
-    viewMode,
-    sortBy,
-    sortDirection,
-    fileActivationAction,
-  ]);
+  };
+  const preferencesPersistPayloadRef = useRef(preferencesPersistPayload);
+  preferencesPersistPayloadRef.current = preferencesPersistPayload;
+  const queuedPreferencesPersistPayloadRef = useRef<PreferencesPersistPayload | null>(null);
+  const preferencesPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Persist preferences with a trailing debounce so bursts of navigation,
+  // selection, and sort changes collapse into a single IPC write that carries
+  // the latest snapshot. Runs after every render and bails out when nothing in
+  // the payload changed since the last scheduled write.
+  useEffect(() => {
+    if (!preferencesReady) {
+      return;
+    }
+    const nextPayload = preferencesPersistPayloadRef.current;
+    const queuedPayload = queuedPreferencesPersistPayloadRef.current;
+    if (queuedPayload !== null && arePreferencesPersistPayloadsEqual(queuedPayload, nextPayload)) {
+      return;
+    }
+    queuedPreferencesPersistPayloadRef.current = nextPayload;
+    if (preferencesPersistTimerRef.current !== null) {
+      clearTimeout(preferencesPersistTimerRef.current);
+    }
+    preferencesPersistTimerRef.current = setTimeout(() => {
+      preferencesPersistTimerRef.current = null;
+      void client.invoke("app:updatePreferences", {
+        preferences: preferencesPersistPayloadRef.current,
+      });
+    }, PREFERENCES_PERSIST_DEBOUNCE_MS);
+  });
+
+  // Flush a pending preferences write on unmount so the latest snapshot wins.
+  useEffect(
+    () => () => {
+      if (preferencesPersistTimerRef.current === null) {
+        return;
+      }
+      clearTimeout(preferencesPersistTimerRef.current);
+      preferencesPersistTimerRef.current = null;
+      void client.invoke("app:updatePreferences", {
+        preferences: preferencesPersistPayloadRef.current,
+      });
+    },
+    [client],
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: startup bootstrapping should run once per client/pane wiring; including callback identities would cause repeated initialization.
   useEffect(() => {
@@ -1600,584 +1378,571 @@ export function App() {
       : null;
 
   return (
-    <main className="app-shell">
-      {mainView === "explorer" ? (
-        <ExplorerWorkspace
-          preferencesReady={preferencesReady}
-          restoredPaneWidths={restoredPaneWidths}
-          treeWidth={panes.treeWidth}
-          inspectorWidth={panes.inspectorWidth}
-          beginResize={panes.beginResize}
-          infoPanelOpen={infoPanelOpen}
-          toolbarRef={toolbarRef}
-          treePaneProps={{
-            paneRef: treePaneRef,
-            isFocused: focusedPane === "tree",
-            dragActive,
-            homePath,
-            selectedTreeItemId,
-            compactTreeView,
-            singleClickExpandTreeItems,
-            nodes: treeNodes,
-            favorites,
-            favoritesPlacement,
-            favoritesPaneHeight,
-            activeLeftPaneSubview: leftPaneSubview,
-            favoritesExpanded,
-            rootPath: treeRootPath,
-            onFocusChange: (focused) => setFocusedPane(focused ? "tree" : null),
-            onLeftPaneSubviewChange: setLeftPaneSubview,
-            onFavoritesPaneHeightChange: setFavoritesPaneHeight,
-            onGoHome: goHome,
-            canGoBack,
-            onGoBack: goBack,
-            canGoForward,
-            onGoForward: goForward,
-            canNavigateToParent: parentDirectoryPath(currentPath) !== null,
-            onNavigateToParent: navigateToParentFolder,
-            canNavigateDown: focusedPane === "tree" || selectedEntry !== null,
-            onNavigateDown: navigateDownAction,
-            onRerootHome: rerootTreeAtHome,
-            onOpenLocation: openLocationSheet,
-            onQuickAccess: goQuickAccess,
-            foldersFirst,
-            onToggleFoldersFirst: toggleFoldersFirst,
-            infoPanelOpen,
-            onToggleInfoPanel: () => setInfoPanelOpen((value) => !value),
-            infoRowOpen,
-            onToggleInfoRow: () => setInfoRowOpen((value) => !value),
-            leftToolbarItems,
-            theme,
-            themeMenuOpen,
-            themeButtonRef,
-            themeMenuRef,
-            onToggleThemeMenu: () => setThemeMenuOpen((value) => !value),
-            onSelectTheme: (nextTheme) => {
-              setTheme(nextTheme);
-              setThemeMenuOpen(false);
-            },
-            actionLogEnabled,
-            onOpenActionLog: openActionLogView,
-            onOpenHelp: () => setMainView("help"),
-            onOpenSettings: openSettingsView,
-            includeHidden,
-            onToggleHidden: toggleHiddenFiles,
-            onNavigate: async (path) => {
-              await navigateTreeFileSystemPath(path, "push");
-              return undefined;
-            },
-            onNavigateFavorite: (path) =>
-              navigateTo(path, "push", undefined, undefined, undefined, undefined, {
-                syncTree: false,
-                treeSelectionMode: "favorite",
-                favoritePath: path,
-                persistOnError: true,
-              }),
-            onClearSelection: clearTreeSelection,
-            onSelectFavoritesRoot: async () => {
-              await selectTreeItem(getFavoritesRootItemId(), "skip");
-              return undefined;
-            },
-            onItemContextMenu: (item, subview, position) => {
-              if (!item.path || item.kind === "favorites-root") {
-                return;
-              }
-              openTreeItemContextMenu({
-                path: item.path,
-                sourceSubview: subview,
-                targetKind: item.kind === "favorite" ? "favorite" : "treeFolder",
-                folderExpansionLabel:
-                  item.kind === "filesystem" && !item.isSymlink
-                    ? item.expanded
-                      ? "Collapse"
-                      : "Expand"
-                    : null,
-                position,
-              });
-            },
-            onItemDragEnter: handleTreeDragEnter,
-            onItemDragOver: handleTreeDragOver,
-            onItemDrop: handleTreeDrop,
-            getItemDropIndicator: (item, subview) =>
-              getTreeItemDropIndicator(item.path, item.kind === "favorite" ? "favorite" : "tree"),
-            onToggleExpand: toggleTreeNode,
-            onToggleFavoritesExpanded: () => setFavoritesExpanded((value) => !value),
-            typeaheadQuery: focusedPane === "tree" ? typeaheadQuery : "",
-            canRunRendererCommand,
-            onRendererCommand: runRendererCommand,
-          }}
-          searchWorkspaceProps={{
-            isSearchMode,
-            searchResultsKey: `${searchRootPath}:${searchCommittedQuery}`,
-            searchResultsPaneProps: {
-              paneRef: contentPaneRef,
-              isFocused: focusedPane === "content",
-              rootPath: searchRootPath,
-              query: searchCommittedQuery,
-              status: searchStatus,
-              results: filteredSearchResults,
-              selectedPaths: contentSelection.paths,
-              selectionLeadPath: contentSelection.leadPath,
-              highlightHoveredItems,
-              error: searchError,
-              truncated: searchTruncated,
-              filterQuery: searchResultsFilterQuery,
-              filterScope: searchResultsFilterScope,
-              totalCount: searchResults.length,
-              sortBy: searchResultsSortBy,
-              sortDirection: searchResultsSortDirection,
-              onStopSearch: () => {
-                void stopSearch();
+    <ExplorerStoreProvider
+      navigation={navigation}
+      dialogs={writeOperations}
+      preferences={preferences}
+    >
+      <main className="app-shell">
+        {mainView === "explorer" ? (
+          <ExplorerWorkspace
+            preferencesReady={preferencesReady}
+            restoredPaneWidths={restoredPaneWidths}
+            treeWidth={panes.treeWidth}
+            inspectorWidth={panes.inspectorWidth}
+            beginResize={panes.beginResize}
+            infoPanelOpen={infoPanelOpen}
+            toolbarRef={toolbarRef}
+            treePaneProps={{
+              paneRef: treePaneRef,
+              isFocused: focusedPane === "tree",
+              dragActive,
+              homePath,
+              selectedTreeItemId,
+              compactTreeView,
+              singleClickExpandTreeItems,
+              nodes: treeNodes,
+              favorites,
+              favoritesPlacement,
+              favoritesPaneHeight,
+              activeLeftPaneSubview: leftPaneSubview,
+              favoritesExpanded,
+              rootPath: treeRootPath,
+              onFocusChange: (focused) => setFocusedPane(focused ? "tree" : null),
+              onLeftPaneSubviewChange: setLeftPaneSubview,
+              onFavoritesPaneHeightChange: setFavoritesPaneHeight,
+              onGoHome: goHome,
+              canGoBack,
+              onGoBack: goBack,
+              canGoForward,
+              onGoForward: goForward,
+              canNavigateToParent: parentDirectoryPath(currentPath) !== null,
+              onNavigateToParent: navigateToParentFolder,
+              canNavigateDown: focusedPane === "tree" || selectedEntry !== null,
+              onNavigateDown: navigateDownAction,
+              onRerootHome: rerootTreeAtHome,
+              onOpenLocation: openLocationSheet,
+              onQuickAccess: goQuickAccess,
+              foldersFirst,
+              onToggleFoldersFirst: toggleFoldersFirst,
+              infoPanelOpen,
+              onToggleInfoPanel: () => setInfoPanelOpen((value) => !value),
+              infoRowOpen,
+              onToggleInfoRow: () => setInfoRowOpen((value) => !value),
+              leftToolbarItems,
+              theme,
+              themeMenuOpen,
+              themeButtonRef,
+              themeMenuRef,
+              onToggleThemeMenu: () => setThemeMenuOpen((value) => !value),
+              onSelectTheme: (nextTheme) => {
+                setTheme(nextTheme);
+                setThemeMenuOpen(false);
               },
-              onClearResults: () => {
-                void clearCommittedSearch().finally(() => {
-                  focusContentPane();
+              actionLogEnabled,
+              onOpenActionLog: openActionLogView,
+              onOpenHelp: () => setMainView("help"),
+              onOpenSettings: openSettingsView,
+              includeHidden,
+              onToggleHidden: toggleHiddenFiles,
+              onNavigate: async (path) => {
+                await navigateTreeFileSystemPath(path, "push");
+                return undefined;
+              },
+              onNavigateFavorite: (path) =>
+                navigateTo(path, "push", undefined, undefined, undefined, undefined, {
+                  syncTree: false,
+                  treeSelectionMode: "favorite",
+                  favoritePath: path,
+                  persistOnError: true,
+                }),
+              onClearSelection: clearTreeSelection,
+              onSelectFavoritesRoot: async () => {
+                await selectTreeItem(getFavoritesRootItemId(), "skip");
+                return undefined;
+              },
+              onItemContextMenu: (item, subview, position) => {
+                if (!item.path || item.kind === "favorites-root") {
+                  return;
+                }
+                openTreeItemContextMenu({
+                  path: item.path,
+                  sourceSubview: subview,
+                  targetKind: item.kind === "favorite" ? "favorite" : "treeFolder",
+                  folderExpansionLabel:
+                    item.kind === "filesystem" && !item.isSymlink
+                      ? item.expanded
+                        ? "Collapse"
+                        : "Expand"
+                      : null,
+                  position,
                 });
               },
-              onCloseResults: () => {
-                setSearchPopoverOpen(false);
-                searchInputRef.current?.blur();
-                hideSearchResults();
-                focusContentPane();
-              },
-              onFilterQueryChange: updateSearchResultsFilterQuery,
-              onFilterScopeChange: updateSearchResultsFilterScope,
-              onSortByChange: updateSearchResultsSortBy,
-              onSortDirectionToggle: toggleSearchResultsSortDirection,
-              onApplySort: applySearchResultsSort,
-              onSelectionGesture: handleContentSelectionGesture,
-              onClearSelection: clearContentSelection,
-              onActivateResult: (item) => {
-                void activateContentEntry(toDirectoryEntryFromSearchResult(item));
-              },
-              onItemContextMenu: (path, position) => {
-                openItemContextMenu(path, position, "search");
-              },
-              onItemDragStart: (item, event) =>
-                handleSearchDragStart(toDirectoryEntryFromSearchResult(item), "search", event),
-              onItemDragEnd: handleDragEnd,
-              onFocusChange: (focused) => setFocusedPane(focused ? "content" : null),
-              onTypeaheadInput: (key) => handleTypeaheadInput(key, "content"),
-              typeaheadQuery: focusedPane === "content" ? typeaheadQuery : "",
-              scrollTop: searchResultsScrollTop,
-              onScrollTopChange: setSearchResultsScrollTop,
-            },
-            contentPaneProps: {
-              paneRef: contentPaneRef,
-              isFocused: focusedPane === "content",
-              currentPath,
-              entries: currentEntries,
-              loading: directoryLoading,
-              error: directoryError,
-              includeHidden,
-              metadataByPath,
-              selectedPaths: contentSelection.paths,
-              selectionLeadPath: contentSelection.leadPath,
-              viewMode,
-              onSelectionGesture: handleContentSelectionGesture,
-              onClearSelection: clearContentSelection,
-              onActivateEntry: (entry) => {
-                void activateContentEntry(entry);
-              },
-              onFocusChange: (focused) => setFocusedPane(focused ? "content" : null),
-              sortBy,
-              sortDirection,
-              onSortChange: handleSortChange,
-              onLayoutColumnsChange: setContentColumns,
-              onVisiblePathsChange: setVisiblePaths,
-              onNavigatePath: (path) => void navigateTo(path, "push"),
-              onRequestPathSuggestions: (inputPath) =>
-                requestPathSuggestions({
-                  client,
-                  includeHidden,
-                  homePath,
-                  inputPath,
-                }),
-              onTypeaheadInput: (key) => handleTypeaheadInput(key, "content"),
-              onItemContextMenu: (path, position) => {
-                openItemContextMenu(path, position, "content");
-              },
-              onItemDragStart: (entry, event) => handleContentDragStart(entry, "content", event),
-              onItemDragEnd: handleDragEnd,
-              onItemDragEnter: handleContentDragEnter,
-              onItemDragOver: handleContentDragOver,
-              onItemDragLeave: handleContentDragLeave,
-              onItemDrop: handleContentDrop,
-              getItemDropIndicator: getContentItemDropIndicator,
-              compactListView,
-              compactDetailsView,
-              highlightHoveredItems,
-              detailColumns,
-              detailColumnWidths,
-              onDetailColumnWidthsChange: setDetailColumnWidths,
-              tabSwitchesExplorerPanes,
-              typeaheadQuery: focusedPane === "content" ? typeaheadQuery : "",
-            },
-            infoRow: (
-              <InfoRow
-                open={infoRowOpen}
-                currentPath={currentPath}
-                selectedEntry={selectedEntry}
-                item={getInfoItem}
-                folderSizeEntry={
-                  infoRowFolderSizePath
-                    ? folderSizeCache.getEntry(infoRowFolderSizePath)
-                    : undefined
-                }
-                onCalculateFolderSize={
-                  infoRowFolderSizePath
-                    ? () => void folderSizeCache.calculateFolderSize(infoRowFolderSizePath)
-                    : undefined
-                }
-                onRecalculateFolderSize={
-                  infoRowFolderSizePath
-                    ? () => folderSizeCache.recalculateFolderSize(infoRowFolderSizePath)
-                    : undefined
-                }
-                onCancelFolderSize={
-                  infoRowFolderSizePath
-                    ? () => void folderSizeCache.cancelFolderSize(infoRowFolderSizePath)
-                    : undefined
-                }
-              />
-            ),
-            statusLabel: isSearchMode
-              ? (searchStatus === "running"
-                  ? `${filteredSearchResults.length} / ${searchResults.length} matches so far`
-                  : `${filteredSearchResults.length} / ${searchResults.length} matches`) +
-                (contentSelection.paths.length > 0
-                  ? ` (${contentSelection.paths.length} selected)`
-                  : "")
-              : contentSelection.paths.length > 0
-                ? `${contentSelection.paths.length} of ${currentEntries.length} selected`
-                : `${currentEntries.length} items`,
-            statusPathLabel: isSearchMode ? `Search root: ${searchRootPath}` : currentPath,
-          }}
-          infoPanelProps={{
-            loading: getInfoLoading,
-            item: getInfoItem,
-            onClose: () => setInfoPanelOpen(false),
-            onNavigateToPath: (path) => {
-              void navigateTo(path, path === currentPath ? "replace" : "push");
-            },
-            onOpen: () => {
-              if (getInfoItem) {
-                void openPathExternally(getInfoItem.path);
-              }
-            },
-            onOpenInTerminal: () => {
-              if (getInfoItem) {
-                void openPathInTerminal(getInfoItem.path);
-              }
-            },
-            onCopyPath: () => (getInfoItem ? copyGetInfoPath(getInfoItem.path) : false),
-            copyPathDisabled: isWriteOperationLocked,
-            folderSizeEntry: infoPanelFolderSizePath
-              ? folderSizeCache.getEntry(infoPanelFolderSizePath)
-              : undefined,
-            onCalculateFolderSize: infoPanelFolderSizePath
-              ? () => void folderSizeCache.calculateFolderSize(infoPanelFolderSizePath)
-              : undefined,
-            onRecalculateFolderSize: infoPanelFolderSizePath
-              ? () => folderSizeCache.recalculateFolderSize(infoPanelFolderSizePath)
-              : undefined,
-            onCancelFolderSize: infoPanelFolderSizePath
-              ? () => void folderSizeCache.cancelFolderSize(infoPanelFolderSizePath)
-              : undefined,
-          }}
-          currentPath={currentPath}
-          topToolbarItems={topToolbarItems}
-          explorerToolbarLayout={explorerToolbarLayout}
-          canGoBack={canGoBack}
-          canGoForward={canGoForward}
-          focusedPane={focusedPane}
-          selectedEntryExists={selectedEntry !== null}
-          goBack={goBack}
-          goForward={goForward}
-          navigateToParentFolder={navigateToParentFolder}
-          navigateDownAction={navigateDownAction}
-          refreshDirectory={refreshDirectory}
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
-          sortBy={sortBy}
-          sortDirection={sortDirection}
-          onSortChange={handleSortChange}
-          searchShellRef={searchShellRef}
-          searchPopoverOpen={searchPopoverOpen}
-          onSearchShellBlur={(event) => {
-            const nextTarget = event.relatedTarget;
-            if (
-              nextTarget instanceof Node &&
-              (searchShellRef.current?.contains(nextTarget) ?? false)
-            ) {
-              return;
-            }
-            setSearchPopoverOpen(false);
-          }}
-          searchPointerIntentRef={searchPointerIntentRef}
-          onSearchShellPointerIntent={() => {
-            setFocusedPane(null);
-            clearTypeahead();
-            window.requestAnimationFrame(() => {
-              searchInputRef.current?.focus();
-              searchPointerIntentRef.current = false;
-            });
-          }}
-          onSearchSubmit={() => {
-            void startSearch(searchDraftQuery).finally(() => {
-              dismissFileSearch({ focusBelow: true });
-            });
-          }}
-          searchInputRef={searchInputRef}
-          searchDraftQuery={searchDraftQuery}
-          onSearchInputFocus={() => {
-            searchPointerIntentRef.current = false;
-            setFocusedPane(null);
-            clearTypeahead();
-            setSearchPopoverOpen(true);
-            showCachedSearchResults();
-          }}
-          onSearchDraftQueryChange={(nextValue) => {
-            setSearchDraftQuery(nextValue);
-            if (nextValue.trim().length === 0) {
-              void clearCommittedSearch();
-            }
-          }}
-          onSearchInputEscape={() => {
-            dismissFileSearch({ focusBelow: true });
-          }}
-          onClearSearchDraft={() => {
-            setSearchDraftQuery("");
-            void clearCommittedSearch().finally(() => {
-              focusFileSearch(false);
-            });
-          }}
-          searchPatternMode={searchPatternMode}
-          onSearchPatternModeChange={updateSearchPatternMode}
-          searchMatchScope={searchMatchScope}
-          onSearchMatchScopeChange={updateSearchMatchScope}
-          searchRecursive={searchRecursive}
-          onSearchRecursiveChange={updateSearchRecursive}
-          searchIncludeHidden={searchIncludeHidden}
-          onSearchIncludeHiddenChange={updateSearchIncludeHidden}
-          canRunRendererCommand={canRunRendererCommand}
-          onRendererCommand={runRendererCommand}
-          onPaneResizeKey={handlePaneResizeKey}
-        />
-      ) : (
-        <section className="workspace single-panel-layout">
-          <section ref={singlePanelRef} className="pane single-panel-pane">
-            {mainView === "help" ? (
-              <HelpView
-                shortcutItems={[...SHORTCUT_ITEMS]}
-                referenceItems={[...REFERENCE_ITEMS]}
-                layoutMode={singlePanelLayout}
-                theme={theme}
-                accent={accent}
-              />
-            ) : mainView === "action-log" ? (
-              <ActionLogView
-                entries={actionLogEntries}
-                loading={actionLogLoading}
-                error={actionLogError}
-                theme={theme}
-                accent={accent}
-                layoutMode={singlePanelLayout}
-                onCopyEntryText={copyActionLogEntryText}
-                onRefresh={() => {
-                  void refreshActionLog();
-                }}
-              />
-            ) : (
-              <SettingsView
-                theme={theme}
-                iconTheme={iconTheme}
-                accent={accent}
-                accentToolbarButtons={accentToolbarButtons}
-                toolbarAccent={toolbarAccent}
-                accentFavoriteItems={accentFavoriteItems}
-                accentFavoriteText={accentFavoriteText}
-                favoriteAccent={favoriteAccent}
-                zoomPercent={zoomPercent}
-                uiFontFamily={uiFontFamily}
-                uiFontSize={uiFontSize}
-                uiFontWeight={uiFontWeight}
-                effectiveTextPrimaryColor={effectiveThemeColors.primary}
-                effectiveTextSecondaryColor={effectiveThemeColors.secondary}
-                effectiveTextMutedColor={effectiveThemeColors.muted}
-                compactListView={compactListView}
-                compactDetailsView={compactDetailsView}
-                compactTreeView={compactTreeView}
-                singleClickExpandTreeItems={singleClickExpandTreeItems}
-                highlightHoveredItems={highlightHoveredItems}
-                detailColumns={detailColumns}
-                layoutMode={singlePanelLayout}
-                tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
-                typeaheadEnabled={typeaheadEnabled}
-                typeaheadDebounceMs={typeaheadDebounceMs}
-                notificationsEnabled={notificationsEnabled}
-                notificationDurationSeconds={notificationDurationSeconds}
-                actionLogEnabled={actionLogEnabled}
-                topToolbarItems={topToolbarItems}
-                leftToolbarItems={leftToolbarItems}
-                restoreLastVisitedFolderOnStartup={restoreLastVisitedFolderOnStartup}
-                homePath={homePath}
-                terminalApp={terminalApp}
-                defaultTextEditor={defaultTextEditor}
-                favorites={favorites}
-                favoritesPlacement={favoritesPlacement}
-                openWithApplications={openWithApplications}
-                fileActivationAction={fileActivationAction}
-                openItemLimit={openItemLimit}
-                themeOptions={[...THEME_OPTIONS]}
-                accentOptions={[...ACCENT_OPTIONS]}
-                uiFontOptions={[...UI_FONT_OPTIONS]}
-                uiFontSizeOptions={[...UI_FONT_SIZE_OPTIONS]}
-                uiFontWeightOptions={[...UI_FONT_WEIGHT_OPTIONS]}
-                typeaheadDebounceOptions={[...TYPEAHEAD_DEBOUNCE_OPTIONS]}
-                notificationDurationSecondsOptions={[...NOTIFICATION_DURATION_SECONDS_OPTIONS]}
-                onThemeChange={setTheme}
-                onIconThemeChange={setIconTheme}
-                onAccentChange={setAccent}
-                onAccentToolbarButtonsChange={setAccentToolbarButtons}
-                onToolbarAccentChange={setToolbarAccent}
-                onAccentFavoriteItemsChange={setAccentFavoriteItems}
-                onAccentFavoriteTextChange={setAccentFavoriteText}
-                onFavoriteAccentChange={setFavoriteAccent}
-                onZoomPercentChange={setZoomPercent}
-                onUiFontFamilyChange={setUiFontFamily}
-                onUiFontSizeChange={setUiFontSize}
-                onUiFontWeightChange={setUiFontWeight}
-                onTextPrimaryColorChange={setTextPrimaryOverride}
-                onTextSecondaryColorChange={setTextSecondaryOverride}
-                onTextMutedColorChange={setTextMutedOverride}
-                onResetAppearance={resetAppearanceSettings}
-                onCompactListViewChange={setCompactListView}
-                onCompactDetailsViewChange={setCompactDetailsView}
-                onCompactTreeViewChange={setCompactTreeView}
-                onSingleClickExpandTreeItemsChange={setSingleClickExpandTreeItems}
-                onHighlightHoveredItemsChange={setHighlightHoveredItems}
-                onDetailColumnsChange={setDetailColumns}
-                onTabSwitchesExplorerPanesChange={setTabSwitchesExplorerPanes}
-                onTypeaheadEnabledChange={setTypeaheadEnabled}
-                onTypeaheadDebounceMsChange={setTypeaheadDebounceMs}
-                onNotificationsEnabledChange={setNotificationsEnabled}
-                onNotificationDurationSecondsChange={setNotificationDurationSeconds}
-                onActionLogEnabledChange={setActionLogEnabled}
-                onTopToolbarItemsChange={setTopToolbarItems}
-                onLeftToolbarItemsChange={setLeftToolbarItems}
-                onResetTopToolbar={() => setTopToolbarItems([...DEFAULT_TOP_TOOLBAR_ITEMS])}
-                onResetLeftToolbar={() =>
-                  setLeftToolbarItems({
-                    main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
-                    utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
-                  })
-                }
-                onResetToolbars={() => {
-                  setTopToolbarItems([...DEFAULT_TOP_TOOLBAR_ITEMS]);
-                  setLeftToolbarItems({
-                    main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
-                    utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
+              onItemDragEnter: handleTreeDragEnter,
+              onItemDragOver: handleTreeDragOver,
+              onItemDrop: handleTreeDrop,
+              getItemDropIndicator: (item, subview) =>
+                getTreeItemDropIndicator(item.path, item.kind === "favorite" ? "favorite" : "tree"),
+              onToggleExpand: toggleTreeNode,
+              onToggleFavoritesExpanded: () => setFavoritesExpanded((value) => !value),
+              typeaheadQuery: focusedPane === "tree" ? typeaheadQuery : "",
+              canRunRendererCommand,
+              onRendererCommand: runRendererCommand,
+            }}
+            searchWorkspaceProps={{
+              isSearchMode,
+              searchResultsKey: `${searchRootPath}:${searchCommittedQuery}`,
+              searchResultsPaneProps: {
+                paneRef: contentPaneRef,
+                isFocused: focusedPane === "content",
+                rootPath: searchRootPath,
+                query: searchCommittedQuery,
+                status: searchStatus,
+                results: filteredSearchResults,
+                selectedPaths: contentSelection.paths,
+                selectionLeadPath: contentSelection.leadPath,
+                highlightHoveredItems,
+                error: searchError,
+                truncated: searchTruncated,
+                filterQuery: searchResultsFilterQuery,
+                filterScope: searchResultsFilterScope,
+                totalCount: searchResults.length,
+                sortBy: searchResultsSortBy,
+                sortDirection: searchResultsSortDirection,
+                onStopSearch: () => {
+                  void stopSearch();
+                },
+                onClearResults: () => {
+                  void clearCommittedSearch().finally(() => {
+                    focusContentPane();
                   });
-                }}
-                onRestoreLastVisitedFolderOnStartupChange={setRestoreLastVisitedFolderOnStartup}
-                onBrowseTerminalApp={() => {
-                  void browseTerminalApplication();
-                }}
-                onClearTerminalApp={() => setTerminalApp(null)}
-                onBrowseDefaultTextEditor={() => {
-                  void browseDefaultTextEditor();
-                }}
-                onClearDefaultTextEditor={() => setDefaultTextEditor(DEFAULT_TEXT_EDITOR)}
-                onAddFavorite={() => {
-                  void addFavoriteFromSettings();
-                }}
-                onBrowseFavorite={(index) => {
-                  void browseFavoriteInSettings(index);
-                }}
-                onMoveFavorite={moveFavoriteInSettings}
-                onRemoveFavorite={removeFavoriteInSettings}
-                onFavoriteIconChange={updateFavoriteIconInSettings}
-                onFavoritesPlacementChange={setFavoritesPlacement}
-                onAddOpenWithApplication={() => {
-                  void addOpenWithApplication();
-                }}
-                onBrowseOpenWithApplication={(entryId) => {
-                  void browseOpenWithApplication(entryId);
-                }}
-                onMoveOpenWithApplication={moveOpenWithApplication}
-                onRemoveOpenWithApplication={removeOpenWithApplication}
-                onFileActivationActionChange={setFileActivationAction}
-                onOpenItemLimitChange={setOpenItemLimit}
-              />
-            )}
+                },
+                onCloseResults: () => {
+                  setSearchPopoverOpen(false);
+                  searchInputRef.current?.blur();
+                  hideSearchResults();
+                  focusContentPane();
+                },
+                onFilterQueryChange: updateSearchResultsFilterQuery,
+                onFilterScopeChange: updateSearchResultsFilterScope,
+                onSortByChange: updateSearchResultsSortBy,
+                onSortDirectionToggle: toggleSearchResultsSortDirection,
+                onApplySort: applySearchResultsSort,
+                onSelectionGesture: handleContentSelectionGesture,
+                onClearSelection: clearContentSelection,
+                onActivateResult: (item) => {
+                  void activateContentEntry(toDirectoryEntryFromSearchResult(item));
+                },
+                onItemContextMenu: (path, position) => {
+                  openItemContextMenu(path, position, "search");
+                },
+                onItemDragStart: (item, event) =>
+                  handleSearchDragStart(toDirectoryEntryFromSearchResult(item), "search", event),
+                onItemDragEnd: handleDragEnd,
+                onFocusChange: (focused) => setFocusedPane(focused ? "content" : null),
+                onTypeaheadInput: (key) => handleTypeaheadInput(key, "content"),
+                typeaheadQuery: focusedPane === "content" ? typeaheadQuery : "",
+                scrollTop: searchResultsScrollTop,
+                onScrollTopChange: setSearchResultsScrollTop,
+              },
+              contentPaneProps: {
+                paneRef: contentPaneRef,
+                isFocused: focusedPane === "content",
+                currentPath,
+                entries: currentEntries,
+                loading: directoryLoading,
+                error: directoryError,
+                includeHidden,
+                metadataByPath,
+                selectedPaths: contentSelection.paths,
+                selectionLeadPath: contentSelection.leadPath,
+                viewMode,
+                onSelectionGesture: handleContentSelectionGesture,
+                onClearSelection: clearContentSelection,
+                onActivateEntry: (entry) => {
+                  void activateContentEntry(entry);
+                },
+                onFocusChange: (focused) => setFocusedPane(focused ? "content" : null),
+                sortBy,
+                sortDirection,
+                onSortChange: handleSortChange,
+                onLayoutColumnsChange: setContentColumns,
+                onVisiblePathsChange: setVisiblePaths,
+                onNavigatePath: (path) => void navigateTo(path, "push"),
+                onRequestPathSuggestions: (inputPath) =>
+                  requestPathSuggestions({
+                    client,
+                    includeHidden,
+                    homePath,
+                    inputPath,
+                  }),
+                onTypeaheadInput: (key) => handleTypeaheadInput(key, "content"),
+                onItemContextMenu: (path, position) => {
+                  openItemContextMenu(path, position, "content");
+                },
+                onItemDragStart: (entry, event) => handleContentDragStart(entry, "content", event),
+                onItemDragEnd: handleDragEnd,
+                onItemDragEnter: handleContentDragEnter,
+                onItemDragOver: handleContentDragOver,
+                onItemDragLeave: handleContentDragLeave,
+                onItemDrop: handleContentDrop,
+                getItemDropIndicator: getContentItemDropIndicator,
+                compactListView,
+                compactDetailsView,
+                highlightHoveredItems,
+                detailColumns,
+                detailColumnWidths,
+                onDetailColumnWidthsChange: setDetailColumnWidths,
+                tabSwitchesExplorerPanes,
+                typeaheadQuery: focusedPane === "content" ? typeaheadQuery : "",
+              },
+              infoRow: (
+                <InfoRow
+                  open={infoRowOpen}
+                  currentPath={currentPath}
+                  selectedEntry={selectedEntry}
+                  item={getInfoItem}
+                  folderSizeEntry={
+                    infoRowFolderSizePath
+                      ? folderSizeCache.getEntry(infoRowFolderSizePath)
+                      : undefined
+                  }
+                  onCalculateFolderSize={
+                    infoRowFolderSizePath
+                      ? () => void folderSizeCache.calculateFolderSize(infoRowFolderSizePath)
+                      : undefined
+                  }
+                  onRecalculateFolderSize={
+                    infoRowFolderSizePath
+                      ? () => folderSizeCache.recalculateFolderSize(infoRowFolderSizePath)
+                      : undefined
+                  }
+                  onCancelFolderSize={
+                    infoRowFolderSizePath
+                      ? () => void folderSizeCache.cancelFolderSize(infoRowFolderSizePath)
+                      : undefined
+                  }
+                />
+              ),
+              statusLabel: isSearchMode
+                ? (searchStatus === "running"
+                    ? `${filteredSearchResults.length} / ${searchResults.length} matches so far`
+                    : `${filteredSearchResults.length} / ${searchResults.length} matches`) +
+                  (contentSelection.paths.length > 0
+                    ? ` (${contentSelection.paths.length} selected)`
+                    : "")
+                : contentSelection.paths.length > 0
+                  ? `${contentSelection.paths.length} of ${currentEntries.length} selected`
+                  : `${currentEntries.length} items`,
+              statusPathLabel: isSearchMode ? `Search root: ${searchRootPath}` : currentPath,
+            }}
+            infoPanelProps={{
+              loading: getInfoLoading,
+              item: getInfoItem,
+              onClose: () => setInfoPanelOpen(false),
+              onNavigateToPath: (path) => {
+                void navigateTo(path, path === currentPath ? "replace" : "push");
+              },
+              onOpen: () => {
+                if (getInfoItem) {
+                  void openPathExternally(getInfoItem.path);
+                }
+              },
+              onOpenInTerminal: () => {
+                if (getInfoItem) {
+                  void openPathInTerminal(getInfoItem.path);
+                }
+              },
+              onCopyPath: () => (getInfoItem ? copyGetInfoPath(getInfoItem.path) : false),
+              copyPathDisabled: isWriteOperationLocked,
+              folderSizeEntry: infoPanelFolderSizePath
+                ? folderSizeCache.getEntry(infoPanelFolderSizePath)
+                : undefined,
+              onCalculateFolderSize: infoPanelFolderSizePath
+                ? () => void folderSizeCache.calculateFolderSize(infoPanelFolderSizePath)
+                : undefined,
+              onRecalculateFolderSize: infoPanelFolderSizePath
+                ? () => folderSizeCache.recalculateFolderSize(infoPanelFolderSizePath)
+                : undefined,
+              onCancelFolderSize: infoPanelFolderSizePath
+                ? () => void folderSizeCache.cancelFolderSize(infoPanelFolderSizePath)
+                : undefined,
+            }}
+            currentPath={currentPath}
+            topToolbarItems={topToolbarItems}
+            explorerToolbarLayout={explorerToolbarLayout}
+            canGoBack={canGoBack}
+            canGoForward={canGoForward}
+            focusedPane={focusedPane}
+            selectedEntryExists={selectedEntry !== null}
+            goBack={goBack}
+            goForward={goForward}
+            navigateToParentFolder={navigateToParentFolder}
+            navigateDownAction={navigateDownAction}
+            refreshDirectory={refreshDirectory}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            sortBy={sortBy}
+            sortDirection={sortDirection}
+            onSortChange={handleSortChange}
+            searchShellRef={searchShellRef}
+            searchPopoverOpen={searchPopoverOpen}
+            onSearchShellBlur={(event) => {
+              const nextTarget = event.relatedTarget;
+              if (
+                nextTarget instanceof Node &&
+                (searchShellRef.current?.contains(nextTarget) ?? false)
+              ) {
+                return;
+              }
+              setSearchPopoverOpen(false);
+            }}
+            searchPointerIntentRef={searchPointerIntentRef}
+            onSearchShellPointerIntent={() => {
+              setFocusedPane(null);
+              clearTypeahead();
+              window.requestAnimationFrame(() => {
+                searchInputRef.current?.focus();
+                searchPointerIntentRef.current = false;
+              });
+            }}
+            onSearchSubmit={() => {
+              void startSearch(searchDraftQuery).finally(() => {
+                dismissFileSearch({ focusBelow: true });
+              });
+            }}
+            searchInputRef={searchInputRef}
+            searchDraftQuery={searchDraftQuery}
+            onSearchInputFocus={() => {
+              searchPointerIntentRef.current = false;
+              setFocusedPane(null);
+              clearTypeahead();
+              setSearchPopoverOpen(true);
+              showCachedSearchResults();
+            }}
+            onSearchDraftQueryChange={(nextValue) => {
+              setSearchDraftQuery(nextValue);
+              if (nextValue.trim().length === 0) {
+                void clearCommittedSearch();
+              }
+            }}
+            onSearchInputEscape={() => {
+              dismissFileSearch({ focusBelow: true });
+            }}
+            onClearSearchDraft={() => {
+              setSearchDraftQuery("");
+              void clearCommittedSearch().finally(() => {
+                focusFileSearch(false);
+              });
+            }}
+            searchPatternMode={searchPatternMode}
+            onSearchPatternModeChange={updateSearchPatternMode}
+            searchMatchScope={searchMatchScope}
+            onSearchMatchScopeChange={updateSearchMatchScope}
+            searchRecursive={searchRecursive}
+            onSearchRecursiveChange={updateSearchRecursive}
+            searchIncludeHidden={searchIncludeHidden}
+            onSearchIncludeHiddenChange={updateSearchIncludeHidden}
+            canRunRendererCommand={canRunRendererCommand}
+            onRendererCommand={runRendererCommand}
+            onPaneResizeKey={handlePaneResizeKey}
+          />
+        ) : (
+          <section className="workspace single-panel-layout">
+            <section ref={singlePanelRef} className="pane single-panel-pane">
+              {mainView === "help" ? (
+                <HelpView
+                  shortcutItems={[...SHORTCUT_ITEMS]}
+                  referenceItems={[...REFERENCE_ITEMS]}
+                  layoutMode={singlePanelLayout}
+                  theme={theme}
+                  accent={accent}
+                />
+              ) : mainView === "action-log" ? (
+                <ActionLogView
+                  entries={actionLogEntries}
+                  loading={actionLogLoading}
+                  error={actionLogError}
+                  theme={theme}
+                  accent={accent}
+                  layoutMode={singlePanelLayout}
+                  onCopyEntryText={copyActionLogEntryText}
+                  onRefresh={() => {
+                    void refreshActionLog();
+                  }}
+                />
+              ) : (
+                <SettingsView
+                  theme={theme}
+                  iconTheme={iconTheme}
+                  accent={accent}
+                  accentToolbarButtons={accentToolbarButtons}
+                  toolbarAccent={toolbarAccent}
+                  accentFavoriteItems={accentFavoriteItems}
+                  accentFavoriteText={accentFavoriteText}
+                  favoriteAccent={favoriteAccent}
+                  zoomPercent={zoomPercent}
+                  uiFontFamily={uiFontFamily}
+                  uiFontSize={uiFontSize}
+                  uiFontWeight={uiFontWeight}
+                  effectiveTextPrimaryColor={effectiveThemeColors.primary}
+                  effectiveTextSecondaryColor={effectiveThemeColors.secondary}
+                  effectiveTextMutedColor={effectiveThemeColors.muted}
+                  compactListView={compactListView}
+                  compactDetailsView={compactDetailsView}
+                  compactTreeView={compactTreeView}
+                  singleClickExpandTreeItems={singleClickExpandTreeItems}
+                  highlightHoveredItems={highlightHoveredItems}
+                  detailColumns={detailColumns}
+                  layoutMode={singlePanelLayout}
+                  tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
+                  typeaheadEnabled={typeaheadEnabled}
+                  typeaheadDebounceMs={typeaheadDebounceMs}
+                  notificationsEnabled={notificationsEnabled}
+                  notificationDurationSeconds={notificationDurationSeconds}
+                  actionLogEnabled={actionLogEnabled}
+                  topToolbarItems={topToolbarItems}
+                  leftToolbarItems={leftToolbarItems}
+                  restoreLastVisitedFolderOnStartup={restoreLastVisitedFolderOnStartup}
+                  homePath={homePath}
+                  terminalApp={terminalApp}
+                  defaultTextEditor={defaultTextEditor}
+                  favorites={favorites}
+                  favoritesPlacement={favoritesPlacement}
+                  openWithApplications={openWithApplications}
+                  fileActivationAction={fileActivationAction}
+                  openItemLimit={openItemLimit}
+                  themeOptions={[...THEME_OPTIONS]}
+                  accentOptions={[...ACCENT_OPTIONS]}
+                  uiFontOptions={[...UI_FONT_OPTIONS]}
+                  uiFontSizeOptions={[...UI_FONT_SIZE_OPTIONS]}
+                  uiFontWeightOptions={[...UI_FONT_WEIGHT_OPTIONS]}
+                  typeaheadDebounceOptions={[...TYPEAHEAD_DEBOUNCE_OPTIONS]}
+                  notificationDurationSecondsOptions={[...NOTIFICATION_DURATION_SECONDS_OPTIONS]}
+                  onThemeChange={setTheme}
+                  onIconThemeChange={setIconTheme}
+                  onAccentChange={setAccent}
+                  onAccentToolbarButtonsChange={setAccentToolbarButtons}
+                  onToolbarAccentChange={setToolbarAccent}
+                  onAccentFavoriteItemsChange={setAccentFavoriteItems}
+                  onAccentFavoriteTextChange={setAccentFavoriteText}
+                  onFavoriteAccentChange={setFavoriteAccent}
+                  onZoomPercentChange={setZoomPercent}
+                  onUiFontFamilyChange={setUiFontFamily}
+                  onUiFontSizeChange={setUiFontSize}
+                  onUiFontWeightChange={setUiFontWeight}
+                  onTextPrimaryColorChange={setTextPrimaryOverride}
+                  onTextSecondaryColorChange={setTextSecondaryOverride}
+                  onTextMutedColorChange={setTextMutedOverride}
+                  onResetAppearance={resetAppearanceSettings}
+                  onCompactListViewChange={setCompactListView}
+                  onCompactDetailsViewChange={setCompactDetailsView}
+                  onCompactTreeViewChange={setCompactTreeView}
+                  onSingleClickExpandTreeItemsChange={setSingleClickExpandTreeItems}
+                  onHighlightHoveredItemsChange={setHighlightHoveredItems}
+                  onDetailColumnsChange={setDetailColumns}
+                  onTabSwitchesExplorerPanesChange={setTabSwitchesExplorerPanes}
+                  onTypeaheadEnabledChange={setTypeaheadEnabled}
+                  onTypeaheadDebounceMsChange={setTypeaheadDebounceMs}
+                  onNotificationsEnabledChange={setNotificationsEnabled}
+                  onNotificationDurationSecondsChange={setNotificationDurationSeconds}
+                  onActionLogEnabledChange={setActionLogEnabled}
+                  onTopToolbarItemsChange={setTopToolbarItems}
+                  onLeftToolbarItemsChange={setLeftToolbarItems}
+                  onResetTopToolbar={() => setTopToolbarItems([...DEFAULT_TOP_TOOLBAR_ITEMS])}
+                  onResetLeftToolbar={() =>
+                    setLeftToolbarItems({
+                      main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
+                      utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
+                    })
+                  }
+                  onResetToolbars={() => {
+                    setTopToolbarItems([...DEFAULT_TOP_TOOLBAR_ITEMS]);
+                    setLeftToolbarItems({
+                      main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
+                      utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
+                    });
+                  }}
+                  onRestoreLastVisitedFolderOnStartupChange={setRestoreLastVisitedFolderOnStartup}
+                  onBrowseTerminalApp={() => {
+                    void browseTerminalApplication();
+                  }}
+                  onClearTerminalApp={() => setTerminalApp(null)}
+                  onBrowseDefaultTextEditor={() => {
+                    void browseDefaultTextEditor();
+                  }}
+                  onClearDefaultTextEditor={() => setDefaultTextEditor(DEFAULT_TEXT_EDITOR)}
+                  onAddFavorite={() => {
+                    void addFavoriteFromSettings();
+                  }}
+                  onBrowseFavorite={(index) => {
+                    void browseFavoriteInSettings(index);
+                  }}
+                  onMoveFavorite={moveFavoriteInSettings}
+                  onRemoveFavorite={removeFavoriteInSettings}
+                  onFavoriteIconChange={updateFavoriteIconInSettings}
+                  onFavoritesPlacementChange={setFavoritesPlacement}
+                  onAddOpenWithApplication={() => {
+                    void addOpenWithApplication();
+                  }}
+                  onBrowseOpenWithApplication={(entryId) => {
+                    void browseOpenWithApplication(entryId);
+                  }}
+                  onMoveOpenWithApplication={moveOpenWithApplication}
+                  onRemoveOpenWithApplication={removeOpenWithApplication}
+                  onFileActivationActionChange={setFileActivationAction}
+                  onOpenItemLimitChange={setOpenItemLimit}
+                />
+              )}
+            </section>
           </section>
-        </section>
-      )}
-      <AppDialogs
-        locationSheetOpen={locationSheetOpen}
-        currentPath={locationSheetInitialPath || currentPath}
-        locationSubmitting={locationSubmitting}
-        locationError={locationError}
-        tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
-        onRequestPathSuggestions={(inputPath) =>
-          requestPathSuggestions({ client, includeHidden, homePath, inputPath })
-        }
-        onCloseLocationSheet={() => setLocationSheetOpen(false)}
-        onSubmitLocationPath={(path) => void submitLocationPath(path)}
-        moveDialogState={moveDialogState}
-        onBrowseForDirectoryPath={browseForDirectoryPath}
-        onCloseMoveDialog={() => setMoveDialogState(null)}
-        onSubmitMoveDialog={(path) => void submitMoveDialog(path)}
-        contextMenuState={contextMenuState}
-        contextMenuDisabledActionIds={contextMenuDisabledActionIds}
-        contextMenuFavoriteToggleLabel={contextMenuFavoriteToggleLabel}
-        contextMenuHiddenActionIds={contextMenuHiddenActionIds}
-        contextMenuSubmenuItems={contextMenuSubmenuItems}
-        shortcutContext={shortcutContext}
-        onRunContextMenuAction={(actionId, paths) => {
-          void runContextMenuAction(actionId, paths);
-        }}
-        onRunContextSubmenuAction={(action, paths) => {
-          void runContextSubmenuAction(action, paths);
-        }}
-        actionNotice={actionNotice}
-        onDismissActionNotice={dismissActionNotice}
-        renameDialogState={renameDialogState}
-        onCloseRenameDialog={() => setRenameDialogState(null)}
-        onSubmitRenameDialog={(value) => void submitRenameDialog(value)}
-        newFolderDialogState={newFolderDialogState}
-        onCloseNewFolderDialog={() => setNewFolderDialogState(null)}
-        onSubmitNewFolderDialog={(value) => void submitNewFolderDialog(value)}
-        copyPasteDialogState={copyPasteDialogState}
-        onRequestCopyLikePlanStart={requestCopyLikePlanStart}
-        onUpdateCopyPastePolicy={updateCopyPastePolicy}
-        onCloseCopyPasteDialog={dismissCopyPasteDialog}
-        onConfirmTrashDialog={(paths) => {
-          void startTrashPaths(paths);
-        }}
-        onConfirmDeleteImmediatelyDialog={(paths) => {
-          void startDeleteImmediatelyPaths(paths);
-        }}
-        showCopyPasteProgressCard={showCopyPasteProgressCard}
-        writeOperationCardState={writeOperationCardState}
-        onCancelWriteOperation={() => {
-          void cancelWriteOperation();
-        }}
-        showCopyPasteResultDialog={showCopyPasteResultDialog}
-        writeOperationProgressEvent={writeOperationProgressEvent}
-        onResolveRuntimeConflict={(conflictId, resolution) => {
-          void resolveRuntimeConflict(conflictId, resolution);
-        }}
-        onRetryFailedCopyPasteItems={(event) => {
-          void retryFailedCopyPasteItems(event);
-        }}
-        toasts={toasts}
-        onDismissToast={dismissToast}
-        copyPasteReviewDialogSize={copyPasteReviewDialogSize}
-        onCopyPasteReviewDialogSizeChange={setCopyPasteReviewDialogSize}
-      />
-    </main>
+        )}
+        <AppDialogs
+          currentPath={locationSheetInitialPath || currentPath}
+          onRequestPathSuggestions={(inputPath) =>
+            requestPathSuggestions({ client, includeHidden, homePath, inputPath })
+          }
+          onSubmitLocationPath={(path) => void submitLocationPath(path)}
+          onBrowseForDirectoryPath={browseForDirectoryPath}
+          onSubmitMoveDialog={(path) => void submitMoveDialog(path)}
+          contextMenuDisabledActionIds={contextMenuDisabledActionIds}
+          contextMenuFavoriteToggleLabel={contextMenuFavoriteToggleLabel}
+          contextMenuHiddenActionIds={contextMenuHiddenActionIds}
+          contextMenuSubmenuItems={contextMenuSubmenuItems}
+          shortcutContext={shortcutContext}
+          onRunContextMenuAction={(actionId, paths) => {
+            void runContextMenuAction(actionId, paths);
+          }}
+          onRunContextSubmenuAction={(action, paths) => {
+            void runContextSubmenuAction(action, paths);
+          }}
+          onDismissActionNotice={dismissActionNotice}
+          onSubmitRenameDialog={(value) => void submitRenameDialog(value)}
+          onSubmitNewFolderDialog={(value) => void submitNewFolderDialog(value)}
+          onRequestCopyLikePlanStart={requestCopyLikePlanStart}
+          onUpdateCopyPastePolicy={updateCopyPastePolicy}
+          onCloseCopyPasteDialog={dismissCopyPasteDialog}
+          onConfirmTrashDialog={(paths) => {
+            void startTrashPaths(paths);
+          }}
+          onConfirmDeleteImmediatelyDialog={(paths) => {
+            void startDeleteImmediatelyPaths(paths);
+          }}
+          showCopyPasteProgressCard={showCopyPasteProgressCard}
+          onCancelWriteOperation={() => {
+            void cancelWriteOperation();
+          }}
+          showCopyPasteResultDialog={showCopyPasteResultDialog}
+          onResolveRuntimeConflict={(conflictId, resolution) => {
+            void resolveRuntimeConflict(conflictId, resolution);
+          }}
+          onRetryFailedCopyPasteItems={(event) => {
+            void retryFailedCopyPasteItems(event);
+          }}
+          onDismissToast={dismissToast}
+        />
+      </main>
+    </ExplorerStoreProvider>
   );
 }
 

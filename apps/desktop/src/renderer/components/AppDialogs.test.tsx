@@ -2,6 +2,13 @@
 
 import { render, screen } from "@testing-library/react";
 
+import type { WriteOperationsState } from "../hooks/useWriteOperations";
+import { ExplorerStoreProvider } from "../state/explorerStoreContext";
+import type {
+  NavigationStore,
+  PreferencesStore,
+  WriteOperationsStore,
+} from "../state/explorerStores";
 import { AppDialogs } from "./AppDialogs";
 
 vi.mock("./TextPromptDialog", () => ({
@@ -23,78 +30,107 @@ vi.mock("./TextPromptDialog", () => ({
 }));
 
 describe("AppDialogs", () => {
-  function renderAppDialogs(overrides: Partial<Parameters<typeof AppDialogs>[0]> = {}) {
+  function createNavigationStore(): NavigationStore {
+    return {
+      locationSheetOpen: false,
+      locationSubmitting: false,
+      locationError: null,
+      setLocationSheetOpen: vi.fn(),
+    } as unknown as NavigationStore;
+  }
+
+  function createDialogStore(overrides: Partial<WriteOperationsState> = {}): WriteOperationsStore {
+    return {
+      contextMenuState: null,
+      actionNotice: null,
+      toasts: [],
+      copyPasteDialogState: null,
+      writeOperationCardState: null,
+      writeOperationProgressEvent: null,
+      renameDialogState: null,
+      newFolderDialogState: null,
+      moveDialogState: null,
+      setMoveDialogState: vi.fn(),
+      setRenameDialogState: vi.fn(),
+      setNewFolderDialogState: vi.fn(),
+      ...overrides,
+    } as unknown as WriteOperationsStore;
+  }
+
+  function createPreferencesStore(): PreferencesStore {
+    return {
+      tabSwitchesExplorerPanes: false,
+      copyPasteReviewDialogSize: null,
+      setCopyPasteReviewDialogSize: vi.fn(),
+    } as unknown as PreferencesStore;
+  }
+
+  function renderAppDialogs(
+    overrides: Partial<Parameters<typeof AppDialogs>[0]> = {},
+    dialogOverrides: Partial<WriteOperationsState> = {},
+  ) {
     return render(
-      <AppDialogs
-        locationSheetOpen={false}
-        currentPath="/tmp"
-        locationSubmitting={false}
-        locationError={null}
-        tabSwitchesExplorerPanes={false}
-        onRequestPathSuggestions={async (inputPath) => ({
-          inputPath,
-          basePath: null,
-          suggestions: [],
-        })}
-        onCloseLocationSheet={() => undefined}
-        onSubmitLocationPath={() => undefined}
-        moveDialogState={null}
-        onBrowseForDirectoryPath={async () => null}
-        onCloseMoveDialog={() => undefined}
-        onSubmitMoveDialog={() => undefined}
-        contextMenuState={null}
-        contextMenuDisabledActionIds={[]}
-        contextMenuFavoriteToggleLabel={null}
-        contextMenuHiddenActionIds={[]}
-        contextMenuSubmenuItems={[]}
-        shortcutContext={{
-          actionNoticeOpen: false,
-          copyPasteModalOpen: false,
-          focusedPane: "content",
-          locationSheetOpen: false,
-          mainView: "explorer",
-          selectedTreeTargetKind: null,
-        }}
-        onRunContextMenuAction={() => undefined}
-        onRunContextSubmenuAction={() => undefined}
-        actionNotice={null}
-        onDismissActionNotice={() => undefined}
-        renameDialogState={null}
-        onCloseRenameDialog={() => undefined}
-        onSubmitRenameDialog={() => undefined}
-        newFolderDialogState={null}
-        onCloseNewFolderDialog={() => undefined}
-        onSubmitNewFolderDialog={() => undefined}
-        copyPasteDialogState={null}
-        onRequestCopyLikePlanStart={() => undefined}
-        onUpdateCopyPastePolicy={() => undefined}
-        onCloseCopyPasteDialog={() => undefined}
-        onConfirmTrashDialog={() => undefined}
-        onConfirmDeleteImmediatelyDialog={() => undefined}
-        showCopyPasteProgressCard={false}
-        writeOperationCardState={null}
-        onCancelWriteOperation={() => undefined}
-        showCopyPasteResultDialog={false}
-        writeOperationProgressEvent={null}
-        onResolveRuntimeConflict={() => undefined}
-        onRetryFailedCopyPasteItems={() => undefined}
-        toasts={[]}
-        onDismissToast={() => undefined}
-        copyPasteReviewDialogSize={null}
-        onCopyPasteReviewDialogSizeChange={() => undefined}
-        {...overrides}
-      />,
+      <ExplorerStoreProvider
+        navigation={createNavigationStore()}
+        dialogs={createDialogStore(dialogOverrides)}
+        preferences={createPreferencesStore()}
+      >
+        <AppDialogs
+          currentPath="/tmp"
+          onRequestPathSuggestions={async (inputPath) => ({
+            inputPath,
+            basePath: null,
+            suggestions: [],
+          })}
+          onSubmitLocationPath={() => undefined}
+          onBrowseForDirectoryPath={async () => null}
+          onSubmitMoveDialog={() => undefined}
+          contextMenuDisabledActionIds={[]}
+          contextMenuFavoriteToggleLabel={null}
+          contextMenuHiddenActionIds={[]}
+          contextMenuSubmenuItems={[]}
+          shortcutContext={{
+            actionNoticeOpen: false,
+            copyPasteModalOpen: false,
+            focusedPane: "content",
+            locationSheetOpen: false,
+            mainView: "explorer",
+            selectedTreeTargetKind: null,
+          }}
+          onRunContextMenuAction={() => undefined}
+          onRunContextSubmenuAction={() => undefined}
+          onDismissActionNotice={() => undefined}
+          onSubmitRenameDialog={() => undefined}
+          onSubmitNewFolderDialog={() => undefined}
+          onRequestCopyLikePlanStart={() => undefined}
+          onUpdateCopyPastePolicy={() => undefined}
+          onCloseCopyPasteDialog={() => undefined}
+          onConfirmTrashDialog={() => undefined}
+          onConfirmDeleteImmediatelyDialog={() => undefined}
+          showCopyPasteProgressCard={false}
+          onCancelWriteOperation={() => undefined}
+          showCopyPasteResultDialog={false}
+          onResolveRuntimeConflict={() => undefined}
+          onRetryFailedCopyPasteItems={() => undefined}
+          onDismissToast={() => undefined}
+          {...overrides}
+        />
+      </ExplorerStoreProvider>,
     );
   }
 
   it("opts New Folder into select-all on open", () => {
-    renderAppDialogs({
-      newFolderDialogState: {
-        parentDirectoryPath: "/tmp",
-        initialName: "New Folder",
-        error: null,
+    renderAppDialogs(
+      {},
+      {
+        newFolderDialogState: {
+          parentDirectoryPath: "/tmp",
+          initialName: "New Folder",
+          error: null,
+          selectInTreeOnSuccess: false,
+        },
       },
-    });
+    );
 
     expect(screen.getByTestId("text-prompt-dialog-New Folder")).toHaveAttribute(
       "data-select-all-on-open",
@@ -103,13 +139,16 @@ describe("AppDialogs", () => {
   });
 
   it("keeps rename on the default prompt behavior", () => {
-    renderAppDialogs({
-      renameDialogState: {
-        sourcePath: "/tmp/demo.txt",
-        currentName: "demo.txt",
-        error: null,
+    renderAppDialogs(
+      {},
+      {
+        renameDialogState: {
+          sourcePath: "/tmp/demo.txt",
+          currentName: "demo.txt",
+          error: null,
+        },
       },
-    });
+    );
 
     expect(screen.getByTestId("text-prompt-dialog-Rename")).toHaveAttribute(
       "data-select-all-on-open",

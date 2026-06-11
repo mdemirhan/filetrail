@@ -63,6 +63,7 @@ export function useExplorerNavigation() {
   const metadataInflightRef = useRef<Set<string>>(new Set());
   const currentPathRef = useRef(currentPath);
   const isSearchModeRef = useRef(false);
+  const activeContentEntriesRef = useRef<DirectoryEntry[]>([]);
   const selectedPathsInViewOrderRef = useRef<string[]>([]);
   const selectedEntryRef = useRef<DirectoryEntry | null>(null);
   const lastExplorerFocusPaneRef = useRef<"tree" | "content" | null>(null);
@@ -142,6 +143,7 @@ export function useExplorerNavigation() {
     metadataInflightRef,
     currentPathRef,
     isSearchModeRef,
+    activeContentEntriesRef,
     selectedPathsInViewOrderRef,
     selectedEntryRef,
     lastExplorerFocusPaneRef,

@@ -1,11 +1,4 @@
-import {
-  type Dispatch,
-  type MutableRefObject,
-  type RefObject,
-  type SetStateAction,
-  useEffect,
-  useMemo,
-} from "react";
+import { useEffect, useMemo } from "react";
 
 import type { IpcResponse } from "@filetrail/contracts";
 
@@ -26,9 +19,14 @@ import type {
   SearchPatternMode,
   SearchResultItem,
 } from "../lib/explorerTypes";
-import type { useFiletrailClient } from "../lib/filetrailClient";
 import { createRendererLogger } from "../lib/logging";
 import { appendSearchResults, filterSearchResults, sortSearchResults } from "../lib/searchResults";
+import type {
+  ExplorerServices,
+  NavigationStore,
+  SearchStore,
+  SelectionActions,
+} from "../state/explorerStores";
 
 type SearchResultsSortBy = SearchResultsSortByPreference;
 type SearchResultsSortDirection = SearchResultsSortDirectionPreference;
@@ -39,61 +37,16 @@ const SEARCH_POLL_INTERVAL_MS = 120;
 const logger = createRendererLogger("filetrail.renderer");
 
 export function useExplorerSearchController(args: {
-  client: ReturnType<typeof useFiletrailClient>;
-  currentPath: string;
-  currentEntries: DirectoryEntry[];
-  contentSelection: ContentSelectionState;
-  applyContentSelection: (selection: ContentSelectionState, entries: DirectoryEntry[]) => void;
-  focusContentPane: () => void;
-  searchInputRef: RefObject<HTMLInputElement | null>;
-  searchCommittedQuery: string;
-  setSearchCommittedQuery: Dispatch<SetStateAction<string>>;
-  searchRootPath: string;
-  setSearchRootPath: Dispatch<SetStateAction<string>>;
-  searchPatternMode: SearchPatternMode;
-  setSearchPatternMode: Dispatch<SetStateAction<SearchPatternMode>>;
-  searchMatchScope: SearchMatchScope;
-  setSearchMatchScope: Dispatch<SetStateAction<SearchMatchScope>>;
-  searchRecursive: boolean;
-  setSearchRecursive: Dispatch<SetStateAction<boolean>>;
-  searchIncludeHidden: boolean;
-  setSearchIncludeHidden: Dispatch<SetStateAction<boolean>>;
-  searchResultsSortBy: SearchResultsSortBy;
-  setSearchResultsSortBy: Dispatch<SetStateAction<SearchResultsSortBy>>;
-  searchResultsSortDirection: SearchResultsSortDirection;
-  setSearchResultsSortDirection: Dispatch<SetStateAction<SearchResultsSortDirection>>;
-  setSearchPopoverOpen: Dispatch<SetStateAction<boolean>>;
-  searchResultsVisible: boolean;
-  setSearchResultsVisible: Dispatch<SetStateAction<boolean>>;
-  searchResults: SearchResultItem[];
-  setSearchResults: Dispatch<SetStateAction<SearchResultItem[]>>;
-  setSearchResultsScrollTop: Dispatch<SetStateAction<number>>;
-  setSearchResultsFilterQuery: Dispatch<SetStateAction<string>>;
-  debouncedSearchResultsFilterQuery: string;
-  setDebouncedSearchResultsFilterQuery: Dispatch<SetStateAction<string>>;
-  searchResultsFilterScope: SearchResultsFilterScope;
-  setSearchResultsFilterScope: Dispatch<SetStateAction<SearchResultsFilterScope>>;
-  setSearchStatus: Dispatch<SetStateAction<SearchStatus>>;
-  setSearchError: Dispatch<SetStateAction<string | null>>;
-  setSearchTruncated: Dispatch<SetStateAction<boolean>>;
-  searchPollTimeoutRef: MutableRefObject<ReturnType<typeof setTimeout> | null>;
-  searchSessionRef: MutableRefObject<number>;
-  searchJobIdRef: MutableRefObject<string | null>;
-  searchCommittedQueryRef: MutableRefObject<string>;
-  searchResultsVisibleRef: MutableRefObject<boolean>;
-  searchResultsSortByRef: MutableRefObject<SearchResultsSortBy>;
-  searchResultsSortDirectionRef: MutableRefObject<SearchResultsSortDirection>;
-  browseSelectionRef: MutableRefObject<ContentSelectionState>;
-  cachedSearchSelectionRef: MutableRefObject<ContentSelectionState>;
+  services: ExplorerServices;
+  navigation: NavigationStore;
+  search: SearchStore;
+  selection: SelectionActions;
 }) {
+  const { services, navigation, search, selection } = args;
+  const { client, searchInputRef } = services;
+  const { currentPath, currentEntries, contentSelection } = navigation;
+  const { applyContentSelection, focusContentPane } = selection;
   const {
-    client,
-    currentPath,
-    currentEntries,
-    contentSelection,
-    applyContentSelection,
-    focusContentPane,
-    searchInputRef,
     setSearchCommittedQuery,
     searchCommittedQuery,
     searchRootPath,
@@ -133,7 +86,7 @@ export function useExplorerSearchController(args: {
     searchResultsSortDirectionRef,
     browseSelectionRef,
     cachedSearchSelectionRef,
-  } = args;
+  } = search;
 
   const filteredSearchResults = useMemo(
     () =>

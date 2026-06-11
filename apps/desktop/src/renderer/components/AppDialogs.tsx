@@ -5,16 +5,16 @@ import type {
   WriteOperationProgressEvent,
 } from "@filetrail/contracts";
 
-import type { CopyPasteReviewDialogSize } from "../../shared/appPreferences";
-import type {
-  ContextMenuState,
-  CopyPasteDialogState,
-  WriteOperationCardState,
-} from "../hooks/useWriteOperations";
+import type { ContextMenuState, WriteOperationCardState } from "../hooks/useWriteOperations";
 import { formatSize } from "../lib/formatting";
 import type { InternalMoveSourceSurface } from "../lib/internalDragAndDrop";
 import type { ShortcutContext } from "../lib/shortcutPolicy";
 import type { ToastEntry } from "../lib/toasts";
+import {
+  useDialogStore,
+  useNavigationStore,
+  usePreferencesStore,
+} from "../state/explorerStoreContext";
 import { ActionNoticeDialog } from "./ActionNoticeDialog";
 import { CopyPasteDialog } from "./CopyPasteDialog";
 import { CopyPasteProgressCard } from "./CopyPasteProgressCard";
@@ -58,19 +58,11 @@ function resolveContextMenuShortcutContext(
 }
 
 export function AppDialogs({
-  locationSheetOpen,
   currentPath,
-  locationSubmitting,
-  locationError,
-  tabSwitchesExplorerPanes,
   onRequestPathSuggestions,
-  onCloseLocationSheet,
   onSubmitLocationPath,
-  moveDialogState,
   onBrowseForDirectoryPath,
-  onCloseMoveDialog,
   onSubmitMoveDialog,
-  contextMenuState,
   contextMenuDisabledActionIds,
   contextMenuFavoriteToggleLabel,
   contextMenuHiddenActionIds,
@@ -78,50 +70,26 @@ export function AppDialogs({
   shortcutContext,
   onRunContextMenuAction,
   onRunContextSubmenuAction,
-  actionNotice,
   onDismissActionNotice,
-  renameDialogState,
-  onCloseRenameDialog,
   onSubmitRenameDialog,
-  newFolderDialogState,
-  onCloseNewFolderDialog,
   onSubmitNewFolderDialog,
-  copyPasteDialogState,
   onRequestCopyLikePlanStart,
   onUpdateCopyPastePolicy,
   onCloseCopyPasteDialog,
   onConfirmTrashDialog,
   onConfirmDeleteImmediatelyDialog,
   showCopyPasteProgressCard,
-  writeOperationCardState,
   onCancelWriteOperation,
   showCopyPasteResultDialog,
-  writeOperationProgressEvent,
   onResolveRuntimeConflict,
   onRetryFailedCopyPasteItems,
-  toasts,
   onDismissToast,
-  copyPasteReviewDialogSize,
-  onCopyPasteReviewDialogSizeChange,
 }: {
-  locationSheetOpen: boolean;
   currentPath: string;
-  locationSubmitting: boolean;
-  locationError: string | null;
-  tabSwitchesExplorerPanes: boolean;
   onRequestPathSuggestions: (inputPath: string) => Promise<IpcResponse<"path:getSuggestions">>;
-  onCloseLocationSheet: () => void;
   onSubmitLocationPath: (path: string) => void;
-  moveDialogState: {
-    sourcePaths: string[];
-    currentPath: string;
-    submitting: boolean;
-    error: string | null;
-  } | null;
   onBrowseForDirectoryPath: (path: string) => Promise<string | null>;
-  onCloseMoveDialog: () => void;
   onSubmitMoveDialog: (path: string) => void;
-  contextMenuState: ContextMenuState | null;
   contextMenuDisabledActionIds: ContextMenuActionId[];
   contextMenuFavoriteToggleLabel: string | null;
   contextMenuHiddenActionIds: ContextMenuActionId[];
@@ -129,23 +97,9 @@ export function AppDialogs({
   shortcutContext: ShortcutContext;
   onRunContextMenuAction: (actionId: ContextMenuActionId, paths: string[]) => void;
   onRunContextSubmenuAction: (action: ContextMenuSubmenuAction, paths: string[]) => void;
-  actionNotice: { title: string; message: string } | null;
   onDismissActionNotice: () => void;
-  renameDialogState: {
-    sourcePath: string;
-    currentName: string;
-    error: string | null;
-  } | null;
-  onCloseRenameDialog: () => void;
   onSubmitRenameDialog: (value: string) => void;
-  newFolderDialogState: {
-    parentDirectoryPath: string;
-    initialName: string;
-    error: string | null;
-  } | null;
-  onCloseNewFolderDialog: () => void;
   onSubmitNewFolderDialog: (value: string) => void;
-  copyPasteDialogState: CopyPasteDialogState;
   onRequestCopyLikePlanStart: (
     report: CopyPasteAnalysisReport,
     policy: CopyPastePolicy,
@@ -162,20 +116,35 @@ export function AppDialogs({
   onConfirmTrashDialog: (paths: string[]) => void;
   onConfirmDeleteImmediatelyDialog: (paths: string[]) => void;
   showCopyPasteProgressCard: boolean;
-  writeOperationCardState: WriteOperationCardState | null;
   onCancelWriteOperation: () => void;
   showCopyPasteResultDialog: boolean;
-  writeOperationProgressEvent: WriteOperationProgressEvent | null;
   onResolveRuntimeConflict: (
     conflictId: string,
     resolution: "overwrite" | "skip" | "keep_both" | "merge",
   ) => void;
   onRetryFailedCopyPasteItems: (event: WriteOperationProgressEvent) => void;
-  toasts: ToastEntry[];
   onDismissToast: (id: string) => void;
-  copyPasteReviewDialogSize: CopyPasteReviewDialogSize | null;
-  onCopyPasteReviewDialogSizeChange: (size: CopyPasteReviewDialogSize | null) => void;
 }) {
+  // Dialog state and trivial close/persist transitions come straight from the
+  // store contexts; only behavior-carrying callbacks remain props.
+  const { locationSheetOpen, locationSubmitting, locationError, setLocationSheetOpen } =
+    useNavigationStore();
+  const {
+    contextMenuState,
+    actionNotice,
+    moveDialogState,
+    setMoveDialogState,
+    renameDialogState,
+    setRenameDialogState,
+    newFolderDialogState,
+    setNewFolderDialogState,
+    copyPasteDialogState,
+    writeOperationCardState,
+    writeOperationProgressEvent,
+    toasts,
+  } = useDialogStore();
+  const { tabSwitchesExplorerPanes, copyPasteReviewDialogSize, setCopyPasteReviewDialogSize } =
+    usePreferencesStore();
   const contextMenuShortcutContext = resolveContextMenuShortcutContext(
     shortcutContext,
     contextMenuState,
@@ -190,7 +159,7 @@ export function AppDialogs({
         error={locationError}
         tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
         onRequestPathSuggestions={onRequestPathSuggestions}
-        onClose={onCloseLocationSheet}
+        onClose={() => setLocationSheetOpen(false)}
         onSubmit={(path) => onSubmitLocationPath(path)}
       />
       <GoToFolderDialog
@@ -205,7 +174,7 @@ export function AppDialogs({
         onBrowse={onBrowseForDirectoryPath}
         tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
         onRequestPathSuggestions={onRequestPathSuggestions}
-        onClose={onCloseMoveDialog}
+        onClose={() => setMoveDialogState(null)}
         onSubmit={(path) => onSubmitMoveDialog(path)}
       />
       {contextMenuState ? (
@@ -242,7 +211,7 @@ export function AppDialogs({
         value={renameDialogState?.currentName ?? ""}
         submitLabel="Rename"
         error={renameDialogState?.error ?? null}
-        onClose={onCloseRenameDialog}
+        onClose={() => setRenameDialogState(null)}
         onSubmit={(value) => onSubmitRenameDialog(value)}
       />
       <TextPromptDialog
@@ -256,7 +225,7 @@ export function AppDialogs({
         submitLabel="Create Folder"
         selectAllOnOpen
         error={newFolderDialogState?.error ?? null}
-        onClose={onCloseNewFolderDialog}
+        onClose={() => setNewFolderDialogState(null)}
         onSubmit={(value) => onSubmitNewFolderDialog(value)}
       />
       {copyPasteDialogState?.type === "analysis" ? (
@@ -290,7 +259,7 @@ export function AppDialogs({
           onPolicyChange={onUpdateCopyPastePolicy}
           onClose={onCloseCopyPasteDialog}
           persistedSize={copyPasteReviewDialogSize}
-          onSizeChange={onCopyPasteReviewDialogSizeChange}
+          onSizeChange={setCopyPasteReviewDialogSize}
           onStart={() =>
             onRequestCopyLikePlanStart(
               copyPasteDialogState.report,

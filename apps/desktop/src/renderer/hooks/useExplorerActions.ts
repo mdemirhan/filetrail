@@ -69,6 +69,14 @@ import { createRendererLogger } from "../lib/logging";
 import { expandHomeShortcut } from "../lib/pathUtils";
 import { type ToastEntry, type ToastKind, createToastEntry, enqueueToast } from "../lib/toasts";
 import type {
+  ExplorerServices,
+  NavigationStore,
+  PreferencesStore,
+  SearchStore,
+  SelectionActions,
+  WriteOperationsStore,
+} from "../state/explorerStores";
+import type {
   ContextMenuState,
   CopyPasteDialogState,
   WriteOperationCardState,
@@ -194,142 +202,56 @@ function getCopyLikeIssueMessage(report: CopyPasteAnalysisReport): string {
 }
 
 export function useExplorerActions(args: {
-  client: ReturnType<typeof useFiletrailClient>;
-  mainView: "explorer" | "help" | "settings" | "action-log";
-  focusedPane: "tree" | "content" | null;
-  setFocusedPane: (value: "tree" | "content" | null) => void;
-  setInfoPanelOpen: Dispatch<SetStateAction<boolean>>;
-  setInfoTargetPathOverride: Dispatch<SetStateAction<string | null>>;
-  setGetInfoItem: Dispatch<SetStateAction<IpcResponse<"item:getProperties">["item"] | null>>;
-  setGetInfoLoading: Dispatch<SetStateAction<boolean>>;
-  getInfoRequestRef: MutableRefObject<number>;
-  homePath: string;
-  currentPath: string;
-  currentEntries: DirectoryEntry[];
-  activeContentEntries: DirectoryEntry[];
-  favorites: FavoritePreference[];
-  setFavorites: Dispatch<SetStateAction<FavoritePreference[]>>;
-  selectedEntry: DirectoryEntry | null;
-  selectedPathsInViewOrder: string[];
-  selectedPathSet: Set<string>;
-  contextMenuTargetEntries: DirectoryEntry[];
-  contextMenuTargetEntry: DirectoryEntry | null;
-  pasteDestinationPath: string | null;
-  isSearchMode: boolean;
-  openItemLimit: number;
-  notificationsEnabled: boolean;
-  notificationDurationSeconds: number;
-  fileActivationAction: FileActivationAction;
-  defaultTextEditor: ApplicationSelection;
-  setDefaultTextEditor: Dispatch<SetStateAction<ApplicationSelection>>;
-  setTerminalApp: Dispatch<SetStateAction<ApplicationSelection | null>>;
-  openWithApplications: OpenWithApplication[];
-  setOpenWithApplications: Dispatch<SetStateAction<OpenWithApplication[]>>;
-  contentPaneRef: RefObject<HTMLElement | null>;
-  searchInputRef: RefObject<HTMLInputElement | null>;
-  setSearchPopoverOpen: Dispatch<SetStateAction<boolean>>;
-  clearTypeahead: () => void;
-  focusContentPane: () => void;
-  restoreExplorerPaneFocus: (preferredPane?: "tree" | "content" | null) => void;
-  navigateTo: (path: string, historyMode: "push" | "replace" | "skip") => Promise<boolean>;
-  navigateTreeFileSystemPath: (
-    path: string,
-    historyMode: "push" | "replace" | "skip",
-  ) => Promise<void>;
-  navigateFavoritePath: (
-    path: string,
-    historyMode: "push" | "replace" | "skip",
-  ) => Promise<boolean>;
-  toggleTreeNode: (path: string) => void;
-  refreshDirectory: (options?: {
-    path?: string;
-    treeSelectionPath?: string | null;
-    extraTreeReloadPaths?: string[];
-  }) => Promise<void>;
-  restartActiveSearch?: (() => Promise<void>) | null;
-  contentSelection: ContentSelectionState;
-  setContentSelection: Dispatch<SetStateAction<ContentSelectionState>>;
-  currentPathRef: MutableRefObject<string>;
-  selectedTreeItemIdRef: MutableRefObject<string | null>;
-  isSearchModeRef: MutableRefObject<boolean>;
-  selectedPathsInViewOrderRef: MutableRefObject<string[]>;
-  selectedEntryRef: MutableRefObject<DirectoryEntry | null>;
-  lastExplorerFocusPaneRef: MutableRefObject<"tree" | "content" | null>;
-  browseSelectionRef: MutableRefObject<ContentSelectionState>;
-  cachedSearchSelectionRef: MutableRefObject<ContentSelectionState>;
-  contextMenuState: ContextMenuState | null;
-  setContextMenuState: Dispatch<SetStateAction<ContextMenuState | null>>;
-  actionNotice: { title: string; message: string } | null;
-  setActionNotice: Dispatch<SetStateAction<{ title: string; message: string } | null>>;
-  toasts: ToastEntry[];
-  setToasts: Dispatch<SetStateAction<ToastEntry[]>>;
-  copyPasteClipboard: CopyPasteClipboardState;
-  setCopyPasteClipboardState: Dispatch<SetStateAction<CopyPasteClipboardState>>;
-  copyPasteDialogState: CopyPasteDialogState;
-  setCopyPasteDialogState: Dispatch<SetStateAction<CopyPasteDialogState>>;
-  writeOperationCardState: WriteOperationCardState | null;
-  setWriteOperationCardState: Dispatch<SetStateAction<WriteOperationCardState | null>>;
-  writeOperationProgressEvent: WriteOperationProgressEvent | null;
-  setWriteOperationProgressEvent: Dispatch<SetStateAction<WriteOperationProgressEvent | null>>;
-  renameDialogState: {
-    sourcePath: string;
-    currentName: string;
-    error: string | null;
-  } | null;
-  setRenameDialogState: Dispatch<
-    SetStateAction<{
-      sourcePath: string;
-      currentName: string;
-      error: string | null;
-    } | null>
-  >;
-  newFolderDialogState: {
-    parentDirectoryPath: string;
-    initialName: string;
-    error: string | null;
-    selectInTreeOnSuccess: boolean;
-  } | null;
-  setNewFolderDialogState: Dispatch<
-    SetStateAction<{
-      parentDirectoryPath: string;
-      initialName: string;
-      error: string | null;
-      selectInTreeOnSuccess: boolean;
-    } | null>
-  >;
-  moveDialogState: {
-    sourcePaths: string[];
-    currentPath: string;
-    submitting: boolean;
-    error: string | null;
-  } | null;
-  setMoveDialogState: Dispatch<
-    SetStateAction<{
-      sourcePaths: string[];
-      currentPath: string;
-      submitting: boolean;
-      error: string | null;
-    } | null>
-  >;
-  actionNoticeReturnFocusPaneRef: MutableRefObject<"tree" | "content" | null>;
-  activeWriteOperationIdRef: MutableRefObject<string | null>;
-  nextPasteAttemptIdRef: MutableRefObject<number>;
-  pendingPasteAttemptRef: MutableRefObject<{
-    id: number;
-    phase: "planning" | "starting";
-    cancelled: boolean;
-  } | null>;
-  nextToastIdRef: MutableRefObject<number>;
-  copyPasteClipboardRef: MutableRefObject<CopyPasteClipboardState>;
-  writeOperationLockedRef: MutableRefObject<boolean>;
-  pendingPasteSelectionRef: MutableRefObject<{
-    directoryPath: string;
-    selectedPaths: string[];
-  } | null>;
-  pendingTreeSelectionPathRef: MutableRefObject<string | null>;
+  services: ExplorerServices;
+  navigation: NavigationStore;
+  preferences: PreferencesStore;
+  search: SearchStore;
+  writeOperations: WriteOperationsStore;
+  selection: SelectionActions;
+  derived: {
+    activeContentEntries: DirectoryEntry[];
+    selectedPathsInViewOrder: string[];
+    selectedPathSet: Set<string>;
+    contextMenuTargetEntries: DirectoryEntry[];
+    contextMenuTargetEntry: DirectoryEntry | null;
+    pasteDestinationPath: string | null;
+    isSearchMode: boolean;
+  };
+  navActions: {
+    restoreExplorerPaneFocus: (preferredPane?: "tree" | "content" | null) => void;
+    navigateTo: (path: string, historyMode: "push" | "replace" | "skip") => Promise<boolean>;
+    navigateTreeFileSystemPath: (
+      path: string,
+      historyMode: "push" | "replace" | "skip",
+    ) => Promise<void>;
+    navigateFavoritePath: (
+      path: string,
+      historyMode: "push" | "replace" | "skip",
+    ) => Promise<boolean>;
+    toggleTreeNode: (path: string) => void;
+    refreshDirectory: (options?: {
+      path?: string;
+      treeSelectionPath?: string | null;
+      extraTreeReloadPaths?: string[];
+    }) => Promise<void>;
+  };
+  callbacks: {
+    restartActiveSearch?: (() => Promise<void>) | null;
+  };
 }) {
   const {
-    client,
+    services,
+    navigation,
+    preferences,
+    search,
+    writeOperations,
+    selection,
+    derived,
+    navActions,
+    callbacks,
+  } = args;
+  const { client, contentPaneRef, searchInputRef } = services;
+  const {
     mainView,
     focusedPane,
     setFocusedPane,
@@ -341,16 +263,18 @@ export function useExplorerActions(args: {
     homePath,
     currentPath,
     currentEntries,
-    activeContentEntries,
+    contentSelection,
+    setContentSelection,
+    currentPathRef,
+    selectedTreeItemIdRef,
+    isSearchModeRef,
+    selectedPathsInViewOrderRef,
+    selectedEntryRef,
+    lastExplorerFocusPaneRef,
+  } = navigation;
+  const {
     favorites,
     setFavorites,
-    selectedEntry,
-    selectedPathsInViewOrder,
-    selectedPathSet,
-    contextMenuTargetEntries,
-    contextMenuTargetEntry,
-    pasteDestinationPath,
-    isSearchMode,
     openItemLimit,
     notificationsEnabled,
     notificationDurationSeconds,
@@ -360,28 +284,9 @@ export function useExplorerActions(args: {
     setTerminalApp,
     openWithApplications,
     setOpenWithApplications,
-    contentPaneRef,
-    searchInputRef,
-    setSearchPopoverOpen,
-    clearTypeahead,
-    focusContentPane,
-    restoreExplorerPaneFocus,
-    navigateTo,
-    navigateTreeFileSystemPath,
-    navigateFavoritePath,
-    toggleTreeNode,
-    refreshDirectory,
-    restartActiveSearch,
-    contentSelection,
-    setContentSelection,
-    currentPathRef,
-    selectedTreeItemIdRef,
-    isSearchModeRef,
-    selectedPathsInViewOrderRef,
-    selectedEntryRef,
-    lastExplorerFocusPaneRef,
-    browseSelectionRef,
-    cachedSearchSelectionRef,
+  } = preferences;
+  const { setSearchPopoverOpen, browseSelectionRef, cachedSearchSelectionRef } = search;
+  const {
     contextMenuState,
     setContextMenuState,
     actionNotice,
@@ -411,10 +316,32 @@ export function useExplorerActions(args: {
     writeOperationLockedRef,
     pendingPasteSelectionRef,
     pendingTreeSelectionPathRef,
-  } = args;
+  } = writeOperations;
+  const { clearTypeahead, focusContentPane } = selection;
+  const {
+    activeContentEntries,
+    selectedPathsInViewOrder,
+    selectedPathSet,
+    contextMenuTargetEntries,
+    contextMenuTargetEntry,
+    pasteDestinationPath,
+    isSearchMode,
+  } = derived;
+  const {
+    restoreExplorerPaneFocus,
+    navigateTo,
+    navigateTreeFileSystemPath,
+    navigateFavoritePath,
+    toggleTreeNode,
+    refreshDirectory,
+  } = navActions;
+  const { restartActiveSearch } = callbacks;
   const activeAnalysisIdRef = useRef<string | null>(null);
   const moveOperationSourceSurfaceRef = useRef(new Map<string, InternalMoveSourceSurface>());
   const restartActiveSearchRef = useRef(restartActiveSearch ?? null);
+  const writeOperationCardStateRef = useRef<WriteOperationCardState | null>(
+    writeOperationCardState,
+  );
 
   const isWriteOperationLocked = writeOperationCardState !== null;
   const canPasteAtResolvedDestination =
@@ -665,16 +592,12 @@ export function useExplorerActions(args: {
   }, [browseSelectionRef, cachedSearchSelectionRef, contentSelection, isSearchMode]);
 
   useLayoutEffect(() => {
-    selectedPathsInViewOrderRef.current = selectedPathsInViewOrder;
-  }, [selectedPathsInViewOrder, selectedPathsInViewOrderRef]);
-
-  useLayoutEffect(() => {
-    selectedEntryRef.current = selectedEntry;
-  }, [selectedEntry, selectedEntryRef]);
-
-  useLayoutEffect(() => {
     copyPasteClipboardRef.current = copyPasteClipboard;
   }, [copyPasteClipboard, copyPasteClipboardRef]);
+
+  useLayoutEffect(() => {
+    writeOperationCardStateRef.current = writeOperationCardState;
+  }, [writeOperationCardState]);
 
   useEffect(() => {
     restartActiveSearchRef.current = restartActiveSearch ?? null;
@@ -749,7 +672,7 @@ export function useExplorerActions(args: {
           stage: event.status,
           targetPath:
             event.result?.targetPath ??
-            writeOperationCardState?.targetPath ??
+            writeOperationCardStateRef.current?.targetPath ??
             currentPathRef.current,
           completedItemCount: event.completedItemCount,
           totalItemCount: event.totalItemCount,
@@ -805,12 +728,7 @@ export function useExplorerActions(args: {
       }
     });
     return unsubscribe;
-  }, [
-    client,
-    refreshDirectory,
-    setWriteOperationProgressEvent,
-    writeOperationCardState?.targetPath,
-  ]);
+  }, [client, refreshDirectory, setWriteOperationProgressEvent]);
 
   function closeContextMenu() {
     setContextMenuState(null);

@@ -1575,6 +1575,13 @@ describe("App copy/paste integration", () => {
     );
 
     await screen.findByTestId("content-pane");
+    // Wait for the initial debounced preferences write so it cannot land
+    // between the before/after counts below.
+    await vi.waitFor(() => {
+      expect(harness.invocations.some((call) => call.channel === "app:updatePreferences")).toBe(
+        true,
+      );
+    });
     const preferenceUpdateCountBeforeAction = harness.invocations.filter(
       (call) => call.channel === "app:updatePreferences",
     ).length;
@@ -4431,21 +4438,72 @@ describe("App copy/paste integration", () => {
       fireEvent.pointerUp(window);
     });
 
-    const persistedSizeCall = harness.invocations
-      .filter((call) => call.channel === "app:updatePreferences")
-      .findLast((call) => {
-        const payload = call.payload as IpcRequestInput<"app:updatePreferences">;
-        return payload.preferences.copyPasteReviewDialogSize !== null;
-      });
+    // Preference writes are debounced, so the persisted size lands shortly
+    // after the drag interaction completes.
+    await vi.waitFor(() => {
+      const persistedSizeCall = harness.invocations
+        .filter((call) => call.channel === "app:updatePreferences")
+        .findLast((call) => {
+          const payload = call.payload as IpcRequestInput<"app:updatePreferences">;
+          return payload.preferences.copyPasteReviewDialogSize !== null;
+        });
 
-    expect(persistedSizeCall).toBeDefined();
-    expect(
-      (persistedSizeCall?.payload as IpcRequestInput<"app:updatePreferences">).preferences
-        .copyPasteReviewDialogSize,
-    ).toMatchObject({
-      width: expect.any(Number),
-      height: expect.any(Number),
+      expect(persistedSizeCall).toBeDefined();
+      expect(
+        (persistedSizeCall?.payload as IpcRequestInput<"app:updatePreferences">).preferences
+          .copyPasteReviewDialogSize,
+      ).toMatchObject({
+        width: expect.any(Number),
+        height: expect.any(Number),
+      });
     });
+  });
+
+  it("debounces preference persists so a burst of changes writes one latest snapshot", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await screen.findByTestId("content-pane");
+    // Let the initial post-hydration persist settle before counting writes.
+    await vi.waitFor(() => {
+      expect(harness.invocations.some((call) => call.channel === "app:updatePreferences")).toBe(
+        true,
+      );
+    });
+    const baselinePersistCount = harness.invocations.filter(
+      (call) => call.channel === "app:updatePreferences",
+    ).length;
+
+    vi.useFakeTimers();
+    for (let press = 0; press < 3; press += 1) {
+      await act(async () => {
+        fireEvent.keyDown(window, { key: "i", metaKey: true, shiftKey: true });
+      });
+    }
+
+    // No write is issued while the debounce window is still open.
+    expect(
+      harness.invocations.filter((call) => call.channel === "app:updatePreferences").length,
+    ).toBe(baselinePersistCount);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    const persistCalls = harness.invocations.filter(
+      (call) => call.channel === "app:updatePreferences",
+    );
+    expect(persistCalls.length).toBe(baselinePersistCount + 1);
+    // Three toggles collapse into a single write carrying the final value.
+    expect(
+      (persistCalls.at(-1)?.payload as IpcRequestInput<"app:updatePreferences">).preferences
+        .detailRowOpen,
+    ).toBe(true);
   });
 
   it("requires confirmation before starting Replace Folder from the review dialog", async () => {
