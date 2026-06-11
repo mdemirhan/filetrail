@@ -432,6 +432,32 @@ describe("TreePane", () => {
     ).toHaveAttribute("data-tree-kind", "favorite");
   });
 
+  it("exposes the ARIA tree pattern on tree containers and rows", () => {
+    renderTreePane({ selectedTreeItemId: "favorites-root" });
+
+    expect(screen.getByRole("tree", { name: "Folders" })).toBeInTheDocument();
+
+    const favoritesRoot = screen.getByRole("treeitem", { name: /Favorites/ });
+    expect(favoritesRoot).toHaveAttribute("aria-selected", "true");
+    expect(favoritesRoot).toHaveAttribute("aria-expanded", "true");
+    expect(favoritesRoot).toHaveAttribute("aria-level", "1");
+
+    const desktopFavorite = screen.getByRole("treeitem", { name: /Desktop/ });
+    expect(desktopFavorite).toHaveAttribute("aria-selected", "false");
+    expect(desktopFavorite).not.toHaveAttribute("aria-expanded");
+    expect(desktopFavorite).toHaveAttribute("aria-level", "2");
+  });
+
+  it("exposes separate favorites and folders trees when configured", () => {
+    renderTreePane({
+      favoritesPlacement: "separate",
+      activeLeftPaneSubview: "favorites",
+    });
+
+    expect(screen.getByRole("tree", { name: "Favorites" })).toBeInTheDocument();
+    expect(screen.getByRole("tree", { name: "Folders" })).toBeInTheDocument();
+  });
+
   it("renders favorites separately from the filesystem tree when configured", () => {
     renderTreePane({
       favoritesPlacement: "separate",

@@ -790,36 +790,23 @@ function FlowListView({
   typeaheadQuery?: string;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [containerHeight, setContainerHeight] = useState(0);
-  const [scrollTop, setScrollTop] = useState(0);
+  const { height: containerHeight } = useElementSize(containerRef);
+  // Scroll position lives in a ref so scrolling never re-renders by itself; a rAF
+  // coalesces scroll events into at most one state update per frame, and that state
+  // is the top visible row index, which only changes when the window shifts rows.
+  const scrollTopRef = useRef(0);
+  const scrollFrameRef = useRef<number | null>(null);
+  const [scrollRowIndex, setScrollRowIndex] = useState(0);
   const selectedPathSet = useMemo(() => new Set(selectedPaths), [selectedPaths]);
 
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) {
-      return;
-    }
-    const measure = () => {
-      const h = el.clientHeight;
-      setContainerHeight((prev) => (prev === h ? prev : h));
-    };
-    measure();
-    const observer = new ResizeObserver(() => {
-      requestAnimationFrame(measure);
-    });
-    observer.observe(el);
-    if (el.parentElement) {
-      observer.observe(el.parentElement);
-    }
-    const onResize = () => {
-      requestAnimationFrame(measure);
-    };
-    window.addEventListener("resize", onResize);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", onResize);
-    };
-  }, []);
+  useEffect(
+    () => () => {
+      if (scrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollFrameRef.current);
+      }
+    },
+    [],
+  );
 
   const listLayout = compactListView ? COMPACT_FLOW_LIST_LAYOUT : FLOW_LIST_LAYOUT;
   const rowsPerColumn = computeRowsPerColumn(containerHeight, listLayout);
@@ -834,7 +821,7 @@ function FlowListView({
     itemCount: rows.length,
     itemSize: listLayout.rowHeight,
     viewportSize: containerHeight,
-    scrollOffset: scrollTop,
+    scrollOffset: scrollRowIndex * listLayout.rowHeight,
     overscan: 6,
   });
   const visibleRows = rows.slice(range.startIndex, range.endIndex);
@@ -905,7 +892,17 @@ function FlowListView({
           y: event.clientY,
         });
       }}
-      onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+      onScroll={(event) => {
+        scrollTopRef.current = event.currentTarget.scrollTop;
+        if (scrollFrameRef.current !== null) {
+          return;
+        }
+        scrollFrameRef.current = window.requestAnimationFrame(() => {
+          scrollFrameRef.current = null;
+          const nextRowIndex = Math.floor(Math.max(0, scrollTopRef.current) / listLayout.rowHeight);
+          setScrollRowIndex((prev) => (prev === nextRowIndex ? prev : nextRowIndex));
+        });
+      }}
       // Vertical wheel delta is mapped to horizontal travel because the visual list grows
       // sideways once the current column is full.
       onWheel={(event) => {
@@ -926,7 +923,11 @@ function FlowListView({
         entriesLength={entries.length}
         includeHidden={includeHidden}
       />
+      {/* biome-ignore lint/a11y/useFocusableInteractive: focus is owned by the scroll container; options are buttons and stay keyboard reachable. */}
+      {/* biome-ignore lint/a11y/useSemanticElements: a native select cannot host this virtualized column-major file grid. */}
       <div
+        role="listbox"
+        aria-multiselectable="true"
         className="flow-grid-rows"
         style={{
           // The full horizontal scroll range depends on the total column count even though
@@ -943,6 +944,9 @@ function FlowListView({
           <div
             key={`${range.startIndex + rowIndex}-${row.at(0)?.path ?? "empty"}`}
             className="flow-grid"
+            // Layout rows are invisible to assistive tech so options stay direct
+            // children of the listbox in the accessibility tree.
+            role="presentation"
             style={{
               gridTemplateColumns: `repeat(${columnCount}, ${listLayout.itemWidth}px)`,
             }}
@@ -951,7 +955,9 @@ function FlowListView({
               const canAcceptDrop =
                 entry.kind === "directory" || entry.kind === "symlink_directory";
               return (
+                // biome-ignore lint/a11y/useSemanticElements: entries stay buttons for activation; role="option" overrides the implicit role on purpose.
                 <button
+                  role="option"
                   key={entry.path}
                   type="button"
                   className={`flow-item${selectedPathSet.has(entry.path) ? " active" : ""}${
@@ -1090,9 +1096,15 @@ function DetailsView({
   typeaheadQuery?: string;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const headerRef = useRef<HTMLDivElement | null>(null);
   const resizeCleanupRef = useRef<(() => void) | null>(null);
-  const [scrollTop, setScrollTop] = useState(0);
-  const [scrollLeft, setScrollLeft] = useState(0);
+  // Scroll position lives in refs so scrolling never re-renders by itself; a rAF
+  // coalesces scroll events into at most one state update per frame, and that state
+  // is the top visible row index, which only changes when the window shifts rows.
+  const scrollTopRef = useRef(0);
+  const scrollLeftRef = useRef(0);
+  const scrollFrameRef = useRef<number | null>(null);
+  const [scrollRowIndex, setScrollRowIndex] = useState(0);
   const selectedPathSet = useMemo(() => new Set(selectedPaths), [selectedPaths]);
   const visibleColumns = useMemo(() => getVisibleDetailColumns(detailColumns), [detailColumns]);
   const rowHeight = getDetailsRowHeight(compactDetailsView);
@@ -1110,7 +1122,7 @@ function DetailsView({
     itemCount: entries.length,
     itemSize: rowHeight,
     viewportSize: viewportHeight,
-    scrollOffset: scrollTop,
+    scrollOffset: scrollRowIndex * rowHeight,
     overscan: 10,
   });
   const visibleEntries = entries.slice(range.startIndex, range.endIndex);
@@ -1128,6 +1140,9 @@ function DetailsView({
       resizeCleanupRef.current?.();
       resizeCleanupRef.current = null;
       document.body.classList.remove("column-resize-active");
+      if (scrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollFrameRef.current);
+      }
     },
     [],
   );
@@ -1223,23 +1238,31 @@ function DetailsView({
   }
 
   return (
-    <div className="details-wrapper">
+    // biome-ignore lint/a11y/useSemanticElements: the virtualized details view is built from styled divs/buttons; a native table cannot express it.
+    <div className="details-wrapper" role="grid" aria-multiselectable="true">
       {typeaheadQuery ? (
         <div className="pane-typeahead pane-typeahead-center" aria-live="polite">
           <span className="pane-typeahead-label">Select</span>
           <span className="pane-typeahead-value">{typeaheadQuery}</span>
         </div>
       ) : null}
-      <div className="details-header-shell">
+      {/* biome-ignore lint/a11y/useSemanticElements: see grid note above; header markup mirrors the styled-div table. */}
+      <div className="details-header-shell" role="rowgroup">
+        {/* biome-ignore lint/a11y/useFocusableInteractive: focus is owned by the scroll container; header cells expose focusable controls. */}
+        {/* biome-ignore lint/a11y/useSemanticElements: see grid note above; header markup mirrors the styled-div table. */}
         <div
+          role="row"
+          ref={headerRef}
           className={`details-header${compactDetailsView ? " compact" : ""}`}
           style={{
             // The header is translated by body scroll rather than scrolled directly so it
-            // stays sticky while still matching the body's horizontal position.
+            // stays sticky while still matching the body's horizontal position. The
+            // transform is kept in sync imperatively from the scroll handler, so the
+            // rendered value only needs to survive re-renders.
             width: `${tableWidth}px`,
             minWidth: "100%",
             gridTemplateColumns,
-            transform: `translateX(-${scrollLeft}px)`,
+            transform: `translateX(-${scrollLeftRef.current}px)`,
           }}
         >
           {visibleColumns.map((columnKey) => (
@@ -1282,8 +1305,21 @@ function DetailsView({
           });
         }}
         onScroll={(event) => {
-          setScrollTop(event.currentTarget.scrollTop);
-          setScrollLeft(event.currentTarget.scrollLeft);
+          scrollTopRef.current = event.currentTarget.scrollTop;
+          scrollLeftRef.current = event.currentTarget.scrollLeft;
+          if (scrollFrameRef.current !== null) {
+            return;
+          }
+          scrollFrameRef.current = window.requestAnimationFrame(() => {
+            scrollFrameRef.current = null;
+            // The sticky header tracks horizontal scroll imperatively so rows do not
+            // re-render on every scrolled pixel.
+            if (headerRef.current) {
+              headerRef.current.style.transform = `translateX(-${scrollLeftRef.current}px)`;
+            }
+            const nextRowIndex = Math.floor(Math.max(0, scrollTopRef.current) / rowHeight);
+            setScrollRowIndex((prev) => (prev === nextRowIndex ? prev : nextRowIndex));
+          });
         }}
       >
         <ContentState
@@ -1293,7 +1329,9 @@ function DetailsView({
           entriesLength={entries.length}
           includeHidden={includeHidden}
         />
+        {/* biome-ignore lint/a11y/useSemanticElements: see grid note above; body markup mirrors the styled-div table. */}
         <div
+          role="rowgroup"
           className="details-table"
           style={{
             width: `${tableWidth}px`,
@@ -1307,7 +1345,9 @@ function DetailsView({
             const metadata = metadataByPath[entry.path];
             const canAcceptDrop = entry.kind === "directory" || entry.kind === "symlink_directory";
             return (
+              // biome-ignore lint/a11y/useSemanticElements: rows stay buttons for activation; role="row" overrides the implicit role on purpose.
               <button
+                role="row"
                 key={entry.path}
                 type="button"
                 className={`details-row${selectedPathSet.has(entry.path) ? " active" : ""}${
@@ -1397,9 +1437,17 @@ function DetailsHeaderCell({
   const sortKey =
     columnKey === "name" || columnKey === "size" || columnKey === "modified" ? columnKey : null;
   const sortable = sortKey !== null;
+  const ariaSort = sortable
+    ? active
+      ? direction === "asc"
+        ? "ascending"
+        : "descending"
+      : "none"
+    : undefined;
 
   return (
-    <div className="details-header-cell">
+    // biome-ignore lint/a11y/useSemanticElements: header cells are styled divs inside the div-based grid; a native th has no place here.
+    <div className="details-header-cell" role="columnheader" aria-sort={ariaSort}>
       {sortable ? (
         <SortButton
           label={label}
@@ -1446,9 +1494,13 @@ function DetailsCell({
   entry: DirectoryEntry;
   metadata: DirectoryEntryMetadata | undefined;
 }) {
+  // Cells are presentational spans inside the row button; gridcell focus management is
+  // intentionally left to the row, so the focusable-interactive rule is suppressed below.
   if (columnKey === "name") {
     return (
-      <span className="details-name">
+      // biome-ignore lint/a11y/useFocusableInteractive: see note above.
+      // biome-ignore lint/a11y/useSemanticElements: see note above.
+      <span className="details-name" role="gridcell">
         <FileIcon entry={entry} />
         <FileNameLabel
           className="details-name-label"
@@ -1459,15 +1511,23 @@ function DetailsCell({
     );
   }
   if (columnKey === "size") {
-    return <span>{formatDetailSize(entry, metadata)}</span>;
+    // biome-ignore lint/a11y/useFocusableInteractive: see note above.
+    // biome-ignore lint/a11y/useSemanticElements: see note above.
+    return <span role="gridcell">{formatDetailSize(entry, metadata)}</span>;
   }
   if (columnKey === "modified") {
-    return <span>{formatDetailModifiedAt(metadata)}</span>;
+    // biome-ignore lint/a11y/useFocusableInteractive: see note above.
+    // biome-ignore lint/a11y/useSemanticElements: see note above.
+    return <span role="gridcell">{formatDetailModifiedAt(metadata)}</span>;
   }
   if (columnKey === "permissions") {
-    return <span>{formatDetailPermissions(metadata)}</span>;
+    // biome-ignore lint/a11y/useFocusableInteractive: see note above.
+    // biome-ignore lint/a11y/useSemanticElements: see note above.
+    return <span role="gridcell">{formatDetailPermissions(metadata)}</span>;
   }
-  return <span>{formatDetailPermissions(metadata)}</span>;
+  // biome-ignore lint/a11y/useFocusableInteractive: see note above.
+  // biome-ignore lint/a11y/useSemanticElements: see note above.
+  return <span role="gridcell">{formatDetailPermissions(metadata)}</span>;
 }
 
 function SortButton({

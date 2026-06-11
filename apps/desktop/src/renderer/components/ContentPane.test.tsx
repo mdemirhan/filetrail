@@ -222,6 +222,16 @@ describe("ContentPane", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /date modified/i }));
     expect(handleSortChange).toHaveBeenCalledWith("modified");
+
+    expect(screen.getByRole("grid")).toHaveAttribute("aria-multiselectable", "true");
+    expect(screen.getByRole("columnheader", { name: /^Name/ })).toHaveAttribute(
+      "aria-sort",
+      "ascending",
+    );
+    expect(screen.getByRole("columnheader", { name: /^Modified/ })).toHaveAttribute(
+      "aria-sort",
+      "none",
+    );
   });
 
   it("forwards modifier selection gestures in details mode", () => {
@@ -267,7 +277,10 @@ describe("ContentPane", () => {
       />,
     );
 
-    fireEvent.pointerDown(screen.getByRole("button", { name: /alpha\.txt/i }), {
+    const row = screen.getByRole("row", { name: /alpha\.txt/i });
+    expect(row).toHaveAttribute("aria-selected", "false");
+
+    fireEvent.pointerDown(row, {
       button: 0,
       metaKey: true,
     });
@@ -341,8 +354,8 @@ describe("ContentPane", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: /Folder/ })).toHaveTextContent("-");
-    expect(screen.getByRole("button", { name: /alpha\.txt/ })).toHaveTextContent("Unavailable");
+    expect(screen.getByRole("row", { name: /Folder/ })).toHaveTextContent("-");
+    expect(screen.getByRole("row", { name: /alpha\.txt/ })).toHaveTextContent("Unavailable");
     expect(screen.queryByText("Not yet available")).not.toBeInTheDocument();
     expect(screen.queryByText("Not available")).not.toBeInTheDocument();
   });
@@ -391,7 +404,7 @@ describe("ContentPane", () => {
       />,
     );
 
-    fireEvent.keyDown(screen.getByRole("button", { name: /alpha\.txt/i }), { key: "a" });
+    fireEvent.keyDown(screen.getByRole("row", { name: /alpha\.txt/i }), { key: "a" });
 
     expect(handleTypeaheadInput).toHaveBeenCalledWith("a");
   });
@@ -1050,12 +1063,16 @@ describe("ContentPane", () => {
       />,
     );
 
-    const row = screen.getByRole("button", { name: /beta\.txt/i });
+    const row = screen.getByRole("option", { name: /beta\.txt/i });
     const list = row.closest(".flow-list");
     expect(list).not.toBeNull();
     if (!list) {
       throw new Error("Missing flow list container.");
     }
+
+    expect(screen.getByRole("listbox")).toHaveAttribute("aria-multiselectable", "true");
+    expect(screen.getAllByRole("option")).toHaveLength(2);
+    expect(row).toHaveAttribute("aria-selected", "false");
 
     fireEvent.pointerDown(row, { button: 0, shiftKey: true });
     fireEvent.mouseDown(list);

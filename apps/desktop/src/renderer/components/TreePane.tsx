@@ -887,7 +887,7 @@ export function TreePane({
                 onDropCapture={handlePaneDropCapture(favoriteItemsById, "favorites")}
               >
                 <div className="favorites-scroll">
-                  <div className="tree-list favorites-list">
+                  <div className="tree-list favorites-list" role="tree" aria-label="Favorites">
                     {favoriteItems.map((item) => (
                       <TreeItemRow
                         key={item.id}
@@ -1146,7 +1146,7 @@ function TreeList({
 }) {
   return (
     <div className="tree-scroll">
-      <div className="tree-list">
+      <div className="tree-list" role="tree" aria-label="Folders">
         {visibleItemIds.map((itemId) => {
           const item = items[itemId];
           if (!item) {
@@ -1349,10 +1349,17 @@ function TreeItemRow({
   }
 
   return (
-    <div className="tree-branch">
+    // The branch wrapper is purely structural; rows are flattened in the DOM, so the
+    // tree pattern is expressed with aria-level on each treeitem instead of nested
+    // role="group" containers.
+    <div className="tree-branch" role="presentation">
       <div
         ref={(element) => registerRowRef(item.id, element)}
         className={`tree-row${isCurrent ? " active" : ""}${isCurrent && !isPaneFocused ? " inactive" : ""}`}
+        role="treeitem"
+        aria-selected={isCurrent}
+        aria-expanded={canExpand ? item.expanded : undefined}
+        aria-level={item.depth + 1}
         data-tree-item-id={item.id}
         data-drop-target-state={dropIndicator ?? "none"}
         data-tree-path={itemPath ?? item.id}
