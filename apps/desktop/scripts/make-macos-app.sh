@@ -125,10 +125,58 @@ else
   exit 1
 fi
 
-echo "[5/6] Ad-hoc code signing..."
-# Ad-hoc signing gives the app a valid code signature so macOS does not block
-# filesystem access to protected paths (e.g. ~/.Trash) for unsigned apps.
-codesign --force --deep --sign - "${APP_BUNDLE}"
+echo "[5/6] Code signing..."
+if [[ -n "${MACOS_SIGN_IDENTITY:-}" ]]; then
+  # Real identity signing with the hardened runtime and a secure timestamp,
+  # both of which are required for notarization. Signing is done inside-out
+  # (Apple discourages --deep for distribution): standalone bundled binaries
+  # first, then framework internals, frameworks, helper apps, and finally the
+  # outer bundle. The helper apps and the main executable run V8, whose JIT
+  # needs the allow-jit entitlement under the hardened runtime.
+  echo "  Signing with identity: ${MACOS_SIGN_IDENTITY}"
+  ENTITLEMENTS_PLIST="${SCRIPT_DIR}/entitlements.mac.plist"
+  if [[ ! -f "${ENTITLEMENTS_PLIST}" ]]; then
+    echo "Missing entitlements plist: ${ENTITLEMENTS_PLIST}" >&2
+    exit 1
+  fi
+  sign() {
+    codesign --force --options runtime --timestamp --sign "${MACOS_SIGN_IDENTITY}" "$@"
+  }
+  # Standalone Mach-O binaries under Resources: the native-fs addon and the
+  # vendored fd search binaries. Notarization rejects unsigned executables.
+  while IFS= read -r -d '' binary; do
+    sign "${binary}"
+  done < <(find "${APP_BUNDLE}/Contents/Resources" -type f \( -name '*.node' -o -name 'fd' \) -print0)
+  # Framework-internal libraries and auxiliary executables.
+  while IFS= read -r -d '' binary; do
+    sign "${binary}"
+  done < <(find "${APP_BUNDLE}/Contents/Frameworks" -type f \( -name '*.dylib' -o -name 'chrome_crashpad_handler' -o -name 'ShipIt' \) -print0)
+  while IFS= read -r -d '' framework; do
+    sign "${framework}"
+  done < <(find "${APP_BUNDLE}/Contents/Frameworks" -maxdepth 1 -name '*.framework' -print0)
+  while IFS= read -r -d '' helper; do
+    sign --entitlements "${ENTITLEMENTS_PLIST}" "${helper}"
+  done < <(find "${APP_BUNDLE}/Contents/Frameworks" -maxdepth 1 -name '*Helper*.app' -print0)
+  sign --entitlements "${ENTITLEMENTS_PLIST}" "${APP_BUNDLE}"
+else
+  # Ad-hoc signing gives the app a valid code signature so macOS does not block
+  # filesystem access to protected paths (e.g. ~/.Trash) for unsigned apps.
+  echo "MACOS_SIGN_IDENTITY not set — ad-hoc signing the app (not distributable)." >&2
+  codesign --force --deep --sign - "${APP_BUNDLE}"
+fi
+
+if [[ -n "${MACOS_NOTARY_PROFILE:-}" ]]; then
+  if [[ -z "${MACOS_SIGN_IDENTITY:-}" ]]; then
+    echo "MACOS_NOTARY_PROFILE is set but MACOS_SIGN_IDENTITY is not; ad-hoc signed apps cannot be notarized." >&2
+    exit 1
+  fi
+  echo "  Notarizing with keychain profile: ${MACOS_NOTARY_PROFILE}"
+  NOTARIZE_ZIP="${OUT_DIR}/${APP_SLUG}-${ARCH}-notarize.zip"
+  ditto -c -k --sequesterRsrc --keepParent "${APP_BUNDLE}" "${NOTARIZE_ZIP}"
+  xcrun notarytool submit "${NOTARIZE_ZIP}" --keychain-profile "${MACOS_NOTARY_PROFILE}" --wait
+  xcrun stapler staple "${APP_BUNDLE}"
+  rm -f "${NOTARIZE_ZIP}"
+fi
 
 echo "[6/6] Building distributables..."
 ZIP_PATH="${OUT_DIR}/${APP_SLUG}-${ARCH}.zip"

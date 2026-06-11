@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: Lint, typecheck, test, smoke
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache bun install cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # The native-fs addon is N-API based (node-gyp-build), so building against
+      # the runner's Node headers produces a binary that also loads under the
+      # Electron runtime used by `bun run test`.
+      - name: Build native-fs addon
+        run: bun run --cwd apps/desktop build:native
+
+      - name: Lint, typecheck, and unit tests
+        run: bun run ci
+
+      - name: Build desktop app
+        run: bun run desktop:build
+
+      - name: Smoke test (Playwright + Electron)
+        run: bun run test:smoke
