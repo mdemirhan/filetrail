@@ -117,9 +117,16 @@ export type RequiredCopyPasteAnalysisRequest = {
   destinationDirectoryPath: string;
 };
 
+// A choice made for one item in the review, overriding the policy for its kind.
+export type CopyPasteNodeOverride = {
+  nodeId: string;
+  action: CopyPasteRuntimeResolutionAction;
+};
+
 export type CopyPasteExecutionRequest = {
   analysisId: string;
   policy: CopyPastePolicy;
+  overrides?: CopyPasteNodeOverride[];
 };
 
 export type NodeFingerprint = {
@@ -161,6 +168,19 @@ export type CopyPasteAnalysisNode = {
   totalNodeCount: number;
   conflictNodeCount: number;
   destinationTotalNodeCount: number | null;
+  /** The name "Keep Both" would give this item (conflicts only). */
+  keepBothDestinationPath: string | null;
+  /** What exists only in the existing folder: kept by Merge, removed by Replace. */
+  destinationOnly: CopyPasteDestinationOnlySummary | null;
+  /** Why this item can't be replaced, when Replace would destroy the item being pasted. */
+  replaceBlockedReason: string | null;
+};
+
+export type CopyPasteDestinationOnlySummary = {
+  /** Items (files and folders, nested ones included) found only at the destination. */
+  count: number;
+  /** A few of them, relative to the existing item, top-most entries first. */
+  samplePaths: string[];
 };
 
 export type CopyPasteAnalysisSummary = {

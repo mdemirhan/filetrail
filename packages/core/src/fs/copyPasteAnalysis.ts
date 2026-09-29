@@ -1,7 +1,7 @@
 import { basename, dirname, join, resolve } from "node:path";
 
 import { captureFingerprint, detectKind } from "./copyPasteFingerprint";
-import { resolveDuplicateName } from "./copyPasteNames";
+import { destinationPathKey, resolveDuplicateName } from "./copyPasteNames";
 import type {
   CopyPasteAnalysisIssue,
   CopyPasteAnalysisNode,
@@ -10,6 +10,7 @@ import type {
   CopyPasteAnalysisSummary,
   CopyPasteAnalysisWarning,
   CopyPasteConflictClass,
+  CopyPasteDestinationOnlySummary,
   CopyPasteNodeKind,
   RequiredCopyPasteAnalysisRequest,
   WriteServiceFileSystem,
@@ -39,7 +40,7 @@ export async function buildCopyPasteAnalysisReport(args: {
   const issues: CopyPasteAnalysisIssue[] = [];
   const warnings: CopyPasteAnalysisWarning[] = [];
   const nodes: CopyPasteAnalysisNode[] = [];
-  const destinationItemCountCache = new Map<string, number | null>();
+  const destinationScanCache: DestinationScanCache = { counts: new Map(), entries: new Map() };
   // APFS is case- and normalization-insensitive by default, so "report.pdf"
   // from one folder and "Report.pdf" from another land on the same entry.
   const claimedDestinationNames = new Map<string, string>();
@@ -165,18 +166,19 @@ export async function buildCopyPasteAnalysisReport(args: {
     }
     claimedDestinationNames.set(destinationNameKey, sourcePath);
 
-    nodes.push(
-      await analyzeNode({
-        id: `item-${index + 1}`,
-        sourcePath,
-        destinationPath,
-        fileSystem,
-        destinationItemCountCache,
-        ...(args.signal ? { signal: args.signal } : {}),
-      }),
-    );
+    const node = await analyzeNode({
+      id: `item-${index + 1}`,
+      sourcePath,
+      destinationPath,
+      fileSystem,
+      destinationScanCache,
+      ...(args.signal ? { signal: args.signal } : {}),
+    });
+    node.replaceBlockedReason = await findReplaceBlockedReason(node, fileSystem);
+    nodes.push(node);
   }
 
+  await annotateKeepBothNames(nodes, fileSystem, args.signal);
   const summary = summarizeAnalysis(nodes);
   if (
     summary.totalNodeCount > thresholds.largeBatchItemThreshold ||
@@ -211,7 +213,7 @@ async function analyzeNode(args: {
   sourcePath: string;
   destinationPath: string;
   fileSystem: WriteServiceFileSystem;
-  destinationItemCountCache: Map<string, number | null>;
+  destinationScanCache: DestinationScanCache;
   signal?: AbortSignal;
 }): Promise<CopyPasteAnalysisNode> {
   args.signal?.throwIfAborted();
@@ -237,7 +239,7 @@ async function analyzeNode(args: {
         sourcePath: childSourcePath,
         destinationPath: childDestinationPath,
         fileSystem: args.fileSystem,
-        destinationItemCountCache: args.destinationItemCountCache,
+        destinationScanCache: args.destinationScanCache,
         ...(args.signal ? { signal: args.signal } : {}),
       });
       children.push(childNode);
@@ -247,13 +249,22 @@ async function analyzeNode(args: {
   }
 
   let destinationTotalNodeCount: number | null = null;
-  if (conflictClass === "directory_conflict") {
+  let destinationOnly: CopyPasteDestinationOnlySummary | null = null;
+  // An existing folder in the way: what only it holds is kept by Merge and lost by Replace.
+  if (conflictClass !== null && destinationKind === "directory") {
     destinationTotalNodeCount = await countDirectoryItems(
       args.fileSystem,
       args.destinationPath,
-      args.destinationItemCountCache,
+      args.destinationScanCache,
       args.signal,
     );
+    destinationOnly = await summarizeDestinationOnly({
+      fileSystem: args.fileSystem,
+      destinationPath: args.destinationPath,
+      sourceChildren: conflictClass === "directory_conflict" ? children : [],
+      cache: args.destinationScanCache,
+      ...(args.signal ? { signal: args.signal } : {}),
+    });
   }
 
   return {
@@ -272,22 +283,200 @@ async function analyzeNode(args: {
     totalNodeCount,
     conflictNodeCount,
     destinationTotalNodeCount,
+    keepBothDestinationPath: null,
+    destinationOnly,
+    replaceBlockedReason: null,
   };
+}
+
+const DESTINATION_ONLY_SAMPLE_LIMIT = 5;
+
+async function summarizeDestinationOnly(args: {
+  fileSystem: WriteServiceFileSystem;
+  destinationPath: string;
+  sourceChildren: CopyPasteAnalysisNode[];
+  cache: DestinationScanCache;
+  signal?: AbortSignal;
+}): Promise<CopyPasteDestinationOnlySummary | null> {
+  const summary: CopyPasteDestinationOnlySummary = { count: 0, samplePaths: [] };
+  const complete = await collectDestinationOnly(
+    args.destinationPath,
+    args.sourceChildren,
+    "",
+    summary,
+    args,
+  );
+  return complete ? summary : null;
+}
+
+// Walks the existing folder next to the pasted one. Entries with no pasted counterpart
+// (or a pasted file standing in for a folder) exist only at the destination; folders
+// present on both sides are compared recursively. Returns false when unreadable.
+async function collectDestinationOnly(
+  destinationPath: string,
+  sourceChildren: CopyPasteAnalysisNode[],
+  prefix: string,
+  summary: CopyPasteDestinationOnlySummary,
+  context: {
+    fileSystem: WriteServiceFileSystem;
+    cache: DestinationScanCache;
+    signal?: AbortSignal;
+  },
+): Promise<boolean> {
+  let entries: string[];
+  try {
+    entries = await readDestinationEntries(context.fileSystem, destinationPath, context.cache);
+  } catch {
+    return false;
+  }
+  const sourceByName = new Map(
+    sourceChildren.map((child) => [destinationPathKey(basename(child.sourcePath)), child]),
+  );
+  for (const entry of entries) {
+    context.signal?.throwIfAborted();
+    const entryPath = join(destinationPath, entry);
+    const counterpart = sourceByName.get(destinationPathKey(entry));
+    if (counterpart?.sourceKind === "directory" && counterpart.destinationKind === "directory") {
+      // Nested folders are analyzed first; reuse their summary instead of walking again.
+      if (counterpart.destinationOnly !== null) {
+        summary.count += counterpart.destinationOnly.count;
+        for (const samplePath of counterpart.destinationOnly.samplePaths) {
+          if (summary.samplePaths.length < DESTINATION_ONLY_SAMPLE_LIMIT) {
+            summary.samplePaths.push(`${prefix}${entry}/${samplePath}`);
+          }
+        }
+        continue;
+      }
+      const complete = await collectDestinationOnly(
+        entryPath,
+        counterpart.children,
+        `${prefix}${entry}/`,
+        summary,
+        context,
+      );
+      if (!complete) {
+        return false;
+      }
+      continue;
+    }
+    if (counterpart !== undefined && counterpart.destinationKind !== "directory") {
+      continue;
+    }
+    summary.count += 1;
+    if (summary.samplePaths.length < DESTINATION_ONLY_SAMPLE_LIMIT) {
+      summary.samplePaths.push(`${prefix}${entry}`);
+    }
+    try {
+      if ((await context.fileSystem.lstat(entryPath)).isDirectory()) {
+        const nestedCount = await countDirectoryItems(
+          context.fileSystem,
+          entryPath,
+          context.cache,
+          context.signal,
+        );
+        if (nestedCount === null) {
+          return false;
+        }
+        summary.count += nestedCount;
+      }
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
+      return false;
+    }
+  }
+  return true;
+}
+
+// The names "Keep Both" would use, reserved across the items of each folder the same
+// way the paste itself will pick them.
+async function annotateKeepBothNames(
+  nodes: CopyPasteAnalysisNode[],
+  fileSystem: WriteServiceFileSystem,
+  signal?: AbortSignal,
+): Promise<void> {
+  const reservedPaths = new Set(nodes.map((node) => destinationPathKey(node.destinationPath)));
+  for (const node of nodes) {
+    signal?.throwIfAborted();
+    if (node.conflictClass !== null) {
+      node.keepBothDestinationPath = await resolveDuplicateName(
+        basename(node.sourcePath),
+        dirname(node.destinationPath),
+        fileSystem,
+        reservedPaths,
+      );
+      reservedPaths.add(destinationPathKey(node.keepBothDestinationPath));
+    }
+    if (node.conflictClass === "directory_conflict") {
+      await annotateKeepBothNames(node.children, fileSystem, signal);
+    }
+  }
+}
+
+// Replacing an item that is, or contains, the item being pasted would destroy the source.
+async function findReplaceBlockedReason(
+  node: CopyPasteAnalysisNode,
+  fileSystem: WriteServiceFileSystem,
+): Promise<string | null> {
+  if (node.conflictClass === null) {
+    return null;
+  }
+  if (isSameExistingItem(node.sourceFingerprint, node.destinationFingerprint)) {
+    return "It is the item being pasted.";
+  }
+  if (node.destinationKind !== "directory") {
+    return null;
+  }
+  for (let ancestor = dirname(node.sourcePath); ; ancestor = dirname(ancestor)) {
+    if (
+      isSameExistingItem(
+        await captureFingerprint(fileSystem, ancestor),
+        node.destinationFingerprint,
+      )
+    ) {
+      return "It contains the item being pasted.";
+    }
+    if (dirname(ancestor) === ancestor) {
+      return null;
+    }
+  }
+}
+
+type DestinationScanCache = {
+  // Item counts of existing folders (null when unreadable).
+  counts: Map<string, number | null>;
+  // Sorted folder listings, so each existing folder is read once per analysis.
+  entries: Map<string, string[]>;
+};
+
+async function readDestinationEntries(
+  fileSystem: WriteServiceFileSystem,
+  directoryPath: string,
+  cache: DestinationScanCache,
+): Promise<string[]> {
+  const cached = cache.entries.get(directoryPath);
+  if (cached) {
+    return cached;
+  }
+  const entries = (await fileSystem.readdir(directoryPath)).sort();
+  cache.entries.set(directoryPath, entries);
+  return entries;
 }
 
 async function countDirectoryItems(
   fileSystem: WriteServiceFileSystem,
   directoryPath: string,
-  cache: Map<string, number | null>,
+  cache: DestinationScanCache,
   signal?: AbortSignal,
 ): Promise<number | null> {
-  if (cache.has(directoryPath)) {
-    return cache.get(directoryPath) ?? null;
+  if (cache.counts.has(directoryPath)) {
+    return cache.counts.get(directoryPath) ?? null;
   }
 
   try {
     signal?.throwIfAborted();
-    const entries = await fileSystem.readdir(directoryPath);
+    const entries = await readDestinationEntries(fileSystem, directoryPath, cache);
     let count = entries.length;
     for (const entry of entries) {
       signal?.throwIfAborted();
@@ -296,19 +485,19 @@ async function countDirectoryItems(
       if (stats.isDirectory()) {
         const nestedCount = await countDirectoryItems(fileSystem, entryPath, cache, signal);
         if (nestedCount === null) {
-          cache.set(directoryPath, null);
+          cache.counts.set(directoryPath, null);
           return null;
         }
         count += nestedCount;
       }
     }
-    cache.set(directoryPath, count);
+    cache.counts.set(directoryPath, count);
     return count;
   } catch (error) {
     if (isAbortError(error)) {
       throw error;
     }
-    cache.set(directoryPath, null);
+    cache.counts.set(directoryPath, null);
     return null;
   }
 }

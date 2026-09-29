@@ -373,7 +373,14 @@ type CopyPasteAnalysisNodeContract = {
   totalNodeCount: number;
   conflictNodeCount: number;
   destinationTotalNodeCount: number | null;
+  keepBothDestinationPath: string | null;
+  destinationOnly: z.infer<typeof copyPasteDestinationOnlySummarySchema> | null;
+  replaceBlockedReason: string | null;
 };
+export const copyPasteDestinationOnlySummarySchema = z.object({
+  count: z.number().int().nonnegative(),
+  samplePaths: z.array(z.string().min(1)),
+});
 export const copyPasteAnalysisNodeSchema: z.ZodType<CopyPasteAnalysisNodeContract> = z.lazy(() =>
   z.object({
     id: z.string().min(1),
@@ -391,6 +398,9 @@ export const copyPasteAnalysisNodeSchema: z.ZodType<CopyPasteAnalysisNodeContrac
     totalNodeCount: z.number().int().nonnegative(),
     conflictNodeCount: z.number().int().nonnegative(),
     destinationTotalNodeCount: z.number().int().nonnegative().nullable(),
+    keepBothDestinationPath: z.string().min(1).nullable(),
+    destinationOnly: copyPasteDestinationOnlySummarySchema.nullable(),
+    replaceBlockedReason: z.string().min(1).nullable(),
   }),
 );
 export const copyPasteAnalysisSummarySchema = z.object({
@@ -900,6 +910,16 @@ export const ipcContractSchemas = {
           .extract(["paste", "move_to", "duplicate"])
           .default("paste"),
         policy: copyPastePolicySchema,
+        // Per-item choices from the review, overriding the policy for those items.
+        overrides: z
+          .array(
+            z.object({
+              nodeId: z.string().min(1),
+              action: copyPasteRuntimeResolutionActionSchema,
+            }),
+          )
+          .max(100_000)
+          .optional(),
         initiator: writeOperationInitiatorSchema.nullable().optional(),
       }),
     ]),
@@ -921,6 +941,8 @@ export const ipcContractSchemas = {
       operationId: z.string().min(1),
       conflictId: z.string().min(1),
       resolution: copyPasteRuntimeResolutionActionSchema,
+      // Answer later changes during the same operation the same way, where that applies.
+      applyToRemaining: z.boolean().optional(),
     }),
     response: z.object({
       ok: z.boolean(),

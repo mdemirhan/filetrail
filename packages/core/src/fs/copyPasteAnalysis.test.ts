@@ -473,7 +473,7 @@ describe("copyPasteAnalysis", () => {
       expect(report.nodes[0]?.destinationTotalNodeCount).toBeNull();
     });
 
-    it("returns null for type mismatch nodes", async () => {
+    it("counts the existing folder of a type mismatch", async () => {
       const fileSystem = new MockWriteServiceFileSystem({
         "/source": { kind: "directory" },
         "/source/item": { kind: "file", size: 5 },
@@ -493,7 +493,9 @@ describe("copyPasteAnalysis", () => {
       });
 
       expect(report.nodes[0]?.conflictClass).toBe("type_mismatch");
-      expect(report.nodes[0]?.destinationTotalNodeCount).toBeNull();
+      // The existing (empty) folder would be lost to Replace, so it is counted too.
+      expect(report.nodes[0]?.destinationTotalNodeCount).toBe(0);
+      expect(report.nodes[0]?.destinationOnly).toEqual({ count: 0, samplePaths: [] });
     });
 
     it("returns null for new items with no conflict", async () => {

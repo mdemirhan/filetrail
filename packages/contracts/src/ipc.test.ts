@@ -1,6 +1,24 @@
 import { copyPasteProgressEventSchema, ipcContractSchemas } from "./ipc";
 
 describe("ipc contracts", () => {
+  it("accepts per-item review choices and standing runtime answers", () => {
+    expect(
+      ipcContractSchemas["copyPaste:start"].request.parse({
+        analysisId: "analysis-1",
+        policy: { file: "keep_both", directory: "merge", mismatch: "keep_both" },
+        overrides: [{ nodeId: "item-1", action: "overwrite" }],
+      }),
+    ).toMatchObject({ overrides: [{ nodeId: "item-1", action: "overwrite" }] });
+    expect(
+      ipcContractSchemas["copyPaste:resolveConflict"].request.parse({
+        operationId: "copy-op-1",
+        conflictId: "runtime-item-1-destination",
+        resolution: "keep_both",
+        applyToRemaining: true,
+      }),
+    ).toMatchObject({ applyToRemaining: true });
+  });
+
   it("validates renderer log payloads", () => {
     expect(
       ipcContractSchemas["app:writeLog"].request.parse({

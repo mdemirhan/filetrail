@@ -1,13 +1,19 @@
 import { basename, dirname } from "node:path";
 
+import { isChoiceAllowedForConflict } from "@filetrail/contracts";
+
 import { destinationPathKey, resolveDuplicateName } from "./copyPasteNames";
 import type {
   CopyPasteAnalysisNode,
   CopyPasteAnalysisReport,
+  CopyPasteNodeOverride,
   CopyPastePolicy,
   CopyPasteRuntimeResolutionAction,
   WriteServiceFileSystem,
 } from "./writeServiceTypes";
+
+type OverrideMap = ReadonlyMap<string, CopyPasteRuntimeResolutionAction>;
+const NO_OVERRIDES: OverrideMap = new Map();
 
 export type ResolvedCopyPasteNode = {
   node: CopyPasteAnalysisNode;
@@ -19,9 +25,21 @@ export type ResolvedCopyPasteNode = {
 export async function resolveAnalysisWithPolicy(args: {
   report: CopyPasteAnalysisReport;
   policy: CopyPastePolicy;
+  // Per-item choices; items without one follow the policy for their kind.
+  overrides?: CopyPasteNodeOverride[];
   fileSystem: WriteServiceFileSystem;
 }): Promise<ResolvedCopyPasteNode[]> {
-  return resolveSiblings(args.report.nodes, args.policy, args.fileSystem, undefined, null);
+  const overrides: OverrideMap = new Map(
+    (args.overrides ?? []).map((override) => [override.nodeId, override.action]),
+  );
+  return resolveSiblings(
+    args.report.nodes,
+    args.policy,
+    overrides,
+    args.fileSystem,
+    undefined,
+    null,
+  );
 }
 
 export async function resolveSingleNodeWithAction(args: {
@@ -31,7 +49,7 @@ export async function resolveSingleNodeWithAction(args: {
   policy: CopyPastePolicy | null;
   fileSystem: WriteServiceFileSystem;
 }): Promise<ResolvedCopyPasteNode> {
-  return resolveNode(args.node, args.policy, args.fileSystem, new Set(), args.action);
+  return resolveNode(args.node, args.policy, NO_OVERRIDES, args.fileSystem, new Set(), args.action);
 }
 
 // Resolves the items of one destination folder. Items keeping their own name claim it
@@ -39,6 +57,7 @@ export async function resolveSingleNodeWithAction(args: {
 async function resolveSiblings(
   nodes: CopyPasteAnalysisNode[],
   policy: CopyPastePolicy | null,
+  overrides: OverrideMap,
   fileSystem: WriteServiceFileSystem,
   explicitAction: ResolvedCopyPasteNode["action"] | undefined,
   parentDestinationPath: string | null,
@@ -57,6 +76,7 @@ async function resolveSiblings(
       await resolveNode(
         node,
         policy,
+        overrides,
         fileSystem,
         reservedPaths,
         explicitAction,
@@ -70,15 +90,23 @@ async function resolveSiblings(
 async function resolveNode(
   node: CopyPasteAnalysisNode,
   policy: CopyPastePolicy | null,
+  overrides: OverrideMap,
   fileSystem: WriteServiceFileSystem,
   reservedPaths: Set<string>,
   explicitAction?: ResolvedCopyPasteNode["action"],
   destinationPathOverride?: string,
 ): Promise<ResolvedCopyPasteNode> {
   const baseDestinationPath = destinationPathOverride ?? node.destinationPath;
+  const override = node.conflictClass === null ? undefined : overrides.get(node.id);
   let action: ResolvedCopyPasteNode["action"];
   if (explicitAction) {
     action = explicitAction;
+  } else if (
+    override !== undefined &&
+    node.conflictClass !== null &&
+    isChoiceAllowedForConflict(node.conflictClass, override)
+  ) {
+    action = override;
   } else if (node.conflictClass === null) {
     action = "create";
   } else if (node.conflictClass === "directory_conflict") {
@@ -143,6 +171,7 @@ async function resolveNode(
   const children = await resolveSiblings(
     node.children,
     policy,
+    overrides,
     fileSystem,
     childAction,
     destinationPath,

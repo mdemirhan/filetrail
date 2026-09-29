@@ -33,6 +33,7 @@ type ExecutionContext = {
   requestResolution: (
     conflict: CopyPasteRuntimeConflict,
   ) => Promise<CopyPasteRuntimeResolutionAction | null>;
+  autoResolve: (conflict: CopyPasteRuntimeConflict) => CopyPasteRuntimeResolutionAction | null;
   destinationDev: number | null;
   totalItemCount: number;
   totalBytes: number | null;
@@ -53,6 +54,8 @@ export async function executeCopyPasteFromAnalysis(args: {
   requestResolution: (
     conflict: CopyPasteRuntimeConflict,
   ) => Promise<CopyPasteRuntimeResolutionAction | null>;
+  // An answer already given for "the rest of this operation", used without asking again.
+  autoResolve?: (conflict: CopyPasteRuntimeConflict) => CopyPasteRuntimeResolutionAction | null;
 }): Promise<void> {
   const startedAt = args.now().toISOString();
   const destinationFingerprint = await captureFingerprint(
@@ -68,6 +71,7 @@ export async function executeCopyPasteFromAnalysis(args: {
     signal: args.signal,
     emit: args.emit,
     requestResolution: args.requestResolution,
+    autoResolve: args.autoResolve ?? (() => null),
     destinationDev: destinationFingerprint.dev,
     totalItemCount: countExecutableSteps(args.resolvedNodes),
     totalBytes: args.report.summary.totalBytes,
@@ -225,8 +229,11 @@ async function executeResolvedNode(
     context.fileSystem,
   );
   if (runtimeConflict) {
-    emitProgress(context, "awaiting_resolution", currentNode, runtimeConflict);
-    const resolution = await context.requestResolution(runtimeConflict);
+    let resolution = context.autoResolve(runtimeConflict);
+    if (resolution === null) {
+      emitProgress(context, "awaiting_resolution", currentNode, runtimeConflict);
+      resolution = await context.requestResolution(runtimeConflict);
+    }
     context.signal.throwIfAborted();
     if (!resolution) {
       throw new Error("Runtime conflict was not resolved.");

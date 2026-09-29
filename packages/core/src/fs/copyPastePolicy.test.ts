@@ -44,6 +44,9 @@ function createNode(
     totalNodeCount: input.totalNodeCount ?? 1,
     conflictNodeCount: input.conflictNodeCount ?? (input.conflictClass ? 1 : 0),
     destinationTotalNodeCount: input.destinationTotalNodeCount ?? null,
+    keepBothDestinationPath: input.keepBothDestinationPath ?? null,
+    destinationOnly: input.destinationOnly ?? null,
+    replaceBlockedReason: input.replaceBlockedReason ?? null,
   };
 }
 

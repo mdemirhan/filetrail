@@ -1,4 +1,4 @@
-import { isAbortError } from "@filetrail/contracts";
+import { getRuntimeConflictChoices, isAbortError } from "@filetrail/contracts";
 
 import {
   buildCopyPasteAnalysisReport,
@@ -92,6 +92,8 @@ export class WriteService {
   private readonly controllers = new Map<string, AbortController>();
   private readonly analysisJobs = new Map<string, AnalysisJob>();
   private readonly pendingResolutions = new Map<string, PendingResolution>();
+  // Answers given "for the rest of this operation", by operation.
+  private readonly standingResolutions = new Map<string, CopyPasteRuntimeResolutionAction>();
   private activeOperationId: string | null = null;
   private sequence = 0;
   private analysisSequence = 0;
@@ -227,12 +229,16 @@ export class WriteService {
     operationId: string,
     conflictId: string,
     action: CopyPasteRuntimeResolutionAction,
+    applyToRemaining = false,
   ): { ok: boolean } {
     const pending = this.pendingResolutions.get(operationId);
     if (!pending || pending.conflictId !== conflictId) {
       return { ok: false };
     }
     this.pendingResolutions.delete(operationId);
+    if (applyToRemaining) {
+      this.standingResolutions.set(operationId, action);
+    }
     pending.resolve(action);
     return { ok: true };
   }
@@ -312,6 +318,7 @@ export class WriteService {
       const resolvedNodes = await resolveAnalysisWithPolicy({
         report: analysisJob.report,
         policy: request.policy,
+        ...(request.overrides ? { overrides: request.overrides } : {}),
         fileSystem: this.fileSystem,
       });
       await executeCopyPasteFromAnalysis({
@@ -324,6 +331,12 @@ export class WriteService {
         signal: controller.signal,
         resolvedNodes,
         emit: (event) => this.emit(event),
+        autoResolve: (conflict) => {
+          const standing = this.standingResolutions.get(operationId);
+          return standing !== undefined && getRuntimeConflictChoices(conflict).includes(standing)
+            ? standing
+            : null;
+        },
         requestResolution: (conflict) =>
           analysisJob.legacyConflictResolution === "error"
             ? Promise.resolve(null)
@@ -385,6 +398,7 @@ export class WriteService {
       });
     } finally {
       this.pendingResolutions.delete(operationId);
+      this.standingResolutions.delete(operationId);
       this.controllers.delete(operationId);
       this.analysisJobs.delete(request.analysisId);
       if (this.activeOperationId === operationId) {

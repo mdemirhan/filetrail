@@ -516,6 +516,41 @@ describe("createWriteOperationCoordinator", () => {
     rename.catch(() => undefined);
     coordinator.shutdown();
   });
+
+  it("passes per-item choices and standing runtime answers to the write service", () => {
+    const writeService = createWriteServiceStub();
+    const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs());
+    const sender = createSender();
+
+    coordinator.handlers["copyPaste:start"](
+      {
+        analysisId: "analysis-1",
+        action: "paste",
+        policy: { file: "keep_both", directory: "merge", mismatch: "keep_both" },
+        overrides: [{ nodeId: "item-2", action: "overwrite" }],
+      },
+      { sender },
+    );
+    coordinator.handlers["copyPaste:resolveConflict"]({
+      operationId: "copy-op-1",
+      conflictId: "runtime-item-1-destination",
+      resolution: "skip",
+      applyToRemaining: true,
+    });
+
+    expect(writeService.startCopyPaste).toHaveBeenCalledWith({
+      analysisId: "analysis-1",
+      policy: { file: "keep_both", directory: "merge", mismatch: "keep_both" },
+      overrides: [{ nodeId: "item-2", action: "overwrite" }],
+    });
+    expect(writeService.resolveRuntimeConflict).toHaveBeenCalledWith(
+      "copy-op-1",
+      "runtime-item-1-destination",
+      "skip",
+      true,
+    );
+    coordinator.shutdown();
+  });
 });
 
 function createNodeFingerprint() {

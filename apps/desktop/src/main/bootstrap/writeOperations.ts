@@ -843,6 +843,7 @@ export function createWriteOperationCoordinator(
             ? writeService.startCopyPaste({
                 analysisId: payload.analysisId,
                 policy: payload.policy,
+                ...(payload.overrides ? { overrides: payload.overrides } : {}),
               })
             : writeService.startCopyPaste({
                 mode: payload.mode,
@@ -891,6 +892,7 @@ export function createWriteOperationCoordinator(
           payload.operationId,
           payload.conflictId,
           payload.resolution,
+          payload.applyToRemaining ?? false,
         );
       },
       "writeOperation:rename": async (
