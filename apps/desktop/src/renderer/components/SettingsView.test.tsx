@@ -136,6 +136,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       onBrowseFavorite={() => undefined}
       onMoveFavorite={() => undefined}
       onRemoveFavorite={() => undefined}
+      onRestoreDefaultFavorites={() => undefined}
       onFavoriteIconChange={() => undefined}
       onFavoritesPlacementChange={() => undefined}
       onAddOpenWithApplication={() => undefined}

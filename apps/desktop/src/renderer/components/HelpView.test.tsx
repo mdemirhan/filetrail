@@ -127,7 +127,7 @@ describe("HelpView", () => {
     });
 
     expect(screen.getByText("Zoom in")).toBeInTheDocument();
-    expect(screen.getByText("Cmd")).toBeInTheDocument();
-    expect(screen.getByText("Plus")).toBeInTheDocument();
+    expect(screen.getByText("⌘")).toBeInTheDocument();
+    expect(screen.getByText("+")).toBeInTheDocument();
   });
 });

@@ -8,30 +8,22 @@ import type {
 } from "@filetrail/contracts";
 
 import {
-  ACCENT_OPTIONS,
+  type AppPreferences,
   DEFAULT_APP_PREFERENCES,
   DEFAULT_TERMINAL_APPLICATION,
-  DEFAULT_TEXT_EDITOR,
   type DetailColumnVisibility,
   type DetailColumnWidths,
-  type FavoritePreference,
-  NOTIFICATION_DURATION_SECONDS_OPTIONS,
-  THEME_OPTIONS,
-  TYPEAHEAD_DEBOUNCE_OPTIONS,
-  UI_FONT_OPTIONS,
-  UI_FONT_SIZE_OPTIONS,
-  UI_FONT_WEIGHT_OPTIONS,
   clampOpenItemLimit,
   clampZoomPercent,
 } from "../shared/appPreferences";
-import { DEFAULT_LEFT_TOOLBAR_ITEMS, DEFAULT_TOP_TOOLBAR_ITEMS } from "../shared/toolbarItems";
+import { DEFAULT_TOP_TOOLBAR_ITEMS } from "../shared/toolbarItems";
 import { ActionLogView } from "./components/ActionLogView";
 import { AppDialogs } from "./components/AppDialogs";
 import { ExplorerWorkspace } from "./components/ExplorerWorkspace";
 import { HelpView } from "./components/HelpView";
 import { InfoRow } from "./components/InfoRow";
-import { SettingsView } from "./components/SettingsView";
-import { useAppPreferences } from "./hooks/useAppPreferences";
+import { ToolbarIcon } from "./components/ToolbarIcon";
+import { applyPreferencesPatch, useAppPreferences } from "./hooks/useAppPreferences";
 import { useElementSize } from "./hooks/useElementSize";
 import { useExplorerActions } from "./hooks/useExplorerActions";
 import { useExplorerDragAndDrop } from "./hooks/useExplorerDragAndDrop";
@@ -41,6 +33,7 @@ import { useExplorerPaneLayout } from "./hooks/useExplorerPaneLayout";
 import { useExplorerSearchController } from "./hooks/useExplorerSearchController";
 import { useExplorerShortcuts } from "./hooks/useExplorerShortcuts";
 import { useFolderSizeCache } from "./hooks/useFolderSizeCache";
+import { usePreferencesSync } from "./hooks/usePreferencesSync";
 import { useSearchSession } from "./hooks/useSearchSession";
 import { useWriteOperations } from "./hooks/useWriteOperations";
 import {
@@ -62,9 +55,8 @@ import {
   toDirectoryEntryFromSearchResult,
 } from "./lib/explorerAppUtils";
 import { parentDirectoryPath } from "./lib/explorerNavigation";
-import type { DirectoryEntry } from "./lib/explorerTypes";
+import type { DirectoryEntry, DirectoryEntryMetadata } from "./lib/explorerTypes";
 import {
-  createFavorite,
   createFavoriteItemId,
   createFileSystemItemId,
   getDefaultFavorites,
@@ -83,26 +75,17 @@ import { createRendererLogger } from "./lib/logging";
 import { expandHomeShortcut } from "./lib/pathUtils";
 import { canRunToolbarRendererCommand } from "./lib/rendererCommandAvailability";
 import { resolveExplorerToolbarLayout, resolveSinglePanelLayout } from "./lib/responsiveLayout";
+import { formatSearchStatus } from "./lib/searchResults";
 import type { canHandleRendererCommand } from "./lib/shortcutPolicy";
 import { resolveStartupNavigation } from "./lib/startupNavigation";
-import { getThemeAppearanceDefaults } from "./lib/theme";
+import { buildContentStatusSummary } from "./lib/statusSummary";
 import { type ToastEntry, type ToastKind, createToastEntry, enqueueToast } from "./lib/toasts";
 import { ExplorerStoreProvider } from "./state/explorerStoreContext";
 import { useExplorerServices, useSelectionActions } from "./state/explorerStores";
 
 const logger = createRendererLogger("filetrail.renderer");
 
-const PREFERENCES_PERSIST_DEBOUNCE_MS = 300;
-
 type PreferencesPersistPayload = IpcRequest<"app:updatePreferences">["preferences"];
-
-function arePreferencesPersistPayloadsEqual(
-  previous: PreferencesPersistPayload,
-  next: PreferencesPersistPayload,
-): boolean {
-  const keys = Object.keys(next) as Array<keyof PreferencesPersistPayload>;
-  return keys.every((key) => Object.is(previous[key], next[key]));
-}
 
 export function App() {
   type SortBy = IpcRequest<"directory:getSnapshot">["sortBy"];
@@ -114,6 +97,12 @@ export function App() {
   const [actionLogLoading, setActionLogLoading] = useState(false);
   const [actionLogError, setActionLogError] = useState<string | null>(null);
   const [locationSheetInitialPath, setLocationSheetInitialPath] = useState("");
+  const [volumeAvailableBytes, setVolumeAvailableBytes] = useState<number | null>(null);
+  // Modified date and size for search results, fetched for the rows on screen.
+  const [searchMetadataByPath, setSearchMetadataByPath] = useState<
+    Record<string, DirectoryEntryMetadata>
+  >({});
+  const searchMetadataRequestedRef = useRef(new Set<string>());
   const preferences = useAppPreferences();
   const navigation = useExplorerNavigation();
   const search = useSearchSession();
@@ -123,6 +112,11 @@ export function App() {
     setPreferencesReady,
     theme,
     setTheme,
+    autoLightTheme,
+    setAutoLightTheme,
+    autoDarkTheme,
+    setAutoDarkTheme,
+    effectiveTheme,
     iconTheme,
     setIconTheme,
     accent,
@@ -187,6 +181,8 @@ export function App() {
     setTopToolbarItems,
     leftToolbarItems,
     setLeftToolbarItems,
+    showSidebarRail,
+    setShowSidebarRail,
     restoreLastVisitedFolderOnStartup,
     setRestoreLastVisitedFolderOnStartup,
     lastGoToFolderPath,
@@ -213,7 +209,8 @@ export function App() {
     setFileActivationAction,
     openItemLimit,
     setOpenItemLimit,
-    resetAppearanceSettings,
+    returnKeyAction,
+    setReturnKeyAction,
   } = preferences;
   const {
     mainView,
@@ -333,6 +330,7 @@ export function App() {
     searchError,
     setSearchError,
     searchTruncated,
+    searchElapsedMs,
     setSearchTruncated,
     searchPollTimeoutRef,
     searchSessionRef,
@@ -408,7 +406,9 @@ export function App() {
   });
   const selectionActions = useSelectionActions({ navigation, services });
   const {
-    applySearchResultsSort,
+    rerunSearch,
+    changeSearchRoot,
+    sortSearchResultsByColumn,
     clearCommittedSearch,
     dismissFileSearch,
     filteredSearchResults,
@@ -587,14 +587,11 @@ export function App() {
     [navigateTo],
   );
   const {
-    addOpenWithApplication,
+    closeContextMenu,
     activateContentEntry,
     activateContentPaths,
     applyContentSelection,
-    browseDefaultTextEditor,
     browseForDirectoryPath,
-    browseOpenWithApplication,
-    browseTerminalApplication,
     cancelWriteOperation,
     clearContentSelection,
     contextMenuDisabledActionIds,
@@ -609,7 +606,6 @@ export function App() {
     extendContentSelectionToPath,
     handleContentSelectionGesture,
     handleCopyPasteDialogEscape,
-    moveOpenWithApplication,
     openItemContextMenu,
     openTreeItemContextMenu,
     openNewFolderDialog,
@@ -619,7 +615,6 @@ export function App() {
     openRenameDialog,
     openMoveDialog,
     requestCopyLikePlanStart,
-    removeOpenWithApplication,
     resolveContentActionPaths,
     resolveRuntimeConflict,
     retryFailedCopyPasteItems,
@@ -802,7 +797,7 @@ export function App() {
       openTreeNode,
       toggleHiddenFiles,
       refreshDirectory,
-      applySearchResultsSort,
+      rerunSearch,
       runCopyClipboardAction,
       startPasteFromClipboard,
       resolveContentActionPaths,
@@ -841,6 +836,8 @@ export function App() {
   // individual field.
   const preferencesPersistPayload: PreferencesPersistPayload = {
     theme,
+    autoLightTheme,
+    autoDarkTheme,
     iconTheme,
     accent,
     accentToolbarButtons,
@@ -874,12 +871,14 @@ export function App() {
     actionLogEnabled,
     topToolbarItems,
     leftToolbarItems,
+    showSidebarRail,
     propertiesOpen: infoPanelOpen,
     detailRowOpen: infoRowOpen,
     terminalApp,
     defaultTextEditor,
     openWithApplications,
     fileActivationAction,
+    returnKeyAction,
     openItemLimit,
     includeHidden,
     searchPatternMode,
@@ -906,50 +905,93 @@ export function App() {
     favoritesInitialized,
     copyPasteReviewDialogSize,
   };
-  const preferencesPersistPayloadRef = useRef(preferencesPersistPayload);
-  preferencesPersistPayloadRef.current = preferencesPersistPayload;
-  const queuedPreferencesPersistPayloadRef = useRef<PreferencesPersistPayload | null>(null);
-  const preferencesPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Persist preferences with a trailing debounce so bursts of navigation,
-  // selection, and sort changes collapse into a single IPC write that carries
-  // the latest snapshot. Runs after every render and bails out when nothing in
-  // the payload changed since the last scheduled write.
+  // A new search (query or root) starts with fresh result metadata.
   useEffect(() => {
-    if (!preferencesReady) {
-      return;
-    }
-    const nextPayload = preferencesPersistPayloadRef.current;
-    const queuedPayload = queuedPreferencesPersistPayloadRef.current;
-    if (queuedPayload !== null && arePreferencesPersistPayloadsEqual(queuedPayload, nextPayload)) {
-      return;
-    }
-    queuedPreferencesPersistPayloadRef.current = nextPayload;
-    if (preferencesPersistTimerRef.current !== null) {
-      clearTimeout(preferencesPersistTimerRef.current);
-    }
-    preferencesPersistTimerRef.current = setTimeout(() => {
-      preferencesPersistTimerRef.current = null;
-      void client.invoke("app:updatePreferences", {
-        preferences: preferencesPersistPayloadRef.current,
-      });
-    }, PREFERENCES_PERSIST_DEBOUNCE_MS);
-  });
+    void searchCommittedQuery;
+    void searchRootPath;
+    searchMetadataRequestedRef.current = new Set();
+    setSearchMetadataByPath({});
+  }, [searchCommittedQuery, searchRootPath]);
 
-  // Flush a pending preferences write on unmount so the latest snapshot wins.
-  useEffect(
-    () => () => {
-      if (preferencesPersistTimerRef.current === null) {
+  // Results can live anywhere below the search root, so metadata is requested per parent
+  // folder (the batch IPC only accepts direct children of one directory).
+  const loadSearchResultMetadata = useCallback(
+    (paths: string[]) => {
+      const missing = paths.filter((path) => !searchMetadataRequestedRef.current.has(path));
+      if (missing.length === 0) {
         return;
       }
-      clearTimeout(preferencesPersistTimerRef.current);
-      preferencesPersistTimerRef.current = null;
-      void client.invoke("app:updatePreferences", {
-        preferences: preferencesPersistPayloadRef.current,
-      });
+      const byParent = new Map<string, string[]>();
+      for (const path of missing) {
+        searchMetadataRequestedRef.current.add(path);
+        const parent = parentDirectoryPath(path);
+        if (!parent) {
+          continue;
+        }
+        byParent.set(parent, [...(byParent.get(parent) ?? []), path]);
+      }
+      for (const [directoryPath, childPaths] of byParent) {
+        void Promise.resolve()
+          .then(() =>
+            client.invoke("directory:getMetadataBatch", { directoryPath, paths: childPaths }),
+          )
+          .then((response) => {
+            setSearchMetadataByPath((current) => {
+              const next = { ...current };
+              for (const item of response.items) {
+                next[item.path] = item;
+              }
+              return next;
+            });
+          })
+          .catch(() => undefined);
+      }
     },
     [client],
   );
+
+  // Free space for the path bar summary; refreshed when the folder changes.
+  useEffect(() => {
+    if (currentPath.length === 0) {
+      return;
+    }
+    let cancelled = false;
+    void Promise.resolve()
+      .then(() => client.invoke("system:getVolumeInfo", { path: currentPath }))
+      .then((response) => {
+        if (!cancelled) {
+          setVolumeAvailableBytes(response.availableBytes);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setVolumeAvailableBytes(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, currentPath]);
+
+  // Writes only changed keys (debounced) and applies edits made in the Settings window.
+  const { markSynced } = usePreferencesSync({
+    client,
+    ready: preferencesReady,
+    payload: preferencesPersistPayload,
+    onRemotePatch: (patch) => {
+      applyPreferencesPatch(preferences, patch as Partial<AppPreferences>);
+      // Search defaults edited in Settings apply to the next search.
+      if (patch.searchPatternMode !== undefined) setSearchPatternMode(patch.searchPatternMode);
+      if (patch.searchMatchScope !== undefined) setSearchMatchScope(patch.searchMatchScope);
+      if (patch.searchRecursive !== undefined) setSearchRecursive(patch.searchRecursive);
+      if (patch.searchIncludeHidden !== undefined) {
+        setSearchIncludeHidden(patch.searchIncludeHidden);
+      }
+      if (patch.searchResultsFilterScope !== undefined) {
+        setSearchResultsFilterScope(patch.searchResultsFilterScope);
+      }
+    },
+  });
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: startup bootstrapping should run once per client/pane wiring; including callback identities would cause repeated initialization.
   useEffect(() => {
@@ -964,7 +1006,10 @@ export function App() {
           return;
         }
         const preferences = preferencesResponse.preferences;
+        markSynced(preferences);
         setTheme(preferences.theme);
+        setAutoLightTheme(preferences.autoLightTheme);
+        setAutoDarkTheme(preferences.autoDarkTheme);
         setIconTheme(preferences.iconTheme);
         setAccent(preferences.accent);
         setAccentToolbarButtons(preferences.accentToolbarButtons);
@@ -1006,6 +1051,7 @@ export function App() {
         setActionLogEnabled(preferences.actionLogEnabled);
         setTopToolbarItems(preferences.topToolbarItems);
         setLeftToolbarItems(preferences.leftToolbarItems);
+        setShowSidebarRail(preferences.showSidebarRail);
         setInfoPanelOpen(preferences.propertiesOpen);
         setInfoRowOpen(preferences.detailRowOpen);
         setSortBy(preferences.sortBy);
@@ -1023,6 +1069,7 @@ export function App() {
         setOpenWithApplications(preferences.openWithApplications);
         setFileActivationAction(preferences.fileActivationAction);
         setOpenItemLimit(preferences.openItemLimit);
+        setReturnKeyAction(preferences.returnKeyAction);
         panes.setTreeWidth(preferences.treeWidth);
         panes.setInspectorWidth(preferences.inspectorWidth);
         setRestoredPaneWidths({
@@ -1164,14 +1211,6 @@ export function App() {
     };
   }, [searchPopoverOpen, setSearchPopoverOpen]);
 
-  const effectiveThemeColors = useMemo(() => {
-    const defaults = getThemeAppearanceDefaults(theme);
-    return {
-      primary: textPrimaryOverride ?? defaults.primary,
-      secondary: textSecondaryOverride ?? defaults.secondary,
-      muted: textMutedOverride ?? defaults.muted,
-    };
-  }, [textMutedOverride, textPrimaryOverride, textSecondaryOverride, theme]);
   const explorerToolbarLayout = useMemo(
     () => (toolbarWidth > 0 ? resolveExplorerToolbarLayout(toolbarWidth) : "full"),
     [toolbarWidth],
@@ -1226,12 +1265,13 @@ export function App() {
     })();
   }
 
+  // Settings is a separate window (like any macOS app); main opens or focuses it.
   function openSettingsView() {
-    setLocationSheetOpen(false);
-    setLocationError(null);
     setThemeMenuOpen(false);
     setSearchPopoverOpen(false);
-    setMainView("settings");
+    void client.invoke("app:openSettingsWindow", {}).catch((error) => {
+      logger.error("open settings window failed", error);
+    });
   }
 
   function openActionLogView() {
@@ -1278,80 +1318,6 @@ export function App() {
     }
     void refreshActionLog();
   }, [actionLogEnabled, mainView, refreshActionLog, setMainView]);
-
-  async function addFavoriteFromSettings() {
-    const pickedPath = await browseForDirectoryPath(currentPath || homePath);
-    if (!pickedPath || isFavoritePath(favorites, pickedPath)) {
-      return;
-    }
-    setFavorites((current) => [...current, createFavorite(pickedPath, homePath)]);
-  }
-
-  async function browseFavoriteInSettings(index: number) {
-    const currentFavorite = favorites[index];
-    if (!currentFavorite) {
-      return;
-    }
-    const pickedPath = await browseForDirectoryPath(currentFavorite.path);
-    if (!pickedPath) {
-      return;
-    }
-    if (
-      favorites.some(
-        (favorite, favoriteIndex) => favoriteIndex !== index && favorite.path === pickedPath,
-      )
-    ) {
-      return;
-    }
-    setFavorites((current) =>
-      current.map((favorite, favoriteIndex) =>
-        favoriteIndex === index
-          ? {
-              path: pickedPath,
-              icon: favorite.icon,
-            }
-          : favorite,
-      ),
-    );
-  }
-
-  function moveFavoriteInSettings(index: number, direction: "up" | "down") {
-    setFavorites((current) => {
-      const targetIndex = direction === "up" ? index - 1 : index + 1;
-      if (
-        index < 0 ||
-        index >= current.length ||
-        targetIndex < 0 ||
-        targetIndex >= current.length
-      ) {
-        return current;
-      }
-      const next = [...current];
-      const [favorite] = next.splice(index, 1);
-      if (!favorite) {
-        return current;
-      }
-      next.splice(targetIndex, 0, favorite);
-      return next;
-    });
-  }
-
-  function removeFavoriteInSettings(index: number) {
-    setFavorites((current) => current.filter((_, favoriteIndex) => favoriteIndex !== index));
-  }
-
-  function updateFavoriteIconInSettings(index: number, icon: FavoritePreference["icon"]) {
-    setFavorites((current) =>
-      current.map((favorite, favoriteIndex) =>
-        favoriteIndex === index
-          ? {
-              ...favorite,
-              icon,
-            }
-          : favorite,
-      ),
-    );
-  }
 
   function navigateDownAction() {
     if (focusedPane === "tree") {
@@ -1525,9 +1491,20 @@ export function App() {
                 },
                 onFilterQueryChange: updateSearchResultsFilterQuery,
                 onFilterScopeChange: updateSearchResultsFilterScope,
-                onSortByChange: updateSearchResultsSortBy,
-                onSortDirectionToggle: toggleSearchResultsSortDirection,
-                onApplySort: applySearchResultsSort,
+                onSortColumn: sortSearchResultsByColumn,
+                metadataByPath: searchMetadataByPath,
+                onVisiblePathsChange: loadSearchResultMetadata,
+                elapsedMs: searchElapsedMs,
+                scopeOptions: buildSearchScopeOptions(currentPath, homePath),
+                onScopeChange: changeSearchRoot,
+                patternMode: searchPatternMode,
+                onPatternModeChange: updateSearchPatternMode,
+                matchScope: searchMatchScope,
+                onMatchScopeChange: updateSearchMatchScope,
+                recursive: searchRecursive,
+                onRecursiveChange: updateSearchRecursive,
+                includeHidden: searchIncludeHidden,
+                onIncludeHiddenChange: updateSearchIncludeHidden,
                 onSelectionGesture: handleContentSelectionGesture,
                 onClearSelection: clearContentSelection,
                 onActivateResult: (item) => {
@@ -1595,6 +1572,30 @@ export function App() {
                 onDetailColumnWidthsChange: setDetailColumnWidths,
                 tabSwitchesExplorerPanes,
                 typeaheadQuery: focusedPane === "content" ? typeaheadQuery : "",
+                statusSummary: buildContentStatusSummary({
+                  itemCount: currentEntries.length,
+                  selectedPaths: contentSelection.paths,
+                  getKnownSizeBytes: (path) => {
+                    const folderSize = folderSizeCache.getEntry(path);
+                    if (folderSize.status === "ready") {
+                      return folderSize.sizeBytes;
+                    }
+                    const metadata = metadataByPath[path];
+                    const entry = currentEntries.find((candidate) => candidate.path === path);
+                    if (!entry || entry.kind === "directory" || entry.kind === "bundle") {
+                      return null;
+                    }
+                    return metadata?.sizeStatus === "ready" ? metadata.sizeBytes : null;
+                  },
+                  availableBytes: volumeAvailableBytes,
+                }),
+                getFolderSizeLabel: (path) => {
+                  const entry = folderSizeCache.getEntry(path);
+                  if (entry.status === "ready") {
+                    return formatSize(entry.sizeBytes, "ready");
+                  }
+                  return entry.status === "calculating" ? "Calculating…" : null;
+                },
               },
               infoRow: (
                 <InfoRow
@@ -1624,17 +1625,6 @@ export function App() {
                   }
                 />
               ),
-              statusLabel: isSearchMode
-                ? (searchStatus === "running"
-                    ? `${filteredSearchResults.length} / ${searchResults.length} matches so far`
-                    : `${filteredSearchResults.length} / ${searchResults.length} matches`) +
-                  (contentSelection.paths.length > 0
-                    ? ` (${contentSelection.paths.length} selected)`
-                    : "")
-                : contentSelection.paths.length > 0
-                  ? `${contentSelection.paths.length} of ${currentEntries.length} selected`
-                  : `${currentEntries.length} items`,
-              statusPathLabel: isSearchMode ? `Search root: ${searchRootPath}` : currentPath,
             }}
             infoPanelProps={{
               loading: getInfoLoading,
@@ -1654,6 +1644,12 @@ export function App() {
                 }
               },
               onCopyPath: () => (getInfoItem ? copyGetInfoPath(getInfoItem.path) : false),
+              openWithItems: contextMenuSubmenuItems,
+              onOpenWith: (action) => {
+                if (getInfoItem) {
+                  void runContextSubmenuAction(action, [getInfoItem.path]);
+                }
+              },
               copyPathDisabled: isWriteOperationLocked,
               folderSizeEntry: infoPanelFolderSizePath
                 ? folderSizeCache.getEntry(infoPanelFolderSizePath)
@@ -1746,16 +1742,49 @@ export function App() {
             canRunRendererCommand={canRunRendererCommand}
             onRendererCommand={runRendererCommand}
             onPaneResizeKey={handlePaneResizeKey}
+            showSidebarRail={showSidebarRail}
+            toolbarTitle={
+              isSearchMode
+                ? `Searching “${getFolderDisplayName(searchRootPath)}”`
+                : getFolderDisplayName(currentPath)
+            }
+            toolbarSubtitle={
+              isSearchMode
+                ? formatSearchStatus({
+                    isSearching: searchStatus === "running",
+                    shown: filteredSearchResults.length,
+                    totalCount: searchResults.length,
+                    elapsedMs: searchElapsedMs,
+                    selectedCount: contentSelection.paths.length,
+                  })
+                : directoryLoading
+                  ? "Loading…"
+                  : `${currentEntries.length} ${currentEntries.length === 1 ? "item" : "items"}`
+            }
           />
         ) : (
           <section className="workspace single-panel-layout">
+            <header className="single-panel-toolbar">
+              <button
+                type="button"
+                className="single-panel-back"
+                onClick={() => setMainView("explorer")}
+                title="Back to Files (Esc)"
+              >
+                <ToolbarIcon name="back" />
+                <span>Files</span>
+              </button>
+              <span className="single-panel-title">
+                {mainView === "action-log" ? "Action Log" : "Help"}
+              </span>
+            </header>
             <section ref={singlePanelRef} className="pane single-panel-pane">
               {mainView === "help" ? (
                 <HelpView
                   shortcutItems={[...SHORTCUT_ITEMS]}
                   referenceItems={[...REFERENCE_ITEMS]}
                   layoutMode={singlePanelLayout}
-                  theme={theme}
+                  theme={effectiveTheme}
                   accent={accent}
                 />
               ) : mainView === "action-log" ? (
@@ -1763,7 +1792,7 @@ export function App() {
                   entries={actionLogEntries}
                   loading={actionLogLoading}
                   error={actionLogError}
-                  theme={theme}
+                  theme={effectiveTheme}
                   accent={accent}
                   layoutMode={singlePanelLayout}
                   onCopyEntryText={copyActionLogEntryText}
@@ -1771,129 +1800,7 @@ export function App() {
                     void refreshActionLog();
                   }}
                 />
-              ) : (
-                <SettingsView
-                  theme={theme}
-                  iconTheme={iconTheme}
-                  accent={accent}
-                  accentToolbarButtons={accentToolbarButtons}
-                  toolbarAccent={toolbarAccent}
-                  accentFavoriteItems={accentFavoriteItems}
-                  accentFavoriteText={accentFavoriteText}
-                  favoriteAccent={favoriteAccent}
-                  zoomPercent={zoomPercent}
-                  uiFontFamily={uiFontFamily}
-                  uiFontSize={uiFontSize}
-                  uiFontWeight={uiFontWeight}
-                  effectiveTextPrimaryColor={effectiveThemeColors.primary}
-                  effectiveTextSecondaryColor={effectiveThemeColors.secondary}
-                  effectiveTextMutedColor={effectiveThemeColors.muted}
-                  compactListView={compactListView}
-                  compactDetailsView={compactDetailsView}
-                  compactTreeView={compactTreeView}
-                  singleClickExpandTreeItems={singleClickExpandTreeItems}
-                  highlightHoveredItems={highlightHoveredItems}
-                  detailColumns={detailColumns}
-                  layoutMode={singlePanelLayout}
-                  tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
-                  typeaheadEnabled={typeaheadEnabled}
-                  typeaheadDebounceMs={typeaheadDebounceMs}
-                  notificationsEnabled={notificationsEnabled}
-                  notificationDurationSeconds={notificationDurationSeconds}
-                  actionLogEnabled={actionLogEnabled}
-                  topToolbarItems={topToolbarItems}
-                  leftToolbarItems={leftToolbarItems}
-                  restoreLastVisitedFolderOnStartup={restoreLastVisitedFolderOnStartup}
-                  homePath={homePath}
-                  terminalApp={terminalApp}
-                  defaultTextEditor={defaultTextEditor}
-                  favorites={favorites}
-                  favoritesPlacement={favoritesPlacement}
-                  openWithApplications={openWithApplications}
-                  fileActivationAction={fileActivationAction}
-                  openItemLimit={openItemLimit}
-                  themeOptions={[...THEME_OPTIONS]}
-                  accentOptions={[...ACCENT_OPTIONS]}
-                  uiFontOptions={[...UI_FONT_OPTIONS]}
-                  uiFontSizeOptions={[...UI_FONT_SIZE_OPTIONS]}
-                  uiFontWeightOptions={[...UI_FONT_WEIGHT_OPTIONS]}
-                  typeaheadDebounceOptions={[...TYPEAHEAD_DEBOUNCE_OPTIONS]}
-                  notificationDurationSecondsOptions={[...NOTIFICATION_DURATION_SECONDS_OPTIONS]}
-                  onThemeChange={setTheme}
-                  onIconThemeChange={setIconTheme}
-                  onAccentChange={setAccent}
-                  onAccentToolbarButtonsChange={setAccentToolbarButtons}
-                  onToolbarAccentChange={setToolbarAccent}
-                  onAccentFavoriteItemsChange={setAccentFavoriteItems}
-                  onAccentFavoriteTextChange={setAccentFavoriteText}
-                  onFavoriteAccentChange={setFavoriteAccent}
-                  onZoomPercentChange={setZoomPercent}
-                  onUiFontFamilyChange={setUiFontFamily}
-                  onUiFontSizeChange={setUiFontSize}
-                  onUiFontWeightChange={setUiFontWeight}
-                  onTextPrimaryColorChange={setTextPrimaryOverride}
-                  onTextSecondaryColorChange={setTextSecondaryOverride}
-                  onTextMutedColorChange={setTextMutedOverride}
-                  onResetAppearance={resetAppearanceSettings}
-                  onCompactListViewChange={setCompactListView}
-                  onCompactDetailsViewChange={setCompactDetailsView}
-                  onCompactTreeViewChange={setCompactTreeView}
-                  onSingleClickExpandTreeItemsChange={setSingleClickExpandTreeItems}
-                  onHighlightHoveredItemsChange={setHighlightHoveredItems}
-                  onDetailColumnsChange={setDetailColumns}
-                  onTabSwitchesExplorerPanesChange={setTabSwitchesExplorerPanes}
-                  onTypeaheadEnabledChange={setTypeaheadEnabled}
-                  onTypeaheadDebounceMsChange={setTypeaheadDebounceMs}
-                  onNotificationsEnabledChange={setNotificationsEnabled}
-                  onNotificationDurationSecondsChange={setNotificationDurationSeconds}
-                  onActionLogEnabledChange={setActionLogEnabled}
-                  onTopToolbarItemsChange={setTopToolbarItems}
-                  onLeftToolbarItemsChange={setLeftToolbarItems}
-                  onResetTopToolbar={() => setTopToolbarItems([...DEFAULT_TOP_TOOLBAR_ITEMS])}
-                  onResetLeftToolbar={() =>
-                    setLeftToolbarItems({
-                      main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
-                      utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
-                    })
-                  }
-                  onResetToolbars={() => {
-                    setTopToolbarItems([...DEFAULT_TOP_TOOLBAR_ITEMS]);
-                    setLeftToolbarItems({
-                      main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
-                      utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
-                    });
-                  }}
-                  onRestoreLastVisitedFolderOnStartupChange={setRestoreLastVisitedFolderOnStartup}
-                  onBrowseTerminalApp={() => {
-                    void browseTerminalApplication();
-                  }}
-                  onClearTerminalApp={() => setTerminalApp(null)}
-                  onBrowseDefaultTextEditor={() => {
-                    void browseDefaultTextEditor();
-                  }}
-                  onClearDefaultTextEditor={() => setDefaultTextEditor(DEFAULT_TEXT_EDITOR)}
-                  onAddFavorite={() => {
-                    void addFavoriteFromSettings();
-                  }}
-                  onBrowseFavorite={(index) => {
-                    void browseFavoriteInSettings(index);
-                  }}
-                  onMoveFavorite={moveFavoriteInSettings}
-                  onRemoveFavorite={removeFavoriteInSettings}
-                  onFavoriteIconChange={updateFavoriteIconInSettings}
-                  onFavoritesPlacementChange={setFavoritesPlacement}
-                  onAddOpenWithApplication={() => {
-                    void addOpenWithApplication();
-                  }}
-                  onBrowseOpenWithApplication={(entryId) => {
-                    void browseOpenWithApplication(entryId);
-                  }}
-                  onMoveOpenWithApplication={moveOpenWithApplication}
-                  onRemoveOpenWithApplication={removeOpenWithApplication}
-                  onFileActivationActionChange={setFileActivationAction}
-                  onOpenItemLimitChange={setOpenItemLimit}
-                />
-              )}
+              ) : null}
             </section>
           </section>
         )}
@@ -1911,6 +1818,12 @@ export function App() {
           contextMenuSubmenuItems={contextMenuSubmenuItems}
           shortcutContext={shortcutContext}
           onRunContextMenuAction={(actionId, paths) => {
+            const [folderPath] = paths;
+            if (actionId === "calculateSize" && folderPath) {
+              closeContextMenu();
+              void folderSizeCache.calculateFolderSize(folderPath);
+              return;
+            }
             void runContextMenuAction(actionId, paths);
           }}
           onRunContextSubmenuAction={(action, paths) => {
@@ -1944,6 +1857,31 @@ export function App() {
       </main>
     </ExplorerStoreProvider>
   );
+}
+
+// Search scopes: the folder being browsed, Home, and the whole disk (deduplicated).
+function buildSearchScopeOptions(
+  currentPath: string,
+  homePath: string,
+): Array<{ path: string; label: string }> {
+  const options: Array<{ path: string; label: string }> = [];
+  for (const [path, label] of [
+    [currentPath, `“${getFolderDisplayName(currentPath)}”`],
+    [homePath, "Home"],
+    ["/", "Macintosh HD"],
+  ] as const) {
+    if (path.length > 0 && !options.some((option) => option.path === path)) {
+      options.push({ path, label });
+    }
+  }
+  return options;
+}
+
+function getFolderDisplayName(path: string): string {
+  if (path === "/") {
+    return "Macintosh HD";
+  }
+  return path.length > 0 ? getPathLeafName(path) : "";
 }
 
 async function requestPathSuggestions(args: {

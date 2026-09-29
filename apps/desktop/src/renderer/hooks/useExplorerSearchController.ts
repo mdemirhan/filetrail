@@ -48,6 +48,7 @@ export function useExplorerSearchController(args: {
   const { applyContentSelection, focusContentPane } = selection;
   const {
     setSearchCommittedQuery,
+    setSearchDraftQuery,
     searchCommittedQuery,
     searchRootPath,
     setSearchRootPath,
@@ -77,6 +78,8 @@ export function useExplorerSearchController(args: {
     setSearchStatus,
     setSearchError,
     setSearchTruncated,
+    setSearchElapsedMs,
+    searchStartedAtRef,
     searchPollTimeoutRef,
     searchSessionRef,
     searchJobIdRef,
@@ -88,14 +91,26 @@ export function useExplorerSearchController(args: {
     cachedSearchSelectionRef,
   } = search;
 
+  // Sorting is live: results stream in from fd in arbitrary order and are kept sorted by
+  // the chosen column instead of waiting for an explicit "apply".
   const filteredSearchResults = useMemo(
     () =>
-      filterSearchResults(
-        searchResults,
-        debouncedSearchResultsFilterQuery,
-        searchResultsFilterScope,
+      sortSearchResults(
+        filterSearchResults(
+          searchResults,
+          debouncedSearchResultsFilterQuery,
+          searchResultsFilterScope,
+        ),
+        searchResultsSortBy,
+        searchResultsSortDirection,
       ),
-    [debouncedSearchResultsFilterQuery, searchResults, searchResultsFilterScope],
+    [
+      debouncedSearchResultsFilterQuery,
+      searchResults,
+      searchResultsFilterScope,
+      searchResultsSortBy,
+      searchResultsSortDirection,
+    ],
   );
   const searchResultEntries = useMemo(
     () => filteredSearchResults.map((result) => toDirectoryEntryFromSearchResult(result)),
@@ -122,6 +137,8 @@ export function useExplorerSearchController(args: {
     if (!hasCachedSearch) {
       return;
     }
+    // The field mirrors what is on screen: showing cached results restores their query.
+    setSearchDraftQuery(searchCommittedQuery);
     setSearchResultsVisible(true);
     applyContentSelection(
       sanitizeContentSelection(cachedSearchSelectionRef.current, searchResultEntries),
@@ -133,6 +150,9 @@ export function useExplorerSearchController(args: {
   }
 
   function hideSearchResults() {
+    // Leaving search mode clears the field so it never shows a query for results that are
+    // no longer visible; the cached results stay available (focus the field or ⇧⌘F).
+    setSearchDraftQuery("");
     setSearchResultsVisible(false);
     applyContentSelection(
       sanitizeContentSelection(browseSelectionRef.current, currentEntries),
@@ -223,6 +243,11 @@ export function useExplorerSearchController(args: {
         if (typedResponse.done) {
           searchJobIdRef.current = null;
           clearSearchPolling();
+          if (searchStartedAtRef.current !== null) {
+            setSearchElapsedMs(
+              Math.max(0, Math.round(performance.now() - searchStartedAtRef.current)),
+            );
+          }
           return;
         }
         searchPollTimeoutRef.current = setTimeout(() => {
@@ -277,6 +302,8 @@ export function useExplorerSearchController(args: {
     setSearchStatus("running");
     setSearchError(null);
     setSearchTruncated(false);
+    setSearchElapsedMs(null);
+    searchStartedAtRef.current = performance.now();
     cachedSearchSelectionRef.current = EMPTY_CONTENT_SELECTION;
     applyContentSelection(EMPTY_CONTENT_SELECTION, searchResultEntries);
 
@@ -341,10 +368,31 @@ export function useExplorerSearchController(args: {
     }
   }
 
-  function applySearchResultsSort() {
-    const sortBy = searchResultsSortByRef.current;
-    const sortDirection = searchResultsSortDirectionRef.current;
-    setSearchResults((current) => sortSearchResults(current, sortBy, sortDirection));
+  // ⌘R in search mode runs the same search again (the folder may have changed).
+  function rerunSearch() {
+    if (!hasCachedSearch) {
+      return;
+    }
+    void startSearch(searchCommittedQuery, { rootPath: searchRootPath || currentPath });
+  }
+
+  function changeSearchRoot(rootPath: string) {
+    if (!hasCachedSearch || rootPath.length === 0) {
+      return;
+    }
+    void startSearch(searchCommittedQuery, { rootPath });
+  }
+
+  // Clicking the active column flips direction; a new column starts ascending.
+  function sortSearchResultsByColumn(nextValue: SearchResultsSortBy) {
+    if (searchResultsSortByRef.current === nextValue) {
+      toggleSearchResultsSortDirection();
+      return;
+    }
+    searchResultsSortByRef.current = nextValue;
+    searchResultsSortDirectionRef.current = "asc";
+    setSearchResultsSortBy(nextValue);
+    setSearchResultsSortDirection("asc");
   }
 
   function updateSearchResultsSortBy(nextValue: SearchResultsSortBy) {
@@ -381,7 +429,9 @@ export function useExplorerSearchController(args: {
   }
 
   return {
-    applySearchResultsSort,
+    rerunSearch,
+    changeSearchRoot,
+    sortSearchResultsByColumn,
     clearCommittedSearch,
     dismissFileSearch,
     filteredSearchResults,

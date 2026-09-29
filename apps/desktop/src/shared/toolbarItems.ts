@@ -42,7 +42,9 @@ export type ToolbarIconName =
   | "copyPath"
   | "rename"
   | "separatorVertical"
-  | "separatorHorizontal";
+  | "separatorHorizontal"
+  | "more"
+  | "sort";
 
 export type ToolbarSurface = "top" | "left";
 export type ToolbarItemKind = "button" | "toggle" | "menu" | "composite" | "separator";
@@ -338,7 +340,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     kind: "button",
     surfaces: ["top", "left"],
     commandType: "renameSelection",
-    shortcutLabel: "F2",
+    shortcutLabel: "↩",
   },
   {
     id: "duplicateSelection",
@@ -416,7 +418,20 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
 
 export const TOOLBAR_ITEM_IDS = TOOLBAR_ITEM_DEFINITIONS.map((item) => item.id) as ToolbarItemId[];
 
+// Finder-like default: back/forward, then (right-aligned) view switch, sort menu, Info
+// toggle and search. Up/Down/Refresh remain available in toolbar customization.
 export const DEFAULT_TOP_TOOLBAR_ITEMS: ToolbarItemId[] = [
+  "back",
+  "forward",
+  "view",
+  "sort",
+  "infoPanel",
+  "search",
+];
+
+// The previous default. Toolbars still exactly equal to it were never customized, so they
+// are upgraded to the new default when preferences load.
+export const LEGACY_DEFAULT_TOP_TOOLBAR_ITEMS: readonly ToolbarItemId[] = [
   "back",
   "forward",
   "topSeparator",

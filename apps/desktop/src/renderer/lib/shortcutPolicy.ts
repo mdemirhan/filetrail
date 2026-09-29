@@ -37,7 +37,7 @@ const CONTEXT_MENU_SHORTCUT_LABELS = {
   copy: "⌘C",
   paste: "⌘V",
   move: "⇧⌘M",
-  rename: "F2",
+  rename: "↩",
   duplicate: "⌘D",
   newFolder: "⇧⌘N",
   terminal: "⌘T",
@@ -109,6 +109,7 @@ export const RAW_EXPLORER_SHORTCUT_IDS = [
   "contentArrowNavigation",
   "treeEnter",
   "contentEnter",
+  "quickLook",
 ] as const;
 
 export type RawExplorerShortcutId = (typeof RAW_EXPLORER_SHORTCUT_IDS)[number];
@@ -148,6 +149,7 @@ export const RAW_EXPLORER_SHORTCUT_TREE_FOCUS_BUCKETS = {
   contentArrowNavigation: "contentOnly",
   treeEnter: "treeNavigation",
   contentEnter: "contentOnly",
+  quickLook: "contentOnly",
 } as const satisfies Record<RawExplorerShortcutId, TreeFocusShortcutBucket>;
 
 // App-level view toggles such as `?` and `Cmd+,` are handled outside the explorer registry.

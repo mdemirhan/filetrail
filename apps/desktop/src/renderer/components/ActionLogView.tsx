@@ -12,7 +12,10 @@ import { generateAccentTokens } from "../lib/accent";
 import { withAlpha } from "../lib/colorUtils";
 import { formatDateTime } from "../lib/formatting";
 import { getThemeVariant, resolveThemeCssBase } from "../lib/themeVariants";
-import { uiMonoFontStack as mono, uiSansFontStack as sans } from "../lib/viewFonts";
+import { uiSansFontStack as sans } from "../lib/viewFonts";
+
+// macOS-style UI: shortcut keycaps and labels use the system font, not monospace.
+const mono = sans;
 import { ToolbarIcon } from "./ToolbarIcon";
 
 type LayoutMode = "wide" | "narrow" | "compact";

@@ -1,5 +1,7 @@
 import { execFile } from "node:child_process";
-import { basename, dirname, isAbsolute, normalize, sep } from "node:path";
+import { mkdtemp, statfs } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, dirname, isAbsolute, join, normalize, sep } from "node:path";
 import { promisify } from "node:util";
 import {
   BrowserWindow,
@@ -24,6 +26,31 @@ export async function openPath(
     ok: error.length === 0,
     error: error.length === 0 ? null : error,
   };
+}
+
+// Free space on the volume holding `path`, shown next to the path bar like Finder's status bar.
+export async function getVolumeInfo(
+  payload: IpcRequest<"system:getVolumeInfo">,
+): Promise<IpcResponse<"system:getVolumeInfo">> {
+  try {
+    const stats = await statfs(payload.path);
+    return { availableBytes: Number(stats.bavail) * Number(stats.bsize) };
+  } catch {
+    return { availableBytes: null };
+  }
+}
+
+// Quick Look uses the native preview panel attached to the requesting window.
+export function quickLookPath(
+  payload: IpcRequest<"system:quickLook">,
+  event: Pick<IpcMainInvokeEvent, "sender">,
+): IpcResponse<"system:quickLook"> {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (!window || !isAbsolute(payload.path)) {
+    return { ok: false };
+  }
+  window.previewFile(payload.path, basename(payload.path));
+  return { ok: true };
 }
 
 export async function pickApplication(
@@ -219,11 +246,21 @@ export async function emptyTrash(): Promise<IpcResponse<"system:emptyTrash">> {
   }
 }
 
+let genericFolderPathPromise: Promise<string> | null = null;
+
+// An empty folder we own, so NSWorkspace returns the ordinary folder icon (folders such as
+// "/" or ~/Library carry custom icons and must not stand in for all folders).
+function getGenericFolderPath(): Promise<string> {
+  genericFolderPathPromise ??= mkdtemp(join(tmpdir(), "filetrail-folder-icon-"));
+  return genericFolderPathPromise;
+}
+
 export async function getFileIconHandler(
   payload: IpcRequest<"system:getFileIcon">,
 ): Promise<IpcResponse<"system:getFileIcon">> {
   try {
-    const buffer = await getFileIcon(payload.path, payload.size);
+    const iconPath = payload.genericFolder ? await getGenericFolderPath() : payload.path;
+    const buffer = await getFileIcon(iconPath, payload.size);
     return {
       pngBase64: buffer ? buffer.toString("base64") : null,
     };

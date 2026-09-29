@@ -5,22 +5,36 @@ export function ToolbarIcon({
 }: {
   name: ToolbarIconName;
 }) {
+  if (name === "more") {
+    return (
+      <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" role="presentation">
+        <circle cx="12" cy="12" r="9" />
+        <circle cx="8" cy="12" r="0.9" />
+        <circle cx="12" cy="12" r="0.9" />
+        <circle cx="16" cy="12" r="0.9" />
+      </svg>
+    );
+  }
   if (name === "list") {
     return (
-      <svg className="toolbar-icon" viewBox="0 0 16 16" aria-hidden="true" role="presentation">
-        <line x1="1.5" y1="3" x2="14.5" y2="3" />
-        <line x1="1.5" y1="8" x2="14.5" y2="8" />
-        <line x1="1.5" y1="13" x2="14.5" y2="13" />
+      <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" role="presentation">
+        <path d="M9 6h11M9 12h11M9 18h11" />
+        <path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01" strokeWidth="2.6" />
       </svg>
     );
   }
   if (name === "details") {
     return (
-      <svg className="toolbar-icon" viewBox="0 0 16 16" aria-hidden="true" role="presentation">
-        <rect x="1.5" y="1.5" width="13" height="13" rx="2" />
-        <line x1="1.5" y1="5" x2="14.5" y2="5" />
-        <line x1="5.5" y1="5" x2="5.5" y2="14.5" />
-        <line x1="1.5" y1="10" x2="14.5" y2="10" />
+      <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" role="presentation">
+        <rect x="3" y="4.5" width="18" height="15" rx="2.5" />
+        <path d="M3 10h18M3 15h18M9 10v9.5" />
+      </svg>
+    );
+  }
+  if (name === "sort") {
+    return (
+      <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" role="presentation">
+        <path d="M8 4v16M4 16l4 4 4-4M16 20V4M12 8l4-4 4 4" />
       </svg>
     );
   }
@@ -151,8 +165,8 @@ export function ToolbarIcon({
   if (name === "drawer") {
     return (
       <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" role="presentation">
-        <rect x="3" y="5" width="18" height="14" rx="1" />
-        <line x1="15" y1="5" x2="15" y2="19" />
+        <rect x="3" y="4.5" width="18" height="15" rx="2.5" />
+        <path d="M15 4.5v15" />
       </svg>
     );
   }

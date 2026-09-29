@@ -6,6 +6,8 @@ import {
 } from "./toolbarItems";
 
 export type ThemeMode =
+  | "macos-dark"
+  | "macos-light"
   | "dark"
   | "tomorrow-night"
   | "catppuccin-mocha"
@@ -18,10 +20,13 @@ export type ThemeMode =
   | "warm-paper"
   | "stone"
   | "sand";
+// "auto" follows the macOS appearance, using autoLightTheme / autoDarkTheme as palettes.
+export type ThemePreference = "auto" | ThemeMode;
 export type AccentMode = string;
-export type IconThemeMode = "classic" | "colorblock" | "monoline" | "vivid";
+// "native" shows the real macOS icons for files and folders (via NSWorkspace).
+export type IconThemeMode = "native" | "classic" | "colorblock" | "monoline" | "vivid";
 export type ExplorerViewMode = "list" | "details";
-export type UiFontFamily = "dm-sans" | "lexend" | "fira-code" | "jetbrains-mono";
+export type UiFontFamily = "system" | "dm-sans" | "lexend" | "fira-code" | "jetbrains-mono";
 export type UiFontWeight = 400 | 500 | 600;
 export type SearchPatternModePreference = "glob" | "regex";
 export type SearchMatchScopePreference = "name" | "path";
@@ -70,6 +75,8 @@ export type FavoritePreference = {
 
 export type FavoritesPlacement = "integrated" | "separate";
 export type FileActivationAction = "open" | "edit";
+// Finder renames with Return; "open" keeps the older behavior of opening the selection.
+export type ReturnKeyAction = "rename" | "open";
 export type CopyPasteReviewDialogSize = {
   width: number;
   height: number;
@@ -84,6 +91,7 @@ export type {
 // These option lists are used for both UI rendering and validation-like lookups.
 // Keep them stable unless the corresponding persisted preference values are migrated.
 export const THEME_OPTIONS = [
+  { value: "macos-dark", label: "macOS Dark", group: "dark" },
   { value: "dark", label: "Dark", group: "dark" },
   { value: "tomorrow-night", label: "Tomorrow Night", group: "dark" },
   { value: "catppuccin-mocha", label: "Catppuccin Mocha", group: "dark" },
@@ -91,12 +99,17 @@ export const THEME_OPTIONS = [
   { value: "graphite", label: "Graphite", group: "dark" },
   { value: "midnight", label: "Midnight", group: "dark" },
   { value: "onyx", label: "Onyx", group: "dark" },
+  { value: "macos-light", label: "macOS Light", group: "light" },
   { value: "light", label: "Light", group: "light" },
   { value: "clean-white", label: "Clean White", group: "light" },
   { value: "warm-paper", label: "Warm Paper", group: "light" },
   { value: "stone", label: "Stone", group: "light" },
   { value: "sand", label: "Sand", group: "light" },
 ] as const;
+
+export const AUTO_THEME_OPTION = { value: "auto", label: "Auto (follow macOS)" } as const;
+export const LIGHT_THEME_OPTIONS = THEME_OPTIONS.filter((option) => option.group === "light");
+export const DARK_THEME_OPTIONS = THEME_OPTIONS.filter((option) => option.group === "dark");
 
 export const THEME_GROUPS = [
   {
@@ -111,6 +124,7 @@ export const THEME_GROUPS = [
   },
 ] as const;
 export const ICON_THEME_OPTIONS = [
+  { value: "native", label: "macOS" },
   { value: "classic", label: "Classic" },
   { value: "colorblock", label: "Color Block" },
   { value: "monoline", label: "Monoline" },
@@ -134,7 +148,28 @@ export const ACCENT_OPTIONS = [
   { id: "lime", value: "#84b840", label: "Lime", primary: "#84b840", dark: "#6a9830" },
 ] as const;
 
+// The Settings window offers macOS's accent colors (plus the app's copper default); older
+// accent values keep working and show up as a custom color.
+export const MACOS_ACCENT_OPTIONS = [
+  { id: "copper", value: "#d4845a", label: "Copper", primary: "#d4845a", dark: "#b86e48" },
+  { id: "macos-blue", value: "#007aff", label: "Blue", primary: "#007aff", dark: "#0062cc" },
+  { id: "macos-purple", value: "#a550a7", label: "Purple", primary: "#a550a7", dark: "#843f86" },
+  { id: "macos-pink", value: "#f74f9e", label: "Pink", primary: "#f74f9e", dark: "#c63f7e" },
+  { id: "macos-red", value: "#e0383e", label: "Red", primary: "#e0383e", dark: "#b32d32" },
+  { id: "macos-orange", value: "#f7821b", label: "Orange", primary: "#f7821b", dark: "#c66816" },
+  { id: "macos-yellow", value: "#ffc600", label: "Yellow", primary: "#ffc600", dark: "#cc9e00" },
+  { id: "macos-green", value: "#62ba46", label: "Green", primary: "#62ba46", dark: "#4e9538" },
+  {
+    id: "macos-graphite",
+    value: "#8c8c8c",
+    label: "Graphite",
+    primary: "#8c8c8c",
+    dark: "#707070",
+  },
+] as const;
+
 export const UI_FONT_OPTIONS = [
+  { value: "system", label: "System (SF Pro)" },
   { value: "dm-sans", label: "DM Sans" },
   { value: "lexend", label: "Lexend" },
   { value: "fira-code", label: "Fira Code" },
@@ -228,7 +263,9 @@ export const OPEN_ITEM_LIMIT_MAX = 50;
 // Adding or renaming keys here requires corresponding migration handling in the loader,
 // otherwise older saved preferences will either be dropped or fail validation.
 export type AppPreferences = {
-  theme: ThemeMode;
+  theme: ThemePreference;
+  autoLightTheme: ThemeMode;
+  autoDarkTheme: ThemeMode;
   iconTheme: IconThemeMode;
   accent: AccentMode;
   accentToolbarButtons: boolean;
@@ -264,10 +301,12 @@ export type AppPreferences = {
   detailRowOpen: boolean;
   topToolbarItems: ToolbarItemId[];
   leftToolbarItems: LeftToolbarItems;
+  showSidebarRail: boolean;
   terminalApp: ApplicationSelection | null;
   defaultTextEditor: ApplicationSelection;
   openWithApplications: OpenWithApplication[];
   fileActivationAction: FileActivationAction;
+  returnKeyAction: ReturnKeyAction;
   openItemLimit: number;
   includeHidden: boolean;
   searchPatternMode: SearchPatternModePreference;
@@ -293,8 +332,10 @@ export type AppPreferences = {
 };
 
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {
-  theme: "dark",
-  iconTheme: "classic",
+  theme: "auto",
+  autoLightTheme: "macos-light",
+  autoDarkTheme: "macos-dark",
+  iconTheme: "native",
   accent: "#d4845a",
   accentToolbarButtons: false,
   toolbarAccent: "#d4845a",
@@ -302,9 +343,9 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   accentFavoriteText: false,
   favoriteAccent: "#58b9e8",
   zoomPercent: 100,
-  uiFontFamily: "lexend",
+  uiFontFamily: "system",
   uiFontSize: 13,
-  uiFontWeight: 500,
+  uiFontWeight: 400,
   textPrimaryOverride: null,
   textSecondaryOverride: null,
   textMutedOverride: null,
@@ -326,16 +367,18 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   notificationDurationSeconds: 4,
   actionLogEnabled: true,
   propertiesOpen: false,
-  detailRowOpen: true,
+  detailRowOpen: false,
   topToolbarItems: [...DEFAULT_TOP_TOOLBAR_ITEMS],
   leftToolbarItems: {
     main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
     utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
   },
+  showSidebarRail: false,
   terminalApp: null,
   defaultTextEditor: { ...DEFAULT_TEXT_EDITOR },
   openWithApplications: DEFAULT_OPEN_WITH_APPLICATIONS.map((entry) => ({ ...entry })),
   fileActivationAction: "open",
+  returnKeyAction: "rename",
   openItemLimit: 5,
   includeHidden: false,
   searchPatternMode: "regex",
@@ -353,7 +396,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   lastVisitedFavoritePath: null,
   lastGoToFolderPath: null,
   favorites: [],
-  favoritesPlacement: "integrated",
+  favoritesPlacement: "separate",
   favoritesPaneHeight: null,
   favoritesExpanded: true,
   favoritesInitialized: false,
@@ -403,8 +446,29 @@ export function clampDetailColumnWidth(key: DetailColumnKey, value: number): num
   return Math.round(Math.max(limits.min, Math.min(limits.max, value)));
 }
 
-export function getThemeLabel(theme: ThemeMode): string {
+export function getThemeLabel(theme: ThemePreference): string {
+  if (theme === "auto") {
+    return AUTO_THEME_OPTION.label;
+  }
   return THEME_OPTIONS.find((option) => option.value === theme)?.label ?? theme;
+}
+
+export function isThemeInGroup(theme: string, group: "light" | "dark"): theme is ThemeMode {
+  return THEME_OPTIONS.some((option) => option.value === theme && option.group === group);
+}
+
+// Resolves the palette actually painted: "auto" picks the light or dark palette from the
+// current macOS appearance; an explicit theme is used as is.
+export function resolveEffectiveTheme(
+  theme: ThemePreference,
+  systemPrefersDark: boolean,
+  autoLightTheme: ThemeMode,
+  autoDarkTheme: ThemeMode,
+): ThemeMode {
+  if (theme !== "auto") {
+    return theme;
+  }
+  return systemPrefersDark ? autoDarkTheme : autoLightTheme;
 }
 
 export function getIconThemeLabel(iconTheme: IconThemeMode): string {
@@ -416,7 +480,11 @@ export function getAccentLabel(accent: AccentMode): string {
   if (!normalized) {
     return accent;
   }
-  return ACCENT_OPTIONS.find((option) => option.value === normalized)?.label ?? "Custom";
+  return (
+    ACCENT_OPTIONS.find((option) => option.value === normalized)?.label ??
+    MACOS_ACCENT_OPTIONS.find((option) => option.value === normalized)?.label ??
+    "Custom"
+  );
 }
 
 export function normalizeAccentColor(value: string): string | null {

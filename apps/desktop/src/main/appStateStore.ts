@@ -17,7 +17,7 @@ import {
   THEME_OPTIONS,
   TYPEAHEAD_DEBOUNCE_MAX_MS,
   TYPEAHEAD_DEBOUNCE_MIN_MS,
-  type ThemeMode,
+  type ThemePreference,
   UI_FONT_OPTIONS,
   UI_FONT_WEIGHT_OPTIONS,
   clampDetailColumnWidth,
@@ -28,9 +28,16 @@ import {
   clampPaneWidth,
   clampTypeaheadDebounceMs,
   clampZoomPercent,
+  isThemeInGroup,
   normalizeAccentColor,
 } from "../shared/appPreferences";
-import { sanitizeLeftToolbarItems, sanitizeTopToolbarItems } from "../shared/toolbarItems";
+import {
+  DEFAULT_TOP_TOOLBAR_ITEMS,
+  LEGACY_DEFAULT_TOP_TOOLBAR_ITEMS,
+  type ToolbarItemId,
+  sanitizeLeftToolbarItems,
+  sanitizeTopToolbarItems,
+} from "../shared/toolbarItems";
 
 export type StoredWindowState = {
   x?: number;
@@ -59,7 +66,7 @@ type AppStateStoreTimer = {
 };
 
 export type AppStateStoreDependencies = {
-  defaultTheme?: ThemeMode;
+  defaultTheme?: ThemePreference;
   fs?: AppStateStoreFileSystem;
   timer?: AppStateStoreTimer;
   onReadError?: (error: unknown) => void;
@@ -89,7 +96,7 @@ const DEFAULT_TIMER: AppStateStoreTimer = {
 // caches, and other ephemeral runtime state should stay out of this file.
 export class AppStateStore {
   private readonly filePath: string;
-  private readonly defaultTheme: ThemeMode;
+  private readonly defaultTheme: ThemePreference;
   private readonly fileSystem: AppStateStoreFileSystem;
   private readonly timer: AppStateStoreTimer;
   private readonly onReadError: (error: unknown) => void;
@@ -192,7 +199,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 function readState(
   filePath: string,
   fileSystem: AppStateStoreFileSystem,
-  defaultTheme: ThemeMode,
+  defaultTheme: ThemePreference,
   onReadError: (error: unknown) => void,
 ): AppState {
   if (!fileSystem.existsSync(filePath)) {
@@ -238,7 +245,7 @@ function persistState(
 
 // This is the migration boundary for persisted preferences. When keys are renamed or
 // removed, normalize legacy shapes here instead of letting stale values leak outward.
-function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPreferences {
+function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): AppPreferences {
   const currentDefaults = withDefaultTheme(DEFAULT_APP_PREFERENCES, defaultTheme);
   if (!isPlainObject(value)) {
     return currentDefaults;
@@ -247,9 +254,17 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
   return {
     theme:
       typeof record.theme === "string" &&
-      THEME_OPTIONS.some((option) => option.value === record.theme)
+      (record.theme === "auto" || THEME_OPTIONS.some((option) => option.value === record.theme))
         ? (record.theme as AppPreferences["theme"])
         : defaultTheme,
+    autoLightTheme:
+      typeof record.autoLightTheme === "string" && isThemeInGroup(record.autoLightTheme, "light")
+        ? record.autoLightTheme
+        : currentDefaults.autoLightTheme,
+    autoDarkTheme:
+      typeof record.autoDarkTheme === "string" && isThemeInGroup(record.autoDarkTheme, "dark")
+        ? record.autoDarkTheme
+        : currentDefaults.autoDarkTheme,
     iconTheme:
       typeof record.iconTheme === "string" &&
       ICON_THEME_OPTIONS.some((option) => option.value === record.iconTheme)
@@ -373,7 +388,7 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
         : currentDefaults.detailRowOpen,
     topToolbarItems:
       record.topToolbarItems !== undefined
-        ? sanitizeTopToolbarItems(record.topToolbarItems)
+        ? upgradeLegacyDefaultTopToolbar(sanitizeTopToolbarItems(record.topToolbarItems))
         : [...currentDefaults.topToolbarItems],
     leftToolbarItems:
       record.leftToolbarItems !== undefined
@@ -382,6 +397,10 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
             main: [...currentDefaults.leftToolbarItems.main],
             utility: [...currentDefaults.leftToolbarItems.utility],
           },
+    showSidebarRail:
+      typeof record.showSidebarRail === "boolean"
+        ? record.showSidebarRail
+        : currentDefaults.showSidebarRail,
     terminalApp: sanitizeTerminalApplicationSelection(record.terminalApp),
     defaultTextEditor: sanitizeApplicationSelection(
       record.defaultTextEditor,
@@ -395,6 +414,10 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
       record.fileActivationAction === "edit" || record.fileActivationAction === "open"
         ? record.fileActivationAction
         : currentDefaults.fileActivationAction,
+    returnKeyAction:
+      record.returnKeyAction === "rename" || record.returnKeyAction === "open"
+        ? record.returnKeyAction
+        : currentDefaults.returnKeyAction,
     openItemLimit: clampOpenItemLimit(
       typeof record.openItemLimit === "number"
         ? record.openItemLimit
@@ -465,7 +488,10 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemeMode): AppPrefer
       typeof record.lastGoToFolderPath === "string" && record.lastGoToFolderPath.length > 0
         ? record.lastGoToFolderPath
         : currentDefaults.lastGoToFolderPath,
-    favorites: sanitizeFavorites(record.favorites, record.favoritePaths, currentDefaults.favorites),
+    favorites: upgradeFavoritesWithRootVolume(
+      record,
+      sanitizeFavorites(record.favorites, record.favoritePaths, currentDefaults.favorites),
+    ),
     favoritesPlacement:
       record.favoritesPlacement === "separate" || record.favoritesPlacement === "integrated"
         ? record.favoritesPlacement
@@ -739,7 +765,41 @@ function sanitizeWindowState(value: unknown): StoredWindowState {
   };
 }
 
-function withDefaultTheme(preferences: AppPreferences, defaultTheme: ThemeMode): AppPreferences {
+// Macintosh HD used to be a fixed sidebar location and is now a default favorite. State saved
+// before that change (no `showSidebarRail` yet, or a `locationsExpanded` flag, which is no
+// longer written) gets it once; afterwards the user can remove it like any other favorite.
+function upgradeFavoritesWithRootVolume(
+  record: Record<string, unknown>,
+  favorites: FavoritePreference[],
+): FavoritePreference[] {
+  const savedBeforeRootFavorite =
+    record.showSidebarRail === undefined || record.locationsExpanded !== undefined;
+  if (
+    record.favoritesInitialized !== true ||
+    !savedBeforeRootFavorite ||
+    favorites.some((favorite) => favorite.path === "/")
+  ) {
+    return favorites;
+  }
+  const rootFavorite: FavoritePreference = { path: "/", icon: "drive" };
+  const trashIndex = favorites.findIndex((favorite) => favorite.path.endsWith("/.Trash"));
+  return trashIndex === -1
+    ? [...favorites, rootFavorite]
+    : [...favorites.slice(0, trashIndex), rootFavorite, ...favorites.slice(trashIndex)];
+}
+
+// A toolbar identical to the old default was never customized; give it the new default.
+function upgradeLegacyDefaultTopToolbar(items: ToolbarItemId[]): ToolbarItemId[] {
+  const isLegacyDefault =
+    items.length === LEGACY_DEFAULT_TOP_TOOLBAR_ITEMS.length &&
+    items.every((item, index) => item === LEGACY_DEFAULT_TOP_TOOLBAR_ITEMS[index]);
+  return isLegacyDefault ? [...DEFAULT_TOP_TOOLBAR_ITEMS] : items;
+}
+
+function withDefaultTheme(
+  preferences: AppPreferences,
+  defaultTheme: ThemePreference,
+): AppPreferences {
   // The first-launch theme can be injected by the platform, but persisted preferences should
   // otherwise carry the entire state.
   return {

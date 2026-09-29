@@ -30,6 +30,14 @@ const NATIVE_ICON_CACHE_MAX = 256;
 // Colorblock mode uses per-extension classification with colored blocks and symbols.
 export function FileIcon({ entry }: { entry: Entry }) {
   const type = resolveIconType(entry);
+  if (
+    typeof document !== "undefined" &&
+    document.documentElement.dataset.iconTheme === "native" &&
+    entry.kind !== "symlink_directory" &&
+    entry.kind !== "symlink_file"
+  ) {
+    return <NativeFileIcon entry={entry} fallbackType={type} />;
+  }
   if (type === "folder") {
     return (
       <span className="file-icon folder" aria-hidden>
@@ -92,6 +100,117 @@ export function FileIcon({ entry }: { entry: Entry }) {
       <DocumentSvg label={resolveDocumentLabel(entry)} />
     </span>
   );
+}
+
+// macOS icon theme: files share one icon per extension (and folders one generic icon), so a
+// directory costs a handful of native lookups instead of one per entry. Apps and bundles
+// keep per-path icons because each has its own.
+// Folders macOS draws with their own icon; everything else shares the plain folder icon.
+const SPECIAL_FOLDER_NAMES = new Set([
+  "Applications",
+  "Desktop",
+  "Developer",
+  "Documents",
+  "Downloads",
+  "Library",
+  "Movies",
+  "Music",
+  "Pictures",
+  "Public",
+  "System",
+  "Users",
+]);
+const GENERIC_FOLDER_KEY = "kind:directory";
+
+function nativeIconCacheKey(entry: Entry): string {
+  if (entry.kind === "bundle" || entry.kind === "other") {
+    return `path:${entry.path}`;
+  }
+  if (entry.kind === "directory") {
+    const name = entry.name || entry.path.split("/").filter(Boolean).at(-1) || "";
+    return entry.path === "/" || SPECIAL_FOLDER_NAMES.has(name)
+      ? `path:${entry.path}`
+      : GENERIC_FOLDER_KEY;
+  }
+  const extension = entry.extension.toLowerCase();
+  return extension.length > 0 ? `ext:${extension}` : `path:${entry.path}`;
+}
+
+function NativeFileIcon({ entry, fallbackType }: { entry: Entry; fallbackType: string }) {
+  const client = useFiletrailClient();
+  const cacheKey = nativeIconCacheKey(entry);
+  const [iconSrc, setIconSrc] = useState<string | null>(
+    () => nativeIconCache.get(cacheKey) ?? null,
+  );
+
+  useEffect(() => {
+    const cached = nativeIconCache.get(cacheKey);
+    if (cached !== undefined) {
+      setIconSrc(cached);
+      return;
+    }
+    let cancelled = false;
+    let request = pendingNativeIconRequests.get(cacheKey);
+    if (!request) {
+      request = client
+        .invoke("system:getFileIcon", {
+          path: entry.path,
+          size: 64,
+          ...(cacheKey === GENERIC_FOLDER_KEY ? { genericFolder: true } : {}),
+        })
+        .then((response) => response.pngBase64)
+        .catch(() => null)
+        .then((base64) => {
+          pendingNativeIconRequests.delete(cacheKey);
+          rememberNativeIcon(cacheKey, base64);
+          return base64;
+        });
+      pendingNativeIconRequests.set(cacheKey, request);
+    }
+    void request.then((base64) => {
+      if (!cancelled) {
+        setIconSrc(base64);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [cacheKey, client, entry.path]);
+
+  if (iconSrc) {
+    return (
+      <span className="file-icon native-file-icon" aria-hidden>
+        <img
+          src={`data:image/png;base64,${iconSrc}`}
+          alt=""
+          className="file-icon-native-img"
+          draggable={false}
+        />
+      </span>
+    );
+  }
+  if (fallbackType === "folder") {
+    return (
+      <span className="file-icon folder" aria-hidden>
+        <FolderSvg />
+      </span>
+    );
+  }
+  return (
+    <span className={`file-icon document ${fallbackType}`} aria-hidden>
+      <DocumentSvg label={resolveDocumentLabel(entry)} />
+    </span>
+  );
+}
+
+const pendingNativeIconRequests = new Map<string, Promise<string | null>>();
+
+function rememberNativeIcon(cacheKey: string, base64: string | null) {
+  if (nativeIconCache.size >= NATIVE_ICON_CACHE_MAX) {
+    const firstKey = nativeIconCache.keys().next().value;
+    if (firstKey !== undefined) nativeIconCache.delete(firstKey);
+  }
+  nativeIconCache.set(cacheKey, base64);
 }
 
 function NativeAppIcon({ path }: { path: string }) {
@@ -181,7 +300,29 @@ export function FolderIcon({
 export function TreeFolderIcon({
   open = false,
   alias = false,
-}: { open?: boolean; alias?: boolean }) {
+  path,
+}: { open?: boolean; alias?: boolean; path?: string | null }) {
+  // The macOS icon theme uses the same system folder icon in the tree as in the list.
+  if (
+    path &&
+    !alias &&
+    typeof document !== "undefined" &&
+    document.documentElement.dataset.iconTheme === "native"
+  ) {
+    return (
+      <NativeFileIcon
+        entry={{
+          path,
+          name: "",
+          extension: "",
+          kind: "directory",
+          isHidden: false,
+          isSymlink: false,
+        }}
+        fallbackType="folder"
+      />
+    );
+  }
   if (alias) {
     return (
       <span className="file-icon folder alias" aria-hidden>

@@ -18,6 +18,24 @@ import {
 } from "./bootstrap/systemHandlers";
 
 describe("toPreferencePatch", () => {
+  it("carries the appearance, sidebar, and Return key preferences", () => {
+    expect(
+      toPreferencePatch({
+        theme: "auto",
+        autoLightTheme: "sand",
+        autoDarkTheme: "obsidian",
+        showSidebarRail: true,
+        returnKeyAction: "open",
+      }),
+    ).toEqual({
+      theme: "auto",
+      autoLightTheme: "sand",
+      autoDarkTheme: "obsidian",
+      showSidebarRail: true,
+      returnKeyAction: "open",
+    });
+  });
+
   it("preserves search result sorting fields", () => {
     expect(
       toPreferencePatch({

@@ -250,4 +250,45 @@ describe("createApplicationMenuTemplate", () => {
       type: "toggleInfoRow",
     });
   });
+
+  it("applies edit commands natively in another focused window instead of the explorer", () => {
+    const send = vi.fn();
+    const template = createApplicationMenuTemplate({ send } as never);
+    const editMenu = template.find((item) => item.label === "Edit");
+    const submenu = Array.isArray(editMenu?.submenu) ? editMenu.submenu : [];
+    const copyItem = submenu.find((item) => item.label === "Copy");
+    if (!copyItem || !("click" in copyItem) || typeof copyItem.click !== "function") {
+      throw new Error("Missing Copy menu item.");
+    }
+    const settingsContents = { cut: vi.fn(), copy: vi.fn(), paste: vi.fn(), selectAll: vi.fn() };
+
+    copyItem.click(
+      undefined as never,
+      { webContents: settingsContents } as never,
+      undefined as never,
+    );
+
+    expect(settingsContents.copy).toHaveBeenCalledTimes(1);
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("opens the Settings window directly when the host provides it", () => {
+    const send = vi.fn();
+    const onOpenSettings = vi.fn();
+    const template = createApplicationMenuTemplate({ send } as never, {
+      actionLogEnabled: true,
+      onOpenSettings,
+    });
+    const editMenu = template.find((item) => item.label === "Edit");
+    const submenu = Array.isArray(editMenu?.submenu) ? editMenu.submenu : [];
+    const settingsItem = submenu.find((item) => item.label === "Settings…");
+    if (!settingsItem || !("click" in settingsItem) || typeof settingsItem.click !== "function") {
+      throw new Error("Missing Settings menu item.");
+    }
+
+    settingsItem.click(undefined as never, undefined as never, undefined as never);
+
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+    expect(send).not.toHaveBeenCalled();
+  });
 });

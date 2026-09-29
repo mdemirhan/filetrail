@@ -2,15 +2,37 @@ import type { MenuItemConstructorOptions, WebContents } from "electron";
 
 import type { RendererCommandType } from "../shared/rendererCommands";
 
+type NativeEditTarget = Pick<WebContents, "cut" | "copy" | "paste" | "selectAll">;
+
+const NATIVE_EDIT_COMMANDS: Partial<Record<RendererCommandType, keyof NativeEditTarget>> = {
+  editCut: "cut",
+  editCopy: "copy",
+  editPaste: "paste",
+  editSelectAll: "selectAll",
+};
+
 // The native menu emits high-level renderer commands; the renderer owns the actual UI
 // transitions so shortcuts, toolbar buttons, and menu items stay behaviorally aligned.
 export function createApplicationMenuTemplate(
   webContents: Pick<WebContents, "send">,
   options: {
     actionLogEnabled: boolean;
+    // Settings is its own window; main opens it directly when provided.
+    onOpenSettings?: () => void;
   } = { actionLogEnabled: true },
 ): MenuItemConstructorOptions[] {
-  const sendCommand = (type: RendererCommandType) => {
+  const sendCommand = (type: RendererCommandType, focusedWindow?: unknown) => {
+    // The menu is shared by every window. When another window (Settings) is focused, edit
+    // commands act on its focused text field natively and explorer commands do not apply.
+    const focusedContents = (focusedWindow as { webContents?: NativeEditTarget } | undefined)
+      ?.webContents;
+    if (focusedContents && (focusedContents as unknown) !== webContents) {
+      const nativeEdit = NATIVE_EDIT_COMMANDS[type];
+      if (nativeEdit) {
+        focusedContents[nativeEdit]();
+      }
+      return;
+    }
     webContents.send("filetrail:command", { type });
   };
 
@@ -25,43 +47,44 @@ export function createApplicationMenuTemplate(
         {
           label: "Open",
           accelerator: "CommandOrControl+O",
-          click: () => sendCommand("openSelection"),
+          click: (_item, window) => sendCommand("openSelection", window),
         },
         {
           label: "Edit",
           accelerator: "CommandOrControl+E",
-          click: () => sendCommand("editSelection"),
+          click: (_item, window) => sendCommand("editSelection", window),
         },
         {
           label: "Move To…",
           accelerator: "CommandOrControl+Shift+M",
-          click: () => sendCommand("moveSelection"),
+          click: (_item, window) => sendCommand("moveSelection", window),
         },
         {
+          // Return and F2 are handled in the renderer: a menu accelerator for Return would
+          // swallow it in text fields and dialogs.
           label: "Rename",
-          accelerator: "F2",
-          click: () => sendCommand("renameSelection"),
+          click: (_item, window) => sendCommand("renameSelection", window),
         },
         {
           label: "Duplicate",
           accelerator: "CommandOrControl+D",
-          click: () => sendCommand("duplicateSelection"),
+          click: (_item, window) => sendCommand("duplicateSelection", window),
         },
         {
           label: "New Folder",
           accelerator: "CommandOrControl+Shift+N",
-          click: () => sendCommand("newFolder"),
+          click: (_item, window) => sendCommand("newFolder", window),
         },
         {
           label: "Move to Trash",
           accelerator: "CommandOrControl+Backspace",
-          click: () => sendCommand("trashSelection"),
+          click: (_item, window) => sendCommand("trashSelection", window),
         },
         { type: "separator" },
         {
           label: "Open in Terminal",
           accelerator: "CommandOrControl+T",
-          click: () => sendCommand("openInTerminal"),
+          click: (_item, window) => sendCommand("openInTerminal", window),
         },
         { type: "separator" },
         { role: "close" },
@@ -76,43 +99,44 @@ export function createApplicationMenuTemplate(
         {
           label: "Cut",
           accelerator: "CommandOrControl+X",
-          click: () => sendCommand("editCut"),
+          click: (_item, window) => sendCommand("editCut", window),
         },
         {
           label: "Copy",
           accelerator: "CommandOrControl+C",
-          click: () => sendCommand("editCopy"),
+          click: (_item, window) => sendCommand("editCopy", window),
         },
         {
           label: "Paste",
           accelerator: "CommandOrControl+V",
-          click: () => sendCommand("editPaste"),
+          click: (_item, window) => sendCommand("editPaste", window),
         },
         {
           label: "Select All",
           accelerator: "CommandOrControl+A",
-          click: () => sendCommand("editSelectAll"),
+          click: (_item, window) => sendCommand("editSelectAll", window),
         },
         { type: "separator" },
         {
           label: "Find Files…",
           accelerator: "CommandOrControl+F",
-          click: () => sendCommand("focusFileSearch"),
+          click: (_item, window) => sendCommand("focusFileSearch", window),
         },
         {
           label: "Go to Folder…",
           accelerator: "CommandOrControl+Shift+G",
-          click: () => sendCommand("openLocationSheet"),
+          click: (_item, window) => sendCommand("openLocationSheet", window),
         },
         {
           label: "Settings…",
           accelerator: "CommandOrControl+,",
-          click: () => sendCommand("openSettings"),
+          click: () =>
+            options.onOpenSettings ? options.onOpenSettings() : sendCommand("openSettings"),
         },
         {
           label: "Copy Path",
           accelerator: "Alt+CommandOrControl+C",
-          click: () => sendCommand("copyPath"),
+          click: (_item, window) => sendCommand("copyPath", window),
         },
       ],
     },
@@ -122,19 +146,19 @@ export function createApplicationMenuTemplate(
         {
           label: "Toggle Info Panel",
           accelerator: "CommandOrControl+I",
-          click: () => sendCommand("toggleInfoPanel"),
+          click: (_item, window) => sendCommand("toggleInfoPanel", window),
         },
         {
           label: "Toggle Info Row",
           accelerator: "CommandOrControl+Shift+I",
-          click: () => sendCommand("toggleInfoRow"),
+          click: (_item, window) => sendCommand("toggleInfoRow", window),
         },
         ...(options.actionLogEnabled
           ? [
               { type: "separator" as const },
               {
                 label: "Action Log",
-                click: () => sendCommand("openActionLog"),
+                click: (_item: unknown, window: unknown) => sendCommand("openActionLog", window),
               },
             ]
           : []),
@@ -142,23 +166,23 @@ export function createApplicationMenuTemplate(
         {
           label: "Refresh",
           accelerator: "CommandOrControl+R",
-          click: () => sendCommand("refreshOrApplySearchSort"),
+          click: (_item, window) => sendCommand("refreshOrApplySearchSort", window),
         },
         { type: "separator" },
         {
           label: "Zoom In",
           accelerator: "CommandOrControl+Plus",
-          click: () => sendCommand("zoomIn"),
+          click: (_item, window) => sendCommand("zoomIn", window),
         },
         {
           label: "Zoom Out",
           accelerator: "CommandOrControl+-",
-          click: () => sendCommand("zoomOut"),
+          click: (_item, window) => sendCommand("zoomOut", window),
         },
         {
           label: "Actual Size",
           accelerator: "CommandOrControl+0",
-          click: () => sendCommand("resetZoom"),
+          click: (_item, window) => sendCommand("resetZoom", window),
         },
         { type: "separator" },
         { role: "toggleDevTools" },

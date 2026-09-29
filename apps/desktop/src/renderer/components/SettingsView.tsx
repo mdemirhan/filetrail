@@ -19,17 +19,21 @@ import type {
   IconThemeMode,
   LeftToolbarItems,
   OpenWithApplication,
+  ReturnKeyAction,
   ThemeMode,
+  ThemePreference,
   ToolbarItemId,
   UiFontFamily,
   UiFontWeight,
 } from "../../shared/appPreferences";
 import {
+  DARK_THEME_OPTIONS,
   DEFAULT_APP_PREFERENCES,
   DEFAULT_TERMINAL_APPLICATION,
   DEFAULT_TEXT_EDITOR,
   FAVORITE_ICON_OPTIONS,
   ICON_THEME_OPTIONS,
+  LIGHT_THEME_OPTIONS,
   ZOOM_PERCENT_MAX,
   ZOOM_PERCENT_MIN,
   clampOpenItemLimit,
@@ -46,8 +50,21 @@ import { generateAccentTokens } from "../lib/accent";
 import { getFavoriteLabel, getTrashPath } from "../lib/favorites";
 import { FavoriteItemIcon } from "../lib/fileIcons";
 import { type ThemeCssBase, getThemeVariant, resolveThemeCssBase } from "../lib/themeVariants";
-import { uiMonoFontStack as mono, uiSansFontStack as sans } from "../lib/viewFonts";
+import { uiSansFontStack as sans } from "../lib/viewFonts";
 import { ToolbarIcon } from "./ToolbarIcon";
+
+// Settings uses the system font throughout, including values that used to be monospaced.
+const mono = sans;
+
+export type SettingsTab = "general" | "appearance" | "explorer" | "search" | "files" | "toolbars";
+
+export type SearchDefaults = {
+  searchPatternMode: "regex" | "glob";
+  searchMatchScope: "name" | "path";
+  searchRecursive: boolean;
+  searchIncludeHidden: boolean;
+  searchResultsFilterScope: "name" | "path";
+};
 
 const settingsBaseThemes = {
   light: {
@@ -417,16 +434,6 @@ function resolveSettingsBaseTheme(theme: ThemeMode) {
   };
 }
 
-function getTypographyColumns(layoutMode: "wide" | "narrow" | "compact") {
-  if (layoutMode === "compact") {
-    return "1fr";
-  }
-  if (layoutMode === "narrow") {
-    return "minmax(0, 1fr) repeat(2, minmax(110px, 1fr))";
-  }
-  return "minmax(0, 2fr) repeat(2, minmax(132px, 1fr))";
-}
-
 function Toggle({
   checked,
   onToggle,
@@ -590,15 +597,16 @@ function SelectControl({
           appearance: "none",
           WebkitAppearance: "none",
           width: "100%",
-          height: "32px",
+          height: "26px",
           padding: "0 28px 0 10px",
           borderRadius: "6px",
           background: theme.select.bg,
           border: `1px solid ${theme.select.border}`,
           color: disabled ? theme.label.secondary : theme.select.text,
-          fontSize: "12px",
-          fontFamily: mono,
-          fontWeight: 500,
+          fontSize: "13px",
+          fontFamily: sans,
+          fontWeight: 400,
+          boxShadow: "0 0.5px 1.5px rgba(0,0,0,0.12)",
           cursor: disabled ? "default" : "pointer",
           outline: "none",
           opacity: disabled ? 0.6 : 1,
@@ -628,8 +636,132 @@ function SelectControl({
           pointerEvents: "none",
         }}
       >
-        <path d="M6 9l6 6 6-6" />
+        <path d="M8 9.5l4-4 4 4M8 14.5l4 4 4-4" />
       </svg>
+    </div>
+  );
+}
+
+function AppearanceThumbnail({ mode }: { mode: "auto" | "light" | "dark" }) {
+  const light = { side: "#e4e4e9", main: "#ffffff", bar: "#d4d4da" };
+  const dark = { side: "#2c2c30", main: "#1e1e20", bar: "#3c3c41" };
+  const half = (colors: typeof light, clip?: string) => (
+    <span style={{ position: "absolute", inset: 0, display: "flex", clipPath: clip }}>
+      <span style={{ width: "22px", background: colors.side }} />
+      <span
+        style={{
+          flex: 1,
+          background: colors.main,
+          display: "flex",
+          flexDirection: "column",
+          gap: "5px",
+          padding: "8px 6px",
+        }}
+      >
+        <span
+          style={{ height: "5px", width: "70%", borderRadius: "3px", background: colors.bar }}
+        />
+        <span
+          style={{
+            height: "5px",
+            width: "90%",
+            borderRadius: "3px",
+            background: "var(--ft-accent-solid)",
+          }}
+        />
+        <span
+          style={{ height: "5px", width: "55%", borderRadius: "3px", background: colors.bar }}
+        />
+      </span>
+    </span>
+  );
+  return (
+    <span
+      style={{
+        position: "relative",
+        display: "block",
+        width: "80px",
+        height: "52px",
+        borderRadius: "7px",
+        overflow: "hidden",
+        boxShadow: "0 0 0 0.5px rgba(0,0,0,0.25)",
+      }}
+    >
+      {mode === "dark" ? half(dark) : half(light)}
+      {mode === "auto" ? half(dark, "polygon(50% 0, 100% 0, 100% 100%, 50% 100%)") : null}
+    </span>
+  );
+}
+
+// Auto / Light / Dark, like System Settings. Light and Dark use the palette chosen for that
+// appearance, so switching back to Auto restores the same colors.
+function AppearanceModePicker({
+  theme,
+  autoLightTheme,
+  autoDarkTheme,
+  palette,
+  onChange,
+}: {
+  theme: ThemePreference;
+  autoLightTheme: ThemeMode;
+  autoDarkTheme: ThemeMode;
+  palette: ResolvedSettingsTheme;
+  onChange: (value: ThemePreference) => void;
+}) {
+  const current: "auto" | "light" | "dark" =
+    theme === "auto"
+      ? "auto"
+      : LIGHT_THEME_OPTIONS.some((option) => option.value === theme)
+        ? "light"
+        : "dark";
+  const modes: ReadonlyArray<{
+    id: "auto" | "light" | "dark";
+    label: string;
+    value: ThemePreference;
+  }> = [
+    { id: "auto", label: "Auto", value: "auto" },
+    { id: "light", label: "Light", value: autoLightTheme },
+    { id: "dark", label: "Dark", value: autoDarkTheme },
+  ];
+  return (
+    <div style={{ display: "flex", gap: "14px" }}>
+      {modes.map((mode) => {
+        const selected = current === mode.id;
+        return (
+          <button
+            key={mode.id}
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onChange(mode.value)}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: "6px",
+              padding: 0,
+              border: 0,
+              background: "transparent",
+              color: selected ? palette.label.primary : palette.label.secondary,
+              fontFamily: sans,
+              fontSize: "11px",
+              fontWeight: selected ? 600 : 400,
+              cursor: "default",
+            }}
+          >
+            <span
+              style={{
+                display: "flex",
+                padding: "2px",
+                borderRadius: "9px",
+                boxShadow: selected ? "0 0 0 2.5px var(--ft-accent-solid)" : "none",
+              }}
+            >
+              <AppearanceThumbnail mode={mode.id} />
+            </span>
+            {mode.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -642,11 +774,11 @@ function ThemeSelectControl({
   onChange,
   ariaLabel,
 }: {
-  value: ThemeMode;
-  themeOptions: ReadonlyArray<{ value: ThemeMode; label: string; group?: "dark" | "light" }>;
+  value: string;
+  themeOptions: ReadonlyArray<{ value: string; label: string; group?: "dark" | "light" }>;
   theme: ResolvedSettingsTheme;
   width?: string;
-  onChange: (value: ThemeMode) => void;
+  onChange: (value: string) => void;
   ariaLabel?: string;
 }) {
   const darkOptions = themeOptions.filter((option) => option.group === "dark");
@@ -656,7 +788,7 @@ function ThemeSelectControl({
   );
   const groups: Array<{
     label: string;
-    options: ReadonlyArray<{ value: ThemeMode; label: string; group?: "dark" | "light" }>;
+    options: ReadonlyArray<{ value: string; label: string; group?: "dark" | "light" }>;
   }> = [];
   if (darkOptions.length > 0) {
     groups.push({ label: "Dark Themes", options: darkOptions });
@@ -670,24 +802,30 @@ function ThemeSelectControl({
       <select
         value={value}
         aria-label={ariaLabel}
-        onChange={(event) => onChange(event.currentTarget.value as ThemeMode)}
+        onChange={(event) => onChange(event.currentTarget.value)}
         style={{
           appearance: "none",
           WebkitAppearance: "none",
           width: "100%",
-          height: "32px",
+          height: "26px",
           padding: "0 28px 0 10px",
           borderRadius: "6px",
           background: theme.select.bg,
           border: `1px solid ${theme.select.border}`,
           color: theme.select.text,
-          fontSize: "12px",
-          fontFamily: mono,
-          fontWeight: 500,
+          fontSize: "13px",
+          fontFamily: sans,
+          fontWeight: 400,
+          boxShadow: "0 0.5px 1.5px rgba(0,0,0,0.12)",
           cursor: "pointer",
           outline: "none",
         }}
       >
+        {ungroupedOptions.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
         {groups.length > 0
           ? groups.map((group) => (
               <optgroup key={group.label} label={group.label}>
@@ -699,11 +837,6 @@ function ThemeSelectControl({
               </optgroup>
             ))
           : null}
-        {ungroupedOptions.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
       </select>
       <svg
         aria-hidden="true"
@@ -723,140 +856,13 @@ function ThemeSelectControl({
           pointerEvents: "none",
         }}
       >
-        <path d="M6 9l6 6 6-6" />
+        <path d="M8 9.5l4-4 4 4M8 14.5l4 4 4-4" />
       </svg>
     </div>
   );
 }
 
 // ── Icon Theme Picker with inline preview ──────────────────────────
-
-const DOC_PATH = "M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z";
-const DOC_FOLD = "M14 2v6h6";
-const FOLDER_PATH =
-  "M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6.93a2 2 0 0 1-1.66-.88l-.82-1.24A2 2 0 0 0 7.93 4H5a2 2 0 0 0-2 2v1z";
-const STAR_PATH =
-  "M12 4.5l2.2 4.45 4.9.7-3.55 3.46.84 4.89L12 15.7 7.6 18l.84-4.89L4.9 9.65l4.9-.7z";
-const COLORBLOCK_BOTTOM = "M4.25 11v9a2 2 0 002 2h11.5a2 2 0 002-2v-9z";
-
-/** Representative file colors for preview mini-icons. */
-const PREVIEW_FILES = [
-  { color: "#3178C6", label: "TS" },
-  { color: "#3776AB", label: "PY" },
-  { color: "#4CAF50", label: "IMG" },
-] as const;
-
-function MiniDocClassic({ color, label }: { color: string; label: string }) {
-  const fillBg = `${color}14`; // ~8% opacity
-  return (
-    <svg viewBox="0 0 24 24" fill="none" width="14" height="14" aria-hidden="true">
-      <path d={DOC_PATH} fill={fillBg} stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
-      <path d={DOC_FOLD} fill={fillBg} stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
-      <text
-        x="12"
-        y="17"
-        textAnchor="middle"
-        fill={color}
-        fontSize="6.5"
-        fontWeight="700"
-        fontFamily="system-ui"
-      >
-        {label}
-      </text>
-    </svg>
-  );
-}
-
-function MiniDocColorblock({ color }: { color: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" width="14" height="14" aria-hidden="true">
-      <path
-        d={DOC_PATH}
-        fill="white"
-        stroke={color}
-        strokeWidth="0.5"
-        strokeOpacity="0.35"
-        strokeLinejoin="round"
-      />
-      <path d={COLORBLOCK_BOTTOM} fill={color} />
-      <path
-        d={DOC_FOLD}
-        fill={color}
-        fillOpacity="0.12"
-        stroke={color}
-        strokeWidth="0.5"
-        strokeOpacity="0.25"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function MiniDocMonoline({ color }: { color: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" width="14" height="14" aria-hidden="true">
-      <path d={DOC_PATH} fill="none" stroke={color} strokeWidth="0.9" strokeLinejoin="round" />
-      <path d={DOC_FOLD} fill="none" stroke={color} strokeWidth="0.9" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function MiniDocVivid({ color }: { color: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" width="14" height="14" aria-hidden="true">
-      <path d={DOC_PATH} fill={color} />
-      <path d={DOC_FOLD} fill="white" fillOpacity="0.3" />
-    </svg>
-  );
-}
-
-function MiniFolder({
-  accentSolid,
-  mode,
-}: {
-  accentSolid: string;
-  mode: "classic" | "monoline" | "vivid";
-}) {
-  const fill =
-    mode === "monoline" ? "none" : mode === "vivid" ? `${accentSolid}4D` : `${accentSolid}2E`;
-  const sw = mode === "vivid" ? 1.75 : 1.5;
-  return (
-    <svg viewBox="0 0 24 24" fill="none" width="14" height="14" aria-hidden="true">
-      <path
-        d={FOLDER_PATH}
-        fill={fill}
-        stroke={accentSolid}
-        strokeWidth={sw}
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function MiniStar({
-  accentSolid,
-  mode,
-}: {
-  accentSolid: string;
-  mode: "classic" | "monoline" | "vivid";
-}) {
-  const sw = mode === "vivid" ? 1.85 : mode === "monoline" ? 1.5 : 1.7;
-  const fill = mode === "vivid" ? accentSolid : "none";
-  const fillOp = mode === "vivid" ? 0.15 : 1;
-  return (
-    <svg viewBox="0 0 24 24" fill="none" width="14" height="14" aria-hidden="true">
-      <path
-        d={STAR_PATH}
-        fill={fill}
-        fillOpacity={fillOp}
-        stroke={accentSolid}
-        strokeWidth={sw}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
 
 function IconThemePicker({
   value,
@@ -867,87 +873,57 @@ function IconThemePicker({
   theme: ResolvedSettingsTheme;
   onChange: (value: IconThemeMode) => void;
 }) {
-  const accent = theme.accent.solid;
-
-  const docRenderers: Record<IconThemeMode, (file: (typeof PREVIEW_FILES)[number]) => ReactNode> = {
-    classic: (f) => <MiniDocClassic key={f.label} color={f.color} label={f.label} />,
-    colorblock: (f) => <MiniDocColorblock key={f.label} color={f.color} />,
-    monoline: (f) => <MiniDocMonoline key={f.label} color={f.color} />,
-    vivid: (f) => <MiniDocVivid key={f.label} color={f.color} />,
-  };
-
-  const folderMode = (t: string): "classic" | "monoline" | "vivid" =>
-    t === "monoline" ? "monoline" : t === "vivid" ? "vivid" : "classic";
-
+  // A macOS segmented control: one segment per icon style, the selected one raised.
   return (
-    <div
-      style={{
-        padding: "10px 0",
-        borderBottom: `1px solid ${theme.separator}`,
-      }}
-    >
-      <div
-        style={{
-          fontSize: "12.5px",
-          fontFamily: sans,
-          fontWeight: 500,
-          color: theme.label.primary,
-          marginBottom: "8px",
-        }}
-      >
-        Icon theme
-      </div>
-      <div style={{ display: "flex", gap: "6px" }}>
-        {ICON_THEME_OPTIONS.map((option) => {
-          const selected = option.value === value;
-          const mode = folderMode(option.value);
-          return (
-            <button
-              key={option.value}
-              type="button"
-              aria-label={`Icon theme: ${option.label}`}
-              aria-pressed={selected}
-              onClick={() => onChange(option.value)}
-              style={{
-                flex: 1,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: "5px",
-                padding: "7px 4px 8px",
-                borderRadius: "8px",
-                border: selected ? `2px solid ${accent}` : `1px solid ${theme.card.border}`,
-                background: selected ? theme.accent.softBg : theme.card.bg,
-                cursor: "pointer",
-                outline: "none",
-                // Prevent layout shift between 1px and 2px border
-                margin: selected ? "0" : "1px",
-              }}
-            >
-              <span
+    <SettingRow
+      title="File icons"
+      desc={value === "native" ? "The icons Finder shows for each file type." : undefined}
+      theme={theme}
+      right={
+        <div
+          role="radiogroup"
+          aria-label="Icon theme"
+          style={{
+            display: "inline-flex",
+            gap: "2px",
+            padding: "2px",
+            borderRadius: "7px",
+            background: theme.toggle.trackOff,
+          }}
+        >
+          {ICON_THEME_OPTIONS.map((option) => {
+            const selected = option.value === value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                aria-label={`Icon theme: ${option.label}`}
+                aria-pressed={selected}
+                onClick={() => onChange(option.value)}
                 style={{
-                  fontSize: "10px",
-                  fontFamily: mono,
-                  fontWeight: 600,
-                  color: selected ? accent : theme.label.secondary,
-                  letterSpacing: "0.02em",
+                  height: "22px",
+                  padding: "0 10px",
+                  border: 0,
+                  borderRadius: "5px",
+                  background: selected ? theme.card.bg : "transparent",
+                  boxShadow: selected ? "0 0.5px 1.5px rgba(0,0,0,0.2)" : "none",
+                  color: theme.label.primary,
+                  fontFamily: sans,
+                  fontSize: "12px",
+                  fontWeight: selected ? 600 : 400,
+                  cursor: "default",
+                  whiteSpace: "nowrap",
                 }}
               >
                 {option.label}
-              </span>
-              <span style={{ display: "flex", gap: "2px", alignItems: "center" }}>
-                <MiniFolder accentSolid={accent} mode={mode} />
-                {PREVIEW_FILES.map((f) => docRenderers[option.value](f))}
-                <MiniStar accentSolid={accent} mode={mode} />
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
+              </button>
+            );
+          })}
+        </div>
+      }
+    />
   );
 }
-
 function ColorRow({
   label,
   value,
@@ -1217,7 +1193,7 @@ function AccentSelector({
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(8, 28px)",
+            gridTemplateColumns: `repeat(${accentOptions.length + 1}, 28px)`,
             gridAutoRows: "28px",
             gap: "8px",
           }}
@@ -2419,7 +2395,7 @@ function SettingRow({
   isLast = false,
 }: {
   title: string;
-  desc?: string;
+  desc?: string | undefined;
   right: ReactNode;
   theme: ResolvedSettingsTheme;
   isLast?: boolean;
@@ -2467,74 +2443,67 @@ function SettingRow({
 }
 
 function SectionCard({
-  icon,
   title,
   theme,
   resetButton,
   children,
 }: {
-  icon: string;
+  icon?: string;
   title: string;
   theme: ResolvedSettingsTheme;
   resetButton?: ReactNode;
   children: ReactNode;
 }) {
+  // A System Settings style group: a sentence-case title above a rounded box of rows.
   return (
-    <div
-      style={{
-        background: theme.card.bg,
-        border: `1px solid ${theme.card.border}`,
-        borderRadius: "10px",
-        boxShadow: theme.card.shadow,
-        marginBottom: "12px",
-        overflow: "hidden",
-      }}
-    >
+    <section style={{ marginBottom: "18px" }}>
       <div
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "12px 16px",
-          borderBottom: `1px solid ${theme.separator}`,
+          padding: "0 4px 6px",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <div
-            style={{
-              width: "22px",
-              height: "22px",
-              borderRadius: "5px",
-              background: theme.section.iconBg,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <span style={{ fontSize: "10px" }}>{icon}</span>
-          </div>
-          <span
-            style={{
-              fontSize: "11px",
-              fontFamily: mono,
-              fontWeight: 600,
-              color: theme.section.title,
-              letterSpacing: "0.06em",
-              textTransform: "uppercase",
-            }}
-          >
-            {title}
-          </span>
-        </div>
+        <h3
+          style={{
+            margin: 0,
+            fontSize: "13px",
+            fontFamily: sans,
+            fontWeight: 600,
+            color: theme.section.title,
+          }}
+        >
+          {title}
+        </h3>
         {resetButton}
       </div>
-      <div style={{ padding: "4px 16px 12px" }}>{children}</div>
-    </div>
+      <div
+        style={{
+          background: theme.card.bg,
+          border: `0.5px solid ${theme.card.border}`,
+          borderRadius: "10px",
+          boxShadow: theme.card.shadow,
+          overflow: "hidden",
+          padding: "2px 14px 4px",
+        }}
+      >
+        {children}
+      </div>
+    </section>
   );
 }
 
 export function SettingsView({
+  activeTab,
+  searchDefaults,
+  onSearchDefaultsChange = () => undefined,
   theme,
+  effectiveTheme,
+  autoLightTheme = "light",
+  autoDarkTheme = "dark",
+  onAutoLightThemeChange = () => undefined,
+  onAutoDarkThemeChange = () => undefined,
   iconTheme,
   accent,
   accentToolbarButtons,
@@ -2572,6 +2541,10 @@ export function SettingsView({
   favoritesPlacement,
   openWithApplications,
   fileActivationAction,
+  returnKeyAction = "rename",
+  onReturnKeyActionChange = () => undefined,
+  showSidebarRail = false,
+  onShowSidebarRailChange = () => undefined,
   openItemLimit,
   themeOptions,
   accentOptions,
@@ -2622,6 +2595,7 @@ export function SettingsView({
   onBrowseFavorite,
   onMoveFavorite,
   onRemoveFavorite,
+  onRestoreDefaultFavorites,
   onFavoriteIconChange,
   onFavoritesPlacementChange,
   onAddOpenWithApplication,
@@ -2631,7 +2605,18 @@ export function SettingsView({
   onFileActivationActionChange,
   onOpenItemLimitChange,
 }: {
-  theme: ThemeMode;
+  // In the Settings window each toolbar tab shows one group of sections; without a tab
+  // (tests, embedded use) every section renders.
+  activeTab?: SettingsTab;
+  // Defaults for new searches; the Search tab only renders when these are provided.
+  searchDefaults?: SearchDefaults | undefined;
+  onSearchDefaultsChange?: (patch: Partial<SearchDefaults>) => void;
+  theme: ThemePreference;
+  effectiveTheme?: ThemeMode;
+  autoLightTheme?: ThemeMode;
+  autoDarkTheme?: ThemeMode;
+  onAutoLightThemeChange?: (value: ThemeMode) => void;
+  onAutoDarkThemeChange?: (value: ThemeMode) => void;
   iconTheme: IconThemeMode;
   accent: AccentMode;
   accentToolbarButtons: boolean;
@@ -2669,8 +2654,12 @@ export function SettingsView({
   favoritesPlacement: FavoritesPlacement;
   openWithApplications: ReadonlyArray<OpenWithApplication>;
   fileActivationAction: FileActivationAction;
+  returnKeyAction?: ReturnKeyAction;
+  onReturnKeyActionChange?: (value: ReturnKeyAction) => void;
+  showSidebarRail?: boolean;
+  onShowSidebarRailChange?: (value: boolean) => void;
   openItemLimit: number;
-  themeOptions: ReadonlyArray<{ value: ThemeMode; label: string; group?: "dark" | "light" }>;
+  themeOptions: ReadonlyArray<{ value: ThemePreference; label: string; group?: "dark" | "light" }>;
   accentOptions: ReadonlyArray<{
     value: AccentMode;
     label: string;
@@ -2681,7 +2670,7 @@ export function SettingsView({
   uiFontWeightOptions: ReadonlyArray<number>;
   typeaheadDebounceOptions: ReadonlyArray<number>;
   notificationDurationSecondsOptions: ReadonlyArray<number>;
-  onThemeChange: (value: ThemeMode) => void;
+  onThemeChange: (value: ThemePreference) => void;
   onIconThemeChange: (value: IconThemeMode) => void;
   onAccentChange: (value: AccentMode) => void;
   onAccentToolbarButtonsChange: (value: boolean) => void;
@@ -2723,6 +2712,7 @@ export function SettingsView({
   onBrowseFavorite: (index: number) => void;
   onMoveFavorite: (index: number, direction: "up" | "down") => void;
   onRemoveFavorite: (index: number) => void;
+  onRestoreDefaultFavorites: () => void;
   onFavoriteIconChange: (index: number, icon: FavoriteIconId) => void;
   onFavoritesPlacementChange: (value: FavoritesPlacement) => void;
   onAddOpenWithApplication: () => void;
@@ -2732,7 +2722,9 @@ export function SettingsView({
   onFileActivationActionChange: (value: FileActivationAction) => void;
   onOpenItemLimitChange: (value: number) => void;
 }) {
-  const palette = resolveSettingsTheme(theme, accent);
+  const showSection = (tab: SettingsTab) => activeTab === undefined || activeTab === tab;
+  const paintedTheme: ThemeMode = effectiveTheme ?? (theme === "auto" ? autoLightTheme : theme);
+  const palette = resolveSettingsTheme(paintedTheme, accent);
   const [resetHover, setResetHover] = useState(false);
   const isDefaultTextEditorSelection =
     defaultTextEditor.appPath === DEFAULT_TEXT_EDITOR.appPath &&
@@ -2911,678 +2903,955 @@ export function SettingsView({
           margin: "0 auto",
         }}
       >
-        <header className="settings-page-header" style={{ marginBottom: "20px" }}>
-          <div className="settings-page-header-left">
-            <span
-              className="settings-page-eyebrow"
-              style={{
-                fontSize: "10px",
-                fontFamily: mono,
-                fontWeight: 600,
-                color: palette.header.subtitle,
-                letterSpacing: "0.1em",
-                textTransform: "uppercase",
-              }}
-            >
-              File Trail
-            </span>
-            <h2
-              style={{
-                fontSize: "20px",
-                fontFamily: sans,
-                fontWeight: 700,
-                color: palette.header.title,
-                margin: "2px 0 3px",
-                letterSpacing: "-0.02em",
-              }}
-            >
-              Settings
-            </h2>
-          </div>
-        </header>
-
-        <SectionCard
-          icon="Aa"
-          title="Appearance"
-          theme={palette}
-          resetButton={
-            <button
-              type="button"
-              onClick={onResetAppearance}
-              onMouseEnter={() => setResetHover(true)}
-              onMouseLeave={() => setResetHover(false)}
-              style={{
-                fontSize: "11px",
-                fontFamily: mono,
-                fontWeight: 500,
-                color: resetHover ? palette.reset.textHover : palette.reset.text,
-                background: resetHover ? palette.reset.bgHover : palette.reset.bg,
-                border: `1px solid ${resetHover ? palette.reset.borderHover : palette.reset.border}`,
-                borderRadius: "5px",
-                padding: "3px 10px",
-                cursor: "pointer",
-                transition: "all 0.12s ease",
-                outline: "none",
-              }}
-            >
-              Reset
-            </button>
-          }
-        >
-          <SettingRow
-            title="Theme"
-            theme={palette}
-            right={
-              <ThemeSelectControl
-                value={theme}
-                themeOptions={themeOptions}
-                theme={palette}
-                width="176px"
-                ariaLabel="Theme"
-                onChange={onThemeChange}
-              />
-            }
-          />
-
-          <IconThemePicker value={iconTheme} theme={palette} onChange={onIconThemeChange} />
-
-          <SettingRow
-            title="Accent color"
-            theme={palette}
-            right={
-              <div style={{ width: "280px", maxWidth: "100%" }}>
-                <AccentSelector
-                  accent={accent}
-                  accentOptions={accentOptions}
-                  theme={palette}
-                  labelPrefix="Accent color"
-                  mode="inline"
-                  onChange={onAccentChange}
-                />
-              </div>
-            }
-          />
-
-          <SettingRow
-            title="Accent toolbar buttons"
-            desc="Use the selected accent for primary toolbar actions."
-            theme={palette}
-            right={
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <AccentSelector
-                  accent={toolbarAccent}
-                  accentOptions={accentOptions}
-                  theme={palette}
-                  disabled={!accentToolbarButtons}
-                  labelPrefix="Toolbar accent"
-                  showSelectedLabel={false}
-                  onChange={onToolbarAccentChange}
-                />
-                <Toggle
-                  checked={accentToolbarButtons}
-                  onToggle={() => onAccentToolbarButtonsChange(!accentToolbarButtons)}
-                  theme={palette}
-                  label="Accent toolbar buttons"
-                />
-              </div>
-            }
-          />
-
-          <SettingRow
-            title="Accent favorite items"
-            desc="Use the dedicated favorite accent for favorite icons in the tree."
-            theme={palette}
-            right={
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <AccentSelector
-                  accent={favoriteAccent}
-                  accentOptions={accentOptions}
-                  theme={palette}
-                  disabled={!accentFavoriteItems}
-                  labelPrefix="Favorite accent"
-                  showSelectedLabel={false}
-                  onChange={onFavoriteAccentChange}
-                />
-                <Toggle
-                  checked={accentFavoriteItems}
-                  onToggle={() => onAccentFavoriteItemsChange(!accentFavoriteItems)}
-                  theme={palette}
-                  label="Accent favorite items"
-                />
-              </div>
-            }
-          />
-
-          <SettingRow
-            title="Accent favorite text"
-            desc="Also apply the favorite accent to favorite labels in the tree."
-            theme={palette}
-            right={
-              <Toggle
-                checked={accentFavoriteText}
-                onToggle={() => onAccentFavoriteTextChange(!accentFavoriteText)}
-                theme={palette}
-                label="Accent favorite text"
-                disabled={!accentFavoriteItems}
-              />
-            }
-          />
-
-          <SettingRow
-            title="Zoom level"
-            desc={`Electron window zoom. Accepts values between ${ZOOM_PERCENT_MIN}% and ${ZOOM_PERCENT_MAX}%.`}
-            theme={palette}
-            right={
-              <ZoomLevelInput value={zoomPercent} theme={palette} onChange={onZoomPercentChange} />
-            }
-          />
-
-          <div style={{ paddingTop: "8px", paddingBottom: "4px" }}>
-            <span
-              style={{
-                fontSize: "10px",
-                fontFamily: mono,
-                fontWeight: 600,
-                color: palette.label.category,
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-              }}
-            >
-              UI Typography
-            </span>
-          </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: getTypographyColumns(layoutMode),
-              gap: "8px",
-              paddingBottom: "8px",
-            }}
-          >
-            <div style={{ minWidth: 0 }}>
-              <div
+        {activeTab ? null : (
+          <header className="settings-page-header" style={{ marginBottom: "20px" }}>
+            <div className="settings-page-header-left">
+              <span
+                className="settings-page-eyebrow"
                 style={{
-                  fontSize: "10.5px",
+                  fontSize: "10px",
                   fontFamily: mono,
-                  color: palette.label.secondary,
-                  marginBottom: "4px",
-                  fontWeight: 500,
+                  fontWeight: 600,
+                  color: palette.header.subtitle,
+                  letterSpacing: "0.1em",
+                  textTransform: "uppercase",
                 }}
               >
-                Font
-              </div>
-              <SelectControl
-                value={uiFontFamily}
-                options={uiFontOptions.map((option) => option.value)}
-                theme={palette}
-                ariaLabel="Font"
-                onChange={(value) => onUiFontFamilyChange(value as UiFontFamily)}
-                formatOption={(value) =>
-                  uiFontOptions.find((option) => option.value === value)?.label ?? String(value)
-                }
-              />
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div
+                File Trail
+              </span>
+              <h2
                 style={{
-                  fontSize: "10.5px",
-                  fontFamily: mono,
-                  color: palette.label.secondary,
-                  marginBottom: "4px",
-                  fontWeight: 500,
+                  fontSize: "20px",
+                  fontFamily: sans,
+                  fontWeight: 700,
+                  color: palette.header.title,
+                  margin: "2px 0 3px",
+                  letterSpacing: "-0.02em",
                 }}
               >
-                Size
-              </div>
-              <SelectControl
-                value={uiFontSize}
-                options={uiFontSizeOptions}
-                theme={palette}
-                ariaLabel="Size"
-                onChange={(value) => onUiFontSizeChange(Number(value))}
-                formatOption={(value) => `${value}px`}
-              />
+                Settings
+              </h2>
             </div>
-            <div style={{ minWidth: 0 }}>
-              <div
+          </header>
+        )}
+
+        {showSection("appearance") ? (
+          <SectionCard
+            icon="Aa"
+            title="Appearance"
+            theme={palette}
+            resetButton={
+              <button
+                type="button"
+                onClick={onResetAppearance}
+                onMouseEnter={() => setResetHover(true)}
+                onMouseLeave={() => setResetHover(false)}
                 style={{
-                  fontSize: "10.5px",
+                  fontSize: "11px",
                   fontFamily: mono,
-                  color: palette.label.secondary,
-                  marginBottom: "4px",
                   fontWeight: 500,
+                  color: resetHover ? palette.reset.textHover : palette.reset.text,
+                  background: resetHover ? palette.reset.bgHover : palette.reset.bg,
+                  border: `1px solid ${resetHover ? palette.reset.borderHover : palette.reset.border}`,
+                  borderRadius: "5px",
+                  padding: "3px 10px",
+                  cursor: "pointer",
+                  transition: "all 0.12s ease",
+                  outline: "none",
                 }}
               >
-                Weight
-              </div>
-              <SelectControl
-                value={uiFontWeight}
-                options={uiFontWeightOptions}
-                theme={palette}
-                ariaLabel="Weight"
-                onChange={(value) => onUiFontWeightChange(Number(value) as UiFontWeight)}
-              />
-            </div>
-          </div>
-
-          <div style={{ borderTop: `1px solid ${palette.separator}`, paddingTop: "8px" }}>
-            <span
-              style={{
-                fontSize: "10px",
-                fontFamily: mono,
-                fontWeight: 600,
-                color: palette.label.category,
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-              }}
-            >
-              Colors
-            </span>
-          </div>
-          <ColorRow
-            label="Primary text"
-            value={effectiveTextPrimaryColor}
-            theme={palette}
-            onChange={(value) => onTextPrimaryColorChange(value)}
-          />
-          <ColorRow
-            label="Secondary"
-            value={effectiveTextSecondaryColor}
-            theme={palette}
-            onChange={(value) => onTextSecondaryColorChange(value)}
-          />
-          <ColorRow
-            label="Muted"
-            value={effectiveTextMutedColor}
-            theme={palette}
-            onChange={(value) => onTextMutedColorChange(value)}
-          />
-        </SectionCard>
-
-        <SectionCard icon="≡" title="Explorer" theme={palette}>
-          <SettingRow
-            title="Compact list view"
-            desc="Reduce list row height and spacing while keeping horizontal scrolling."
-            theme={palette}
-            right={
-              <Toggle
-                checked={compactListView}
-                onToggle={() => onCompactListViewChange(!compactListView)}
-                theme={palette}
-                label="Compact list view"
-              />
+                Reset
+              </button>
             }
-          />
-          <SettingRow
-            title="Compact tree view"
-            desc="Reduce tree row height and spacing in the folders pane."
-            theme={palette}
-            right={
-              <Toggle
-                checked={compactTreeView}
-                onToggle={() => onCompactTreeViewChange(!compactTreeView)}
-                theme={palette}
-                label="Compact tree view"
-              />
-            }
-          />
-          <SettingRow
-            title="Compact detail view"
-            desc="Use the same denser row height as compact list view in detail mode."
-            theme={palette}
-            right={
-              <Toggle
-                checked={compactDetailsView}
-                onToggle={() => onCompactDetailsViewChange(!compactDetailsView)}
-                theme={palette}
-                label="Compact detail view"
-              />
-            }
-          />
-          <SettingRow
-            title="Single-click expand tree folders"
-            desc="Expand or collapse filesystem tree folders when you single-click them in the folders pane."
-            theme={palette}
-            right={
-              <Toggle
-                checked={singleClickExpandTreeItems}
-                onToggle={() => onSingleClickExpandTreeItemsChange(!singleClickExpandTreeItems)}
-                theme={palette}
-                label="Single-click expand tree folders"
-              />
-            }
-          />
-          <SettingRow
-            title="Highlight hovered items"
-            desc="Show hover highlighting in list view, detail view, and search results."
-            theme={palette}
-            right={
-              <Toggle
-                checked={highlightHoveredItems}
-                onToggle={() => onHighlightHoveredItemsChange(!highlightHoveredItems)}
-                theme={palette}
-                label="Highlight hovered items"
-              />
-            }
-          />
-
-          <div
-            style={{
-              borderTop: `1px solid ${palette.separator}`,
-              paddingTop: "8px",
-              marginTop: "4px",
-            }}
           >
-            <span
-              style={{
-                fontSize: "10px",
-                fontFamily: mono,
-                fontWeight: 600,
-                color: palette.label.category,
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-              }}
-            >
-              Detail View Columns
-            </span>
-          </div>
-          <div
-            style={{
-              display: "flex",
-              gap: "4px",
-              paddingTop: "8px",
-              paddingBottom: "4px",
-              flexWrap: "wrap",
-            }}
-          >
-            {(
-              [
-                ["size", "Size"],
-                ["modified", "Modified"],
-                ["permissions", "Permissions"],
-              ] as const
-            ).map(([key, label]) => (
-              <CheckboxChip
-                key={key}
-                checked={detailColumns[key]}
-                label={label}
-                theme={palette}
-                onToggle={() =>
-                  onDetailColumnsChange({
-                    ...detailColumns,
-                    [key]: !detailColumns[key],
-                  })
-                }
-              />
-            ))}
-          </div>
-        </SectionCard>
-
-        <SectionCard icon="⌨" title="Keyboard" theme={palette}>
-          <SettingRow
-            title="Tab switches between panes"
-            desc="Use Tab and Shift+Tab to move between the folder tree and file list while keeping native Tab behavior in dialogs and standard controls."
-            theme={palette}
-            right={
-              <Toggle
-                checked={tabSwitchesExplorerPanes}
-                onToggle={() => onTabSwitchesExplorerPanesChange(!tabSwitchesExplorerPanes)}
-                theme={palette}
-                label="Tab switches between panes"
-              />
-            }
-          />
-          <SettingRow
-            title="Type to select"
-            desc="Jump to the first visible matching item while typing in the tree, list, or detail view."
-            theme={palette}
-            right={
-              <Toggle
-                checked={typeaheadEnabled}
-                onToggle={() => onTypeaheadEnabledChange(!typeaheadEnabled)}
-                theme={palette}
-                label="Type to select"
-              />
-            }
-          />
-          <SettingRow
-            title="Reset delay"
-            theme={palette}
-            isLast
-            right={
-              <SelectControl
-                value={typeaheadDebounceMs}
-                options={typeaheadDebounceOptions}
-                theme={palette}
-                width="110px"
-                ariaLabel="Reset delay"
-                disabled={!typeaheadEnabled}
-                onChange={(value) => onTypeaheadDebounceMsChange(Number(value))}
-                formatOption={(value) => `${value} ms`}
-              />
-            }
-          />
-        </SectionCard>
-
-        <SectionCard icon="🔔" title="Notifications" theme={palette}>
-          <SettingRow
-            title="Show notifications"
-            desc="Show bottom-right banners for copy, cut, paste status, and warnings."
-            theme={palette}
-            right={
-              <Toggle
-                checked={notificationsEnabled}
-                onToggle={() => onNotificationsEnabledChange(!notificationsEnabled)}
-                theme={palette}
-                label="Show notifications"
-              />
-            }
-          />
-          <SettingRow
-            title="Notification duration"
-            theme={palette}
-            isLast
-            right={
-              <SelectControl
-                value={notificationDurationSeconds}
-                options={notificationDurationSecondsOptions}
-                theme={palette}
-                width="110px"
-                ariaLabel="Notification duration"
-                disabled={!notificationsEnabled}
-                onChange={(value) => onNotificationDurationSecondsChange(Number(value))}
-                formatOption={(value) => `${value} s`}
-              />
-            }
-          />
-        </SectionCard>
-
-        <SectionCard icon="🧾" title="Action Log" theme={palette}>
-          <SettingRow
-            title="Enable action log"
-            desc="Record file actions and launches, and show Action Log in the View menu and left toolbar."
-            theme={palette}
-            isLast
-            right={
-              <Toggle
-                checked={actionLogEnabled}
-                onToggle={() => onActionLogEnabledChange(!actionLogEnabled)}
-                theme={palette}
-                label="Enable action log"
-              />
-            }
-          />
-        </SectionCard>
-
-        <SectionCard icon="⚡" title="Startup" theme={palette}>
-          <SettingRow
-            title="Restore last visited folder"
-            desc="Reopen the last folder instead of starting at home."
-            theme={palette}
-            right={
-              <Toggle
-                checked={restoreLastVisitedFolderOnStartup}
-                onToggle={() =>
-                  onRestoreLastVisitedFolderOnStartupChange(!restoreLastVisitedFolderOnStartup)
-                }
-                theme={palette}
-                label="Restore last visited folder"
-              />
-            }
-          />
-
-          <ApplicationSelectionDisplay
-            title="Terminal app"
-            ariaLabel="Terminal app"
-            application={terminalApp ?? DEFAULT_TERMINAL_APPLICATION}
-            theme={palette}
-            actions={
-              <>
-                <ActionButton
-                  label="Browse"
-                  ariaLabel="Browse terminal app"
-                  theme={palette}
-                  onClick={onBrowseTerminalApp}
-                />
-                {terminalApp ? (
-                  <ActionButton
-                    label="Default"
-                    ariaLabel="Use default terminal app"
-                    theme={palette}
-                    onClick={onClearTerminalApp}
-                  />
-                ) : null}
-              </>
-            }
-          />
-        </SectionCard>
-
-        <SectionCard icon="✎" title="File Opening" theme={palette}>
-          <SettingRow
-            title="File activation"
-            desc="Choose what Enter and double click do for files in the content pane. Folders still open normally."
-            theme={palette}
-            right={
-              <SelectControl
-                value={fileActivationAction}
-                options={["open", "edit"] satisfies FileActivationAction[]}
-                theme={palette}
-                width="120px"
-                ariaLabel="File activation"
-                onChange={(value) => onFileActivationActionChange(value as FileActivationAction)}
-                formatOption={(value) => (value === "edit" ? "Edit" : "Open")}
-              />
-            }
-          />
-          <SettingRow
-            title="Open and Edit limit"
-            desc="Prevent large accidental launches. Applies to the Open and Edit actions."
-            theme={palette}
-            right={
-              <OpenItemLimitInput
-                value={openItemLimit}
-                theme={palette}
-                onChange={onOpenItemLimitChange}
-              />
-            }
-          />
-
-          <ApplicationSelectionDisplay
-            title="Default text editor"
-            ariaLabel="Default text editor"
-            application={defaultTextEditor}
-            theme={palette}
-            actions={
-              <>
-                <ActionButton
-                  label="Browse"
-                  ariaLabel="Browse default text editor"
-                  theme={palette}
-                  onClick={onBrowseDefaultTextEditor}
-                />
-                {!isDefaultTextEditorSelection ? (
-                  <ActionButton
-                    label="Default"
-                    ariaLabel="Use default text editor"
-                    theme={palette}
-                    onClick={onClearDefaultTextEditor}
-                  />
-                ) : null}
-              </>
-            }
-          />
-        </SectionCard>
-
-        <SectionCard icon="★" title="Favorites" theme={palette}>
-          <SettingRow
-            title="Favorites placement"
-            theme={palette}
-            desc="Choose whether favorites stay inside the tree or live in a separate row above it."
-            right={
-              <SelectControl
-                value={favoritesPlacement}
-                options={["integrated", "separate"]}
-                theme={palette}
-                width="220px"
-                ariaLabel="Favorites placement"
-                onChange={(value) => onFavoritesPlacementChange(value as FavoritesPlacement)}
-                formatOption={(value) =>
-                  value === "integrated" ? "Integrated in tree" : "Separate row above tree"
-                }
-              />
-            }
-          />
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "12px",
-              padding: "10px 0 12px",
-              borderBottom: `1px solid ${palette.separator}`,
-            }}
-          >
-            <div
-              style={{
-                fontSize: "12.5px",
-                fontFamily: sans,
-                fontWeight: 500,
-                color: palette.label.primary,
-              }}
-            >
-              Configured favorites
-            </div>
-            <ActionButton
-              label="Add Favorite"
+            <SettingRow
+              title="Appearance"
+              desc={theme === "auto" ? "Follows the macOS Light / Dark setting." : undefined}
               theme={palette}
-              ariaLabel="Add Favorite"
-              onClick={onAddFavorite}
+              right={
+                <AppearanceModePicker
+                  theme={theme}
+                  autoLightTheme={autoLightTheme}
+                  autoDarkTheme={autoDarkTheme}
+                  palette={palette}
+                  onChange={onThemeChange}
+                />
+              }
             />
-          </div>
+            <SettingRow
+              title="Theme"
+              theme={palette}
+              right={
+                <ThemeSelectControl
+                  value={theme}
+                  themeOptions={themeOptions}
+                  theme={palette}
+                  width="176px"
+                  ariaLabel="Theme"
+                  onChange={(value) => onThemeChange(value as ThemePreference)}
+                />
+              }
+            />
+            {theme === "auto" ? (
+              <>
+                <SettingRow
+                  title="Light appearance"
+                  desc="Palette used while macOS is in Light mode."
+                  theme={palette}
+                  right={
+                    <ThemeSelectControl
+                      value={autoLightTheme}
+                      themeOptions={LIGHT_THEME_OPTIONS}
+                      theme={palette}
+                      width="176px"
+                      ariaLabel="Light appearance theme"
+                      onChange={(value) => onAutoLightThemeChange(value as ThemeMode)}
+                    />
+                  }
+                />
+                <SettingRow
+                  title="Dark appearance"
+                  desc="Palette used while macOS is in Dark mode."
+                  theme={palette}
+                  right={
+                    <ThemeSelectControl
+                      value={autoDarkTheme}
+                      themeOptions={DARK_THEME_OPTIONS}
+                      theme={palette}
+                      width="176px"
+                      ariaLabel="Dark appearance theme"
+                      onChange={(value) => onAutoDarkThemeChange(value as ThemeMode)}
+                    />
+                  }
+                />
+              </>
+            ) : null}
 
-          {favorites.map((favorite, index) => (
+            <IconThemePicker value={iconTheme} theme={palette} onChange={onIconThemeChange} />
+
+            <SettingRow
+              title="Accent color"
+              theme={palette}
+              right={
+                <div style={{ maxWidth: "100%" }}>
+                  <AccentSelector
+                    accent={accent}
+                    accentOptions={accentOptions}
+                    theme={palette}
+                    labelPrefix="Accent color"
+                    mode="inline"
+                    onChange={onAccentChange}
+                  />
+                </div>
+              }
+            />
+
+            <SettingRow
+              title="Accent toolbar buttons"
+              desc="Use the selected accent for primary toolbar actions."
+              theme={palette}
+              right={
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <AccentSelector
+                    accent={toolbarAccent}
+                    accentOptions={accentOptions}
+                    theme={palette}
+                    disabled={!accentToolbarButtons}
+                    labelPrefix="Toolbar accent"
+                    showSelectedLabel={false}
+                    onChange={onToolbarAccentChange}
+                  />
+                  <Toggle
+                    checked={accentToolbarButtons}
+                    onToggle={() => onAccentToolbarButtonsChange(!accentToolbarButtons)}
+                    theme={palette}
+                    label="Accent toolbar buttons"
+                  />
+                </div>
+              }
+            />
+
+            <SettingRow
+              title="Accent favorite items"
+              desc="Use the dedicated favorite accent for favorite icons in the tree."
+              theme={palette}
+              right={
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <AccentSelector
+                    accent={favoriteAccent}
+                    accentOptions={accentOptions}
+                    theme={palette}
+                    disabled={!accentFavoriteItems}
+                    labelPrefix="Favorite accent"
+                    showSelectedLabel={false}
+                    onChange={onFavoriteAccentChange}
+                  />
+                  <Toggle
+                    checked={accentFavoriteItems}
+                    onToggle={() => onAccentFavoriteItemsChange(!accentFavoriteItems)}
+                    theme={palette}
+                    label="Accent favorite items"
+                  />
+                </div>
+              }
+            />
+
+            <SettingRow
+              title="Accent favorite text"
+              desc="Also apply the favorite accent to favorite labels in the tree."
+              theme={palette}
+              right={
+                <Toggle
+                  checked={accentFavoriteText}
+                  onToggle={() => onAccentFavoriteTextChange(!accentFavoriteText)}
+                  theme={palette}
+                  label="Accent favorite text"
+                  disabled={!accentFavoriteItems}
+                />
+              }
+            />
+
+            <SettingRow
+              title="Zoom level"
+              desc={`Electron window zoom. Accepts values between ${ZOOM_PERCENT_MIN}% and ${ZOOM_PERCENT_MAX}%.`}
+              theme={palette}
+              right={
+                <ZoomLevelInput
+                  value={zoomPercent}
+                  theme={palette}
+                  onChange={onZoomPercentChange}
+                />
+              }
+            />
+
+            <SettingRow
+              title="Font"
+              theme={palette}
+              right={
+                <SelectControl
+                  value={uiFontFamily}
+                  options={uiFontOptions.map((option) => option.value)}
+                  theme={palette}
+                  width="190px"
+                  ariaLabel="Font"
+                  onChange={(value) => onUiFontFamilyChange(value as UiFontFamily)}
+                  formatOption={(value) =>
+                    uiFontOptions.find((option) => option.value === value)?.label ?? String(value)
+                  }
+                />
+              }
+            />
+            <SettingRow
+              title="Text size"
+              desc={`${uiFontSize} pt`}
+              theme={palette}
+              right={
+                <label
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    color: palette.label.secondary,
+                    fontFamily: sans,
+                  }}
+                >
+                  <span aria-hidden="true" style={{ fontSize: "11px" }}>
+                    A
+                  </span>
+                  <input
+                    type="range"
+                    aria-label="Size"
+                    min={uiFontSizeOptions[0] ?? 12}
+                    max={uiFontSizeOptions.at(-1) ?? 15}
+                    step={1}
+                    value={uiFontSize}
+                    onChange={(event) => onUiFontSizeChange(Number(event.currentTarget.value))}
+                    style={{ width: "150px", accentColor: palette.accent.solid }}
+                  />
+                  <span aria-hidden="true" style={{ fontSize: "16px" }}>
+                    A
+                  </span>
+                </label>
+              }
+            />
+            <SettingRow
+              title="Font weight"
+              theme={palette}
+              right={
+                <SelectControl
+                  value={uiFontWeight}
+                  options={uiFontWeightOptions}
+                  theme={palette}
+                  width="120px"
+                  ariaLabel="Weight"
+                  onChange={(value) => onUiFontWeightChange(Number(value) as UiFontWeight)}
+                  formatOption={(value) =>
+                    value === 400 ? "Regular" : value === 500 ? "Medium" : "Semibold"
+                  }
+                />
+              }
+            />
+
             <div
-              key={`${favorite.path}-${index}`}
+              style={{
+                paddingTop: "12px",
+                paddingBottom: "2px",
+                fontSize: "12px",
+                fontFamily: sans,
+                fontWeight: 600,
+                color: palette.label.secondary,
+              }}
+            >
+              Text colors
+            </div>
+            <ColorRow
+              label="Primary text"
+              value={effectiveTextPrimaryColor}
+              theme={palette}
+              onChange={(value) => onTextPrimaryColorChange(value)}
+            />
+            <ColorRow
+              label="Secondary"
+              value={effectiveTextSecondaryColor}
+              theme={palette}
+              onChange={(value) => onTextSecondaryColorChange(value)}
+            />
+            <ColorRow
+              label="Muted"
+              value={effectiveTextMutedColor}
+              theme={palette}
+              onChange={(value) => onTextMutedColorChange(value)}
+            />
+          </SectionCard>
+        ) : null}
+
+        {showSection("explorer") ? (
+          <SectionCard icon="≡" title="Explorer" theme={palette}>
+            <SettingRow
+              title="Compact list view"
+              desc="Reduce list row height and spacing while keeping horizontal scrolling."
+              theme={palette}
+              right={
+                <Toggle
+                  checked={compactListView}
+                  onToggle={() => onCompactListViewChange(!compactListView)}
+                  theme={palette}
+                  label="Compact list view"
+                />
+              }
+            />
+            <SettingRow
+              title="Compact tree view"
+              desc="Reduce tree row height and spacing in the folders pane."
+              theme={palette}
+              right={
+                <Toggle
+                  checked={compactTreeView}
+                  onToggle={() => onCompactTreeViewChange(!compactTreeView)}
+                  theme={palette}
+                  label="Compact tree view"
+                />
+              }
+            />
+            <SettingRow
+              title="Compact detail view"
+              desc="Use the same denser row height as compact list view in detail mode."
+              theme={palette}
+              right={
+                <Toggle
+                  checked={compactDetailsView}
+                  onToggle={() => onCompactDetailsViewChange(!compactDetailsView)}
+                  theme={palette}
+                  label="Compact detail view"
+                />
+              }
+            />
+            <SettingRow
+              title="Single-click expand tree folders"
+              desc="Expand or collapse filesystem tree folders when you single-click them in the folders pane."
+              theme={palette}
+              right={
+                <Toggle
+                  checked={singleClickExpandTreeItems}
+                  onToggle={() => onSingleClickExpandTreeItemsChange(!singleClickExpandTreeItems)}
+                  theme={palette}
+                  label="Single-click expand tree folders"
+                />
+              }
+            />
+            <SettingRow
+              title="Highlight hovered items"
+              desc="Show hover highlighting in list view, detail view, and search results."
+              theme={palette}
+              right={
+                <Toggle
+                  checked={highlightHoveredItems}
+                  onToggle={() => onHighlightHoveredItemsChange(!highlightHoveredItems)}
+                  theme={palette}
+                  label="Highlight hovered items"
+                />
+              }
+            />
+
+            <div
+              style={{
+                borderTop: `1px solid ${palette.separator}`,
+                paddingTop: "8px",
+                marginTop: "4px",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: "10px",
+                  fontFamily: mono,
+                  fontWeight: 600,
+                  color: palette.label.category,
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                }}
+              >
+                Detail View Columns
+              </span>
+            </div>
+            <div
               style={{
                 display: "flex",
-                alignItems: "flex-start",
+                gap: "4px",
+                paddingTop: "8px",
+                paddingBottom: "4px",
+                flexWrap: "wrap",
+              }}
+            >
+              {(
+                [
+                  ["size", "Size"],
+                  ["modified", "Modified"],
+                  ["permissions", "Permissions"],
+                ] as const
+              ).map(([key, label]) => (
+                <CheckboxChip
+                  key={key}
+                  checked={detailColumns[key]}
+                  label={label}
+                  theme={palette}
+                  onToggle={() =>
+                    onDetailColumnsChange({
+                      ...detailColumns,
+                      [key]: !detailColumns[key],
+                    })
+                  }
+                />
+              ))}
+            </div>
+          </SectionCard>
+        ) : null}
+
+        {showSection("general") ? (
+          <SectionCard icon="⌨" title="Keyboard" theme={palette}>
+            <SettingRow
+              title="Tab switches between panes"
+              desc="Use Tab and Shift+Tab to move between the folder tree and file list while keeping native Tab behavior in dialogs and standard controls."
+              theme={palette}
+              right={
+                <Toggle
+                  checked={tabSwitchesExplorerPanes}
+                  onToggle={() => onTabSwitchesExplorerPanesChange(!tabSwitchesExplorerPanes)}
+                  theme={palette}
+                  label="Tab switches between panes"
+                />
+              }
+            />
+            <SettingRow
+              title="Type to select"
+              desc="Jump to the first visible matching item while typing in the tree, list, or detail view."
+              theme={palette}
+              right={
+                <Toggle
+                  checked={typeaheadEnabled}
+                  onToggle={() => onTypeaheadEnabledChange(!typeaheadEnabled)}
+                  theme={palette}
+                  label="Type to select"
+                />
+              }
+            />
+            <SettingRow
+              title="Reset delay"
+              theme={palette}
+              isLast
+              right={
+                <SelectControl
+                  value={typeaheadDebounceMs}
+                  options={typeaheadDebounceOptions}
+                  theme={palette}
+                  width="110px"
+                  ariaLabel="Reset delay"
+                  disabled={!typeaheadEnabled}
+                  onChange={(value) => onTypeaheadDebounceMsChange(Number(value))}
+                  formatOption={(value) => `${value} ms`}
+                />
+              }
+            />
+          </SectionCard>
+        ) : null}
+
+        {showSection("general") ? (
+          <SectionCard icon="🔔" title="Notifications" theme={palette}>
+            <SettingRow
+              title="Show notifications"
+              desc="Show bottom-right banners for copy, cut, paste status, and warnings."
+              theme={palette}
+              right={
+                <Toggle
+                  checked={notificationsEnabled}
+                  onToggle={() => onNotificationsEnabledChange(!notificationsEnabled)}
+                  theme={palette}
+                  label="Show notifications"
+                />
+              }
+            />
+            <SettingRow
+              title="Notification duration"
+              theme={palette}
+              isLast
+              right={
+                <SelectControl
+                  value={notificationDurationSeconds}
+                  options={notificationDurationSecondsOptions}
+                  theme={palette}
+                  width="110px"
+                  ariaLabel="Notification duration"
+                  disabled={!notificationsEnabled}
+                  onChange={(value) => onNotificationDurationSecondsChange(Number(value))}
+                  formatOption={(value) => `${value} s`}
+                />
+              }
+            />
+          </SectionCard>
+        ) : null}
+
+        {showSection("general") ? (
+          <SectionCard icon="🧾" title="Action Log" theme={palette}>
+            <SettingRow
+              title="Enable action log"
+              desc="Record file actions and launches, and show Action Log in the View menu and left toolbar."
+              theme={palette}
+              isLast
+              right={
+                <Toggle
+                  checked={actionLogEnabled}
+                  onToggle={() => onActionLogEnabledChange(!actionLogEnabled)}
+                  theme={palette}
+                  label="Enable action log"
+                />
+              }
+            />
+          </SectionCard>
+        ) : null}
+
+        {showSection("general") ? (
+          <SectionCard icon="⚡" title="Startup" theme={palette}>
+            <SettingRow
+              title="Restore last visited folder"
+              desc="Reopen the last folder instead of starting at home."
+              theme={palette}
+              right={
+                <Toggle
+                  checked={restoreLastVisitedFolderOnStartup}
+                  onToggle={() =>
+                    onRestoreLastVisitedFolderOnStartupChange(!restoreLastVisitedFolderOnStartup)
+                  }
+                  theme={palette}
+                  label="Restore last visited folder"
+                />
+              }
+            />
+
+            <ApplicationSelectionDisplay
+              title="Terminal app"
+              ariaLabel="Terminal app"
+              application={terminalApp ?? DEFAULT_TERMINAL_APPLICATION}
+              theme={palette}
+              actions={
+                <>
+                  <ActionButton
+                    label="Browse"
+                    ariaLabel="Browse terminal app"
+                    theme={palette}
+                    onClick={onBrowseTerminalApp}
+                  />
+                  {terminalApp ? (
+                    <ActionButton
+                      label="Default"
+                      ariaLabel="Use default terminal app"
+                      theme={palette}
+                      onClick={onClearTerminalApp}
+                    />
+                  ) : null}
+                </>
+              }
+            />
+          </SectionCard>
+        ) : null}
+
+        {searchDefaults && showSection("search") ? (
+          <SectionCard title="Search" theme={palette}>
+            <SettingRow
+              title="Pattern type"
+              desc="How the search field text is matched. Regex supports partial matches."
+              theme={palette}
+              right={
+                <SelectControl
+                  value={searchDefaults.searchPatternMode}
+                  options={["regex", "glob"]}
+                  theme={palette}
+                  width="120px"
+                  ariaLabel="Default pattern type"
+                  onChange={(value) =>
+                    onSearchDefaultsChange({ searchPatternMode: value as "regex" | "glob" })
+                  }
+                  formatOption={(value) => (value === "glob" ? "Glob" : "Regex")}
+                />
+              }
+            />
+            <SettingRow
+              title="Match on"
+              theme={palette}
+              right={
+                <SelectControl
+                  value={searchDefaults.searchMatchScope}
+                  options={["name", "path"]}
+                  theme={palette}
+                  width="120px"
+                  ariaLabel="Default match scope"
+                  onChange={(value) =>
+                    onSearchDefaultsChange({ searchMatchScope: value as "name" | "path" })
+                  }
+                  formatOption={(value) => (value === "path" ? "Full Path" : "Name")}
+                />
+              }
+            />
+            <SettingRow
+              title="Search subfolders"
+              theme={palette}
+              right={
+                <Toggle
+                  checked={searchDefaults.searchRecursive}
+                  onToggle={() =>
+                    onSearchDefaultsChange({ searchRecursive: !searchDefaults.searchRecursive })
+                  }
+                  theme={palette}
+                  label="Search subfolders"
+                />
+              }
+            />
+            <SettingRow
+              title="Include hidden files"
+              theme={palette}
+              right={
+                <Toggle
+                  checked={searchDefaults.searchIncludeHidden}
+                  onToggle={() =>
+                    onSearchDefaultsChange({
+                      searchIncludeHidden: !searchDefaults.searchIncludeHidden,
+                    })
+                  }
+                  theme={palette}
+                  label="Include hidden files"
+                />
+              }
+            />
+            <SettingRow
+              title="Filter results by"
+              desc="What the results filter field matches against."
+              theme={palette}
+              isLast
+              right={
+                <SelectControl
+                  value={searchDefaults.searchResultsFilterScope}
+                  options={["name", "path"]}
+                  theme={palette}
+                  width="120px"
+                  ariaLabel="Default results filter scope"
+                  onChange={(value) =>
+                    onSearchDefaultsChange({ searchResultsFilterScope: value as "name" | "path" })
+                  }
+                  formatOption={(value) => (value === "path" ? "Path" : "Name")}
+                />
+              }
+            />
+          </SectionCard>
+        ) : null}
+        {showSection("files") ? (
+          <SectionCard icon="✎" title="File Opening" theme={palette}>
+            <SettingRow
+              title="File activation"
+              desc="Choose what double click (and Return, when set to Open) does for files. Folders still open normally."
+              theme={palette}
+              right={
+                <SelectControl
+                  value={fileActivationAction}
+                  options={["open", "edit"] satisfies FileActivationAction[]}
+                  theme={palette}
+                  width="120px"
+                  ariaLabel="File activation"
+                  onChange={(value) => onFileActivationActionChange(value as FileActivationAction)}
+                  formatOption={(value) => (value === "edit" ? "Edit" : "Open")}
+                />
+              }
+            />
+            <SettingRow
+              title="Return key"
+              desc="Rename like Finder, or open the selection. ⌘O and ⌘↓ always open."
+              theme={palette}
+              right={
+                <SelectControl
+                  value={returnKeyAction}
+                  options={["rename", "open"] satisfies ReturnKeyAction[]}
+                  theme={palette}
+                  width="120px"
+                  ariaLabel="Return key"
+                  onChange={(value) => onReturnKeyActionChange(value as ReturnKeyAction)}
+                  formatOption={(value) => (value === "open" ? "Open" : "Rename")}
+                />
+              }
+            />
+            <SettingRow
+              title="Open and Edit limit"
+              desc="Prevent large accidental launches. Applies to the Open and Edit actions."
+              theme={palette}
+              right={
+                <OpenItemLimitInput
+                  value={openItemLimit}
+                  theme={palette}
+                  onChange={onOpenItemLimitChange}
+                />
+              }
+            />
+
+            <ApplicationSelectionDisplay
+              title="Default text editor"
+              ariaLabel="Default text editor"
+              application={defaultTextEditor}
+              theme={palette}
+              actions={
+                <>
+                  <ActionButton
+                    label="Browse"
+                    ariaLabel="Browse default text editor"
+                    theme={palette}
+                    onClick={onBrowseDefaultTextEditor}
+                  />
+                  {!isDefaultTextEditorSelection ? (
+                    <ActionButton
+                      label="Default"
+                      ariaLabel="Use default text editor"
+                      theme={palette}
+                      onClick={onClearDefaultTextEditor}
+                    />
+                  ) : null}
+                </>
+              }
+            />
+          </SectionCard>
+        ) : null}
+
+        {showSection("explorer") ? (
+          <SectionCard icon="★" title="Favorites" theme={palette}>
+            <SettingRow
+              title="Favorites placement"
+              theme={palette}
+              desc="Show favorites as their own sidebar section, or as a Favorites folder at the top of the folder tree that scrolls with it."
+              right={
+                <SelectControl
+                  value={favoritesPlacement}
+                  options={["separate", "integrated"]}
+                  theme={palette}
+                  width="220px"
+                  ariaLabel="Favorites placement"
+                  onChange={(value) => onFavoritesPlacementChange(value as FavoritesPlacement)}
+                  formatOption={(value) =>
+                    value === "integrated" ? "In the folder tree" : "Separate section"
+                  }
+                />
+              }
+            />
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
                 justifyContent: "space-between",
                 gap: "12px",
-                padding: "12px 0",
-                borderBottom:
-                  index === favorites.length - 1 ? "none" : `1px solid ${palette.separator}`,
+                padding: "10px 0 12px",
+                borderBottom: `1px solid ${palette.separator}`,
               }}
             >
               <div
                 style={{
-                  minWidth: 0,
-                  flex: 1,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "12px",
+                  fontSize: "12.5px",
+                  fontFamily: sans,
+                  fontWeight: 500,
+                  color: palette.label.primary,
                 }}
               >
-                <FavoriteItemIcon icon={favorite.icon} />
+                Configured favorites
+              </div>
+              <div style={{ display: "flex", gap: "6px" }}>
+                <ActionButton
+                  label="Restore Defaults"
+                  theme={palette}
+                  ariaLabel="Restore default favorites"
+                  onClick={onRestoreDefaultFavorites}
+                />
+                <ActionButton
+                  label="Add Favorite"
+                  theme={palette}
+                  ariaLabel="Add Favorite"
+                  onClick={onAddFavorite}
+                />
+              </div>
+            </div>
+
+            {favorites.map((favorite, index) => (
+              <div
+                key={`${favorite.path}-${index}`}
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  justifyContent: "space-between",
+                  gap: "12px",
+                  padding: "12px 0",
+                  borderBottom:
+                    index === favorites.length - 1 ? "none" : `1px solid ${palette.separator}`,
+                }}
+              >
+                <div
+                  style={{
+                    minWidth: 0,
+                    flex: 1,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "12px",
+                  }}
+                >
+                  <FavoriteItemIcon icon={favorite.icon} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div
+                      style={{
+                        fontSize: "12.5px",
+                        fontFamily: sans,
+                        fontWeight: 500,
+                        color: palette.label.primary,
+                        marginBottom: "4px",
+                      }}
+                    >
+                      {getFavoriteLabel(favorite.path, homePath)}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        fontFamily: mono,
+                        color: palette.label.secondary,
+                        lineHeight: "1.4",
+                        wordBreak: "break-all",
+                      }}
+                    >
+                      {favorite.path}
+                    </div>
+                  </div>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    flexWrap: "wrap",
+                    justifyContent: "flex-end",
+                  }}
+                >
+                  <FavoriteIconPicker
+                    selectedIcon={favorite.icon}
+                    theme={palette}
+                    ariaLabel={`Favorite icon for ${getFavoriteLabel(favorite.path, homePath)}`}
+                    onChange={(icon) => onFavoriteIconChange(index, icon)}
+                  />
+                  <ActionButton
+                    label="Browse"
+                    ariaLabel={`Browse ${getFavoriteLabel(favorite.path, homePath)}`}
+                    theme={palette}
+                    onClick={() => onBrowseFavorite(index)}
+                  />
+                  <ActionButton
+                    label="Up"
+                    ariaLabel={`Move ${getFavoriteLabel(favorite.path, homePath)} up`}
+                    theme={palette}
+                    disabled={index === 0}
+                    onClick={() => onMoveFavorite(index, "up")}
+                  />
+                  <ActionButton
+                    label="Down"
+                    ariaLabel={`Move ${getFavoriteLabel(favorite.path, homePath)} down`}
+                    theme={palette}
+                    disabled={index === favorites.length - 1}
+                    onClick={() => onMoveFavorite(index, "down")}
+                  />
+                  <ActionButton
+                    label="Remove"
+                    ariaLabel={`Remove ${getFavoriteLabel(favorite.path, homePath)}`}
+                    theme={palette}
+                    disabled={favorite.path === getTrashPath(homePath)}
+                    onClick={() => onRemoveFavorite(index)}
+                  />
+                </div>
+              </div>
+            ))}
+          </SectionCard>
+        ) : null}
+
+        {showSection("files") ? (
+          <SectionCard icon="↗" title="Open With" theme={palette}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "12px",
+                padding: "10px 0 12px",
+                borderBottom: `1px solid ${palette.separator}`,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "12.5px",
+                  fontFamily: sans,
+                  fontWeight: 500,
+                  color: palette.label.primary,
+                }}
+              >
+                Configured applications
+              </div>
+              <ActionButton
+                label="Add App"
+                theme={palette}
+                ariaLabel="Add Open With application"
+                onClick={onAddOpenWithApplication}
+              />
+            </div>
+
+            {openWithApplications.map((application, index) => (
+              <div
+                key={application.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "12px",
+                  padding: "12px 0",
+                  borderBottom:
+                    index === openWithApplications.length - 1
+                      ? "none"
+                      : `1px solid ${palette.separator}`,
+                }}
+              >
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div
                     style={{
@@ -3593,7 +3862,7 @@ export function SettingsView({
                       marginBottom: "4px",
                     }}
                   >
-                    {getFavoriteLabel(favorite.path, homePath)}
+                    {application.appName}
                   </div>
                   <div
                     style={{
@@ -3604,224 +3873,128 @@ export function SettingsView({
                       wordBreak: "break-all",
                     }}
                   >
-                    {favorite.path}
+                    {application.appPath}
                   </div>
                 </div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    flexWrap: "wrap",
+                    justifyContent: "flex-end",
+                  }}
+                >
+                  <ActionButton
+                    label="Browse"
+                    ariaLabel={`Browse ${application.appName}`}
+                    theme={palette}
+                    onClick={() => onBrowseOpenWithApplication(application.id)}
+                  />
+                  <ActionButton
+                    label="Up"
+                    ariaLabel={`Move ${application.appName} up`}
+                    theme={palette}
+                    disabled={index === 0}
+                    onClick={() => onMoveOpenWithApplication(application.id, "up")}
+                  />
+                  <ActionButton
+                    label="Down"
+                    ariaLabel={`Move ${application.appName} down`}
+                    theme={palette}
+                    disabled={index === openWithApplications.length - 1}
+                    onClick={() => onMoveOpenWithApplication(application.id, "down")}
+                  />
+                  <ActionButton
+                    label="Remove"
+                    ariaLabel={`Remove ${application.appName}`}
+                    theme={palette}
+                    onClick={() => onRemoveOpenWithApplication(application.id)}
+                  />
+                </div>
               </div>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  flexWrap: "wrap",
-                  justifyContent: "flex-end",
-                }}
-              >
-                <FavoriteIconPicker
-                  selectedIcon={favorite.icon}
-                  theme={palette}
-                  ariaLabel={`Favorite icon for ${getFavoriteLabel(favorite.path, homePath)}`}
-                  onChange={(icon) => onFavoriteIconChange(index, icon)}
-                />
-                <ActionButton
-                  label="Browse"
-                  ariaLabel={`Browse ${getFavoriteLabel(favorite.path, homePath)}`}
-                  theme={palette}
-                  onClick={() => onBrowseFavorite(index)}
-                />
-                <ActionButton
-                  label="Up"
-                  ariaLabel={`Move ${getFavoriteLabel(favorite.path, homePath)} up`}
-                  theme={palette}
-                  disabled={index === 0}
-                  onClick={() => onMoveFavorite(index, "up")}
-                />
-                <ActionButton
-                  label="Down"
-                  ariaLabel={`Move ${getFavoriteLabel(favorite.path, homePath)} down`}
-                  theme={palette}
-                  disabled={index === favorites.length - 1}
-                  onClick={() => onMoveFavorite(index, "down")}
-                />
-                <ActionButton
-                  label="Remove"
-                  ariaLabel={`Remove ${getFavoriteLabel(favorite.path, homePath)}`}
-                  theme={palette}
-                  disabled={favorite.path === getTrashPath(homePath)}
-                  onClick={() => onRemoveFavorite(index)}
-                />
-              </div>
-            </div>
-          ))}
-        </SectionCard>
+            ))}
+          </SectionCard>
+        ) : null}
 
-        <SectionCard icon="↗" title="Open With" theme={palette}>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "12px",
-              padding: "10px 0 12px",
-              borderBottom: `1px solid ${palette.separator}`,
-            }}
+        {showSection("toolbars") ? (
+          <SectionCard
+            icon="⌘"
+            title="Toolbars"
+            theme={palette}
+            resetButton={
+              <ActionButton label="Reset All" theme={palette} onClick={onResetToolbars} />
+            }
           >
-            <div
-              style={{
-                fontSize: "12.5px",
-                fontFamily: sans,
-                fontWeight: 500,
-                color: palette.label.primary,
-              }}
-            >
-              Configured applications
+            <SettingRow
+              title="Show command rail"
+              desc="Adds a narrow strip of icon buttons beside the sidebar. When off, the sidebar shows labeled sections and the View Options menu holds the view toggles."
+              theme={palette}
+              right={
+                <Toggle
+                  checked={showSidebarRail}
+                  onToggle={() => onShowSidebarRailChange(!showSidebarRail)}
+                  theme={palette}
+                  label="Show command rail"
+                />
+              }
+            />
+            <div style={{ display: "grid", gap: "22px", paddingTop: "6px" }}>
+              <ToolbarSurfaceEditor
+                title="Top toolbar"
+                items={customizableTopToolbarItems}
+                availableItems={sortedTopToolbarAvailableItems}
+                theme={palette}
+                onReorderItem={handleTopToolbarMove}
+                onRemoveItem={handleTopToolbarRemove}
+                onAddItem={handleTopToolbarAdd}
+                onReset={onResetTopToolbar}
+              />
+
+              <div style={{ height: "1px", background: palette.separator }} />
+              <ToolbarSurfaceEditor
+                title="Left rail"
+                items={customizableLeftMainItems}
+                availableItems={sortedLeftMainAvailableItems}
+                theme={palette}
+                onReorderItem={(sourceIndex, targetIndex) =>
+                  handleLeftToolbarMove("main", sourceIndex, targetIndex)
+                }
+                onRemoveItem={(index) => handleLeftToolbarRemove("main", index)}
+                onAddItem={(itemId) => handleLeftToolbarAdd("main", itemId)}
+                onReset={() =>
+                  onLeftToolbarItemsChange({
+                    ...leftToolbarItems,
+                    main: DEFAULT_LEFT_TOOLBAR_ITEMS.main.filter((itemId) => itemId !== "settings"),
+                  })
+                }
+              />
+              <div style={{ height: "1px", background: palette.separator }} />
+              <ToolbarSurfaceEditor
+                title="Bottom utility"
+                items={customizableLeftUtilityItems}
+                availableItems={sortedLeftUtilityAvailableItems}
+                theme={palette}
+                onReorderItem={(sourceIndex, targetIndex) =>
+                  handleLeftToolbarMove("utility", sourceIndex, targetIndex)
+                }
+                onRemoveItem={(index) => handleLeftToolbarRemove("utility", index)}
+                onAddItem={(itemId) => handleLeftToolbarAdd("utility", itemId)}
+                onReset={() =>
+                  onLeftToolbarItemsChange({
+                    ...leftToolbarItems,
+                    utility: [
+                      ...DEFAULT_LEFT_TOOLBAR_ITEMS.utility.filter(
+                        (itemId) => itemId !== "settings",
+                      ),
+                      "settings",
+                    ],
+                  })
+                }
+              />
             </div>
-            <ActionButton
-              label="Add App"
-              theme={palette}
-              ariaLabel="Add Open With application"
-              onClick={onAddOpenWithApplication}
-            />
-          </div>
-
-          {openWithApplications.map((application, index) => (
-            <div
-              key={application.id}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: "12px",
-                padding: "12px 0",
-                borderBottom:
-                  index === openWithApplications.length - 1
-                    ? "none"
-                    : `1px solid ${palette.separator}`,
-              }}
-            >
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div
-                  style={{
-                    fontSize: "12.5px",
-                    fontFamily: sans,
-                    fontWeight: 500,
-                    color: palette.label.primary,
-                    marginBottom: "4px",
-                  }}
-                >
-                  {application.appName}
-                </div>
-                <div
-                  style={{
-                    fontSize: "11px",
-                    fontFamily: mono,
-                    color: palette.label.secondary,
-                    lineHeight: "1.4",
-                    wordBreak: "break-all",
-                  }}
-                >
-                  {application.appPath}
-                </div>
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  flexWrap: "wrap",
-                  justifyContent: "flex-end",
-                }}
-              >
-                <ActionButton
-                  label="Browse"
-                  ariaLabel={`Browse ${application.appName}`}
-                  theme={palette}
-                  onClick={() => onBrowseOpenWithApplication(application.id)}
-                />
-                <ActionButton
-                  label="Up"
-                  ariaLabel={`Move ${application.appName} up`}
-                  theme={palette}
-                  disabled={index === 0}
-                  onClick={() => onMoveOpenWithApplication(application.id, "up")}
-                />
-                <ActionButton
-                  label="Down"
-                  ariaLabel={`Move ${application.appName} down`}
-                  theme={palette}
-                  disabled={index === openWithApplications.length - 1}
-                  onClick={() => onMoveOpenWithApplication(application.id, "down")}
-                />
-                <ActionButton
-                  label="Remove"
-                  ariaLabel={`Remove ${application.appName}`}
-                  theme={palette}
-                  onClick={() => onRemoveOpenWithApplication(application.id)}
-                />
-              </div>
-            </div>
-          ))}
-        </SectionCard>
-
-        <SectionCard
-          icon="⌘"
-          title="Toolbars"
-          theme={palette}
-          resetButton={<ActionButton label="Reset All" theme={palette} onClick={onResetToolbars} />}
-        >
-          <div style={{ display: "grid", gap: "22px", paddingTop: "6px" }}>
-            <ToolbarSurfaceEditor
-              title="Top toolbar"
-              items={customizableTopToolbarItems}
-              availableItems={sortedTopToolbarAvailableItems}
-              theme={palette}
-              onReorderItem={handleTopToolbarMove}
-              onRemoveItem={handleTopToolbarRemove}
-              onAddItem={handleTopToolbarAdd}
-              onReset={onResetTopToolbar}
-            />
-
-            <div style={{ height: "1px", background: palette.separator }} />
-            <ToolbarSurfaceEditor
-              title="Left rail"
-              items={customizableLeftMainItems}
-              availableItems={sortedLeftMainAvailableItems}
-              theme={palette}
-              onReorderItem={(sourceIndex, targetIndex) =>
-                handleLeftToolbarMove("main", sourceIndex, targetIndex)
-              }
-              onRemoveItem={(index) => handleLeftToolbarRemove("main", index)}
-              onAddItem={(itemId) => handleLeftToolbarAdd("main", itemId)}
-              onReset={() =>
-                onLeftToolbarItemsChange({
-                  ...leftToolbarItems,
-                  main: DEFAULT_LEFT_TOOLBAR_ITEMS.main.filter((itemId) => itemId !== "settings"),
-                })
-              }
-            />
-            <div style={{ height: "1px", background: palette.separator }} />
-            <ToolbarSurfaceEditor
-              title="Bottom utility"
-              items={customizableLeftUtilityItems}
-              availableItems={sortedLeftUtilityAvailableItems}
-              theme={palette}
-              onReorderItem={(sourceIndex, targetIndex) =>
-                handleLeftToolbarMove("utility", sourceIndex, targetIndex)
-              }
-              onRemoveItem={(index) => handleLeftToolbarRemove("utility", index)}
-              onAddItem={(itemId) => handleLeftToolbarAdd("utility", itemId)}
-              onReset={() =>
-                onLeftToolbarItemsChange({
-                  ...leftToolbarItems,
-                  utility: [
-                    ...DEFAULT_LEFT_TOOLBAR_ITEMS.utility.filter((itemId) => itemId !== "settings"),
-                    "settings",
-                  ],
-                })
-              }
-            />
-          </div>
-        </SectionCard>
+          </SectionCard>
+        ) : null}
 
         <div className="settings-footer-note" style={{ textAlign: "center", padding: "8px 0 4px" }}>
           <span

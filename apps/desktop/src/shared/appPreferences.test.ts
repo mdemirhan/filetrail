@@ -12,6 +12,7 @@ import {
   getAccentLabel,
   getThemeLabel,
   getUiFontLabel,
+  resolveEffectiveTheme,
 } from "./appPreferences";
 import { DEFAULT_LEFT_TOOLBAR_ITEMS, DEFAULT_TOP_TOOLBAR_ITEMS } from "./toolbarItems";
 
@@ -57,16 +58,18 @@ describe("appPreferences helpers", () => {
 
   it("ships expected defaults for the persisted preference shape", () => {
     expect(DEFAULT_APP_PREFERENCES).toMatchObject({
-      theme: "dark",
+      theme: "auto",
+      autoLightTheme: "macos-light",
+      autoDarkTheme: "macos-dark",
       accent: "#d4845a",
       accentToolbarButtons: false,
       toolbarAccent: "#d4845a",
       accentFavoriteItems: true,
       favoriteAccent: "#58b9e8",
       zoomPercent: 100,
-      uiFontFamily: "lexend",
+      uiFontFamily: "system",
       uiFontSize: 13,
-      uiFontWeight: 500,
+      uiFontWeight: 400,
       viewMode: "list",
       sortBy: "name",
       sortDirection: "asc",
@@ -123,8 +126,15 @@ describe("appPreferences helpers", () => {
       lastVisitedPath: null,
       lastVisitedFavoritePath: null,
       lastGoToFolderPath: null,
-      favoritesPlacement: "integrated",
+      favoritesPlacement: "separate",
       favoritesPaneHeight: null,
     });
+  });
+
+  it("resolves auto to the light or dark palette from the macOS appearance", () => {
+    expect(resolveEffectiveTheme("auto", false, "sand", "obsidian")).toBe("sand");
+    expect(resolveEffectiveTheme("auto", true, "sand", "obsidian")).toBe("obsidian");
+    expect(resolveEffectiveTheme("graphite", false, "sand", "obsidian")).toBe("graphite");
+    expect(getThemeLabel("auto")).toBe("Auto (follow macOS)");
   });
 });

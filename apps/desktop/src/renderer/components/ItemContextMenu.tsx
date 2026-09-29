@@ -299,6 +299,13 @@ function ContextMenuIcon({ name }: { name: ContextMenuIconName }) {
       </svg>
     );
   }
+  if (name === "calculateSize") {
+    return (
+      <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
+      </svg>
+    );
+  }
   if (name === "showPackageContents") {
     return (
       <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">

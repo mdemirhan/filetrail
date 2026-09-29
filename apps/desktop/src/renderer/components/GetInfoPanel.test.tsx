@@ -2,7 +2,7 @@
 
 import { act, fireEvent, render, screen } from "@testing-library/react";
 
-import { InfoPanel } from "./GetInfoPanel";
+import { InfoPanel, describeOwnerAccess } from "./GetInfoPanel";
 
 const baseItem = {
   path: "/Users/demo/projects/filetrail/README.md",
@@ -82,7 +82,8 @@ describe("InfoPanel", () => {
 
     expect(screen.getByText("Markdown document")).toBeInTheDocument();
     expect(screen.getByText("2.0 KB")).toBeInTheDocument();
-    expect(screen.getByText("rw-r--r-- (644)")).toBeInTheDocument();
+    expect(screen.getByText("Read & Write")).toBeInTheDocument();
+    expect(screen.getByText("644")).toHaveAttribute("title", "rw-r--r--");
 
     fireEvent.click(screen.getByRole("button", { name: "Open" }));
     fireEvent.click(screen.getByRole("button", { name: "Terminal" }));
@@ -94,8 +95,9 @@ describe("InfoPanel", () => {
     expect(onCopyPath).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "demo" }));
-    expect(onNavigateToPath).toHaveBeenCalledWith("/Users/demo");
+    // "Where" shows the containing folder and navigates to it.
+    fireEvent.click(screen.getByRole("button", { name: "filetrail" }));
+    expect(onNavigateToPath).toHaveBeenCalledWith("/Users/demo/projects/filetrail");
 
     fireEvent.click(screen.getByRole("button", { name: "Close Toggle Info Panel" }));
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -132,7 +134,7 @@ describe("InfoPanel", () => {
       />,
     );
 
-    expect(screen.getByText("Folder")).toBeInTheDocument();
+    expect(screen.getAllByText("Folder").length).toBeGreaterThan(0);
     expect(screen.getByText("-")).toBeInTheDocument();
     expect(screen.getAllByText("Not available")).toHaveLength(2);
     expect(screen.getByText("Unavailable")).toBeInTheDocument();
@@ -260,7 +262,7 @@ describe("InfoPanel", () => {
     );
 
     // Size text should include the logical size and disk size
-    expect(screen.getByText(/1\.0 MB/)).toBeInTheDocument();
+    expect(screen.getAllByText(/1\.0 MB/).length).toBeGreaterThan(0);
     expect(screen.getByText(/on disk/)).toBeInTheDocument();
     // Item count
     const itemsText = screen.getByText(/items/);
@@ -291,7 +293,7 @@ describe("InfoPanel", () => {
       />,
     );
 
-    expect(screen.getByText(/1\.0 MB/)).toBeInTheDocument();
+    expect(screen.getAllByText(/1\.0 MB/).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Recalculate folder size" })).toBeInTheDocument();
   });
 
@@ -361,5 +363,57 @@ describe("InfoPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel folder size calculation" }));
     expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("describes permissions from the owner's point of view", () => {
+    expect(describeOwnerAccess("rw-r--r--")).toBe("Read & Write");
+    expect(describeOwnerAccess("-r--r--r--")).toBe("Read only");
+    expect(describeOwnerAccess("drwx------")).toBe("Read & Write");
+    expect(describeOwnerAccess("---------")).toBe("No access");
+  });
+
+  it("closes the Open With menu on an outside click or Escape and runs the chosen app", () => {
+    const onOpenWith = vi.fn();
+    render(
+      <div>
+        <button type="button">Outside</button>
+        <InfoPanel
+          loading={false}
+          item={baseItem}
+          onClose={() => undefined}
+          onNavigateToPath={() => undefined}
+          onOpen={() => undefined}
+          onOpenInTerminal={() => undefined}
+          onCopyPath={() => true}
+          openWithItems={[
+            {
+              action: {
+                kind: "application",
+                id: "zed",
+                label: "Zed",
+                appPath: "/Applications/Zed.app",
+                appName: "Zed",
+              },
+            },
+          ]}
+          onOpenWith={onOpenWith}
+        />
+      </div>,
+    );
+
+    const trigger = screen.getByRole("button", { name: /Open With/ });
+    fireEvent.click(trigger);
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    fireEvent.pointerDown(screen.getByText("Outside"));
+    expect(screen.queryByRole("menu")).toBeNull();
+
+    fireEvent.click(trigger);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Zed" }));
+    expect(onOpenWith).toHaveBeenCalledWith(expect.objectContaining({ id: "zed" }));
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 });

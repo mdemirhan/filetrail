@@ -27,6 +27,9 @@ describe("helpContent", () => {
 
   it("documents file operation shortcuts", () => {
     expect(SHORTCUT_ITEMS).toContainEqual(
+      expect.objectContaining({ shortcut: "Space", description: "Quick Look the selected item" }),
+    );
+    expect(SHORTCUT_ITEMS).toContainEqual(
       expect.objectContaining({
         shortcut: "Cmd+Shift+M",
         description: "Move the selected items to another folder",
@@ -34,8 +37,8 @@ describe("helpContent", () => {
     );
     expect(SHORTCUT_ITEMS).toContainEqual(
       expect.objectContaining({
-        shortcut: "F2",
-        description: "Rename the selected item",
+        shortcut: "Return",
+        description: expect.stringContaining("Rename the selected item"),
       }),
     );
     expect(SHORTCUT_ITEMS).toContainEqual(

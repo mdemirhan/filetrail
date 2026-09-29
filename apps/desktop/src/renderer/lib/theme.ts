@@ -21,6 +21,7 @@ import {
 // CSS files own the full palettes; this module applies the user-selected theme identity,
 // font stack, and optional text color overrides at runtime.
 const UI_FONT_STACKS: Record<UiFontFamily, string> = {
+  system: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif',
   "dm-sans": '"DM Sans", "Inter", -apple-system, BlinkMacSystemFont, sans-serif',
   lexend: '"Lexend", "DM Sans", "Inter", -apple-system, BlinkMacSystemFont, sans-serif',
   "fira-code": '"Fira Code", "SFMono-Regular", ui-monospace, monospace',
@@ -109,11 +110,14 @@ export function applyAppearance({
   root.dataset.accentFavoriteItems = accentFavoriteItems ? "true" : "false";
   root.dataset.accentFavoriteText = accentFavoriteItems && accentFavoriteText ? "true" : "false";
   root.style.setProperty("--font-sans", UI_FONT_STACKS[uiFontFamily]);
-  root.style.setProperty("--font-mono", '"Fira Code", "SFMono-Regular", ui-monospace, monospace');
+  root.style.setProperty(
+    "--font-mono",
+    '"SF Mono", "SFMono-Regular", ui-monospace, Menlo, monospace',
+  );
   root.style.setProperty("--ui-font-size", `${uiFontSize}px`);
   root.style.setProperty("--ui-font-weight", String(uiFontWeight));
   root.style.setProperty("--mono-font-size", "12px");
-  root.style.setProperty("--mono-font-weight", "500");
+  root.style.setProperty("--mono-font-weight", "400");
   for (const propertyName of THEME_VARIANT_OVERRIDE_KEYS) {
     root.style.removeProperty(propertyName);
   }

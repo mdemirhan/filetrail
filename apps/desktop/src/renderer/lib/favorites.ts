@@ -27,9 +27,13 @@ export function getTrashPath(homePath: string): string {
   return homePath.length > 0 ? `${homePath}/.Trash` : "";
 }
 
+// Finder's sidebar places, all ordinary favorites the user can remove or reorder.
 export function getDefaultFavorites(homePath: string): FavoritePreference[] {
   if (homePath.length === 0) {
-    return [{ path: "/Applications", icon: "applications" }];
+    return [
+      { path: "/Applications", icon: "applications" },
+      { path: "/", icon: "drive" },
+    ];
   }
   return [
     { path: homePath, icon: "home" },
@@ -37,6 +41,7 @@ export function getDefaultFavorites(homePath: string): FavoritePreference[] {
     { path: `${homePath}/Desktop`, icon: "desktop" },
     { path: `${homePath}/Documents`, icon: "documents" },
     { path: `${homePath}/Downloads`, icon: "downloads" },
+    { path: "/", icon: "drive" },
     { path: getTrashPath(homePath), icon: "trash" },
   ];
 }

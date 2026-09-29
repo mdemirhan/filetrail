@@ -199,8 +199,13 @@ export function useExplorerNavigationController(args: {
     setFocusedPane("tree");
     clearTypeahead();
     window.requestAnimationFrame(() => {
+      // A collapsed Favorites section renders no rows; fall back to the folder tree then.
+      const favoritesRowsVisible =
+        treePaneRef.current?.querySelector(".favorites-pane-section .tree-label") != null;
       const targetSubview =
-        favoritesPlacement === "separate" ? lastLeftPaneSubviewRef.current : "tree";
+        favoritesPlacement === "separate" && favoritesRowsVisible
+          ? lastLeftPaneSubviewRef.current
+          : "tree";
       const selectedSelector =
         targetSubview === "favorites"
           ? ".favorites-pane-section .tree-row.active .tree-label"

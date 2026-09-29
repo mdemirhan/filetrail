@@ -1,8 +1,8 @@
 // Help content is intentionally maintained as static data so wording can be tuned without
 // chasing implementation details through multiple components.
 export const SHORTCUT_ITEMS = [
-  { group: "Navigation", shortcut: "Cmd+Left", description: "Go back to the previous folder" },
-  { group: "Navigation", shortcut: "Cmd+Right", description: "Go forward to the next folder" },
+  { group: "Navigation", shortcut: "Cmd+[", description: "Go back to the previous folder" },
+  { group: "Navigation", shortcut: "Cmd+]", description: "Go forward to the next folder" },
   {
     group: "Navigation",
     shortcut: "Cmd+Up",
@@ -29,7 +29,12 @@ export const SHORTCUT_ITEMS = [
     shortcut: "Cmd+Shift+M",
     description: "Move the selected items to another folder",
   },
-  { group: "Navigation", shortcut: "F2", description: "Rename the selected item" },
+  {
+    group: "Navigation",
+    shortcut: "Return",
+    description: "Rename the selected item (F2 also works; Settings can make Return open instead)",
+  },
+  { group: "Navigation", shortcut: "Space", description: "Quick Look the selected item" },
   { group: "Navigation", shortcut: "Cmd+D", description: "Duplicate the selected items" },
   { group: "Navigation", shortcut: "Cmd+Shift+N", description: "Create a new folder" },
   {
@@ -72,7 +77,7 @@ export const SHORTCUT_ITEMS = [
   {
     group: "Search",
     shortcut: "Cmd+R",
-    description: "Apply the selected sort to the current search results",
+    description: "Run the current search again",
   },
   {
     group: "Search",
@@ -100,7 +105,11 @@ export const SHORTCUT_ITEMS = [
   { group: "Views", shortcut: "Cmd++", description: "Zoom in" },
   { group: "Views", shortcut: "Cmd+-", description: "Zoom out" },
   { group: "Views", shortcut: "Cmd+0", description: "Reset zoom to 100%" },
-  { group: "Views", shortcut: "Esc", description: "Return from Help or Settings to Explorer" },
+  {
+    group: "Views",
+    shortcut: "Esc",
+    description: "Return from Help or the Action Log to your files",
+  },
 ] as const;
 
 // These reference notes cover UI behaviors that are not obvious from shortcut listings alone.

@@ -9,6 +9,8 @@ import type {
 } from "@filetrail/contracts";
 import type { RendererCommand } from "../shared/rendererCommands";
 
+type PreferencesPatch = IpcRequestInput<"app:updatePreferences">["preferences"];
+
 type IpcEnvelope =
   | {
       ok: true;
@@ -25,6 +27,7 @@ type InvokeApi = {
   onCommand(listener: (command: RendererCommand) => void): () => void;
   onWriteOperationProgress(listener: (event: WriteOperationProgressEvent) => void): () => void;
   onCopyPasteProgress(listener: (event: WriteOperationProgressEvent) => void): () => void;
+  onPreferencesChanged(listener: (patch: PreferencesPatch) => void): () => void;
 };
 
 const api: InvokeApi = {
@@ -57,6 +60,15 @@ const api: InvokeApi = {
     };
   },
   onCopyPasteProgress: (listener) => api.onWriteOperationProgress(listener),
+  onPreferencesChanged: (listener) => {
+    const handleChange = (_event: unknown, patch: PreferencesPatch) => {
+      listener(patch);
+    };
+    ipcRenderer.on("filetrail:preferencesChanged", handleChange);
+    return () => {
+      ipcRenderer.removeListener("filetrail:preferencesChanged", handleChange);
+    };
+  },
 };
 
 contextBridge.exposeInMainWorld("filetrail", api);

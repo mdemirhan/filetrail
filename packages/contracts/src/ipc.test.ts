@@ -124,6 +124,10 @@ describe("ipc contracts", () => {
       ipcContractSchemas["app:getPreferences"].response.parse({
         preferences: {
           theme: "dark",
+          autoLightTheme: "light",
+          autoDarkTheme: "dark",
+          showSidebarRail: false,
+          returnKeyAction: "rename",
           iconTheme: "classic",
           accent: "#daa520",
           accentToolbarButtons: false,
@@ -232,6 +236,10 @@ describe("ipc contracts", () => {
     ).toEqual({
       preferences: {
         theme: "dark",
+        autoLightTheme: "light",
+        autoDarkTheme: "dark",
+        showSidebarRail: false,
+        returnKeyAction: "rename",
         iconTheme: "classic",
         accent: "#daa520",
         accentToolbarButtons: false,

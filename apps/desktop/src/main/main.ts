@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { BrowserWindow, Menu, app, nativeImage, nativeTheme, shell } from "electron";
+import { BrowserWindow, Menu, app, nativeImage, shell } from "electron";
 
 import { resolveActionLogFilePath } from "./actionLog";
 import { createAppLogger, isDebugLoggingEnabled, resolveAppLogFilePath } from "./appLog";
@@ -11,6 +11,7 @@ import { bootstrapMainProcess, getMainProcessStatus, shutdownMainProcess } from 
 import { resolveBundledFdBinaryPath } from "./fdBinary";
 import { resolveStartupFolderPath } from "./launchContext";
 let mainWindowRef: BrowserWindow | null = null;
+let settingsWindowRef: BrowserWindow | null = null;
 let appStateStoreRef: AppStateStore | null = null;
 let appLoggerRef: ReturnType<typeof createAppLogger> | null = null;
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -59,7 +60,7 @@ if (hasSingleInstanceLock) {
         fdBinaryError: fdStatus.error,
       });
       const appStateStore = createAppStateStore(resolveAppStatePath(userDataPath), {
-        defaultTheme: nativeTheme.shouldUseDarkColors ? "dark" : "light",
+        defaultTheme: "auto",
         onReadError: (error) => {
           appLogger.error("[filetrail] failed reading app state", error);
         },
@@ -75,14 +76,28 @@ if (hasSingleInstanceLock) {
         }
       }
       appStateStoreRef = appStateStore;
-      await bootstrapMainProcess(appStateStore, launchContext, appLogger, (preferences) => {
-        const window = mainWindowRef ?? BrowserWindow.getAllWindows()[0] ?? null;
-        if (!window || window.isDestroyed()) {
-          return;
-        }
-        applyWindowZoom(window, preferences.zoomPercent);
-        applyApplicationMenu(window, preferences.actionLogEnabled);
-      });
+      await bootstrapMainProcess(
+        appStateStore,
+        launchContext,
+        appLogger,
+        (preferences, change) => {
+          // Keep every open window (explorer and Settings) on the same preferences.
+          for (const window of BrowserWindow.getAllWindows()) {
+            if (window.isDestroyed()) {
+              continue;
+            }
+            applyWindowZoom(window, preferences.zoomPercent);
+            if (window.webContents.id !== change.senderId) {
+              window.webContents.send("filetrail:preferencesChanged", change.patch);
+            }
+          }
+          const window = mainWindowRef ?? BrowserWindow.getAllWindows()[0] ?? null;
+          if (window && !window.isDestroyed()) {
+            applyApplicationMenu(window, preferences.actionLogEnabled);
+          }
+        },
+        { openSettingsWindow },
+      );
       mainWindowRef = createWindow();
 
       app.on("activate", () => {
@@ -231,6 +246,10 @@ function createWindow(): BrowserWindow {
     if (mainWindowRef === mainWindow) {
       mainWindowRef = null;
     }
+    // Settings belongs to the explorer window; closing the explorer still quits the app.
+    if (settingsWindowRef && !settingsWindowRef.isDestroyed()) {
+      settingsWindowRef.close();
+    }
   });
 
   mainWindow.on("move", scheduleWindowStateSave);
@@ -240,6 +259,60 @@ function createWindow(): BrowserWindow {
   mainWindow.on("close", persistWindowState);
 
   return mainWindow;
+}
+
+// Settings lives in its own window (⌘,), like a native macOS app. Preference edits there
+// persist through the same IPC as the explorer window and are broadcast back to it.
+function openSettingsWindow(): void {
+  const appStateStore = appStateStoreRef;
+  if (!appStateStore) {
+    return;
+  }
+  if (settingsWindowRef && !settingsWindowRef.isDestroyed()) {
+    settingsWindowRef.show();
+    settingsWindowRef.focus();
+    return;
+  }
+  const settingsWindow = new BrowserWindow({
+    show: false,
+    width: 780,
+    height: 760,
+    minWidth: 640,
+    minHeight: 560,
+    title: "Settings",
+    backgroundColor: "#f4f5f8",
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 16, y: 18 },
+    fullscreenable: false,
+    webPreferences: {
+      preload: fileURLToPath(new URL("../preload/index.cjs", import.meta.url)),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  settingsWindowRef = settingsWindow;
+  applyWindowZoom(settingsWindow, appStateStore.getPreferences().zoomPercent);
+  const rendererEntryUrl = resolveRendererEntryUrl();
+  const settingsUrl = `${rendererEntryUrl}#settings`;
+  settingsWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (isAllowedExternalUrl(url)) {
+      void shell.openExternal(url);
+    }
+    return { action: "deny" };
+  });
+  settingsWindow.webContents.on("will-navigate", (event, navigationUrl) => {
+    if (navigationUrl !== settingsUrl) {
+      event.preventDefault();
+    }
+  });
+  settingsWindow.once("ready-to-show", () => settingsWindow.show());
+  settingsWindow.on("closed", () => {
+    if (settingsWindowRef === settingsWindow) {
+      settingsWindowRef = null;
+    }
+  });
+  void settingsWindow.loadURL(settingsUrl);
 }
 
 function resolveRendererEntryUrl(): string {
@@ -269,6 +342,7 @@ function applyApplicationMenu(mainWindow: BrowserWindow, actionLogEnabled: boole
     Menu.buildFromTemplate(
       createApplicationMenuTemplate(mainWindow.webContents, {
         actionLogEnabled,
+        onOpenSettings: openSettingsWindow,
       }),
     ),
   );

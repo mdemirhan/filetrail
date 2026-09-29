@@ -1,10 +1,12 @@
+import { DETAILS_LAYOUT } from "./detailsLayout";
 import type { FlowListLayout } from "./virtualization";
 
 // These layout tokens must stay aligned with the corresponding CSS row sizing. Navigation,
 // reveal-into-view, and virtualization all read from this module rather than measuring DOM.
+// Row heights match the details view (DETAILS_LAYOUT) so switching views keeps the same density.
 export const FLOW_LIST_LAYOUT = {
-  rowHeight: 36,
-  rowGap: 2,
+  rowHeight: DETAILS_LAYOUT.regularRowHeight,
+  rowGap: 0,
   itemWidth: 292,
   columnGap: 18,
   paddingTop: 8,
@@ -13,8 +15,8 @@ export const FLOW_LIST_LAYOUT = {
 } as const satisfies FlowListLayout & { paddingInline: number };
 
 export const COMPACT_FLOW_LIST_LAYOUT = {
-  rowHeight: 28,
-  rowGap: 1,
+  rowHeight: DETAILS_LAYOUT.compactRowHeight,
+  rowGap: 0,
   itemWidth: 252,
   columnGap: 18,
   paddingTop: 6,

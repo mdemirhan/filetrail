@@ -46,7 +46,11 @@ describe("appStateStore", () => {
 
     expect(store.getPreferences()).toEqual({
       theme: "tomorrow-night",
-      iconTheme: "classic",
+      autoLightTheme: "macos-light",
+      autoDarkTheme: "macos-dark",
+      showSidebarRail: false,
+      returnKeyAction: "rename",
+      iconTheme: "native",
       accent: "#d4845a",
       accentToolbarButtons: false,
       toolbarAccent: "#d4845a",
@@ -54,9 +58,9 @@ describe("appStateStore", () => {
       accentFavoriteText: false,
       favoriteAccent: "#58b9e8",
       zoomPercent: 100,
-      uiFontFamily: "lexend",
+      uiFontFamily: "system",
       uiFontSize: 13,
-      uiFontWeight: 500,
+      uiFontWeight: 400,
       textPrimaryOverride: null,
       textSecondaryOverride: null,
       textMutedOverride: null,
@@ -87,19 +91,8 @@ describe("appStateStore", () => {
       notificationDurationSeconds: 4,
       actionLogEnabled: true,
       propertiesOpen: false,
-      detailRowOpen: true,
-      topToolbarItems: [
-        "back",
-        "forward",
-        "topSeparator",
-        "up",
-        "down",
-        "refresh",
-        "topSeparator",
-        "view",
-        "sort",
-        "search",
-      ],
+      detailRowOpen: false,
+      topToolbarItems: ["back", "forward", "view", "sort", "infoPanel", "search"],
       leftToolbarItems: {
         main: [
           "home",
@@ -157,7 +150,7 @@ describe("appStateStore", () => {
       lastVisitedFavoritePath: null,
       lastGoToFolderPath: null,
       favorites: [],
-      favoritesPlacement: "integrated",
+      favoritesPlacement: "separate",
       favoritesPaneHeight: null,
       favoritesExpanded: true,
       favoritesInitialized: false,
@@ -281,6 +274,10 @@ describe("appStateStore", () => {
     });
     expect(reloaded.getPreferences()).toEqual({
       theme: "dark",
+      autoLightTheme: "macos-light",
+      autoDarkTheme: "macos-dark",
+      showSidebarRail: false,
+      returnKeyAction: "rename",
       iconTheme: "colorblock",
       accent: "#2cb5a0",
       accentToolbarButtons: false,
@@ -379,6 +376,90 @@ describe("appStateStore", () => {
     });
   });
 
+  it("keeps auto themes and rejects auto palettes from the wrong appearance", () => {
+    const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
+    const filePath = resolveAppStatePath(userDataPath);
+    writeFileSync(
+      filePath,
+      JSON.stringify({
+        preferences: { theme: "auto", autoLightTheme: "obsidian", autoDarkTheme: "midnight" },
+      }),
+      "utf8",
+    );
+
+    const preferences = createAppStateStore(filePath, { defaultTheme: "auto" }).getPreferences();
+
+    expect(preferences.theme).toBe("auto");
+    expect(preferences.autoLightTheme).toBe("macos-light");
+    expect(preferences.autoDarkTheme).toBe("midnight");
+  });
+
+  it("upgrades an untouched legacy toolbar to the new default but keeps customized ones", () => {
+    const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
+    const filePath = resolveAppStatePath(userDataPath);
+    const legacy = [
+      "back",
+      "forward",
+      "topSeparator",
+      "up",
+      "down",
+      "refresh",
+      "topSeparator",
+      "view",
+      "sort",
+      "search",
+    ];
+    writeFileSync(filePath, JSON.stringify({ preferences: { topToolbarItems: legacy } }), "utf8");
+    expect(createAppStateStore(filePath).getPreferences().topToolbarItems).toEqual([
+      "back",
+      "forward",
+      "view",
+      "sort",
+      "infoPanel",
+      "search",
+    ]);
+
+    writeFileSync(
+      filePath,
+      JSON.stringify({ preferences: { topToolbarItems: ["back", "refresh", "search"] } }),
+      "utf8",
+    );
+    expect(createAppStateStore(filePath).getPreferences().topToolbarItems).toEqual([
+      "back",
+      "refresh",
+      "search",
+    ]);
+  });
+
+  it("adds Macintosh HD to favorites saved before it became a default favorite", () => {
+    const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
+    const filePath = resolveAppStatePath(userDataPath);
+    const savedFavorites = [
+      { path: "/Users/demo", icon: "home" },
+      { path: "/Users/demo/.Trash", icon: "trash" },
+    ];
+    const withFavorites = (extra: Record<string, unknown>) =>
+      JSON.stringify({
+        preferences: { favorites: savedFavorites, favoritesInitialized: true, ...extra },
+      });
+
+    // Saved by the Locations sidebar (still has its collapse flag): inserted ahead of Trash.
+    writeFileSync(filePath, withFavorites({ showSidebarRail: false, locationsExpanded: true }));
+    expect(createAppStateStore(filePath).getPreferences().favorites).toEqual([
+      { path: "/Users/demo", icon: "home" },
+      { path: "/", icon: "drive" },
+      { path: "/Users/demo/.Trash", icon: "trash" },
+    ]);
+
+    // Saved before the native sidebar existed.
+    writeFileSync(filePath, withFavorites({}));
+    expect(createAppStateStore(filePath).getPreferences().favorites).toHaveLength(3);
+
+    // Saved after the change: a removed Macintosh HD stays removed.
+    writeFileSync(filePath, withFavorites({ showSidebarRail: false }));
+    expect(createAppStateStore(filePath).getPreferences().favorites).toEqual(savedFavorites);
+  });
+
   it("sanitizes invalid persisted values", () => {
     const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
     const filePath = resolveAppStatePath(userDataPath);
@@ -462,9 +543,9 @@ describe("appStateStore", () => {
     expect(reloaded.getPreferences().treeWidth).toBe(220);
     expect(reloaded.getPreferences().inspectorWidth).toBe(480);
     expect(reloaded.getPreferences().accent).toBe("#d4845a");
-    expect(reloaded.getPreferences().uiFontFamily).toBe("lexend");
+    expect(reloaded.getPreferences().uiFontFamily).toBe("system");
     expect(reloaded.getPreferences().uiFontSize).toBe(15);
-    expect(reloaded.getPreferences().uiFontWeight).toBe(500);
+    expect(reloaded.getPreferences().uiFontWeight).toBe(400);
     expect(reloaded.getPreferences().textPrimaryOverride).toBeNull();
     expect(reloaded.getPreferences().typeaheadDebounceMs).toBe(1500);
     expect(reloaded.getPreferences().terminalApp).toBeNull();
@@ -535,9 +616,11 @@ describe("appStateStore", () => {
       defaultTheme: "dark",
     });
 
+    // State this old also predates Macintosh HD as a default favorite.
     expect(reloaded.getPreferences().favorites).toEqual([
       { path: "/Users/demo/Documents", icon: "documents" },
       { path: "/Applications", icon: "applications" },
+      { path: "/", icon: "drive" },
     ]);
     expect(reloaded.getPreferences().lastVisitedFavoritePath).toBeNull();
   });

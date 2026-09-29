@@ -389,6 +389,13 @@ export function useExplorerActions(args: {
     if (contextMenuFavoriteToggleLabel === null) {
       hidden.add("toggleFavorite");
     }
+    // Folder sizes are calculated one folder at a time.
+    if (
+      contextMenuTargetEntries.length !== 1 ||
+      !isDirectoryLikeEntry(contextMenuTargetEntries[0] ?? null)
+    ) {
+      hidden.add("calculateSize");
+    }
     if (contextMenuState.surface === "trash") {
       // "Show Package Contents" is only visible for bundle entries (.app, .framework, etc.)
       const hasBundle = contextMenuTargetEntries.some((entry) => entry.kind === "bundle");
@@ -401,6 +408,7 @@ export function useExplorerActions(args: {
       return Array.from(hidden);
     }
     if (contextMenuState.surface === "treeFolder") {
+      hidden.delete("calculateSize");
       // "Delete Immediately" is only shown for tree items inside the Trash.
       const targetPath = contextMenuState.targetPath;
       if (!targetPath || !isPathInsideTrash(targetPath, homePath)) {

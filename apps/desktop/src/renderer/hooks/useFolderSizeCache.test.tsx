@@ -233,9 +233,12 @@ describe("useFolderSizeCache", () => {
       await Promise.resolve();
     });
     expect(result.current.getEntry("/test").status).toBe("idle");
+    // Re-renders inside the miss cooldown do not re-send the probe.
+    expect(startHandler).toHaveBeenCalledTimes(1);
 
-    // Second probe — returns ready (simulating parent walk completed)
+    // Second probe after the cooldown — returns ready (simulating parent walk completed)
     act(() => {
+      vi.advanceTimersByTime(5_001);
       result.current.getEntry("/test");
     });
     await act(async () => {

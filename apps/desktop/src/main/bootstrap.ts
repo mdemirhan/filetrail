@@ -23,12 +23,14 @@ import {
 import {
   emptyTrash,
   getFileIconHandler,
+  getVolumeInfo,
   openInTerminal,
   openPath,
   openPathsWithApplication,
   performEditAction,
   pickApplication,
   pickDirectory,
+  quickLookPath,
   resolveApplicationDisplayName,
   resolveTerminalApplicationName,
 } from "./bootstrap/systemHandlers";
@@ -43,7 +45,11 @@ export async function bootstrapMainProcess(
   appStateStore: AppStateStore,
   launchContext: { startupFolderPath: string | null } = { startupFolderPath: null },
   logger: Pick<AppLogger, "debug" | "info" | "warn" | "error"> = console,
-  onPreferencesChanged?: (preferences: AppPreferences) => void,
+  onPreferencesChanged?: (
+    preferences: AppPreferences,
+    change: { patch: Partial<AppPreferences>; senderId: number | null },
+  ) => void,
+  windows: { openSettingsWindow?: () => void } = {},
 ): Promise<void> {
   // Main owns the worker client so the renderer only ever talks through the IPC contract.
   const workerClient = new ExplorerWorkerClient(resolveExplorerWorkerUrl(), {
@@ -106,10 +112,16 @@ export async function bootstrapMainProcess(
         items: await actionLogStore.list(),
       }),
       "app:getLaunchContext": () => launchContext,
-      "app:updatePreferences": (payload) => {
-        const preferences = appStateStore.updatePreferences(toPreferencePatch(payload.preferences));
-        onPreferencesChanged?.(preferences);
+      "app:updatePreferences": (payload, event) => {
+        const patch = toPreferencePatch(payload.preferences);
+        const preferences = appStateStore.updatePreferences(patch);
+        // The sender id lets main forward the change to the other windows (e.g. Settings).
+        onPreferencesChanged?.(preferences, { patch, senderId: event?.sender?.id ?? null });
         return { preferences };
+      },
+      "app:openSettingsWindow": () => {
+        windows.openSettingsWindow?.();
+        return { ok: windows.openSettingsWindow !== undefined };
       },
       "app:clearCaches": () => {
         clearResponseCaches();
@@ -198,6 +210,8 @@ export async function bootstrapMainProcess(
         }
         return response;
       },
+      "system:quickLook": (payload, event) => quickLookPath(payload, event),
+      "system:getVolumeInfo": (payload) => getVolumeInfo(payload),
       "system:pickApplication": (_payload, event) => pickApplication(event),
       "system:pickDirectory": (payload, event) => pickDirectory(payload, event),
       "system:openPathsWithApplication": async (payload) => {

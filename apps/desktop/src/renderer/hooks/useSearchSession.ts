@@ -48,6 +48,9 @@ export function useSearchSession() {
   const [searchStatus, setSearchStatus] = useState<SearchJobStatus | "idle">("idle");
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchTruncated, setSearchTruncated] = useState(false);
+  // Wall-clock duration of the last completed search, shown next to the result count.
+  const [searchElapsedMs, setSearchElapsedMs] = useState<number | null>(null);
+  const searchStartedAtRef = useRef<number | null>(null);
   const searchPollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchSessionRef = useRef(0);
   const searchJobIdRef = useRef<string | null>(null);
@@ -94,6 +97,9 @@ export function useSearchSession() {
   }, [searchResultsSortDirection]);
 
   return {
+    searchElapsedMs,
+    setSearchElapsedMs,
+    searchStartedAtRef,
     searchDraftQuery,
     setSearchDraftQuery,
     searchCommittedQuery,

@@ -8,6 +8,7 @@ describe("favorites", () => {
       { path: "/Users/demo/Desktop", icon: "desktop" },
       { path: "/Users/demo/Documents", icon: "documents" },
       { path: "/Users/demo/Downloads", icon: "downloads" },
+      { path: "/", icon: "drive" },
       { path: "/Users/demo/.Trash", icon: "trash" },
     ]);
   });

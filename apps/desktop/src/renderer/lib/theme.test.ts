@@ -46,11 +46,11 @@ describe("theme helpers", () => {
     expect(document.documentElement.dataset.accentFavoriteItems).toBe("true");
     expect(document.documentElement.dataset.accentFavoriteText).toBe("true");
     expect(document.documentElement.style.getPropertyValue("--font-sans")).toContain("Lexend");
-    expect(document.documentElement.style.getPropertyValue("--font-mono")).toContain("Fira Code");
+    expect(document.documentElement.style.getPropertyValue("--font-mono")).toContain("SF Mono");
     expect(document.documentElement.style.getPropertyValue("--ui-font-size")).toBe("14px");
     expect(document.documentElement.style.getPropertyValue("--ui-font-weight")).toBe("500");
     expect(document.documentElement.style.getPropertyValue("--mono-font-size")).toBe("12px");
-    expect(document.documentElement.style.getPropertyValue("--mono-font-weight")).toBe("500");
+    expect(document.documentElement.style.getPropertyValue("--mono-font-weight")).toBe("400");
     expect(document.documentElement.style.getPropertyValue("--ft-accent-solid")).toBe("#2cb5a0");
     expect(document.documentElement.style.getPropertyValue("--accent-blue")).toBe("#2cb5a0");
     expect(document.documentElement.style.getPropertyValue("--tb-primary-bg")).toBe(

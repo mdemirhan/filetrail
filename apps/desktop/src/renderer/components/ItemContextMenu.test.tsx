@@ -323,6 +323,7 @@ describe("ItemContextMenu", () => {
     ).toEqual([
       "Open",
       "Show Info",
+      "Calculate Size",
       "Add to Favorites",
       "Copy",
       "Cut",

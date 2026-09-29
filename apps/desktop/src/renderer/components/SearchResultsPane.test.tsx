@@ -2,15 +2,13 @@
 
 import { fireEvent, render, screen } from "@testing-library/react";
 
-import { SearchResultsPane } from "./SearchResultsPane";
+import { SearchResultsPane, buildHighlightPattern } from "./SearchResultsPane";
 
 describe("SearchResultsPane", () => {
   const defaultSortProps = {
     sortBy: "path" as const,
     sortDirection: "asc" as const,
-    onSortByChange: () => undefined,
-    onSortDirectionToggle: () => undefined,
-    onApplySort: () => undefined,
+    onSortColumn: () => undefined,
   };
   const defaultFilterProps = {
     filterQuery: "",
@@ -226,10 +224,13 @@ describe("SearchResultsPane", () => {
     expect(handleTypeaheadInput).toHaveBeenCalledWith("a");
   });
 
-  it("forwards manual sort controls and restores scroll position", () => {
-    const handleSortByChange = vi.fn();
-    const handleSortDirectionToggle = vi.fn();
-    const handleApplySort = vi.fn();
+  it("sorts by clicked columns, forwards scope bar changes, and restores scroll position", () => {
+    const handleSortColumn = vi.fn();
+    const handleScopeChange = vi.fn();
+    const handlePatternModeChange = vi.fn();
+    const handleMatchScopeChange = vi.fn();
+    const handleRecursiveChange = vi.fn();
+    const handleIncludeHiddenChange = vi.fn();
     const handleScrollTopChange = vi.fn();
     const handleFilterQueryChange = vi.fn();
     const handleFilterScopeChange = vi.fn();
@@ -239,7 +240,7 @@ describe("SearchResultsPane", () => {
         isFocused
         rootPath="/Users/demo/project"
         query="app"
-        status="running"
+        status="complete"
         results={[
           {
             path: "/Users/demo/project/src/App.tsx",
@@ -249,7 +250,7 @@ describe("SearchResultsPane", () => {
             isHidden: false,
             isSymlink: false,
             parentPath: "/Users/demo/project/src",
-            relativeParentPath: "src",
+            relativeParentPath: "src/components",
           },
         ]}
         selectedPaths={[]}
@@ -261,14 +262,27 @@ describe("SearchResultsPane", () => {
         totalCount={4}
         sortBy="path"
         sortDirection="asc"
+        elapsedMs={38}
+        scopeOptions={[
+          { path: "/Users/demo/project", label: "“project”" },
+          { path: "/Users/demo", label: "Home" },
+          { path: "/", label: "Macintosh HD" },
+        ]}
+        onScopeChange={handleScopeChange}
+        patternMode="regex"
+        onPatternModeChange={handlePatternModeChange}
+        matchScope="name"
+        onMatchScopeChange={handleMatchScopeChange}
+        recursive
+        onRecursiveChange={handleRecursiveChange}
+        includeHidden={false}
+        onIncludeHiddenChange={handleIncludeHiddenChange}
         onStopSearch={() => undefined}
         onClearResults={() => undefined}
         onCloseResults={() => undefined}
         onFilterQueryChange={handleFilterQueryChange}
         onFilterScopeChange={handleFilterScopeChange}
-        onSortByChange={handleSortByChange}
-        onSortDirectionToggle={handleSortDirectionToggle}
-        onApplySort={handleApplySort}
+        onSortColumn={handleSortColumn}
         onSelectionGesture={() => undefined}
         onClearSelection={() => undefined}
         onActivateResult={() => undefined}
@@ -279,45 +293,45 @@ describe("SearchResultsPane", () => {
       />,
     );
 
-    const sortSelect = screen.getByLabelText("Sort search results by");
-    const filterInput = screen.getByLabelText("Filter search results");
-    const filterScopeSelect = screen.getByLabelText("Filter search results by");
-    const directionButton = screen.getByRole("button", { name: "Ascending sort" });
-    const applySortButton = screen.getByRole("button", {
-      name: "Apply the selected sort to the current search results",
-    });
     const scroll = document.querySelector(".search-results-scroll");
-
     expect(scroll).toHaveProperty("scrollTop", 42);
+    expect(screen.getByText("Date Modified")).toBeInTheDocument();
+    expect(screen.getByText("src › components")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "“project”" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Sort by folder" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
 
-    fireEvent.change(sortSelect, { target: { value: "name" } });
-    fireEvent.change(filterInput, { target: { value: "main" } });
-    fireEvent.change(filterScopeSelect, { target: { value: "path" } });
-    fireEvent.click(directionButton);
-    fireEvent.click(applySortButton);
+    fireEvent.click(screen.getByRole("button", { name: "Sort by name" }));
+    fireEvent.click(screen.getByRole("button", { name: "Home" }));
+    fireEvent.click(screen.getByRole("button", { name: "“project”" }));
+    fireEvent.change(screen.getByLabelText("Pattern type"), { target: { value: "glob" } });
+    fireEvent.change(screen.getByLabelText("Match on"), { target: { value: "path" } });
+    fireEvent.click(screen.getByLabelText("Subfolders"));
+    fireEvent.click(screen.getByLabelText("Hidden Files"));
+    fireEvent.change(screen.getByLabelText("Filter search results"), { target: { value: "main" } });
+    fireEvent.change(screen.getByLabelText("Filter search results by"), {
+      target: { value: "path" },
+    });
     if (!scroll) {
       throw new Error("Missing search results scroll container.");
     }
     fireEvent.scroll(scroll, { target: { scrollTop: 96 } });
 
-    expect(handleSortByChange).toHaveBeenCalledWith("name");
+    expect(handleSortColumn).toHaveBeenCalledWith("name");
+    expect(handleScopeChange).toHaveBeenCalledTimes(1);
+    expect(handleScopeChange).toHaveBeenCalledWith("/Users/demo");
+    expect(handlePatternModeChange).toHaveBeenCalledWith("glob");
+    expect(handleMatchScopeChange).toHaveBeenCalledWith("path");
+    expect(handleRecursiveChange).toHaveBeenCalledWith(false);
+    expect(handleIncludeHiddenChange).toHaveBeenCalledWith(true);
     expect(handleFilterQueryChange).toHaveBeenCalledWith("main");
     expect(handleFilterScopeChange).toHaveBeenCalledWith("path");
-    expect(handleSortDirectionToggle).toHaveBeenCalledTimes(1);
-    expect(handleApplySort).toHaveBeenCalledTimes(1);
     expect(handleScrollTopChange).toHaveBeenCalledWith(96);
-    expect(applySortButton).toHaveAttribute(
-      "title",
-      "Apply the selected sort to the current search results (Cmd+R)",
-    );
-    expect(screen.getByRole("button", { name: "Close search results" })).toHaveAttribute(
-      "title",
-      "Close search results",
-    );
-    expect(screen.getByRole("button", { name: "Clear search results" })).toHaveAttribute(
-      "title",
-      "Clear search results",
-    );
   });
 
   it("scrolls the selected lead result into view", () => {
@@ -394,8 +408,8 @@ describe("SearchResultsPane", () => {
       />,
     );
 
-    expect(scroll.scrollTop).toBe(96);
-    expect(handleScrollTopChange).toHaveBeenCalledWith(96);
+    expect(scroll.scrollTop).toBe(8);
+    expect(handleScrollTopChange).toHaveBeenCalledWith(8);
   });
 
   it("returns focus to search results when escape is pressed in the filter input", () => {
@@ -448,5 +462,14 @@ describe("SearchResultsPane", () => {
     fireEvent.keyDown(filterInput, { key: "Escape" });
 
     expect(document.activeElement).toBe(scroll);
+  });
+
+  it("highlights the matched part of names for plain regex name searches", () => {
+    expect(buildHighlightPattern("app", "regex", "name")?.exec("MyApp.tsx")?.[0]).toBe("App");
+    expect(buildHighlightPattern("App", "regex", "name")?.exec("MyApp.tsx")?.[0]).toBe("App");
+    expect(buildHighlightPattern("App", "regex", "name")?.exec("myapp.tsx")).toBeNull();
+    expect(buildHighlightPattern("*.ts", "glob", "name")).toBeNull();
+    expect(buildHighlightPattern("src/app", "regex", "path")).toBeNull();
+    expect(buildHighlightPattern("(", "regex", "name")).toBeNull();
   });
 });

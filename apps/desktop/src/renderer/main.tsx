@@ -15,6 +15,7 @@ import "@fontsource/lexend/500.css";
 import "@fontsource/lexend/600.css";
 
 import { App } from "./App";
+import { SettingsWindowApp } from "./SettingsWindowApp";
 import { createRendererLogger, installGlobalRendererErrorHandlers } from "./lib/logging";
 import "./styles.css";
 
@@ -34,8 +35,9 @@ logger.info("renderer boot", {
   platform: navigator.platform,
 });
 
+// The same bundle serves the explorer window and the Settings window (`#settings`).
+const isSettingsWindow = window.location.hash === "#settings";
+
 createRoot(rootElement).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
+  <StrictMode>{isSettingsWindow ? <SettingsWindowApp /> : <App />}</StrictMode>,
 );

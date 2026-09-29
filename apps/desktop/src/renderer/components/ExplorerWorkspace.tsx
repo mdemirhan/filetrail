@@ -87,6 +87,29 @@ export function normalizeTopToolbarItems(items: readonly ToolbarItemId[]) {
   return normalized;
 }
 
+const LEADING_TOOLBAR_ITEM_IDS = new Set<ToolbarItemId>(["back", "forward"]);
+
+// Back/forward sit before the folder title like Finder; everything else is right-aligned.
+export function splitLeadingToolbarItems(items: readonly ToolbarItemId[]) {
+  let leadingCount = 0;
+  while (leadingCount < items.length) {
+    const itemId = items[leadingCount];
+    if (itemId === undefined || !LEADING_TOOLBAR_ITEM_IDS.has(itemId)) {
+      break;
+    }
+    leadingCount += 1;
+  }
+  return {
+    leading: items.slice(0, leadingCount),
+    trailing: normalizeTopToolbarItems(items.slice(leadingCount)),
+  };
+}
+
+type ViewOptionsMenuItem =
+  | { kind: "toggle"; id: string; label: string; checked: boolean; onSelect: () => void }
+  | { kind: "action"; id: string; label: string; shortcut?: string; onSelect: () => void }
+  | { kind: "separator"; id: string };
+
 export function ExplorerWorkspace({
   preferencesReady,
   restoredPaneWidths,
@@ -138,6 +161,9 @@ export function ExplorerWorkspace({
   canRunRendererCommand,
   onRendererCommand,
   onPaneResizeKey,
+  showSidebarRail = true,
+  toolbarTitle = "",
+  toolbarSubtitle = "",
 }: {
   preferencesReady: boolean;
   restoredPaneWidths: { treeWidth: number; inspectorWidth: number } | null;
@@ -189,6 +215,9 @@ export function ExplorerWorkspace({
   canRunRendererCommand: (command: RendererCommandType) => boolean;
   onRendererCommand: (command: RendererCommandType) => void;
   onPaneResizeKey: (pane: "tree" | "inspector", event: ReactKeyboardEvent<HTMLDivElement>) => void;
+  showSidebarRail?: boolean;
+  toolbarTitle?: string;
+  toolbarSubtitle?: string;
 }) {
   const titlebarActionsMainRef = useRef<HTMLDivElement | null>(null);
   const titlebarActionsMeasureRef = useRef<HTMLDivElement | null>(null);
@@ -204,13 +233,25 @@ export function ExplorerWorkspace({
       ),
     [explorerToolbarLayout, topToolbarItems],
   );
-  const [visibleTopToolbarCount, setVisibleTopToolbarCount] = useState(baseTopToolbarItems.length);
+  const { leading: leadingTopToolbarItems, trailing: trailingTopToolbarItems } = useMemo(
+    () => splitLeadingToolbarItems(baseTopToolbarItems),
+    [baseTopToolbarItems],
+  );
+  const [visibleTopToolbarCount, setVisibleTopToolbarCount] = useState(
+    trailingTopToolbarItems.length,
+  );
+  const viewOptionsButtonRef = useRef<HTMLButtonElement | null>(null);
+  const viewOptionsMenuRef = useRef<HTMLDivElement | null>(null);
+  const [viewOptionsPosition, setViewOptionsPosition] = useState<{
+    right: number;
+    top: number;
+  } | null>(null);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [sortMenuViewportPosition, setSortMenuViewportPosition] = useState<{
     left: number;
     top: number;
   } | null>(null);
-  const toolbarMeasurementKey = baseTopToolbarItems.join(":");
+  const toolbarMeasurementKey = trailingTopToolbarItems.join(":");
   const sortMenuResetKey = `${explorerToolbarLayout}:${visibleTopToolbarCount}`;
 
   useLayoutEffect(() => {
@@ -259,7 +300,7 @@ export function ExplorerWorkspace({
         return;
       }
       const rect = button.getBoundingClientRect();
-      const menuWidth = 164;
+      const menuWidth = 200;
       setSortMenuViewportPosition({
         left: Math.max(12, Math.min(rect.left, window.innerWidth - menuWidth - 12)),
         top: rect.bottom + 8,
@@ -307,9 +348,161 @@ export function ExplorerWorkspace({
   }, [sortMenuResetKey]);
 
   const visibleTopToolbarItems = useMemo(
-    () => normalizeTopToolbarItems(baseTopToolbarItems.slice(0, visibleTopToolbarCount)),
-    [baseTopToolbarItems, visibleTopToolbarCount],
+    () => normalizeTopToolbarItems(trailingTopToolbarItems.slice(0, visibleTopToolbarCount)),
+    [trailingTopToolbarItems, visibleTopToolbarCount],
   );
+
+  useEffect(() => {
+    if (!viewOptionsPosition) {
+      return;
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Node &&
+        (viewOptionsMenuRef.current?.contains(target) ||
+          viewOptionsButtonRef.current?.contains(target))
+      ) {
+        return;
+      }
+      setViewOptionsPosition(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setViewOptionsPosition(null);
+      }
+    };
+    window.addEventListener("pointerdown", handlePointerDown, true);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown, true);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [viewOptionsPosition]);
+
+  const viewOptionsItems: ViewOptionsMenuItem[] = [
+    {
+      kind: "toggle",
+      id: "infoPanel",
+      label: "Show Info Panel",
+      checked: infoPanelOpen,
+      onSelect: treePaneProps.onToggleInfoPanel,
+    },
+    {
+      kind: "toggle",
+      id: "infoRow",
+      label: "Show Info Row",
+      checked: treePaneProps.infoRowOpen,
+      onSelect: treePaneProps.onToggleInfoRow,
+    },
+    { kind: "separator", id: "separator-1" },
+    {
+      kind: "toggle",
+      id: "foldersFirst",
+      label: "Keep Folders on Top",
+      checked: treePaneProps.foldersFirst,
+      onSelect: treePaneProps.onToggleFoldersFirst,
+    },
+    {
+      kind: "toggle",
+      id: "hidden",
+      label: "Show Hidden Files",
+      checked: treePaneProps.includeHidden,
+      onSelect: treePaneProps.onToggleHidden,
+    },
+    { kind: "separator", id: "separator-2" },
+    ...(treePaneProps.onOpenLocation
+      ? [
+          {
+            kind: "action" as const,
+            id: "goToFolder",
+            label: "Go to Folder…",
+            shortcut: "⇧⌘G",
+            onSelect: treePaneProps.onOpenLocation,
+          },
+        ]
+      : []),
+    {
+      kind: "action",
+      id: "rerootHome",
+      label: "Show Home in Folder Tree",
+      onSelect: treePaneProps.onRerootHome,
+    },
+  ];
+
+  function renderViewOptions() {
+    return (
+      <div className="toolbar-view-options">
+        <button
+          ref={viewOptionsButtonRef}
+          type="button"
+          className={`tb-btn tb-btn-icon${viewOptionsPosition ? " active" : ""}`}
+          title="View Options"
+          aria-label="View options"
+          aria-haspopup="menu"
+          aria-expanded={viewOptionsPosition !== null}
+          onClick={() => {
+            if (viewOptionsPosition) {
+              setViewOptionsPosition(null);
+              return;
+            }
+            const rect = viewOptionsButtonRef.current?.getBoundingClientRect();
+            if (!rect) {
+              return;
+            }
+            setViewOptionsPosition({
+              right: Math.max(8, window.innerWidth - rect.right),
+              top: rect.bottom + 6,
+            });
+          }}
+        >
+          <ToolbarIcon name="more" />
+        </button>
+        {viewOptionsPosition
+          ? createPortal(
+              <div
+                ref={viewOptionsMenuRef}
+                className="toolbar-menu"
+                role="menu"
+                aria-label="View options"
+                style={{
+                  position: "fixed",
+                  right: `${viewOptionsPosition.right}px`,
+                  top: `${viewOptionsPosition.top}px`,
+                }}
+              >
+                {viewOptionsItems.map((item) =>
+                  item.kind === "separator" ? (
+                    <hr key={item.id} className="toolbar-menu-separator" />
+                  ) : (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className="toolbar-menu-item"
+                      role={item.kind === "toggle" ? "menuitemcheckbox" : "menuitem"}
+                      aria-checked={item.kind === "toggle" ? item.checked : undefined}
+                      onClick={() => {
+                        setViewOptionsPosition(null);
+                        item.onSelect();
+                      }}
+                    >
+                      <span className="toolbar-menu-check" aria-hidden="true">
+                        {item.kind === "toggle" && item.checked ? "✓" : ""}
+                      </span>
+                      <span className="toolbar-menu-label">{item.label}</span>
+                      {item.kind === "action" && item.shortcut ? (
+                        <span className="toolbar-menu-shortcut">{item.shortcut}</span>
+                      ) : null}
+                    </button>
+                  ),
+                )}
+              </div>,
+              document.body,
+            )
+          : null}
+      </div>
+    );
+  }
   const getToolbarTooltip = (itemId: ToolbarItemId, labelOverride?: string) => {
     const definition = getToolbarItemDefinition(itemId);
     return formatToolbarTooltip(labelOverride ?? definition.label, definition.shortcutLabel);
@@ -385,7 +578,7 @@ export function ExplorerWorkspace({
     if (itemId === "view") {
       return (
         <div key={itemId} className="toolbar-group toolbar-group-view">
-          <fieldset className="toolbar-segmented">
+          <fieldset className="toolbar-segmented toolbar-segmented-native">
             <legend className="sr-only">View mode</legend>
             <button
               type="button"
@@ -412,13 +605,14 @@ export function ExplorerWorkspace({
       );
     }
     if (itemId === "sort") {
-      const sortLabel = getSortByLabel(sortBy);
+      // One icon button opening a menu of sort fields and direction, like Finder's
+      // "Sort By" toolbar item. Choosing the active field again reverses the direction.
       const sortMenu =
         mode === "interactive" && sortMenuOpen && sortMenuViewportPosition
           ? createPortal(
               <div
                 ref={sortMenuRef}
-                className="toolbar-sort-menu"
+                className="toolbar-menu toolbar-sort-menu"
                 role="menu"
                 style={{
                   position: "fixed",
@@ -426,20 +620,47 @@ export function ExplorerWorkspace({
                   top: `${sortMenuViewportPosition.top}px`,
                 }}
               >
-                {(["name", "size", "modified", "kind"] as const).map((value) => (
+                {(["name", "kind", "modified", "size"] as const).map((value) => (
                   <button
                     key={value}
                     type="button"
-                    className={`toolbar-sort-menu-item${sortBy === value ? " active" : ""}`}
+                    className="toolbar-menu-item"
                     onClick={() => {
-                      onSortChange(value);
+                      if (value !== sortBy) {
+                        onSortChange(value);
+                      }
                       setSortMenuOpen(false);
                     }}
                     role="menuitemradio"
                     aria-checked={sortBy === value}
                   >
-                    <span>{getSortByLabel(value)}</span>
-                    {sortBy === value ? <span className="toolbar-sort-menu-check">✓</span> : null}
+                    <span className="toolbar-menu-check" aria-hidden="true">
+                      {sortBy === value ? "✓" : ""}
+                    </span>
+                    <span className="toolbar-menu-label">{getSortByLabel(value)}</span>
+                  </button>
+                ))}
+                <hr className="toolbar-menu-separator" />
+                {(["asc", "desc"] as const).map((direction) => (
+                  <button
+                    key={direction}
+                    type="button"
+                    className="toolbar-menu-item"
+                    onClick={() => {
+                      if (direction !== sortDirection) {
+                        onSortChange(sortBy);
+                      }
+                      setSortMenuOpen(false);
+                    }}
+                    role="menuitemradio"
+                    aria-checked={sortDirection === direction}
+                  >
+                    <span className="toolbar-menu-check" aria-hidden="true">
+                      {sortDirection === direction ? "✓" : ""}
+                    </span>
+                    <span className="toolbar-menu-label">
+                      {direction === "asc" ? "Ascending" : "Descending"}
+                    </span>
                   </button>
                 ))}
               </div>,
@@ -448,37 +669,21 @@ export function ExplorerWorkspace({
           : null;
       return (
         <div key={itemId} className="toolbar-group">
-          <fieldset className="toolbar-select-group">
-            <legend className="sr-only">Sorting controls</legend>
-            <button
-              type="button"
-              className="tb-btn tb-btn-icon"
-              onClick={mode === "interactive" ? () => onSortChange(sortBy) : undefined}
-              tabIndex={mode === "interactive" ? undefined : -1}
-              title={sortDirection === "asc" ? "Ascending sort" : "Descending sort"}
-              aria-label={sortDirection === "asc" ? "Ascending sort" : "Descending sort"}
-            >
-              <ToolbarIcon name={sortDirection === "asc" ? "sortAsc" : "sortDesc"} />
-            </button>
-            {mode === "interactive" ? (
-              <button
-                ref={sortMenuButtonRef}
-                type="button"
-                className={`toolbar-select toolbar-sort-trigger${sortMenuOpen ? " open" : ""}`}
-                onClick={() => setSortMenuOpen((value) => !value)}
-                title="Sort by"
-                aria-label="Sort by"
-                aria-haspopup="menu"
-                aria-expanded={sortMenuOpen}
-              >
-                {sortLabel}
-              </button>
-            ) : (
-              <div className="toolbar-select toolbar-select-static" aria-hidden="true">
-                {sortLabel}
-              </div>
-            )}
-          </fieldset>
+          <button
+            ref={mode === "interactive" ? sortMenuButtonRef : undefined}
+            type="button"
+            className={`tb-btn tb-btn-icon${sortMenuOpen ? " active" : ""}`}
+            onClick={mode === "interactive" ? () => setSortMenuOpen((value) => !value) : undefined}
+            tabIndex={mode === "interactive" ? undefined : -1}
+            title={`Sort by ${getSortByLabel(sortBy)} (${
+              sortDirection === "asc" ? "ascending" : "descending"
+            })`}
+            aria-label="Sort by"
+            aria-haspopup="menu"
+            aria-expanded={sortMenuOpen}
+          >
+            <ToolbarIcon name="sort" />
+          </button>
           {sortMenu}
         </div>
       );
@@ -529,7 +734,7 @@ export function ExplorerWorkspace({
                     event.stopPropagation();
                     onSearchInputEscape();
                   }}
-                  placeholder="Find files…"
+                  placeholder="Search"
                   spellCheck={false}
                 />
                 {searchDraftQuery.trim().length > 0 ? (
@@ -544,11 +749,7 @@ export function ExplorerWorkspace({
                   >
                     <ToolbarIcon name="close" />
                   </button>
-                ) : (
-                  <span className="toolbar-search-shortcut" aria-hidden="true">
-                    ⌘F
-                  </span>
-                )}
+                ) : null}
               </div>
             </form>
             {searchPopoverOpen ? (
@@ -776,30 +977,44 @@ export function ExplorerWorkspace({
     );
   }
 
+  const toolbar = (
+    <header ref={toolbarRef} className="window-toolbar" style={{ gridColumn: "3 / -1" }}>
+      {leadingTopToolbarItems.length > 0 ? (
+        <div className="toolbar-leading">
+          {leadingTopToolbarItems.map((itemId, index) =>
+            renderTopToolbarActionItem(itemId, `${itemId}-leading-${index}`),
+          )}
+        </div>
+      ) : null}
+      <div className="toolbar-title-block">
+        <span className="toolbar-title" title={currentPath}>
+          {toolbarTitle}
+        </span>
+        {toolbarSubtitle ? <span className="toolbar-subtitle">{toolbarSubtitle}</span> : null}
+      </div>
+      <div className="titlebar-actions" data-layout={explorerToolbarLayout}>
+        <div ref={titlebarActionsMainRef} className="titlebar-actions-main">
+          {visibleTopToolbarItems.map((itemId, index) =>
+            renderTopToolbarActionItem(itemId, `${itemId}-${index}`),
+          )}
+        </div>
+        {showSidebarRail ? null : renderViewOptions()}
+        {renderTopToolbarItem("search")}
+        <div
+          ref={titlebarActionsMeasureRef}
+          className="titlebar-actions-measure"
+          aria-hidden="true"
+        >
+          {trailingTopToolbarItems.map((itemId, index) =>
+            renderMeasuredTopToolbarActionItem(itemId, `${itemId}-measure-${index}`),
+          )}
+        </div>
+      </div>
+    </header>
+  );
+
   return (
     <section className="workspace explorer-workspace">
-      <header ref={toolbarRef} className="window-toolbar">
-        <div className="window-toolbar-brand">
-          <span className="window-toolbar-title">File Trail</span>
-        </div>
-        <div className="titlebar-actions" data-layout={explorerToolbarLayout}>
-          <div ref={titlebarActionsMainRef} className="titlebar-actions-main">
-            {visibleTopToolbarItems.map((itemId, index) =>
-              renderTopToolbarActionItem(itemId, `${itemId}-${index}`),
-            )}
-          </div>
-          {renderTopToolbarItem("search")}
-          <div
-            ref={titlebarActionsMeasureRef}
-            className="titlebar-actions-measure"
-            aria-hidden="true"
-          >
-            {baseTopToolbarItems.map((itemId, index) =>
-              renderMeasuredTopToolbarActionItem(itemId, `${itemId}-measure-${index}`),
-            )}
-          </div>
-        </div>
-      </header>
       {!preferencesReady ||
       (restoredPaneWidths !== null &&
         (treeWidth !== restoredPaneWidths.treeWidth ||
@@ -812,11 +1027,15 @@ export function ExplorerWorkspace({
             gridTemplateColumns: `${treeWidth}px ${EXPLORER_LAYOUT.resizerWidth}px minmax(0, 1fr)${
               infoPanelOpen ? ` ${EXPLORER_LAYOUT.resizerWidth}px ${inspectorWidth}px` : ""
             }`,
+            gridTemplateRows: "auto minmax(0, 1fr)",
           }}
         >
-          <TreePane {...treePaneProps} />
+          <div className="workspace-sidebar-cell" style={{ gridColumn: "1", gridRow: "1 / -1" }}>
+            <TreePane {...treePaneProps} showRail={showSidebarRail} />
+          </div>
           <div
             className="pane-resizer"
+            style={{ gridColumn: "2", gridRow: "1 / -1" }}
             onPointerDown={beginResize("tree")}
             role="separator"
             tabIndex={0}
@@ -824,11 +1043,15 @@ export function ExplorerWorkspace({
             aria-label="Resize folders pane"
             onKeyDown={(event) => onPaneResizeKey("tree", event)}
           />
-          <SearchWorkspace {...searchWorkspaceProps} />
+          {toolbar}
+          <div className="workspace-main-cell" style={{ gridColumn: "3", gridRow: "2" }}>
+            <SearchWorkspace {...searchWorkspaceProps} />
+          </div>
           {infoPanelOpen ? (
             <>
               <div
                 className="pane-resizer"
+                style={{ gridColumn: "4", gridRow: "2" }}
                 onPointerDown={beginResize("inspector")}
                 role="separator"
                 tabIndex={0}
@@ -836,7 +1059,9 @@ export function ExplorerWorkspace({
                 aria-label="Resize Info Panel pane"
                 onKeyDown={(event) => onPaneResizeKey("inspector", event)}
               />
-              <InfoPanel {...infoPanelProps} />
+              <div className="workspace-inspector-cell" style={{ gridColumn: "5", gridRow: "2" }}>
+                <InfoPanel {...infoPanelProps} />
+              </div>
             </>
           ) : null}
         </section>

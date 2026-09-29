@@ -15,6 +15,10 @@ export type FiletrailClient = {
   onCommand(listener: (command: RendererCommand) => void): () => void;
   onWriteOperationProgress(listener: (event: WriteOperationProgressEvent) => void): () => void;
   onCopyPasteProgress(listener: (event: WriteOperationProgressEvent) => void): () => void;
+  // Preference edits made in another window (the Settings window) arrive here.
+  onPreferencesChanged?(
+    listener: (patch: IpcRequestInput<"app:updatePreferences">["preferences"]) => void,
+  ): () => void;
 };
 
 const MISSING_PRELOAD_ERROR =

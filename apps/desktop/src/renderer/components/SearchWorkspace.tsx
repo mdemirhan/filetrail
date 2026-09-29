@@ -12,16 +12,12 @@ export function SearchWorkspace({
   searchResultsPaneProps,
   contentPaneProps,
   infoRow,
-  statusLabel,
-  statusPathLabel,
 }: {
   isSearchMode: boolean;
   searchResultsKey?: string;
   searchResultsPaneProps: SearchResultsPaneProps;
   contentPaneProps: ContentPaneProps;
   infoRow: ReactNode;
-  statusLabel: string;
-  statusPathLabel: string;
 }) {
   return (
     <section className="main-shell">
@@ -31,10 +27,6 @@ export function SearchWorkspace({
         <ContentPane {...contentPaneProps} />
       )}
       {infoRow}
-      <footer className="status-bar">
-        <span>{statusLabel}</span>
-        <span className="status-path">{statusPathLabel}</span>
-      </footer>
     </section>
   );
 }

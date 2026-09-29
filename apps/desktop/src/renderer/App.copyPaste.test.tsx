@@ -635,36 +635,26 @@ vi.mock("./components/HelpView", () => ({
         Help notes
         <input aria-label="Help notes" defaultValue="docs" />
       </label>
-    </div>
-  ),
-}));
-vi.mock("./components/ActionLogView", () => ({
-  ActionLogView: () => <div data-testid="action-log-view">Action Log</div>,
-}));
-vi.mock("./components/SettingsView", () => ({
-  SettingsView: () => (
-    <div data-testid="settings-view">
       <label>
-        Terminal app
-        <input aria-label="Terminal app" defaultValue="Terminal" />
+        Readonly value
+        <input aria-label="Readonly value" defaultValue="5" readOnly />
       </label>
       <label>
-        Open and Edit item limit
-        <input aria-label="Open and Edit item limit" defaultValue="5" readOnly />
-      </label>
-      <label>
-        Search scope
-        <select aria-label="Search scope" defaultValue="name">
+        Help scope
+        <select aria-label="Help scope" defaultValue="name">
           <option value="name">Name</option>
           <option value="path">Path</option>
         </select>
       </label>
       <label>
-        Accent color
-        <input aria-label="Accent color" type="color" defaultValue="#336699" />
+        Help color
+        <input aria-label="Help color" type="color" defaultValue="#336699" />
       </label>
     </div>
   ),
+}));
+vi.mock("./components/ActionLogView", () => ({
+  ActionLogView: () => <div data-testid="action-log-view">Action Log</div>,
 }));
 vi.mock("./components/ToolbarIcon", () => ({
   ToolbarIcon: () => null,
@@ -942,7 +932,7 @@ describe("App copy/paste integration", () => {
     expect(harness.invocations.some((call) => call.channel === "system:copyText")).toBe(false);
   });
 
-  it("ignores menu shortcut commands while settings is open", async () => {
+  it("asks the main process to open the Settings window on Command-comma", async () => {
     const harness = createAppHarness();
 
     render(
@@ -955,7 +945,29 @@ describe("App copy/paste integration", () => {
     await act(async () => {
       fireEvent.keyDown(window, { key: ",", metaKey: true });
     });
-    await screen.findByTestId("settings-view");
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.some((call) => call.channel === "app:openSettingsWindow")).toBe(
+        true,
+      );
+    });
+    expect(screen.getByTestId("content-pane")).toBeInTheDocument();
+  });
+
+  it("ignores menu shortcut commands while help is open", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await screen.findByTestId("content-pane");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "?" });
+    });
+    await screen.findByTestId("help-view");
 
     await act(async () => {
       harness.emitCommand({ type: "copyPath" });
@@ -973,7 +985,7 @@ describe("App copy/paste integration", () => {
       </FiletrailClientProvider>,
     );
 
-    const searchInput = await screen.findByPlaceholderText("Find files…");
+    const searchInput = await screen.findByPlaceholderText("Search");
     await act(async () => {
       searchInput.focus();
       harness.emitCommand({ type: "editCopy" });
@@ -997,7 +1009,7 @@ describe("App copy/paste integration", () => {
       </FiletrailClientProvider>,
     );
 
-    const searchInput = await screen.findByPlaceholderText("Find files…");
+    const searchInput = await screen.findByPlaceholderText("Search");
     await act(async () => {
       searchInput.focus();
       fireEvent.keyDown(searchInput, { key: "c", metaKey: true });
@@ -1111,7 +1123,7 @@ describe("App copy/paste integration", () => {
     expect(screen.getByTitle("/Users/demo/beta.txt")).toHaveAttribute("data-selected", "false");
   });
 
-  it("routes generic edit commands to native editing for path, location, rename, and settings inputs", async () => {
+  it("routes generic edit commands to native editing for path, location, and rename inputs", async () => {
     const harness = createAppHarness();
 
     render(
@@ -1155,16 +1167,7 @@ describe("App copy/paste integration", () => {
       fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     });
 
-    await act(async () => {
-      fireEvent.keyDown(window, { key: ",", metaKey: true });
-    });
-    const settingsInput = await screen.findByLabelText("Terminal app");
-    await act(async () => {
-      settingsInput.focus();
-      harness.emitCommand({ type: "editCut" });
-    });
-
-    expectNativeEditActions(harness, ["copy", "paste", "selectAll", "cut"]);
+    expectNativeEditActions(harness, ["copy", "paste", "selectAll"]);
     expectNoFileClipboardActions(harness);
   });
 
@@ -1198,9 +1201,9 @@ describe("App copy/paste integration", () => {
     );
 
     await act(async () => {
-      fireEvent.keyDown(window, { key: ",", metaKey: true });
+      fireEvent.keyDown(window, { key: "?" });
     });
-    const readonlyInput = await screen.findByLabelText("Open and Edit item limit");
+    const readonlyInput = await screen.findByLabelText("Readonly value");
     await act(async () => {
       readonlyInput.focus();
       harness.emitCommand({ type: "editCopy" });
@@ -1213,7 +1216,7 @@ describe("App copy/paste integration", () => {
     expectNoFileClipboardActions(harness);
   });
 
-  it("does not treat non-text settings controls as native text editors", async () => {
+  it("does not treat non-text controls as native text editors", async () => {
     const harness = createAppHarness();
 
     render(
@@ -1223,10 +1226,10 @@ describe("App copy/paste integration", () => {
     );
 
     await act(async () => {
-      fireEvent.keyDown(window, { key: ",", metaKey: true });
+      fireEvent.keyDown(window, { key: "?" });
     });
-    const searchScopeSelect = await screen.findByLabelText("Search scope");
-    const accentColorInput = await screen.findByLabelText("Accent color");
+    const searchScopeSelect = await screen.findByLabelText("Help scope");
+    const accentColorInput = await screen.findByLabelText("Help color");
 
     await act(async () => {
       searchScopeSelect.focus();
@@ -1239,7 +1242,7 @@ describe("App copy/paste integration", () => {
     expectNoFileClipboardActions(harness);
   });
 
-  it("keeps generic edit commands working for text inputs in help and settings views", async () => {
+  it("keeps generic edit commands working for text inputs in the help view", async () => {
     const harness = createAppHarness();
 
     render(
@@ -1258,11 +1261,7 @@ describe("App copy/paste integration", () => {
     });
 
     await act(async () => {
-      fireEvent.keyDown(window, { key: ",", metaKey: true });
-    });
-    const settingsInput = await screen.findByLabelText("Terminal app");
-    await act(async () => {
-      settingsInput.focus();
+      helpInput.focus();
       harness.emitCommand({ type: "editPaste" });
     });
 
@@ -2691,8 +2690,32 @@ describe("App copy/paste integration", () => {
     });
   });
 
-  it("uses the selected paths for Enter in the content pane", async () => {
+  it("renames the single selected item on Return like Finder", async () => {
     const harness = createAppHarness();
+    harness.setDirectoryEntries("/Users/demo", [
+      createDirectoryEntry("/Users/demo/source-a.txt", "file"),
+    ]);
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceAButton = await screen.findByTitle("/Users/demo/source-a.txt");
+    await act(async () => {
+      fireEvent.click(sourceAButton);
+    });
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "Enter" });
+    });
+
+    await screen.findByRole("dialog", { name: "Rename" });
+    expect(harness.invocations.some((call) => call.channel === "system:openPath")).toBe(false);
+  });
+
+  it("opens the selected paths on Return when the Return key is set to open", async () => {
+    const harness = createAppHarness({ preferences: { returnKeyAction: "open" } });
     harness.setDirectoryEntries("/Users/demo", [
       createDirectoryEntry("/Users/demo/source-a.txt", "file"),
       createDirectoryEntry("/Users/demo/source-b.txt", "file"),
@@ -3843,7 +3866,7 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "f", metaKey: true });
     });
     await vi.waitFor(() => {
-      expect(screen.getByPlaceholderText("Find files…")).toBe(document.activeElement);
+      expect(screen.getByPlaceholderText("Search")).toBe(document.activeElement);
     });
 
     await act(async () => {
@@ -6540,6 +6563,34 @@ describe("App copy/paste integration", () => {
     });
   });
 
+  it("clears the search field when Escape hides results and restores it with the cached results", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await openSearchResults();
+    const searchInput = screen.getByPlaceholderText("Search") as HTMLInputElement;
+    expect(searchInput.value).toBe("source");
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "Escape" });
+    });
+    await vi.waitFor(() => {
+      expect(screen.queryByTestId("search-results-pane")).not.toBeInTheDocument();
+    });
+    expect(searchInput.value).toBe("");
+
+    await act(async () => {
+      fireEvent.focus(searchInput);
+    });
+    await screen.findByTestId("search-results-pane");
+    expect(searchInput.value).toBe("source");
+  });
+
   it("rejects dropping a search selection onto search results", async () => {
     const harness = createAppHarness();
 
@@ -7238,7 +7289,7 @@ async function openDirectory(path: string): Promise<void> {
 }
 
 async function openSearchResults(): Promise<void> {
-  const searchInput = await screen.findByPlaceholderText("Find files…");
+  const searchInput = await screen.findByPlaceholderText("Search");
   const form = searchInput.closest("form");
   if (!form) {
     throw new Error("Missing search form.");

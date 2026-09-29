@@ -18,6 +18,9 @@ declare global {
       onCommand(listener: (command: RendererCommand) => void): () => void;
       onWriteOperationProgress(listener: (event: WriteOperationProgressEvent) => void): () => void;
       onCopyPasteProgress(listener: (event: WriteOperationProgressEvent) => void): () => void;
+      onPreferencesChanged?(
+        listener: (patch: IpcRequestInput<"app:updatePreferences">["preferences"]) => void,
+      ): () => void;
     };
   }
 }

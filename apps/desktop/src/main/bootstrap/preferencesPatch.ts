@@ -10,6 +10,18 @@ export function toPreferencePatch(
   if (value.theme !== undefined) {
     patch.theme = value.theme;
   }
+  if (value.autoLightTheme !== undefined) {
+    patch.autoLightTheme = value.autoLightTheme;
+  }
+  if (value.autoDarkTheme !== undefined) {
+    patch.autoDarkTheme = value.autoDarkTheme;
+  }
+  if (value.showSidebarRail !== undefined) {
+    patch.showSidebarRail = value.showSidebarRail;
+  }
+  if (value.returnKeyAction !== undefined) {
+    patch.returnKeyAction = value.returnKeyAction;
+  }
   if (value.iconTheme !== undefined) {
     patch.iconTheme = value.iconTheme;
   }

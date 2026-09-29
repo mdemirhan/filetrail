@@ -1391,9 +1391,10 @@ body.platform-macos .window-toolbar-brand {
   color: var(--search-text);
   font-size: 12.5px;
   font-weight: 500;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   letter-spacing: 0.01em;
   caret-color: var(--search-caret);
+  font-variant-numeric: tabular-nums;
 }
 
 .toolbar-search-input:focus,
@@ -1420,12 +1421,13 @@ body.platform-macos .window-toolbar-brand {
   border-radius: 3px;
   background: var(--search-shortcut-bg);
   color: var(--search-shortcut-fg);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 10px;
   line-height: 1;
   letter-spacing: 0.02em;
   font-weight: 500;
   user-select: none;
+  font-variant-numeric: tabular-nums;
 }
 
 .toolbar-search-clear {
@@ -1554,7 +1556,7 @@ body.platform-macos .window-toolbar-brand {
   border-radius: 7px;
   background-color: var(--search-pill-bg);
   color: var(--search-text);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 600;
   line-height: 1;
@@ -1569,6 +1571,7 @@ body.platform-macos .window-toolbar-brand {
   background-size: 6px 6px, 6px 6px;
   background-repeat: no-repeat;
   transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+  font-variant-numeric: tabular-nums;
 }
 
 .toolbar-search-select:hover {
@@ -1597,12 +1600,13 @@ body.platform-macos .window-toolbar-brand {
   border-radius: 7px;
   background: var(--search-pill-bg);
   color: var(--search-pill-fg);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 12.5px;
   font-weight: 600;
   letter-spacing: 0.02em;
   white-space: nowrap;
   transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  font-variant-numeric: tabular-nums;
 }
 
 .toolbar-search-pill:hover {
@@ -1625,9 +1629,10 @@ body.platform-macos .window-toolbar-brand {
   min-width: 0;
   padding: 0 10px 8px;
   color: var(--search-meta-fg);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 12px;
   line-height: 1.4;
+  font-variant-numeric: tabular-nums;
 }
 
 .toolbar-search-status {
@@ -1857,10 +1862,11 @@ body.platform-macos .window-toolbar-brand {
 
 .context-menu-item-shortcut {
   color: var(--context-menu-shortcut);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
 }
 
 .context-menu-item.active .context-menu-item-shortcut {
@@ -3233,9 +3239,10 @@ body.platform-macos .window-toolbar-brand {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--accent-text);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 12px;
   font-weight: var(--mono-font-weight);
+  font-variant-numeric: tabular-nums;
 }
 
 .tree-expand:focus-visible,
@@ -3763,24 +3770,33 @@ body.resizing-panels-vertical * {
   scrollbar-gutter: stable;
 }
 
+/* Rows fit the pane and long names end in an ellipsis (full path in the tooltip), like the
+   Finder sidebar, instead of scrolling sideways and clipping names mid-word. */
 .tree-scroll {
   width: 100%;
   height: 100%;
-  overflow-x: scroll;
+  overflow-x: hidden;
   overflow-y: auto;
   scrollbar-gutter: stable;
 }
 
 .tree-list {
-  min-width: 100%;
-  width: max-content;
+  width: 100%;
   padding: 6px 0 16px;
   background: transparent;
 }
 
 .tree-branch {
-  min-width: 100%;
-  width: max-content;
+  width: 100%;
+}
+
+/* Per-level indent of tree rows (TreePane sets padding-left from it). */
+.tree-pane {
+  --tree-indent: 14px;
+}
+
+.compact-tree-view {
+  --tree-indent: 11px;
 }
 
 .compact-tree-view .tree-list {
@@ -3792,6 +3808,16 @@ body.resizing-panels-vertical * {
 .content-scroll::-webkit-scrollbar {
   width: 8px;
   height: 8px;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.tree-scroll::-webkit-scrollbar-corner,
+.favorites-scroll::-webkit-scrollbar-corner,
+.content-scroll::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 .tree-scroll::-webkit-scrollbar-thumb,
@@ -3816,8 +3842,8 @@ body.resizing-panels-vertical * {
   display: flex;
   align-items: center;
   gap: 6px;
-  min-width: calc(100% - 12px);
-  width: max-content;
+  width: calc(100% - 12px);
+  min-width: 0;
   min-height: 30px;
   margin: 1px 6px;
   padding-right: 8px;
@@ -3892,8 +3918,9 @@ body.resizing-panels-vertical * {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-width: max-content;
-  flex: 0 0 auto;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
   padding: 4px 0;
   text-align: left;
   font-size: 13px;
@@ -3916,7 +3943,9 @@ body.resizing-panels-vertical * {
 }
 
 .tree-label-text {
-  overflow: visible;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -3951,23 +3980,16 @@ body.resizing-panels-vertical * {
   padding: 6px 20px 4px;
 }
 
+/* Row pitch is FLOW_LIST_LAYOUT.rowHeight (the details-view row height): rows sit flush. */
 .flow-grid-rows {
   display: grid;
-  gap: 2px;
-}
-
-.flow-list.compact .flow-grid-rows {
-  gap: 1px;
+  gap: 0;
 }
 
 .flow-grid {
   display: grid;
   align-items: start;
-  gap: 2px 18px;
-}
-
-.flow-list.compact .flow-grid {
-  gap: 1px 18px;
+  gap: 0 18px;
 }
 
 .flow-item {
@@ -3976,10 +3998,10 @@ body.resizing-panels-vertical * {
   align-items: center;
   gap: 8px;
   min-width: 0;
-  height: 34px;
+  height: 28px;
   padding: 0 10px;
   border: 2px solid transparent;
-  border-radius: 8px;
+  border-radius: 5px;
   background: transparent;
   text-align: left;
   user-select: none;
@@ -3988,7 +4010,7 @@ body.resizing-panels-vertical * {
 }
 
 .flow-list.compact .flow-item {
-  height: 27px;
+  height: 24px;
   gap: 6px;
   padding: 0 8px;
 }
@@ -4425,11 +4447,12 @@ body.resizing-panels-vertical * {
 
 .search-results-status-label {
   color: var(--srbar-status-label);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 500;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
 }
 
 .search-results-status-label-searching {
@@ -4462,12 +4485,13 @@ body.resizing-panels-vertical * {
   border-radius: 4px;
   background: var(--srbar-badge-bg);
   color: var(--srbar-badge-fg);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 12px;
   font-weight: 600;
   line-height: 1.6;
   letter-spacing: 0.01em;
   margin-left: 2px;
+  font-variant-numeric: tabular-nums;
 }
 
 .search-results-root {
@@ -4551,10 +4575,11 @@ body.resizing-panels-vertical * {
   background: transparent;
   color: var(--srbar-filter-text);
   font-size: 13.5px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   caret-color: var(--srbar-spinner);
   user-select: text;
   -webkit-user-select: text;
+  font-variant-numeric: tabular-nums;
 }
 
 .search-results-filter-input:focus,
@@ -4596,7 +4621,7 @@ body.resizing-panels-vertical * {
   border: 0;
   background: var(--srbar-select-bg);
   color: var(--srbar-select-text);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 12px;
   font-weight: 500;
   appearance: none;
@@ -4613,6 +4638,7 @@ body.resizing-panels-vertical * {
   background-repeat: no-repeat;
   user-select: auto;
   -webkit-user-select: auto;
+  font-variant-numeric: tabular-nums;
 }
 
 .search-results-sort-toggle {
@@ -4630,10 +4656,11 @@ body.resizing-panels-vertical * {
   border-radius: 0;
   padding: 0 10px;
   color: var(--srbar-apply-text);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 12px;
   letter-spacing: 0.02em;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .search-results-apply-button:hover {
@@ -5350,12 +5377,13 @@ body.resizing-panels-vertical * {
   height: var(--breadcrumb-row-height);
   padding: 0 12px;
   border-bottom: 1px solid var(--get-info-panel-border);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--get-info-header-text);
+  font-variant-numeric: tabular-nums;
 }
 
 .get-info-close {
@@ -5450,12 +5478,13 @@ body.resizing-panels-vertical * {
   border-radius: 4px;
   background: var(--get-info-hero-type-bg);
   color: var(--get-info-hero-type);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 10.5px;
   font-weight: 700;
   line-height: 1.6;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
 }
 
 .get-info-actions {
@@ -5489,13 +5518,14 @@ body.resizing-panels-vertical * {
 
 .get-info-action-label {
   color: var(--get-info-action-text);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.03em;
   line-height: 1.2;
   text-align: center;
   transition: color 0.12s ease;
+  font-variant-numeric: tabular-nums;
 }
 
 .get-info-action:hover .get-info-action-label {
@@ -5527,11 +5557,12 @@ body.resizing-panels-vertical * {
 .get-info-meta-label {
   flex-shrink: 0;
   color: color-mix(in srgb, var(--get-info-meta-label) 35%, var(--get-info-meta-value));
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
 }
 
 .get-info-meta-value {
@@ -5569,11 +5600,12 @@ body.resizing-panels-vertical * {
 
 .get-info-path-header > span {
   color: var(--get-info-path-text);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
 }
 
 .get-info-breadcrumbs {
@@ -5624,8 +5656,9 @@ body.resizing-panels-vertical * {
 
 .get-info-separator {
   color: var(--get-info-path-separator);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .get-info-icon {
@@ -5730,11 +5763,12 @@ body.resizing-panels-vertical * {
 .dt-val {
   font-size: 12px;
   color: var(--text-secondary);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-weight: var(--mono-font-weight);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Folder Size Interactive States ──────────────────────────────── */
@@ -5744,12 +5778,13 @@ body.resizing-panels-vertical * {
   border: 0;
   background: transparent;
   color: var(--accent);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: inherit;
   font-weight: 600;
   cursor: pointer;
   text-decoration: none;
   transition: color 0.12s ease;
+  font-variant-numeric: tabular-nums;
 }
 
 .folder-size-calculate-btn:hover {
@@ -6288,12 +6323,13 @@ body.platform-macos .action-log-view {
 .help-header-eyebrow,
 .settings-page-eyebrow,
 .action-log-page-eyebrow {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 10px;
   font-weight: var(--mono-font-weight);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--help-accent);
+  font-variant-numeric: tabular-nums;
 }
 
 .help-header h2,
@@ -6313,7 +6349,7 @@ body.platform-macos .action-log-view {
 }
 
 .help-header-badge {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 11px;
   font-weight: var(--mono-font-weight);
   color: var(--help-muted);
@@ -6321,6 +6357,7 @@ body.platform-macos .action-log-view {
   border-radius: var(--radius-sm);
   background: var(--help-elevated);
   padding: 4px 9px;
+  font-variant-numeric: tabular-nums;
 }
 
 .help-grid {
@@ -6870,7 +6907,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
 }
 
 .help-key {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 11px;
   font-weight: var(--mono-font-weight);
   color: var(--text-secondary);
@@ -6881,6 +6918,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
   border-radius: var(--radius-sm);
   padding: 1px 7px;
   line-height: 1.6;
+  font-variant-numeric: tabular-nums;
 }
 
 .help-syntax-section,
@@ -6948,10 +6986,11 @@ body.platform-macos .settings-view[data-layout="compact"] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 12px;
   font-weight: 700;
   flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .help-tip-text strong {
@@ -7125,4 +7164,1325 @@ body.platform-macos .settings-view[data-layout="compact"] {
 .location-sheet-error {
   color: var(--danger);
   font-size: 12px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   Native macOS layer
+   Finder-like window chrome built on the existing theme tokens, so every
+   palette (light and dark) inherits it: a full-height sidebar that holds the
+   traffic lights, a toolbar over the content with the folder title, a bottom
+   path bar, and sentence-case section labels instead of letter-spaced caps.
+   ══════════════════════════════════════════════════════════════════════ */
+
+.explorer-workspace {
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.workspace-sidebar-cell,
+.workspace-main-cell,
+.workspace-inspector-cell {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.workspace-sidebar-cell > *,
+.workspace-main-cell > *,
+.workspace-inspector-cell > * {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ── Sidebar ──────────────────────────────────────────────────────────── */
+
+.tree-pane {
+  display: flex;
+  flex-direction: column;
+  border-right: 0;
+}
+
+.sidebar-titlebar {
+  flex: 0 0 52px;
+  -webkit-app-region: drag;
+}
+
+.tree-pane .sidebar-shell {
+  flex: 1 1 auto;
+  height: auto;
+}
+
+.sidebar-shell-no-rail {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.sidebar-shell-no-rail .sidebar-main {
+  background: transparent;
+}
+
+.sidebar-section-title,
+.sidebar-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-tertiary);
+}
+
+.sidebar-section-title {
+  padding: 4px 12px 4px 20px;
+}
+
+.sidebar-header {
+  min-height: 0;
+  height: auto;
+  padding: 14px 12px 4px 20px;
+  border-bottom: 0;
+  background: transparent;
+}
+
+.sidebar-header-focused {
+  background: transparent;
+}
+
+.sidebar-footer {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 40px;
+  padding: 0 10px;
+  border-top: 1px solid var(--border-light);
+}
+
+.sidebar-footer-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: default;
+}
+
+.sidebar-footer-button:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* ── Toolbar ──────────────────────────────────────────────────────────── */
+
+.window-toolbar {
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 52px;
+  padding: 0 12px 0 8px;
+  background: var(--bg-base);
+  border-bottom: 1px solid var(--border);
+}
+
+.toolbar-leading {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.toolbar-title-block {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 40%;
+  padding-left: 4px;
+  line-height: 1.2;
+  -webkit-app-region: drag;
+}
+
+.toolbar-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.toolbar-subtitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.titlebar-actions {
+  justify-content: flex-end;
+}
+
+.titlebar-actions-main {
+  justify-content: flex-end;
+}
+
+.toolbar-view-options {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.toolbar-menu {
+  z-index: 100;
+  min-width: 220px;
+  padding: 5px;
+  border: 0.5px solid var(--context-menu-border);
+  border-radius: 9px;
+  background: var(--context-menu-bg-blur, var(--context-menu-bg));
+  box-shadow: var(--context-menu-shadow);
+  backdrop-filter: blur(20px) saturate(1.6);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+}
+
+.toolbar-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 24px;
+  padding: 0 10px 0 4px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--context-menu-text);
+  font-size: 13px;
+  text-align: left;
+  cursor: default;
+}
+
+.toolbar-menu-item:hover,
+.toolbar-menu-item:focus-visible {
+  background: var(--ft-accent-solid);
+  color: #ffffff;
+  outline: none;
+  box-shadow: none;
+}
+
+.toolbar-menu-check {
+  width: 16px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.toolbar-menu-label {
+  flex: 1 1 auto;
+}
+
+.toolbar-menu-shortcut {
+  color: var(--context-menu-shortcut);
+}
+
+.toolbar-menu-item:hover .toolbar-menu-shortcut {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.toolbar-menu-separator {
+  height: 1px;
+  margin: 5px 10px;
+  border: 0;
+  background: var(--context-menu-separator);
+}
+
+/* ── Path bar and status bar (Finder-style, below the list) ───────────── */
+
+.content-pane {
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.content-pathbar-row {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-top: 1px solid var(--border-light);
+  border-bottom: 0;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-secondary);
+}
+
+.content-pathbar-row .pathbar-segment {
+  height: 20px;
+  padding: 0 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.content-pathbar-row .pathbar-segment.active {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.content-pathbar-row .pathbar-separator {
+  color: var(--text-tertiary);
+}
+
+.content-pathbar-row .pathbar-suggestions {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+.main-shell {
+  grid-template-rows: minmax(0, 1fr) auto 24px;
+}
+
+.status-bar {
+  justify-content: center;
+  padding: 0 12px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Lists: Finder density, accent selection, alternating rows ────────── */
+
+.details-header {
+  min-height: 28px;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-secondary);
+}
+
+.details-header-button.active {
+  font-weight: 600;
+}
+
+.details-wrapper {
+  grid-template-rows: 28px minmax(0, 1fr);
+}
+
+.details-row {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 12px;
+  border-bottom: 0;
+  border-radius: 5px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.details-scroll.compact .details-row {
+  height: 24px;
+  min-height: 24px;
+  padding: 0 12px;
+}
+
+.details-row[data-row-parity="odd"] {
+  background: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
+}
+
+.details-name {
+  gap: 8px;
+}
+
+/* Focused selection is a solid accent with white text; unfocused selection turns gray. */
+.flow-item.active:not(.inactive),
+.details-row.active:not(.inactive),
+.search-result-row.active:not(.inactive) {
+  background: color-mix(in srgb, var(--ft-accent-solid) 86%, black);
+  color: #ffffff;
+}
+
+.flow-item.active:not(.inactive) .flow-item-label,
+.details-row.active:not(.inactive) > span,
+.details-row.active:not(.inactive) .details-name-label,
+.search-result-row.active:not(.inactive) .search-result-name,
+.search-result-row.active:not(.inactive) .search-result-path {
+  color: #ffffff;
+}
+
+.flow-item.active.inactive,
+.details-row.active.inactive,
+.search-result-row.active.inactive {
+  background: var(--bg-active-inactive);
+}
+
+/* ── Search: scope bar, filter row, sortable columns ──────────────────── */
+
+.search-results-header {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-base);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.search-scope-bar,
+.search-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-secondary);
+}
+
+.search-filter-row {
+  min-height: 32px;
+  border-top: 1px solid var(--border-light);
+}
+
+.search-scope-label {
+  margin-right: 2px;
+  color: var(--text-tertiary);
+}
+
+.search-scope-button {
+  height: 22px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: default;
+}
+
+.search-scope-button:hover {
+  background: var(--bg-hover);
+}
+
+.search-scope-button.active {
+  background: var(--bg-active-inactive);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.search-scope-spacer {
+  flex: 1 1 auto;
+}
+
+.search-scope-select {
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.search-scope-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.search-scope-check input {
+  margin: 0;
+  accent-color: var(--ft-accent-solid);
+}
+
+.search-scope-action {
+  height: 22px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: default;
+}
+
+.search-scope-action:hover {
+  background: var(--bg-hover);
+}
+
+.search-filter-row .search-results-filter-input-region {
+  flex: 0 1 280px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: var(--bg-input);
+}
+
+.search-filter-row .search-results-filter-input {
+  font-size: 12px;
+}
+
+.search-filter-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.search-results-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 8px;
+  height: 26px;
+  padding: 0 16px 0 42px;
+  border-top: 1px solid var(--border-light);
+}
+
+.search-results-column {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: left;
+  cursor: default;
+}
+
+.search-results-column.active {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.search-results-column-arrow {
+  font-size: 8px;
+  color: var(--text-tertiary);
+}
+
+.search-result-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 8px;
+  width: calc(100% - 12px);
+  height: 28px;
+  min-height: 28px;
+  margin: 0 6px;
+  padding: 0 10px;
+  border-radius: 5px;
+}
+
+.search-result-name {
+  font-size: 13px;
+  font-weight: var(--ui-font-weight);
+}
+
+.search-result-path {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+/* Remaining uppercase letter-spaced labels read as web UI; macOS uses sentence case. */
+.pane-header,
+.get-info-header,
+.get-info-meta-label,
+.get-info-path-header > span,
+.get-info-kind-badge,
+.help-header-eyebrow,
+.settings-page-eyebrow,
+.action-log-page-eyebrow {
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.search-results-pane {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.content-pathbar-row,
+.content-pathbar-row.pane-header-focused {
+  background: var(--bg-base);
+}
+
+.flow-item.active:not(.inactive) .truncated-name-extension,
+.details-row.active:not(.inactive) .truncated-name-extension,
+.search-result-row.active:not(.inactive) .truncated-name-extension {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* Hairline pane dividers instead of a thick bar; the full width stays grabbable. */
+.pane-resizer::before {
+  inset: 0 auto 0 50%;
+  width: 1px;
+  transform: translateX(-50%);
+}
+
+/* ── Info panel (Finder inspector style) ──────────────────────────────── */
+
+.get-info-panel {
+  background: var(--bg-base);
+  border-left: 0;
+}
+
+.get-info-header {
+  height: 32px;
+  min-height: 32px;
+  border-bottom: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.get-info-content {
+  padding: 0 16px 18px;
+}
+
+.get-info-hero {
+  gap: 6px;
+  padding: 8px 8px 14px;
+}
+
+.get-info-hero-icon {
+  width: 104px;
+  height: 104px;
+  border-radius: 0;
+  background: transparent;
+}
+
+.get-info-hero-icon .file-icon {
+  width: 88px;
+  height: 88px;
+}
+
+.get-info-name {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+  word-break: break-word;
+}
+
+.get-info-subtitle {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.get-info-buttons {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.get-info-buttons > * {
+  flex: 1 1 0;
+}
+
+.get-info-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: default;
+}
+
+.get-info-button:hover {
+  background: var(--bg-hover);
+}
+
+.get-info-button.primary {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--ft-accent-solid) 86%, black);
+  color: #ffffff;
+  font-weight: 500;
+}
+
+.get-info-button.primary:hover {
+  background: color-mix(in srgb, var(--ft-accent-solid) 76%, black);
+}
+
+.get-info-button-chevron {
+  font-size: 9px;
+  color: var(--text-tertiary);
+}
+
+.get-info-open-with {
+  position: relative;
+}
+
+.get-info-open-with-menu.context-submenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: auto;
+  right: 0;
+  z-index: 20;
+  min-width: 200px;
+}
+
+.get-info-section {
+  margin-bottom: 16px;
+}
+
+.get-info-section-title {
+  margin: 0 0 4px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.get-info-meta {
+  margin-bottom: 0;
+}
+
+.get-info-meta-row {
+  border-bottom: 1px solid var(--border-light);
+}
+
+.get-info-meta-label {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.get-info-meta-value {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.get-info-permissions {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.get-info-permissions-code {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.get-info-where {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ft-accent-solid);
+  font-size: 12px;
+  cursor: default;
+}
+
+.get-info-where:hover {
+  text-decoration: underline;
+}
+
+.get-info-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: 0;
+}
+
+.get-info-action {
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 9px;
+  height: 30px;
+  padding: 0 4px;
+  border-radius: 5px;
+  background: transparent;
+}
+
+.get-info-action-icon {
+  display: inline-flex;
+  color: var(--ft-accent-solid);
+}
+
+.get-info-action-label {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.get-info-action-shortcut {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+/* ── Context menu: ⌘ glyph shortcuts in the system font; destructive items in red ── */
+
+.context-menu-item-shortcut {
+  font-family: var(--font-sans);
+  letter-spacing: 0.02em;
+}
+
+.context-menu-item.destructive,
+.context-menu-item.destructive .context-menu-item-label,
+.context-menu-item.destructive .context-menu-icon-svg {
+  color: var(--context-menu-destructive);
+  stroke: var(--context-menu-destructive);
+}
+
+/* ── Help / Action Log: a toolbar with a way back to the files ────────── */
+
+.single-panel-layout {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.single-panel-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 0 16px 0 88px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-base);
+  -webkit-app-region: drag;
+}
+
+.single-panel-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: default;
+  -webkit-app-region: no-drag;
+}
+
+.single-panel-back:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.single-panel-title {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+/* ── Settings window ──────────────────────────────────────────────────── */
+
+body.settings-window-body {
+  overflow: hidden;
+}
+
+.settings-window {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  height: 100vh;
+  background: var(--bg-base);
+}
+
+.settings-window-toolbar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 16px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--toolbar-bg, var(--bg-base));
+  -webkit-app-region: drag;
+}
+
+.settings-window-title {
+  height: 18px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings-window-tabs {
+  display: flex;
+  gap: 2px;
+}
+
+.settings-window-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 78px;
+  height: 50px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: default;
+  -webkit-app-region: no-drag;
+}
+
+.settings-window-tab:hover {
+  background: var(--bg-hover);
+}
+
+.settings-window-tab.active {
+  background: var(--bg-active-inactive);
+  color: var(--text-primary);
+}
+
+.settings-window-tab-icon {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.settings-window-tab.active .settings-window-tab-icon {
+  stroke: var(--ft-accent-solid);
+}
+
+.settings-window-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 20px;
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.settings-window-body-scroll {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.settings-window .settings-view {
+  background: transparent !important;
+}
+
+/* macOS icon theme: real system icons, sized like the drawn icons they replace. */
+.file-icon.native-file-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.get-info-hero-icon .file-icon.native-file-icon,
+.get-info-hero-icon .file-icon.native-app-icon {
+  width: 96px;
+  height: 96px;
+}
+
+/* The path bar row carries the status summary; there is no separate status bar row. */
+.main-shell {
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.content-pathbar-row .pathbar {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.content-pathbar-status {
+  flex: 0 0 auto;
+  margin-left: 12px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.content-pathbar-row.pane-header-focused,
+.content-pathbar-row.pane-header-focused .content-pathbar-status {
+  color: var(--text-tertiary);
+}
+
+/* Every text span in a focused selected row is white, including names without an extension
+   (which otherwise match `.details-name span:last-child` and stay dark). */
+.flow-item.active:not(.inactive) .flow-item-label span,
+.details-row.active:not(.inactive) .details-name span,
+.search-result-row.active:not(.inactive) .search-result-name span {
+  color: #ffffff;
+}
+
+/* Info panel folder size: size on one line, item count below, both right-aligned. */
+.get-info-meta-value .folder-size-detail {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.get-info-meta-value .folder-size-items {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+/* ── macOS Light / macOS Dark: base tokens outside the variant set ─────── */
+
+:root[data-theme-variant="macos-light"] {
+  --bg-hover: rgba(0, 0, 0, 0.045);
+  --bg-input: rgba(0, 0, 0, 0.04);
+  --bg-active: rgba(0, 0, 0, 0.08);
+  --bg-active-inactive: #dcdce1;
+  --bg-panel: #ffffff;
+  --accent-soft: rgba(0, 0, 0, 0.06);
+}
+
+:root[data-theme-variant="macos-dark"] {
+  --bg-hover: rgba(255, 255, 255, 0.06);
+  --bg-input: rgba(255, 255, 255, 0.06);
+  --bg-active: rgba(255, 255, 255, 0.1);
+  --bg-active-inactive: #3a3a3e;
+  --bg-panel: #1e1e20;
+  --accent-soft: rgba(255, 255, 255, 0.08);
+}
+
+/* ── Toolbar controls (Finder style) ──────────────────────────────────── */
+
+.window-toolbar .toolbar-icon {
+  width: 17px;
+  height: 17px;
+  stroke-width: 1.7;
+}
+
+.window-toolbar .tb-btn.tb-btn-icon {
+  width: 32px;
+  min-width: 32px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--text-secondary);
+}
+
+.window-toolbar .tb-btn.tb-btn-icon:hover:not(:disabled),
+.window-toolbar .tb-btn.tb-btn-icon.active {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.window-toolbar .tb-btn.tb-btn-icon.active {
+  background: var(--toolbar-toggle-active-bg, var(--bg-active-inactive));
+}
+
+/* View switch: a two-part segmented control with the selected segment raised. */
+.toolbar-group-view .toolbar-segmented.toolbar-segmented-native {
+  gap: 2px;
+  padding: 2px;
+  border-radius: 7px;
+  background: var(--toolbar-toggle-bg, var(--bg-hover));
+}
+
+.toolbar-group-view .toolbar-segmented.toolbar-segmented-native .tb-btn {
+  width: 34px;
+  min-width: 34px;
+  height: 22px;
+  border-radius: 5px;
+  color: var(--text-secondary);
+}
+
+.toolbar-group-view .toolbar-segmented.toolbar-segmented-native .tb-btn:hover:not(:disabled) {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.toolbar-group-view .toolbar-segmented.toolbar-segmented-native .tb-btn.active {
+  background: var(--toolbar-toggle-active-bg, var(--bg-elevated));
+  color: var(--toolbar-toggle-icon-active, var(--text-primary));
+  box-shadow: 0 0.5px 1.5px rgba(0, 0, 0, 0.2);
+}
+
+.toolbar-group-view .toolbar-segmented.toolbar-segmented-native .toolbar-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.toolbar-sort-menu {
+  min-width: 200px;
+}
+
+/* Compact search field that widens while in use. */
+.window-toolbar .toolbar-search-slot,
+.titlebar-actions[data-layout] .toolbar-search-slot {
+  flex: 0 0 200px;
+  transition: flex-basis 0.18s ease;
+}
+
+.window-toolbar .toolbar-search-slot:focus-within {
+  flex-basis: 280px;
+}
+
+.window-toolbar .toolbar-search {
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: var(--search-surface);
+}
+
+.window-toolbar .toolbar-search-shell.active .toolbar-search {
+  border-color: color-mix(in srgb, var(--ft-accent-solid) 70%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ft-accent-solid) 25%, transparent);
+}
+
+.window-toolbar .toolbar-search-row {
+  min-height: 28px;
+  padding: 0 8px;
+  gap: 6px;
+}
+
+.window-toolbar .toolbar-search-input {
+  font-size: 13px;
+}
+
+/* ── Sidebar (Finder style) ───────────────────────────────────────────── */
+
+.sidebar-main-native {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.sidebar-sections {
+  flex: 0 0 auto;
+  max-height: 60%;
+  overflow-y: auto;
+  padding-bottom: 4px;
+}
+
+.sidebar-favorites {
+  border-bottom: 0;
+  padding-bottom: 6px;
+}
+
+.sidebar-favorites.active,
+.sidebar-main-native .filesystem-tree-section.active {
+  background: transparent;
+}
+
+.sidebar-favorites .tree-list {
+  padding: 0;
+}
+
+/* Favorites are flat rows: no disclosure spacer. */
+.sidebar-favorites .tree-expand {
+  display: none;
+}
+
+.sidebar-main-native .sidebar-tree {
+  flex: 1 1 auto;
+}
+
+.sidebar-main-native .tree-row {
+  min-height: 26px;
+  height: 26px;
+  margin: 0 10px;
+  width: calc(100% - 20px);
+  border: 0;
+  border-radius: 6px;
+}
+
+.sidebar-main-native .tree-label {
+  gap: 7px;
+  padding: 0;
+  font-size: 13px;
+  font-weight: var(--ui-font-weight);
+}
+
+.sidebar-main-native .tree-expand {
+  width: 14px;
+  height: 14px;
+}
+
+.sidebar-main-native .file-icon.folder,
+.sidebar-main-native .file-icon.favorite,
+.sidebar-main-native .file-icon.native-file-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* Compact tree view: shorter rows, smaller text and icons (sidebar tree and Favorites). */
+.compact-tree-view .sidebar-main-native .tree-row {
+  min-height: 21px;
+  height: 21px;
+  border-radius: 5px;
+}
+
+.compact-tree-view .sidebar-main-native .tree-label {
+  gap: 5px;
+  font-size: 11.5px;
+}
+
+.compact-tree-view .sidebar-main-native .tree-expand {
+  width: 12px;
+  height: 12px;
+}
+
+.compact-tree-view .sidebar-main-native .file-icon.folder,
+.compact-tree-view .sidebar-main-native .file-icon.favorite,
+.compact-tree-view .sidebar-main-native .file-icon.native-file-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.compact-tree-view .sidebar-section-header {
+  height: 20px;
+  margin-top: 4px;
+}
+
+.sidebar-main-native .tree-row.active {
+  background: var(--bg-active-inactive);
+}
+
+.sidebar-main-native .tree-row.active:not(.inactive) {
+  background: color-mix(in srgb, var(--ft-accent-solid) 86%, black);
+}
+
+.sidebar-main-native .tree-row.active:not(.inactive) .tree-label,
+.sidebar-main-native .tree-row.active:not(.inactive) .tree-expand,
+.sidebar-main-native .tree-row.active:not(.inactive) .file-icon-favorite {
+  color: #ffffff;
+}
+
+.sidebar-main-native .tree-label-badge {
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+/* ── Search: one scope bar (filter included) and Finder-style result columns ── */
+
+.search-scope-bar {
+  flex-wrap: wrap;
+  row-gap: 4px;
+  padding: 6px 12px;
+}
+
+.search-scope-bar .search-results-filter-input-region {
+  flex: 0 1 180px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: var(--bg-input);
+}
+
+.search-scope-bar .search-results-filter-input {
+  font-size: 12px;
+}
+
+.search-scope-divider {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--border);
+}
+
+.search-scope-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.search-results-columns {
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 170px 76px;
+}
+
+.search-results-column-static {
+  cursor: default;
+}
+
+.search-results-column-size {
+  justify-content: flex-end;
+}
+
+.search-result-row {
+  grid-template-columns: 18px minmax(0, 1.4fr) minmax(0, 1fr) 170px 76px;
+}
+
+.search-result-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.search-result-size {
+  text-align: right;
+}
+
+.search-result-row.active:not(.inactive) .search-result-meta {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.search-result-match {
+  border-radius: 3px;
+  padding: 0 1px;
+  background: rgba(255, 214, 10, 0.45);
+  color: inherit;
+}
+
+.search-result-row.active:not(.inactive) .search-result-match {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+/* ── Collapsible sidebar section header (Favorites) ────────────────────── */
+
+.sidebar-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: calc(100% - 20px);
+  height: 24px;
+  margin: 6px 10px 0;
+  padding: 0 6px 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-tertiary);
+  text-align: left;
+  cursor: default;
+}
+
+.sidebar-section-header .sidebar-section-title {
+  padding: 0;
+}
+
+.sidebar-section-chevron {
+  display: inline-flex;
+  color: var(--text-tertiary);
+  opacity: 0;
+  transform: rotate(90deg);
+  transition: opacity 0.12s ease, transform 0.15s ease;
+}
+
+.sidebar-section-chevron .toolbar-icon {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2;
+}
+
+.sidebar-section-header:hover .sidebar-section-chevron,
+.sidebar-section-header:focus-visible .sidebar-section-chevron,
+.sidebar-section-header.collapsed .sidebar-section-chevron {
+  opacity: 1;
+}
+
+.sidebar-section-header.collapsed .sidebar-section-chevron {
+  transform: rotate(0deg);
+}
+
+.sidebar-section-header:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ft-accent-solid) 45%, transparent);
 }

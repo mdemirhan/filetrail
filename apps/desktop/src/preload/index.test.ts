@@ -25,6 +25,7 @@ async function importPreload() {
     onCommand: (listener: (command: unknown) => void) => () => void;
     onWriteOperationProgress: (listener: (event: unknown) => void) => () => void;
     onCopyPasteProgress: (listener: (event: unknown) => void) => () => void;
+    onPreferencesChanged: (listener: (patch: unknown) => void) => () => void;
   };
 }
 
@@ -115,6 +116,27 @@ describe("preload bridge", () => {
     unsubscribe();
     expect(electronMock.removeListener).toHaveBeenCalledWith(
       "filetrail:command",
+      registeredHandler,
+    );
+  });
+
+  it("subscribes to preference changes from other windows", async () => {
+    const api = await importPreload();
+    const listener = vi.fn();
+
+    const unsubscribe = api.onPreferencesChanged(listener);
+    const [, registeredHandler] = electronMock.on.mock.calls[0] ?? [];
+    expect(electronMock.on).toHaveBeenCalledWith(
+      "filetrail:preferencesChanged",
+      expect.any(Function),
+    );
+
+    (registeredHandler as (event: unknown, patch: unknown) => void)({}, { theme: "auto" });
+    expect(listener).toHaveBeenCalledWith({ theme: "auto" });
+
+    unsubscribe();
+    expect(electronMock.removeListener).toHaveBeenCalledWith(
+      "filetrail:preferencesChanged",
       registeredHandler,
     );
   });

@@ -26,6 +26,8 @@ export const explorerEntryKindSchema = z.enum([
 ]);
 
 export const themeModeSchema = z.enum([
+  "macos-dark",
+  "macos-light",
   "dark",
   "tomorrow-night",
   "catppuccin-mocha",
@@ -40,8 +42,14 @@ export const themeModeSchema = z.enum([
   "sand",
 ]);
 export const accentModeSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/);
-export const uiFontFamilySchema = z.enum(["dm-sans", "lexend", "fira-code", "jetbrains-mono"]);
-export const iconThemeModeSchema = z.enum(["classic", "colorblock", "monoline", "vivid"]);
+export const uiFontFamilySchema = z.enum([
+  "system",
+  "dm-sans",
+  "lexend",
+  "fira-code",
+  "jetbrains-mono",
+]);
+export const iconThemeModeSchema = z.enum(["native", "classic", "colorblock", "monoline", "vivid"]);
 export const colorOverrideSchema = z
   .string()
   .regex(/^#[0-9a-fA-F]{6}$/)
@@ -600,8 +608,12 @@ export const appLogEntrySchema = z.object({
   context: z.record(z.string(), jsonValueSchema).default({}),
 });
 
+export const themePreferenceSchema = z.union([z.literal("auto"), themeModeSchema]);
+
 export const appPreferencesSchema = z.object({
-  theme: themeModeSchema,
+  theme: themePreferenceSchema,
+  autoLightTheme: themeModeSchema,
+  autoDarkTheme: themeModeSchema,
   iconTheme: iconThemeModeSchema,
   accent: accentModeSchema,
   accentToolbarButtons: z.boolean(),
@@ -637,10 +649,12 @@ export const appPreferencesSchema = z.object({
   detailRowOpen: z.boolean(),
   topToolbarItems: z.array(toolbarItemIdSchema),
   leftToolbarItems: leftToolbarItemsSchema,
+  showSidebarRail: z.boolean(),
   terminalApp: applicationSelectionSchema.nullable(),
   defaultTextEditor: applicationSelectionSchema,
   openWithApplications: z.array(openWithApplicationSchema),
   fileActivationAction: z.enum(["open", "edit"]),
+  returnKeyAction: z.enum(["rename", "open"]),
   openItemLimit: z.number().int().min(1).max(50),
   includeHidden: z.boolean(),
   searchPatternMode: searchPatternModeSchema,
@@ -681,6 +695,12 @@ export const ipcContractSchemas = {
     request: emptyRequestSchema,
     response: z.object({
       path: z.string().min(1),
+    }),
+  },
+  "app:openSettingsWindow": {
+    request: emptyRequestSchema,
+    response: z.object({
+      ok: z.boolean(),
     }),
   },
   "app:getPreferences": {
@@ -993,6 +1013,22 @@ export const ipcContractSchemas = {
       error: z.string().nullable(),
     }),
   },
+  "system:getVolumeInfo": {
+    request: z.object({
+      path: z.string().min(1),
+    }),
+    response: z.object({
+      availableBytes: z.number().nonnegative().nullable(),
+    }),
+  },
+  "system:quickLook": {
+    request: z.object({
+      path: z.string().min(1),
+    }),
+    response: z.object({
+      ok: z.boolean(),
+    }),
+  },
   "system:pickApplication": {
     request: emptyRequestSchema,
     response: z.object({
@@ -1056,6 +1092,8 @@ export const ipcContractSchemas = {
     request: z.object({
       path: z.string().min(1),
       size: z.number().int().min(16).max(512),
+      // Return the plain folder icon regardless of `path` (which may have a custom icon).
+      genericFolder: z.boolean().optional(),
     }),
     response: z.object({
       pngBase64: z.string().nullable(),

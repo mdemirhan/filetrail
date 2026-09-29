@@ -1,3 +1,4 @@
+import { getDetailsRowHeight } from "./detailsLayout";
 import {
   COMPACT_FLOW_LIST_LAYOUT,
   FLOW_LIST_LAYOUT,
@@ -6,6 +7,11 @@ import {
 } from "./flowListLayout";
 
 describe("flowListLayout", () => {
+  it("uses the details-view row pitch so both views have the same density", () => {
+    expect(FLOW_LIST_LAYOUT.rowHeight).toBe(getDetailsRowHeight(false));
+    expect(COMPACT_FLOW_LIST_LAYOUT.rowHeight).toBe(getDetailsRowHeight(true));
+  });
+
   it("returns the correct column step for regular and compact layouts", () => {
     expect(getFlowListColumnStep(false)).toBe(
       FLOW_LIST_LAYOUT.itemWidth + FLOW_LIST_LAYOUT.columnGap,

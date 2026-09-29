@@ -32,6 +32,8 @@ const ICON_NAMES = [
   "close",
   "sortAsc",
   "sortDesc",
+  "sort",
+  "more",
   "help",
   "settings",
   "search",
@@ -66,11 +68,18 @@ describe("ToolbarIcon", () => {
 
   it("renders specialized shapes for list, details, search, clear, and stop icons", () => {
     const { container, rerender } = render(<ToolbarIcon name="list" />);
-    expect(container.querySelectorAll("line")).toHaveLength(3);
+    // Bulleted list: three rows plus three bullet dots.
+    expect(container.querySelectorAll("path")).toHaveLength(2);
 
     rerender(<ToolbarIcon name="details" />);
     expect(container.querySelectorAll("rect")).toHaveLength(1);
-    expect(container.querySelectorAll("line")).toHaveLength(3);
+    expect(container.querySelector("path")).toHaveAttribute("d", "M3 10h18M3 15h18M9 10v9.5");
+
+    rerender(<ToolbarIcon name="sort" />);
+    expect(container.querySelector("path")).toHaveAttribute(
+      "d",
+      "M8 4v16M4 16l4 4 4-4M16 20V4M12 8l4-4 4 4",
+    );
 
     rerender(<ToolbarIcon name="search" />);
     expect(container.querySelector("circle")).not.toBeNull();

@@ -106,6 +106,8 @@ export function ContentPane({
   onDetailColumnWidthsChange = () => undefined,
   tabSwitchesExplorerPanes = false,
   typeaheadQuery,
+  getFolderSizeLabel,
+  statusSummary,
 }: {
   paneRef?: React.RefObject<HTMLElement | null>;
   isFocused: boolean;
@@ -155,6 +157,10 @@ export function ContentPane({
   onDetailColumnWidthsChange?: (value: DetailColumnWidths) => void;
   tabSwitchesExplorerPanes?: boolean;
   typeaheadQuery?: string;
+  // Cached folder size text for the details Size column, or null when none is known.
+  getFolderSizeLabel?: ((path: string) => string | null) | undefined;
+  // Item/selection count and free space, shown at the right end of the path bar.
+  statusSummary?: string | undefined;
 }) {
   const [pathEditorOpen, setPathEditorOpen] = useState(false);
   const [pathbarExpanded, setPathbarExpanded] = useState(false);
@@ -343,7 +349,86 @@ export function ContentPane({
         onTypeaheadInput(event.key);
       }}
     >
-      <div className={`pane-header content-header${isFocused ? " pane-header-focused" : ""}`}>
+      <div ref={viewportRef} className="content-viewport">
+        {viewMode === "list" && typeaheadQuery ? (
+          <div className="pane-typeahead pane-typeahead-center" aria-live="polite">
+            <span className="pane-typeahead-label">Select</span>
+            <span className="pane-typeahead-value">{typeaheadQuery}</span>
+          </div>
+        ) : null}
+        {viewMode === "list" ? (
+          <FlowListView
+            key={currentPath}
+            currentPath={currentPath}
+            entries={entries}
+            isFocused={isFocused}
+            loading={loading}
+            error={error}
+            includeHidden={includeHidden}
+            selectedPaths={selectedPaths}
+            selectionLeadPath={selectionLeadPath}
+            viewportWidth={viewportWidth}
+            viewportHeight={viewportHeight}
+            onActivateEntry={onActivateEntry}
+            onLayoutColumnsChange={onLayoutColumnsChange}
+            onSelectionGesture={onSelectionGesture}
+            onClearSelection={onClearSelection}
+            onVisiblePathsChange={onVisiblePathsChange}
+            onItemContextMenu={onItemContextMenu}
+            onItemDragStart={onItemDragStart}
+            onItemDragEnd={onItemDragEnd}
+            onItemDragEnter={onItemDragEnter}
+            onItemDragOver={onItemDragOver}
+            onItemDragLeave={onItemDragLeave}
+            onItemDrop={onItemDrop}
+            getItemDropIndicator={getItemDropIndicator}
+            compactListView={compactListView}
+            highlightHoveredItems={highlightHoveredItems}
+            typeaheadQuery={typeaheadQuery ?? ""}
+          />
+        ) : (
+          <DetailsView
+            key={currentPath}
+            currentPath={currentPath}
+            entries={entries}
+            isFocused={isFocused}
+            loading={loading}
+            error={error}
+            includeHidden={includeHidden}
+            metadataByPath={metadataByPath}
+            selectedPaths={selectedPaths}
+            selectionLeadPath={selectionLeadPath}
+            sortBy={sortBy}
+            sortDirection={sortDirection}
+            viewportWidth={viewportWidth}
+            viewportHeight={viewportHeight}
+            onActivateEntry={onActivateEntry}
+            onSortChange={onSortChange}
+            onLayoutColumnsChange={onLayoutColumnsChange}
+            onSelectionGesture={onSelectionGesture}
+            onClearSelection={onClearSelection}
+            onVisiblePathsChange={onVisiblePathsChange}
+            onItemContextMenu={onItemContextMenu}
+            onItemDragStart={onItemDragStart}
+            onItemDragEnd={onItemDragEnd}
+            onItemDragEnter={onItemDragEnter}
+            onItemDragOver={onItemDragOver}
+            onItemDragLeave={onItemDragLeave}
+            onItemDrop={onItemDrop}
+            getItemDropIndicator={getItemDropIndicator}
+            compactDetailsView={compactDetailsView}
+            highlightHoveredItems={highlightHoveredItems}
+            detailColumns={detailColumns}
+            detailColumnWidths={detailColumnWidths}
+            onDetailColumnWidthsChange={onDetailColumnWidthsChange}
+            typeaheadQuery={typeaheadQuery ?? ""}
+            getFolderSizeLabel={getFolderSizeLabel}
+          />
+        )}
+      </div>
+      <div
+        className={`pane-header content-header content-pathbar-row${isFocused ? " pane-header-focused" : ""}`}
+      >
         {pathEditorOpen ? (
           <form
             className="pathbar-editor-form"
@@ -492,82 +577,11 @@ export function ContentPane({
             ))}
           </nav>
         )}
-      </div>
-      <div ref={viewportRef} className="content-viewport">
-        {viewMode === "list" && typeaheadQuery ? (
-          <div className="pane-typeahead pane-typeahead-center" aria-live="polite">
-            <span className="pane-typeahead-label">Select</span>
-            <span className="pane-typeahead-value">{typeaheadQuery}</span>
-          </div>
+        {statusSummary && !pathEditorOpen ? (
+          <span className="content-pathbar-status" aria-live="polite">
+            {statusSummary}
+          </span>
         ) : null}
-        {viewMode === "list" ? (
-          <FlowListView
-            key={currentPath}
-            currentPath={currentPath}
-            entries={entries}
-            isFocused={isFocused}
-            loading={loading}
-            error={error}
-            includeHidden={includeHidden}
-            selectedPaths={selectedPaths}
-            selectionLeadPath={selectionLeadPath}
-            viewportWidth={viewportWidth}
-            viewportHeight={viewportHeight}
-            onActivateEntry={onActivateEntry}
-            onLayoutColumnsChange={onLayoutColumnsChange}
-            onSelectionGesture={onSelectionGesture}
-            onClearSelection={onClearSelection}
-            onVisiblePathsChange={onVisiblePathsChange}
-            onItemContextMenu={onItemContextMenu}
-            onItemDragStart={onItemDragStart}
-            onItemDragEnd={onItemDragEnd}
-            onItemDragEnter={onItemDragEnter}
-            onItemDragOver={onItemDragOver}
-            onItemDragLeave={onItemDragLeave}
-            onItemDrop={onItemDrop}
-            getItemDropIndicator={getItemDropIndicator}
-            compactListView={compactListView}
-            highlightHoveredItems={highlightHoveredItems}
-            typeaheadQuery={typeaheadQuery ?? ""}
-          />
-        ) : (
-          <DetailsView
-            key={currentPath}
-            currentPath={currentPath}
-            entries={entries}
-            isFocused={isFocused}
-            loading={loading}
-            error={error}
-            includeHidden={includeHidden}
-            metadataByPath={metadataByPath}
-            selectedPaths={selectedPaths}
-            selectionLeadPath={selectionLeadPath}
-            sortBy={sortBy}
-            sortDirection={sortDirection}
-            viewportWidth={viewportWidth}
-            viewportHeight={viewportHeight}
-            onActivateEntry={onActivateEntry}
-            onSortChange={onSortChange}
-            onLayoutColumnsChange={onLayoutColumnsChange}
-            onSelectionGesture={onSelectionGesture}
-            onClearSelection={onClearSelection}
-            onVisiblePathsChange={onVisiblePathsChange}
-            onItemContextMenu={onItemContextMenu}
-            onItemDragStart={onItemDragStart}
-            onItemDragEnd={onItemDragEnd}
-            onItemDragEnter={onItemDragEnter}
-            onItemDragOver={onItemDragOver}
-            onItemDragLeave={onItemDragLeave}
-            onItemDrop={onItemDrop}
-            getItemDropIndicator={getItemDropIndicator}
-            compactDetailsView={compactDetailsView}
-            highlightHoveredItems={highlightHoveredItems}
-            detailColumns={detailColumns}
-            detailColumnWidths={detailColumnWidths}
-            onDetailColumnWidthsChange={onDetailColumnWidthsChange}
-            typeaheadQuery={typeaheadQuery ?? ""}
-          />
-        )}
       </div>
     </section>
   );
@@ -1052,6 +1066,7 @@ function DetailsView({
   detailColumnWidths = DEFAULT_DETAIL_COLUMN_WIDTHS,
   onDetailColumnWidthsChange = () => undefined,
   typeaheadQuery,
+  getFolderSizeLabel,
 }: {
   currentPath: string;
   entries: DirectoryEntry[];
@@ -1094,6 +1109,7 @@ function DetailsView({
   detailColumnWidths?: DetailColumnWidths;
   onDetailColumnWidthsChange?: (value: DetailColumnWidths) => void;
   typeaheadQuery?: string;
+  getFolderSizeLabel?: ((path: string) => string | null) | undefined;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const headerRef = useRef<HTMLDivElement | null>(null);
@@ -1341,9 +1357,12 @@ function DetailsView({
             paddingBottom: `${Math.max(0, entries.length - range.endIndex) * rowHeight}px`,
           }}
         >
-          {visibleEntries.map((entry) => {
+          {visibleEntries.map((entry, visibleIndex) => {
             const metadata = metadataByPath[entry.path];
             const canAcceptDrop = entry.kind === "directory" || entry.kind === "symlink_directory";
+            // Parity comes from the absolute row index so stripes stay put while virtualized
+            // rows mount and unmount during scrolling.
+            const rowParity = (range.startIndex + visibleIndex) % 2 === 0 ? "even" : "odd";
             return (
               // biome-ignore lint/a11y/useSemanticElements: rows stay buttons for activation; role="row" overrides the implicit role on purpose.
               <button
@@ -1357,6 +1376,7 @@ function DetailsView({
                   canAcceptDrop ? (getItemDropIndicator?.(entry.path) ?? "none") : "none"
                 }
                 data-selectable-entry-path={entry.path}
+                data-row-parity={rowParity}
                 draggable={Boolean(onItemDragStart)}
                 onPointerDown={(event) => {
                   if (event.button !== 0) {
@@ -1399,6 +1419,11 @@ function DetailsView({
                     columnKey={columnKey}
                     entry={entry}
                     metadata={metadata}
+                    folderSizeLabel={
+                      columnKey === "size" && isFolderLikeEntry(entry)
+                        ? (getFolderSizeLabel?.(entry.path) ?? null)
+                        : null
+                    }
                   />
                 ))}
               </button>
@@ -1489,10 +1514,12 @@ function DetailsCell({
   columnKey,
   entry,
   metadata,
+  folderSizeLabel = null,
 }: {
   columnKey: DetailColumnKey;
   entry: DirectoryEntry;
   metadata: DirectoryEntryMetadata | undefined;
+  folderSizeLabel?: string | null;
 }) {
   // Cells are presentational spans inside the row button; gridcell focus management is
   // intentionally left to the row, so the focusable-interactive rule is suppressed below.
@@ -1513,7 +1540,7 @@ function DetailsCell({
   if (columnKey === "size") {
     // biome-ignore lint/a11y/useFocusableInteractive: see note above.
     // biome-ignore lint/a11y/useSemanticElements: see note above.
-    return <span role="gridcell">{formatDetailSize(entry, metadata)}</span>;
+    return <span role="gridcell">{folderSizeLabel ?? formatDetailSize(entry, metadata)}</span>;
   }
   if (columnKey === "modified") {
     // biome-ignore lint/a11y/useFocusableInteractive: see note above.
@@ -1556,6 +1583,12 @@ function SortButton({
         <span className="details-sort-indicator">{direction === "asc" ? "↑" : "↓"}</span>
       ) : null}
     </button>
+  );
+}
+
+function isFolderLikeEntry(entry: DirectoryEntry): boolean {
+  return (
+    entry.kind === "directory" || entry.kind === "symlink_directory" || entry.kind === "bundle"
   );
 }
 

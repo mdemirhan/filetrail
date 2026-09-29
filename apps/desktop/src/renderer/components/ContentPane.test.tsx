@@ -37,6 +37,40 @@ describe("ContentPane", () => {
     expect(screen.getByText("This folder is empty")).toBeInTheDocument();
   });
 
+  it("shows the status summary at the end of the path bar", () => {
+    render(
+      <ContentPane
+        isFocused
+        currentPath="/Users/demo"
+        entries={[]}
+        viewMode="list"
+        loading={false}
+        error={null}
+        includeHidden={false}
+        metadataByPath={{}}
+        sortBy="name"
+        sortDirection="asc"
+        onSelectPath={() => undefined}
+        onActivateEntry={() => undefined}
+        onSortChange={() => undefined}
+        onLayoutColumnsChange={() => undefined}
+        onVisiblePathsChange={() => undefined}
+        onNavigatePath={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+        onFocusChange={() => undefined}
+        typeaheadQuery=""
+        statusSummary="0 items · 212 GB available"
+      />,
+    );
+
+    const summary = screen.getByText("0 items · 212 GB available");
+    expect(summary.closest(".content-pathbar-row")).not.toBeNull();
+  });
+
   it("renders a selection-empty state when no folder is selected", () => {
     const { container } = render(
       <ContentPane

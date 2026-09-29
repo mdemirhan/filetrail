@@ -64,7 +64,7 @@ type ExplorerShortcutActions = {
     treeSelectionPath?: string | null;
     extraTreeReloadPaths?: string[];
   }) => Promise<void>;
-  applySearchResultsSort: () => void;
+  rerunSearch: () => void;
   runCopyClipboardAction: (mode: "copy" | "cut") => Promise<void>;
   startPasteFromClipboard: () => Promise<void>;
   resolveContentActionPaths: () => string[];
@@ -136,6 +136,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
     setInfoRowOpen: navigation.setInfoRowOpen,
     tabSwitchesExplorerPanes: preferences.tabSwitchesExplorerPanes,
     typeaheadEnabled: preferences.typeaheadEnabled,
+    returnKeyAction: preferences.returnKeyAction,
     viewMode: preferences.viewMode,
     setZoomPercent: preferences.setZoomPercent,
     setSearchPopoverOpen: search.setSearchPopoverOpen,
@@ -148,6 +149,11 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
     setContextMenuState: writeOperations.setContextMenuState,
     ...derived,
     ...actions,
+    quickLookPath: (path: string) => {
+      void services.client.invoke("system:quickLook", { path }).catch(() => undefined);
+    },
+    selectionLeadOrSelectedPath: () =>
+      navigation.contentSelection.leadPath ?? derived.selectedEntry?.path ?? null,
   };
   const latestArgsRef = useRef(flatArgs);
   useLayoutEffect(() => {
@@ -381,7 +387,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
           !keyboardEvent.ctrlKey &&
           !keyboardEvent.shiftKey &&
           !keyboardEvent.altKey &&
-          keyboardEvent.key === "ArrowLeft",
+          (keyboardEvent.key === "ArrowLeft" || keyboardEvent.key === "["),
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
           latestArgsRef.current.goBack();
@@ -394,7 +400,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
           !keyboardEvent.ctrlKey &&
           !keyboardEvent.shiftKey &&
           !keyboardEvent.altKey &&
-          keyboardEvent.key === "ArrowRight",
+          (keyboardEvent.key === "ArrowRight" || keyboardEvent.key === "]"),
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
           latestArgsRef.current.goForward();
@@ -494,7 +500,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
           const current = latestArgsRef.current;
           keyboardEvent.preventDefault();
           if (current.isSearchMode) {
-            current.applySearchResultsSort();
+            current.rerunSearch();
             return;
           }
           void current.refreshDirectory();
@@ -766,9 +772,29 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         },
       },
       {
+        id: "quickLook",
+        matches: (keyboardEvent) =>
+          keyboardEvent.key === " " &&
+          !keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.altKey &&
+          latestArgsRef.current.focusedPane === "content" &&
+          latestArgsRef.current.selectedEntry !== null,
+        run: (keyboardEvent) => {
+          const current = latestArgsRef.current;
+          const path = current.selectionLeadOrSelectedPath();
+          if (!path) {
+            return;
+          }
+          keyboardEvent.preventDefault();
+          current.quickLookPath(path);
+        },
+      },
+      {
         id: "contentEnter",
         matches: (keyboardEvent) =>
           keyboardEvent.key === "Enter" &&
+          !keyboardEvent.metaKey &&
           latestArgsRef.current.focusedPane === "content" &&
           latestArgsRef.current.selectedEntry !== null,
         run: (keyboardEvent) => {
@@ -777,6 +803,13 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
             return;
           }
           keyboardEvent.preventDefault();
+          if (current.returnKeyAction === "rename") {
+            // Finder behavior: Return renames a single selected item; ⌘O / ⌘↓ open.
+            if (current.selectedPathsInViewOrder.length <= 1) {
+              current.openRenameDialog([current.selectedEntry.path]);
+            }
+            return;
+          }
           const pathsToActivate =
             current.selectedPathsInViewOrder.length > 0
               ? current.selectedPathsInViewOrder
@@ -1018,7 +1051,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       }
       if (commandType === "refreshOrApplySearchSort") {
         if (current.isSearchMode) {
-          current.applySearchResultsSort();
+          current.rerunSearch();
           return;
         }
         void current.refreshDirectory();

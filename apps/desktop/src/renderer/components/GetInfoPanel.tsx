@@ -1,15 +1,15 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 import type { IpcResponse } from "@filetrail/contracts";
 
 import type { FolderSizeEntry } from "../hooks/useFolderSizeCache";
+import type { ContextMenuSubmenuAction, ContextMenuSubmenuItem } from "../lib/contextMenu";
 import { isFolderSizeEligibleKind } from "../lib/explorerAppUtils";
 import { FileIcon } from "../lib/fileIcons";
 import {
   formatDateTime,
   formatFolderSizeDetail,
   formatSize,
-  pathSegments,
   splitPermissionMode,
 } from "../lib/formatting";
 
@@ -30,6 +30,8 @@ export function InfoPanel({
   onCalculateFolderSize,
   onRecalculateFolderSize,
   onCancelFolderSize,
+  openWithItems = [],
+  onOpenWith,
 }: {
   loading: boolean;
   item: ItemProperties | null;
@@ -43,6 +45,8 @@ export function InfoPanel({
   onCalculateFolderSize?: (() => void) | undefined;
   onRecalculateFolderSize?: (() => void) | undefined;
   onCancelFolderSize?: (() => void) | undefined;
+  openWithItems?: readonly ContextMenuSubmenuItem[];
+  onOpenWith?: ((action: ContextMenuSubmenuAction) => void) | undefined;
 }) {
   const [copied, setCopied] = useState(false);
   const permissionParts = useMemo(() => splitPermissionMode(item?.permissionMode ?? null), [item]);
@@ -64,7 +68,7 @@ export function InfoPanel({
   return (
     <aside className="get-info-panel">
       <div className="get-info-header">
-        <strong>Get Info</strong>
+        <strong>Info</strong>
         <button
           type="button"
           className="get-info-close"
@@ -90,6 +94,8 @@ export function InfoPanel({
           onCalculateFolderSize={onCalculateFolderSize}
           onRecalculateFolderSize={onRecalculateFolderSize}
           onCancelFolderSize={onCancelFolderSize}
+          openWithItems={openWithItems}
+          onOpenWith={onOpenWith}
         />
       ) : (
         <div className="get-info-empty">Select a file or folder to show its info.</div>
@@ -111,6 +117,8 @@ function GetInfoPanelContent({
   onCalculateFolderSize,
   onRecalculateFolderSize,
   onCancelFolderSize,
+  openWithItems,
+  onOpenWith,
 }: {
   copied: boolean;
   item: ItemProperties;
@@ -124,7 +132,40 @@ function GetInfoPanelContent({
   onCalculateFolderSize?: (() => void) | undefined;
   onRecalculateFolderSize?: (() => void) | undefined;
   onCancelFolderSize?: (() => void) | undefined;
+  openWithItems: readonly ContextMenuSubmenuItem[];
+  onOpenWith?: ((action: ContextMenuSubmenuAction) => void) | undefined;
 }) {
+  const [openWithMenuOpen, setOpenWithMenuOpen] = useState(false);
+  const openWithRef = useRef<HTMLDivElement | null>(null);
+
+  // Close the Open With menu on any click outside it (focus does not move when clicking
+  // empty panel space, so blur alone is not enough) and on Escape.
+  useEffect(() => {
+    if (!openWithMenuOpen) {
+      return;
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && openWithRef.current?.contains(event.target)) {
+        return;
+      }
+      setOpenWithMenuOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        setOpenWithMenuOpen(false);
+      }
+    };
+    const close = () => setOpenWithMenuOpen(false);
+    window.addEventListener("pointerdown", handlePointerDown, true);
+    window.addEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("blur", close);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown, true);
+      window.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener("blur", close);
+    };
+  }, [openWithMenuOpen]);
   const showFolderSizeForItem = isFolderSizeEligibleKind(item.kind);
 
   let sizeValue: ReactNode;
@@ -146,7 +187,13 @@ function GetInfoPanelContent({
     sizeValue = formatSize(item.sizeBytes, item.sizeStatus);
   }
 
+  const parentPath = getParentPath(item.path);
   const metadataRows: { label: string; value: ReactNode; muted: boolean }[] = [
+    {
+      label: "Kind",
+      value: item.kindLabel,
+      muted: false,
+    },
     {
       label: "Size",
       value: sizeValue,
@@ -164,13 +211,40 @@ function GetInfoPanelContent({
     },
     {
       label: "Permissions",
-      value: permissionParts
-        ? `${permissionParts.symbolic} (${permissionParts.octal})`
-        : "Unavailable",
+      value: permissionParts ? (
+        <span className="get-info-permissions">
+          <span>{describeOwnerAccess(permissionParts.symbolic)}</span>
+          <span className="get-info-permissions-code" title={permissionParts.symbolic}>
+            {permissionParts.octal}
+          </span>
+        </span>
+      ) : (
+        "Unavailable"
+      ),
       muted: permissionParts === null,
     },
+    {
+      label: "Where",
+      value: parentPath ? (
+        <button
+          type="button"
+          className="get-info-where"
+          title={parentPath}
+          onClick={() => onNavigateToPath(parentPath)}
+        >
+          {getFolderLabel(parentPath)}
+        </button>
+      ) : (
+        "—"
+      ),
+      muted: parentPath === null,
+    },
   ];
-  const segments = pathSegments(item.path);
+  const sizeSummary = showFolderSizeForItem
+    ? folderSizeEntry?.status === "ready"
+      ? formatSize(folderSizeEntry.sizeBytes, "ready")
+      : null
+    : formatSize(item.sizeBytes, item.sizeStatus);
 
   return (
     <div className="get-info-content">
@@ -190,64 +264,87 @@ function GetInfoPanelContent({
         <div className="get-info-name" title={item.name}>
           {item.name}
         </div>
-        <div className="get-info-kind-badge">{item.kindLabel}</div>
-      </div>
-
-      <div className="get-info-actions">
-        <GetInfoActionButton label="Open" onClick={onOpen}>
-          <InfoPanelGlyph name="open" />
-        </GetInfoActionButton>
-        <GetInfoActionButton label="Terminal" onClick={onOpenInTerminal}>
-          <InfoPanelGlyph name="terminal" />
-        </GetInfoActionButton>
-        <GetInfoActionButton
-          label={copied ? "Copied" : "Copy Path"}
-          disabled={copyPathDisabled}
-          onClick={() => void onCopyPath()}
-        >
-          <InfoPanelGlyph name={copied ? "check" : "copy"} />
-        </GetInfoActionButton>
-      </div>
-
-      <dl className="get-info-meta">
-        {metadataRows.map((row, index) => (
-          <div
-            key={row.label}
-            className={`get-info-meta-row${index === metadataRows.length - 1 ? " last" : ""}`}
-          >
-            <dt className="get-info-meta-label">{row.label}</dt>
-            <dd className={`get-info-meta-value${row.muted ? " muted" : ""}`}>{row.value}</dd>
-          </div>
-        ))}
-      </dl>
-
-      <div className="get-info-path-card">
-        <div className="get-info-path-header">
-          <span>Path</span>
+        <div className="get-info-subtitle">
+          {sizeSummary ? `${item.kindLabel} · ${sizeSummary}` : item.kindLabel}
         </div>
-        <div className="get-info-breadcrumbs">
-          {/* Ancestor segments remain clickable; the current segment is plain text. */}
-          {segments.map((segment, index) => {
-            const isCurrent = index === segments.length - 1;
-            return (
-              <span key={segment.path} className="get-info-breadcrumb-item">
-                {isCurrent ? (
-                  <span className="get-info-current-crumb">{segment.label}</span>
-                ) : (
-                  <button
-                    type="button"
-                    className="get-info-crumb"
-                    onClick={() => onNavigateToPath(segment.path)}
-                  >
-                    {segment.label}
-                  </button>
-                )}
-                {isCurrent ? null : <span className="get-info-separator">/</span>}
+      </div>
+
+      <div className="get-info-buttons">
+        <button type="button" className="get-info-button primary" onClick={onOpen}>
+          Open
+        </button>
+        {onOpenWith && openWithItems.length > 0 ? (
+          <div ref={openWithRef} className="get-info-open-with">
+            <button
+              type="button"
+              className="get-info-button"
+              aria-haspopup="menu"
+              aria-expanded={openWithMenuOpen}
+              onClick={() => setOpenWithMenuOpen((value) => !value)}
+            >
+              Open With
+              <span className="get-info-button-chevron" aria-hidden="true">
+                ▾
               </span>
-            );
-          })}
-        </div>
+            </button>
+            {openWithMenuOpen ? (
+              // Same markup and styles as the right-click menu's Open With submenu.
+              <div className="context-submenu get-info-open-with-menu" role="menu">
+                {openWithItems.map((entry) =>
+                  entry.type === "separator" ? (
+                    <div key={entry.key} className="context-menu-separator" />
+                  ) : (
+                    <button
+                      key={entry.action.id}
+                      type="button"
+                      role="menuitem"
+                      className="context-submenu-item"
+                      onClick={() => {
+                        setOpenWithMenuOpen(false);
+                        onOpenWith(entry.action);
+                      }}
+                    >
+                      {entry.action.label}
+                    </button>
+                  ),
+                )}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
+
+      <section className="get-info-section">
+        <h3 className="get-info-section-title">Information</h3>
+        <dl className="get-info-meta">
+          {metadataRows.map((row, index) => (
+            <div
+              key={row.label}
+              className={`get-info-meta-row${index === metadataRows.length - 1 ? " last" : ""}`}
+            >
+              <dt className="get-info-meta-label">{row.label}</dt>
+              <dd className={`get-info-meta-value${row.muted ? " muted" : ""}`}>{row.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+
+      <section className="get-info-section">
+        <h3 className="get-info-section-title">Quick Actions</h3>
+        <div className="get-info-actions">
+          <GetInfoActionButton
+            label={copied ? "Copied" : "Copy Path"}
+            shortcut="⌥⌘C"
+            disabled={copyPathDisabled}
+            onClick={() => void onCopyPath()}
+          >
+            <InfoPanelGlyph name={copied ? "check" : "copy"} />
+          </GetInfoActionButton>
+          <GetInfoActionButton label="Terminal" shortcut="⌘T" onClick={onOpenInTerminal}>
+            <InfoPanelGlyph name="terminal" />
+          </GetInfoActionButton>
+        </div>
+      </section>
     </div>
   );
 }
@@ -255,11 +352,13 @@ function GetInfoPanelContent({
 function GetInfoActionButton({
   children,
   label,
+  shortcut,
   disabled = false,
   onClick,
 }: {
   children: ReactNode;
   label: string;
+  shortcut?: string;
   disabled?: boolean | undefined;
   onClick: () => void;
 }) {
@@ -269,8 +368,43 @@ function GetInfoActionButton({
         {children}
       </span>
       <span className="get-info-action-label">{label}</span>
+      {shortcut ? (
+        <span className="get-info-action-shortcut" aria-hidden="true">
+          {shortcut}
+        </span>
+      ) : null}
     </button>
   );
+}
+
+// Finder phrases permissions from the owner's point of view; the octal code stays visible.
+export function describeOwnerAccess(symbolic: string): string {
+  const owner = symbolic.slice(-9, -6);
+  const canRead = owner.includes("r");
+  const canWrite = owner.includes("w");
+  if (canRead && canWrite) {
+    return "Read & Write";
+  }
+  if (canRead) {
+    return "Read only";
+  }
+  if (canWrite) {
+    return "Write only";
+  }
+  return "No access";
+}
+
+function getParentPath(path: string): string | null {
+  const trimmed = path.replace(/\/+$/u, "");
+  const index = trimmed.lastIndexOf("/");
+  if (index < 0 || trimmed.length === 0) {
+    return null;
+  }
+  return index === 0 ? "/" : trimmed.slice(0, index);
+}
+
+function getFolderLabel(path: string): string {
+  return path === "/" ? "Macintosh HD" : (path.split("/").filter(Boolean).at(-1) ?? path);
 }
 
 function FolderSizeCell({

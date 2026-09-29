@@ -9,7 +9,10 @@ import {
 } from "../../shared/appPreferences";
 import { generateAccentTokens } from "../lib/accent";
 import { type ThemeCssBase, getThemeVariant, resolveThemeCssBase } from "../lib/themeVariants";
-import { uiMonoFontStack as mono, uiSansFontStack as sans } from "../lib/viewFonts";
+import { uiSansFontStack as sans } from "../lib/viewFonts";
+
+// macOS-style UI: shortcut keycaps and labels use the system font, not monospace.
+const mono = sans;
 
 type ShortcutItem = {
   group: string;
@@ -500,7 +503,7 @@ function Keys({
   const keyOccurrences = new Map<string, number>();
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "3px", flexShrink: 0 }}>
-      {keys.map((key, index) => {
+      {keys.map((key) => {
         const occurrenceCount = keyOccurrences.get(key) ?? 0;
         keyOccurrences.set(key, occurrenceCount + 1);
         return (
@@ -508,9 +511,6 @@ function Keys({
             key={`${keys.join("::")}-${key}-${occurrenceCount}`}
             style={{ display: "flex", alignItems: "center", gap: "3px" }}
           >
-            {index > 0 ? (
-              <span style={{ fontSize: "9px", color: theme.plus, fontFamily: mono }}>+</span>
-            ) : null}
             <Kbd theme={theme}>{key}</Kbd>
           </span>
         );
@@ -674,12 +674,39 @@ function splitShortcutGroups(groups: Array<{ name: string; items: ShortcutItem[]
   return { leftGroups, rightGroups };
 }
 
-function shortcutParts(shortcut: string): string[] {
+// Help data is written as "Cmd+Shift+G"; it is shown the macOS way, as symbol keycaps
+// in the standard modifier order (⌃⌥⇧⌘) followed by the key.
+const SHORTCUT_GLYPHS: Record<string, string> = {
+  Cmd: "⌘",
+  Shift: "⇧",
+  Option: "⌥",
+  Alt: "⌥",
+  Ctrl: "⌃",
+  Backspace: "⌫",
+  Delete: "⌦",
+  Left: "←",
+  Right: "→",
+  Up: "↑",
+  Down: "↓",
+  Return: "↩",
+  Enter: "↩",
+  Esc: "⎋",
+  Tab: "⇥",
+  Plus: "+",
+};
+const MODIFIER_ORDER = ["⌃", "⌥", "⇧", "⌘"];
+
+export function shortcutParts(shortcut: string): string[] {
   const normalized = shortcut.endsWith("++") ? `${shortcut.slice(0, -2)}+Plus` : shortcut;
-  return normalized
+  const parts = normalized
     .split("+")
     .map((part) => part.trim())
-    .filter((part) => part.length > 0);
+    .filter((part) => part.length > 0)
+    .map((part) => SHORTCUT_GLYPHS[part] ?? part);
+  const modifiers = parts
+    .filter((part) => MODIFIER_ORDER.includes(part))
+    .sort((left, right) => MODIFIER_ORDER.indexOf(left) - MODIFIER_ORDER.indexOf(right));
+  return [...modifiers, ...parts.filter((part) => !MODIFIER_ORDER.includes(part))];
 }
 
 function resolveThemeMode(theme: ThemeMode | undefined): ThemeMode {

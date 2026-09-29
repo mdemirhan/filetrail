@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { type ComponentProps, createRef } from "react";
 
 import { DEFAULT_LEFT_TOOLBAR_ITEMS, type LeftToolbarItems } from "../../shared/toolbarItems";
@@ -499,6 +499,58 @@ describe("TreePane", () => {
     expect(handleFavoritesPaneHeightChange).toHaveBeenCalledWith(260);
   });
 
+  it("shows Favorites as a labeled section above the folder tree without the command rail", () => {
+    const { container } = renderTreePane({
+      showRail: false,
+      favoritesPlacement: "separate",
+      favorites: [
+        { path: "/Users/demo", icon: "home" },
+        { path: "/", icon: "drive" },
+        { path: "/Users/demo/Documents", icon: "documents" },
+      ],
+    });
+
+    const favorites = screen.getByRole("tree", { name: "Favorites" });
+    expect(within(favorites).getByText("Documents")).toBeInTheDocument();
+    expect(within(favorites).getByText("Macintosh HD")).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Locations" })).toBeNull();
+    expect(screen.getByText("Folders")).toBeInTheDocument();
+    expect(container.querySelector(".sidebar-rail")).toBeNull();
+    expect(container.querySelector('[data-tree-kind="favorites-root"]')).toBeNull();
+  });
+
+  it("shows Favorites as a root row of the folder tree when integrated without the rail", () => {
+    const { container } = renderTreePane({
+      showRail: false,
+      favoritesPlacement: "integrated",
+      favorites: [{ path: "/Users/demo/Documents", icon: "documents" }],
+    });
+
+    expect(screen.queryByRole("tree", { name: "Favorites" })).toBeNull();
+    expect(container.querySelector(".sidebar-section-header")).toBeNull();
+    expect(screen.queryByText("Folders")).toBeNull();
+    expect(container.querySelector('[data-tree-kind="favorites-root"]')).not.toBeNull();
+    expect(container.querySelector('[data-tree-kind="favorite"]')).toHaveTextContent("Documents");
+    expect(container.querySelector(".sidebar-footer")).not.toBeNull();
+  });
+
+  it("collapses the Favorites section from its header", () => {
+    const onToggleFavoritesExpanded = vi.fn();
+    renderTreePane({
+      showRail: false,
+      favoritesPlacement: "separate",
+      favoritesExpanded: false,
+      onToggleFavoritesExpanded,
+    });
+
+    const favoritesHeader = screen.getByRole("button", { name: /Favorites/ });
+    expect(favoritesHeader).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("tree", { name: "Favorites" })).toBeNull();
+
+    fireEvent.click(favoritesHeader);
+    expect(onToggleFavoritesExpanded).toHaveBeenCalledTimes(1);
+  });
+
   it("renders theme options when the rail menu is open", () => {
     renderTreePane({
       theme: "dark",
@@ -506,12 +558,12 @@ describe("TreePane", () => {
       favorites: [],
     });
 
-    const darkThemeButton = screen.getByRole("button", { name: /Dark/i });
+    const darkThemeButton = screen.getByRole("button", { name: /^Dark/ });
     expect(darkThemeButton.closest(".sidebar-rail-menu-portal")?.parentElement).toBe(document.body);
-    expect(screen.getByRole("button", { name: /Dark/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^macOS Dark/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Tomorrow Night/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Catppuccin Mocha/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Light/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Light/ })).toBeInTheDocument();
   });
 
   it("uses the rail theme button as a menu trigger", () => {

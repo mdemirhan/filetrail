@@ -11,6 +11,7 @@ export type ContextMenuActionId =
   | "showPackageContents"
   | "edit"
   | "showInfo"
+  | "calculateSize"
   | "cut"
   | "copy"
   | "paste"
@@ -65,6 +66,7 @@ export type ContextMenuIconName =
   | "showPackageContents"
   | "edit"
   | "showInfo"
+  | "calculateSize"
   | "cut"
   | "copy"
   | "paste"
@@ -127,6 +129,7 @@ export function getContextMenuItems(input: {
       { id: "open", label: "Open", icon: "open" },
       { type: "separator", key: "separator-tree-after-open" },
       { id: "showInfo", label: "Show Info", icon: "showInfo" },
+      { id: "calculateSize", label: "Calculate Size", icon: "calculateSize" },
       { type: "separator", key: "separator-tree-open" },
       { id: "toggleFavorite", label: favoriteToggleLabel, icon: "favorite" },
       { type: "separator", key: "separator-tree-favorite" },
@@ -175,6 +178,7 @@ export function getContextMenuItems(input: {
     { id: "edit", label: "Edit", icon: "edit" },
     { type: "separator", key: "separator-open" },
     { id: "showInfo", label: "Show Info", icon: "showInfo" },
+    { id: "calculateSize", label: "Calculate Size", icon: "calculateSize" },
     { type: "separator", key: "separator-info" },
     { id: "copy", label: "Copy", icon: "copy" },
     { id: "cut", label: "Cut", icon: "cut" },

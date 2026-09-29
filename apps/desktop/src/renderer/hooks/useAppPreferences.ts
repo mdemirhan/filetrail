@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import {
   type AccentMode,
+  type AppPreferences,
   type ApplicationSelection,
   type CopyPasteReviewDialogSize,
   DEFAULT_APP_PREFERENCES,
@@ -16,15 +17,31 @@ import {
   type IconThemeMode,
   type LeftToolbarItems,
   type OpenWithApplication,
+  type ReturnKeyAction,
   type ThemeMode,
+  type ThemePreference,
   type UiFontFamily,
   type UiFontWeight,
+  resolveEffectiveTheme,
 } from "../../shared/appPreferences";
 import { applyAppearance } from "../lib/theme";
 
 export function useAppPreferences() {
   const [preferencesReady, setPreferencesReady] = useState(false);
-  const [theme, setTheme] = useState<ThemeMode>(DEFAULT_APP_PREFERENCES.theme);
+  const [theme, setTheme] = useState<ThemePreference>(DEFAULT_APP_PREFERENCES.theme);
+  const [autoLightTheme, setAutoLightTheme] = useState<ThemeMode>(
+    DEFAULT_APP_PREFERENCES.autoLightTheme,
+  );
+  const [autoDarkTheme, setAutoDarkTheme] = useState<ThemeMode>(
+    DEFAULT_APP_PREFERENCES.autoDarkTheme,
+  );
+  const systemPrefersDark = useSystemPrefersDark();
+  const effectiveTheme = resolveEffectiveTheme(
+    theme,
+    systemPrefersDark,
+    autoLightTheme,
+    autoDarkTheme,
+  );
   const [iconTheme, setIconTheme] = useState<IconThemeMode>(DEFAULT_APP_PREFERENCES.iconTheme);
   const [accent, setAccent] = useState<AccentMode>(DEFAULT_APP_PREFERENCES.accent);
   const [accentToolbarButtons, setAccentToolbarButtons] = useState(
@@ -101,6 +118,7 @@ export function useAppPreferences() {
   const [leftToolbarItems, setLeftToolbarItems] = useState<LeftToolbarItems>(
     DEFAULT_APP_PREFERENCES.leftToolbarItems,
   );
+  const [showSidebarRail, setShowSidebarRail] = useState(DEFAULT_APP_PREFERENCES.showSidebarRail);
   const [restoreLastVisitedFolderOnStartup, setRestoreLastVisitedFolderOnStartup] = useState(
     DEFAULT_APP_PREFERENCES.restoreLastVisitedFolderOnStartup,
   );
@@ -137,9 +155,12 @@ export function useAppPreferences() {
     DEFAULT_APP_PREFERENCES.fileActivationAction,
   );
   const [openItemLimit, setOpenItemLimit] = useState(DEFAULT_APP_PREFERENCES.openItemLimit);
+  const [returnKeyAction, setReturnKeyAction] = useState<ReturnKeyAction>(
+    DEFAULT_APP_PREFERENCES.returnKeyAction,
+  );
   useEffect(() => {
     applyAppearance({
-      theme,
+      theme: effectiveTheme,
       iconTheme,
       accent,
       accentToolbarButtons,
@@ -165,7 +186,7 @@ export function useAppPreferences() {
     textMutedOverride,
     textPrimaryOverride,
     textSecondaryOverride,
-    theme,
+    effectiveTheme,
     uiFontFamily,
     uiFontSize,
     uiFontWeight,
@@ -193,6 +214,11 @@ export function useAppPreferences() {
     setPreferencesReady,
     theme,
     setTheme,
+    autoLightTheme,
+    setAutoLightTheme,
+    autoDarkTheme,
+    setAutoDarkTheme,
+    effectiveTheme,
     iconTheme,
     setIconTheme,
     accent,
@@ -257,6 +283,8 @@ export function useAppPreferences() {
     setTopToolbarItems,
     leftToolbarItems,
     setLeftToolbarItems,
+    showSidebarRail,
+    setShowSidebarRail,
     restoreLastVisitedFolderOnStartup,
     setRestoreLastVisitedFolderOnStartup,
     lastGoToFolderPath,
@@ -283,6 +311,92 @@ export function useAppPreferences() {
     setFileActivationAction,
     openItemLimit,
     setOpenItemLimit,
+    returnKeyAction,
+    setReturnKeyAction,
     resetAppearanceSettings,
   };
+}
+
+const DARK_SCHEME_QUERY = "(prefers-color-scheme: dark)";
+
+// Electron keeps prefers-color-scheme in sync with the macOS appearance, so this tracks
+// Light/Dark switches (including scheduled Auto) while the app is running.
+function useSystemPrefersDark(): boolean {
+  const [prefersDark, setPrefersDark] = useState(() => readSystemPrefersDark());
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return;
+    }
+    const query = window.matchMedia(DARK_SCHEME_QUERY);
+    const update = () => setPrefersDark(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  return prefersDark;
+}
+
+function readSystemPrefersDark(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return false;
+  }
+  return window.matchMedia(DARK_SCHEME_QUERY).matches;
+}
+
+type AppPreferencesStore = ReturnType<typeof useAppPreferences>;
+type IncomingPreferences = Partial<AppPreferences>;
+
+// Applies preferences edited in another window. Only user-facing settings are mapped;
+// window-local state (navigation, pane sizes, search session) stays with its window.
+export function applyPreferencesPatch(store: AppPreferencesStore, patch: IncomingPreferences) {
+  const set = <K extends keyof AppPreferences>(
+    key: K,
+    setter: (value: AppPreferences[K]) => void,
+  ) => {
+    const value = patch[key];
+    if (value !== undefined) {
+      setter(value as AppPreferences[K]);
+    }
+  };
+  set("theme", store.setTheme);
+  set("autoLightTheme", store.setAutoLightTheme);
+  set("autoDarkTheme", store.setAutoDarkTheme);
+  set("iconTheme", store.setIconTheme);
+  set("accent", store.setAccent);
+  set("accentToolbarButtons", store.setAccentToolbarButtons);
+  set("toolbarAccent", store.setToolbarAccent);
+  set("accentFavoriteItems", store.setAccentFavoriteItems);
+  set("accentFavoriteText", store.setAccentFavoriteText);
+  set("favoriteAccent", store.setFavoriteAccent);
+  set("zoomPercent", store.setZoomPercent);
+  set("uiFontFamily", store.setUiFontFamily);
+  set("uiFontSize", store.setUiFontSize);
+  set("uiFontWeight", store.setUiFontWeight);
+  set("textPrimaryOverride", store.setTextPrimaryOverride);
+  set("textSecondaryOverride", store.setTextSecondaryOverride);
+  set("textMutedOverride", store.setTextMutedOverride);
+  set("compactListView", store.setCompactListView);
+  set("compactDetailsView", store.setCompactDetailsView);
+  set("compactTreeView", store.setCompactTreeView);
+  set("singleClickExpandTreeItems", store.setSingleClickExpandTreeItems);
+  set("highlightHoveredItems", store.setHighlightHoveredItems);
+  set("detailColumns", store.setDetailColumns);
+  set("tabSwitchesExplorerPanes", store.setTabSwitchesExplorerPanes);
+  set("typeaheadEnabled", store.setTypeaheadEnabled);
+  set("typeaheadDebounceMs", store.setTypeaheadDebounceMs);
+  set("notificationsEnabled", store.setNotificationsEnabled);
+  set("notificationDurationSeconds", store.setNotificationDurationSeconds);
+  set("actionLogEnabled", store.setActionLogEnabled);
+  set("topToolbarItems", store.setTopToolbarItems);
+  set("leftToolbarItems", store.setLeftToolbarItems);
+  set("showSidebarRail", store.setShowSidebarRail);
+  set("restoreLastVisitedFolderOnStartup", store.setRestoreLastVisitedFolderOnStartup);
+  set("favorites", store.setFavorites);
+  set("favoritesPlacement", store.setFavoritesPlacement);
+  set("terminalApp", store.setTerminalApp);
+  set("defaultTextEditor", store.setDefaultTextEditor);
+  set("openWithApplications", store.setOpenWithApplications);
+  set("fileActivationAction", store.setFileActivationAction);
+  set("returnKeyAction", store.setReturnKeyAction);
+  set("openItemLimit", store.setOpenItemLimit);
 }

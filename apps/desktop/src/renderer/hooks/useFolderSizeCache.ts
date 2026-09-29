@@ -9,6 +9,9 @@ export type FolderSizeEntry =
   | { status: "error"; message: string };
 
 const POLL_INTERVAL_MS = 200;
+// Views probe every folder they render; a miss is retried only after this cooldown so
+// re-renders do not re-send the same probe, while a later parent walk still shows up.
+const PROBE_MISS_COOLDOWN_MS = 5_000;
 // Every folder rendered gets probed, so cap the cache; evicted paths are simply
 // probed again (a cheap main-process lookup) if they are shown later.
 export const MAX_FOLDER_SIZE_CACHE_ENTRIES = 5_000;
@@ -23,6 +26,7 @@ export function useFolderSizeCache(client: FiletrailClient) {
 
   const pollTimers = useRef(new Map<string, ReturnType<typeof setInterval>>());
   const probedPaths = useRef(new Set<string>());
+  const probeMissedAt = useRef(new Map<string, number>());
 
   useEffect(() => {
     const timers = pollTimers.current;
@@ -156,10 +160,15 @@ export function useFolderSizeCache(client: FiletrailClient) {
   const probeCache = useCallback(
     (path: string) => {
       if (probedPaths.current.has(path)) return;
+      const missedAt = probeMissedAt.current.get(path);
+      if (missedAt !== undefined && Date.now() - missedAt < PROBE_MISS_COOLDOWN_MS) return;
+      // Mark in flight so concurrent renders do not probe the same path again.
+      probeMissedAt.current.set(path, Date.now());
       void (async () => {
         try {
           const result = await client.invoke("folderSize:start", { path, probeOnly: true });
           if (result.status === "ready") {
+            probeMissedAt.current.delete(path);
             probedPaths.current.add(path);
             const status = await client.invoke("folderSize:getStatus", { jobId: result.jobId });
             if (status.status === "ready" && status.sizeBytes !== null) {
