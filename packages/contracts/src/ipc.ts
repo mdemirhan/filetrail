@@ -273,6 +273,9 @@ export const directoryEntrySchema = z.object({
   kind: explorerEntryKindSchema,
   isHidden: z.boolean(),
   isSymlink: z.boolean(),
+  // Only when listed sorted by size, and only for files: the renderer merges these with
+  // the folder sizes it learns later to keep the whole list in size order.
+  sizeBytes: z.number().int().nonnegative().nullable().optional(),
 });
 
 export const directoryEntryMetadataSchema = z.object({

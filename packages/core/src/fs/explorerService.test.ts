@@ -152,6 +152,58 @@ describe("explorerService", () => {
     expect(snapshot.entries.map((entry) => entry.name)).toEqual(["large.txt", "small.txt"]);
   });
 
+  it("reports file sizes and keeps items without a size last when sorting by size", async () => {
+    const fakeFileSystem = {
+      readdir: vi.fn(async () => [
+        fakeDirent("Folder", { directory: true }),
+        fakeDirent("small.txt", { file: true }),
+        fakeDirent("large.txt", { file: true }),
+      ]),
+      stat: vi.fn(async (path: string) =>
+        fakeStats(
+          path === "/workspace" || path.endsWith("Folder"),
+          path.endsWith(".txt"),
+          path.endsWith("large.txt") ? 100 : 10,
+        ),
+      ),
+      lstat: vi.fn(async () => fakeStats(false, true, 12, false)),
+      realpath: vi.fn(async (path: string) => path),
+    };
+
+    for (const direction of ["asc", "desc"] as const) {
+      const snapshot = await listDirectorySnapshot(
+        "/workspace",
+        false,
+        "size",
+        direction,
+        false,
+        fakeFileSystem,
+      );
+      expect(snapshot.entries.map((entry) => [entry.name, entry.sizeBytes])).toEqual(
+        direction === "asc"
+          ? [
+              ["small.txt", 10],
+              ["large.txt", 100],
+              ["Folder", null],
+            ]
+          : [
+              ["large.txt", 100],
+              ["small.txt", 10],
+              ["Folder", null],
+            ],
+      );
+    }
+    const byName = await listDirectorySnapshot(
+      "/workspace",
+      false,
+      "name",
+      "asc",
+      true,
+      fakeFileSystem,
+    );
+    expect(byName.entries.every((entry) => !("sizeBytes" in entry))).toBe(true);
+  });
+
   it("combines folders and files when folders-first sorting is disabled", async () => {
     const fakeFileSystem = {
       readdir: vi.fn(async () => [

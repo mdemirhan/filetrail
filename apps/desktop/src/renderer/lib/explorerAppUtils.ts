@@ -351,6 +351,55 @@ export function isFolderSizeEligibleKind(kind: DirectoryEntry["kind"] | null | u
   return kind === "directory" || kind === "symlink_directory" || kind === "bundle";
 }
 
+// The listing is sorted before folder sizes are known (they come from a separate folder
+// size calculation), so sorting by size is finished here: files use the size the listing
+// reported, folders and bundles the size calculated for them, and items without a known
+// size stay at the end in both directions. Mirrors the main-process sort otherwise.
+export function sortEntriesBySize(
+  entries: readonly DirectoryEntry[],
+  options: {
+    sortDirection: "asc" | "desc";
+    foldersFirst: boolean;
+    getFolderSizeBytes: (path: string) => number | null;
+  },
+): DirectoryEntry[] {
+  const sizeByPath = new Map<string, number | null>();
+  for (const entry of entries) {
+    sizeByPath.set(
+      entry.path,
+      isFolderSizeEligibleKind(entry.kind)
+        ? options.getFolderSizeBytes(entry.path)
+        : (entry.sizeBytes ?? null),
+    );
+  }
+  const direction = options.sortDirection === "desc" ? -1 : 1;
+  return [...entries].sort((left, right) => {
+    if (options.foldersFirst) {
+      const rank = folderRank(left) - folderRank(right);
+      if (rank !== 0) {
+        return rank;
+      }
+    }
+    const leftSize = sizeByPath.get(left.path) ?? null;
+    const rightSize = sizeByPath.get(right.path) ?? null;
+    if (leftSize === null || rightSize === null) {
+      if (leftSize !== rightSize) {
+        return leftSize === null ? 1 : -1;
+      }
+    } else if (leftSize !== rightSize) {
+      return (leftSize - rightSize) * direction;
+    }
+    return (
+      left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" }) *
+      direction
+    );
+  });
+}
+
+function folderRank(entry: DirectoryEntry): number {
+  return entry.kind === "directory" || entry.kind === "symlink_directory" ? 0 : 1;
+}
+
 export function isEditableFileEntry(entry: DirectoryEntry | null): entry is DirectoryEntry {
   return entry?.kind === "file" || entry?.kind === "symlink_file";
 }

@@ -52,6 +52,7 @@ import {
   resolvePasteDestinationPath,
   resolveWriteOperationSelectionDirectoryPath,
   shouldRenderCopyPasteResultDialog,
+  sortEntriesBySize,
   toDirectoryEntryFromSearchResult,
 } from "./lib/explorerAppUtils";
 import { parentDirectoryPath } from "./lib/explorerNavigation";
@@ -431,9 +432,27 @@ export function App() {
     search,
     selection: selectionActions,
   });
+  // Folder sizes are learned after the listing arrives, so the size order is completed
+  // here and updated as each folder size comes in.
+  const folderSizeVersion = folderSizeCache.version;
+  const getFolderSizeEntry = folderSizeCache.getEntry;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: folderSizeVersion changes whenever a cached folder size does; getEntry reads that cache.
+  const browseEntries = useMemo(() => {
+    if (sortBy !== "size") {
+      return currentEntries;
+    }
+    return sortEntriesBySize(currentEntries, {
+      sortDirection,
+      foldersFirst,
+      getFolderSizeBytes: (path) => {
+        const entry = getFolderSizeEntry(path);
+        return entry.status === "ready" ? entry.sizeBytes : null;
+      },
+    });
+  }, [currentEntries, sortBy, sortDirection, foldersFirst, getFolderSizeEntry, folderSizeVersion]);
   const activeContentEntries = useMemo(
-    () => (isSearchMode ? searchResultEntries : currentEntries),
-    [currentEntries, isSearchMode, searchResultEntries],
+    () => (isSearchMode ? searchResultEntries : browseEntries),
+    [browseEntries, isSearchMode, searchResultEntries],
   );
   const selectedPathSet = useMemo(() => new Set(contentSelection.paths), [contentSelection.paths]);
   const selectedPathsInViewOrder = useMemo(
@@ -1527,7 +1546,7 @@ export function App() {
                 paneRef: contentPaneRef,
                 isFocused: focusedPane === "content",
                 currentPath,
-                entries: currentEntries,
+                entries: browseEntries,
                 loading: directoryLoading,
                 error: directoryError,
                 includeHidden,

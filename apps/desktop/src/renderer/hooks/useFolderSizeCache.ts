@@ -21,7 +21,7 @@ export function useFolderSizeCache(client: FiletrailClient) {
   // version counter only when the UI needs to repaint — i.e. when a
   // user-visible entry changes (calculation completes, cancel, etc.).
   const cacheRef = useRef(new Map<string, FolderSizeEntry>());
-  const [, setVersion] = useState(0);
+  const [version, setVersion] = useState(0);
   const bumpVersion = useCallback(() => setVersion((v) => v + 1), []);
 
   const pollTimers = useRef(new Map<string, ReturnType<typeof setInterval>>());
@@ -200,5 +200,7 @@ export function useFolderSizeCache(client: FiletrailClient) {
     [probeCache],
   );
 
-  return { getEntry, calculateFolderSize, recalculateFolderSize, cancelFolderSize };
+  // `version` changes whenever a cached entry does, for views that derive from the cache
+  // (sorting by size).
+  return { getEntry, calculateFolderSize, recalculateFolderSize, cancelFolderSize, version };
 }

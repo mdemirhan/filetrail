@@ -134,7 +134,9 @@ export async function listDirectorySnapshot(
     entries: entries
       .filter((value) => value !== null)
       .sort((left, right) => compareEntries(left, right, sortBy, sortDirection, foldersFirst))
-      .map(({ sortModifiedAt: _sortModifiedAt, sortSizeBytes: _sortSizeBytes, ...entry }) => entry),
+      .map(({ sortModifiedAt: _sortModifiedAt, sortSizeBytes, ...entry }) =>
+        sortBy === "size" ? { ...entry, sizeBytes: sortSizeBytes } : entry,
+      ),
   };
 }
 
@@ -452,6 +454,18 @@ function compareEntries(
     const rightRank = isDirectoryKind(right.kind) ? 0 : 1;
     if (leftRank !== rightRank) {
       return leftRank - rightRank;
+    }
+  }
+
+  // Items without a value (folders when sorting by size) stay at the end in both directions.
+  const leftValue =
+    sortBy === "modified" ? left.sortModifiedAt : sortBy === "size" ? left.sortSizeBytes : 0;
+  const rightValue =
+    sortBy === "modified" ? right.sortModifiedAt : sortBy === "size" ? right.sortSizeBytes : 0;
+  if ((leftValue ?? null) === null || (rightValue ?? null) === null) {
+    const missing = compareNullableNumbers(leftValue ?? null, rightValue ?? null);
+    if (missing !== 0) {
+      return missing;
     }
   }
 

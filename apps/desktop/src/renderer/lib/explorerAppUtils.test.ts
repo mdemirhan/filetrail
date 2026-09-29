@@ -11,6 +11,7 @@ import {
   resolveWriteOperationTreeSelectionPath,
   selectTopLevelItems,
   shouldRenderCopyPasteResultDialog,
+  sortEntriesBySize,
 } from "./explorerAppUtils";
 import type { DirectoryEntry, WriteOperationResult } from "./explorerTypes";
 
@@ -376,6 +377,100 @@ describe("selectTopLevelItems", () => {
       { sourcePath: "/src/b" },
       { sourcePath: "/src/a" },
       { sourcePath: null },
+    ]);
+  });
+});
+
+describe("sortEntriesBySize", () => {
+  function sized(
+    name: string,
+    kind: DirectoryEntry["kind"],
+    sizeBytes?: number | null,
+  ): DirectoryEntry {
+    return {
+      path: `/dest/${name}`,
+      name,
+      extension: "",
+      kind,
+      isHidden: false,
+      isSymlink: kind === "symlink_directory",
+      ...(sizeBytes === undefined ? {} : { sizeBytes }),
+    };
+  }
+  const entries = [
+    sized("blob_storage", "directory"),
+    sized("Cache", "directory"),
+    sized("live-status", "directory"),
+    sized("Local Storage", "directory"),
+    sized("Pending", "directory"),
+    sized("App.app", "bundle"),
+    sized("Preferences", "file", 41),
+    sized("codetrail.sqlite", "file", 1_400_000_000),
+    sized("Trust Tokens-journal", "file", 0),
+  ];
+  const folderSizes: Record<string, number> = {
+    "/dest/blob_storage": 0,
+    "/dest/Cache": 0,
+    "/dest/live-status": 35_000_000,
+    "/dest/Local Storage": 10_000,
+    "/dest/App.app": 500,
+  };
+  const getFolderSizeBytes = (path: string) => folderSizes[path] ?? null;
+
+  it("orders folders by their calculated size, like files, with unknown sizes last", () => {
+    const sorted = sortEntriesBySize(entries, {
+      sortDirection: "asc",
+      foldersFirst: true,
+      getFolderSizeBytes,
+    });
+    expect(sorted.map((entry) => entry.name)).toEqual([
+      "blob_storage",
+      "Cache",
+      "Local Storage",
+      "live-status",
+      "Pending",
+      "Trust Tokens-journal",
+      "Preferences",
+      "App.app",
+      "codetrail.sqlite",
+    ]);
+  });
+
+  it("keeps unknown sizes last when sorting largest first", () => {
+    const sorted = sortEntriesBySize(entries, {
+      sortDirection: "desc",
+      foldersFirst: true,
+      getFolderSizeBytes,
+    });
+    expect(sorted.map((entry) => entry.name)).toEqual([
+      "live-status",
+      "Local Storage",
+      "Cache",
+      "blob_storage",
+      "Pending",
+      "codetrail.sqlite",
+      "App.app",
+      "Preferences",
+      "Trust Tokens-journal",
+    ]);
+  });
+
+  it("mixes folders and files by size when folders aren't listed first", () => {
+    const sorted = sortEntriesBySize(entries, {
+      sortDirection: "asc",
+      foldersFirst: false,
+      getFolderSizeBytes,
+    });
+    expect(sorted.map((entry) => entry.name)).toEqual([
+      "blob_storage",
+      "Cache",
+      "Trust Tokens-journal",
+      "Preferences",
+      "App.app",
+      "Local Storage",
+      "live-status",
+      "codetrail.sqlite",
+      "Pending",
     ]);
   });
 });
