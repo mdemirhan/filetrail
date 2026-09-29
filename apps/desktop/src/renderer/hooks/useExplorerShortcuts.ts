@@ -29,6 +29,17 @@ import type {
   WriteOperationsStore,
 } from "../state/explorerStores";
 
+// Every modal marks itself with aria-modal; the class names cover older dialogs.
+const MODAL_KEYBOARD_OWNER_SELECTOR = '[aria-modal="true"], .copy-paste-dialog, .location-sheet';
+
+// Cmd+. is the macOS "cancel" shortcut and closes a dialog just like Escape.
+function isModalCancelKey(event: KeyboardEvent): boolean {
+  if (event.key === "Escape") {
+    return true;
+  }
+  return event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.key === ".";
+}
+
 type RawShortcutBinding = {
   id: RawExplorerShortcutId;
   matches: (event: KeyboardEvent) => boolean;
@@ -1136,6 +1147,13 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         current.setMainView("explorer");
         return;
       }
+      // Escape (or Cmd+.) cancels the open dialog even from one of its menus or fields,
+      // which would otherwise keep the key to themselves below.
+      if (current.copyPasteModalOpen && isModalCancelKey(event)) {
+        event.preventDefault();
+        current.handleCopyPasteDialogEscape();
+        return;
+      }
       if (isKeyboardOwnedFormControl(target)) {
         return;
       }
@@ -1160,12 +1178,9 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         return;
       }
       if (current.copyPasteModalOpen) {
-        if (event.key === "Escape") {
-          event.preventDefault();
-          current.handleCopyPasteDialogEscape();
-          return;
-        }
-        if (targetElement?.closest(".copy-paste-dialog, .location-sheet")) {
+        // Keys inside the dialog (Tab, Return, Space, arrows) belong to it; anything aimed
+        // at the explorer behind it is swallowed.
+        if (targetElement?.closest(MODAL_KEYBOARD_OWNER_SELECTOR)) {
           return;
         }
         event.preventDefault();

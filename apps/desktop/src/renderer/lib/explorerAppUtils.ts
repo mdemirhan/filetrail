@@ -61,23 +61,45 @@ export function isExpectedPlannedSkipResult(event: WriteOperationProgressEvent):
 // started. Only top-level items are returned; an item inside a folder is retried by
 // retrying that folder, never pasted on its own at the destination root.
 export function collectRetrySourcePaths(items: WriteOperationResult["items"]): string[] {
-  const itemPaths = items
-    .map((item) => item.sourcePath)
-    .filter((path): path is string => typeof path === "string");
-  const hasAncestorItem = (path: string) =>
-    itemPaths.some((candidate) => candidate !== path && path.startsWith(`${candidate}/`));
-  const retryPaths: string[] = [];
-  for (const item of items) {
+  const retryPaths = new Set<string>();
+  for (const item of selectTopLevelItems(items)) {
     if (
       typeof item.sourcePath === "string" &&
-      (item.status === "failed" || item.status === "cancelled") &&
-      !hasAncestorItem(item.sourcePath) &&
-      !retryPaths.includes(item.sourcePath)
+      (item.status === "failed" || item.status === "cancelled")
     ) {
-      retryPaths.push(item.sourcePath);
+      retryPaths.add(item.sourcePath);
     }
   }
-  return retryPaths;
+  return [...retryPaths];
+}
+
+// Result lists name every item the operation touched, including everything inside a
+// copied folder. This keeps only the items the user actually picked: those with no other
+// listed item above them. Items without a source path cannot be nested and are kept.
+// Each path's ancestors are looked up in a set so large results stay fast.
+export function selectTopLevelItems<T extends { sourcePath?: string | null }>(
+  items: readonly T[],
+): T[] {
+  const itemPaths = new Set<string>();
+  for (const item of items) {
+    if (typeof item.sourcePath === "string") {
+      itemPaths.add(item.sourcePath);
+    }
+  }
+  return items.filter(
+    (item) => typeof item.sourcePath !== "string" || !hasAncestorPath(item.sourcePath, itemPaths),
+  );
+}
+
+function hasAncestorPath(path: string, candidates: ReadonlySet<string>): boolean {
+  let separatorIndex = path.lastIndexOf("/");
+  while (separatorIndex > 0) {
+    if (candidates.has(path.slice(0, separatorIndex))) {
+      return true;
+    }
+    separatorIndex = path.lastIndexOf("/", separatorIndex - 1);
+  }
+  return false;
 }
 
 export function resolvePasteDestinationPath(args: {
@@ -88,6 +110,7 @@ export function resolvePasteDestinationPath(args: {
   focusedPane: "tree" | "content" | null;
   isSearchMode: boolean;
   selectedEntry: DirectoryEntry | null;
+  selectedPathCount: number;
 }): string | null {
   const {
     contextMenuState,
@@ -97,7 +120,9 @@ export function resolvePasteDestinationPath(args: {
     focusedPane,
     isSearchMode,
     selectedEntry,
+    selectedPathCount,
   } = args;
+  const currentFolder = currentPath.length > 0 ? currentPath : null;
   if (isSearchMode) {
     return null;
   }
@@ -108,21 +133,36 @@ export function resolvePasteDestinationPath(args: {
     ) {
       return contextMenuState.targetPath;
     }
-    if (isDirectoryLikeEntry(contextMenuTargetEntry)) {
+    // Like the keyboard, a folder is the target only when it is the one item picked.
+    if (contextMenuState.paths.length <= 1 && isPasteTargetFolderEntry(contextMenuTargetEntry)) {
       return contextMenuTargetEntry.path;
     }
-    return currentPath.length > 0 ? currentPath : null;
+    return currentFolder;
   }
+  // The tree's selected folder is the folder on screen, so paste goes there.
   if (focusedPane === "tree") {
-    return currentPath.length > 0 ? currentPath : null;
+    return currentFolder;
   }
-  if (focusedPane === "content" && isDirectoryLikeEntry(selectedEntry)) {
+  // With several items selected there is no single folder to paste into, so the paste
+  // goes into the folder on screen, like Finder.
+  if (
+    focusedPane === "content" &&
+    selectedPathCount === 1 &&
+    isPasteTargetFolderEntry(selectedEntry)
+  ) {
     if (clipboardSourcePaths.includes(selectedEntry.path)) {
-      return currentPath.length > 0 ? currentPath : selectedEntry.path;
+      return currentFolder ?? selectedEntry.path;
     }
     return selectedEntry.path;
   }
-  return currentPath.length > 0 ? currentPath : null;
+  return currentFolder;
+}
+
+// A symlinked folder is not a paste target, the same as for drag and drop
+// (`isRealDirectoryEntry`): pasting through it would write into the link's target
+// somewhere else on disk, so the paste goes into the folder on screen instead.
+function isPasteTargetFolderEntry(entry: DirectoryEntry | null): entry is DirectoryEntry {
+  return entry?.kind === "directory" && !entry.isSymlink;
 }
 
 export function resolveNewFolderTargetPath(args: {

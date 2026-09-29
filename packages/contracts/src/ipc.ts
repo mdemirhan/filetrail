@@ -193,6 +193,16 @@ export const copyPasteRuntimeResolutionActionSchema = z.enum([
   "keep_both",
   "merge",
 ]);
+// "trash_unavailable": Replace couldn't move the existing item to the Trash (for example on
+// a network or FAT volume), so the only way to replace it is to delete it permanently.
+export const copyPasteRuntimeConflictReasonSchema = z.enum([
+  "destination_changed",
+  "destination_created",
+  "destination_deleted",
+  "source_changed",
+  "source_deleted",
+  "trash_unavailable",
+]);
 export const writeOperationInitiatorSchema = z.enum(["clipboard", "drag_drop", "move_dialog"]);
 export const copyPastePlanItemStatusSchema = z.enum(["ready", "conflict", "blocked"]);
 export const copyPastePlanIssueCodeSchema = z.enum([
@@ -426,17 +436,15 @@ export const copyPasteRuntimeConflictSchema = z.object({
   sourceKind: z.enum(["file", "directory", "symlink"]),
   destinationKind: copyPasteNodeKindSchema,
   conflictClass: copyPasteConflictClassSchema,
-  reason: z.enum([
-    "destination_changed",
-    "destination_created",
-    "destination_deleted",
-    "source_changed",
-    "source_deleted",
-  ]),
+  reason: copyPasteRuntimeConflictReasonSchema,
   sourceFingerprint: nodeFingerprintSchema,
   destinationFingerprint: nodeFingerprintSchema,
   currentSourceFingerprint: nodeFingerprintSchema,
   currentDestinationFingerprint: nodeFingerprintSchema,
+});
+export const autoResolvedRuntimeConflictSchema = z.object({
+  conflict: copyPasteRuntimeConflictSchema,
+  resolution: copyPasteRuntimeResolutionActionSchema,
 });
 export const copyPastePlanSchema = z.object({
   mode: copyPasteModeSchema,
@@ -468,6 +476,9 @@ export const copyPasteItemResultSchema = z.object({
     .enum(["planned_conflict_policy", "runtime_conflict_resolution"])
     .nullable()
     .optional(),
+  // For a folder: how many items inside it failed. A folder whose only problem is failures
+  // inside it has status "failed" and a null error.
+  childFailureCount: z.number().int().nonnegative().optional(),
 });
 export const copyPasteOperationResultSchema = z.object({
   operationId: z.string().min(1),
@@ -502,6 +513,9 @@ export const copyPasteProgressEventSchema = z.object({
   currentSourcePath: z.string().nullable(),
   currentDestinationPath: z.string().nullable(),
   runtimeConflict: copyPasteRuntimeConflictSchema.nullable().optional(),
+  // A conflict answered automatically by an earlier "Do the same for any other changes".
+  // Recorded in the Action Log; nothing is shown.
+  autoResolvedRuntimeConflict: autoResolvedRuntimeConflictSchema.nullable().optional(),
   result: copyPasteOperationResultSchema.nullable(),
 });
 export const writeOperationItemResultSchema = z.object({
@@ -513,6 +527,9 @@ export const writeOperationItemResultSchema = z.object({
     .enum(["planned_conflict_policy", "runtime_conflict_resolution"])
     .nullable()
     .optional(),
+  // For a folder: how many items inside it failed. A folder whose only problem is failures
+  // inside it has status "failed" and a null error.
+  childFailureCount: z.number().int().nonnegative().optional(),
 });
 export const writeOperationResultSchema = z.object({
   operationId: z.string().min(1),
@@ -545,6 +562,9 @@ export const writeOperationProgressEventSchema = z.object({
   currentSourcePath: z.string().nullable(),
   currentDestinationPath: z.string().nullable(),
   runtimeConflict: copyPasteRuntimeConflictSchema.nullable().optional(),
+  // A conflict answered automatically by an earlier "Do the same for any other changes".
+  // Recorded in the Action Log; nothing is shown.
+  autoResolvedRuntimeConflict: autoResolvedRuntimeConflictSchema.nullable().optional(),
   result: writeOperationResultSchema.nullable(),
 });
 export const actionLogItemSchema = z.object({
@@ -557,6 +577,9 @@ export const actionLogItemSchema = z.object({
     .enum(["planned_conflict_policy", "runtime_conflict_resolution"])
     .nullable()
     .optional(),
+  // For a folder: how many items inside it failed. A folder whose only problem is failures
+  // inside it has status "failed" and a null error.
+  childFailureCount: z.number().int().nonnegative().optional(),
 });
 export const actionLogRuntimeConflictSchema = z.object({
   conflictId: z.string().min(1),
@@ -565,13 +588,7 @@ export const actionLogRuntimeConflictSchema = z.object({
   sourceKind: z.enum(["file", "directory", "symlink"]),
   destinationKind: copyPasteNodeKindSchema,
   conflictClass: copyPasteConflictClassSchema,
-  reason: z.enum([
-    "destination_changed",
-    "destination_created",
-    "destination_deleted",
-    "source_changed",
-    "source_deleted",
-  ]),
+  reason: copyPasteRuntimeConflictReasonSchema,
   resolution: copyPasteRuntimeResolutionActionSchema.nullable().default(null),
 });
 export const actionLogEntrySchema = z.object({

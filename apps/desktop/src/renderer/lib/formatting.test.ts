@@ -69,6 +69,9 @@ describe("formatting helpers", () => {
     it("returns seconds for 1-59 seconds", () => {
       expect(formatRelativeDuration(2000)).toBe("2 seconds");
       expect(formatRelativeDuration(1000)).toBe("1 second");
+      // Sub-millisecond precision must not round up to "1000 ms".
+      expect(formatRelativeDuration(999.6)).toBe("1 second");
+      expect(formatRelativeDuration(999.4)).toBe("999 ms");
     });
 
     it("returns minutes for 1-59 min", () => {

@@ -115,10 +115,11 @@ export function splitDisplayName(
 }
 
 export function formatRelativeDuration(deltaMs: number): string {
-  const absDelta = Math.abs(deltaMs);
+  // Round to whole milliseconds first so 999.6 ms reads "1 second", not "1000 ms".
+  const absDelta = Math.round(Math.abs(deltaMs));
 
   if (absDelta < 1000) {
-    return `${Math.round(absDelta)} ms`;
+    return `${absDelta} ms`;
   }
 
   const seconds = Math.floor(absDelta / 1000);

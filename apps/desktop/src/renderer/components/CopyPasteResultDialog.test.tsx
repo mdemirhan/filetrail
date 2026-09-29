@@ -57,7 +57,7 @@ describe("CopyPasteResultDialog", () => {
       <CopyPasteResultDialog
         event={event("paste", [
           item("/src/a.txt", "completed"),
-          item("/src/photos", "failed"),
+          { ...item("/src/photos", "failed"), childFailureCount: 1 },
           item(
             "/src/photos/raw/IMG_2041.dng",
             "failed",
@@ -73,10 +73,16 @@ describe("CopyPasteResultDialog", () => {
       />,
     );
 
+    // "photos" was pasted without one item inside; that item is counted once.
     expect(
-      screen.getByRole("heading", { name: "Pasted 1 of 5 items into “dest”" }),
+      screen.getByRole("heading", { name: "Pasted 2 of 5 items into “dest”" }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toHaveAccessibleDescription(
+      "1 item couldn't be copied. 1 item inside “photos” couldn't be copied. 1 item wasn't started because the operation was stopped. 1 item was skipped.",
+    );
     const failed = screen.getByRole("region", { name: "Couldn't copy" });
+    expect(within(failed).getByText("1 item inside couldn't be copied")).toBeInTheDocument();
+    expect(within(failed).queryByText("Unknown error.")).not.toBeInTheDocument();
     expect(within(failed).getByText("photos/raw/IMG_2041.dng")).toBeInTheDocument();
     expect(
       within(failed).getByText("There isn't enough free space on the destination disk."),
@@ -118,5 +124,111 @@ describe("CopyPasteResultDialog", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Couldn't move" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Retry/ })).not.toBeInTheDocument();
+  });
+
+  it("describes a folder with failures inside without counting it twice", () => {
+    render(
+      <CopyPasteResultDialog
+        event={event("move_to", [
+          { ...item("/src/photos", "failed"), childFailureCount: 2 },
+          item("/src/photos/a.jpg", "completed"),
+          item("/src/photos/b.jpg", "failed", "The item is in use."),
+          item("/src/photos/raw/c.dng", "failed", "The item is in use."),
+        ])}
+        canRetry
+        onRetry={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Moved 1 of 1 item into “dest”" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "2 items inside “photos” couldn't be moved. Items that weren't moved are still in their original folder.",
+      ),
+    ).toBeInTheDocument();
+    const failed = screen.getByRole("region", { name: "Couldn't move" });
+    expect(within(failed).getByText("2 items inside couldn't be moved")).toBeInTheDocument();
+    expect(within(failed).getByText("photos/raw/c.dng")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry 1 Item" })).toBeInTheDocument();
+  });
+
+  it("uses a folder's own count when the items inside aren't listed", () => {
+    render(
+      <CopyPasteResultDialog
+        event={event("paste", [
+          { ...item("/src/photos", "failed"), childFailureCount: 3 },
+          item("/src/notes.txt", "completed"),
+        ])}
+        canRetry={false}
+        onRetry={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Pasted 2 of 2 items into “dest”" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("3 items inside “photos” couldn't be copied.")).toBeInTheDocument();
+  });
+
+  it("stays quick with a very large result and lists only the first rows", () => {
+    const items: Items = [{ ...item("/src/big", "failed"), childFailureCount: 15_000 }];
+    for (let index = 0; index < 15_000; index += 1) {
+      items.push(item(`/src/big/sub ${index % 50}/file ${index}.txt`, "failed", "Disk full."));
+    }
+    for (let index = 0; index < 15_000; index += 1) {
+      items.push(item(`/src/done ${index}.txt`, "completed"));
+    }
+    const startedAt = performance.now();
+    render(
+      <CopyPasteResultDialog
+        event={event("paste", items)}
+        canRetry
+        onRetry={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    // Quadratic path matching took tens of seconds here.
+    expect(performance.now() - startedAt).toBeLessThan(5_000);
+
+    expect(
+      screen.getByRole("heading", { name: "Pasted 15,001 of 15,001 items into “dest”" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("15,000 items inside “big” couldn't be copied.")).toBeInTheDocument();
+    const failed = screen.getByRole("region", { name: "Couldn't copy" });
+    expect(within(failed).getAllByRole("listitem")).toHaveLength(201);
+    expect(within(failed).getByText("and 14,801 more")).toBeInTheDocument();
+    expect(within(failed).getByText("big/sub 1/file 1.txt")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry 1 Item" })).toBeInTheDocument();
+  });
+
+  it("keeps Tab inside the sheet and gives focus back when it closes", () => {
+    const opener = document.createElement("button");
+    document.body.append(opener);
+    opener.focus();
+    const { unmount } = render(
+      <CopyPasteResultDialog
+        event={event("paste", [item("/src/a.txt", "failed", "Disk full.")])}
+        canRetry
+        onRetry={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    const done = screen.getByRole("button", { name: "Done" });
+    const retry = screen.getByRole("button", { name: "Retry 1 Item" });
+    expect(done).toHaveFocus();
+    expect(screen.getByRole("dialog")).toHaveAttribute("aria-modal", "true");
+
+    fireEvent.keyDown(done, { key: "Tab" });
+    expect(retry).toHaveFocus();
+    fireEvent.keyDown(retry, { key: "Tab", shiftKey: true });
+    expect(done).toHaveFocus();
+
+    unmount();
+    expect(opener).toHaveFocus();
+    opener.remove();
   });
 });

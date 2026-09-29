@@ -714,4 +714,75 @@ describe("copyPasteAnalysis", () => {
       conflictClass: "type_mismatch",
     });
   });
+
+  describe("on a case-sensitive volume", () => {
+    function analyze(
+      fileSystem: MockWriteServiceFileSystem,
+      sourcePaths: string[],
+    ): ReturnType<typeof buildCopyPasteAnalysisReport> {
+      return buildCopyPasteAnalysisReport({
+        analysisId: "analysis-1",
+        request: { mode: "copy", sourcePaths, destinationDirectoryPath: "/target" },
+        fileSystem,
+        thresholds: { largeBatchItemThreshold: 100, largeBatchByteThreshold: 1000 },
+      });
+    }
+
+    it("lets names that differ only by case land side by side", async () => {
+      const seed = {
+        "/a/report.pdf": { kind: "file" as const, size: 5 },
+        "/b/Report.pdf": { kind: "file" as const, size: 7 },
+        "/target": { kind: "directory" as const },
+      };
+      const insensitive = new MockWriteServiceFileSystem(seed);
+      const sensitive = new MockWriteServiceFileSystem(seed);
+      sensitive.caseSensitive = true;
+
+      expect(
+        (await analyze(insensitive, ["/a/report.pdf", "/b/Report.pdf"])).issues.map(
+          (issue) => issue.code,
+        ),
+      ).toEqual(["duplicate_destination_name"]);
+      const report = await analyze(sensitive, ["/a/report.pdf", "/b/Report.pdf"]);
+      expect(report.issues).toEqual([]);
+      expect(report.destinationCaseSensitive).toBe(true);
+    });
+
+    it("reserves Keep Both names by exact case", async () => {
+      const seed = {
+        "/source/notes.txt": { kind: "file" as const, size: 5 },
+        "/source/Notes copy.txt": { kind: "file" as const, size: 5 },
+        "/target/notes.txt": { kind: "file" as const, size: 1 },
+      };
+      const insensitive = new MockWriteServiceFileSystem(seed);
+      const sensitive = new MockWriteServiceFileSystem(seed);
+      sensitive.caseSensitive = true;
+      const sources = ["/source/notes.txt", "/source/Notes copy.txt"];
+
+      expect((await analyze(insensitive, sources)).nodes[0]?.keepBothDestinationPath).toBe(
+        "/target/notes copy 2.txt",
+      );
+      expect((await analyze(sensitive, sources)).nodes[0]?.keepBothDestinationPath).toBe(
+        "/target/notes copy.txt",
+      );
+    });
+
+    it("asks the volume once per analysis", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source/a.txt": { kind: "file", size: 5 },
+        "/source/b.txt": { kind: "file", size: 5 },
+        "/target/a.txt": { kind: "file", size: 1 },
+        "/target/b.txt": { kind: "file", size: 1 },
+      });
+      const asked: string[] = [];
+      fileSystem.isCaseSensitive = async (path) => {
+        asked.push(path);
+        return true;
+      };
+
+      await analyze(fileSystem, ["/source/a.txt", "/source/b.txt"]);
+
+      expect(asked).toEqual(["/target"]);
+    });
+  });
 });

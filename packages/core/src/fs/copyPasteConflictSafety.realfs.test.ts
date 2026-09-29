@@ -8,6 +8,7 @@ import {
   rm,
   stat,
   symlink,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -139,6 +140,34 @@ describe("copy/paste conflict safety (real filesystem)", () => {
     },
   );
 
+  it.each(["copy", "cut"] as const)(
+    "refuses to replace a folder that holds the item pasted through a symlinked folder (%s)",
+    async (mode) => {
+      // "L" links to "X", so "L/X" is really "X/X": replacing "X" would destroy it.
+      const outer = join(testDir, "X");
+      await mkdir(join(outer, "X"), { recursive: true });
+      await writeFile(join(outer, "X", "a.txt"), "inner");
+      await writeFile(join(outer, "other.txt"), "other");
+      await symlink(outer, join(testDir, "L"));
+
+      const { report, result } = await paste({
+        mode,
+        sourcePaths: [join(testDir, "L", "X")],
+        destinationDirectoryPath: testDir,
+        policy: REPLACE_ALL,
+      });
+
+      expect(report.nodes[0]?.replaceBlockedReason).toBe("It contains the item being pasted.");
+      expect(result?.items[0]).toMatchObject({
+        status: "failed",
+        error: "Can't replace “X” because it contains the item being pasted.",
+      });
+      expect(await readFile(join(outer, "X", "a.txt"), "utf8")).toBe("inner");
+      expect(await readFile(join(outer, "other.txt"), "utf8")).toBe("other");
+      expect(await readdir(trashDir)).toEqual([]);
+    },
+  );
+
   it("refuses to replace a folder with a file it contains", async () => {
     const outer = join(testDir, "foo");
     await mkdir(outer);
@@ -231,32 +260,72 @@ describe("copy/paste conflict safety (real filesystem)", () => {
     expect(await exists(join(source, "notes.txt"))).toBe(false);
   });
 
-  it("keeps the existing item when it can't be moved to the Trash", async () => {
-    const source = join(testDir, "source");
-    const target = join(testDir, "target");
-    await mkdir(source);
-    await mkdir(target);
-    await writeFile(join(source, "notes.txt"), "new notes");
-    await writeFile(join(target, "notes.txt"), "old notes");
+  it.each([
+    ["skip", "old notes"],
+    ["overwrite", "new notes"],
+  ] as const)(
+    "asks before deleting permanently when the Trash is unavailable (%s)",
+    async (answer, expectedContent) => {
+      const source = join(testDir, "source");
+      const target = join(testDir, "target");
+      await mkdir(source);
+      await mkdir(target);
+      await writeFile(join(source, "notes.txt"), "new notes");
+      await writeFile(join(target, "notes.txt"), "old notes");
 
-    const { result } = await paste({
+      const { result, conflicts } = await paste({
+        mode: "copy",
+        sourcePaths: [join(source, "notes.txt")],
+        destinationDirectoryPath: target,
+        policy: REPLACE_ALL,
+        fileSystem: {
+          ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+          trash: async () => {
+            throw new Error("no Trash on this volume");
+          },
+        },
+        resolve: () => answer,
+      });
+
+      expect(conflicts.map((conflict) => conflict.reason)).toEqual(["trash_unavailable"]);
+      expect(result?.items[0]?.status).toBe(answer === "skip" ? "skipped" : "completed");
+      expect(await readFile(join(target, "notes.txt"), "utf8")).toBe(expectedContent);
+      expect(await readFile(join(source, "notes.txt"), "utf8")).toBe("new notes");
+      // The hidden copy the replacement was built under never stays behind.
+      expect(await readdir(target)).toEqual(["notes.txt"]);
+    },
+  );
+  it("never shows the hidden name a replacement is built under", async () => {
+    const source = join(testDir, "source", "photos");
+    const target = join(testDir, "target");
+    await mkdir(source, { recursive: true });
+    await mkdir(join(target, "photos"), { recursive: true });
+    await writeFile(join(source, "a.jpg"), "a");
+    await writeFile(join(target, "photos", "old.jpg"), "old");
+
+    const events: CopyPasteProgressEvent[] = [];
+    const { result, conflicts } = await paste({
       mode: "copy",
-      sourcePaths: [join(source, "notes.txt")],
+      sourcePaths: [source],
       destinationDirectoryPath: target,
       policy: REPLACE_ALL,
-      fileSystem: {
-        ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
-        trash: async () => {
-          throw new Error("no Trash on this volume");
-        },
-      },
+      // Changing a file inside after review asks about it while the hidden copy is built.
+      beforeExecute: () => writeFile(join(source, "a.jpg"), "changed after review"),
+      resolve: () => "overwrite",
+      onEvent: (event) => events.push(event),
     });
 
-    expect(result?.items[0]).toMatchObject({
-      status: "failed",
-      error: "Couldn't move the existing “notes.txt” to the Trash: no Trash on this volume",
-    });
-    expect(await readFile(join(target, "notes.txt"), "utf8")).toBe("old notes");
+    expect(conflicts.map((conflict) => conflict.reason)).toEqual(["source_changed"]);
+    const shownPaths = events.flatMap((event) => [
+      event.currentDestinationPath,
+      event.runtimeConflict?.destinationPath,
+    ]);
+    expect(shownPaths.filter((path) => path?.includes(".filetrail-"))).toEqual([]);
+    expect(events.find((event) => event.runtimeConflict)?.runtimeConflict?.destinationPath).toBe(
+      join(target, "photos", "a.jpg"),
+    );
+    expect(result?.status).toBe("completed");
+    expect(await readdir(join(target, "photos"))).toEqual(["a.jpg"]);
   });
 
   it("asks again when an item to be replaced changed after review", async () => {
@@ -423,6 +492,357 @@ describe("copy/paste conflict safety (real filesystem)", () => {
     expect(result?.status).not.toBe("failed");
     expect(await readFile(join(target, "D copy", "c.txt"), "utf8")).toBe("someone else's c");
     expect(await readFile(join(target, "D copy", "c copy.txt"), "utf8")).toBe("new c");
+  });
+
+  it("asks rather than deleting permanently when there is no Trash at all", async () => {
+    const source = join(testDir, "source");
+    const target = join(testDir, "target");
+    await mkdir(source);
+    await mkdir(target);
+    await writeFile(join(source, "notes.txt"), "new notes");
+    await writeFile(join(target, "notes.txt"), "old notes");
+
+    const { result, conflicts } = await paste({
+      mode: "copy",
+      sourcePaths: [join(source, "notes.txt")],
+      destinationDirectoryPath: target,
+      policy: REPLACE_ALL,
+      fileSystem: DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+      resolve: () => null,
+    });
+
+    expect(conflicts.map((conflict) => conflict.reason)).toEqual(["trash_unavailable"]);
+    expect(result?.items[0]?.status).toBe("failed");
+    expect(await readFile(join(target, "notes.txt"), "utf8")).toBe("old notes");
+    expect(await readdir(target)).toEqual(["notes.txt"]);
+  });
+
+  it("keeps the existing file in place when the replacement can't be written", async () => {
+    const source = join(testDir, "source");
+    const target = join(testDir, "target");
+    await mkdir(source);
+    await mkdir(target);
+    await writeFile(join(source, "notes.txt"), "new notes");
+    await writeFile(join(target, "notes.txt"), "old notes");
+    const trashed: string[] = [];
+
+    const { result } = await paste({
+      mode: "copy",
+      sourcePaths: [join(source, "notes.txt")],
+      destinationDirectoryPath: target,
+      policy: REPLACE_ALL,
+      fileSystem: {
+        ...fileSystemWithTrash,
+        copyFileStream: async (_sourcePath, destinationPath) => {
+          // The disk fills up half way through.
+          await writeFile(destinationPath, "new no");
+          throw Object.assign(new Error("ENOSPC: no space left on device"), { code: "ENOSPC" });
+        },
+        trash: async (path) => {
+          trashed.push(path);
+          await fileSystemWithTrash.trash?.(path);
+        },
+      },
+    });
+
+    expect(result?.items[0]).toMatchObject({
+      status: "failed",
+      error: "There isn't enough free space on the destination disk.",
+    });
+    expect(trashed).toEqual([]);
+    expect(await readFile(join(target, "notes.txt"), "utf8")).toBe("old notes");
+    expect(await readdir(target)).toEqual(["notes.txt"]);
+  });
+
+  it("keeps the existing folder when items inside the replacement can't be copied", async () => {
+    const source = join(testDir, "source");
+    const target = join(testDir, "target");
+    await mkdir(join(source, "docs"), { recursive: true });
+    await mkdir(join(target, "docs"), { recursive: true });
+    await writeFile(join(source, "docs", "a.txt"), "new a");
+    await writeFile(join(source, "docs", "b.txt"), "new b");
+    await writeFile(join(target, "docs", "keep.txt"), "existing work");
+    await chmod(join(source, "docs", "a.txt"), 0o000);
+
+    try {
+      const { result } = await paste({
+        mode: "copy",
+        sourcePaths: [join(source, "docs")],
+        destinationDirectoryPath: target,
+        policy: REPLACE_ALL,
+      });
+
+      expect(result?.status).toBe("failed");
+      expect(result?.items[0]).toMatchObject({
+        status: "failed",
+        error: "“docs” wasn't replaced because some items inside couldn't be copied.",
+        childFailureCount: 1,
+      });
+      expect(result?.items.map((item) => [basename(item.sourcePath), item.status])).toEqual([
+        ["docs", "failed"],
+        ["a.txt", "failed"],
+      ]);
+      expect(await readdir(trashDir)).toEqual([]);
+      expect(await readdir(join(target, "docs"))).toEqual(["keep.txt"]);
+      expect(await readdir(target)).toEqual(["docs"]);
+    } finally {
+      await chmod(join(source, "docs", "a.txt"), 0o644);
+    }
+  });
+
+  it("moves a replacing folder back when the Trash is unavailable and the person skips", async () => {
+    const source = join(testDir, "source");
+    const target = join(testDir, "target");
+    await mkdir(join(source, "docs"), { recursive: true });
+    await mkdir(join(target, "docs"), { recursive: true });
+    await writeFile(join(source, "docs", "a.txt"), "new a");
+    await writeFile(join(target, "docs", "keep.txt"), "existing work");
+    const sourceIno = (await stat(join(source, "docs"))).ino;
+
+    const skipped = await paste({
+      mode: "cut",
+      sourcePaths: [join(source, "docs")],
+      destinationDirectoryPath: target,
+      policy: REPLACE_ALL,
+      fileSystem: {
+        ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+        trash: async () => {
+          throw new Error("no Trash on this volume");
+        },
+      },
+      resolve: () => "skip",
+    });
+
+    expect(skipped.conflicts.map((conflict) => conflict.reason)).toEqual(["trash_unavailable"]);
+    expect(skipped.result?.items[0]?.status).toBe("skipped");
+    // Moved to a hidden name by rename, then moved back: still the same folder.
+    expect((await stat(join(source, "docs"))).ino).toBe(sourceIno);
+    expect(await readFile(join(source, "docs", "a.txt"), "utf8")).toBe("new a");
+    expect(await readdir(join(target, "docs"))).toEqual(["keep.txt"]);
+    expect(await readdir(target)).toEqual(["docs"]);
+
+    const replaced = await paste({
+      mode: "cut",
+      sourcePaths: [join(source, "docs")],
+      destinationDirectoryPath: target,
+      policy: REPLACE_ALL,
+      fileSystem: {
+        ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+        trash: async () => {
+          throw new Error("no Trash on this volume");
+        },
+      },
+      resolve: () => "overwrite",
+    });
+
+    expect(replaced.result?.status).toBe("completed");
+    expect(await exists(join(source, "docs"))).toBe(false);
+    expect(await readdir(join(target, "docs"))).toEqual(["a.txt"]);
+  });
+
+  it("replaces a folder with one moved from another disk, removing the originals last", async () => {
+    const source = join(testDir, "source");
+    const target = join(testDir, "target");
+    await mkdir(join(source, "docs", "sub"), { recursive: true });
+    await mkdir(join(target, "docs"), { recursive: true });
+    await writeFile(join(source, "docs", "a.txt"), "new a");
+    await writeFile(join(source, "docs", "sub", "b.txt"), "new b");
+    await writeFile(join(target, "docs", "keep.txt"), "existing work");
+    const sourceSeenAtSwap: string[] = [];
+
+    const { result } = await paste({
+      mode: "cut",
+      sourcePaths: [join(source, "docs")],
+      destinationDirectoryPath: target,
+      policy: REPLACE_ALL,
+      fileSystem: {
+        ...fileSystemWithTrash,
+        // Behaves like another disk: nothing under "source" can be renamed away.
+        renameExclusive: async (from, to) => {
+          if (from.startsWith(`${source}/`)) {
+            throw Object.assign(new Error("EXDEV"), { code: "EXDEV" });
+          }
+          sourceSeenAtSwap.push(...(await readdir(join(source, "docs"))));
+          await rename(from, to);
+        },
+      },
+    });
+
+    expect(result?.status).toBe("completed");
+    // The originals were all still there when the copy took the existing folder's place.
+    expect(sourceSeenAtSwap.sort()).toEqual(["a.txt", "sub"]);
+    expect(await exists(join(source, "docs"))).toBe(false);
+    expect(await readFile(join(target, "docs", "a.txt"), "utf8")).toBe("new a");
+    expect(await readFile(join(target, "docs", "sub", "b.txt"), "utf8")).toBe("new b");
+    expect(await readFile(join(trashDir, "docs", "keep.txt"), "utf8")).toBe("existing work");
+    expect(await readdir(target)).toEqual(["docs"]);
+  });
+
+  it("keeps a moved folder whose items were skipped while merging", async () => {
+    const source = join(testDir, "source");
+    const target = join(testDir, "target");
+    await mkdir(join(source, "D"), { recursive: true });
+    await mkdir(join(target, "D"), { recursive: true });
+    await writeFile(join(source, "D", "a.txt"), "new a");
+    await writeFile(join(source, "D", "b.txt"), "new b");
+    await writeFile(join(target, "D", "a.txt"), "old a");
+
+    const { result } = await paste({
+      mode: "cut",
+      sourcePaths: [join(source, "D")],
+      destinationDirectoryPath: target,
+      policy: { file: "skip", directory: "merge", mismatch: "skip" },
+    });
+
+    expect(result?.status).toBe("partial");
+    expect(await readdir(join(source, "D"))).toEqual(["a.txt"]);
+    expect(await readFile(join(target, "D", "a.txt"), "utf8")).toBe("old a");
+    expect(await readFile(join(target, "D", "b.txt"), "utf8")).toBe("new b");
+  });
+
+  it("asks instead of moving over an item that appears at the last moment", async () => {
+    const source = join(testDir, "source");
+    const target = join(testDir, "target");
+    await mkdir(source);
+    await mkdir(target);
+    await writeFile(join(source, "x.txt"), "moved");
+
+    const { result, conflicts } = await paste({
+      mode: "cut",
+      sourcePaths: [join(source, "x.txt")],
+      destinationDirectoryPath: target,
+      policy: REPLACE_ALL,
+      fileSystem: {
+        ...fileSystemWithTrash,
+        // Someone saves "x.txt" right before the move.
+        mkdir: async (path, options) => {
+          await DEFAULT_WRITE_SERVICE_FILE_SYSTEM.mkdir(path, options);
+          if (path === target && !(await exists(join(target, "x.txt")))) {
+            await writeFile(join(target, "x.txt"), "someone else's");
+          }
+        },
+      },
+      resolve: () => "skip",
+    });
+
+    expect(conflicts.map((conflict) => conflict.reason)).toEqual(["destination_created"]);
+    expect(result?.items[0]?.status).toBe("skipped");
+    expect(await readFile(join(target, "x.txt"), "utf8")).toBe("someone else's");
+    expect(await readFile(join(source, "x.txt"), "utf8")).toBe("moved");
+  });
+
+  it("doesn't ask again when only a folder's timestamp changed (Finder's .DS_Store)", async () => {
+    const source = join(testDir, "source");
+    const target = join(testDir, "target");
+    await mkdir(join(source, "docs"), { recursive: true });
+    await mkdir(join(target, "docs"), { recursive: true });
+    await writeFile(join(source, "docs", "a.txt"), "new a");
+
+    const { result, conflicts } = await paste({
+      mode: "copy",
+      sourcePaths: [join(source, "docs")],
+      destinationDirectoryPath: target,
+      policy: REPLACE_ALL,
+      beforeExecute: async () => {
+        await writeFile(join(target, "docs", ".DS_Store"), "finder");
+        const later = new Date(Date.now() + 60_000);
+        await utimes(join(target, "docs"), later, later);
+      },
+    });
+
+    expect(conflicts).toEqual([]);
+    expect(result?.status).toBe("completed");
+    expect(await readdir(join(target, "docs"))).toEqual(["a.txt"]);
+  });
+
+  it.each([
+    ["overwrite", ["a.txt"]],
+    ["skip", null],
+  ] as const)(
+    "asks when the folder to merge into was deleted (%s)",
+    async (answer, expectedEntries) => {
+      const source = join(testDir, "source");
+      const target = join(testDir, "target");
+      await mkdir(join(source, "D"), { recursive: true });
+      await mkdir(join(target, "D"), { recursive: true });
+      await writeFile(join(source, "D", "a.txt"), "new a");
+
+      const { result, conflicts } = await paste({
+        mode: "copy",
+        sourcePaths: [join(source, "D")],
+        destinationDirectoryPath: target,
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        beforeExecute: () => rm(join(target, "D"), { recursive: true }),
+        resolve: () => answer,
+      });
+
+      expect(conflicts.map((conflict) => conflict.reason)).toEqual(["destination_deleted"]);
+      expect(conflicts[0]?.currentDestinationFingerprint.exists).toBe(false);
+      expect(result?.items[0]?.status).toBe(answer === "skip" ? "skipped" : "completed");
+      if (expectedEntries === null) {
+        expect(await exists(join(target, "D"))).toBe(false);
+      } else {
+        expect(await readdir(join(target, "D"))).toEqual(expectedEntries);
+      }
+    },
+  );
+
+  it("reports a folder whose every item failed as failed, with the count", async () => {
+    const source = join(testDir, "source");
+    const target = join(testDir, "target");
+    await mkdir(join(source, "docs"), { recursive: true });
+    await mkdir(target);
+    await writeFile(join(source, "docs", "a.txt"), "a");
+    await writeFile(join(source, "docs", "b.txt"), "b");
+    await chmod(join(source, "docs", "a.txt"), 0o000);
+    await chmod(join(source, "docs", "b.txt"), 0o000);
+
+    try {
+      const { result } = await paste({
+        mode: "copy",
+        sourcePaths: [join(source, "docs")],
+        destinationDirectoryPath: target,
+        policy: REPLACE_ALL,
+      });
+
+      expect(result?.status).toBe("failed");
+      expect(result?.items[0]).toMatchObject({
+        status: "failed",
+        error: null,
+        childFailureCount: 2,
+      });
+    } finally {
+      await chmod(join(source, "docs", "a.txt"), 0o644);
+      await chmod(join(source, "docs", "b.txt"), 0o644);
+    }
+  });
+
+  it("keeps what was already done inside a folder when the paste is stopped", async () => {
+    const source = join(testDir, "source");
+    const target = join(testDir, "target");
+    await mkdir(join(source, "docs"), { recursive: true });
+    await mkdir(target);
+    for (const name of ["a.txt", "b.txt", "c.txt"]) {
+      await writeFile(join(source, "docs", name), name);
+    }
+
+    const { result } = await paste({
+      mode: "copy",
+      sourcePaths: [join(source, "docs")],
+      destinationDirectoryPath: target,
+      policy: REPLACE_ALL,
+      onEvent: (event, controller) => {
+        if (event.status === "running" && event.currentSourcePath?.endsWith("a.txt")) {
+          controller.abort();
+        }
+      },
+    });
+
+    expect(result?.status).toBe("partial");
+    expect(result?.items.map((item) => [basename(item.sourcePath), item.status])).toEqual([
+      ["docs", "cancelled"],
+      ["a.txt", "completed"],
+    ]);
   });
 
   it("gives a Keep Both copy a name no other pasted item uses", async () => {

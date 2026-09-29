@@ -64,6 +64,9 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
   renameImpl: NonNullable<WriteServiceFileSystem["rename"]> | null = null;
   mkdirImpl: WriteServiceFileSystem["mkdir"] | null = null;
   rmImpl: WriteServiceFileSystem["rm"] | null = null;
+  rmdirImpl: WriteServiceFileSystem["rmdir"] | null = null;
+  // The macOS default; tests of case-sensitive volumes set this to true.
+  caseSensitive = false;
   symlinkImpl: WriteServiceFileSystem["symlink"] | null = null;
   readlinkImpl: WriteServiceFileSystem["readlink"] | null = null;
   lstatImpl: WriteServiceFileSystem["lstat"] | null = null;
@@ -186,11 +189,56 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
     this.nodes.delete(path);
   }
 
+  async rmdir(path: string): Promise<void> {
+    if (this.rmdirImpl) {
+      return this.rmdirImpl(path);
+    }
+    const node = this.getNodeOrThrow(path);
+    if (node.kind !== "directory") {
+      throw createFsError("ENOTDIR", path);
+    }
+    if (this.listChildren(path).length > 0) {
+      throw createFsError("ENOTEMPTY", path);
+    }
+    this.nodes.delete(normalizePath(path));
+  }
+
+  async isCaseSensitive(_path: string): Promise<boolean | null> {
+    return this.caseSensitive;
+  }
+
+  /** Enables the `trash` method; trashed items are kept in `trashed`. */
+  readonly trashed: string[] = [];
+  trashImpl: NonNullable<WriteServiceFileSystem["trash"]> | null = null;
+  enableTrash(): void {
+    const trashFn = async (path: string): Promise<void> => {
+      if (this.trashImpl) {
+        return this.trashImpl(path);
+      }
+      this.getNodeOrThrow(path);
+      for (const candidate of Array.from(this.nodes.keys())) {
+        if (candidate === normalizePath(path) || candidate.startsWith(`${normalizePath(path)}/`)) {
+          this.nodes.delete(candidate);
+        }
+      }
+      this.trashed.push(normalizePath(path));
+    };
+    Object.defineProperty(this, "trash", {
+      value: trashFn,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  }
+
   async symlink(target: string, path: string): Promise<void> {
     if (this.symlinkImpl) {
       return this.symlinkImpl(target, path);
     }
     this.ensureDirectory(dirname(path), true);
+    if (this.nodes.has(normalizePath(path))) {
+      throw createFsError("EEXIST", path);
+    }
     this.nodes.set(normalizePath(path), this.createNode({ kind: "symlink", target }));
   }
 
@@ -255,6 +303,9 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
         throw createFsError("EISDIR", sourcePath);
       }
       this.ensureDirectory(dirname(destinationPath), true);
+      if (this.nodes.has(normalizePath(destinationPath))) {
+        throw createFsError("EEXIST", destinationPath);
+      }
       this.nodes.set(
         normalizePath(destinationPath),
         this.createNode({
@@ -323,6 +374,9 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
       throw new Error(`Cannot stream-copy non-file source: ${sourcePath}`);
     }
     this.ensureDirectory(dirname(destinationPath), true);
+    if (this.nodes.has(normalizePath(destinationPath))) {
+      throw createFsError("EEXIST", destinationPath);
+    }
     this.nodes.set(
       normalizePath(destinationPath),
       this.createNode({
@@ -396,7 +450,10 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
     const existing = this.nodes.get(normalized);
     if (existing) {
       if (existing.kind !== "directory") {
-        throw createFsError("ENOTDIR", normalized);
+        throw createFsError(recursive ? "ENOTDIR" : "EEXIST", normalized);
+      }
+      if (!recursive) {
+        throw createFsError("EEXIST", normalized);
       }
       return;
     }

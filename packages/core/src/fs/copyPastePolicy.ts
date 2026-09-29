@@ -13,7 +13,16 @@ import type {
 } from "./writeServiceTypes";
 
 type OverrideMap = ReadonlyMap<string, CopyPasteRuntimeResolutionAction>;
-const NO_OVERRIDES: OverrideMap = new Map();
+
+type ResolveContext = {
+  policy: CopyPastePolicy | null;
+  overrides: OverrideMap;
+  fileSystem: WriteServiceFileSystem;
+  caseSensitive: boolean;
+  // Names claimed across the whole paste (keyed by `destinationPathKey`), when resolving
+  // one item while the paste is running; null resolves each folder's items on their own.
+  operationReservedPaths: Set<string> | null;
+};
 
 export type ResolvedCopyPasteNode = {
   node: CopyPasteAnalysisNode;
@@ -29,36 +38,71 @@ export async function resolveAnalysisWithPolicy(args: {
   overrides?: CopyPasteNodeOverride[];
   fileSystem: WriteServiceFileSystem;
 }): Promise<ResolvedCopyPasteNode[]> {
-  const overrides: OverrideMap = new Map(
-    (args.overrides ?? []).map((override) => [override.nodeId, override.action]),
-  );
   return resolveSiblings(
     args.report.nodes,
-    args.policy,
-    overrides,
-    args.fileSystem,
+    {
+      policy: args.policy,
+      overrides: toOverrideMap(args.overrides),
+      fileSystem: args.fileSystem,
+      caseSensitive: args.report.destinationCaseSensitive ?? false,
+      operationReservedPaths: null,
+    },
     undefined,
     null,
   );
 }
 
+// Re-resolves one item with the answer given while the paste runs.
 export async function resolveSingleNodeWithAction(args: {
   node: CopyPasteAnalysisNode;
   action: CopyPasteRuntimeResolutionAction;
   // The paste's policy, used for nested conflicts when the action is "merge".
   policy: CopyPastePolicy | null;
+  // The review's per-item choices, which still apply to the items inside a merged folder.
+  overrides?: CopyPasteNodeOverride[];
   fileSystem: WriteServiceFileSystem;
+  caseSensitive?: boolean;
+  // Every name this paste has planned or already written (keyed by `destinationPathKey`),
+  // so a "Keep Both" copy never takes a name another item will use. New names are added.
+  reservedPaths?: Set<string>;
 }): Promise<ResolvedCopyPasteNode> {
-  return resolveNode(args.node, args.policy, NO_OVERRIDES, args.fileSystem, new Set(), args.action);
+  const reservedPaths = args.reservedPaths ?? new Set<string>();
+  return resolveNode(
+    args.node,
+    {
+      policy: args.policy,
+      overrides: toOverrideMap(args.overrides),
+      fileSystem: args.fileSystem,
+      caseSensitive: args.caseSensitive ?? false,
+      operationReservedPaths: reservedPaths,
+    },
+    reservedPaths,
+    args.action,
+  );
+}
+
+// The keys of every destination a resolved paste will write to.
+export function collectDestinationPathKeys(
+  nodes: ResolvedCopyPasteNode[],
+  caseSensitive: boolean,
+  into: Set<string> = new Set(),
+): Set<string> {
+  for (const node of nodes) {
+    into.add(destinationPathKey(node.destinationPath, caseSensitive));
+    collectDestinationPathKeys(node.children, caseSensitive, into);
+  }
+  return into;
+}
+
+function toOverrideMap(overrides: CopyPasteNodeOverride[] | undefined): OverrideMap {
+  return new Map((overrides ?? []).map((override) => [override.nodeId, override.action]));
 }
 
 // Resolves the items of one destination folder. Items keeping their own name claim it
 // first, so a "Keep Both" copy never picks a name another item of this paste will use.
 async function resolveSiblings(
   nodes: CopyPasteAnalysisNode[],
-  policy: CopyPastePolicy | null,
-  overrides: OverrideMap,
-  fileSystem: WriteServiceFileSystem,
+  context: ResolveContext,
   explicitAction: ResolvedCopyPasteNode["action"] | undefined,
   parentDestinationPath: string | null,
 ): Promise<ResolvedCopyPasteNode[]> {
@@ -66,18 +110,17 @@ async function resolveSiblings(
     parentDestinationPath === null
       ? node.destinationPath
       : joinChildDestinationPath(parentDestinationPath, node.sourcePath);
-  const reservedPaths = new Set<string>();
+  // Keys are whole paths, so one set can serve every folder of a running paste.
+  const reservedPaths = context.operationReservedPaths ?? new Set<string>();
   for (const node of nodes) {
-    reservedPaths.add(destinationPathKey(destinationPathFor(node)));
+    reservedPaths.add(destinationPathKey(destinationPathFor(node), context.caseSensitive));
   }
   const resolved: ResolvedCopyPasteNode[] = [];
   for (const node of nodes) {
     resolved.push(
       await resolveNode(
         node,
-        policy,
-        overrides,
-        fileSystem,
+        context,
         reservedPaths,
         explicitAction,
         parentDestinationPath === null ? undefined : destinationPathFor(node),
@@ -89,13 +132,12 @@ async function resolveSiblings(
 
 async function resolveNode(
   node: CopyPasteAnalysisNode,
-  policy: CopyPastePolicy | null,
-  overrides: OverrideMap,
-  fileSystem: WriteServiceFileSystem,
+  context: ResolveContext,
   reservedPaths: Set<string>,
   explicitAction?: ResolvedCopyPasteNode["action"],
   destinationPathOverride?: string,
 ): Promise<ResolvedCopyPasteNode> {
+  const { policy, overrides } = context;
   const baseDestinationPath = destinationPathOverride ?? node.destinationPath;
   const override = node.conflictClass === null ? undefined : overrides.get(node.id);
   let action: ResolvedCopyPasteNode["action"];
@@ -130,10 +172,11 @@ async function resolveNode(
     destinationPath = await resolveDuplicateName(
       basename(node.sourcePath),
       dirname(baseDestinationPath),
-      fileSystem,
+      context.fileSystem,
       reservedPaths,
+      { isDirectory: node.sourceKind === "directory", caseSensitive: context.caseSensitive },
     );
-    reservedPaths.add(destinationPathKey(destinationPath));
+    reservedPaths.add(destinationPathKey(destinationPath, context.caseSensitive));
   }
 
   // "overwrite" keeps the destination state seen at review time so execution can
@@ -168,14 +211,7 @@ async function resolveNode(
       : action === "merge" || action === "create"
         ? undefined
         : action;
-  const children = await resolveSiblings(
-    node.children,
-    policy,
-    overrides,
-    fileSystem,
-    childAction,
-    destinationPath,
-  );
+  const children = await resolveSiblings(node.children, context, childAction, destinationPath);
 
   return {
     node: normalizedNode,

@@ -485,6 +485,7 @@ function capActionLogItems(
     status: string;
     error: string | null;
     skipReason?: string | null | undefined;
+    childFailureCount?: number | undefined;
   }>,
 ): ActionLogItem[] {
   const mapped = items.map((item) => ({
@@ -494,6 +495,9 @@ function capActionLogItems(
     status: item.status as ActionLogItem["status"],
     error: item.error,
     skipReason: (item.skipReason ?? null) as ActionLogItem["skipReason"],
+    // A folder that "failed" only because of items inside it has no error of its own;
+    // the count is what explains the failure in the log.
+    ...(item.childFailureCount !== undefined ? { childFailureCount: item.childFailureCount } : {}),
   }));
   if (mapped.length <= MAX_ACTION_LOG_ITEMS) {
     return mapped;

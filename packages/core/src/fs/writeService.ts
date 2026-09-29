@@ -1,4 +1,8 @@
-import { getRuntimeConflictChoices, isAbortError } from "@filetrail/contracts";
+import {
+  getRuntimeConflictChoices,
+  getRuntimeConflictScope,
+  isAbortError,
+} from "@filetrail/contracts";
 
 import {
   buildCopyPasteAnalysisReport,
@@ -18,6 +22,7 @@ import {
   type CopyPastePlan,
   type CopyPasteProgressEvent,
   type CopyPasteRequest,
+  type CopyPasteRuntimeConflict,
   type CopyPasteRuntimeResolutionAction,
   DEFAULT_COPY_PASTE_POLICY,
   DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
@@ -77,9 +82,28 @@ type AnalysisJob = {
 };
 
 type PendingResolution = {
-  conflictId: string;
+  conflict: CopyPasteRuntimeConflict;
   resolve: (action: CopyPasteRuntimeResolutionAction | null) => void;
 };
+
+// The answers that make sense for a conflict as it is on disk now.
+export function getAllowedRuntimeResolutions(
+  conflict: CopyPasteRuntimeConflict,
+): CopyPasteRuntimeResolutionAction[] {
+  return getRuntimeConflictChoices({
+    reason: conflict.reason,
+    conflictClass: conflict.conflictClass,
+    destinationExists: conflict.currentDestinationFingerprint.exists,
+  });
+}
+
+function runtimeConflictScope(conflict: CopyPasteRuntimeConflict): string {
+  return getRuntimeConflictScope({
+    reason: conflict.reason,
+    conflictClass: conflict.conflictClass,
+    destinationExists: conflict.currentDestinationFingerprint.exists,
+  });
+}
 
 export class WriteService {
   private readonly fileSystem: WriteServiceFileSystem;
@@ -92,8 +116,12 @@ export class WriteService {
   private readonly controllers = new Map<string, AbortController>();
   private readonly analysisJobs = new Map<string, AnalysisJob>();
   private readonly pendingResolutions = new Map<string, PendingResolution>();
-  // Answers given "for the rest of this operation", by operation.
-  private readonly standingResolutions = new Map<string, CopyPasteRuntimeResolutionAction>();
+  // Answers given "for the rest of this operation", by operation, then by the kind of
+  // conflict they answered (`getRuntimeConflictScope`).
+  private readonly standingResolutions = new Map<
+    string,
+    Map<string, CopyPasteRuntimeResolutionAction>
+  >();
   private activeOperationId: string | null = null;
   private sequence = 0;
   private analysisSequence = 0;
@@ -232,12 +260,18 @@ export class WriteService {
     applyToRemaining = false,
   ): { ok: boolean } {
     const pending = this.pendingResolutions.get(operationId);
-    if (!pending || pending.conflictId !== conflictId) {
+    if (!pending || pending.conflict.conflictId !== conflictId) {
+      return { ok: false };
+    }
+    // An answer this conflict doesn't offer is refused; the question stays open.
+    if (!getAllowedRuntimeResolutions(pending.conflict).includes(action)) {
       return { ok: false };
     }
     this.pendingResolutions.delete(operationId);
     if (applyToRemaining) {
-      this.standingResolutions.set(operationId, action);
+      const standing = this.standingResolutions.get(operationId) ?? new Map();
+      standing.set(runtimeConflictScope(pending.conflict), action);
+      this.standingResolutions.set(operationId, standing);
     }
     pending.resolve(action);
     return { ok: true };
@@ -326,25 +360,29 @@ export class WriteService {
         report: analysisJob.report,
         mode: analysisJob.report.mode,
         policy: request.policy,
+        ...(request.overrides ? { overrides: request.overrides } : {}),
         fileSystem: this.fileSystem,
         now: this.now,
         signal: controller.signal,
         resolvedNodes,
         emit: (event) => this.emit(event),
+        // Only an answer given for the same kind of conflict, and one that makes sense
+        // for this conflict, is reused.
         autoResolve: (conflict) => {
-          const standing = this.standingResolutions.get(operationId);
-          return standing !== undefined && getRuntimeConflictChoices(conflict).includes(standing)
+          const standing = this.standingResolutions
+            .get(operationId)
+            ?.get(runtimeConflictScope(conflict));
+          return standing !== undefined && getAllowedRuntimeResolutions(conflict).includes(standing)
             ? standing
             : null;
         },
+        // Registers the question synchronously, before the progress event announcing it
+        // goes out, so an answer given from that event is not lost.
         requestResolution: (conflict) =>
           analysisJob.legacyConflictResolution === "error"
             ? Promise.resolve(null)
             : new Promise<CopyPasteRuntimeResolutionAction | null>((resolve) => {
-                this.pendingResolutions.set(operationId, {
-                  conflictId: conflict.conflictId,
-                  resolve,
-                });
+                this.pendingResolutions.set(operationId, { conflict, resolve });
               }),
       });
     } catch (error) {

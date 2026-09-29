@@ -169,7 +169,9 @@ describe("copy/paste review data (real filesystem)", () => {
       signal: new AbortController().signal,
       resolvedNodes,
       emit: () => undefined,
-      requestResolution: async () => null,
+      // No Trash in this file system: replacing "a.txt" asks before deleting it.
+      requestResolution: async (conflict) =>
+        conflict.reason === "trash_unavailable" ? "overwrite" : null,
     });
     expect(await readFile(join(target, "a.txt"), "utf8")).toBe("new a.txt");
     expect(await readFile(join(target, "b.txt"), "utf8")).toBe("old b.txt");

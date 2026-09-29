@@ -34,6 +34,8 @@
 #include <sys/vnode.h>
 #include <unistd.h>
 
+#include "native_errors.h"
+
 #define BULK_BUF_SIZE (256 * 1024)
 #define NUM_THREADS 4
 
@@ -740,31 +742,7 @@ static void complete_folder_size(napi_env env, napi_status status, void *data) {
 
     napi_reject_deferred(env, w->deferred, error);
   } else if (w->errnum != 0) {
-    const char *code;
-    switch (w->errnum) {
-    case ENOENT:  code = "ENOENT";  break;
-    case EACCES:  code = "EACCES";  break;
-    case EPERM:   code = "EPERM";   break;
-    case ENOTDIR: code = "ENOTDIR"; break;
-    case ENOMEM:  code = "ENOMEM";  break;
-    default:      code = "UNKNOWN"; break;
-    }
-
-    char msg[512];
-    snprintf(msg, sizeof(msg), "%s: folder size '%s'", code, w->root_path);
-
-    napi_value err_msg;
-    napi_create_string_utf8(env, msg, NAPI_AUTO_LENGTH, &err_msg);
-    napi_value error;
-    napi_create_error(env, NULL, err_msg, &error);
-
-    napi_value code_val;
-    napi_create_string_utf8(env, code, NAPI_AUTO_LENGTH, &code_val);
-    napi_set_named_property(env, error, "code", code_val);
-
-    napi_value path_val;
-    napi_create_string_utf8(env, w->root_path, NAPI_AUTO_LENGTH, &path_val);
-    napi_set_named_property(env, error, "path", path_val);
+    napi_value error = native_errno_error(env, w->errnum, "folder size", w->root_path, NULL);
 
     napi_reject_deferred(env, w->deferred, error);
   } else {

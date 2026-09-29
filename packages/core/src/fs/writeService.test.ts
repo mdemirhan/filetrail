@@ -481,6 +481,9 @@ describe("writeService", () => {
       rm: async (p, o) => {
         await ofs.promises.rm(p, o);
       },
+      rmdir: async (p) => {
+        await ofs.promises.rmdir(p);
+      },
       symlink: async (t, p) => {
         await ofs.promises.symlink(t, p);
       },
@@ -659,6 +662,10 @@ function createMockFileSystem(args: {
       directoryPaths.add(path);
     }),
     rm: vi.fn(async (path) => {
+      existingPaths.delete(path);
+      directoryPaths.delete(path);
+    }),
+    rmdir: vi.fn(async (path) => {
       existingPaths.delete(path);
       directoryPaths.delete(path);
     }),

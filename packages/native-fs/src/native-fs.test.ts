@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -185,5 +193,94 @@ describe("nativeFolderSize wrapper (single-flight)", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe("nativeCopyFile errors", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "native-fs-copy-"));
+    writeFileSync(join(root, "a.txt"), "new");
+    writeFileSync(join(root, "b.txt"), "existing");
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("never writes over an existing destination", async () => {
+    await expect(
+      addon.nativeCopyFile(join(root, "a.txt"), join(root, "b.txt")),
+    ).rejects.toMatchObject({ code: "EEXIST", syscall: "copyfile" });
+    expect(readFileSync(join(root, "b.txt"), "utf8")).toBe("existing");
+  });
+
+  it("names the errno and keeps long paths whole in the message", async () => {
+    const longDestination = join(root, "missing-folder", "x".repeat(200), "y".repeat(200));
+    const error = await addon.nativeCopyFile(join(root, "a.txt"), longDestination).then(
+      () => null,
+      (reason: unknown) => reason as NodeJS.ErrnoException & { dest: string },
+    );
+
+    expect(error).toMatchObject({ code: "ENOENT", dest: longDestination });
+    expect(error?.message).toContain(longDestination);
+  });
+
+  it("reports errnos that used to be UNKNOWN by name", async () => {
+    // A file used as a folder in the destination path.
+    await expect(
+      addon.nativeCopyFile(join(root, "a.txt"), join(root, "b.txt", "c.txt")),
+    ).rejects.toMatchObject({ code: "ENOTDIR" });
+  });
+});
+
+describe("nativeRenameExclusive", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "native-fs-rename-"));
+    writeFileSync(join(root, "a.txt"), "moved");
+    writeFileSync(join(root, "b.txt"), "existing");
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it.each([
+    ["addon", () => addon.nativeRenameExclusive],
+    ["wrapper", () => wrapper.nativeRenameExclusive],
+  ])("moves an item without replacing anything (%s)", async (_label, getRename) => {
+    const renameExclusive = getRename();
+    await expect(renameExclusive(join(root, "a.txt"), join(root, "b.txt"))).rejects.toMatchObject({
+      code: "EEXIST",
+    });
+    expect(readFileSync(join(root, "b.txt"), "utf8")).toBe("existing");
+
+    await renameExclusive(join(root, "a.txt"), join(root, "c.txt"));
+    expect(readFileSync(join(root, "c.txt"), "utf8")).toBe("moved");
+    expect(existsSync(join(root, "a.txt"))).toBe(false);
+  });
+});
+
+describe("nativeIsCaseSensitive", () => {
+  it("answers for the volume holding a path", async () => {
+    const root = mkdtempSync(join(tmpdir(), "native-fs-case-"));
+    try {
+      writeFileSync(join(root, "Probe"), "");
+      const answer = await wrapper.nativeIsCaseSensitive(root);
+      // The answer must agree with what the volume does with a case-swapped name.
+      const swappedExists = existsSync(join(root, "pROBE"));
+      expect(answer).toBe(!swappedExists);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a path that doesn't exist", async () => {
+    await expect(addon.nativeIsCaseSensitive("/nonexistent/path/xyz")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 });

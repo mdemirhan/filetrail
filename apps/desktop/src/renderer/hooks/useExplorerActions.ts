@@ -96,6 +96,14 @@ const WRITE_OPERATION_BUSY_ERROR = "Another write operation is already running."
 const ANALYSIS_POLL_INTERVAL_MS = 120;
 // Starting without changing anything in the review never loses data.
 const DEFAULT_COPY_PASTE_POLICY = SAFE_COPY_PASTE_POLICY;
+// A retry runs after part of the work already landed at the destination. Skipping files
+// that exist keeps it from adding "copy" duplicates of what made it the first time, and
+// merging folders finishes the ones that stopped halfway. The review sheet can change it.
+const RETRY_COPY_PASTE_POLICY: CopyPastePolicy = {
+  file: "skip",
+  directory: "merge",
+  mismatch: "skip",
+};
 const CONTEXT_MENU_WIDTH = 240;
 const CONTEXT_SUBMENU_WIDTH = 180;
 const CONTEXT_MENU_SAFE_MARGIN = 12;
@@ -1002,19 +1010,20 @@ export function useExplorerActions(args: {
     if (!result) {
       return null;
     }
-    const parts: string[] = [];
-    if (result.summary.completedItemCount > 0) {
-      parts.push(formatResultCountLabel(result.summary.completedItemCount, "item"));
-      parts[parts.length - 1] =
-        `${parts.at(-1)} ${event.action === "move_to" ? "moved" : "copied"}`;
+    const { completedItemCount, skippedItemCount } = result.summary;
+    const sentences: string[] = [];
+    if (completedItemCount > 0) {
+      const verb = event.action === "move_to" ? "Moved" : "Copied";
+      sentences.push(`${verb} ${formatResultCountLabel(completedItemCount, "item")}.`);
     }
-    if (result.summary.skippedItemCount > 0) {
-      parts.push(`${formatResultCountLabel(result.summary.skippedItemCount, "item")} skipped`);
+    if (skippedItemCount > 0) {
+      sentences.push(
+        `Skipped ${formatResultCountLabel(skippedItemCount, "item")} that already ${
+          skippedItemCount === 1 ? "exists" : "exist"
+        }.`,
+      );
     }
-    if (parts.length > 0) {
-      return `${parts.join(", ")} by the selected conflict handling.`;
-    }
-    return null;
+    return sentences.length > 0 ? sentences.join(" ") : null;
   }
 
   function getPlannedSkipToastTitle(
@@ -1338,7 +1347,12 @@ export function useExplorerActions(args: {
       // Like Finder: copied items stay on the clipboard for more pastes; cut items are
       // cleared once something was actually moved.
       const clipboard = copyPasteClipboardRef.current;
-      if (clearClipboardOnStart && report.mode === "cut" && clipboard.type === "ready") {
+      if (
+        clearClipboardOnStart &&
+        report.mode === "cut" &&
+        clipboard.type === "ready" &&
+        clipboard.mode === "cut"
+      ) {
         clipboardClearAfterMoveRef.current = {
           operationId: response.operationId,
           capturedAt: clipboard.capturedAt,
@@ -1417,7 +1431,10 @@ export function useExplorerActions(args: {
     }
   }
 
-  function requestCopyLikePlanStart(
+  // Starts the reviewed plan. Resolves true once the operation is under way, and false
+  // when it did not start (busy, expired analysis, IPC failure) so the review dialog can
+  // take its start button out of the busy state and let the user try again.
+  async function requestCopyLikePlanStart(
     report: CopyPasteAnalysisReport,
     policy: CopyPastePolicy,
     action: CopyLikeAction,
@@ -1426,24 +1443,28 @@ export function useExplorerActions(args: {
       sourceSurface?: InternalMoveSourceSurface | null;
       pendingTreeSelectionPath?: string | null;
       initiator?: "clipboard" | "drag_drop" | "move_dialog" | null;
+      overrides?: CopyPasteOverrides;
     },
-  ) {
+  ): Promise<boolean> {
     // A second click on the review dialog's start button must not start it again.
     if (reviewStartInFlightRef.current === report.analysisId) {
-      return;
+      return false;
     }
     reviewStartInFlightRef.current = report.analysisId;
-    void executeCopyLikePlan(report, policy, action, options)
-      .then((outcome) => {
-        if (outcome.status === "blocked" || outcome.status === "error") {
-          surfaceCopyLikePreStartFailureToast(action, outcome);
-        }
-      })
-      .finally(() => {
-        if (reviewStartInFlightRef.current === report.analysisId) {
-          reviewStartInFlightRef.current = null;
-        }
-      });
+    try {
+      const outcome = await executeCopyLikePlan(report, policy, action, options);
+      if (outcome.status === "blocked" || outcome.status === "error") {
+        surfaceCopyLikePreStartFailureToast(action, outcome);
+      }
+      return outcome.status === "queued";
+    } catch (error) {
+      logger.error("copy paste review start failed", error);
+      return false;
+    } finally {
+      if (reviewStartInFlightRef.current === report.analysisId) {
+        reviewStartInFlightRef.current = null;
+      }
+    }
   }
 
   async function analyzeCopyLikeRequest(args: {
@@ -1531,17 +1552,27 @@ export function useExplorerActions(args: {
           };
         }
         if (update.report.issues.length > 0) {
+          // Cut and paste into the folder the items are already in leaves them there, like
+          // Finder. Issues are per item, so only those items stay; the rest still move.
+          const alreadyInPlacePaths =
+            args.initiator === "clipboard" && update.report.mode === "cut"
+              ? collectAlreadyInPlaceSourcePaths(update.report, args.sourcePaths)
+              : null;
+          if (alreadyInPlacePaths) {
+            const remainingSourcePaths = args.sourcePaths.filter(
+              (path) => !alreadyInPlacePaths.has(path),
+            );
+            if (remainingSourcePaths.length > 0) {
+              return await analyzeCopyLikeRequest({ ...args, sourcePaths: remainingSourcePaths });
+            }
+            pendingPasteAttemptRef.current = null;
+            applyWriteOperationCardState(null);
+            setCopyPasteDialogState(null);
+            return { status: "cancelled" };
+          }
           pendingPasteAttemptRef.current = null;
           applyWriteOperationCardState(null);
           setCopyPasteDialogState(null);
-          // Cut and paste into the folder the items are already in does nothing, like Finder.
-          if (
-            args.initiator === "clipboard" &&
-            update.report.mode === "cut" &&
-            update.report.issues.every((issue) => issue.code === "same_path")
-          ) {
-            return { status: "cancelled" };
-          }
           return {
             status: "blocked",
             message: getCopyLikeIssueMessage(update.report),
@@ -1595,6 +1626,27 @@ export function useExplorerActions(args: {
             : getCopyLikePreparationFailureMessage(args.action),
       };
     }
+  }
+
+  // The source paths a cut would leave where they already are, or null when the report has
+  // any other issue (those still need the blocking notice).
+  function collectAlreadyInPlaceSourcePaths(
+    report: CopyPasteAnalysisReport,
+    sourcePaths: readonly string[],
+  ): Set<string> | null {
+    const requestedPaths = new Set(sourcePaths);
+    const alreadyInPlacePaths = new Set<string>();
+    for (const issue of report.issues) {
+      if (
+        issue.code !== "same_path" ||
+        issue.sourcePath === null ||
+        !requestedPaths.has(issue.sourcePath)
+      ) {
+        return null;
+      }
+      alreadyInPlacePaths.add(issue.sourcePath);
+    }
+    return alreadyInPlacePaths;
   }
 
   async function startPasteFromClipboard() {
@@ -1712,6 +1764,15 @@ export function useExplorerActions(args: {
       dismissCopyPasteDialog();
       return;
     }
+    // A retried move clears the cut items off the clipboard once it moves something, like
+    // a normal cut and paste. Only a cut of these same items is cleared, never an
+    // unrelated clipboard.
+    const clipboard = copyPasteClipboardRef.current;
+    const retriesClipboardCut =
+      event.action === "move_to" &&
+      clipboard.type === "ready" &&
+      clipboard.mode === "cut" &&
+      failedSourcePaths.some((path) => clipboard.sourcePaths.includes(path));
     const pasteAttemptId = beginPendingPasteAttempt({
       action: event.action,
       targetPath: result.targetPath ?? currentPathRef.current,
@@ -1727,7 +1788,8 @@ export function useExplorerActions(args: {
       destinationDirectoryPath: result.targetPath ?? currentPathRef.current,
       action: event.action,
       pasteAttemptId,
-      clearClipboardOnStart: false,
+      clearClipboardOnStart: retriesClipboardCut,
+      defaultPolicy: RETRY_COPY_PASTE_POLICY,
     });
     if (outcome.status === "blocked" || outcome.status === "error") {
       surfaceCopyLikePreStartFailureToast(event.action, outcome);

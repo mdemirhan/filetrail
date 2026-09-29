@@ -28,13 +28,25 @@ type WriteOperationFs = {
 
 type WriteOperationSender = {
   send: (channel: string, payload: unknown) => void;
+  isDestroyed?: () => boolean;
 };
 
-// The Electron WebContents events used to stop an operation whose window went away.
+// The Electron WebContents events that mean the page that started an operation is gone:
+// its renderer crashed, its window closed, or it was replaced by a reload. "did-navigate"
+// only fires for a committed main-frame load (not in-page navigations, and not navigation
+// attempts that will-navigate blocks), which is exactly when the old page disappears.
+const SENDER_GONE_EVENTS = ["render-process-gone", "destroyed", "did-navigate"] as const;
+type SenderGoneEvent = (typeof SENDER_GONE_EVENTS)[number];
 type SenderLifecycleEvents = {
-  on?: (event: "render-process-gone" | "destroyed", listener: () => void) => unknown;
-  removeListener?: (event: "render-process-gone" | "destroyed", listener: () => void) => unknown;
+  on?: (event: SenderGoneEvent, listener: () => void) => unknown;
+  removeListener?: (event: SenderGoneEvent, listener: () => void) => unknown;
 };
+
+const WRITE_OPERATION_PROGRESS_CHANNEL = "filetrail:writeOperationProgress";
+
+// Answer returned to a request that isn't allowed to act on an operation (unknown id, or
+// asked by a window other than the one that started it).
+const REJECTED_REQUEST = { ok: false } as const;
 
 // Holds the single write slot while a local operation is still being prepared.
 const PREPARING_WRITE_OPERATION_ID = "preparing-write-operation";
@@ -110,6 +122,18 @@ export function createWriteOperationCoordinator(
         ),
       );
     }
+    // A conflict answered by an earlier "do the same for the rest" never reaches the user,
+    // but it still belongs in the Action Log together with the answer that was applied.
+    const autoResolved = event.autoResolvedRuntimeConflict ?? null;
+    if (autoResolved && metadata) {
+      metadata.runtimeConflicts.set(autoResolved.conflict.conflictId, {
+        ...mergeRuntimeConflictRecord(
+          metadata.runtimeConflicts.get(autoResolved.conflict.conflictId) ?? null,
+          autoResolved.conflict,
+        ),
+        resolution: autoResolved.resolution,
+      });
+    }
     if (isTerminalStatus(event.status)) {
       const logMetadata =
         metadata?.metadata ??
@@ -161,36 +185,40 @@ export function createWriteOperationCoordinator(
     if (!sender) {
       return;
     }
-    sender.send(
-      "filetrail:writeOperationProgress",
-      writeOperationProgressEventSchema.parse({
-        operationId: event.operationId,
-        action,
-        status: event.status,
-        completedItemCount: event.completedItemCount,
-        totalItemCount: event.totalItemCount,
-        completedByteCount: event.completedByteCount,
-        totalBytes: event.totalBytes,
-        currentSourcePath: event.currentSourcePath,
-        currentDestinationPath: event.currentDestinationPath,
-        runtimeConflict: event.runtimeConflict,
-        result: event.result
-          ? {
-              operationId: event.result.operationId,
-              action,
-              status: event.result.status,
-              targetPath: event.result.destinationDirectoryPath,
-              startedAt: event.result.startedAt,
-              finishedAt: event.result.finishedAt,
-              summary: event.result.summary,
-              items: event.result.items,
-              error: event.result.error,
-            }
-          : null,
-      }),
-    );
-    if (isTerminalStatus(event.status)) {
-      detachSender(event.operationId);
+    try {
+      sendProgress(
+        sender,
+        writeOperationProgressEventSchema.parse({
+          operationId: event.operationId,
+          action,
+          status: event.status,
+          completedItemCount: event.completedItemCount,
+          totalItemCount: event.totalItemCount,
+          completedByteCount: event.completedByteCount,
+          totalBytes: event.totalBytes,
+          currentSourcePath: event.currentSourcePath,
+          currentDestinationPath: event.currentDestinationPath,
+          runtimeConflict: event.runtimeConflict,
+          autoResolvedRuntimeConflict: autoResolved,
+          result: event.result
+            ? {
+                operationId: event.result.operationId,
+                action,
+                status: event.result.status,
+                targetPath: event.result.destinationDirectoryPath,
+                startedAt: event.result.startedAt,
+                finishedAt: event.result.finishedAt,
+                summary: event.result.summary,
+                items: event.result.items,
+                error: event.result.error,
+              }
+            : null,
+        }),
+      );
+    } finally {
+      if (isTerminalStatus(event.status)) {
+        detachSender(event.operationId);
+      }
     }
   });
 
@@ -219,10 +247,18 @@ export function createWriteOperationCoordinator(
     }
   }
 
-  // An operation whose window crashed or closed can never be answered or finished
-  // from the UI, so it is cancelled instead of holding the write slot forever.
+  // An operation whose page crashed, closed, or reloaded can never be answered or finished
+  // from the UI, so it is cancelled instead of holding the write slot forever. Listeners
+  // are added only now, after the start request arrived, so a reload that happened before
+  // this operation began can't reach it: an operation started by the reloaded page is safe.
   function attachSender(operationId: string, sender: WriteOperationSender): void {
     writeOperationSenders.set(operationId, sender);
+    if (isSenderDestroyed(sender)) {
+      // The window closed while the start request was in flight; nothing will ever
+      // answer this operation.
+      cancelWriteOperation(operationId);
+      return;
+    }
     const events = sender as SenderLifecycleEvents;
     if (typeof events.on !== "function" || typeof events.removeListener !== "function") {
       return;
@@ -230,11 +266,13 @@ export function createWriteOperationCoordinator(
     const cancel = () => {
       cancelWriteOperation(operationId);
     };
-    events.on.call(sender, "render-process-gone", cancel);
-    events.on.call(sender, "destroyed", cancel);
+    for (const eventName of SENDER_GONE_EVENTS) {
+      events.on.call(sender, eventName, cancel);
+    }
     senderDetachers.set(operationId, () => {
-      events.removeListener?.call(sender, "render-process-gone", cancel);
-      events.removeListener?.call(sender, "destroyed", cancel);
+      for (const eventName of SENDER_GONE_EVENTS) {
+        events.removeListener?.call(sender, eventName, cancel);
+      }
     });
   }
 
@@ -242,6 +280,27 @@ export function createWriteOperationCoordinator(
     writeOperationSenders.delete(operationId);
     senderDetachers.get(operationId)?.();
     senderDetachers.delete(operationId);
+  }
+
+  // Cancel and conflict answers are only taken from the window that started the
+  // operation; another window (such as Settings) shares the same preload API.
+  function isOperationOwner(operationId: string, requester: unknown): boolean {
+    const owner = writeOperationSenders.get(operationId);
+    return owner !== undefined && owner === requester;
+  }
+
+  // A window can be destroyed between our check and the send, and Electron then throws
+  // "Object has been destroyed". Losing a progress update for a window that's gone is fine;
+  // letting the throw skip the operation's cleanup is not.
+  function sendProgress(sender: WriteOperationSender, payload: WriteOperationProgressEvent): void {
+    if (isSenderDestroyed(sender)) {
+      return;
+    }
+    try {
+      sender.send(WRITE_OPERATION_PROGRESS_CHANNEL, payload);
+    } catch {
+      // The window went away mid-send; there is no one left to tell.
+    }
   }
 
   function queueLocalWriteOperation(args: {
@@ -280,21 +339,35 @@ export function createWriteOperationCoordinator(
       currentDestinationPath: null,
       result: null,
     });
-    void args.execute(operationId, controller);
+    void args
+      .execute(operationId, controller)
+      .catch((error: unknown) => {
+        console.error("[filetrail] local write operation failed unexpectedly", error);
+      })
+      .finally(() => {
+        // Normally the terminal event already released everything; this only matters if
+        // the operation stopped without reaching one, which would otherwise lock writes.
+        releaseLocalWriteOperation(operationId);
+      });
     return {
       operationId,
       status: "queued",
     };
   }
 
+  function releaseLocalWriteOperation(operationId: string): void {
+    detachSender(operationId);
+    writeOperationMetadata.delete(operationId);
+    localWriteOperationControllers.delete(operationId);
+    if (activeWriteOperationId === operationId) {
+      activeWriteOperationId = null;
+    }
+  }
+
   function emitLocalWriteOperationEvent(event: WriteOperationProgressEvent): void {
     const sender = writeOperationSenders.get(event.operationId);
-    if (sender) {
-      sender.send(
-        "filetrail:writeOperationProgress",
-        writeOperationProgressEventSchema.parse(event),
-      );
-    }
+    // Release the operation before telling the window, so a failed send can't leave the
+    // write slot held and a renderer reacting to the final event can start the next write.
     if (isTerminalStatus(event.status)) {
       const metadata = writeOperationMetadata.get(event.operationId);
       if (event.result && options.recordWriteOperation) {
@@ -310,12 +383,10 @@ export function createWriteOperationCoordinator(
           ...(metadata?.metadata ? { metadata: metadata.metadata } : {}),
         });
       }
-      detachSender(event.operationId);
-      writeOperationMetadata.delete(event.operationId);
-      localWriteOperationControllers.delete(event.operationId);
-      if (activeWriteOperationId === event.operationId) {
-        activeWriteOperationId = null;
-      }
+      releaseLocalWriteOperation(event.operationId);
+    }
+    if (sender) {
+      sendProgress(sender, writeOperationProgressEventSchema.parse(event));
     }
   }
 
@@ -877,23 +948,36 @@ export function createWriteOperationCoordinator(
         attachSender(handle.operationId, event.sender);
         return handle;
       },
-      "copyPaste:cancel": (payload: IpcRequest<"copyPaste:cancel">) =>
-        cancelWriteOperation(payload.operationId),
-      "copyPaste:resolveConflict": (payload: IpcRequest<"copyPaste:resolveConflict">) => {
-        const metadata = writeOperationMetadata.get(payload.operationId);
-        const currentConflict = metadata?.runtimeConflicts.get(payload.conflictId) ?? null;
-        if (metadata && currentConflict) {
-          metadata.runtimeConflicts.set(payload.conflictId, {
-            ...currentConflict,
-            resolution: payload.resolution,
-          });
+      "copyPaste:cancel": (
+        payload: IpcRequest<"copyPaste:cancel">,
+        event: { sender: WriteOperationSender },
+      ) =>
+        isOperationOwner(payload.operationId, event.sender)
+          ? cancelWriteOperation(payload.operationId)
+          : REJECTED_REQUEST,
+      "copyPaste:resolveConflict": (
+        payload: IpcRequest<"copyPaste:resolveConflict">,
+        event: { sender: WriteOperationSender },
+      ) => {
+        if (!isOperationOwner(payload.operationId, event.sender)) {
+          return REJECTED_REQUEST;
         }
-        return writeService.resolveRuntimeConflict(
+        const response = writeService.resolveRuntimeConflict(
           payload.operationId,
           payload.conflictId,
           payload.resolution,
           payload.applyToRemaining ?? false,
         );
+        // Only an answer the service accepted was applied, so only that one is logged.
+        const metadata = writeOperationMetadata.get(payload.operationId);
+        const currentConflict = metadata?.runtimeConflicts.get(payload.conflictId) ?? null;
+        if (response.ok && metadata && currentConflict) {
+          metadata.runtimeConflicts.set(payload.conflictId, {
+            ...currentConflict,
+            resolution: payload.resolution,
+          });
+        }
+        return response;
       },
       "writeOperation:rename": async (
         payload: IpcRequest<"writeOperation:rename">,
@@ -963,8 +1047,13 @@ export function createWriteOperationCoordinator(
             executeDeleteImmediatelyOperation(payload, operationId, controller),
         });
       },
-      "writeOperation:cancel": (payload: IpcRequest<"writeOperation:cancel">) =>
-        cancelWriteOperation(payload.operationId),
+      "writeOperation:cancel": (
+        payload: IpcRequest<"writeOperation:cancel">,
+        event: { sender: WriteOperationSender },
+      ) =>
+        isOperationOwner(payload.operationId, event.sender)
+          ? cancelWriteOperation(payload.operationId)
+          : REJECTED_REQUEST,
     },
     shutdown() {
       writeServiceUnsubscribe();
@@ -995,6 +1084,14 @@ function mergeRuntimeConflictRecord(
     reason: runtimeConflict.reason,
     resolution: current?.resolution ?? null,
   };
+}
+
+function isSenderDestroyed(sender: WriteOperationSender): boolean {
+  try {
+    return sender.isDestroyed?.() === true;
+  } catch {
+    return true;
+  }
 }
 
 async function pathExists(path: string, lstatFn: WriteOperationFs["lstat"]): Promise<boolean> {

@@ -23,12 +23,19 @@ const EDIT_COMMANDS = new Set<RendererCommandType>([
   "editSelectAll",
 ]);
 const ZOOM_COMMANDS = new Set<RendererCommandType>(["zoomIn", "zoomOut", "resetZoom"]);
+// Paste is safe from the tree: it goes into the tree's selected folder, which is the
+// folder on screen, and never acts on a stale content selection the way copy or cut would.
 const TREE_SAFE_RENDERER_COMMANDS = new Set<RendererCommandType>([
   "openSelection",
   "openInTerminal",
   "copyPath",
+  "pasteSelection",
 ]);
-const TREE_SAFE_RAW_SHORTCUTS = new Set<RawExplorerShortcutId>(["copyPath", "openInTerminal"]);
+const TREE_SAFE_RAW_SHORTCUTS = new Set<RawExplorerShortcutId>([
+  "copyPath",
+  "openInTerminal",
+  "pasteSelection",
+]);
 const CONTEXT_MENU_SHORTCUT_LABELS = {
   open: "⌘O",
   showInfo: "⌘I",
@@ -248,7 +255,13 @@ export function getContextMenuShortcutLabel(
   if (actionId === "copy" && canHandleRawExplorerShortcut("copySelection", context)) {
     return CONTEXT_MENU_SHORTCUT_LABELS.copy ?? null;
   }
-  if (actionId === "paste" && canHandleRawExplorerShortcut("pasteSelection", context)) {
+  // A tree or favorite menu pastes into the right-clicked folder, while Cmd+V from the
+  // tree pastes into the selected one, so the badge would promise the wrong target.
+  if (
+    actionId === "paste" &&
+    context.focusedPane !== "tree" &&
+    canHandleRawExplorerShortcut("pasteSelection", context)
+  ) {
     return CONTEXT_MENU_SHORTCUT_LABELS.paste ?? null;
   }
   if (actionId === "move" && canHandleRawExplorerShortcut("moveSelection", context)) {

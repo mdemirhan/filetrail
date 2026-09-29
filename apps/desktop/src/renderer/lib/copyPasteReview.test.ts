@@ -155,9 +155,92 @@ describe("copy/paste review model", () => {
 
     expect(rows.map((row) => [row.name, row.tone, row.detail])).toEqual([
       ["notes.txt", "danger", "Replaces the existing 10 B file from Jan 1"],
-      ["photos", "danger", "Deletes “d.jpg”, which only exists here"],
-      ["config", "danger", "Deletes “settings.ini”, which only exists here"],
+      ["photos", "danger", "Deletes “d.jpg”, which only exists in the existing folder"],
+      ["config", "danger", "Deletes “settings.ini”, which only exists in the existing folder"],
     ]);
+  });
+
+  it("gets singular, plural and unnamed items right in what Replace deletes", () => {
+    const describe = (destinationOnly: CopyPasteAnalysisNode["destinationOnly"]) =>
+      buildReviewRows({
+        report: report([{ ...photos, destinationOnly }]),
+        policy: policyForAllConflicts("overwrite"),
+        overrides: {},
+        showNewItems: false,
+        now: NOW,
+      })[0]?.detail;
+
+    expect(describe({ count: 3, samplePaths: ["d.jpg", "raw"] })).toBe(
+      "Deletes “d.jpg” and 2 more, which only exist in the existing folder",
+    );
+    expect(describe({ count: 1, samplePaths: [] })).toBe(
+      "Deletes 1 item that only exists in the existing folder",
+    );
+    expect(describe({ count: 1_500, samplePaths: [] })).toBe(
+      "Deletes 1,500 items that only exist in the existing folder",
+    );
+    expect(describe({ count: 1_201, samplePaths: ["d.jpg"] })).toBe(
+      "Deletes “d.jpg” and 1,200 more, which only exist in the existing folder",
+    );
+  });
+
+  it("says what merging keeps, with or without a sample name", () => {
+    const describe = (destinationOnly: CopyPasteAnalysisNode["destinationOnly"]) =>
+      buildReviewRows({
+        report: report([{ ...photos, destinationOnly }]),
+        policy: SAFE_COPY_PASTE_POLICY,
+        overrides: {},
+        showNewItems: false,
+        now: NOW,
+      })[0]?.detail;
+
+    expect(describe({ count: 3, samplePaths: ["d.jpg"] })).toBe(
+      "Folder · 1 conflict inside · 1 item added · keeps “d.jpg” and 2 more",
+    );
+    expect(describe({ count: 2, samplePaths: [] })).toBe(
+      "Folder · 1 conflict inside · 1 item added · keeps 2 items already there",
+    );
+  });
+
+  it("falls back to the safe choice where Replace isn't possible, and says why", () => {
+    const blockedFolder = {
+      ...photos,
+      replaceBlockedReason: "It contains the item being pasted.",
+    };
+    const blockedFile = {
+      ...notes,
+      id: "item-5",
+      replaceBlockedReason: "It is the item being pasted.",
+    };
+    const args = {
+      report: report([blockedFolder, blockedFile, config]),
+      policy: policyForAllConflicts("overwrite"),
+      overrides: {},
+    };
+    const rows = buildReviewRows({ ...args, showNewItems: false, now: NOW });
+
+    expect(rows.map((row) => [row.name, row.choice])).toEqual([
+      ["photos", "merge"],
+      ["a.jpg", "overwrite"],
+      ["notes.txt", "keep_both"],
+      ["config", "overwrite"],
+    ]);
+    expect(rows[0]?.detail).toContain("Can't replace: It contains the item being pasted.");
+    expect(rows[2]?.detail).toContain("Can't replace: It is the item being pasted.");
+    expect(summarizeReview(args)).toMatchObject({ replaced: 2, merged: 1, keptBoth: 1 });
+    // The menu still reads Replace: that is what it does wherever it can.
+    expect(currentAllConflictsChoice(args.report, args.policy, {})).toBe("overwrite");
+  });
+
+  it("names nested rows by their path below the source folder", () => {
+    const rows = buildReviewRows({
+      report: report([photos]),
+      policy: SAFE_COPY_PASTE_POLICY,
+      overrides: {},
+      showNewItems: false,
+      now: NOW,
+    });
+    expect(rows.map((row) => row.relativePath)).toEqual(["photos", "photos/a.jpg"]);
   });
 
   it("applies per-item choices and says where skipped moves stay", () => {
@@ -173,6 +256,17 @@ describe("copy/paste review model", () => {
       ["notes.txt", "skip", "Stays in “src”"],
       ["photos", "keep_both", "Folder · 2 items · the existing folder stays"],
     ]);
+  });
+
+  it("says each skipped move stays in its own folder", () => {
+    const rows = buildReviewRows({
+      report: report([notes, photos], "cut"),
+      policy: SAFE_COPY_PASTE_POLICY,
+      overrides: { "item-2/a.jpg": "skip" },
+      showNewItems: false,
+      now: NOW,
+    });
+    expect(rows.find((row) => row.name === "a.jpg")?.detail).toBe("Stays in “photos”");
   });
 
   it("shows new items on request", () => {
@@ -206,14 +300,43 @@ describe("copy/paste review model", () => {
       skipped: 0,
     });
     expect(formatReviewSummary(summary)).toBe(
-      "Adds 2 · Keeps both 2 · Merges 1 folder · Replaces 1",
+      "Adds 2 · Keeps both for 2 · Merges 1 folder · Replaces 1",
     );
+    expect(formatReviewSummary(summary, "Move")).toBe(
+      "Moves 2 · Keeps both for 2 · Merges 1 folder · Replaces 1",
+    );
+    expect(
+      formatReviewSummary({ ...summary, added: 12_000, keptBoth: 0, merged: 0, replaced: 0 }),
+    ).toBe("Adds 12,000");
   });
 
   it("reports the 'For all conflicts' choice, or mixed", () => {
-    expect(currentAllConflictsChoice(SAFE_COPY_PASTE_POLICY, {})).toBe("keep_both");
-    expect(currentAllConflictsChoice(policyForAllConflicts("skip"), {})).toBe("skip");
-    expect(currentAllConflictsChoice(SAFE_COPY_PASTE_POLICY, { "item-1": "skip" })).toBeNull();
+    const nodes = report([notes, photos, config]);
+    expect(currentAllConflictsChoice(nodes, SAFE_COPY_PASTE_POLICY, {})).toBe("keep_both");
+    expect(currentAllConflictsChoice(nodes, policyForAllConflicts("skip"), {})).toBe("skip");
+    expect(currentAllConflictsChoice(nodes, SAFE_COPY_PASTE_POLICY, { "item-1": "skip" })).toBe(
+      null,
+    );
+    // A nested conflict set differently makes it mixed too.
+    expect(
+      currentAllConflictsChoice(nodes, SAFE_COPY_PASTE_POLICY, { "item-2/a.jpg": "skip" }),
+    ).toBeNull();
+  });
+
+  it("goes back to a single 'For all conflicts' value when an item is set back", () => {
+    const nodes = report([notes, photos]);
+    // Choices equal to what "For all conflicts" does are not a difference.
+    expect(
+      currentAllConflictsChoice(nodes, SAFE_COPY_PASTE_POLICY, {
+        "item-1": "keep_both",
+        "item-2": "merge",
+      }),
+    ).toBe("keep_both");
+    expect(
+      currentAllConflictsChoice(nodes, policyForAllConflicts("overwrite"), {
+        "item-1": "overwrite",
+      }),
+    ).toBe("overwrite");
   });
 
   it("formats dates relative to today", () => {
@@ -221,5 +344,36 @@ describe("copy/paste review model", () => {
     expect(formatReviewDate(NOW - 86_400_000, NOW)).toBe("yesterday, 2:00 PM");
     expect(formatReviewDate(JAN_1, NOW)).toBe("Jan 1");
     expect(formatReviewDate(new Date(2025, 5, 3).getTime(), NOW)).toBe("Jun 3, 2025");
+  });
+
+  // Built from local dates, so they hold in any time zone; in one with daylight saving
+  // (e.g. TZ=America/New_York) the days around the change are 23 and 25 hours long.
+  it("counts yesterday in calendar days across daylight saving changes", () => {
+    const afterFallBack = new Date(2026, 10, 2, 10, 0).getTime();
+    expect(formatReviewDate(new Date(2026, 10, 1, 0, 30).getTime(), afterFallBack)).toBe(
+      "yesterday, 12:30 AM",
+    );
+    expect(formatReviewDate(new Date(2026, 9, 31, 23, 30).getTime(), afterFallBack)).toBe("Oct 31");
+
+    const afterSpringForward = new Date(2026, 2, 9, 10, 0).getTime();
+    expect(formatReviewDate(new Date(2026, 2, 8, 0, 30).getTime(), afterSpringForward)).toBe(
+      "yesterday, 12:30 AM",
+    );
+    expect(formatReviewDate(new Date(2026, 2, 7, 23, 30).getTime(), afterSpringForward)).toBe(
+      "Mar 7",
+    );
+
+    const newYear = new Date(2026, 0, 1, 9, 0).getTime();
+    expect(formatReviewDate(new Date(2025, 11, 31, 22, 0).getTime(), newYear)).toBe(
+      "yesterday, 10:00 PM",
+    );
+  });
+
+  it("shows a date in the future in full instead of as today", () => {
+    expect(formatReviewDate(NOW + 30_000, NOW)).toBe("today, 2:00 PM");
+    expect(formatReviewDate(NOW + 2 * 3_600_000, NOW)).toBe("Sep 29, 2026, 4:00 PM");
+    expect(formatReviewDate(new Date(2027, 2, 1, 9, 5).getTime(), NOW)).toBe(
+      "Mar 1, 2027, 9:05 AM",
+    );
   });
 });

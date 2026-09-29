@@ -1,9 +1,12 @@
+import { ACCENT_OPTIONS, MACOS_ACCENT_OPTIONS } from "../../shared/appPreferences";
 import {
   accentTokensToCssVariables,
+  contrastRatio,
   generateAccentTokens,
   getAccentPalette,
   getFavoriteAccentVariables,
   getToolbarAccentVariables,
+  solidButtonColors,
 } from "./accent";
 
 describe("accent helpers", () => {
@@ -74,6 +77,30 @@ describe("accent helpers", () => {
       "--favorite-accent-focus-border": "rgba(232, 114, 154, 0.4)",
       "--favorite-accent-badge-bg": "rgba(232, 114, 154, 0.11)",
       "--favorite-accent-badge-text": "#e8729a",
+    });
+  });
+
+  it("gives solid accent buttons readable text, keeping white where a darker shade allows", () => {
+    const check = (accent: string) => {
+      const colors = solidButtonColors(accent);
+      expect(contrastRatio(colors.foreground, colors.background)).toBeGreaterThanOrEqual(4.5);
+      return colors;
+    };
+    // Light accents (Gold, Yellow, Aqua, Sky) get black text on the accent itself.
+    for (const light of ["#daa520", "#ffc600", "#23c7d9", "#58b9e8"]) {
+      expect(check(light)).toEqual({ background: light, foreground: "#000000" });
+    }
+    // Dark enough accents keep white text, on the accent or a slightly darker shade.
+    expect(check("#4f46e5")).toEqual({ background: "#4f46e5", foreground: "#ffffff" });
+    expect(check("#007aff").foreground).toBe("#ffffff");
+    expect(check("#e0383e").foreground).toBe("#ffffff");
+    for (const option of [...ACCENT_OPTIONS, ...MACOS_ACCENT_OPTIONS]) {
+      check(option.primary);
+    }
+    expect(generateAccentTokens("#daa520", "dark").onSolid).toBe("#000000");
+    expect(accentTokensToCssVariables(generateAccentTokens("#4f46e5", "light"))).toMatchObject({
+      "--ft-accent-solid-button": "#4f46e5",
+      "--ft-accent-on-solid": "#ffffff",
     });
   });
 });

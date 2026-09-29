@@ -3,6 +3,8 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  readdir,
+  rename,
   rm,
   stat,
   symlink,
@@ -10,7 +12,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 import { buildCopyPasteAnalysisReport } from "./copyPasteAnalysis";
 import { executeCopyPasteFromAnalysis } from "./copyPasteExecution";
@@ -267,24 +269,29 @@ describe("copyPasteExecution real filesystem", () => {
       expect(dstStat.ino).toBe(originalIno);
     });
 
-    it("rename overwrite replaces an existing destination file atomically", async () => {
+    it("rename overwrite moves the file into place and the old one to the Trash", async () => {
       const srcDir = join(testDir, "src");
       const dstDir = join(testDir, "dst");
+      const trashDir = join(testDir, "trash");
       await mkdir(srcDir, { recursive: true });
       await mkdir(dstDir, { recursive: true });
+      await mkdir(trashDir, { recursive: true });
       await writeFile(join(srcDir, "data.txt"), "new content");
       await writeFile(join(dstDir, "data.txt"), "old content");
 
       const srcStat = await stat(join(srcDir, "data.txt"));
       const originalIno = srcStat.ino;
 
-      // Record rm calls — rename(2) must replace the file without a pre-delete.
+      // Nothing is deleted permanently: the replaced file goes to the Trash.
       const rmPaths: string[] = [];
       const fileSystem: WriteServiceFileSystem = {
         ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
         rm: async (path, options) => {
           rmPaths.push(path);
           await DEFAULT_WRITE_SERVICE_FILE_SYSTEM.rm(path, options);
+        },
+        trash: async (path) => {
+          await rename(path, join(trashDir, basename(path)));
         },
       };
 
@@ -313,11 +320,12 @@ describe("copyPasteExecution real filesystem", () => {
       expect(await fileExists(join(srcDir, "data.txt"))).toBe(false);
       const content = await readFile(join(dstDir, "data.txt"), "utf-8");
       expect(content).toBe("new content");
-      // Same inode as the source = atomic rename, not copy.
+      expect(await readFile(join(trashDir, "data.txt"), "utf-8")).toBe("old content");
+      expect(await readdir(dstDir)).toEqual(["data.txt"]);
+      // Same inode as the source = moved by rename, not copied.
       const dstStat = await stat(join(dstDir, "data.txt"));
       expect(dstStat.ino).toBe(originalIno);
     });
-
     it("rename preserves mtime on real filesystem (file)", async () => {
       const srcDir = join(testDir, "src");
       const dstDir = join(testDir, "dst");

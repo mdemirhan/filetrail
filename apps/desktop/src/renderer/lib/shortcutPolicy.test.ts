@@ -126,14 +126,14 @@ describe("shortcutPolicy", () => {
           RENDERER_COMMAND_TREE_FOCUS_BUCKETS[command] === "contentOnly" &&
           canHandleRendererCommand(command, treeFolderContext),
       ),
-    ).toEqual(["openSelection", "openInTerminal", "copyPath"]);
+    ).toEqual(["openSelection", "openInTerminal", "pasteSelection", "copyPath"]);
     expect(
       RAW_EXPLORER_SHORTCUT_IDS.filter(
         (shortcutId) =>
           RAW_EXPLORER_SHORTCUT_TREE_FOCUS_BUCKETS[shortcutId] === "contentOnly" &&
           canHandleRawExplorerShortcut(shortcutId, treeFolderContext),
       ),
-    ).toEqual(["copyPath", "openInTerminal"]);
+    ).toEqual(["pasteSelection", "copyPath", "openInTerminal"]);
   });
 
   it("allows only the safe content-target commands for favorites", () => {
@@ -148,14 +148,14 @@ describe("shortcutPolicy", () => {
           RENDERER_COMMAND_TREE_FOCUS_BUCKETS[command] === "contentOnly" &&
           canHandleRendererCommand(command, favoriteContext),
       ),
-    ).toEqual(["openSelection", "openInTerminal", "copyPath"]);
+    ).toEqual(["openSelection", "openInTerminal", "pasteSelection", "copyPath"]);
     expect(
       RAW_EXPLORER_SHORTCUT_IDS.filter(
         (shortcutId) =>
           RAW_EXPLORER_SHORTCUT_TREE_FOCUS_BUCKETS[shortcutId] === "contentOnly" &&
           canHandleRawExplorerShortcut(shortcutId, favoriteContext),
       ),
-    ).toEqual(["copyPath", "openInTerminal"]);
+    ).toEqual(["pasteSelection", "copyPath", "openInTerminal"]);
   });
 
   it("blocks content-target actions entirely for the favorites root", () => {
@@ -170,12 +170,30 @@ describe("shortcutPolicy", () => {
     expect(canHandleRawExplorerShortcut("copyPath", favoritesRootContext)).toBe(false);
   });
 
+  it("pastes into the tree's folder from the tree, but never from the Favorites root", () => {
+    for (const selectedTreeTargetKind of ["filesystemFolder", "favorite"] as const) {
+      const treeContext = ctx({ focusedPane: "tree", selectedTreeTargetKind });
+      expect(canHandleRendererCommand("pasteSelection", treeContext)).toBe(true);
+      expect(canHandleRawExplorerShortcut("pasteSelection", treeContext)).toBe(true);
+    }
+    for (const selectedTreeTargetKind of ["favoritesRoot", null] as const) {
+      const treeContext = ctx({ focusedPane: "tree", selectedTreeTargetKind });
+      expect(canHandleRendererCommand("pasteSelection", treeContext)).toBe(false);
+      expect(canHandleRawExplorerShortcut("pasteSelection", treeContext)).toBe(false);
+    }
+    expect(
+      canHandleRendererCommand(
+        "pasteSelection",
+        ctx({ focusedPane: "tree", selectedTreeTargetKind: "filesystemFolder", mainView: "help" }),
+      ),
+    ).toBe(false);
+  });
+
   it("keeps the dangerous renderer-command denylist fully blocked for tree folders and favorites", () => {
     const dangerousRendererCommands = [
       "editSelection",
       "copySelection",
       "cutSelection",
-      "pasteSelection",
       "moveSelection",
       "renameSelection",
       "duplicateSelection",
@@ -204,7 +222,6 @@ describe("shortcutPolicy", () => {
     const dangerousRawShortcutIds = [
       "copySelection",
       "cutSelection",
-      "pasteSelection",
       "moveSelection",
       "renameSelection",
       "duplicateSelection",

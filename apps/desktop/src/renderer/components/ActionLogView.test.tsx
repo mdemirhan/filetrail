@@ -311,4 +311,91 @@ describe("ActionLogView", () => {
 
     expect(screen.getAllByText("/Users/demo/source").length).toBeGreaterThan(0);
   });
+
+  it("labels a replacement that had to skip the Trash and folders with failures inside", () => {
+    const entries: ActionLogEntry[] = [
+      {
+        id: "entry-4",
+        occurredAt: "2026-03-10T07:00:00.000Z",
+        action: "paste",
+        status: "partial",
+        operationId: "write-op-10",
+        sourcePaths: ["/Users/demo/photos"],
+        destinationPaths: ["/Volumes/NAS/photos"],
+        sourceSummary: "/Users/demo/photos",
+        destinationSummary: "/Volumes/NAS/photos",
+        title: "Paste partially completed",
+        message: "Paste finished with problems.",
+        durationMs: 40,
+        error: null,
+        summary: {
+          totalItemCount: 2,
+          completedItemCount: 0,
+          failedItemCount: 2,
+          skippedItemCount: 0,
+          cancelledItemCount: 0,
+        },
+        items: [
+          {
+            sourcePath: "/Users/demo/photos",
+            destinationPath: "/Volumes/NAS/photos",
+            sourceKind: "directory",
+            status: "failed",
+            error: null,
+            childFailureCount: 1,
+          },
+          {
+            sourcePath: "/Users/demo/photos/a.jpg",
+            destinationPath: "/Volumes/NAS/photos/a.jpg",
+            sourceKind: "file",
+            status: "failed",
+            error: "The item is in use.",
+          },
+        ],
+        initiator: "clipboard",
+        requestedDestinationPath: "/Volumes/NAS",
+        runtimeConflicts: [
+          {
+            conflictId: "conflict-2",
+            sourcePath: "/Users/demo/photos/b.jpg",
+            destinationPath: "/Volumes/NAS/photos/b.jpg",
+            sourceKind: "file",
+            destinationKind: "file",
+            conflictClass: "file_conflict",
+            reason: "trash_unavailable",
+            resolution: "overwrite",
+          },
+        ],
+        metadata: {},
+      },
+    ];
+    const onCopyEntryText = vi.fn();
+
+    render(
+      <ActionLogView
+        entries={entries}
+        loading={false}
+        error={null}
+        theme="light"
+        accent="#daa520"
+        onCopyEntryText={onCopyEntryText}
+        onRefresh={() => undefined}
+      />,
+    );
+
+    const rowButton = screen.getByText("/Users/demo/photos").closest("button");
+    if (!(rowButton instanceof HTMLButtonElement)) {
+      throw new Error("Missing paste action log row button.");
+    }
+    fireEvent.click(rowButton);
+
+    expect(screen.getByText("Trash unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Resolution: Deleted permanently")).toBeInTheDocument();
+    expect(screen.getAllByText("1 item inside failed").length).toBeGreaterThan(0);
+
+    fireEvent.change(screen.getByLabelText("Search action log"), {
+      target: { value: "deleted permanently" },
+    });
+    expect(screen.getAllByText("/Users/demo/photos").length).toBeGreaterThan(0);
+  });
 });

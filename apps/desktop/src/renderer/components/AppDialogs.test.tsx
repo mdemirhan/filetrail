@@ -100,7 +100,7 @@ describe("AppDialogs", () => {
           onDismissActionNotice={() => undefined}
           onSubmitRenameDialog={() => undefined}
           onSubmitNewFolderDialog={() => undefined}
-          onRequestCopyLikePlanStart={() => undefined}
+          onRequestCopyLikePlanStart={() => Promise.resolve(true)}
           onUpdateCopyPasteChoices={() => undefined}
           onCloseCopyPasteDialog={() => undefined}
           onConfirmTrashDialog={() => undefined}

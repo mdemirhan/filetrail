@@ -6,10 +6,11 @@ import type {
 } from "@filetrail/contracts";
 
 import type { ContextMenuState, WriteOperationCardState } from "../hooks/useWriteOperations";
-import type {
-  CopyPasteReport as CopyPasteAnalysisReport,
-  CopyPasteOverrides,
-  CopyPastePolicy,
+import {
+  type CopyPasteReport as CopyPasteAnalysisReport,
+  type CopyPasteOverrides,
+  type CopyPastePolicy,
+  leafName,
 } from "../lib/copyPasteReview";
 import { formatSize } from "../lib/formatting";
 import type { InternalMoveSourceSurface } from "../lib/internalDragAndDrop";
@@ -114,7 +115,7 @@ export function AppDialogs({
       pendingTreeSelectionPath?: string | null;
       overrides?: CopyPasteOverrides;
     },
-  ) => void;
+  ) => Promise<boolean>;
   onUpdateCopyPasteChoices: (choices: {
     policy: CopyPastePolicy;
     overrides: CopyPasteOverrides;
@@ -317,7 +318,7 @@ export function AppDialogs({
           detailLabel={
             writeOperationCardState.action === "new_folder" ? "Destination" : "Current item"
           }
-          detailValue={getPathLeafName(
+          detailValue={leafName(
             writeOperationCardState.currentSourcePath ??
               writeOperationCardState.targetPath ??
               currentPath,
@@ -344,7 +345,7 @@ export function AppDialogs({
         isCopyLikeAction(writeOperationProgressEvent.action) ? (
           <CopyPasteResultDialog
             event={writeOperationProgressEvent}
-            canRetry={isRetryableCopyAction(writeOperationProgressEvent)}
+            canRetry
             onRetry={() => onRetryFailedCopyPasteItems(writeOperationProgressEvent)}
             onClose={onCloseCopyPasteDialog}
           />
@@ -466,45 +467,10 @@ function getWriteOperationTitle(
   return phase === "progress" ? "Paste In Progress" : "Paste Result";
 }
 
-function isRetryableCopyAction(event: WriteOperationProgressEvent): boolean {
-  return event.action === "paste" || event.action === "move_to" || event.action === "duplicate";
-}
-
-function getCancelWriteOperationLabel(action: WriteOperationAction): string {
-  return `Cancel ${getWriteOperationLabel(action)}`;
-}
-
-function getWriteOperationLabel(action: WriteOperationAction): string {
-  if (action === "move_to") {
-    return "Move";
-  }
-  if (action === "duplicate") {
-    return "Duplicate";
-  }
-  if (action === "trash") {
-    return "Trash";
-  }
-  if (action === "rename") {
-    return "Rename";
-  }
-  if (action === "new_folder") {
-    return "Create Folder";
-  }
-  if (action === "delete_immediately") {
-    return "Delete";
-  }
-  return "Paste";
-}
-
 function isCopyLikeAction(action: WriteOperationAction): boolean {
   return action === "paste" || action === "move_to" || action === "duplicate";
 }
 
 function getCopyLikeVerb(action: WriteOperationAction): "Paste" | "Move" | "Duplicate" {
   return action === "move_to" ? "Move" : action === "duplicate" ? "Duplicate" : "Paste";
-}
-
-function getPathLeafName(path: string): string {
-  const trimmedPath = path.replace(/\/+$/u, "");
-  return trimmedPath.split("/").filter(Boolean).at(-1) ?? path;
 }

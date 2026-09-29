@@ -102,6 +102,7 @@ export function ActionLogView({
           ...entry.destinationPaths,
           ...entry.items.flatMap((item) => [
             item.error ?? "",
+            formatChildFailureLabel(item) ?? "",
             item.skipReason ? formatSkipReasonLabel(item.skipReason) : "",
           ]),
           ...Object.entries(entry.metadata).flatMap(([key, value]) => [key, String(value)]),
@@ -110,7 +111,9 @@ export function ActionLogView({
             conflict.destinationPath,
             formatConflictClassLabel(conflict.conflictClass),
             formatRuntimeConflictReasonLabel(conflict.reason),
-            conflict.resolution ? formatRuntimeResolutionLabel(conflict.resolution) : "",
+            conflict.resolution
+              ? formatRuntimeResolutionLabel(conflict.resolution, conflict.reason)
+              : "",
           ]),
         ]
           .join("\n")
@@ -664,7 +667,10 @@ export function ActionLogView({
                                 <span style={chipStyle(palette)}>
                                   Resolution:{" "}
                                   {conflict.resolution
-                                    ? formatRuntimeResolutionLabel(conflict.resolution)
+                                    ? formatRuntimeResolutionLabel(
+                                        conflict.resolution,
+                                        conflict.reason,
+                                      )
                                     : "None"}
                                 </span>
                               </div>
@@ -946,11 +952,15 @@ function formatRuntimeConflictReasonLabel(
   if (reason === "source_changed") {
     return "Source changed";
   }
+  if (reason === "trash_unavailable") {
+    return "Trash unavailable";
+  }
   return "Source deleted";
 }
 
 function formatRuntimeResolutionLabel(
   resolution: NonNullable<ActionLogEntry["runtimeConflicts"][number]["resolution"]>,
+  reason: ActionLogEntry["runtimeConflicts"][number]["reason"],
 ): string {
   if (resolution === "keep_both") {
     return "Keep both";
@@ -959,9 +969,19 @@ function formatRuntimeResolutionLabel(
     return "Merge";
   }
   if (resolution === "overwrite") {
-    return "Overwrite";
+    // Without a Trash, replacing meant deleting the existing item for good.
+    return reason === "trash_unavailable" ? "Deleted permanently" : "Overwrite";
   }
   return "Skip";
+}
+
+// A folder whose only problem is failures inside it has no error of its own.
+function formatChildFailureLabel(item: ActionLogItem): string | null {
+  const count = item.childFailureCount ?? 0;
+  if (count === 0) {
+    return null;
+  }
+  return `${count.toLocaleString()} ${count === 1 ? "item" : "items"} inside failed`;
 }
 
 function formatSummary(entry: ActionLogEntry): string {
@@ -1225,24 +1245,34 @@ function ItemRow({
         <div>
           <div style={eyebrowStyle(palette)}>Destination</div>
           <div style={pathValueStyle(palette)}>{item.destinationPath ?? "None"}</div>
-          {item.error ? (
-            <div style={{ marginTop: "8px", color: palette.error, fontSize: "12px" }}>
-              {item.error}
-            </div>
-          ) : null}
+          <ItemProblem item={item} palette={palette} />
         </div>
       )}
       {layoutMode === "narrow" && item.destinationPath ? (
         <div>
           <div style={eyebrowStyle(palette)}>Destination</div>
           <div style={pathValueStyle(palette)}>{item.destinationPath}</div>
-          {item.error ? (
-            <div style={{ marginTop: "8px", color: palette.error, fontSize: "12px" }}>
-              {item.error}
-            </div>
-          ) : null}
+          <ItemProblem item={item} palette={palette} />
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function ItemProblem({
+  item,
+  palette,
+}: {
+  item: ActionLogItem;
+  palette: ReturnType<typeof resolveActionLogTheme>;
+}) {
+  const problems = [item.error, formatChildFailureLabel(item)].filter(Boolean);
+  if (problems.length === 0) {
+    return null;
+  }
+  return (
+    <div style={{ marginTop: "8px", color: palette.error, fontSize: "12px" }}>
+      {problems.join(" · ")}
     </div>
   );
 }
@@ -1668,6 +1698,10 @@ function formatActionLogEntryForClipboard(entry: ActionLogEntry): string {
         if (item.error) {
           lines.push(`  Error: ${item.error}`);
         }
+        const childFailures = formatChildFailureLabel(item);
+        if (childFailures) {
+          lines.push(`  ${childFailures}`);
+        }
       }
     }
   }
@@ -1680,7 +1714,7 @@ function formatActionLogEntryForClipboard(entry: ActionLogEntry): string {
       lines.push(`  Source: ${conflict.sourcePath}`);
       lines.push(`  Destination: ${conflict.destinationPath}`);
       lines.push(
-        `  Resolution: ${conflict.resolution ? formatRuntimeResolutionLabel(conflict.resolution) : "None"}`,
+        `  Resolution: ${conflict.resolution ? formatRuntimeResolutionLabel(conflict.resolution, conflict.reason) : "None"}`,
       );
     }
   }

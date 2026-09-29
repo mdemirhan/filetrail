@@ -9,6 +9,7 @@ import {
   realpath,
   rename,
   rm,
+  rmdir,
   stat,
   symlink,
   utimes,
@@ -68,8 +69,17 @@ export type WriteServiceFileSystem = {
   readlink: (path: string) => Promise<string>;
   chmod?: (path: string, mode: number) => Promise<void>;
   rename?: (oldPath: string, newPath: string) => Promise<void>;
+  /** Like `rename` but fails with EEXIST instead of replacing an item at `newPath`
+   *  (macOS `renamex_np(RENAME_EXCL)`). Without it, the destination is checked first. */
+  renameExclusive?: (oldPath: string, newPath: string) => Promise<void>;
   mkdir: (path: string, options?: { recursive?: boolean }) => Promise<void>;
   rm: (path: string, options?: { recursive?: boolean; force?: boolean }) => Promise<void>;
+  /** Removes an empty folder; fails (ENOTEMPTY or EEXIST) when anything is inside. */
+  rmdir: (path: string) => Promise<void>;
+  /** Whether the volume holding `path` tells names apart by letter case (macOS
+   *  `pathconf(_PC_CASE_SENSITIVE)`), or null when it doesn't say. Without it, an
+   *  existing name is looked up with its case swapped. */
+  isCaseSensitive?: (path: string) => Promise<boolean | null>;
   symlink: (target: string, path: string) => Promise<void>;
   /** Copies a file preserving metadata (mode, timestamps, xattrs). When provided,
    *  used instead of `copyFileStream` + `chmod` for file copies. */
@@ -85,8 +95,9 @@ export type WriteServiceFileSystem = {
   /** Like `utimes` but operates on the symlink itself, not its target. Used to
    *  preserve timestamps on symlinks after creation. */
   lutimes?: (path: string, atimeMs: number, mtimeMs: number) => Promise<void>;
-  /** Moves a path to the Trash. When provided, items replaced by a paste are trashed
-   *  instead of permanently deleted, so a replace can always be undone. */
+  /** Moves a path to the Trash. Items replaced by a paste are trashed so a replace can be
+   *  undone. Without it (or when it fails), the person is asked before anything is
+   *  deleted permanently (a "trash_unavailable" runtime conflict). */
   trash?: (path: string) => Promise<void>;
 };
 
@@ -202,6 +213,8 @@ export type CopyPasteAnalysisReport = {
   issues: CopyPasteAnalysisIssue[];
   warnings: CopyPasteAnalysisWarning[];
   summary: CopyPasteAnalysisSummary;
+  /** Whether the destination volume tells names apart by letter case (default: no). */
+  destinationCaseSensitive?: boolean;
 };
 
 export type CopyPasteAnalysisStartHandle = {
@@ -278,7 +291,10 @@ export type CopyPasteRuntimeConflict = {
     | "destination_created"
     | "destination_deleted"
     | "source_changed"
-    | "source_deleted";
+    | "source_deleted"
+    // Replace couldn't move the existing item to the Trash; "overwrite" deletes it
+    // permanently instead.
+    | "trash_unavailable";
   sourceFingerprint: NodeFingerprint;
   destinationFingerprint: NodeFingerprint;
   currentSourceFingerprint: NodeFingerprint;
@@ -292,6 +308,9 @@ export type CopyPasteItemResult = {
   status: "completed" | "skipped" | "failed" | "cancelled";
   error: string | null;
   skipReason?: "planned_conflict_policy" | "runtime_conflict_resolution" | null;
+  /** For a folder: how many items inside it failed. A folder whose only problem is
+   *  failures inside it has status "failed" and a null error. */
+  childFailureCount?: number;
 };
 
 export type CopyPasteOperationResult = {
@@ -327,6 +346,11 @@ export type CopyPasteProgressEvent = {
   currentSourcePath: string | null;
   currentDestinationPath: string | null;
   runtimeConflict?: CopyPasteRuntimeConflict | null;
+  /** A conflict answered automatically by an earlier "apply to remaining" answer. */
+  autoResolvedRuntimeConflict?: {
+    conflict: CopyPasteRuntimeConflict;
+    resolution: CopyPasteRuntimeResolutionAction;
+  } | null;
   result: CopyPasteOperationResult | null;
 };
 
@@ -419,6 +443,9 @@ export const DEFAULT_WRITE_SERVICE_FILE_SYSTEM: WriteServiceFileSystem = {
   },
   rm: async (path, options) => {
     await rm(path, options);
+  },
+  rmdir: async (path) => {
+    await rmdir(path);
   },
   symlink: async (target, path) => {
     await symlink(target, path);

@@ -9,9 +9,10 @@ import {
   resolveWriteOperationRefreshPath,
   resolveWriteOperationTreeReloadPaths,
   resolveWriteOperationTreeSelectionPath,
+  selectTopLevelItems,
   shouldRenderCopyPasteResultDialog,
 } from "./explorerAppUtils";
-import type { WriteOperationResult } from "./explorerTypes";
+import type { DirectoryEntry, WriteOperationResult } from "./explorerTypes";
 
 function createPartialSkipEvent(
   skipReason: "planned_conflict_policy" | "runtime_conflict_resolution" | null,
@@ -91,8 +92,99 @@ describe("explorerAppUtils", () => {
           isHidden: false,
           isSymlink: false,
         },
+        selectedPathCount: 1,
       }),
     ).toBe("/Users/demo");
+  });
+
+  describe("resolvePasteDestinationPath", () => {
+    const folder: DirectoryEntry = {
+      path: "/Users/demo/Folder",
+      name: "Folder",
+      kind: "directory",
+      extension: "",
+      isHidden: false,
+      isSymlink: false,
+    };
+    const linkedFolder: DirectoryEntry = {
+      path: "/Users/demo/Linked",
+      name: "Linked",
+      kind: "symlink_directory",
+      extension: "",
+      isHidden: false,
+      isSymlink: true,
+    };
+    const base = {
+      contextMenuState: null,
+      contextMenuTargetEntry: null,
+      clipboardSourcePaths: ["/Users/demo/source.txt"],
+      currentPath: "/Users/demo",
+      focusedPane: "content" as const,
+      isSearchMode: false,
+      selectedEntry: folder,
+      selectedPathCount: 1,
+    };
+    const contentMenu = (paths: string[], targetPath: string) => ({
+      x: 0,
+      y: 0,
+      paths,
+      targetPath,
+      surface: "content" as const,
+      targetKind: "contentEntry" as const,
+      sourceSubview: null,
+      scope: "selection" as const,
+      folderExpansionLabel: null,
+    });
+
+    it("pastes into the one selected folder", () => {
+      expect(resolvePasteDestinationPath(base)).toBe("/Users/demo/Folder");
+    });
+
+    it("pastes into the current folder when several items are selected", () => {
+      expect(resolvePasteDestinationPath({ ...base, selectedPathCount: 2 })).toBe("/Users/demo");
+      expect(
+        resolvePasteDestinationPath({
+          ...base,
+          contextMenuState: contentMenu(["/Users/demo/Folder", "/Users/demo/a.txt"], folder.path),
+          contextMenuTargetEntry: folder,
+        }),
+      ).toBe("/Users/demo");
+    });
+
+    it("pastes into a right-clicked folder when it is the only item", () => {
+      expect(
+        resolvePasteDestinationPath({
+          ...base,
+          contextMenuState: contentMenu([folder.path], folder.path),
+          contextMenuTargetEntry: folder,
+        }),
+      ).toBe("/Users/demo/Folder");
+    });
+
+    it("never pastes through a symlinked folder", () => {
+      expect(resolvePasteDestinationPath({ ...base, selectedEntry: linkedFolder })).toBe(
+        "/Users/demo",
+      );
+      expect(
+        resolvePasteDestinationPath({
+          ...base,
+          contextMenuState: contentMenu([linkedFolder.path], linkedFolder.path),
+          contextMenuTargetEntry: linkedFolder,
+        }),
+      ).toBe("/Users/demo");
+    });
+
+    it("pastes into the folder on screen from the tree or with no focused pane", () => {
+      expect(resolvePasteDestinationPath({ ...base, focusedPane: "tree" })).toBe("/Users/demo");
+      expect(resolvePasteDestinationPath({ ...base, focusedPane: null })).toBe("/Users/demo");
+      expect(
+        resolvePasteDestinationPath({ ...base, focusedPane: "tree", currentPath: "" }),
+      ).toBeNull();
+    });
+
+    it("has no destination in search results", () => {
+      expect(resolvePasteDestinationPath({ ...base, isSearchMode: true })).toBeNull();
+    });
   });
 
   it("remaps the refreshed path after a rename inside the current folder", () => {
@@ -237,5 +329,53 @@ describe("collectRetrySourcePaths", () => {
         item("/src/d.txt", "cancelled"),
       ]),
     ).toEqual(["/src/photos", "/src/c.txt", "/src/d.txt"]);
+  });
+
+  it("does not confuse a sibling with a shared name prefix for a parent", () => {
+    const item = (sourcePath: string) => ({
+      sourcePath,
+      destinationPath: null,
+      status: "failed" as const,
+      error: null,
+    });
+    expect(collectRetrySourcePaths([item("/src/photo"), item("/src/photos/a.jpg")])).toEqual([
+      "/src/photo",
+      "/src/photos/a.jpg",
+    ]);
+  });
+
+  it("stays fast for very large results", () => {
+    const items: WriteOperationResult["items"] = [
+      { sourcePath: "/src/big", destinationPath: null, status: "failed", error: null },
+    ];
+    for (let index = 0; index < 30_000; index += 1) {
+      items.push({
+        sourcePath: `/src/big/dir-${index % 100}/file-${index}.txt`,
+        destinationPath: null,
+        status: "failed",
+        error: null,
+      });
+    }
+    const startedAt = performance.now();
+    expect(collectRetrySourcePaths(items)).toEqual(["/src/big"]);
+    // The old pairwise scan took seconds at this size.
+    expect(performance.now() - startedAt).toBeLessThan(500);
+  });
+});
+
+describe("selectTopLevelItems", () => {
+  it("keeps items with nothing listed above them, in their original order", () => {
+    const items = [
+      { sourcePath: "/src/b" },
+      { sourcePath: "/src/a/inner.txt" },
+      { sourcePath: "/src/a" },
+      { sourcePath: "/src/b/deep/x.txt" },
+      { sourcePath: null },
+    ];
+    expect(selectTopLevelItems(items)).toEqual([
+      { sourcePath: "/src/b" },
+      { sourcePath: "/src/a" },
+      { sourcePath: null },
+    ]);
   });
 });

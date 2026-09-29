@@ -1,11 +1,12 @@
 /**
  * N-API async wrapper around macOS copyfile(3).
  *
- * Exposes a single function: nativeCopyFile(src, dst) → Promise<void>
+ * Exposes nativeCopyFile(src, dst) → Promise<void>.
  *
  * Uses COPYFILE_ALL (preserve stat, xattrs, ACLs) | COPYFILE_CLONE (attempt
- * CoW clone on APFS, fall back to full copy). The copy runs on a libuv thread
- * pool thread so the main thread is never blocked.
+ * CoW clone on APFS, fall back to full copy) | COPYFILE_EXCL (never replace an
+ * existing destination). The copy runs on a libuv thread pool thread so the
+ * main thread is never blocked.
  */
 
 #include <node_api.h>
@@ -14,6 +15,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "native_errors.h"
 
 /* ── Async work data ─────────────────────────────────────────────── */
 
@@ -33,9 +36,12 @@ static void execute_copy(napi_env env, void *data) {
 
   /* NOFOLLOW_SRC copies a symlink as a symlink instead of its target's data.
      Callers recreate symlinks themselves today; this keeps the addon safe if
-     one is ever passed through. */
+     one is ever passed through.
+     EXCL fails with EEXIST instead of writing over an item that appeared at the
+     destination: callers always copy to a name they expect to be free. */
   int rc = copyfile(w->source, w->destination, NULL,
-                    COPYFILE_ALL | COPYFILE_CLONE | COPYFILE_NOFOLLOW_SRC);
+                    COPYFILE_ALL | COPYFILE_CLONE | COPYFILE_NOFOLLOW_SRC |
+                        COPYFILE_EXCL);
   w->errnum = (rc == 0) ? 0 : errno;
 }
 
@@ -52,85 +58,8 @@ static void complete_copy(napi_env env, napi_status status, void *data) {
     napi_create_error(env, NULL, err_msg, &error);
     napi_reject_deferred(env, w->deferred, error);
   } else if (w->errnum != 0) {
-    /* Build a Node.js-style error with a `code` property. */
-    const char *code;
-    switch (w->errnum) {
-    case ENOENT:
-      code = "ENOENT";
-      break;
-    case EACCES:
-      code = "EACCES";
-      break;
-    case EPERM:
-      code = "EPERM";
-      break;
-    case ENOSPC:
-      code = "ENOSPC";
-      break;
-    case EISDIR:
-      code = "EISDIR";
-      break;
-    case EEXIST:
-      code = "EEXIST";
-      break;
-    case EXDEV:
-      code = "EXDEV";
-      break;
-    case ENAMETOOLONG:
-      code = "ENAMETOOLONG";
-      break;
-    case EROFS:
-      code = "EROFS";
-      break;
-    case EDQUOT:
-      code = "EDQUOT";
-      break;
-    case ENOTDIR:
-      code = "ENOTDIR";
-      break;
-    case ENOTEMPTY:
-      code = "ENOTEMPTY";
-      break;
-    case EBUSY:
-      code = "EBUSY";
-      break;
-    case EIO:
-      code = "EIO";
-      break;
-    default:
-      code = "UNKNOWN";
-      break;
-    }
-
-    char msg[512];
-    snprintf(msg, sizeof(msg), "%s: copyfile '%s' -> '%s'", code, w->source,
-             w->destination);
-
-    napi_value err_msg;
-    napi_create_string_utf8(env, msg, NAPI_AUTO_LENGTH, &err_msg);
-    napi_value error;
-    napi_create_error(env, NULL, err_msg, &error);
-
-    /* Attach .code */
-    napi_value code_val;
-    napi_create_string_utf8(env, code, NAPI_AUTO_LENGTH, &code_val);
-    napi_set_named_property(env, error, "code", code_val);
-
-    /* Attach .path (source) */
-    napi_value path_val;
-    napi_create_string_utf8(env, w->source, NAPI_AUTO_LENGTH, &path_val);
-    napi_set_named_property(env, error, "path", path_val);
-
-    /* Attach .dest */
-    napi_value dest_val;
-    napi_create_string_utf8(env, w->destination, NAPI_AUTO_LENGTH, &dest_val);
-    napi_set_named_property(env, error, "dest", dest_val);
-
-    /* Attach .errno */
-    napi_value errno_val;
-    napi_create_int32(env, w->errnum, &errno_val);
-    napi_set_named_property(env, error, "errno", errno_val);
-
+    napi_value error =
+        native_errno_error(env, w->errnum, "copyfile", w->source, w->destination);
     napi_reject_deferred(env, w->deferred, error);
   } else {
     napi_value undefined;
@@ -213,6 +142,9 @@ extern napi_value register_file_icon(napi_env env, napi_value exports);
 /* Defined in native_foldersize.c — registers nativeFolderSize/Cancel on exports. */
 extern napi_value register_folder_size(napi_env env, napi_value exports);
 
+/* Defined in native_rename.c — registers nativeRenameExclusive/nativeIsCaseSensitive. */
+extern napi_value register_rename(napi_env env, napi_value exports);
+
 static napi_value init(napi_env env, napi_value exports) {
   napi_value fn;
   napi_create_function(env, "nativeCopyFile", NAPI_AUTO_LENGTH,
@@ -221,6 +153,7 @@ static napi_value init(napi_env env, napi_value exports) {
 
   register_file_icon(env, exports);
   register_folder_size(env, exports);
+  register_rename(env, exports);
 
   return exports;
 }

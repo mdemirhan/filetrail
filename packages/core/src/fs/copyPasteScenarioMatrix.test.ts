@@ -251,6 +251,8 @@ async function runScenario(args: {
   mutateAfterResolve?: ((fileSystem: MockWriteServiceFileSystem) => void) | undefined;
 }) {
   const fileSystem = new MockWriteServiceFileSystem(args.seed);
+  // As in the app: items replaced by a paste go to the Trash.
+  fileSystem.enableTrash();
   const report = await buildCopyPasteAnalysisReport({
     analysisId: "analysis-1",
     request: {

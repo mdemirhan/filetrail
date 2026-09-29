@@ -1,5 +1,5 @@
 import { ACCENT_OPTIONS, type AccentMode, type ThemeMode } from "../../shared/appPreferences";
-import { darkenHex, withAlpha } from "./colorUtils";
+import { darkenHex, hexToRgb, withAlpha } from "./colorUtils";
 import { type ThemeCssBase, resolveThemeCssBase } from "./themeVariants";
 
 type AccentThemeProfile = {
@@ -31,6 +31,10 @@ export type AccentTokens = {
   dark: string;
   solid: string;
   solidDark: string;
+  /** Background of solid (default) buttons: the accent, a touch darker if that keeps white text. */
+  solidButton: string;
+  /** Text on `solidButton`: white or black, always at least 4.5:1. */
+  onSolid: string;
   hoverBg: string;
   pillBg: string;
   pillBorder: string;
@@ -159,6 +163,7 @@ export function getAccentPalette(accent: AccentMode) {
 export function generateAccentTokens(accent: AccentMode, theme: ThemeMode): AccentTokens {
   const palette = getAccentPalette(accent);
   const profile = ACCENT_THEME_PROFILES[resolveThemeCssBase(theme)];
+  const button = solidButtonColors(palette.primary);
 
   return {
     id: accent,
@@ -167,6 +172,8 @@ export function generateAccentTokens(accent: AccentMode, theme: ThemeMode): Acce
     dark: palette.dark,
     solid: palette.primary,
     solidDark: palette.dark,
+    solidButton: button.background,
+    onSolid: button.foreground,
     hoverBg: withAlpha(palette.primary, profile.hoverBgAlpha),
     pillBg: withAlpha(palette.primary, profile.pillBgAlpha),
     pillBorder: withAlpha(palette.primary, profile.pillBorderAlpha),
@@ -212,6 +219,8 @@ export function accentTokensToCssVariables(tokens: AccentTokens): Record<string,
     "--help-accent-dim": tokens.calloutBg,
     "--ft-accent-solid": tokens.solid,
     "--ft-accent-solid-dark": tokens.solidDark,
+    "--ft-accent-solid-button": tokens.solidButton,
+    "--ft-accent-on-solid": tokens.onSolid,
     "--ft-accent-hover-bg": tokens.hoverBg,
     "--ft-accent-pill-bg": tokens.pillBg,
     "--ft-accent-pill-border": tokens.pillBorder,
@@ -266,4 +275,41 @@ export function getFavoriteAccentVariables(tokens: AccentTokens): Record<string,
     "--favorite-accent-badge-bg": tokens.pillBg,
     "--favorite-accent-badge-text": tokens.pillText,
   };
+}
+
+// WCAG relative luminance of an sRGB hex color (0 for black, 1 for white).
+export function relativeLuminance(value: string): number {
+  const rgb = hexToRgb(value);
+  const linear = (channel: number) => {
+    const c = channel / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * linear(rgb.r) + 0.7152 * linear(rgb.g) + 0.0722 * linear(rgb.b);
+}
+
+export function contrastRatio(foreground: string, background: string): number {
+  const a = relativeLuminance(foreground);
+  const b = relativeLuminance(background);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
+const MIN_TEXT_CONTRAST = 4.5;
+// How much a solid button may be darkened to keep white text before it stops looking like
+// the accent color; lighter accents (gold, yellow, aqua…) get black text instead.
+const MAX_BUTTON_DARKENING = 0.2;
+
+// Colors for a solid accent button with readable text (at least 4.5:1, WCAG AA). macOS
+// buttons have white text, so white is kept when the accent is dark enough or a slightly
+// darker shade of it is; otherwise the text is black on the accent itself.
+export function solidButtonColors(accent: string): { background: string; foreground: string } {
+  if (!/^#[0-9a-f]{6}$/iu.test(accent)) {
+    return { background: accent, foreground: "#ffffff" };
+  }
+  for (let step = 0; step <= MAX_BUTTON_DARKENING * 100; step += 1) {
+    const background = step === 0 ? accent : darkenHex(accent, step / 100);
+    if (contrastRatio("#ffffff", background) >= MIN_TEXT_CONTRAST) {
+      return { background, foreground: "#ffffff" };
+    }
+  }
+  return { background: accent, foreground: "#000000" };
 }

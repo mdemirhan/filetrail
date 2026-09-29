@@ -3628,7 +3628,7 @@ describe("App copy/paste integration", () => {
     expect(screen.queryByText("Ready to move")).not.toBeInTheDocument();
   });
 
-  it("blocks Cmd+V in tree focus even when the current tree folder is a valid destination", async () => {
+  it("pastes into the tree's selected folder with Cmd+V in tree focus", async () => {
     const harness = createAppHarness();
 
     render(
@@ -3643,12 +3643,73 @@ describe("App copy/paste integration", () => {
     });
     await openDirectory("/Users/demo/Folder");
     await focusTreePane();
-    const invocationCountBeforePaste = harness.invocations.length;
+    expect(screen.getByTestId("tree-selection")).toHaveTextContent("fs:/Users/demo/Folder");
     await act(async () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
-    expect(harness.invocations).toHaveLength(invocationCountBeforePaste);
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.findLast((call) => call.channel === "copyPaste:plan")?.payload,
+      ).toMatchObject({
+        sourcePaths: ["/Users/demo/source.txt"],
+        destinationDirectoryPath: "/Users/demo/Folder",
+      });
+    });
+  });
+
+  it("does not paste from the tree when the Favorites root is selected", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("favorites-root"));
+    });
+    expect(screen.getByTestId("tree-selection")).toHaveTextContent("favorites-root");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+      harness.emitCommand({ type: "editPaste" });
+    });
+
+    expect(harness.invocations.some((call) => call.channel === "copyPaste:plan")).toBe(false);
+  });
+
+  it("pastes into the folder on screen when no pane has focus, even with a folder selected", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+    await selectItem("/Users/demo/Folder");
+    // Focusing the search field takes focus away from both panes.
+    await act(async () => {
+      fireEvent.focus(screen.getByPlaceholderText("Search"));
+    });
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.findLast((call) => call.channel === "copyPaste:plan")?.payload,
+      ).toMatchObject({ destinationDirectoryPath: "/Users/demo" });
+    });
   });
 
   it("blocks Cmd+Shift+N in tree focus even when content still has a stale selection", async () => {
@@ -3725,7 +3786,7 @@ describe("App copy/paste integration", () => {
     expect(screen.queryByText("Ready to move")).not.toBeInTheDocument();
   });
 
-  it("blocks the Paste menu command in tree focus", async () => {
+  it("pastes into the tree's selected folder from the Paste menu command in tree focus", async () => {
     const harness = createAppHarness();
 
     render(
@@ -3740,12 +3801,16 @@ describe("App copy/paste integration", () => {
     });
     await openDirectory("/Users/demo/Folder");
     await focusTreePane();
-    const invocationCountBeforePaste = harness.invocations.length;
     await act(async () => {
       harness.emitCommand({ type: "editPaste" });
     });
 
-    expect(harness.invocations).toHaveLength(invocationCountBeforePaste);
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.findLast((call) => call.channel === "copyPaste:plan")?.payload,
+      ).toMatchObject({ destinationDirectoryPath: "/Users/demo/Folder" });
+    });
+    expectNativeEditActions(harness, []);
   });
 
   it("blocks the New Folder menu command in tree focus", async () => {
@@ -5582,9 +5647,7 @@ describe("App copy/paste integration", () => {
     expect(skipToast).not.toBeNull();
     expect(screen.queryByRole("dialog", { name: /^Pasted \d+ of/ })).not.toBeInTheDocument();
     expect(
-      within(skipToast as HTMLElement).getByText(
-        "1 item skipped by the selected conflict handling.",
-      ),
+      within(skipToast as HTMLElement).getByText("Skipped 1 item that already exists."),
     ).toBeInTheDocument();
 
     const planCallsBeforeRetry = harness.invocations.filter(
@@ -6870,10 +6933,591 @@ describe("App copy/paste integration", () => {
   });
 });
 
+describe("App copy/paste dialogs and destinations", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const reviewSheetName = "“Folder” already exists in “demo”";
+
+  async function openFolderReviewSheet(
+    harnessArgs: Parameters<typeof createAppHarness>[0] = {},
+  ): Promise<{ harness: ReturnType<typeof createAppHarness>; sheet: HTMLElement }> {
+    const harness = createAppHarness({ planResponse: folderConflictPlan(), ...harnessArgs });
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+    await selectItem("/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "d", metaKey: true });
+    });
+    const sheet = await screen.findByRole("dialog", { name: reviewSheetName });
+    return { harness, sheet };
+  }
+
+  // fireEvent returns false when a listener called preventDefault.
+  function expectKeysReachDialog(element: HTMLElement) {
+    element.focus();
+    expect(element).toHaveFocus();
+    for (const key of ["Tab", "Enter", " "]) {
+      expect(fireEvent.keyDown(element, { key })).toBe(true);
+    }
+  }
+
+  it("lets Tab, Return and Space through inside the review sheet", async () => {
+    const { sheet } = await openFolderReviewSheet();
+
+    expectKeysReachDialog(within(sheet).getByRole("button", { name: "Cancel" }));
+    // Keys aimed at the explorer behind the sheet are still swallowed.
+    expect(fireEvent.keyDown(window, { key: "ArrowDown" })).toBe(false);
+  });
+
+  it("closes the review sheet with Escape while a choice menu has focus", async () => {
+    const { sheet, harness } = await openFolderReviewSheet();
+
+    const select = within(sheet).getByLabelText("Choice for Folder");
+    select.focus();
+    await act(async () => {
+      fireEvent.keyDown(select, { key: "Escape" });
+    });
+
+    expect(screen.queryByRole("dialog", { name: reviewSheetName })).not.toBeInTheDocument();
+    expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
+  });
+
+  it("closes the review sheet with Cmd+. like Escape", async () => {
+    const { sheet } = await openFolderReviewSheet();
+
+    const cancelButton = within(sheet).getByRole("button", { name: "Cancel" });
+    cancelButton.focus();
+    await act(async () => {
+      fireEvent.keyDown(cancelButton, { key: ".", metaKey: true });
+    });
+
+    expect(screen.queryByRole("dialog", { name: reviewSheetName })).not.toBeInTheDocument();
+  });
+
+  it("starts a reviewed operation once even when the start button is clicked twice", async () => {
+    const { sheet, harness } = await openFolderReviewSheet({ deferCopyPasteStart: true });
+
+    const startButton = within(sheet).getByRole("button", { name: "Duplicate" });
+    await act(async () => {
+      fireEvent.click(startButton);
+      fireEvent.click(startButton);
+    });
+    await act(async () => {
+      harness.resolveCopyPasteStart();
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: reviewSheetName })).not.toBeInTheDocument();
+    });
+    expect(harness.invocations.filter((call) => call.channel === "copyPaste:start")).toHaveLength(
+      1,
+    );
+  });
+
+  it("keeps the review sheet usable when the start fails", async () => {
+    const { sheet } = await openFolderReviewSheet({
+      copyPasteStartError: new Error("The analysis expired. Paste again to recheck."),
+    });
+
+    await act(async () => {
+      fireEvent.click(within(sheet).getByRole("button", { name: "Duplicate" }));
+    });
+
+    expect(await screen.findByText("Duplicate couldn't start")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: reviewSheetName })).toBeInTheDocument();
+    await vi.waitFor(() => {
+      expect(within(sheet).getByRole("button", { name: "Duplicate" })).not.toBeDisabled();
+    });
+  });
+
+  it("lets keys through inside the runtime conflict alert and sends apply-to-remaining", async () => {
+    const harness = createAppHarness();
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+    await selectItem("/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+    await vi.waitFor(() => {
+      expect(harness.invocations.map((call) => call.channel)).toContain("copyPaste:start");
+    });
+    await act(async () => {
+      harness.emitProgress({
+        operationId: "copy-op-1",
+        action: "paste",
+        status: "awaiting_resolution",
+        completedItemCount: 0,
+        totalItemCount: 1,
+        completedByteCount: 0,
+        totalBytes: null,
+        currentSourcePath: "/Users/demo/Folder",
+        currentDestinationPath: "/Users/demo/Folder",
+        runtimeConflict: {
+          conflictId: "runtime-1",
+          analysisId: "analysis-1",
+          sourcePath: "/Users/demo/Folder",
+          destinationPath: "/Users/demo/Folder",
+          sourceKind: "directory",
+          destinationKind: "directory",
+          conflictClass: "directory_conflict",
+          reason: "destination_changed",
+          sourceFingerprint: createNodeFingerprint("directory"),
+          destinationFingerprint: createNodeFingerprint("directory"),
+          currentSourceFingerprint: createNodeFingerprint("directory"),
+          currentDestinationFingerprint: createNodeFingerprint("directory"),
+        },
+        result: null,
+      });
+    });
+    const alert = await screen.findByRole("dialog", {
+      name: "“Folder” in “demo” changed while pasting",
+    });
+
+    expectKeysReachDialog(within(alert).getByRole("button", { name: "Stop Pasting" }));
+
+    await act(async () => {
+      fireEvent.click(within(alert).getByRole("checkbox"));
+    });
+    await act(async () => {
+      fireEvent.click(within(alert).getByRole("button", { name: "Keep Both" }));
+    });
+
+    expect(
+      harness.invocations.findLast((call) => call.channel === "copyPaste:resolveConflict")?.payload,
+    ).toEqual({
+      operationId: "copy-op-1",
+      conflictId: "runtime-1",
+      resolution: "keep_both",
+      applyToRemaining: true,
+    });
+  });
+
+  it("lets keys through inside the result dialog", async () => {
+    const harness = createAppHarness();
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+    await pasteSourceIntoFolder(harness, "c");
+    await act(async () => {
+      harness.emitProgress(
+        failedResultEvent("copy", [
+          { sourcePath: "/Users/demo/source.txt", status: "failed", error: "Disk full" },
+        ]),
+      );
+    });
+
+    const retryButton = await screen.findByRole("button", { name: /^Retry \d+ Items?$/ });
+    expectKeysReachDialog(retryButton);
+  });
+
+  it("retries a failed folder copy without duplicating the files that already arrived", async () => {
+    const harness = createAppHarness();
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+    await pasteSourceIntoFolder(harness, "c");
+    await act(async () => {
+      harness.emitProgress(
+        failedResultEvent("copy", [
+          { sourcePath: "/Users/demo/photos", status: "failed", error: "Disk full" },
+          { sourcePath: "/Users/demo/photos/a.jpg", status: "completed", error: null },
+          { sourcePath: "/Users/demo/photos/b.jpg", status: "failed", error: "Disk full" },
+        ]),
+      );
+    });
+    const startCallsBeforeRetry = harness.invocations.filter(
+      (call) => call.channel === "copyPaste:start",
+    ).length;
+
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: /^Retry \d+ Items?$/ }));
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.filter((call) => call.channel === "copyPaste:start")).toHaveLength(
+        startCallsBeforeRetry + 1,
+      );
+    });
+    expect(
+      harness.invocations.findLast((call) => call.channel === "copyPaste:plan")?.payload,
+    ).toMatchObject({ sourcePaths: ["/Users/demo/photos"] });
+    expect(
+      harness.invocations.findLast((call) => call.channel === "copyPaste:start")?.payload,
+    ).toMatchObject({ policy: { file: "skip", directory: "merge", mismatch: "skip" } });
+  });
+
+  it("clears the cut items from the clipboard once a retried move moved them", async () => {
+    const harness = createAppHarness({
+      planResponse: cutPlan(["/Users/demo/source.txt"], "/Users/demo/Folder"),
+    });
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+    await pasteSourceIntoFolder(harness, "x");
+    await act(async () => {
+      harness.emitProgress(
+        failedResultEvent("cut", [
+          { sourcePath: "/Users/demo/source.txt", status: "failed", error: "Permission denied" },
+        ]),
+      );
+    });
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: /^Retry \d+ Items?$/ }));
+    });
+    await vi.waitFor(() => {
+      expect(harness.invocations.filter((call) => call.channel === "copyPaste:start")).toHaveLength(
+        2,
+      );
+    });
+    await act(async () => {
+      harness.emitProgress(
+        finishedResultEvent("cut", "completed", [
+          { sourcePath: "/Users/demo/source.txt", status: "completed", error: null },
+        ]),
+      );
+    });
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+    expect(await screen.findByText("Clipboard is empty")).toBeInTheDocument();
+  });
+
+  it("pastes into the current folder when several items are selected", async () => {
+    const harness = createAppHarness();
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+    // The folder is the lead item of a two-item selection.
+    await act(async () => {
+      fireEvent.click(screen.getByTitle("/Users/demo/Folder"), { metaKey: true });
+    });
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.findLast((call) => call.channel === "copyPaste:plan")?.payload,
+      ).toMatchObject({ destinationDirectoryPath: "/Users/demo" });
+    });
+  });
+
+  it("never pastes into a symlinked folder, from the keyboard or the context menu", async () => {
+    const harness = createAppHarness({
+      directorySnapshots: {
+        "/Users/demo": {
+          path: "/Users/demo",
+          parentPath: "/Users",
+          entries: [
+            createDirectoryEntry("/Users/demo/source.txt", "file"),
+            createDirectoryEntry("/Users/demo/Folder", "directory"),
+            createDirectoryEntry("/Users/demo/Linked", "symlink_directory", { isSymlink: true }),
+          ],
+        },
+      },
+    });
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+    await selectItem("/Users/demo/Linked");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.findLast((call) => call.channel === "copyPaste:plan")?.payload,
+      ).toMatchObject({ destinationDirectoryPath: "/Users/demo" });
+    });
+
+    // Let the first paste finish so the next one is not blocked as busy.
+    await act(async () => {
+      harness.emitProgress(
+        finishedResultEvent("copy", "completed", [
+          { sourcePath: "/Users/demo/source.txt", status: "completed", error: null },
+        ]),
+      );
+    });
+    const planCallCount = harness.invocations.filter(
+      (call) => call.channel === "copyPaste:plan",
+    ).length;
+    await act(async () => {
+      fireEvent.contextMenu(await screen.findByTitle("/Users/demo/Linked"));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Paste/ }));
+    });
+    await vi.waitFor(() => {
+      expect(harness.invocations.filter((call) => call.channel === "copyPaste:plan")).toHaveLength(
+        planCallCount + 1,
+      );
+    });
+    expect(
+      harness.invocations.findLast((call) => call.channel === "copyPaste:plan")?.payload,
+    ).toMatchObject({ destinationDirectoryPath: "/Users/demo" });
+  });
+
+  it("does nothing, silently, when cut items are pasted into the folder they are in", async () => {
+    const harness = createAppHarness({
+      planResponse: cutPlan(["/Users/demo/source.txt"], "/Users/demo", [
+        sameFolderIssue("/Users/demo/source.txt"),
+      ]),
+    });
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "x", metaKey: true });
+    });
+    await clearContentSelection();
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.some((call) => call.channel === "copyPaste:plan")).toBe(true);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.queryByText("Move couldn't start")).not.toBeInTheDocument();
+    expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
+  });
+
+  it("still moves the other cut items when some are already in the destination folder", async () => {
+    const harness = createAppHarness({
+      analysisReportForRequest: (request) =>
+        toAnalysisReport(
+          request.sourcePaths.includes("/Users/demo/source.txt")
+            ? cutPlan(request.sourcePaths, request.destinationDirectoryPath, [
+                sameFolderIssue("/Users/demo/source.txt"),
+              ])
+            : cutPlan(request.sourcePaths, request.destinationDirectoryPath),
+        ),
+    });
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.click(screen.getByTitle("/Users/demo/Folder"), { metaKey: true });
+    });
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "x", metaKey: true });
+    });
+    await clearContentSelection();
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.map((call) => call.channel)).toContain("copyPaste:start");
+    });
+    expect(
+      harness.invocations
+        .filter((call) => call.channel === "copyPaste:plan")
+        .map((call) => (call.payload as { sourcePaths: string[] }).sourcePaths),
+    ).toEqual([["/Users/demo/source.txt", "/Users/demo/Folder"], ["/Users/demo/Folder"]]);
+    expect(screen.queryByText("Move couldn't start")).not.toBeInTheDocument();
+  });
+});
+
+async function pasteSourceIntoFolder(
+  harness: ReturnType<typeof createAppHarness>,
+  clipboardKey: "c" | "x",
+): Promise<void> {
+  await selectItem("/Users/demo/source.txt");
+  await act(async () => {
+    fireEvent.keyDown(window, { key: clipboardKey, metaKey: true });
+  });
+  await selectItem("/Users/demo/Folder");
+  await act(async () => {
+    fireEvent.keyDown(window, { key: "v", metaKey: true });
+  });
+  await vi.waitFor(() => {
+    expect(harness.invocations.map((call) => call.channel)).toContain("copyPaste:start");
+  });
+}
+
+type TestResultItem = {
+  sourcePath: string;
+  status: "completed" | "failed" | "cancelled";
+  error: string | null;
+};
+
+function failedResultEvent(mode: "copy" | "cut", items: TestResultItem[]): TestProgressEvent {
+  return finishedResultEvent(mode, "failed", items);
+}
+
+function finishedResultEvent(
+  mode: "copy" | "cut",
+  status: "completed" | "failed",
+  items: TestResultItem[],
+): TestProgressEvent {
+  const count = (itemStatus: TestResultItem["status"]) =>
+    items.filter((item) => item.status === itemStatus).length;
+  const summary = {
+    topLevelItemCount: 1,
+    totalItemCount: items.length,
+    completedItemCount: count("completed"),
+    failedItemCount: count("failed"),
+    skippedItemCount: 0,
+    cancelledItemCount: count("cancelled"),
+    completedByteCount: 0,
+    totalBytes: 5,
+  };
+  return {
+    operationId: "copy-op-1",
+    mode,
+    status,
+    completedItemCount: summary.completedItemCount,
+    totalItemCount: items.length,
+    completedByteCount: 0,
+    totalBytes: 5,
+    currentSourcePath: null,
+    currentDestinationPath: null,
+    result: {
+      operationId: "copy-op-1",
+      mode,
+      status,
+      destinationDirectoryPath: "/Users/demo/Folder",
+      startedAt: "2026-03-09T00:00:00.000Z",
+      finishedAt: "2026-03-09T00:00:01.000Z",
+      summary,
+      items: items.map((item) => ({
+        sourcePath: item.sourcePath,
+        destinationPath: `/Users/demo/Folder/${item.sourcePath.split("/").at(-1)}`,
+        status: item.status,
+        error: item.error,
+      })),
+      error: status === "failed" ? (items.find((item) => item.error)?.error ?? null) : null,
+    },
+  };
+}
+
+function sameFolderIssue(sourcePath: string): IpcResponse<"copyPaste:plan">["issues"][number] {
+  return {
+    code: "same_path",
+    message: `Cannot paste ${sourcePath} onto itself.`,
+    sourcePath,
+    destinationPath: sourcePath,
+  };
+}
+
+function cutPlan(
+  sourcePaths: string[],
+  destinationDirectoryPath: string,
+  issues: IpcResponse<"copyPaste:plan">["issues"] = [],
+): IpcResponse<"copyPaste:plan"> {
+  const issuePaths = new Set(issues.map((issue) => issue.sourcePath));
+  const items = sourcePaths
+    .filter((sourcePath) => !issuePaths.has(sourcePath))
+    .map((sourcePath) => ({
+      sourcePath,
+      destinationPath: `${destinationDirectoryPath}/${sourcePath.split("/").at(-1)}`,
+      kind: "file" as const,
+      status: "ready" as const,
+      sizeBytes: 5,
+    }));
+  return {
+    mode: "cut",
+    sourcePaths,
+    destinationDirectoryPath,
+    conflictResolution: "error",
+    items,
+    conflicts: [],
+    issues,
+    warnings: [],
+    requiresConfirmation: { largeBatch: false, cutDelete: false },
+    summary: {
+      topLevelItemCount: sourcePaths.length,
+      totalItemCount: items.length,
+      totalBytes: items.length * 5,
+      skippedConflictCount: 0,
+    },
+    canExecute: issues.length === 0,
+  };
+}
+
+function folderConflictPlan(): IpcResponse<"copyPaste:plan"> {
+  return {
+    mode: "copy",
+    sourcePaths: ["/Users/demo/Folder"],
+    destinationDirectoryPath: "/Users/demo",
+    conflictResolution: "error",
+    items: [
+      {
+        sourcePath: "/Users/demo/Folder",
+        destinationPath: "/Users/demo/Folder",
+        kind: "directory",
+        status: "conflict",
+        sizeBytes: null,
+      },
+    ],
+    conflicts: [
+      {
+        sourcePath: "/Users/demo/Folder",
+        destinationPath: "/Users/demo/Folder",
+        reason: "destination_exists",
+      },
+    ],
+    issues: [],
+    warnings: [],
+    requiresConfirmation: { largeBatch: false, cutDelete: false },
+    summary: {
+      topLevelItemCount: 1,
+      totalItemCount: 1,
+      totalBytes: null,
+      skippedConflictCount: 0,
+    },
+    canExecute: true,
+  };
+}
+
 function createAppHarness(
   args: {
     planResponse?: IpcResponse<"copyPaste:plan">;
     analysisUpdateResponse?: IpcResponse<"copyPaste:analyzeGetUpdate">;
+    // Builds the finished analysis from the request, for tests where it depends on the
+    // items being analyzed.
+    analysisReportForRequest?: (
+      request: IpcRequestInput<"copyPaste:analyzeStart">,
+    ) => NonNullable<IpcResponse<"copyPaste:analyzeGetUpdate">["report"]>;
     preferences?: Partial<IpcResponse<"app:getPreferences">["preferences"]>;
     directorySnapshots?: Record<string, IpcResponse<"directory:getSnapshot">>;
     treeChildrenByPath?: Record<string, IpcResponse<"tree:getChildren">["children"]>;
@@ -6948,6 +7592,7 @@ function createAppHarness(
   const analysisReport = args.planResponse
     ? toAnalysisReport(args.planResponse)
     : toAnalysisReport(defaultPlanResponse());
+  let lastAnalyzeRequest: IpcRequestInput<"copyPaste:analyzeStart"> | null = null;
 
   const client: FiletrailClient = {
     async invoke<C extends IpcChannel>(channel: C, payload: IpcRequestInput<C>) {
@@ -7050,6 +7695,7 @@ function createAppHarness(
         return (args.planResponse ?? defaultPlanResponse()) as IpcResponse<C>;
       }
       if (channel === "copyPaste:analyzeStart") {
+        lastAnalyzeRequest = payload as IpcRequestInput<"copyPaste:analyzeStart">;
         invocations.push({
           channel: "copyPaste:plan",
           payload: {
@@ -7080,7 +7726,10 @@ function createAppHarness(
           analysisId: "analysis-1",
           status: "complete",
           done: true,
-          report: analysisReport,
+          report:
+            args.analysisReportForRequest && lastAnalyzeRequest
+              ? args.analysisReportForRequest(lastAnalyzeRequest)
+              : analysisReport,
           error: null,
         }) as IpcResponse<C>;
       }

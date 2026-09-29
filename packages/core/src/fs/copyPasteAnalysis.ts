@@ -1,7 +1,12 @@
 import { basename, dirname, join, resolve } from "node:path";
 
-import { captureFingerprint, detectKind } from "./copyPasteFingerprint";
-import { destinationPathKey, resolveDuplicateName } from "./copyPasteNames";
+import {
+  captureFingerprint,
+  detectKind,
+  findSourceRelation,
+  isSameExistingItem,
+} from "./copyPasteFingerprint";
+import { destinationPathKey, detectCaseSensitivity, resolveDuplicateName } from "./copyPasteNames";
 import type {
   CopyPasteAnalysisIssue,
   CopyPasteAnalysisNode,
@@ -40,15 +45,25 @@ export async function buildCopyPasteAnalysisReport(args: {
   const issues: CopyPasteAnalysisIssue[] = [];
   const warnings: CopyPasteAnalysisWarning[] = [];
   const nodes: CopyPasteAnalysisNode[] = [];
-  const destinationScanCache: DestinationScanCache = { counts: new Map(), entries: new Map() };
-  // APFS is case- and normalization-insensitive by default, so "report.pdf"
-  // from one folder and "Report.pdf" from another land on the same entry.
-  const claimedDestinationNames = new Map<string, string>();
-
   const destinationFingerprint = await captureFingerprint(
     fileSystem,
     request.destinationDirectoryPath,
   );
+  // Asked once per analysis: everything pasted lands on the destination folder's volume.
+  const caseSensitive =
+    destinationFingerprint.kind === "directory"
+      ? await detectCaseSensitivity(fileSystem, request.destinationDirectoryPath)
+      : false;
+  const pathKey = (path: string) => destinationPathKey(path, caseSensitive);
+  const destinationScanCache: DestinationScanCache = {
+    counts: new Map(),
+    entries: new Map(),
+    pathKey,
+  };
+  // APFS is case- and normalization-insensitive by default, so "report.pdf"
+  // from one folder and "Report.pdf" from another land on the same entry.
+  const claimedDestinationNames = new Map<string, string>();
+
   if (!destinationFingerprint.exists) {
     issues.push({
       code: "destination_missing",
@@ -95,6 +110,8 @@ export async function buildCopyPasteAnalysisReport(args: {
         basename(sourcePath),
         request.destinationDirectoryPath,
         fileSystem,
+        undefined,
+        { isDirectory: sourceFingerprint.kind === "directory", caseSensitive },
       );
     }
 
@@ -153,7 +170,7 @@ export async function buildCopyPasteAnalysisReport(args: {
       }
     }
 
-    const destinationNameKey = basename(destinationPath).normalize("NFD").toLowerCase();
+    const destinationNameKey = pathKey(basename(destinationPath));
     const claimingSourcePath = claimedDestinationNames.get(destinationNameKey);
     if (claimingSourcePath !== undefined) {
       issues.push({
@@ -178,7 +195,7 @@ export async function buildCopyPasteAnalysisReport(args: {
     nodes.push(node);
   }
 
-  await annotateKeepBothNames(nodes, fileSystem, args.signal);
+  await annotateKeepBothNames(nodes, fileSystem, caseSensitive, args.signal);
   const summary = summarizeAnalysis(nodes);
   if (
     summary.totalNodeCount > thresholds.largeBatchItemThreshold ||
@@ -205,6 +222,7 @@ export async function buildCopyPasteAnalysisReport(args: {
     issues,
     warnings,
     summary,
+    destinationCaseSensitive: caseSensitive,
   };
 }
 
@@ -330,12 +348,12 @@ async function collectDestinationOnly(
     return false;
   }
   const sourceByName = new Map(
-    sourceChildren.map((child) => [destinationPathKey(basename(child.sourcePath)), child]),
+    sourceChildren.map((child) => [context.cache.pathKey(basename(child.sourcePath)), child]),
   );
   for (const entry of entries) {
     context.signal?.throwIfAborted();
     const entryPath = join(destinationPath, entry);
-    const counterpart = sourceByName.get(destinationPathKey(entry));
+    const counterpart = sourceByName.get(context.cache.pathKey(entry));
     if (counterpart?.sourceKind === "directory" && counterpart.destinationKind === "directory") {
       // Nested folders are analyzed first; reuse their summary instead of walking again.
       if (counterpart.destinationOnly !== null) {
@@ -394,9 +412,12 @@ async function collectDestinationOnly(
 async function annotateKeepBothNames(
   nodes: CopyPasteAnalysisNode[],
   fileSystem: WriteServiceFileSystem,
+  caseSensitive: boolean,
   signal?: AbortSignal,
 ): Promise<void> {
-  const reservedPaths = new Set(nodes.map((node) => destinationPathKey(node.destinationPath)));
+  const reservedPaths = new Set(
+    nodes.map((node) => destinationPathKey(node.destinationPath, caseSensitive)),
+  );
   for (const node of nodes) {
     signal?.throwIfAborted();
     if (node.conflictClass !== null) {
@@ -405,11 +426,12 @@ async function annotateKeepBothNames(
         dirname(node.destinationPath),
         fileSystem,
         reservedPaths,
+        { isDirectory: node.sourceKind === "directory", caseSensitive },
       );
-      reservedPaths.add(destinationPathKey(node.keepBothDestinationPath));
+      reservedPaths.add(destinationPathKey(node.keepBothDestinationPath, caseSensitive));
     }
     if (node.conflictClass === "directory_conflict") {
-      await annotateKeepBothNames(node.children, fileSystem, signal);
+      await annotateKeepBothNames(node.children, fileSystem, caseSensitive, signal);
     }
   }
 }
@@ -422,25 +444,17 @@ async function findReplaceBlockedReason(
   if (node.conflictClass === null) {
     return null;
   }
-  if (isSameExistingItem(node.sourceFingerprint, node.destinationFingerprint)) {
-    return "It is the item being pasted.";
-  }
-  if (node.destinationKind !== "directory") {
-    return null;
-  }
-  for (let ancestor = dirname(node.sourcePath); ; ancestor = dirname(ancestor)) {
-    if (
-      isSameExistingItem(
-        await captureFingerprint(fileSystem, ancestor),
-        node.destinationFingerprint,
-      )
-    ) {
-      return "It contains the item being pasted.";
-    }
-    if (dirname(ancestor) === ancestor) {
-      return null;
-    }
-  }
+  const relation = await findSourceRelation(
+    fileSystem,
+    node.sourcePath,
+    node.destinationPath,
+    node.destinationFingerprint,
+  );
+  return relation === "same"
+    ? "It is the item being pasted."
+    : relation === "contains"
+      ? "It contains the item being pasted."
+      : null;
 }
 
 type DestinationScanCache = {
@@ -448,6 +462,8 @@ type DestinationScanCache = {
   counts: Map<string, number | null>;
   // Sorted folder listings, so each existing folder is read once per analysis.
   entries: Map<string, string[]>;
+  // How names are compared on the destination volume (see `destinationPathKey`).
+  pathKey: (path: string) => string;
 };
 
 async function readDestinationEntries(
@@ -500,20 +516,6 @@ async function countDirectoryItems(
     cache.counts.set(directoryPath, null);
     return null;
   }
-}
-
-function isSameExistingItem(
-  left: CopyPasteAnalysisNode["sourceFingerprint"],
-  right: CopyPasteAnalysisNode["sourceFingerprint"],
-): boolean {
-  return (
-    left.exists &&
-    right.exists &&
-    left.ino !== null &&
-    left.dev !== null &&
-    left.ino === right.ino &&
-    left.dev === right.dev
-  );
 }
 
 function isAbortError(error: unknown): boolean {

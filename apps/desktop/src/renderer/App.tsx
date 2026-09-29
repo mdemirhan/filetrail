@@ -510,6 +510,7 @@ export function App() {
         focusedPane,
         isSearchMode,
         selectedEntry,
+        selectedPathCount: selectedPathsInViewOrder.length,
       }),
     [
       contextMenuState,
@@ -519,6 +520,7 @@ export function App() {
       focusedPane,
       isSearchMode,
       selectedEntry,
+      selectedPathsInViewOrder.length,
     ],
   );
   const isWriteOperationLocked = writeOperationCardState !== null;

@@ -179,4 +179,68 @@ describe("actionLog", () => {
     ]);
     expect(items[0]?.items[1]?.skipReason).toBe("runtime_conflict_resolution");
   });
+
+  it("keeps folder child-failure counts and Trash-unavailable conflicts", async () => {
+    const root = await mkdtemp(join(tmpdir(), "filetrail-action-log-child-failures-"));
+    const store = createActionLogStore(resolveActionLogFilePath(root), {
+      onError: (error) => {
+        throw error;
+      },
+    });
+    const recorder = createActionLogRecorder(store);
+
+    await recorder.recordWriteOperation({
+      action: "paste",
+      operationId: "copy-op-10",
+      sourcePaths: ["/Users/demo/source/folder"],
+      destinationPaths: ["/Users/demo/target"],
+      runtimeConflicts: [
+        {
+          conflictId: "conflict-trash",
+          sourcePath: "/Users/demo/source/folder/a.txt",
+          destinationPath: "/Users/demo/target/folder/a.txt",
+          sourceKind: "file",
+          destinationKind: "file",
+          conflictClass: "file_conflict",
+          reason: "trash_unavailable",
+          resolution: "skip",
+        },
+      ],
+      result: {
+        operationId: "copy-op-10",
+        action: "paste",
+        status: "failed",
+        targetPath: "/Users/demo/target",
+        startedAt: "2026-03-10T12:00:00.000Z",
+        finishedAt: "2026-03-10T12:00:00.050Z",
+        summary: {
+          topLevelItemCount: 1,
+          totalItemCount: 3,
+          completedItemCount: 1,
+          failedItemCount: 1,
+          skippedItemCount: 1,
+          cancelledItemCount: 0,
+          completedByteCount: 0,
+          totalBytes: null,
+        },
+        items: [
+          {
+            sourcePath: "/Users/demo/source/folder",
+            destinationPath: "/Users/demo/target/folder",
+            status: "failed",
+            error: null,
+            skipReason: null,
+            childFailureCount: 2,
+          },
+        ],
+        error: null,
+      },
+    });
+
+    const entries = await store.list();
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.items[0]?.childFailureCount).toBe(2);
+    expect(entries[0]?.runtimeConflicts[0]?.reason).toBe("trash_unavailable");
+  });
 });

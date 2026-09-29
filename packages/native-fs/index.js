@@ -1,3 +1,4 @@
+const fs = require("node:fs");
 const binding = require("node-gyp-build")(__dirname);
 
 /*
@@ -32,9 +33,37 @@ function nativeFolderSize(folderPath) {
   });
 }
 
+/*
+ * Fallbacks for a binary built before these functions existed. The rename one checks
+ * first, which leaves a tiny window the native RENAME_EXCL version doesn't have.
+ */
+async function renameExclusiveFallback(from, to) {
+  try {
+    await fs.promises.lstat(to);
+  } catch (error) {
+    if (error && error.code === "ENOENT") {
+      await fs.promises.rename(from, to);
+      return;
+    }
+    throw error;
+  }
+  throw Object.assign(new Error(`EEXIST: file already exists, rename '${from}' -> '${to}'`), {
+    code: "EEXIST",
+    syscall: "rename",
+    path: from,
+    dest: to,
+  });
+}
+
+async function isCaseSensitiveFallback() {
+  return null;
+}
+
 module.exports = {
   nativeCopyFile: binding.nativeCopyFile,
   nativeGetFileIcon: binding.nativeGetFileIcon,
   nativeFolderSize,
   nativeFolderSizeCancel: binding.nativeFolderSizeCancel,
+  nativeRenameExclusive: binding.nativeRenameExclusive ?? renameExclusiveFallback,
+  nativeIsCaseSensitive: binding.nativeIsCaseSensitive ?? isCaseSensitiveFallback,
 };

@@ -1,15 +1,17 @@
 /**
- * Copies a file using macOS `copyfile(3)` with `COPYFILE_ALL | COPYFILE_CLONE`.
+ * Copies a file using macOS `copyfile(3)` with `COPYFILE_ALL | COPYFILE_CLONE | COPYFILE_EXCL`.
  *
  * - Attempts a CoW (copy-on-write) clone on APFS same-volume copies (instant).
  * - Falls back to a full data copy when CoW is not available.
  * - Preserves all metadata: stat info (timestamps, mode, flags), xattrs, and ACLs.
+ * - Never replaces an existing destination: fails with `EEXIST` instead.
  * - Runs on a libuv thread pool thread — non-blocking.
  *
  * @param sourcePath - Absolute path to the source file.
  * @param destinationPath - Absolute path to the destination file. Parent directory must exist.
  * @returns A promise that resolves when the copy completes.
- * @throws An error with a `code` property (e.g. `"ENOENT"`, `"EACCES"`) on failure.
+ * @throws An error with a `code` property (the errno name, e.g. `"ENOENT"`, `"ENOTSUP"`)
+ *   plus `errno`, `syscall`, `path` and `dest` on failure.
  */
 export function nativeCopyFile(sourcePath: string, destinationPath: string): Promise<void>;
 
@@ -57,3 +59,21 @@ export function nativeFolderSize(folderPath: string): Promise<string>;
  * calculation is active (no-op).
  */
 export function nativeFolderSizeCancel(): void;
+
+/**
+ * Moves `from` to `to` without ever replacing an item at `to`, using `renamex_np(2)`
+ * with `RENAME_EXCL`. Volumes that don't support that flag fall back to checking for
+ * `to` first, then `rename(2)`. Both paths must be on the same volume.
+ *
+ * @throws An error with `code: "EEXIST"` when something is already at `to`, `"EXDEV"`
+ *   across volumes, or another errno name.
+ */
+export function nativeRenameExclusive(from: string, to: string): Promise<void>;
+
+/**
+ * Whether the volume holding `path` tells names apart by letter case, from
+ * `pathconf(2)` `_PC_CASE_SENSITIVE`. Resolves `null` when the volume doesn't say.
+ *
+ * @throws An error with a `code` property when `path` can't be reached (e.g. `"ENOENT"`).
+ */
+export function nativeIsCaseSensitive(path: string): Promise<boolean | null>;

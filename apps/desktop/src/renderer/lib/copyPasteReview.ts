@@ -31,6 +31,8 @@ export type ReviewRow = {
   depth: number;
   kind: "file" | "folder";
   name: string;
+  /** "photos/raw/IMG_2041.dng": the path below the folder the item is copied from. */
+  relativePath: string;
   /** The item's current choice; null for an item that is simply added. */
   choice: CopyPasteChoice | null;
   choices: CopyPasteChoice[];
@@ -81,13 +83,20 @@ export function effectiveChoice(
     return null;
   }
   const override = overrides[node.id];
-  if (override && isChoiceAllowedForConflict(node.conflictClass, override)) {
-    return override;
+  const choice =
+    override && isChoiceAllowedForConflict(node.conflictClass, override)
+      ? override
+      : node.conflictClass === "directory_conflict"
+        ? policy.directory
+        : node.conflictClass === "type_mismatch"
+          ? policy.mismatch
+          : policy.file;
+  // "For all conflicts: Replace" can't replace an item that isn't replaceable (for example
+  // the folder that contains what is being pasted); that item gets the safe choice instead.
+  if (choice === "overwrite" && node.replaceBlockedReason !== null) {
+    return node.conflictClass === "directory_conflict" ? "merge" : "keep_both";
   }
-  if (node.conflictClass === "directory_conflict") {
-    return policy.directory;
-  }
-  return node.conflictClass === "type_mismatch" ? policy.mismatch : policy.file;
+  return choice;
 }
 
 // The "For all conflicts" menu: Keep Both merges folders, the others apply to every kind.
@@ -99,16 +108,51 @@ export function policyForAllConflicts(choice: "keep_both" | "overwrite" | "skip"
   };
 }
 
-// The "For all conflicts" value, or null when items were set differently.
+type AllConflictsChoice = "keep_both" | "overwrite" | "skip";
+const ALL_CONFLICTS_CHOICES: AllConflictsChoice[] = ["keep_both", "overwrite", "skip"];
+
+// The "For all conflicts" value, or null when items were set differently. It comes from
+// what every listed conflict will actually do, so setting an item back to the common choice
+// shows the single value again.
 export function currentAllConflictsChoice(
+  report: CopyPasteReport,
   policy: CopyPastePolicy,
   overrides: CopyPasteOverrides,
-): "keep_both" | "overwrite" | "skip" | null {
-  if (Object.keys(overrides).length > 0 || policy.file !== policy.mismatch) {
-    return null;
+): AllConflictsChoice | null {
+  // The menu's own value comes first when several match (e.g. every item blocks Replace).
+  const candidates = [...ALL_CONFLICTS_CHOICES].sort(
+    (left, right) => Number(right === policy.file) - Number(left === policy.file),
+  );
+  for (const candidate of candidates) {
+    const expected = policyForAllConflicts(candidate);
+    if (sameDecisions(report.nodes, policy, overrides, expected)) {
+      return candidate;
+    }
   }
-  const expected = policyForAllConflicts(policy.file);
-  return expected.directory === policy.directory ? policy.file : null;
+  return null;
+}
+
+// Whether the current choices do the same as `expected` with no per-item choices, looking
+// inside merged folders (their conflicts are listed too).
+function sameDecisions(
+  nodes: CopyPasteAnalysisNode[],
+  policy: CopyPastePolicy,
+  overrides: CopyPasteOverrides,
+  expected: CopyPastePolicy,
+): boolean {
+  for (const node of nodes) {
+    if (node.conflictClass === null) {
+      continue;
+    }
+    const choice = effectiveChoice(node, policy, overrides);
+    if (choice !== effectiveChoice(node, expected, {})) {
+      return false;
+    }
+    if (choice === "merge" && !sameDecisions(node.children, policy, overrides, expected)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export function buildReviewRows(args: {
@@ -119,20 +163,21 @@ export function buildReviewRows(args: {
   now: number;
 }): ReviewRow[] {
   const rows: ReviewRow[] = [];
-  const sourceFolderName = leafName(dirnameOf(args.report.sourcePaths[0] ?? ""));
-  const visit = (nodes: CopyPasteAnalysisNode[], depth: number) => {
+  const visit = (nodes: CopyPasteAnalysisNode[], depth: number, basePath: string) => {
     for (const node of nodes) {
       const choice = effectiveChoice(node, args.policy, args.overrides);
       if (choice === null && !(args.showNewItems && depth === 0)) {
         continue;
       }
-      rows.push(buildRow(node, depth, choice, args.report.mode, sourceFolderName, args.now));
+      // Nested paths are shown below the folder the top-level item was copied from.
+      const base = depth === 0 ? dirnameOf(node.sourcePath) : basePath;
+      rows.push(buildRow(node, depth, choice, args.report.mode, base, args.now));
       if (choice === "merge") {
-        visit(node.children, depth + 1);
+        visit(node.children, depth + 1, base);
       }
     }
   };
-  visit(args.report.nodes, 0);
+  visit(args.report.nodes, 0, "");
   return rows;
 }
 
@@ -172,13 +217,16 @@ export function summarizeReview(args: {
   return summary;
 }
 
-export function formatReviewSummary(summary: ReviewSummary): string {
+// "Adds 2 · Keeps both for 1 · Merges 1 folder"; a move says "Moves" for what it adds.
+export function formatReviewSummary(summary: ReviewSummary, verb = "Paste"): string {
   const parts = [
-    summary.added > 0 ? `Adds ${summary.added}` : null,
-    summary.keptBoth > 0 ? `Keeps both ${summary.keptBoth}` : null,
+    summary.added > 0
+      ? `${verb === "Move" ? "Moves" : "Adds"} ${formatCount(summary.added)}`
+      : null,
+    summary.keptBoth > 0 ? `Keeps both for ${formatCount(summary.keptBoth)}` : null,
     summary.merged > 0 ? `Merges ${pluralize(summary.merged, "folder")}` : null,
-    summary.replaced > 0 ? `Replaces ${summary.replaced}` : null,
-    summary.skipped > 0 ? `Skips ${summary.skipped}` : null,
+    summary.replaced > 0 ? `Replaces ${formatCount(summary.replaced)}` : null,
+    summary.skipped > 0 ? `Skips ${formatCount(summary.skipped)}` : null,
   ].filter((part): part is string => part !== null);
   return parts.join(" · ");
 }
@@ -188,16 +236,23 @@ function buildRow(
   depth: number,
   choice: CopyPasteChoice | null,
   mode: "copy" | "cut",
-  sourceFolderName: string,
+  basePath: string,
   now: number,
 ): ReviewRow {
-  const detail = describeRow(node, choice, mode, sourceFolderName, now);
+  const detail = describeRow(node, choice, mode, now);
+  const relativePath =
+    basePath && node.sourcePath.startsWith(`${basePath}/`)
+      ? node.sourcePath.slice(basePath.length + 1)
+      : basePath === "/" && node.sourcePath.startsWith("/")
+        ? node.sourcePath.slice(1)
+        : leafName(node.sourcePath);
   return {
     id: node.id,
     node,
     depth,
     kind: node.sourceKind === "directory" ? "folder" : "file",
     name: leafName(node.sourcePath),
+    relativePath,
     choice,
     choices: node.conflictClass === null ? [] : choicesForNode(node),
     keepBothName:
@@ -214,7 +269,23 @@ function describeRow(
   node: CopyPasteAnalysisNode,
   choice: CopyPasteChoice | null,
   mode: "copy" | "cut",
-  sourceFolderName: string,
+  now: number,
+): { text: string; tone: ReviewTone } {
+  const described = describeChoice(node, choice, mode, now);
+  // Say why Replace isn't offered here, not only inside the disabled menu item.
+  if (choice !== null && node.replaceBlockedReason !== null) {
+    return {
+      ...described,
+      text: `${described.text} · Can't replace: ${node.replaceBlockedReason}`,
+    };
+  }
+  return described;
+}
+
+function describeChoice(
+  node: CopyPasteAnalysisNode,
+  choice: CopyPasteChoice | null,
+  mode: "copy" | "cut",
   now: number,
 ): { text: string; tone: ReviewTone } {
   const isFolder = node.sourceKind === "directory";
@@ -228,7 +299,7 @@ function describeRow(
   }
   if (choice === "skip") {
     return {
-      text: mode === "cut" ? `Stays in “${sourceFolderName}”` : "Left as is",
+      text: mode === "cut" ? `Stays in “${leafName(dirnameOf(node.sourcePath))}”` : "Left as is",
       tone: "muted",
     };
   }
@@ -245,7 +316,7 @@ function describeRow(
     if (addedInside > 0) {
       parts.push(`${pluralize(addedInside, "item")} added`);
     }
-    const kept = describeDestinationOnly(node, "keeps");
+    const kept = describeKeptDestinationOnly(node);
     if (kept) {
       parts.push(kept);
     }
@@ -266,15 +337,15 @@ function describeRow(
 
 function describeReplacement(node: CopyPasteAnalysisNode, now: number): string {
   if (node.destinationKind === "directory") {
-    const lost = describeDestinationOnly(node, "deletes");
+    const lost = describeDeletedDestinationOnly(node);
     if (lost) {
-      return `${capitalize(lost)}, which only exists here`;
+      return lost;
     }
     if (node.destinationOnly === null) {
       return `Replaces the existing folder “${leafName(node.destinationPath)}” and everything in it`;
     }
     return node.sourceKind === "directory"
-      ? "Replaces the existing folder; nothing only exists there"
+      ? "Replaces the existing folder; everything in it is also in yours"
       : `Replaces the existing empty folder “${leafName(node.destinationPath)}”`;
   }
   const existing = node.destinationFingerprint;
@@ -284,20 +355,34 @@ function describeReplacement(node: CopyPasteAnalysisNode, now: number): string {
   return `Replaces the existing${size} ${kind}${date}`;
 }
 
-function describeDestinationOnly(
-  node: CopyPasteAnalysisNode,
-  verb: "keeps" | "deletes",
-): string | null {
+// Merging keeps what is only in the existing folder: "keeps “d.jpg” and 2 more".
+function describeKeptDestinationOnly(node: CopyPasteAnalysisNode): string | null {
   const only = node.destinationOnly;
   if (!only || only.count === 0) {
     return null;
   }
   const first = only.samplePaths[0];
   if (!first) {
-    return `${verb} ${pluralize(only.count, "item")} that only exist there`;
+    return `keeps ${pluralize(only.count, "item")} already there`;
   }
   const others = only.count - 1;
-  return others > 0 ? `${verb} “${first}” and ${others} more` : `${verb} “${first}”`;
+  return others > 0 ? `keeps “${first}” and ${formatCount(others)} more` : `keeps “${first}”`;
+}
+
+// Replacing deletes what is only in the existing folder, and says so.
+function describeDeletedDestinationOnly(node: CopyPasteAnalysisNode): string | null {
+  const only = node.destinationOnly;
+  if (!only || only.count === 0) {
+    return null;
+  }
+  const verb = only.count === 1 ? "exists" : "exist";
+  const first = only.samplePaths[0];
+  if (!first) {
+    return `Deletes ${pluralize(only.count, "item")} that only ${verb} in the existing folder`;
+  }
+  const others = only.count - 1;
+  const items = others > 0 ? `“${first}” and ${formatCount(others)} more` : `“${first}”`;
+  return `Deletes ${items}, which only ${verb} in the existing folder`;
 }
 
 function describeMismatch(node: CopyPasteAnalysisNode): string {
@@ -350,6 +435,13 @@ function describeSizeAndDate(
 }
 
 const TIME_FORMAT = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
+const FULL_FORMAT = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
 const DAY_FORMAT = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
 const DAY_YEAR_FORMAT = new Intl.DateTimeFormat(undefined, {
   month: "short",
@@ -357,15 +449,28 @@ const DAY_YEAR_FORMAT = new Intl.DateTimeFormat(undefined, {
   year: "numeric",
 });
 
-// "today, 13:59", "yesterday, 09:12", "Jan 1", or "Jan 1, 2025" for another year.
+// A clock a little ahead of this one is still "today"; further ahead gets the full date.
+const FUTURE_TOLERANCE_MS = 60_000;
+
+// "today, 13:59", "yesterday, 09:12", "Jan 1", or "Jan 1, 2025" for another year. A date in
+// the future (a wrong clock somewhere) is shown in full rather than as "today".
 export function formatReviewDate(ms: number, now: number): string {
   const date = new Date(ms);
+  if (ms > now + FUTURE_TOLERANCE_MS) {
+    return FULL_FORMAT.format(date);
+  }
   const today = new Date(now);
+  // Calendar days, not 24-hour steps: days around a daylight saving change are 23 or 25 hours.
   const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const startOfYesterday = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate() - 1,
+  ).getTime();
   if (ms >= startOfToday) {
     return `today, ${TIME_FORMAT.format(date)}`;
   }
-  if (ms >= startOfToday - 86_400_000) {
+  if (ms >= startOfYesterday) {
     return `yesterday, ${TIME_FORMAT.format(date)}`;
   }
   return date.getFullYear() === today.getFullYear()
@@ -373,12 +478,13 @@ export function formatReviewDate(ms: number, now: number): string {
     : DAY_YEAR_FORMAT.format(date);
 }
 
-export function pluralize(count: number, noun: string): string {
-  return `${count.toLocaleString()} ${noun}${count === 1 ? "" : "s"}`;
+// "1,200": counts are written the way the person's locale writes numbers.
+export function formatCount(count: number): string {
+  return count.toLocaleString();
 }
 
-function capitalize(value: string): string {
-  return value.length > 0 ? `${value[0]?.toUpperCase()}${value.slice(1)}` : value;
+export function pluralize(count: number, noun: string): string {
+  return `${formatCount(count)} ${noun}${count === 1 ? "" : "s"}`;
 }
 
 export function leafName(path: string): string {
@@ -386,7 +492,7 @@ export function leafName(path: string): string {
   return trimmed.split("/").filter(Boolean).at(-1) ?? path;
 }
 
-function dirnameOf(path: string): string {
+export function dirnameOf(path: string): string {
   const trimmed = path.replace(/\/+$/u, "");
   const index = trimmed.lastIndexOf("/");
   return index <= 0 ? "/" : trimmed.slice(0, index);
