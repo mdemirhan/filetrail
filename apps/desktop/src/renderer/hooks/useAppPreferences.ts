@@ -4,7 +4,6 @@ import {
   type AccentMode,
   type AppPreferences,
   type ApplicationSelection,
-  type CopyPasteReviewDialogSize,
   DEFAULT_APP_PREFERENCES,
   DEFAULT_DETAIL_COLUMN_VISIBILITY,
   DEFAULT_DETAIL_COLUMN_WIDTHS,
@@ -140,8 +139,6 @@ export function useAppPreferences() {
   const [favoritesInitialized, setFavoritesInitialized] = useState(
     DEFAULT_APP_PREFERENCES.favoritesInitialized,
   );
-  const [copyPasteReviewDialogSize, setCopyPasteReviewDialogSize] =
-    useState<CopyPasteReviewDialogSize | null>(DEFAULT_APP_PREFERENCES.copyPasteReviewDialogSize);
   const [terminalApp, setTerminalApp] = useState<ApplicationSelection | null>(
     DEFAULT_APP_PREFERENCES.terminalApp,
   );
@@ -299,8 +296,6 @@ export function useAppPreferences() {
     setFavoritesExpanded,
     favoritesInitialized,
     setFavoritesInitialized,
-    copyPasteReviewDialogSize,
-    setCopyPasteReviewDialogSize,
     terminalApp,
     setTerminalApp,
     defaultTextEditor,

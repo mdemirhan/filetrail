@@ -1,6 +1,7 @@
 import { type Dispatch, type SetStateAction, useMemo, useReducer, useRef } from "react";
 
 import type {
+  CopyPasteChoice,
   IpcRequest,
   IpcResponse,
   WriteOperationAction,
@@ -52,6 +53,8 @@ type CopyPasteDialogState =
       type: "review";
       report: CopyPasteAnalysisReport;
       policy: NonNullable<CopyPastePolicy>;
+      // Per-item choices made in the review, by analysis node id.
+      overrides: Readonly<Record<string, CopyPasteChoice>>;
       action: "paste" | "move_to" | "duplicate";
       clearClipboardOnStart: boolean;
       initiator?: "clipboard" | "drag_drop" | "move_dialog" | null;

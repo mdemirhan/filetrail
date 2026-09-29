@@ -175,6 +175,12 @@ export function canHandleRendererCommand(
     return false;
   }
 
+  // Like Finder, Paste goes into the folder on screen even when no pane has focus (for
+  // example right after opening an empty folder).
+  if (command === "pasteSelection" && context.focusedPane === null) {
+    return context.mainView === "explorer";
+  }
+
   if (RENDERER_COMMAND_TREE_FOCUS_BUCKETS[command] === "contentOnly") {
     if (context.focusedPane === "content") {
       return context.mainView === "explorer";

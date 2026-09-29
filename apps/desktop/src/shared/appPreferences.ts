@@ -77,10 +77,6 @@ export type FavoritesPlacement = "integrated" | "separate";
 export type FileActivationAction = "open" | "edit";
 // Finder renames with Return; "open" keeps the older behavior of opening the selection.
 export type ReturnKeyAction = "rename" | "open";
-export type CopyPasteReviewDialogSize = {
-  width: number;
-  height: number;
-};
 export type {
   LeftToolbarItems,
   LeftToolbarZone,
@@ -328,7 +324,6 @@ export type AppPreferences = {
   favoritesPaneHeight: number | null;
   favoritesExpanded: boolean;
   favoritesInitialized: boolean;
-  copyPasteReviewDialogSize: CopyPasteReviewDialogSize | null;
 };
 
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {
@@ -400,7 +395,6 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   favoritesPaneHeight: null,
   favoritesExpanded: true,
   favoritesInitialized: false,
-  copyPasteReviewDialogSize: null,
 };
 
 // Pane widths are rounded before persistence so restored layouts remain stable and do not

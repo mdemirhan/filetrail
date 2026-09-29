@@ -4395,93 +4395,6 @@ describe("App copy/paste integration", () => {
     expect(document.activeElement).toBe(activeElementBeforePasteWarning);
   });
 
-  it("persists moved copy-paste review dialog bounds", async () => {
-    const harness = createAppHarness({
-      planResponse: {
-        mode: "copy",
-        sourcePaths: ["/Users/demo/source.txt"],
-        destinationDirectoryPath: "/Users/demo/Folder",
-        conflictResolution: "error",
-        items: [
-          {
-            sourcePath: "/Users/demo/source.txt",
-            destinationPath: "/Users/demo/Folder/source.txt",
-            kind: "file",
-            status: "conflict",
-            sizeBytes: 5,
-          },
-        ],
-        conflicts: [
-          {
-            sourcePath: "/Users/demo/source.txt",
-            destinationPath: "/Users/demo/Folder/source.txt",
-            reason: "destination_exists",
-          },
-        ],
-        issues: [],
-        warnings: [],
-        requiresConfirmation: {
-          largeBatch: false,
-          cutDelete: false,
-        },
-        summary: {
-          topLevelItemCount: 1,
-          totalItemCount: 1,
-          totalBytes: 5,
-          skippedConflictCount: 0,
-        },
-        canExecute: true,
-      },
-    });
-
-    render(
-      <FiletrailClientProvider value={harness.client}>
-        <App />
-      </FiletrailClientProvider>,
-    );
-
-    await selectItem("/Users/demo/source.txt");
-    await act(async () => {
-      fireEvent.keyDown(window, { key: "c", metaKey: true });
-    });
-    await openDirectory("/Users/demo/Folder");
-    await act(async () => {
-      fireEvent.keyDown(window, { key: "v", metaKey: true });
-    });
-
-    await screen.findByRole("dialog", { name: "Paste Requires Review" });
-
-    await act(async () => {
-      fireEvent.pointerDown(screen.getByTestId("copy-paste-review-drag-handle"), {
-        button: 0,
-        clientX: 180,
-        clientY: 140,
-      });
-      fireEvent.pointerMove(window, { clientX: 220, clientY: 175 });
-      fireEvent.pointerUp(window);
-    });
-
-    // Preference writes are debounced, so the persisted size lands shortly
-    // after the drag interaction completes.
-    await vi.waitFor(() => {
-      const persistedSizeCall = harness.invocations
-        .filter((call) => call.channel === "app:updatePreferences")
-        .findLast((call) => {
-          const payload = call.payload as IpcRequestInput<"app:updatePreferences">;
-          return payload.preferences.copyPasteReviewDialogSize !== null;
-        });
-
-      expect(persistedSizeCall).toBeDefined();
-      expect(
-        (persistedSizeCall?.payload as IpcRequestInput<"app:updatePreferences">).preferences
-          .copyPasteReviewDialogSize,
-      ).toMatchObject({
-        width: expect.any(Number),
-        height: expect.any(Number),
-      });
-    });
-  });
-
   it("debounces preference persists so a burst of changes writes one latest snapshot", async () => {
     const harness = createAppHarness();
 
@@ -4579,12 +4492,16 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "d", metaKey: true });
     });
 
-    await screen.findByRole("dialog", { name: "Duplicate Requires Review" });
+    await screen.findByRole("dialog", { name: "“Folder” already exists in “demo”" });
+    // Merging is the safe default; replacing takes an explicit choice and a red button.
+    expect(screen.getByRole("button", { name: "Duplicate" })).toBeInTheDocument();
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Replace Folder" }));
+      fireEvent.change(screen.getByLabelText("Choice for Folder"), {
+        target: { value: "overwrite" },
+      });
     });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Continue Duplicate" }));
+      fireEvent.click(screen.getByRole("button", { name: "Replace 1 and Duplicate" }));
     });
 
     await vi.waitFor(() => {
@@ -4595,10 +4512,11 @@ describe("App copy/paste integration", () => {
     ).toMatchObject({
       action: "duplicate",
       policy: {
-        file: "skip",
-        directory: "overwrite",
-        mismatch: "skip",
+        file: "keep_both",
+        directory: "merge",
+        mismatch: "keep_both",
       },
+      overrides: [{ nodeId: expect.any(String), action: "overwrite" }],
     });
   });
 
@@ -4654,21 +4572,18 @@ describe("App copy/paste integration", () => {
     });
 
     expect(
-      await screen.findByRole("dialog", { name: "Paste Paused: Destination Changed" }),
+      await screen.findByRole("dialog", {
+        name: "“Folder” in “demo” changed while pasting",
+      }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Source")).toBeInTheDocument();
-    expect(screen.getByText("Destination")).toBeInTheDocument();
-    expect(screen.getAllByText("/Users/demo/Folder").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText(/the destination item changed after planning/i)).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: "Replace Folder" })).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: "Merge Folders" })).toBeInTheDocument();
-    expect(
-      screen.getByText(/replace the destination folder with the source folder/i),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Cancel Paste" })).toBeInTheDocument();
+    expect(screen.getByText("In “demo” now")).toBeInTheDocument();
+    expect(screen.getByText("Your copy")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Merge" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Keep Both" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Stop Pasting" })).toBeInTheDocument();
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Replace Folder" }));
+      fireEvent.click(screen.getByRole("button", { name: "Replace" }));
     });
 
     expect(
@@ -4732,14 +4647,12 @@ describe("App copy/paste integration", () => {
     });
 
     expect(
-      await screen.findByRole("dialog", { name: "Move Paused: Source Missing" }),
+      await screen.findByRole("dialog", { name: /is no longer available$/ }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/the source item no longer exists at its original path/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/so it can only be skipped/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Skip" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Cancel Move" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Overwrite" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Stop Moving" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Replace" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Keep Both" })).not.toBeInTheDocument();
 
     await act(async () => {
@@ -5120,7 +5033,7 @@ describe("App copy/paste integration", () => {
     expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
   });
 
-  it("keeps the cut clipboard cleared after a cancelled cut/paste operation", async () => {
+  it("keeps cut items on the clipboard when a cancelled move moved nothing", async () => {
     const harness = createAppHarness({
       planResponse: {
         mode: "cut",
@@ -5239,11 +5152,19 @@ describe("App copy/paste integration", () => {
       });
     });
 
+    const planCallsBeforeRetry = harness.invocations.filter(
+      (call) => call.channel === "copyPaste:plan",
+    );
     await act(async () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
-    expect(await screen.findByText("Clipboard is empty")).toBeInTheDocument();
+    await vi.waitFor(() => {
+      expect(harness.invocations.filter((call) => call.channel === "copyPaste:plan")).toHaveLength(
+        planCallsBeforeRetry.length + 1,
+      );
+    });
+    expect(screen.queryByText("Clipboard is empty")).not.toBeInTheDocument();
   });
 
   it("clears the starting progress card if copyPaste:start is rejected as busy", async () => {
@@ -5507,7 +5428,7 @@ describe("App copy/paste integration", () => {
     });
   });
 
-  it("clears the clipboard after a successful paste so it cannot be repeated", async () => {
+  it("keeps copied items on the clipboard after a paste so it can be repeated", async () => {
     const harness = createAppHarness();
 
     render(
@@ -5575,7 +5496,7 @@ describe("App copy/paste integration", () => {
     const pastedToast = pastedToastTitle.closest(".toast-card");
     expect(pastedToast).not.toBeNull();
     expect(within(pastedToast as HTMLElement).getByText("source.txt")).toBeInTheDocument();
-    expect(screen.queryByRole("dialog", { name: "Paste Result" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: /^Pasted \d+ of/ })).not.toBeInTheDocument();
 
     const planCallsBeforeRetry = harness.invocations.filter(
       (call) => call.channel === "copyPaste:plan",
@@ -5586,13 +5507,13 @@ describe("App copy/paste integration", () => {
 
     await vi.waitFor(() => {
       expect(harness.invocations.filter((call) => call.channel === "copyPaste:plan")).toHaveLength(
-        planCallsBeforeRetry.length,
+        planCallsBeforeRetry.length + 1,
       );
     });
-    expect(await screen.findByText("Clipboard is empty")).toBeInTheDocument();
+    expect(screen.queryByText("Clipboard is empty")).not.toBeInTheDocument();
   });
 
-  it("clears the clipboard after an expected skip-conflicts paste result without opening a modal", async () => {
+  it("keeps copied items on the clipboard after a skip-conflicts paste without opening a modal", async () => {
     const harness = createAppHarness();
 
     render(
@@ -5659,7 +5580,7 @@ describe("App copy/paste integration", () => {
     const skipToastTitle = within(toastViewport).getByText("Nothing pasted");
     const skipToast = skipToastTitle.closest(".toast-card");
     expect(skipToast).not.toBeNull();
-    expect(screen.queryByRole("dialog", { name: "Paste Result" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: /^Pasted \d+ of/ })).not.toBeInTheDocument();
     expect(
       within(skipToast as HTMLElement).getByText(
         "1 item skipped by the selected conflict handling.",
@@ -5675,13 +5596,13 @@ describe("App copy/paste integration", () => {
 
     await vi.waitFor(() => {
       expect(harness.invocations.filter((call) => call.channel === "copyPaste:plan")).toHaveLength(
-        planCallsBeforeRetry.length,
+        planCallsBeforeRetry.length + 1,
       );
     });
-    expect(await screen.findByText("Clipboard is empty")).toBeInTheDocument();
+    expect(screen.queryByText("Clipboard is empty")).not.toBeInTheDocument();
   });
 
-  it("clears the cut clipboard after a failed cut/paste result", async () => {
+  it("keeps cut items on the clipboard when a failed move moved nothing", async () => {
     const harness = createAppHarness({
       planResponse: {
         mode: "cut",
@@ -5775,7 +5696,115 @@ describe("App copy/paste integration", () => {
     });
 
     await act(async () => {
-      fireEvent.click(await screen.findByRole("button", { name: "Close" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Done" }));
+    });
+
+    const planCallsBeforeRetry = harness.invocations.filter(
+      (call) => call.channel === "copyPaste:plan",
+    );
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.filter((call) => call.channel === "copyPaste:plan")).toHaveLength(
+        planCallsBeforeRetry.length + 1,
+      );
+    });
+    expect(screen.queryByText("Clipboard is empty")).not.toBeInTheDocument();
+  });
+
+  it("clears cut items from the clipboard once the move moved them", async () => {
+    const harness = createAppHarness({
+      planResponse: {
+        mode: "cut",
+        sourcePaths: ["/Users/demo/source.txt"],
+        destinationDirectoryPath: "/Users/demo/Folder",
+        conflictResolution: "error",
+        items: [
+          {
+            sourcePath: "/Users/demo/source.txt",
+            destinationPath: "/Users/demo/Folder/source.txt",
+            kind: "file",
+            status: "ready",
+            sizeBytes: 5,
+          },
+        ],
+        conflicts: [],
+        issues: [],
+        warnings: [{ code: "cut_requires_delete", message: "Cut will remove the source item." }],
+        requiresConfirmation: {
+          largeBatch: false,
+          cutDelete: true,
+        },
+        summary: {
+          topLevelItemCount: 1,
+          totalItemCount: 1,
+          totalBytes: 5,
+          skippedConflictCount: 0,
+        },
+        canExecute: true,
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "x", metaKey: true });
+    });
+    await selectItem("/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.map((call) => call.channel)).toContain("copyPaste:start");
+    });
+
+    await act(async () => {
+      harness.emitProgress({
+        operationId: "copy-op-1",
+        mode: "cut",
+        status: "completed",
+        completedItemCount: 1,
+        totalItemCount: 1,
+        completedByteCount: 0,
+        totalBytes: 5,
+        currentSourcePath: null,
+        currentDestinationPath: null,
+        result: {
+          operationId: "copy-op-1",
+          mode: "cut",
+          status: "completed",
+          destinationDirectoryPath: "/Users/demo/Folder",
+          startedAt: "2026-03-09T00:00:00.000Z",
+          finishedAt: "2026-03-09T00:00:01.000Z",
+          summary: {
+            topLevelItemCount: 1,
+            totalItemCount: 1,
+            completedItemCount: 1,
+            failedItemCount: 0,
+            skippedItemCount: 0,
+            cancelledItemCount: 0,
+            completedByteCount: 0,
+            totalBytes: 5,
+          },
+          items: [
+            {
+              sourcePath: "/Users/demo/source.txt",
+              destinationPath: "/Users/demo/Folder/source.txt",
+              status: "completed",
+              error: null,
+            },
+          ],
+          error: null,
+        },
+      });
     });
 
     const planCallsBeforeRetry = harness.invocations.filter(
@@ -5792,7 +5821,6 @@ describe("App copy/paste integration", () => {
     });
     expect(await screen.findByText("Clipboard is empty")).toBeInTheDocument();
   });
-
   it("offers retry for failed items from the result dialog", async () => {
     const harness = createAppHarness();
 
@@ -5856,9 +5884,9 @@ describe("App copy/paste integration", () => {
       });
     });
 
-    expect(await screen.findByRole("button", { name: "Retry Failed Items" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /^Retry \d+ Items?$/ })).toBeInTheDocument();
     await act(async () => {
-      fireEvent.click(await screen.findByRole("button", { name: "Retry Failed Items" }));
+      fireEvent.click(await screen.findByRole("button", { name: /^Retry \d+ Items?$/ }));
     });
 
     await vi.waitFor(() => {
@@ -5942,7 +5970,7 @@ describe("App copy/paste integration", () => {
     });
 
     await act(async () => {
-      fireEvent.click(await screen.findByRole("button", { name: "Retry Failed Items" }));
+      fireEvent.click(await screen.findByRole("button", { name: /^Retry \d+ Items?$/ }));
     });
 
     expect(await screen.findByRole("region", { name: "Paste In Progress" })).toBeInTheDocument();
@@ -6032,7 +6060,7 @@ describe("App copy/paste integration", () => {
       });
     });
 
-    expect(screen.queryByRole("dialog", { name: "Paste Result" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: /^Pasted \d+ of/ })).not.toBeInTheDocument();
     const updatedToastViewport = await screen.findByTestId("toast-viewport");
     const pastedToastTitle = within(updatedToastViewport).getByText("Pasted into Folder");
     const pastedToast = pastedToastTitle.closest(".toast-card");
@@ -6203,7 +6231,7 @@ describe("App copy/paste integration", () => {
     await vi.waitFor(() => {
       expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(true);
     });
-    expect(screen.queryByText("Move Requires Review")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: /already exists? in/ })).not.toBeInTheDocument();
   });
 
   it("keeps the full content selection when dragging one selected item", async () => {
@@ -6333,12 +6361,12 @@ describe("App copy/paste integration", () => {
     const targetFolder = await screen.findByRole("button", { name: "test2" });
     await dragBetween(sourceFolder, targetFolder);
 
-    expect(await screen.findByRole("dialog", { name: "Move Requires Review" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: /already exists? in/ })).toBeInTheDocument();
     expect(screen.queryByLabelText("Move To")).toBeNull();
     expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Continue Move" }));
+      fireEvent.click(screen.getByRole("button", { name: "Move" }));
     });
 
     await vi.waitFor(() => {
@@ -6350,10 +6378,11 @@ describe("App copy/paste integration", () => {
       action: "move_to",
       sourcePaths: ["/Users/demo/test3_1"],
       destinationDirectoryPath: "/Users/demo/test2",
+      // Folders merge by default, so nothing is lost without an explicit Replace.
       policy: {
-        file: "skip",
-        directory: "skip",
-        mismatch: "skip",
+        file: "keep_both",
+        directory: "merge",
+        mismatch: "keep_both",
       },
     });
   });
@@ -6421,11 +6450,11 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
-    expect(await screen.findByRole("dialog", { name: "Move Requires Review" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: /already exists? in/ })).toBeInTheDocument();
     expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Continue Move" }));
+      fireEvent.click(screen.getByRole("button", { name: "Move" }));
     });
 
     await vi.waitFor(() => {
@@ -6437,10 +6466,11 @@ describe("App copy/paste integration", () => {
       action: "move_to",
       sourcePaths: ["/Users/demo/test3_1"],
       destinationDirectoryPath: "/Users/demo/test2",
+      // Folders merge by default, so nothing is lost without an explicit Replace.
       policy: {
-        file: "skip",
-        directory: "skip",
-        mismatch: "skip",
+        file: "keep_both",
+        directory: "merge",
+        mismatch: "keep_both",
       },
     });
   });
@@ -6507,11 +6537,11 @@ describe("App copy/paste integration", () => {
       fireEvent.click(screen.getByText("Move"));
     });
 
-    expect(await screen.findByRole("dialog", { name: "Move Requires Review" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: /already exists? in/ })).toBeInTheDocument();
     expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Continue Move" }));
+      fireEvent.click(screen.getByRole("button", { name: "Move" }));
     });
 
     await vi.waitFor(() => {
@@ -6523,10 +6553,11 @@ describe("App copy/paste integration", () => {
       action: "move_to",
       sourcePaths: ["/Users/demo/test3_1"],
       destinationDirectoryPath: "/Users/demo/test2",
+      // Folders merge by default, so nothing is lost without an explicit Replace.
       policy: {
-        file: "skip",
-        directory: "skip",
-        mismatch: "skip",
+        file: "keep_both",
+        directory: "merge",
+        mismatch: "keep_both",
       },
     });
   });

@@ -9,7 +9,12 @@ import {
   useRef,
 } from "react";
 
-import type { IpcRequest, IpcResponse, WriteOperationProgressEvent } from "@filetrail/contracts";
+import type {
+  CopyPasteChoice,
+  IpcRequest,
+  IpcResponse,
+  WriteOperationProgressEvent,
+} from "@filetrail/contracts";
 import { getItemNameError } from "@filetrail/contracts/itemName";
 
 import type {
@@ -41,6 +46,7 @@ import {
   hasClipboardItems,
   setCopyPasteClipboard,
 } from "../lib/copyPasteClipboard";
+import { type CopyPasteOverrides, SAFE_COPY_PASTE_POLICY } from "../lib/copyPasteReview";
 import {
   collectRetrySourcePaths,
   createOpenItemLimitMessage,
@@ -88,14 +94,8 @@ const logger = createRendererLogger("filetrail.renderer");
 
 const WRITE_OPERATION_BUSY_ERROR = "Another write operation is already running.";
 const ANALYSIS_POLL_INTERVAL_MS = 120;
-const DEFAULT_COPY_PASTE_POLICY: Extract<
-  IpcRequest<"copyPaste:start">,
-  { analysisId: string }
->["policy"] = {
-  file: "skip",
-  directory: "skip",
-  mismatch: "skip",
-};
+// Starting without changing anything in the review never loses data.
+const DEFAULT_COPY_PASTE_POLICY = SAFE_COPY_PASTE_POLICY;
 const CONTEXT_MENU_WIDTH = 240;
 const CONTEXT_SUBMENU_WIDTH = 180;
 const CONTEXT_MENU_SAFE_MARGIN = 12;
@@ -342,6 +342,10 @@ export function useExplorerActions(args: {
   const { restartActiveSearch } = callbacks;
   const activeAnalysisIdRef = useRef<string | null>(null);
   const reviewStartInFlightRef = useRef<string | null>(null);
+  // A cut clipboard to clear when its move finishes having moved something.
+  const clipboardClearAfterMoveRef = useRef<{ operationId: string; capturedAt: string } | null>(
+    null,
+  );
   const moveOperationSourceSurfaceRef = useRef(new Map<string, InternalMoveSourceSurface>());
   const restartActiveSearchRef = useRef(restartActiveSearch ?? null);
   const writeOperationCardStateRef = useRef<WriteOperationCardState | null>(
@@ -703,6 +707,18 @@ export function useExplorerActions(args: {
       ) {
         const sourceSurface = moveOperationSourceSurfaceRef.current.get(event.operationId);
         moveOperationSourceSurfaceRef.current.delete(event.operationId);
+        const clipboardToClear = clipboardClearAfterMoveRef.current;
+        if (clipboardToClear?.operationId === event.operationId) {
+          clipboardClearAfterMoveRef.current = null;
+          const clipboard = copyPasteClipboardRef.current;
+          if (
+            (event.result?.summary.completedItemCount ?? 0) > 0 &&
+            clipboard.type === "ready" &&
+            clipboard.capturedAt === clipboardToClear.capturedAt
+          ) {
+            applyCopyPasteClipboardState(clearCopyPasteClipboard());
+          }
+        }
         activeWriteOperationIdRef.current = null;
         pendingPasteAttemptRef.current = null;
         applyWriteOperationCardState(null);
@@ -1276,6 +1292,7 @@ export function useExplorerActions(args: {
       sourceSurface?: InternalMoveSourceSurface | null;
       pendingTreeSelectionPath?: string | null;
       initiator?: "clipboard" | "drag_drop" | "move_dialog" | null;
+      overrides?: CopyPasteOverrides;
     } = {},
   ): Promise<CopyLikePreStartOutcome> {
     const pasteAttemptId = options.pasteAttemptId ?? null;
@@ -1304,17 +1321,28 @@ export function useExplorerActions(args: {
       currentSourcePath: report.sourcePaths[0] ?? null,
     });
     try {
+      const overrides = Object.entries(options.overrides ?? {}).map(([nodeId, choice]) => ({
+        nodeId,
+        action: choice,
+      }));
       const response = await client.invoke("copyPaste:start", {
         analysisId: report.analysisId,
         action,
         policy,
+        ...(overrides.length > 0 ? { overrides } : {}),
         initiator,
       });
       if (action === "move_to" && sourceSurface) {
         moveOperationSourceSurfaceRef.current.set(response.operationId, sourceSurface);
       }
-      if (clearClipboardOnStart) {
-        applyCopyPasteClipboardState(clearCopyPasteClipboard());
+      // Like Finder: copied items stay on the clipboard for more pastes; cut items are
+      // cleared once something was actually moved.
+      const clipboard = copyPasteClipboardRef.current;
+      if (clearClipboardOnStart && report.mode === "cut" && clipboard.type === "ready") {
+        clipboardClearAfterMoveRef.current = {
+          operationId: response.operationId,
+          capturedAt: clipboard.capturedAt,
+        };
       }
       const pendingAttempt = pasteAttemptId === null ? null : pendingPasteAttemptRef.current;
       if (pendingAttempt && pendingAttempt.id === pasteAttemptId && pendingAttempt.cancelled) {
@@ -1506,6 +1534,14 @@ export function useExplorerActions(args: {
           pendingPasteAttemptRef.current = null;
           applyWriteOperationCardState(null);
           setCopyPasteDialogState(null);
+          // Cut and paste into the folder the items are already in does nothing, like Finder.
+          if (
+            args.initiator === "clipboard" &&
+            update.report.mode === "cut" &&
+            update.report.issues.every((issue) => issue.code === "same_path")
+          ) {
+            return { status: "cancelled" };
+          }
           return {
             status: "blocked",
             message: getCopyLikeIssueMessage(update.report),
@@ -1520,6 +1556,7 @@ export function useExplorerActions(args: {
             type: "review",
             report: update.report,
             policy: defaultPolicy,
+            overrides: {},
             action: args.action,
             clearClipboardOnStart: args.clearClipboardOnStart,
             sourceSurface: args.sourceSurface ?? null,
@@ -1704,15 +1741,21 @@ export function useExplorerActions(args: {
     activeAnalysisIdRef.current = null;
   }
 
-  function updateCopyPastePolicy(policy: CopyPastePolicy) {
+  function updateCopyPasteChoices(choices: {
+    policy: CopyPastePolicy;
+    overrides: CopyPasteOverrides;
+  }) {
     setCopyPasteDialogState((current) =>
-      current && current.type === "review" ? { ...current, policy } : current,
+      current && current.type === "review"
+        ? { ...current, policy: choices.policy, overrides: choices.overrides }
+        : current,
     );
   }
 
   async function resolveRuntimeConflict(
     conflictId: string,
-    resolution: "overwrite" | "skip" | "keep_both" | "merge",
+    resolution: CopyPasteChoice,
+    applyToRemaining: boolean,
   ) {
     const operationId = activeWriteOperationIdRef.current;
     if (!operationId) {
@@ -1722,6 +1765,7 @@ export function useExplorerActions(args: {
       operationId,
       conflictId,
       resolution,
+      ...(applyToRemaining ? { applyToRemaining } : {}),
     });
   }
 
@@ -2805,7 +2849,7 @@ export function useExplorerActions(args: {
     syncContentSelectionRefs,
     toggleContentSelection,
     extendContentSelectionToPath,
-    updateCopyPastePolicy,
+    updateCopyPasteChoices,
     activateContentEntry,
     activateContentPaths,
     addOpenWithApplication,

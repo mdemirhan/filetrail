@@ -154,7 +154,6 @@ describe("appStateStore", () => {
       favoritesPaneHeight: null,
       favoritesExpanded: true,
       favoritesInitialized: false,
-      copyPasteReviewDialogSize: null,
     });
     expect(store.getWindowState()).toEqual({
       width: 1480,
@@ -258,7 +257,6 @@ describe("appStateStore", () => {
       favoritesPaneHeight: 224,
       favoritesExpanded: false,
       favoritesInitialized: true,
-      copyPasteReviewDialogSize: null,
     });
     store.setWindowState({
       x: 120,
@@ -365,7 +363,6 @@ describe("appStateStore", () => {
       favoritesPaneHeight: 224,
       favoritesExpanded: false,
       favoritesInitialized: true,
-      copyPasteReviewDialogSize: null,
     });
     expect(reloaded.getWindowState()).toEqual({
       x: 120,

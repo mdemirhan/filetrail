@@ -111,10 +111,6 @@ export const applicationSelectionSchema = z.object({
   appPath: z.string().trim().min(1),
   appName: z.string().trim().min(1),
 });
-export const copyPasteReviewDialogSizeSchema = z.object({
-  width: z.number().int().min(520).max(3200),
-  height: z.number().int().min(420).max(2400),
-});
 export const toolbarItemIdSchema = z.enum([
   "back",
   "forward",
@@ -686,7 +682,6 @@ export const appPreferencesSchema = z.object({
   favoritesPaneHeight: z.number().int().min(96).max(2400).nullable(),
   favoritesExpanded: z.boolean(),
   favoritesInitialized: z.boolean(),
-  copyPasteReviewDialogSize: copyPasteReviewDialogSizeSchema.nullable(),
 });
 
 export const folderSizeJobStatusSchema = z.enum([

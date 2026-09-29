@@ -60,8 +60,6 @@ describe("AppDialogs", () => {
   function createPreferencesStore(): PreferencesStore {
     return {
       tabSwitchesExplorerPanes: false,
-      copyPasteReviewDialogSize: null,
-      setCopyPasteReviewDialogSize: vi.fn(),
     } as unknown as PreferencesStore;
   }
 
@@ -103,7 +101,7 @@ describe("AppDialogs", () => {
           onSubmitRenameDialog={() => undefined}
           onSubmitNewFolderDialog={() => undefined}
           onRequestCopyLikePlanStart={() => undefined}
-          onUpdateCopyPastePolicy={() => undefined}
+          onUpdateCopyPasteChoices={() => undefined}
           onCloseCopyPasteDialog={() => undefined}
           onConfirmTrashDialog={() => undefined}
           onConfirmDeleteImmediatelyDialog={() => undefined}

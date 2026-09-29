@@ -197,8 +197,6 @@ export function App() {
     setFavoritesExpanded,
     favoritesInitialized,
     setFavoritesInitialized,
-    copyPasteReviewDialogSize,
-    setCopyPasteReviewDialogSize,
     terminalApp,
     setTerminalApp,
     defaultTextEditor,
@@ -636,7 +634,7 @@ export function App() {
     submitNewFolderDialog,
     submitRenameDialog,
     toggleContentSelection,
-    updateCopyPastePolicy,
+    updateCopyPasteChoices,
   } = useExplorerActions({
     services,
     navigation,
@@ -906,7 +904,6 @@ export function App() {
     favoritesPaneHeight,
     favoritesExpanded,
     favoritesInitialized,
-    copyPasteReviewDialogSize,
   };
   // A new search (query or root) starts with fresh result metadata.
   useEffect(() => {
@@ -1066,7 +1063,6 @@ export function App() {
         setFavoritesPaneHeight(preferences.favoritesPaneHeight);
         setFavoritesExpanded(preferences.favoritesExpanded);
         setFavoritesInitialized(preferences.favoritesInitialized);
-        setCopyPasteReviewDialogSize(preferences.copyPasteReviewDialogSize);
         setTerminalApp(preferences.terminalApp);
         setDefaultTextEditor(preferences.defaultTextEditor);
         setOpenWithApplications(preferences.openWithApplications);
@@ -1836,7 +1832,7 @@ export function App() {
           onSubmitRenameDialog={(value) => void submitRenameDialog(value)}
           onSubmitNewFolderDialog={(value) => void submitNewFolderDialog(value)}
           onRequestCopyLikePlanStart={requestCopyLikePlanStart}
-          onUpdateCopyPastePolicy={updateCopyPastePolicy}
+          onUpdateCopyPasteChoices={updateCopyPasteChoices}
           onCloseCopyPasteDialog={dismissCopyPasteDialog}
           onConfirmTrashDialog={(paths) => {
             void startTrashPaths(paths);
@@ -1849,8 +1845,8 @@ export function App() {
             void cancelWriteOperation();
           }}
           showCopyPasteResultDialog={showCopyPasteResultDialog}
-          onResolveRuntimeConflict={(conflictId, resolution) => {
-            void resolveRuntimeConflict(conflictId, resolution);
+          onResolveRuntimeConflict={(conflictId, resolution, applyToRemaining) => {
+            void resolveRuntimeConflict(conflictId, resolution, applyToRemaining);
           }}
           onRetryFailedCopyPasteItems={(event) => {
             void retryFailedCopyPasteItems(event);

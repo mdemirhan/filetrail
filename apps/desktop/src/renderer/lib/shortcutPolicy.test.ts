@@ -11,6 +11,15 @@ import {
 } from "./shortcutPolicy";
 
 describe("shortcutPolicy", () => {
+  it("pastes into the folder on screen even when no pane has focus", () => {
+    expect(canHandleRendererCommand("pasteSelection", ctx({ focusedPane: null }))).toBe(true);
+    expect(
+      canHandleRendererCommand("pasteSelection", ctx({ focusedPane: null, mainView: "help" })),
+    ).toBe(false);
+    // Other content commands still need the file list.
+    expect(canHandleRendererCommand("copySelection", ctx({ focusedPane: null }))).toBe(false);
+  });
+
   function ctx(overrides: Partial<ShortcutContext> = {}): ShortcutContext {
     return {
       actionNoticeOpen: false,

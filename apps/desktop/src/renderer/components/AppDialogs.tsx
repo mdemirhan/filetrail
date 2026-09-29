@@ -1,11 +1,16 @@
 import type {
-  IpcRequest,
+  CopyPasteChoice,
   IpcResponse,
   WriteOperationAction,
   WriteOperationProgressEvent,
 } from "@filetrail/contracts";
 
 import type { ContextMenuState, WriteOperationCardState } from "../hooks/useWriteOperations";
+import type {
+  CopyPasteReport as CopyPasteAnalysisReport,
+  CopyPasteOverrides,
+  CopyPastePolicy,
+} from "../lib/copyPasteReview";
 import { formatSize } from "../lib/formatting";
 import type { InternalMoveSourceSurface } from "../lib/internalDragAndDrop";
 import type { ShortcutContext } from "../lib/shortcutPolicy";
@@ -18,6 +23,7 @@ import {
 import { ActionNoticeDialog } from "./ActionNoticeDialog";
 import { CopyPasteDialog } from "./CopyPasteDialog";
 import { CopyPasteProgressCard } from "./CopyPasteProgressCard";
+import { CopyPasteResultDialog } from "./CopyPasteResultDialog";
 import { CopyPasteReviewDialog } from "./CopyPasteReviewDialog";
 import { CopyPasteRuntimeConflictDialog } from "./CopyPasteRuntimeConflictDialog";
 import { GoToFolderDialog } from "./GoToFolderDialog";
@@ -29,9 +35,6 @@ import {
 } from "./ItemContextMenu";
 import { TextPromptDialog } from "./TextPromptDialog";
 import { ToastViewport } from "./ToastViewport";
-
-type CopyPasteAnalysisReport = NonNullable<IpcResponse<"copyPaste:analyzeGetUpdate">["report"]>;
-type CopyPastePolicy = Extract<IpcRequest<"copyPaste:start">, { analysisId: string }>["policy"];
 
 function resolveContextMenuShortcutContext(
   shortcutContext: ShortcutContext,
@@ -74,7 +77,7 @@ export function AppDialogs({
   onSubmitRenameDialog,
   onSubmitNewFolderDialog,
   onRequestCopyLikePlanStart,
-  onUpdateCopyPastePolicy,
+  onUpdateCopyPasteChoices,
   onCloseCopyPasteDialog,
   onConfirmTrashDialog,
   onConfirmDeleteImmediatelyDialog,
@@ -109,9 +112,13 @@ export function AppDialogs({
       initiator?: "clipboard" | "drag_drop" | "move_dialog" | null;
       sourceSurface?: InternalMoveSourceSurface | null;
       pendingTreeSelectionPath?: string | null;
+      overrides?: CopyPasteOverrides;
     },
   ) => void;
-  onUpdateCopyPastePolicy: (policy: CopyPastePolicy) => void;
+  onUpdateCopyPasteChoices: (choices: {
+    policy: CopyPastePolicy;
+    overrides: CopyPasteOverrides;
+  }) => void;
   onCloseCopyPasteDialog: () => void;
   onConfirmTrashDialog: (paths: string[]) => void;
   onConfirmDeleteImmediatelyDialog: (paths: string[]) => void;
@@ -120,7 +127,8 @@ export function AppDialogs({
   showCopyPasteResultDialog: boolean;
   onResolveRuntimeConflict: (
     conflictId: string,
-    resolution: "overwrite" | "skip" | "keep_both" | "merge",
+    resolution: CopyPasteChoice,
+    applyToRemaining: boolean,
   ) => void;
   onRetryFailedCopyPasteItems: (event: WriteOperationProgressEvent) => void;
   onDismissToast: (id: string) => void;
@@ -143,8 +151,7 @@ export function AppDialogs({
     writeOperationProgressEvent,
     toasts,
   } = useDialogStore();
-  const { tabSwitchesExplorerPanes, copyPasteReviewDialogSize, setCopyPasteReviewDialogSize } =
-    usePreferencesStore();
+  const { tabSwitchesExplorerPanes } = usePreferencesStore();
   const contextMenuShortcutContext = resolveContextMenuShortcutContext(
     shortcutContext,
     contextMenuState,
@@ -247,20 +254,13 @@ export function AppDialogs({
       ) : null}
       {copyPasteDialogState?.type === "review" ? (
         <CopyPasteReviewDialog
+          key={copyPasteDialogState.report.analysisId}
           action={copyPasteDialogState.action}
-          title={
-            copyPasteDialogState.action === "move_to"
-              ? "Move Requires Review"
-              : copyPasteDialogState.action === "duplicate"
-                ? "Duplicate Requires Review"
-                : "Paste Requires Review"
-          }
           report={copyPasteDialogState.report}
           policy={copyPasteDialogState.policy}
-          onPolicyChange={onUpdateCopyPastePolicy}
+          overrides={copyPasteDialogState.overrides}
+          onChoicesChange={onUpdateCopyPasteChoices}
           onClose={onCloseCopyPasteDialog}
-          persistedSize={copyPasteReviewDialogSize}
-          onSizeChange={setCopyPasteReviewDialogSize}
           onStart={() =>
             onRequestCopyLikePlanStart(
               copyPasteDialogState.report,
@@ -271,6 +271,7 @@ export function AppDialogs({
                 initiator: copyPasteDialogState.initiator ?? null,
                 sourceSurface: copyPasteDialogState.sourceSurface ?? null,
                 pendingTreeSelectionPath: copyPasteDialogState.pendingTreeSelectionPath ?? null,
+                overrides: copyPasteDialogState.overrides,
               },
             )
           }
@@ -327,50 +328,37 @@ export function AppDialogs({
       {writeOperationProgressEvent?.status === "awaiting_resolution" &&
       writeOperationProgressEvent.runtimeConflict ? (
         <CopyPasteRuntimeConflictDialog
-          title={buildRuntimeConflictTitle(writeOperationProgressEvent)}
-          summary={buildRuntimeConflictSummary(writeOperationProgressEvent)}
-          sourcePath={writeOperationProgressEvent.runtimeConflict.sourcePath}
-          sourceDetail={buildRuntimeConflictSourceDetail(writeOperationProgressEvent)}
-          destinationPath={writeOperationProgressEvent.runtimeConflict.destinationPath}
-          destinationDetail={buildRuntimeConflictDestinationDetail(writeOperationProgressEvent)}
-          changeExplanation={buildRuntimeConflictChangeExplanation(writeOperationProgressEvent)}
-          actions={buildRuntimeConflictActions(
-            writeOperationProgressEvent,
-            onResolveRuntimeConflict,
-          )}
-          cancelLabel={getCancelWriteOperationLabel(writeOperationProgressEvent.action)}
-          onCancel={onCancelWriteOperation}
+          key={writeOperationProgressEvent.runtimeConflict.conflictId}
+          verb={getCopyLikeVerb(writeOperationProgressEvent.action)}
+          conflict={writeOperationProgressEvent.runtimeConflict}
+          onResolve={(choice, applyToRemaining) => {
+            const conflictId = writeOperationProgressEvent.runtimeConflict?.conflictId;
+            if (conflictId) {
+              onResolveRuntimeConflict(conflictId, choice, applyToRemaining);
+            }
+          }}
+          onStop={onCancelWriteOperation}
         />
       ) : null}
       {showCopyPasteResultDialog && writeOperationProgressEvent ? (
-        <CopyPasteDialog
-          title={getWriteOperationTitle(writeOperationProgressEvent.action, "result")}
-          message={buildCopyPasteResultMessage(writeOperationProgressEvent)}
-          detailLines={buildCopyPasteResultDetailLines(writeOperationProgressEvent)}
-          primaryAction={
-            isRetryableCopyAction(writeOperationProgressEvent) &&
-            writeOperationProgressEvent.result?.items.some((item) => item.status === "failed")
-              ? {
-                  label: "Retry Failed Items",
-                  onClick: () => {
-                    onRetryFailedCopyPasteItems(writeOperationProgressEvent);
-                  },
-                }
-              : {
-                  label: "Close",
-                  onClick: onCloseCopyPasteDialog,
-                }
-          }
-          secondaryAction={
-            isRetryableCopyAction(writeOperationProgressEvent) &&
-            writeOperationProgressEvent.result?.items.some((item) => item.status === "failed")
-              ? {
-                  label: "Close",
-                  onClick: onCloseCopyPasteDialog,
-                }
-              : undefined
-          }
-        />
+        isCopyLikeAction(writeOperationProgressEvent.action) ? (
+          <CopyPasteResultDialog
+            event={writeOperationProgressEvent}
+            canRetry={isRetryableCopyAction(writeOperationProgressEvent)}
+            onRetry={() => onRetryFailedCopyPasteItems(writeOperationProgressEvent)}
+            onClose={onCloseCopyPasteDialog}
+          />
+        ) : (
+          <CopyPasteDialog
+            title={getWriteOperationTitle(writeOperationProgressEvent.action, "result")}
+            message={buildCopyPasteResultMessage(writeOperationProgressEvent)}
+            detailLines={buildCopyPasteResultDetailLines(writeOperationProgressEvent)}
+            primaryAction={{
+              label: "Close",
+              onClick: onCloseCopyPasteDialog,
+            }}
+          />
+        )
       ) : null}
       <ToastViewport
         toasts={toasts}
@@ -482,155 +470,6 @@ function isRetryableCopyAction(event: WriteOperationProgressEvent): boolean {
   return event.action === "paste" || event.action === "move_to" || event.action === "duplicate";
 }
 
-function buildRuntimeConflictActions(
-  event: WriteOperationProgressEvent,
-  onResolveRuntimeConflict: (
-    conflictId: string,
-    resolution: "overwrite" | "skip" | "keep_both" | "merge",
-  ) => void,
-) {
-  const conflict = event.runtimeConflict;
-  if (!conflict) {
-    return [];
-  }
-  if (conflict.reason === "source_deleted") {
-    return [
-      {
-        label: conflict.sourceKind === "directory" ? "Skip Folder" : "Skip",
-        description: "Leave this item unchanged and continue with the rest of the operation.",
-        onClick: () => onResolveRuntimeConflict(conflict.conflictId, "skip"),
-      },
-    ];
-  }
-  if (conflict.conflictClass === "directory_conflict") {
-    return [
-      {
-        label: "Replace Folder",
-        destructive: true,
-        description:
-          "Replace the destination folder with the source folder and continue. Destination-only contents will be removed.",
-        onClick: () => onResolveRuntimeConflict(conflict.conflictId, "overwrite"),
-      },
-      {
-        label: "Merge Folders",
-        description: "Keep the destination folder and continue moving the source contents into it.",
-        onClick: () => onResolveRuntimeConflict(conflict.conflictId, "merge"),
-      },
-      {
-        label: "Keep Both",
-        description:
-          "Keep the existing destination folder and create a second folder with a new name.",
-        onClick: () => onResolveRuntimeConflict(conflict.conflictId, "keep_both"),
-      },
-      {
-        label: "Skip Folder",
-        description: "Leave this folder unchanged and continue with the rest of the operation.",
-        onClick: () => onResolveRuntimeConflict(conflict.conflictId, "skip"),
-      },
-    ];
-  }
-  return [
-    {
-      label: conflict.conflictClass === "type_mismatch" ? "Replace" : "Overwrite",
-      description:
-        "Replace the destination item with the source item and continue with the operation.",
-      onClick: () => onResolveRuntimeConflict(conflict.conflictId, "overwrite"),
-    },
-    {
-      label: "Keep Both",
-      description:
-        "Keep the destination item and create a second copy of the source item with a new name.",
-      onClick: () => onResolveRuntimeConflict(conflict.conflictId, "keep_both"),
-    },
-    {
-      label: "Skip",
-      description: "Leave this item unchanged and continue with the rest of the operation.",
-      onClick: () => onResolveRuntimeConflict(conflict.conflictId, "skip"),
-    },
-  ];
-}
-
-function buildRuntimeConflictTitle(event: WriteOperationProgressEvent): string {
-  const conflict = event.runtimeConflict;
-  if (!conflict) {
-    return "Operation Paused";
-  }
-  return `${getWriteOperationLabel(event.action)} Paused: ${formatRuntimeConflictReasonTitle(conflict.reason)}`;
-}
-
-function buildRuntimeConflictSummary(event: WriteOperationProgressEvent): string {
-  const conflict = event.runtimeConflict;
-  if (!conflict) {
-    return "The operation paused because the filesystem changed after planning.";
-  }
-  const sourceName = getPathLeafName(conflict.sourcePath);
-  const destinationName = getPathLeafName(conflict.destinationPath);
-  if (conflict.reason === "source_deleted") {
-    return `The source ${formatKindLabel(conflict.sourceKind)} "${sourceName}" is no longer available.`;
-  }
-  if (conflict.reason === "source_changed") {
-    return `The source ${formatKindLabel(conflict.sourceKind)} "${sourceName}" changed after the operation was planned.`;
-  }
-  if (conflict.reason === "destination_created") {
-    return `A destination ${formatKindLabel(conflict.destinationKind)} named "${destinationName}" appeared after the operation was planned.`;
-  }
-  if (conflict.reason === "destination_deleted") {
-    return `The destination item "${destinationName}" no longer matches the state that was reviewed earlier.`;
-  }
-  return `The destination ${formatKindLabel(conflict.destinationKind)} "${destinationName}" changed after the operation was planned.`;
-}
-
-function buildRuntimeConflictSourceDetail(event: WriteOperationProgressEvent): string {
-  const conflict = event.runtimeConflict;
-  if (!conflict) {
-    return "";
-  }
-  if (conflict.reason === "source_deleted") {
-    return `${formatKindLabel(conflict.sourceKind)} · missing now`;
-  }
-  if (conflict.reason === "source_changed") {
-    return `${formatKindLabel(conflict.sourceKind)} · changed after planning`;
-  }
-  return `${formatKindLabel(conflict.sourceKind)} · still present`;
-}
-
-function buildRuntimeConflictDestinationDetail(event: WriteOperationProgressEvent): string {
-  const conflict = event.runtimeConflict;
-  if (!conflict) {
-    return "";
-  }
-  if (conflict.reason === "destination_deleted") {
-    return "missing · deleted after planning";
-  }
-  if (conflict.reason === "destination_created") {
-    return `${formatKindLabel(conflict.destinationKind)} · created after planning`;
-  }
-  if (conflict.reason === "destination_changed") {
-    return `${formatKindLabel(conflict.destinationKind)} · changed after planning`;
-  }
-  return `${formatKindLabel(conflict.currentDestinationFingerprint.kind)} · current destination state`;
-}
-
-function buildRuntimeConflictChangeExplanation(event: WriteOperationProgressEvent): string {
-  const conflict = event.runtimeConflict;
-  if (!conflict) {
-    return "The filesystem changed after the operation was planned, so File Trail paused before continuing with an outdated decision.";
-  }
-  if (conflict.reason === "source_deleted") {
-    return "The source item no longer exists at its original path, so continuing without a new decision could fail or produce an incomplete move.";
-  }
-  if (conflict.reason === "source_changed") {
-    return "The source item is different from the version that was analyzed earlier, so the original plan may no longer reflect what will be moved.";
-  }
-  if (conflict.reason === "destination_created") {
-    return "The plan expected no item at the destination path, but something new appeared there before the write reached this step.";
-  }
-  if (conflict.reason === "destination_deleted") {
-    return "The destination item that existed during planning is gone now, so File Trail needs a new decision before continuing.";
-  }
-  return "The destination item changed after planning, so the original conflict choice may no longer be safe to apply automatically.";
-}
-
 function getCancelWriteOperationLabel(action: WriteOperationAction): string {
   return `Cancel ${getWriteOperationLabel(action)}`;
 }
@@ -657,40 +496,12 @@ function getWriteOperationLabel(action: WriteOperationAction): string {
   return "Paste";
 }
 
-function formatRuntimeConflictReasonTitle(
-  reason: NonNullable<WriteOperationProgressEvent["runtimeConflict"]>["reason"],
-): string {
-  if (reason === "destination_created") {
-    return "Destination Created";
-  }
-  if (reason === "destination_deleted") {
-    return "Destination Deleted";
-  }
-  if (reason === "source_changed") {
-    return "Source Changed";
-  }
-  if (reason === "source_deleted") {
-    return "Source Missing";
-  }
-  return "Destination Changed";
+function isCopyLikeAction(action: WriteOperationAction): boolean {
+  return action === "paste" || action === "move_to" || action === "duplicate";
 }
 
-function formatKindLabel(
-  kind: "file" | "directory" | "symlink" | "symlink_directory" | "missing",
-): string {
-  if (kind === "directory") {
-    return "folder";
-  }
-  if (kind === "symlink_directory") {
-    return "symlink folder";
-  }
-  if (kind === "symlink") {
-    return "symlink";
-  }
-  if (kind === "missing") {
-    return "item";
-  }
-  return "file";
+function getCopyLikeVerb(action: WriteOperationAction): "Paste" | "Move" | "Duplicate" {
+  return action === "move_to" ? "Move" : action === "duplicate" ? "Duplicate" : "Paste";
 }
 
 function getPathLeafName(path: string): string {

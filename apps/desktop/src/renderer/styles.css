@@ -2311,53 +2311,6 @@ body.platform-macos .window-toolbar-brand {
   width: min(460px, calc(100vw - 32px));
 }
 
-.copy-paste-runtime-conflict-body {
-  display: grid;
-  gap: 10px;
-  margin-top: 14px;
-}
-
-.copy-paste-runtime-conflict-section-title {
-  font-size: 0.95rem;
-}
-
-.copy-paste-runtime-conflict-section-message {
-  margin-top: 6px;
-}
-
-.copy-paste-runtime-conflict-actions {
-  display: grid;
-  gap: 10px;
-  margin-top: 10px;
-}
-
-.copy-paste-runtime-conflict-action-row {
-  display: grid;
-  gap: 6px;
-  grid-template-columns: max-content 1fr;
-  align-items: start;
-}
-
-.copy-paste-runtime-conflict-action-description {
-  margin: 6px 0 0;
-  font-size: 0.92rem;
-}
-
-.copy-paste-runtime-conflict-footer {
-  margin-top: 18px;
-}
-
-.copy-paste-runtime-conflict-path {
-  margin-top: 6px;
-  word-break: break-word;
-}
-
-.copy-paste-runtime-conflict-detail {
-  margin-top: 4px;
-  font-size: 0.92rem;
-  opacity: 0.9;
-}
-
 .copy-paste-progress {
   margin-top: 8px;
   color: var(--text-primary);
@@ -2375,769 +2328,6 @@ body.platform-macos .window-toolbar-brand {
 
 .copy-paste-detail-list li + li {
   margin-top: 4px;
-}
-
-.copy-paste-review-dialog {
-  --ft-conflict-accent: var(--accent-gold, var(--accent-blue));
-  --ft-conflict-surface: color-mix(in srgb, var(--bg-elevated) 94%, black 6%);
-  --ft-conflict-panel: color-mix(in srgb, var(--bg-elevated) 96%, var(--bg-base) 4%);
-  --ft-conflict-border: color-mix(in srgb, var(--border) 84%, transparent);
-  --ft-conflict-icon-slate: color-mix(in srgb, var(--text-secondary) 82%, #8fa0b5 18%);
-  --ft-conflict-icon-violet: color-mix(in srgb, var(--accent) 80%, #9c7cff 20%);
-  --ft-conflict-icon-coral: #e07d5a;
-  --ft-conflict-icon-gold: color-mix(in srgb, var(--ft-conflict-accent) 86%, #e0b24a 14%);
-  position: fixed;
-  inset: auto;
-  top: 0;
-  left: 0;
-  transform: none;
-  display: flex;
-  flex-direction: column;
-  max-width: none;
-  max-height: none;
-  padding: 0;
-  overflow: hidden;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--ft-conflict-surface) 96%, transparent),
-    color-mix(in srgb, var(--ft-conflict-surface) 98%, black 2%)
-  );
-  border-color: color-mix(in srgb, var(--ft-conflict-border) 88%, transparent);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px color-mix(in srgb, white 3%, transparent)
-    inset;
-}
-
-.copy-paste-review-shell {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-height: 0;
-}
-
-.copy-paste-review-header {
-  flex: 0 0 auto;
-  padding: 16px 18px 0;
-}
-
-.copy-paste-review-title-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  cursor: move;
-  user-select: none;
-}
-
-.copy-paste-review-title-block {
-  min-width: 0;
-}
-
-.copy-paste-review-warning-glyph {
-  width: 14px;
-  height: 14px;
-  margin-top: 2px;
-  color: var(--ft-conflict-accent);
-  stroke: currentColor;
-  stroke-width: 1.1;
-  flex: 0 0 auto;
-}
-
-.copy-paste-review-message {
-  margin-top: 0;
-  color: var(--text-secondary);
-  font-size: 11.5px;
-  line-height: 1.4;
-}
-
-.copy-paste-review-path-pill {
-  display: inline-flex;
-  align-items: center;
-  min-height: 22px;
-  max-width: 100%;
-  padding: 1px 5px;
-  margin-left: 0;
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--bg-hover) 74%, var(--bg-elevated));
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-weight: var(--mono-font-weight);
-  line-height: 1.2;
-  vertical-align: middle;
-  word-break: break-all;
-}
-
-.copy-paste-review-summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 14px;
-}
-
-.copy-paste-review-summary span {
-  display: inline-flex;
-  align-items: center;
-  min-height: 30px;
-  padding: 0 12px;
-  border: 1px solid var(--ft-conflict-border);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-hover) 54%, var(--bg-elevated));
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.copy-paste-review-summary span.is-accent {
-  border-color: color-mix(in srgb, var(--ft-conflict-accent) 36%, var(--ft-conflict-border));
-  background: color-mix(in srgb, var(--ft-conflict-accent) 10%, var(--bg-hover));
-  color: var(--ft-conflict-accent);
-}
-
-.copy-paste-review-summary span.is-success {
-  border-color: color-mix(in srgb, var(--success) 36%, var(--ft-conflict-border));
-  background: color-mix(in srgb, var(--success) 10%, var(--bg-hover));
-  color: var(--success);
-}
-
-.copy-paste-review-summary span.is-warning {
-  border-color: color-mix(in srgb, var(--warning) 36%, var(--ft-conflict-border));
-  background: color-mix(in srgb, var(--warning) 10%, var(--bg-hover));
-  color: var(--warning);
-}
-
-.copy-paste-review-summary span.is-muted {
-  border-color: color-mix(in srgb, var(--text-tertiary) 22%, var(--ft-conflict-border));
-  background: color-mix(in srgb, var(--text-tertiary) 8%, var(--bg-hover));
-  color: var(--text-tertiary);
-}
-
-.copy-paste-review-summary span.is-danger {
-  border-color: color-mix(in srgb, var(--danger) 36%, var(--ft-conflict-border));
-  background: color-mix(in srgb, var(--danger) 10%, var(--bg-hover));
-  color: var(--danger);
-}
-
-.copy-paste-review-policy-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 10px 12px;
-  margin-top: 12px;
-  border: 1px solid var(--ft-conflict-border);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-hover) 40%, var(--ft-conflict-panel));
-}
-
-.copy-paste-review-policy-warning {
-  margin-top: 10px;
-  padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--danger) 34%, var(--ft-conflict-border));
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--danger) 8%, var(--ft-conflict-panel));
-  color: color-mix(in srgb, var(--danger) 72%, var(--text-primary));
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.copy-paste-review-policy-group {
-  margin: 0;
-  padding: 0;
-  border: 0;
-  min-inline-size: fit-content;
-  flex: 0 0 auto;
-}
-
-.copy-paste-review-policy-group + .copy-paste-review-policy-group {
-  border-left: 0;
-}
-
-.copy-paste-review-policy-label {
-  display: block;
-  padding: 0;
-  margin-bottom: 4px;
-  color: var(--text-tertiary);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.copy-paste-review-segmented {
-  display: inline-flex;
-  width: auto;
-  padding: 2px;
-  border: 1px solid var(--ft-conflict-border);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--bg-base) 22%, var(--bg-elevated));
-}
-
-.copy-paste-review-segmented button {
-  flex: 0 0 auto;
-  min-height: 32px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-tertiary);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 140ms ease, color 140ms ease;
-}
-
-.copy-paste-review-segmented button:hover {
-  color: var(--text-secondary);
-}
-
-.copy-paste-review-segmented button.is-active {
-  background: color-mix(in srgb, var(--ft-conflict-accent) 16%, transparent);
-  color: var(--ft-conflict-accent);
-}
-
-.copy-paste-review-body {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-height: 0;
-  padding: 12px 10px 0;
-}
-
-.copy-paste-review-filter-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 5px;
-  padding: 0 2px 8px;
-}
-
-.copy-paste-review-filter-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 24px;
-  padding: 0 9px;
-  border: 1px solid var(--ft-conflict-border);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-tertiary);
-  font: inherit;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
-}
-
-.copy-paste-review-filter-chip:hover {
-  background: color-mix(in srgb, var(--bg-hover) 54%, transparent);
-  color: var(--text-secondary);
-}
-
-.copy-paste-review-filter-chip.is-active.is-success {
-  border-color: color-mix(in srgb, var(--icon-green) 42%, var(--ft-conflict-border));
-  background: color-mix(in srgb, var(--icon-green) 14%, var(--bg-hover));
-  color: var(--icon-green);
-}
-
-.copy-paste-review-filter-chip.is-active.is-danger {
-  border-color: color-mix(in srgb, var(--danger) 36%, var(--ft-conflict-border));
-  background: color-mix(in srgb, var(--danger) 10%, var(--bg-hover));
-  color: var(--danger);
-}
-
-.copy-paste-review-filter-chip.is-active.is-muted {
-  border-color: color-mix(in srgb, var(--text-tertiary) 32%, var(--ft-conflict-border));
-  background: color-mix(in srgb, var(--text-tertiary) 12%, var(--bg-hover));
-  color: var(--text-secondary);
-}
-
-.copy-paste-review-filter-chip.is-active.is-warning {
-  border-color: color-mix(in srgb, var(--warning) 58%, var(--ft-conflict-border));
-  background: color-mix(in srgb, var(--warning) 16%, var(--bg-hover));
-  color: color-mix(in srgb, var(--warning) 78%, var(--text-primary) 22%);
-}
-
-.copy-paste-review-filter-chip.is-active.is-neutral {
-  border-color: color-mix(in srgb, var(--ft-conflict-accent) 36%, var(--ft-conflict-border));
-  background: color-mix(in srgb, var(--ft-conflict-accent) 10%, var(--bg-hover));
-  color: var(--ft-conflict-accent);
-}
-
-.copy-paste-review-filter-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: 999px;
-  background: color-mix(in srgb, currentColor 12%, transparent);
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.copy-paste-review-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 2px;
-}
-
-.copy-paste-review-tree-label {
-  color: var(--text-tertiary);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  text-transform: uppercase;
-}
-
-.copy-paste-review-search {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-  max-width: 228px;
-  min-height: 30px;
-  padding: 0 10px;
-  border: 1px solid var(--ft-conflict-border);
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--bg-hover) 24%, var(--bg-elevated));
-}
-
-.copy-paste-review-search-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  color: var(--text-tertiary);
-  flex: 0 0 auto;
-}
-
-.copy-paste-review-search-icon svg {
-  width: 12px;
-  height: 12px;
-  stroke: currentColor;
-  stroke-width: 1.45;
-}
-
-.copy-paste-review-search input {
-  width: 100%;
-  min-height: 28px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text-primary);
-  font: inherit;
-  font-size: 11px;
-}
-
-.copy-paste-review-search input::placeholder {
-  color: var(--text-tertiary);
-}
-
-.copy-paste-review-search input:focus-visible {
-  outline: none;
-}
-
-.copy-paste-review-search:focus-within {
-  border-color: var(--accent-blue-border);
-  box-shadow: 0 0 0 3px var(--accent-blue-dim);
-}
-
-.copy-paste-review-list-panel {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  min-height: 0;
-  border: 1px solid var(--ft-conflict-border);
-  border-radius: 0;
-  border-left: 0;
-  border-right: 0;
-  border-bottom: 0;
-  background: color-mix(in srgb, var(--bg-base) 16%, var(--ft-conflict-panel));
-  overflow: hidden;
-}
-
-.copy-paste-review-list-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 12px;
-  border-bottom: 1px solid color-mix(in srgb, var(--ft-conflict-border) 88%, transparent);
-  color: var(--text-tertiary);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.copy-paste-review-tree,
-.copy-paste-review-tree-group {
-  display: grid;
-  align-content: start;
-  gap: 0;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.copy-paste-review-tree {
-  flex: 1 1 auto;
-  padding: 6px 0 10px;
-  overflow: auto;
-  min-height: 0;
-  overflow-x: hidden;
-}
-
-.copy-paste-review-tree-item {
-  min-width: 0;
-}
-
-.copy-paste-review-row {
-  display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  padding: 5px 10px;
-  width: 100%;
-  min-width: 0;
-}
-
-.copy-paste-review-row-leading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 14px;
-}
-
-.copy-paste-review-row-toggle,
-.copy-paste-review-row-toggle-spacer {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-}
-
-.copy-paste-review-row-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-tertiary);
-  cursor: pointer;
-}
-
-.copy-paste-review-row-toggle:hover {
-  color: var(--text-secondary);
-  background: color-mix(in srgb, var(--bg-hover) 78%, transparent);
-}
-
-.copy-paste-review-row-toggle:focus-visible {
-  outline: 1px solid var(--accent-blue-border);
-  outline-offset: 1px;
-}
-
-.copy-paste-review-row-toggle svg {
-  width: 14px;
-  height: 14px;
-  stroke: currentColor;
-  stroke-width: 1.35;
-}
-
-.copy-paste-review-row-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  color: var(--ft-conflict-icon-slate);
-  flex: 0 0 auto;
-}
-
-.copy-paste-review-row-icon svg {
-  width: 14px;
-  height: 14px;
-  stroke: currentColor;
-  stroke-width: 1.15;
-}
-
-.copy-paste-review-row-nameplate {
-  min-width: 0;
-  overflow: hidden;
-}
-
-.copy-paste-review-row-path {
-  display: flex;
-  align-items: baseline;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-primary);
-  font-size: 12px;
-  white-space: nowrap;
-  text-align: left;
-}
-
-.copy-paste-review-row-hint {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 11px;
-  line-height: 1.3;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  padding-top: 1px;
-}
-
-.copy-paste-review-row-hint .is-gain {
-  color: var(--icon-sky);
-  font-weight: 600;
-}
-
-.copy-paste-review-row-hint .is-loss {
-  color: var(--icon-orange);
-  font-weight: 600;
-}
-
-.copy-paste-review-row-hint .is-danger {
-  color: var(--danger);
-  font-weight: 600;
-}
-
-.copy-paste-review-row-hint.is-muted {
-  opacity: 0.5;
-}
-
-.copy-paste-review-row-hint.is-muted .is-gain,
-.copy-paste-review-row-hint.is-muted .is-loss,
-.copy-paste-review-row-hint.is-muted .is-danger {
-  color: inherit;
-  font-weight: inherit;
-}
-
-.copy-paste-review-row-meta {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  min-width: 108px;
-}
-
-.copy-paste-review-row-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 22px;
-  padding: 0 9px;
-  border: 1px solid var(--ft-conflict-border);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-hover) 54%, var(--bg-elevated));
-  color: var(--text-secondary);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
-}
-
-.copy-paste-review-row-badge.is-accent {
-  border-color: color-mix(in srgb, var(--ft-conflict-accent) 36%, var(--ft-conflict-border));
-  background: color-mix(in srgb, var(--ft-conflict-accent) 10%, var(--bg-hover));
-  color: var(--ft-conflict-accent);
-}
-
-.copy-paste-review-row-badge.is-success {
-  border-color: color-mix(in srgb, var(--icon-green) 42%, var(--ft-conflict-border));
-  background: color-mix(in srgb, var(--icon-green) 14%, var(--bg-hover));
-  color: var(--icon-green);
-}
-
-.copy-paste-review-row-badge.is-warning {
-  border-color: color-mix(in srgb, var(--warning) 58%, var(--ft-conflict-border));
-  background: color-mix(in srgb, var(--warning) 16%, var(--bg-hover));
-  color: color-mix(in srgb, var(--warning) 78%, var(--text-primary) 22%);
-}
-
-.copy-paste-review-row-badge.is-muted {
-  border-color: color-mix(in srgb, var(--text-tertiary) 22%, var(--ft-conflict-border));
-  background: color-mix(in srgb, var(--text-tertiary) 8%, var(--bg-hover));
-  color: var(--text-tertiary);
-}
-
-.copy-paste-review-row-badge.is-danger {
-  border-color: color-mix(in srgb, var(--danger) 36%, var(--ft-conflict-border));
-  background: color-mix(in srgb, var(--danger) 10%, var(--bg-hover));
-  color: var(--danger);
-}
-
-.copy-paste-review-empty {
-  display: flex;
-  flex: 1 1 auto;
-  align-items: center;
-  justify-content: center;
-  min-height: 180px;
-  padding: 24px;
-  color: var(--text-tertiary);
-  font-size: 12px;
-  text-align: center;
-}
-
-.copy-paste-review-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 12px;
-  padding: 10px 18px;
-  margin-top: 0;
-  border-top: 1px solid color-mix(in srgb, var(--ft-conflict-border) 88%, transparent);
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--ft-conflict-surface) 84%, transparent),
-    color-mix(in srgb, var(--ft-conflict-surface) 98%, var(--bg-base))
-  );
-}
-
-.copy-paste-review-selection-summary {
-  overflow: hidden;
-  color: var(--text-tertiary);
-  font-size: 10.5px;
-  font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1 1 auto;
-}
-
-.copy-paste-review-action-buttons {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-}
-
-.copy-paste-review-actions .tb-btn {
-  min-height: 34px;
-  padding: 0 16px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.copy-paste-review-actions .tb-btn.primary {
-  border-color: color-mix(in srgb, var(--ft-conflict-accent) 34%, var(--ft-conflict-border));
-  background: color-mix(in srgb, var(--ft-conflict-accent) 14%, transparent);
-  color: var(--ft-conflict-accent);
-}
-
-.copy-paste-review-resize-handle {
-  position: absolute;
-  right: 4px;
-  bottom: 4px;
-  width: 14px;
-  height: 14px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: nwse-resize;
-  opacity: 0.45;
-}
-
-.copy-paste-review-resize-handle::before {
-  content: "";
-  position: absolute;
-  right: 2px;
-  bottom: 2px;
-  width: 8px;
-  height: 8px;
-  border-right: 1px solid color-mix(in srgb, var(--text-tertiary) 42%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--text-tertiary) 42%, transparent);
-}
-
-.copy-paste-review-resize-handle:focus-visible {
-  outline: 1px solid var(--accent-blue-border);
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
-.copy-paste-review-resize-handle:hover {
-  opacity: 0.7;
-}
-
-@media (max-width: 820px) {
-  .copy-paste-review-dialog {
-    max-width: none;
-    max-height: none;
-  }
-
-  .copy-paste-review-policy-bar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .copy-paste-review-policy-group {
-    padding: 0;
-    min-inline-size: 0;
-  }
-
-  .copy-paste-review-policy-group + .copy-paste-review-policy-group {
-    padding-top: 18px;
-    margin-top: 18px;
-    border-top: 1px solid color-mix(in srgb, var(--ft-conflict-border) 88%, transparent);
-    border-left: 0;
-  }
-
-  .copy-paste-review-toolbar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .copy-paste-review-search {
-    margin-left: 0;
-    max-width: none;
-  }
-
-  .copy-paste-review-search input {
-    width: 100%;
-  }
-
-  .copy-paste-review-actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .copy-paste-review-action-buttons {
-    width: 100%;
-    margin-left: 0;
-    flex-direction: column;
-  }
-
-  .copy-paste-review-selection-summary {
-    white-space: normal;
-  }
-
-  .copy-paste-review-header,
-  .copy-paste-review-body,
-  .copy-paste-review-actions {
-    padding-left: 20px;
-    padding-right: 20px;
-  }
-
-  .copy-paste-review-message,
-  .copy-paste-review-summary span,
-  .copy-paste-review-segmented button,
-  .copy-paste-review-search input,
-  .copy-paste-review-row-path,
-  .copy-paste-review-row-badge {
-    font-size: 11px;
-  }
-
-  .copy-paste-review-row-hint {
-    font-size: 10px;
-  }
 }
 
 .sort-direction-label {
@@ -8485,4 +7675,384 @@ body.settings-window-body {
 .sidebar-section-header:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--ft-accent-solid) 45%, transparent);
+}
+
+/* ── Copy/paste review sheet, conflict alert, result sheet ─────────────────── */
+
+/* The sheet hangs from the toolbar, like a macOS window sheet. */
+.copy-paste-sheet-backdrop {
+  align-items: flex-start;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.copy-paste-sheet {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(740px, calc(100vw - 48px));
+  max-height: calc(100vh - 52px - 24px);
+  margin: 52px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0 0 12px 12px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28), 0 0 0 1px var(--border-light);
+  font-size: 13px;
+  outline: none;
+}
+
+.copy-paste-sheet-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 22px 24px 14px;
+}
+
+.copy-paste-sheet-glyph {
+  flex: none;
+  width: 40px;
+  height: 40px;
+}
+
+.copy-paste-glyph-sheet,
+.copy-paste-glyph-sheet-back {
+  fill: var(--bg-elevated);
+  stroke: var(--text-tertiary);
+}
+
+.copy-paste-glyph-sheet-back {
+  fill: var(--bg-hover);
+}
+
+.copy-paste-glyph-arrow {
+  fill: none;
+  stroke: var(--ft-accent-solid);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.copy-paste-sheet-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.copy-paste-sheet-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.copy-paste-sheet-message {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.copy-paste-sheet-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 24px;
+  border-top: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border-light);
+  background: color-mix(in srgb, var(--text-primary) 2.5%, transparent);
+}
+
+.copy-paste-sheet-bar-label {
+  font-weight: 500;
+}
+
+.copy-paste-sheet-bar-note {
+  color: var(--text-secondary);
+}
+
+.copy-paste-sheet-bar-spacer {
+  flex: 1 1 auto;
+}
+
+.copy-paste-sheet-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ft-accent-solid);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* A native popup button: the platform menu opens on click. */
+.copy-paste-choice {
+  height: 24px;
+  min-width: 112px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong, var(--border-light));
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.copy-paste-choice.is-danger {
+  color: var(--danger);
+}
+
+.copy-paste-sheet-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 4px 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.copy-paste-sheet-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  column-gap: 12px;
+  align-items: center;
+  padding: 8px 24px;
+}
+
+.copy-paste-sheet-row + .copy-paste-sheet-row {
+  border-top: 1px solid color-mix(in srgb, var(--border-light) 60%, transparent);
+}
+
+.copy-paste-sheet-row.is-replacing {
+  background: color-mix(in srgb, var(--danger) 7%, transparent);
+}
+
+.copy-paste-row-glyph {
+  width: 18px;
+  height: 18px;
+  justify-self: center;
+}
+
+.copy-paste-glyph-folder {
+  fill: #5ab3f5;
+  stroke: #3b97dc;
+}
+
+.copy-paste-glyph-file {
+  fill: var(--bg-elevated);
+  stroke: var(--text-tertiary);
+}
+
+.copy-paste-glyph-file-fold {
+  fill: none;
+  stroke: var(--text-tertiary);
+}
+
+.copy-paste-sheet-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.copy-paste-sheet-row-name {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copy-paste-sheet-row-rename {
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.copy-paste-sheet-row-detail {
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.copy-paste-sheet-row.is-danger .copy-paste-sheet-row-detail,
+.copy-paste-sheet-row-detail.is-danger {
+  color: var(--danger);
+}
+
+.copy-paste-sheet-row.is-muted .copy-paste-sheet-row-detail,
+.copy-paste-sheet-row-detail.is-muted {
+  color: var(--text-tertiary);
+}
+
+.copy-paste-sheet-row-added {
+  color: var(--text-secondary);
+}
+
+.copy-paste-sheet-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 24px 18px;
+  border-top: 1px solid var(--border-light);
+}
+
+.copy-paste-sheet-footer-note {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.copy-paste-sheet-footer-note.is-warning {
+  color: var(--text-primary);
+}
+
+.copy-paste-warning-glyph {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.copy-paste-glyph-warning {
+  fill: #ffcc00;
+  stroke: #a37b00;
+  stroke-linejoin: round;
+}
+
+.copy-paste-glyph-warning-mark {
+  stroke: #1d1d1f;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+.tb-btn.danger-text {
+  color: var(--danger);
+}
+
+/* Conflict found while copying: a compact alert over the paused operation. */
+.copy-paste-conflict-alert {
+  /* Laid out by the backdrop's centering, not the default dialog positioning. */
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: min(540px, calc(100vw - 48px));
+  margin: 0;
+  padding: 22px 24px 20px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28), 0 0 0 1px var(--border-light);
+  font-size: 13px;
+}
+
+.copy-paste-conflict-alert-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.copy-paste-conflict-alert-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.copy-paste-conflict-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+}
+
+.copy-paste-conflict-card-label {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.copy-paste-conflict-card-name {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copy-paste-conflict-card-facts {
+  color: var(--text-secondary);
+}
+
+.copy-paste-conflict-alert-apply {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.copy-paste-conflict-alert-apply input {
+  margin: 0;
+  accent-color: var(--ft-accent-solid);
+}
+
+.copy-paste-conflict-alert-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Result sheet sections */
+.copy-paste-result-list {
+  padding: 0 0 8px;
+}
+
+.copy-paste-result-section-title {
+  margin: 0;
+  padding: 10px 24px 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.copy-paste-result-section + .copy-paste-result-section {
+  border-top: 1px solid var(--border-light);
+}
+
+.copy-paste-result-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.copy-paste-result-items .copy-paste-sheet-row {
+  grid-template-columns: minmax(0, 1fr);
+  padding: 6px 24px;
+}
+
+/* Default and destructive buttons in these sheets are solid, like macOS alert buttons. */
+.copy-paste-sheet .tb-btn.primary,
+.copy-paste-conflict-alert .tb-btn.primary {
+  border-color: transparent;
+  background: var(--ft-accent-solid);
+  color: #ffffff;
+}
+
+.copy-paste-sheet .tb-btn.danger {
+  border-color: transparent;
+  background: var(--danger);
+  color: #ffffff;
+}
+
+.copy-paste-sheet .tb-btn.primary:hover:not(:disabled),
+.copy-paste-conflict-alert .tb-btn.primary:hover:not(:disabled),
+.copy-paste-sheet .tb-btn.danger:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.copy-paste-sheet .tb-btn:disabled {
+  opacity: 0.6;
 }
