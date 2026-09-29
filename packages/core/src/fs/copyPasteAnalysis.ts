@@ -40,6 +40,9 @@ export async function buildCopyPasteAnalysisReport(args: {
   const warnings: CopyPasteAnalysisWarning[] = [];
   const nodes: CopyPasteAnalysisNode[] = [];
   const destinationItemCountCache = new Map<string, number | null>();
+  // APFS is case- and normalization-insensitive by default, so "report.pdf"
+  // from one folder and "Report.pdf" from another land on the same entry.
+  const claimedDestinationNames = new Map<string, string>();
 
   const destinationFingerprint = await captureFingerprint(
     fileSystem,
@@ -124,6 +127,19 @@ export async function buildCopyPasteAnalysisReport(args: {
         continue;
       }
     }
+
+    const destinationNameKey = basename(destinationPath).normalize("NFD").toLowerCase();
+    const claimingSourcePath = claimedDestinationNames.get(destinationNameKey);
+    if (claimingSourcePath !== undefined) {
+      issues.push({
+        code: "duplicate_destination_name",
+        message: `${sourcePath} and ${claimingSourcePath} would both be pasted as ${basename(destinationPath)}.`,
+        sourcePath,
+        destinationPath,
+      });
+      continue;
+    }
+    claimedDestinationNames.set(destinationNameKey, sourcePath);
 
     nodes.push(
       await analyzeNode({

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import {
@@ -50,6 +50,7 @@ type AppStateStoreFileSystem = {
   mkdirSync: (path: string, options: { recursive: true }) => void;
   readFileSync: (path: string, encoding: "utf8") => string;
   writeFileSync: (path: string, data: string, encoding: "utf8") => void;
+  renameSync: (oldPath: string, newPath: string) => void;
 };
 
 type AppStateStoreTimer = {
@@ -76,6 +77,7 @@ const DEFAULT_FILE_SYSTEM: AppStateStoreFileSystem = {
   mkdirSync: (path, options) => mkdirSync(path, options),
   readFileSync: (path, encoding) => readFileSync(path, encoding),
   writeFileSync: (path, data, encoding) => writeFileSync(path, data, encoding),
+  renameSync: (oldPath, newPath) => renameSync(oldPath, newPath),
 };
 
 const DEFAULT_TIMER: AppStateStoreTimer = {
@@ -222,9 +224,13 @@ function persistState(
   onPersistError: (error: unknown) => void,
 ): void {
   // JSON rewrite is good enough here and keeps the persisted format easy to inspect manually.
+  // Write a sibling temp file and rename it over the target so a crash mid-write
+  // leaves the previous state intact instead of a truncated file.
+  const tempPath = `${filePath}.tmp`;
   try {
     fileSystem.mkdirSync(dirname(filePath), { recursive: true });
-    fileSystem.writeFileSync(filePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+    fileSystem.writeFileSync(tempPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+    fileSystem.renameSync(tempPath, filePath);
   } catch (error) {
     onPersistError(error);
   }

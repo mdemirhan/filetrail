@@ -18,6 +18,31 @@ describe("CopyPasteDialog", () => {
     expect(screen.getByRole("button", { name: "Cancel Operation" })).toHaveFocus();
   });
 
+  it("focuses the safe action and ignores Enter on the dialog for irreversible confirmations", async () => {
+    const onDelete = vi.fn();
+    render(
+      <CopyPasteDialog
+        title="Delete Immediately?"
+        message="Permanently delete a.txt?"
+        primaryAction={{
+          label: "Delete",
+          onClick: onDelete,
+          destructive: true,
+          irreversible: true,
+        }}
+        secondaryAction={{ label: "Cancel", onClick: () => undefined }}
+      />,
+    );
+
+    await act(async () => {});
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+
+    const dialog = screen.getByRole("dialog", { name: "Delete Immediately?" });
+    dialog.focus();
+    fireEvent.keyDown(dialog, { key: "Enter" });
+    expect(onDelete).not.toHaveBeenCalled();
+  });
+
   it("traps tab focus inside the dialog", async () => {
     render(
       <CopyPasteDialog

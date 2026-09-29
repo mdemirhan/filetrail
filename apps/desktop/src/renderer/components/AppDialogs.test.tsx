@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 
 import type { WriteOperationsState } from "../hooks/useWriteOperations";
 import { ExplorerStoreProvider } from "../state/explorerStoreContext";
@@ -154,5 +154,42 @@ describe("AppDialogs", () => {
       "data-select-all-on-open",
       "false",
     );
+  });
+
+  it("starts Delete Immediately on Cancel so Enter cannot permanently delete", async () => {
+    const onConfirmDeleteImmediatelyDialog = vi.fn();
+    renderAppDialogs(
+      { onConfirmDeleteImmediatelyDialog },
+      {
+        copyPasteDialogState: {
+          type: "confirmDeleteImmediately",
+          paths: ["/tmp/demo.txt"],
+          itemLabel: "demo.txt",
+        },
+      },
+    );
+
+    await act(async () => {});
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+    fireEvent.keyDown(screen.getByRole("dialog", { name: "Delete Immediately?" }), {
+      key: "Enter",
+    });
+    expect(onConfirmDeleteImmediatelyDialog).not.toHaveBeenCalled();
+  });
+
+  it("keeps Move to Trash confirmable with Enter because it can be undone", async () => {
+    renderAppDialogs(
+      {},
+      {
+        copyPasteDialogState: {
+          type: "confirmTrash",
+          paths: ["/tmp/demo.txt"],
+          itemLabel: "demo.txt",
+        },
+      },
+    );
+
+    await act(async () => {});
+    expect(screen.getByRole("button", { name: "Move to Trash" })).toHaveFocus();
   });
 });

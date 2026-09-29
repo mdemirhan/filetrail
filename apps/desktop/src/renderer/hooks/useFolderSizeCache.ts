@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { FiletrailClient } from "../lib/filetrailClient";
 
@@ -9,6 +9,9 @@ export type FolderSizeEntry =
   | { status: "error"; message: string };
 
 const POLL_INTERVAL_MS = 200;
+// Every folder rendered gets probed, so cap the cache; evicted paths are simply
+// probed again (a cheap main-process lookup) if they are shown later.
+export const MAX_FOLDER_SIZE_CACHE_ENTRIES = 5_000;
 
 export function useFolderSizeCache(client: FiletrailClient) {
   // The cache lives in a ref so reads are free (no re-renders). We bump a
@@ -21,9 +24,32 @@ export function useFolderSizeCache(client: FiletrailClient) {
   const pollTimers = useRef(new Map<string, ReturnType<typeof setInterval>>());
   const probedPaths = useRef(new Set<string>());
 
+  useEffect(() => {
+    const timers = pollTimers.current;
+    return () => {
+      for (const timer of timers.values()) {
+        clearInterval(timer);
+      }
+      timers.clear();
+    };
+  }, []);
+
   const updateEntry = useCallback(
     (path: string, entry: FolderSizeEntry) => {
-      cacheRef.current.set(path, entry);
+      const cache = cacheRef.current;
+      cache.delete(path);
+      cache.set(path, entry);
+      for (const [cachedPath, cachedEntry] of cache) {
+        if (cache.size <= MAX_FOLDER_SIZE_CACHE_ENTRIES) {
+          break;
+        }
+        // Never drop an in-flight calculation; its poller still reports into it.
+        if (cachedEntry.status === "calculating") {
+          continue;
+        }
+        cache.delete(cachedPath);
+        probedPaths.current.delete(cachedPath);
+      }
       bumpVersion();
     },
     [bumpVersion],

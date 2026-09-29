@@ -175,8 +175,14 @@ static void complete_get_icon(napi_env env, napi_status status, void *data) {
   } else {
     napi_value buffer;
     void *buf_data;
-    napi_create_buffer_copy(env, work->png_length, work->png_data, &buf_data, &buffer);
-    napi_resolve_deferred(env, work->deferred, buffer);
+    if (napi_create_buffer_copy(env, work->png_length, work->png_data, &buf_data, &buffer) ==
+        napi_ok) {
+      napi_resolve_deferred(env, work->deferred, buffer);
+    } else {
+      napi_value null_val;
+      napi_get_null(env, &null_val);
+      napi_resolve_deferred(env, work->deferred, null_val);
+    }
   }
 
   napi_delete_async_work(env, work->work);
@@ -190,7 +196,10 @@ static void complete_get_icon(napi_env env, napi_status status, void *data) {
 static napi_value js_get_file_icon(napi_env env, napi_callback_info info) {
   size_t argc = 2;
   napi_value argv[2];
-  napi_get_cb_info(env, info, &argc, argv, NULL, NULL);
+  if (napi_get_cb_info(env, info, &argc, argv, NULL, NULL) != napi_ok) {
+    napi_throw_error(env, NULL, "nativeGetFileIcon: failed to read arguments");
+    return NULL;
+  }
 
   if (argc < 2) {
     napi_throw_error(env, NULL, "nativeGetFileIcon requires (path, size)");
@@ -199,29 +208,70 @@ static napi_value js_get_file_icon(napi_env env, napi_callback_info info) {
 
   /* Extract path string. */
   size_t path_len;
-  napi_get_value_string_utf8(env, argv[0], NULL, 0, &path_len);
+  if (napi_get_value_string_utf8(env, argv[0], NULL, 0, &path_len) != napi_ok) {
+    napi_throw_type_error(env, NULL, "nativeGetFileIcon: path must be a string");
+    return NULL;
+  }
   char *path = (char *)malloc(path_len + 1);
-  napi_get_value_string_utf8(env, argv[0], path, path_len + 1, NULL);
+  if (!path) {
+    napi_throw_error(env, NULL, "Out of memory");
+    return NULL;
+  }
+  if (napi_get_value_string_utf8(env, argv[0], path, path_len + 1, NULL) != napi_ok) {
+    free(path);
+    napi_throw_type_error(env, NULL, "nativeGetFileIcon: path must be a string");
+    return NULL;
+  }
 
   /* Extract size number. */
   int32_t size;
-  napi_get_value_int32(env, argv[1], &size);
+  if (napi_get_value_int32(env, argv[1], &size) != napi_ok) {
+    free(path);
+    napi_throw_type_error(env, NULL, "nativeGetFileIcon: size must be a number");
+    return NULL;
+  }
   if (size < 16) size = 16;
   if (size > 512) size = 512;
 
   /* Create async work. */
   icon_work_t *work = (icon_work_t *)calloc(1, sizeof(icon_work_t));
+  if (!work) {
+    free(path);
+    napi_throw_error(env, NULL, "Out of memory");
+    return NULL;
+  }
   work->path = path;
   work->size = size;
 
   napi_value promise;
-  napi_create_promise(env, &work->deferred, &promise);
+  if (napi_create_promise(env, &work->deferred, &promise) != napi_ok) {
+    free(path);
+    free(work);
+    napi_throw_error(env, NULL, "nativeGetFileIcon: failed to create promise");
+    return NULL;
+  }
 
   napi_value resource_name;
-  napi_create_string_utf8(env, "nativeGetFileIcon", NAPI_AUTO_LENGTH, &resource_name);
-  napi_create_async_work(env, NULL, resource_name, execute_get_icon, complete_get_icon, work,
-                         &work->work);
-  napi_queue_async_work(env, work->work);
+  napi_status status =
+      napi_create_string_utf8(env, "nativeGetFileIcon", NAPI_AUTO_LENGTH, &resource_name);
+  if (status == napi_ok) {
+    status = napi_create_async_work(env, NULL, resource_name, execute_get_icon,
+                                    complete_get_icon, work, &work->work);
+  }
+  if (status == napi_ok) {
+    status = napi_queue_async_work(env, work->work);
+    if (status != napi_ok) {
+      napi_delete_async_work(env, work->work);
+    }
+  }
+  if (status != napi_ok) {
+    /* The promise already exists, so settle it rather than leaving it pending. */
+    napi_value null_val;
+    napi_get_null(env, &null_val);
+    napi_resolve_deferred(env, work->deferred, null_val);
+    free(path);
+    free(work);
+  }
 
   return promise;
 }

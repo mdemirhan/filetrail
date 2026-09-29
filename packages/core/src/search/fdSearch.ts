@@ -74,7 +74,9 @@ export function buildFdSearchArgs(request: SearchStartRequest): string[] {
     args.push("--hidden");
   }
 
-  args.push(request.query, request.rootPath);
+  // "--" ends option parsing so a query starting with "-" (e.g. "-xrm") is
+  // treated as a pattern, never as an fd flag such as --exec.
+  args.push("--", request.query, request.rootPath);
   return args;
 }
 
@@ -172,14 +174,15 @@ export class FdSearchRuntime {
     if (!job) {
       return { ok: true };
     }
-    if (job.done) {
-      this.jobs.delete(jobId);
-      return { ok: true };
+    if (!job.done) {
+      job.status = "cancelled";
+      job.done = true;
+      job.process.kill("SIGTERM");
     }
-    job.status = "cancelled";
-    job.done = true;
-    job.process.kill("SIGTERM");
+    // Keep the terminal state so a poll already in flight gets a done response
+    // instead of "Unknown search job".
     this.jobs.delete(jobId);
+    this.rememberFinishedJob(jobId, job);
     return { ok: true };
   }
 

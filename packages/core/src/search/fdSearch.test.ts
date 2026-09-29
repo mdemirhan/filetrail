@@ -41,6 +41,7 @@ describe("fdSearch", () => {
       "--max-depth",
       "1",
       "--hidden",
+      "--",
       "src/*.ts",
       "/Users/demo/project",
     ]);
@@ -188,7 +189,7 @@ describe("fdSearch", () => {
     ]);
   });
 
-  it("terminates cancelled jobs and removes them without requiring another update poll", () => {
+  it("terminates cancelled jobs and answers later polls with a cancelled terminal state", () => {
     const process = createMockProcess();
     const runtime = new FdSearchRuntime("/tmp/fd", {
       spawn: vi.fn(() => process as never),
@@ -205,9 +206,12 @@ describe("fdSearch", () => {
 
     expect(runtime.cancelSearch(started.jobId)).toEqual({ ok: true });
     expect(process.kill).toHaveBeenCalledWith("SIGTERM");
-    expect(() => runtime.getUpdate(started.jobId, 0)).toThrow(
-      `Unknown search job: ${started.jobId}`,
-    );
+    expect(runtime.getUpdate(started.jobId, 0)).toMatchObject({
+      jobId: started.jobId,
+      status: "cancelled",
+      items: [],
+      done: true,
+    });
     expect(runtime.cancelSearch(started.jobId)).toEqual({ ok: true });
   });
 
@@ -334,6 +338,18 @@ describe("fdSearch", () => {
       truncated: false,
       error: "fd exited via signal SIGKILL",
     });
+  });
+
+  it("ends option parsing before the query so a leading dash is not an fd flag", () => {
+    const args = buildFdSearchArgs({
+      rootPath: "/Users/demo/project",
+      query: "-xrm",
+      patternMode: "regex",
+      matchScope: "path",
+      recursive: true,
+      includeHidden: false,
+    });
+    expect(args.slice(-3)).toEqual(["--", "-xrm", "/Users/demo/project"]);
   });
 
   it("cancels running jobs and clears the registry when the runtime closes", async () => {

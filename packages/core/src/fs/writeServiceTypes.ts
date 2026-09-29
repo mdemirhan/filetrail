@@ -32,7 +32,8 @@ export type CopyPastePlanIssueCode =
   | "destination_not_directory"
   | "source_missing"
   | "same_path"
-  | "parent_into_child";
+  | "parent_into_child"
+  | "duplicate_destination_name";
 export type CopyPastePlanWarningCode = "large_batch" | "cut_requires_delete";
 export type CopyPasteAnalysisJobStatus =
   | "queued"

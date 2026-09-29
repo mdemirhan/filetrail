@@ -298,6 +298,7 @@ export function AppDialogs({
             label: "Delete",
             onClick: () => onConfirmDeleteImmediatelyDialog(copyPasteDialogState.paths),
             destructive: true,
+            irreversible: true,
           }}
           secondaryAction={{
             label: "Cancel",

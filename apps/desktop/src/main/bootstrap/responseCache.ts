@@ -2,27 +2,108 @@ import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 import type { ExplorerWorkerClient } from "@filetrail/core";
 
 const CACHE_TTL_MS = 3_000;
-const directorySnapshotCache = new Map<string, { expiresAt: number; value: unknown }>();
-const directoryMetadataCache = new Map<string, { expiresAt: number; value: unknown }>();
-const treeChildrenCache = new Map<string, { expiresAt: number; value: unknown }>();
-const folderSizeJobs = new Map<
-  string,
-  {
-    jobId: string;
-    path: string;
-    status: "queued" | "running" | "deferred" | "ready" | "cancelled" | "error";
-    sizeBytes: number | null;
-    diskBytes: number | null;
-    fileCount: number | null;
-    error: string | null;
-  }
->();
+// Entries expire after a few seconds. Inserts also sweep expired entries and cap
+// each cache (oldest first) so browsing many directories cannot grow memory
+// without bound.
+const MAX_DIRECTORY_SNAPSHOT_ENTRIES = 64;
+const MAX_TREE_CHILDREN_ENTRIES = 256;
+const MAX_DIRECTORY_METADATA_ENTRIES = 5_000;
+// Finished folder-size jobs are kept so repeated status polls stay answerable,
+// but only the most recent ones; queued and running jobs are never evicted.
+const MAX_FINISHED_FOLDER_SIZE_JOBS = 256;
+
+type TtlCacheEntry = { expiresAt: number; value: unknown };
+type TtlCache = { entries: Map<string, TtlCacheEntry>; maxEntries: number };
+
+const directorySnapshotCache: TtlCache = {
+  entries: new Map(),
+  maxEntries: MAX_DIRECTORY_SNAPSHOT_ENTRIES,
+};
+const directoryMetadataCache: TtlCache = {
+  entries: new Map(),
+  maxEntries: MAX_DIRECTORY_METADATA_ENTRIES,
+};
+const treeChildrenCache: TtlCache = { entries: new Map(), maxEntries: MAX_TREE_CHILDREN_ENTRIES };
+type FolderSizeJobStatus = "queued" | "running" | "deferred" | "ready" | "cancelled" | "error";
+type FolderSizeJob = {
+  jobId: string;
+  path: string;
+  status: FolderSizeJobStatus;
+  sizeBytes: number | null;
+  diskBytes: number | null;
+  fileCount: number | null;
+  error: string | null;
+};
+const folderSizeJobs = new Map<string, FolderSizeJob>();
 const debugTimingsEnabled = process.env.FILETRAIL_DEBUG_TIMINGS === "1";
 
 export function clearResponseCaches(): void {
-  directorySnapshotCache.clear();
-  directoryMetadataCache.clear();
-  treeChildrenCache.clear();
+  directorySnapshotCache.entries.clear();
+  directoryMetadataCache.entries.clear();
+  treeChildrenCache.entries.clear();
+}
+
+export function getResponseCacheSizes(): {
+  directorySnapshots: number;
+  directoryMetadata: number;
+  treeChildren: number;
+  folderSizeJobs: number;
+} {
+  return {
+    directorySnapshots: directorySnapshotCache.entries.size,
+    directoryMetadata: directoryMetadataCache.entries.size,
+    treeChildren: treeChildrenCache.entries.size,
+    folderSizeJobs: folderSizeJobs.size,
+  };
+}
+
+function storeCacheEntry(cache: TtlCache, key: string, value: unknown, now: number): void {
+  // Re-inserting moves the key to the newest position so eviction stays oldest-first.
+  cache.entries.delete(key);
+  cache.entries.set(key, { expiresAt: now + CACHE_TTL_MS, value });
+  if (cache.entries.size <= cache.maxEntries) {
+    return;
+  }
+  for (const [entryKey, entry] of cache.entries) {
+    if (entry.expiresAt <= now) {
+      cache.entries.delete(entryKey);
+    }
+  }
+  for (const entryKey of cache.entries.keys()) {
+    if (cache.entries.size <= cache.maxEntries) {
+      break;
+    }
+    cache.entries.delete(entryKey);
+  }
+}
+
+function setFolderSizeJob(jobId: string, job: FolderSizeJob): void {
+  // Re-inserting moves the job to the newest position, so a long walk that just
+  // finished is not the first finished job evicted before its result is polled.
+  folderSizeJobs.delete(jobId);
+  folderSizeJobs.set(jobId, job);
+}
+
+function isFinishedFolderSizeJob(status: FolderSizeJobStatus): boolean {
+  return status !== "queued" && status !== "running";
+}
+
+function pruneFinishedFolderSizeJobs(): void {
+  let finishedCount = 0;
+  for (const job of folderSizeJobs.values()) {
+    if (isFinishedFolderSizeJob(job.status)) {
+      finishedCount += 1;
+    }
+  }
+  for (const [jobId, job] of folderSizeJobs) {
+    if (finishedCount <= MAX_FINISHED_FOLDER_SIZE_JOBS) {
+      break;
+    }
+    if (isFinishedFolderSizeJob(job.status)) {
+      folderSizeJobs.delete(jobId);
+      finishedCount -= 1;
+    }
+  }
 }
 
 export function resetResponseCacheState(): void {
@@ -57,7 +138,7 @@ export function createFolderSizeHandlers(native: {
 
   function runJob(jobId: string, path: string): void {
     activeJobId = jobId;
-    folderSizeJobs.set(jobId, {
+    setFolderSizeJob(jobId, {
       jobId,
       path,
       status: "running",
@@ -88,7 +169,7 @@ export function createFolderSizeHandlers(native: {
             fileCount: dirStats[2],
           });
         }
-        folderSizeJobs.set(jobId, {
+        setFolderSizeJob(jobId, {
           jobId,
           path,
           status: "ready",
@@ -104,7 +185,7 @@ export function createFolderSizeHandlers(native: {
           // Already marked as cancelled by the cancel handler
         } else {
           const message = err instanceof Error ? err.message : "Unknown error";
-          folderSizeJobs.set(jobId, {
+          setFolderSizeJob(jobId, {
             jobId,
             path,
             status: "error",
@@ -119,6 +200,7 @@ export function createFolderSizeHandlers(native: {
         if (activeJobId === jobId) {
           activeJobId = null;
         }
+        pruneFinishedFolderSizeJobs();
         processQueue();
       });
   }
@@ -132,7 +214,7 @@ export function createFolderSizeHandlers(native: {
       const cached = folderSizeCache.get(payload.path);
       if (cached !== undefined) {
         const jobId = generateJobId();
-        folderSizeJobs.set(jobId, {
+        setFolderSizeJob(jobId, {
           jobId,
           path: payload.path,
           status: "ready",
@@ -141,6 +223,7 @@ export function createFolderSizeHandlers(native: {
           fileCount: cached.fileCount,
           error: null,
         });
+        pruneFinishedFolderSizeJobs();
         return { jobId, status: "ready" };
       }
 
@@ -148,7 +231,7 @@ export function createFolderSizeHandlers(native: {
       // renderer to check the main-process cache without side effects.
       if (payload.probeOnly) {
         const jobId = generateJobId();
-        folderSizeJobs.set(jobId, {
+        setFolderSizeJob(jobId, {
           jobId,
           path: payload.path,
           status: "deferred",
@@ -157,6 +240,7 @@ export function createFolderSizeHandlers(native: {
           fileCount: null,
           error: null,
         });
+        pruneFinishedFolderSizeJobs();
         return { jobId, status: "deferred" };
       }
 
@@ -170,17 +254,17 @@ export function createFolderSizeHandlers(native: {
         native.cancelFolderSize();
         const activeJob = folderSizeJobs.get(activeJobId);
         if (activeJob) {
-          folderSizeJobs.set(activeJobId, { ...activeJob, status: "cancelled" });
+          setFolderSizeJob(activeJobId, { ...activeJob, status: "cancelled" });
         }
 
         if (queuedJobId) {
           const oldQueued = folderSizeJobs.get(queuedJobId);
           if (oldQueued) {
-            folderSizeJobs.set(queuedJobId, { ...oldQueued, status: "cancelled" });
+            setFolderSizeJob(queuedJobId, { ...oldQueued, status: "cancelled" });
           }
         }
         queuedJobId = jobId;
-        folderSizeJobs.set(jobId, {
+        setFolderSizeJob(jobId, {
           jobId,
           path: payload.path,
           status: "queued",
@@ -211,7 +295,7 @@ export function createFolderSizeHandlers(native: {
     cancel(payload: IpcRequest<"folderSize:cancel">): IpcResponse<"folderSize:cancel"> {
       const job = folderSizeJobs.get(payload.jobId);
       if (job) {
-        folderSizeJobs.set(payload.jobId, { ...job, status: "cancelled" });
+        setFolderSizeJob(payload.jobId, { ...job, status: "cancelled" });
         if (job.jobId === activeJobId) {
           native.cancelFolderSize();
         }
@@ -255,7 +339,7 @@ export async function getCachedMetadataBatch(
   const missingPaths: string[] = [];
 
   for (const path of payload.paths) {
-    const cached = directoryMetadataCache.get(path);
+    const cached = directoryMetadataCache.entries.get(path);
     if (cached && cached.expiresAt > now) {
       cachedItemsByPath.set(
         path,
@@ -272,10 +356,7 @@ export async function getCachedMetadataBatch(
       paths: missingPaths,
     });
     for (const item of response.items) {
-      directoryMetadataCache.set(item.path, {
-        expiresAt: now + CACHE_TTL_MS,
-        value: item,
-      });
+      storeCacheEntry(directoryMetadataCache, item.path, item, now);
       cachedItemsByPath.set(item.path, item);
     }
   }
@@ -306,21 +387,18 @@ export async function withTiming<T>(
 }
 
 async function withCachedResponse<TPayload extends object, TResponse>(
-  cache: Map<string, { expiresAt: number; value: unknown }>,
+  cache: TtlCache,
   payload: TPayload,
   load: () => Promise<TResponse>,
 ): Promise<TResponse> {
   // Payload serialization keeps variants like includeHidden/sort mode isolated in cache.
   const cacheKey = JSON.stringify(payload);
   const now = Date.now();
-  const cached = cache.get(cacheKey);
+  const cached = cache.entries.get(cacheKey);
   if (cached && cached.expiresAt > now) {
     return cached.value as TResponse;
   }
   const value = await load();
-  cache.set(cacheKey, {
-    expiresAt: now + CACHE_TTL_MS,
-    value,
-  });
+  storeCacheEntry(cache, cacheKey, value, now);
   return value;
 }

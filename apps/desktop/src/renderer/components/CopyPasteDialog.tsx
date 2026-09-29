@@ -19,6 +19,7 @@ export function CopyPasteDialog({
         label: string;
         onClick: () => void;
         destructive?: boolean | undefined;
+        irreversible?: boolean | undefined;
       }
     | undefined;
   secondaryAction?:
@@ -32,8 +33,15 @@ export function CopyPasteDialog({
   const secondaryButtonRef = useRef<HTMLButtonElement | null>(null);
   const primaryButtonRef = useRef<HTMLButtonElement | null>(null);
 
+  const primaryIsIrreversible = primaryAction?.irreversible === true;
+
+  // Confirmations that cannot be undone (e.g. delete immediately) start on the
+  // safe action so a stray Enter or Space cannot confirm them.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: initial focus only runs on mount.
   useEffect(() => {
-    const target = primaryButtonRef.current ?? secondaryButtonRef.current ?? dialogRef.current;
+    const target = primaryIsIrreversible
+      ? (secondaryButtonRef.current ?? dialogRef.current)
+      : (primaryButtonRef.current ?? secondaryButtonRef.current ?? dialogRef.current);
     target?.focus();
   }, []);
 
@@ -51,7 +59,7 @@ export function CopyPasteDialog({
           if (event.defaultPrevented) {
             return;
           }
-          if (event.key === "Enter" && primaryAction) {
+          if (event.key === "Enter" && primaryAction && !primaryIsIrreversible) {
             const target = event.target;
             if (!(target instanceof HTMLElement) || target === dialogRef.current) {
               event.preventDefault();

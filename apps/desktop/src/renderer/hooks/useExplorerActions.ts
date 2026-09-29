@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import type { IpcRequest, IpcResponse, WriteOperationProgressEvent } from "@filetrail/contracts";
+import { getItemNameError } from "@filetrail/contracts/itemName";
 
 import type {
   ApplicationSelection,
@@ -196,6 +197,8 @@ function getCopyLikeIssueMessage(report: CopyPasteAnalysisReport): string {
       return "Source and destination cannot be the same.";
     case "parent_into_child":
       return "You can't place a folder into its own descendant.";
+    case "duplicate_destination_name":
+      return "Two of the selected items have the same name and would overwrite each other.";
     default:
       return issue.message;
   }
@@ -2489,6 +2492,11 @@ export function useExplorerActions(args: {
     if (!renameDialogState) {
       return;
     }
+    const nameError = getItemNameError(nextName);
+    if (nameError) {
+      setRenameDialogState((current) => (current ? { ...current, error: nameError } : current));
+      return;
+    }
     try {
       const response = await client.invoke("writeOperation:rename", {
         sourcePath: renameDialogState.sourcePath,
@@ -2581,6 +2589,11 @@ export function useExplorerActions(args: {
 
   async function submitNewFolderDialog(folderName: string) {
     if (!newFolderDialogState) {
+      return;
+    }
+    const nameError = getItemNameError(folderName);
+    if (nameError) {
+      setNewFolderDialogState((current) => (current ? { ...current, error: nameError } : current));
       return;
     }
     try {

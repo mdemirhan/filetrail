@@ -246,6 +246,39 @@ describe("copyPasteAnalysis", () => {
     ]);
   });
 
+  it("blocks sources from different folders that would land on the same destination name", async () => {
+    const fileSystem = new MockWriteServiceFileSystem({
+      "/a": { kind: "directory" },
+      "/a/report.pdf": { kind: "file", size: 5 },
+      "/b": { kind: "directory" },
+      "/b/Report.pdf": { kind: "file", size: 7 },
+      "/b/notes.txt": { kind: "file", size: 1 },
+      "/target": { kind: "directory" },
+    });
+
+    const report = await buildCopyPasteAnalysisReport({
+      analysisId: "analysis-1",
+      request: {
+        mode: "cut",
+        sourcePaths: ["/a/report.pdf", "/b/Report.pdf", "/b/notes.txt"],
+        destinationDirectoryPath: "/target",
+      },
+      fileSystem,
+      thresholds: {
+        largeBatchItemThreshold: 100,
+        largeBatchByteThreshold: 1000,
+      },
+    });
+
+    expect(report.issues).toEqual([
+      expect.objectContaining({
+        code: "duplicate_destination_name",
+        sourcePath: "/b/Report.pdf",
+        destinationPath: "/target/Report.pdf",
+      }),
+    ]);
+  });
+
   it("falls back to a source-missing issue when parent/child realpath checks fail", async () => {
     const fileSystem = new MockWriteServiceFileSystem({
       "/workspace": { kind: "directory" },

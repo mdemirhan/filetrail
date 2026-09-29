@@ -3,7 +3,7 @@
 import { act, renderHook } from "@testing-library/react";
 
 import { createMockFiletrailClient } from "../test/mockFiletrailClient";
-import { useFolderSizeCache } from "./useFolderSizeCache";
+import { MAX_FOLDER_SIZE_CACHE_ENTRIES, useFolderSizeCache } from "./useFolderSizeCache";
 
 function createHandlers(overrides: Record<string, unknown> = {}) {
   const startHandler = vi.fn(async () => ({
@@ -308,5 +308,48 @@ describe("useFolderSizeCache", () => {
     if (entry.status === "error") {
       expect(entry.message).toBe("Disk error");
     }
+  });
+
+  it("stops polling when the hook unmounts", async () => {
+    const { startHandler, getStatusHandler, cancelHandler } = createHandlers();
+    const client = createMockFiletrailClient({
+      "folderSize:start": startHandler,
+      "folderSize:getStatus": getStatusHandler,
+      "folderSize:cancel": cancelHandler,
+    });
+
+    const { result, unmount } = renderHook(() => useFolderSizeCache(client));
+    await act(async () => {
+      await result.current.calculateFolderSize("/test");
+    });
+    unmount();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1_000);
+    });
+    expect(getStatusHandler).not.toHaveBeenCalled();
+  });
+
+  it("caps cached entries and re-probes evicted paths", async () => {
+    const { startHandler, getStatusHandler, cancelHandler } = createHandlers({ status: "ready" });
+    const client = createMockFiletrailClient({
+      "folderSize:start": startHandler,
+      "folderSize:getStatus": getStatusHandler,
+      "folderSize:cancel": cancelHandler,
+    });
+
+    const { result } = renderHook(() => useFolderSizeCache(client));
+    for (let index = 0; index <= MAX_FOLDER_SIZE_CACHE_ENTRIES; index += 1) {
+      await act(async () => {
+        await result.current.calculateFolderSize(`/dir/${index}`);
+      });
+    }
+
+    expect(result.current.getEntry(`/dir/${MAX_FOLDER_SIZE_CACHE_ENTRIES}`).status).toBe("ready");
+    startHandler.mockClear();
+    expect(result.current.getEntry("/dir/0").status).toBe("idle");
+    expect(startHandler).toHaveBeenCalledWith(
+      expect.objectContaining({ path: "/dir/0", probeOnly: true }),
+    );
   });
 });

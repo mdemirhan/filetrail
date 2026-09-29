@@ -1,10 +1,43 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { type StoredWindowState, createAppStateStore, resolveAppStatePath } from "./appStateStore";
 
 describe("appStateStore", () => {
+  it("persists through a temp file so a failed write keeps the previous state", () => {
+    const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
+    const filePath = resolveAppStatePath(userDataPath);
+    const store = createAppStateStore(filePath, { defaultTheme: "dark" });
+    store.updatePreferences({ favoritesExpanded: false });
+    store.flush();
+    const persisted = readFileSync(filePath, "utf8");
+    expect(JSON.parse(persisted).preferences.favoritesExpanded).toBe(false);
+    expect(existsSync(`${filePath}.tmp`)).toBe(false);
+
+    const onPersistError = vi.fn();
+    const failingStore = createAppStateStore(filePath, {
+      defaultTheme: "dark",
+      onPersistError,
+      fs: {
+        existsSync,
+        mkdirSync: () => undefined,
+        readFileSync: (path, encoding) => readFileSync(path, encoding),
+        writeFileSync: () => {
+          throw new Error("disk full");
+        },
+        renameSync: () => {
+          throw new Error("rename should not run after a failed write");
+        },
+      },
+    });
+    failingStore.updatePreferences({ favoritesExpanded: true });
+    failingStore.flush();
+
+    expect(onPersistError).toHaveBeenCalledWith(new Error("disk full"));
+    expect(readFileSync(filePath, "utf8")).toBe(persisted);
+  });
+
   it("returns defaults when no state file exists", () => {
     const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
     const store = createAppStateStore(resolveAppStatePath(userDataPath), {

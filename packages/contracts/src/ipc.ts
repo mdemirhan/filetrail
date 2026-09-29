@@ -1,8 +1,21 @@
 import { z } from "zod";
+import { getItemNameError } from "./itemName";
 
 // These schemas are the single source of truth for renderer <-> main IPC payloads.
 // Keep the runtime validators and the inferred TypeScript types aligned here so the
 // transport contract cannot silently drift between processes.
+const itemNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(255)
+  .superRefine((name, context) => {
+    const message = getItemNameError(name);
+    if (message) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message });
+    }
+  });
+
 export const explorerEntryKindSchema = z.enum([
   "directory",
   "file",
@@ -184,6 +197,7 @@ export const copyPastePlanIssueCodeSchema = z.enum([
   "source_missing",
   "same_path",
   "parent_into_child",
+  "duplicate_destination_name",
 ]);
 export const copyPastePlanWarningCodeSchema = z.enum(["large_batch", "cut_requires_delete"]);
 export const copyPasteNodeKindSchema = z.enum(["missing", "file", "directory", "symlink"]);
@@ -895,7 +909,7 @@ export const ipcContractSchemas = {
   "writeOperation:rename": {
     request: z.object({
       sourcePath: z.string().min(1),
-      destinationName: z.string().trim().min(1).max(255),
+      destinationName: itemNameSchema,
     }),
     response: z.object({
       operationId: z.string().min(1),
@@ -905,7 +919,7 @@ export const ipcContractSchemas = {
   "writeOperation:createFolder": {
     request: z.object({
       parentDirectoryPath: z.string().min(1),
-      folderName: z.string().trim().min(1).max(255),
+      folderName: itemNameSchema,
     }),
     response: z.object({
       operationId: z.string().min(1),

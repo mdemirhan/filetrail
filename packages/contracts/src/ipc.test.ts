@@ -27,6 +27,26 @@ describe("ipc contracts", () => {
     });
   });
 
+  it("rejects rename and new folder names that would escape the parent directory", () => {
+    const rename = ipcContractSchemas["writeOperation:rename"].request;
+    const createFolder = ipcContractSchemas["writeOperation:createFolder"].request;
+
+    expect(rename.parse({ sourcePath: "/Users/demo/a.txt", destinationName: " b.txt " })).toEqual({
+      sourcePath: "/Users/demo/a.txt",
+      destinationName: "b.txt",
+    });
+    for (const destinationName of ["../b.txt", "sub/b.txt", "..", "."]) {
+      expect(rename.safeParse({ sourcePath: "/Users/demo/a.txt", destinationName }).success).toBe(
+        false,
+      );
+    }
+    for (const folderName of ["../../Library/LaunchAgents", "a/b", ".."]) {
+      expect(
+        createFolder.safeParse({ parentDirectoryPath: "/Users/demo", folderName }).success,
+      ).toBe(false);
+    }
+  });
+
   it("validates the folder size placeholder channels", () => {
     expect(
       ipcContractSchemas["folderSize:start"].response.parse({

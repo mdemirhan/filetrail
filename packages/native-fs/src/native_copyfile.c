@@ -31,8 +31,11 @@ static void execute_copy(napi_env env, void *data) {
   (void)env;
   copy_work_t *w = (copy_work_t *)data;
 
+  /* NOFOLLOW_SRC copies a symlink as a symlink instead of its target's data.
+     Callers recreate symlinks themselves today; this keeps the addon safe if
+     one is ever passed through. */
   int rc = copyfile(w->source, w->destination, NULL,
-                    COPYFILE_ALL | COPYFILE_CLONE);
+                    COPYFILE_ALL | COPYFILE_CLONE | COPYFILE_NOFOLLOW_SRC);
   w->errnum = (rc == 0) ? 0 : errno;
 }
 

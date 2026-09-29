@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createFolderSizeHandlers } from "./responseCache";
+import {
+  createFolderSizeHandlers,
+  getCachedResponse,
+  getResponseCacheSizes,
+  resetResponseCacheState,
+} from "./responseCache";
 
 function createMockNative() {
   let resolveActive: ((value: string) => void) | null = null;
@@ -211,5 +216,44 @@ describe("createFolderSizeHandlers", () => {
     expect(handlers.getCachedSize("/test")).toBe(1000);
     handlers.clearCache();
     expect(handlers.getCachedSize("/test")).toBeUndefined();
+  });
+
+  it("keeps only the most recent finished jobs so repeated probes do not grow without bound", async () => {
+    resetResponseCacheState();
+    const native = createMockNative();
+    const handlers = createFolderSizeHandlers(native);
+
+    const running = handlers.start({ path: "/walking" });
+    const probes = Array.from({ length: 1_000 }, (_, index) =>
+      handlers.start({ path: `/probe/${index}`, probeOnly: true }),
+    );
+
+    expect(getResponseCacheSizes().folderSizeJobs).toBe(257);
+    expect(handlers.getStatus({ jobId: running.jobId }).status).toBe("running");
+    expect(handlers.getStatus({ jobId: probes.at(-1)?.jobId ?? "" }).status).toBe("deferred");
+    expect(handlers.getStatus({ jobId: probes[0]?.jobId ?? "" }).error).toBe(
+      "Unknown folder size job.",
+    );
+
+    native.resolveActive(sampleJson);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(handlers.getStatus({ jobId: running.jobId }).status).toBe("ready");
+    resetResponseCacheState();
+  });
+});
+
+describe("getCachedResponse", () => {
+  it("caps cached directory snapshots and evicts the oldest first", async () => {
+    resetResponseCacheState();
+    for (let index = 0; index < 200; index += 1) {
+      await getCachedResponse("directory", { path: `/dir/${index}` }, async () => index);
+    }
+    expect(getResponseCacheSizes().directorySnapshots).toBe(64);
+
+    const load = vi.fn(async () => -1);
+    expect(await getCachedResponse("directory", { path: "/dir/199" }, load)).toBe(199);
+    expect(await getCachedResponse("directory", { path: "/dir/0" }, load)).toBe(-1);
+    expect(load).toHaveBeenCalledTimes(1);
+    resetResponseCacheState();
   });
 });
