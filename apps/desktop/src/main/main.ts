@@ -72,7 +72,7 @@ if (hasSingleInstanceLock) {
       if (iconPath && process.platform === "darwin") {
         const icon = nativeImage.createFromPath(iconPath);
         if (!icon.isEmpty()) {
-          app.dock.setIcon(icon);
+          app.dock?.setIcon(icon);
         }
       }
       appStateStoreRef = appStateStore;

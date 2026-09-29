@@ -839,10 +839,16 @@ function FlowListView({
     overscan: 6,
   });
   const visibleRows = rows.slice(range.startIndex, range.endIndex);
+  // Report by value: the sliced rows are a new array every render, and depending on them
+  // would re-render the parent in an endless loop.
+  const visiblePathsKey = visibleRows
+    .flat()
+    .map((entry) => entry.path)
+    .join("\0");
 
   useEffect(() => {
-    onVisiblePathsChange(visibleRows.flat().map((entry) => entry.path));
-  }, [onVisiblePathsChange, visibleRows]);
+    onVisiblePathsChange(visiblePathsKey.length > 0 ? visiblePathsKey.split("\0") : []);
+  }, [onVisiblePathsChange, visiblePathsKey]);
 
   useEffect(() => {
     onLayoutColumnsChange(rowsPerColumn);
@@ -1142,10 +1148,12 @@ function DetailsView({
     overscan: 10,
   });
   const visibleEntries = entries.slice(range.startIndex, range.endIndex);
+  // Report by value (see the list view): the slice is a new array every render.
+  const visiblePathsKey = visibleEntries.map((entry) => entry.path).join("\0");
 
   useEffect(() => {
-    onVisiblePathsChange(visibleEntries.map((entry) => entry.path));
-  }, [onVisiblePathsChange, visibleEntries]);
+    onVisiblePathsChange(visiblePathsKey.length > 0 ? visiblePathsKey.split("\0") : []);
+  }, [onVisiblePathsChange, visiblePathsKey]);
 
   useEffect(() => {
     onLayoutColumnsChange(1);
