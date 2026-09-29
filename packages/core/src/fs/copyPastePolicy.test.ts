@@ -365,6 +365,7 @@ describe("copyPastePolicy", () => {
     const resolved = await resolveSingleNodeWithAction({
       node,
       action: "keep_both",
+      policy: null,
       fileSystem,
     });
 
@@ -413,6 +414,7 @@ describe("copyPastePolicy", () => {
     const resolved = await resolveSingleNodeWithAction({
       node,
       action: "overwrite",
+      policy: null,
       fileSystem,
     });
 

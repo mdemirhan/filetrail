@@ -76,6 +76,27 @@ static void complete_copy(napi_env env, napi_status status, void *data) {
     case EXDEV:
       code = "EXDEV";
       break;
+    case ENAMETOOLONG:
+      code = "ENAMETOOLONG";
+      break;
+    case EROFS:
+      code = "EROFS";
+      break;
+    case EDQUOT:
+      code = "EDQUOT";
+      break;
+    case ENOTDIR:
+      code = "ENOTDIR";
+      break;
+    case ENOTEMPTY:
+      code = "ENOTEMPTY";
+      break;
+    case EBUSY:
+      code = "EBUSY";
+      break;
+    case EIO:
+      code = "EIO";
+      break;
     default:
       code = "UNKNOWN";
       break;

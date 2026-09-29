@@ -118,7 +118,7 @@ export function formatRelativeDuration(deltaMs: number): string {
   const absDelta = Math.abs(deltaMs);
 
   if (absDelta < 1000) {
-    return `${absDelta} ms`;
+    return `${Math.round(absDelta)} ms`;
   }
 
   const seconds = Math.floor(absDelta / 1000);

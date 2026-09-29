@@ -30,6 +30,15 @@ type WriteOperationSender = {
   send: (channel: string, payload: unknown) => void;
 };
 
+// The Electron WebContents events used to stop an operation whose window went away.
+type SenderLifecycleEvents = {
+  on?: (event: "render-process-gone" | "destroyed", listener: () => void) => unknown;
+  removeListener?: (event: "render-process-gone" | "destroyed", listener: () => void) => unknown;
+};
+
+// Holds the single write slot while a local operation is still being prepared.
+const PREPARING_WRITE_OPERATION_ID = "preparing-write-operation";
+
 type PreparedRenameOperation = {
   sourcePath: string;
   destinationPath: string;
@@ -57,6 +66,7 @@ export function createWriteOperationCoordinator(
   } = {},
 ) {
   const writeOperationSenders = new Map<string, WriteOperationSender>();
+  const senderDetachers = new Map<string, () => void>();
   const copyPasteRequests = new Map<string, IpcRequest<"copyPaste:start">>();
   const localWriteOperationControllers = new Map<string, AbortController>();
   const writeOperationMetadata = new Map<
@@ -180,7 +190,7 @@ export function createWriteOperationCoordinator(
       }),
     );
     if (isTerminalStatus(event.status)) {
-      writeOperationSenders.delete(event.operationId);
+      detachSender(event.operationId);
     }
   });
 
@@ -193,6 +203,45 @@ export function createWriteOperationCoordinator(
     if (activeWriteOperationId !== null) {
       throw new Error("Another write operation is already running.");
     }
+  }
+
+  // Claims the write slot before async preparation so a second request arriving
+  // meanwhile is rejected instead of running alongside this one.
+  async function prepareWithReservedSlot<T>(prepare: () => Promise<T>): Promise<T> {
+    ensureNoWriteOperationInFlight();
+    activeWriteOperationId = PREPARING_WRITE_OPERATION_ID;
+    try {
+      return await prepare();
+    } finally {
+      if (activeWriteOperationId === PREPARING_WRITE_OPERATION_ID) {
+        activeWriteOperationId = null;
+      }
+    }
+  }
+
+  // An operation whose window crashed or closed can never be answered or finished
+  // from the UI, so it is cancelled instead of holding the write slot forever.
+  function attachSender(operationId: string, sender: WriteOperationSender): void {
+    writeOperationSenders.set(operationId, sender);
+    const events = sender as SenderLifecycleEvents;
+    if (typeof events.on !== "function" || typeof events.removeListener !== "function") {
+      return;
+    }
+    const cancel = () => {
+      cancelWriteOperation(operationId);
+    };
+    events.on.call(sender, "render-process-gone", cancel);
+    events.on.call(sender, "destroyed", cancel);
+    senderDetachers.set(operationId, () => {
+      events.removeListener?.call(sender, "render-process-gone", cancel);
+      events.removeListener?.call(sender, "destroyed", cancel);
+    });
+  }
+
+  function detachSender(operationId: string): void {
+    writeOperationSenders.delete(operationId);
+    senderDetachers.get(operationId)?.();
+    senderDetachers.delete(operationId);
   }
 
   function queueLocalWriteOperation(args: {
@@ -208,7 +257,7 @@ export function createWriteOperationCoordinator(
     const controller = new AbortController();
     activeWriteOperationId = operationId;
     localWriteOperationControllers.set(operationId, controller);
-    writeOperationSenders.set(operationId, args.sender);
+    attachSender(operationId, args.sender);
     writeOperationMetadata.set(operationId, {
       kind: args.kind,
       action: args.action,
@@ -261,7 +310,7 @@ export function createWriteOperationCoordinator(
           ...(metadata?.metadata ? { metadata: metadata.metadata } : {}),
         });
       }
-      writeOperationSenders.delete(event.operationId);
+      detachSender(event.operationId);
       writeOperationMetadata.delete(event.operationId);
       localWriteOperationControllers.delete(event.operationId);
       if (activeWriteOperationId === event.operationId) {
@@ -824,7 +873,7 @@ export function createWriteOperationCoordinator(
             transferMode,
           },
         });
-        writeOperationSenders.set(handle.operationId, event.sender);
+        attachSender(handle.operationId, event.sender);
         return handle;
       },
       "copyPaste:cancel": (payload: IpcRequest<"copyPaste:cancel">) =>
@@ -848,8 +897,7 @@ export function createWriteOperationCoordinator(
         payload: IpcRequest<"writeOperation:rename">,
         event: { sender: WriteOperationSender },
       ) => {
-        ensureNoWriteOperationInFlight();
-        const operation = await prepareRenameOperation(payload);
+        const operation = await prepareWithReservedSlot(() => prepareRenameOperation(payload));
         return queueLocalWriteOperation({
           action: "rename",
           kind: "rename",
@@ -865,8 +913,9 @@ export function createWriteOperationCoordinator(
         payload: IpcRequest<"writeOperation:createFolder">,
         event: { sender: WriteOperationSender },
       ) => {
-        ensureNoWriteOperationInFlight();
-        const operation = await prepareCreateFolderOperation(payload);
+        const operation = await prepareWithReservedSlot(() =>
+          prepareCreateFolderOperation(payload),
+        );
         return queueLocalWriteOperation({
           action: "new_folder",
           kind: "newFolder",
@@ -917,6 +966,10 @@ export function createWriteOperationCoordinator(
     },
     shutdown() {
       writeServiceUnsubscribe();
+      for (const detach of senderDetachers.values()) {
+        detach();
+      }
+      senderDetachers.clear();
       writeOperationSenders.clear();
       copyPasteRequests.clear();
       localWriteOperationControllers.clear();

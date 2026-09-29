@@ -64,12 +64,32 @@ export async function buildCopyPasteAnalysisReport(args: {
     });
   }
 
+  // The destination folder may be reached through another path (a symlinked folder or a
+  // different letter case), so "same folder" compares identities, not just strings.
+  const sameDirectoryCache = new Map<string, boolean>();
+  const isDestinationDirectory = async (directoryPath: string): Promise<boolean> => {
+    if (directoryPath === request.destinationDirectoryPath) {
+      return true;
+    }
+    const cached = sameDirectoryCache.get(directoryPath);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const same = isSameExistingItem(
+      await captureFingerprint(fileSystem, directoryPath),
+      destinationFingerprint,
+    );
+    sameDirectoryCache.set(directoryPath, same);
+    return same;
+  };
+
   for (const [index, sourcePath] of request.sourcePaths.entries()) {
     args.signal?.throwIfAborted();
     const sourceFingerprint = await captureFingerprint(fileSystem, sourcePath);
     let destinationPath = join(request.destinationDirectoryPath, basename(sourcePath));
+    const pastingIntoSourceFolder = await isDestinationDirectory(dirname(sourcePath));
 
-    if (request.mode === "copy" && dirname(sourcePath) === request.destinationDirectoryPath) {
+    if (request.mode === "copy" && pastingIntoSourceFolder) {
       destinationPath = await resolveDuplicateName(
         basename(sourcePath),
         request.destinationDirectoryPath,
@@ -87,7 +107,11 @@ export async function buildCopyPasteAnalysisReport(args: {
       continue;
     }
 
-    if (sourcePath === destinationPath) {
+    if (
+      sourcePath === destinationPath ||
+      (request.mode === "cut" && pastingIntoSourceFolder) ||
+      isSameExistingItem(sourceFingerprint, await captureFingerprint(fileSystem, destinationPath))
+    ) {
       issues.push({
         code: "same_path",
         message: `Cannot paste ${sourcePath} onto itself.`,
@@ -287,6 +311,20 @@ async function countDirectoryItems(
     cache.set(directoryPath, null);
     return null;
   }
+}
+
+function isSameExistingItem(
+  left: CopyPasteAnalysisNode["sourceFingerprint"],
+  right: CopyPasteAnalysisNode["sourceFingerprint"],
+): boolean {
+  return (
+    left.exists &&
+    right.exists &&
+    left.ino !== null &&
+    left.dev !== null &&
+    left.ino === right.ino &&
+    left.dev === right.dev
+  );
 }
 
 function isAbortError(error: unknown): boolean {

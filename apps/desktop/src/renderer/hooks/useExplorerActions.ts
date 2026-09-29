@@ -42,6 +42,7 @@ import {
   setCopyPasteClipboard,
 } from "../lib/copyPasteClipboard";
 import {
+  collectRetrySourcePaths,
   createOpenItemLimitMessage,
   formatPathForShell,
   getPathLeafName,
@@ -340,6 +341,7 @@ export function useExplorerActions(args: {
   } = navActions;
   const { restartActiveSearch } = callbacks;
   const activeAnalysisIdRef = useRef<string | null>(null);
+  const reviewStartInFlightRef = useRef<string | null>(null);
   const moveOperationSourceSurfaceRef = useRef(new Map<string, InternalMoveSourceSurface>());
   const restartActiveSearchRef = useRef(restartActiveSearch ?? null);
   const writeOperationCardStateRef = useRef<WriteOperationCardState | null>(
@@ -987,7 +989,8 @@ export function useExplorerActions(args: {
     const parts: string[] = [];
     if (result.summary.completedItemCount > 0) {
       parts.push(formatResultCountLabel(result.summary.completedItemCount, "item"));
-      parts[parts.length - 1] = `${parts.at(-1)} moved`;
+      parts[parts.length - 1] =
+        `${parts.at(-1)} ${event.action === "move_to" ? "moved" : "copied"}`;
     }
     if (result.summary.skippedItemCount > 0) {
       parts.push(`${formatResultCountLabel(result.summary.skippedItemCount, "item")} skipped`);
@@ -1397,11 +1400,22 @@ export function useExplorerActions(args: {
       initiator?: "clipboard" | "drag_drop" | "move_dialog" | null;
     },
   ) {
-    void executeCopyLikePlan(report, policy, action, options).then((outcome) => {
-      if (outcome.status === "blocked" || outcome.status === "error") {
-        surfaceCopyLikePreStartFailureToast(action, outcome);
-      }
-    });
+    // A second click on the review dialog's start button must not start it again.
+    if (reviewStartInFlightRef.current === report.analysisId) {
+      return;
+    }
+    reviewStartInFlightRef.current = report.analysisId;
+    void executeCopyLikePlan(report, policy, action, options)
+      .then((outcome) => {
+        if (outcome.status === "blocked" || outcome.status === "error") {
+          surfaceCopyLikePreStartFailureToast(action, outcome);
+        }
+      })
+      .finally(() => {
+        if (reviewStartInFlightRef.current === report.analysisId) {
+          reviewStartInFlightRef.current = null;
+        }
+      });
   }
 
   async function analyzeCopyLikeRequest(args: {
@@ -1656,12 +1670,7 @@ export function useExplorerActions(args: {
       dismissCopyPasteDialog();
       return;
     }
-    const failedSourcePaths = result.items
-      .filter(
-        (item): item is typeof item & { sourcePath: string } =>
-          item.status === "failed" && typeof item.sourcePath === "string",
-      )
-      .map((item) => item.sourcePath);
+    const failedSourcePaths = collectRetrySourcePaths(result.items);
     if (failedSourcePaths.length === 0) {
       dismissCopyPasteDialog();
       return;

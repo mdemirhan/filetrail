@@ -62,6 +62,8 @@ describe("formatting helpers", () => {
   describe("formatRelativeDuration", () => {
     it("returns ms for sub-second", () => {
       expect(formatRelativeDuration(500)).toBe("500 ms");
+      // File timestamps carry sub-millisecond precision.
+      expect(formatRelativeDuration(9.737548828125)).toBe("10 ms");
     });
 
     it("returns seconds for 1-59 seconds", () => {

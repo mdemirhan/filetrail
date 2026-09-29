@@ -1,5 +1,5 @@
 import { dirname } from "node:path";
-import { app, clipboard, ipcMain } from "electron";
+import { app, clipboard, ipcMain, shell } from "electron";
 
 import type { AppLogEntry } from "@filetrail/contracts";
 import { ExplorerWorkerClient, createWriteService, getPathSuggestions } from "@filetrail/core";
@@ -66,7 +66,10 @@ export async function bootstrapMainProcess(
     getFolderSize,
     cancelFolderSize,
   } = await import("./originalFileSystem");
-  const writeService = createWriteService({ fileSystem: originalFileSystem });
+  const writeService = createWriteService({
+    // Items replaced by a paste go to the Trash, so a replace can always be undone.
+    fileSystem: { ...originalFileSystem, trash: (path) => shell.trashItem(path) },
+  });
   const actionLogStore = createActionLogStore(
     resolveActionLogFilePath(dirname(appStateStore.getFilePath())),
     {

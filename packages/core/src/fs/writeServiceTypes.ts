@@ -85,6 +85,9 @@ export type WriteServiceFileSystem = {
   /** Like `utimes` but operates on the symlink itself, not its target. Used to
    *  preserve timestamps on symlinks after creation. */
   lutimes?: (path: string, atimeMs: number, mtimeMs: number) => Promise<void>;
+  /** Moves a path to the Trash. When provided, items replaced by a paste are trashed
+   *  instead of permanently deleted, so a replace can always be undone. */
+  trash?: (path: string) => Promise<void>;
 };
 
 export type CopyPasteRequest = {
@@ -402,7 +405,12 @@ export const DEFAULT_WRITE_SERVICE_FILE_SYSTEM: WriteServiceFileSystem = {
   },
   copyFileStream: async (sourcePath, destinationPath, signal) => {
     await mkdir(dirname(destinationPath), { recursive: true });
-    await pipeline(createReadStream(sourcePath), createWriteStream(destinationPath), { signal });
+    // "wx": never truncate an item that appeared at the destination in the meantime.
+    await pipeline(
+      createReadStream(sourcePath),
+      createWriteStream(destinationPath, { flags: "wx" }),
+      { signal },
+    );
   },
   utimes: async (path, atimeMs, mtimeMs) => {
     await utimes(path, atimeMs / 1000, mtimeMs / 1000);

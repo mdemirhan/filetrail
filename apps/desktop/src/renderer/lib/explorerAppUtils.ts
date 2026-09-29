@@ -57,6 +57,29 @@ export function isExpectedPlannedSkipResult(event: WriteOperationProgressEvent):
     .every((item) => item.skipReason === "planned_conflict_policy");
 }
 
+// Items worth retrying after a copy-like operation: failures and items that never
+// started. Only top-level items are returned; an item inside a folder is retried by
+// retrying that folder, never pasted on its own at the destination root.
+export function collectRetrySourcePaths(items: WriteOperationResult["items"]): string[] {
+  const itemPaths = items
+    .map((item) => item.sourcePath)
+    .filter((path): path is string => typeof path === "string");
+  const hasAncestorItem = (path: string) =>
+    itemPaths.some((candidate) => candidate !== path && path.startsWith(`${candidate}/`));
+  const retryPaths: string[] = [];
+  for (const item of items) {
+    if (
+      typeof item.sourcePath === "string" &&
+      (item.status === "failed" || item.status === "cancelled") &&
+      !hasAncestorItem(item.sourcePath) &&
+      !retryPaths.includes(item.sourcePath)
+    ) {
+      retryPaths.push(item.sourcePath);
+    }
+  }
+  return retryPaths;
+}
+
 export function resolvePasteDestinationPath(args: {
   contextMenuState: ContextMenuState | null;
   contextMenuTargetEntry: DirectoryEntry | null;

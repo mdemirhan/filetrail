@@ -6,8 +6,10 @@ import { captureFingerprint, fingerprintsEqual } from "./copyPasteFingerprint";
 import { type ResolvedCopyPasteNode, resolveSingleNodeWithAction } from "./copyPastePolicy";
 import type {
   CopyPasteAnalysisReport,
+  CopyPasteConflictClass,
   CopyPasteItemResult,
   CopyPasteMode,
+  CopyPasteNodeKind,
   CopyPasteOperationResult,
   CopyPasteOperationStatus,
   CopyPastePolicy,
@@ -17,6 +19,26 @@ import type {
   NodeFingerprint,
   WriteServiceFileSystem,
 } from "./writeServiceTypes";
+
+const NOT_STARTED_MESSAGE = "Not started because the operation was stopped.";
+
+type ExecutionContext = {
+  operationId: string;
+  report: CopyPasteAnalysisReport;
+  mode: CopyPasteMode;
+  policy: CopyPastePolicy;
+  fileSystem: WriteServiceFileSystem;
+  signal: AbortSignal;
+  emit: (event: CopyPasteProgressEvent) => void;
+  requestResolution: (
+    conflict: CopyPasteRuntimeConflict,
+  ) => Promise<CopyPasteRuntimeResolutionAction | null>;
+  destinationDev: number | null;
+  totalItemCount: number;
+  totalBytes: number | null;
+  // Shared by every step so progress survives an item that fails half way.
+  progress: { completedItemCount: number; completedByteCount: number };
+};
 
 export async function executeCopyPasteFromAnalysis(args: {
   operationId: string;
@@ -33,99 +55,69 @@ export async function executeCopyPasteFromAnalysis(args: {
   ) => Promise<CopyPasteRuntimeResolutionAction | null>;
 }): Promise<void> {
   const startedAt = args.now().toISOString();
-  let completedItemCount = 0;
-  let completedByteCount = 0;
-  const totalItemCount = countExecutableSteps(args.resolvedNodes);
-  const totalBytes = args.report.summary.totalBytes;
   const destinationFingerprint = await captureFingerprint(
     args.fileSystem,
     args.report.destinationDirectoryPath,
   );
-  const destinationDev = destinationFingerprint.dev;
+  const context: ExecutionContext = {
+    operationId: args.operationId,
+    report: args.report,
+    mode: args.mode,
+    policy: args.policy,
+    fileSystem: args.fileSystem,
+    signal: args.signal,
+    emit: args.emit,
+    requestResolution: args.requestResolution,
+    destinationDev: destinationFingerprint.dev,
+    totalItemCount: countExecutableSteps(args.resolvedNodes),
+    totalBytes: args.report.summary.totalBytes,
+    progress: { completedItemCount: 0, completedByteCount: 0 },
+  };
   const itemResults: CopyPasteItemResult[] = [];
   let encounteredError: Error | null = null;
   let cancelled = false;
 
-  args.emit({
-    operationId: args.operationId,
-    analysisId: args.report.analysisId,
-    mode: args.mode,
-    status: "running",
-    completedItemCount: 0,
-    totalItemCount,
-    completedByteCount: 0,
-    totalBytes,
-    currentSourcePath: null,
-    currentDestinationPath: null,
-    runtimeConflict: null,
-    result: null,
-  });
+  emitProgress(context, "running", null, null);
 
-  for (const node of args.resolvedNodes) {
+  const recordNotStarted = (nodes: ResolvedCopyPasteNode[]) => {
+    for (const node of nodes) {
+      itemResults.push(
+        node.action === "skip"
+          ? itemResult(node, "skipped", null, "planned_conflict_policy")
+          : itemResult(node, "cancelled", NOT_STARTED_MESSAGE),
+      );
+    }
+  };
+
+  for (const [nodeIndex, node] of args.resolvedNodes.entries()) {
     if (args.signal.aborted) {
       cancelled = true;
-      itemResults.push({
-        sourcePath: node.node.sourcePath,
-        destinationPath: node.destinationPath,
-        sourceKind: node.node.sourceKind,
-        status: "cancelled",
-        error: "Operation cancelled.",
-      });
+      recordNotStarted(args.resolvedNodes.slice(nodeIndex));
       break;
     }
     try {
-      const stepResult = await executeResolvedNode({
-        resolvedNode: node,
-        report: args.report,
-        fileSystem: args.fileSystem,
-        signal: args.signal,
-        now: args.now,
-        emit: args.emit,
-        requestResolution: args.requestResolution,
-        operationId: args.operationId,
-        mode: args.mode,
-        destinationDev,
-        totalItemCount,
-        totalBytes,
-        completedItemCount,
-        completedByteCount,
-      });
-      completedItemCount = stepResult.completedItemCount;
-      completedByteCount = stepResult.completedByteCount;
-      itemResults.push({
-        sourcePath: node.node.sourcePath,
-        destinationPath: node.destinationPath,
-        sourceKind: node.node.sourceKind,
-        status: stepResult.itemStatus,
-        error: stepResult.itemStatus === "skipped" ? null : stepResult.error,
-        skipReason: stepResult.skipReason,
-      });
+      const outcome = await executeResolvedNode(context, node);
+      itemResults.push(
+        itemResult(
+          node,
+          outcome.itemStatus,
+          outcome.itemStatus === "skipped" ? null : outcome.error,
+          outcome.skipReason,
+        ),
+      );
       // Surface non-success children (failed, skipped) so they appear in the action log
-      itemResults.push(...stepResult.childItems);
+      itemResults.push(...outcome.childItems);
     } catch (error) {
       if (isAbortError(error) || args.signal.aborted) {
         cancelled = true;
-        itemResults.push({
-          sourcePath: node.node.sourcePath,
-          destinationPath: node.destinationPath,
-          sourceKind: node.node.sourceKind,
-          status: "cancelled",
-          error: "Operation cancelled.",
-          skipReason: null,
-        });
-      } else {
-        const message = toErrorMessage(error);
-        encounteredError = error instanceof Error ? error : new Error(message);
-        itemResults.push({
-          sourcePath: node.node.sourcePath,
-          destinationPath: node.destinationPath,
-          sourceKind: node.node.sourceKind,
-          status: "failed",
-          error: message,
-          skipReason: null,
-        });
+        itemResults.push(itemResult(node, "cancelled", "Operation cancelled."));
+        recordNotStarted(args.resolvedNodes.slice(nodeIndex + 1));
+        break;
       }
-      break;
+      const message = describeCopyPasteError(error);
+      encounteredError ??= error instanceof Error ? error : new Error(message);
+      itemResults.push(itemResult(node, "failed", message));
+      // Keep going: one failed item must not stop the rest of the operation.
     }
   }
 
@@ -140,13 +132,13 @@ export async function executeCopyPasteFromAnalysis(args: {
     mode: args.mode,
     startedAt,
     finishedAt: args.now().toISOString(),
-    completedByteCount,
-    totalBytes,
+    completedByteCount: context.progress.completedByteCount,
+    totalBytes: context.totalBytes,
     items: itemResults,
     status,
     error:
       encounteredError !== null
-        ? toErrorMessage(encounteredError)
+        ? describeCopyPasteError(encounteredError)
         : cancelled
           ? "Operation cancelled."
           : null,
@@ -156,10 +148,10 @@ export async function executeCopyPasteFromAnalysis(args: {
     analysisId: args.report.analysisId,
     mode: args.mode,
     status,
-    completedItemCount,
-    totalItemCount,
-    completedByteCount,
-    totalBytes,
+    completedItemCount: context.progress.completedItemCount,
+    totalItemCount: context.totalItemCount,
+    completedByteCount: context.progress.completedByteCount,
+    totalBytes: context.totalBytes,
     currentSourcePath: null,
     currentDestinationPath: null,
     runtimeConflict: null,
@@ -168,8 +160,6 @@ export async function executeCopyPasteFromAnalysis(args: {
 }
 
 type ExecuteNodeResult = {
-  completedItemCount: number;
-  completedByteCount: number;
   itemStatus: "completed" | "skipped" | "failed";
   skipReason: "planned_conflict_policy" | "runtime_conflict_resolution" | null;
   error: string | null;
@@ -177,29 +167,51 @@ type ExecuteNodeResult = {
   childItems: CopyPasteItemResult[];
 };
 
-async function executeResolvedNode(args: {
-  resolvedNode: ResolvedCopyPasteNode;
-  report: CopyPasteAnalysisReport;
-  fileSystem: WriteServiceFileSystem;
-  signal: AbortSignal;
-  now: () => Date;
-  emit: (event: CopyPasteProgressEvent) => void;
-  requestResolution: (
-    conflict: CopyPasteRuntimeConflict,
-  ) => Promise<CopyPasteRuntimeResolutionAction | null>;
-  operationId: string;
-  mode: CopyPasteMode;
-  destinationDev: number | null;
-  totalItemCount: number;
-  totalBytes: number | null;
-  completedItemCount: number;
-  completedByteCount: number;
-}): Promise<ExecuteNodeResult> {
-  let currentNode = args.resolvedNode;
+function itemResult(
+  node: ResolvedCopyPasteNode,
+  status: CopyPasteItemResult["status"],
+  error: string | null,
+  skipReason: CopyPasteItemResult["skipReason"] = null,
+): CopyPasteItemResult {
+  return {
+    sourcePath: node.node.sourcePath,
+    destinationPath: node.destinationPath,
+    sourceKind: node.node.sourceKind,
+    status,
+    error,
+    skipReason,
+  };
+}
+
+function emitProgress(
+  context: ExecutionContext,
+  status: "running" | "awaiting_resolution",
+  node: ResolvedCopyPasteNode | null,
+  runtimeConflict: CopyPasteRuntimeConflict | null,
+): void {
+  context.emit({
+    operationId: context.operationId,
+    analysisId: context.report.analysisId,
+    mode: context.mode,
+    status,
+    completedItemCount: context.progress.completedItemCount,
+    totalItemCount: context.totalItemCount,
+    completedByteCount: context.progress.completedByteCount,
+    totalBytes: context.totalBytes,
+    currentSourcePath: node?.node.sourcePath ?? null,
+    currentDestinationPath: node?.destinationPath ?? null,
+    runtimeConflict,
+    result: null,
+  });
+}
+
+async function executeResolvedNode(
+  context: ExecutionContext,
+  resolvedNode: ResolvedCopyPasteNode,
+): Promise<ExecuteNodeResult> {
+  let currentNode = resolvedNode;
   if (currentNode.action === "skip") {
     return {
-      completedItemCount: args.completedItemCount,
-      completedByteCount: args.completedByteCount,
       itemStatus: "skipped",
       skipReason: "planned_conflict_policy",
       error: null,
@@ -209,38 +221,37 @@ async function executeResolvedNode(args: {
 
   const runtimeConflict = await detectRuntimeConflict(
     currentNode,
-    args.report.analysisId,
-    args.fileSystem,
+    context.report.analysisId,
+    context.fileSystem,
   );
   if (runtimeConflict) {
-    args.emit({
-      operationId: args.operationId,
-      analysisId: args.report.analysisId,
-      mode: args.mode,
-      status: "awaiting_resolution",
-      completedItemCount: args.completedItemCount,
-      totalItemCount: args.totalItemCount,
-      completedByteCount: args.completedByteCount,
-      totalBytes: args.totalBytes,
-      currentSourcePath: currentNode.node.sourcePath,
-      currentDestinationPath: currentNode.destinationPath,
-      runtimeConflict,
-      result: null,
-    });
-    const resolution = await args.requestResolution(runtimeConflict);
-    args.signal.throwIfAborted();
+    emitProgress(context, "awaiting_resolution", currentNode, runtimeConflict);
+    const resolution = await context.requestResolution(runtimeConflict);
+    context.signal.throwIfAborted();
     if (!resolution) {
       throw new Error("Runtime conflict was not resolved.");
     }
+    // Continue from what is on disk now, which is what the person just decided on.
+    const currentDestination = runtimeConflict.currentDestinationFingerprint;
     currentNode = await resolveSingleNodeWithAction({
-      node: currentNode.node,
+      node: {
+        ...currentNode.node,
+        destinationPath: currentNode.destinationPath,
+        sourceFingerprint: runtimeConflict.currentSourceFingerprint.exists
+          ? runtimeConflict.currentSourceFingerprint
+          : currentNode.node.sourceFingerprint,
+        destinationFingerprint: currentDestination,
+        destinationKind: currentDestination.kind,
+        conflictClass: currentDestination.exists
+          ? conflictClassFor(currentNode.node.sourceKind, currentDestination.kind)
+          : null,
+      },
       action: resolution,
-      fileSystem: args.fileSystem,
+      policy: context.policy,
+      fileSystem: context.fileSystem,
     });
     if (currentNode.action === "skip") {
       return {
-        completedItemCount: args.completedItemCount,
-        completedByteCount: args.completedByteCount,
         itemStatus: "skipped",
         skipReason: "runtime_conflict_resolution",
         error: null,
@@ -253,13 +264,13 @@ async function executeResolvedNode(args: {
   // source and destination are on the same device. Skipped for merge actions
   // (can't atomically rename a directory into an existing one).
   const canRename =
-    args.mode === "cut" &&
-    args.fileSystem.rename &&
-    args.destinationDev !== null &&
-    currentNode.node.sourceFingerprint.dev === args.destinationDev &&
+    context.mode === "cut" &&
+    context.fileSystem.rename &&
+    context.destinationDev !== null &&
+    currentNode.node.sourceFingerprint.dev === context.destinationDev &&
     currentNode.action !== "merge";
   if (canRename) {
-    const renameResult = await tryRenameForCut(currentNode, args);
+    const renameResult = await tryRenameForCut(context, currentNode);
     if (renameResult) {
       return renameResult;
     }
@@ -267,159 +278,50 @@ async function executeResolvedNode(args: {
   }
 
   if (currentNode.node.sourceKind === "directory") {
-    if (
-      currentNode.action === "create" ||
-      currentNode.action === "keep_both" ||
-      currentNode.action === "overwrite"
-    ) {
-      if (currentNode.action === "overwrite") {
-        await removeDestinationIfPresent(currentNode.destinationPath, args.fileSystem);
-      }
-      await args.fileSystem.mkdir(currentNode.destinationPath, { recursive: true });
-      await preserveModeIfSupported(
-        args.fileSystem,
-        currentNode.destinationPath,
-        currentNode.node.sourceFingerprint.mode,
-      );
-      args.completedItemCount += 1;
-      args.emit({
-        operationId: args.operationId,
-        analysisId: args.report.analysisId,
-        mode: args.mode,
-        status: "running",
-        completedItemCount: args.completedItemCount,
-        totalItemCount: args.totalItemCount,
-        completedByteCount: args.completedByteCount,
-        totalBytes: args.totalBytes,
-        currentSourcePath: currentNode.node.sourcePath,
-        currentDestinationPath: currentNode.destinationPath,
-        runtimeConflict: null,
-        result: null,
-      });
-    }
-    let hasChildFailure = false;
-    const bubbledChildItems: CopyPasteItemResult[] = [];
-    for (const child of currentNode.children) {
-      args.signal.throwIfAborted();
-      const childResult = await executeResolvedNode({
-        ...args,
-        resolvedNode: child,
-      });
-      args.completedItemCount = childResult.completedItemCount;
-      args.completedByteCount = childResult.completedByteCount;
-      if (childResult.itemStatus === "failed") {
-        hasChildFailure = true;
-      }
-      // Bubble up all child items so they appear in the action log
-      if (child.node.sourceKind !== "directory") {
-        bubbledChildItems.push({
-          sourcePath: child.node.sourcePath,
-          destinationPath: child.destinationPath,
-          sourceKind: child.node.sourceKind,
-          status: childResult.itemStatus,
-          error: childResult.itemStatus === "skipped" ? null : childResult.error,
-          skipReason: childResult.skipReason,
-        });
-      }
-      // Also bubble up any grandchild items
-      bubbledChildItems.push(...childResult.childItems);
-    }
-    // Preserve directory timestamps AFTER children are processed, since writing
-    // children into the directory updates its mtime on the real filesystem.
-    if (
-      currentNode.action === "create" ||
-      currentNode.action === "keep_both" ||
-      currentNode.action === "overwrite"
-    ) {
-      await preserveTimestampsIfSupported(
-        args.fileSystem,
-        currentNode.destinationPath,
-        currentNode.node.sourceFingerprint.mtimeMs,
-      );
-    }
-    let dirDeleteError: string | null = null;
-    if (args.mode === "cut") {
-      dirDeleteError = await tryRemoveEmptySourceDirectory(
-        currentNode.node.sourcePath,
-        currentNode.node.sourceFingerprint,
-        args.fileSystem,
-      );
-    }
-    return {
-      completedItemCount: args.completedItemCount,
-      completedByteCount: args.completedByteCount,
-      itemStatus: dirDeleteError !== null || hasChildFailure ? "failed" : "completed",
-      skipReason: null,
-      error: dirDeleteError,
-      childItems: bubbledChildItems,
-    };
+    return executeDirectoryNode(context, currentNode);
   }
 
   if (currentNode.action === "overwrite") {
-    await removeDestinationIfPresent(currentNode.destinationPath, args.fileSystem);
+    await replaceDestination(currentNode, context.fileSystem);
   }
   if (currentNode.node.sourceKind === "symlink") {
-    const linkTarget = await args.fileSystem.readlink(currentNode.node.sourcePath);
-    await args.fileSystem.mkdir(dirname(currentNode.destinationPath), { recursive: true });
-    await args.fileSystem.symlink(linkTarget, currentNode.destinationPath);
+    const linkTarget = await context.fileSystem.readlink(currentNode.node.sourcePath);
+    await context.fileSystem.mkdir(dirname(currentNode.destinationPath), { recursive: true });
+    await context.fileSystem.symlink(linkTarget, currentNode.destinationPath);
     await preserveSymlinkTimestampsIfSupported(
-      args.fileSystem,
+      context.fileSystem,
       currentNode.destinationPath,
       currentNode.node.sourceFingerprint.mtimeMs,
     );
   } else {
-    if (args.fileSystem.copyFile) {
-      await args.fileSystem.mkdir(dirname(currentNode.destinationPath), { recursive: true });
-      await args.fileSystem.copyFile(currentNode.node.sourcePath, currentNode.destinationPath);
-    } else {
-      await args.fileSystem.copyFileStream(
-        currentNode.node.sourcePath,
-        currentNode.destinationPath,
-        args.signal,
-      );
-    }
+    await copyFileContents(context, currentNode);
     // Applied after both copy paths. Native copyFile (copyfile(3) COPYFILE_ALL)
     // already carries metadata, so chmod/utimes simply re-apply the same values.
     await preserveModeIfSupported(
-      args.fileSystem,
+      context.fileSystem,
       currentNode.destinationPath,
       currentNode.node.sourceFingerprint.mode,
     );
     await preserveTimestampsIfSupported(
-      args.fileSystem,
+      context.fileSystem,
       currentNode.destinationPath,
       currentNode.node.sourceFingerprint.mtimeMs,
     );
   }
-  args.completedItemCount += 1;
+  context.progress.completedItemCount += 1;
   if (currentNode.node.sourceFingerprint.size !== null) {
-    args.completedByteCount += currentNode.node.sourceFingerprint.size;
+    context.progress.completedByteCount += currentNode.node.sourceFingerprint.size;
   }
   let deleteError: string | null = null;
-  if (args.mode === "cut") {
+  if (context.mode === "cut") {
     deleteError = await tryDeleteMovedSource(
       currentNode.node.sourcePath,
       currentNode.node.sourceFingerprint,
-      args.fileSystem,
+      context.fileSystem,
     );
   }
-  args.emit({
-    operationId: args.operationId,
-    analysisId: args.report.analysisId,
-    mode: args.mode,
-    status: "running",
-    completedItemCount: args.completedItemCount,
-    totalItemCount: args.totalItemCount,
-    completedByteCount: args.completedByteCount,
-    totalBytes: args.totalBytes,
-    currentSourcePath: currentNode.node.sourcePath,
-    currentDestinationPath: currentNode.destinationPath,
-    runtimeConflict: null,
-    result: null,
-  });
+  emitProgress(context, "running", currentNode, null);
   return {
-    completedItemCount: args.completedItemCount,
-    completedByteCount: args.completedByteCount,
     itemStatus: deleteError !== null ? "failed" : "completed",
     skipReason: null,
     error: deleteError,
@@ -427,30 +329,126 @@ async function executeResolvedNode(args: {
   };
 }
 
-async function tryRenameForCut(
+async function executeDirectoryNode(
+  context: ExecutionContext,
   currentNode: ResolvedCopyPasteNode,
-  args: {
-    fileSystem: WriteServiceFileSystem;
-    signal: AbortSignal;
-    report: CopyPasteAnalysisReport;
-    operationId: string;
-    mode: CopyPasteMode;
-    emit: (event: CopyPasteProgressEvent) => void;
-    totalItemCount: number;
-    totalBytes: number | null;
-    completedItemCount: number;
-    completedByteCount: number;
-  },
+): Promise<ExecuteNodeResult> {
+  const createsDirectory =
+    currentNode.action === "create" ||
+    currentNode.action === "keep_both" ||
+    currentNode.action === "overwrite";
+  if (createsDirectory) {
+    if (currentNode.action === "overwrite") {
+      await replaceDestination(currentNode, context.fileSystem);
+    }
+    await context.fileSystem.mkdir(currentNode.destinationPath, { recursive: true });
+    await preserveModeIfSupported(
+      context.fileSystem,
+      currentNode.destinationPath,
+      currentNode.node.sourceFingerprint.mode,
+    );
+    context.progress.completedItemCount += 1;
+    emitProgress(context, "running", currentNode, null);
+  }
+  let hasChildFailure = false;
+  const bubbledChildItems: CopyPasteItemResult[] = [];
+  for (const child of currentNode.children) {
+    context.signal.throwIfAborted();
+    let childResult: ExecuteNodeResult;
+    try {
+      childResult = await executeResolvedNode(context, child);
+    } catch (error) {
+      if (isAbortError(error) || context.signal.aborted) {
+        throw error;
+      }
+      // A failed item inside a folder is recorded and the rest of the folder continues.
+      childResult = {
+        itemStatus: "failed",
+        skipReason: null,
+        error: describeCopyPasteError(error),
+        childItems: [],
+      };
+    }
+    if (childResult.itemStatus === "failed") {
+      hasChildFailure = true;
+    }
+    // Bubble up file items, and folders that failed themselves, for the action log.
+    if (child.node.sourceKind !== "directory" || childResult.error !== null) {
+      bubbledChildItems.push(
+        itemResult(
+          child,
+          childResult.itemStatus,
+          childResult.itemStatus === "skipped" ? null : childResult.error,
+          childResult.skipReason,
+        ),
+      );
+    }
+    bubbledChildItems.push(...childResult.childItems);
+  }
+  // Preserve directory timestamps AFTER children are processed, since writing
+  // children into the directory updates its mtime on the real filesystem.
+  if (createsDirectory) {
+    await preserveTimestampsIfSupported(
+      context.fileSystem,
+      currentNode.destinationPath,
+      currentNode.node.sourceFingerprint.mtimeMs,
+    );
+  }
+  let dirDeleteError: string | null = null;
+  if (context.mode === "cut") {
+    dirDeleteError = await tryRemoveEmptySourceDirectory(
+      currentNode.node.sourcePath,
+      currentNode.node.sourceFingerprint,
+      context.fileSystem,
+    );
+  }
+  return {
+    itemStatus: dirDeleteError !== null || hasChildFailure ? "failed" : "completed",
+    skipReason: null,
+    error: dirDeleteError,
+    childItems: bubbledChildItems,
+  };
+}
+
+async function copyFileContents(
+  context: ExecutionContext,
+  currentNode: ResolvedCopyPasteNode,
+): Promise<void> {
+  try {
+    if (context.fileSystem.copyFile) {
+      await context.fileSystem.mkdir(dirname(currentNode.destinationPath), { recursive: true });
+      await context.fileSystem.copyFile(currentNode.node.sourcePath, currentNode.destinationPath);
+    } else {
+      await context.fileSystem.copyFileStream(
+        currentNode.node.sourcePath,
+        currentNode.destinationPath,
+        context.signal,
+      );
+    }
+  } catch (error) {
+    // Leave no half-written file behind, unless the name was taken by someone else.
+    if ((error as NodeJS.ErrnoException | null)?.code !== "EEXIST") {
+      await context.fileSystem
+        .rm(currentNode.destinationPath, { recursive: false, force: true })
+        .catch(() => undefined);
+    }
+    throw error;
+  }
+}
+
+async function tryRenameForCut(
+  context: ExecutionContext,
+  currentNode: ResolvedCopyPasteNode,
 ): Promise<ExecuteNodeResult | null> {
   try {
-    const rename = args.fileSystem.rename;
+    const rename = context.fileSystem.rename;
     if (!rename) {
       return null;
     }
     if (currentNode.action === "overwrite") {
-      await removeDestinationIfRenameCannotReplace(currentNode, args.fileSystem);
+      await prepareRenameDestination(currentNode, context.fileSystem);
     }
-    await args.fileSystem.mkdir(dirname(currentNode.destinationPath), { recursive: true });
+    await context.fileSystem.mkdir(dirname(currentNode.destinationPath), { recursive: true });
     await rename(currentNode.node.sourcePath, currentNode.destinationPath);
   } catch (error) {
     const nodeError = error as NodeJS.ErrnoException;
@@ -460,31 +458,28 @@ async function tryRenameForCut(
     throw error;
   }
   // Rename succeeded — count all items in the subtree as completed
-  const subtreeItemCount = countExecutableSteps([currentNode]);
-  args.completedItemCount += subtreeItemCount;
-  args.completedByteCount += sumSubtreeBytes([currentNode]);
-  args.emit({
-    operationId: args.operationId,
-    analysisId: args.report.analysisId,
-    mode: args.mode,
-    status: "running",
-    completedItemCount: args.completedItemCount,
-    totalItemCount: args.totalItemCount,
-    completedByteCount: args.completedByteCount,
-    totalBytes: args.totalBytes,
-    currentSourcePath: currentNode.node.sourcePath,
-    currentDestinationPath: currentNode.destinationPath,
-    runtimeConflict: null,
-    result: null,
-  });
+  context.progress.completedItemCount += countExecutableSteps([currentNode]);
+  context.progress.completedByteCount += sumSubtreeBytes([currentNode]);
+  emitProgress(context, "running", currentNode, null);
   return {
-    completedItemCount: args.completedItemCount,
-    completedByteCount: args.completedByteCount,
     itemStatus: "completed",
     skipReason: null,
     error: null,
     childItems: [],
   };
+}
+
+function conflictClassFor(
+  sourceKind: Exclude<CopyPasteNodeKind, "missing">,
+  destinationKind: CopyPasteNodeKind,
+): CopyPasteConflictClass {
+  if (sourceKind === "directory" && destinationKind === "directory") {
+    return "directory_conflict";
+  }
+  if (sourceKind !== "directory" && destinationKind === sourceKind) {
+    return "file_conflict";
+  }
+  return "type_mismatch";
 }
 
 async function detectRuntimeConflict(
@@ -500,100 +495,164 @@ async function detectRuntimeConflict(
     fileSystem,
     resolvedNode.destinationPath,
   );
+  const conflict = (
+    reason: CopyPasteRuntimeConflict["reason"],
+    conflictClass: CopyPasteConflictClass,
+    side: "source" | "destination",
+  ): CopyPasteRuntimeConflict => ({
+    conflictId: `runtime-${resolvedNode.node.id}-${side}`,
+    analysisId,
+    sourcePath: resolvedNode.node.sourcePath,
+    destinationPath: resolvedNode.destinationPath,
+    sourceKind: resolvedNode.node.sourceKind,
+    destinationKind:
+      side === "source" ? resolvedNode.node.destinationKind : currentDestinationFingerprint.kind,
+    conflictClass,
+    reason,
+    sourceFingerprint: resolvedNode.node.sourceFingerprint,
+    destinationFingerprint: resolvedNode.node.destinationFingerprint,
+    currentSourceFingerprint,
+    currentDestinationFingerprint,
+  });
 
-  if (!fingerprintsEqual(resolvedNode.node.sourceFingerprint, currentSourceFingerprint)) {
-    return {
-      conflictId: `runtime-${resolvedNode.node.id}-source`,
-      analysisId,
-      sourcePath: resolvedNode.node.sourcePath,
-      destinationPath: resolvedNode.destinationPath,
-      sourceKind: resolvedNode.node.sourceKind,
-      destinationKind: resolvedNode.node.destinationKind,
-      conflictClass: resolvedNode.node.conflictClass ?? "file_conflict",
-      reason: currentSourceFingerprint.exists ? "source_changed" : "source_deleted",
-      sourceFingerprint: resolvedNode.node.sourceFingerprint,
-      destinationFingerprint: resolvedNode.node.destinationFingerprint,
-      currentSourceFingerprint,
-      currentDestinationFingerprint,
-    };
+  // A folder's own timestamps change whenever anything inside it changes; its items are
+  // checked one by one, so only its identity matters here.
+  const sourceChanged =
+    resolvedNode.node.sourceKind === "directory"
+      ? !sameItemIdentity(resolvedNode.node.sourceFingerprint, currentSourceFingerprint)
+      : !fingerprintsEqual(resolvedNode.node.sourceFingerprint, currentSourceFingerprint);
+  if (sourceChanged) {
+    return conflict(
+      currentSourceFingerprint.exists ? "source_changed" : "source_deleted",
+      resolvedNode.node.conflictClass ??
+        (resolvedNode.node.sourceKind === "directory" ? "directory_conflict" : "file_conflict"),
+      "source",
+    );
   }
 
-  if (
-    (resolvedNode.action === "create" || resolvedNode.action === "keep_both") &&
-    currentDestinationFingerprint.exists &&
-    currentDestinationFingerprint.kind !== "missing"
-  ) {
-    return {
-      conflictId: `runtime-${resolvedNode.node.id}-destination`,
-      analysisId,
-      sourcePath: resolvedNode.node.sourcePath,
-      destinationPath: resolvedNode.destinationPath,
-      sourceKind: resolvedNode.node.sourceKind,
-      destinationKind: currentDestinationFingerprint.kind,
-      conflictClass:
-        currentDestinationFingerprint.kind === "directory" &&
-        resolvedNode.node.sourceKind === "directory"
-          ? "directory_conflict"
-          : currentDestinationFingerprint.kind === resolvedNode.node.sourceKind &&
-              currentDestinationFingerprint.kind !== "directory"
-            ? "file_conflict"
-            : "type_mismatch",
-      reason: "destination_created",
-      sourceFingerprint: resolvedNode.node.sourceFingerprint,
-      destinationFingerprint: resolvedNode.node.destinationFingerprint,
-      currentSourceFingerprint,
-      currentDestinationFingerprint,
-    };
+  const destinationExists =
+    currentDestinationFingerprint.exists && currentDestinationFingerprint.kind !== "missing";
+  switch (resolvedNode.action) {
+    case "create":
+    case "keep_both":
+      return destinationExists
+        ? conflict(
+            "destination_created",
+            conflictClassFor(resolvedNode.node.sourceKind, currentDestinationFingerprint.kind),
+            "destination",
+          )
+        : null;
+    case "overwrite": {
+      // Gone already: nothing is left to replace, so this simply becomes a copy.
+      if (!destinationExists) {
+        return null;
+      }
+      const planned = resolvedNode.node.destinationFingerprint;
+      return fingerprintsEqual(planned, currentDestinationFingerprint)
+        ? null
+        : conflict(
+            planned.exists ? "destination_changed" : "destination_created",
+            conflictClassFor(resolvedNode.node.sourceKind, currentDestinationFingerprint.kind),
+            "destination",
+          );
+    }
+    case "merge":
+      // A missing folder is recreated; only a folder that became something else matters.
+      return destinationExists && currentDestinationFingerprint.kind !== "directory"
+        ? conflict("destination_changed", "type_mismatch", "destination")
+        : null;
+    default:
+      return null;
   }
-
-  if (
-    resolvedNode.node.conflictClass !== null &&
-    resolvedNode.action !== "keep_both" &&
-    !fingerprintsEqual(resolvedNode.node.destinationFingerprint, currentDestinationFingerprint)
-  ) {
-    return {
-      conflictId: `runtime-${resolvedNode.node.id}-destination`,
-      analysisId,
-      sourcePath: resolvedNode.node.sourcePath,
-      destinationPath: resolvedNode.destinationPath,
-      sourceKind: resolvedNode.node.sourceKind,
-      destinationKind: currentDestinationFingerprint.kind,
-      conflictClass: resolvedNode.node.conflictClass,
-      reason: !currentDestinationFingerprint.exists ? "destination_deleted" : "destination_changed",
-      sourceFingerprint: resolvedNode.node.sourceFingerprint,
-      destinationFingerprint: resolvedNode.node.destinationFingerprint,
-      currentSourceFingerprint,
-      currentDestinationFingerprint,
-    };
-  }
-  return null;
 }
 
-async function removeDestinationIfPresent(
-  destinationPath: string,
+function sameItemIdentity(planned: NodeFingerprint, current: NodeFingerprint): boolean {
+  return (
+    planned.exists === current.exists &&
+    planned.kind === current.kind &&
+    (planned.ino === null || current.ino === null || planned.ino === current.ino) &&
+    (planned.dev === null || current.dev === null || planned.dev === current.dev)
+  );
+}
+
+function isSameExistingItem(left: NodeFingerprint, right: NodeFingerprint): boolean {
+  return (
+    left.exists &&
+    right.exists &&
+    left.ino !== null &&
+    left.dev !== null &&
+    left.ino === right.ino &&
+    left.dev === right.dev
+  );
+}
+
+// Refuses to replace an item that is, or contains, the item being pasted: removing it
+// would destroy the source too (pasting "foo/foo" over "foo", or the same folder reached
+// through a symlink or a different letter case).
+async function assertDestinationDoesNotContainSource(
+  currentNode: ResolvedCopyPasteNode,
+  destination: NodeFingerprint,
   fileSystem: WriteServiceFileSystem,
 ): Promise<void> {
-  const destinationFingerprint = await captureFingerprint(fileSystem, destinationPath);
-  if (!destinationFingerprint.exists) {
+  const destinationPath = currentNode.destinationPath;
+  const sourcePath = currentNode.node.sourcePath;
+  const name = basename(destinationPath);
+  const source = await captureFingerprint(fileSystem, sourcePath);
+  if (sourcePath === destinationPath || isSameExistingItem(source, destination)) {
+    throw new Error(`“${name}” is the item being pasted, so it can't replace itself.`);
+  }
+  if (destination.kind !== "directory") {
     return;
   }
-  await fileSystem.rm(destinationPath, {
-    recursive: destinationFingerprint.kind === "directory",
+  if (sourcePath.startsWith(`${destinationPath}/`)) {
+    throw new Error(`Can't replace “${name}” because it contains the item being pasted.`);
+  }
+  for (let ancestor = dirname(sourcePath); ; ancestor = dirname(ancestor)) {
+    if (isSameExistingItem(await captureFingerprint(fileSystem, ancestor), destination)) {
+      throw new Error(`Can't replace “${name}” because it contains the item being pasted.`);
+    }
+    if (dirname(ancestor) === ancestor) {
+      return;
+    }
+  }
+}
+
+// Removes the item a paste replaces: to the Trash when available, so a replace can be
+// undone and nothing is lost if the copy that follows fails.
+async function replaceDestination(
+  currentNode: ResolvedCopyPasteNode,
+  fileSystem: WriteServiceFileSystem,
+): Promise<void> {
+  const destination = await captureFingerprint(fileSystem, currentNode.destinationPath);
+  if (!destination.exists) {
+    return;
+  }
+  await assertDestinationDoesNotContainSource(currentNode, destination, fileSystem);
+  if (fileSystem.trash) {
+    await trashReplacedItem(currentNode.destinationPath, fileSystem.trash);
+    return;
+  }
+  await fileSystem.rm(currentNode.destinationPath, {
+    recursive: destination.kind === "directory",
     force: true,
   });
 }
 
-/** Pre-deletes an overwrite destination only when rename(2) cannot atomically
+/** Clears the way for a rename over an existing item. With a Trash the existing item is
+ *  always trashed. Without one it is pre-deleted only when rename(2) cannot atomically
  *  replace it: a non-empty destination directory, or a cross-type replacement
- *  (file over directory / directory over file). For file-over-file and
- *  directory-over-empty-directory replacements, rename swaps the destination
- *  atomically, so no pre-delete is needed. */
-async function removeDestinationIfRenameCannotReplace(
+ *  (file over directory / directory over file). */
+async function prepareRenameDestination(
   currentNode: ResolvedCopyPasteNode,
   fileSystem: WriteServiceFileSystem,
 ): Promise<void> {
   const destinationFingerprint = await captureFingerprint(fileSystem, currentNode.destinationPath);
   if (!destinationFingerprint.exists) {
+    return;
+  }
+  await assertDestinationDoesNotContainSource(currentNode, destinationFingerprint, fileSystem);
+  if (fileSystem.trash) {
+    await trashReplacedItem(currentNode.destinationPath, fileSystem.trash);
     return;
   }
   const sourceIsDirectory = currentNode.node.sourceKind === "directory";
@@ -611,6 +670,42 @@ async function removeDestinationIfRenameCannotReplace(
     recursive: destinationIsDirectory,
     force: true,
   });
+}
+
+async function trashReplacedItem(
+  path: string,
+  trash: (path: string) => Promise<void>,
+): Promise<void> {
+  try {
+    await trash(path);
+  } catch (error) {
+    throw new Error(
+      `Couldn't move the existing “${basename(path)}” to the Trash: ${describeCopyPasteError(error)}`,
+    );
+  }
+}
+
+const ERROR_CODE_MESSAGES: Record<string, string> = {
+  ENOSPC: "There isn't enough free space on the destination disk.",
+  EDQUOT: "The destination's storage quota is full.",
+  EACCES: "You don't have permission to access this item.",
+  EPERM: "You don't have permission to access this item.",
+  EROFS: "The destination is read-only.",
+  ENAMETOOLONG: "The name is too long.",
+  ENOENT: "The item no longer exists.",
+  EEXIST: "An item with this name already exists.",
+  ENOTEMPTY: "The folder isn't empty.",
+  EBUSY: "The item is in use.",
+  EIO: "A disk error occurred.",
+};
+
+/** A readable, path-free reason for a failed item (the item itself is shown next to it). */
+export function describeCopyPasteError(error: unknown): string {
+  const code = (error as NodeJS.ErrnoException | null)?.code;
+  if (typeof code === "string" && ERROR_CODE_MESSAGES[code]) {
+    return ERROR_CODE_MESSAGES[code];
+  }
+  return toErrorMessage(error);
 }
 
 /** Attempts to delete the source after a successful copy in cut mode.

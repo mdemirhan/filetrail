@@ -193,16 +193,19 @@ export class WriteService {
     }
     this.pruneTerminalAnalysisJobs("analysisId" in request ? request.analysisId : null);
 
+    // Validate before claiming the busy slot so a bad request can't leave it held.
+    const start = "analysisId" in request ? request : this.createLegacyExecutionRequest(request);
+    const mode = this.getAnalysisJobOrThrow(start.analysisId).request.mode;
+
     const operationId = this.createOperationId();
     const controller = new AbortController();
     this.controllers.set(operationId, controller);
     this.activeOperationId = operationId;
 
-    const start = "analysisId" in request ? request : this.createLegacyExecutionRequest(request);
     this.emit({
       operationId,
       analysisId: start.analysisId,
-      mode: this.getAnalysisJobOrThrow(start.analysisId).request.mode,
+      mode,
       status: "queued",
       completedItemCount: 0,
       totalItemCount: 0,

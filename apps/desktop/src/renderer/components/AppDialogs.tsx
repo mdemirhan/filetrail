@@ -240,7 +240,8 @@ export function AppDialogs({
           message="Scanning the destination and building a recursive conflict report."
           secondaryAction={{
             label: "Cancel Analysis",
-            onClick: onCloseCopyPasteDialog,
+            // Stops the analysis itself; only hiding the dialog would let the paste start.
+            onClick: onCancelWriteOperation,
           }}
         />
       ) : null}

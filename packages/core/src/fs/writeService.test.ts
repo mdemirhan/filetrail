@@ -21,6 +21,24 @@ import {
 } from "./writeService";
 
 describe("writeService", () => {
+  it("stays usable after being asked to start an unknown analysis", () => {
+    const service = createWriteService();
+    expect(() =>
+      service.startCopyPaste({
+        analysisId: "missing-analysis",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+      }),
+    ).toThrow("Unknown copy/paste analysis job: missing-analysis");
+    // The failed start must not leave the write slot claimed.
+    expect(() =>
+      service.startCopyPasteAnalysis({
+        mode: "copy",
+        sourcePaths: ["/tmp/a"],
+        destinationDirectoryPath: "/tmp",
+      }),
+    ).not.toThrow();
+  });
+
   it("plans same-directory copy/paste as duplicate naming instead of a conflict", async () => {
     const service = createWriteService({
       fileSystem: createMockFileSystem({

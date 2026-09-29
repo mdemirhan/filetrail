@@ -1,6 +1,7 @@
 import type { WriteOperationProgressEvent } from "@filetrail/contracts";
 
 import {
+  collectRetrySourcePaths,
   isExpectedPlannedSkipResult,
   isFolderSizeEligibleKind,
   resolveExplorerTreeRootPath,
@@ -216,5 +217,25 @@ describe("explorerAppUtils", () => {
 
     expect(isExpectedPlannedSkipResult(event)).toBe(false);
     expect(shouldRenderCopyPasteResultDialog(event)).toBe(true);
+  });
+});
+
+describe("collectRetrySourcePaths", () => {
+  it("retries failed and never-started top-level items, never nested ones on their own", () => {
+    const item = (sourcePath: string, status: "completed" | "failed" | "cancelled") => ({
+      sourcePath,
+      destinationPath: null,
+      status,
+      error: null,
+    });
+    expect(
+      collectRetrySourcePaths([
+        item("/src/a.txt", "completed"),
+        item("/src/photos", "failed"),
+        item("/src/photos/raw/b.dng", "failed"),
+        item("/src/c.txt", "failed"),
+        item("/src/d.txt", "cancelled"),
+      ]),
+    ).toEqual(["/src/photos", "/src/c.txt", "/src/d.txt"]);
   });
 });

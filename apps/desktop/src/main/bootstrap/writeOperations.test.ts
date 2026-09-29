@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { EventEmitter } from "node:events";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import type { WriteOperationProgressEvent } from "@filetrail/contracts";
@@ -457,6 +458,62 @@ describe("createWriteOperationCoordinator", () => {
       }),
     );
 
+    coordinator.shutdown();
+  });
+
+  it("cancels a paste whose window crashed or closed, so writes don't stay locked", () => {
+    const writeService = createWriteServiceStub();
+    const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs());
+    const sender = Object.assign(new EventEmitter(), { send: vi.fn() });
+
+    coordinator.handlers["copyPaste:start"](
+      {
+        analysisId: "analysis-1",
+        action: "paste",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+      },
+      { sender },
+    );
+    sender.emit("render-process-gone");
+
+    expect(writeService.cancelOperation).toHaveBeenCalledWith("copy-op-1");
+    coordinator.shutdown();
+    expect(sender.listenerCount("destroyed")).toBe(0);
+  });
+
+  it("rejects a paste that arrives while a rename is still being prepared", async () => {
+    let finishLstat: (() => void) | null = null;
+    const fs = createWriteOperationFs({
+      lstat: vi.fn(
+        (path: string) =>
+          new Promise<{ isDirectory(): boolean }>((resolveLstat, rejectLstat) => {
+            finishLstat = () =>
+              path === "/Users/demo/source.txt"
+                ? resolveLstat(createStats(false))
+                : rejectLstat(new Error("missing"));
+          }),
+      ),
+    });
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs);
+    const sender = createSender();
+
+    const rename = coordinator.handlers["writeOperation:rename"](
+      { sourcePath: "/Users/demo/source.txt", destinationName: "renamed.txt" },
+      { sender },
+    );
+    expect(() =>
+      coordinator.handlers["copyPaste:start"](
+        {
+          analysisId: "analysis-1",
+          action: "paste",
+          policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        },
+        { sender },
+      ),
+    ).toThrow("Another write operation is already running.");
+
+    (finishLstat as (() => void) | null)?.();
+    rename.catch(() => undefined);
     coordinator.shutdown();
   });
 });

@@ -84,7 +84,12 @@ export const originalFileSystem: WriteServiceFileSystem = {
   },
   copyFileStream: async (sourcePath, destinationPath, signal) => {
     await mkdir(dirname(destinationPath), { recursive: true });
-    await pipeline(createReadStream(sourcePath), createWriteStream(destinationPath), { signal });
+    // "wx": never truncate an item that appeared at the destination in the meantime.
+    await pipeline(
+      createReadStream(sourcePath),
+      createWriteStream(destinationPath, { flags: "wx" }),
+      { signal },
+    );
   },
   utimes: async (path, atimeMs, mtimeMs) => {
     await utimes(path, atimeMs / 1000, mtimeMs / 1000);

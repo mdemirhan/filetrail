@@ -1269,7 +1269,7 @@ describe("copyPasteExecution", () => {
     expect(chmodFailureEvents.at(-1)).toMatchObject({
       status: "failed",
       result: {
-        error: "chmod denied",
+        error: "You don't have permission to access this item.",
       },
     });
   });
@@ -2472,7 +2472,7 @@ describe("copyPasteExecution", () => {
 
       const finalEvent = expectLastEvent(events);
       expect(finalEvent.status).toBe("failed");
-      expect(finalEvent.result?.error).toContain("EPERM");
+      expect(finalEvent.result?.error).toBe("You don't have permission to access this item.");
       expect(fileSystem.exists("/source/a.txt")).toBe(true);
       expect(fileSystem.exists("/target/a.txt")).toBe(false);
     });
@@ -3435,7 +3435,7 @@ describe("copyPasteExecution", () => {
 
       const finalEvent = expectLastEvent(events);
       expect(finalEvent.result?.status).toBe("failed");
-      expect(finalEvent.result?.error).toContain("EACCES");
+      expect(finalEvent.result?.error).toBe("You don't have permission to access this item.");
     });
 
     it("utimes called for directories after mkdir + chmod", async () => {
@@ -3574,7 +3574,7 @@ describe("copyPasteExecution", () => {
 
       const finalEvent = expectLastEvent(events);
       expect(finalEvent.status).toBe("failed");
-      expect(finalEvent.result?.error).toContain("EPERM");
+      expect(finalEvent.result?.error).toBe("You don't have permission to access this item.");
     });
 
     it("symlink uses lutimes not utimes (does not follow symlink target)", async () => {
@@ -3746,7 +3746,7 @@ describe("copyPasteExecution", () => {
 
       const finalEvent = expectLastEvent(events);
       expect(finalEvent.result?.status).toBe("failed");
-      expect(finalEvent.result?.error).toContain("EPERM");
+      expect(finalEvent.result?.error).toBe("You don't have permission to access this item.");
     });
 
     it("copyFile + cut: inline source deletion still works", async () => {

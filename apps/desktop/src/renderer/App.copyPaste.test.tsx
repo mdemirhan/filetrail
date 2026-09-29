@@ -4905,6 +4905,40 @@ describe("App copy/paste integration", () => {
     });
   });
 
+  it("stops the paste when Cancel Analysis is clicked, even if the analysis then finishes", async () => {
+    const harness = createAppHarness({
+      deferCopyPastePlan: true,
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+    await selectItem("/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: "Cancel Analysis" }));
+    });
+    await act(async () => {
+      harness.resolveCopyPastePlan();
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Cancel Analysis" })).not.toBeInTheDocument();
+    });
+    expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
+    expect(screen.queryByRole("region", { name: "Paste In Progress" })).not.toBeInTheDocument();
+  });
+
   it("keeps the clipboard when paste planning fails", async () => {
     const harness = createAppHarness({
       copyPastePlanError: new Error("planner unavailable"),

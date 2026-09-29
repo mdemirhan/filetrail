@@ -675,6 +675,9 @@ export function App() {
   const copyPasteModalOpen =
     (copyPasteDialogState !== null && copyPasteDialogState.type !== "analysis") ||
     showCopyPasteResultDialog ||
+    // The "changed while pasting" prompt blocks the explorer until it is answered.
+    (writeOperationProgressEvent?.status === "awaiting_resolution" &&
+      Boolean(writeOperationProgressEvent.runtimeConflict)) ||
     renameDialogState !== null ||
     newFolderDialogState !== null ||
     moveDialogState !== null;
