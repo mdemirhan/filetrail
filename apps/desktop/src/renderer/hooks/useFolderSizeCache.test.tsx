@@ -258,6 +258,62 @@ describe("useFolderSizeCache", () => {
     ).toBeGreaterThanOrEqual(2);
   });
 
+  it("shows the sizes of folders inside right after calculating their parent", async () => {
+    let parentCalculated = false;
+    const startHandler = vi.fn(
+      async (payload: { path: string; probeOnly?: boolean | undefined }) => {
+        if (!payload.probeOnly) {
+          parentCalculated = true;
+          return { jobId: `walk:${payload.path}`, status: "ready" as const };
+        }
+        // The parent's walk measures the folders inside it too.
+        return parentCalculated
+          ? { jobId: `probe:${payload.path}`, status: "ready" as const }
+          : { jobId: `probe:${payload.path}`, status: "deferred" as const };
+      },
+    );
+    const getStatusHandler = vi.fn(async ({ jobId }: { jobId: string }) => ({
+      jobId,
+      status: "ready" as const,
+      sizeBytes: jobId.endsWith("/out") ? 1000 : 400,
+      diskBytes: 0,
+      fileCount: 1,
+      error: null,
+    }));
+    const client = createMockFiletrailClient({
+      "folderSize:start": startHandler,
+      "folderSize:getStatus": getStatusHandler,
+      "folderSize:cancel": vi.fn(async () => ({ ok: true })),
+    });
+    const { result } = renderHook(() => useFolderSizeCache(client));
+
+    // The row for a folder inside asks once and learns nothing yet.
+    act(() => {
+      result.current.getEntry("/out/FileTrail-darwin-arm64");
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current.getEntry("/out/FileTrail-darwin-arm64").status).toBe("idle");
+
+    await act(async () => {
+      await result.current.calculateFolderSize("/out");
+    });
+    // Well inside the 5 s retry cooldown: the next render asks again at once.
+    act(() => {
+      result.current.getEntry("/out/FileTrail-darwin-arm64");
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.getEntry("/out/FileTrail-darwin-arm64")).toMatchObject({
+      status: "ready",
+      sizeBytes: 400,
+    });
+  });
+
   it("polling stops on error status", async () => {
     const { startHandler, cancelHandler } = createHandlers();
     let callCount = 0;

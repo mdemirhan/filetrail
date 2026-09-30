@@ -1180,7 +1180,8 @@ function DetailsView({
     const effectiveViewportWidth =
       viewportWidth > 0 ? viewportWidth : (container?.clientWidth ?? 0);
     // clientHeight: the visible rows only (no column header, no horizontal scrollbar).
-    const effectiveViewportHeight = container?.clientHeight ?? 0;
+    // The measured size re-runs this when the pane is resized.
+    const effectiveViewportHeight = container?.clientHeight ?? rowsViewportHeight;
     if (
       !container ||
       !selectionLeadPath ||

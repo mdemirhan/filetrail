@@ -27,6 +27,8 @@ export function useFolderSizeCache(client: FiletrailClient) {
   const pollTimers = useRef(new Map<string, ReturnType<typeof setInterval>>());
   const probedPaths = useRef(new Set<string>());
   const probeMissedAt = useRef(new Map<string, number>());
+  // Set below, once probeCache exists: re-asks for the folders inside `path`.
+  const refreshInsideRef = useRef<(path: string) => void>(() => undefined);
 
   useEffect(() => {
     const timers = pollTimers.current;
@@ -81,6 +83,7 @@ export function useFolderSizeCache(client: FiletrailClient) {
               diskBytes: result.diskBytes ?? result.sizeBytes,
               fileCount: result.fileCount ?? 0,
             });
+            refreshInsideRef.current(path);
           } else if (result.status === "error") {
             stopPolling(path);
             updateEntry(path, { status: "error", message: result.error ?? "Unknown error" });
@@ -112,6 +115,7 @@ export function useFolderSizeCache(client: FiletrailClient) {
               diskBytes: status.diskBytes ?? status.sizeBytes,
               fileCount: status.fileCount ?? 0,
             });
+            refreshInsideRef.current(path);
           } else {
             updateEntry(path, { status: "calculating", jobId: result.jobId });
             startPolling(path, result.jobId);
@@ -187,6 +191,27 @@ export function useFolderSizeCache(client: FiletrailClient) {
     },
     [client, updateEntry],
   );
+
+  // Calculating a folder also measures every folder inside it (the main process keeps
+  // those sizes). Folders already on screen asked before that and are waiting out their
+  // retry cooldown, so ask again for everything inside right away; known sizes inside
+  // are refreshed too, since they may have changed.
+  refreshInsideRef.current = (path: string) => {
+    const prefix = path.endsWith("/") ? path : `${path}/`;
+    for (const missedPath of [...probeMissedAt.current.keys()]) {
+      if (missedPath.startsWith(prefix)) {
+        probeMissedAt.current.delete(missedPath);
+      }
+    }
+    for (const [cachedPath, cachedEntry] of cacheRef.current) {
+      if (cachedPath.startsWith(prefix) && cachedEntry.status !== "calculating") {
+        probedPaths.current.delete(cachedPath);
+        probeCache(cachedPath);
+      }
+    }
+    // Repaint so folders on screen without a size ask again now.
+    bumpVersion();
+  };
 
   const getEntry = useCallback(
     (path: string): FolderSizeEntry => {
