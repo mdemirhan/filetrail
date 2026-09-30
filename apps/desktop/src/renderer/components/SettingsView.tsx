@@ -1549,55 +1549,6 @@ function FavoriteIconPicker({
   );
 }
 
-function TextInput({
-  value,
-  placeholder,
-  ariaLabel = "Terminal app",
-  theme,
-  readOnly = false,
-  onChange,
-}: {
-  value: string;
-  placeholder: string;
-  ariaLabel?: string;
-  theme: ResolvedSettingsTheme;
-  readOnly?: boolean;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <input
-      type="text"
-      value={value}
-      placeholder={placeholder}
-      aria-label={ariaLabel}
-      spellCheck={false}
-      readOnly={readOnly}
-      onChange={(event) => onChange(event.currentTarget.value)}
-      style={{
-        width: "100%",
-        height: "32px",
-        padding: "0 10px",
-        borderRadius: "6px",
-        background: theme.input.bg,
-        border: `1px solid ${theme.input.border}`,
-        color: theme.input.text,
-        fontSize: "12px",
-        fontFamily: mono,
-        fontWeight: 450,
-        outline: "none",
-        caretColor: theme.input.caret,
-        opacity: readOnly ? 0.9 : 1,
-      }}
-      onFocus={(event) => {
-        event.currentTarget.style.borderColor = theme.input.borderFocus;
-      }}
-      onBlur={(event) => {
-        event.currentTarget.style.borderColor = theme.input.border;
-      }}
-    />
-  );
-}
-
 function ActionButton({
   label,
   ariaLabel,

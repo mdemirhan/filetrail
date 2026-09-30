@@ -49,8 +49,7 @@ describe("accent helpers", () => {
     expect(accentTokensToCssVariables(tokens)).toMatchObject({
       "--accent": "#e8729a",
       "--accent-text": "#e8729a",
-      "--ft-accent-pill-bg": "rgba(232, 114, 154, 0.11)",
-      "--ft-accent-search-stop-border": "rgba(232, 114, 154, 0.18)",
+      "--ft-accent-pill-text": "#e8729a",
       "--ft-accent-ring-soft": "rgba(232, 114, 154, 0.15)",
     });
     expect(getToolbarAccentVariables(tokens)).toEqual({
@@ -68,12 +67,6 @@ describe("accent helpers", () => {
     expect(getFavoriteAccentVariables(tokens)).toEqual({
       "--favorite-accent-solid": "#e8729a",
       "--favorite-accent-text": "#e8729a",
-      "--favorite-accent-soft-bg": "rgba(232, 114, 154, 0.08)",
-      "--favorite-accent-active-bg": "rgba(232, 114, 154, 0.14)",
-      "--favorite-accent-border": "rgba(232, 114, 154, 0.3)",
-      "--favorite-accent-focus-border": "rgba(232, 114, 154, 0.4)",
-      "--favorite-accent-badge-bg": "rgba(232, 114, 154, 0.11)",
-      "--favorite-accent-badge-text": "#e8729a",
       "--favorite-accent-selection-bg": "#c86284",
       "--favorite-accent-on-selection": "#000000",
     });

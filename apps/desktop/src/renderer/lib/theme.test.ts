@@ -62,8 +62,8 @@ describe("theme helpers", () => {
     expect(document.documentElement.style.getPropertyValue("--favorite-accent-solid")).toBe(
       "#e8806a",
     );
-    expect(document.documentElement.style.getPropertyValue("--favorite-accent-active-bg")).toBe(
-      "rgba(232, 128, 106, 0.16)",
+    expect(document.documentElement.style.getPropertyValue("--favorite-accent-selection-bg")).toBe(
+      "#c86e5b",
     );
     expect(document.documentElement.style.getPropertyValue("--text-primary")).toBe("#ffffff");
   });
