@@ -57,12 +57,8 @@ describe("accent helpers", () => {
       "--tb-primary-bg": "rgba(232, 114, 154, 0.11)",
       "--tb-primary-fg": "#e8729a",
       "--tb-primary-hover-bg": "rgba(232, 114, 154, 0.11)",
-      "--toolbar-nav-icon-active": "#e8729a",
       "--toolbar-toggle-active-bg": "rgba(232, 114, 154, 0.14)",
       "--toolbar-toggle-icon-active": "#e8729a",
-      "--toolbar-sort-text": "#e8729a",
-      "--toolbar-sort-arrow": "#e8729a",
-      "--sidebar-rail-icon": "#e8729a",
       "--sidebar-rail-active-bg": "rgba(232, 114, 154, 0.14)",
       "--sidebar-rail-icon-active": "#e8729a",
       "--sidebar-rail-menu-active-bg": "rgba(232, 114, 154, 0.11)",
@@ -78,6 +74,8 @@ describe("accent helpers", () => {
       "--favorite-accent-focus-border": "rgba(232, 114, 154, 0.4)",
       "--favorite-accent-badge-bg": "rgba(232, 114, 154, 0.11)",
       "--favorite-accent-badge-text": "#e8729a",
+      "--favorite-accent-selection-bg": "#c86284",
+      "--favorite-accent-on-selection": "#000000",
     });
   });
 

@@ -256,17 +256,15 @@ export function accentTokensToCssVariables(tokens: AccentTokens): Record<string,
   };
 }
 
+// "Accent toolbar buttons" colors only what is on or pressed (the current view, an open panel,
+// the chosen sort, primary buttons); icons at rest stay neutral like the rest of the toolbar.
 export function getToolbarAccentVariables(tokens: AccentTokens): Record<string, string> {
   return {
     "--tb-primary-bg": tokens.pillBg,
     "--tb-primary-fg": tokens.pillText,
     "--tb-primary-hover-bg": tokens.hoverBg,
-    "--toolbar-nav-icon-active": tokens.pathCrumbHover,
     "--toolbar-toggle-active-bg": tokens.activeStrongBg,
     "--toolbar-toggle-icon-active": tokens.pathCrumbHover,
-    "--toolbar-sort-text": tokens.pathCrumbHover,
-    "--toolbar-sort-arrow": tokens.pathCrumbHover,
-    "--sidebar-rail-icon": tokens.pathCrumbHover,
     "--sidebar-rail-active-bg": tokens.activeStrongBg,
     "--sidebar-rail-icon-active": tokens.pathCrumbHover,
     "--sidebar-rail-menu-active-bg": tokens.hoverBg,
@@ -285,6 +283,8 @@ export function getFavoriteAccentVariables(tokens: AccentTokens): Record<string,
     "--favorite-accent-focus-border": tokens.focusBorder,
     "--favorite-accent-badge-bg": tokens.pillBg,
     "--favorite-accent-badge-text": tokens.pillText,
+    "--favorite-accent-selection-bg": tokens.selectionBg,
+    "--favorite-accent-on-selection": tokens.onSelection,
   };
 }
 

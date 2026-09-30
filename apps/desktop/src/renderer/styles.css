@@ -1,4 +1,9 @@
 :root {
+  /* Black on light themes, white on dark: tints for stripes and hover shades that must
+     not pick up a text color override. */
+  --neutral-ink: #000000;
+  /* Sticky column headers sit on the window background in every theme. */
+  --bg-panel: var(--bg-base);
   color-scheme: light;
   --bg-base: #f2f3f8;
   --bg-surface: rgba(0, 0, 0, 0.012);
@@ -79,8 +84,6 @@
   --get-info-close-icon-hover: #6e7080;
   --get-info-close-bg-hover: rgba(0, 0, 0, 0.06);
   --get-info-hero-icon-bg: var(--ft-accent-hero-icon-bg);
-  --get-info-hero-badge-bg: var(--ft-accent-solid);
-  --get-info-hero-badge-text: #ffffff;
   --get-info-hero-name: #2a2a34;
   --get-info-hero-type: #9a9ca8;
   --get-info-hero-type-bg: rgba(0, 0, 0, 0.04);
@@ -211,8 +214,8 @@
   --srbar-status-label: #838592;
   --srbar-status-label-searching: var(--ft-accent-path-crumb-hover);
   --srbar-path: #a0a2ae;
-  --srbar-badge-bg: var(--ft-accent-solid);
-  --srbar-badge-fg: #ffffff;
+  --srbar-badge-bg: var(--ft-accent-solid-button);
+  --srbar-badge-fg: var(--ft-accent-on-solid);
   --srbar-count: #a0a2ae;
   --srbar-count-number: #6e7080;
   --srbar-action-text: #6e7080;
@@ -249,6 +252,7 @@
 }
 
 :root[data-theme="tomorrow-night"] {
+  --neutral-ink: #ffffff;
   color-scheme: dark;
   --bg-base: #1d1f21;
   --bg-surface: #222426;
@@ -303,8 +307,6 @@
   --get-info-close-icon-hover: #84858a;
   --get-info-close-bg-hover: rgba(255, 255, 255, 0.05);
   --get-info-hero-icon-bg: var(--ft-accent-hero-icon-bg);
-  --get-info-hero-badge-bg: var(--ft-accent-solid);
-  --get-info-hero-badge-text: #18191b;
   --get-info-hero-name: #c0c1c8;
   --get-info-hero-type: #505158;
   --get-info-hero-type-bg: rgba(255, 255, 255, 0.03);
@@ -421,8 +423,8 @@
   --srbar-status-label: #68696e;
   --srbar-status-label-searching: var(--ft-accent-path-crumb-hover);
   --srbar-path: #404148;
-  --srbar-badge-bg: var(--ft-accent-solid);
-  --srbar-badge-fg: #18191b;
+  --srbar-badge-bg: var(--ft-accent-solid-button);
+  --srbar-badge-fg: var(--ft-accent-on-solid);
   --srbar-count: #404148;
   --srbar-count-number: #68696e;
   --srbar-action-text: #68696e;
@@ -459,6 +461,7 @@
 }
 
 :root[data-theme="dark"] {
+  --neutral-ink: #ffffff;
   color-scheme: dark;
   --bg-base: #1e2028;
   --bg-surface: #252830;
@@ -513,8 +516,6 @@
   --get-info-close-icon-hover: #8a8d9a;
   --get-info-close-bg-hover: rgba(255, 255, 255, 0.06);
   --get-info-hero-icon-bg: var(--ft-accent-hero-icon-bg);
-  --get-info-hero-badge-bg: var(--ft-accent-solid);
-  --get-info-hero-badge-text: #1c1f26;
   --get-info-hero-name: #c8cad4;
   --get-info-hero-type: #555868;
   --get-info-hero-type-bg: rgba(255, 255, 255, 0.04);
@@ -631,8 +632,8 @@
   --srbar-status-label: #6e7080;
   --srbar-status-label-searching: var(--ft-accent-path-crumb-hover);
   --srbar-path: #484b54;
-  --srbar-badge-bg: var(--ft-accent-solid);
-  --srbar-badge-fg: #1c1f26;
+  --srbar-badge-bg: var(--ft-accent-solid-button);
+  --srbar-badge-fg: var(--ft-accent-on-solid);
   --srbar-count: #484b54;
   --srbar-count-number: #6e7080;
   --srbar-action-text: #6e7080;
@@ -669,6 +670,7 @@
 }
 
 :root[data-theme="catppuccin-mocha"] {
+  --neutral-ink: #ffffff;
   color-scheme: dark;
   --bg-base: #1e1e2e;
   --bg-surface: #1e1e2e;
@@ -723,8 +725,6 @@
   --get-info-close-icon-hover: #8888aa;
   --get-info-close-bg-hover: rgba(255, 255, 255, 0.05);
   --get-info-hero-icon-bg: var(--ft-accent-hero-icon-bg);
-  --get-info-hero-badge-bg: var(--ft-accent-solid);
-  --get-info-hero-badge-text: #11111b;
   --get-info-hero-name: #cdd6f5;
   --get-info-hero-type: #50506e;
   --get-info-hero-type-bg: rgba(255, 255, 255, 0.03);
@@ -841,8 +841,8 @@
   --srbar-status-label: #6c7086;
   --srbar-status-label-searching: var(--ft-accent-path-crumb-hover);
   --srbar-path: #3a3a52;
-  --srbar-badge-bg: var(--ft-accent-solid);
-  --srbar-badge-fg: #11111b;
+  --srbar-badge-bg: var(--ft-accent-solid-button);
+  --srbar-badge-fg: var(--ft-accent-on-solid);
   --srbar-count: #3a3a52;
   --srbar-count-number: #6c7086;
   --srbar-action-text: #6c7086;
@@ -1184,12 +1184,12 @@ body.platform-macos .window-toolbar-brand {
 }
 
 .toolbar-group-view .toolbar-segmented .tb-btn:hover:not(:disabled) {
-  background: var(--sidebar-rail-active-bg, var(--accent-soft));
-  color: var(--sidebar-rail-icon-active, var(--text-primary));
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .toolbar-group-view .toolbar-segmented .tb-btn.active {
-  background: var(--sidebar-rail-active-bg, var(--accent-soft));
+  background: var(--sidebar-rail-active-bg, var(--bg-active-inactive));
   color: var(--sidebar-rail-icon-active, var(--text-primary));
 }
 
@@ -2857,9 +2857,13 @@ body.resizing-panels-vertical * {
   color: var(--sidebar-rail-icon, var(--text-tertiary));
 }
 
-.sidebar-rail-button:hover,
+.sidebar-rail-button:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
 .sidebar-rail-button.active {
-  background: var(--sidebar-rail-active-bg, var(--accent-soft));
+  background: var(--sidebar-rail-active-bg, var(--bg-active-inactive));
   color: var(--sidebar-rail-icon-active, var(--text-primary));
 }
 
@@ -5299,7 +5303,7 @@ body.resizing-panels-vertical * {
 }
 
 .go-to-folder-clear:hover {
-  background: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  background: color-mix(in srgb, var(--neutral-ink) 12%, transparent);
 }
 
 .go-to-folder-clear svg {
@@ -6738,7 +6742,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
 }
 
 .details-row[data-row-parity="odd"] {
-  background: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
+  background: color-mix(in srgb, var(--neutral-ink) 3.5%, transparent);
 }
 
 .details-name {
@@ -7397,19 +7401,13 @@ body.settings-window-body {
 :root[data-theme-variant="macos-light"] {
   --bg-hover: rgba(0, 0, 0, 0.045);
   --bg-input: rgba(0, 0, 0, 0.04);
-  --bg-active: rgba(0, 0, 0, 0.08);
   --bg-active-inactive: #dcdce1;
-  --bg-panel: #ffffff;
-  --accent-soft: rgba(0, 0, 0, 0.06);
 }
 
 :root[data-theme-variant="macos-dark"] {
   --bg-hover: rgba(255, 255, 255, 0.06);
   --bg-input: rgba(255, 255, 255, 0.06);
-  --bg-active: rgba(255, 255, 255, 0.1);
   --bg-active-inactive: #3a3a3e;
-  --bg-panel: #1e1e20;
-  --accent-soft: rgba(255, 255, 255, 0.08);
 }
 
 /* ── Toolbar controls (Finder style) ──────────────────────────────────── */
@@ -7436,6 +7434,7 @@ body.settings-window-body {
 
 .window-toolbar .tb-btn.tb-btn-icon.active {
   background: var(--toolbar-toggle-active-bg, var(--bg-active-inactive));
+  color: var(--toolbar-toggle-icon-active, var(--text-primary));
 }
 
 /* View switch: a two-part segmented control with the selected segment raised. */
@@ -7613,6 +7612,20 @@ body.settings-window-body {
 .sidebar-main-native .tree-row.active:not(.inactive) .tree-expand,
 .sidebar-main-native .tree-row.active:not(.inactive) .file-icon-favorite {
   color: var(--ft-accent-on-selection);
+}
+
+/* With "Accent favorite items" on, a selected favorite takes the favorite accent. */
+:root[data-accent-favorite-items="true"]
+  .sidebar-main-native
+  .tree-row[data-tree-kind="favorite"].active:not(.inactive) {
+  background: var(--favorite-accent-selection-bg);
+}
+
+:root[data-accent-favorite-items="true"]
+  .sidebar-main-native
+  .tree-row[data-tree-kind="favorite"].active:not(.inactive)
+  :is(.tree-label, .tree-expand, .file-icon-favorite) {
+  color: var(--favorite-accent-on-selection);
 }
 
 .sidebar-main-native .tree-label-badge {
@@ -7864,7 +7877,7 @@ body.settings-window-body {
   padding: 8px 24px;
   border-top: 1px solid var(--border-light);
   border-bottom: 1px solid var(--border-light);
-  background: color-mix(in srgb, var(--text-primary) 2.5%, transparent);
+  background: color-mix(in srgb, var(--neutral-ink) 2.5%, transparent);
 }
 
 .copy-paste-sheet-bar-label {

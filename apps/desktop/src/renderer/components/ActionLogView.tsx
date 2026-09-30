@@ -12,10 +12,10 @@ import { generateAccentTokens } from "../lib/accent";
 import { withAlpha } from "../lib/colorUtils";
 import { formatDateTime } from "../lib/formatting";
 import { getThemeVariant, resolveThemeCssBase } from "../lib/themeVariants";
-import { uiSansFontStack as sans } from "../lib/viewFonts";
+import { VIEW_PAGE_BG, VIEW_TEXT } from "../lib/viewColors";
+import { uiMonoFontStack as mono, uiSansFontStack as sans } from "../lib/viewFonts";
 
-// macOS-style UI: shortcut keycaps and labels use the system font, not monospace.
-const mono = sans;
+// The Action Log follows the Font preference; paths and codes are monospaced.
 import { ToolbarIcon } from "./ToolbarIcon";
 
 type LayoutMode = "wide" | "narrow" | "compact";
@@ -199,7 +199,7 @@ export function ActionLogView({
               style={{
                 margin: 0,
                 color: palette.accentText,
-                fontFamily: mono,
+                fontFamily: sans,
                 fontSize: "10px",
                 fontWeight: 600,
                 letterSpacing: "0.1em",
@@ -384,7 +384,7 @@ export function ActionLogView({
                 borderBottom: `1px solid ${palette.line}`,
                 background: palette.headerBg,
                 color: palette.textMuted,
-                fontFamily: mono,
+                fontFamily: sans,
                 fontSize: "10px",
                 fontWeight: 600,
                 letterSpacing: "0.08em",
@@ -470,7 +470,7 @@ export function ActionLogView({
                               style={{
                                 color: palette.textSecondary,
                                 fontSize: "11px",
-                                fontFamily: mono,
+                                fontFamily: sans,
                               }}
                             >
                               {formatRelativeTime(entry.occurredAt)}
@@ -500,7 +500,7 @@ export function ActionLogView({
                               <DetailIcon
                                 color={expanded ? palette.accentText : palette.textMuted}
                               />
-                              <span style={{ fontSize: "11px", fontFamily: mono }}>
+                              <span style={{ fontSize: "11px", fontFamily: sans }}>
                                 {expanded ? "Hide" : "Details"}
                               </span>
                             </span>
@@ -512,7 +512,7 @@ export function ActionLogView({
                             style={{
                               color: palette.textSecondary,
                               fontSize: "11px",
-                              fontFamily: mono,
+                              fontFamily: sans,
                             }}
                           >
                             {formatRelativeTime(entry.occurredAt)}
@@ -554,7 +554,7 @@ export function ActionLogView({
                           color:
                             copyFeedback.status === "failed" ? palette.error : palette.textMuted,
                           fontSize: "11px",
-                          fontFamily: mono,
+                          fontFamily: sans,
                           letterSpacing: "0.02em",
                           whiteSpace: "nowrap",
                         }}
@@ -764,7 +764,7 @@ export function ActionLogView({
                                     color: palette.textSecondary,
                                     fontSize: "11px",
                                     fontWeight: 600,
-                                    fontFamily: mono,
+                                    fontFamily: sans,
                                     letterSpacing: "0.04em",
                                     textTransform: "uppercase",
                                   }}
@@ -806,9 +806,10 @@ function resolveActionLogTheme(theme: ThemeMode, accent: AccentMode) {
   const variant = getThemeVariant(theme);
   const accentTokens = generateAccentTokens(accent, theme);
   const isLight = resolveThemeCssBase(theme) === "light";
-  const textPrimary = variant?.text.primary ?? (isLight ? "#1d2432" : "#eef2f8");
-  const textSecondary = variant?.text.secondary ?? (isLight ? "#4b566a" : "#b7c1d3");
-  const textMuted = variant?.text.muted ?? (isLight ? "#7b8496" : "#8792a6");
+  // Text and the page use the root tokens so the theme and the text color overrides apply.
+  const textPrimary = VIEW_TEXT.primary;
+  const textSecondary = VIEW_TEXT.secondary;
+  const textMuted = VIEW_TEXT.muted;
   const baseCard = variant?.surfaces.card ?? (isLight ? "#fbfcff" : "#1a1f27");
   const border =
     variant?.surfaces.cardBorder ?? (isLight ? "rgba(17, 24, 39, 0.08)" : "rgba(255,255,255,0.08)");
@@ -817,7 +818,7 @@ function resolveActionLogTheme(theme: ThemeMode, accent: AccentMode) {
   const error = isLight ? "#bf3f4f" : "#ff8e9d";
 
   return {
-    pageBg: variant?.surfaces.page ?? (isLight ? "#eef2f7" : "#12161d"),
+    pageBg: VIEW_PAGE_BG,
     tableBg: baseCard,
     summaryBg: withAlpha(baseCard, isLight ? 0.92 : 1),
     headerBg: isLight ? "rgba(255,255,255,0.54)" : "rgba(255,255,255,0.02)",
@@ -1192,7 +1193,7 @@ function StatusBadge({
         background,
         border: `1px solid ${border}`,
         color,
-        fontFamily: mono,
+        fontFamily: sans,
         fontSize: "11px",
         textTransform: "uppercase",
         letterSpacing: "0.06em",
@@ -1448,7 +1449,7 @@ function fieldLabelStyle(palette: ReturnType<typeof resolveActionLogTheme>): CSS
     fontSize: "10px",
     color: palette.textMuted,
     display: "block",
-    fontFamily: mono,
+    fontFamily: sans,
     textTransform: "uppercase",
     letterSpacing: "0.08em",
   };
@@ -1471,7 +1472,7 @@ function noticeStyle(
 
 function sectionTitleStyle(palette: ReturnType<typeof resolveActionLogTheme>): CSSProperties {
   return {
-    fontFamily: mono,
+    fontFamily: sans,
     fontSize: "10px",
     letterSpacing: "0.08em",
     textTransform: "uppercase",
@@ -1481,7 +1482,7 @@ function sectionTitleStyle(palette: ReturnType<typeof resolveActionLogTheme>): C
 
 function eyebrowStyle(palette: ReturnType<typeof resolveActionLogTheme>): CSSProperties {
   return {
-    fontFamily: mono,
+    fontFamily: sans,
     fontSize: "9px",
     letterSpacing: "0.08em",
     textTransform: "uppercase",

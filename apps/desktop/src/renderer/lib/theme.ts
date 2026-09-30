@@ -51,7 +51,7 @@ const THEME_DEFAULT_TEXT_COLORS: Record<
   "catppuccin-mocha": {
     primary: "#cdd6f4",
     secondary: "#bac2de",
-    muted: "#6c7086",
+    muted: "#a6adc8",
   },
 };
 
@@ -126,13 +126,61 @@ export function applyAppearance({
   if (accentToolbarButtons) {
     setProperties(root, toolbarAccentVariables);
   }
-  setOptionalColor(root, ["--text-primary"], textPrimaryOverride);
-  setOptionalColor(root, ["--text-secondary"], textSecondaryOverride);
-  setOptionalColor(root, TEXT_MUTED_OVERRIDE_KEYS, textMutedOverride);
+  setOptionalColor(root, TEXT_OVERRIDE_TARGETS.primary, textPrimaryOverride);
+  setOptionalColor(root, TEXT_OVERRIDE_TARGETS.secondary, textSecondaryOverride);
+  setOptionalColor(root, TEXT_OVERRIDE_TARGETS.muted, textMutedOverride);
 }
 
-const TEXT_MUTED_OVERRIDE_KEYS = ["--text-tertiary", "--text-dim", "--fg-muted", "--fg-dim"];
-const TEXT_OVERRIDE_KEYS = ["--text-primary", "--text-secondary", ...TEXT_MUTED_OVERRIDE_KEYS];
+// Each text color override also writes the tokens that surfaces derive from that text color
+// (menus, search, the Info panel, the toolbar and the search bar), so an override reaches
+// every piece of text. Without an override, each theme keeps its own tuned values.
+const TEXT_OVERRIDE_TARGETS = {
+  primary: [
+    "--text-primary",
+    "--fg-bright",
+    "--get-info-hero-name",
+    "--context-menu-text",
+    "--context-menu-hover-text",
+  ],
+  secondary: [
+    "--text-secondary",
+    "--fg",
+    "--toolbar-sort-text",
+    "--get-info-action-text",
+    "--get-info-meta-value",
+    "--get-info-path-text",
+    "--get-info-perms-text",
+    "--search-text",
+    "--search-pill-hover-fg",
+    "--srbar-count-number",
+    "--srbar-action-text",
+    "--srbar-action-text-hover",
+    "--srbar-apply-text",
+    "--srbar-filter-text",
+    "--srbar-select-text",
+  ],
+  muted: [
+    "--text-tertiary",
+    "--text-dim",
+    "--fg-muted",
+    "--fg-dim",
+    "--toolbar-title-fg",
+    "--toolbar-sort-arrow",
+    "--get-info-header-text",
+    "--get-info-hero-type",
+    "--get-info-meta-label",
+    "--get-info-meta-value-muted",
+    "--context-menu-text-muted",
+    "--context-menu-shortcut",
+    "--context-menu-submenu-arrow",
+    "--search-shortcut-fg",
+    "--search-pill-fg",
+    "--search-meta-fg",
+    "--srbar-status-label",
+    "--srbar-count",
+  ],
+} as const;
+const TEXT_OVERRIDE_KEYS = Object.values(TEXT_OVERRIDE_TARGETS).flat();
 
 function setProperties(root: HTMLElement, variables: Record<string, string>): void {
   for (const [propertyName, value] of Object.entries(variables)) {
@@ -140,7 +188,11 @@ function setProperties(root: HTMLElement, variables: Record<string, string>): vo
   }
 }
 
-function setOptionalColor(root: HTMLElement, propertyNames: string[], value: string | null): void {
+function setOptionalColor(
+  root: HTMLElement,
+  propertyNames: readonly string[],
+  value: string | null,
+): void {
   if (!value) {
     return;
   }

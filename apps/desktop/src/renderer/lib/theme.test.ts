@@ -50,13 +50,12 @@ describe("theme helpers", () => {
     expect(document.documentElement.style.getPropertyValue("--tb-primary-bg")).toBe(
       "rgba(218, 165, 32, 0.12)",
     );
-    expect(document.documentElement.style.getPropertyValue("--toolbar-nav-icon-active")).toBe(
-      "#daa520",
-    );
+    // Icons at rest stay neutral; only active states take the toolbar accent.
+    expect(document.documentElement.style.getPropertyValue("--toolbar-nav-icon-active")).toBe("");
     expect(document.documentElement.style.getPropertyValue("--toolbar-toggle-active-bg")).toBe(
       "rgba(218, 165, 32, 0.16)",
     );
-    expect(document.documentElement.style.getPropertyValue("--sidebar-rail-icon")).toBe("#daa520");
+    expect(document.documentElement.style.getPropertyValue("--sidebar-rail-icon")).toBe("");
     expect(document.documentElement.style.getPropertyValue("--sidebar-rail-active-bg")).toBe(
       "rgba(218, 165, 32, 0.16)",
     );
@@ -155,6 +154,41 @@ describe("theme helpers", () => {
     expect(style.getPropertyValue("--toolbar-toggle-active-bg")).not.toBe("");
     expect(style.getPropertyValue("--toolbar-toggle-active-bg")).not.toContain("218, 165, 32");
     expect(style.getPropertyValue("--toolbar-nav-icon-active")).not.toBe("");
+  });
+
+  it("carries text color overrides into menus, search, the Info panel and the toolbar", () => {
+    const base = {
+      theme: "light" as const,
+      iconTheme: "classic" as const,
+      accent: "#007aff",
+      accentToolbarButtons: false,
+      toolbarAccent: "#007aff",
+      accentFavoriteItems: false,
+      accentFavoriteText: false,
+      favoriteAccent: "#007aff",
+      uiFontFamily: "system" as const,
+      textPrimaryOverride: "#111111" as string | null,
+      textSecondaryOverride: "#222222" as string | null,
+      textMutedOverride: "#333333" as string | null,
+    };
+    const style = document.documentElement.style;
+    applyAppearance(base);
+    expect(style.getPropertyValue("--context-menu-text")).toBe("#111111");
+    expect(style.getPropertyValue("--search-text")).toBe("#222222");
+    expect(style.getPropertyValue("--get-info-meta-value")).toBe("#222222");
+    expect(style.getPropertyValue("--context-menu-shortcut")).toBe("#333333");
+    expect(style.getPropertyValue("--search-meta-fg")).toBe("#333333");
+
+    // Cleared overrides hand these back to the stylesheet's theme palette.
+    applyAppearance({
+      ...base,
+      textPrimaryOverride: null,
+      textSecondaryOverride: null,
+      textMutedOverride: null,
+    });
+    expect(style.getPropertyValue("--context-menu-text")).toBe("");
+    expect(style.getPropertyValue("--search-text")).toBe("");
+    expect(style.getPropertyValue("--context-menu-shortcut")).toBe("");
   });
 
   it("starts from the same fonts the default Font preference applies", () => {

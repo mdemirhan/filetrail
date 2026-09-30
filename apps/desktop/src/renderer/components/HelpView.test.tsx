@@ -62,40 +62,17 @@ describe("HelpView", () => {
     expect(screen.queryByText("Keyboard shortcuts and navigation guide")).not.toBeInTheDocument();
   });
 
-  it.each([
-    ["light", "#edeef4"],
-    ["dark", "#181b22"],
-    ["tomorrow-night", "#151617"],
-    ["catppuccin-mocha", "#0e0e18"],
-    ["graphite", "#161614"],
-    ["sand", "#ece7dc"],
-  ] satisfies Array<[ThemeMode, string]>)(
-    "uses the attached design palette for the %s theme",
-    (theme, background) => {
+  it.each(["light", "catppuccin-mocha", "sand"] satisfies ThemeMode[])(
+    "takes the page and text colors from the app theme tokens (%s)",
+    (theme) => {
       renderHelpView({ theme });
 
-      expect(screen.getByText("Help & Reference").closest(".help-view")).toHaveStyle({
-        background,
-      });
+      // The tokens carry the theme and any text color override, like the rest of the app.
+      const view = screen.getByText("Help & Reference").closest(".help-view");
+      expect(view).toHaveStyle({ background: "var(--bg-base)" });
+      expect(screen.getByText("Help & Reference")).toHaveStyle({ color: "var(--text-primary)" });
     },
   );
-
-  it("falls back to the document theme when no theme prop is provided", () => {
-    document.documentElement.dataset.theme = "dark";
-    document.documentElement.dataset.themeVariant = "onyx";
-
-    render(
-      <HelpView
-        shortcutItems={defaultShortcutItems}
-        referenceItems={defaultReferenceItems}
-        layoutMode="wide"
-      />,
-    );
-
-    expect(screen.getByText("Help & Reference").closest(".help-view")).toHaveStyle({
-      background: "#101218",
-    });
-  });
 
   it("shows keyboard shortcuts first and switches to explorer reference on tab click", async () => {
     const user = userEvent.setup();

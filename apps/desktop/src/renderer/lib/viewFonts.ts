@@ -1,3 +1,4 @@
-export const uiMonoFontStack = "'SF Mono', 'JetBrains Mono', 'Fira Code', monospace";
-export const uiSansFontStack =
-  "-apple-system, BlinkMacSystemFont, 'Helvetica Neue', system-ui, sans-serif";
+// Settings, Help and the Action Log style text inline; these follow the Font preference
+// (applied to the root by `applyAppearance`). Monospace is only for paths, colors and codes.
+export const uiSansFontStack = "var(--font-sans)";
+export const uiMonoFontStack = "var(--font-mono)";

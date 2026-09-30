@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { readFileSync, readdirSync } from "node:fs";
+import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -150,5 +150,23 @@ describe("theme styles", () => {
       .map((match) => match[1] ?? "")
       .filter((name) => !known.has(name));
     expect([...new Set(undefinedReads)]).toEqual([]);
+  });
+
+  it("takes every font from the Font preference (icon artwork aside)", () => {
+    // The stylesheet only uses the font tokens that `applyAppearance` sets.
+    for (const { selector, value } of declarations.filter((d) => d.property === "font-family")) {
+      expect(`${selector}: ${value}`).toMatch(/: (var\(--font-(sans|mono)\)|inherit)$/u);
+    }
+    // Components that style inline go through `viewFonts` instead of naming fonts.
+    const componentsDir = resolve(import.meta.dirname, "./components");
+    for (const file of readdirSync(componentsDir).filter((name) => name.endsWith(".tsx"))) {
+      if (file.endsWith(".test.tsx")) {
+        continue;
+      }
+      const source = readFileSync(join(componentsDir, file), "utf8");
+      for (const match of source.matchAll(/fontFamily[=:]\s*([^,}\n]+)/gu)) {
+        expect(`${file}: ${match[1]?.trim()}`).toMatch(/: (sans|mono|monoText \? mono : sans)$/u);
+      }
+    }
   });
 });

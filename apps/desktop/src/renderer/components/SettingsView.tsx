@@ -49,11 +49,11 @@ import { generateAccentTokens } from "../lib/accent";
 import { getFavoriteLabel, getTrashPath } from "../lib/favorites";
 import { FavoriteItemIcon } from "../lib/fileIcons";
 import { type ThemeCssBase, getThemeVariant, resolveThemeCssBase } from "../lib/themeVariants";
-import { uiSansFontStack as sans } from "../lib/viewFonts";
+import { VIEW_TEXT } from "../lib/viewColors";
+import { uiMonoFontStack as mono, uiSansFontStack as sans } from "../lib/viewFonts";
 import { ToolbarIcon } from "./ToolbarIcon";
 
-// Settings uses the system font throughout, including values that used to be monospaced.
-const mono = sans;
+// Settings follows the Font preference; paths and color values are monospaced.
 
 export type SettingsTab = "general" | "appearance" | "explorer" | "search" | "files" | "toolbars";
 
@@ -336,25 +336,32 @@ function resolveSettingsTheme(theme: ThemeMode, accent: AccentMode) {
   const base = resolveSettingsBaseTheme(theme);
   const accentTokens = generateAccentTokens(accent, theme);
 
+  // Text uses the root tokens so the text color overrides apply here too.
   return {
     ...base,
     header: {
-      ...base.header,
+      title: VIEW_TEXT.primary,
+      desc: VIEW_TEXT.muted,
       subtitle: accentTokens.solid,
     },
     section: {
-      ...base.section,
+      title: VIEW_TEXT.primary,
       iconBg: accentTokens.heroIconBg,
     },
     label: {
-      ...base.label,
+      primary: VIEW_TEXT.secondary,
+      secondary: VIEW_TEXT.muted,
       category: accentTokens.pathCrumbHover,
     },
     input: {
       ...base.input,
+      text: VIEW_TEXT.primary,
       borderFocus: accentTokens.focusBorder,
       caret: accentTokens.solid,
     },
+    select: { ...base.select, text: VIEW_TEXT.primary },
+    color: { ...base.color, text: VIEW_TEXT.muted },
+    footer: VIEW_TEXT.muted,
     toggle: {
       ...base.toggle,
       trackOn: accentTokens.solid,
@@ -365,6 +372,7 @@ function resolveSettingsTheme(theme: ThemeMode, accent: AccentMode) {
     },
     reset: {
       ...base.reset,
+      text: VIEW_TEXT.muted,
       textHover: accentTokens.pathCrumbHover,
       bgHover: accentTokens.softBg,
       borderHover: accentTokens.border,
@@ -1231,7 +1239,7 @@ function AccentSelector({
           <span
             style={{
               fontSize: "11px",
-              fontFamily: mono,
+              fontFamily: sans,
               fontWeight: 500,
               color: theme.label.secondary,
             }}
@@ -1280,7 +1288,7 @@ function AccentSelector({
         <span
           style={{
             fontSize: "11px",
-            fontFamily: mono,
+            fontFamily: sans,
             fontWeight: 500,
             color: theme.label.secondary,
           }}
@@ -1617,7 +1625,7 @@ function ActionButton({
         background: theme.input.bg,
         color: disabled ? theme.label.secondary : theme.label.primary,
         fontSize: "11px",
-        fontFamily: mono,
+        fontFamily: sans,
         fontWeight: 500,
         cursor: disabled ? "default" : "pointer",
         opacity: disabled ? 0.6 : 1,
@@ -1852,7 +1860,7 @@ function ToolbarSurfaceEditor({
           <div
             style={{
               fontSize: "11px",
-              fontFamily: mono,
+              fontFamily: sans,
               color: theme.label.secondary,
             }}
           >
@@ -2039,7 +2047,7 @@ function ToolbarSurfaceEditor({
               style={{
                 padding: "8px 10px",
                 fontSize: "11px",
-                fontFamily: mono,
+                fontFamily: sans,
                 color: theme.label.secondary,
                 whiteSpace: "nowrap",
               }}
@@ -2062,7 +2070,7 @@ function ToolbarSurfaceEditor({
               textAlign: "center",
               color: theme.label.secondary,
               fontSize: "12px",
-              fontFamily: mono,
+              fontFamily: sans,
               background: theme.input.bg,
               borderRadius: "10px",
               border: `1px solid ${theme.separator}`,
@@ -2305,7 +2313,7 @@ function ZoomLevelInput({
         border: `1px solid ${theme.input.border}`,
         color: theme.input.text,
         fontSize: "12px",
-        fontFamily: mono,
+        fontFamily: sans,
         fontWeight: 450,
         outline: "none",
         caretColor: theme.input.caret,
@@ -2377,7 +2385,7 @@ function OpenItemLimitInput({
         border: `1px solid ${theme.input.border}`,
         color: theme.input.text,
         fontSize: "12px",
-        fontFamily: mono,
+        fontFamily: sans,
         fontWeight: 450,
         outline: "none",
         caretColor: theme.input.caret,
@@ -2897,7 +2905,7 @@ export function SettingsView({
                 className="settings-page-eyebrow"
                 style={{
                   fontSize: "10px",
-                  fontFamily: mono,
+                  fontFamily: sans,
                   fontWeight: 600,
                   color: palette.header.subtitle,
                   letterSpacing: "0.1em",
@@ -2935,7 +2943,7 @@ export function SettingsView({
                 onMouseLeave={() => setResetHover(false)}
                 style={{
                   fontSize: "11px",
-                  fontFamily: mono,
+                  fontFamily: sans,
                   fontWeight: 500,
                   color: resetHover ? palette.reset.textHover : palette.reset.text,
                   background: resetHover ? palette.reset.bgHover : palette.reset.bg,
@@ -3035,7 +3043,7 @@ export function SettingsView({
 
             <SettingRow
               title="Accent toolbar buttons"
-              desc="Use the selected accent for primary toolbar actions."
+              desc="Highlight buttons that are on, such as the current view or an open panel, in this color. Icons stay neutral."
               theme={palette}
               right={
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -3240,7 +3248,7 @@ export function SettingsView({
               <span
                 style={{
                   fontSize: "10px",
-                  fontFamily: mono,
+                  fontFamily: sans,
                   fontWeight: 600,
                   color: palette.label.category,
                   letterSpacing: "0.06em",
@@ -3937,7 +3945,7 @@ export function SettingsView({
           <span
             style={{
               fontSize: "10.5px",
-              fontFamily: mono,
+              fontFamily: sans,
               color: palette.footer,
               fontWeight: 400,
             }}

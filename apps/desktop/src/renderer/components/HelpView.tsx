@@ -9,10 +9,10 @@ import {
 } from "../../shared/appPreferences";
 import { generateAccentTokens } from "../lib/accent";
 import { type ThemeCssBase, getThemeVariant, resolveThemeCssBase } from "../lib/themeVariants";
-import { uiSansFontStack as sans } from "../lib/viewFonts";
+import { VIEW_PAGE_BG, VIEW_TEXT } from "../lib/viewColors";
+import { uiMonoFontStack as mono, uiSansFontStack as sans } from "../lib/viewFonts";
 
-// macOS-style UI: shortcut keycaps and labels use the system font, not monospace.
-const mono = sans;
+// Help follows the Font preference, keycaps included.
 
 type ShortcutItem = {
   group: string;
@@ -140,13 +140,23 @@ function resolveHelpTheme(theme: ThemeMode | undefined, accent: AccentMode | und
   const base = resolveHelpBaseTheme(resolvedTheme);
   const accentTokens = generateAccentTokens(resolvedAccent, resolvedTheme);
 
+  // Text and the page use the root tokens so the theme and the text color overrides apply.
   return {
     ...base,
+    page: VIEW_PAGE_BG,
+    title: VIEW_TEXT.primary,
+    desc: VIEW_TEXT.muted,
+    sectionTitle: VIEW_TEXT.primary,
+    text: VIEW_TEXT.secondary,
+    textMuted: VIEW_TEXT.muted,
+    kbd: { ...base.kbd, text: VIEW_TEXT.secondary },
+    interaction: { label: VIEW_TEXT.primary, desc: VIEW_TEXT.muted },
     subtitle: accentTokens.solid,
     sectionIcon: accentTokens.heroIconBg,
     category: accentTokens.pathCrumbHover,
     callout: {
-      ...base.callout,
+      text: VIEW_TEXT.secondary,
+      bold: VIEW_TEXT.primary,
       bg: accentTokens.calloutBg,
       border: accentTokens.calloutBorder,
       icon: accentTokens.solid,
@@ -249,7 +259,7 @@ export function HelpView({
             className="help-header-eyebrow"
             style={{
               fontSize: "10px",
-              fontFamily: mono,
+              fontFamily: sans,
               fontWeight: 600,
               color: resolvedTheme.subtitle,
               letterSpacing: "0.1em",
@@ -478,7 +488,7 @@ function Kbd({
         padding: "0 6px",
         borderRadius: "4px",
         fontSize: "10.5px",
-        fontFamily: mono,
+        fontFamily: sans,
         fontWeight: 600,
         color: theme.kbd.text,
         background: theme.kbd.bg,
@@ -623,7 +633,7 @@ function CategoryLabel({
     <div
       style={{
         fontSize: "10px",
-        fontFamily: mono,
+        fontFamily: sans,
         fontWeight: 700,
         color: theme.category,
         letterSpacing: "0.07em",
