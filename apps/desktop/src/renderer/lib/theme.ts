@@ -3,7 +3,6 @@ import type {
   IconThemeMode,
   ThemeMode,
   UiFontFamily,
-  UiFontWeight,
 } from "../../shared/appPreferences";
 import {
   accentTokensToCssVariables,
@@ -20,13 +19,15 @@ import {
 
 // CSS files own the full palettes; this module applies the user-selected theme identity,
 // font stack, and optional text color overrides at runtime.
-const UI_FONT_STACKS: Record<UiFontFamily, string> = {
+export const UI_FONT_STACKS: Record<UiFontFamily, string> = {
   system: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif',
   "dm-sans": '"DM Sans", "Inter", -apple-system, BlinkMacSystemFont, sans-serif',
   lexend: '"Lexend", "DM Sans", "Inter", -apple-system, BlinkMacSystemFont, sans-serif',
   "fira-code": '"Fira Code", "SFMono-Regular", ui-monospace, monospace',
   "jetbrains-mono": '"JetBrains Mono", "SFMono-Regular", ui-monospace, monospace',
 };
+
+export const UI_MONO_FONT_STACK = '"SF Mono", "SFMono-Regular", ui-monospace, Menlo, monospace';
 
 const THEME_DEFAULT_TEXT_COLORS: Record<
   ReturnType<typeof resolveThemeCssBase>,
@@ -74,8 +75,6 @@ export function applyAppearance({
   accentFavoriteText,
   favoriteAccent,
   uiFontFamily,
-  uiFontSize,
-  uiFontWeight,
   textPrimaryOverride,
   textSecondaryOverride,
   textMutedOverride,
@@ -89,8 +88,6 @@ export function applyAppearance({
   accentFavoriteText: boolean;
   favoriteAccent: AccentMode;
   uiFontFamily: UiFontFamily;
-  uiFontSize: number;
-  uiFontWeight: UiFontWeight;
   textPrimaryOverride: string | null;
   textSecondaryOverride: string | null;
   textMutedOverride: string | null;
@@ -110,14 +107,7 @@ export function applyAppearance({
   root.dataset.accentFavoriteItems = accentFavoriteItems ? "true" : "false";
   root.dataset.accentFavoriteText = accentFavoriteItems && accentFavoriteText ? "true" : "false";
   root.style.setProperty("--font-sans", UI_FONT_STACKS[uiFontFamily]);
-  root.style.setProperty(
-    "--font-mono",
-    '"SF Mono", "SFMono-Regular", ui-monospace, Menlo, monospace',
-  );
-  root.style.setProperty("--ui-font-size", `${uiFontSize}px`);
-  root.style.setProperty("--ui-font-weight", String(uiFontWeight));
-  root.style.setProperty("--mono-font-size", "12px");
-  root.style.setProperty("--mono-font-weight", "400");
+  root.style.setProperty("--font-mono", UI_MONO_FONT_STACK);
   // Clear everything a previous call may have set inline, then layer: theme variant palette,
   // accents, the toolbar accent (when on), and finally the text color overrides (when set).
   // Removing only up front means a setting that is off leaves the variant's value in place.

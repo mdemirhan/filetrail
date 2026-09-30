@@ -24,7 +24,6 @@ import type {
   ThemePreference,
   ToolbarItemId,
   UiFontFamily,
-  UiFontWeight,
 } from "../../shared/appPreferences";
 import {
   DARK_THEME_OPTIONS,
@@ -2513,8 +2512,6 @@ export function SettingsView({
   favoriteAccent,
   zoomPercent,
   uiFontFamily,
-  uiFontSize,
-  uiFontWeight,
   effectiveTextPrimaryColor,
   effectiveTextSecondaryColor,
   effectiveTextMutedColor,
@@ -2549,8 +2546,6 @@ export function SettingsView({
   themeOptions,
   accentOptions,
   uiFontOptions,
-  uiFontSizeOptions,
-  uiFontWeightOptions,
   typeaheadDebounceOptions,
   notificationDurationSecondsOptions,
   onThemeChange,
@@ -2563,8 +2558,6 @@ export function SettingsView({
   onFavoriteAccentChange,
   onZoomPercentChange,
   onUiFontFamilyChange,
-  onUiFontSizeChange,
-  onUiFontWeightChange,
   onTextPrimaryColorChange,
   onTextSecondaryColorChange,
   onTextMutedColorChange,
@@ -2626,8 +2619,6 @@ export function SettingsView({
   favoriteAccent: AccentMode;
   zoomPercent: number;
   uiFontFamily: UiFontFamily;
-  uiFontSize: number;
-  uiFontWeight: UiFontWeight;
   effectiveTextPrimaryColor: string;
   effectiveTextSecondaryColor: string;
   effectiveTextMutedColor: string;
@@ -2666,8 +2657,6 @@ export function SettingsView({
     primary: string;
   }>;
   uiFontOptions: ReadonlyArray<{ value: UiFontFamily; label: string }>;
-  uiFontSizeOptions: ReadonlyArray<number>;
-  uiFontWeightOptions: ReadonlyArray<number>;
   typeaheadDebounceOptions: ReadonlyArray<number>;
   notificationDurationSecondsOptions: ReadonlyArray<number>;
   onThemeChange: (value: ThemePreference) => void;
@@ -2680,8 +2669,6 @@ export function SettingsView({
   onFavoriteAccentChange: (value: AccentMode) => void;
   onZoomPercentChange: (value: number) => void;
   onUiFontFamilyChange: (value: UiFontFamily) => void;
-  onUiFontSizeChange: (value: number) => void;
-  onUiFontWeightChange: (value: UiFontWeight) => void;
   onTextPrimaryColorChange: (value: string | null) => void;
   onTextSecondaryColorChange: (value: string | null) => void;
   onTextMutedColorChange: (value: string | null) => void;
@@ -3113,7 +3100,7 @@ export function SettingsView({
 
             <SettingRow
               title="Zoom level"
-              desc={`Electron window zoom. Accepts values between ${ZOOM_PERCENT_MIN}% and ${ZOOM_PERCENT_MAX}%.`}
+              desc={`Makes everything larger or smaller, text included (⌘+, ⌘−, ⌘0). ${ZOOM_PERCENT_MIN}% to ${ZOOM_PERCENT_MAX}%.`}
               theme={palette}
               right={
                 <ZoomLevelInput
@@ -3137,56 +3124,6 @@ export function SettingsView({
                   onChange={(value) => onUiFontFamilyChange(value as UiFontFamily)}
                   formatOption={(value) =>
                     uiFontOptions.find((option) => option.value === value)?.label ?? String(value)
-                  }
-                />
-              }
-            />
-            <SettingRow
-              title="Text size"
-              desc={`${uiFontSize} pt`}
-              theme={palette}
-              right={
-                <label
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    color: palette.label.secondary,
-                    fontFamily: sans,
-                  }}
-                >
-                  <span aria-hidden="true" style={{ fontSize: "11px" }}>
-                    A
-                  </span>
-                  <input
-                    type="range"
-                    aria-label="Size"
-                    min={uiFontSizeOptions[0] ?? 12}
-                    max={uiFontSizeOptions.at(-1) ?? 15}
-                    step={1}
-                    value={uiFontSize}
-                    onChange={(event) => onUiFontSizeChange(Number(event.currentTarget.value))}
-                    style={{ width: "150px", accentColor: palette.accent.solid }}
-                  />
-                  <span aria-hidden="true" style={{ fontSize: "16px" }}>
-                    A
-                  </span>
-                </label>
-              }
-            />
-            <SettingRow
-              title="Font weight"
-              theme={palette}
-              right={
-                <SelectControl
-                  value={uiFontWeight}
-                  options={uiFontWeightOptions}
-                  theme={palette}
-                  width="120px"
-                  ariaLabel="Weight"
-                  onChange={(value) => onUiFontWeightChange(Number(value) as UiFontWeight)}
-                  formatOption={(value) =>
-                    value === 400 ? "Regular" : value === 500 ? "Medium" : "Semibold"
                   }
                 />
               }

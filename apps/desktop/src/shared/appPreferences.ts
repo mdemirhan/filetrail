@@ -27,7 +27,6 @@ export type AccentMode = string;
 export type IconThemeMode = "native" | "classic" | "colorblock" | "monoline" | "vivid";
 export type ExplorerViewMode = "list" | "details";
 export type UiFontFamily = "system" | "dm-sans" | "lexend" | "fira-code" | "jetbrains-mono";
-export type UiFontWeight = 400 | 500 | 600;
 export type SearchPatternModePreference = "glob" | "regex";
 export type SearchMatchScopePreference = "name" | "path";
 export type SearchResultsSortByPreference = "name" | "path";
@@ -171,8 +170,6 @@ export const UI_FONT_OPTIONS = [
   { value: "fira-code", label: "Fira Code" },
   { value: "jetbrains-mono", label: "JetBrains Mono" },
 ] as const;
-export const UI_FONT_SIZE_OPTIONS = [12, 13, 14, 15] as const;
-export const UI_FONT_WEIGHT_OPTIONS = [400, 500, 600] as const;
 export const ZOOM_PERCENT_MIN = 75;
 export const ZOOM_PERCENT_MAX = 150;
 export const TYPEAHEAD_DEBOUNCE_OPTIONS = [250, 500, 750, 1000, 1500] as const;
@@ -271,8 +268,6 @@ export type AppPreferences = {
   favoriteAccent: AccentMode;
   zoomPercent: number;
   uiFontFamily: UiFontFamily;
-  uiFontSize: number;
-  uiFontWeight: UiFontWeight;
   textPrimaryOverride: string | null;
   textSecondaryOverride: string | null;
   textMutedOverride: string | null;
@@ -339,8 +334,6 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   favoriteAccent: "#58b9e8",
   zoomPercent: 100,
   uiFontFamily: "system",
-  uiFontSize: 13,
-  uiFontWeight: 400,
   textPrimaryOverride: null,
   textSecondaryOverride: null,
   textMutedOverride: null,
@@ -401,18 +394,6 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
 // drift from repeated floating-point resize calculations.
 export function clampPaneWidth(value: number, min: number, max: number): number {
   return Math.round(Math.max(min, Math.min(max, value)));
-}
-
-export function clampFontSize(value: number, min: number, max: number): number {
-  return Math.round(Math.max(min, Math.min(max, value)));
-}
-
-export function clampFontWeight(
-  value: number,
-  options: readonly number[],
-  fallback = options[0] ?? 400,
-): number {
-  return options.includes(value) ? value : fallback;
 }
 
 export function clampZoomPercent(value: number): number {

@@ -59,8 +59,6 @@ describe("appStateStore", () => {
       favoriteAccent: "#58b9e8",
       zoomPercent: 100,
       uiFontFamily: "system",
-      uiFontSize: 13,
-      uiFontWeight: 400,
       textPrimaryOverride: null,
       textSecondaryOverride: null,
       textMutedOverride: null,
@@ -179,8 +177,6 @@ describe("appStateStore", () => {
       favoriteAccent: "#e8806a",
       zoomPercent: 115,
       uiFontFamily: "lexend",
-      uiFontSize: 14,
-      uiFontWeight: 500,
       textPrimaryOverride: "#ffffff",
       textSecondaryOverride: "#cccccc",
       textMutedOverride: "#999999",
@@ -285,8 +281,6 @@ describe("appStateStore", () => {
       favoriteAccent: "#e8806a",
       zoomPercent: 115,
       uiFontFamily: "lexend",
-      uiFontSize: 14,
-      uiFontWeight: 500,
       textPrimaryOverride: "#ffffff",
       textSecondaryOverride: "#cccccc",
       textMutedOverride: "#999999",
@@ -479,8 +473,8 @@ describe("appStateStore", () => {
         utility: ["copyPath", "theme", "sort"],
       } as never,
       uiFontFamily: "bad-font" as never,
-      uiFontSize: 999,
-      uiFontWeight: 123 as never,
+      // Settings that no longer exist are dropped when loading.
+      ...({ uiFontSize: 15, uiFontWeight: 600 } as object),
       textPrimaryOverride: "oops" as never,
       typeaheadDebounceMs: 9999,
       terminalApp: {
@@ -541,8 +535,8 @@ describe("appStateStore", () => {
     expect(reloaded.getPreferences().inspectorWidth).toBe(480);
     expect(reloaded.getPreferences().accent).toBe("#d4845a");
     expect(reloaded.getPreferences().uiFontFamily).toBe("system");
-    expect(reloaded.getPreferences().uiFontSize).toBe(15);
-    expect(reloaded.getPreferences().uiFontWeight).toBe(400);
+    expect(reloaded.getPreferences()).not.toHaveProperty("uiFontSize");
+    expect(reloaded.getPreferences()).not.toHaveProperty("uiFontWeight");
     expect(reloaded.getPreferences().textPrimaryOverride).toBeNull();
     expect(reloaded.getPreferences().typeaheadDebounceMs).toBe(1500);
     expect(reloaded.getPreferences().terminalApp).toBeNull();

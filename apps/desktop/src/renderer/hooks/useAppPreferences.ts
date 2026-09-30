@@ -20,7 +20,6 @@ import {
   type ThemeMode,
   type ThemePreference,
   type UiFontFamily,
-  type UiFontWeight,
   resolveEffectiveTheme,
 } from "../../shared/appPreferences";
 import { applyAppearance } from "../lib/theme";
@@ -61,10 +60,6 @@ export function useAppPreferences() {
   const [zoomPercent, setZoomPercent] = useState(DEFAULT_APP_PREFERENCES.zoomPercent);
   const [uiFontFamily, setUiFontFamily] = useState<UiFontFamily>(
     DEFAULT_APP_PREFERENCES.uiFontFamily,
-  );
-  const [uiFontSize, setUiFontSize] = useState(DEFAULT_APP_PREFERENCES.uiFontSize);
-  const [uiFontWeight, setUiFontWeight] = useState<UiFontWeight>(
-    DEFAULT_APP_PREFERENCES.uiFontWeight,
   );
   const [textPrimaryOverride, setTextPrimaryOverride] = useState(
     DEFAULT_APP_PREFERENCES.textPrimaryOverride,
@@ -166,8 +161,6 @@ export function useAppPreferences() {
       accentFavoriteText,
       favoriteAccent,
       uiFontFamily,
-      uiFontSize,
-      uiFontWeight,
       textPrimaryOverride,
       textSecondaryOverride,
       textMutedOverride,
@@ -185,8 +178,6 @@ export function useAppPreferences() {
     textSecondaryOverride,
     effectiveTheme,
     uiFontFamily,
-    uiFontSize,
-    uiFontWeight,
   ]);
 
   function resetAppearanceSettings() {
@@ -194,8 +185,6 @@ export function useAppPreferences() {
     setAccent(DEFAULT_APP_PREFERENCES.accent);
     setZoomPercent(DEFAULT_APP_PREFERENCES.zoomPercent);
     setUiFontFamily(DEFAULT_APP_PREFERENCES.uiFontFamily);
-    setUiFontSize(DEFAULT_APP_PREFERENCES.uiFontSize);
-    setUiFontWeight(DEFAULT_APP_PREFERENCES.uiFontWeight);
     setTextPrimaryOverride(null);
     setTextSecondaryOverride(null);
     setTextMutedOverride(null);
@@ -234,10 +223,6 @@ export function useAppPreferences() {
     setZoomPercent,
     uiFontFamily,
     setUiFontFamily,
-    uiFontSize,
-    setUiFontSize,
-    uiFontWeight,
-    setUiFontWeight,
     textPrimaryOverride,
     setTextPrimaryOverride,
     textSecondaryOverride,
@@ -365,8 +350,6 @@ export function applyPreferencesPatch(store: AppPreferencesStore, patch: Incomin
   set("favoriteAccent", store.setFavoriteAccent);
   set("zoomPercent", store.setZoomPercent);
   set("uiFontFamily", store.setUiFontFamily);
-  set("uiFontSize", store.setUiFontSize);
-  set("uiFontWeight", store.setUiFontWeight);
   set("textPrimaryOverride", store.setTextPrimaryOverride);
   set("textSecondaryOverride", store.setTextSecondaryOverride);
   set("textMutedOverride", store.setTextMutedOverride);

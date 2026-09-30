@@ -49,12 +49,6 @@ export function toPreferencePatch(
   if (value.uiFontFamily !== undefined) {
     patch.uiFontFamily = value.uiFontFamily;
   }
-  if (value.uiFontSize !== undefined) {
-    patch.uiFontSize = value.uiFontSize;
-  }
-  if (value.uiFontWeight !== undefined) {
-    patch.uiFontWeight = value.uiFontWeight;
-  }
   if (value.textPrimaryOverride !== undefined) {
     patch.textPrimaryOverride = value.textPrimaryOverride;
   }

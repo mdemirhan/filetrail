@@ -137,10 +137,6 @@ export function App() {
     setZoomPercent,
     uiFontFamily,
     setUiFontFamily,
-    uiFontSize,
-    setUiFontSize,
-    uiFontWeight,
-    setUiFontWeight,
     textPrimaryOverride,
     setTextPrimaryOverride,
     textSecondaryOverride,
@@ -894,8 +890,6 @@ export function App() {
     favoriteAccent,
     zoomPercent,
     uiFontFamily,
-    uiFontSize,
-    uiFontWeight,
     textPrimaryOverride,
     textSecondaryOverride,
     textMutedOverride,
@@ -1065,8 +1059,6 @@ export function App() {
         setFavoriteAccent(preferences.favoriteAccent);
         setZoomPercent(preferences.zoomPercent);
         setUiFontFamily(preferences.uiFontFamily);
-        setUiFontSize(preferences.uiFontSize);
-        setUiFontWeight(preferences.uiFontWeight);
         setTextPrimaryOverride(preferences.textPrimaryOverride);
         setTextSecondaryOverride(preferences.textSecondaryOverride);
         setTextMutedOverride(preferences.textMutedOverride);

@@ -2,8 +2,6 @@ import {
   DEFAULT_APP_PREFERENCES,
   DETAIL_COLUMN_WIDTH_LIMITS,
   clampDetailColumnWidth,
-  clampFontSize,
-  clampFontWeight,
   clampNotificationDurationSeconds,
   clampOpenItemLimit,
   clampPaneWidth,
@@ -20,7 +18,6 @@ describe("appPreferences helpers", () => {
   it("clamps numeric preferences and rounds to whole pixels", () => {
     expect(clampPaneWidth(279.6, 200, 320)).toBe(280);
     expect(clampPaneWidth(99.2, 200, 320)).toBe(200);
-    expect(clampFontSize(14.6, 12, 15)).toBe(15);
     expect(clampTypeaheadDebounceMs(1600.4, 250, 1500)).toBe(1500);
     expect(clampNotificationDurationSeconds(1.2)).toBe(2);
     expect(clampNotificationDurationSeconds(10.8)).toBe(10);
@@ -28,12 +25,6 @@ describe("appPreferences helpers", () => {
     expect(clampOpenItemLimit(51.2)).toBe(50);
     expect(clampZoomPercent(106.8)).toBe(107);
     expect(clampZoomPercent(500)).toBe(150);
-  });
-
-  it("keeps font weight within the allowed set", () => {
-    expect(clampFontWeight(500, [400, 500, 600])).toBe(500);
-    expect(clampFontWeight(700, [400, 500, 600])).toBe(400);
-    expect(clampFontWeight(700, [400, 500, 600], 600)).toBe(600);
   });
 
   it("clamps detail column widths using per-column limits", () => {
@@ -68,8 +59,6 @@ describe("appPreferences helpers", () => {
       favoriteAccent: "#58b9e8",
       zoomPercent: 100,
       uiFontFamily: "system",
-      uiFontSize: 13,
-      uiFontWeight: 400,
       viewMode: "list",
       sortBy: "name",
       sortDirection: "asc",

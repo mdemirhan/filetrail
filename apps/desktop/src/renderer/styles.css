@@ -157,12 +157,12 @@
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
-  --font-sans: "Lexend", "DM Sans", "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: "Fira Code", "SFMono-Regular", ui-monospace, monospace;
+  /* Fallbacks until the Font preference is applied; they match its "System" default. */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --font-mono: "SF Mono", "SFMono-Regular", ui-monospace, Menlo, monospace;
+  /* Base text sizes. Text is scaled with the zoom level, not by changing these. */
   --ui-font-size: 13px;
-  --ui-font-weight: 500;
   --mono-font-size: 12px;
-  --mono-font-weight: 500;
   --ui-font-size-xs: calc(var(--ui-font-size) - 3px);
   --ui-font-size-sm: calc(var(--ui-font-size) - 1px);
   --ui-font-size-md: var(--ui-font-size);
@@ -893,7 +893,7 @@ body,
 body {
   font-family: var(--font-sans);
   font-size: var(--ui-font-size);
-  font-weight: var(--ui-font-weight);
+  font-weight: 400;
   background: var(--bg-base);
   color: var(--text-primary);
   overflow: visible;
@@ -2475,7 +2475,7 @@ body.platform-macos .window-toolbar-brand {
   color: var(--accent-text);
   font-family: var(--font-sans);
   font-size: 12px;
-  font-weight: var(--mono-font-weight);
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2661,7 +2661,7 @@ body.resizing-panels-vertical * {
   background: transparent;
   color: var(--text-tertiary);
   font-size: var(--ui-font-size-md);
-  font-weight: var(--ui-font-weight);
+  font-weight: 400;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2773,7 +2773,7 @@ body.resizing-panels-vertical * {
   font-size: var(--mono-font-size);
   color: var(--text-tertiary);
   font-family: var(--font-mono);
-  font-weight: var(--mono-font-weight);
+  font-weight: 400;
 }
 
 .tree-scroll,
@@ -3290,7 +3290,7 @@ body.resizing-panels-vertical * {
   font-family: var(--font-sans);
   font-size: var(--ui-font-size-md);
   color: var(--text-primary);
-  font-weight: var(--ui-font-weight);
+  font-weight: 400;
 }
 
 .flow-list.compact .flow-item-label {
@@ -4528,7 +4528,7 @@ body.resizing-panels-vertical * {
 .file-icon-document-text {
   fill: currentColor;
   font-size: 5.2px;
-  font-weight: var(--mono-font-weight);
+  font-weight: 400;
   font-family: var(--font-mono);
 }
 
@@ -4547,7 +4547,7 @@ body.resizing-panels-vertical * {
 .file-icon.document.colorblock .file-icon-document-text {
   fill: white;
   font-size: 5.2px;
-  font-weight: var(--mono-font-weight);
+  font-weight: 400;
   font-family: var(--font-mono);
 }
 
@@ -4567,7 +4567,7 @@ body.resizing-panels-vertical * {
 
 .file-icon.document.monoline .file-icon-document-text {
   font-size: 5.2px;
-  font-weight: var(--mono-font-weight);
+  font-weight: 400;
   font-family: var(--font-mono);
 }
 
@@ -4581,7 +4581,7 @@ body.resizing-panels-vertical * {
 .file-icon.document.vivid .file-icon-document-text {
   fill: white;
   font-size: 5.2px;
-  font-weight: var(--mono-font-weight);
+  font-weight: 400;
   font-family: var(--font-mono);
 }
 
@@ -4928,7 +4928,7 @@ body.resizing-panels-vertical * {
 
 .status-path {
   font-family: var(--font-mono);
-  font-weight: var(--mono-font-weight);
+  font-weight: 400;
   font-size: 10px;
   color: var(--text-tertiary);
 }
@@ -5006,7 +5006,7 @@ body.resizing-panels-vertical * {
   font-size: 12px;
   color: var(--text-secondary);
   font-family: var(--font-sans);
-  font-weight: var(--mono-font-weight);
+  font-weight: 400;
   white-space: nowrap;
   text-overflow: ellipsis;
   font-variant-numeric: tabular-nums;
@@ -5587,7 +5587,7 @@ body.platform-macos .action-log-view {
 .action-log-page-eyebrow {
   font-family: var(--font-sans);
   font-size: 10px;
-  font-weight: var(--mono-font-weight);
+  font-weight: 400;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--help-accent);
@@ -5613,7 +5613,7 @@ body.platform-macos .action-log-view {
 .help-header-badge {
   font-family: var(--font-sans);
   font-size: 11px;
-  font-weight: var(--mono-font-weight);
+  font-weight: 400;
   color: var(--help-muted);
   border: 1px solid var(--help-border);
   border-radius: var(--radius-sm);
@@ -5971,7 +5971,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
 .settings-color-value {
   font-family: var(--font-mono);
   font-size: 11px;
-  font-weight: var(--mono-font-weight);
+  font-weight: 400;
   color: var(--text-secondary);
 }
 
@@ -6164,7 +6164,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
 .help-key {
   font-family: var(--font-sans);
   font-size: 11px;
-  font-weight: var(--mono-font-weight);
+  font-weight: 400;
   color: var(--text-secondary);
   background: var(--help-key-bg);
   border: 1px solid var(--help-key-border);
@@ -6197,7 +6197,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
 .help-syntax-tag {
   font-family: var(--font-mono);
   font-size: 9.5px;
-  font-weight: var(--mono-font-weight);
+  font-weight: 400;
   border-radius: 4px;
   padding: 1px 6px;
   color: var(--help-accent);
@@ -6218,7 +6218,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
   flex-shrink: 0;
   font-family: var(--font-mono);
   font-size: 12px;
-  font-weight: var(--mono-font-weight);
+  font-weight: 400;
   color: var(--text-secondary);
 }
 
@@ -6932,7 +6932,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
 
 .search-result-name {
   font-size: 13px;
-  font-weight: var(--ui-font-weight);
+  font-weight: 400;
 }
 
 .search-result-path {
@@ -6989,6 +6989,11 @@ body.platform-macos .settings-view[data-layout="compact"] {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-secondary);
+}
+
+/* The title is a <strong>, whose default "bolder" would turn 600 into 900. */
+.get-info-header > strong {
+  font-weight: inherit;
 }
 
 .get-info-content {
@@ -7552,7 +7557,7 @@ body.settings-window-body {
   gap: 7px;
   padding: 0;
   font-size: 13px;
-  font-weight: var(--ui-font-weight);
+  font-weight: 400;
 }
 
 .sidebar-main-native .tree-expand {

@@ -20,8 +20,6 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       favoriteAccent="#e8806a"
       zoomPercent={100}
       uiFontFamily="lexend"
-      uiFontSize={13}
-      uiFontWeight={500}
       effectiveTextPrimaryColor="#ffffff"
       effectiveTextSecondaryColor="#cccccc"
       effectiveTextMutedColor="#999999"
@@ -90,8 +88,6 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
         { value: "#2cb5a0", label: "Teal", primary: "#2cb5a0" },
       ]}
       uiFontOptions={[{ value: "lexend", label: "Lexend" }]}
-      uiFontSizeOptions={[13]}
-      uiFontWeightOptions={[500]}
       typeaheadDebounceOptions={[750]}
       notificationDurationSecondsOptions={[4, 6]}
       onThemeChange={() => undefined}
@@ -104,8 +100,6 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       onFavoriteAccentChange={() => undefined}
       onZoomPercentChange={() => undefined}
       onUiFontFamilyChange={() => undefined}
-      onUiFontSizeChange={() => undefined}
-      onUiFontWeightChange={() => undefined}
       onTextPrimaryColorChange={() => undefined}
       onTextSecondaryColorChange={() => undefined}
       onTextMutedColorChange={() => undefined}

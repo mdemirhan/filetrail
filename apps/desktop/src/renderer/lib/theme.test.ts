@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 
 import { applyAppearance } from "./theme";
-import { getThemeAppearanceDefaults } from "./theme";
+import { UI_FONT_STACKS, UI_MONO_FONT_STACK, getThemeAppearanceDefaults } from "./theme";
 
 describe("theme helpers", () => {
   it("returns variant-specific text defaults when a custom theme overrides the base palette", () => {
@@ -30,8 +30,6 @@ describe("theme helpers", () => {
       accentFavoriteText: true,
       favoriteAccent: "#e8806a",
       uiFontFamily: "lexend",
-      uiFontSize: 14,
-      uiFontWeight: 500,
       textPrimaryOverride: "#ffffff",
       textSecondaryOverride: "#cccccc",
       textMutedOverride: "#999999",
@@ -47,10 +45,6 @@ describe("theme helpers", () => {
     expect(document.documentElement.dataset.accentFavoriteText).toBe("true");
     expect(document.documentElement.style.getPropertyValue("--font-sans")).toContain("Lexend");
     expect(document.documentElement.style.getPropertyValue("--font-mono")).toContain("SF Mono");
-    expect(document.documentElement.style.getPropertyValue("--ui-font-size")).toBe("14px");
-    expect(document.documentElement.style.getPropertyValue("--ui-font-weight")).toBe("500");
-    expect(document.documentElement.style.getPropertyValue("--mono-font-size")).toBe("12px");
-    expect(document.documentElement.style.getPropertyValue("--mono-font-weight")).toBe("400");
     expect(document.documentElement.style.getPropertyValue("--ft-accent-solid")).toBe("#2cb5a0");
     expect(document.documentElement.style.getPropertyValue("--accent-blue")).toBe("#2cb5a0");
     expect(document.documentElement.style.getPropertyValue("--tb-primary-bg")).toBe(
@@ -86,8 +80,6 @@ describe("theme helpers", () => {
       accentFavoriteText: true,
       favoriteAccent: "#daa520",
       uiFontFamily: "lexend",
-      uiFontSize: 13,
-      uiFontWeight: 500,
       textPrimaryOverride: null,
       textSecondaryOverride: null,
       textMutedOverride: null,
@@ -115,8 +107,6 @@ describe("theme helpers", () => {
       accentFavoriteText: false,
       favoriteAccent: "#daa520",
       uiFontFamily: "lexend",
-      uiFontSize: 13,
-      uiFontWeight: 500,
       textPrimaryOverride: null,
       textSecondaryOverride: null,
       textMutedOverride: null,
@@ -139,8 +129,6 @@ describe("theme helpers", () => {
       accentFavoriteText: false,
       favoriteAccent: "#daa520",
       uiFontFamily: "system" as const,
-      uiFontSize: 13,
-      uiFontWeight: 400 as const,
       textPrimaryOverride: "#ff0000" as string | null,
       textSecondaryOverride: null,
       textMutedOverride: "#00ff00" as string | null,
@@ -167,6 +155,14 @@ describe("theme helpers", () => {
     expect(style.getPropertyValue("--toolbar-toggle-active-bg")).not.toBe("");
     expect(style.getPropertyValue("--toolbar-toggle-active-bg")).not.toContain("218, 165, 32");
     expect(style.getPropertyValue("--toolbar-nav-icon-active")).not.toBe("");
+  });
+
+  it("starts from the same fonts the default Font preference applies", () => {
+    const styles = readFileSync("apps/desktop/src/renderer/styles.css", "utf8");
+    expect(styles).toContain(`  --font-sans: ${UI_FONT_STACKS.system};`);
+    expect(styles).toContain(`  --font-mono: ${UI_MONO_FONT_STACK};`);
+    // Text size and weight are no longer settings: nothing may still read them.
+    expect(styles).not.toMatch(/--ui-font-weight|--mono-font-weight/u);
   });
 
   it("ships a stylesheet rule that targets the favorite svg for accent overrides", () => {
@@ -197,8 +193,6 @@ describe("theme helpers", () => {
           accentFavoriteText: false,
           favoriteAccent: "#daa520",
           uiFontFamily: "lexend",
-          uiFontSize: 13,
-          uiFontWeight: 500,
           textPrimaryOverride: null,
           textSecondaryOverride: null,
           textMutedOverride: null,

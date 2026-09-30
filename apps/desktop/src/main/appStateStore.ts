@@ -19,10 +19,7 @@ import {
   TYPEAHEAD_DEBOUNCE_MIN_MS,
   type ThemePreference,
   UI_FONT_OPTIONS,
-  UI_FONT_WEIGHT_OPTIONS,
   clampDetailColumnWidth,
-  clampFontSize,
-  clampFontWeight,
   clampNotificationDurationSeconds,
   clampOpenItemLimit,
   clampPaneWidth,
@@ -302,16 +299,6 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
       UI_FONT_OPTIONS.some((option) => option.value === record.uiFontFamily)
         ? (record.uiFontFamily as AppPreferences["uiFontFamily"])
         : currentDefaults.uiFontFamily,
-    uiFontSize: clampFontSize(
-      typeof record.uiFontSize === "number" ? record.uiFontSize : currentDefaults.uiFontSize,
-      12,
-      15,
-    ),
-    uiFontWeight: clampFontWeight(
-      typeof record.uiFontWeight === "number" ? record.uiFontWeight : currentDefaults.uiFontWeight,
-      UI_FONT_WEIGHT_OPTIONS,
-      currentDefaults.uiFontWeight,
-    ) as AppPreferences["uiFontWeight"],
     textPrimaryOverride: normalizeColorOverride(record.textPrimaryOverride),
     textSecondaryOverride: normalizeColorOverride(record.textSecondaryOverride),
     textMutedOverride: normalizeColorOverride(record.textMutedOverride),

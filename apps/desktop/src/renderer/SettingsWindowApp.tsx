@@ -11,8 +11,6 @@ import {
   THEME_OPTIONS,
   TYPEAHEAD_DEBOUNCE_OPTIONS,
   UI_FONT_OPTIONS,
-  UI_FONT_SIZE_OPTIONS,
-  UI_FONT_WEIGHT_OPTIONS,
 } from "../shared/appPreferences";
 import { DEFAULT_LEFT_TOOLBAR_ITEMS, DEFAULT_TOP_TOOLBAR_ITEMS } from "../shared/toolbarItems";
 import { type SearchDefaults, type SettingsTab, SettingsView } from "./components/SettingsView";
@@ -99,8 +97,6 @@ export function SettingsWindowApp() {
     favoriteAccent: preferences.favoriteAccent,
     zoomPercent: preferences.zoomPercent,
     uiFontFamily: preferences.uiFontFamily,
-    uiFontSize: preferences.uiFontSize,
-    uiFontWeight: preferences.uiFontWeight,
     textPrimaryOverride,
     textSecondaryOverride,
     textMutedOverride,
@@ -325,8 +321,6 @@ export function SettingsWindowApp() {
             favoriteAccent={preferences.favoriteAccent}
             zoomPercent={preferences.zoomPercent}
             uiFontFamily={preferences.uiFontFamily}
-            uiFontSize={preferences.uiFontSize}
-            uiFontWeight={preferences.uiFontWeight}
             effectiveTextPrimaryColor={textPrimaryOverride ?? defaults.primary}
             effectiveTextSecondaryColor={textSecondaryOverride ?? defaults.secondary}
             effectiveTextMutedColor={textMutedOverride ?? defaults.muted}
@@ -361,8 +355,6 @@ export function SettingsWindowApp() {
             themeOptions={[AUTO_THEME_OPTION, ...THEME_OPTIONS]}
             accentOptions={[...MACOS_ACCENT_OPTIONS]}
             uiFontOptions={[...UI_FONT_OPTIONS]}
-            uiFontSizeOptions={[...UI_FONT_SIZE_OPTIONS]}
-            uiFontWeightOptions={[...UI_FONT_WEIGHT_OPTIONS]}
             typeaheadDebounceOptions={[...TYPEAHEAD_DEBOUNCE_OPTIONS]}
             notificationDurationSecondsOptions={[...NOTIFICATION_DURATION_SECONDS_OPTIONS]}
             onThemeChange={preferences.setTheme}
@@ -375,8 +367,6 @@ export function SettingsWindowApp() {
             onFavoriteAccentChange={preferences.setFavoriteAccent}
             onZoomPercentChange={preferences.setZoomPercent}
             onUiFontFamilyChange={preferences.setUiFontFamily}
-            onUiFontSizeChange={preferences.setUiFontSize}
-            onUiFontWeightChange={preferences.setUiFontWeight}
             onTextPrimaryColorChange={preferences.setTextPrimaryOverride}
             onTextSecondaryColorChange={preferences.setTextSecondaryOverride}
             onTextMutedColorChange={preferences.setTextMutedOverride}
