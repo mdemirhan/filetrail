@@ -1118,6 +1118,9 @@ function DetailsView({
   getFolderSizeLabel?: ((path: string) => string | null) | undefined;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  // The rows scroll below the column header, so what fits on screen is the scroll area's
+  // own height, not the whole pane's.
+  const { height: rowsViewportHeight } = useElementSize(containerRef);
   const headerRef = useRef<HTMLDivElement | null>(null);
   const resizeCleanupRef = useRef<(() => void) | null>(null);
   // Scroll position lives in refs so scrolling never re-renders by itself; a rAF
@@ -1143,7 +1146,7 @@ function DetailsView({
   const range = getVirtualRange({
     itemCount: entries.length,
     itemSize: rowHeight,
-    viewportSize: viewportHeight,
+    viewportSize: rowsViewportHeight > 0 ? rowsViewportHeight : viewportHeight,
     scrollOffset: scrollRowIndex * rowHeight,
     overscan: 10,
   });
@@ -1176,8 +1179,8 @@ function DetailsView({
     const container = containerRef.current;
     const effectiveViewportWidth =
       viewportWidth > 0 ? viewportWidth : (container?.clientWidth ?? 0);
-    const effectiveViewportHeight =
-      viewportHeight > 0 ? viewportHeight : (container?.clientHeight ?? 0);
+    // clientHeight: the visible rows only (no column header, no horizontal scrollbar).
+    const effectiveViewportHeight = container?.clientHeight ?? 0;
     if (
       !container ||
       !selectionLeadPath ||
@@ -1202,7 +1205,7 @@ function DetailsView({
     if (itemBottom > viewBottom) {
       container.scrollTop = itemBottom - effectiveViewportHeight;
     }
-  }, [entries, rowHeight, selectionLeadPath, viewportHeight, viewportWidth]);
+  }, [entries, rowHeight, rowsViewportHeight, selectionLeadPath, viewportWidth]);
 
   // Resizing uses global pointer listeners so the drag continues even if the pointer
   // leaves the resize handle while the user is dragging quickly.

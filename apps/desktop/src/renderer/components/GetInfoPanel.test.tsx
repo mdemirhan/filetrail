@@ -32,7 +32,8 @@ const bundleItem = {
 };
 
 describe("InfoPanel", () => {
-  it("shows loading and empty states", () => {
+  it("shows nothing while the first item loads, a spinner only if it takes a while", () => {
+    vi.useFakeTimers();
     const { rerender } = render(
       <InfoPanel
         loading
@@ -44,7 +45,13 @@ describe("InfoPanel", () => {
         onCopyPath={() => true}
       />,
     );
-    expect(screen.getByText("Loading Info Panel…")).toBeInTheDocument();
+    expect(screen.queryByText(/Loading/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Select a file or folder to show its info.")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Loading info")).not.toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(screen.getByLabelText("Loading info")).toBeInTheDocument();
 
     rerender(
       <InfoPanel
@@ -58,6 +65,40 @@ describe("InfoPanel", () => {
       />,
     );
     expect(screen.getByText("Select a file or folder to show its info.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Loading info")).not.toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it("shows a preview in place while the rest of the details load", () => {
+    vi.useFakeTimers();
+    const preview = {
+      ...baseItem,
+      createdAt: null,
+      permissionMode: null,
+    };
+    render(
+      <InfoPanel
+        loading
+        pending
+        item={preview}
+        onClose={() => undefined}
+        onNavigateToPath={() => undefined}
+        onOpen={() => undefined}
+        onOpenInTerminal={() => undefined}
+        onCopyPath={() => true}
+      />,
+    );
+    expect(screen.getByText("README.md", { selector: ".get-info-name" })).toBeInTheDocument();
+    expect(screen.getByText("Created").nextElementSibling).toHaveTextContent("—");
+    expect(screen.getByText("Permissions").nextElementSibling).toHaveTextContent("—");
+    expect(screen.queryByText("Unavailable")).not.toBeInTheDocument();
+    expect(screen.queryByText("Not available")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Loading info")).not.toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(screen.getByLabelText("Loading info")).toBeInTheDocument();
+    vi.useRealTimers();
   });
 
   it("renders metadata and action handlers for files", async () => {

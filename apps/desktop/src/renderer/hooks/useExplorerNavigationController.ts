@@ -3,9 +3,11 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useRef,
+  useState,
 } from "react";
 
-import type { IpcRequest } from "@filetrail/contracts";
+import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 
 import { SEARCH_RESULT_ROW_HEIGHT } from "../components/SearchResultsPane";
 import type { TreeNodeState } from "../components/TreePane";
@@ -715,7 +717,9 @@ export function useExplorerNavigationController(args: {
           },
       entries,
     );
-    setGetInfoItem(null);
+    // Reloading a folder (a new sort, a change on disk, a paste) keeps what the info views
+    // show and asks for it again, instead of blanking them until the selection changes.
+    setInfoRefreshKey((key) => key + 1);
   }
 
   async function navigateTo(
@@ -1690,38 +1694,55 @@ export function useExplorerNavigationController(args: {
     metadataInflightRef,
   ]);
 
+  // Properties of recently shown items, so moving back to one shows it at once; it is still
+  // asked for again in the background in case it changed.
+  const infoPropertiesCacheRef = useRef(new Map<string, ItemProperties>());
+  const [infoRefreshKey, setInfoRefreshKey] = useState(0);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: infoRefreshKey asks again after the folder reloads.
   useEffect(() => {
     if ((!infoPanelOpen && !infoRowOpen) || currentPath.length === 0) {
       return;
     }
     const targetPath = infoTargetPathOverride ?? contentSelection.leadPath ?? currentPath;
     const requestId = ++getInfoRequestRef.current;
-    setGetInfoLoading(true);
-    void client
-      .invoke("item:getProperties", { path: targetPath })
-      .then((response) => {
-        if (getInfoRequestRef.current !== requestId) {
-          return;
-        }
-        setGetInfoItem(response.item);
-      })
-      .catch((error) => {
-        if (getInfoRequestRef.current !== requestId) {
-          return;
-        }
-        setGetInfoItem(null);
-        logger.error("Info Panel load failed", error);
-      })
-      .finally(() => {
-        if (getInfoRequestRef.current === requestId) {
-          setGetInfoLoading(false);
-        }
-      });
+    const cached = infoPropertiesCacheRef.current.get(targetPath);
+    if (cached) {
+      setGetInfoItem(cached);
+    }
+    setGetInfoLoading(!cached);
+    // A short pause, so holding an arrow key doesn't ask for every item passed on the way.
+    const timer = window.setTimeout(() => {
+      void client
+        .invoke("item:getProperties", { path: targetPath })
+        .then((response) => {
+          rememberInfoProperties(infoPropertiesCacheRef.current, response.item);
+          if (getInfoRequestRef.current !== requestId) {
+            return;
+          }
+          setGetInfoItem(response.item);
+        })
+        .catch((error) => {
+          infoPropertiesCacheRef.current.delete(targetPath);
+          if (getInfoRequestRef.current !== requestId) {
+            return;
+          }
+          setGetInfoItem(null);
+          logger.error("Info Panel load failed", error);
+        })
+        .finally(() => {
+          if (getInfoRequestRef.current === requestId) {
+            setGetInfoLoading(false);
+          }
+        });
+    }, INFO_FETCH_DELAY_MS);
+    return () => window.clearTimeout(timer);
   }, [
     client,
     contentSelection.leadPath,
     currentPath,
     getInfoRequestRef,
+    infoRefreshKey,
     infoTargetPathOverride,
     infoPanelOpen,
     infoRowOpen,
@@ -1760,4 +1781,20 @@ export function useExplorerNavigationController(args: {
     submitLocationPath,
     handlePaneResizeKey,
   };
+}
+
+type ItemProperties = IpcResponse<"item:getProperties">["item"];
+
+const INFO_FETCH_DELAY_MS = 80;
+const INFO_PROPERTIES_CACHE_LIMIT = 200;
+
+function rememberInfoProperties(cache: Map<string, ItemProperties>, item: ItemProperties): void {
+  cache.delete(item.path);
+  cache.set(item.path, item);
+  for (const path of cache.keys()) {
+    if (cache.size <= INFO_PROPERTIES_CACHE_LIMIT) {
+      break;
+    }
+    cache.delete(path);
+  }
 }

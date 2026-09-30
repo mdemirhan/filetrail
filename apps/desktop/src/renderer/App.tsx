@@ -71,6 +71,7 @@ import { FileIcon } from "./lib/fileIcons";
 import { useFiletrailClient } from "./lib/filetrailClient";
 import { formatDateTime, formatPermissionMode, formatSize } from "./lib/formatting";
 import { REFERENCE_ITEMS, SHORTCUT_ITEMS } from "./lib/helpContent";
+import { resolveInfoItem } from "./lib/infoPreview";
 import { EXPLORER_LAYOUT } from "./lib/layoutTokens";
 import { createRendererLogger } from "./lib/logging";
 import { expandHomeShortcut } from "./lib/pathUtils";
@@ -450,6 +451,30 @@ export function App() {
       },
     });
   }, [currentEntries, sortBy, sortDirection, foldersFirst, getFolderSizeEntry, folderSizeVersion]);
+  // The info panel shows the selected item, or the folder on screen when nothing is
+  // selected, updating in place from what the list knows until its details arrive.
+  const infoPanelTargetPath = currentPath
+    ? (infoTargetPathOverride ?? contentSelection.leadPath ?? currentPath)
+    : null;
+  const infoPanelView = useMemo(
+    () =>
+      resolveInfoItem({
+        path: infoPanelTargetPath,
+        currentPath,
+        entries: isSearchMode ? searchResultEntries : browseEntries,
+        metadataByPath,
+        properties: getInfoItem,
+      }),
+    [
+      browseEntries,
+      currentPath,
+      getInfoItem,
+      infoPanelTargetPath,
+      isSearchMode,
+      metadataByPath,
+      searchResultEntries,
+    ],
+  );
   const activeContentEntries = useMemo(
     () => (isSearchMode ? searchResultEntries : browseEntries),
     [browseEntries, isSearchMode, searchResultEntries],
@@ -1354,8 +1379,9 @@ export function App() {
   // Derive folder size paths for the info panel and info row.
   // The info panel always shows the getInfoItem (which is the selected or inspected item).
   // The info row shows the selected entry, falling back to the current directory.
+  const infoPanelItem = infoPanelView?.item ?? null;
   const infoPanelFolderSizePath =
-    getInfoItem && isFolderSizeEligibleKind(getInfoItem.kind) ? getInfoItem.path : null;
+    infoPanelItem && isFolderSizeEligibleKind(infoPanelItem.kind) ? infoPanelItem.path : null;
   const infoRowActiveEntry =
     selectedEntry ?? (currentPath ? { path: currentPath, kind: "directory" as const } : null);
   const infoRowFolderSizePath =
@@ -1622,6 +1648,7 @@ export function App() {
                   open={infoRowOpen}
                   currentPath={currentPath}
                   selectedEntry={selectedEntry}
+                  metadata={selectedEntry ? (metadataByPath[selectedEntry.path] ?? null) : null}
                   item={getInfoItem}
                   folderSizeEntry={
                     infoRowFolderSizePath
@@ -1648,26 +1675,27 @@ export function App() {
             }}
             infoPanelProps={{
               loading: getInfoLoading,
-              item: getInfoItem,
+              item: infoPanelItem,
+              pending: infoPanelView?.pending ?? false,
               onClose: () => setInfoPanelOpen(false),
               onNavigateToPath: (path) => {
                 void navigateTo(path, path === currentPath ? "replace" : "push");
               },
               onOpen: () => {
-                if (getInfoItem) {
-                  void openPathExternally(getInfoItem.path);
+                if (infoPanelItem) {
+                  void openPathExternally(infoPanelItem.path);
                 }
               },
               onOpenInTerminal: () => {
-                if (getInfoItem) {
-                  void openPathInTerminal(getInfoItem.path);
+                if (infoPanelItem) {
+                  void openPathInTerminal(infoPanelItem.path);
                 }
               },
-              onCopyPath: () => (getInfoItem ? copyGetInfoPath(getInfoItem.path) : false),
+              onCopyPath: () => (infoPanelItem ? copyGetInfoPath(infoPanelItem.path) : false),
               openWithItems: contextMenuSubmenuItems,
               onOpenWith: (action) => {
-                if (getInfoItem) {
-                  void runContextSubmenuAction(action, [getInfoItem.path]);
+                if (infoPanelItem) {
+                  void runContextSubmenuAction(action, [infoPanelItem.path]);
                 }
               },
               copyPathDisabled: isWriteOperationLocked,

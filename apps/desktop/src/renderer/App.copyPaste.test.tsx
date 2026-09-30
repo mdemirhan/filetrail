@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type RefObject, useEffect, useState } from "react";
 
 import type {
@@ -493,7 +493,10 @@ vi.mock("./components/SearchResultsPane", () => ({
   ),
 }));
 vi.mock("./components/GetInfoPanel", () => ({
-  InfoPanel: () => null,
+  // Just what the panel is showing, for tests that check it.
+  InfoPanel: ({ item }: { item: { name: string } | null }) => (
+    <div data-testid="info-panel">{item ? item.name : "Select a file or folder"}</div>
+  ),
 }));
 vi.mock("./components/LocationSheet", () => ({
   LocationSheet: ({
@@ -711,6 +714,37 @@ describe("App copy/paste integration", () => {
     expect(within(initialToastViewport).getByText("Ready to paste")).toBeInTheDocument();
     expect(within(initialToastViewport).getByText("source.txt")).toBeInTheDocument();
     expect(document.activeElement).toBe(activeElementBeforeCopy);
+  });
+
+  it("keeps showing the folder's info in the Info panel after the folder reloads", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await screen.findByRole("button", { name: "source.txt" });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Toggle Info Panel" }));
+    });
+    await waitFor(() => expect(screen.getByTestId("info-panel")).toHaveTextContent("demo"));
+    const propertyRequests = () =>
+      harness.invocations.filter((call) => call.channel === "item:getProperties").length;
+    await waitFor(() => expect(propertyRequests()).toBeGreaterThan(0));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    });
+    const requestsBefore = propertyRequests();
+
+    await act(async () => {
+      harness.emitCommand({ type: "refreshOrApplySearchSort" });
+    });
+
+    // Asked again after the reload, rather than left blank until the selection changes.
+    await waitFor(() => expect(propertyRequests()).toBeGreaterThan(requestsBefore));
+    expect(screen.getByTestId("info-panel")).toHaveTextContent("demo");
   });
 
   it("clears the active content location when the tree selection is cleared", async () => {

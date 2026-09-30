@@ -20,6 +20,7 @@ type ItemProperties = IpcResponse<"item:getProperties">["item"];
 export function InfoPanel({
   loading,
   item,
+  pending = false,
   onClose,
   onNavigateToPath,
   onOpen,
@@ -35,6 +36,8 @@ export function InfoPanel({
 }: {
   loading: boolean;
   item: ItemProperties | null;
+  // `item` is a preview from the file list; the rest of its details are still loading.
+  pending?: boolean;
   onClose: () => void;
   onNavigateToPath: (path: string) => void;
   onOpen: () => void;
@@ -49,6 +52,7 @@ export function InfoPanel({
   onOpenWith?: ((action: ContextMenuSubmenuAction) => void) | undefined;
 }) {
   const [copied, setCopied] = useState(false);
+  const showSpinner = useDelayedFlag(pending || (loading && !item), SPINNER_DELAY_MS);
   const permissionParts = useMemo(() => splitPermissionMode(item?.permissionMode ?? null), [item]);
 
   useEffect(() => {
@@ -69,6 +73,11 @@ export function InfoPanel({
     <aside className="get-info-panel">
       <div className="get-info-header">
         <strong>Info</strong>
+        {showSpinner ? (
+          <output className="get-info-pending" aria-label="Loading info">
+            <span className="folder-size-spinner" />
+          </output>
+        ) : null}
         <button
           type="button"
           className="get-info-close"
@@ -78,12 +87,11 @@ export function InfoPanel({
           <InfoPanelGlyph name="close" />
         </button>
       </div>
-      {loading ? (
-        <div className="get-info-loading">Loading Info Panel…</div>
-      ) : item ? (
+      {item ? (
         <GetInfoPanelContent
           copied={copied}
           item={item}
+          pending={pending}
           permissionParts={permissionParts}
           copyPathDisabled={copyPathDisabled}
           onCopyPath={handleCopyPath}
@@ -97,7 +105,7 @@ export function InfoPanel({
           openWithItems={openWithItems}
           onOpenWith={onOpenWith}
         />
-      ) : (
+      ) : loading ? null : (
         <div className="get-info-empty">Select a file or folder to show its info.</div>
       )}
     </aside>
@@ -107,6 +115,7 @@ export function InfoPanel({
 function GetInfoPanelContent({
   copied,
   item,
+  pending,
   permissionParts,
   copyPathDisabled,
   onCopyPath,
@@ -122,6 +131,7 @@ function GetInfoPanelContent({
 }: {
   copied: boolean;
   item: ItemProperties;
+  pending: boolean;
   permissionParts: { symbolic: string; octal: string } | null;
   copyPathDisabled: boolean;
   onCopyPath: () => Promise<void>;
@@ -183,6 +193,9 @@ function GetInfoPanelContent({
   } else if (showFolderSizeForItem) {
     sizeValue = "-";
     sizeMuted = true;
+  } else if (pending && item.sizeBytes === null) {
+    sizeValue = PENDING_VALUE;
+    sizeMuted = true;
   } else {
     sizeValue = formatSize(item.sizeBytes, item.sizeStatus);
   }
@@ -201,12 +214,12 @@ function GetInfoPanelContent({
     },
     {
       label: "Created",
-      value: formatDateTime(item.createdAt),
+      value: pendingOr(item.createdAt, formatDateTime),
       muted: item.createdAt === null,
     },
     {
       label: "Modified",
-      value: formatDateTime(item.modifiedAt),
+      value: pendingOr(item.modifiedAt, formatDateTime),
       muted: item.modifiedAt === null,
     },
     {
@@ -218,6 +231,8 @@ function GetInfoPanelContent({
             {permissionParts.octal}
           </span>
         </span>
+      ) : pending ? (
+        PENDING_VALUE
       ) : (
         "Unavailable"
       ),
@@ -244,7 +259,15 @@ function GetInfoPanelContent({
     ? folderSizeEntry?.status === "ready"
       ? formatSize(folderSizeEntry.sizeBytes, "ready")
       : null
-    : formatSize(item.sizeBytes, item.sizeStatus);
+    : pending && item.sizeBytes === null
+      ? null
+      : formatSize(item.sizeBytes, item.sizeStatus);
+
+  // A value that hasn't arrived yet keeps its row, with a placeholder, so nothing moves
+  // when it does.
+  function pendingOr(value: string | null, format: (value: string | null) => string): string {
+    return value === null && pending ? PENDING_VALUE : format(value);
+  }
 
   return (
     <div className="get-info-content">
@@ -347,6 +370,24 @@ function GetInfoPanelContent({
       </section>
     </div>
   );
+}
+
+const PENDING_VALUE = "—";
+// Details usually arrive well within this; a spinner only shows when they don't.
+const SPINNER_DELAY_MS = 300;
+
+// True once `active` has stayed true for `delayMs`.
+function useDelayedFlag(active: boolean, delayMs: number): boolean {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    if (!active) {
+      setShown(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setShown(true), delayMs);
+    return () => window.clearTimeout(timer);
+  }, [active, delayMs]);
+  return shown;
 }
 
 function GetInfoActionButton({

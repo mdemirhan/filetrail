@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import type { FolderSizeEntry } from "../hooks/useFolderSizeCache";
 import { isFolderSizeEligibleKind } from "../lib/explorerAppUtils";
-import type { DirectoryEntry, ItemProperties } from "../lib/explorerTypes";
+import type { DirectoryEntry, DirectoryEntryMetadata, ItemProperties } from "../lib/explorerTypes";
 import { FileIcon } from "../lib/fileIcons";
 import {
   formatDateTime,
@@ -10,11 +10,13 @@ import {
   formatPermissionMode,
   formatSize,
 } from "../lib/formatting";
+import { fallbackKindLabel, folderEntryForPath } from "../lib/infoPreview";
 
 export function InfoRow({
   open,
   currentPath,
   selectedEntry,
+  metadata = null,
   item,
   folderSizeEntry,
   onCalculateFolderSize,
@@ -24,40 +26,27 @@ export function InfoRow({
   open: boolean;
   currentPath: string;
   selectedEntry: DirectoryEntry | null;
+  // What the file list already knows about the selected item: shown at once, so the bar
+  // updates in the same frame as the selection.
+  metadata?: DirectoryEntryMetadata | null | undefined;
   item: ItemProperties | null;
   folderSizeEntry?: FolderSizeEntry | undefined;
   onCalculateFolderSize?: (() => void) | undefined;
   onRecalculateFolderSize?: (() => void) | undefined;
   onCancelFolderSize?: (() => void) | undefined;
 }) {
-  const activeEntry =
-    selectedEntry ??
-    (currentPath
-      ? {
-          path: currentPath,
-          name: currentPath.split("/").filter(Boolean).at(-1) ?? "Macintosh HD",
-          extension: "",
-          kind: "directory" as const,
-          isHidden: false,
-          isSymlink: false,
-        }
-      : null);
+  const activeEntry = selectedEntry ?? (currentPath ? folderEntryForPath(currentPath) : null);
 
   if (!activeEntry) {
     return <div className={`info-row${open ? " open" : ""}`} />;
   }
 
+  // Listing metadata first (instant), then the item's own properties once they arrive.
   const activeItem = item?.path === activeEntry.path ? item : null;
+  const activeMetadata = metadata?.path === activeEntry.path ? metadata : null;
+  const known = activeMetadata ?? activeItem;
   const showFolderSizeForEntry = isFolderSizeEligibleKind(activeEntry.kind);
-  const kindLabel =
-    activeItem?.kindLabel ??
-    (activeEntry.kind === "directory"
-      ? "Folder"
-      : activeEntry.kind === "symlink_directory"
-        ? "Alias Folder"
-        : activeEntry.extension
-          ? `${activeEntry.extension.toUpperCase()} File`
-          : "File");
+  const kindLabel = known?.kindLabel ?? fallbackKindLabel(activeEntry);
   const showFolderSizeInteraction =
     showFolderSizeForEntry && folderSizeEntry && onCalculateFolderSize && onCancelFolderSize;
 
@@ -74,40 +63,68 @@ export function InfoRow({
   } else if (showFolderSizeForEntry) {
     sizeLabel = "—";
   } else {
-    sizeLabel = activeItem ? formatSize(activeItem.sizeBytes, activeItem.sizeStatus) : "—";
+    sizeLabel = known ? formatSize(known.sizeBytes, known.sizeStatus) : "—";
   }
-  const modifiedLabel = activeItem ? formatDateTime(activeItem.modifiedAt) : "—";
-  const permissionsLabel = activeItem ? formatPermissionMode(activeItem.permissionMode) : "—";
+  // The size column is narrow; the full folder size text stays available on hover.
+  const sizeTitle =
+    showFolderSizeForEntry && folderSizeEntry?.status === "ready"
+      ? formatFolderSizeText(folderSizeEntry)
+      : undefined;
+  const modifiedLabel = known ? formatDateTime(known.modifiedAt) : "—";
+  const permissionsLabel = known ? formatPermissionMode(known.permissionMode) : "—";
 
+  // Name on the first line, using the full width; the facts on the second, each in a
+  // fixed column so switching items only changes the text.
   return (
     <div className={`info-row${open ? " open" : ""}`}>
       <div className="detail-inner">
-        <div className="dt-hero">
-          <div>
-            <FileIcon entry={activeEntry} />
-          </div>
-          <div>
-            <div className="dt-name">{activeEntry.name}</div>
-            <div className="dt-type">{kindLabel}</div>
-          </div>
+        <div className="dt-icon">
+          <FileIcon entry={activeEntry} />
         </div>
-        <div className="dt-meta">
-          <div className="dt-pair">
-            <div className="dt-lbl">Size</div>
-            <div className="dt-val">{sizeLabel}</div>
+        <div className="dt-body">
+          <div className="dt-name" title={activeEntry.name}>
+            {activeEntry.name}
           </div>
-          <div className="dt-pair">
-            <div className="dt-lbl">Modified</div>
-            <div className="dt-val">{modifiedLabel}</div>
-          </div>
-          <div className="dt-pair">
-            <div className="dt-lbl">Permissions</div>
-            <div className="dt-val">{permissionsLabel}</div>
+          <div className="dt-meta">
+            <InfoRowFact label="Kind" title={kindLabel}>
+              {kindLabel}
+            </InfoRowFact>
+            <InfoRowFact label="Size" title={sizeTitle}>
+              {sizeLabel}
+            </InfoRowFact>
+            <InfoRowFact label="Modified" title={modifiedLabel}>
+              {modifiedLabel}
+            </InfoRowFact>
+            <InfoRowFact label="Permissions" title={permissionsLabel}>
+              {permissionsLabel}
+            </InfoRowFact>
           </div>
         </div>
       </div>
     </div>
   );
+}
+
+function InfoRowFact({
+  label,
+  title,
+  children,
+}: {
+  label: string;
+  title?: string | undefined;
+  children: ReactNode;
+}) {
+  return (
+    <div className="dt-pair" title={title}>
+      <span className="dt-lbl">{label}</span>
+      <span className="dt-val">{children}</span>
+    </div>
+  );
+}
+
+function formatFolderSizeText(entry: Extract<FolderSizeEntry, { status: "ready" }>): string {
+  const detail = formatFolderSizeDetail(entry.sizeBytes, entry.diskBytes, entry.fileCount);
+  return `${detail.size}${detail.disk ? ` (${detail.disk})` : ""} · ${detail.items}`;
 }
 
 function InfoRowFolderSize({

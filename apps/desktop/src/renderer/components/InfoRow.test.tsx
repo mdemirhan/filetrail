@@ -201,3 +201,43 @@ describe("InfoRow", () => {
     expect(onCalculate).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("InfoRow with list metadata", () => {
+  it("shows the selected file's details from the listing before its properties arrive", () => {
+    render(
+      <InfoRow
+        open
+        currentPath="/Users/demo"
+        selectedEntry={fileEntry}
+        metadata={{
+          path: fileEntry.path,
+          kindLabel: "Plain Text Document",
+          modifiedAt: "2026-03-02T10:30:00.000Z",
+          sizeBytes: 2048,
+          sizeStatus: "ready",
+          permissionMode: 0o644,
+        }}
+        // Still the previous item's properties.
+        item={baseItem}
+      />,
+    );
+
+    expect(screen.getByText("Plain Text Document")).toBeInTheDocument();
+    expect(screen.getByText("2.0 KB")).toBeInTheDocument();
+    expect(screen.getByText("rw-r--r-- (644)")).toBeInTheDocument();
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
+  });
+
+  it("keeps the full name available as a tooltip", () => {
+    const longName = `${"a very long file name ".repeat(8)}.txt`;
+    render(
+      <InfoRow
+        open
+        currentPath="/Users/demo"
+        selectedEntry={{ ...fileEntry, path: `/Users/demo/${longName}`, name: longName }}
+        item={null}
+      />,
+    );
+    expect(screen.getByTitle(longName)).toHaveClass("dt-name");
+  });
+});
