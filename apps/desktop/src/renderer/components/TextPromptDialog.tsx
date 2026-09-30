@@ -137,17 +137,15 @@ export function TextPromptDialog({
             }
             onSubmit(nextValue);
           }}
-          style={{ display: "grid", gap: "10px" }}
+          className="text-prompt-form"
         >
-          <label
-            htmlFor="text-prompt-dialog-input"
-            style={{ fontSize: "12px", color: "var(--text-secondary, #8a8e9c)" }}
-          >
+          <label htmlFor="text-prompt-dialog-input" className="text-prompt-label">
             {label}
           </label>
           <input
             ref={inputRef}
             id="text-prompt-dialog-input"
+            className="text-prompt-input"
             value={draftValue}
             placeholder={placeholder}
             onFocus={(event) => {
@@ -173,30 +171,8 @@ export function TextPromptDialog({
             onChange={(event) => setDraftValue(event.currentTarget.value)}
             spellCheck={false}
             autoComplete="off"
-            style={{
-              width: "100%",
-              height: "34px",
-              padding: "0 10px",
-              borderRadius: "8px",
-              border: "1px solid rgba(255,255,255,0.12)",
-              background: "rgba(255,255,255,0.04)",
-              color: "inherit",
-              fontSize: "13px",
-              outline: "none",
-              boxSizing: "border-box",
-            }}
           />
-          {error ? (
-            <div
-              style={{
-                fontSize: "12px",
-                color: "#ff8d8d",
-                lineHeight: "1.4",
-              }}
-            >
-              {error}
-            </div>
-          ) : null}
+          {error ? <div className="text-prompt-error">{error}</div> : null}
           <div className="action-notice-actions">
             <button type="button" className="tb-btn" onClick={onClose}>
               Cancel

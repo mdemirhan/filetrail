@@ -1,8 +1,9 @@
 import { existsSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { BrowserWindow, Menu, app, nativeImage, shell } from "electron";
+import { BrowserWindow, Menu, app, nativeImage, nativeTheme, shell } from "electron";
 
+import { type AppPreferences, isThemeInGroup } from "../shared/appPreferences";
 import { resolveActionLogFilePath } from "./actionLog";
 import { createAppLogger, isDebugLoggingEnabled, resolveAppLogFilePath } from "./appLog";
 import { createApplicationMenuTemplate } from "./appMenu";
@@ -76,6 +77,14 @@ if (hasSingleInstanceLock) {
         }
       }
       appStateStoreRef = appStateStore;
+      applyNativeAppearance(appStateStore.getPreferences().theme);
+      // "Auto" follows macOS: keep the window backgrounds in step when it switches.
+      nativeTheme.on("updated", () => {
+        const preferences = appStateStoreRef?.getPreferences();
+        if (preferences?.theme === "auto") {
+          applyNativeAppearance(preferences.theme);
+        }
+      });
       await bootstrapMainProcess(
         appStateStore,
         launchContext,
@@ -94,6 +103,9 @@ if (hasSingleInstanceLock) {
           const window = mainWindowRef ?? BrowserWindow.getAllWindows()[0] ?? null;
           if (window && !window.isDestroyed()) {
             applyApplicationMenu(window, preferences.actionLogEnabled);
+          }
+          if (change.patch.theme !== undefined) {
+            applyNativeAppearance(preferences.theme);
           }
         },
         { openSettingsWindow },
@@ -159,7 +171,7 @@ function createWindow(): BrowserWindow {
     minWidth: 1080,
     minHeight: 720,
     title: "File Trail",
-    backgroundColor: "#f4f5f8",
+    backgroundColor: windowBackgroundColor(appStateStore.getPreferences().theme),
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 14, y: 16 },
     webPreferences: {
@@ -280,7 +292,7 @@ function openSettingsWindow(): void {
     minWidth: 640,
     minHeight: 560,
     title: "Settings",
-    backgroundColor: "#f4f5f8",
+    backgroundColor: windowBackgroundColor(appStateStore.getPreferences().theme),
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 18 },
     fullscreenable: false,
@@ -331,6 +343,26 @@ function isAllowedExternalUrl(rawUrl: string): boolean {
   } catch {
     return false;
   }
+}
+
+// Native parts of the window (title bar, scroll bars, pickers, the empty window before the
+// page paints) follow the app's theme rather than the macOS appearance: an explicit
+// theme pins them to its light or dark side, "auto" follows the system as the page does.
+function applyNativeAppearance(theme: AppPreferences["theme"]): void {
+  nativeTheme.themeSource =
+    theme === "auto" ? "system" : isThemeInGroup(theme, "dark") ? "dark" : "light";
+  const color = windowBackgroundColor(theme);
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.setBackgroundColor(color);
+    }
+  }
+}
+
+// Shown only before the page paints (opening, resizing), so light or dark is enough.
+function windowBackgroundColor(theme: AppPreferences["theme"]): string {
+  const dark = theme === "auto" ? nativeTheme.shouldUseDarkColors : isThemeInGroup(theme, "dark");
+  return dark ? "#161618" : "#f4f5f8";
 }
 
 function applyWindowZoom(mainWindow: BrowserWindow, zoomPercent: number): void {
