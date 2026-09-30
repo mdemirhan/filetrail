@@ -4,7 +4,13 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { render, screen } from "@testing-library/react";
 
-import { FavoriteItemIcon, FileIcon, FolderIcon, TreeFolderIcon } from "./fileIcons";
+import {
+  FavoriteItemIcon,
+  FileIcon,
+  FolderIcon,
+  IconThemeProvider,
+  TreeFolderIcon,
+} from "./fileIcons";
 
 function expectDefined<T>(value: T | null | undefined): NonNullable<T> {
   expect(value).toBeDefined();
@@ -188,6 +194,26 @@ describe("fileIcons", () => {
         expect(container.querySelector(".alias-badge")).toBeNull();
       },
     );
+  });
+
+  it("follows the icon theme from the provider on the same render it changes", () => {
+    // The root attribute is written in an effect after rendering, so it still holds the old
+    // theme while icons re-render; the provider value must win.
+    document.documentElement.dataset.iconTheme = "classic";
+    const entry = createEntry({ extension: "ts", name: "app.ts" });
+    const { container, rerender } = render(
+      <IconThemeProvider value="classic">
+        <FileIcon entry={entry} />
+      </IconThemeProvider>,
+    );
+    expect(container.querySelector(".file-icon.document.vivid")).toBeNull();
+    rerender(
+      <IconThemeProvider value="vivid">
+        <FileIcon entry={entry} />
+      </IconThemeProvider>,
+    );
+    expect(container.querySelector(".file-icon.document.vivid")).not.toBeNull();
+    delete document.documentElement.dataset.iconTheme;
   });
 
   it("resolves meaningful labels for name-based extensionless files", () => {

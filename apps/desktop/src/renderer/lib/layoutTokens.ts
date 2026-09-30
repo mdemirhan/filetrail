@@ -10,3 +10,14 @@ export const EXPLORER_LAYOUT = {
   paneResizeStepLarge: 24,
   minContentWidth: 420,
 } as const;
+
+// Sidebar tree row heights; they match `.sidebar-main-native .tree-row` in styles.css and
+// drive keyboard paging (Page Up/Down move by one screen of rows).
+export const TREE_LAYOUT = {
+  regularRowHeight: 26,
+  compactRowHeight: 21,
+} as const;
+
+export function getTreeRowHeight(compact: boolean): number {
+  return compact ? TREE_LAYOUT.compactRowHeight : TREE_LAYOUT.regularRowHeight;
+}

@@ -67,7 +67,7 @@ import {
   isFavoritePath,
   isFavoritesRootItemId,
 } from "./lib/favorites";
-import { FileIcon } from "./lib/fileIcons";
+import { FileIcon, IconThemeProvider } from "./lib/fileIcons";
 import { useFiletrailClient } from "./lib/filetrailClient";
 import { formatDateTime, formatPermissionMode, formatSize } from "./lib/formatting";
 import { REFERENCE_ITEMS, SHORTCUT_ITEMS } from "./lib/helpContent";
@@ -1389,7 +1389,7 @@ export function App() {
       ? infoRowActiveEntry.path
       : null;
 
-  return (
+  const workspace = (
     <ExplorerStoreProvider
       navigation={navigation}
       dialogs={writeOperations}
@@ -1905,6 +1905,8 @@ export function App() {
       </main>
     </ExplorerStoreProvider>
   );
+  // Icons take the icon theme from here so a change re-renders them all at once.
+  return <IconThemeProvider value={iconTheme}>{workspace}</IconThemeProvider>;
 }
 
 // Search scopes: the folder being browsed, Home, and the whole disk (deduplicated).

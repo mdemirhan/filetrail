@@ -7,7 +7,6 @@ import type {
 // Shared details-view sizing contract. The renderer uses these values for sticky header
 // alignment, virtualization, keyboard paging, and compact-mode switching.
 export const DETAILS_LAYOUT = {
-  headerHeight: 31,
   regularRowHeight: 28,
   compactRowHeight: 24,
   minTableWidth: 420,

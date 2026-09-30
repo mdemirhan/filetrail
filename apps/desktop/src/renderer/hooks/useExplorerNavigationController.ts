@@ -43,7 +43,7 @@ import {
   isFavoritesRootItemId,
 } from "../lib/favorites";
 import { getFlowListColumnStep } from "../lib/flowListLayout";
-import { EXPLORER_LAYOUT } from "../lib/layoutTokens";
+import { EXPLORER_LAYOUT, getTreeRowHeight } from "../lib/layoutTokens";
 import { createRendererLogger } from "../lib/logging";
 import { pageScrollElement, scrollElementByAmount } from "../lib/pagedScroll";
 import { expandHomeShortcut } from "../lib/pathUtils";
@@ -380,7 +380,7 @@ export function useExplorerNavigationController(args: {
         );
         const stepItems = getPageStepItemCount(
           target.element.clientHeight,
-          compactTreeView ? 25 : 32,
+          getTreeRowHeight(compactTreeView),
         );
         const nextIndex = getPagedSelectionIndex({
           itemCount: favoriteItemIds.length,
@@ -403,7 +403,7 @@ export function useExplorerNavigationController(args: {
       );
       const stepItems = getPageStepItemCount(
         target.element.clientHeight,
-        compactTreeView ? 25 : 32,
+        getTreeRowHeight(compactTreeView),
       );
       const nextIndex = getPagedSelectionIndex({
         itemCount: visibleItemIds.length,

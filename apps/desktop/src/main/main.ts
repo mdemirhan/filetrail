@@ -179,11 +179,12 @@ function createWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      zoomFactor: appStateStore.getPreferences().zoomPercent / 100,
     },
     ...(iconPath ? { icon: iconPath } : {}),
   });
   let saveTimeout: ReturnType<typeof setTimeout> | null = null;
-  applyWindowZoom(mainWindow, appStateStore.getPreferences().zoomPercent);
+  keepWindowZoom(mainWindow, appStateStore);
 
   const persistWindowState = () => {
     if (mainWindow.isDestroyed()) {
@@ -301,10 +302,11 @@ function openSettingsWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      zoomFactor: appStateStore.getPreferences().zoomPercent / 100,
     },
   });
   settingsWindowRef = settingsWindow;
-  applyWindowZoom(settingsWindow, appStateStore.getPreferences().zoomPercent);
+  keepWindowZoom(settingsWindow, appStateStore);
   const rendererEntryUrl = resolveRendererEntryUrl();
   const settingsUrl = `${rendererEntryUrl}#settings`;
   settingsWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -367,6 +369,18 @@ function windowBackgroundColor(theme: AppPreferences["theme"]): string {
 
 function applyWindowZoom(mainWindow: BrowserWindow, zoomPercent: number): void {
   mainWindow.webContents.setZoomFactor(zoomPercent / 100);
+}
+
+// A zoom factor set before the page loads does not always survive the load (Chromium keeps
+// zoom per page), so the saved zoom is applied again once each page has loaded; otherwise a
+// newly opened Settings window can show at 100% until the zoom next changes.
+function keepWindowZoom(window: BrowserWindow, appStateStore: AppStateStore): void {
+  applyWindowZoom(window, appStateStore.getPreferences().zoomPercent);
+  window.webContents.on("did-finish-load", () => {
+    if (!window.isDestroyed()) {
+      applyWindowZoom(window, appStateStore.getPreferences().zoomPercent);
+    }
+  });
 }
 
 function applyApplicationMenu(mainWindow: BrowserWindow, actionLogEnabled: boolean): void {

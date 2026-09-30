@@ -6745,12 +6745,13 @@ body.platform-macos .settings-view[data-layout="compact"] {
   gap: 8px;
 }
 
-/* Focused selection is a solid accent with white text; unfocused selection turns gray. */
+/* Focused selection is a solid accent with white text (black on light accents, see
+   `selectionColors`); unfocused selection turns gray. */
 .flow-item.active:not(.inactive),
 .details-row.active:not(.inactive),
 .search-result-row.active:not(.inactive) {
-  background: color-mix(in srgb, var(--ft-accent-solid) 86%, black);
-  color: #ffffff;
+  background: var(--ft-accent-selection-bg);
+  color: var(--ft-accent-on-selection);
 }
 
 .flow-item.active:not(.inactive) .flow-item-label,
@@ -6758,7 +6759,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
 .details-row.active:not(.inactive) .details-name-label,
 .search-result-row.active:not(.inactive) .search-result-name,
 .search-result-row.active:not(.inactive) .search-result-path {
-  color: #ffffff;
+  color: var(--ft-accent-on-selection);
 }
 
 .flow-item.active.inactive,
@@ -6964,7 +6965,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
 .flow-item.active:not(.inactive) .truncated-name-extension,
 .details-row.active:not(.inactive) .truncated-name-extension,
 .search-result-row.active:not(.inactive) .truncated-name-extension {
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--ft-accent-on-selection-soft);
 }
 
 /* Hairline pane dividers instead of a thick bar; the full width stays grabbable. */
@@ -7365,12 +7366,12 @@ body.settings-window-body {
   color: var(--text-tertiary);
 }
 
-/* Every text span in a focused selected row is white, including names without an extension
-   (which otherwise match `.details-name span:last-child` and stay dark). */
+/* Every text span in a focused selected row takes the selection text color, including names
+   without an extension (which otherwise match `.details-name span:last-child` and stay dark). */
 .flow-item.active:not(.inactive) .flow-item-label span,
 .details-row.active:not(.inactive) .details-name span,
 .search-result-row.active:not(.inactive) .search-result-name span {
-  color: #ffffff;
+  color: var(--ft-accent-on-selection);
 }
 
 /* Info panel folder size: size on one line, item count below, both right-aligned. */
@@ -7600,13 +7601,13 @@ body.settings-window-body {
 }
 
 .sidebar-main-native .tree-row.active:not(.inactive) {
-  background: color-mix(in srgb, var(--ft-accent-solid) 86%, black);
+  background: var(--ft-accent-selection-bg);
 }
 
 .sidebar-main-native .tree-row.active:not(.inactive) .tree-label,
 .sidebar-main-native .tree-row.active:not(.inactive) .tree-expand,
 .sidebar-main-native .tree-row.active:not(.inactive) .file-icon-favorite {
-  color: #ffffff;
+  color: var(--ft-accent-on-selection);
 }
 
 .sidebar-main-native .tree-label-badge {
@@ -7679,7 +7680,7 @@ body.settings-window-body {
 }
 
 .search-result-row.active:not(.inactive) .search-result-meta {
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--ft-accent-on-selection-soft);
 }
 
 .search-result-match {
@@ -7690,7 +7691,7 @@ body.settings-window-body {
 }
 
 .search-result-row.active:not(.inactive) .search-result-match {
-  background: rgba(255, 255, 255, 0.28);
+  background: var(--ft-accent-on-selection-faint);
 }
 
 /* ── Collapsible sidebar section header (Favorites) ────────────────────── */

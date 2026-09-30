@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 
 import type { IpcResponse } from "@filetrail/contracts";
-import type { FavoriteIconId } from "../../shared/appPreferences";
+import type { FavoriteIconId, IconThemeMode } from "../../shared/appPreferences";
 import { useFiletrailClient } from "./filetrailClient";
 import {
   ColorblockDocumentSvg,
@@ -25,14 +25,29 @@ type Entry = IpcResponse<"directory:getSnapshot">["entries"][number];
 const nativeIconCache = new Map<string, string | null>();
 const NATIVE_ICON_CACHE_MAX = 256;
 
+// The icon theme comes from React (App provides the preference) so a change re-renders
+// every icon at once. Reading the root `data-icon-theme` instead would lag a change by one
+// render, because that attribute is written in an effect after the render. The attribute is
+// only a fallback for icons rendered outside a provider.
+const IconThemeContext = createContext<IconThemeMode | null>(null);
+export const IconThemeProvider = IconThemeContext.Provider;
+
+function useIconTheme(): string | undefined {
+  const iconTheme = useContext(IconThemeContext);
+  if (iconTheme) {
+    return iconTheme;
+  }
+  return typeof document === "undefined" ? undefined : document.documentElement.dataset.iconTheme;
+}
+
 // Icon rendering is intentionally lightweight and CSS-driven. Classic mode classifies
 // entries into a small visual vocabulary and lets CSS handle the final appearance.
 // Colorblock mode uses per-extension classification with colored blocks and symbols.
 export function FileIcon({ entry }: { entry: Entry }) {
+  const activeIconTheme = useIconTheme();
   const type = resolveIconType(entry);
   if (
-    typeof document !== "undefined" &&
-    document.documentElement.dataset.iconTheme === "native" &&
+    activeIconTheme === "native" &&
     entry.kind !== "symlink_directory" &&
     entry.kind !== "symlink_file"
   ) {
@@ -58,41 +73,37 @@ export function FileIcon({ entry }: { entry: Entry }) {
     return <NativeAppIcon path={entry.path} />;
   }
   // Non-classic themes: per-extension classification with inline colored SVGs.
-  if (typeof document !== "undefined") {
-    const activeIconTheme = document.documentElement.dataset.iconTheme;
-    const isSymlink = entry.kind === "symlink_file";
-    if (activeIconTheme === "colorblock") {
-      const extension = entry.extension.toLowerCase();
-      const cbType =
-        resolveColorblockIconTypeByName(entry.name) ?? resolveColorblockIconType(extension);
-      return (
-        <span className={`file-icon document colorblock${isSymlink ? " alias" : ""}`} aria-hidden>
-          <ColorblockDocumentSvg iconType={cbType} label={resolveDocumentLabel(entry)} />
-          {isSymlink && <span className="alias-badge">↗</span>}
-        </span>
-      );
-    }
-    if (activeIconTheme === "monoline") {
-      const extension = entry.extension.toLowerCase();
-      const mlType =
-        resolveMonolineIconTypeByName(entry.name) ?? resolveMonolineIconType(extension);
-      return (
-        <span className={`file-icon document monoline${isSymlink ? " alias" : ""}`} aria-hidden>
-          <MonolineDocumentSvg iconType={mlType} label={resolveDocumentLabel(entry)} />
-          {isSymlink && <span className="alias-badge">↗</span>}
-        </span>
-      );
-    }
-    if (activeIconTheme === "vivid") {
-      const extension = entry.extension.toLowerCase();
-      const vType = resolveVividIconTypeByName(entry.name) ?? resolveVividIconType(extension);
-      return (
-        <span className={`file-icon document vivid${isSymlink ? " alias" : ""}`} aria-hidden>
-          <VividDocumentSvg iconType={vType} label={resolveDocumentLabel(entry)} />
-          {isSymlink && <span className="alias-badge">↗</span>}
-        </span>
-      );
-    }
+  const isSymlink = entry.kind === "symlink_file";
+  if (activeIconTheme === "colorblock") {
+    const extension = entry.extension.toLowerCase();
+    const cbType =
+      resolveColorblockIconTypeByName(entry.name) ?? resolveColorblockIconType(extension);
+    return (
+      <span className={`file-icon document colorblock${isSymlink ? " alias" : ""}`} aria-hidden>
+        <ColorblockDocumentSvg iconType={cbType} label={resolveDocumentLabel(entry)} />
+        {isSymlink && <span className="alias-badge">↗</span>}
+      </span>
+    );
+  }
+  if (activeIconTheme === "monoline") {
+    const extension = entry.extension.toLowerCase();
+    const mlType = resolveMonolineIconTypeByName(entry.name) ?? resolveMonolineIconType(extension);
+    return (
+      <span className={`file-icon document monoline${isSymlink ? " alias" : ""}`} aria-hidden>
+        <MonolineDocumentSvg iconType={mlType} label={resolveDocumentLabel(entry)} />
+        {isSymlink && <span className="alias-badge">↗</span>}
+      </span>
+    );
+  }
+  if (activeIconTheme === "vivid") {
+    const extension = entry.extension.toLowerCase();
+    const vType = resolveVividIconTypeByName(entry.name) ?? resolveVividIconType(extension);
+    return (
+      <span className={`file-icon document vivid${isSymlink ? " alias" : ""}`} aria-hidden>
+        <VividDocumentSvg iconType={vType} label={resolveDocumentLabel(entry)} />
+        {isSymlink && <span className="alias-badge">↗</span>}
+      </span>
+    );
   }
   // Classic theme (default): broader category classification with CSS-driven colors.
   return (
@@ -302,13 +313,9 @@ export function TreeFolderIcon({
   alias = false,
   path,
 }: { open?: boolean; alias?: boolean; path?: string | null }) {
+  const activeIconTheme = useIconTheme();
   // The macOS icon theme uses the same system folder icon in the tree as in the list.
-  if (
-    path &&
-    !alias &&
-    typeof document !== "undefined" &&
-    document.documentElement.dataset.iconTheme === "native"
-  ) {
+  if (path && !alias && activeIconTheme === "native") {
     return (
       <NativeFileIcon
         entry={{

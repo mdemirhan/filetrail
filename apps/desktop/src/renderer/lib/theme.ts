@@ -118,47 +118,43 @@ export function applyAppearance({
   root.style.setProperty("--ui-font-weight", String(uiFontWeight));
   root.style.setProperty("--mono-font-size", "12px");
   root.style.setProperty("--mono-font-weight", "400");
-  for (const propertyName of THEME_VARIANT_OVERRIDE_KEYS) {
+  // Clear everything a previous call may have set inline, then layer: theme variant palette,
+  // accents, the toolbar accent (when on), and finally the text color overrides (when set).
+  // Removing only up front means a setting that is off leaves the variant's value in place.
+  const toolbarAccentTokens = generateAccentTokens(toolbarAccent, theme);
+  const toolbarAccentVariables = getToolbarAccentVariables(toolbarAccentTokens);
+  for (const propertyName of [
+    ...THEME_VARIANT_OVERRIDE_KEYS,
+    ...Object.keys(toolbarAccentVariables),
+    ...TEXT_OVERRIDE_KEYS,
+  ]) {
     root.style.removeProperty(propertyName);
   }
-  const themeVariantVariables = getThemeVariantCssOverrides(theme);
-  for (const [propertyName, value] of Object.entries(themeVariantVariables)) {
-    root.style.setProperty(propertyName, value);
-  }
-  const accentTokens = generateAccentTokens(accent, theme);
-  const accentVariables = accentTokensToCssVariables(accentTokens);
-  for (const [propertyName, value] of Object.entries(accentVariables)) {
-    root.style.setProperty(propertyName, value);
-  }
-  const favoriteAccentVariables = getFavoriteAccentVariables(
-    generateAccentTokens(favoriteAccent, theme),
-  );
-  for (const [propertyName, value] of Object.entries(favoriteAccentVariables)) {
-    root.style.setProperty(propertyName, value);
-  }
-  const toolbarAccentTokens = generateAccentTokens(toolbarAccent, theme);
+  setProperties(root, getThemeVariantCssOverrides(theme));
+  setProperties(root, accentTokensToCssVariables(generateAccentTokens(accent, theme)));
+  setProperties(root, getFavoriteAccentVariables(generateAccentTokens(favoriteAccent, theme)));
   if (accentToolbarButtons) {
-    const toolbarAccentVariables = getToolbarAccentVariables(toolbarAccentTokens);
-    for (const [propertyName, value] of Object.entries(toolbarAccentVariables)) {
-      root.style.setProperty(propertyName, value);
-    }
-  } else {
-    for (const propertyName of Object.keys(getToolbarAccentVariables(toolbarAccentTokens))) {
-      root.style.removeProperty(propertyName);
-    }
+    setProperties(root, toolbarAccentVariables);
   }
-  applyOptionalColor("--text-primary", textPrimaryOverride);
-  applyOptionalColor("--text-secondary", textSecondaryOverride);
-  applyOptionalColor("--text-tertiary", textMutedOverride);
-  applyOptionalColor("--text-dim", textMutedOverride);
-  applyOptionalColor("--fg-muted", textMutedOverride);
-  applyOptionalColor("--fg-dim", textMutedOverride);
+  setOptionalColor(root, ["--text-primary"], textPrimaryOverride);
+  setOptionalColor(root, ["--text-secondary"], textSecondaryOverride);
+  setOptionalColor(root, TEXT_MUTED_OVERRIDE_KEYS, textMutedOverride);
 }
 
-function applyOptionalColor(propertyName: string, value: string | null): void {
-  if (value) {
-    document.documentElement.style.setProperty(propertyName, value);
+const TEXT_MUTED_OVERRIDE_KEYS = ["--text-tertiary", "--text-dim", "--fg-muted", "--fg-dim"];
+const TEXT_OVERRIDE_KEYS = ["--text-primary", "--text-secondary", ...TEXT_MUTED_OVERRIDE_KEYS];
+
+function setProperties(root: HTMLElement, variables: Record<string, string>): void {
+  for (const [propertyName, value] of Object.entries(variables)) {
+    root.style.setProperty(propertyName, value);
+  }
+}
+
+function setOptionalColor(root: HTMLElement, propertyNames: string[], value: string | null): void {
+  if (!value) {
     return;
   }
-  document.documentElement.style.removeProperty(propertyName);
+  for (const propertyName of propertyNames) {
+    root.style.setProperty(propertyName, value);
+  }
 }

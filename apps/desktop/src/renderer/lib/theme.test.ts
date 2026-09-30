@@ -128,6 +128,47 @@ describe("theme helpers", () => {
     expect(document.documentElement.style.getPropertyValue("--toolbar-bg")).toBe("#101012");
   });
 
+  it("keeps a variant's own text and toolbar colors when overrides and the toolbar accent are off", () => {
+    const base = {
+      theme: "macos-dark" as const,
+      iconTheme: "classic" as const,
+      accent: "#007aff",
+      accentToolbarButtons: true,
+      toolbarAccent: "#daa520",
+      accentFavoriteItems: false,
+      accentFavoriteText: false,
+      favoriteAccent: "#daa520",
+      uiFontFamily: "system" as const,
+      uiFontSize: 13,
+      uiFontWeight: 400 as const,
+      textPrimaryOverride: "#ff0000" as string | null,
+      textSecondaryOverride: null,
+      textMutedOverride: "#00ff00" as string | null,
+    };
+    const style = document.documentElement.style;
+    applyAppearance(base);
+    expect(style.getPropertyValue("--text-primary")).toBe("#ff0000");
+    expect(style.getPropertyValue("--fg-dim")).toBe("#00ff00");
+    expect(style.getPropertyValue("--toolbar-toggle-active-bg")).toBe("rgba(218, 165, 32, 0.16)");
+
+    // Turning the overrides and the toolbar accent off brings back the variant's values
+    // rather than leaving the properties empty (which fell back to the base theme).
+    applyAppearance({
+      ...base,
+      accentToolbarButtons: false,
+      textPrimaryOverride: null,
+      textMutedOverride: null,
+    });
+    expect(style.getPropertyValue("--text-primary")).toBe("#f2f2f5");
+    expect(style.getPropertyValue("--text-secondary")).not.toBe("");
+    expect(style.getPropertyValue("--text-dim")).not.toBe("");
+    expect(style.getPropertyValue("--fg-dim")).not.toBe("#00ff00");
+    expect(style.getPropertyValue("--fg-dim")).not.toBe("");
+    expect(style.getPropertyValue("--toolbar-toggle-active-bg")).not.toBe("");
+    expect(style.getPropertyValue("--toolbar-toggle-active-bg")).not.toContain("218, 165, 32");
+    expect(style.getPropertyValue("--toolbar-nav-icon-active")).not.toBe("");
+  });
+
   it("ships a stylesheet rule that targets the favorite svg for accent overrides", () => {
     const styles = readFileSync("apps/desktop/src/renderer/styles.css", "utf8");
 

@@ -6,6 +6,7 @@ import {
   getAccentPalette,
   getFavoriteAccentVariables,
   getToolbarAccentVariables,
+  selectionColors,
   solidButtonColors,
 } from "./accent";
 
@@ -101,6 +102,29 @@ describe("accent helpers", () => {
     expect(accentTokensToCssVariables(generateAccentTokens("#4f46e5", "light"))).toMatchObject({
       "--ft-accent-solid-button": "#4f46e5",
       "--ft-accent-on-solid": "#ffffff",
+    });
+  });
+
+  it("keeps selected-row text white where it reads well and switches to black otherwise", () => {
+    // Selections are the accent darkened like `color-mix(accent 86%, black)`.
+    expect(selectionColors("#007aff")).toEqual({ background: "#0069db", foreground: "#ffffff" });
+    expect(selectionColors("#4f46e5").foreground).toBe("#ffffff");
+    // Yellow and gold stay light even darkened: black text reads far better.
+    expect(selectionColors("#ffc600").foreground).toBe("#000000");
+    expect(selectionColors("#daa520").foreground).toBe("#000000");
+    for (const option of [...ACCENT_OPTIONS, ...MACOS_ACCENT_OPTIONS]) {
+      const colors = selectionColors(option.primary);
+      const other = colors.foreground === "#ffffff" ? "#000000" : "#ffffff";
+      // Whichever is chosen is readable, or at least the better of the two.
+      expect(
+        contrastRatio(colors.foreground, colors.background) >= 4.5 ||
+          contrastRatio(colors.foreground, colors.background) >=
+            contrastRatio(other, colors.background),
+      ).toBe(true);
+    }
+    expect(accentTokensToCssVariables(generateAccentTokens("#ffc600", "dark"))).toMatchObject({
+      "--ft-accent-on-selection": "#000000",
+      "--ft-accent-on-selection-soft": "rgba(0, 0, 0, 0.85)",
     });
   });
 });
