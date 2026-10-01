@@ -89,9 +89,6 @@ export function useAppPreferences() {
   const [restoreLastVisitedFolderOnStartup, setRestoreLastVisitedFolderOnStartup] = useState(
     DEFAULT_APP_PREFERENCES.restoreLastVisitedFolderOnStartup,
   );
-  const [lastGoToFolderPath, setLastGoToFolderPath] = useState(
-    DEFAULT_APP_PREFERENCES.lastGoToFolderPath,
-  );
   const [favorites, setFavorites] = useState<FavoritePreference[]>(
     DEFAULT_APP_PREFERENCES.favorites,
   );
@@ -187,8 +184,6 @@ export function useAppPreferences() {
     setShowSidebarBottomRail,
     restoreLastVisitedFolderOnStartup,
     setRestoreLastVisitedFolderOnStartup,
-    lastGoToFolderPath,
-    setLastGoToFolderPath,
     favorites,
     setFavorites,
     favoritesPlacement,

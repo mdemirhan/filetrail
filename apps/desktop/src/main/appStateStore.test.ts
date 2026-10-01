@@ -141,7 +141,6 @@ describe("appStateStore", () => {
       treeRootPath: null,
       lastVisitedPath: null,
       lastVisitedFavoritePath: null,
-      lastGoToFolderPath: null,
       favorites: [],
       favoritesPlacement: "separate",
       favoritesExpanded: true,
@@ -232,7 +231,6 @@ describe("appStateStore", () => {
       treeRootPath: "/Users/demo",
       lastVisitedPath: "/Users/demo/src",
       lastVisitedFavoritePath: "/Users/demo/Documents",
-      lastGoToFolderPath: "/Users/demo/src",
       favorites: [
         { path: "/Users/demo/Documents", icon: "documents" },
         { path: "/Applications", icon: "applications" },
@@ -330,7 +328,6 @@ describe("appStateStore", () => {
       treeRootPath: "/Users/demo",
       lastVisitedPath: "/Users/demo/src",
       lastVisitedFavoritePath: "/Users/demo/Documents",
-      lastGoToFolderPath: "/Users/demo/src",
       favorites: [
         { path: "/Users/demo/Documents", icon: "documents" },
         { path: "/Applications", icon: "applications" },
@@ -518,6 +515,32 @@ describe("appStateStore", () => {
     expect(load("text")).toBe("text");
     expect(load(undefined)).toBe("text");
     expect(load("fuzzy")).toBe("text");
+  });
+
+  it("remembers the folders that are opened across restarts", () => {
+    const filePath = resolveAppStatePath(mkdtempSync(join(tmpdir(), "filetrail-app-state-")));
+    const store = createAppStateStore(filePath);
+    expect(store.getVisitedFolders()).toEqual([]);
+
+    store.recordFolderVisit("/Users/demo/work", 1_000);
+    store.recordFolderVisit("/Users/demo/music", 2_000);
+    store.recordFolderVisit("/Users/demo/work", 3_000);
+    store.flush();
+
+    const reloaded = createAppStateStore(filePath);
+    expect(reloaded.getVisitedFolders()).toEqual([
+      { path: "/Users/demo/work", visitCount: 2, lastVisitedAt: 3_000 },
+      { path: "/Users/demo/music", visitCount: 1, lastVisitedAt: 2_000 },
+    ]);
+    // Preferences and visits live in the same file without disturbing each other.
+    reloaded.updatePreferences({ viewMode: "details" });
+    expect(reloaded.forgetVisitedFolder("/Users/demo/work")).toEqual([
+      { path: "/Users/demo/music", visitCount: 1, lastVisitedAt: 2_000 },
+    ]);
+    reloaded.flush();
+    const again = createAppStateStore(filePath);
+    expect(again.getVisitedFolders().map((folder) => folder.path)).toEqual(["/Users/demo/music"]);
+    expect(again.getPreferences().viewMode).toBe("details");
   });
 
   it("sanitizes invalid persisted values", () => {

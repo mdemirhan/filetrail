@@ -42,7 +42,7 @@ export const SHORTCUT_ITEMS: readonly ShortcutItem[] = [
     shortcut: "Cmd+Down",
     description: "Open the selected item, or expand the folder in the tree",
   },
-  { group: "navigation", shortcut: "Cmd+Shift+G", description: "Go to Folder" },
+  { group: "navigation", shortcut: "Cmd+K", description: "Go to a folder by name or path" },
   {
     group: "navigation",
     shortcut: "Cmd+Shift+H",
@@ -114,9 +114,9 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
             description: "Double-click a folder to open it. Back and forward retrace your steps.",
           },
           {
-            label: "Go to Folder",
+            label: "Go To",
             description:
-              "Type or paste a path, with suggestions as you type. `~` stands for your home folder.",
+              "⌘K (or ⇧⌘G) finds a folder you have opened before, or a favorite, from a few letters of its name; the folders you use most come first. Start with `/` or `~` to type a path instead, and Tab completes it. ⌘⌫ removes the selected folder from the list.",
           },
           {
             label: "Favorites",

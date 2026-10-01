@@ -343,7 +343,6 @@ export type AppPreferences = {
   treeRootPath: string | null;
   lastVisitedPath: string | null;
   lastVisitedFavoritePath: string | null;
-  lastGoToFolderPath: string | null;
   favorites: FavoritePreference[];
   favoritesPlacement: FavoritesPlacement;
   favoritesExpanded: boolean;
@@ -402,7 +401,6 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   treeRootPath: null,
   lastVisitedPath: null,
   lastVisitedFavoritePath: null,
-  lastGoToFolderPath: null,
   favorites: [],
   favoritesPlacement: "separate",
   favoritesExpanded: true,

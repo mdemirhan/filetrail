@@ -317,6 +317,12 @@ export const searchResultItemSchema = z.object({
   relativeParentPath: z.string(),
 });
 
+export const visitedFolderSchema = z.object({
+  path: z.string().min(1),
+  visitCount: z.number().int().positive(),
+  lastVisitedAt: z.number().nonnegative(),
+});
+
 export const resolvedPathSchema = z.object({
   inputPath: z.string().min(1),
   resolvedPath: z.string().nullable(),
@@ -677,7 +683,6 @@ export const appPreferencesSchema = z.object({
   treeRootPath: z.string().min(1).nullable(),
   lastVisitedPath: z.string().min(1).nullable(),
   lastVisitedFavoritePath: z.string().min(1).nullable(),
-  lastGoToFolderPath: z.string().min(1).nullable(),
   favorites: z.array(favoritePreferenceSchema),
   favoritesPlacement: favoritesPlacementSchema,
   favoritesExpanded: z.boolean(),
@@ -724,6 +729,29 @@ export const ipcContractSchemas = {
     }),
     response: z.object({
       preferences: appPreferencesSchema,
+    }),
+  },
+  // The folders that have been opened, for the Go To box (⌘K).
+  "places:list": {
+    request: emptyRequestSchema,
+    response: z.object({
+      folders: z.array(visitedFolderSchema),
+    }),
+  },
+  "places:recordVisit": {
+    request: z.object({
+      path: z.string().min(1),
+    }),
+    response: z.object({
+      ok: z.literal(true),
+    }),
+  },
+  "places:forget": {
+    request: z.object({
+      path: z.string().min(1),
+    }),
+    response: z.object({
+      folders: z.array(visitedFolderSchema),
     }),
   },
   "app:clearCaches": {

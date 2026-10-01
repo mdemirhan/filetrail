@@ -122,6 +122,16 @@ export async function bootstrapMainProcess(
         onPreferencesChanged?.(preferences, { patch, senderId: event?.sender?.id ?? null });
         return { preferences };
       },
+      "places:list": () => ({
+        folders: appStateStore.getVisitedFolders(),
+      }),
+      "places:recordVisit": (payload) => {
+        appStateStore.recordFolderVisit(payload.path);
+        return { ok: true };
+      },
+      "places:forget": (payload) => ({
+        folders: appStateStore.forgetVisitedFolder(payload.path),
+      }),
       "app:openSettingsWindow": () => {
         windows.openSettingsWindow?.();
         return { ok: windows.openSettingsWindow !== undefined };

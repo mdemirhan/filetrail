@@ -225,12 +225,12 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
   },
   {
     id: "goToFolder",
-    label: "Go To Folder",
+    label: "Go To",
     icon: "location",
     kind: "button",
     surfaces: ["top", "left"],
     commandType: "openLocationSheet",
-    shortcutLabel: "Cmd+Shift+G",
+    shortcutLabel: "Cmd+K",
   },
   {
     id: "foldersFirst",

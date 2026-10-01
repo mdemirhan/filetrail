@@ -14,6 +14,7 @@ import {
 } from "../lib/copyPasteReview";
 import { formatSize } from "../lib/formatting";
 import type { InternalMoveSourceSurface } from "../lib/internalDragAndDrop";
+import type { Place } from "../lib/places";
 import type { ShortcutContext } from "../lib/shortcutPolicy";
 import type { ToastEntry } from "../lib/toasts";
 import {
@@ -63,6 +64,8 @@ function resolveContextMenuShortcutContext(
 
 export function AppDialogs({
   currentPath,
+  places,
+  onForgetPlace,
   onRequestPathSuggestions,
   onSubmitLocationPath,
   onBrowseForDirectoryPath,
@@ -90,6 +93,9 @@ export function AppDialogs({
   onDismissToast,
 }: {
   currentPath: string;
+  /** Opened folders and favorites, for the Go To and Move To boxes. */
+  places: readonly Place[];
+  onForgetPlace: (path: string) => void;
   onRequestPathSuggestions: (inputPath: string) => Promise<IpcResponse<"path:getSuggestions">>;
   onSubmitLocationPath: (path: string) => void;
   onBrowseForDirectoryPath: (path: string) => Promise<string | null>;
@@ -163,6 +169,8 @@ export function AppDialogs({
       <GoToFolderDialog
         open={locationSheetOpen}
         currentPath={currentPath}
+        places={places}
+        onForgetPlace={onForgetPlace}
         submitting={locationSubmitting}
         error={locationError}
         tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
@@ -173,6 +181,10 @@ export function AppDialogs({
       <GoToFolderDialog
         open={moveDialogState !== null}
         currentPath={moveDialogState?.currentPath ?? currentPath}
+        places={places}
+        // Return must not move anything into a folder nobody chose.
+        selectFirstPlace={false}
+        onForgetPlace={onForgetPlace}
         submitting={moveDialogState?.submitting ?? false}
         error={moveDialogState?.error ?? null}
         title="Move To"

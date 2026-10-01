@@ -18,6 +18,7 @@ import {
   themeChoicePatch,
 } from "../shared/appPreferences";
 import { DEFAULT_TOP_TOOLBAR_ITEMS } from "../shared/toolbarItems";
+import { type VisitedFolder, forgetVisitedFolder } from "../shared/visitedFolders";
 import { ActionLogView } from "./components/ActionLogView";
 import { AppDialogs } from "./components/AppDialogs";
 import { ExplorerWorkspace } from "./components/ExplorerWorkspace";
@@ -77,6 +78,7 @@ import { EXPLORER_LAYOUT } from "./lib/layoutTokens";
 import { filterEntriesByName, formatItemCount } from "./lib/listFilter";
 import { createRendererLogger } from "./lib/logging";
 import { expandHomeShortcut } from "./lib/pathUtils";
+import { buildPlaces } from "./lib/places";
 import { canRunToolbarRendererCommand } from "./lib/rendererCommandAvailability";
 import { resolveExplorerToolbarLayout, resolveSinglePanelLayout } from "./lib/responsiveLayout";
 import { formatSearchStatus } from "./lib/searchResults";
@@ -100,7 +102,8 @@ export function App() {
   const [actionLogEntries, setActionLogEntries] = useState<ActionLogEntry[]>([]);
   const [actionLogLoading, setActionLogLoading] = useState(false);
   const [actionLogError, setActionLogError] = useState<string | null>(null);
-  const [locationSheetInitialPath, setLocationSheetInitialPath] = useState("");
+  // The folders that have been opened, loaded each time the Go To or Move To box opens.
+  const [visitedFolders, setVisitedFolders] = useState<VisitedFolder[]>([]);
   const [volumeAvailableBytes, setVolumeAvailableBytes] = useState<number | null>(null);
   // Modified date and size for search results, fetched for the rows on screen.
   const [searchMetadataByPath, setSearchMetadataByPath] = useState<
@@ -167,8 +170,6 @@ export function App() {
     setShowSidebarBottomRail,
     restoreLastVisitedFolderOnStartup,
     setRestoreLastVisitedFolderOnStartup,
-    lastGoToFolderPath,
-    setLastGoToFolderPath,
     favorites,
     setFavorites,
     favoritesPlacement,
@@ -608,9 +609,6 @@ export function App() {
       locationDialogOpen,
       explorerFocusSuppressed,
     },
-    callbacks: {
-      onLocationPathSubmitted: setLastGoToFolderPath,
-    },
   });
   const navigateFavoritePath = useCallback(
     (path: string, historyMode: "push" | "replace" | "skip") =>
@@ -931,7 +929,6 @@ export function App() {
       getFavoriteItemPath(selectedTreeItemId) === currentPath
         ? getFavoriteItemPath(selectedTreeItemId)
         : null,
-    lastGoToFolderPath,
     favorites,
     favoritesPlacement,
     favoritesExpanded,
@@ -1078,7 +1075,6 @@ export function App() {
         setSortBy(preferences.sortBy);
         setSortDirection(preferences.sortDirection);
         setRestoreLastVisitedFolderOnStartup(preferences.restoreLastVisitedFolderOnStartup);
-        setLastGoToFolderPath(preferences.lastGoToFolderPath);
         setFavorites(preferences.favorites);
         setFavoritesPlacement(preferences.favoritesPlacement);
         setFavoritesExpanded(preferences.favoritesExpanded);
@@ -1306,25 +1302,52 @@ export function App() {
     setMainView("explorer");
     setLocationError(null);
     setFocusedPane(null);
-    setLocationSheetInitialPath(currentPath);
     setLocationSheetOpen(true);
-    void (async () => {
-      const rememberedPath = lastGoToFolderPath?.trim() ?? "";
-      if (rememberedPath.length === 0 || rememberedPath === currentPath) {
-        return;
-      }
-      try {
-        const response = await client.invoke("item:getProperties", { path: rememberedPath });
-        if (
-          response.item &&
-          (response.item.kind === "directory" || response.item.kind === "symlink_directory")
-        ) {
-          setLocationSheetInitialPath(rememberedPath);
+  }
+
+  // The Go To and Move To boxes rank the folders that have been opened; the list is read
+  // again whenever one of them opens.
+  useEffect(() => {
+    if (!locationDialogOpen) {
+      return;
+    }
+    let cancelled = false;
+    void client
+      .invoke("places:list", {})
+      .then((response) => {
+        if (!cancelled) {
+          setVisitedFolders(response.folders);
         }
-      } catch {
-        return;
-      }
-    })();
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [client, locationDialogOpen]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: ranked as of when the box opened; a visit made meanwhile does not reshuffle it.
+  const places = useMemo(
+    () =>
+      buildPlaces({
+        visitedFolders,
+        favoritePaths: favorites.map((favorite) => favorite.path),
+        currentPath,
+        homePath,
+        now: Date.now(),
+      }),
+    [visitedFolders, favorites, currentPath, homePath, locationDialogOpen],
+  );
+
+  function forgetPlace(path: string) {
+    setVisitedFolders((current) => forgetVisitedFolder(current, path));
+    void client.invoke("places:forget", { path }).catch(() => undefined);
+  }
+
+  // A folder from the list that can no longer be opened is dropped from it.
+  async function goToPath(path: string) {
+    const didOpen = await submitLocationPath(path);
+    if (!didOpen && visitedFolders.some((folder) => folder.path === path)) {
+      forgetPlace(path);
+    }
   }
 
   // Settings is a separate window (like any macOS app); main opens or focuses it.
@@ -1926,11 +1949,13 @@ export function App() {
           </section>
         )}
         <AppDialogs
-          currentPath={locationSheetInitialPath || currentPath}
+          currentPath={currentPath}
+          places={places}
+          onForgetPlace={forgetPlace}
           onRequestPathSuggestions={(inputPath) =>
             requestPathSuggestions({ client, includeHidden, homePath, inputPath })
           }
-          onSubmitLocationPath={(path) => void submitLocationPath(path)}
+          onSubmitLocationPath={(path) => void goToPath(path)}
           onBrowseForDirectoryPath={browseForDirectoryPath}
           onSubmitMoveDialog={(path) => void submitMoveDialog(path)}
           contextMenuDisabledActionIds={contextMenuDisabledActionIds}

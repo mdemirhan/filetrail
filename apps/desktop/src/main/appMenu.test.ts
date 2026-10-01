@@ -139,14 +139,12 @@ describe("createApplicationMenuTemplate", () => {
     expect(send).toHaveBeenCalledWith("filetrail:command", { type: "editSelectAll" });
   });
 
-  it("wires Go to Folder to the renderer command channel", () => {
+  it("wires Go To to the renderer command channel, on ⌘K", () => {
     const send = vi.fn();
     const template = createApplicationMenuTemplate({ send } as never);
     const editMenu = template.find((item) => item.label === "Edit");
     const submenu = Array.isArray(editMenu?.submenu) ? editMenu.submenu : [];
-    const goToFolderItem = submenu.find(
-      (item) => "label" in item && item.label === "Go to Folder…",
-    );
+    const goToFolderItem = submenu.find((item) => "label" in item && item.label === "Go To…");
 
     expect(goToFolderItem).toBeTruthy();
     if (
@@ -154,8 +152,9 @@ describe("createApplicationMenuTemplate", () => {
       !("click" in goToFolderItem) ||
       typeof goToFolderItem.click !== "function"
     ) {
-      throw new Error("Go to Folder menu item missing.");
+      throw new Error("Go To menu item missing.");
     }
+    expect(goToFolderItem.accelerator).toBe("CommandOrControl+K");
     goToFolderItem.click(undefined as never, undefined as never, undefined as never);
 
     expect(send).toHaveBeenCalledWith("filetrail:command", { type: "openLocationSheet" });

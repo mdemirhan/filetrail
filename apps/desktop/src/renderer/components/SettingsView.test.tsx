@@ -311,7 +311,7 @@ describe("SettingsView", () => {
 
     const topToolbarEditor = screen.getByRole("group", { name: "Top toolbar" });
     // The name under each tile is shown as text, not only as a hover tooltip.
-    for (const label of ["Back", "Forward", "Refresh", "Go To Folder", "Open In Terminal"]) {
+    for (const label of ["Back", "Forward", "Refresh", "Go To", "Open In Terminal"]) {
       expect(within(topToolbarEditor).getByText(label)).toBeVisible();
     }
     expect(within(topToolbarEditor).getByText("Available · click to add")).toBeInTheDocument();
@@ -539,7 +539,7 @@ describe("SettingsView", () => {
       "Add Forward to Top toolbar",
       "Add Navigate Up to Top toolbar",
       "Add Navigate Down to Top toolbar",
-      "Add Go To Folder to Top toolbar",
+      "Add Go To to Top toolbar",
       "Add Refresh to Top toolbar",
     ]);
     expect(leftRailAddButtons[0]).toHaveAttribute("aria-label", "Add Separator to Left rail");
@@ -552,7 +552,7 @@ describe("SettingsView", () => {
       "Add Applications to Left rail",
       "Add Trash to Left rail",
       "Add Root Tree At Home to Left rail",
-      "Add Go To Folder to Left rail",
+      "Add Go To to Left rail",
     ]);
     expect(
       utilityAddButtons.slice(0, 4).map((button) => button.getAttribute("aria-label")),

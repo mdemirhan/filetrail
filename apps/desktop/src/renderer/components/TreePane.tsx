@@ -786,7 +786,7 @@ export function TreePane({
           onClick={onOpenLocation}
           disabled={!onOpenLocation}
           title={getToolbarTooltip(itemId)}
-          aria-label="Go to Folder"
+          aria-label="Go To"
         >
           <ToolbarIcon name="location" />
         </button>

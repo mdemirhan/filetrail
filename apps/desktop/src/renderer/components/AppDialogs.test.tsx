@@ -75,6 +75,8 @@ describe("AppDialogs", () => {
       >
         <AppDialogs
           currentPath="/tmp"
+          places={[]}
+          onForgetPlace={() => undefined}
           onRequestPathSuggestions={async (inputPath) => ({
             inputPath,
             basePath: null,

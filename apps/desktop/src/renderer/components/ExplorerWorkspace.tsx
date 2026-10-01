@@ -438,8 +438,8 @@ export function ExplorerWorkspace({
           {
             kind: "action" as const,
             id: "goToFolder",
-            label: "Go to Folder…",
-            shortcut: "⇧⌘G",
+            label: "Go To…",
+            shortcut: "⌘K",
             onSelect: treePaneProps.onOpenLocation,
           },
         ]

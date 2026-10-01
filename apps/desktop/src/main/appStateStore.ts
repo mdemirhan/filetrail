@@ -35,6 +35,12 @@ import {
   sanitizeLeftToolbarItems,
   sanitizeTopToolbarItems,
 } from "../shared/toolbarItems";
+import {
+  type VisitedFolder,
+  forgetVisitedFolder,
+  recordFolderVisit,
+  sanitizeVisitedFolders,
+} from "../shared/visitedFolders";
 
 export type StoredWindowState = {
   x?: number;
@@ -47,6 +53,7 @@ export type StoredWindowState = {
 type AppState = {
   preferences?: AppPreferences;
   window?: StoredWindowState;
+  visitedFolders?: VisitedFolder[];
 };
 
 type AppStateStoreFileSystem = {
@@ -144,6 +151,25 @@ export class AppStateStore {
     return next;
   }
 
+  getVisitedFolders(): VisitedFolder[] {
+    return this.state.visitedFolders ?? [];
+  }
+
+  recordFolderVisit(path: string, now: number = Date.now()): void {
+    this.state = {
+      ...this.state,
+      visitedFolders: recordFolderVisit(this.getVisitedFolders(), path, now),
+    };
+    this.schedulePersist();
+  }
+
+  forgetVisitedFolder(path: string): VisitedFolder[] {
+    const visitedFolders = forgetVisitedFolder(this.getVisitedFolders(), path);
+    this.state = { ...this.state, visitedFolders };
+    this.schedulePersist();
+    return visitedFolders;
+  }
+
   getWindowState(): StoredWindowState {
     return this.state.window ?? DEFAULT_WINDOW_STATE;
   }
@@ -214,6 +240,7 @@ function readState(
     return {
       preferences,
       window,
+      visitedFolders: sanitizeVisitedFolders(record.visitedFolders),
     };
   } catch (error) {
     onReadError(error);
@@ -442,10 +469,6 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
       record.lastVisitedFavoritePath.length > 0
         ? record.lastVisitedFavoritePath
         : null,
-    lastGoToFolderPath:
-      typeof record.lastGoToFolderPath === "string" && record.lastGoToFolderPath.length > 0
-        ? record.lastGoToFolderPath
-        : currentDefaults.lastGoToFolderPath,
     favorites: upgradeFavoritesWithRootVolume(
       record,
       sanitizeFavorites(record.favorites, record.favoritePaths, currentDefaults.favorites),

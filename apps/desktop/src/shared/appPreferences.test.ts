@@ -115,7 +115,6 @@ describe("appPreferences helpers", () => {
       treeRootPath: null,
       lastVisitedPath: null,
       lastVisitedFavoritePath: null,
-      lastGoToFolderPath: null,
       favoritesPlacement: "separate",
     });
   });

@@ -123,8 +123,9 @@ export function createApplicationMenuTemplate(
           click: (_item, window) => sendCommand("focusFileSearch", window),
         },
         {
-          label: "Go to Folder…",
-          accelerator: "CommandOrControl+Shift+G",
+          // ⇧⌘G opens it as well; the window handles that key itself.
+          label: "Go To…",
+          accelerator: "CommandOrControl+K",
           click: (_item, window) => sendCommand("openLocationSheet", window),
         },
         {

@@ -3867,11 +3867,7 @@ body.resizing-panels * {
   stroke-width: 2;
 }
 
-.location-sheet-backdrop {
-  background: var(--modal-backdrop);
-}
-
-/* Modal dialogs (Go to Folder, Move To, the location sheet): the scrim behind them and their
+/* Modal dialogs (Go To, Move To): the scrim behind them and their
    drop shadow. Both stay dark, but are stronger in the dark themes so the dialog still
    separates from an already dark window. */
 :root {
@@ -4113,6 +4109,7 @@ body.resizing-panels * {
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   min-height: 36px;
   padding: 8px 10px;
   border: 1px solid transparent;
@@ -4160,6 +4157,12 @@ body.resizing-panels * {
 
 .go-to-folder-suggestion.is-selected .go-to-folder-suggestion-name {
   color: var(--text-primary);
+}
+
+.go-to-folder-match {
+  background: transparent;
+  color: var(--ft-accent-path-crumb-hover);
+  font-weight: 700;
 }
 
 .go-to-folder-suggestion-path {
@@ -4263,23 +4266,6 @@ body.resizing-panels * {
 .go-to-folder-submit:disabled {
   cursor: default;
   opacity: 0.6;
-}
-
-.location-sheet {
-  position: fixed;
-  top: 33%;
-  left: 50%;
-  transform: translate(-50%, -33%);
-  width: min(560px, calc(100vw - 32px));
-  margin: 0;
-  padding: 0;
-  border: 1px solid var(--border-active);
-  border-radius: var(--radius-lg);
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow-lg);
-  overflow: visible;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
 }
 
 .settings-view {
@@ -4426,82 +4412,6 @@ body.platform-macos .settings-view[data-layout="compact"] {
   .titlebar-actions {
     gap: 2px;
   }
-}
-
-.location-sheet-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 18px 18px 12px;
-  border-bottom: 1px solid var(--border);
-}
-
-.location-sheet-eyebrow {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--accent-gold);
-}
-
-.location-sheet-header h2 {
-  margin-top: 2px;
-  font-size: 20px;
-  color: var(--text-primary);
-}
-
-.location-sheet-form {
-  display: grid;
-  gap: 12px;
-  padding: 16px 18px 18px;
-}
-
-.location-sheet-input-shell {
-  position: relative;
-}
-
-.location-sheet-label {
-  font-size: 12px;
-  color: var(--text-secondary);
-  font-weight: 600;
-}
-
-.location-sheet-input {
-  width: 100%;
-  border: 1px solid var(--border-active);
-  border-radius: var(--radius-md);
-  background: var(--bg-input);
-  padding: 11px 12px;
-  color: var(--text-primary);
-  box-shadow: none;
-  font-size: var(--ui-font-size-lg);
-  font-weight: 500;
-}
-
-.location-sheet-input::placeholder {
-  color: var(--text-tertiary);
-}
-
-.location-sheet-input:focus {
-  outline: none;
-  border-color: var(--accent-gold);
-  box-shadow: 0 0 0 3px var(--accent-gold-dim);
-}
-
-.location-sheet-suggestions {
-  top: calc(100% + 6px);
-}
-
-.location-sheet-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.location-sheet-error {
-  color: var(--danger);
-  font-size: 12px;
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -6525,22 +6435,13 @@ body.settings-window-body {
 .copy-paste-sheet .tb-btn.primary,
 .copy-paste-conflict-alert .tb-btn.primary,
 .action-notice-dialog .tb-btn.primary,
-.location-sheet .tb-btn.primary {
-  border-color: transparent;
-  background: var(--ft-accent-solid-button);
-  color: var(--ft-accent-on-solid);
-}
-
 .copy-paste-sheet .tb-btn.primary:hover:not(:disabled),
 .copy-paste-conflict-alert .tb-btn.primary:hover:not(:disabled),
 .action-notice-dialog .tb-btn.primary:hover:not(:disabled),
-.location-sheet .tb-btn.primary:hover:not(:disabled) {
-  filter: brightness(1.06);
-}
-
 /* Destructive buttons are red text on a neutral button, as in macOS alerts, so they never
    look like the default button, whatever the accent color (red included). */
-.copy-paste-sheet .tb-btn.danger,
+  .copy-paste-sheet
+  .tb-btn.danger,
 .copy-paste-conflict-alert .tb-btn.danger-text {
   border-color: transparent;
   background: var(--bg-hover);

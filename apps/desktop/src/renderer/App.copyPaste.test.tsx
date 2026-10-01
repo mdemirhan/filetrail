@@ -590,11 +590,15 @@ vi.mock("./components/GoToFolderDialog", () => ({
     onBrowse,
     onClose,
     onSubmit,
+    places,
+    onForgetPlace,
   }: {
     open: boolean;
     title?: string;
     inputAriaLabel?: string;
     currentPath: string;
+    places?: ReadonlyArray<{ path: string; name: string; isVisited: boolean }>;
+    onForgetPlace?: (path: string) => void;
     submitLabel?: string;
     browseLabel?: string;
     error: string | null;
@@ -626,6 +630,24 @@ vi.mock("./components/GoToFolderDialog", () => ({
             />
           </label>
           {error ? <div>{error}</div> : null}
+          {(places ?? []).map((place) => (
+            <span key={place.path}>
+              <button
+                type="button"
+                title={`place:${place.path}`}
+                onClick={() => onSubmit(place.path)}
+              >
+                Go to {place.name}
+              </button>
+              <button
+                type="button"
+                title={`forget:${place.path}`}
+                onClick={() => onForgetPlace?.(place.path)}
+              >
+                Forget {place.name}
+              </button>
+            </span>
+          ))}
           <button type="button" onClick={onClose}>
             Cancel
           </button>
@@ -4218,36 +4240,77 @@ describe("App copy/paste integration", () => {
     expect(await screen.findByLabelText("Path")).toBeInTheDocument();
   });
 
-  it("remembers the last successful Go to Folder path and seeds it on the next open", async () => {
+  it("remembers the folders that are opened and offers them in the Go To box", async () => {
     const harness = createAppHarness({
       directorySnapshots: {
-        "/Users/demo/Remembered": {
-          path: "/Users/demo/Remembered",
-          parentPath: "/Users/demo",
-          entries: [],
-        },
         "/Users/demo/Folder": {
           path: "/Users/demo/Folder",
           parentPath: "/Users/demo",
           entries: [],
         },
       },
-      itemPropertiesByPath: {
-        "/Users/demo/Remembered": {
-          path: "/Users/demo/Remembered",
-          name: "Remembered",
-          extension: "",
-          kind: "directory",
-          kindLabel: "Folder",
-          isHidden: false,
-          isSymlink: false,
-          createdAt: null,
-          modifiedAt: null,
-          sizeBytes: null,
-          sizeStatus: "ready",
-          permissionMode: null,
-        },
-      },
+      visitedFolders: [{ path: "/Users/demo/Old", visitCount: 3, lastVisitedAt: 1 }],
+    });
+    const visits = () =>
+      harness.invocations
+        .filter((call) => call.channel === "places:recordVisit")
+        .map((call) => (call.payload as IpcRequestInput<"places:recordVisit">).path);
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+    await screen.findByTestId("content-pane");
+
+    // ⌘K opens the box with the folders opened before.
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "k", metaKey: true });
+    });
+    await screen.findByTitle("place:/Users/demo/Old");
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("Path"), { target: { value: "/Users/demo/Folder" } });
+      fireEvent.click(screen.getByText("Open Folder"));
+    });
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/Folder");
+    });
+    // Going there counted as a visit.
+    expect(visits()).toContain("/Users/demo/Folder");
+    const visitsAfterGoing = visits().length;
+
+    // Back does not count, and neither does the folder shown at launch.
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "[", metaKey: true });
+    });
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo");
+    });
+    expect(visits()).toHaveLength(visitsAfterGoing);
+
+    // ⇧⌘G opens the same box; the folder just visited is now offered, the one on screen
+    // is not, and a folder can be taken off the list.
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "g", metaKey: true, shiftKey: true });
+    });
+    await screen.findByTitle("place:/Users/demo/Folder");
+    expect(screen.queryByTitle("place:/Users/demo")).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByTitle("forget:/Users/demo/Old"));
+    });
+    expect(screen.queryByTitle("place:/Users/demo/Old")).toBeNull();
+    expect(
+      harness.invocations.some(
+        (call) =>
+          call.channel === "places:forget" &&
+          (call.payload as IpcRequestInput<"places:forget">).path === "/Users/demo/Old",
+      ),
+    ).toBe(true);
+  });
+
+  it("drops a remembered folder that can no longer be opened", async () => {
+    const harness = createAppHarness({
+      visitedFolders: [{ path: "/Users/demo/Gone", visitCount: 3, lastVisitedAt: 1 }],
     });
 
     render(
@@ -4255,65 +4318,20 @@ describe("App copy/paste integration", () => {
         <App />
       </FiletrailClientProvider>,
     );
-
+    await screen.findByTestId("content-pane");
     await act(async () => {
-      fireEvent.keyDown(window, { key: "g", metaKey: true, shiftKey: true });
+      fireEvent.keyDown(window, { key: "k", metaKey: true });
     });
-
-    const pathInput = await screen.findByLabelText("Path");
-    expect(pathInput).toHaveValue("/Users/demo");
-
     await act(async () => {
-      fireEvent.change(pathInput, { target: { value: "/Users/demo/Remembered" } });
-      fireEvent.click(screen.getByText("Open Folder"));
+      fireEvent.click(await screen.findByTitle("place:/Users/demo/Gone"));
     });
 
     await vi.waitFor(() => {
-      const persistedCall = [...harness.invocations].reverse().find((call) => {
-        if (call.channel !== "app:updatePreferences") {
-          return false;
-        }
-        return (
-          (call.payload as IpcRequestInput<"app:updatePreferences">).preferences
-            .lastGoToFolderPath === "/Users/demo/Remembered"
-        );
-      });
-      expect(persistedCall).toBeDefined();
+      expect(screen.queryByTitle("place:/Users/demo/Gone")).toBeNull();
     });
-
-    const folderTreeItem = await screen.findByTitle("tree:/Users/demo/Folder");
-    await act(async () => {
-      fireEvent.click(folderTreeItem);
-    });
-
-    await act(async () => {
-      fireEvent.keyDown(window, { key: "g", metaKey: true, shiftKey: true });
-    });
-
-    expect(await screen.findByLabelText("Path")).toHaveValue("/Users/demo/Remembered");
-  });
-
-  it("falls back to the current folder when the remembered Go to Folder path is no longer valid", async () => {
-    const harness = createAppHarness({
-      preferences: {
-        lastGoToFolderPath: "/Users/demo/Remembered",
-      },
-      itemPropertiesByPath: {
-        "/Users/demo/Remembered": "missing",
-      },
-    });
-
-    render(
-      <FiletrailClientProvider value={harness.client}>
-        <App />
-      </FiletrailClientProvider>,
-    );
-
-    await act(async () => {
-      fireEvent.keyDown(window, { key: "g", metaKey: true, shiftKey: true });
-    });
-
-    expect(await screen.findByLabelText("Path")).toHaveValue("/Users/demo");
+    // The box stays open, on the folder that was on screen.
+    expect(screen.getByLabelText("Path")).toBeInTheDocument();
+    expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo");
   });
 
   it("expands ~ when submitting Go to Folder", async () => {
@@ -8136,6 +8154,7 @@ function createAppHarness(
     copyTextError?: Error;
     pickApplicationResponse?: IpcResponse<"system:pickApplication">;
     pickDirectoryResponse?: IpcResponse<"system:pickDirectory">;
+    visitedFolders?: IpcResponse<"places:list">["folders"];
     copyPastePlanError?: Error;
     deferCopyPastePlan?: boolean;
     deferCopyPastePlanCalls?: number[];
@@ -8164,6 +8183,7 @@ function createAppHarness(
     lastVisitedPath: "/Users/demo",
     ...args.preferences,
   } as IpcResponse<"app:getPreferences">["preferences"];
+  let visitedFolders = args.visitedFolders ?? [];
   const directorySnapshots: Record<string, IpcResponse<"directory:getSnapshot">> = {
     "/Users/demo": {
       path: "/Users/demo",
@@ -8448,6 +8468,23 @@ function createAppHarness(
       }
       if (channel === "app:clearCaches") {
         return { ok: true } as IpcResponse<C>;
+      }
+      if (channel === "places:list") {
+        return { folders: visitedFolders } as IpcResponse<C>;
+      }
+      if (channel === "places:recordVisit") {
+        const { path } = payload as IpcRequestInput<"places:recordVisit">;
+        const existing = visitedFolders.find((folder) => folder.path === path);
+        visitedFolders = [
+          { path, visitCount: (existing?.visitCount ?? 0) + 1, lastVisitedAt: Date.now() },
+          ...visitedFolders.filter((folder) => folder.path !== path),
+        ];
+        return { ok: true } as IpcResponse<C>;
+      }
+      if (channel === "places:forget") {
+        const { path } = payload as IpcRequestInput<"places:forget">;
+        visitedFolders = visitedFolders.filter((folder) => folder.path !== path);
+        return { folders: visitedFolders } as IpcResponse<C>;
       }
       if (channel === "app:writeLog") {
         return { ok: true } as IpcResponse<C>;

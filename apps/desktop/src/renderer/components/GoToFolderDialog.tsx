@@ -1,29 +1,54 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { IpcResponse } from "@filetrail/contracts";
 
 import { usePathSuggestions } from "../hooks/usePathSuggestions";
 import { getFocusableElements } from "../lib/focusUtils";
+import { type Place, isPathQuery, rankPlaces } from "../lib/places";
 
 type PathSuggestion = IpcResponse<"path:getSuggestions">["suggestions"][number];
 
+// One row of the list: a folder to go to, however it was found.
+type GoToRow = {
+  path: string;
+  name: string;
+  detail: string;
+  nameRanges: Array<[number, number]>;
+  isFavorite: boolean;
+  /** Whether ⌘⌫ can take it out of the list of opened folders. */
+  canForget: boolean;
+};
+
+// The Go To box (⌘K, ⇧⌘G) and the Move To box. A few letters find a folder that has been
+// opened before, or a favorite, best match and most used first. Text starting with "/" or
+// "~" is a path instead and is completed folder by folder, as Go to Folder always did.
 export function GoToFolderDialog({
   open,
   currentPath,
+  places = [],
+  selectFirstPlace = true,
   submitting,
   error,
   tabSwitchesExplorerPanes,
-  title = "Go to Folder",
-  inputAriaLabel = "Absolute path",
-  submitLabel = "Open Folder",
+  title = "Go To",
+  inputAriaLabel = "Folder name or path",
+  submitLabel = "Open",
   browseLabel = "Browse",
   onBrowse = null,
   onClose,
   onSubmit,
+  onForgetPlace,
   onRequestPathSuggestions,
 }: {
   open: boolean;
   currentPath: string;
+  /** Opened folders and favorites to find by name; ranked here against what is typed. */
+  places?: readonly Place[];
+  /**
+   * Whether the top place is selected before anything is typed, so Return goes there at
+   * once. Off for Move To, where Return must never act on a folder nobody chose.
+   */
+  selectFirstPlace?: boolean;
   submitting: boolean;
   error: string | null;
   tabSwitchesExplorerPanes: boolean;
@@ -34,6 +59,7 @@ export function GoToFolderDialog({
   onBrowse?: ((path: string) => Promise<string | null>) | null;
   onClose: () => void;
   onSubmit: (path: string) => void;
+  onForgetPlace?: ((path: string) => void) | undefined;
   onRequestPathSuggestions: (inputPath: string) => Promise<IpcResponse<"path:getSuggestions">>;
 }) {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
@@ -44,12 +70,39 @@ export function GoToFolderDialog({
   const [browseInProgress, setBrowseInProgress] = useState(false);
   const { draftValue, suggestions, setValue, clearSuggestions } = usePathSuggestions({
     open,
-    initialInput: currentPath,
+    initialInput: "",
     inputRef,
     onRequestPathSuggestions,
   });
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [inputFocused, setInputFocused] = useState(false);
+  const pathMode = isPathQuery(draftValue);
+  const rows = useMemo<GoToRow[]>(() => {
+    if (pathMode) {
+      return suggestions.map((suggestion: PathSuggestion) => ({
+        path: suggestion.path,
+        name: suggestion.name,
+        detail: suggestion.path,
+        nameRanges: [],
+        isFavorite: false,
+        canForget: false,
+      }));
+    }
+    return rankPlaces(places, draftValue).map(({ place, nameRanges }) => ({
+      path: place.path,
+      name: place.name,
+      detail: place.displayPath,
+      nameRanges,
+      isFavorite: place.isFavorite,
+      canForget: place.isVisited,
+    }));
+  }, [draftValue, pathMode, places, suggestions]);
+  const hasQuery = draftValue.trim().length > 0;
+
+  // Only a path asks the disk for completions; a name is matched against `places`.
+  function changeValue(nextValue: string): void {
+    setValue(nextValue, isPathQuery(nextValue));
+  }
 
   focusInputAtEndRef.current = () => {
     const input = inputRef.current;
@@ -71,7 +124,6 @@ export function GoToFolderDialog({
       return;
     }
     setBrowseInProgress(false);
-    setSelectedIndex(-1);
     setInputFocused(true);
     const input = inputRef.current;
     if (!input) {
@@ -96,15 +148,16 @@ export function GoToFolderDialog({
     };
   }, [open]);
 
-  useEffect(() => {
-    if (!open) {
+  // What is typed decides what is selected: the best place while a name is typed (and
+  // before, for Go To), nothing while a path is typed until ↓ picks a completion.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-evaluated when the text or the list changes, not on every selection move.
+  useLayoutEffect(() => {
+    if (!open || rows.length === 0 || pathMode) {
       setSelectedIndex(-1);
       return;
     }
-    if (suggestions.length === 0) {
-      setSelectedIndex(-1);
-    }
-  }, [open, suggestions]);
+    setSelectedIndex(hasQuery || selectFirstPlace ? 0 : -1);
+  }, [open, draftValue, rows.length, pathMode, selectFirstPlace]);
 
   useEffect(() => {
     if (!open) {
@@ -154,8 +207,16 @@ export function GoToFolderDialog({
     return null;
   }
 
-  const selectedSuggestion = selectedIndex >= 0 ? (suggestions[selectedIndex] ?? null) : null;
-  const canSubmit = draftValue.trim().length > 0 && !submitting;
+  const selectedRow = selectedIndex >= 0 ? (rows[selectedIndex] ?? null) : null;
+  // A name needs a folder picked from the list; a path can be opened as typed.
+  const canSubmit = !submitting && (pathMode ? hasQuery : selectedRow !== null);
+
+  function submit(): void {
+    if (!canSubmit) {
+      return;
+    }
+    onSubmit(pathMode ? draftValue.trim() : (selectedRow?.path ?? ""));
+  }
 
   async function handleBrowse(): Promise<void> {
     if (!onBrowse || browseInProgress) {
@@ -163,15 +224,11 @@ export function GoToFolderDialog({
     }
     setBrowseInProgress(true);
     try {
-      const pickedPath = await onBrowse(
-        draftValue.trim().length > 0 ? draftValue.trim() : currentPath,
-      );
+      const pickedPath = await onBrowse(pathMode && hasQuery ? draftValue.trim() : currentPath);
       if (!pickedPath) {
         return;
       }
       setValue(pickedPath, true);
-      setSelectedIndex(-1);
-      clearSuggestions();
       window.requestAnimationFrame(() => {
         inputRef.current?.focus();
         inputRef.current?.setSelectionRange(pickedPath.length, pickedPath.length);
@@ -181,12 +238,26 @@ export function GoToFolderDialog({
     }
   }
 
-  function acceptSuggestion(suggestion: PathSuggestion, nextIndex: number): void {
-    setValue(suggestion.path, true);
-    setSelectedIndex(nextIndex);
+  // Puts a completion into the field. With `descend` the path ends in a slash, so the
+  // list moves on to the folders inside it (Tab); without, the folder itself stays listed.
+  function acceptCompletion(row: GoToRow, descend: boolean): void {
+    const nextValue = descend && !row.path.endsWith("/") ? `${row.path}/` : row.path;
+    setValue(nextValue, true);
     window.requestAnimationFrame(() => {
       inputRef.current?.focus();
-      inputRef.current?.setSelectionRange(suggestion.path.length, suggestion.path.length);
+      inputRef.current?.setSelectionRange(nextValue.length, nextValue.length);
+    });
+  }
+
+  function moveSelection(step: 1 | -1): void {
+    if (rows.length === 0) {
+      return;
+    }
+    setSelectedIndex((currentIndex) => {
+      if (currentIndex < 0) {
+        return step === 1 ? 0 : rows.length - 1;
+      }
+      return Math.max(0, Math.min(rows.length - 1, currentIndex + step));
     });
   }
 
@@ -264,10 +335,7 @@ export function GoToFolderDialog({
           id="go-to-folder-form"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!canSubmit) {
-              return;
-            }
-            onSubmit(draftValue.trim());
+            submit();
           }}
         />
         <div className="go-to-folder-input-section">
@@ -278,8 +346,8 @@ export function GoToFolderDialog({
               fill="none"
               aria-hidden="true"
             >
-              <path d="M2 4l4-2h8v12H6l-4-2V4z" />
-              <path d="M6 2v12" />
+              <circle cx="7" cy="7" r="4.5" />
+              <path d="M10.5 10.5 14 14" />
             </svg>
             <input
               ref={inputRef}
@@ -287,42 +355,54 @@ export function GoToFolderDialog({
               form="go-to-folder-form"
               className="go-to-folder-input"
               aria-label={inputAriaLabel}
+              placeholder="Folder name, or a path starting with / or ~"
               spellCheck={false}
               autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
               value={draftValue}
-              onChange={(event) => setValue(event.currentTarget.value, true)}
+              onChange={(event) => changeValue(event.currentTarget.value)}
               onFocus={() => setInputFocused(true)}
               onBlur={() => setInputFocused(false)}
               onKeyDown={(event) => {
                 if (event.key === "ArrowDown") {
                   event.preventDefault();
-                  if (suggestions.length === 0) {
-                    return;
-                  }
-                  setSelectedIndex((currentIndex) =>
-                    currentIndex < 0 ? 0 : Math.min(currentIndex + 1, suggestions.length - 1),
-                  );
+                  moveSelection(1);
                   return;
                 }
                 if (event.key === "ArrowUp") {
                   event.preventDefault();
-                  if (suggestions.length === 0) {
-                    return;
+                  moveSelection(-1);
+                  return;
+                }
+                if (event.key === "Tab" && !event.shiftKey && pathMode && rows.length > 0) {
+                  // Tab completes the path with the selected folder, or the first one.
+                  const row = selectedRow ?? rows[0];
+                  if (row) {
+                    event.preventDefault();
+                    acceptCompletion(row, true);
                   }
-                  setSelectedIndex((currentIndex) =>
-                    currentIndex < 0 ? suggestions.length - 1 : Math.max(currentIndex - 1, 0),
-                  );
+                  return;
+                }
+                if (
+                  event.key === "Backspace" &&
+                  event.metaKey &&
+                  !pathMode &&
+                  selectedRow?.canForget &&
+                  onForgetPlace
+                ) {
+                  // ⌘⌫ takes the selected folder out of the list of opened folders.
+                  event.preventDefault();
+                  onForgetPlace(selectedRow.path);
                   return;
                 }
                 if (event.key === "Enter") {
-                  if (!selectedSuggestion || selectedIndex < 0) {
+                  if (!pathMode || !selectedRow || selectedRow.path === draftValue.trim()) {
                     return;
                   }
-                  if (selectedSuggestion.path === draftValue.trim()) {
-                    return;
-                  }
+                  // A selected completion goes into the field first; Return again opens it.
                   event.preventDefault();
-                  acceptSuggestion(selectedSuggestion, selectedIndex);
+                  acceptCompletion(selectedRow, false);
                   return;
                 }
                 if (event.key === "Escape") {
@@ -335,10 +415,9 @@ export function GoToFolderDialog({
               <button
                 type="button"
                 className="go-to-folder-clear"
-                aria-label="Clear path"
+                aria-label="Clear"
                 onClick={() => {
                   setValue("", false);
-                  setSelectedIndex(-1);
                   clearSuggestions();
                   window.requestAnimationFrame(() => inputRef.current?.focus());
                 }}
@@ -353,41 +432,57 @@ export function GoToFolderDialog({
         </div>
 
         <div className="go-to-folder-suggestions-section">
-          {suggestions.length > 0 ? (
+          {rows.length > 0 ? (
             <>
               <div className="go-to-folder-suggestions-label">
-                <svg viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                  <circle cx="5" cy="5" r="4" />
-                  <path d="M8 8l3 3" />
-                </svg>
                 <span>
-                  {suggestions.length} match{suggestions.length === 1 ? "" : "es"}
+                  {pathMode || hasQuery
+                    ? `${rows.length} match${rows.length === 1 ? "" : "es"}`
+                    : "Folders you use"}
                 </span>
               </div>
               <ul
                 ref={listRef}
                 className="go-to-folder-suggestions-list"
-                aria-label="Folder suggestions"
+                aria-label={pathMode ? "Folder suggestions" : "Folders"}
               >
-                {suggestions.map((suggestion, index) => {
+                {rows.map((row, index) => {
                   const isSelected = selectedIndex === index;
                   return (
-                    <li key={suggestion.path}>
+                    <li key={row.path}>
                       <button
                         type="button"
                         data-go-to-folder-index={index}
                         className={`go-to-folder-suggestion${isSelected ? " is-selected" : ""}`}
-                        onClick={() => acceptSuggestion(suggestion, index)}
+                        aria-current={isSelected ? "true" : undefined}
+                        title={row.path}
+                        // The field keeps the keyboard while the list is used with the mouse.
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => {
+                          if (pathMode) {
+                            acceptCompletion(row, false);
+                            setSelectedIndex(index);
+                            return;
+                          }
+                          onSubmit(row.path);
+                        }}
                         onMouseEnter={() => setSelectedIndex(index)}
                       >
                         <span className="go-to-folder-suggestion-icon" aria-hidden="true">
-                          <svg viewBox="0 0 14 14" fill="none" aria-hidden="true">
-                            <path d="M1.5 3l3-1.5h8v10.5H4.5l-3-1.5V3z" />
-                            <path d="M4.5 1.5v10.5" />
-                          </svg>
+                          {row.isFavorite ? (
+                            <svg viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                              <path d="M7 1.6l1.6 3.4 3.7.5-2.7 2.6.7 3.7L7 10l-3.3 1.8.7-3.7L1.7 5.5l3.7-.5L7 1.6z" />
+                            </svg>
+                          ) : (
+                            <svg viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                              <path d="M1.5 3.5h4l1.2 1.4h5.8v6.6h-11z" />
+                            </svg>
+                          )}
                         </span>
-                        <span className="go-to-folder-suggestion-name">{suggestion.name}</span>
-                        <span className="go-to-folder-suggestion-path">{suggestion.path}</span>
+                        <span className="go-to-folder-suggestion-name">
+                          {renderHighlightedName(row.name, row.nameRanges)}
+                        </span>
+                        <span className="go-to-folder-suggestion-path">{row.detail}</span>
                       </button>
                     </li>
                   );
@@ -396,7 +491,13 @@ export function GoToFolderDialog({
             </>
           ) : (
             <div className="go-to-folder-empty-state">
-              <span>{draftValue.trim().length > 0 ? "No matches" : "Type a path to search"}</span>
+              <span>
+                {pathMode
+                  ? "No folders match this path"
+                  : hasQuery
+                    ? "No folder you have opened has that name. Start with / or ~ to type a path."
+                    : "Folders you open are listed here. Start with / or ~ to type a path."}
+              </span>
             </div>
           )}
         </div>
@@ -404,7 +505,18 @@ export function GoToFolderDialog({
         <div className="go-to-folder-footer">
           <div className="go-to-folder-footer-hints" aria-hidden="true">
             <kbd>↑↓</kbd>
-            <span>navigate</span>
+            <span>choose</span>
+            {pathMode ? (
+              <>
+                <kbd>⇥</kbd>
+                <span>complete</span>
+              </>
+            ) : onForgetPlace ? (
+              <>
+                <kbd>⌘⌫</kbd>
+                <span>forget</span>
+              </>
+            ) : null}
           </div>
           <div className="go-to-folder-footer-actions">
             <button
@@ -438,4 +550,28 @@ export function GoToFolderDialog({
       </dialog>
     </div>
   );
+}
+
+// The name with the letters that matched what was typed marked.
+function renderHighlightedName(name: string, ranges: Array<[number, number]>) {
+  if (ranges.length === 0) {
+    return name;
+  }
+  const parts: React.ReactNode[] = [];
+  let position = 0;
+  for (const [start, end] of ranges) {
+    if (start > position) {
+      parts.push(name.slice(position, start));
+    }
+    parts.push(
+      <mark key={start} className="go-to-folder-match">
+        {name.slice(start, end)}
+      </mark>,
+    );
+    position = end;
+  }
+  if (position < name.length) {
+    parts.push(name.slice(position));
+  }
+  return parts;
 }

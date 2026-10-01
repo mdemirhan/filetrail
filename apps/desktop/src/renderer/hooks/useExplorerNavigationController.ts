@@ -81,23 +81,11 @@ export function useExplorerNavigationController(args: {
     locationDialogOpen: boolean;
     explorerFocusSuppressed: boolean;
   };
-  callbacks: {
-    onLocationPathSubmitted: (path: string) => void;
-  };
 }) {
   type SortBy = IpcRequest<"directory:getSnapshot">["sortBy"];
   type SortDirection = IpcRequest<"directory:getSnapshot">["sortDirection"];
 
-  const {
-    services,
-    navigation,
-    preferences,
-    search,
-    writeOperations,
-    selection,
-    derived,
-    callbacks,
-  } = args;
+  const { services, navigation, preferences, search, writeOperations, selection, derived } = args;
   const {
     client,
     panes,
@@ -204,7 +192,6 @@ export function useExplorerNavigationController(args: {
     locationDialogOpen,
     explorerFocusSuppressed,
   } = derived;
-  const { onLocationPathSubmitted } = callbacks;
 
   const hasCachedSearch = searchCommittedQuery.trim().length > 0;
   const isSearchMode = searchResultsVisible && hasCachedSearch;
@@ -895,6 +882,11 @@ export function useExplorerNavigationController(args: {
         setLeftPaneSubview("tree");
       }
       applyHistoryUpdate(response.path, historyMode);
+      if (historyMode === "push") {
+        // Going somewhere counts as a visit for the Go To box; Back, Forward and reloads
+        // do not.
+        void client.invoke("places:recordVisit", { path: response.path }).catch(() => undefined);
+      }
       return true;
     } catch (error) {
       if (directoryRequestRef.current !== requestId) {
@@ -1589,7 +1581,8 @@ export function useExplorerNavigationController(args: {
     );
   }
 
-  async function submitLocationPath(path: string) {
+  // Resolves to whether the folder was opened; the box stays up with the error otherwise.
+  async function submitLocationPath(path: string): Promise<boolean> {
     setLocationSubmitting(true);
     try {
       const trimmedPath = path.trim();
@@ -1597,8 +1590,8 @@ export function useExplorerNavigationController(args: {
       const didNavigate = await navigateTo(expandedPath, "push");
       if (didNavigate) {
         setLocationSheetOpen(false);
-        onLocationPathSubmitted(expandedPath);
       }
+      return didNavigate;
     } finally {
       setLocationSubmitting(false);
     }

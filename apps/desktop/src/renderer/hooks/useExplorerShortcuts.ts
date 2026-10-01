@@ -31,7 +31,7 @@ import type {
 } from "../state/explorerStores";
 
 // Every modal marks itself with aria-modal; the class names cover older dialogs.
-const MODAL_KEYBOARD_OWNER_SELECTOR = '[aria-modal="true"], .copy-paste-dialog, .location-sheet';
+const MODAL_KEYBOARD_OWNER_SELECTOR = '[aria-modal="true"], .copy-paste-dialog';
 
 // Cmd+. is the macOS "cancel" shortcut and closes a dialog just like Escape.
 function isModalCancelKey(event: KeyboardEvent): boolean {
@@ -232,7 +232,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
           const target = keyboardEvent.target;
           const targetElement = target instanceof HTMLElement ? target : null;
           const isAutocompleteContext =
-            targetElement?.closest(".pathbar-editor-shell, .location-sheet-input-shell") !== null;
+            targetElement?.closest(".pathbar-editor-shell, .go-to-folder-input-shell") !== null;
           if (isAutocompleteContext) {
             return false;
           }
@@ -634,13 +634,15 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         },
       },
       {
+        // ⌘K opens the Go To box; ⇧⌘G, Finder's Go to Folder, opens it too.
         id: "openLocationSheet",
         matches: (keyboardEvent) =>
           keyboardEvent.metaKey &&
-          keyboardEvent.shiftKey &&
           !keyboardEvent.ctrlKey &&
           !keyboardEvent.altKey &&
-          keyboardEvent.key.toLowerCase() === "g",
+          (keyboardEvent.shiftKey
+            ? keyboardEvent.key.toLowerCase() === "g"
+            : keyboardEvent.key.toLowerCase() === "k"),
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
           latestArgsRef.current.openLocationSheet();

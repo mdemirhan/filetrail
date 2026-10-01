@@ -80,7 +80,9 @@ describe("helpContent", () => {
     const trash = searchHelp("TRASH");
     expect(trash.map((result) => result.topic.id)).toEqual(["files"]);
     expect(trash[0]?.shortcuts.map((item) => item.shortcut)).toEqual(["Cmd+Backspace"]);
-    expect(searchHelp("cmd+shift+g")[0]?.shortcuts[0]?.description).toBe("Go to Folder");
+    expect(searchHelp("cmd+k")[0]?.shortcuts[0]?.description).toBe(
+      "Go to a folder by name or path",
+    );
     // A section title brings its rows along ("glob" is in "Glob patterns").
     expect(searchHelp("glob patterns")[0]?.rows.length).toBeGreaterThanOrEqual(6);
   });

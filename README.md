@@ -68,7 +68,7 @@ File Trail has a much deeper customization surface than a typical file explorer.
 - Built-in Get Info panel with copy path and open-in-Terminal actions
 - Hidden file toggle
 - Folders-first sorting
-- Go to Folder support
+- Go To (⌘K): jump to any folder you have opened before from a few letters of its name, or type a path
 - Keyboard shortcuts for common navigation and browsing actions
 - Action log tracking for file operations
 
