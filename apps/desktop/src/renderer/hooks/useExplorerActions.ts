@@ -2426,8 +2426,10 @@ export function useExplorerActions(args: {
       return;
     }
     if (entry.kind === "symlink_directory") {
+      const viewEpoch = navigation.viewEpochRef.current;
       const targetPath = await resolveTargetPath(entry.path);
-      if (targetPath) {
+      // Another tab may have come to the front while the alias was looked up.
+      if (targetPath && navigation.viewEpochRef.current === viewEpoch) {
         await navigateTo(targetPath, "push");
       }
       return;

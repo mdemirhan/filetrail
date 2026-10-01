@@ -8379,6 +8379,8 @@ function createAppHarness(
     // Scripts the searches by the text searched for: the names found in /Users/demo, whether
     // the search is still running, and whether it stopped at its limit.
     searchJobs?: (query: string) => { names: string[]; running?: boolean; truncated?: boolean };
+    // Reading this folder's subfolders for the tree waits until `releaseTreeChildren`.
+    holdTreeChildrenFor?: string;
     copyPastePlanError?: Error;
     deferCopyPastePlan?: boolean;
     deferCopyPastePlanCalls?: number[];
@@ -8397,6 +8399,7 @@ function createAppHarness(
   ) => void;
   // The folder is gone from disk: reading it fails from now on.
   removeDirectory: (path: string) => void;
+  releaseTreeChildren: () => void;
   resolveCopyPastePlan: () => void;
   resolveCopyPasteStart: () => void;
 } {
@@ -8433,6 +8436,10 @@ function createAppHarness(
     ...args.treeChildrenByPath,
   };
   const invocations: Array<{ channel: IpcChannel; payload: unknown }> = [];
+  let releaseTreeChildren: () => void = () => undefined;
+  const heldTreeChildren = new Promise<void>((resolve) => {
+    releaseTreeChildren = resolve;
+  });
   let commandListener: ((command: RendererCommand) => void) | null = null;
   let writeOperationProgressListener: ((event: WriteOperationProgressEvent) => void) | null = null;
   let copyPasteProgressListener: ((event: WriteOperationProgressEvent) => void) | null = null;
@@ -8478,6 +8485,9 @@ function createAppHarness(
         return { preferences } as IpcResponse<C>;
       }
       if (channel === "tree:getChildren") {
+        if ((payload as IpcRequestInput<"tree:getChildren">).path === args.holdTreeChildrenFor) {
+          await heldTreeChildren;
+        }
         return {
           path: (payload as IpcRequestInput<"tree:getChildren">).path,
           children: treeChildrenByPath[(payload as IpcRequestInput<"tree:getChildren">).path] ?? [],
@@ -8819,6 +8829,9 @@ function createAppHarness(
     },
     removeDirectory(path) {
       delete directorySnapshots[path];
+    },
+    releaseTreeChildren() {
+      releaseTreeChildren();
     },
     resolveCopyPastePlan() {
       resolveCopyPastePlanPromises.shift()?.();
@@ -9202,6 +9215,51 @@ describe("App tabs", () => {
     await waitFor(() => expect(focusedPane()).toBe("content"));
   });
 
+  it("keeps a navigation that is still filling in the tree out of a tab opened meanwhile", async () => {
+    const harness = createAppHarness({
+      directorySnapshots: {
+        "/Users/demo/Folder": {
+          path: "/Users/demo/Folder",
+          parentPath: "/Users/demo",
+          entries: [createDirectoryEntry("/Users/demo/Folder/Deep", "directory")],
+        },
+        "/Users/demo/Folder/Deep": {
+          path: "/Users/demo/Folder/Deep",
+          parentPath: "/Users/demo/Folder",
+          entries: [],
+        },
+      },
+      holdTreeChildrenFor: "/Users/demo/Folder",
+    });
+    await renderApp(harness);
+    const currentPath = () => screen.getByTestId("content-current-path").textContent;
+    await act(async () => {
+      fireEvent.doubleClick(screen.getByTitle("/Users/demo/Folder"));
+    });
+    await waitFor(() => expect(currentPath()).toBe("/Users/demo/Folder"));
+
+    // The folder is on screen; the tree is still waiting for the folders above it.
+    await act(async () => {
+      fireEvent.doubleClick(screen.getByTitle("/Users/demo/Folder/Deep"));
+    });
+    await waitFor(() => expect(currentPath()).toBe("/Users/demo/Folder/Deep"));
+    await pressKey({ key: "t", metaKey: true });
+    await act(async () => {
+      harness.releaseTreeChildren();
+    });
+
+    // The new tab has no history of its own to go back through.
+    expect(tabLabels()).toEqual(["Deep", "Deep"]);
+    await pressKey({ key: "[", metaKey: true });
+    expect(currentPath()).toBe("/Users/demo/Folder/Deep");
+
+    // The tab that navigated kept its history: Back leads to the folder it came from.
+    await pressKey({ key: "Tab", ctrlKey: true });
+    await waitFor(() => expect(activeTabLabel()).toBe("Deep"));
+    await pressKey({ key: "[", metaKey: true });
+    await waitFor(() => expect(currentPath()).toBe("/Users/demo/Folder"));
+  });
+
   it("reads a tab's folder again when the tab comes back on screen", async () => {
     const harness = createAppHarness();
     await renderApp(harness);
@@ -9385,6 +9443,38 @@ describe("App tabs", () => {
     expect(
       harness.invocations.filter((call) => call.channel === "places:recordVisit"),
     ).toHaveLength(0);
+  });
+
+  it("keeps the tab on screen until the window has read its first folder", async () => {
+    const harness = createAppHarness({
+      preferences: {
+        restoreLastVisitedFolderOnStartup: true,
+        restoreOpenTabsOnStartup: true,
+        openTabs: [savedTab("/Users/demo"), savedTab("/Users/demo/Folder")],
+        activeTabIndex: 0,
+      },
+      holdTreeChildrenFor: "/Users/demo",
+    });
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+    await waitFor(() =>
+      expect(harness.invocations.map((call) => call.channel)).toContain("tree:getChildren"),
+    );
+
+    // The startup is still filling in the first tab: the shortcut does nothing yet.
+    await pressKey({ key: "Tab", ctrlKey: true });
+    await act(async () => {
+      harness.releaseTreeChildren();
+    });
+
+    await screen.findByRole("button", { name: "source.txt" });
+    expect(activeTabLabel()).toBe("demo");
+    expect(screen.getByTestId("content-current-path")).toHaveTextContent(/^\/Users\/demo$/);
+    await pressKey({ key: "Tab", ctrlKey: true });
+    expect(activeTabLabel()).toBe("Folder");
   });
 
   it("drops a restored tab whose folder no longer exists", async () => {

@@ -190,6 +190,7 @@ export function useExplorerTabs(args: {
 
   // Answers still on their way were asked for by the tab that is leaving the screen.
   function forgetRequestsUnderWay() {
+    navigation.viewEpochRef.current += 1;
     navigation.directoryRequestRef.current += 1;
     navigation.getInfoRequestRef.current += 1;
     navigation.treeRequestRef.current = {};
@@ -271,8 +272,10 @@ export function useExplorerTabs(args: {
     setActivationCount((count) => count + 1);
   }
 
+  // Not while a dialog owns the window, and not before the window has read its first
+  // folder: until then the startup is still filling in the tab on screen.
   function canChangeTabs(): boolean {
-    return !derived.blocked && navigation.mainView === "explorer";
+    return preferences.preferencesReady && !derived.blocked && navigation.mainView === "explorer";
   }
 
   function activateTab(tabId: string) {
@@ -393,6 +396,9 @@ export function useExplorerTabs(args: {
     }
     if (current.tabs.length === 1) {
       window.close();
+      return;
+    }
+    if (!preferences.preferencesReady) {
       return;
     }
     if (tabId !== current.activeTabId) {

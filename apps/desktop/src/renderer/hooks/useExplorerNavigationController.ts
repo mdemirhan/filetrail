@@ -159,7 +159,17 @@ export function useExplorerNavigationController(args: {
     lastExplorerFocusPaneRef,
     leftPaneSubviewRef,
     lastLeftPaneSubviewRef,
+    viewEpochRef,
   } = navigation;
+
+  // Resolves to whether the view that was on screen when it was made still is. Anything
+  // that waits for the disk checks it afterwards: another tab may have come to the front
+  // meanwhile, and what was read belongs to the tab that asked.
+  function createViewGuard(): () => boolean {
+    const epoch = viewEpochRef.current;
+    return () => viewEpochRef.current === epoch;
+  }
+
   const {
     preferencesReady,
     favorites,
@@ -894,6 +904,7 @@ export function useExplorerNavigationController(args: {
     } = {},
   ): Promise<boolean> {
     const requestId = ++directoryRequestRef.current;
+    const isSameView = createViewGuard();
     setInfoTargetPathOverride(null);
     setDirectoryLoading(true);
     setDirectoryError(null);
@@ -916,13 +927,27 @@ export function useExplorerNavigationController(args: {
         }),
       );
       applyDirectorySnapshot(response.path, response.entries, cachedMetadata, options);
+      // The folder is on screen from here on, so it is in the history from here on: what
+      // follows waits for the tree, and the tab may be left before the tree has answered.
+      applyHistoryUpdate(response.path, historyMode);
+      if (historyMode === "push") {
+        // Going somewhere counts as a visit for the Go To box; Back, Forward and reloads
+        // do not.
+        void client.invoke("places:recordVisit", { path: response.path }).catch(() => undefined);
+      }
       if (options.rerootTree) {
         initializeTree(response.path);
       }
       if (options.syncTree !== false) {
         await syncTreeToPath(response.path, includeHiddenOverride, {
           forceReload: options.forceTreeReload ?? false,
+          isCurrent: isSameView,
         });
+        // The tree selection that follows is that of the tab that navigated; it may no
+        // longer be the one on screen.
+        if (!isSameView()) {
+          return false;
+        }
       }
       if (options.treeSelectionMode === "favorite") {
         setTreeSelection(createFavoriteItemId(options.favoritePath ?? response.path));
@@ -932,12 +957,6 @@ export function useExplorerNavigationController(args: {
       } else if (options.treeSelectionMode !== "preserve") {
         setTreeSelection(createFileSystemItemId(response.path));
         setLeftPaneSubview("tree");
-      }
-      applyHistoryUpdate(response.path, historyMode);
-      if (historyMode === "push") {
-        // Going somewhere counts as a visit for the Go To box; Back, Forward and reloads
-        // do not.
-        void client.invoke("places:recordVisit", { path: response.path }).catch(() => undefined);
       }
       return true;
     } catch (error) {
@@ -1128,9 +1147,10 @@ export function useExplorerNavigationController(args: {
   async function syncTreeToPath(
     path: string,
     includeHiddenOverride: boolean,
-    options: { forceReload?: boolean } = {},
+    options: { forceReload?: boolean; isCurrent?: () => boolean } = {},
   ) {
     const forceReload = options.forceReload ?? false;
+    const isCurrent = options.isCurrent ?? createViewGuard();
     const currentRootPath = treeRootPathRef.current;
     const nextRootPath =
       currentRootPath.length === 0 || !isPathWithinRoot(path, currentRootPath)
@@ -1150,7 +1170,7 @@ export function useExplorerNavigationController(args: {
 
     await loadTreeChildren(nextRootPath, includeHiddenOverride, false, path, forceReload);
 
-    if (path === nextRootPath) {
+    if (path === nextRootPath || !isCurrent()) {
       return;
     }
 
@@ -1158,6 +1178,9 @@ export function useExplorerNavigationController(args: {
     for (const ancestorPath of ancestorChain) {
       ensureTreeNode(ancestorPath, true);
       await loadTreeChildren(ancestorPath, includeHiddenOverride, true, path, forceReload);
+      if (!isCurrent()) {
+        return;
+      }
     }
 
     const focusedNode = treeNodesRef.current[path];
@@ -1521,10 +1544,12 @@ export function useExplorerNavigationController(args: {
     options: {
       recursive?: boolean;
       visitedPaths?: Set<string>;
+      isCurrent?: () => boolean;
     } = {},
   ) {
     const recursive = options.recursive ?? false;
     const visitedPaths = options.visitedPaths ?? new Set<string>();
+    const isCurrent = options.isCurrent ?? createViewGuard();
     if (visitedPaths.has(path)) {
       return;
     }
@@ -1538,7 +1563,7 @@ export function useExplorerNavigationController(args: {
       return;
     }
     await loadTreeChildren(path, includeHidden, node.expanded, activePath, true);
-    if (!recursive) {
+    if (!recursive || !isCurrent()) {
       return;
     }
     const refreshedNode = treeNodesRef.current[path];
@@ -1553,7 +1578,11 @@ export function useExplorerNavigationController(args: {
       await refreshVisibleTreePath(childPath, activePath, {
         recursive: true,
         visitedPaths,
+        isCurrent,
       });
+      if (!isCurrent()) {
+        return;
+      }
     }
   }
 
@@ -1564,7 +1593,14 @@ export function useExplorerNavigationController(args: {
       extraTreeReloadPaths?: string[];
     } = {},
   ) {
+    // The folder, and the paths it was asked with, belong to the tab on screen now. If
+    // another tab comes to the front while this waits, the refresh stops: that tab reads
+    // its own folder again when it is shown.
+    const isSameView = createViewGuard();
     await client.invoke("app:clearCaches", {});
+    if (!isSameView()) {
+      return;
+    }
     const targetPath = options.path ?? currentPathRef.current;
     if (!targetPath) {
       return;
@@ -1574,10 +1610,17 @@ export function useExplorerNavigationController(args: {
       ...reloadOptions,
       forceTreeReload: true,
     });
+    if (!isSameView()) {
+      return;
+    }
     if (options.treeSelectionPath) {
       await syncTreeToPath(options.treeSelectionPath, includeHidden, {
         forceReload: true,
+        isCurrent: isSameView,
       });
+      if (!isSameView()) {
+        return;
+      }
       setTreeSelection(createFileSystemItemId(options.treeSelectionPath));
       setLeftPaneSubview("tree");
     }
@@ -1586,7 +1629,11 @@ export function useExplorerNavigationController(args: {
       await refreshVisibleTreePath(extraTreeReloadPath, targetPath, {
         recursive: true,
         visitedPaths: visitedTreeReloadPaths,
+        isCurrent: isSameView,
       });
+      if (!isSameView()) {
+        return;
+      }
     }
   }
 
@@ -1627,6 +1674,7 @@ export function useExplorerNavigationController(args: {
     if (!targetPath) {
       return;
     }
+    const isSameView = createViewGuard();
     const didOpen = await navigateToNearestExistingFolder(targetPath, "skip", {
       ...getSelectedTreeReloadOptions(targetPath),
       persistOnError: false,
@@ -1634,9 +1682,10 @@ export function useExplorerNavigationController(args: {
       keepSelection: true,
       keepSearchResults: true,
     });
-    if (didOpen && options.refreshExpandedTree) {
+    if (didOpen && options.refreshExpandedTree && isSameView()) {
       await refreshVisibleTreePath(treeRootPathRef.current, currentPathRef.current, {
         recursive: true,
+        isCurrent: isSameView,
       });
     }
   }

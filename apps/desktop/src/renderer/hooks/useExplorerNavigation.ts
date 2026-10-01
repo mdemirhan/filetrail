@@ -71,6 +71,9 @@ export function useExplorerNavigation() {
   const lastLeftPaneSubviewRef = useRef<"favorites" | "tree">("tree");
   // The tab on screen. Everything else in this store is that tab's state.
   const activeTabIdRef = useRef("");
+  // Counts the times another tab's state was put into this store. Work that waits for the
+  // disk compares it before and after, so it does not carry on in a tab it was not started in.
+  const viewEpochRef = useRef(0);
 
   return {
     mainView,
@@ -154,5 +157,6 @@ export function useExplorerNavigation() {
     leftPaneSubviewRef,
     lastLeftPaneSubviewRef,
     activeTabIdRef,
+    viewEpochRef,
   };
 }
