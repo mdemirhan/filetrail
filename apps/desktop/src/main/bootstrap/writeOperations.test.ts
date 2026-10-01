@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import type { WriteOperationProgressEvent } from "@filetrail/contracts";
 import type { WriteService } from "@filetrail/core";
 
-import { createWriteOperationCoordinator } from "./writeOperations";
+import { PROGRESS_UPDATE_INTERVAL_MS, createWriteOperationCoordinator } from "./writeOperations";
 
 const electronMock = vi.hoisted(() => ({
   trashItem: vi.fn(),
@@ -586,6 +586,65 @@ describe("createWriteOperationCoordinator", () => {
 
     expect(countLifecycleListeners(sender)).toBe(0);
     coordinator.shutdown();
+  });
+
+  it("sends at most one plain progress update per interval, and the newest always arrives", () => {
+    vi.useFakeTimers();
+    try {
+      const { writeService, emit } = createSubscribingWriteService();
+      const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs());
+      const sender = createSender();
+      startPaste(coordinator, sender);
+      const sentCounts = () =>
+        sender.send.mock.calls.map(
+          ([, payload]) => (payload as WriteOperationProgressEvent).completedItemCount,
+        );
+
+      // A folder of small files: one update per file, all within the same moment.
+      for (let completed = 1; completed <= 500; completed += 1) {
+        emit({
+          ...createCopyPasteTerminalEvent("copy-op-1", "running"),
+          completedItemCount: completed,
+          totalItemCount: 1000,
+        });
+      }
+      expect(sentCounts()).toEqual([1]);
+
+      vi.advanceTimersByTime(PROGRESS_UPDATE_INTERVAL_MS);
+      expect(sentCounts()).toEqual([1, 500]);
+
+      // Nothing new: nothing more is sent.
+      vi.advanceTimersByTime(PROGRESS_UPDATE_INTERVAL_MS * 5);
+      expect(sentCounts()).toEqual([1, 500]);
+
+      // After a quiet spell the next update goes out at once.
+      emit({ ...createCopyPasteTerminalEvent("copy-op-1", "running"), completedItemCount: 501 });
+      expect(sentCounts()).toEqual([1, 500, 501]);
+
+      // A question for the user does not wait, and replaces an update that was.
+      emit({ ...createCopyPasteTerminalEvent("copy-op-1", "running"), completedItemCount: 502 });
+      emit({
+        ...createCopyPasteTerminalEvent("copy-op-1", "awaiting_resolution"),
+        completedItemCount: 503,
+        runtimeConflict: createRuntimeConflict("conflict-1"),
+      });
+      expect(sentCounts()).toEqual([1, 500, 501, 503]);
+
+      // Neither does the end, after which nothing held back is sent late.
+      emit({ ...createCopyPasteTerminalEvent("copy-op-1", "running"), completedItemCount: 504 });
+      emit({ ...createCopyPasteTerminalEvent("copy-op-1", "running"), completedItemCount: 505 });
+      emit(createCopyPasteTerminalEvent("copy-op-1", "completed"));
+      const statuses = sender.send.mock.calls.map(
+        ([, payload]) => (payload as WriteOperationProgressEvent).status,
+      );
+      expect(statuses.at(-1)).toBe("completed");
+      const sentBeforeWaiting = sender.send.mock.calls.length;
+      vi.advanceTimersByTime(PROGRESS_UPDATE_INTERVAL_MS * 5);
+      expect(sender.send.mock.calls).toHaveLength(sentBeforeWaiting);
+      coordinator.shutdown();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("passes back the write service's rejection of a conflict answer", () => {

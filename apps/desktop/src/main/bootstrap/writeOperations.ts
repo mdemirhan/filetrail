@@ -42,6 +42,11 @@ type SenderLifecycleEvents = {
 
 const WRITE_OPERATION_PROGRESS_CHANNEL = "filetrail:writeOperationProgress";
 
+// Progress is reported once per item, which for a folder of small files is thousands of
+// messages a second. The window only keeps a progress card current, so plain "running"
+// updates are sent at most this often; the newest one always gets through.
+export const PROGRESS_UPDATE_INTERVAL_MS = 100;
+
 // Answer returned to a request that isn't allowed to act on an operation (unknown id, or
 // asked by a window other than the one that started it).
 const REJECTED_REQUEST = { ok: false } as const;
@@ -63,6 +68,14 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
   const senderDetachers = new Map<string, () => void>();
   const copyPasteRequests = new Map<string, IpcRequest<"copyPaste:start">>();
   const localWriteOperationControllers = new Map<string, AbortController>();
+  const progressThrottles = new Map<
+    string,
+    {
+      lastSentAt: number;
+      pending: (() => void) | null;
+      timer: ReturnType<typeof setTimeout> | null;
+    }
+  >();
   let activeWriteOperationId: string | null = null;
   let localWriteOperationSequence = 0;
 
@@ -89,36 +102,39 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
     }
     const sender = writeOperationSenders.get(event.operationId);
     if (!sender) {
+      forgetProgress(event.operationId);
       return;
     }
     try {
-      sendProgress(
-        sender,
-        writeOperationProgressEventSchema.parse({
-          operationId: event.operationId,
-          action,
-          status: event.status,
-          completedItemCount: event.completedItemCount,
-          totalItemCount: event.totalItemCount,
-          completedByteCount: event.completedByteCount,
-          totalBytes: event.totalBytes,
-          currentSourcePath: event.currentSourcePath,
-          currentDestinationPath: event.currentDestinationPath,
-          runtimeConflict: event.runtimeConflict,
-          result: event.result
-            ? {
-                operationId: event.result.operationId,
-                action,
-                status: event.result.status,
-                targetPath: event.result.destinationDirectoryPath,
-                startedAt: event.result.startedAt,
-                finishedAt: event.result.finishedAt,
-                summary: event.result.summary,
-                items: event.result.items,
-                error: event.result.error,
-              }
-            : null,
-        }),
+      deliverProgress(event.operationId, event.status, event.runtimeConflict != null, () =>
+        sendProgress(
+          sender,
+          writeOperationProgressEventSchema.parse({
+            operationId: event.operationId,
+            action,
+            status: event.status,
+            completedItemCount: event.completedItemCount,
+            totalItemCount: event.totalItemCount,
+            completedByteCount: event.completedByteCount,
+            totalBytes: event.totalBytes,
+            currentSourcePath: event.currentSourcePath,
+            currentDestinationPath: event.currentDestinationPath,
+            runtimeConflict: event.runtimeConflict,
+            result: event.result
+              ? {
+                  operationId: event.result.operationId,
+                  action,
+                  status: event.result.status,
+                  targetPath: event.result.destinationDirectoryPath,
+                  startedAt: event.result.startedAt,
+                  finishedAt: event.result.finishedAt,
+                  summary: event.result.summary,
+                  items: event.result.items,
+                  error: event.result.error,
+                }
+              : null,
+          }),
+        ),
       );
     } finally {
       if (isTerminalStatus(event.status)) {
@@ -126,6 +142,58 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
       }
     }
   });
+
+  // Sends a progress update now, or holds it back if one went out a moment ago (see
+  // PROGRESS_UPDATE_INTERVAL_MS). Only plain "running" updates wait: a question for the
+  // user and the end of the operation go out at once, ahead of anything held back.
+  function deliverProgress(
+    operationId: string,
+    status: WriteOperationProgressEvent["status"],
+    asksUser: boolean,
+    send: () => void,
+  ): void {
+    const throttle = progressThrottles.get(operationId) ?? {
+      lastSentAt: Number.NEGATIVE_INFINITY,
+      pending: null,
+      timer: null,
+    };
+    if (status !== "running" || asksUser) {
+      forgetProgress(operationId);
+      if (!isTerminalStatus(status)) {
+        progressThrottles.set(operationId, { lastSentAt: Date.now(), pending: null, timer: null });
+      }
+      send();
+      return;
+    }
+    progressThrottles.set(operationId, throttle);
+    const waitMs = throttle.lastSentAt + PROGRESS_UPDATE_INTERVAL_MS - Date.now();
+    if (waitMs <= 0 && throttle.timer === null) {
+      throttle.lastSentAt = Date.now();
+      send();
+      return;
+    }
+    throttle.pending = send;
+    if (throttle.timer === null) {
+      throttle.timer = setTimeout(
+        () => {
+          throttle.timer = null;
+          const pending = throttle.pending;
+          throttle.pending = null;
+          throttle.lastSentAt = Date.now();
+          pending?.();
+        },
+        Math.max(waitMs, 0),
+      );
+    }
+  }
+
+  function forgetProgress(operationId: string): void {
+    const throttle = progressThrottles.get(operationId);
+    if (throttle?.timer) {
+      clearTimeout(throttle.timer);
+    }
+    progressThrottles.delete(operationId);
+  }
 
   function createLocalWriteOperationId(): string {
     localWriteOperationSequence += 1;
@@ -262,7 +330,11 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
       releaseLocalWriteOperation(event.operationId);
     }
     if (sender) {
-      sendProgress(sender, writeOperationProgressEventSchema.parse(event));
+      deliverProgress(event.operationId, event.status, false, () =>
+        sendProgress(sender, writeOperationProgressEventSchema.parse(event)),
+      );
+    } else {
+      forgetProgress(event.operationId);
     }
   }
 
@@ -890,6 +962,9 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
         detach();
       }
       senderDetachers.clear();
+      for (const operationId of [...progressThrottles.keys()]) {
+        forgetProgress(operationId);
+      }
       writeOperationSenders.clear();
       copyPasteRequests.clear();
       localWriteOperationControllers.clear();
