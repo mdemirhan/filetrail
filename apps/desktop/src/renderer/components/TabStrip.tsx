@@ -46,6 +46,16 @@ export function TabStrip({
   const menuRef = useRef<HTMLDivElement | null>(null);
   useKeepInViewport(menuRef, menu !== null);
 
+  // With more tabs than fit, the row scrolls: the tab on screen is kept in sight.
+  const activeTabId = tabs.find((tab) => tab.active)?.id ?? null;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: also when a tab is added or removed, which can move the active tab out of sight.
+  useEffect(() => {
+    const activeTab = tabsRef.current?.querySelector<HTMLElement>("[aria-selected='true']");
+    if (activeTab && typeof activeTab.scrollIntoView === "function") {
+      activeTab.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+  }, [activeTabId, tabs.length]);
+
   useEffect(() => {
     if (!menu) {
       return;

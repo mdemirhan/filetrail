@@ -9300,6 +9300,31 @@ describe("App tabs", () => {
     expect(await screen.findByTitle("/Users/demo/arrived.txt")).toBeInTheDocument();
   });
 
+  it("reads a tab's tree with the hidden-files setting of the moment when the tab comes back", async () => {
+    const harness = createAppHarness();
+    await renderApp(harness);
+    await pressKey({ key: "t", metaKey: true });
+    await openDirectory("/Users/demo/Folder");
+    const treeRequests = () =>
+      harness.invocations
+        .filter((call) => call.channel === "tree:getChildren")
+        .map((call) => call.payload as IpcRequestInput<"tree:getChildren">);
+
+    // Hidden files are shown from the second tab; the first tab's tree was read without them.
+    await pressKey({ key: ".", metaKey: true, shiftKey: true });
+    await waitFor(() => expect(treeRequests().some((request) => request.includeHidden)).toBe(true));
+    const requestsBefore = treeRequests().length;
+    await pressKey({ key: "Tab", ctrlKey: true });
+
+    await waitFor(() =>
+      expect(treeRequests().slice(requestsBefore)).toContainEqual({
+        path: "/Users/demo",
+        includeHidden: true,
+      }),
+    );
+    expect(screen.getByTestId("content-current-path")).toHaveTextContent(/^\/Users\/demo$/);
+  });
+
   it("opens the nearest folder that still exists when a tab's folder is gone", async () => {
     const harness = createAppHarness();
     await renderApp(harness);

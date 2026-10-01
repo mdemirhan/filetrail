@@ -13,6 +13,7 @@ import {
   applyBackgroundSearchUpdate,
   describeTab,
   describeTabSnapshot,
+  disambiguateTabLabels,
   moveTabInList,
   resolveAdjacentTab,
   resolveTabAfterClose,
@@ -52,6 +53,9 @@ type PendingActivation = {
   contentScroll: { top: number; left: number };
   treeScrollTop: number | null;
   focusedPane: "tree" | "content";
+  treeRootPath: string;
+  // The tree was started again from its root and has to be filled in.
+  treeRebuilt: boolean;
   refreshExpandedTree: boolean;
   rerunSearch: boolean;
 };
@@ -138,7 +142,6 @@ export function useExplorerTabs(args: {
   // The tabs that were closed, most recent last, for Reopen Closed Tab. They are not kept
   // between launches.
   const closedTabsRef = useRef<TabSnapshot[]>([]);
-  const [closedTabCount, setClosedTabCount] = useState(0);
 
   function rememberClosedTab(snapshot: TabSnapshot | null) {
     if (!snapshot || snapshot.currentPath.length === 0) {
@@ -148,7 +151,6 @@ export function useExplorerTabs(args: {
       ...closedTabsRef.current.slice(-(CLOSED_TABS_LIMIT - 1)),
       toReopenableSnapshot(snapshot),
     ];
-    setClosedTabCount(closedTabsRef.current.length);
   }
 
   function commitState(next: ExplorerTabsState) {
@@ -237,6 +239,7 @@ export function useExplorerTabs(args: {
       leftPaneSubview: navigation.leftPaneSubview,
       focusedPane:
         navigation.focusedPane ?? navigation.lastExplorerFocusPaneRef.current ?? "content",
+      includeHidden: preferences.includeHidden,
       view: {
         treeNodes: navigation.treeNodesRef.current,
         currentEntries: navigation.currentEntries,
@@ -276,11 +279,16 @@ export function useExplorerTabs(args: {
     writeOperations.setRenameDialogState((current) => (current?.inline ? null : current));
 
     const view = snapshot.view;
-    const treeNodes = view
-      ? settleTreeNodes(view.treeNodes)
-      : snapshot.treeRootPath.length > 0
-        ? { [snapshot.treeRootPath]: createTreeNode(snapshot.treeRootPath, true) }
-        : {};
+    // Hidden files were shown or hidden since the tab was left: its tree lists folders by
+    // the old setting, so it is started again from its root, as it is in the tab on screen
+    // when the setting changes.
+    const treeRebuilt = view !== null && snapshot.includeHidden !== preferences.includeHidden;
+    const treeNodes =
+      view && !treeRebuilt
+        ? settleTreeNodes(view.treeNodes)
+        : snapshot.treeRootPath.length > 0
+          ? { [snapshot.treeRootPath]: createTreeNode(snapshot.treeRootPath, true) }
+          : {};
     const metadataByPath = view?.metadataByPath ?? {};
 
     preferences.setViewMode(snapshot.viewMode);
@@ -332,6 +340,8 @@ export function useExplorerTabs(args: {
       contentScroll: view?.contentScroll ?? { top: 0, left: 0 },
       treeScrollTop: view?.treeScrollTop ?? null,
       focusedPane: snapshot.focusedPane,
+      treeRootPath: snapshot.treeRootPath,
+      treeRebuilt,
       refreshExpandedTree: options.refreshExpandedTree ?? false,
       rerunSearch,
     };
@@ -553,7 +563,6 @@ export function useExplorerTabs(args: {
       return;
     }
     closedTabsRef.current = closedTabsRef.current.slice(0, -1);
-    setClosedTabCount(closedTabsRef.current.length);
     openTabWithSnapshot(captureLiveTab(), snapshot, "load");
   }
 
@@ -596,6 +605,7 @@ export function useExplorerTabs(args: {
           leftPaneSubview:
             startupTab.favoritePath && favoritesPlacement === "separate" ? "favorites" : "tree",
           focusedPane: "content",
+          includeHidden: false,
           view: null,
           search: null,
         },
@@ -674,6 +684,9 @@ export function useExplorerTabs(args: {
       return;
     }
     if (pending.mode === "reload") {
+      if (pending.treeRebuilt && pending.treeRootPath.length > 0) {
+        void navActions.loadTreeChildren(pending.treeRootPath);
+      }
       void navActions.reloadFolderInPlace({ refreshExpandedTree: pending.refreshExpandedTree });
       return;
     }
@@ -742,17 +755,19 @@ export function useExplorerTabs(args: {
   );
   const tabItems = useMemo<ExplorerTabItem[]>(
     () =>
-      state.tabs.map((tab) => ({
-        id: tab.id,
-        active: tab.id === state.activeTabId,
-        path:
-          tab.id === state.activeTabId || !tab.snapshot
-            ? navigation.currentPath
-            : tab.snapshot.currentPath,
-        ...(tab.id === state.activeTabId || !tab.snapshot
-          ? liveDescription
-          : describeTabSnapshot(tab.snapshot)),
-      })),
+      disambiguateTabLabels(
+        state.tabs.map((tab) => ({
+          id: tab.id,
+          active: tab.id === state.activeTabId,
+          path:
+            tab.id === state.activeTabId || !tab.snapshot
+              ? navigation.currentPath
+              : tab.snapshot.currentPath,
+          ...(tab.id === state.activeTabId || !tab.snapshot
+            ? liveDescription
+            : describeTabSnapshot(tab.snapshot)),
+        })),
+      ),
     [liveDescription, navigation.currentPath, state],
   );
 
@@ -805,7 +820,6 @@ export function useExplorerTabs(args: {
     closeOtherTabs,
     duplicateTab,
     reopenClosedTab,
-    canReopenClosedTab: closedTabCount > 0,
     moveTab,
   };
 }

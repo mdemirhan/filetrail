@@ -901,12 +901,16 @@ export function useExplorerNavigationController(args: {
       keepSelection?: boolean;
       /** Search results on screen stay there; only the folder underneath is read again. */
       keepSearchResults?: boolean;
+      /** The folder is already on screen and is only checked for changes: no "Loading…". */
+      quiet?: boolean;
     } = {},
   ): Promise<boolean> {
     const requestId = ++directoryRequestRef.current;
     const isSameView = createViewGuard();
     setInfoTargetPathOverride(null);
-    setDirectoryLoading(true);
+    if (!options.quiet) {
+      setDirectoryLoading(true);
+    }
     setDirectoryError(null);
     setLocationError(null);
     try {
@@ -1681,6 +1685,7 @@ export function useExplorerNavigationController(args: {
       forceTreeReload: true,
       keepSelection: true,
       keepSearchResults: true,
+      quiet: true,
     });
     if (didOpen && options.refreshExpandedTree && isSameView()) {
       await refreshVisibleTreePath(treeRootPathRef.current, currentPathRef.current, {
