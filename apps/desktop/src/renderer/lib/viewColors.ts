@@ -1,10 +1,9 @@
 // Text colors for the views that style inline (Settings, Help, Action Log). They reference
-// the root tokens that `applyAppearance` maintains, so the theme and the text color
-// overrides reach these views exactly as they reach the rest of the app.
+// the root tokens that `applyAppearance` maintains, so the palette reaches these views
+// exactly as it reaches the rest of the app.
 export const VIEW_TEXT = {
   primary: "var(--text-primary)",
   secondary: "var(--text-secondary)",
-  // The "Muted" text override writes --text-tertiary along with the dimmer tokens.
   muted: "var(--text-tertiary)",
 } as const;
 

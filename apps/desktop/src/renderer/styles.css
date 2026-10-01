@@ -1,6 +1,5 @@
 :root {
-  /* Black on light themes, white on dark: tints for stripes and hover shades that must
-     not pick up a text color override. */
+  /* Black on light themes, white on dark: the ink for stripe and hover tints. */
   --neutral-ink: #000000;
   /* Sticky column headers sit on the window background in every theme. */
   --bg-panel: var(--bg-base);
@@ -48,7 +47,6 @@
   --icon-pink: #db2777;
   --icon-violet: #8b5cf6;
   --icon-orange: #ea580c;
-  --icon-sky: #0284c7;
   --danger: #b42318;
   --sidebar-bg: #e8eaf2;
   --toolbar-bg: #e5e8ef;
@@ -186,7 +184,6 @@
   --icon-pink: #cc8ba2;
   --icon-violet: #b294bb;
   --icon-orange: #d08770;
-  --icon-sky: #81a2be;
   --danger: #cc6666;
   --sidebar-bg: #1b1d1f;
   --toolbar-bg: #18191b;
@@ -312,7 +309,6 @@
   --icon-pink: #f472b6;
   --icon-violet: #a78bfa;
   --icon-orange: #fb923c;
-  --icon-sky: #38bdf8;
   --danger: #f08080;
   --sidebar-bg: #20232b;
   --toolbar-bg: #1c1f26;
@@ -438,7 +434,6 @@
   --icon-pink: #f5c2e7;
   --icon-violet: #cba6f7;
   --icon-orange: #fab387;
-  --icon-sky: #74c7ec;
   --danger: #f38ba8;
   --sidebar-bg: #181825;
   --toolbar-bg: #11111b;
@@ -803,7 +798,7 @@ input:focus-visible {
   min-width: 38px;
   height: 36px;
   border-radius: 10px;
-  color: var(--sidebar-rail-icon, var(--text-tertiary));
+  color: var(--text-tertiary);
 }
 
 .toolbar-group-view .toolbar-segmented .tb-btn:hover:not(:disabled) {
@@ -812,8 +807,8 @@ input:focus-visible {
 }
 
 .toolbar-group-view .toolbar-segmented .tb-btn.active {
-  background: var(--sidebar-rail-active-bg, var(--bg-active-inactive));
-  color: var(--sidebar-rail-icon-active, var(--text-primary));
+  background: var(--bg-active-inactive);
+  color: var(--text-primary);
 }
 
 .toolbar-group-view .toolbar-segmented .tb-btn + .tb-btn {
@@ -2147,7 +2142,7 @@ body.resizing-panels * {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--sidebar-rail-icon, var(--text-tertiary));
+  color: var(--text-tertiary);
   cursor: default;
 }
 
@@ -2161,8 +2156,8 @@ body.resizing-panels * {
 }
 
 .sidebar-rail-button.active {
-  background: var(--sidebar-rail-active-bg, var(--bg-active-inactive));
-  color: var(--sidebar-rail-icon-active, var(--text-primary));
+  background: var(--bg-active-inactive);
+  color: var(--text-primary);
 }
 
 .sidebar-rail-separator {
@@ -2218,12 +2213,12 @@ body.resizing-panels * {
 
 .sidebar-rail-menu-item:hover,
 .sidebar-rail-menu-item.active {
-  background: var(--sidebar-rail-menu-active-bg, var(--bg-hover));
-  color: var(--sidebar-rail-menu-active-fg, var(--text-primary));
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .sidebar-rail-menu-check {
-  color: var(--sidebar-rail-menu-check, var(--accent-text));
+  color: var(--accent-text);
 }
 
 .sidebar-main {
@@ -3179,98 +3174,6 @@ body.resizing-panels * {
   stroke-width: 1.7;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-
-.favorite-icon-home {
-  color: var(--accent-blue);
-}
-
-.favorite-icon-applications {
-  color: var(--accent-gold);
-}
-
-.favorite-icon-desktop {
-  color: var(--icon-cyan);
-}
-
-.favorite-icon-documents {
-  color: var(--icon-indigo);
-}
-
-.favorite-icon-downloads {
-  color: var(--icon-green);
-}
-
-.favorite-icon-trash {
-  color: var(--danger);
-}
-
-.favorite-icon-folder {
-  color: var(--accent-gold);
-}
-
-.favorite-icon-star {
-  color: var(--accent-gold);
-}
-
-.favorite-icon-drive {
-  color: var(--icon-neutral);
-}
-
-.favorite-icon-code {
-  color: var(--icon-blue);
-}
-
-.favorite-icon-terminal {
-  color: var(--icon-green);
-}
-
-.favorite-icon-globe {
-  color: var(--icon-cyan);
-}
-
-.favorite-icon-music {
-  color: var(--icon-pink);
-}
-
-.favorite-icon-photos {
-  color: var(--icon-violet);
-}
-
-.favorite-icon-videos {
-  color: var(--icon-peach);
-}
-
-.favorite-icon-archive {
-  color: var(--icon-orange);
-}
-
-.favorite-icon-cloud {
-  color: var(--icon-sky);
-}
-
-.favorite-icon-server {
-  color: var(--icon-neutral);
-}
-
-.favorite-icon-projects {
-  color: var(--icon-blue);
-}
-
-.favorite-icon-books {
-  color: var(--accent-gold);
-}
-
-.favorite-icon-camera {
-  color: var(--icon-cyan);
-}
-
-.favorite-icon-toolbox {
-  color: var(--icon-green);
-}
-
-.favorite-icon-network {
-  color: var(--icon-indigo);
 }
 
 /* Favorite icons take the accent color, as in Finder's sidebar. */
