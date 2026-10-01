@@ -2027,6 +2027,7 @@ export function SettingsView({
   topToolbarItems,
   leftToolbarItems,
   restoreLastVisitedFolderOnStartup,
+  restoreOpenTabsOnStartup,
   homePath,
   terminalApp,
   defaultTextEditor,
@@ -2064,6 +2065,7 @@ export function SettingsView({
   onResetLeftToolbar,
   onResetToolbars,
   onRestoreLastVisitedFolderOnStartupChange,
+  onRestoreOpenTabsOnStartupChange,
   onBrowseTerminalApp,
   onClearTerminalApp,
   onBrowseDefaultTextEditor,
@@ -2110,6 +2112,7 @@ export function SettingsView({
   topToolbarItems: ToolbarItemId[];
   leftToolbarItems: LeftToolbarItems;
   restoreLastVisitedFolderOnStartup: boolean;
+  restoreOpenTabsOnStartup: boolean;
   homePath: string;
   terminalApp: ApplicationSelection | null;
   defaultTextEditor: ApplicationSelection;
@@ -2147,6 +2150,7 @@ export function SettingsView({
   onResetLeftToolbar: () => void;
   onResetToolbars: () => void;
   onRestoreLastVisitedFolderOnStartupChange: (value: boolean) => void;
+  onRestoreOpenTabsOnStartupChange: (value: boolean) => void;
   onBrowseTerminalApp: () => void;
   onClearTerminalApp: () => void;
   onBrowseDefaultTextEditor: () => void;
@@ -2626,7 +2630,7 @@ export function SettingsView({
         {showSection("general") ? (
           <SectionCard icon="⌨" title="Keyboard" theme={palette}>
             <SettingRow
-              title="Tab switches between panes"
+              title="Tab key switches between panes"
               desc="Use Tab and Shift+Tab to move between the folder tree and file list while keeping native Tab behavior in dialogs and standard controls."
               theme={palette}
               isLast
@@ -2635,7 +2639,7 @@ export function SettingsView({
                   checked={tabSwitchesExplorerPanes}
                   onToggle={() => onTabSwitchesExplorerPanesChange(!tabSwitchesExplorerPanes)}
                   theme={palette}
-                  label="Tab switches between panes"
+                  label="Tab key switches between panes"
                 />
               }
             />
@@ -2691,6 +2695,19 @@ export function SettingsView({
                   }
                   theme={palette}
                   label="Restore last visited folder"
+                />
+              }
+            />
+            <SettingRow
+              title="Restore open tabs"
+              desc="Reopen the tabs that were open. Each returns to its own folder when Restore last visited folder is on, and to home when it is off."
+              theme={palette}
+              right={
+                <Toggle
+                  checked={restoreOpenTabsOnStartup}
+                  onToggle={() => onRestoreOpenTabsOnStartupChange(!restoreOpenTabsOnStartup)}
+                  theme={palette}
+                  label="Restore open tabs"
                 />
               }
             />

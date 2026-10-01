@@ -62,3 +62,92 @@ export function resolveStartupNavigation(
         : null,
   };
 }
+
+// A tab as the window opens it: where it starts and how it shows its folder.
+export type StartupTab = {
+  path: string;
+  rootPath: string;
+  favoritePath: string | null;
+  viewMode: AppPreferences["viewMode"];
+  sortBy: AppPreferences["sortBy"];
+  sortDirection: AppPreferences["sortDirection"];
+};
+
+// The tabs the window opens with and the one that is on screen. "Restore open tabs" brings
+// back the tabs that were open; "Restore last visited folder" decides whether they return
+// to their own folders or start at home. A folder the app was launched with is shown in a
+// tab of its own, unless one of the restored tabs already has it.
+export function resolveStartupTabs(
+  preferences: Pick<
+    AppPreferences,
+    | "restoreLastVisitedFolderOnStartup"
+    | "restoreOpenTabsOnStartup"
+    | "openTabs"
+    | "activeTabIndex"
+    | "lastVisitedPath"
+    | "lastVisitedFavoritePath"
+    | "treeRootPath"
+    | "viewMode"
+    | "sortBy"
+    | "sortDirection"
+  >,
+  homePath: string,
+  startupFolderPath: string | null = null,
+): { tabs: StartupTab[]; activeIndex: number } {
+  const view = {
+    viewMode: preferences.viewMode,
+    sortBy: preferences.sortBy,
+    sortDirection: preferences.sortDirection,
+  };
+  if (!preferences.restoreOpenTabsOnStartup || preferences.openTabs.length === 0) {
+    const { startupPath, startupRootPath, startupFavoritePath } = resolveStartupNavigation(
+      preferences,
+      homePath,
+      startupFolderPath,
+    );
+    return {
+      tabs: [
+        {
+          path: startupPath,
+          rootPath: startupRootPath,
+          favoritePath: startupFavoritePath,
+          ...view,
+        },
+      ],
+      activeIndex: 0,
+    };
+  }
+
+  const tabs = preferences.openTabs.map((tab): StartupTab => {
+    const tabView = {
+      viewMode: tab.viewMode,
+      sortBy: tab.sortBy,
+      sortDirection: tab.sortDirection,
+    };
+    if (!preferences.restoreLastVisitedFolderOnStartup || !tab.path) {
+      return { path: homePath, rootPath: homePath, favoritePath: null, ...tabView };
+    }
+    return {
+      path: tab.path,
+      rootPath: resolvePersistedStartupRoot(tab.treeRootPath, homePath, tab.path),
+      favoritePath: tab.favoritePath === tab.path ? tab.favoritePath : null,
+      ...tabView,
+    };
+  });
+  let activeIndex = Math.min(preferences.activeTabIndex, tabs.length - 1);
+  if (startupFolderPath) {
+    const existingIndex = tabs.findIndex((tab) => tab.path === startupFolderPath);
+    if (existingIndex >= 0) {
+      activeIndex = existingIndex;
+    } else {
+      tabs.push({
+        path: startupFolderPath,
+        rootPath: resolvePersistedStartupRoot(null, homePath, startupFolderPath),
+        favoritePath: null,
+        ...view,
+      });
+      activeIndex = tabs.length - 1;
+    }
+  }
+  return { tabs, activeIndex };
+}

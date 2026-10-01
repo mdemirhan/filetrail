@@ -95,6 +95,7 @@ export function SettingsWindowApp() {
     showSidebarRail: preferences.showSidebarRail,
     showSidebarBottomRail: preferences.showSidebarBottomRail,
     restoreLastVisitedFolderOnStartup: preferences.restoreLastVisitedFolderOnStartup,
+    restoreOpenTabsOnStartup: preferences.restoreOpenTabsOnStartup,
     favorites: preferences.favorites,
     favoritesPlacement: preferences.favoritesPlacement,
     terminalApp: preferences.terminalApp,
@@ -323,6 +324,8 @@ export function SettingsWindowApp() {
             showSidebarBottomRail={preferences.showSidebarBottomRail}
             onShowSidebarBottomRailChange={preferences.setShowSidebarBottomRail}
             restoreLastVisitedFolderOnStartup={preferences.restoreLastVisitedFolderOnStartup}
+            restoreOpenTabsOnStartup={preferences.restoreOpenTabsOnStartup}
+            onRestoreOpenTabsOnStartupChange={preferences.setRestoreOpenTabsOnStartup}
             homePath={homePath}
             terminalApp={preferences.terminalApp}
             defaultTextEditor={preferences.defaultTextEditor}

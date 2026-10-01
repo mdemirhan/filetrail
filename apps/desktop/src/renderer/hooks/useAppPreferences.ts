@@ -84,6 +84,9 @@ export function useAppPreferences() {
   const [restoreLastVisitedFolderOnStartup, setRestoreLastVisitedFolderOnStartup] = useState(
     DEFAULT_APP_PREFERENCES.restoreLastVisitedFolderOnStartup,
   );
+  const [restoreOpenTabsOnStartup, setRestoreOpenTabsOnStartup] = useState(
+    DEFAULT_APP_PREFERENCES.restoreOpenTabsOnStartup,
+  );
   const [favorites, setFavorites] = useState<FavoritePreference[]>(
     DEFAULT_APP_PREFERENCES.favorites,
   );
@@ -174,6 +177,8 @@ export function useAppPreferences() {
     setShowSidebarBottomRail,
     restoreLastVisitedFolderOnStartup,
     setRestoreLastVisitedFolderOnStartup,
+    restoreOpenTabsOnStartup,
+    setRestoreOpenTabsOnStartup,
     favorites,
     setFavorites,
     favoritesPlacement,
@@ -259,6 +264,7 @@ export function applyPreferencesPatch(store: AppPreferencesStore, patch: Incomin
   set("showSidebarRail", store.setShowSidebarRail);
   set("showSidebarBottomRail", store.setShowSidebarBottomRail);
   set("restoreLastVisitedFolderOnStartup", store.setRestoreLastVisitedFolderOnStartup);
+  set("restoreOpenTabsOnStartup", store.setRestoreOpenTabsOnStartup);
   set("favorites", store.setFavorites);
   set("favoritesPlacement", store.setFavoritesPlacement);
   set("terminalApp", store.setTerminalApp);

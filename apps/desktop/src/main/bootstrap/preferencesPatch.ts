@@ -133,6 +133,15 @@ export function toPreferencePatch(
   if (value.restoreLastVisitedFolderOnStartup !== undefined) {
     patch.restoreLastVisitedFolderOnStartup = value.restoreLastVisitedFolderOnStartup;
   }
+  if (value.restoreOpenTabsOnStartup !== undefined) {
+    patch.restoreOpenTabsOnStartup = value.restoreOpenTabsOnStartup;
+  }
+  if (value.openTabs !== undefined) {
+    patch.openTabs = value.openTabs;
+  }
+  if (value.activeTabIndex !== undefined) {
+    patch.activeTabIndex = value.activeTabIndex;
+  }
   if (value.treeRootPath !== undefined) {
     patch.treeRootPath = value.treeRootPath;
   }

@@ -560,6 +560,15 @@ export const appLogEntrySchema = z.object({
 
 export const themePreferenceSchema = z.union([z.literal("auto"), themeModeSchema]);
 
+export const openTabPreferenceSchema = z.object({
+  path: z.string().min(1).nullable(),
+  treeRootPath: z.string().min(1).nullable(),
+  favoritePath: z.string().min(1).nullable(),
+  viewMode: explorerViewModeSchema,
+  sortBy: directorySortBySchema,
+  sortDirection: sortDirectionSchema,
+});
+
 export const appPreferencesSchema = z.object({
   theme: themePreferenceSchema,
   autoLightTheme: themeModeSchema,
@@ -604,6 +613,9 @@ export const appPreferencesSchema = z.object({
   treeWidth: z.number().int().min(220).max(520),
   inspectorWidth: z.number().int().min(260).max(480),
   restoreLastVisitedFolderOnStartup: z.boolean(),
+  restoreOpenTabsOnStartup: z.boolean(),
+  openTabs: z.array(openTabPreferenceSchema).max(100),
+  activeTabIndex: z.number().int().min(0),
   treeRootPath: z.string().min(1).nullable(),
   lastVisitedPath: z.string().min(1).nullable(),
   lastVisitedFavoritePath: z.string().min(1).nullable(),

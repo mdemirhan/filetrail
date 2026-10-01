@@ -8386,6 +8386,8 @@ function createAppHarness(
     path: string,
     entries: IpcResponse<"directory:getSnapshot">["entries"],
   ) => void;
+  // The folder is gone from disk: reading it fails from now on.
+  removeDirectory: (path: string) => void;
   resolveCopyPastePlan: () => void;
   resolveCopyPasteStart: () => void;
 } {
@@ -8806,6 +8808,9 @@ function createAppHarness(
         entries,
       };
     },
+    removeDirectory(path) {
+      delete directorySnapshots[path];
+    },
     resolveCopyPastePlan() {
       resolveCopyPastePlanPromises.shift()?.();
     },
@@ -9185,6 +9190,31 @@ describe("App tabs", () => {
     expect(await screen.findByTitle("/Users/demo/arrived.txt")).toBeInTheDocument();
   });
 
+  it("opens the nearest folder that still exists when a tab's folder is gone", async () => {
+    const harness = createAppHarness();
+    await renderApp(harness);
+    await openDirectory("/Users/demo/Folder");
+    await pressKey({ key: "t", metaKey: true });
+    await pressKey({ key: "ArrowUp", metaKey: true });
+    await waitFor(() =>
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent(/^\/Users\/demo$/),
+    );
+    expect(tabLabels()).toEqual(["Folder", "demo"]);
+
+    // The first tab's folder is removed while the tab is in the background.
+    harness.removeDirectory("/Users/demo/Folder");
+    harness.setDirectoryEntries("/Users/demo", [
+      createDirectoryEntry("/Users/demo/source.txt", "file"),
+    ]);
+    await pressKey({ key: "Tab", ctrlKey: true });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent(/^\/Users\/demo$/),
+    );
+    expect(tabLabels()).toEqual(["demo", "demo"]);
+    expect(screen.getAllByRole("tab")[0]).toHaveAttribute("aria-selected", "true");
+  });
+
   it("pastes into one tab what was copied in another", async () => {
     const harness = createAppHarness();
     await renderApp(harness);
@@ -9283,6 +9313,98 @@ describe("App tabs", () => {
 
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/Folder");
+  });
+
+  const savedTab = (path: string) => ({
+    path,
+    treeRootPath: "/Users/demo",
+    favoritePath: null,
+    viewMode: "details" as const,
+    sortBy: "name" as const,
+    sortDirection: "asc" as const,
+  });
+
+  it("reopens the tabs that were open, reading each folder when its tab is shown", async () => {
+    const harness = createAppHarness({
+      preferences: {
+        restoreLastVisitedFolderOnStartup: true,
+        restoreOpenTabsOnStartup: true,
+        openTabs: [savedTab("/Users/demo"), savedTab("/Users/demo/Folder")],
+        activeTabIndex: 0,
+      },
+    });
+    await renderApp(harness);
+
+    expect(tabLabels()).toEqual(["demo", "Folder"]);
+    expect(activeTabLabel()).toBe("demo");
+    // The tab in the background has not been read.
+    const snapshotRequests = () =>
+      harness.invocations
+        .filter((call) => call.channel === "directory:getSnapshot")
+        .map((call) => (call.payload as { path: string }).path);
+    expect(snapshotRequests()).not.toContain("/Users/demo/Folder");
+
+    await pressKey({ key: "Tab", ctrlKey: true });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/Folder"),
+    );
+    expect(snapshotRequests()).toContain("/Users/demo/Folder");
+    // Restoring a tab is not a visit for the Go To box.
+    expect(
+      harness.invocations.filter((call) => call.channel === "places:recordVisit"),
+    ).toHaveLength(0);
+  });
+
+  it("drops a restored tab whose folder no longer exists", async () => {
+    const harness = createAppHarness({
+      preferences: {
+        restoreLastVisitedFolderOnStartup: true,
+        restoreOpenTabsOnStartup: true,
+        openTabs: [savedTab("/Users/demo"), savedTab("/Users/demo/Gone")],
+        activeTabIndex: 0,
+      },
+      itemPropertiesByPath: { "/Users/demo/Gone": "missing" },
+    });
+    await renderApp(harness);
+
+    await waitFor(() => expect(screen.queryByRole("tablist")).not.toBeInTheDocument());
+    expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo");
+  });
+
+  it("opens a single view when Restore open tabs is off", async () => {
+    const harness = createAppHarness({
+      preferences: {
+        restoreLastVisitedFolderOnStartup: true,
+        restoreOpenTabsOnStartup: false,
+        openTabs: [savedTab("/Users/demo"), savedTab("/Users/demo/Folder")],
+        activeTabIndex: 1,
+      },
+    });
+    await renderApp(harness);
+
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+  });
+
+  it("hands the open tabs over to be saved", async () => {
+    const harness = createAppHarness();
+    await renderApp(harness);
+    await pressKey({ key: "t", metaKey: true });
+    await openDirectory("/Users/demo/Folder");
+
+    await waitFor(() => {
+      const saved: Record<string, unknown> = Object.assign(
+        {},
+        ...harness.invocations
+          .filter((call) => call.channel === "app:updatePreferences")
+          .map((call) => (call.payload as { preferences: Record<string, unknown> }).preferences),
+      );
+      expect(saved.activeTabIndex).toBe(1);
+      expect(saved.openTabs).toEqual([
+        { ...savedTab("/Users/demo") },
+        { ...savedTab("/Users/demo/Folder") },
+      ]);
+    });
   });
 
   it("leaves the tab on screen alone while a dialog is open", async () => {

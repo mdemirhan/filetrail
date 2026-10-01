@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
+import type { OpenTabPreference } from "../../shared/appPreferences";
 import { EMPTY_CONTENT_SELECTION } from "../lib/contentSelection";
 import { createTreeNode } from "../lib/explorerAppUtils";
 import {
@@ -14,7 +15,12 @@ import {
   resolveTabAfterClose,
   settleTreeNodes,
 } from "../lib/explorerTabs";
-import { createFileSystemItemId, getFavoriteItemPath } from "../lib/favorites";
+import {
+  createFavoriteItemId,
+  createFileSystemItemId,
+  getFavoriteItemPath,
+} from "../lib/favorites";
+import type { StartupTab } from "../lib/startupNavigation";
 import type {
   ExplorerServices,
   NavigationStore,
@@ -386,6 +392,71 @@ export function useExplorerTabs(args: {
     });
   }
 
+  // Sets up the tabs the window opens with. The tab on screen is loaded by the caller, the
+  // way a single view always was; the others wait, unread, until they are shown. A waiting
+  // tab whose folder turns out to be gone is dropped.
+  function restoreTabs(
+    startupTabs: readonly StartupTab[],
+    activeIndex: number,
+    favoritesPlacement: "integrated" | "separate",
+  ) {
+    const tabs = startupTabs.map((startupTab, index): ExplorerTab => {
+      const id = createTabId();
+      if (index === activeIndex) {
+        return { id, snapshot: null, stale: false };
+      }
+      return {
+        id,
+        stale: false,
+        snapshot: {
+          currentPath: startupTab.path,
+          historyPaths: [startupTab.path],
+          historyIndex: 0,
+          viewMode: startupTab.viewMode,
+          sortBy: startupTab.sortBy,
+          sortDirection: startupTab.sortDirection,
+          treeRootPath: startupTab.rootPath,
+          selectedTreeItemId: startupTab.favoritePath
+            ? createFavoriteItemId(startupTab.favoritePath)
+            : createFileSystemItemId(startupTab.path),
+          leftPaneSubview:
+            startupTab.favoritePath && favoritesPlacement === "separate" ? "favorites" : "tree",
+          view: null,
+          search: null,
+        },
+      };
+    });
+    const activeTab = tabs[activeIndex];
+    if (!activeTab) {
+      return;
+    }
+    commitState({ tabs, activeTabId: activeTab.id });
+    for (const tab of tabs) {
+      const path = tab.snapshot?.currentPath;
+      if (!path) {
+        continue;
+      }
+      void client
+        .invoke("item:getProperties", { path })
+        .then((response) => {
+          if (response.item !== null) {
+            return;
+          }
+          const current = stateRef.current;
+          // Not if it has been put on screen meanwhile: it then finds the nearest folder
+          // that still exists by itself.
+          if (
+            current.activeTabId === tab.id ||
+            !current.tabs.some((other) => other.id === tab.id)
+          ) {
+            return;
+          }
+          commitState({ ...current, tabs: current.tabs.filter((other) => other.id !== tab.id) });
+        })
+        .catch(() => undefined);
+    }
+  }
+
   // The list and the tree are scrolled back before the window paints the tab.
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs once per tab shown.
   useLayoutEffect(() => {
@@ -488,7 +559,37 @@ export function useExplorerTabs(args: {
     [liveDescription, state],
   );
 
+  // What is remembered of the tabs between launches. The list keeps its identity while
+  // nothing in it changes, so it is only sent to be saved when it has.
+  const liveTabPreference: OpenTabPreference = {
+    path: navigation.currentPath || null,
+    treeRootPath: navigation.treeRootPath || null,
+    favoritePath:
+      navigation.currentPath.length > 0 &&
+      getFavoriteItemPath(navigation.selectedTreeItemId) === navigation.currentPath
+        ? navigation.currentPath
+        : null,
+    viewMode: preferences.viewMode,
+    sortBy: navigation.sortBy,
+    sortDirection: navigation.sortDirection,
+  };
+  const nextOpenTabs = state.tabs.map((tab) =>
+    tab.id === state.activeTabId || !tab.snapshot
+      ? liveTabPreference
+      : toOpenTabPreference(tab.snapshot),
+  );
+  const openTabsRef = useRef(nextOpenTabs);
+  if (JSON.stringify(openTabsRef.current) !== JSON.stringify(nextOpenTabs)) {
+    openTabsRef.current = nextOpenTabs;
+  }
+
   return {
+    openTabs: openTabsRef.current,
+    activeTabIndex: Math.max(
+      0,
+      state.tabs.findIndex((tab) => tab.id === state.activeTabId),
+    ),
+    restoreTabs,
     tabItems,
     activeTabId: state.activeTabId,
     tabCount: state.tabs.length,
@@ -497,5 +598,20 @@ export function useExplorerTabs(args: {
     openNewTab,
     openPathInNewTab,
     closeTab,
+  };
+}
+
+function toOpenTabPreference(snapshot: TabSnapshot): OpenTabPreference {
+  const favoritePath = getFavoriteItemPath(snapshot.selectedTreeItemId);
+  return {
+    path: snapshot.currentPath || null,
+    treeRootPath: snapshot.treeRootPath || null,
+    favoritePath:
+      snapshot.currentPath.length > 0 && favoritePath === snapshot.currentPath
+        ? favoritePath
+        : null,
+    viewMode: snapshot.viewMode,
+    sortBy: snapshot.sortBy,
+    sortDirection: snapshot.sortDirection,
   };
 }

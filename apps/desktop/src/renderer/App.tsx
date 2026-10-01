@@ -81,7 +81,7 @@ import { canRunToolbarRendererCommand } from "./lib/rendererCommandAvailability"
 import { resolveExplorerToolbarLayout, resolveSinglePanelLayout } from "./lib/responsiveLayout";
 import { formatSearchStatus } from "./lib/searchResults";
 import type { canHandleRendererCommand } from "./lib/shortcutPolicy";
-import { resolveStartupNavigation } from "./lib/startupNavigation";
+import { resolveStartupTabs } from "./lib/startupNavigation";
 import { buildContentStatusSummary } from "./lib/statusSummary";
 import { type ToastEntry, type ToastKind, createToastEntry, enqueueToast } from "./lib/toasts";
 import { ExplorerStoreProvider } from "./state/explorerStoreContext";
@@ -161,6 +161,8 @@ export function App() {
     setShowSidebarBottomRail,
     restoreLastVisitedFolderOnStartup,
     setRestoreLastVisitedFolderOnStartup,
+    restoreOpenTabsOnStartup,
+    setRestoreOpenTabsOnStartup,
     favorites,
     setFavorites,
     favoritesPlacement,
@@ -750,6 +752,9 @@ export function App() {
     newFolderDialogState !== null ||
     moveDialogState !== null;
   const {
+    openTabs,
+    activeTabIndex,
+    restoreTabs,
     tabItems,
     tabCount,
     activateTab,
@@ -984,6 +989,9 @@ export function App() {
     treeWidth: panes.treeWidth,
     inspectorWidth: panes.inspectorWidth,
     restoreLastVisitedFolderOnStartup,
+    restoreOpenTabsOnStartup,
+    openTabs,
+    activeTabIndex,
     treeRootPath: treeRootPath || null,
     lastVisitedPath: currentPath || null,
     lastVisitedFavoritePath:
@@ -1134,6 +1142,7 @@ export function App() {
         setSortBy(preferences.sortBy);
         setSortDirection(preferences.sortDirection);
         setRestoreLastVisitedFolderOnStartup(preferences.restoreLastVisitedFolderOnStartup);
+        setRestoreOpenTabsOnStartup(preferences.restoreOpenTabsOnStartup);
         setFavorites(preferences.favorites);
         setFavoritesPlacement(preferences.favoritesPlacement);
         setFavoritesExpanded(preferences.favoritesExpanded);
@@ -1156,16 +1165,33 @@ export function App() {
           setFavoritesExpanded(true);
           setFavoritesInitialized(true);
         }
-        const { startupPath, startupRootPath, startupFavoritePath } = resolveStartupNavigation(
+        const startup = resolveStartupTabs(
           preferences,
           homeResponse.path,
           launchContextResponse.startupFolderPath,
         );
+        // A favorite that was removed since is opened as the plain folder it is.
+        const startupTabs = startup.tabs.map((tab) => ({
+          ...tab,
+          favoritePath:
+            tab.favoritePath && isFavoritePath(preferences.favorites, tab.favoritePath)
+              ? tab.favoritePath
+              : null,
+        }));
+        const startupTab = startupTabs[startup.activeIndex];
+        if (!startupTab) {
+          setPreferencesReady(true);
+          return;
+        }
+        // The tab on screen is loaded here; the other tabs are read when they are shown.
+        restoreTabs(startupTabs, startup.activeIndex, preferences.favoritesPlacement);
+        const startupPath = startupTab.path;
+        const startupRootPath = startupTab.rootPath;
+        const restoredFavoritePath = startupTab.favoritePath;
+        setViewMode(startupTab.viewMode);
+        setSortBy(startupTab.sortBy);
+        setSortDirection(startupTab.sortDirection);
         initializeTree(startupRootPath);
-        const restoredFavoritePath =
-          startupFavoritePath && isFavoritePath(preferences.favorites, startupFavoritePath)
-            ? startupFavoritePath
-            : null;
         setSelectedTreeItemId(
           restoredFavoritePath
             ? createFavoriteItemId(restoredFavoritePath)
@@ -1188,8 +1214,8 @@ export function App() {
           startupPath,
           "replace",
           preferences.includeHidden,
-          preferences.sortBy,
-          preferences.sortDirection,
+          startupTab.sortBy,
+          startupTab.sortDirection,
           preferences.foldersFirst,
           restoredFavoritePath
             ? {
@@ -1209,8 +1235,8 @@ export function App() {
             homeResponse.path,
             "replace",
             preferences.includeHidden,
-            preferences.sortBy,
-            preferences.sortDirection,
+            startupTab.sortBy,
+            startupTab.sortDirection,
             preferences.foldersFirst,
           ).finally(() => {
             if (!cancelled) {

@@ -86,14 +86,14 @@ describe("appStateStore", () => {
   it("writes a deliberate change promptly", () => {
     const { store, filePath, writes, pendingDelays, runTimers } = createTimedStore();
 
-    store.updatePreferences({ viewMode: "details" });
+    store.updatePreferences({ foldersFirst: false });
     store.updatePreferences({ favoritesExpanded: false });
     // A burst of changes is one write, a moment later.
     expect(pendingDelays()).toEqual([150]);
     runTimers();
 
     expect(writes()).toBe(1);
-    expect(JSON.parse(readFileSync(filePath, "utf8")).preferences.viewMode).toBe("details");
+    expect(JSON.parse(readFileSync(filePath, "utf8")).preferences.foldersFirst).toBe(false);
 
     store.forgetVisitedFolder("/Users/demo/gone");
     expect(pendingDelays()).toEqual([150]);
@@ -131,12 +131,109 @@ describe("appStateStore", () => {
     expect(writes()).toBe(2);
   });
 
+  it("keeps the open tabs for the quit-time write, but writes the setting at once", () => {
+    const { store, filePath, writes, pendingDelays, runTimers } = createTimedStore();
+    const tab = {
+      path: "/Users/demo/work",
+      treeRootPath: "/Users/demo",
+      favoritePath: null,
+      viewMode: "details" as const,
+      sortBy: "name" as const,
+      sortDirection: "asc" as const,
+    };
+
+    // Opening, switching and closing tabs is where the user is, not a setting.
+    store.updatePreferences({ openTabs: [tab], activeTabIndex: 0 });
+    store.updatePreferences({
+      openTabs: [tab, { ...tab, path: "/Users/demo/music" }],
+      activeTabIndex: 1,
+    });
+    expect(writes()).toBe(0);
+    expect(pendingDelays()).toEqual([5 * 60 * 1000]);
+
+    // Nor are the view mode and sort order, which are those of the tab on screen and change
+    // with every switch to a tab that shows its folder differently.
+    store.updatePreferences({ viewMode: "details", sortBy: "size", sortDirection: "desc" });
+    store.updatePreferences({ searchResultsSortBy: "name", searchResultsSortDirection: "desc" });
+    expect(writes()).toBe(0);
+    expect(pendingDelays()).toEqual([5 * 60 * 1000]);
+
+    // The same tabs again are not a change.
+    store.updatePreferences({
+      openTabs: [tab, { ...tab, path: "/Users/demo/music" }],
+      activeTabIndex: 1,
+    });
+    store.flush();
+    expect(writes()).toBe(1);
+    const saved = JSON.parse(readFileSync(filePath, "utf8")).preferences;
+    expect(saved.openTabs.map((savedTab: { path: string }) => savedTab.path)).toEqual([
+      "/Users/demo/work",
+      "/Users/demo/music",
+    ]);
+    expect(saved.activeTabIndex).toBe(1);
+    expect(saved).toMatchObject({ viewMode: "details", sortBy: "size", sortDirection: "desc" });
+    store.flush();
+    expect(writes()).toBe(1);
+
+    store.updatePreferences({ restoreOpenTabsOnStartup: true });
+    expect(pendingDelays()).toEqual([150]);
+    runTimers();
+    expect(writes()).toBe(2);
+  });
+
+  it("keeps the saved tabs that make sense and drops the rest", () => {
+    const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
+    const filePath = resolveAppStatePath(userDataPath);
+    writeFileSync(
+      filePath,
+      JSON.stringify({
+        preferences: {
+          restoreOpenTabsOnStartup: true,
+          activeTabIndex: -3,
+          openTabs: [
+            {
+              path: "/Users/demo/work",
+              viewMode: "details",
+              sortBy: "size",
+              sortDirection: "desc",
+            },
+            "not a tab",
+            { path: "", treeRootPath: 7, viewMode: "gallery", sortBy: "colour" },
+          ],
+        },
+      }),
+    );
+
+    const preferences = createAppStateStore(filePath).getPreferences();
+
+    expect(preferences.restoreOpenTabsOnStartup).toBe(true);
+    expect(preferences.activeTabIndex).toBe(0);
+    expect(preferences.openTabs).toEqual([
+      {
+        path: "/Users/demo/work",
+        treeRootPath: null,
+        favoritePath: null,
+        viewMode: "details",
+        sortBy: "size",
+        sortDirection: "desc",
+      },
+      {
+        path: null,
+        treeRootPath: null,
+        favoritePath: null,
+        viewMode: "list",
+        sortBy: "name",
+        sortDirection: "asc",
+      },
+    ]);
+  });
+
   it("writes navigation along with the next deliberate change, and nothing for no change", () => {
     const { store, filePath, writes, pendingDelays, runTimers } = createTimedStore();
 
     store.updatePreferences({ lastVisitedPath: "/Users/demo/work" });
     store.setWindowState({ width: 900, height: 600, maximized: false });
-    store.updatePreferences({ viewMode: "details" });
+    store.updatePreferences({ foldersFirst: false });
     // The prompt write takes the place of the long timer.
     expect(pendingDelays()).toEqual([150]);
     runTimers();
@@ -148,7 +245,7 @@ describe("appStateStore", () => {
     );
 
     // The same values again, and the same window, are not changes.
-    store.updatePreferences({ viewMode: "details", lastVisitedPath: "/Users/demo/work" });
+    store.updatePreferences({ foldersFirst: false, lastVisitedPath: "/Users/demo/work" });
     store.setWindowState(store.getWindowState());
     runTimers();
     store.flush();
@@ -253,6 +350,9 @@ describe("appStateStore", () => {
       treeWidth: 280,
       inspectorWidth: 320,
       restoreLastVisitedFolderOnStartup: false,
+      restoreOpenTabsOnStartup: false,
+      openTabs: [],
+      activeTabIndex: 0,
       treeRootPath: null,
       lastVisitedPath: null,
       lastVisitedFavoritePath: null,
@@ -341,6 +441,26 @@ describe("appStateStore", () => {
       treeWidth: 312,
       inspectorWidth: 388,
       restoreLastVisitedFolderOnStartup: true,
+      restoreOpenTabsOnStartup: true,
+      openTabs: [
+        {
+          path: "/Users/demo/src",
+          treeRootPath: "/Users/demo",
+          favoritePath: null,
+          viewMode: "details",
+          sortBy: "size",
+          sortDirection: "desc",
+        },
+        {
+          path: "/Users/demo/Documents",
+          treeRootPath: "/Users/demo",
+          favoritePath: "/Users/demo/Documents",
+          viewMode: "list",
+          sortBy: "name",
+          sortDirection: "asc",
+        },
+      ],
+      activeTabIndex: 1,
       treeRootPath: "/Users/demo",
       lastVisitedPath: "/Users/demo/src",
       lastVisitedFavoritePath: "/Users/demo/Documents",
@@ -436,6 +556,26 @@ describe("appStateStore", () => {
       treeWidth: 312,
       inspectorWidth: 388,
       restoreLastVisitedFolderOnStartup: true,
+      restoreOpenTabsOnStartup: true,
+      openTabs: [
+        {
+          path: "/Users/demo/src",
+          treeRootPath: "/Users/demo",
+          favoritePath: null,
+          viewMode: "details",
+          sortBy: "size",
+          sortDirection: "desc",
+        },
+        {
+          path: "/Users/demo/Documents",
+          treeRootPath: "/Users/demo",
+          favoritePath: "/Users/demo/Documents",
+          viewMode: "list",
+          sortBy: "name",
+          sortDirection: "asc",
+        },
+      ],
+      activeTabIndex: 1,
       treeRootPath: "/Users/demo",
       lastVisitedPath: "/Users/demo/src",
       lastVisitedFavoritePath: "/Users/demo/Documents",

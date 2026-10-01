@@ -71,6 +71,19 @@ export type FavoritePreference = {
   icon: FavoriteIconId;
 };
 
+// A tab as it is remembered between launches: where it was and how it showed its folder.
+// Its history, selection and search are not kept.
+export type OpenTabPreference = {
+  // null for a tab that showed no folder (Favorites selected in the sidebar).
+  path: string | null;
+  treeRootPath: string | null;
+  favoritePath: string | null;
+  viewMode: ExplorerViewMode;
+  sortBy: "name" | "modified" | "kind" | "size";
+  sortDirection: "asc" | "desc";
+};
+export const OPEN_TABS_LIMIT = 100;
+
 export type FavoritesPlacement = "integrated" | "separate";
 export type FileActivationAction = "open" | "edit";
 // Finder renames with Return; "open" keeps the older behavior of opening the selection.
@@ -330,6 +343,11 @@ export type AppPreferences = {
   treeWidth: number;
   inspectorWidth: number;
   restoreLastVisitedFolderOnStartup: boolean;
+  restoreOpenTabsOnStartup: boolean;
+  // The tabs that were open, in order, and which one was on screen. Like the last visited
+  // folder, they follow where the user is and are written when the app quits.
+  openTabs: OpenTabPreference[];
+  activeTabIndex: number;
   treeRootPath: string | null;
   lastVisitedPath: string | null;
   lastVisitedFavoritePath: string | null;
@@ -386,6 +404,9 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   treeWidth: 280,
   inspectorWidth: 320,
   restoreLastVisitedFolderOnStartup: false,
+  restoreOpenTabsOnStartup: false,
+  openTabs: [],
+  activeTabIndex: 0,
   treeRootPath: null,
   lastVisitedPath: null,
   lastVisitedFavoritePath: null,

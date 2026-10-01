@@ -36,6 +36,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
         utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
       }}
       restoreLastVisitedFolderOnStartup={false}
+      restoreOpenTabsOnStartup={false}
       homePath="/Users/demo"
       terminalApp={null}
       defaultTextEditor={{
@@ -98,6 +99,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       onResetLeftToolbar={() => undefined}
       onResetToolbars={() => undefined}
       onRestoreLastVisitedFolderOnStartupChange={() => undefined}
+      onRestoreOpenTabsOnStartupChange={() => undefined}
       onBrowseTerminalApp={() => undefined}
       onClearTerminalApp={() => undefined}
       onBrowseDefaultTextEditor={() => undefined}
@@ -618,10 +620,20 @@ describe("SettingsView", () => {
     ).toBeInTheDocument();
     cleanup();
 
-    // General keeps the startup choice only.
+    // General keeps the startup choices only.
     renderSettingsView({ activeTab: "general" });
     expect(screen.getByText("Restore last visited folder")).toBeInTheDocument();
+    expect(screen.getByText("Restore open tabs")).toBeInTheDocument();
     expect(screen.queryAllByText("Terminal app")).toHaveLength(0);
+  });
+
+  it("switches Restore open tabs on its own, next to Restore last visited folder", () => {
+    const onRestoreOpenTabsOnStartupChange = vi.fn();
+    renderSettingsView({ activeTab: "general", onRestoreOpenTabsOnStartupChange });
+
+    fireEvent.click(screen.getByRole("switch", { name: "Restore open tabs" }));
+
+    expect(onRestoreOpenTabsOnStartupChange).toHaveBeenCalledWith(true);
   });
 
   it("forwards terminal browse and reset actions", () => {

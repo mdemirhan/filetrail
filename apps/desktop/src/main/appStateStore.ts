@@ -14,7 +14,9 @@ import {
   type FavoriteIconId,
   type FavoritePreference,
   LEGACY_DEFAULT_DETAIL_COLUMN_VISIBILITY,
+  OPEN_TABS_LIMIT,
   OPTIONAL_DETAIL_COLUMN_KEYS,
+  type OpenTabPreference,
   type ThemeMode,
   type ThemePreference,
   UI_FONT_OPTIONS,
@@ -103,10 +105,19 @@ const PROMPT_SAVE_DELAY_MS = 150;
 // app quits, or along with the next deliberate change. A session can stay open for days,
 // so it is also written once this long after the first unsaved change.
 const DEFERRED_SAVE_DELAY_MS = 5 * 60 * 1000;
+// The view mode and the sort orders belong to the tab on screen, so they change whenever
+// another tab comes to the front; they are saved with the tabs.
 const NAVIGATION_PREFERENCE_KEYS: ReadonlySet<string> = new Set<keyof AppPreferences>([
   "lastVisitedPath",
   "lastVisitedFavoritePath",
   "treeRootPath",
+  "openTabs",
+  "activeTabIndex",
+  "viewMode",
+  "sortBy",
+  "sortDirection",
+  "searchResultsSortBy",
+  "searchResultsSortDirection",
 ]);
 
 // The persisted store intentionally contains only restart-worthy UI state. Directory data,
@@ -312,6 +323,39 @@ function persistState(
   }
 }
 
+// Tabs saved by an older or damaged file are kept as far as they make sense; a tab that
+// does not is dropped rather than failing the whole list.
+function sanitizeOpenTabs(value: unknown): OpenTabPreference[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const nonEmptyString = (candidate: unknown) =>
+    typeof candidate === "string" && candidate.length > 0 ? candidate : null;
+  const tabs: OpenTabPreference[] = [];
+  for (const candidate of value) {
+    if (!isPlainObject(candidate)) {
+      continue;
+    }
+    tabs.push({
+      path: nonEmptyString(candidate.path),
+      treeRootPath: nonEmptyString(candidate.treeRootPath),
+      favoritePath: nonEmptyString(candidate.favoritePath),
+      viewMode: candidate.viewMode === "details" ? "details" : "list",
+      sortBy:
+        candidate.sortBy === "modified" ||
+        candidate.sortBy === "kind" ||
+        candidate.sortBy === "size"
+          ? candidate.sortBy
+          : "name",
+      sortDirection: candidate.sortDirection === "desc" ? "desc" : "asc",
+    });
+    if (tabs.length === OPEN_TABS_LIMIT) {
+      break;
+    }
+  }
+  return tabs;
+}
+
 // This is the migration boundary for persisted preferences. When keys are renamed or
 // removed, normalize legacy shapes here instead of letting stale values leak outward.
 function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): AppPreferences {
@@ -492,6 +536,17 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
       typeof record.restoreLastVisitedFolderOnStartup === "boolean"
         ? record.restoreLastVisitedFolderOnStartup
         : currentDefaults.restoreLastVisitedFolderOnStartup,
+    restoreOpenTabsOnStartup:
+      typeof record.restoreOpenTabsOnStartup === "boolean"
+        ? record.restoreOpenTabsOnStartup
+        : currentDefaults.restoreOpenTabsOnStartup,
+    openTabs: sanitizeOpenTabs(record.openTabs),
+    activeTabIndex:
+      typeof record.activeTabIndex === "number" &&
+      Number.isInteger(record.activeTabIndex) &&
+      record.activeTabIndex >= 0
+        ? record.activeTabIndex
+        : 0,
     treeRootPath:
       typeof record.treeRootPath === "string" && record.treeRootPath.length > 0
         ? record.treeRootPath
