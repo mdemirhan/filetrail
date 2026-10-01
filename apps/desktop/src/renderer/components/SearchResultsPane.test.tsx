@@ -230,6 +230,8 @@ describe("SearchResultsPane", () => {
     const handlePatternModeChange = vi.fn();
     const handleMatchScopeChange = vi.fn();
     const handleRecursiveChange = vi.fn();
+    const handleSkipGitFoldersChange = vi.fn();
+    const handleSkipGitIgnoredChange = vi.fn();
     const handleScrollTopChange = vi.fn();
     const handleFilterQueryChange = vi.fn();
     const handleFilterScopeChange = vi.fn();
@@ -274,6 +276,10 @@ describe("SearchResultsPane", () => {
         onMatchScopeChange={handleMatchScopeChange}
         recursive
         onRecursiveChange={handleRecursiveChange}
+        skipGitFolders
+        onSkipGitFoldersChange={handleSkipGitFoldersChange}
+        skipGitIgnored={false}
+        onSkipGitIgnoredChange={handleSkipGitIgnoredChange}
         onStopSearch={() => undefined}
         onClearResults={() => undefined}
         onCloseResults={() => undefined}
@@ -326,6 +332,10 @@ describe("SearchResultsPane", () => {
     expect(handlePatternModeChange).toHaveBeenCalledWith("glob");
     expect(handleMatchScopeChange).toHaveBeenCalledWith("path");
     expect(handleRecursiveChange).toHaveBeenCalledWith(false);
+    fireEvent.click(screen.getByLabelText("Skip .git folders"));
+    fireEvent.click(screen.getByLabelText("Skip files ignored by Git"));
+    expect(handleSkipGitFoldersChange).toHaveBeenCalledWith(false);
+    expect(handleSkipGitIgnoredChange).toHaveBeenCalledWith(true);
     expect(handleFilterQueryChange).toHaveBeenCalledWith("main");
     expect(handleFilterScopeChange).toHaveBeenCalledWith("path");
     expect(handleScrollTopChange).toHaveBeenCalledWith(96);

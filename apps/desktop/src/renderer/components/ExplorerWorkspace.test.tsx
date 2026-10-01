@@ -125,6 +125,10 @@ function renderExplorerWorkspace(
       onSearchMatchScopeChange={() => undefined}
       searchRecursive={false}
       onSearchRecursiveChange={() => undefined}
+      searchSkipGitFolders
+      onSearchSkipGitFoldersChange={() => undefined}
+      searchSkipGitIgnored={false}
+      onSearchSkipGitIgnoredChange={() => undefined}
       canRunRendererCommand={() => true}
       onRendererCommand={() => undefined}
       onPaneResizeKey={() => undefined}

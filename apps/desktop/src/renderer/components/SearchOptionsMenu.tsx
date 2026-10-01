@@ -24,6 +24,10 @@ export function SearchOptionsMenu({
   onMatchScopeChange,
   recursive,
   onRecursiveChange,
+  skipGitFolders,
+  onSkipGitFoldersChange,
+  skipGitIgnored,
+  onSkipGitIgnoredChange,
 }: {
   /** The search field; the menu hangs below it. */
   anchorRef: RefObject<HTMLElement | null>;
@@ -37,6 +41,10 @@ export function SearchOptionsMenu({
   onMatchScopeChange: (value: SearchMatchScope) => void;
   recursive: boolean;
   onRecursiveChange: (value: boolean) => void;
+  skipGitFolders: boolean;
+  onSkipGitFoldersChange: (value: boolean) => void;
+  skipGitIgnored: boolean;
+  onSkipGitIgnoredChange: (value: boolean) => void;
 }) {
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -217,6 +225,13 @@ export function SearchOptionsMenu({
             {radioItem("Regex", patternMode === "regex", () => onPatternModeChange("regex"))}
             <hr className="toolbar-menu-separator" />
             {checkboxItem("Search subfolders", recursive, () => onRecursiveChange(!recursive))}
+            <hr className="toolbar-menu-separator" />
+            {checkboxItem("Skip .git folders", skipGitFolders, () =>
+              onSkipGitFoldersChange(!skipGitFolders),
+            )}
+            {checkboxItem("Skip files ignored by Git", skipGitIgnored, () =>
+              onSkipGitIgnoredChange(!skipGitIgnored),
+            )}
           </div>,
           document.body,
         )

@@ -301,6 +301,10 @@ export function App() {
     setSearchMatchScope,
     searchRecursive,
     setSearchRecursive,
+    searchSkipGitFolders,
+    setSearchSkipGitFolders,
+    searchSkipGitIgnored,
+    setSearchSkipGitIgnored,
     searchResultsSortBy,
     setSearchResultsSortBy,
     searchResultsSortDirection,
@@ -417,6 +421,8 @@ export function App() {
     updateSearchMatchScope,
     updateSearchPatternMode,
     updateSearchRecursive,
+    updateSearchSkipGitFolders,
+    updateSearchSkipGitIgnored,
     updateSearchResultsFilterQuery,
     updateSearchResultsFilterScope,
     updateSearchResultsSortBy,
@@ -920,7 +926,7 @@ export function App() {
     returnKeyAction,
     openItemLimit,
     includeHidden,
-    // The search options (pattern, match, subfolders, filter scope) are left
+    // The search options (pattern, match, subfolders, Git skipping, filter scope) are left
     // out on purpose: what is chosen in the search field or results bar lasts for this run
     // only. Settings owns the saved defaults, which each launch starts from.
     searchResultsSortBy,
@@ -1020,6 +1026,12 @@ export function App() {
       if (patch.searchPatternMode !== undefined) setSearchPatternMode(patch.searchPatternMode);
       if (patch.searchMatchScope !== undefined) setSearchMatchScope(patch.searchMatchScope);
       if (patch.searchRecursive !== undefined) setSearchRecursive(patch.searchRecursive);
+      if (patch.searchSkipGitFolders !== undefined) {
+        setSearchSkipGitFolders(patch.searchSkipGitFolders);
+      }
+      if (patch.searchSkipGitIgnored !== undefined) {
+        setSearchSkipGitIgnored(patch.searchSkipGitIgnored);
+      }
       if (patch.searchResultsFilterScope !== undefined) {
         setSearchResultsFilterScope(patch.searchResultsFilterScope);
       }
@@ -1059,6 +1071,8 @@ export function App() {
         setSearchPatternMode(preferences.searchPatternMode);
         setSearchMatchScope(preferences.searchMatchScope);
         setSearchRecursive(preferences.searchRecursive);
+        setSearchSkipGitFolders(preferences.searchSkipGitFolders);
+        setSearchSkipGitIgnored(preferences.searchSkipGitIgnored);
         searchResultsSortByRef.current = preferences.searchResultsSortBy;
         searchResultsSortDirectionRef.current = preferences.searchResultsSortDirection;
         setSearchResultsSortBy(preferences.searchResultsSortBy);
@@ -1537,6 +1551,10 @@ export function App() {
                 onMatchScopeChange: updateSearchMatchScope,
                 recursive: searchRecursive,
                 onRecursiveChange: updateSearchRecursive,
+                skipGitFolders: searchSkipGitFolders,
+                onSkipGitFoldersChange: updateSearchSkipGitFolders,
+                skipGitIgnored: searchSkipGitIgnored,
+                onSkipGitIgnoredChange: updateSearchSkipGitIgnored,
                 onSelectionGesture: handleContentSelectionGesture,
                 onClearSelection: clearContentSelection,
                 onActivateResult: (item) => {
@@ -1771,6 +1789,10 @@ export function App() {
             onSearchMatchScopeChange={updateSearchMatchScope}
             searchRecursive={searchRecursive}
             onSearchRecursiveChange={updateSearchRecursive}
+            searchSkipGitFolders={searchSkipGitFolders}
+            onSearchSkipGitFoldersChange={updateSearchSkipGitFolders}
+            searchSkipGitIgnored={searchSkipGitIgnored}
+            onSearchSkipGitIgnoredChange={updateSearchSkipGitIgnored}
             canRunRendererCommand={canRunRendererCommand}
             onRendererCommand={runRendererCommand}
             onPaneResizeKey={handlePaneResizeKey}

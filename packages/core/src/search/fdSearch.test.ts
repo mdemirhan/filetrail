@@ -27,6 +27,8 @@ describe("fdSearch", () => {
         matchScope: "path",
         recursive: false,
         includeHidden: true,
+        skipGitFolders: false,
+        skipGitIgnored: false,
       }),
     ).toEqual([
       "--type",
@@ -47,6 +49,39 @@ describe("fdSearch", () => {
     ]);
   });
 
+  it("skips .git folders and Git-ignored files only when asked to", () => {
+    const base = {
+      rootPath: "/Users/demo/project",
+      query: "cfg",
+      patternMode: "regex" as const,
+      matchScope: "name" as const,
+      recursive: true,
+      includeHidden: true,
+    };
+    const flags = (options: { skipGitFolders: boolean; skipGitIgnored: boolean }) =>
+      buildFdSearchArgs({ ...base, ...options }).slice(6, -3);
+
+    // Nothing skipped: fd is told not to read ignore files at all.
+    expect(flags({ skipGitFolders: false, skipGitIgnored: false })).toEqual([
+      "--no-ignore",
+      "--hidden",
+    ]);
+    // `.git` is not in any ignore file; with hidden files included it needs its own exclude.
+    expect(flags({ skipGitFolders: true, skipGitIgnored: false })).toEqual([
+      "--no-ignore",
+      "--exclude",
+      ".git",
+      "--hidden",
+    ]);
+    // Ignored files: fd's default behavior, so the flag that disables it is left out.
+    expect(flags({ skipGitFolders: false, skipGitIgnored: true })).toEqual(["--hidden"]);
+    expect(flags({ skipGitFolders: true, skipGitIgnored: true })).toEqual([
+      "--exclude",
+      ".git",
+      "--hidden",
+    ]);
+  });
+
   it("streams null-delimited results in incremental batches", () => {
     const process = createMockProcess();
     const runtime = new FdSearchRuntime("/tmp/fd", {
@@ -60,6 +95,8 @@ describe("fdSearch", () => {
       matchScope: "name",
       recursive: true,
       includeHidden: false,
+      skipGitFolders: false,
+      skipGitIgnored: false,
     });
 
     process.stdout.write(
@@ -126,6 +163,8 @@ describe("fdSearch", () => {
       matchScope: "name",
       recursive: true,
       includeHidden: false,
+      skipGitFolders: false,
+      skipGitIgnored: false,
     });
 
     process.stdout.write(
@@ -176,6 +215,8 @@ describe("fdSearch", () => {
       matchScope: "name",
       recursive: true,
       includeHidden: false,
+      skipGitFolders: false,
+      skipGitIgnored: false,
     });
 
     process.stdout.write(Buffer.from("/Users/demo/project/src/Ap", "utf8"));
@@ -202,6 +243,8 @@ describe("fdSearch", () => {
       matchScope: "name",
       recursive: true,
       includeHidden: false,
+      skipGitFolders: false,
+      skipGitIgnored: false,
     });
 
     expect(runtime.cancelSearch(started.jobId)).toEqual({ ok: true });
@@ -228,6 +271,8 @@ describe("fdSearch", () => {
       matchScope: "name",
       recursive: true,
       includeHidden: false,
+      skipGitFolders: false,
+      skipGitIgnored: false,
     });
 
     process.stderr.write("regex parse error");
@@ -257,6 +302,8 @@ describe("fdSearch", () => {
       matchScope: "name",
       recursive: true,
       includeHidden: true,
+      skipGitFolders: false,
+      skipGitIgnored: false,
     });
 
     process.stdout.write("/Users/demo/project/.env");
@@ -297,6 +344,8 @@ describe("fdSearch", () => {
       matchScope: "name",
       recursive: true,
       includeHidden: false,
+      skipGitFolders: false,
+      skipGitIgnored: false,
     });
 
     process.emit("error", new Error("spawn failed"));
@@ -325,6 +374,8 @@ describe("fdSearch", () => {
       matchScope: "name",
       recursive: true,
       includeHidden: false,
+      skipGitFolders: false,
+      skipGitIgnored: false,
     });
 
     process.emit("close", null, "SIGKILL");
@@ -348,6 +399,8 @@ describe("fdSearch", () => {
       matchScope: "path",
       recursive: true,
       includeHidden: false,
+      skipGitFolders: false,
+      skipGitIgnored: false,
     });
     expect(args.slice(-3)).toEqual(["--", "-xrm", "/Users/demo/project"]);
   });
@@ -365,6 +418,8 @@ describe("fdSearch", () => {
       matchScope: "name",
       recursive: true,
       includeHidden: false,
+      skipGitFolders: false,
+      skipGitIgnored: false,
     });
 
     await runtime.close();

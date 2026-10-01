@@ -60,6 +60,10 @@ export function useExplorerSearchController(args: {
     setSearchMatchScope,
     searchRecursive,
     setSearchRecursive,
+    searchSkipGitFolders,
+    setSearchSkipGitFolders,
+    searchSkipGitIgnored,
+    setSearchSkipGitIgnored,
     searchResultsSortBy,
     setSearchResultsSortBy,
     searchResultsSortDirection,
@@ -294,6 +298,8 @@ export function useExplorerSearchController(args: {
       patternMode: SearchPatternMode;
       matchScope: SearchMatchScope;
       recursive: boolean;
+      skipGitFolders: boolean;
+      skipGitIgnored: boolean;
       rootPath: string;
     }> = {},
   ) {
@@ -333,6 +339,8 @@ export function useExplorerSearchController(args: {
         patternMode: overrides.patternMode ?? searchPatternMode,
         matchScope: overrides.matchScope ?? searchMatchScope,
         recursive: overrides.recursive ?? searchRecursive,
+        skipGitFolders: overrides.skipGitFolders ?? searchSkipGitFolders,
+        skipGitIgnored: overrides.skipGitIgnored ?? searchSkipGitIgnored,
         includeHidden,
       })) as { jobId: string; status: IpcResponse<"search:start">["status"] };
       if (searchSessionRef.current !== sessionId) {
@@ -382,6 +390,26 @@ export function useExplorerSearchController(args: {
     if (hasCachedSearch) {
       void startSearch(searchCommittedQuery, {
         recursive: nextValue,
+        rootPath: searchRootPath || currentPath,
+      });
+    }
+  }
+
+  function updateSearchSkipGitFolders(nextValue: boolean) {
+    setSearchSkipGitFolders(nextValue);
+    if (hasCachedSearch) {
+      void startSearch(searchCommittedQuery, {
+        skipGitFolders: nextValue,
+        rootPath: searchRootPath || currentPath,
+      });
+    }
+  }
+
+  function updateSearchSkipGitIgnored(nextValue: boolean) {
+    setSearchSkipGitIgnored(nextValue);
+    if (hasCachedSearch) {
+      void startSearch(searchCommittedQuery, {
+        skipGitIgnored: nextValue,
         rootPath: searchRootPath || currentPath,
       });
     }
@@ -455,6 +483,8 @@ export function useExplorerSearchController(args: {
     updateSearchMatchScope,
     updateSearchPatternMode,
     updateSearchRecursive,
+    updateSearchSkipGitFolders,
+    updateSearchSkipGitIgnored,
     updateSearchResultsFilterQuery,
     updateSearchResultsFilterScope,
     updateSearchResultsSortBy,

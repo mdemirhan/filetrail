@@ -303,6 +303,8 @@ export type AppPreferences = {
   searchPatternMode: SearchPatternModePreference;
   searchMatchScope: SearchMatchScopePreference;
   searchRecursive: boolean;
+  searchSkipGitFolders: boolean;
+  searchSkipGitIgnored: boolean;
   searchResultsSortBy: SearchResultsSortByPreference;
   searchResultsSortDirection: SearchResultsSortDirectionPreference;
   searchResultsFilterScope: SearchResultsFilterScopePreference;
@@ -371,6 +373,8 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   searchPatternMode: "regex",
   searchMatchScope: "name",
   searchRecursive: true,
+  searchSkipGitFolders: true,
+  searchSkipGitIgnored: false,
   searchResultsSortBy: "path",
   searchResultsSortDirection: "asc",
   searchResultsFilterScope: "name",

@@ -4548,6 +4548,8 @@ describe("App copy/paste integration", () => {
         "searchPatternMode",
         "searchMatchScope",
         "searchRecursive",
+        "searchSkipGitFolders",
+        "searchSkipGitIgnored",
         "searchResultsFilterScope",
       ] as const) {
         expect(saved[key]).toBeUndefined();

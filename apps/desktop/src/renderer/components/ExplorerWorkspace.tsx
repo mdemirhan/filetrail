@@ -157,6 +157,10 @@ export function ExplorerWorkspace({
   onSearchMatchScopeChange,
   searchRecursive,
   onSearchRecursiveChange,
+  searchSkipGitFolders,
+  onSearchSkipGitFoldersChange,
+  searchSkipGitIgnored,
+  onSearchSkipGitIgnoredChange,
   canRunRendererCommand,
   onRendererCommand,
   onPaneResizeKey,
@@ -209,6 +213,10 @@ export function ExplorerWorkspace({
   onSearchMatchScopeChange: (value: SearchMatchScope) => void;
   searchRecursive: boolean;
   onSearchRecursiveChange: (value: boolean) => void;
+  searchSkipGitFolders: boolean;
+  onSearchSkipGitFoldersChange: (value: boolean) => void;
+  searchSkipGitIgnored: boolean;
+  onSearchSkipGitIgnoredChange: (value: boolean) => void;
   canRunRendererCommand: (command: RendererCommandType) => boolean;
   onRendererCommand: (command: RendererCommandType) => void;
   onPaneResizeKey: (pane: "tree" | "inspector", event: ReactKeyboardEvent<HTMLDivElement>) => void;
@@ -723,6 +731,10 @@ export function ExplorerWorkspace({
                   onMatchScopeChange={onSearchMatchScopeChange}
                   recursive={searchRecursive}
                   onRecursiveChange={onSearchRecursiveChange}
+                  skipGitFolders={searchSkipGitFolders}
+                  onSkipGitFoldersChange={onSearchSkipGitFoldersChange}
+                  skipGitIgnored={searchSkipGitIgnored}
+                  onSkipGitIgnoredChange={onSearchSkipGitIgnoredChange}
                 />
                 <input
                   ref={searchInputRef}

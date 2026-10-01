@@ -145,6 +145,12 @@ export function toPreferencePatch(
   if (value.searchRecursive !== undefined) {
     patch.searchRecursive = value.searchRecursive;
   }
+  if (value.searchSkipGitFolders !== undefined) {
+    patch.searchSkipGitFolders = value.searchSkipGitFolders;
+  }
+  if (value.searchSkipGitIgnored !== undefined) {
+    patch.searchSkipGitIgnored = value.searchSkipGitIgnored;
+  }
   if (value.searchResultsSortBy !== undefined) {
     patch.searchResultsSortBy = value.searchResultsSortBy;
   }

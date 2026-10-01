@@ -61,6 +61,8 @@ export type SearchDefaults = {
   searchPatternMode: "regex" | "glob";
   searchMatchScope: "name" | "path";
   searchRecursive: boolean;
+  searchSkipGitFolders: boolean;
+  searchSkipGitIgnored: boolean;
   searchResultsFilterScope: "name" | "path";
 };
 
@@ -3436,6 +3438,40 @@ export function SettingsView({
                   }
                   theme={palette}
                   label="Search subfolders"
+                />
+              }
+            />
+            <SettingRow
+              title="Skip .git folders"
+              desc="Leave Git's internal files out of the results. This matters while hidden files are shown."
+              theme={palette}
+              right={
+                <Toggle
+                  checked={searchDefaults.searchSkipGitFolders}
+                  onToggle={() =>
+                    onSearchDefaultsChange({
+                      searchSkipGitFolders: !searchDefaults.searchSkipGitFolders,
+                    })
+                  }
+                  theme={palette}
+                  label="Skip .git folders"
+                />
+              }
+            />
+            <SettingRow
+              title="Skip files ignored by Git"
+              desc="Inside a Git repository, leave out whatever its .gitignore excludes, such as build output."
+              theme={palette}
+              right={
+                <Toggle
+                  checked={searchDefaults.searchSkipGitIgnored}
+                  onToggle={() =>
+                    onSearchDefaultsChange({
+                      searchSkipGitIgnored: !searchDefaults.searchSkipGitIgnored,
+                    })
+                  }
+                  theme={palette}
+                  label="Skip files ignored by Git"
                 />
               }
             />

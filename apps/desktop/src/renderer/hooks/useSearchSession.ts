@@ -29,6 +29,12 @@ export function useSearchSession() {
     DEFAULT_APP_PREFERENCES.searchMatchScope,
   );
   const [searchRecursive, setSearchRecursive] = useState(DEFAULT_APP_PREFERENCES.searchRecursive);
+  const [searchSkipGitFolders, setSearchSkipGitFolders] = useState(
+    DEFAULT_APP_PREFERENCES.searchSkipGitFolders,
+  );
+  const [searchSkipGitIgnored, setSearchSkipGitIgnored] = useState(
+    DEFAULT_APP_PREFERENCES.searchSkipGitIgnored,
+  );
   const [searchResultsSortBy, setSearchResultsSortBy] = useState<SearchResultsSortBy>(
     DEFAULT_APP_PREFERENCES.searchResultsSortBy,
   );
@@ -109,6 +115,10 @@ export function useSearchSession() {
     setSearchMatchScope,
     searchRecursive,
     setSearchRecursive,
+    searchSkipGitFolders,
+    setSearchSkipGitFolders,
+    searchSkipGitIgnored,
+    setSearchSkipGitIgnored,
     searchResultsSortBy,
     setSearchResultsSortBy,
     searchResultsSortDirection,

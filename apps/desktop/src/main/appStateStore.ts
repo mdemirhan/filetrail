@@ -426,6 +426,14 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
       typeof record.searchRecursive === "boolean"
         ? record.searchRecursive
         : currentDefaults.searchRecursive,
+    searchSkipGitFolders:
+      typeof record.searchSkipGitFolders === "boolean"
+        ? record.searchSkipGitFolders
+        : currentDefaults.searchSkipGitFolders,
+    searchSkipGitIgnored:
+      typeof record.searchSkipGitIgnored === "boolean"
+        ? record.searchSkipGitIgnored
+        : currentDefaults.searchSkipGitIgnored,
     searchResultsSortBy:
       record.searchResultsSortBy === "name" || record.searchResultsSortBy === "path"
         ? record.searchResultsSortBy

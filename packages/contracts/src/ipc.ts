@@ -684,6 +684,8 @@ export const appPreferencesSchema = z.object({
   searchPatternMode: searchPatternModeSchema,
   searchMatchScope: searchMatchScopeSchema,
   searchRecursive: z.boolean(),
+  searchSkipGitFolders: z.boolean(),
+  searchSkipGitIgnored: z.boolean(),
   searchResultsSortBy: searchResultsSortBySchema,
   searchResultsSortDirection: sortDirectionSchema,
   searchResultsFilterScope: searchResultsFilterScopeSchema,
@@ -829,6 +831,9 @@ export const ipcContractSchemas = {
       matchScope: searchMatchScopeSchema.default("name"),
       recursive: z.boolean().default(true),
       includeHidden: z.boolean().default(false),
+      // Leave out `.git` folders, and anything Git ignores (.gitignore and friends).
+      skipGitFolders: z.boolean().default(true),
+      skipGitIgnored: z.boolean().default(false),
     }),
     response: z.object({
       jobId: z.string().min(1),

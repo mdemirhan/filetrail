@@ -55,6 +55,10 @@ export function SearchResultsPane({
   matchScope = "name",
   onMatchScopeChange = () => undefined,
   recursive = true,
+  skipGitFolders = true,
+  onSkipGitFoldersChange = () => undefined,
+  skipGitIgnored = false,
+  onSkipGitIgnoredChange = () => undefined,
   onRecursiveChange = () => undefined,
   onStopSearch,
   onClearResults,
@@ -102,6 +106,10 @@ export function SearchResultsPane({
   matchScope?: SearchMatchScopePreference;
   onMatchScopeChange?: (value: SearchMatchScopePreference) => void;
   recursive?: boolean;
+  skipGitFolders?: boolean;
+  onSkipGitFoldersChange?: (value: boolean) => void;
+  skipGitIgnored?: boolean;
+  onSkipGitIgnoredChange?: (value: boolean) => void;
   onRecursiveChange?: (value: boolean) => void;
   onStopSearch: () => void;
   onClearResults: () => void;
@@ -359,6 +367,22 @@ export function SearchResultsPane({
               onChange={(event) => onRecursiveChange(event.currentTarget.checked)}
             />
             Search subfolders
+          </label>
+          <label className="search-scope-check">
+            <input
+              type="checkbox"
+              checked={skipGitFolders}
+              onChange={(event) => onSkipGitFoldersChange(event.currentTarget.checked)}
+            />
+            Skip .git folders
+          </label>
+          <label className="search-scope-check">
+            <input
+              type="checkbox"
+              checked={skipGitIgnored}
+              onChange={(event) => onSkipGitIgnoredChange(event.currentTarget.checked)}
+            />
+            Skip files ignored by Git
           </label>
           {isSearching ? (
             <button

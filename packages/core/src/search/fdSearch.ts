@@ -59,7 +59,18 @@ export type FdSearchRuntimeDependencies = {
 };
 
 export function buildFdSearchArgs(request: SearchStartRequest): string[] {
-  const args = ["--type", "f", "--print0", "--absolute-path", "--color", "never", "--no-ignore"];
+  const args = ["--type", "f", "--print0", "--absolute-path", "--color", "never"];
+
+  // fd leaves out what Git ignores (.gitignore, .ignore, .fdignore and the global ignore
+  // file, inside Git repositories) unless told otherwise.
+  if (!request.skipGitIgnored) {
+    args.push("--no-ignore");
+  }
+  // `.git` is not covered by ignore files: fd only passes over it for being hidden, so it
+  // would be searched as soon as hidden files are included.
+  if (request.skipGitFolders) {
+    args.push("--exclude", ".git");
+  }
 
   if (request.patternMode === "glob") {
     args.push("--glob");
