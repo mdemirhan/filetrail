@@ -21,9 +21,44 @@ import {
 
 type Entry = IpcResponse<"directory:getSnapshot">["entries"][number];
 
-// In-memory LRU cache for native app icons (base64 PNG data).
+// The icons macOS draws (base64 PNG data), most recently used last. Large enough for every
+// row of a big folder whose items each have their own icon (apps, files without an
+// extension); a cache smaller than what is on screen drops icons still in use, and they are
+// then asked for again.
 const nativeIconCache = new Map<string, string | null>();
-const NATIVE_ICON_CACHE_MAX = 256;
+const NATIVE_ICON_CACHE_MAX = 2048;
+// The info panel's icon changes with the selection. Its request waits this long, so
+// holding an arrow key does not ask for the icon of every item passed on the way.
+const DEFERRED_ICON_LOAD_DELAY_MS = 80;
+
+function readNativeIcon(cacheKey: string): string | null | undefined {
+  const cached = nativeIconCache.get(cacheKey);
+  if (cached !== undefined) {
+    nativeIconCache.delete(cacheKey);
+    nativeIconCache.set(cacheKey, cached);
+  }
+  return cached;
+}
+
+function rememberNativeIcon(cacheKey: string, base64: string | null) {
+  nativeIconCache.delete(cacheKey);
+  if (nativeIconCache.size >= NATIVE_ICON_CACHE_MAX) {
+    const oldestKey = nativeIconCache.keys().next().value;
+    if (oldestKey !== undefined) nativeIconCache.delete(oldestKey);
+  }
+  nativeIconCache.set(cacheKey, base64);
+}
+
+// Runs `load` now, or after the short delay when `deferLoad` is set; the returned function
+// calls it off.
+function scheduleIconLoad(load: () => void, deferLoad: boolean): () => void {
+  if (!deferLoad) {
+    load();
+    return () => undefined;
+  }
+  const timer = window.setTimeout(load, DEFERRED_ICON_LOAD_DELAY_MS);
+  return () => window.clearTimeout(timer);
+}
 
 // The icon theme comes from React (App provides the preference) so a change re-renders
 // every icon at once. Reading the root `data-icon-theme` instead would lag a change by one
@@ -43,7 +78,14 @@ function useIconTheme(): string | undefined {
 // Icon rendering is intentionally lightweight and CSS-driven. Classic mode classifies
 // entries into a small visual vocabulary and lets CSS handle the final appearance.
 // Colorblock mode uses per-extension classification with colored blocks and symbols.
-export function FileIcon({ entry }: { entry: Entry }) {
+export function FileIcon({
+  entry,
+  deferLoad = false,
+}: {
+  entry: Entry;
+  /** Wait a moment before asking for an icon that is not known yet (see above). */
+  deferLoad?: boolean;
+}) {
   const activeIconTheme = useIconTheme();
   const type = resolveIconType(entry);
   if (
@@ -51,7 +93,7 @@ export function FileIcon({ entry }: { entry: Entry }) {
     entry.kind !== "symlink_directory" &&
     entry.kind !== "symlink_file"
   ) {
-    return <NativeFileIcon entry={entry} fallbackType={type} />;
+    return <NativeFileIcon entry={entry} fallbackType={type} deferLoad={deferLoad} />;
   }
   if (type === "folder") {
     return (
@@ -70,7 +112,7 @@ export function FileIcon({ entry }: { entry: Entry }) {
   }
   // macOS .app bundles get native icons loaded from NSWorkspace.
   if (entry.kind === "bundle" && entry.extension.toLowerCase() === "app") {
-    return <NativeAppIcon path={entry.path} />;
+    return <NativeAppIcon path={entry.path} deferLoad={deferLoad} />;
   }
   // Non-classic themes: per-extension classification with inline colored SVGs.
   const isSymlink = entry.kind === "symlink_file";
@@ -147,7 +189,15 @@ function nativeIconCacheKey(entry: Entry): string {
   return extension.length > 0 ? `ext:${extension}` : `path:${entry.path}`;
 }
 
-function NativeFileIcon({ entry, fallbackType }: { entry: Entry; fallbackType: string }) {
+function NativeFileIcon({
+  entry,
+  fallbackType,
+  deferLoad = false,
+}: {
+  entry: Entry;
+  fallbackType: string;
+  deferLoad?: boolean;
+}) {
   const client = useFiletrailClient();
   const cacheKey = nativeIconCacheKey(entry);
   const [iconSrc, setIconSrc] = useState<string | null>(
@@ -155,38 +205,41 @@ function NativeFileIcon({ entry, fallbackType }: { entry: Entry; fallbackType: s
   );
 
   useEffect(() => {
-    const cached = nativeIconCache.get(cacheKey);
+    const cached = readNativeIcon(cacheKey);
     if (cached !== undefined) {
       setIconSrc(cached);
       return;
     }
     let cancelled = false;
-    let request = pendingNativeIconRequests.get(cacheKey);
-    if (!request) {
-      request = client
-        .invoke("system:getFileIcon", {
-          path: entry.path,
-          size: 64,
-          ...(cacheKey === GENERIC_FOLDER_KEY ? { genericFolder: true } : {}),
-        })
-        .then((response) => response.pngBase64)
-        .catch(() => null)
-        .then((base64) => {
-          pendingNativeIconRequests.delete(cacheKey);
-          rememberNativeIcon(cacheKey, base64);
-          return base64;
-        });
-      pendingNativeIconRequests.set(cacheKey, request);
-    }
-    void request.then((base64) => {
-      if (!cancelled) {
-        setIconSrc(base64);
+    const cancelLoad = scheduleIconLoad(() => {
+      let request = pendingNativeIconRequests.get(cacheKey);
+      if (!request) {
+        request = client
+          .invoke("system:getFileIcon", {
+            path: entry.path,
+            size: 64,
+            ...(cacheKey === GENERIC_FOLDER_KEY ? { genericFolder: true } : {}),
+          })
+          .then((response) => response.pngBase64)
+          .catch(() => null)
+          .then((base64) => {
+            pendingNativeIconRequests.delete(cacheKey);
+            rememberNativeIcon(cacheKey, base64);
+            return base64;
+          });
+        pendingNativeIconRequests.set(cacheKey, request);
       }
-    });
+      void request.then((base64) => {
+        if (!cancelled) {
+          setIconSrc(base64);
+        }
+      });
+    }, deferLoad);
     return () => {
       cancelled = true;
+      cancelLoad();
     };
-  }, [cacheKey, client, entry.path]);
+  }, [cacheKey, client, deferLoad, entry.path]);
 
   if (iconSrc) {
     return (
@@ -216,48 +269,34 @@ function NativeFileIcon({ entry, fallbackType }: { entry: Entry; fallbackType: s
 
 const pendingNativeIconRequests = new Map<string, Promise<string | null>>();
 
-function rememberNativeIcon(cacheKey: string, base64: string | null) {
-  if (nativeIconCache.size >= NATIVE_ICON_CACHE_MAX) {
-    const firstKey = nativeIconCache.keys().next().value;
-    if (firstKey !== undefined) nativeIconCache.delete(firstKey);
-  }
-  nativeIconCache.set(cacheKey, base64);
-}
-
-function NativeAppIcon({ path }: { path: string }) {
+function NativeAppIcon({ path, deferLoad = false }: { path: string; deferLoad?: boolean }) {
   const client = useFiletrailClient();
-  const [iconSrc, setIconSrc] = useState<string | null>(() => {
-    const cached = nativeIconCache.get(path);
-    return cached ?? null;
-  });
+  const [iconSrc, setIconSrc] = useState<string | null>(() => nativeIconCache.get(path) ?? null);
 
   useEffect(() => {
-    const cached = nativeIconCache.get(path);
+    const cached = readNativeIcon(path);
     if (cached !== undefined) {
       setIconSrc(cached);
       return;
     }
     let cancelled = false;
-    client
-      .invoke("system:getFileIcon", { path, size: 64 })
-      .then((res) => {
-        if (cancelled) return;
-        const base64 = res.pngBase64;
-        // Evict oldest entry if cache is full.
-        if (nativeIconCache.size >= NATIVE_ICON_CACHE_MAX) {
-          const firstKey = nativeIconCache.keys().next().value;
-          if (firstKey !== undefined) nativeIconCache.delete(firstKey);
-        }
-        nativeIconCache.set(path, base64);
-        setIconSrc(base64);
-      })
-      .catch(() => {
-        if (!cancelled) setIconSrc(null);
-      });
+    const cancelLoad = scheduleIconLoad(() => {
+      client
+        .invoke("system:getFileIcon", { path, size: 64 })
+        .then((res) => {
+          if (cancelled) return;
+          rememberNativeIcon(path, res.pngBase64);
+          setIconSrc(res.pngBase64);
+        })
+        .catch(() => {
+          if (!cancelled) setIconSrc(null);
+        });
+    }, deferLoad);
     return () => {
       cancelled = true;
+      cancelLoad();
     };
-  }, [path, client]);
+  }, [path, client, deferLoad]);
 
   if (iconSrc) {
     return (

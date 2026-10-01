@@ -79,7 +79,7 @@ export function InfoRow({
     <div className={`info-row${open ? " open" : ""}`}>
       <div className="detail-inner">
         <div className="dt-icon">
-          <FileIcon entry={activeEntry} />
+          <FileIcon entry={activeEntry} deferLoad />
         </div>
         <div className="dt-body">
           <div className="dt-name" title={activeEntry.name}>

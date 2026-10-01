@@ -1679,15 +1679,22 @@ export function App() {
                   itemCount: currentEntries.length,
                   selectedPaths: contentSelection.paths,
                   getKnownSizeBytes: (path) => {
-                    const folderSize = folderSizeCache.getEntry(path);
-                    if (folderSize.status === "ready") {
-                      return folderSize.sizeBytes;
-                    }
-                    const metadata = metadataByPath[path];
                     const entry = currentEntries.find((candidate) => candidate.path === path);
-                    if (!entry || entry.kind === "directory" || entry.kind === "bundle") {
+                    if (!entry) {
                       return null;
                     }
+                    // Only folders have a calculated size to look up; asking for a file's
+                    // would send a request that can never find one.
+                    if (isFolderSizeEligibleKind(entry.kind)) {
+                      const folderSize = folderSizeCache.getEntry(path);
+                      if (folderSize.status === "ready") {
+                        return folderSize.sizeBytes;
+                      }
+                    }
+                    if (entry.kind === "directory" || entry.kind === "bundle") {
+                      return null;
+                    }
+                    const metadata = metadataByPath[path];
                     return metadata?.sizeStatus === "ready" ? metadata.sizeBytes : null;
                   },
                   availableBytes: volumeAvailableBytes,

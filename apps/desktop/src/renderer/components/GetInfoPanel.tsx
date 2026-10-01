@@ -321,6 +321,7 @@ function GetInfoPanelContent({
       <div className="get-info-hero">
         <div className="get-info-hero-icon">
           <FileIcon
+            deferLoad
             entry={{
               path: item.path,
               name: item.name,

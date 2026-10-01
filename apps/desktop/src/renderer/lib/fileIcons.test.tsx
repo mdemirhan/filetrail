@@ -2,7 +2,7 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 
 import {
   FavoriteItemIcon,
@@ -11,6 +11,7 @@ import {
   IconThemeProvider,
   TreeFolderIcon,
 } from "./fileIcons";
+import { type FiletrailClient, FiletrailClientProvider } from "./filetrailClient";
 
 function expectDefined<T>(value: T | null | undefined): NonNullable<T> {
   expect(value).toBeDefined();
@@ -247,6 +248,66 @@ describe("fileIcons", () => {
 
     rerender(<TreeFolderIcon alias />);
     expect(container.querySelector(".file-icon.folder.alias")).not.toBeNull();
+  });
+});
+
+describe("native icons", () => {
+  function renderWithClient() {
+    const invoke = vi.fn(async (_channel: string, payload: { path: string }) => ({
+      pngBase64: `icon-of-${payload.path}`,
+    }));
+    const client = { invoke } as unknown as FiletrailClient;
+    const wrap = (node: React.ReactNode) => (
+      <FiletrailClientProvider value={client}>
+        <IconThemeProvider value="native">{node}</IconThemeProvider>
+      </FiletrailClientProvider>
+    );
+    return { invoke, wrap };
+  }
+  // A file without an extension has an icon of its own, so each one is its own request.
+  const tool = (name: string) =>
+    createEntry({ path: `/usr/bin/${name}`, name, extension: "", kind: "file" });
+
+  it("asks for an icon once and reuses it", async () => {
+    const { invoke, wrap } = renderWithClient();
+    const first = render(wrap(<FileIcon entry={tool("icon-once")} />));
+    await act(async () => undefined);
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(first.container.querySelector("img")?.getAttribute("src")).toContain(
+      "icon-of-/usr/bin/icon-once",
+    );
+    first.unmount();
+
+    const second = render(wrap(<FileIcon entry={tool("icon-once")} />));
+    await act(async () => undefined);
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(second.container.querySelector("img")).not.toBeNull();
+  });
+
+  it("waits before asking when deferred, so items passed quickly are never asked for", async () => {
+    vi.useFakeTimers();
+    try {
+      const { invoke, wrap } = renderWithClient();
+      const { rerender } = render(wrap(<FileIcon deferLoad entry={tool("passed-1")} />));
+      for (const name of ["passed-2", "passed-3", "landed"]) {
+        await act(async () => {
+          vi.advanceTimersByTime(25);
+        });
+        rerender(wrap(<FileIcon deferLoad entry={tool(name)} />));
+      }
+      expect(invoke).not.toHaveBeenCalled();
+
+      await act(async () => {
+        vi.advanceTimersByTime(80);
+      });
+      expect(invoke).toHaveBeenCalledTimes(1);
+      expect(invoke).toHaveBeenCalledWith("system:getFileIcon", {
+        path: "/usr/bin/landed",
+        size: 64,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
