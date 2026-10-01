@@ -75,10 +75,10 @@ afterAll(() => {
   globalThis.ResizeObserver = originalResizeObserver;
 });
 
-function renderExplorerWorkspace(
+function explorerWorkspaceElement(
   overrides: Partial<ComponentProps<typeof ExplorerWorkspace>> = {},
 ) {
-  return render(
+  return (
     <ExplorerWorkspace
       preferencesReady
       restoredPaneWidths={null}
@@ -133,8 +133,14 @@ function renderExplorerWorkspace(
       onRendererCommand={() => undefined}
       onPaneResizeKey={() => undefined}
       {...overrides}
-    />,
+    />
   );
+}
+
+function renderExplorerWorkspace(
+  overrides: Partial<ComponentProps<typeof ExplorerWorkspace>> = {},
+) {
+  return render(explorerWorkspaceElement(overrides));
 }
 
 describe("resolveVisibleTopToolbarCount", () => {
@@ -144,6 +150,11 @@ describe("resolveVisibleTopToolbarCount", () => {
 
   it("drops trailing items when the strip runs out of width", () => {
     expect(resolveVisibleTopToolbarCount([32, 32, 70, 32], 141)).toBe(2);
+  });
+
+  it("keeps the whole strip when its items have not been laid out", () => {
+    expect(resolveVisibleTopToolbarCount([0, 0, 0], 0)).toBe(3);
+    expect(resolveVisibleTopToolbarCount([32, 0, 32], 40)).toBe(3);
   });
 
   it("returns zero when there is no available width", () => {
@@ -167,6 +178,34 @@ describe("normalizeTopToolbarItems", () => {
 });
 
 describe("ExplorerWorkspace", () => {
+  it("shows every button of a saved toolbar that loads before the toolbar appears", () => {
+    // Before preferences are ready the toolbar is not on screen and holds the default items.
+    const view = renderExplorerWorkspace({
+      preferencesReady: false,
+      topToolbarItems: ["back", "forward", "view", "sort", "infoPanel", "search"],
+    });
+    const savedToolbar = {
+      topToolbarItems: [
+        "back",
+        "forward",
+        "up",
+        "refresh",
+        "copySelection",
+        "newFolder",
+        "copyPath",
+        "search",
+      ] satisfies ComponentProps<typeof ExplorerWorkspace>["topToolbarItems"],
+    };
+    view.rerender(explorerWorkspaceElement({ preferencesReady: false, ...savedToolbar }));
+    view.rerender(explorerWorkspaceElement({ preferencesReady: true, ...savedToolbar }));
+
+    const visibleItems = Array.from(
+      view.container.querySelectorAll(".titlebar-actions-main [data-top-toolbar-item]"),
+      (item) => item.getAttribute("data-top-toolbar-item"),
+    );
+    expect(visibleItems).toEqual(["up", "refresh", "copySelection", "newFolder", "copyPath"]);
+  });
+
   it("disables content-only toolbar commands when content focus is lost", () => {
     renderExplorerWorkspace({
       focusedPane: null,

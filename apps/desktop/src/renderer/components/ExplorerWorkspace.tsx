@@ -53,14 +53,15 @@ export function resolveVisibleTopToolbarCount(
   availableWidth: number,
   gapPx = TOP_TOOLBAR_ITEM_GAP_PX,
 ) {
+  // Nothing has been laid out yet (or there is no layout at all): keep the whole strip.
+  if (itemWidths.some((itemWidth) => itemWidth <= 0)) {
+    return itemWidths.length;
+  }
   if (availableWidth <= 0) {
     return 0;
   }
   let usedWidth = 0;
   for (const [index, itemWidth] of itemWidths.entries()) {
-    if (itemWidth <= 0) {
-      return itemWidths.length;
-    }
     const nextWidth = usedWidth === 0 ? itemWidth : usedWidth + gapPx + itemWidth;
     if (nextWidth > availableWidth) {
       return index;
@@ -259,10 +260,19 @@ export function ExplorerWorkspace({
     top: number;
   } | null>(null);
   const toolbarMeasurementKey = trailingTopToolbarItems.join(":");
+  // The toolbar is not on screen until preferences and pane widths are restored.
+  const workspaceReady =
+    preferencesReady &&
+    (restoredPaneWidths === null ||
+      (treeWidth === restoredPaneWidths.treeWidth &&
+        inspectorWidth === restoredPaneWidths.inspectorWidth));
   const sortMenuResetKey = `${explorerToolbarLayout}:${visibleTopToolbarCount}`;
 
+  // Measured again once the toolbar appears: a saved toolbar arrives before it does, and
+  // would otherwise stay cut to the number of buttons in the default one.
   useLayoutEffect(() => {
     void toolbarMeasurementKey;
+    void workspaceReady;
     const mainContainer = titlebarActionsMainRef.current;
     const measureContainer = titlebarActionsMeasureRef.current;
     if (
@@ -294,7 +304,7 @@ export function ExplorerWorkspace({
     return () => {
       observer.disconnect();
     };
-  }, [toolbarMeasurementKey]);
+  }, [toolbarMeasurementKey, workspaceReady]);
 
   useLayoutEffect(() => {
     if (!sortMenuOpen) {
@@ -973,10 +983,7 @@ export function ExplorerWorkspace({
 
   return (
     <section className="workspace explorer-workspace">
-      {!preferencesReady ||
-      (restoredPaneWidths !== null &&
-        (treeWidth !== restoredPaneWidths.treeWidth ||
-          inspectorWidth !== restoredPaneWidths.inspectorWidth)) ? (
+      {!workspaceReady ? (
         <section className="workspace-body workspace-loading" />
       ) : (
         <section
