@@ -4159,6 +4159,39 @@ body.resizing-panels * {
   color: var(--text-primary);
 }
 
+/* The folders listed when Back or Forward is held. */
+.history-menu {
+  max-width: min(420px, calc(100vw - 16px));
+}
+
+.history-menu-item {
+  gap: 10px;
+  padding: 0 10px;
+}
+
+.history-menu-name {
+  flex: none;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-menu-detail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+}
+
+.history-menu-item:hover .history-menu-detail,
+.history-menu-item:focus-visible .history-menu-detail {
+  color: inherit;
+  opacity: 0.8;
+}
+
 .go-to-folder-match {
   background: transparent;
   color: var(--ft-accent-path-crumb-hover);

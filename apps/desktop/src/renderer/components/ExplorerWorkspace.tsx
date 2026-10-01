@@ -19,6 +19,7 @@ import { useKeepInViewport } from "../hooks/useKeepInViewport";
 import { parentDirectoryPath } from "../lib/explorerNavigation";
 import { EXPLORER_LAYOUT } from "../lib/layoutTokens";
 import { InfoPanel } from "./GetInfoPanel";
+import { HistoryButton } from "./HistoryButton";
 import { SearchOptionsMenu } from "./SearchOptionsMenu";
 import { SearchWorkspace } from "./SearchWorkspace";
 import { ToolbarIcon } from "./ToolbarIcon";
@@ -539,32 +540,36 @@ export function ExplorerWorkspace({
     }
     if (itemId === "back") {
       return (
-        <button
+        <HistoryButton
           key={itemId}
-          type="button"
           className="tb-btn tb-btn-icon toolbar-btn-muted"
-          disabled={!canGoBack}
-          onClick={goBack}
+          label="Back"
           title={getToolbarTooltip(itemId)}
-          aria-label="Back"
+          disabled={!canGoBack}
+          entries={treePaneProps.backHistory ?? []}
+          interactive={mode === "interactive"}
+          onStep={goBack}
+          onSelectEntry={treePaneProps.onGoToHistoryIndex ?? (() => undefined)}
         >
           <ToolbarIcon name="back" />
-        </button>
+        </HistoryButton>
       );
     }
     if (itemId === "forward") {
       return (
-        <button
+        <HistoryButton
           key={itemId}
-          type="button"
           className="tb-btn tb-btn-icon toolbar-btn-muted"
-          disabled={!canGoForward}
-          onClick={goForward}
+          label="Forward"
           title={getToolbarTooltip(itemId)}
-          aria-label="Forward"
+          disabled={!canGoForward}
+          entries={treePaneProps.forwardHistory ?? []}
+          interactive={mode === "interactive"}
+          onStep={goForward}
+          onSelectEntry={treePaneProps.onGoToHistoryIndex ?? (() => undefined)}
         >
           <ToolbarIcon name="forward" />
-        </button>
+        </HistoryButton>
       );
     }
     if (itemId === "up") {

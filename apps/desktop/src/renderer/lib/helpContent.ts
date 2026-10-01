@@ -111,7 +111,8 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           },
           {
             label: "File list",
-            description: "Double-click a folder to open it. Back and forward retrace your steps.",
+            description:
+              "Double-click a folder to open it. Back and Forward retrace your steps; hold either button, or right-click it, to pick from the folders it leads to.",
           },
           {
             label: "Go To",

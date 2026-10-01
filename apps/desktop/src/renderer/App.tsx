@@ -73,6 +73,7 @@ import {
 import { FileIcon, IconThemeProvider } from "./lib/fileIcons";
 import { useFiletrailClient } from "./lib/filetrailClient";
 import { formatDateTime, formatPermissionMode, formatSize } from "./lib/formatting";
+import { getBackHistoryEntries, getForwardHistoryEntries } from "./lib/historyMenu";
 import { resolveInfoItem } from "./lib/infoPreview";
 import { EXPLORER_LAYOUT } from "./lib/layoutTokens";
 import { filterEntriesByName, formatItemCount } from "./lib/listFilter";
@@ -575,6 +576,7 @@ export function App() {
     handleTreeKeyboardAction,
     goBack,
     goForward,
+    goToHistoryIndex,
     goHome,
     rerootTreeAtHome,
     rootTreeAtPath,
@@ -1240,6 +1242,15 @@ export function App() {
   );
   const canGoBack = historyIndex > 0;
   const canGoForward = historyIndex >= 0 && historyIndex < historyPaths.length - 1;
+  // What holding Back or Forward lists.
+  const backHistory = useMemo(
+    () => getBackHistoryEntries(historyPaths, historyIndex, homePath),
+    [historyPaths, historyIndex, homePath],
+  );
+  const forwardHistory = useMemo(
+    () => getForwardHistoryEntries(historyPaths, historyIndex, homePath),
+    [historyPaths, historyIndex, homePath],
+  );
 
   // Moving from the search field into the results starts at the first one.
   function selectFirstSearchResult() {
@@ -1477,6 +1488,9 @@ export function App() {
               onGoBack: goBack,
               canGoForward,
               onGoForward: goForward,
+              backHistory,
+              forwardHistory,
+              onGoToHistoryIndex: goToHistoryIndex,
               canNavigateToParent: parentDirectoryPath(currentPath) !== null,
               onNavigateToParent: navigateToParentFolder,
               canNavigateDown: focusedPane === "tree" || selectedEntry !== null,

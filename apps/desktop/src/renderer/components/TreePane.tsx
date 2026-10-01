@@ -34,6 +34,8 @@ import {
   getFavoriteLabel,
 } from "../lib/favorites";
 import { FavoriteItemIcon, TreeFolderIcon } from "../lib/fileIcons";
+import type { HistoryMenuEntry } from "../lib/historyMenu";
+import { HistoryButton } from "./HistoryButton";
 import { ToolbarIcon } from "./ToolbarIcon";
 
 function formatToolbarTooltip(label: string, shortcutLabel?: string) {
@@ -76,6 +78,9 @@ export function TreePane({
   onGoBack,
   canGoForward,
   onGoForward,
+  backHistory = [],
+  forwardHistory = [],
+  onGoToHistoryIndex = () => undefined,
   canNavigateToParent,
   onNavigateToParent,
   canNavigateDown,
@@ -139,6 +144,10 @@ export function TreePane({
   onGoBack?: () => void;
   canGoForward?: boolean;
   onGoForward?: () => void;
+  /** The folders Back and Forward lead to, nearest first, for their hold menus. */
+  backHistory?: HistoryMenuEntry[];
+  forwardHistory?: HistoryMenuEntry[];
+  onGoToHistoryIndex?: (historyIndex: number) => void;
   canNavigateToParent?: boolean;
   onNavigateToParent?: () => void;
   canNavigateDown?: boolean;
@@ -479,32 +488,34 @@ export function TreePane({
     }
     if (itemId === "back") {
       return (
-        <button
+        <HistoryButton
           key={itemId}
-          type="button"
           className="sidebar-rail-button"
-          onClick={onGoBack}
-          disabled={!canGoBack || !onGoBack}
+          label="Back"
           title={getToolbarTooltip(itemId)}
-          aria-label="Back"
+          disabled={!canGoBack || !onGoBack}
+          entries={backHistory}
+          onStep={onGoBack}
+          onSelectEntry={onGoToHistoryIndex}
         >
           <ToolbarIcon name="back" />
-        </button>
+        </HistoryButton>
       );
     }
     if (itemId === "forward") {
       return (
-        <button
+        <HistoryButton
           key={itemId}
-          type="button"
           className="sidebar-rail-button"
-          onClick={onGoForward}
-          disabled={!canGoForward || !onGoForward}
+          label="Forward"
           title={getToolbarTooltip(itemId)}
-          aria-label="Forward"
+          disabled={!canGoForward || !onGoForward}
+          entries={forwardHistory}
+          onStep={onGoForward}
+          onSelectEntry={onGoToHistoryIndex}
         >
           <ToolbarIcon name="forward" />
-        </button>
+        </HistoryButton>
       );
     }
     if (itemId === "home") {

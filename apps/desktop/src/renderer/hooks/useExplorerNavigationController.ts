@@ -630,6 +630,17 @@ export function useExplorerNavigationController(args: {
     void navigateTo(nextPath, "skip");
   }
 
+  // Jumps straight to a folder in the history (from the Back or Forward hold menu). Like
+  // Back and Forward themselves, it moves within the history instead of adding to it.
+  function goToHistoryIndex(index: number) {
+    const nextPath = historyPaths[index];
+    if (!nextPath || index === historyIndex) {
+      return;
+    }
+    setHistoryIndex(index);
+    void navigateTo(nextPath, "skip");
+  }
+
   function goHome() {
     if (homePath) {
       void navigateTo(homePath, "push");
@@ -1877,6 +1888,7 @@ export function useExplorerNavigationController(args: {
     handleTreeKeyboardAction,
     goBack,
     goForward,
+    goToHistoryIndex,
     goHome,
     rerootTreeAtHome,
     rootTreeAtPath,
