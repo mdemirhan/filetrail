@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { EventEmitter } from "node:events";
-import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, readdir, writeFile } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import type { WriteOperationProgressEvent } from "@filetrail/contracts";
-import type { WriteService } from "@filetrail/core";
+import { type WriteService, createWriteService } from "@filetrail/core";
 
 import { PROGRESS_UPDATE_INTERVAL_MS, createWriteOperationCoordinator } from "./writeOperations";
 
@@ -585,6 +587,95 @@ describe("createWriteOperationCoordinator", () => {
     await waitForTerminalEvent(sender, "write-op-1");
 
     expect(countLifecycleListeners(sender)).toBe(0);
+    coordinator.shutdown();
+  });
+
+  it("sends the window a trimmed analysis report, keeps its own whole, and copies everything", async () => {
+    const root = await mkdtemp(join(tmpdir(), "filetrail-trim-"));
+    const source = join(root, "source");
+    const destination = join(root, "destination");
+    // "album" is new at the destination. "shared" exists there, with one of its files.
+    await mkdir(join(source, "album", "raw"), { recursive: true });
+    await mkdir(join(source, "shared", "deep"), { recursive: true });
+    await mkdir(join(destination, "shared"), { recursive: true });
+    const files = [
+      "album/one.jpg",
+      "album/two.jpg",
+      "album/raw/one.dng",
+      "album/raw/two.dng",
+      "shared/clash.txt",
+      "shared/new.txt",
+      "shared/deep/a.txt",
+      "shared/deep/b.txt",
+    ];
+    for (const file of files) {
+      await writeFile(join(source, file), file);
+    }
+    await writeFile(join(destination, "shared", "clash.txt"), "already here");
+
+    const writeService = createWriteService();
+    const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs());
+    const sender = createSender();
+    const { analysisId } = coordinator.handlers["copyPaste:analyzeStart"]({
+      mode: "copy",
+      sourcePaths: [join(source, "album"), join(source, "shared")],
+      destinationDirectoryPath: destination,
+      action: "paste",
+    });
+    const update = await waitFor(() => {
+      const current = coordinator.handlers["copyPaste:analyzeGetUpdate"]({ analysisId });
+      return current.done ? current : null;
+    });
+    const names = (nodes: Array<{ sourcePath: string }>) =>
+      nodes.map((node) => node.sourcePath.split("/").at(-1));
+    const sent = update.report;
+    if (!sent) {
+      throw new Error("Expected a finished analysis report.");
+    }
+
+    // The window gets: nothing inside the new folder; the clashing folder's items, and
+    // nothing inside the new folder within it.
+    const [sentAlbum, sentShared] = sent.nodes;
+    expect(sentAlbum?.conflictClass).toBeNull();
+    expect(sentAlbum?.children).toEqual([]);
+    expect(sentAlbum?.totalNodeCount).toBe(6);
+    expect(sentShared?.conflictClass).toBe("directory_conflict");
+    expect(names(sentShared?.children ?? []).sort()).toEqual(["clash.txt", "deep", "new.txt"]);
+    expect(sentShared?.children.find((node) => node.sourcePath.endsWith("deep"))?.children).toEqual(
+      [],
+    );
+    expect(sent.summary).toEqual(
+      writeService.getCopyPasteAnalysisUpdate(analysisId).report?.summary,
+    );
+
+    // The write service's own report, which the copy runs from, is untouched.
+    const kept = writeService.getCopyPasteAnalysisUpdate(analysisId).report;
+    expect(names(kept?.nodes[0]?.children ?? []).sort()).toEqual(["one.jpg", "raw", "two.jpg"]);
+    expect(
+      kept?.nodes[1]?.children.find((node) => node.sourcePath.endsWith("deep"))?.children,
+    ).toHaveLength(2);
+
+    const { operationId } = coordinator.handlers["copyPaste:start"](
+      {
+        analysisId,
+        action: "paste",
+        policy: { file: "keep_both", directory: "merge", mismatch: "keep_both" },
+      },
+      { sender },
+    );
+    const terminal = await waitForTerminalEvent(sender, operationId);
+
+    expect(terminal.status).toBe("completed");
+    for (const file of files.filter((name) => name !== "shared/clash.txt")) {
+      expect(existsSync(join(destination, file)), file).toBe(true);
+    }
+    // The clash was kept next to the existing file.
+    expect((await readdir(join(destination, "shared"))).sort()).toEqual([
+      "clash copy.txt",
+      "clash.txt",
+      "deep",
+      "new.txt",
+    ]);
     coordinator.shutdown();
   });
 

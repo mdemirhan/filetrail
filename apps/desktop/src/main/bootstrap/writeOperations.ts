@@ -834,8 +834,12 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
           destinationDirectoryPath: payload.destinationDirectoryPath,
         });
       },
-      "copyPaste:analyzeGetUpdate": (payload: IpcRequest<"copyPaste:analyzeGetUpdate">) =>
-        writeService.getCopyPasteAnalysisUpdate(payload.analysisId),
+      "copyPaste:analyzeGetUpdate": (payload: IpcRequest<"copyPaste:analyzeGetUpdate">) => {
+        const update = writeService.getCopyPasteAnalysisUpdate(payload.analysisId);
+        return update.report
+          ? { ...update, report: trimAnalysisReportForWindow(update.report) }
+          : update;
+      },
       "copyPaste:analyzeCancel": (payload: IpcRequest<"copyPaste:analyzeCancel">) =>
         writeService.cancelCopyPasteAnalysis(payload.analysisId),
       "copyPaste:plan": (payload: IpcRequest<"copyPaste:plan">) => {
@@ -970,6 +974,31 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
       localWriteOperationControllers.clear();
       activeWriteOperationId = null;
     },
+  };
+}
+
+type AnalysisReport = NonNullable<ReturnType<WriteService["getCopyPasteAnalysisUpdate"]>["report"]>;
+type AnalysisNode = AnalysisReport["nodes"][number];
+
+// The report of an analysis has a record for every file and folder to be copied. The window
+// draws the review from it, and looks inside an item only when it is a folder that exists on
+// both sides (the clashes inside are listed and can be answered one by one). What is inside
+// an item that is new at the destination is never read there, so it is left out of what the
+// window is sent: for a large copy that is nearly the whole report, tens of megabytes
+// checked and sent for nothing.
+// This returns a trimmed copy. The write service copies from its own report, which must
+// stay whole.
+export function trimAnalysisReportForWindow(report: AnalysisReport): AnalysisReport {
+  return { ...report, nodes: report.nodes.map(trimAnalysisNodeForWindow) };
+}
+
+function trimAnalysisNodeForWindow(node: AnalysisNode): AnalysisNode {
+  return {
+    ...node,
+    children:
+      node.conflictClass === "directory_conflict"
+        ? node.children.map(trimAnalysisNodeForWindow)
+        : [],
   };
 }
 
