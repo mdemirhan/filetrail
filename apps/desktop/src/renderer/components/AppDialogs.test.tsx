@@ -144,6 +144,7 @@ describe("AppDialogs", () => {
           sourcePath: "/tmp/demo.txt",
           currentName: "demo.txt",
           error: null,
+          inline: false,
         },
       },
     );

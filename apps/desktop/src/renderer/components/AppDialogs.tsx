@@ -212,7 +212,8 @@ export function AppDialogs({
         />
       ) : null}
       <TextPromptDialog
-        open={renameDialogState !== null}
+        // List items are renamed in their row (see ContentPane); the dialog is for the rest.
+        open={renameDialogState !== null && !renameDialogState.inline}
         title="Rename"
         {...(renameDialogState ? { message: `Rename ${renameDialogState.currentName}` } : {})}
         label="New name"

@@ -35,6 +35,7 @@ import {
 } from "../lib/formatting";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
 import { buildColumnMajorRows, computeRowsPerColumn, getVirtualRange } from "../lib/virtualization";
+import { InlineRenameField } from "./InlineRenameField";
 import { PathSuggestionDropdown } from "./PathSuggestionDropdown";
 
 type DirectoryEntry = IpcResponse<"directory:getSnapshot">["entries"][number];
@@ -66,6 +67,7 @@ type SelectionGestureModifiers = {
   metaKey: boolean;
   shiftKey: boolean;
 };
+type InlineRenameState = { path: string; error: string | null };
 
 // `ContentPane` is the shared shell for list and details view. It owns path navigation,
 // path suggestions, pane focus, and typeahead forwarding, then delegates actual entry
@@ -113,6 +115,9 @@ export function ContentPane({
   typeaheadQuery,
   getFolderSizeLabel,
   statusSummary,
+  inlineRename = null,
+  onInlineRenameSubmit = () => undefined,
+  onInlineRenameCancel = () => undefined,
 }: {
   paneRef?: React.RefObject<HTMLElement | null>;
   isFocused: boolean;
@@ -166,6 +171,10 @@ export function ContentPane({
   getFolderSizeLabel?: ((path: string) => string | null) | undefined;
   // Item/selection count and free space, shown at the right end of the path bar.
   statusSummary?: string | undefined;
+  // The item whose name is being edited in its row, with the reason the last name was refused.
+  inlineRename?: InlineRenameState | null;
+  onInlineRenameSubmit?: (nextName: string) => void;
+  onInlineRenameCancel?: () => void;
 }) {
   const [pathEditorOpen, setPathEditorOpen] = useState(false);
   const [pathbarExpanded, setPathbarExpanded] = useState(false);
@@ -390,6 +399,9 @@ export function ContentPane({
             compactListView={compactListView}
             highlightHoveredItems={highlightHoveredItems}
             typeaheadQuery={typeaheadQuery ?? ""}
+            inlineRename={inlineRename}
+            onInlineRenameSubmit={onInlineRenameSubmit}
+            onInlineRenameCancel={onInlineRenameCancel}
           />
         ) : (
           <DetailsView
@@ -428,6 +440,9 @@ export function ContentPane({
             onDetailColumnWidthsChange={onDetailColumnWidthsChange}
             typeaheadQuery={typeaheadQuery ?? ""}
             getFolderSizeLabel={getFolderSizeLabel}
+            inlineRename={inlineRename}
+            onInlineRenameSubmit={onInlineRenameSubmit}
+            onInlineRenameCancel={onInlineRenameCancel}
           />
         )}
       </div>
@@ -772,6 +787,9 @@ function FlowListView({
   compactListView = false,
   highlightHoveredItems = true,
   typeaheadQuery,
+  inlineRename,
+  onInlineRenameSubmit,
+  onInlineRenameCancel,
 }: {
   currentPath: string;
   entries: DirectoryEntry[];
@@ -807,6 +825,9 @@ function FlowListView({
   compactListView?: boolean;
   highlightHoveredItems?: boolean;
   typeaheadQuery?: string;
+  inlineRename: InlineRenameState | null;
+  onInlineRenameSubmit: (nextName: string) => void;
+  onInlineRenameCancel: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const { height: containerHeight } = useElementSize(containerRef);
@@ -979,6 +1000,30 @@ function FlowListView({
             {row.map((entry) => {
               const canAcceptDrop =
                 entry.kind === "directory" || entry.kind === "symlink_directory";
+              if (inlineRename?.path === entry.path) {
+                // While its name is edited the item is not a button: it would take the
+                // field's clicks and key presses as its own.
+                return (
+                  // biome-ignore lint/a11y/useFocusableInteractive: the name field inside holds the focus.
+                  // biome-ignore lint/a11y/useSemanticElements: a native option cannot hold a text field.
+                  <div
+                    role="option"
+                    key={entry.path}
+                    className="flow-item active inactive renaming"
+                    data-selectable-entry-path={entry.path}
+                    aria-selected="true"
+                  >
+                    <FileIcon entry={entry} />
+                    <InlineRenameField
+                      name={entry.name}
+                      extension={entry.extension}
+                      error={inlineRename.error}
+                      onSubmit={onInlineRenameSubmit}
+                      onCancel={onInlineRenameCancel}
+                    />
+                  </div>
+                );
+              }
               return (
                 // biome-ignore lint/a11y/useSemanticElements: entries stay buttons for activation; role="option" overrides the implicit role on purpose.
                 <button
@@ -1089,6 +1134,9 @@ function DetailsView({
   onDetailColumnWidthsChange = () => undefined,
   typeaheadQuery,
   getFolderSizeLabel,
+  inlineRename,
+  onInlineRenameSubmit,
+  onInlineRenameCancel,
 }: {
   currentPath: string;
   entries: DirectoryEntry[];
@@ -1132,6 +1180,9 @@ function DetailsView({
   onDetailColumnWidthsChange?: (value: DetailColumnWidths) => void;
   typeaheadQuery?: string;
   getFolderSizeLabel?: ((path: string) => string | null) | undefined;
+  inlineRename: InlineRenameState | null;
+  onInlineRenameSubmit: (nextName: string) => void;
+  onInlineRenameCancel: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   // The rows scroll below the column header, so what fits on screen is the scroll area's
@@ -1402,6 +1453,50 @@ function DetailsView({
             // Parity comes from the absolute row index so stripes stay put while virtualized
             // rows mount and unmount during scrolling.
             const rowParity = (range.startIndex + visibleIndex) % 2 === 0 ? "even" : "odd";
+            if (inlineRename?.path === entry.path) {
+              // While its name is edited the row is not a button: it would take the
+              // field's clicks and key presses as its own.
+              return (
+                // biome-ignore lint/a11y/useFocusableInteractive: the name field inside holds the focus.
+                // biome-ignore lint/a11y/useSemanticElements: see grid note above; the row mirrors the styled-div table.
+                <div
+                  role="row"
+                  key={entry.path}
+                  className="details-row active inactive renaming"
+                  data-selectable-entry-path={entry.path}
+                  data-row-parity={rowParity}
+                  aria-selected="true"
+                  style={{
+                    width: `${tableWidth}px`,
+                    minWidth: "100%",
+                    gridTemplateColumns,
+                  }}
+                >
+                  {visibleColumns.map((columnKey) => (
+                    <DetailsCell
+                      key={columnKey}
+                      columnKey={columnKey}
+                      entry={entry}
+                      metadata={metadata}
+                      folderSizeLabel={
+                        columnKey === "size" && isFolderLikeEntry(entry)
+                          ? (getFolderSizeLabel?.(entry.path) ?? null)
+                          : null
+                      }
+                      nameEditor={
+                        <InlineRenameField
+                          name={entry.name}
+                          extension={entry.extension}
+                          error={inlineRename.error}
+                          onSubmit={onInlineRenameSubmit}
+                          onCancel={onInlineRenameCancel}
+                        />
+                      }
+                    />
+                  ))}
+                </div>
+              );
+            }
             return (
               // biome-ignore lint/a11y/useSemanticElements: rows stay buttons for activation; role="row" overrides the implicit role on purpose.
               <button
@@ -1557,11 +1652,14 @@ function DetailsCell({
   entry,
   metadata,
   folderSizeLabel = null,
+  nameEditor = null,
 }: {
   columnKey: DetailColumnKey;
   entry: DirectoryEntry;
   metadata: DirectoryEntryMetadata | undefined;
   folderSizeLabel?: string | null;
+  // Shown in place of the name while it is being edited.
+  nameEditor?: React.ReactNode;
 }) {
   // Cells are presentational spans inside the row button; gridcell focus management is
   // intentionally left to the row, so the focusable-interactive rule is suppressed below.
@@ -1571,11 +1669,13 @@ function DetailsCell({
       // biome-ignore lint/a11y/useSemanticElements: see note above.
       <span className="details-name" role="gridcell">
         <FileIcon entry={entry} />
-        <FileNameLabel
-          className="details-name-label"
-          name={entry.name}
-          extension={entry.extension}
-        />
+        {nameEditor ?? (
+          <FileNameLabel
+            className="details-name-label"
+            name={entry.name}
+            extension={entry.extension}
+          />
+        )}
       </span>
     );
   }

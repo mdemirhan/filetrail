@@ -2307,7 +2307,9 @@ export function useExplorerActions(args: {
       return;
     }
     if (actionId === "rename") {
-      openRenameDialog(paths);
+      openRenameDialog(paths, {
+        fromTree: contextMenuSurface === "treeFolder" || contextMenuSurface === "favorite",
+      });
       return;
     }
     if (actionId === "duplicate") {
@@ -2689,7 +2691,9 @@ export function useExplorerActions(args: {
     return response.canceled ? null : response.path;
   }
 
-  function openRenameDialog(paths: string[]) {
+  // Starts a rename. An item shown in the file list is renamed in its row, like Finder;
+  // `fromTree` (the folder tree's menu) and items outside the list use the dialog.
+  function openRenameDialog(paths: string[], options: { fromTree?: boolean } = {}) {
     if (paths.length !== 1) {
       return;
     }
@@ -2706,6 +2710,10 @@ export function useExplorerActions(args: {
       sourcePath,
       currentName: getPathLeafName(sourcePath),
       error: null,
+      inline:
+        !options.fromTree &&
+        !isSearchMode &&
+        currentEntries.some((entry) => entry.path === sourcePath),
     });
     closeContextMenu();
   }

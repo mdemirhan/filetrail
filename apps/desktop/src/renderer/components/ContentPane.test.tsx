@@ -478,6 +478,76 @@ describe("ContentPane", () => {
     );
   });
 
+  it.each(["list", "details"] as const)(
+    "edits an item's name in its row in %s view",
+    (viewMode) => {
+      const handleSubmit = vi.fn();
+      const handleCancel = vi.fn();
+      const handleSelectionGesture = vi.fn();
+      const handleActivate = vi.fn();
+
+      render(
+        <ContentPane
+          isFocused={false}
+          currentPath="/Users/demo"
+          entries={["alpha.txt", "beta.txt"].map((name) => ({
+            path: `/Users/demo/${name}`,
+            name,
+            extension: "txt",
+            kind: "file" as const,
+            isHidden: false,
+            isSymlink: false,
+          }))}
+          viewMode={viewMode}
+          loading={false}
+          error={null}
+          includeHidden={false}
+          selectedPaths={["/Users/demo/alpha.txt"]}
+          selectionLeadPath="/Users/demo/alpha.txt"
+          metadataByPath={{}}
+          sortBy="name"
+          sortDirection="asc"
+          onSelectionGesture={handleSelectionGesture}
+          onClearSelection={() => undefined}
+          onActivateEntry={handleActivate}
+          onSortChange={() => undefined}
+          onLayoutColumnsChange={() => undefined}
+          onVisiblePathsChange={() => undefined}
+          onNavigatePath={() => undefined}
+          onRequestPathSuggestions={async () => ({
+            inputPath: "",
+            basePath: null,
+            suggestions: [],
+          })}
+          onFocusChange={() => undefined}
+          typeaheadQuery=""
+          inlineRename={{ path: "/Users/demo/alpha.txt", error: null }}
+          onInlineRenameSubmit={handleSubmit}
+          onInlineRenameCancel={handleCancel}
+        />,
+      );
+
+      const role = viewMode === "list" ? "option" : "row";
+      const input = screen.getByRole("textbox", { name: "Rename alpha.txt" });
+      expect(input).toHaveFocus();
+      // The row being renamed is not a button, so it cannot open or drag the item.
+      const renamingRow = input.closest(`[role="${role}"]`);
+      expect(renamingRow?.tagName).toBe("DIV");
+      expect(renamingRow).toHaveAttribute("aria-selected", "true");
+      expect(screen.getByRole(role, { name: /beta\.txt/ }).tagName).toBe("BUTTON");
+
+      fireEvent.doubleClick(input);
+      fireEvent.pointerDown(input, { button: 0 });
+      expect(handleActivate).not.toHaveBeenCalled();
+      expect(handleSelectionGesture).not.toHaveBeenCalled();
+
+      fireEvent.change(input, { target: { value: "gamma.txt" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(handleSubmit).toHaveBeenCalledWith("gamma.txt");
+      expect(handleCancel).not.toHaveBeenCalled();
+    },
+  );
+
   it("forwards typeahead keys from details view through the shared content handler", () => {
     const handleTypeaheadInput = vi.fn();
 

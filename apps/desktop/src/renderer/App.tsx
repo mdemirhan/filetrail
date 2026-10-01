@@ -1640,6 +1640,11 @@ export function App() {
                 onDetailColumnWidthsChange: setDetailColumnWidths,
                 tabSwitchesExplorerPanes,
                 typeaheadQuery: focusedPane === "content" ? typeaheadQuery : "",
+                inlineRename: renameDialogState?.inline
+                  ? { path: renameDialogState.sourcePath, error: renameDialogState.error }
+                  : null,
+                onInlineRenameSubmit: (nextName) => void submitRenameDialog(nextName),
+                onInlineRenameCancel: () => setRenameDialogState(null),
                 statusSummary: buildContentStatusSummary({
                   itemCount: currentEntries.length,
                   selectedPaths: contentSelection.paths,

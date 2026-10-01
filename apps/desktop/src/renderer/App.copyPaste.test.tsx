@@ -29,9 +29,15 @@ vi.mock("./components/ContentPane", () => ({
     onSelectionGesture,
     onActivateEntry,
     selectedPaths,
+    inlineRename,
+    onInlineRenameSubmit,
+    onInlineRenameCancel,
   }: {
     currentPath: string;
     entries: Array<{ path: string; name: string; kind: string; isSymlink?: boolean }>;
+    inlineRename?: { path: string; error: string | null } | null;
+    onInlineRenameSubmit?: (nextName: string) => void;
+    onInlineRenameCancel?: () => void;
     onFocusChange: (focused: boolean) => void;
     onClearSelection?: () => void;
     onItemContextMenu?: (path: string | null, position: { x: number; y: number }) => void;
@@ -99,6 +105,21 @@ vi.mock("./components/ContentPane", () => ({
       >
         Background
       </button>
+      {/* Stands in for the name field a list row shows while its item is renamed. */}
+      {inlineRename ? (
+        <input
+          aria-label={`Rename ${inlineRename.path.slice(inlineRename.path.lastIndexOf("/") + 1)}`}
+          defaultValue={inlineRename.path.slice(inlineRename.path.lastIndexOf("/") + 1)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              onInlineRenameSubmit?.(event.currentTarget.value);
+            }
+            if (event.key === "Escape") {
+              onInlineRenameCancel?.();
+            }
+          }}
+        />
+      ) : null}
       {entries.map((entry) => (
         <button
           key={entry.path}
@@ -1192,14 +1213,17 @@ describe("App copy/paste integration", () => {
     await act(async () => {
       harness.emitCommand({ type: "renameSelection" });
     });
-    const renameInput = await screen.findByLabelText("New name");
+    // A list item is renamed in its row, not in a dialog.
+    const renameInput = await screen.findByLabelText("Rename source.txt");
+    expect(screen.queryByRole("dialog", { name: "Rename" })).not.toBeInTheDocument();
     await act(async () => {
       renameInput.focus();
       harness.emitCommand({ type: "editSelectAll" });
     });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      fireEvent.keyDown(renameInput, { key: "Escape" });
     });
+    expect(screen.queryByLabelText("Rename source.txt")).not.toBeInTheDocument();
 
     expectNativeEditActions(harness, ["copy", "paste", "selectAll"]);
     expectNoFileClipboardActions(harness);
@@ -2218,7 +2242,7 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "F2" });
     });
 
-    await screen.findByRole("dialog", { name: "Rename" });
+    await screen.findByLabelText("Rename source.txt");
     await act(async () => {
       fireEvent.keyDown(window, { key: "d", metaKey: true });
     });
@@ -2280,14 +2304,10 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "F2" });
     });
 
-    expect(await screen.findByRole("dialog", { name: "Rename" })).toHaveTextContent(
-      "Rename source.txt",
-    );
+    const renameInput = await screen.findByLabelText("Rename source.txt");
     await act(async () => {
-      fireEvent.change(screen.getByLabelText("New name"), {
-        target: { value: "renamed.txt" },
-      });
-      fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+      fireEvent.change(renameInput, { target: { value: "renamed.txt" } });
+      fireEvent.keyDown(renameInput, { key: "Enter" });
     });
 
     await vi.waitFor(() => {
@@ -2316,13 +2336,11 @@ describe("App copy/paste integration", () => {
     await act(async () => {
       fireEvent.keyDown(window, { key: "F2" });
     });
-    await screen.findByRole("dialog", { name: "Rename" });
+    const renameInput = await screen.findByLabelText("Rename source.txt");
 
     await act(async () => {
-      fireEvent.change(screen.getByLabelText("New name"), {
-        target: { value: "renamed.txt" },
-      });
-      fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+      fireEvent.change(renameInput, { target: { value: "renamed.txt" } });
+      fireEvent.keyDown(renameInput, { key: "Enter" });
     });
 
     harness.setDirectoryEntries("/Users/demo", [
@@ -2876,7 +2894,7 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "Enter" });
     });
 
-    await screen.findByRole("dialog", { name: "Rename" });
+    await screen.findByLabelText("Rename source-a.txt");
     expect(harness.invocations.some((call) => call.channel === "system:openPath")).toBe(false);
   });
 

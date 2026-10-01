@@ -93,6 +93,9 @@ type RenameDialogState = {
   sourcePath: string;
   currentName: string;
   error: string | null;
+  // Items in the file list are renamed in their row; anything else (a tree folder, a
+  // search result) is renamed in a dialog.
+  inline: boolean;
 } | null;
 
 type NewFolderDialogState = {
