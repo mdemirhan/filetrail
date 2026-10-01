@@ -160,7 +160,7 @@ describe("ItemContextMenu", () => {
     expect(screen.getByRole("button", { name: "Remove from Favorites" })).toBeInTheDocument();
   });
 
-  it("orders content actions with copy before cut", () => {
+  it("orders content actions with cut before copy", () => {
     render(
       <ItemContextMenu
         anchorX={0}
@@ -203,7 +203,7 @@ describe("ItemContextMenu", () => {
         return label;
       });
 
-    expect(labels.indexOf("Copy")).toBeLessThan(labels.indexOf("Cut"));
+    expect(labels.indexOf("Cut")).toBeLessThan(labels.indexOf("Copy"));
   });
 
   it("shows only safe shortcut badges for tree folders", () => {
@@ -268,7 +268,7 @@ describe("ItemContextMenu", () => {
     expect(screen.queryByRole("button", { name: /^Copy$/ })).toBeNull();
   });
 
-  it("orders tree folder actions with new folder before terminal and copy path", () => {
+  it("orders tree folder actions by group", () => {
     render(
       <ItemContextMenu
         anchorX={0}
@@ -312,26 +312,26 @@ describe("ItemContextMenu", () => {
         }),
     ).toEqual([
       "Open",
+      "Root Tree Here",
       "Show Info",
       "Calculate Size",
-      "Add to Favorites",
-      "Root Tree Here",
-      "Copy",
       "Cut",
+      "Copy",
       "Paste",
-      "Move To…",
+      "Copy Path",
       "Rename",
       "Duplicate",
+      "Move To…",
       "New Folder",
+      "Add to Favorites",
       "Open in Terminal",
       "Show in Finder",
-      "Copy Path",
       "Move to Trash",
       "Delete Immediately",
     ]);
   });
 
-  it("keeps favorite new-folder actions split from terminal and copy path", () => {
+  it("keeps the favorite menu's new folder and favorite toggle in their own groups", () => {
     const { container } = render(
       <ItemContextMenu
         anchorX={0}
@@ -350,19 +350,23 @@ describe("ItemContextMenu", () => {
       />,
     );
 
-    expect(container.querySelectorAll(".context-menu-separator")).toHaveLength(4);
+    expect(container.querySelectorAll(".context-menu-separator")).toHaveLength(5);
     const pasteButton = screen.getByRole("button", { name: "Paste" });
+    const copyPathButton = screen.getByRole("button", { name: "Copy Path⌥⌘C" });
     const newFolderButton = screen.getByRole("button", { name: "New Folder" });
+    const favoriteButton = screen.getByRole("button", { name: "Remove from Favorites" });
     const terminalButton = screen.getByRole("button", { name: "Open in Terminal⌘T" });
-    const separatorAfterPaste = pasteButton.nextElementSibling;
-    const separatorAfterNewFolder = newFolderButton.nextElementSibling;
 
-    expect(separatorAfterPaste).not.toBeNull();
-    expect(separatorAfterPaste).toHaveClass("context-menu-separator");
-    expect(separatorAfterPaste?.nextElementSibling).toBe(newFolderButton);
-    expect(separatorAfterNewFolder).not.toBeNull();
+    expect(pasteButton.nextElementSibling).toBe(copyPathButton);
+    const separatorAfterCopyPath = copyPathButton.nextElementSibling;
+    expect(separatorAfterCopyPath).toHaveClass("context-menu-separator");
+    expect(separatorAfterCopyPath?.nextElementSibling).toBe(newFolderButton);
+    const separatorAfterNewFolder = newFolderButton.nextElementSibling;
     expect(separatorAfterNewFolder).toHaveClass("context-menu-separator");
-    expect(separatorAfterNewFolder?.nextElementSibling).toBe(terminalButton);
+    expect(separatorAfterNewFolder?.nextElementSibling).toBe(favoriteButton);
+    const separatorAfterFavorite = favoriteButton.nextElementSibling;
+    expect(separatorAfterFavorite).toHaveClass("context-menu-separator");
+    expect(separatorAfterFavorite?.nextElementSibling).toBe(terminalButton);
   });
 
   it("hides the favorite toggle item when requested", () => {
@@ -405,7 +409,7 @@ describe("ItemContextMenu", () => {
 
     expect(screen.getByRole("button", { name: "Show Info⌘I" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open in Terminal⌘T" })).toBeInTheDocument();
-    expect(container.querySelectorAll(".context-menu-separator")).toHaveLength(1);
+    expect(container.querySelectorAll(".context-menu-separator")).toHaveLength(3);
   });
 
   it("renders submenu items in the supplied order and dispatches the clicked action", () => {
