@@ -1,687 +1,254 @@
-import { useMemo, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import {
-  type AccentMode,
-  DEFAULT_APP_PREFERENCES,
-  type ThemeMode,
-  getThemeLabel,
-  normalizeAccentColor,
-} from "../../shared/appPreferences";
-import { generateAccentTokens } from "../lib/accent";
-import { type ThemeCssBase, getThemeVariant, resolveThemeCssBase } from "../lib/themeVariants";
-import { VIEW_PAGE_BG, VIEW_TEXT } from "../lib/viewColors";
-import { uiMonoFontStack as mono, uiSansFontStack as sans } from "../lib/viewFonts";
+  HELP_SHORTCUT_GROUPS,
+  HELP_TOPICS,
+  type HelpRow,
+  type HelpTopic,
+  type HelpTopicId,
+  SHORTCUT_ITEMS,
+  type ShortcutItem,
+  getHelpTopic,
+  searchHelp,
+} from "../lib/helpContent";
 
-// Help follows the Font preference, keycaps included.
-
-type ShortcutItem = {
-  group: string;
-  shortcut: string;
-  description: string;
-};
-
-type ReferenceItem = {
-  label: string;
-  description: string;
-};
-
-const helpBaseThemes = {
-  light: {
-    name: "Light",
-    page: "#edeef4",
-    card: "#f7f8fb",
-    cardBorder: "rgba(0,0,0,0.06)",
-    title: "#2a2a34",
-    desc: "#8a8c9a",
-    sectionTitle: "#2a2a34",
-    text: "#4a4a5a",
-    textMuted: "#8a8c9a",
-    kbd: {
-      bg: "#fff",
-      border: "rgba(0,0,0,0.12)",
-      text: "#3a3a4a",
-      shadow: "0 1px 0 rgba(0,0,0,0.08)",
-    },
-    plus: "#c0c2ce",
-    sep: "rgba(0,0,0,0.05)",
-    interaction: { label: "#2a2a34", desc: "#6e7080" },
-    callout: { text: "#5a5a6a", bold: "#3a3a4a" },
-    tabInactive: {
-      bg: "transparent",
-      border: "rgba(0,0,0,0.06)",
-      text: "#9a9ca8",
-    },
-  },
-  dark: {
-    name: "Dark",
-    page: "#181b22",
-    card: "#1f222a",
-    cardBorder: "rgba(255,255,255,0.05)",
-    title: "#dcdee8",
-    desc: "#6a6d78",
-    sectionTitle: "#dcdee8",
-    text: "#c0c4d0",
-    textMuted: "#7a7d8e",
-    kbd: {
-      bg: "rgba(255,255,255,0.06)",
-      border: "rgba(255,255,255,0.1)",
-      text: "#c0c4d0",
-      shadow: "0 1px 0 rgba(0,0,0,0.3)",
-    },
-    plus: "#484b54",
-    sep: "rgba(255,255,255,0.04)",
-    interaction: { label: "#dcdee8", desc: "#7a7d8e" },
-    callout: { text: "#7a7d8e", bold: "#c0c4d0" },
-    tabInactive: {
-      bg: "transparent",
-      border: "rgba(255,255,255,0.06)",
-      text: "#555868",
-    },
-  },
-  "tomorrow-night": {
-    name: "Tomorrow Night",
-    page: "#151617",
-    card: "#1c1d1f",
-    cardBorder: "rgba(255,255,255,0.04)",
-    title: "#d8d9e0",
-    desc: "#62636a",
-    sectionTitle: "#d8d9e0",
-    text: "#b8b9c2",
-    textMuted: "#74757c",
-    kbd: {
-      bg: "rgba(255,255,255,0.05)",
-      border: "rgba(255,255,255,0.08)",
-      text: "#b8b9c2",
-      shadow: "0 1px 0 rgba(0,0,0,0.35)",
-    },
-    plus: "#44454a",
-    sep: "rgba(255,255,255,0.035)",
-    interaction: { label: "#d8d9e0", desc: "#74757c" },
-    callout: { text: "#74757c", bold: "#b8b9c2" },
-    tabInactive: {
-      bg: "transparent",
-      border: "rgba(255,255,255,0.05)",
-      text: "#505158",
-    },
-  },
-  "catppuccin-mocha": {
-    name: "Catppuccin Mocha",
-    page: "#0e0e18",
-    card: "#141420",
-    cardBorder: "rgba(255,255,255,0.04)",
-    title: "#dde4ff",
-    desc: "#585878",
-    sectionTitle: "#dde4ff",
-    text: "#b8bee0",
-    textMuted: "#707090",
-    kbd: {
-      bg: "rgba(255,255,255,0.04)",
-      border: "rgba(255,255,255,0.07)",
-      text: "#b8bee0",
-      shadow: "0 1px 0 rgba(0,0,0,0.4)",
-    },
-    plus: "#3a3a52",
-    sep: "rgba(255,255,255,0.03)",
-    interaction: { label: "#dde4ff", desc: "#707090" },
-    callout: { text: "#707090", bold: "#b8bee0" },
-    tabInactive: {
-      bg: "transparent",
-      border: "rgba(255,255,255,0.04)",
-      text: "#50506e",
-    },
-  },
-} as const satisfies Record<ThemeCssBase, unknown>;
-
-type ResolvedHelpTheme = ReturnType<typeof resolveHelpTheme>;
-
-function resolveHelpTheme(theme: ThemeMode | undefined, accent: AccentMode | undefined) {
-  const resolvedTheme = resolveThemeMode(theme);
-  const resolvedAccent = resolveAccentMode(accent);
-  const base = resolveHelpBaseTheme(resolvedTheme);
-  const accentTokens = generateAccentTokens(resolvedAccent, resolvedTheme);
-
-  // Text and the page use the root tokens so the theme and the text color overrides apply.
-  return {
-    ...base,
-    page: VIEW_PAGE_BG,
-    title: VIEW_TEXT.primary,
-    desc: VIEW_TEXT.muted,
-    sectionTitle: VIEW_TEXT.primary,
-    text: VIEW_TEXT.secondary,
-    textMuted: VIEW_TEXT.muted,
-    kbd: { ...base.kbd, text: VIEW_TEXT.secondary },
-    interaction: { label: VIEW_TEXT.primary, desc: VIEW_TEXT.muted },
-    subtitle: accentTokens.solid,
-    sectionIcon: accentTokens.heroIconBg,
-    category: accentTokens.pathCrumbHover,
-    callout: {
-      text: VIEW_TEXT.secondary,
-      bold: VIEW_TEXT.primary,
-      bg: accentTokens.calloutBg,
-      border: accentTokens.calloutBorder,
-      icon: accentTokens.solid,
-    },
-    tabActive: {
-      bg: accentTokens.pillBg,
-      border: accentTokens.pillBorder,
-      text: accentTokens.pillText,
-    },
-  };
-}
-
-function resolveHelpBaseTheme(theme: ThemeMode) {
-  const cssBase = resolveThemeCssBase(theme);
-  const base = helpBaseThemes[cssBase];
-  const variant = getThemeVariant(theme);
-  if (!variant) {
-    return base;
-  }
-  return {
-    ...base,
-    name: getThemeLabel(theme),
-    page: variant.surfaces.page,
-    card: variant.surfaces.card,
-    cardBorder: variant.surfaces.cardBorder,
-    title: variant.text.primary,
-    desc: variant.text.muted,
-    sectionTitle: variant.text.primary,
-    text: variant.text.secondary,
-    textMuted: variant.text.muted,
-    kbd: {
-      ...base.kbd,
-      bg: variant.controls.inputBg,
-      border: variant.controls.inputBorder,
-      text: variant.text.secondary,
-    },
-    plus: variant.text.placeholder,
-    sep: variant.separator,
-    interaction: {
-      label: variant.text.primary,
-      desc: variant.text.muted,
-    },
-    callout: {
-      text: variant.text.secondary,
-      bold: variant.text.primary,
-    },
-    tabInactive: {
-      bg: "transparent",
-      border: variant.pills.inactiveBorder,
-      text: variant.pills.inactiveText,
-    },
-  };
-}
-
-const PREFERRED_LEFT_GROUPS = ["Navigation", "Panels"];
-const PREFERRED_RIGHT_GROUPS = ["Search", "Views"];
-
+// Help is a list of topics beside one readable column, like the sidebar and Settings. Each
+// topic explains an area and ends with its shortcuts; "Keyboard shortcuts" lists them all.
+// Typing in "Search help" replaces the page with matches from every topic. Styling is in
+// styles.css (`.help-*`) on the app's theme tokens, so Help follows theme, accent and font.
 export function HelpView({
-  shortcutItems,
-  referenceItems,
   layoutMode = "wide",
-  theme,
-  accent,
+  initialTopic = "navigation",
 }: {
-  shortcutItems: readonly ShortcutItem[];
-  referenceItems: readonly ReferenceItem[];
   layoutMode?: "wide" | "narrow" | "compact";
-  theme?: ThemeMode;
-  accent?: AccentMode;
+  initialTopic?: HelpTopicId;
 }) {
-  const resolvedTheme = resolveHelpTheme(theme, accent);
-  const [activeTab, setActiveTab] = useState<"shortcuts" | "explorer">("shortcuts");
-  const groupedShortcuts = useMemo(() => groupShortcuts(shortcutItems), [shortcutItems]);
-  const { leftGroups, rightGroups } = useMemo(
-    () => splitShortcutGroups(groupedShortcuts),
-    [groupedShortcuts],
-  );
-  const stackedColumns = layoutMode !== "wide";
-  const interactionLabelWidth = layoutMode === "compact" ? "100%" : "160px";
+  const [activeTopicId, setActiveTopicId] = useState<HelpTopicId>(initialTopic);
+  const [query, setQuery] = useState("");
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const searching = query.trim().length > 0;
+
+  // A new page starts at its top.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scrolls when the page shown changes.
+  useEffect(() => {
+    contentRef.current?.scrollTo?.({ top: 0 });
+  }, [activeTopicId, searching]);
 
   return (
-    <div
-      className="help-view"
-      data-layout={layoutMode}
-      style={{
-        background: resolvedTheme.page,
-        padding:
-          layoutMode === "compact"
-            ? "26px 16px 16px"
-            : layoutMode === "narrow"
-              ? "30px 18px 18px"
-              : "34px 24px 20px",
-        minHeight: "100%",
-        overflowY: "auto",
-      }}
-    >
-      <header className="help-header" style={{ marginBottom: "20px" }}>
-        <div className="help-header-left">
-          <span
-            className="help-header-eyebrow"
-            style={{
-              fontSize: "10px",
-              fontFamily: sans,
-              fontWeight: 600,
-              color: resolvedTheme.subtitle,
-              letterSpacing: "0.1em",
-              textTransform: "uppercase",
+    <div className="help-view" data-layout={layoutMode}>
+      <nav className="help-sidebar" aria-label="Help topics">
+        <label className="help-filter">
+          <svg className="help-filter-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="11" cy="11" r="6.5" />
+            <path d="m16 16 4.5 4.5" />
+          </svg>
+          <input
+            type="text"
+            className="help-filter-input"
+            value={query}
+            placeholder="Search help"
+            aria-label="Search help"
+            spellCheck={false}
+            onChange={(event) => setQuery(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              // Escape clears the search first; with nothing to clear it leaves Help as usual.
+              if (event.key === "Escape" && query.length > 0) {
+                event.preventDefault();
+                event.stopPropagation();
+                setQuery("");
+              }
             }}
-          >
-            FILE TRAIL
-          </span>
-          <h1
-            style={{
-              fontSize: "20px",
-              fontFamily: sans,
-              fontWeight: 700,
-              color: resolvedTheme.title,
-              margin: "2px 0 0",
-              letterSpacing: "-0.02em",
-            }}
-          >
-            Help &amp; Reference
-          </h1>
-        </div>
-      </header>
-
-      <div
-        role="tablist"
-        aria-label="Help sections"
-        style={{ display: "flex", gap: "4px", marginBottom: "16px", flexWrap: "wrap" }}
-      >
-        {[
-          { id: "shortcuts", label: "⌨ Keyboard Shortcuts" },
-          { id: "explorer", label: "ℹ Explorer Reference" },
-        ].map((tab) => {
-          const active = activeTab === tab.id;
-          const tabStyle = active ? resolvedTheme.tabActive : resolvedTheme.tabInactive;
-          return (
+          />
+        </label>
+        <div className="help-topics">
+          {HELP_TOPICS.map((topic) => (
             <button
-              key={tab.id}
-              id={`help-tab-${tab.id}`}
+              key={topic.id}
               type="button"
-              role="tab"
-              aria-selected={active}
-              aria-controls={`help-panel-${tab.id}`}
-              onClick={() => setActiveTab(tab.id as "shortcuts" | "explorer")}
-              style={{
-                padding: "6px 14px",
-                borderRadius: "6px",
-                border: `1px solid ${tabStyle.border}`,
-                background: tabStyle.bg,
-                color: tabStyle.text,
-                fontSize: "11.5px",
-                fontFamily: sans,
-                fontWeight: active ? 600 : 400,
-                cursor: "pointer",
-                transition: "all 0.12s ease",
-                outline: "none",
+              className="help-topic"
+              aria-current={!searching && topic.id === activeTopicId ? "page" : undefined}
+              onClick={() => {
+                setQuery("");
+                setActiveTopicId(topic.id);
               }}
             >
-              {tab.label}
+              <TopicIcon id={topic.id} />
+              <span>{topic.title}</span>
             </button>
-          );
-        })}
-      </div>
-
-      {activeTab === "shortcuts" ? (
-        <section
-          id="help-panel-shortcuts"
-          role="tabpanel"
-          aria-labelledby="help-tab-shortcuts"
-          style={cardStyle(resolvedTheme)}
-        >
-          <div
-            style={{
-              display: "flex",
-              flexDirection: stackedColumns ? "column" : "row",
-              gap: stackedColumns ? "12px" : "32px",
-            }}
-          >
-            <div style={{ flex: 1, minWidth: 0 }}>
-              {leftGroups.map((group) => (
-                <div key={group.name}>
-                  <CategoryLabel theme={resolvedTheme}>{group.name}</CategoryLabel>
-                  {group.items.map((item, index) => (
-                    <ShortcutRow
-                      key={`${item.group}-${item.shortcut}-${item.description}`}
-                      desc={item.description}
-                      keys={shortcutParts(item.shortcut)}
-                      theme={resolvedTheme}
-                      isLast={index === group.items.length - 1}
-                    />
-                  ))}
-                </div>
-              ))}
-            </div>
-
-            {leftGroups.length > 0 && rightGroups.length > 0 ? (
-              <div
-                aria-hidden
-                style={{
-                  width: stackedColumns ? "100%" : "1px",
-                  height: stackedColumns ? "1px" : "auto",
-                  background: resolvedTheme.sep,
-                  flexShrink: 0,
-                  margin: stackedColumns ? "0" : "12px 0",
-                }}
-              />
-            ) : null}
-
-            <div style={{ flex: 1, minWidth: 0 }}>
-              {rightGroups.map((group) => (
-                <div key={group.name}>
-                  <CategoryLabel theme={resolvedTheme}>{group.name}</CategoryLabel>
-                  {group.items.map((item, index) => (
-                    <ShortcutRow
-                      key={`${item.group}-${item.shortcut}-${item.description}`}
-                      desc={item.description}
-                      keys={shortcutParts(item.shortcut)}
-                      theme={resolvedTheme}
-                      isLast={index === group.items.length - 1}
-                    />
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      ) : (
-        <section
-          id="help-panel-explorer"
-          role="tabpanel"
-          aria-labelledby="help-tab-explorer"
-          style={cardStyle(resolvedTheme)}
-        >
-          <CategoryLabel theme={resolvedTheme}>Interaction</CategoryLabel>
-          {referenceItems.map((item, index) => (
-            <InteractionRow
-              key={item.label}
-              label={item.label}
-              desc={item.description}
-              theme={resolvedTheme}
-              isLast={index === referenceItems.length - 1}
-              stacked={layoutMode === "compact"}
-              labelWidth={interactionLabelWidth}
-            />
           ))}
-
-          <div
-            style={{
-              marginTop: "16px",
-              padding: "12px 14px",
-              borderRadius: "8px",
-              background: resolvedTheme.callout.bg,
-              border: `1px solid ${resolvedTheme.callout.border}`,
-              display: "flex",
-              gap: "10px",
-              alignItems: "flex-start",
-            }}
-          >
-            <div
-              style={{
-                width: "18px",
-                height: "18px",
-                borderRadius: "50%",
-                background: resolvedTheme.callout.icon,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-                marginTop: "1px",
-              }}
-            >
-              <span
-                style={{
-                  fontSize: "10px",
-                  fontWeight: 800,
-                  color: resolvedTheme.card,
-                  lineHeight: 1,
-                }}
-              >
-                i
-              </span>
-            </div>
-            <div
-              style={{
-                fontSize: "12px",
-                fontFamily: sans,
-                color: resolvedTheme.callout.text,
-                lineHeight: "1.55",
-              }}
-            >
-              <strong style={{ color: resolvedTheme.callout.bold }}>Path Bar Editing</strong> uses
-              live filesystem suggestions from the typed parent folder, and{" "}
-              <Kbd theme={resolvedTheme}>Esc</Kbd> always returns it to clickable mode.
-            </div>
-          </div>
-        </section>
-      )}
+        </div>
+      </nav>
+      <div ref={contentRef} className="help-content">
+        <article className="help-page">
+          {searching ? (
+            <SearchResultsPage query={query.trim()} />
+          ) : activeTopicId === "shortcuts" ? (
+            <ShortcutsPage />
+          ) : (
+            <TopicPage topic={getHelpTopic(activeTopicId)} />
+          )}
+        </article>
+      </div>
     </div>
   );
 }
 
-function cardStyle(theme: ResolvedHelpTheme) {
-  return {
-    background: theme.card,
-    border: `1px solid ${theme.cardBorder}`,
-    borderRadius: "10px",
-    padding: "4px 20px 16px",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
-  } as const;
+function TopicPage({ topic }: { topic: HelpTopic }) {
+  const shortcuts = SHORTCUT_ITEMS.filter((item) => item.group === topic.id);
+  return (
+    <>
+      <h1>{topic.title}</h1>
+      <p className="help-intro">{renderInline(topic.intro)}</p>
+      {topic.sections.map((section) => (
+        <section key={section.title} className="help-section">
+          <h2>{section.title}</h2>
+          <div className="help-rows">
+            {section.rows.map((row) => (
+              <RowItem key={row.label} row={row} />
+            ))}
+          </div>
+          {section.note ? <p className="help-note">{renderInline(section.note)}</p> : null}
+        </section>
+      ))}
+      {shortcuts.length > 0 ? (
+        <section className="help-section">
+          <h2>Shortcuts</h2>
+          <ShortcutList items={shortcuts} />
+        </section>
+      ) : null}
+    </>
+  );
 }
 
-function Kbd({
-  children,
-  theme,
-}: {
-  children: string;
-  theme: ResolvedHelpTheme;
-}) {
+function ShortcutsPage() {
+  const topic = getHelpTopic("shortcuts");
   return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        minWidth: "22px",
-        height: "20px",
-        padding: "0 6px",
-        borderRadius: "4px",
-        fontSize: "10.5px",
-        fontFamily: sans,
-        fontWeight: 600,
-        color: theme.kbd.text,
-        background: theme.kbd.bg,
-        border: `1px solid ${theme.kbd.border}`,
-        boxShadow: theme.kbd.shadow,
-        lineHeight: 1,
-        letterSpacing: "0.02em",
-      }}
-    >
-      {children}
+    <>
+      <h1>{topic.title}</h1>
+      <p className="help-intro">{topic.intro}</p>
+      <div className="help-shortcut-columns">
+        {HELP_SHORTCUT_GROUPS.map((group) => (
+          <section key={group} className="help-section help-shortcut-group">
+            <h2>{getHelpTopic(group).title}</h2>
+            <ShortcutList items={SHORTCUT_ITEMS.filter((item) => item.group === group)} />
+          </section>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function SearchResultsPage({ query }: { query: string }) {
+  const results = searchHelp(query);
+  return (
+    <>
+      <h1>Results for “{query}”</h1>
+      {results.length === 0 ? (
+        <p className="help-intro">Nothing in Help matches. Try a shorter or different word.</p>
+      ) : null}
+      {results.map(({ topic, rows, shortcuts }) => (
+        <section key={topic.id} className="help-section">
+          <h2>{topic.title}</h2>
+          {rows.length > 0 ? (
+            <div className="help-rows">
+              {rows.map(({ section, row }) => (
+                <RowItem key={`${section}:${row.label}`} row={row} />
+              ))}
+            </div>
+          ) : null}
+          {shortcuts.length > 0 ? <ShortcutList items={shortcuts} /> : null}
+        </section>
+      ))}
+    </>
+  );
+}
+
+function RowItem({ row }: { row: HelpRow }) {
+  return (
+    <div className="help-row">
+      <div className="help-row-label">
+        {row.code ? <code className="help-code">{row.label}</code> : row.label}
+      </div>
+      <div className="help-row-description">{renderInline(row.description)}</div>
+    </div>
+  );
+}
+
+function ShortcutList({ items }: { items: readonly ShortcutItem[] }) {
+  return (
+    <div className="help-rows">
+      {items.map((item) => (
+        <div key={`${item.shortcut}:${item.description}`} className="help-shortcut-row">
+          <span>{item.description}</span>
+          <Keys keys={shortcutParts(item.shortcut)} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Keys({ keys }: { keys: string[] }) {
+  const occurrences = new Map<string, number>();
+  return (
+    <span className="help-keys">
+      {keys.map((key) => {
+        const count = occurrences.get(key) ?? 0;
+        occurrences.set(key, count + 1);
+        return (
+          <kbd key={`${key}:${count}`} className="help-key">
+            {key}
+          </kbd>
+        );
+      })}
     </span>
   );
 }
 
-function Keys({
-  keys,
-  theme,
-}: {
-  keys: string[];
-  theme: ResolvedHelpTheme;
-}) {
-  const keyOccurrences = new Map<string, number>();
+// `text in backticks` is shown as code; everything else is plain text.
+function renderInline(text: string): ReactNode[] {
+  return text.split("`").map((part, index) =>
+    index % 2 === 1 ? (
+      // biome-ignore lint/suspicious/noArrayIndexKey: the parts of a fixed string never reorder.
+      <code key={index} className="help-code">
+        {part}
+      </code>
+    ) : (
+      part
+    ),
+  );
+}
+
+function TopicIcon({ id }: { id: HelpTopicId }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "3px", flexShrink: 0 }}>
-      {keys.map((key) => {
-        const occurrenceCount = keyOccurrences.get(key) ?? 0;
-        keyOccurrences.set(key, occurrenceCount + 1);
-        return (
-          <span
-            key={`${keys.join("::")}-${key}-${occurrenceCount}`}
-            style={{ display: "flex", alignItems: "center", gap: "3px" }}
-          >
-            <Kbd theme={theme}>{key}</Kbd>
-          </span>
-        );
-      })}
-    </div>
+    <svg className="help-topic-icon" viewBox="0 0 24 24" aria-hidden="true">
+      {id === "navigation" ? (
+        <>
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="m15.5 8.5-2 5-5 2 2-5z" />
+        </>
+      ) : id === "files" ? (
+        <>
+          <path d="M8 3.5h6l4 4V17a1.5 1.5 0 0 1-1.5 1.5H8A1.5 1.5 0 0 1 6.5 17V5A1.5 1.5 0 0 1 8 3.5z" />
+          <path d="M14 3.5V8h4" />
+        </>
+      ) : id === "search" ? (
+        <>
+          <circle cx="11" cy="11" r="6.5" />
+          <path d="m16 16 4.5 4.5" />
+        </>
+      ) : id === "views" ? (
+        <>
+          <rect x="3.5" y="5" width="17" height="14" rx="2.5" />
+          <path d="M9.5 5v14" />
+        </>
+      ) : (
+        <>
+          <rect x="2.5" y="6.5" width="19" height="11" rx="2.5" />
+          <path d="M6.5 10.5h.01M10 10.5h.01M13.5 10.5h.01M17 10.5h.01M8 14h8" />
+        </>
+      )}
+    </svg>
   );
-}
-
-function ShortcutRow({
-  desc,
-  keys,
-  theme,
-  isLast,
-}: {
-  desc: string;
-  keys: string[];
-  theme: ResolvedHelpTheme;
-  isLast: boolean;
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "8px 0",
-        gap: "16px",
-        borderBottom: isLast ? "none" : `1px solid ${theme.sep}`,
-      }}
-    >
-      <span
-        style={{
-          fontSize: "12px",
-          fontFamily: sans,
-          fontWeight: 430,
-          color: theme.text,
-          lineHeight: "1.4",
-          flex: 1,
-        }}
-      >
-        {desc}
-      </span>
-      <Keys keys={keys} theme={theme} />
-    </div>
-  );
-}
-
-function InteractionRow({
-  label,
-  desc,
-  theme,
-  isLast,
-  stacked,
-  labelWidth,
-}: {
-  label: string;
-  desc: string;
-  theme: ResolvedHelpTheme;
-  isLast: boolean;
-  stacked: boolean;
-  labelWidth: string;
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: stacked ? "column" : "row",
-        gap: stacked ? "4px" : "16px",
-        padding: "10px 0",
-        borderBottom: isLast ? "none" : `1px solid ${theme.sep}`,
-      }}
-    >
-      <span
-        style={{
-          fontSize: "12px",
-          fontFamily: sans,
-          fontWeight: 600,
-          color: theme.interaction.label,
-          width: stacked ? "100%" : labelWidth,
-          flexShrink: 0,
-          lineHeight: "1.4",
-        }}
-      >
-        {label}
-      </span>
-      <span
-        style={{
-          fontSize: "12px",
-          fontFamily: sans,
-          fontWeight: 400,
-          color: theme.interaction.desc,
-          lineHeight: "1.5",
-          flex: 1,
-        }}
-      >
-        {desc}
-      </span>
-    </div>
-  );
-}
-
-function CategoryLabel({
-  children,
-  theme,
-}: {
-  children: string;
-  theme: ResolvedHelpTheme;
-}) {
-  return (
-    <div
-      style={{
-        fontSize: "10px",
-        fontFamily: sans,
-        fontWeight: 700,
-        color: theme.category,
-        letterSpacing: "0.07em",
-        textTransform: "uppercase",
-        padding: "12px 0 4px",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function groupShortcuts(
-  shortcuts: readonly ShortcutItem[],
-): Array<{ name: string; items: ShortcutItem[] }> {
-  const map = new Map<string, ShortcutItem[]>();
-  for (const item of shortcuts) {
-    const existing = map.get(item.group);
-    if (existing) {
-      existing.push(item);
-      continue;
-    }
-    map.set(item.group, [item]);
-  }
-  return Array.from(map.entries()).map(([name, items]) => ({ name, items }));
-}
-
-function splitShortcutGroups(groups: Array<{ name: string; items: ShortcutItem[] }>): {
-  leftGroups: Array<{ name: string; items: ShortcutItem[] }>;
-  rightGroups: Array<{ name: string; items: ShortcutItem[] }>;
-} {
-  const byName = new Map(groups.map((group) => [group.name, group]));
-  const leftGroups = PREFERRED_LEFT_GROUPS.map((name) => byName.get(name)).filter(isPresent);
-  const rightGroups = PREFERRED_RIGHT_GROUPS.map((name) => byName.get(name)).filter(isPresent);
-  const leftovers = groups.filter(
-    (group) =>
-      !PREFERRED_LEFT_GROUPS.includes(group.name) && !PREFERRED_RIGHT_GROUPS.includes(group.name),
-  );
-
-  for (const leftover of leftovers) {
-    if (leftGroups.length <= rightGroups.length) {
-      leftGroups.push(leftover);
-      continue;
-    }
-    rightGroups.push(leftover);
-  }
-
-  return { leftGroups, rightGroups };
 }
 
 // Help data is written as "Cmd+Shift+G"; it is shown the macOS way, as symbol keycaps
@@ -700,7 +267,7 @@ const SHORTCUT_GLYPHS: Record<string, string> = {
   Down: "↓",
   Return: "↩",
   Enter: "↩",
-  Esc: "⎋",
+  Esc: "esc",
   Tab: "⇥",
   Plus: "+",
 };
@@ -717,43 +284,4 @@ export function shortcutParts(shortcut: string): string[] {
     .filter((part) => MODIFIER_ORDER.includes(part))
     .sort((left, right) => MODIFIER_ORDER.indexOf(left) - MODIFIER_ORDER.indexOf(right));
   return [...modifiers, ...parts.filter((part) => !MODIFIER_ORDER.includes(part))];
-}
-
-function resolveThemeMode(theme: ThemeMode | undefined): ThemeMode {
-  if (theme) {
-    return theme;
-  }
-  if (typeof document !== "undefined") {
-    const documentThemeVariant = document.documentElement.dataset.themeVariant as
-      | ThemeMode
-      | undefined;
-    if (
-      documentThemeVariant &&
-      (documentThemeVariant in helpBaseThemes || getThemeVariant(documentThemeVariant) !== null)
-    ) {
-      return documentThemeVariant;
-    }
-    const documentTheme = document.documentElement.dataset.theme as ThemeMode | undefined;
-    if (documentTheme && documentTheme in helpBaseThemes) {
-      return documentTheme;
-    }
-  }
-  return "dark";
-}
-
-function resolveAccentMode(accent: AccentMode | undefined): AccentMode {
-  if (accent) {
-    return normalizeAccentColor(accent) ?? DEFAULT_APP_PREFERENCES.accent;
-  }
-  if (typeof document !== "undefined") {
-    const documentAccent = document.documentElement.dataset.accent as AccentMode | undefined;
-    if (documentAccent) {
-      return normalizeAccentColor(documentAccent) ?? DEFAULT_APP_PREFERENCES.accent;
-    }
-  }
-  return DEFAULT_APP_PREFERENCES.accent;
-}
-
-function isPresent<T>(value: T | undefined): value is T {
-  return value !== undefined;
 }

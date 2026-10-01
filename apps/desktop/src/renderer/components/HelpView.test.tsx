@@ -1,110 +1,120 @@
 // @vitest-environment jsdom
 
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 
-import type { ThemeMode } from "../../shared/appPreferences";
-import { HelpView } from "./HelpView";
-
-const defaultShortcutItems = [
-  { group: "Navigation", shortcut: "Cmd+R", description: "Refresh the current folder" },
-  { group: "Panels", shortcut: "Cmd+1", description: "Focus the folder tree" },
-  { group: "Search", shortcut: "Cmd+F", description: "Focus file search" },
-  { group: "Views", shortcut: "Esc", description: "Return from Help or Settings to Explorer" },
-] as const;
-
-const defaultReferenceItems = [
-  {
-    label: "Single click path segment",
-    description: "Navigate directly to that folder in the current browsing history.",
-  },
-  {
-    label: "Double click path bar",
-    description: "Switch the path bar into editable mode without opening a separate dialog.",
-  },
-] as const;
-
-function renderHelpView({
-  theme = "dark",
-  layoutMode = "wide",
-  shortcutItems = defaultShortcutItems,
-  referenceItems = defaultReferenceItems,
-}: {
-  theme?: ThemeMode;
-  layoutMode?: "wide" | "narrow" | "compact";
-  shortcutItems?: ReadonlyArray<{ group: string; shortcut: string; description: string }>;
-  referenceItems?: ReadonlyArray<{ label: string; description: string }>;
-} = {}) {
-  return render(
-    <HelpView
-      shortcutItems={shortcutItems}
-      referenceItems={referenceItems}
-      layoutMode={layoutMode}
-      theme={theme}
-    />,
-  );
-}
+import { HELP_TOPICS, SHORTCUT_ITEMS } from "../lib/helpContent";
+import { HelpView, shortcutParts } from "./HelpView";
 
 describe("HelpView", () => {
   it("exposes the selected layout mode on the root element", () => {
-    renderHelpView({ layoutMode: "compact" });
+    const { container } = render(<HelpView layoutMode="compact" />);
 
-    expect(screen.getByText("Help & Reference").closest(".help-view")).toHaveAttribute(
-      "data-layout",
-      "compact",
+    expect(container.querySelector(".help-view")).toHaveAttribute("data-layout", "compact");
+  });
+
+  it("lists every topic and opens on the first one", () => {
+    render(<HelpView />);
+
+    const topics = within(screen.getByRole("navigation", { name: "Help topics" }));
+    for (const topic of HELP_TOPICS) {
+      expect(topics.getByRole("button", { name: topic.title })).toBeInTheDocument();
+    }
+    expect(topics.getByRole("button", { name: "Getting around" })).toHaveAttribute(
+      "aria-current",
+      "page",
     );
+    expect(screen.getByRole("heading", { level: 1, name: "Getting around" })).toBeInTheDocument();
   });
 
-  it("uses the compact header without a description row", () => {
-    renderHelpView();
+  it("shows a topic's explanations followed by its shortcuts", () => {
+    render(<HelpView />);
 
-    expect(screen.getByText("FILE TRAIL")).toBeInTheDocument();
-    expect(screen.queryByText("Keyboard shortcuts and navigation guide")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Searching" }));
+
+    expect(screen.getByRole("heading", { level: 1, name: "Searching" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Glob patterns" })).toBeInTheDocument();
+    // Patterns are shown as code, with what they match beside them.
+    expect(screen.getByText("*.{jpg,png,gif}").tagName).toBe("CODE");
+    expect(screen.getByText("Any of several endings")).toBeInTheDocument();
+    // Backticks in the text become inline code.
+    expect(screen.getAllByText("**/").some((element) => element.tagName === "CODE")).toBe(true);
+    // The topic's own shortcuts close the page; others stay on their topics.
+    expect(screen.getByRole("heading", { level: 2, name: "Shortcuts" })).toBeInTheDocument();
+    expect(screen.getByText("Find files")).toBeInTheDocument();
+    expect(screen.queryByText("Move to Trash")).toBeNull();
   });
 
-  it.each(["light", "catppuccin-mocha", "sand"] satisfies ThemeMode[])(
-    "takes the page and text colors from the app theme tokens (%s)",
-    (theme) => {
-      renderHelpView({ theme });
+  it("lists every shortcut on the Keyboard shortcuts page, grouped by topic", () => {
+    render(<HelpView initialTopic="shortcuts" />);
 
-      // The tokens carry the theme and any text color override, like the rest of the app.
-      const view = screen.getByText("Help & Reference").closest(".help-view");
-      expect(view).toHaveStyle({ background: "var(--bg-base)" });
-      expect(screen.getByText("Help & Reference")).toHaveStyle({ color: "var(--text-primary)" });
-    },
-  );
-
-  it("shows keyboard shortcuts first and switches to explorer reference on tab click", async () => {
-    const user = userEvent.setup();
-    renderHelpView();
-
-    expect(screen.getByText("Refresh the current folder")).toBeInTheDocument();
-    expect(screen.queryByText("Single click path segment")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("tab", { name: "ℹ Explorer Reference" }));
-
-    expect(screen.getByText("Single click path segment")).toBeInTheDocument();
-    expect(screen.queryByText("Refresh the current folder")).not.toBeInTheDocument();
-    expect(screen.getByText(/Path Bar Editing/)).toBeInTheDocument();
-  });
-
-  it("renders grouped shortcut headings from the provided data", () => {
-    renderHelpView();
-
-    expect(screen.getByText("Navigation")).toBeInTheDocument();
-    expect(screen.getByText("Panels")).toBeInTheDocument();
-    expect(screen.getByText("Search")).toBeInTheDocument();
-    expect(screen.getByText("Views")).toBeInTheDocument();
+    for (const title of ["Getting around", "Working with files", "Searching", "Views and panels"]) {
+      expect(screen.getByRole("heading", { level: 2, name: title })).toBeInTheDocument();
+    }
+    for (const item of SHORTCUT_ITEMS) {
+      expect(screen.getAllByText(item.description).length).toBeGreaterThan(0);
+    }
   });
 
   it("renders shortcut keys as separate keycaps and preserves trailing plus keys", () => {
-    renderHelpView({
-      shortcutItems: [{ group: "Navigation", shortcut: "Cmd++", description: "Zoom in" }],
-      referenceItems: defaultReferenceItems,
+    const { container } = render(<HelpView initialTopic="views" />);
+
+    const row = screen.getByText("Zoom in").closest(".help-shortcut-row");
+    expect(row).not.toBeNull();
+    const keys = Array.from(row?.querySelectorAll(".help-key") ?? []).map((key) => key.textContent);
+    expect(keys).toEqual(["⌘", "+"]);
+    expect(container.querySelectorAll(".help-key").length).toBeGreaterThan(4);
+    expect(shortcutParts("Cmd+Shift+G")).toEqual(["⇧", "⌘", "G"]);
+    expect(shortcutParts("Cmd+Option+C")).toEqual(["⌥", "⌘", "C"]);
+  });
+
+  it("searches across all topics and shortcuts, and Escape clears the search", () => {
+    render(<HelpView />);
+    const input = screen.getByRole("textbox", { name: "Search help" });
+
+    fireEvent.change(input, { target: { value: "trash" } });
+
+    expect(screen.getByRole("heading", { level: 1, name: "Results for “trash”" })).toBeVisible();
+    // A row and a shortcut from Working with files, nothing from other topics.
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Working with files" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Move to Trash").length).toBe(2);
+    expect(screen.queryByRole("heading", { level: 2, name: "Views and panels" })).toBeNull();
+    // While searching, no topic is marked as the current page.
+    expect(document.querySelector('.help-topic[aria-current="page"]')).toBeNull();
+
+    // The shortcut as written also matches.
+    fireEvent.change(input, { target: { value: "cmd+f" } });
+    expect(screen.getByText("Find files")).toBeInTheDocument();
+
+    fireEvent.change(input, { target: { value: "zzzz" } });
+    expect(screen.getByText(/Nothing in Help matches/)).toBeInTheDocument();
+
+    // Escape clears the search instead of leaving Help.
+    const outer = vi.fn();
+    window.addEventListener("keydown", outer);
+    try {
+      fireEvent.keyDown(input, { key: "Escape" });
+      expect(input).toHaveValue("");
+      expect(outer).not.toHaveBeenCalled();
+      expect(screen.getByRole("heading", { level: 1, name: "Getting around" })).toBeVisible();
+      // With nothing to clear, Escape passes through.
+      fireEvent.keyDown(input, { key: "Escape" });
+      expect(outer).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener("keydown", outer);
+    }
+  });
+
+  it("choosing a topic leaves search results", () => {
+    render(<HelpView />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Search help" }), {
+      target: { value: "zoom" },
     });
 
-    expect(screen.getByText("Zoom in")).toBeInTheDocument();
-    expect(screen.getByText("⌘")).toBeInTheDocument();
-    expect(screen.getByText("+")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Views and panels" }));
+
+    expect(screen.getByRole("textbox", { name: "Search help" })).toHaveValue("");
+    expect(screen.getByRole("heading", { level: 1, name: "Views and panels" })).toBeVisible();
   });
 });

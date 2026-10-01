@@ -70,7 +70,6 @@ import {
 import { FileIcon, IconThemeProvider } from "./lib/fileIcons";
 import { useFiletrailClient } from "./lib/filetrailClient";
 import { formatDateTime, formatPermissionMode, formatSize } from "./lib/formatting";
-import { REFERENCE_ITEMS, SHORTCUT_ITEMS } from "./lib/helpContent";
 import { resolveInfoItem } from "./lib/infoPreview";
 import { EXPLORER_LAYOUT } from "./lib/layoutTokens";
 import { createRendererLogger } from "./lib/logging";
@@ -1834,13 +1833,7 @@ export function App() {
             </header>
             <section ref={singlePanelRef} className="pane single-panel-pane">
               {mainView === "help" ? (
-                <HelpView
-                  shortcutItems={[...SHORTCUT_ITEMS]}
-                  referenceItems={[...REFERENCE_ITEMS]}
-                  layoutMode={singlePanelLayout}
-                  theme={effectiveTheme}
-                  accent={accent}
-                />
+                <HelpView layoutMode={singlePanelLayout} />
               ) : mainView === "action-log" ? (
                 <ActionLogView
                   entries={actionLogEntries}

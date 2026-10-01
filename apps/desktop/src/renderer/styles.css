@@ -101,16 +101,12 @@
   --accent-soft: rgba(124, 58, 237, 0.08);
   --accent-text: #6d28d9;
   --help-muted: var(--text-tertiary);
-  --help-key-bg: var(--bg-elevated);
-  --help-key-border: var(--border-active);
-  --help-key-shadow: rgba(0, 0, 0, 0.15);
   --help-accent: #2563eb;
   --tb-primary-bg: rgba(124, 58, 237, 0.1);
   --tb-primary-fg: #6d28d9;
   --tb-primary-hover-bg: rgba(124, 58, 237, 0.16);
   --tb-primary-shadow: none;
   --tb-primary-hover-shadow: none;
-  --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
   /* Fallbacks until the Font preference is applied; they match its "System" default. */
@@ -243,9 +239,6 @@
   --accent-soft: rgba(178, 148, 187, 0.12);
   --accent-text: #c9b1d1;
   --help-muted: var(--text-tertiary);
-  --help-key-bg: var(--bg-elevated);
-  --help-key-border: var(--border-active);
-  --help-key-shadow: rgba(0, 0, 0, 0.34);
   --help-accent: var(--accent-blue);
   --tb-primary-bg: rgba(178, 148, 187, 0.14);
   --tb-primary-fg: #c9b1d1;
@@ -372,9 +365,6 @@
   --accent-soft: rgba(109, 160, 247, 0.14);
   --accent-text: #a9c6ff;
   --help-muted: var(--text-tertiary);
-  --help-key-bg: var(--bg-elevated);
-  --help-key-border: var(--border-active);
-  --help-key-shadow: rgba(0, 0, 0, 0.34);
   --help-accent: var(--accent-blue);
   --tb-primary-bg: var(--accent-blue-dim);
   --tb-primary-fg: var(--accent-blue);
@@ -501,9 +491,6 @@
   --accent-soft: rgba(203, 166, 247, 0.12);
   --accent-text: #cba6f7;
   --help-muted: var(--text-tertiary);
-  --help-key-bg: var(--bg-elevated);
-  --help-key-border: var(--border-active);
-  --help-key-shadow: rgba(0, 0, 0, 0.34);
   --help-accent: var(--accent-blue);
   --tb-primary-bg: rgba(203, 166, 247, 0.14);
   --tb-primary-fg: #cba6f7;
@@ -4463,7 +4450,6 @@ body.resizing-panels-vertical * {
   -webkit-backdrop-filter: blur(14px);
 }
 
-.help-view,
 .settings-view,
 .action-log-view {
   min-height: 0;
@@ -4474,7 +4460,6 @@ body.resizing-panels-vertical * {
   padding: 26px 16px 28px;
 }
 
-body.platform-macos .help-view,
 body.platform-macos .settings-view,
 body.platform-macos .action-log-view {
   padding-top: 58px;
@@ -4488,7 +4473,6 @@ body.platform-macos .action-log-view {
   width: min(820px, 100%);
 }
 
-.help-header,
 .settings-page-header,
 .action-log-page-header {
   display: flex;
@@ -4498,7 +4482,6 @@ body.platform-macos .action-log-view {
   margin-bottom: 18px;
 }
 
-.help-header-left,
 .settings-page-header-left,
 .action-log-page-header-left {
   display: flex;
@@ -4506,7 +4489,6 @@ body.platform-macos .action-log-view {
   gap: 2px;
 }
 
-.help-header-eyebrow,
 .settings-page-eyebrow,
 .action-log-page-eyebrow {
   font-family: var(--font-sans);
@@ -4518,7 +4500,6 @@ body.platform-macos .action-log-view {
   font-variant-numeric: tabular-nums;
 }
 
-.help-header h2,
 .settings-page-header h2,
 .action-log-page-header h2,
 .action-log-page-header h1 {
@@ -4528,7 +4509,6 @@ body.platform-macos .action-log-view {
   font-weight: 650;
 }
 
-.help-header p,
 .settings-page-header p {
   font-size: 11px;
   color: var(--help-muted);
@@ -4539,17 +4519,14 @@ body.platform-macos .action-log-view {
   padding-bottom: 0;
 }
 
-.help-view[data-layout="narrow"],
 .settings-view[data-layout="narrow"] {
   padding: 20px 14px 30px;
 }
 
-body.platform-macos .help-view[data-layout="narrow"],
 body.platform-macos .settings-view[data-layout="narrow"] {
   padding-top: 52px;
 }
 
-.help-view[data-layout="narrow"] .help-header,
 .settings-view[data-layout="narrow"] .settings-page-header,
 .action-log-view[data-layout="narrow"] .action-log-page-header {
   align-items: flex-start;
@@ -4560,7 +4537,6 @@ body.platform-macos .settings-view[data-layout="narrow"] {
   max-width: none;
 }
 
-body.platform-macos .help-view[data-layout="compact"],
 body.platform-macos .settings-view[data-layout="compact"] {
   padding-top: 48px;
 }
@@ -4592,33 +4568,15 @@ body.platform-macos .settings-view[data-layout="compact"] {
   color: var(--fg-muted);
 }
 
-.help-key {
-  font-family: var(--font-sans);
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--text-secondary);
-  background: var(--help-key-bg);
-  border: 1px solid var(--help-key-border);
-  border-bottom-width: 2px;
-  border-bottom-color: var(--help-key-shadow);
-  border-radius: var(--radius-sm);
-  padding: 1px 7px;
-  line-height: 1.6;
-  font-variant-numeric: tabular-nums;
-}
-
 @media (max-width: 1100px) {
-  .help-view,
   .settings-view {
     padding: 20px 14px 30px;
   }
 
-  body.platform-macos .help-view,
   body.platform-macos .settings-view {
     padding-top: 52px;
   }
 
-  .help-header,
   .settings-page-header {
     align-items: flex-start;
     flex-direction: column;
@@ -4630,7 +4588,6 @@ body.platform-macos .settings-view[data-layout="compact"] {
     max-width: none;
   }
 
-  body.platform-macos .help-view,
   body.platform-macos .settings-view {
     padding-top: 48px;
   }
@@ -4964,6 +4921,269 @@ body.platform-macos .settings-view[data-layout="compact"] {
   font-weight: 600;
 }
 
+/* ── Help: topics on the left, one readable column on the right ───────── */
+
+.help-view {
+  display: grid;
+  grid-template-columns: 208px minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+
+.help-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 12px 10px;
+  border-right: 1px solid var(--border-light);
+  background: var(--sidebar-bg);
+  overflow-y: auto;
+}
+
+.help-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: var(--bg-input);
+  color: var(--text-tertiary);
+}
+
+.help-filter:focus-within {
+  border-color: color-mix(in srgb, var(--ft-accent-solid) 70%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ft-accent-solid) 25%, transparent);
+}
+
+.help-filter-icon,
+.help-topic-icon {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.help-filter-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+
+.help-filter-input:focus,
+.help-filter-input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.help-filter-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.help-topics {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.help-topic {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  text-align: left;
+  cursor: default;
+}
+
+.help-topic:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.help-topic[aria-current="page"] {
+  background: var(--bg-active-inactive);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.help-topic[aria-current="page"] .help-topic-icon {
+  color: var(--ft-accent-solid);
+}
+
+.help-content {
+  min-width: 0;
+  min-height: 0;
+  padding: 22px 28px 36px;
+  overflow-y: auto;
+}
+
+.help-page {
+  max-width: 720px;
+  line-height: 1.5;
+}
+
+.help-page h1 {
+  margin: 0 0 4px;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.help-intro {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.help-section h2 {
+  margin: 22px 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.help-row,
+.help-shortcut-row {
+  padding: 7px 0;
+  border-top: 1px solid var(--border-light);
+}
+
+.help-rows > :first-child {
+  border-top: 0;
+}
+
+.help-row {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 14px;
+  align-items: baseline;
+}
+
+.help-row-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.help-row-description {
+  color: var(--text-secondary);
+}
+
+.help-code {
+  padding: 1px 6px;
+  border: 1px solid var(--border-light);
+  border-radius: 5px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.help-note {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--ft-accent-soft-bg);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.help-shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.help-keys {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 3px;
+}
+
+.help-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 21px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* The full shortcut list flows into two columns when there is room. Spacing sits below
+   each group (not above its heading) so both columns start at the same height. */
+.help-shortcut-columns {
+  columns: 2 300px;
+  column-gap: 36px;
+  margin-top: 22px;
+}
+
+.help-shortcut-group {
+  break-inside: avoid;
+  padding-bottom: 22px;
+}
+
+.help-shortcut-group h2 {
+  margin-top: 0;
+}
+
+.help-view[data-layout="narrow"] {
+  grid-template-columns: 188px minmax(0, 1fr);
+}
+
+/* Very narrow windows (a high zoom level): topics move above the page as a wrapping row. */
+.help-view[data-layout="compact"] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.help-view[data-layout="compact"] .help-sidebar {
+  border-right: 0;
+  border-bottom: 1px solid var(--border-light);
+  overflow: visible;
+}
+
+.help-view[data-layout="compact"] .help-topics {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.help-view[data-layout="compact"] .help-content {
+  padding: 16px 16px 28px;
+}
+
+.help-view[data-layout="compact"] .help-row {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+}
+
 /* ── Path bar and status bar (Finder-style, below the list) ───────────── */
 
 .content-pane {
@@ -5222,7 +5442,6 @@ body.platform-macos .settings-view[data-layout="compact"] {
 .pane-header,
 .get-info-header,
 .get-info-meta-label,
-.help-header-eyebrow,
 .settings-page-eyebrow,
 .action-log-page-eyebrow {
   letter-spacing: 0;

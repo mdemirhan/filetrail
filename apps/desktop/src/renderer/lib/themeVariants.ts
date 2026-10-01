@@ -871,7 +871,6 @@ function getThemeVariantCssOverridesFromVariant(
     "--fg-muted": variant.text.tertiary,
     "--fg-dim": variant.text.muted,
     "--help-muted": variant.text.tertiary,
-    "--help-key-bg": variant.surfaces.card,
     "--search-surface": variant.search.bg,
     "--search-border": variant.search.border,
     "--search-text": variant.text.secondary,
