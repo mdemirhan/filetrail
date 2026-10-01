@@ -2835,31 +2835,6 @@ export function SettingsView({
                 />
               }
             />
-
-            <ApplicationSelectionDisplay
-              title="Terminal app"
-              ariaLabel="Terminal app"
-              application={terminalApp ?? DEFAULT_TERMINAL_APPLICATION}
-              theme={palette}
-              actions={
-                <>
-                  <ActionButton
-                    label="Browse"
-                    ariaLabel="Browse terminal app"
-                    theme={palette}
-                    onClick={onBrowseTerminalApp}
-                  />
-                  {terminalApp ? (
-                    <ActionButton
-                      label="Default"
-                      ariaLabel="Use default terminal app"
-                      theme={palette}
-                      onClick={onClearTerminalApp}
-                    />
-                  ) : null}
-                </>
-              }
-            />
           </SectionCard>
         ) : null}
 
@@ -3035,6 +3010,31 @@ export function SettingsView({
                       ariaLabel="Use default text editor"
                       theme={palette}
                       onClick={onClearDefaultTextEditor}
+                    />
+                  ) : null}
+                </>
+              }
+            />
+
+            <ApplicationSelectionDisplay
+              title="Terminal app"
+              ariaLabel="Terminal app"
+              application={terminalApp ?? DEFAULT_TERMINAL_APPLICATION}
+              theme={palette}
+              actions={
+                <>
+                  <ActionButton
+                    label="Browse"
+                    ariaLabel="Browse terminal app"
+                    theme={palette}
+                    onClick={onBrowseTerminalApp}
+                  />
+                  {terminalApp ? (
+                    <ActionButton
+                      label="Default"
+                      ariaLabel="Use default terminal app"
+                      theme={palette}
+                      onClick={onClearTerminalApp}
                     />
                   ) : null}
                 </>

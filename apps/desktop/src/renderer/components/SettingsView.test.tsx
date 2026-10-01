@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 
 import type { ThemeMode } from "../../shared/appPreferences";
@@ -629,6 +629,25 @@ describe("SettingsView", () => {
 
     expect(onZoomPercentChange).toHaveBeenCalledWith(100);
     expect(input).toHaveValue("100%");
+  });
+
+  it("keeps the Terminal app with the other app choices on the Files tab", () => {
+    renderSettingsView({ activeTab: "files" });
+    const fileOpening = screen.getByText("File Opening").closest("section");
+    if (!(fileOpening instanceof HTMLElement)) {
+      throw new Error("Missing File Opening section.");
+    }
+    expect(within(fileOpening).getAllByText("Default text editor").length).toBeGreaterThan(0);
+    expect(within(fileOpening).getAllByText("Terminal app").length).toBeGreaterThan(0);
+    expect(
+      within(fileOpening).getByRole("button", { name: "Browse terminal app" }),
+    ).toBeInTheDocument();
+    cleanup();
+
+    // General keeps the startup choice only.
+    renderSettingsView({ activeTab: "general" });
+    expect(screen.getByText("Restore last visited folder")).toBeInTheDocument();
+    expect(screen.queryAllByText("Terminal app")).toHaveLength(0);
   });
 
   it("forwards terminal browse and reset actions", () => {

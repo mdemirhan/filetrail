@@ -176,6 +176,11 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
             description: "Right-click a file to pick another app. Settings → Files sets the list.",
           },
           { label: "Quick Look", description: "Press Space to preview without opening." },
+          {
+            label: "Open in Terminal",
+            description:
+              "Opens a Terminal window in the folder. Settings → Files chooses the terminal app.",
+          },
         ],
       },
       {
