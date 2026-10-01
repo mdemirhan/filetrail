@@ -84,16 +84,28 @@ describe("HistoryButton", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
-  it("opens on a right-click and closes with Escape or a click elsewhere", () => {
-    const { button, onStep } = renderButton();
+  it("opens on a right-click, takes the arrow keys, and closes with Escape or a click elsewhere", () => {
+    const { button, onStep, onSelectEntry } = renderButton();
 
     fireEvent.contextMenu(button);
     expect(screen.getByRole("menu")).toBeInTheDocument();
-    // The first folder has the keyboard; arrows move through the list.
-    expect(screen.getByRole("menuitem", { name: /src/u })).toHaveFocus();
+    // The arrow keys start on the first folder and move through the list. The keyboard
+    // focus itself is not taken away from where it was.
+    const current = () => screen.getByRole("menuitem", { current: true }).textContent;
+    expect(current()).toBe("src~");
+    expect(document.activeElement).toBe(document.body);
     fireEvent.keyDown(window, { key: "ArrowDown" });
-    expect(screen.getByRole("menuitem", { name: /Home/u })).toHaveFocus();
+    expect(current()).toBe("Home/Users");
+    fireEvent.keyDown(window, { key: "ArrowDown" });
+    expect(current()).toBe("src~");
     fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+
+    // Return goes to the folder the arrow keys are on.
+    fireEvent.contextMenu(button);
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+    fireEvent.keyDown(window, { key: "Enter" });
+    expect(onSelectEntry).toHaveBeenCalledWith(1);
     expect(screen.queryByRole("menu")).toBeNull();
 
     fireEvent.contextMenu(button);

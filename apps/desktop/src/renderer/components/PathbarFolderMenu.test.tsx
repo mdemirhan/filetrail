@@ -45,8 +45,8 @@ describe("PathbarFolderMenu", () => {
       "aria-checked",
       "true",
     );
-    // The ticked folder has the keyboard.
-    expect(screen.getByRole("menuitemradio", { name: /Documents/u })).toHaveFocus();
+    // The arrow keys start on the ticked folder.
+    expect(screen.getByRole("menuitemradio", { current: true })).toHaveTextContent("Documents");
   });
 
   it("goes to the folder chosen, and nowhere when the ticked one is chosen", async () => {
@@ -64,22 +64,31 @@ describe("PathbarFolderMenu", () => {
   });
 
   it("moves with the arrow keys and jumps to a letter, and closes with Escape", async () => {
-    renderMenu();
+    const { onNavigatePath } = renderMenu();
     await openMenu();
 
+    const current = () => screen.getByRole("menuitemradio", { current: true }).textContent;
     fireEvent.keyDown(window, { key: "ArrowDown" });
-    expect(screen.getByRole("menuitemradio", { name: "Downloads" })).toHaveFocus();
+    expect(current()).toBe("Downloads");
     fireEvent.keyDown(window, { key: "s" });
-    expect(screen.getByRole("menuitemradio", { name: "src" })).toHaveFocus();
+    expect(current()).toBe("src");
     // The next folder starting with "d" after the last one wraps to the first.
     fireEvent.keyDown(window, { key: "d" });
-    expect(screen.getByRole("menuitemradio", { name: "Desktop" })).toHaveFocus();
+    expect(current()).toBe("Desktop");
     fireEvent.keyDown(window, { key: "End" });
-    expect(screen.getByRole("menuitemradio", { name: "src" })).toHaveFocus();
+    expect(current()).toBe("src");
+    // The keyboard focus itself is never moved into the menu.
+    expect(screen.getByRole("menu").contains(document.activeElement)).toBe(false);
 
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByRole("menu")).toBeNull();
-    expect(screen.getByRole("button", { name: "Folders in demo" })).toHaveFocus();
+
+    // Return goes to the folder the arrow keys are on.
+    await openMenu();
+    fireEvent.keyDown(window, { key: "ArrowUp" });
+    fireEvent.keyDown(window, { key: "Enter" });
+    expect(onNavigatePath).toHaveBeenCalledWith("/Users/demo/Desktop");
+    expect(screen.queryByRole("menu")).toBeNull();
   });
 
   it("closes on a click elsewhere and when the path changes", async () => {

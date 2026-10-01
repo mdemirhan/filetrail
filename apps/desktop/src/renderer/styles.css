@@ -2019,6 +2019,25 @@ body.resizing-panels * {
   box-shadow: 0 0 0 2px var(--accent-blue-dim);
 }
 
+/* Menus worked with the arrow keys mark the current row themselves; the keyboard focus
+   stays in the list behind them. */
+.history-menu .toolbar-menu-item.active,
+.pathbar-folder-menu .toolbar-menu-item.active {
+  background: var(--ft-accent-solid-button);
+  color: var(--ft-accent-on-solid);
+}
+
+.history-menu .toolbar-menu-item:hover:not(.active),
+.pathbar-folder-menu .toolbar-menu-item:hover:not(.active) {
+  background: transparent;
+  color: var(--context-menu-text);
+}
+
+.history-menu .toolbar-menu-item.active .history-menu-detail {
+  color: inherit;
+  opacity: 0.8;
+}
+
 .pathbar-folder-menu {
   min-width: 200px;
   max-width: min(360px, calc(100vw - 16px));

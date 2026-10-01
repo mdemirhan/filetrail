@@ -4339,6 +4339,7 @@ describe("App copy/paste integration", () => {
   it("drops a remembered folder that can no longer be opened", async () => {
     const harness = createAppHarness({
       visitedFolders: [{ path: "/Users/demo/Gone", visitCount: 3, lastVisitedAt: 1 }],
+      itemPropertiesByPath: { "/Users/demo/Gone": "missing" },
     });
 
     render(

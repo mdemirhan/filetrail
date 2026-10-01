@@ -38,6 +38,9 @@ export function HistoryButton({
   // The click that ends a hold must not also step back once.
   const openedByHoldRef = useRef(false);
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
+  // The row the arrow keys are on. The keyboard focus itself stays where it was (the file
+  // list or the sidebar), so nothing has to be given back when the menu closes.
+  const [activeIndex, setActiveIndex] = useState(0);
   const open = position !== null;
   useKeepInViewport(menuRef, open);
 
@@ -54,6 +57,7 @@ export function HistoryButton({
       return;
     }
     const rect = button.getBoundingClientRect();
+    setActiveIndex(0);
     setPosition({ left: rect.left, top: rect.bottom + 6 });
   }
 
@@ -74,10 +78,18 @@ export function HistoryButton({
 
   useLayoutEffect(() => {
     if (!open) {
-      return;
+      // A hold that ended away from the button never got its click; do not let the flag
+      // swallow the next one.
+      openedByHoldRef.current = false;
     }
-    menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
   }, [open]);
+
+  const entriesRef = useRef(entries);
+  entriesRef.current = entries;
+  const activeIndexRef = useRef(activeIndex);
+  activeIndexRef.current = activeIndex;
+  const onSelectEntryRef = useRef(onSelectEntry);
+  onSelectEntryRef.current = onSelectEntry;
 
   useEffect(() => {
     if (!open) {
@@ -94,32 +106,30 @@ export function HistoryButton({
       }
       close();
     };
+    // While the menu is open the keyboard belongs to it: the keys are taken here, before
+    // the file list's shortcuts see them.
     const handleKeyDown = (event: KeyboardEvent) => {
-      const items = Array.from(
-        menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [],
-      );
-      const focusedIndex = items.indexOf(document.activeElement as HTMLElement);
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
+      if (event.metaKey || event.ctrlKey || event.altKey) {
         close();
-        buttonRef.current?.focus();
         return;
       }
+      event.preventDefault();
+      event.stopPropagation();
+      const count = entriesRef.current.length;
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-        event.preventDefault();
-        event.stopPropagation();
         const step = event.key === "ArrowDown" ? 1 : -1;
-        const nextIndex =
-          focusedIndex === -1
-            ? step === 1
-              ? 0
-              : items.length - 1
-            : (focusedIndex + step + items.length) % items.length;
-        items[nextIndex]?.focus();
+        setActiveIndex((current) => (current + step + count) % count);
         return;
       }
-      if (event.key === "Tab") {
+      if (event.key === "Enter" || event.key === " ") {
+        const entry = entriesRef.current[activeIndexRef.current];
+        close();
+        if (entry) {
+          onSelectEntryRef.current(entry.index);
+        }
+        return;
+      }
+      if (event.key === "Escape" || event.key === "Tab") {
         close();
       }
     };
@@ -197,14 +207,20 @@ export function HistoryButton({
               aria-label={`${label} history`}
               style={{ position: "fixed", left: `${position.left}px`, top: `${position.top}px` }}
             >
-              {entries.map((entry) => (
+              {entries.map((entry, index) => (
                 <button
                   key={entry.index}
                   type="button"
-                  className="toolbar-menu-item history-menu-item"
+                  className={`toolbar-menu-item history-menu-item${
+                    index === activeIndex ? " active" : ""
+                  }`}
                   role="menuitem"
+                  aria-current={index === activeIndex ? "true" : undefined}
                   tabIndex={-1}
                   title={entry.path}
+                  // The menu never takes the keyboard focus (see `activeIndex`).
+                  onMouseDown={(event) => event.preventDefault()}
+                  onMouseMove={() => setActiveIndex(index)}
                   onClick={() => {
                     setPosition(null);
                     onSelectEntry(entry.index);

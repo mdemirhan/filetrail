@@ -67,6 +67,7 @@ export function GoToFolderDialog({
   const listRef = useRef<HTMLUListElement | null>(null);
   const openRef = useRef(open);
   const focusInputAtEndRef = useRef<() => void>(() => undefined);
+  const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
   const [browseInProgress, setBrowseInProgress] = useState(false);
   const { draftValue, suggestions, setValue, clearSuggestions } = usePathSuggestions({
     open,
@@ -466,7 +467,16 @@ export function GoToFolderDialog({
                           }
                           onSubmit(row.path);
                         }}
-                        onMouseEnter={() => setSelectedIndex(index)}
+                        // Only a pointer that really moved selects a row. One merely resting
+                        // over the list when it appears or changes must not, or Return could
+                        // act on a folder nobody chose.
+                        onMouseMove={(event) => {
+                          const last = lastPointerRef.current;
+                          lastPointerRef.current = { x: event.clientX, y: event.clientY };
+                          if (last && (last.x !== event.clientX || last.y !== event.clientY)) {
+                            setSelectedIndex(index);
+                          }
+                        }}
                       >
                         <span className="go-to-folder-suggestion-icon" aria-hidden="true">
                           {row.isFavorite ? (

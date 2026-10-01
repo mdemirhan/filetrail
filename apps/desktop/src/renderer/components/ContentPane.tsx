@@ -299,6 +299,10 @@ export function ContentPane({
       if (target instanceof Node && pathbarRef.current?.contains(target)) {
         return;
       }
+      // Moving into a separator's menu is not leaving the path bar.
+      if (target instanceof Element && target.closest(".pathbar-folder-menu")) {
+        return;
+      }
       setPathbarExpanded(false);
     };
     window.addEventListener("mousemove", handleMouseMove, true);

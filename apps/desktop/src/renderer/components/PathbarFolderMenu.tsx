@@ -36,6 +36,9 @@ export function PathbarFolderMenu({
     folders: PathbarFolder[] | null;
     failed: boolean;
   } | null>(null);
+  // The row the arrow keys are on. The keyboard focus itself stays in the file list, so
+  // nothing has to be given back when the menu closes.
+  const [activeIndex, setActiveIndex] = useState(-1);
   const open = menu !== null;
   const folders = menu?.folders ?? null;
   useKeepInViewport(menuRef, open);
@@ -79,17 +82,40 @@ export function PathbarFolderMenu({
     setMenu(null);
   }, [parentPath, activePath]);
 
-  // The ticked folder starts in view and has the keyboard.
+  const { shownFolders, hiddenBefore, hiddenAfter } = limitFolders(folders ?? [], activePath);
+  const shownFoldersRef = useRef(shownFolders);
+  shownFoldersRef.current = shownFolders;
+  const activeIndexRef = useRef(activeIndex);
+  activeIndexRef.current = activeIndex;
+  const chooseRef = useRef<(folder: PathbarFolder) => void>(() => undefined);
+  chooseRef.current = (folder) => {
+    close();
+    if (folder.path !== activePath) {
+      onNavigatePath(folder.path);
+    }
+  };
+
+  // The arrow keys start on the ticked folder, which starts in view.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the list arrives; it reads the list as it then is.
   useLayoutEffect(() => {
     if (!folders) {
       return;
     }
-    const items = menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]');
-    const active = menuRef.current?.querySelector<HTMLElement>('[aria-checked="true"]');
-    const target = active ?? items?.[0];
-    target?.scrollIntoView?.({ block: "center" });
-    target?.focus({ preventScroll: true });
+    const tickedIndex = shownFoldersRef.current.findIndex((folder) => folder.path === activePath);
+    setActiveIndex(tickedIndex >= 0 ? tickedIndex : 0);
+    menuRef.current
+      ?.querySelector<HTMLElement>('[aria-checked="true"]')
+      ?.scrollIntoView?.({ block: "center" });
   }, [folders]);
+
+  useLayoutEffect(() => {
+    if (!open || activeIndex < 0) {
+      return;
+    }
+    menuRef.current
+      ?.querySelectorAll<HTMLElement>('[role="menuitemradio"]')
+      [activeIndex]?.scrollIntoView?.({ block: "nearest" });
+  }, [activeIndex, open]);
 
   useEffect(() => {
     if (!open) {
@@ -109,22 +135,18 @@ export function PathbarFolderMenu({
       }
       closeMenu();
     };
+    // While the menu is open the keyboard belongs to it: the keys are taken here, before
+    // the file list's shortcuts see them.
     const handleKeyDown = (event: KeyboardEvent) => {
-      const items = Array.from(
-        menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]') ?? [],
-      );
-      const focusedIndex = items.indexOf(document.activeElement as HTMLElement);
-      const consume = () => {
-        event.preventDefault();
-        event.stopPropagation();
-      };
-      if (event.key === "Escape") {
-        consume();
+      if (event.metaKey || event.ctrlKey || event.altKey) {
         closeMenu();
-        buttonRef.current?.focus();
         return;
       }
-      if (event.key === "Tab") {
+      event.preventDefault();
+      event.stopPropagation();
+      const items = shownFoldersRef.current;
+      const current = activeIndexRef.current;
+      if (event.key === "Escape" || event.key === "Tab") {
         closeMenu();
         return;
       }
@@ -132,32 +154,32 @@ export function PathbarFolderMenu({
         return;
       }
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-        consume();
         const step = event.key === "ArrowDown" ? 1 : -1;
-        const nextIndex =
-          focusedIndex === -1
-            ? step === 1
-              ? 0
-              : items.length - 1
-            : Math.max(0, Math.min(items.length - 1, focusedIndex + step));
-        items[nextIndex]?.focus();
+        setActiveIndex(Math.max(0, Math.min(items.length - 1, current + step)));
         return;
       }
       if (event.key === "Home" || event.key === "End") {
-        consume();
-        items[event.key === "Home" ? 0 : items.length - 1]?.focus();
+        setActiveIndex(event.key === "Home" ? 0 : items.length - 1);
+        return;
+      }
+      if (event.key === "Enter" || event.key === " ") {
+        const folder = items[current];
+        if (folder) {
+          chooseRef.current(folder);
+        }
         return;
       }
       // A letter jumps to the next folder starting with it, as in any macOS menu.
-      if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      if (event.key.length === 1) {
         const letter = event.key.toLocaleLowerCase();
-        const startsWithLetter = (item: HTMLElement) =>
-          (item.textContent ?? "").trim().toLocaleLowerCase().startsWith(letter);
-        const next =
-          items.slice(focusedIndex + 1).find(startsWithLetter) ?? items.find(startsWithLetter);
-        if (next) {
-          consume();
-          next.focus();
+        const startsWithLetter = (folder: PathbarFolder) =>
+          folder.name.toLocaleLowerCase().startsWith(letter);
+        const after = items.findIndex(
+          (folder, index) => index > current && startsWithLetter(folder),
+        );
+        const next = after >= 0 ? after : items.findIndex(startsWithLetter);
+        if (next >= 0) {
+          setActiveIndex(next);
         }
       }
     };
@@ -172,8 +194,6 @@ export function PathbarFolderMenu({
       window.removeEventListener("blur", closeMenu);
     };
   }, [open]);
-
-  const { shownFolders, hiddenBefore, hiddenAfter } = limitFolders(folders ?? [], activePath);
 
   return (
     <>
@@ -219,23 +239,22 @@ export function PathbarFolderMenu({
                       {formatHiddenFolders(hiddenBefore)} above
                     </div>
                   ) : null}
-                  {shownFolders.map((folder) => {
+                  {shownFolders.map((folder, index) => {
                     const checked = folder.path === activePath;
                     return (
                       <button
                         key={folder.path}
                         type="button"
-                        className="toolbar-menu-item"
+                        className={`toolbar-menu-item${index === activeIndex ? " active" : ""}`}
                         role="menuitemradio"
                         aria-checked={checked}
+                        aria-current={index === activeIndex ? "true" : undefined}
                         tabIndex={-1}
                         title={folder.path}
-                        onClick={() => {
-                          close();
-                          if (!checked) {
-                            onNavigatePath(folder.path);
-                          }
-                        }}
+                        // The menu never takes the keyboard focus (see `activeIndex`).
+                        onMouseDown={(event) => event.preventDefault()}
+                        onMouseMove={() => setActiveIndex(index)}
+                        onClick={() => chooseRef.current(folder)}
                       >
                         <span className="toolbar-menu-check" aria-hidden="true">
                           {checked ? "✓" : ""}

@@ -1375,10 +1375,18 @@ export function App() {
     void client.invoke("places:forget", { path }).catch(() => undefined);
   }
 
-  // A folder from the list that can no longer be opened is dropped from it.
+  // A folder from the list that no longer exists is dropped from it. One that only could
+  // not be opened this time (no permission, a disk that is not connected) is kept.
   async function goToPath(path: string) {
     const didOpen = await submitLocationPath(path);
-    if (!didOpen && visitedFolders.some((folder) => folder.path === path)) {
+    if (didOpen || !visitedFolders.some((folder) => folder.path === path)) {
+      return;
+    }
+    const stillExists = await client.invoke("item:getProperties", { path }).then(
+      (response) => response.item !== null,
+      () => true,
+    );
+    if (!stillExists) {
       forgetPlace(path);
     }
   }
