@@ -14,6 +14,7 @@ import {
 import { useElementSize } from "../hooks/useElementSize";
 import { usePathSuggestions } from "../hooks/usePathSuggestions";
 import { isSelectionNarrowingClick } from "../lib/contentSelection";
+import type { ClipboardSummary } from "../lib/copyPasteClipboard";
 import {
   fitDetailColumns,
   getDetailsRowHeight,
@@ -35,6 +36,7 @@ import {
 } from "../lib/formatting";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
 import { buildColumnMajorRows, computeRowsPerColumn, getVirtualRange } from "../lib/virtualization";
+import { ClipboardIndicator } from "./ClipboardIndicator";
 import { InlineRenameField } from "./InlineRenameField";
 import { ListFilterPill } from "./ListFilterPill";
 import { PathSuggestionDropdown } from "./PathSuggestionDropdown";
@@ -130,6 +132,7 @@ export function ContentPane({
   getFolderSizeLabel,
   sizeBars = null,
   statusSummary,
+  clipboardSummary = null,
   inlineRename = null,
   onInlineRenameSubmit = () => undefined,
   onInlineRenameCancel = () => undefined,
@@ -195,6 +198,8 @@ export function ContentPane({
   sizeBars?: SizeBars | null;
   // Item/selection count and free space, shown at the right end of the path bar.
   statusSummary?: string | undefined;
+  /** What is on the clipboard, while it holds files. */
+  clipboardSummary?: ClipboardSummary | null;
   // The item whose name is being edited in its row, with the reason the last name was refused.
   inlineRename?: InlineRenameState | null;
   onInlineRenameSubmit?: (nextName: string) => void;
@@ -661,6 +666,9 @@ export function ContentPane({
             ))}
           </nav>
         )}
+        {clipboardSummary && !pathEditorOpen ? (
+          <ClipboardIndicator summary={clipboardSummary} />
+        ) : null}
         {statusSummary && !pathEditorOpen ? (
           <span className="content-pathbar-status" aria-live="polite">
             {statusSummary}

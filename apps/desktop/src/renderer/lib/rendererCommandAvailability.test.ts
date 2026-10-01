@@ -298,7 +298,7 @@ describe("canRunToolbarRendererCommand", () => {
     ).toBe(false);
   });
 
-  it("disables write-locked commands while a write operation is in flight", () => {
+  it("disables what would start another operation while a write operation is in flight", () => {
     const context = availabilityContext({
       writeOperationLocked: true,
       copyPasteClipboard: setCopyPasteClipboard(
@@ -308,12 +308,14 @@ describe("canRunToolbarRendererCommand", () => {
       ),
     });
 
-    expect(canRunToolbarRendererCommand("copySelection", context)).toBe(false);
     expect(canRunToolbarRendererCommand("pasteSelection", context)).toBe(false);
     expect(canRunToolbarRendererCommand("moveSelection", context)).toBe(false);
     expect(canRunToolbarRendererCommand("newFolder", context)).toBe(false);
-    expect(canRunToolbarRendererCommand("copyPath", context)).toBe(false);
     expect(canRunToolbarRendererCommand("openSelection", context)).toBe(true);
+    // Filling the clipboard starts nothing, so it is not held back.
+    expect(canRunToolbarRendererCommand("copySelection", context)).toBe(true);
+    expect(canRunToolbarRendererCommand("cutSelection", context)).toBe(true);
+    expect(canRunToolbarRendererCommand("copyPath", context)).toBe(true);
   });
 
   it("still requires content focus for content-only actions", () => {

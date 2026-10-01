@@ -1,5 +1,7 @@
 import type { IpcRequest } from "@filetrail/contracts";
 
+import { getPathLeafName } from "./explorerAppUtils";
+
 export type ClipboardMode = IpcRequest<"copyPaste:plan">["mode"];
 
 export type CopyPasteClipboardState =
@@ -66,4 +68,30 @@ export function clearClipboardAfterSuccessfulPaste(
 
 export function hasClipboardItems(clipboard: CopyPasteClipboardState): boolean {
   return clipboard.type === "ready" && clipboard.sourcePaths.length > 0;
+}
+
+export type ClipboardSummary = {
+  label: string;
+  tooltip: string;
+};
+
+const CLIPBOARD_TOOLTIP_NAME_LIMIT = 5;
+
+// What the window says about the clipboard while it holds files: "3 items copied" or
+// "1 item cut", with the names behind it. The items may be in a tab that is not on screen.
+export function describeClipboard(clipboard: CopyPasteClipboardState): ClipboardSummary | null {
+  if (clipboard.type !== "ready" || clipboard.sourcePaths.length === 0) {
+    return null;
+  }
+  const count = clipboard.sourcePaths.length;
+  const names = clipboard.sourcePaths
+    .slice(0, CLIPBOARD_TOOLTIP_NAME_LIMIT)
+    .map((path) => getPathLeafName(path));
+  if (count > names.length) {
+    names.push(`and ${count - names.length} more`);
+  }
+  return {
+    label: `${count} ${count === 1 ? "item" : "items"} ${clipboard.mode === "cut" ? "cut" : "copied"}`,
+    tooltip: `${names.join("\n")}\nPaste with ⌘V`,
+  };
 }

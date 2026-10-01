@@ -6273,6 +6273,41 @@ body.settings-window-body {
   grid-template-columns: minmax(0, 1fr);
 }
 
+/* What is on the clipboard, in the path bar row and in the search results bar. */
+.clipboard-indicator {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  margin-left: 12px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.clipboard-indicator-icon {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.search-scope-bar .clipboard-indicator {
+  margin: 0 4px 0 0;
+}
+
+/* The focused path bar tints its direct spans; the indicator keeps its own color. */
+.content-pathbar-row.pane-header-focused > .clipboard-indicator {
+  color: var(--text-secondary);
+}
+
 /* In the path bar row the item count gives way before the path does. */
 .content-pathbar-status {
   flex: 0 1 auto;

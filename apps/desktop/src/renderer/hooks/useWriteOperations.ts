@@ -247,6 +247,9 @@ export function useWriteOperations() {
     selectedPaths: string[];
   } | null>(null);
   const pendingTreeSelectionPathRef = useRef<string | null>(null);
+  // The tab the running file operation was started from. What follows the operation in the
+  // list (selecting what arrived, moving the tree selection) is only done in that tab.
+  const writeOperationTabIdRef = useRef<string | null>(null);
 
   return {
     contextMenuState,
@@ -278,6 +281,7 @@ export function useWriteOperations() {
     writeOperationLockedRef,
     pendingPasteSelectionRef,
     pendingTreeSelectionPathRef,
+    writeOperationTabIdRef,
   };
 }
 

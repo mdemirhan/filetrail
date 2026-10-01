@@ -38,7 +38,7 @@ import {
   type ContentSelectionState,
   setSingleContentSelection as createSingleContentSelection,
 } from "./lib/contentSelection";
-import { buildPasteRequest } from "./lib/copyPasteClipboard";
+import { buildPasteRequest, describeClipboard } from "./lib/copyPasteClipboard";
 import {
   createOpenItemLimitMessage,
   formatPathForShell,
@@ -549,6 +549,10 @@ export function App() {
     }
     return copyPasteClipboard.sourcePaths;
   }, [copyPasteClipboard]);
+  const clipboardSummary = useMemo(
+    () => describeClipboard(copyPasteClipboard),
+    [copyPasteClipboard],
+  );
   const pasteDestinationPath = useMemo(
     () =>
       resolvePasteDestinationPath({
@@ -1654,6 +1658,7 @@ export function App() {
                 onFilterQueryChange: setListFilter,
                 scrollTop: searchResultsScrollTop,
                 onScrollTopChange: setSearchResultsScrollTop,
+                clipboardSummary,
               },
               contentPaneProps: {
                 paneRef: contentPaneRef,
@@ -1739,6 +1744,7 @@ export function App() {
                   },
                   availableBytes: volumeAvailableBytes,
                 }),
+                clipboardSummary,
                 sizeBars,
                 getFolderSizeLabel: (path) => {
                   const entry = folderSizeCache.getEntry(path);
@@ -1826,7 +1832,6 @@ export function App() {
                   void runContextSubmenuAction(action, [infoPanelItem.path]);
                 }
               },
-              copyPathDisabled: isWriteOperationLocked,
               folderSizeEntry: infoPanelFolderSizePath
                 ? folderSizeCache.getEntry(infoPanelFolderSizePath)
                 : undefined,

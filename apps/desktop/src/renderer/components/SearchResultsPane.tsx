@@ -10,6 +10,7 @@ import type {
 
 import { useElementSize } from "../hooks/useElementSize";
 import { isSelectionNarrowingClick } from "../lib/contentSelection";
+import type { ClipboardSummary } from "../lib/copyPasteClipboard";
 import type { DirectoryEntryMetadata } from "../lib/explorerTypes";
 import { FileIcon } from "../lib/fileIcons";
 import { isKeyboardOwnedFormControl } from "../lib/focusedEditTarget";
@@ -17,6 +18,7 @@ import { formatDateTime, formatSize, splitDisplayName } from "../lib/formatting"
 import { resolveSearchResultsColumnLayout } from "../lib/responsiveLayout";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
 import { getVirtualRange } from "../lib/virtualization";
+import { ClipboardIndicator } from "./ClipboardIndicator";
 import { SearchOptionsMenu } from "./SearchOptionsMenu";
 type SearchResultItem = IpcResponse<"search:getUpdate">["items"][number];
 type SearchStatus = IpcResponse<"search:getUpdate">["status"] | "idle";
@@ -80,6 +82,7 @@ export function SearchResultsPane({
   onFilterQueryChange = () => undefined,
   scrollTop = 0,
   onScrollTopChange = () => undefined,
+  clipboardSummary = null,
 }: {
   paneRef?: React.RefObject<HTMLElement | null>;
   isFocused: boolean;
@@ -138,6 +141,8 @@ export function SearchResultsPane({
   onFilterQueryChange?: (value: string) => void;
   scrollTop?: number;
   onScrollTopChange?: (value: number) => void;
+  /** What is on the clipboard, while it holds files. */
+  clipboardSummary?: ClipboardSummary | null;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const { width, height } = useElementSize(scrollRef);
@@ -292,6 +297,7 @@ export function SearchResultsPane({
             </button>
           ))}
           <span className="search-scope-spacer" />
+          {clipboardSummary ? <ClipboardIndicator summary={clipboardSummary} /> : null}
           {/* Narrows what the search found, without searching again. */}
           <div className="search-results-filter">
             <svg viewBox="0 0 24 24" aria-hidden="true" className="search-results-filter-icon">

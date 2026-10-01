@@ -32,7 +32,9 @@ vi.mock("./components/ContentPane", () => ({
     inlineRename,
     onInlineRenameSubmit,
     onInlineRenameCancel,
+    clipboardSummary,
   }: {
+    clipboardSummary?: { label: string; tooltip: string } | null;
     currentPath: string;
     entries: Array<{ path: string; name: string; kind: string; isSymlink?: boolean }>;
     inlineRename?: { path: string; error: string | null } | null;
@@ -81,6 +83,7 @@ vi.mock("./components/ContentPane", () => ({
     <div data-testid="content-pane" onPointerDown={() => onFocusChange(true)}>
       <output data-testid="content-current-path">{currentPath}</output>
       <output data-testid="content-entry-count">{entries.length}</output>
+      <output data-testid="clipboard-summary">{clipboardSummary?.label ?? ""}</output>
       <label>
         Current folder path
         <input
@@ -5208,7 +5211,7 @@ describe("App copy/paste integration", () => {
     });
   });
 
-  it("locks write actions immediately while paste planning is in flight", async () => {
+  it("locks write actions immediately while paste planning is in flight, but not Copy and Cut", async () => {
     const harness = createAppHarness({
       deferCopyPastePlan: true,
     });
@@ -5242,38 +5245,32 @@ describe("App copy/paste integration", () => {
           ),
       );
 
-    const invocationCountBeforeBlockedCopy = nonProbeInvocations().length;
+    const invocationCountBeforeBlockedPaste = nonProbeInvocations().length;
+    // Cut only fills the clipboard, so the operation under way does not hold it back.
     await act(async () => {
       fireEvent.keyDown(window, { key: "x", metaKey: true });
     });
-    expect(await screen.findByText("Wait for the current write to finish")).toBeInTheDocument();
-    expect(nonProbeInvocations()).toHaveLength(invocationCountBeforeBlockedCopy);
+    expect(await screen.findByText("Ready to move")).toBeInTheDocument();
+    expect(nonProbeInvocations()).toHaveLength(invocationCountBeforeBlockedPaste);
 
     await act(async () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
-    expect(nonProbeInvocations()).toHaveLength(invocationCountBeforeBlockedCopy);
-
-    await act(async () => {
-      fireEvent.keyDown(window, { key: "c", metaKey: true, altKey: true });
-    });
-    expect(nonProbeInvocations()).toHaveLength(invocationCountBeforeBlockedCopy);
+    expect(nonProbeInvocations()).toHaveLength(invocationCountBeforeBlockedPaste);
 
     const sourceButton = await screen.findByRole("button", { name: "source.txt" });
     await act(async () => {
       fireEvent.contextMenu(sourceButton);
     });
 
-    expect(await screen.findByRole("button", { name: "Copy" })).toHaveAttribute(
+    expect(await screen.findByRole("button", { name: "Paste" })).toHaveAttribute(
       "aria-disabled",
       "true",
     );
-    expect(screen.getByRole("button", { name: "Cut" })).toHaveAttribute("aria-disabled", "true");
-    expect(screen.getByRole("button", { name: "Paste" })).toHaveAttribute("aria-disabled", "true");
-    expect(screen.getByRole("button", { name: "Copy Path" })).toHaveAttribute(
-      "aria-disabled",
-      "true",
-    );
+    expect(screen.getByRole("button", { name: "Rename" })).toHaveAttribute("aria-disabled", "true");
+    for (const name of ["Copy", "Cut", "Copy Path"]) {
+      expect(screen.getByRole("button", { name })).not.toHaveAttribute("aria-disabled", "true");
+    }
 
     await act(async () => {
       harness.resolveCopyPastePlan();
@@ -9191,11 +9188,14 @@ describe("App tabs", () => {
   it("pastes into one tab what was copied in another", async () => {
     const harness = createAppHarness();
     await renderApp(harness);
+    expect(screen.getByTestId("clipboard-summary")).toHaveTextContent("");
     await selectItem("/Users/demo/source.txt");
     await pressKey({ key: "c", metaKey: true });
 
     await pressKey({ key: "t", metaKey: true });
     await openDirectory("/Users/demo/Folder");
+    // The copied item is in the other tab; the status bar still says it is there to paste.
+    expect(screen.getByTestId("clipboard-summary")).toHaveTextContent("1 item copied");
     await clearContentSelection();
     await pressKey({ key: "v", metaKey: true });
 
@@ -9208,6 +9208,45 @@ describe("App tabs", () => {
         destinationDirectoryPath: "/Users/demo/Folder",
       }),
     );
+  });
+
+  it("shows a running operation in every tab and selects what arrived only where it started", async () => {
+    const harness = createAppHarness();
+    await renderApp(harness);
+    await selectItem("/Users/demo/source.txt");
+    await pressKey({ key: "c", metaKey: true });
+    await openDirectory("/Users/demo/Folder");
+    // Two tabs on the same folder; the paste is started in the second.
+    await pressKey({ key: "t", metaKey: true });
+    await clearContentSelection();
+    await pressKey({ key: "v", metaKey: true });
+    await vi.waitFor(() => {
+      expect(harness.invocations.map((call) => call.channel)).toContain("copyPaste:start");
+    });
+
+    await pressKey({ key: "Tab", ctrlKey: true });
+
+    expect(activeTabLabel()).toBe("Folder");
+    expect(screen.getAllByRole("tab")[0]).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("region", { name: "Paste In Progress" })).toBeInTheDocument();
+
+    harness.setDirectoryEntries("/Users/demo/Folder", [
+      createDirectoryEntry("/Users/demo/Folder/source.txt", "file"),
+    ]);
+    await act(async () => {
+      harness.emitProgress(
+        finishedResultEvent("copy", "completed", [
+          { sourcePath: "/Users/demo/source.txt", status: "completed", error: null },
+        ]),
+      );
+    });
+
+    // The tab on screen shows what arrived, but its selection is left alone.
+    expect(await screen.findByTitle("/Users/demo/Folder/source.txt")).toHaveAttribute(
+      "data-selected",
+      "false",
+    );
+    expect(screen.queryByRole("region", { name: "Paste In Progress" })).not.toBeInTheDocument();
   });
 
   it("keeps a tab's search while another tab is in front", async () => {

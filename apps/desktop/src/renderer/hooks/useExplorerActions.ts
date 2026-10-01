@@ -105,15 +105,14 @@ const RETRY_COPY_PASTE_POLICY: CopyPastePolicy = {
   directory: "merge",
   mismatch: "skip",
 };
+// What a running file operation blocks, in every tab: anything that would start another.
+// Copy, Cut and Copy Path only fill a clipboard, so they stay available.
 const WRITE_LOCKED_CONTEXT_ACTION_IDS: ContextMenuActionId[] = [
-  "cut",
-  "copy",
   "paste",
   "move",
   "rename",
   "duplicate",
   "newFolder",
-  "copyPath",
   "trash",
 ];
 // Background-menu actions that act on the folder on screen rather than on a selection.
@@ -288,6 +287,7 @@ export function useExplorerActions(args: {
     selectedPathsInViewOrderRef,
     selectedEntryRef,
     lastExplorerFocusPaneRef,
+    activeTabIdRef,
   } = navigation;
   const {
     favorites,
@@ -333,6 +333,7 @@ export function useExplorerActions(args: {
     writeOperationLockedRef,
     pendingPasteSelectionRef,
     pendingTreeSelectionPathRef,
+    writeOperationTabIdRef,
   } = writeOperations;
   const { clearTypeahead, focusContentPane } = selection;
   const {
@@ -734,6 +735,15 @@ export function useExplorerActions(args: {
       ) {
         const sourceSurface = moveOperationSourceSurfaceRef.current.get(event.operationId);
         moveOperationSourceSurfaceRef.current.delete(event.operationId);
+        // Another tab may be on screen by now. Its folder is still read again, but what
+        // the operation leaves selected belongs to the tab it was started from.
+        const startedInTabOnScreen =
+          writeOperationTabIdRef.current === null ||
+          writeOperationTabIdRef.current === activeTabIdRef.current;
+        writeOperationTabIdRef.current = null;
+        if (!startedInTabOnScreen) {
+          pendingTreeSelectionPathRef.current = null;
+        }
         const clipboardToClear = clipboardClearAfterMoveRef.current;
         if (clipboardToClear?.operationId === event.operationId) {
           clipboardClearAfterMoveRef.current = null;
@@ -749,8 +759,10 @@ export function useExplorerActions(args: {
         activeWriteOperationIdRef.current = null;
         pendingPasteAttemptRef.current = null;
         applyWriteOperationCardState(null);
-        if (event.result) {
+        if (event.result && startedInTabOnScreen) {
           queueWriteOperationSelection(event.result);
+        } else {
+          pendingPasteSelectionRef.current = null;
         }
         if (shouldRenderCopyPasteResultDialog(event)) {
           setWriteOperationProgressEvent(event);
@@ -774,6 +786,7 @@ export function useExplorerActions(args: {
           extraTreeReloadPaths: nextTreeReloadPaths,
         });
         if (
+          startedInTabOnScreen &&
           sourceSurface === "search" &&
           event.action === "move_to" &&
           event.result &&
@@ -978,6 +991,9 @@ export function useExplorerActions(args: {
   }
 
   function applyWriteOperationCardState(nextState: WriteOperationCardState | null) {
+    if (nextState !== null && !writeOperationLockedRef.current) {
+      writeOperationTabIdRef.current = activeTabIdRef.current;
+    }
     writeOperationLockedRef.current = nextState !== null;
     setWriteOperationCardState(nextState);
   }
@@ -1267,10 +1283,6 @@ export function useExplorerActions(args: {
   }
 
   async function runCopyPathAction(paths: string[]) {
-    if (isWriteOperationInFlight()) {
-      showWriteOperationBusyToast();
-      return;
-    }
     try {
       await copyPathsToClipboard(paths);
       pushToast({
@@ -1298,10 +1310,6 @@ export function useExplorerActions(args: {
   }
 
   async function runCopyClipboardAction(mode: "copy" | "cut", explicitPaths?: string[]) {
-    if (isWriteOperationInFlight()) {
-      showWriteOperationBusyToast();
-      return;
-    }
     const paths =
       explicitPaths && explicitPaths.length > 0 ? explicitPaths : resolveClipboardSourcePaths();
     if (paths.length === 0) {
@@ -1915,10 +1923,6 @@ export function useExplorerActions(args: {
   }
 
   async function copyGetInfoPath(path: string): Promise<boolean> {
-    if (isWriteOperationInFlight()) {
-      showWriteOperationBusyToast();
-      return false;
-    }
     try {
       await client.invoke("system:copyText", { text: formatPathForShell(path) });
       return true;
@@ -1933,10 +1937,6 @@ export function useExplorerActions(args: {
   }
 
   async function copyGetInfoName(name: string): Promise<boolean> {
-    if (isWriteOperationInFlight()) {
-      showWriteOperationBusyToast();
-      return false;
-    }
     try {
       await client.invoke("system:copyText", { text: name });
       return true;

@@ -6,15 +6,14 @@ import type { DirectoryEntry } from "./explorerTypes";
 import type { ShortcutContext } from "./shortcutPolicy";
 import { canHandleRendererCommand } from "./shortcutPolicy";
 
+// What a running file operation blocks: anything that would start another one. Copy, Cut
+// and Copy Path only fill a clipboard, so they stay available.
 const WRITE_LOCKED_RENDERER_COMMANDS = new Set<RendererCommandType>([
-  "copySelection",
-  "cutSelection",
   "pasteSelection",
   "moveSelection",
   "renameSelection",
   "duplicateSelection",
   "newFolder",
-  "copyPath",
   "trashSelection",
 ]);
 
