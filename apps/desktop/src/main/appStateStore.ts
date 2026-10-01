@@ -14,6 +14,8 @@ import {
   type FavoriteIconId,
   type FavoritePreference,
   ICON_THEME_OPTIONS,
+  LEGACY_DEFAULT_DETAIL_COLUMN_VISIBILITY,
+  OPTIONAL_DETAIL_COLUMN_KEYS,
   THEME_OPTIONS,
   TYPEAHEAD_DEBOUNCE_MAX_MS,
   TYPEAHEAD_DEBOUNCE_MIN_MS,
@@ -692,12 +694,23 @@ function sanitizeDetailColumns(
     return defaults;
   }
   const record = value;
-  return {
-    size: typeof record.size === "boolean" ? record.size : defaults.size,
-    modified: typeof record.modified === "boolean" ? record.modified : defaults.modified,
-    permissions:
-      typeof record.permissions === "boolean" ? record.permissions : defaults.permissions,
-  };
+  // State saved before Kind and Date Created existed has neither key. If its three
+  // columns are still the old defaults, nothing was customized: use the new defaults.
+  const predatesKindColumn = record.kind === undefined && record.created === undefined;
+  if (
+    predatesKindColumn &&
+    record.size === LEGACY_DEFAULT_DETAIL_COLUMN_VISIBILITY.size &&
+    record.modified === LEGACY_DEFAULT_DETAIL_COLUMN_VISIBILITY.modified &&
+    record.permissions === LEGACY_DEFAULT_DETAIL_COLUMN_VISIBILITY.permissions
+  ) {
+    return defaults;
+  }
+  return Object.fromEntries(
+    OPTIONAL_DETAIL_COLUMN_KEYS.map((key) => [
+      key,
+      typeof record[key] === "boolean" ? record[key] : defaults[key],
+    ]),
+  ) as AppPreferences["detailColumns"];
 }
 
 function sanitizeDetailColumnWidths(

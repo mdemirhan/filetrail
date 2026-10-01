@@ -351,7 +351,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "List and Details",
             description:
-              "The two buttons in the toolbar switch between a compact list and columns with size, date and permissions.",
+              "The two buttons in the toolbar switch between a compact list and columns with date, size and kind. Settings → Explorer chooses the columns.",
           },
           {
             label: "Sort",

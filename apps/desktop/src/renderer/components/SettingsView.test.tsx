@@ -32,6 +32,8 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
         size: true,
         modified: true,
         permissions: true,
+        kind: true,
+        created: false,
       }}
       layoutMode="wide"
       tabSwitchesExplorerPanes={true}

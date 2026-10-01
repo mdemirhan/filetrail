@@ -212,6 +212,7 @@ describe("InfoRow with list metadata", () => {
         metadata={{
           path: fileEntry.path,
           kindLabel: "Plain Text Document",
+          createdAt: null,
           modifiedAt: "2026-03-02T10:30:00.000Z",
           sizeBytes: 2048,
           sizeStatus: "ready",

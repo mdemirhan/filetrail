@@ -73,15 +73,19 @@ describe("appStateStore", () => {
       singleClickExpandTreeItems: false,
       highlightHoveredItems: false,
       detailColumns: {
-        size: true,
         modified: true,
-        permissions: true,
+        size: true,
+        kind: true,
+        created: false,
+        permissions: false,
       },
       detailColumnWidths: {
         name: 320,
         size: 108,
         modified: 168,
         permissions: 148,
+        kind: 148,
+        created: 168,
       },
       tabSwitchesExplorerPanes: true,
       typeaheadEnabled: true,
@@ -194,12 +198,16 @@ describe("appStateStore", () => {
         size: true,
         modified: false,
         permissions: true,
+        kind: true,
+        created: false,
       },
       detailColumnWidths: {
         name: 360,
         size: 120,
         modified: 180,
         permissions: 160,
+        kind: 148,
+        created: 168,
       },
       tabSwitchesExplorerPanes: false,
       typeaheadEnabled: false,
@@ -299,12 +307,16 @@ describe("appStateStore", () => {
         size: true,
         modified: false,
         permissions: true,
+        kind: true,
+        created: false,
       },
       detailColumnWidths: {
         name: 360,
         size: 120,
         modified: 180,
         permissions: 160,
+        kind: 148,
+        created: 168,
       },
       tabSwitchesExplorerPanes: false,
       typeaheadEnabled: false,
@@ -385,6 +397,43 @@ describe("appStateStore", () => {
     expect(preferences.theme).toBe("auto");
     expect(preferences.autoLightTheme).toBe("macos-light");
     expect(preferences.autoDarkTheme).toBe("midnight");
+  });
+
+  it("upgrades untouched legacy detail columns to the new defaults but keeps customized ones", () => {
+    const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
+    const filePath = resolveAppStatePath(userDataPath);
+    const save = (detailColumns: Record<string, boolean>) =>
+      writeFileSync(filePath, JSON.stringify({ preferences: { detailColumns } }), "utf8");
+
+    // Saved before Kind and Date Created existed, still on the old defaults.
+    save({ size: true, modified: true, permissions: true });
+    expect(createAppStateStore(filePath).getPreferences().detailColumns).toEqual({
+      modified: true,
+      size: true,
+      kind: true,
+      created: false,
+      permissions: false,
+    });
+
+    // A changed choice is kept as it was; the new columns take their defaults.
+    save({ size: false, modified: true, permissions: true });
+    expect(createAppStateStore(filePath).getPreferences().detailColumns).toEqual({
+      modified: true,
+      size: false,
+      kind: true,
+      created: false,
+      permissions: true,
+    });
+
+    // State that already knows the new columns is never treated as legacy.
+    save({ size: true, modified: true, permissions: true, kind: false, created: true });
+    expect(createAppStateStore(filePath).getPreferences().detailColumns).toEqual({
+      modified: true,
+      size: true,
+      kind: false,
+      created: true,
+      permissions: true,
+    });
   });
 
   it("upgrades an untouched legacy toolbar to the new default but keeps customized ones", () => {
@@ -505,6 +554,8 @@ describe("appStateStore", () => {
         size: 1,
         modified: 180,
         permissions: 100,
+        kind: 148,
+        created: 168,
       } as never,
       fileActivationAction: "launch" as never,
       openItemLimit: 999,
@@ -569,12 +620,16 @@ describe("appStateStore", () => {
       size: true,
       modified: false,
       permissions: true,
+      kind: true,
+      created: false,
     });
     expect(reloaded.getPreferences().detailColumnWidths).toEqual({
       name: 720,
       size: 84,
       modified: 180,
       permissions: 132,
+      kind: 148,
+      created: 168,
     });
     expect(reloaded.getPreferences().fileActivationAction).toBe("open");
     expect(reloaded.getPreferences().openItemLimit).toBe(50);

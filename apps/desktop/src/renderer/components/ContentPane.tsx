@@ -5,6 +5,7 @@ import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 import {
   DEFAULT_DETAIL_COLUMN_VISIBILITY,
   DEFAULT_DETAIL_COLUMN_WIDTHS,
+  DETAIL_COLUMN_LABELS,
   type DetailColumnKey,
   type DetailColumnVisibility,
   type DetailColumnWidths,
@@ -1499,17 +1500,10 @@ function DetailsHeaderCell({
   onResizeStart: (event: React.PointerEvent<HTMLSpanElement>, key: DetailColumnKey) => void;
   onResizeNudge: (key: DetailColumnKey, direction: -1 | 1) => void;
 }) {
-  const label =
-    columnKey === "name"
-      ? "Name"
-      : columnKey === "size"
-        ? "Size"
-        : columnKey === "modified"
-          ? "Modified"
-          : "Permissions";
-  const accessibleLabel = columnKey === "modified" ? "Date Modified" : label;
-  const sortKey =
-    columnKey === "name" || columnKey === "size" || columnKey === "modified" ? columnKey : null;
+  const label = DETAIL_COLUMN_LABELS[columnKey];
+  // Only columns the directory snapshot can order are sortable; Date Created and
+  // Permissions come from metadata that loads lazily for the visible rows.
+  const sortKey = columnKey === "created" || columnKey === "permissions" ? null : columnKey;
   const sortable = sortKey !== null;
   const ariaSort = sortable
     ? active
@@ -1525,7 +1519,6 @@ function DetailsHeaderCell({
       {sortable ? (
         <SortButton
           label={label}
-          accessibleLabel={accessibleLabel}
           active={active}
           direction={direction}
           onClick={() => {
@@ -1594,12 +1587,17 @@ function DetailsCell({
   if (columnKey === "modified") {
     // biome-ignore lint/a11y/useFocusableInteractive: see note above.
     // biome-ignore lint/a11y/useSemanticElements: see note above.
-    return <span role="gridcell">{formatDetailModifiedAt(metadata)}</span>;
+    return <span role="gridcell">{formatDetailDate(metadata?.modifiedAt)}</span>;
   }
-  if (columnKey === "permissions") {
+  if (columnKey === "created") {
     // biome-ignore lint/a11y/useFocusableInteractive: see note above.
     // biome-ignore lint/a11y/useSemanticElements: see note above.
-    return <span role="gridcell">{formatDetailPermissions(metadata)}</span>;
+    return <span role="gridcell">{formatDetailDate(metadata?.createdAt)}</span>;
+  }
+  if (columnKey === "kind") {
+    // biome-ignore lint/a11y/useFocusableInteractive: see note above.
+    // biome-ignore lint/a11y/useSemanticElements: see note above.
+    return <span role="gridcell">{metadata?.kindLabel ?? ""}</span>;
   }
   // biome-ignore lint/a11y/useFocusableInteractive: see note above.
   // biome-ignore lint/a11y/useSemanticElements: see note above.
@@ -1608,24 +1606,21 @@ function DetailsCell({
 
 function SortButton({
   label,
-  accessibleLabel,
   active,
   direction,
   onClick,
 }: {
   label: string;
-  accessibleLabel?: string;
   active: boolean;
   direction: "asc" | "desc";
   onClick: () => void;
 }) {
-  // Only snapshot-backed columns are sortable; permissions depend on lazy metadata loading.
   return (
     <button
       type="button"
       className={`details-header-button${active ? " active" : ""}`}
       onClick={onClick}
-      aria-label={accessibleLabel ?? label}
+      aria-label={label}
     >
       <span>{label}</span>
       {active ? (
@@ -1655,11 +1650,8 @@ function formatDetailSize(
   return formatSize(metadata.sizeBytes, metadata.sizeStatus);
 }
 
-function formatDetailModifiedAt(metadata: DirectoryEntryMetadata | undefined): string {
-  if (!metadata?.modifiedAt) {
-    return "";
-  }
-  return formatDateTime(metadata.modifiedAt);
+function formatDetailDate(value: string | null | undefined): string {
+  return value ? formatDateTime(value) : "";
 }
 
 function formatDetailPermissions(metadata: DirectoryEntryMetadata | undefined): string {

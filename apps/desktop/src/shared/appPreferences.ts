@@ -32,7 +32,7 @@ export type SearchMatchScopePreference = "name" | "path";
 export type SearchResultsSortByPreference = "name" | "path";
 export type SearchResultsSortDirectionPreference = "asc" | "desc";
 export type SearchResultsFilterScopePreference = "name" | "path";
-export type DetailColumnKey = "name" | "size" | "modified" | "permissions";
+export type DetailColumnKey = "name" | "modified" | "size" | "kind" | "created" | "permissions";
 export type OptionalDetailColumnKey = Exclude<DetailColumnKey, "name">;
 export type DetailColumnVisibility = Record<OptionalDetailColumnKey, boolean>;
 export type DetailColumnWidths = Record<DetailColumnKey, number>;
@@ -178,25 +178,61 @@ export const TYPEAHEAD_DEBOUNCE_MAX_MS = 1500;
 export const NOTIFICATION_DURATION_SECONDS_OPTIONS = [2, 3, 4, 5, 6, 8, 10] as const;
 export const NOTIFICATION_DURATION_SECONDS_MIN = 2;
 export const NOTIFICATION_DURATION_SECONDS_MAX = 10;
-export const DETAIL_COLUMN_KEYS = ["name", "size", "modified", "permissions"] as const;
-export const OPTIONAL_DETAIL_COLUMN_KEYS = ["size", "modified", "permissions"] as const;
-// `name` is always visible, so only optional columns are persisted as booleans.
+// In display order, which is Finder's: Name, Date Modified, Size, Kind, then the extras.
+export const DETAIL_COLUMN_KEYS = [
+  "name",
+  "modified",
+  "size",
+  "kind",
+  "created",
+  "permissions",
+] as const;
+export const OPTIONAL_DETAIL_COLUMN_KEYS = [
+  "modified",
+  "size",
+  "kind",
+  "created",
+  "permissions",
+] as const;
+export const DETAIL_COLUMN_LABELS: Record<DetailColumnKey, string> = {
+  name: "Name",
+  modified: "Date Modified",
+  size: "Size",
+  kind: "Kind",
+  created: "Date Created",
+  permissions: "Permissions",
+};
+// `name` is always visible, so only optional columns are persisted as booleans. The
+// defaults are Finder's list view columns; Date Created and Permissions are opt-in.
 export const DEFAULT_DETAIL_COLUMN_VISIBILITY: DetailColumnVisibility = {
+  modified: true,
+  size: true,
+  kind: true,
+  created: false,
+  permissions: false,
+};
+// The defaults before Kind and Date Created existed. Saved choices still exactly equal to
+// them were never customized, so they are upgraded to the new defaults when state loads.
+export const LEGACY_DEFAULT_DETAIL_COLUMN_VISIBILITY = {
   size: true,
   modified: true,
   permissions: true,
-};
+} as const;
 // Widths are persisted in pixels and are shared by renderer layout and IPC validation.
 export const DEFAULT_DETAIL_COLUMN_WIDTHS: DetailColumnWidths = {
   name: 320,
-  size: 108,
   modified: 168,
+  size: 108,
+  kind: 148,
+  created: 168,
   permissions: 148,
 };
 export const DETAIL_COLUMN_WIDTH_LIMITS = {
   name: { min: 220, max: 720 },
-  size: { min: 84, max: 240 },
   modified: { min: 132, max: 280 },
+  size: { min: 84, max: 240 },
+  kind: { min: 96, max: 320 },
+  created: { min: 132, max: 280 },
   permissions: { min: 132, max: 260 },
 } as const satisfies Record<DetailColumnKey, { min: number; max: number }>;
 export const DEFAULT_OPEN_WITH_APPLICATIONS: OpenWithApplication[] = [

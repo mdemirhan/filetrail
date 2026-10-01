@@ -11,6 +11,7 @@ const entry = {
 const metadata = {
   path: entry.path,
   kindLabel: "Plain Text Document",
+  createdAt: null,
   modifiedAt: "2026-03-02T10:30:00.000Z",
   sizeBytes: 12,
   sizeStatus: "ready" as const,

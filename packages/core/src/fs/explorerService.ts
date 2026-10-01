@@ -292,6 +292,7 @@ async function readDirectoryEntryMetadata(
   return {
     path,
     kindLabel: getKindLabel(kind, path),
+    createdAt: toIsoStringOrNull(metadataStats?.birthtime),
     modifiedAt: toIsoStringOrNull(metadataStats?.mtime),
     sizeBytes: stats && !isDir ? stats.size : null,
     sizeStatus: stats ? (isDir ? "deferred" : "ready") : "unavailable",

@@ -262,7 +262,7 @@ describe("ContentPane", () => {
       "aria-sort",
       "ascending",
     );
-    expect(screen.getByRole("columnheader", { name: /^Modified/ })).toHaveAttribute(
+    expect(screen.getByRole("columnheader", { name: /^Date Modified/ })).toHaveAttribute(
       "aria-sort",
       "none",
     );
@@ -358,6 +358,7 @@ describe("ContentPane", () => {
           "/Users/demo/alpha.txt": {
             path: "/Users/demo/alpha.txt",
             kindLabel: "TXT File",
+            createdAt: null,
             modifiedAt: null,
             sizeBytes: null,
             sizeStatus: "unavailable",
@@ -368,6 +369,8 @@ describe("ContentPane", () => {
           size: true,
           modified: true,
           permissions: false,
+          kind: true,
+          created: false,
         }}
         sortBy="name"
         sortDirection="asc"
@@ -392,6 +395,87 @@ describe("ContentPane", () => {
     expect(screen.getByRole("row", { name: /alpha\.txt/ })).toHaveTextContent("Unavailable");
     expect(screen.queryByText("Not yet available")).not.toBeInTheDocument();
     expect(screen.queryByText("Not available")).not.toBeInTheDocument();
+  });
+
+  it("shows Kind and Date Created columns, sorting by Kind but not by Date Created", () => {
+    const handleSortChange = vi.fn();
+    render(
+      <ContentPane
+        isFocused
+        currentPath="/Users/demo"
+        entries={[
+          {
+            path: "/Users/demo/alpha.txt",
+            name: "alpha.txt",
+            extension: "txt",
+            kind: "file",
+            isHidden: false,
+            isSymlink: false,
+          },
+        ]}
+        viewMode="details"
+        loading={false}
+        error={null}
+        includeHidden={false}
+        selectedPaths={[]}
+        selectionLeadPath={null}
+        metadataByPath={{
+          "/Users/demo/alpha.txt": {
+            path: "/Users/demo/alpha.txt",
+            kindLabel: "Plain Text Document",
+            createdAt: "2026-03-02T10:30:00.000Z",
+            modifiedAt: "2026-04-05T08:15:00.000Z",
+            sizeBytes: 2048,
+            sizeStatus: "ready",
+            permissionMode: 0o644,
+          },
+        }}
+        detailColumns={{
+          modified: true,
+          size: true,
+          kind: true,
+          created: true,
+          permissions: false,
+        }}
+        sortBy="name"
+        sortDirection="asc"
+        onSelectionGesture={() => undefined}
+        onClearSelection={() => undefined}
+        onActivateEntry={() => undefined}
+        onSortChange={handleSortChange}
+        onLayoutColumnsChange={() => undefined}
+        onVisiblePathsChange={() => undefined}
+        onNavigatePath={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+        onFocusChange={() => undefined}
+        typeaheadQuery=""
+      />,
+    );
+
+    expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
+      "Name↑",
+      "Date Modified",
+      "Size",
+      "Kind",
+      "Date Created",
+    ]);
+    const row = screen.getByRole("row", { name: /alpha\.txt/ });
+    expect(row).toHaveTextContent("Plain Text Document");
+    // Both dates are shown: created in March, modified in April.
+    expect(row).toHaveTextContent(/Mar 2, 2026/);
+    expect(row).toHaveTextContent(/Apr 5, 2026/);
+
+    fireEvent.click(screen.getByRole("button", { name: "Kind" }));
+    expect(handleSortChange).toHaveBeenCalledWith("kind");
+    // Date Created comes from lazily loaded metadata, so its header is a plain label.
+    expect(screen.queryByRole("button", { name: "Date Created" })).toBeNull();
+    expect(screen.getByRole("columnheader", { name: /Date Created/ })).not.toHaveAttribute(
+      "aria-sort",
+    );
   });
 
   it("forwards typeahead keys from details view through the shared content handler", () => {

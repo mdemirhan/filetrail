@@ -30,9 +30,11 @@ import {
   DEFAULT_APP_PREFERENCES,
   DEFAULT_TERMINAL_APPLICATION,
   DEFAULT_TEXT_EDITOR,
+  DETAIL_COLUMN_LABELS,
   FAVORITE_ICON_OPTIONS,
   ICON_THEME_OPTIONS,
   LIGHT_THEME_OPTIONS,
+  OPTIONAL_DETAIL_COLUMN_KEYS,
   ZOOM_PERCENT_MAX,
   ZOOM_PERCENT_MIN,
   clampOpenItemLimit,
@@ -3227,17 +3229,11 @@ export function SettingsView({
                 flexWrap: "wrap",
               }}
             >
-              {(
-                [
-                  ["size", "Size"],
-                  ["modified", "Modified"],
-                  ["permissions", "Permissions"],
-                ] as const
-              ).map(([key, label]) => (
+              {OPTIONAL_DETAIL_COLUMN_KEYS.map((key) => (
                 <CheckboxChip
                   key={key}
                   checked={detailColumns[key]}
-                  label={label}
+                  label={DETAIL_COLUMN_LABELS[key]}
                   theme={palette}
                   onToggle={() =>
                     onDetailColumnsChange({

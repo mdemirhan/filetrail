@@ -1,3 +1,4 @@
+import { DEFAULT_DETAIL_COLUMN_WIDTHS } from "../../shared/appPreferences";
 import {
   DETAILS_LAYOUT,
   fitDetailColumns,
@@ -12,46 +13,42 @@ describe("detailsLayout", () => {
     expect(getDetailsRowHeight(true)).toBe(DETAILS_LAYOUT.compactRowHeight);
   });
 
-  it("keeps the name column first and preserves the stable optional-column order", () => {
+  it("keeps the name column first and the optional columns in Finder's order", () => {
     expect(
       getVisibleDetailColumns({
-        size: true,
         modified: false,
+        size: true,
+        kind: true,
+        created: false,
         permissions: true,
       }),
-    ).toEqual(["name", "size", "permissions"]);
+    ).toEqual(["name", "size", "kind", "permissions"]);
+    expect(
+      getVisibleDetailColumns({
+        modified: true,
+        size: true,
+        kind: true,
+        created: true,
+        permissions: true,
+      }),
+    ).toEqual(["name", "modified", "size", "kind", "created", "permissions"]);
   });
 
   it("adds gaps between visible columns and the row padding", () => {
-    expect(
-      getDetailsTableWidth(
-        {
-          name: 220,
-          size: 84,
-          modified: 132,
-          permissions: 132,
-        },
-        ["name"],
-      ),
-    ).toBe(220 + DETAILS_LAYOUT.rowPadding);
+    expect(getDetailsTableWidth({ ...DEFAULT_DETAIL_COLUMN_WIDTHS, name: 220 }, ["name"])).toBe(
+      220 + DETAILS_LAYOUT.rowPadding,
+    );
 
-    expect(
-      getDetailsTableWidth(
-        {
-          name: 320,
-          size: 108,
-          modified: 168,
-          permissions: 148,
-        },
-        ["name", "size", "modified"],
-      ),
-    ).toBe(320 + 108 + 168 + DETAILS_LAYOUT.columnGap * 2 + DETAILS_LAYOUT.rowPadding);
+    expect(getDetailsTableWidth(DEFAULT_DETAIL_COLUMN_WIDTHS, ["name", "modified", "size"])).toBe(
+      320 + 168 + 108 + DETAILS_LAYOUT.columnGap * 2 + DETAILS_LAYOUT.rowPadding,
+    );
   });
 
   describe("fitDetailColumns", () => {
-    const widths = { name: 320, size: 108, modified: 168, permissions: 148 };
-    const columns = ["name", "size", "modified", "permissions"] as const;
-    // 320 + 108 + 168 + 148, three gaps and the row padding.
+    // Name 320, Date Modified 168, Size 108, Kind 148.
+    const widths = DEFAULT_DETAIL_COLUMN_WIDTHS;
+    const columns = ["name", "modified", "size", "kind"] as const;
+    // The four columns, three gaps and the row padding.
     const fullWidth = 744 + 36 + 24;
 
     it("changes nothing when the table fits or the pane is not measured yet", () => {
@@ -78,24 +75,24 @@ describe("detailsLayout", () => {
     });
 
     it("drops columns from the right, one at a time, as the pane narrows", () => {
-      // One pixel under the floor layout: Permissions goes and Name takes the space back.
-      const withoutPermissions = fitDetailColumns({
+      // One pixel under the floor layout: Kind goes and Name takes the space back.
+      const withoutKind = fitDetailColumns({
         columns,
         widths,
         availableWidth: fullWidth - 161,
       });
-      expect(withoutPermissions.columns).toEqual(["name", "size", "modified"]);
-      expect(withoutPermissions.widths.name).toBe(319);
+      expect(withoutKind.columns).toEqual(["name", "modified", "size"]);
+      expect(withoutKind.widths.name).toBe(319);
 
-      // Name at its floor, Size, Modified, two gaps and the padding come to 484.
+      // Name at its floor, Date Modified, Size, two gaps and the padding come to 484.
       expect(fitDetailColumns({ columns, widths, availableWidth: 484 }).columns).toEqual([
         "name",
-        "size",
         "modified",
+        "size",
       ]);
       expect(fitDetailColumns({ columns, widths, availableWidth: 483 }).columns).toEqual([
         "name",
-        "size",
+        "modified",
       ]);
       expect(fitDetailColumns({ columns, widths, availableWidth: 264 })).toEqual({
         columns: ["name"],
@@ -118,7 +115,7 @@ describe("detailsLayout", () => {
 
     it("leaves the saved widths of the other columns alone", () => {
       const fitted = fitDetailColumns({ columns, widths, availableWidth: 400 });
-      expect(fitted.widths).toMatchObject({ size: 108, modified: 168, permissions: 148 });
+      expect(fitted.widths).toMatchObject({ modified: 168, size: 108, kind: 148 });
     });
   });
 });

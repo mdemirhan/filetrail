@@ -666,6 +666,7 @@ describe("explorerService", () => {
       {
         path: "/workspace/dangling",
         kindLabel: "Item",
+        createdAt: "2024-01-01T00:00:00.000Z",
         modifiedAt: "2024-01-03T00:00:00.000Z",
         sizeBytes: null,
         sizeStatus: "unavailable",

@@ -34,7 +34,7 @@ export function resolveInfoItem(args: {
       kindLabel: metadata?.kindLabel ?? fallbackKindLabel(entry),
       isHidden: entry.isHidden,
       isSymlink: entry.isSymlink,
-      createdAt: null,
+      createdAt: metadata?.createdAt ?? null,
       modifiedAt: metadata?.modifiedAt ?? null,
       sizeBytes: metadata?.sizeBytes ?? null,
       sizeStatus: metadata?.sizeStatus ?? "deferred",

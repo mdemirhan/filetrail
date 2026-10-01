@@ -62,14 +62,18 @@ export const searchMatchScopeSchema = z.enum(["name", "path"]);
 export const searchResultsSortBySchema = z.enum(["name", "path"]);
 export const searchResultsFilterScopeSchema = z.enum(["name", "path"]);
 export const detailColumnVisibilitySchema = z.object({
-  size: z.boolean(),
   modified: z.boolean(),
+  size: z.boolean(),
+  kind: z.boolean(),
+  created: z.boolean(),
   permissions: z.boolean(),
 });
 export const detailColumnWidthsSchema = z.object({
   name: z.number().int().min(220).max(720),
-  size: z.number().int().min(84).max(240),
   modified: z.number().int().min(132).max(280),
+  size: z.number().int().min(84).max(240),
+  kind: z.number().int().min(96).max(320),
+  created: z.number().int().min(132).max(280),
   permissions: z.number().int().min(132).max(260),
 });
 export const openWithApplicationSchema = z.object({
@@ -281,6 +285,7 @@ export const directoryEntrySchema = z.object({
 export const directoryEntryMetadataSchema = z.object({
   path: z.string().min(1),
   kindLabel: z.string().min(1),
+  createdAt: z.string().nullable(),
   modifiedAt: z.string().nullable(),
   sizeBytes: z.number().int().nonnegative().nullable(),
   // Directories intentionally report `deferred` while folder size calculation is skipped

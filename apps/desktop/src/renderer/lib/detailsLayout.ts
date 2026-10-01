@@ -1,7 +1,8 @@
-import type {
-  DetailColumnKey,
-  DetailColumnVisibility,
-  DetailColumnWidths,
+import {
+  DETAIL_COLUMN_KEYS,
+  type DetailColumnKey,
+  type DetailColumnVisibility,
+  type DetailColumnWidths,
 } from "../../shared/appPreferences";
 
 // Shared details-view sizing contract. The renderer uses these values for sticky header
@@ -22,16 +23,12 @@ export function getDetailsRowHeight(compact: boolean): number {
   return compact ? DETAILS_LAYOUT.compactRowHeight : DETAILS_LAYOUT.regularRowHeight;
 }
 
-// `name` is always present; the remaining columns are optional and preserve a stable order.
+// `name` is always present; the remaining columns are optional and keep the stable order
+// of `DETAIL_COLUMN_KEYS`.
 export function getVisibleDetailColumns(
   visibility: DetailColumnVisibility,
 ): ReadonlyArray<DetailColumnKey> {
-  return [
-    "name",
-    ...(visibility.size ? (["size"] as const) : []),
-    ...(visibility.modified ? (["modified"] as const) : []),
-    ...(visibility.permissions ? (["permissions"] as const) : []),
-  ];
+  return DETAIL_COLUMN_KEYS.filter((key) => key === "name" || visibility[key]);
 }
 
 // Width of the table: its columns, the gaps between them and the row padding. Rows are
