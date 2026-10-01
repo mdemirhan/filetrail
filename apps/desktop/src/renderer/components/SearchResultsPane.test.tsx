@@ -455,6 +455,66 @@ describe("SearchResultsPane", () => {
     expect(handleScrollTopChange).toHaveBeenCalledWith(8);
   });
 
+  it("has a filter field that narrows the results and gives the keyboard back to the list", () => {
+    const handleFilterQueryChange = vi.fn();
+    const renderPane = (filterQuery: string, resultCount: number) =>
+      render(
+        <SearchResultsPane
+          isFocused
+          rootPath="/Users/demo/project"
+          query="app"
+          status="complete"
+          results={Array.from({ length: resultCount }, (_, index) => ({
+            path: `/Users/demo/project/src/App${index}.tsx`,
+            name: `App${index}.tsx`,
+            extension: "tsx",
+            kind: "file" as const,
+            isHidden: false,
+            isSymlink: false,
+            parentPath: "/Users/demo/project/src",
+            relativeParentPath: "src",
+          }))}
+          error={null}
+          truncated={false}
+          totalCount={3}
+          filterQuery={filterQuery}
+          onFilterQueryChange={handleFilterQueryChange}
+          {...defaultSortProps}
+          onStopSearch={() => undefined}
+          onClearResults={() => undefined}
+          onCloseResults={() => undefined}
+          onActivateResult={() => undefined}
+          onFocusChange={() => undefined}
+        />,
+      );
+
+    const empty = renderPane("", 3);
+    const field = screen.getByLabelText("Filter results") as HTMLInputElement;
+    expect(field.value).toBe("");
+    expect(screen.queryByRole("button", { name: "Clear filter" })).toBeNull();
+    fireEvent.change(field, { target: { value: "src" } });
+    expect(handleFilterQueryChange).toHaveBeenLastCalledWith("src");
+    // With nothing to clear, Esc goes back to the list.
+    field.focus();
+    fireEvent.keyDown(field, { key: "Escape" });
+    expect(document.activeElement).toBe(document.querySelector(".search-results-scroll"));
+    empty.unmount();
+
+    // With text, Esc and the ✕ clear it; what was typed in the list shows in the field.
+    handleFilterQueryChange.mockClear();
+    const filtered = renderPane("zzz", 0);
+    const filledField = screen.getByLabelText("Filter results") as HTMLInputElement;
+    expect(filledField.value).toBe("zzz");
+    expect(screen.getByText("No results match “zzz”")).toBeInTheDocument();
+    filledField.focus();
+    fireEvent.keyDown(filledField, { key: "Escape" });
+    expect(handleFilterQueryChange).toHaveBeenLastCalledWith("");
+    expect(filledField).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filter" }));
+    expect(handleFilterQueryChange).toHaveBeenCalledTimes(2);
+    filtered.unmount();
+  });
+
   it("treats a pattern that does not parse yet as unfinished while it is being typed", () => {
     const renderPane = (errorIsQuiet: boolean) =>
       render(
@@ -487,8 +547,6 @@ describe("SearchResultsPane", () => {
     renderPane(false);
     expect(screen.getByText("Search failed")).toBeInTheDocument();
     expect(screen.getByText(/unclosed group/u)).toBeInTheDocument();
-    // The bar has no second text field: typing in the search field refines the search.
-    expect(screen.queryByRole("textbox")).toBeNull();
   });
 
   it("highlights the matched part of names for plain regex name searches", () => {

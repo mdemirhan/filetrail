@@ -395,10 +395,12 @@ export function App() {
     isSearchMode,
     searchResultEntries,
     allSearchResultEntries,
+    filterSearchResultEntries,
     showCachedSearchResults,
     startSearch,
     stopSearch,
     submitSearch,
+    abandonSearchDraft,
     updateSearchDraftQuery,
     toggleSearchResultsSortDirection,
     updateSearchMatchScope,
@@ -594,6 +596,7 @@ export function App() {
     handleTypeaheadInput,
     eraseListFilterCharacter,
     clearListFilter,
+    setListFilter,
     listFilterTakesSpace,
     handleTreeKeyboardAction,
     goBack,
@@ -630,6 +633,8 @@ export function App() {
     derived: {
       activeContentEntries,
       unfilteredContentEntries,
+      filterContentEntries: (query) =>
+        isSearchMode ? filterSearchResultEntries(query) : filterEntriesByName(browseEntries, query),
       locationDialogOpen,
       explorerFocusSuppressed,
     },
@@ -939,7 +944,7 @@ export function App() {
     returnKeyAction,
     openItemLimit,
     includeHidden,
-    // The search options (pattern, match, subfolders, Git skipping, filter scope) are left
+    // The search options (match mode, match scope, subfolders, Git skipping) are left
     // out on purpose: what is chosen in the search field or results bar lasts for this run
     // only. Settings owns the saved defaults, which each launch starts from.
     searchResultsSortBy,
@@ -1301,7 +1306,9 @@ export function App() {
   function searchFromListFilter() {
     const text = listFilterQuery;
     clearListFilter();
-    updateSearchDraftQuery(text);
+    setSearchDraftQuery(text);
+    // Searched at once and in this folder, whatever search was made here before.
+    void startSearch(text, { rootPath: currentPath, live: true });
     window.requestAnimationFrame(() => {
       searchInputRef.current?.focus();
       searchPointerIntentRef.current = false;
@@ -1618,7 +1625,7 @@ export function App() {
                 // A pattern that does not parse while it is being typed is not a failure yet.
                 errorIsQuiet: searchStartedLive && searchPatternMode !== "text",
                 truncated: searchTruncated,
-                totalCount: searchResults.length,
+                totalCount: allSearchResultEntries.length,
                 sortBy: searchResultsSortBy,
                 sortDirection: searchResultsSortDirection,
                 onStopSearch: () => {
@@ -1665,7 +1672,7 @@ export function App() {
                 onFocusChange: (focused) => setFocusedPane(focused ? "content" : null),
                 onTypeaheadInput: (key) => handleTypeaheadInput(key, "content"),
                 filterQuery: listFilterQuery,
-                onClearFilter: clearListFilter,
+                onFilterQueryChange: setListFilter,
                 scrollTop: searchResultsScrollTop,
                 onScrollTopChange: setSearchResultsScrollTop,
               },
@@ -1916,14 +1923,17 @@ export function App() {
               // Esc ends the search and shows the folder again (⇧⌘F brings the results back).
               if (isSearchMode) {
                 hideSearchResults();
+              } else {
+                // Nothing was searched yet: drop what was typed and the search about to start.
+                abandonSearchDraft();
               }
               dismissFileSearch({ focusBelow: true });
             }}
             onClearSearchDraft={() => {
-              setSearchDraftQuery("");
-              void clearCommittedSearch().finally(() => {
-                focusFileSearch(false);
-              });
+              // The ✕ empties the field and forgets the search; the field keeps the keyboard.
+              abandonSearchDraft();
+              void clearCommittedSearch();
+              searchInputRef.current?.focus();
             }}
             searchPatternMode={searchPatternMode}
             onSearchPatternModeChange={updateSearchPatternMode}
@@ -1950,7 +1960,7 @@ export function App() {
                 ? formatSearchStatus({
                     isSearching: searchStatus === "running",
                     shown: filteredSearchResults.length,
-                    totalCount: searchResults.length,
+                    totalCount: allSearchResultEntries.length,
                     elapsedMs: searchElapsedMs,
                     selectedCount: contentSelection.paths.length,
                   })

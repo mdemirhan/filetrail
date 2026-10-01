@@ -19,6 +19,9 @@ type SearchResultsSortDirection = SearchResultsSortDirectionPreference;
 export function useSearchSession() {
   const [searchDraftQuery, setSearchDraftQuery] = useState("");
   const [searchCommittedQuery, setSearchCommittedQuery] = useState("");
+  // The text the search on disk was started with. While plain text is typed, the committed
+  // query can be longer than this: the results are then narrowed here, without a new search.
+  const [searchBaseQuery, setSearchBaseQuery] = useState("");
   const [searchRootPath, setSearchRootPath] = useState("");
   const [searchPatternMode, setSearchPatternMode] = useState<SearchPatternMode>(
     DEFAULT_APP_PREFERENCES.searchPatternMode,
@@ -56,6 +59,7 @@ export function useSearchSession() {
   const searchJobIdRef = useRef<string | null>(null);
   const searchPointerIntentRef = useRef(false);
   const searchCommittedQueryRef = useRef("");
+  const searchBaseQueryRef = useRef("");
   const searchDraftQueryRef = useRef("");
   // The folder that was on screen when the current search started. A search is only
   // continued (its scope kept, its results brought back) while that folder is still open.
@@ -78,6 +82,10 @@ export function useSearchSession() {
   useEffect(() => {
     searchCommittedQueryRef.current = searchCommittedQuery;
   }, [searchCommittedQuery]);
+
+  useEffect(() => {
+    searchBaseQueryRef.current = searchBaseQuery;
+  }, [searchBaseQuery]);
 
   useEffect(() => {
     searchDraftQueryRef.current = searchDraftQuery;
@@ -103,6 +111,8 @@ export function useSearchSession() {
     setSearchDraftQuery,
     searchCommittedQuery,
     setSearchCommittedQuery,
+    searchBaseQuery,
+    setSearchBaseQuery,
     searchRootPath,
     setSearchRootPath,
     searchPatternMode,
@@ -140,6 +150,7 @@ export function useSearchSession() {
     searchJobIdRef,
     searchPointerIntentRef,
     searchCommittedQueryRef,
+    searchBaseQueryRef,
     searchDraftQueryRef,
     searchOriginPathRef,
     searchResultsRef,

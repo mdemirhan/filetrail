@@ -6008,6 +6008,86 @@ body.settings-window-body {
   text-transform: none;
 }
 
+/* The filter of the results bar: narrows what the search found. */
+.search-results-filter {
+  display: flex;
+  align-items: center;
+  flex: 0 1 200px;
+  gap: 6px;
+  min-width: 90px;
+  height: 22px;
+  padding: 0 4px 0 7px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--bg-input);
+}
+
+.search-results-filter:focus-within {
+  border-color: var(--ft-accent-border);
+}
+
+.search-results-filter-icon {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: var(--text-tertiary);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+
+.search-results-filter-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.search-results-filter-input:focus,
+.search-results-filter-input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.search-results-filter-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.search-results-filter-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: default;
+}
+
+.search-results-filter-clear:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.search-results-filter-clear svg {
+  width: 9px;
+  height: 9px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
 /* ── Search: one scope bar and Finder-style result columns ── */
 
 .search-scope-bar {

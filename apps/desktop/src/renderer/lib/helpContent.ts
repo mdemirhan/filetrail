@@ -356,6 +356,16 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
               "The bar above the results switches between this folder, Home and the whole disk.",
           },
           {
+            label: "Filter",
+            description:
+              "The Filter field narrows what was found, by name or by the folder a result is in, without searching again. Typing in the results goes to the same filter, and Esc clears it.",
+          },
+          {
+            label: "Keep typing",
+            description:
+              "Making plain text longer narrows the results at once. Other changes are searched for when you stop typing.",
+          },
+          {
             label: "Open",
             description:
               "Opening a folder in the results goes into it and closes the search. ⇧⌘F brings the results back.",

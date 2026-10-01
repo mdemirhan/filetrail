@@ -7262,7 +7262,7 @@ describe("App copy/paste integration", () => {
     }
     await act(async () => {
       fireEvent.keyDown(window, { key: "f", metaKey: true });
-      await new Promise((resolve) => setTimeout(resolve, 320));
+      await new Promise((resolve) => setTimeout(resolve, 60));
     });
 
     const searchInput = screen.getByPlaceholderText("Search") as HTMLInputElement;
@@ -7301,7 +7301,7 @@ describe("App copy/paste integration", () => {
       searchInput.focus();
     });
     // One character is not searched on its own.
-    await type("s", 320);
+    await type("s", 480);
     expect(searchQueries()).toEqual([]);
     expect(screen.queryByTestId("search-results-pane")).not.toBeInTheDocument();
 
@@ -7309,7 +7309,7 @@ describe("App copy/paste integration", () => {
     await type("so", 60);
     await type("sou", 60);
     expect(searchQueries()).toEqual([]);
-    await type("sour", 320);
+    await type("sour", 480);
     expect(searchQueries()).toEqual(["sour"]);
     await screen.findByTestId("search-results-pane");
     expect(
@@ -7346,6 +7346,195 @@ describe("App copy/paste integration", () => {
     expect(searchInput.value).toBe("s");
   });
 
+  it("narrows what a search found as more is typed, without searching again", async () => {
+    const harness = createAppHarness({
+      searchJobs: (query) => ({
+        names: ["source.txt", "sonar.txt", "notes.txt"].filter((name) => name.includes(query)),
+      }),
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+    await screen.findByTestId("content-pane");
+    const searchInput = screen.getByPlaceholderText("Search") as HTMLInputElement;
+    const searchQueries = () =>
+      harness.invocations
+        .filter((call) => call.channel === "search:start")
+        .map((call) => (call.payload as IpcRequestInput<"search:start">).query);
+    const resultNames = () =>
+      screen
+        .queryAllByTitle(/^search:/u)
+        .map((row) => row.title.replace("search:/Users/demo/", ""));
+    const type = async (value: string, restMs = 0) => {
+      await act(async () => {
+        fireEvent.change(searchInput, { target: { value } });
+        await new Promise((resolve) => setTimeout(resolve, restMs));
+      });
+    };
+
+    await act(async () => {
+      searchInput.focus();
+    });
+    await type("so", 480);
+    expect(searchQueries()).toEqual(["so"]);
+    await vi.waitFor(() => expect(resultNames()).toEqual(["sonar.txt", "source.txt"]));
+
+    // Longer text is covered by the search that ran: it is applied at once, with no wait
+    // and no new search.
+    await type("sou");
+    expect(resultNames()).toEqual(["source.txt"]);
+    // Text with no match empties the list straight away.
+    await type("soup");
+    expect(resultNames()).toEqual([]);
+    expect(screen.getByTestId("search-results-pane")).toBeInTheDocument();
+    // Taking characters back, down to what was searched for, brings the results back.
+    await type("so");
+    expect(resultNames()).toEqual(["sonar.txt", "source.txt"]);
+    await type("son", 480);
+    expect(resultNames()).toEqual(["sonar.txt"]);
+    expect(searchQueries()).toEqual(["so"]);
+
+    // Text the search does not cover is searched for, once the typing stops.
+    await type("on", 480);
+    expect(searchQueries()).toEqual(["so", "on"]);
+    await vi.waitFor(() => expect(resultNames()).toEqual(["sonar.txt"]));
+  });
+
+  it("never shows the results of one search under the text of another", async () => {
+    const harness = createAppHarness({
+      searchJobs: (query) =>
+        // The second search finds nothing and takes its time over it.
+        query === "zz" ? { names: [], running: true } : { names: ["source.txt", "sonar.txt"] },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+    await screen.findByTestId("content-pane");
+    const searchInput = screen.getByPlaceholderText("Search") as HTMLInputElement;
+    const type = async (value: string, restMs = 0) => {
+      await act(async () => {
+        fireEvent.change(searchInput, { target: { value } });
+        await new Promise((resolve) => setTimeout(resolve, restMs));
+      });
+    };
+    await act(async () => {
+      searchInput.focus();
+    });
+    await type("so", 480);
+    await vi.waitFor(() => expect(screen.queryAllByTitle(/^search:/u)).toHaveLength(2));
+
+    // Unrelated text: once its search starts, the old results are gone, although the new
+    // search is still running and has found nothing.
+    await type("zz", 480);
+    expect(screen.queryAllByTitle(/^search:/u)).toHaveLength(0);
+    expect(screen.getByTestId("search-results-pane")).toBeInTheDocument();
+
+    // Putting the results away stops the search that was still running.
+    const cancelsBefore = harness.invocations.filter(
+      (call) => call.channel === "search:cancel",
+    ).length;
+    await act(async () => {
+      fireEvent.keyDown(searchInput, { key: "Escape" });
+    });
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.filter((call) => call.channel === "search:cancel").length,
+      ).toBeGreaterThan(cancelsBefore);
+    });
+    expect(
+      harness.invocations.filter((call) => call.channel === "search:cancel").at(-1)?.payload,
+    ).toEqual({ jobId: "search-job-2" });
+  });
+
+  it("searches for the longer text itself when the search it would narrow stopped at its limit", async () => {
+    const harness = createAppHarness({
+      searchJobs: (query) =>
+        query === "so"
+          ? { names: ["source.txt", "sonar.txt"], truncated: true }
+          : { names: ["source.txt", "sound.txt"] },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+    await screen.findByTestId("content-pane");
+    const searchInput = screen.getByPlaceholderText("Search") as HTMLInputElement;
+    const searchQueries = () =>
+      harness.invocations
+        .filter((call) => call.channel === "search:start")
+        .map((call) => (call.payload as IpcRequestInput<"search:start">).query);
+    const type = async (value: string, restMs = 0) => {
+      await act(async () => {
+        fireEvent.change(searchInput, { target: { value } });
+        await new Promise((resolve) => setTimeout(resolve, restMs));
+      });
+    };
+    await act(async () => {
+      searchInput.focus();
+    });
+    await type("so", 480);
+    await vi.waitFor(() => expect(screen.queryAllByTitle(/^search:/u)).toHaveLength(2));
+
+    // A search that stopped at its limit may have missed matches, so it cannot simply be
+    // narrowed: the longer text is searched for, and found once each.
+    await type("sou", 480);
+    expect(searchQueries()).toEqual(["so", "sou"]);
+    await vi.waitFor(() => {
+      expect(screen.queryAllByTitle(/^search:/u).map((row) => row.title)).toEqual([
+        "search:/Users/demo/sound.txt",
+        "search:/Users/demo/source.txt",
+      ]);
+    });
+  });
+
+  it("forgets text typed in the search field when Escape or the ✕ is used before it is searched", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+    await screen.findByTestId("content-pane");
+    const searchInput = screen.getByPlaceholderText("Search") as HTMLInputElement;
+    const searchCount = () =>
+      harness.invocations.filter((call) => call.channel === "search:start").length;
+
+    // Escape while the search is still waiting for the typing to stop.
+    await act(async () => {
+      searchInput.focus();
+      fireEvent.change(searchInput, { target: { value: "source" } });
+      fireEvent.keyDown(searchInput, { key: "Escape" });
+      await new Promise((resolve) => setTimeout(resolve, 480));
+    });
+    expect(searchCount()).toBe(0);
+    expect(searchInput.value).toBe("");
+    expect(screen.queryByTestId("search-results-pane")).not.toBeInTheDocument();
+
+    // The ✕ after a search: the field empties and stays empty.
+    await act(async () => {
+      searchInput.focus();
+      fireEvent.change(searchInput, { target: { value: "source" } });
+      await new Promise((resolve) => setTimeout(resolve, 480));
+    });
+    await screen.findByTestId("search-results-pane");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Clear file search" }));
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    });
+    expect(searchInput.value).toBe("");
+    expect(screen.queryByTestId("search-results-pane")).not.toBeInTheDocument();
+    expect(searchInput).toHaveFocus();
+  });
+
   it("ends the search with Escape in the search field", async () => {
     const harness = createAppHarness();
 
@@ -7360,7 +7549,7 @@ describe("App copy/paste integration", () => {
     await act(async () => {
       searchInput.focus();
       fireEvent.change(searchInput, { target: { value: "source" } });
-      await new Promise((resolve) => setTimeout(resolve, 320));
+      await new Promise((resolve) => setTimeout(resolve, 480));
     });
     await screen.findByTestId("search-results-pane");
 
@@ -8184,6 +8373,9 @@ function createAppHarness(
     pickApplicationResponse?: IpcResponse<"system:pickApplication">;
     pickDirectoryResponse?: IpcResponse<"system:pickDirectory">;
     visitedFolders?: IpcResponse<"places:list">["folders"];
+    // Scripts the searches by the text searched for: the names found in /Users/demo, whether
+    // the search is still running, and whether it stopped at its limit.
+    searchJobs?: (query: string) => { names: string[]; running?: boolean; truncated?: boolean };
     copyPastePlanError?: Error;
     deferCopyPastePlan?: boolean;
     deferCopyPastePlanCalls?: number[];
@@ -8213,6 +8405,8 @@ function createAppHarness(
     ...args.preferences,
   } as IpcResponse<"app:getPreferences">["preferences"];
   let visitedFolders = args.visitedFolders ?? [];
+  let searchJobCount = 0;
+  const searchJobQueries = new Map<string, string>();
   const directorySnapshots: Record<string, IpcResponse<"directory:getSnapshot">> = {
     "/Users/demo": {
       path: "/Users/demo",
@@ -8434,7 +8628,27 @@ function createAppHarness(
         } satisfies IpcResponse<"path:getSuggestions"> as IpcResponse<C>;
       }
       if (channel === "search:start") {
-        return { jobId: "search-job-1", status: "running" } as IpcResponse<C>;
+        const request = payload as IpcRequestInput<"search:start">;
+        searchJobCount += 1;
+        const jobId = args.searchJobs ? `search-job-${searchJobCount}` : "search-job-1";
+        searchJobQueries.set(jobId, request.query);
+        return { jobId, status: "running" } as IpcResponse<C>;
+      }
+      if (channel === "search:getUpdate" && args.searchJobs) {
+        // A scripted search: which names it finds, and whether it has finished.
+        const { jobId, cursor = 0 } = payload as IpcRequestInput<"search:getUpdate">;
+        const job = args.searchJobs(searchJobQueries.get(jobId) ?? "");
+        const items = cursor === 0 ? job.names.map((name) => createSearchResult(name)) : [];
+        const running = job.running === true;
+        return {
+          jobId,
+          status: running ? "running" : job.truncated ? "truncated" : "complete",
+          items,
+          nextCursor: cursor + items.length,
+          done: !running,
+          truncated: job.truncated === true,
+          error: null,
+        } satisfies IpcResponse<"search:getUpdate"> as IpcResponse<C>;
       }
       if (channel === "search:getUpdate") {
         return {
@@ -8704,6 +8918,20 @@ function expectNoFileClipboardActions(harness: ReturnType<typeof createAppHarnes
   expect(harness.invocations.some((call) => call.channel === "copyPaste:plan")).toBe(false);
   expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
   expect(harness.invocations.some((call) => call.channel === "system:copyText")).toBe(false);
+}
+
+function createSearchResult(name: string): IpcResponse<"search:getUpdate">["items"][number] {
+  const dotIndex = name.lastIndexOf(".");
+  return {
+    path: `/Users/demo/${name}`,
+    name,
+    extension: dotIndex > 0 ? name.slice(dotIndex + 1) : "",
+    kind: "file",
+    isHidden: false,
+    isSymlink: false,
+    parentPath: "/Users/demo",
+    relativeParentPath: ".",
+  };
 }
 
 function createDirectoryEntry(

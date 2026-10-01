@@ -1,4 +1,9 @@
-import { filterEntriesByName, findListFilterSelection, formatItemCount } from "./listFilter";
+import {
+  filterEntriesByName,
+  filterSearchResultsByText,
+  findListFilterSelection,
+  formatItemCount,
+} from "./listFilter";
 
 const entries = [
   { name: "Android" },
@@ -43,6 +48,23 @@ describe("list filter", () => {
     );
     expect(findListFilterSelection([], "zzz")).toBeNull();
     expect(findListFilterSelection(entries, "")).toBeNull();
+  });
+
+  it("filters search results by name or by the folder they are in", () => {
+    const results = [
+      { name: "App.tsx", relativeParentPath: "src/components" },
+      { name: "App.test.tsx", relativeParentPath: "tests" },
+      { name: "src-notes.md", relativeParentPath: "docs" },
+    ];
+    const names = (query: string) =>
+      filterSearchResultsByText(results, query).map((result) => result.name);
+
+    expect(names("app")).toEqual(["App.tsx", "App.test.tsx"]);
+    // "src" is a folder of one result and part of the name of another.
+    expect(names("SRC")).toEqual(["App.tsx", "src-notes.md"]);
+    expect(names("tests")).toEqual(["App.test.tsx"]);
+    expect(names("zzz")).toEqual([]);
+    expect(filterSearchResultsByText(results, "")).toBe(results);
   });
 
   it("counts the items, mentioning the total only while some are hidden", () => {

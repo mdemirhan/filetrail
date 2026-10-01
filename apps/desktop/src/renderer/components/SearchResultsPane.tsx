@@ -17,7 +17,6 @@ import { formatDateTime, formatSize, splitDisplayName } from "../lib/formatting"
 import { resolveSearchResultsColumnLayout } from "../lib/responsiveLayout";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
 import { getVirtualRange } from "../lib/virtualization";
-import { ListFilterPill } from "./ListFilterPill";
 import { SearchOptionsMenu } from "./SearchOptionsMenu";
 type SearchResultItem = IpcResponse<"search:getUpdate">["items"][number];
 type SearchStatus = IpcResponse<"search:getUpdate">["status"] | "idle";
@@ -78,7 +77,7 @@ export function SearchResultsPane({
   onFocusChange,
   onTypeaheadInput,
   filterQuery = "",
-  onClearFilter = () => undefined,
+  onFilterQueryChange = () => undefined,
   scrollTop = 0,
   onScrollTopChange = () => undefined,
 }: {
@@ -131,9 +130,12 @@ export function SearchResultsPane({
   onItemDragEnd?: ((event: React.DragEvent<HTMLElement>) => void) | undefined;
   onFocusChange: (focused: boolean) => void;
   onTypeaheadInput?: (key: string) => void;
-  /** What has been typed to narrow `results`, which already are the matching ones. */
+  /**
+   * The text of the filter field; `results` already are the matching ones. Typing in the
+   * results list goes into the same filter.
+   */
   filterQuery?: string;
-  onClearFilter?: () => void;
+  onFilterQueryChange?: (value: string) => void;
   scrollTop?: number;
   onScrollTopChange?: (value: number) => void;
 }) {
@@ -290,6 +292,53 @@ export function SearchResultsPane({
             </button>
           ))}
           <span className="search-scope-spacer" />
+          {/* Narrows what the search found, without searching again. */}
+          <div className="search-results-filter">
+            <svg viewBox="0 0 24 24" aria-hidden="true" className="search-results-filter-icon">
+              <path d="M4 6h16M7 12h10M10 18h4" />
+            </svg>
+            <input
+              type="text"
+              className="search-results-filter-input"
+              value={filterQuery}
+              onChange={(event) => onFilterQueryChange(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  // Esc clears the filter first; with nothing to clear it returns to the list.
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (filterQuery.length > 0) {
+                    onFilterQueryChange("");
+                  } else {
+                    scrollRef.current?.focus({ preventScroll: true });
+                  }
+                  return;
+                }
+                if (event.key === "Enter" || event.key === "ArrowDown") {
+                  event.preventDefault();
+                  scrollRef.current?.focus({ preventScroll: true });
+                }
+              }}
+              placeholder="Filter by name or folder"
+              spellCheck={false}
+              autoComplete="off"
+              aria-label="Filter results"
+            />
+            {filterQuery.length > 0 ? (
+              <button
+                type="button"
+                className="search-results-filter-clear"
+                aria-label="Clear filter"
+                title="Clear filter (Esc)"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => onFilterQueryChange("")}
+              >
+                <svg viewBox="0 0 12 12" aria-hidden="true">
+                  <path d="M3 3l6 6M9 3l-6 6" />
+                </svg>
+              </button>
+            ) : null}
+          </div>
           {/* The same menu as the magnifier in the toolbar search field. */}
           <SearchOptionsMenu
             trigger="label"
@@ -355,12 +404,6 @@ export function SearchResultsPane({
         </div>
       </div>
       <div className="search-results-body">
-        <ListFilterPill
-          query={filterQuery}
-          shownCount={results.length}
-          totalCount={totalCount}
-          onClear={onClearFilter}
-        />
         <div
           ref={scrollRef}
           className="content-scroll search-results-scroll"
@@ -418,7 +461,9 @@ export function SearchResultsPane({
           {status !== "running" && results.length === 0 && totalCount > 0 && !error ? (
             <div className="content-state content-empty">
               <strong className="empty-state-title">No results match “{filterQuery}”</strong>
-              <span className="empty-state-message">Press Esc to see all the results again.</span>
+              <span className="empty-state-message">
+                Nothing found has that in its name or folder. Press Esc to see all the results.
+              </span>
             </div>
           ) : null}
           {status !== "running" && results.length === 0 && totalCount === 0 && !error ? (

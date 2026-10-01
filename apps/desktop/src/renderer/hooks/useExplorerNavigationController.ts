@@ -48,11 +48,7 @@ import {
 } from "../lib/favorites";
 import { getFlowListColumnStep } from "../lib/flowListLayout";
 import { EXPLORER_LAYOUT, getTreeRowHeight } from "../lib/layoutTokens";
-import {
-  LIST_FILTER_SPACE_WINDOW_MS,
-  filterEntriesByName,
-  findListFilterSelection,
-} from "../lib/listFilter";
+import { LIST_FILTER_SPACE_WINDOW_MS, findListFilterSelection } from "../lib/listFilter";
 import { createRendererLogger } from "../lib/logging";
 import { pageScrollElement, scrollElementByAmount } from "../lib/pagedScroll";
 import { expandHomeShortcut } from "../lib/pathUtils";
@@ -78,6 +74,8 @@ export function useExplorerNavigationController(args: {
     activeContentEntries: DirectoryEntry[];
     /** The list on screen before the typed filter narrows it. */
     unfilteredContentEntries: DirectoryEntry[];
+    /** What a filter text would leave of that list. */
+    filterContentEntries: (query: string) => DirectoryEntry[];
     locationDialogOpen: boolean;
     explorerFocusSuppressed: boolean;
   };
@@ -189,6 +187,7 @@ export function useExplorerNavigationController(args: {
   const {
     activeContentEntries,
     unfilteredContentEntries,
+    filterContentEntries,
     locationDialogOpen,
     explorerFocusSuppressed,
   } = derived;
@@ -496,12 +495,18 @@ export function useExplorerNavigationController(args: {
     if (nextQuery.length === 0) {
       return;
     }
-    const matches = filterEntriesByName(unfilteredContentEntries, nextQuery);
+    const matches = filterContentEntries(nextQuery);
     const selected = findListFilterSelection(matches, nextQuery);
     applyContentSelection(
       selected ? createSingleContentSelection(selected.path) : EMPTY_CONTENT_SELECTION,
       matches,
     );
+  }
+
+  // The filter field of the search results sets the whole text at once.
+  function setListFilter(nextQuery: string) {
+    lastListFilterInputAtRef.current = Date.now();
+    applyListFilter(nextQuery);
   }
 
   function typeIntoListFilter(text: string) {
@@ -1884,6 +1889,7 @@ export function useExplorerNavigationController(args: {
     handleTypeaheadInput,
     eraseListFilterCharacter,
     clearListFilter,
+    setListFilter,
     listFilterTakesSpace,
     handleTreeKeyboardAction,
     goBack,
