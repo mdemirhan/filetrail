@@ -47,6 +47,7 @@ type PendingActivation = {
   favoritePath: string | null;
   contentScroll: { top: number; left: number };
   treeScrollTop: number | null;
+  focusedPane: "tree" | "content";
   refreshExpandedTree: boolean;
   rerunSearch: boolean;
 };
@@ -93,6 +94,7 @@ export function useExplorerTabs(args: {
       },
     ) => Promise<boolean>;
     reloadFolderInPlace: (options?: { refreshExpandedTree?: boolean }) => Promise<void>;
+    focusTreePane: () => void;
     loadTreeChildren: (path: string) => Promise<void>;
     restoreListFilter: (
       query: string,
@@ -167,6 +169,8 @@ export function useExplorerTabs(args: {
       treeRootPath: navigation.treeRootPathRef.current,
       selectedTreeItemId: navigation.selectedTreeItemIdRef.current,
       leftPaneSubview: navigation.leftPaneSubview,
+      focusedPane:
+        navigation.focusedPane ?? navigation.lastExplorerFocusPaneRef.current ?? "content",
       view: {
         treeNodes: navigation.treeNodesRef.current,
         currentEntries: navigation.currentEntries,
@@ -260,6 +264,7 @@ export function useExplorerTabs(args: {
       favoritePath: getFavoriteItemPath(snapshot.selectedTreeItemId),
       contentScroll: view?.contentScroll ?? { top: 0, left: 0 },
       treeScrollTop: view?.treeScrollTop ?? null,
+      focusedPane: snapshot.focusedPane,
       refreshExpandedTree: options.refreshExpandedTree ?? false,
       rerunSearch,
     };
@@ -515,6 +520,7 @@ export function useExplorerTabs(args: {
             : createFileSystemItemId(startupTab.path),
           leftPaneSubview:
             startupTab.favoritePath && favoritesPlacement === "separate" ? "favorites" : "tree",
+          focusedPane: "content",
           view: null,
           search: null,
         },
@@ -579,7 +585,12 @@ export function useExplorerTabs(args: {
     }
     pendingActivationRef.current = null;
     if (navigation.mainView === "explorer") {
-      selection.focusContentPane();
+      // The keyboard goes back to the pane the tab had it in, the tree or the list.
+      if (pending.focusedPane === "tree") {
+        navActions.focusTreePane();
+      } else {
+        selection.focusContentPane();
+      }
     }
     if (pending.rerunSearch) {
       searchSession.rerun();

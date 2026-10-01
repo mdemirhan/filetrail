@@ -33,7 +33,9 @@ vi.mock("./components/ContentPane", () => ({
     onInlineRenameSubmit,
     onInlineRenameCancel,
     clipboardSummary,
+    isFocused,
   }: {
+    isFocused?: boolean;
     clipboardSummary?: { label: string; tooltip: string } | null;
     currentPath: string;
     entries: Array<{ path: string; name: string; kind: string; isSymlink?: boolean }>;
@@ -87,6 +89,7 @@ vi.mock("./components/ContentPane", () => ({
       <output data-testid="content-current-path">{currentPath}</output>
       <output data-testid="content-entry-count">{entries.length}</output>
       <output data-testid="clipboard-summary">{clipboardSummary?.label ?? ""}</output>
+      <output data-testid="content-focused">{String(isFocused ?? false)}</output>
       <label>
         Current folder path
         <input
@@ -162,6 +165,7 @@ vi.mock("./components/ContentPane", () => ({
 vi.mock("./components/TreePane", () => ({
   TreePane: ({
     paneRef,
+    isFocused,
     onFocusChange,
     onLeftPaneSubviewChange,
     onRerootHome,
@@ -182,6 +186,7 @@ vi.mock("./components/TreePane", () => ({
     rootPath,
   }: {
     paneRef?: RefObject<HTMLDivElement | null>;
+    isFocused?: boolean;
     onFocusChange: (focused: boolean) => void;
     onLeftPaneSubviewChange: (value: "favorites" | "tree") => void;
     onRerootHome: () => void;
@@ -294,6 +299,7 @@ vi.mock("./components/TreePane", () => ({
     rootPath: string;
   }) => (
     <div ref={paneRef} data-testid="tree-pane-shell">
+      <output data-testid="tree-focused">{String(isFocused ?? false)}</output>
       <button
         type="button"
         data-testid="tree-pane"
@@ -9172,6 +9178,28 @@ describe("App tabs", () => {
       expect(screen.getByTestId("content-current-path")).toHaveTextContent(/^\/Users\/demo$/),
     );
     expect(tabLabels()).toEqual(["demo", "demo"]);
+  });
+
+  it("gives the keyboard back to the pane each tab had it in", async () => {
+    const harness = createAppHarness();
+    await renderApp(harness);
+    const focusedPane = () =>
+      screen.getByTestId("tree-focused").textContent === "true"
+        ? "tree"
+        : screen.getByTestId("content-focused").textContent === "true"
+          ? "content"
+          : null;
+    // The first tab is left with the keyboard in the folder tree, the second in the list.
+    await focusTreePane();
+    await pressKey({ key: "t", metaKey: true });
+    await selectItem("/Users/demo/source.txt");
+    expect(focusedPane()).toBe("content");
+
+    await pressKey({ key: "Tab", ctrlKey: true });
+    await waitFor(() => expect(focusedPane()).toBe("tree"));
+
+    await pressKey({ key: "Tab", ctrlKey: true });
+    await waitFor(() => expect(focusedPane()).toBe("content"));
   });
 
   it("reads a tab's folder again when the tab comes back on screen", async () => {

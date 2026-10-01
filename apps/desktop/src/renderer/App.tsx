@@ -785,6 +785,7 @@ export function App() {
     navActions: {
       navigateToNearestExistingFolder,
       reloadFolderInPlace,
+      focusTreePane,
       loadTreeChildren: (path) => loadTreeChildren(path),
       restoreListFilter,
     },

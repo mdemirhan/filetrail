@@ -92,6 +92,7 @@ describe("explorerTabs", () => {
       treeRootPath: "/Users/demo",
       selectedTreeItemId: null,
       leftPaneSubview: "tree",
+      focusedPane: "tree",
       view: {
         treeNodes: {},
         currentEntries: [],

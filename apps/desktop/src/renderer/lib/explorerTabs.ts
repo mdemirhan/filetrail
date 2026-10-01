@@ -77,6 +77,8 @@ export type TabSnapshot = {
   treeRootPath: string;
   selectedTreeItemId: TreeItemId | null;
   leftPaneSubview: "favorites" | "tree";
+  // The pane that had the keyboard, which gets it back when the tab is shown again.
+  focusedPane: "tree" | "content";
   // null for a tab that has not been shown yet (one restored at launch): its folder and
   // tree are read when it is first opened.
   view: TabViewState | null;
