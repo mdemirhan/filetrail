@@ -14,6 +14,8 @@ import { resolveStartupFolderPath } from "./launchContext";
 let mainWindowRef: BrowserWindow | null = null;
 let settingsWindowRef: BrowserWindow | null = null;
 let appStateStoreRef: AppStateStore | null = null;
+// Records the explorer window's size and position in the store; set while it is open.
+let recordMainWindowState: (() => void) | null = null;
 let appLoggerRef: ReturnType<typeof createAppLogger> | null = null;
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 const WINDOW_STATE_SAVE_DELAY_MS = 160;
@@ -95,13 +97,17 @@ if (hasSingleInstanceLock) {
             if (window.isDestroyed()) {
               continue;
             }
-            applyWindowZoom(window, preferences.zoomPercent);
+            // Setting the zoom, even to the value it has, makes Chromium rewrite its own
+            // preferences file; most changes (the folder on screen, say) are not the zoom.
+            if (change.patch.zoomPercent !== undefined) {
+              applyWindowZoom(window, preferences.zoomPercent);
+            }
             if (window.webContents.id !== change.senderId) {
               window.webContents.send("filetrail:preferencesChanged", change.patch);
             }
           }
           const window = mainWindowRef ?? BrowserWindow.getAllWindows()[0] ?? null;
-          if (window && !window.isDestroyed()) {
+          if (change.patch.actionLogEnabled !== undefined && window && !window.isDestroyed()) {
             applyApplicationMenu(window, preferences.actionLogEnabled);
           }
           if (change.patch.theme !== undefined) {
@@ -209,6 +215,8 @@ function createWindow(): BrowserWindow {
     });
   };
 
+  recordMainWindowState = persistWindowState;
+
   const scheduleWindowStateSave = () => {
     if (saveTimeout) {
       clearTimeout(saveTimeout);
@@ -265,6 +273,9 @@ function createWindow(): BrowserWindow {
     }
     if (mainWindowRef === mainWindow) {
       mainWindowRef = null;
+    }
+    if (recordMainWindowState === persistWindowState) {
+      recordMainWindowState = null;
     }
     // Settings belongs to the explorer window; closing the explorer still quits the app.
     if (settingsWindowRef && !settingsWindowRef.isDestroyed()) {
@@ -456,6 +467,8 @@ async function finalizeShutdown(): Promise<void> {
     workerActive: state.workerActive,
     writeCoordinatorActive: state.writeCoordinatorActive,
   });
+  // The store is written here, once, with the window as it is now.
+  recordMainWindowState?.();
   appStateStoreRef?.flush();
   try {
     await shutdownMainProcess();

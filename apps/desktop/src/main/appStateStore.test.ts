@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -36,6 +36,123 @@ describe("appStateStore", () => {
 
     expect(onPersistError).toHaveBeenCalledWith(new Error("disk full"));
     expect(readFileSync(filePath, "utf8")).toBe(persisted);
+  });
+
+  // A store whose timers only run when the test says so, counting the writes it makes.
+  function createTimedStore() {
+    const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
+    const filePath = resolveAppStatePath(userDataPath);
+    const timers = new Map<number, { callback: () => void; delayMs: number }>();
+    let nextTimerId = 1;
+    let writes = 0;
+    const store = createAppStateStore(filePath, {
+      defaultTheme: "macos-dark",
+      timer: {
+        setTimeout: (callback, delayMs) => {
+          timers.set(nextTimerId, { callback, delayMs });
+          return nextTimerId++ as unknown as ReturnType<typeof setTimeout>;
+        },
+        clearTimeout: (timer) => {
+          timers.delete(timer as unknown as number);
+        },
+      },
+      fs: {
+        existsSync,
+        mkdirSync: () => undefined,
+        readFileSync: (path, encoding) => readFileSync(path, encoding),
+        writeFileSync: (path, data, encoding) => {
+          writes += 1;
+          writeFileSync(path, data, encoding);
+        },
+        renameSync: (from, to) => renameSync(from, to),
+      },
+    });
+    return {
+      store,
+      filePath,
+      writes: () => writes,
+      pendingDelays: () => [...timers.values()].map((timer) => timer.delayMs),
+      runTimers: () => {
+        for (const [id, timer] of [...timers]) {
+          // A timer cancelled by one that ran before it does not run.
+          if (timers.delete(id)) {
+            timer.callback();
+          }
+        }
+      },
+    };
+  }
+
+  it("writes a deliberate change promptly", () => {
+    const { store, filePath, writes, pendingDelays, runTimers } = createTimedStore();
+
+    store.updatePreferences({ viewMode: "details" });
+    store.updatePreferences({ favoritesExpanded: false });
+    // A burst of changes is one write, a moment later.
+    expect(pendingDelays()).toEqual([150]);
+    runTimers();
+
+    expect(writes()).toBe(1);
+    expect(JSON.parse(readFileSync(filePath, "utf8")).preferences.viewMode).toBe("details");
+
+    store.forgetVisitedFolder("/Users/demo/gone");
+    expect(pendingDelays()).toEqual([150]);
+  });
+
+  it("keeps where the user is for the quit-time write", () => {
+    const { store, filePath, writes, pendingDelays, runTimers } = createTimedStore();
+
+    store.updatePreferences({ lastVisitedPath: "/Users/demo/work", treeRootPath: "/Users/demo" });
+    store.recordFolderVisit("/Users/demo/work", 1_000);
+    store.setWindowState({ x: 10, y: 20, width: 900, height: 600, maximized: false });
+    store.updatePreferences({ lastVisitedPath: "/Users/demo/music" });
+    store.recordFolderVisit("/Users/demo/music", 2_000);
+
+    // Nothing is written while browsing; one long timer bounds what a crash can lose, and
+    // later navigation does not push it back.
+    expect(writes()).toBe(0);
+    expect(pendingDelays()).toEqual([5 * 60 * 1000]);
+
+    store.flush();
+    expect(writes()).toBe(1);
+    expect(pendingDelays()).toEqual([]);
+    const saved = JSON.parse(readFileSync(filePath, "utf8"));
+    expect(saved.preferences.lastVisitedPath).toBe("/Users/demo/music");
+    expect(saved.window).toMatchObject({ x: 10, width: 900 });
+    expect(saved.visitedFolders).toHaveLength(2);
+
+    // Nothing has changed since: quitting again writes nothing.
+    store.flush();
+    expect(writes()).toBe(1);
+
+    // The long timer does write, for a session that stays open.
+    store.recordFolderVisit("/Users/demo/work", 3_000);
+    runTimers();
+    expect(writes()).toBe(2);
+  });
+
+  it("writes navigation along with the next deliberate change, and nothing for no change", () => {
+    const { store, filePath, writes, pendingDelays, runTimers } = createTimedStore();
+
+    store.updatePreferences({ lastVisitedPath: "/Users/demo/work" });
+    store.setWindowState({ width: 900, height: 600, maximized: false });
+    store.updatePreferences({ viewMode: "details" });
+    // The prompt write takes the place of the long timer.
+    expect(pendingDelays()).toEqual([150]);
+    runTimers();
+
+    expect(writes()).toBe(1);
+    expect(pendingDelays()).toEqual([]);
+    expect(JSON.parse(readFileSync(filePath, "utf8")).preferences.lastVisitedPath).toBe(
+      "/Users/demo/work",
+    );
+
+    // The same values again, and the same window, are not changes.
+    store.updatePreferences({ viewMode: "details", lastVisitedPath: "/Users/demo/work" });
+    store.setWindowState(store.getWindowState());
+    runTimers();
+    store.flush();
+    expect(writes()).toBe(1);
   });
 
   it("returns defaults when no state file exists", () => {

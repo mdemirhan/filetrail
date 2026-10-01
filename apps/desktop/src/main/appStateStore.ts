@@ -96,6 +96,20 @@ const DEFAULT_TIMER: AppStateStoreTimer = {
   clearTimeout,
 };
 
+// How long after a deliberate change (a setting, a favorite) the file is written. Short,
+// so the change survives a crash; long enough that a burst of changes is one write.
+const PROMPT_SAVE_DELAY_MS = 150;
+// State that only follows where the user is: it changes with every folder opened and every
+// window move, and losing the latest of it to a crash costs nothing. It is written when the
+// app quits, or along with the next deliberate change. A session can stay open for days,
+// so it is also written once this long after the first unsaved change.
+const DEFERRED_SAVE_DELAY_MS = 5 * 60 * 1000;
+const NAVIGATION_PREFERENCE_KEYS: ReadonlySet<string> = new Set<keyof AppPreferences>([
+  "lastVisitedPath",
+  "lastVisitedFavoritePath",
+  "treeRootPath",
+]);
+
 // The persisted store intentionally contains only restart-worthy UI state. Directory data,
 // caches, and other ephemeral runtime state should stay out of this file.
 export class AppStateStore {
@@ -106,7 +120,8 @@ export class AppStateStore {
   private readonly onReadError: (error: unknown) => void;
   private readonly onPersistError: (error: unknown) => void;
   private state: AppState;
-  private persistTimer: ReturnType<typeof setTimeout> | null = null;
+  private promptSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  private deferredSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(filePath: string, dependencies: AppStateStoreDependencies = {}) {
     this.filePath = filePath;
@@ -143,11 +158,18 @@ export class AppStateStore {
       },
       this.defaultTheme,
     );
+    const changedKeys = (Object.keys(next) as Array<keyof AppPreferences>).filter(
+      (key) => JSON.stringify(next[key]) !== JSON.stringify(current[key]),
+    );
     this.state = {
       ...this.state,
       preferences: next,
     };
-    this.schedulePersist();
+    if (changedKeys.some((key) => !NAVIGATION_PREFERENCE_KEYS.has(key))) {
+      this.saveSoon();
+    } else if (changedKeys.length > 0) {
+      this.saveLater();
+    }
     return next;
   }
 
@@ -160,13 +182,14 @@ export class AppStateStore {
       ...this.state,
       visitedFolders: recordFolderVisit(this.getVisitedFolders(), path, now),
     };
-    this.schedulePersist();
+    this.saveLater();
   }
 
+  // Removing a folder from Go To is something the user did on purpose.
   forgetVisitedFolder(path: string): VisitedFolder[] {
     const visitedFolders = forgetVisitedFolder(this.getVisitedFolders(), path);
     this.state = { ...this.state, visitedFolders };
-    this.schedulePersist();
+    this.saveSoon();
     return visitedFolders;
   }
 
@@ -176,30 +199,53 @@ export class AppStateStore {
 
   setWindowState(value: StoredWindowState): void {
     const window = sanitizeWindowState(value);
+    if (JSON.stringify(window) === JSON.stringify(this.state.window)) {
+      return;
+    }
     this.state = {
       ...this.state,
       window,
     };
-    this.schedulePersist();
+    this.saveLater();
   }
 
+  /** Writes whatever has not been written yet. Called when the app quits. */
   flush(): void {
-    if (this.persistTimer) {
-      this.timer.clearTimeout(this.persistTimer);
-      this.persistTimer = null;
+    if (this.promptSaveTimer === null && this.deferredSaveTimer === null) {
+      return;
+    }
+    this.save();
+  }
+
+  private save(): void {
+    if (this.promptSaveTimer !== null) {
+      this.timer.clearTimeout(this.promptSaveTimer);
+      this.promptSaveTimer = null;
+    }
+    if (this.deferredSaveTimer !== null) {
+      this.timer.clearTimeout(this.deferredSaveTimer);
+      this.deferredSaveTimer = null;
     }
     persistState(this.filePath, this.state, this.fileSystem, this.onPersistError);
   }
 
-  private schedulePersist(): void {
-    if (this.persistTimer) {
-      this.timer.clearTimeout(this.persistTimer);
+  private saveSoon(): void {
+    if (this.promptSaveTimer !== null) {
+      this.timer.clearTimeout(this.promptSaveTimer);
     }
-    // Debounce writes so resize drags and repeated toggles do not hammer the filesystem.
-    this.persistTimer = this.timer.setTimeout(() => {
-      this.persistTimer = null;
-      persistState(this.filePath, this.state, this.fileSystem, this.onPersistError);
-    }, 150);
+    if (this.deferredSaveTimer !== null) {
+      this.timer.clearTimeout(this.deferredSaveTimer);
+      this.deferredSaveTimer = null;
+    }
+    // Debounced so a burst of changes (a drag, repeated toggles) is one write.
+    this.promptSaveTimer = this.timer.setTimeout(() => this.save(), PROMPT_SAVE_DELAY_MS);
+  }
+
+  private saveLater(): void {
+    // Not pushed back by later changes: it bounds how much a crash can lose.
+    if (this.promptSaveTimer === null && this.deferredSaveTimer === null) {
+      this.deferredSaveTimer = this.timer.setTimeout(() => this.save(), DEFERRED_SAVE_DELAY_MS);
+    }
   }
 }
 
