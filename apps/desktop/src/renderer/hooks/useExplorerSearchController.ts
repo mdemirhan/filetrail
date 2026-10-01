@@ -12,6 +12,7 @@ import {
   sanitizeContentSelection,
 } from "../lib/contentSelection";
 import { toDirectoryEntryFromSearchResult } from "../lib/explorerAppUtils";
+import type { TabSearchSession } from "../lib/explorerTabs";
 import type {
   DirectoryEntry,
   SearchMatchScope,
@@ -89,18 +90,24 @@ export function useExplorerSearchController(args: {
     searchResultsVisible,
     searchResults,
     setSearchResults,
+    searchResultsScrollTop,
     setSearchResultsScrollTop,
     setSearchStatus,
+    searchError,
     setSearchError,
+    searchStartedLive,
     setSearchStartedLive,
     setSearchTruncated,
+    searchElapsedMs,
     setSearchElapsedMs,
+    searchDraftQuery,
     searchStartedAtRef,
     searchPollTimeoutRef,
     searchSessionRef,
     searchJobIdRef,
     searchDraftQueryRef,
     searchOriginPathRef,
+    searchResultsRef,
     searchResultsVisibleRef,
     searchResultsSortByRef,
     searchResultsSortDirectionRef,
@@ -155,6 +162,9 @@ export function useExplorerSearchController(args: {
   // Set when a search was stopped because its results were put away; it runs again when
   // they are shown.
   const searchInterruptedRef = useRef(false);
+  // How far into the running search's results this window has read. A tab left while its
+  // search runs picks the results up from here when it is shown again.
+  const searchCursorRef = useRef(0);
 
   useEffect(
     () => () => {
@@ -285,6 +295,7 @@ export function useExplorerSearchController(args: {
     searchBaseQueryRef.current = "";
     searchCommittedQueryRef.current = "";
     setSearchRootPath("");
+    searchResultsRef.current = [];
     setSearchResults([]);
     setSearchResultsScrollTop(0);
     setSearchStatus("idle");
@@ -319,8 +330,12 @@ export function useExplorerSearchController(args: {
             ? typedResponse.items
             : typedResponse.items.filter((item) => !keptPaths.has(item.path));
         if (newItems.length > 0) {
-          setSearchResults((current) => appendSearchResults(current, newItems));
+          // Kept in step with the cursor, so a tab left at this moment loses neither.
+          const nextResults = appendSearchResults(searchResultsRef.current, newItems);
+          searchResultsRef.current = nextResults;
+          setSearchResults(nextResults);
         }
+        searchCursorRef.current = typedResponse.nextCursor;
         // The search stopped at its limit while the text in the field is narrower than
         // what it looked for: it may have missed matches, so look for that text itself.
         if (
@@ -436,6 +451,7 @@ export function useExplorerSearchController(args: {
           )
         : [];
     keptResultPathsRef.current = new Set(keptResults.map((result) => result.path));
+    searchResultsRef.current = keptResults;
     setSearchResults(keptResults);
     setSearchCommittedQuery(trimmedQuery);
     setSearchBaseQuery(trimmedQuery);
@@ -481,6 +497,7 @@ export function useExplorerSearchController(args: {
         return;
       }
       searchJobIdRef.current = response.jobId;
+      searchCursorRef.current = 0;
       setSearchStatus(response.status);
       pollSearch(response.jobId, 0, sessionId);
     } catch (error) {
@@ -684,7 +701,149 @@ export function useExplorerSearchController(args: {
     });
   }
 
+  // ── Tabs ──────────────────────────────────────────────────────────────────────────────
+  // Each tab has a search of its own, but only the tab on screen is live: leaving a tab
+  // takes its search out of the window (`detachSearchSession`) and showing a tab puts its
+  // search back (`attachSearchSession`).
+
+  // Stops listening to the search on screen and hands it back as it stands. A search that
+  // is running keeps running in the worker; nothing asks it for results until it is
+  // attached again.
+  function detachSearchSession(): TabSearchSession {
+    cancelLiveSearch();
+    clearSearchPolling();
+    const session: TabSearchSession = {
+      draftQuery: searchDraftQuery,
+      committedQuery: searchCommittedQuery,
+      baseQuery: searchBaseQuery,
+      rootPath: searchRootPath,
+      originPath: searchOriginPathRef.current,
+      patternMode: searchPatternMode,
+      matchScope: searchMatchScope,
+      recursive: searchRecursive,
+      skipGitFolders: searchSkipGitFolders,
+      skipGitIgnored: searchSkipGitIgnored,
+      resultsSortBy: searchResultsSortBy,
+      resultsSortDirection: searchResultsSortDirection,
+      resultsVisible: searchResultsVisible,
+      results: searchResultsRef.current,
+      resultsScrollTop: searchResultsScrollTop,
+      status: searchStatus,
+      error: searchError,
+      startedLive: searchStartedLive,
+      truncated: searchTruncated,
+      elapsedMs: searchElapsedMs,
+      startedAt: searchStartedAtRef.current,
+      jobId: searchJobIdRef.current,
+      cursor: searchCursorRef.current,
+      keptResultPaths: keptResultPathsRef.current,
+      interrupted: searchInterruptedRef.current,
+      searchedHidden: searchedHiddenRef.current,
+      browseSelection: browseSelectionRef.current,
+      cachedSearchSelection: cachedSearchSelectionRef.current,
+    };
+    // Answers still on their way belong to the search that was just taken out.
+    searchSessionRef.current += 1;
+    searchJobIdRef.current = null;
+    return session;
+  }
+
+  // Puts a tab's search on screen. Resolves to whether the search has to run again: it was
+  // cut off before it got going, or hidden files were switched since it ran.
+  function attachSearchSession(session: TabSearchSession): boolean {
+    cancelLiveSearch();
+    clearSearchPolling();
+    const sessionId = searchSessionRef.current + 1;
+    searchSessionRef.current = sessionId;
+    // A search left before the worker had answered `search:start` was cancelled when that
+    // answer arrived, so there is nothing to pick up.
+    const cutOff = session.status === "running" && session.jobId === null;
+    setSearchDraftQuery(session.draftQuery);
+    searchDraftQueryRef.current = session.draftQuery;
+    setSearchCommittedQuery(session.committedQuery);
+    searchCommittedQueryRef.current = session.committedQuery;
+    setSearchBaseQuery(session.baseQuery);
+    searchBaseQueryRef.current = session.baseQuery;
+    setSearchRootPath(session.rootPath);
+    searchOriginPathRef.current = session.originPath;
+    setSearchPatternMode(session.patternMode);
+    setSearchMatchScope(session.matchScope);
+    setSearchRecursive(session.recursive);
+    setSearchSkipGitFolders(session.skipGitFolders);
+    setSearchSkipGitIgnored(session.skipGitIgnored);
+    setSearchResultsSortBy(session.resultsSortBy);
+    searchResultsSortByRef.current = session.resultsSortBy;
+    setSearchResultsSortDirection(session.resultsSortDirection);
+    searchResultsSortDirectionRef.current = session.resultsSortDirection;
+    setSearchPopoverOpen(false);
+    setSearchResultsVisible(session.resultsVisible);
+    searchResultsVisibleRef.current = session.resultsVisible;
+    setSearchResults(session.results);
+    searchResultsRef.current = session.results;
+    setSearchResultsScrollTop(session.resultsScrollTop);
+    setSearchStatus(cutOff ? "cancelled" : session.status);
+    setSearchError(session.error);
+    setSearchStartedLive(session.startedLive);
+    setSearchTruncated(session.truncated);
+    setSearchElapsedMs(session.elapsedMs);
+    searchStartedAtRef.current = session.startedAt;
+    keptResultPathsRef.current = session.keptResultPaths;
+    searchInterruptedRef.current = session.interrupted || cutOff;
+    searchedHiddenRef.current = session.searchedHidden;
+    browseSelectionRef.current = session.browseSelection;
+    cachedSearchSelectionRef.current = session.cachedSearchSelection;
+    searchJobIdRef.current = session.jobId;
+    searchCursorRef.current = session.cursor;
+    if (session.jobId !== null) {
+      pollSearch(session.jobId, session.cursor, sessionId);
+    }
+    const hasQuery = session.committedQuery.trim().length > 0;
+    return (
+      hasQuery &&
+      session.resultsVisible &&
+      (cutOff || session.interrupted || session.searchedHidden !== includeHidden)
+    );
+  }
+
+  // A search with nothing in it and the options of the search on screen: what a new tab
+  // starts with.
+  function createEmptySearchSession(): TabSearchSession {
+    return {
+      draftQuery: "",
+      committedQuery: "",
+      baseQuery: "",
+      rootPath: "",
+      originPath: "",
+      patternMode: searchPatternMode,
+      matchScope: searchMatchScope,
+      recursive: searchRecursive,
+      skipGitFolders: searchSkipGitFolders,
+      skipGitIgnored: searchSkipGitIgnored,
+      resultsSortBy: searchResultsSortBy,
+      resultsSortDirection: searchResultsSortDirection,
+      resultsVisible: false,
+      results: [],
+      resultsScrollTop: 0,
+      status: "idle",
+      error: null,
+      startedLive: false,
+      truncated: false,
+      elapsedMs: null,
+      startedAt: null,
+      jobId: null,
+      cursor: 0,
+      keptResultPaths: new Set(),
+      interrupted: false,
+      searchedHidden: includeHidden,
+      browseSelection: EMPTY_CONTENT_SELECTION,
+      cachedSearchSelection: EMPTY_CONTENT_SELECTION,
+    };
+  }
+
   return {
+    detachSearchSession,
+    attachSearchSession,
+    createEmptySearchSession,
     rerunSearch,
     changeSearchRoot,
     sortSearchResultsByColumn,

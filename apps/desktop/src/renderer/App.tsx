@@ -18,6 +18,7 @@ import { AppDialogs } from "./components/AppDialogs";
 import { ExplorerWorkspace } from "./components/ExplorerWorkspace";
 import { HelpView } from "./components/HelpView";
 import { InfoRow } from "./components/InfoRow";
+import { TabStrip } from "./components/TabStrip";
 import { ToolbarIcon } from "./components/ToolbarIcon";
 import { applyPreferencesPatch, useAppPreferences } from "./hooks/useAppPreferences";
 import { useElementSize } from "./hooks/useElementSize";
@@ -28,6 +29,7 @@ import { useExplorerNavigationController } from "./hooks/useExplorerNavigationCo
 import { useExplorerPaneLayout } from "./hooks/useExplorerPaneLayout";
 import { useExplorerSearchController } from "./hooks/useExplorerSearchController";
 import { useExplorerShortcuts } from "./hooks/useExplorerShortcuts";
+import { useExplorerTabs } from "./hooks/useExplorerTabs";
 import { useFolderSizeCache } from "./hooks/useFolderSizeCache";
 import { usePreferencesSync } from "./hooks/usePreferencesSync";
 import { useSearchSession } from "./hooks/useSearchSession";
@@ -52,6 +54,7 @@ import {
   toDirectoryEntryFromSearchResult,
 } from "./lib/explorerAppUtils";
 import { parentDirectoryPath } from "./lib/explorerNavigation";
+import { getFolderDisplayName } from "./lib/explorerTabs";
 import type { DirectoryEntry, DirectoryEntryMetadata } from "./lib/explorerTypes";
 import {
   createFavoriteItemId,
@@ -371,6 +374,9 @@ export function App() {
   });
   const selectionActions = useSelectionActions({ navigation, services });
   const {
+    detachSearchSession,
+    attachSearchSession,
+    createEmptySearchSession,
     rerunSearch,
     changeSearchRoot,
     sortSearchResultsByColumn,
@@ -600,6 +606,9 @@ export function App() {
     clearTreeSelection,
     initializeTree,
     navigateTo,
+    navigateToNearestExistingFolder,
+    reloadFolderInPlace,
+    restoreListFilter,
     navigateTreeFileSystemPath,
     loadTreeChildren,
     toggleTreeNode,
@@ -736,6 +745,38 @@ export function App() {
     renameDialogState !== null ||
     newFolderDialogState !== null ||
     moveDialogState !== null;
+  const {
+    tabItems,
+    tabCount,
+    activateTab,
+    activateAdjacentTab,
+    openNewTab,
+    openPathInNewTab,
+    closeTab,
+  } = useExplorerTabs({
+    services,
+    navigation,
+    preferences,
+    search,
+    writeOperations,
+    selection: selectionActions,
+    searchSession: {
+      detach: detachSearchSession,
+      attach: attachSearchSession,
+      createEmpty: createEmptySearchSession,
+      rerun: rerunSearch,
+    },
+    navActions: {
+      navigateToNearestExistingFolder,
+      reloadFolderInPlace,
+      loadTreeChildren: (path) => loadTreeChildren(path),
+      restoreListFilter,
+    },
+    derived: {
+      isSearchMode,
+      blocked: copyPasteModalOpen || locationDialogOpen || actionNotice !== null,
+    },
+  });
   const dragDropBlocked =
     mainView !== "explorer" ||
     actionNotice !== null ||
@@ -879,6 +920,9 @@ export function App() {
       extendContentSelectionToPath,
       setSingleContentSelection,
       selectAllContentEntries,
+      openNewTab,
+      closeTab,
+      activateAdjacentTab,
     },
   });
 
@@ -1892,6 +1936,16 @@ export function App() {
             onPaneResizeKey={handlePaneResizeKey}
             showSidebarRail={showSidebarRail}
             showSidebarBottomRail={showSidebarBottomRail}
+            tabStrip={
+              tabCount > 1 ? (
+                <TabStrip
+                  tabs={tabItems}
+                  onSelectTab={activateTab}
+                  onCloseTab={closeTab}
+                  onNewTab={openNewTab}
+                />
+              ) : null
+            }
             toolbarTitle={
               isSearchMode
                 ? `Searching “${getFolderDisplayName(searchRootPath)}”`
@@ -2004,13 +2058,6 @@ function buildSearchScopeOptions(
     }
   }
   return options;
-}
-
-function getFolderDisplayName(path: string): string {
-  if (path === "/") {
-    return "Macintosh HD";
-  }
-  return path.length > 0 ? getPathLeafName(path) : "";
 }
 
 async function requestPathSuggestions(args: {

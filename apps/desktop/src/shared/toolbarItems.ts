@@ -393,7 +393,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     kind: "button",
     surfaces: ["top", "left"],
     commandType: "openInTerminal",
-    shortcutLabel: "Cmd+T",
+    shortcutLabel: "Cmd+Option+T",
   },
   {
     id: "copyPath",

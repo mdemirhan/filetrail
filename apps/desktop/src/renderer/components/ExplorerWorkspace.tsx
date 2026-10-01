@@ -172,6 +172,7 @@ export function ExplorerWorkspace({
   showSidebarBottomRail = true,
   toolbarTitle = "",
   toolbarSubtitle = "",
+  tabStrip = null,
 }: {
   preferencesReady: boolean;
   restoredPaneWidths: { treeWidth: number; inspectorWidth: number } | null;
@@ -195,6 +196,8 @@ export function ExplorerWorkspace({
   navigateToParentFolder: () => void;
   navigateDownAction: () => void;
   refreshDirectory: () => Promise<void>;
+  /** The row of tabs, while there is more than one. */
+  tabStrip?: React.ReactNode;
   viewMode: ExplorerViewMode;
   onViewModeChange: (value: ExplorerViewMode) => void;
   sortBy: SortBy;
@@ -961,7 +964,11 @@ export function ExplorerWorkspace({
   }
 
   const toolbar = (
-    <header ref={toolbarRef} className="window-toolbar" style={{ gridColumn: "3 / -1" }}>
+    <header
+      ref={toolbarRef}
+      className="window-toolbar"
+      style={{ gridColumn: "3 / -1", gridRow: "1" }}
+    >
       {leadingTopToolbarItems.length > 0 ? (
         <div className="toolbar-leading">
           {leadingTopToolbarItems.map((itemId, index) =>
@@ -1007,7 +1014,8 @@ export function ExplorerWorkspace({
             gridTemplateColumns: `${treeWidth}px ${EXPLORER_LAYOUT.resizerWidth}px minmax(0, 1fr)${
               infoPanelOpen ? ` ${EXPLORER_LAYOUT.resizerWidth}px ${inspectorWidth}px` : ""
             }`,
-            gridTemplateRows: "auto minmax(0, 1fr)",
+            // Toolbar, tab strip (no height while there is a single view), panes.
+            gridTemplateRows: "auto auto minmax(0, 1fr)",
           }}
         >
           <div className="workspace-sidebar-cell" style={{ gridColumn: "1", gridRow: "1 / -1" }}>
@@ -1028,14 +1036,15 @@ export function ExplorerWorkspace({
             onKeyDown={(event) => onPaneResizeKey("tree", event)}
           />
           {toolbar}
-          <div className="workspace-main-cell" style={{ gridColumn: "3", gridRow: "2" }}>
+          {tabStrip}
+          <div className="workspace-main-cell" style={{ gridColumn: "3", gridRow: "3" }}>
             <SearchWorkspace {...searchWorkspaceProps} />
           </div>
           {infoPanelOpen ? (
             <>
               <div
                 className="pane-resizer"
-                style={{ gridColumn: "4", gridRow: "2" }}
+                style={{ gridColumn: "4", gridRow: "3" }}
                 onPointerDown={beginResize("inspector")}
                 role="separator"
                 tabIndex={0}
@@ -1043,7 +1052,7 @@ export function ExplorerWorkspace({
                 aria-label="Resize Info Panel pane"
                 onKeyDown={(event) => onPaneResizeKey("inspector", event)}
               />
-              <div className="workspace-inspector-cell" style={{ gridColumn: "5", gridRow: "2" }}>
+              <div className="workspace-inspector-cell" style={{ gridColumn: "5", gridRow: "3" }}>
                 <InfoPanel {...infoPanelProps} />
               </div>
             </>

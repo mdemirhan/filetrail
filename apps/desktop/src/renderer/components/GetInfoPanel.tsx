@@ -436,7 +436,7 @@ function GetInfoPanelContent({
               <InfoPanelGlyph name={copied === "name" ? "check" : "name"} />
             </GetInfoActionButton>
           ) : null}
-          <GetInfoActionButton label="Terminal" shortcut="⌘T" onClick={onOpenInTerminal}>
+          <GetInfoActionButton label="Terminal" shortcut="⌥⌘T" onClick={onOpenInTerminal}>
             <InfoPanelGlyph name="terminal" />
           </GetInfoActionButton>
           <GetInfoActionButton label="Show in Finder" onClick={onShowInFinder}>

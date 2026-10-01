@@ -221,7 +221,7 @@ describe("ItemContextMenu", () => {
 
     expect(screen.getByRole("button", { name: "Open⌘O" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Show Info⌘I" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open in Terminal⌘T" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open in Terminal⌥⌘T" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy Path⌥⌘C" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Copy⌘C" })).toBeNull();
@@ -257,7 +257,7 @@ describe("ItemContextMenu", () => {
     expect(screen.queryByRole("button", { name: /^Open⌘O$/ })).toBeNull();
     expect(screen.getByRole("button", { name: "Paste" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Paste⌘V" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Open in Terminal⌘T" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open in Terminal⌥⌘T" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy Path⌥⌘C" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Copy$/ })).toBeNull();
   });
@@ -349,7 +349,7 @@ describe("ItemContextMenu", () => {
     const copyPathButton = screen.getByRole("button", { name: "Copy Path⌥⌘C" });
     const newFolderButton = screen.getByRole("button", { name: "New Folder" });
     const favoriteButton = screen.getByRole("button", { name: "Remove from Favorites" });
-    const terminalButton = screen.getByRole("button", { name: "Open in Terminal⌘T" });
+    const terminalButton = screen.getByRole("button", { name: "Open in Terminal⌥⌘T" });
 
     expect(pasteButton.nextElementSibling).toBe(copyPathButton);
     const separatorAfterCopyPath = copyPathButton.nextElementSibling;
@@ -402,7 +402,7 @@ describe("ItemContextMenu", () => {
     );
 
     expect(screen.getByRole("button", { name: "Show Info⌘I" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open in Terminal⌘T" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open in Terminal⌥⌘T" })).toBeInTheDocument();
     expect(container.querySelectorAll(".context-menu-separator")).toHaveLength(3);
   });
 

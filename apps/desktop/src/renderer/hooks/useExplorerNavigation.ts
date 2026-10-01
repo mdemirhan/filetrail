@@ -69,6 +69,8 @@ export function useExplorerNavigation() {
   const lastExplorerFocusPaneRef = useRef<"tree" | "content" | null>(null);
   const leftPaneSubviewRef = useRef<"favorites" | "tree">(leftPaneSubview);
   const lastLeftPaneSubviewRef = useRef<"favorites" | "tree">("tree");
+  // The tab on screen. Everything else in this store is that tab's state.
+  const activeTabIdRef = useRef("");
 
   return {
     mainView,
@@ -151,5 +153,6 @@ export function useExplorerNavigation() {
     lastExplorerFocusPaneRef,
     leftPaneSubviewRef,
     lastLeftPaneSubviewRef,
+    activeTabIdRef,
   };
 }

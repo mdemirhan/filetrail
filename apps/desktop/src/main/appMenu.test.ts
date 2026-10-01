@@ -258,6 +258,49 @@ describe("createApplicationMenuTemplate", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  it("wires the tab commands, with ⌘T for New Tab and ⌘W for Close Tab", () => {
+    const send = vi.fn();
+    const template = createApplicationMenuTemplate({ send } as never);
+    const items = template.flatMap((menu) => (Array.isArray(menu.submenu) ? menu.submenu : []));
+    const expected = [
+      ["New Tab", "CommandOrControl+T", "newTab"],
+      ["Close Tab", "CommandOrControl+W", "closeTab"],
+      ["Show Next Tab", "Ctrl+Tab", "selectNextTab"],
+      ["Show Previous Tab", "Ctrl+Shift+Tab", "selectPreviousTab"],
+    ] as const;
+
+    for (const [label, accelerator, type] of expected) {
+      const item = items.find((candidate) => "label" in candidate && candidate.label === label);
+      if (!item || !("click" in item) || typeof item.click !== "function") {
+        throw new Error(`${label} menu item missing.`);
+      }
+      expect(item.accelerator).toBe(accelerator);
+      item.click(undefined as never, undefined as never, undefined as never);
+      expect(send).toHaveBeenCalledWith("filetrail:command", { type });
+    }
+    const terminalItem = items.find(
+      (candidate) => "label" in candidate && candidate.label === "Open in Terminal",
+    );
+    expect(terminalItem?.accelerator).toBe("Alt+CommandOrControl+T");
+  });
+
+  it("closes another focused window with ⌘W instead of a tab of the explorer", () => {
+    const send = vi.fn();
+    const template = createApplicationMenuTemplate({ send } as never);
+    const fileMenu = template.find((item) => item.label === "File");
+    const submenu = Array.isArray(fileMenu?.submenu) ? fileMenu.submenu : [];
+    const closeTabItem = submenu.find((item) => "label" in item && item.label === "Close Tab");
+    if (!closeTabItem || !("click" in closeTabItem) || typeof closeTabItem.click !== "function") {
+      throw new Error("Close Tab menu item missing.");
+    }
+    const settingsWindow = { webContents: { send: vi.fn() }, close: vi.fn() };
+
+    closeTabItem.click(undefined as never, settingsWindow as never, undefined as never);
+
+    expect(settingsWindow.close).toHaveBeenCalledTimes(1);
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it("opens the Settings window directly when the host provides it", () => {
     const send = vi.fn();
     const onOpenSettings = vi.fn();

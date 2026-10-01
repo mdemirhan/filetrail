@@ -23,12 +23,18 @@ export function createApplicationMenuTemplate(
   const sendCommand = (type: RendererCommandType, focusedWindow?: unknown) => {
     // The menu is shared by every window. When another window (Settings) is focused, edit
     // commands act on its focused text field natively and explorer commands do not apply.
-    const focusedContents = (focusedWindow as { webContents?: NativeEditTarget } | undefined)
-      ?.webContents;
+    const focused = focusedWindow as
+      | { webContents?: NativeEditTarget; close?: () => void }
+      | undefined;
+    const focusedContents = focused?.webContents;
     if (focusedContents && (focusedContents as unknown) !== webContents) {
       const nativeEdit = NATIVE_EDIT_COMMANDS[type];
       if (nativeEdit) {
         focusedContents[nativeEdit]();
+      }
+      // Only the explorer has tabs; ⌘W in any other window closes that window.
+      if (type === "closeTab") {
+        focused?.close?.();
       }
       return;
     }
@@ -43,6 +49,12 @@ export function createApplicationMenuTemplate(
     {
       label: "File",
       submenu: [
+        {
+          label: "New Tab",
+          accelerator: "CommandOrControl+T",
+          click: (_item, window) => sendCommand("newTab", window),
+        },
+        { type: "separator" },
         {
           label: "Open",
           accelerator: "CommandOrControl+O",
@@ -82,11 +94,17 @@ export function createApplicationMenuTemplate(
         { type: "separator" },
         {
           label: "Open in Terminal",
-          accelerator: "CommandOrControl+T",
+          accelerator: "Alt+CommandOrControl+T",
           click: (_item, window) => sendCommand("openInTerminal", window),
         },
         { type: "separator" },
-        { role: "close" },
+        {
+          // Closes the window when it has a single view.
+          label: "Close Tab",
+          accelerator: "CommandOrControl+W",
+          click: (_item, window) => sendCommand("closeTab", window),
+        },
+        { role: "close", label: "Close Window", accelerator: "Shift+CommandOrControl+W" },
       ],
     },
     {
@@ -196,7 +214,23 @@ export function createApplicationMenuTemplate(
     },
     {
       label: "Window",
-      submenu: [{ role: "minimize" }, { role: "zoom" }, { role: "front" }],
+      submenu: [
+        { role: "minimize" },
+        { role: "zoom" },
+        { type: "separator" },
+        {
+          label: "Show Previous Tab",
+          accelerator: "Ctrl+Shift+Tab",
+          click: (_item, window) => sendCommand("selectPreviousTab", window),
+        },
+        {
+          label: "Show Next Tab",
+          accelerator: "Ctrl+Tab",
+          click: (_item, window) => sendCommand("selectNextTab", window),
+        },
+        { type: "separator" },
+        { role: "front" },
+      ],
     },
   ];
 }

@@ -26,6 +26,10 @@ export const RENDERER_COMMAND_TYPES = [
   "toggleInfoRow",
   "goHomeRootTree",
   "rootTreeAtSelection",
+  "newTab",
+  "closeTab",
+  "selectNextTab",
+  "selectPreviousTab",
 ] as const;
 
 export type RendererCommandType = (typeof RENDERER_COMMAND_TYPES)[number];

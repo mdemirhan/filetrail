@@ -4273,6 +4273,135 @@ body.platform-macos .settings-view[data-layout="compact"] {
   flex: 0 0 auto;
 }
 
+/* ── Tabs: a row under the toolbar, shown while there is more than one ── */
+
+.tab-strip {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  height: 30px;
+  background: color-mix(in srgb, var(--bg-base) 94%, var(--neutral-ink));
+  border-bottom: 1px solid var(--border);
+  -webkit-app-region: no-drag;
+}
+
+.tab-strip-tabs {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tab-strip-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab-strip-tab {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 96px;
+  padding: 0 28px;
+  border-right: 1px solid var(--border);
+  color: var(--text-tertiary);
+  font-size: 12px;
+  cursor: default;
+  user-select: none;
+}
+
+.tab-strip-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.tab-strip-tab.active {
+  /* One pixel taller than the row, so the tab runs into the list below it. */
+  margin-bottom: -1px;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.tab-strip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-strip-search {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+}
+
+.tab-strip-search .toolbar-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.tab-strip-search.searching {
+  color: var(--ft-accent-solid);
+}
+
+.tab-strip-close {
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-tertiary);
+  opacity: 0;
+  transform: translateY(-50%);
+}
+
+.tab-strip-close .toolbar-icon {
+  width: 10px;
+  height: 10px;
+  stroke-width: 2.4;
+}
+
+.tab-strip-tab:hover .tab-strip-close {
+  opacity: 1;
+}
+
+.tab-strip-close:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.tab-strip-new {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-tertiary);
+}
+
+.tab-strip-new .toolbar-icon {
+  width: 13px;
+  height: 13px;
+}
+
+.tab-strip-new:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
 /* Tooltips drawn by the app for icon-only buttons (see lib/titleTooltips.ts). */
 .app-tooltip {
   position: fixed;

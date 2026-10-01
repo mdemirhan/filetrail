@@ -53,6 +53,19 @@ export const SHORTCUT_ITEMS: readonly ShortcutItem[] = [
     shortcut: "Cmd+Shift+R",
     description: "Root the folder tree at the selected folder",
   },
+  { group: "navigation", shortcut: "Cmd+T", description: "New tab, on the same folder" },
+  {
+    group: "navigation",
+    shortcut: "Cmd+W",
+    description: "Close the tab (the window, when it has a single view)",
+  },
+  { group: "navigation", shortcut: "Ctrl+Tab", description: "Next tab (Cmd+Shift+] also works)" },
+  {
+    group: "navigation",
+    shortcut: "Ctrl+Shift+Tab",
+    description: "Previous tab (Cmd+Shift+[ also works)",
+  },
+  { group: "navigation", shortcut: "Cmd+Shift+W", description: "Close the window" },
   { group: "navigation", shortcut: "Cmd+1", description: "Focus the folder tree" },
   { group: "navigation", shortcut: "Cmd+2", description: "Focus the file list" },
   {
@@ -77,7 +90,7 @@ export const SHORTCUT_ITEMS: readonly ShortcutItem[] = [
   { group: "files", shortcut: "Cmd+Backspace", description: "Move to Trash" },
   { group: "files", shortcut: "Cmd+A", description: "Select all" },
   { group: "files", shortcut: "Cmd+Option+C", description: "Copy the path" },
-  { group: "files", shortcut: "Cmd+T", description: "Open in Terminal" },
+  { group: "files", shortcut: "Cmd+Option+T", description: "Open in Terminal" },
 
   { group: "search", shortcut: "Cmd+F", description: "Find files" },
   { group: "search", shortcut: "Cmd+Shift+F", description: "Show the last results again" },

@@ -32,6 +32,7 @@ import {
   pathHasHiddenSegmentWithinRoot,
 } from "../lib/explorerNavigation";
 import { type ExplorerPane, resolveExplorerPaneRestoreTarget } from "../lib/explorerPaneFocus";
+import { getPathAndAncestors } from "../lib/explorerTabs";
 import type { DirectoryEntry, DirectoryEntryMetadata } from "../lib/explorerTypes";
 import {
   type TreeItemId,
@@ -540,11 +541,33 @@ export function useExplorerNavigationController(args: {
     listFilterQueryRef.current = listFilterQuery;
   }, [listFilterQuery]);
 
-  // A filter belongs to the list it was typed into.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: clears when the folder or the kind of list changes, not when the filter itself does.
+  // A filter belongs to the list it was typed into: it is dropped when the folder or the
+  // kind of list changes. `listFilterOwnerRef` names the list the filter on screen was
+  // typed into, so a tab that is shown again can bring its filter back with its list.
+  const listFilterOwner = getListFilterOwner(currentPath, isSearchMode, searchCommittedQuery);
+  const listFilterOwnerRef = useRef(listFilterOwner);
   useEffect(() => {
+    if (listFilterOwnerRef.current === listFilterOwner) {
+      return;
+    }
+    listFilterOwnerRef.current = listFilterOwner;
     clearListFilter();
-  }, [currentPath, isSearchMode, searchCommittedQuery, clearListFilter]);
+  }, [listFilterOwner, clearListFilter]);
+
+  // Puts back the filter a tab had when it was left, along with the list it belongs to.
+  function restoreListFilter(
+    query: string,
+    list: { currentPath: string; isSearchMode: boolean; searchCommittedQuery: string },
+  ) {
+    listFilterOwnerRef.current = getListFilterOwner(
+      list.currentPath,
+      list.isSearchMode,
+      list.searchCommittedQuery,
+    );
+    listFilterQueryRef.current = query;
+    lastListFilterInputAtRef.current = 0;
+    setListFilterQuery(query);
+  }
 
   // Something outside the filter was selected (a new folder, a pasted or renamed item, a
   // reveal): show the whole list again so the selection is on screen.
@@ -797,6 +820,7 @@ export function useExplorerNavigationController(args: {
     path: string,
     entries: DirectoryEntry[],
     cachedMetadata: Record<string, DirectoryEntryMetadata>,
+    options: { keepSelection?: boolean; keepSearchResults?: boolean } = {},
   ) {
     metadataCacheRef.current = new Map(Object.entries(cachedMetadata));
     metadataInflightRef.current.clear();
@@ -804,7 +828,11 @@ export function useExplorerNavigationController(args: {
     setCurrentEntries(entries);
     setVisiblePaths([]);
     setMetadataByPath(cachedMetadata);
-    if (searchResultsVisibleRef.current && !keepSearchResultsOnReloadRef.current) {
+    if (
+      searchResultsVisibleRef.current &&
+      !keepSearchResultsOnReloadRef.current &&
+      !options.keepSearchResults
+    ) {
       // Opening a folder leaves the search; the field is cleared with it so it never shows
       // a query for results that are no longer on screen.
       setSearchResultsVisible(false);
@@ -822,20 +850,24 @@ export function useExplorerNavigationController(args: {
           .filter((entry) => pendingPasteSelection.selectedPaths.includes(entry.path))
           .map((entry) => entry.path)
       : [];
-    applyContentSelection(
-      selectedPastePaths.length > 0
-        ? {
-            paths: selectedPastePaths,
-            anchorPath: selectedPastePaths[0] ?? null,
-            leadPath: selectedPastePaths.at(-1) ?? null,
-          }
-        : {
-            paths: [],
-            anchorPath: null,
-            leadPath: null,
-          },
-      entries,
-    );
+    // A folder read again in place keeps its selection; whatever of it is gone from the
+    // new listing is dropped when the list updates.
+    if (selectedPastePaths.length > 0 || !options.keepSelection) {
+      applyContentSelection(
+        selectedPastePaths.length > 0
+          ? {
+              paths: selectedPastePaths,
+              anchorPath: selectedPastePaths[0] ?? null,
+              leadPath: selectedPastePaths.at(-1) ?? null,
+            }
+          : {
+              paths: [],
+              anchorPath: null,
+              leadPath: null,
+            },
+        entries,
+      );
+    }
     // Reloading a folder (a new sort, a change on disk, a paste) keeps what the info views
     // show and asks for it again, instead of blanking them until the selection changes.
     setInfoRefreshKey((key) => key + 1);
@@ -855,6 +887,10 @@ export function useExplorerNavigationController(args: {
       persistOnError?: boolean;
       forceTreeReload?: boolean;
       rerootTree?: boolean;
+      /** The folder is read again where it stands: the selection is kept. */
+      keepSelection?: boolean;
+      /** Search results on screen stay there; only the folder underneath is read again. */
+      keepSearchResults?: boolean;
     } = {},
   ): Promise<boolean> {
     const requestId = ++directoryRequestRef.current;
@@ -879,7 +915,7 @@ export function useExplorerNavigationController(args: {
           return cached ? [[entry.path, cached] as const] : [];
         }),
       );
-      applyDirectorySnapshot(response.path, response.entries, cachedMetadata);
+      applyDirectorySnapshot(response.path, response.entries, cachedMetadata, options);
       if (options.rerootTree) {
         initializeTree(response.path);
       }
@@ -912,7 +948,7 @@ export function useExplorerNavigationController(args: {
       setDirectoryError(message);
       setLocationError(message);
       if (options.persistOnError) {
-        applyDirectorySnapshot(path, [], {});
+        applyDirectorySnapshot(path, [], {}, options);
         if (options.treeSelectionMode === "favorite") {
           setTreeSelection(createFavoriteItemId(options.favoritePath ?? path));
           if (favoritesPlacement === "separate") {
@@ -1005,7 +1041,10 @@ export function useExplorerNavigationController(args: {
       return;
     }
 
-    const requestId = (treeRequestRef.current[path] ?? 0) + 1;
+    // Numbered across the whole tree, not per folder: forgetting the requests under way
+    // (a new root, another tab) can then never make an old answer look like a new one.
+    nextTreeRequestId += 1;
+    const requestId = nextTreeRequestId;
     treeRequestRef.current[path] = requestId;
 
     updateTreeNodes((current) => ({
@@ -1551,6 +1590,57 @@ export function useExplorerNavigationController(args: {
     }
   }
 
+  // Opens `path`, or the nearest folder above it that still exists. Resolves to whether a
+  // folder was opened; a newer navigation that takes over ends the attempt.
+  async function navigateToNearestExistingFolder(
+    path: string,
+    historyMode: "push" | "replace" | "skip",
+    options: Parameters<typeof navigateTo>[6] = {},
+  ): Promise<boolean> {
+    for (const candidatePath of getPathAndAncestors(path)) {
+      const requestId = directoryRequestRef.current + 1;
+      const didOpen = await navigateTo(
+        candidatePath,
+        candidatePath === path ? historyMode : "replace",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        candidatePath === path ? options : {},
+      );
+      if (didOpen) {
+        return true;
+      }
+      if (directoryRequestRef.current !== requestId) {
+        return false;
+      }
+    }
+    return false;
+  }
+
+  // Reads the folder on screen again where it stands: its selection, its search results
+  // and its place in the history are kept. A tab does this when it comes back on screen,
+  // since its folder may have changed while another tab was in front. If the folder is
+  // gone, the nearest folder above it that still exists is opened instead.
+  async function reloadFolderInPlace(options: { refreshExpandedTree?: boolean } = {}) {
+    const targetPath = currentPathRef.current;
+    if (!targetPath) {
+      return;
+    }
+    const didOpen = await navigateToNearestExistingFolder(targetPath, "skip", {
+      ...getSelectedTreeReloadOptions(targetPath),
+      persistOnError: false,
+      forceTreeReload: true,
+      keepSelection: true,
+      keepSearchResults: true,
+    });
+    if (didOpen && options.refreshExpandedTree) {
+      await refreshVisibleTreePath(treeRootPathRef.current, currentPathRef.current, {
+        recursive: true,
+      });
+    }
+  }
+
   function handleSortChange(nextSortBy: SortBy) {
     const nextSortDirection: SortDirection =
       nextSortBy === sortBy
@@ -1907,6 +1997,9 @@ export function useExplorerNavigationController(args: {
     initializeTree,
     reinitializeTree,
     navigateTo,
+    navigateToNearestExistingFolder,
+    reloadFolderInPlace,
+    restoreListFilter,
     navigateTreeFileSystemPath,
     loadTreeChildren,
     toggleTreeNode,
@@ -1921,6 +2014,17 @@ export function useExplorerNavigationController(args: {
 }
 
 type ItemProperties = IpcResponse<"item:getProperties">["item"];
+
+let nextTreeRequestId = 0;
+
+// Names the list a typed filter belongs to: a folder, or one search.
+function getListFilterOwner(
+  currentPath: string,
+  isSearchMode: boolean,
+  searchCommittedQuery: string,
+): string {
+  return `${currentPath}\n${isSearchMode ? "search" : "folder"}\n${searchCommittedQuery}`;
+}
 
 // The sidebar's type-to-select forgets what was typed after this long without a key.
 const TREE_TYPEAHEAD_RESET_MS = 1000;

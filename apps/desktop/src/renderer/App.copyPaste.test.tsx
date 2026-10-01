@@ -3294,7 +3294,7 @@ describe("App copy/paste integration", () => {
         fireEvent.contextMenu(targetButton);
       });
 
-      expect(screen.getByRole("button", { name: "Open in Terminal⌘T" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Open in Terminal⌥⌘T" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Copy Path⌥⌘C" })).toBeInTheDocument();
 
       unmount();
@@ -3336,7 +3336,7 @@ describe("App copy/paste integration", () => {
         fireEvent.click(disabledButton);
       });
 
-      expect(screen.getByRole("button", { name: "Open in Terminal⌘T" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Open in Terminal⌥⌘T" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Copy Path⌥⌘C" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Show Info⌘I" })).toBeInTheDocument();
       if (targetTitle.startsWith("tree:")) {
@@ -4392,7 +4392,7 @@ describe("App copy/paste integration", () => {
     });
   });
 
-  it("allows Cmd+T in tree focus for the selected tree folder", async () => {
+  it("allows Cmd+Option+T in tree focus for the selected tree folder", async () => {
     const harness = createAppHarness();
 
     render(
@@ -4403,7 +4403,7 @@ describe("App copy/paste integration", () => {
 
     await focusTreePane();
     await act(async () => {
-      fireEvent.keyDown(window, { key: "t", metaKey: true });
+      fireEvent.keyDown(window, { code: "KeyT", metaKey: true, altKey: true });
     });
 
     expect(
@@ -4411,7 +4411,7 @@ describe("App copy/paste integration", () => {
     ).toEqual({ path: "/Users/demo" });
   });
 
-  it("allows Cmd+T and Cmd+Option+C for favorites in the separate favorites pane", async () => {
+  it("allows Cmd+Option+T and Cmd+Option+C for favorites in the separate favorites pane", async () => {
     const harness = createAppHarness({
       preferences: {
         favoritesPlacement: "separate",
@@ -4443,7 +4443,7 @@ describe("App copy/paste integration", () => {
     });
 
     await act(async () => {
-      fireEvent.keyDown(window, { key: "t", metaKey: true });
+      fireEvent.keyDown(window, { code: "KeyT", metaKey: true, altKey: true });
       fireEvent.keyDown(window, { code: "KeyC", metaKey: true, altKey: true });
     });
 
@@ -9087,6 +9087,183 @@ function createNodeFingerprint(kind: "missing" | "file" | "directory" | "symlink
     symlinkTarget: null,
   };
 }
+
+describe("App tabs", () => {
+  const tabLabels = () => screen.queryAllByRole("tab").map((tab) => tab.textContent);
+  const activeTabLabel = () =>
+    screen.queryAllByRole("tab").find((tab) => tab.getAttribute("aria-selected") === "true")
+      ?.textContent;
+
+  async function renderApp(harness: ReturnType<typeof createAppHarness>) {
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+    await screen.findByRole("button", { name: "source.txt" });
+  }
+
+  async function pressKey(init: KeyboardEventInit) {
+    await act(async () => {
+      fireEvent.keyDown(window, init);
+    });
+  }
+
+  it("shows no tab strip with a single view, and one once a second tab opens", async () => {
+    const harness = createAppHarness();
+    await renderApp(harness);
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+
+    await pressKey({ key: "t", metaKey: true });
+
+    expect(tabLabels()).toEqual(["demo", "demo"]);
+    expect(screen.getAllByRole("tab")[1]).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo");
+
+    await pressKey({ key: "w", metaKey: true });
+
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo");
+  });
+
+  it("closes the window with Cmd+W when a single view is left", async () => {
+    const harness = createAppHarness();
+    const closeWindow = vi.spyOn(window, "close").mockImplementation(() => undefined);
+    await renderApp(harness);
+
+    await pressKey({ key: "w", metaKey: true });
+
+    expect(closeWindow).toHaveBeenCalledTimes(1);
+    closeWindow.mockRestore();
+  });
+
+  it("gives each tab its own folder, selection and history", async () => {
+    const harness = createAppHarness();
+    await renderApp(harness);
+    await selectItem("/Users/demo/source.txt");
+
+    await pressKey({ key: "t", metaKey: true });
+    // The new tab starts on the same folder with nothing selected and nowhere to go back to.
+    expect(screen.getByTitle("/Users/demo/source.txt")).toHaveAttribute("data-selected", "false");
+    await openDirectory("/Users/demo/Folder");
+    expect(tabLabels()).toEqual(["demo", "Folder"]);
+
+    await pressKey({ key: "Tab", ctrlKey: true });
+
+    expect(activeTabLabel()).toBe("demo");
+    expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo");
+    expect(await screen.findByTitle("/Users/demo/source.txt")).toHaveAttribute(
+      "data-selected",
+      "true",
+    );
+
+    await pressKey({ key: "Tab", ctrlKey: true, shiftKey: true });
+
+    expect(activeTabLabel()).toBe("Folder");
+    expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/Folder");
+    // Back leads to the folder the tab was opened on.
+    await pressKey({ key: "[", metaKey: true });
+    await waitFor(() =>
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent(/^\/Users\/demo$/),
+    );
+    expect(tabLabels()).toEqual(["demo", "demo"]);
+  });
+
+  it("reads a tab's folder again when the tab comes back on screen", async () => {
+    const harness = createAppHarness();
+    await renderApp(harness);
+    await pressKey({ key: "t", metaKey: true });
+    await openDirectory("/Users/demo/Folder");
+
+    // Something else changes the first tab's folder while it is in the background.
+    harness.setDirectoryEntries("/Users/demo", [
+      createDirectoryEntry("/Users/demo/source.txt", "file"),
+      createDirectoryEntry("/Users/demo/arrived.txt", "file"),
+      createDirectoryEntry("/Users/demo/Folder", "directory"),
+    ]);
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole("tab")[0] as HTMLElement);
+    });
+
+    expect(await screen.findByTitle("/Users/demo/arrived.txt")).toBeInTheDocument();
+  });
+
+  it("pastes into one tab what was copied in another", async () => {
+    const harness = createAppHarness();
+    await renderApp(harness);
+    await selectItem("/Users/demo/source.txt");
+    await pressKey({ key: "c", metaKey: true });
+
+    await pressKey({ key: "t", metaKey: true });
+    await openDirectory("/Users/demo/Folder");
+    await clearContentSelection();
+    await pressKey({ key: "v", metaKey: true });
+
+    await waitFor(() =>
+      expect(
+        harness.invocations.find((call) => call.channel === "copyPaste:analyzeStart")?.payload,
+      ).toMatchObject({
+        mode: "copy",
+        sourcePaths: ["/Users/demo/source.txt"],
+        destinationDirectoryPath: "/Users/demo/Folder",
+      }),
+    );
+  });
+
+  it("keeps a tab's search while another tab is in front", async () => {
+    const harness = createAppHarness();
+    await renderApp(harness);
+    await openSearchResults();
+    await waitFor(() => expect(screen.getByTestId("search-results-pane")).toBeInTheDocument());
+
+    await pressKey({ key: "t", metaKey: true });
+
+    // The new tab shows the folder, with an empty search field.
+    expect(screen.queryByTestId("search-results-pane")).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Search")).toHaveValue("");
+    expect(tabLabels()).toEqual(["“source” in demo", "demo"]);
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole("tab")[0] as HTMLElement);
+    });
+
+    expect(await screen.findByTestId("search-results-pane")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Search")).toHaveValue("source");
+    expect(harness.invocations.filter((call) => call.channel === "search:cancel")).toHaveLength(0);
+  });
+
+  it("closes a background tab from its close button and keeps the tab on screen", async () => {
+    const harness = createAppHarness();
+    await renderApp(harness);
+    await pressKey({ key: "t", metaKey: true });
+    await openDirectory("/Users/demo/Folder");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Close demo" }));
+    });
+
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/Folder");
+  });
+
+  it("leaves the tab on screen alone while a dialog is open", async () => {
+    const harness = createAppHarness();
+    await renderApp(harness);
+    await pressKey({ key: "t", metaKey: true });
+    await act(async () => {
+      harness.emitCommand({ type: "openLocationSheet" });
+    });
+
+    await act(async () => {
+      harness.emitCommand({ type: "selectNextTab" });
+      harness.emitCommand({ type: "newTab" });
+      harness.emitCommand({ type: "closeTab" });
+    });
+
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
+    expect(screen.getAllByRole("tab")[1]).toHaveAttribute("aria-selected", "true");
+  });
+});
 
 describe("App test harness", () => {
   it("routes write and copy-paste progress to their matching listeners only", () => {

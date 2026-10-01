@@ -47,7 +47,7 @@ const CONTEXT_MENU_SHORTCUT_LABELS = {
   rename: "↩",
   duplicate: "⌘D",
   newFolder: "⇧⌘N",
-  terminal: "⌘T",
+  terminal: "⌥⌘T",
   copyPath: "⌥⌘C",
   rootTreeHere: "⇧⌘R",
   trash: "⌘⌫",
@@ -81,6 +81,10 @@ export const RENDERER_COMMAND_TREE_FOCUS_BUCKETS = {
   toggleInfoRow: "globalExplorer",
   goHomeRootTree: "globalExplorer",
   rootTreeAtSelection: "globalExplorer",
+  newTab: "globalExplorer",
+  closeTab: "globalExplorer",
+  selectNextTab: "globalExplorer",
+  selectPreviousTab: "globalExplorer",
 } as const satisfies Record<RendererCommandType, TreeFocusShortcutBucket>;
 
 export const RAW_EXPLORER_SHORTCUT_IDS = [
@@ -113,6 +117,10 @@ export const RAW_EXPLORER_SHORTCUT_IDS = [
   "toggleInfoPanel",
   "goHomeRootTree",
   "rootTreeAtSelection",
+  "newTab",
+  "closeTab",
+  "selectNextTab",
+  "selectPreviousTab",
   "pagedScrollBackward",
   "pagedScrollForward",
   "listFilterEdit",
@@ -156,6 +164,10 @@ export const RAW_EXPLORER_SHORTCUT_TREE_FOCUS_BUCKETS = {
   toggleInfoPanel: "globalExplorer",
   goHomeRootTree: "globalExplorer",
   rootTreeAtSelection: "globalExplorer",
+  newTab: "globalExplorer",
+  closeTab: "globalExplorer",
+  selectNextTab: "globalExplorer",
+  selectPreviousTab: "globalExplorer",
   pagedScrollBackward: "treeNavigation",
   pagedScrollForward: "treeNavigation",
   listFilterEdit: "contentOnly",
@@ -188,6 +200,11 @@ export function canHandleRendererCommand(
 
   if (context.actionNoticeOpen || context.locationSheetOpen || context.copyPasteModalOpen) {
     return false;
+  }
+
+  // ⌘W closes the tab, or the window, from the Help page as well.
+  if (command === "closeTab") {
+    return true;
   }
 
   // Like Finder, Paste goes into the folder on screen even when no pane has focus (for

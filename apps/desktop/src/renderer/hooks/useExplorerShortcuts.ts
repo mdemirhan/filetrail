@@ -103,6 +103,9 @@ type ExplorerShortcutActions = {
   extendContentSelectionToPath: (path: string, additive?: boolean) => void;
   setSingleContentSelection: (path: string) => void;
   selectAllContentEntries: () => void;
+  openNewTab: () => void;
+  closeTab: () => void;
+  activateAdjacentTab: (direction: "next" | "previous") => void;
 };
 
 type UseExplorerShortcutsArgs = {
@@ -226,6 +229,10 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         matches: (keyboardEvent) => {
           const current = latestArgsRef.current;
           if (!current.tabSwitchesExplorerPanes || keyboardEvent.key !== "Tab") {
+            return false;
+          }
+          // ⌃Tab moves between tabs.
+          if (keyboardEvent.ctrlKey || keyboardEvent.metaKey || keyboardEvent.altKey) {
             return false;
           }
           const target = keyboardEvent.target;
@@ -566,13 +573,77 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         },
       },
       {
-        id: "openInTerminal",
+        id: "newTab",
         matches: (keyboardEvent) =>
           keyboardEvent.metaKey &&
           !keyboardEvent.ctrlKey &&
           !keyboardEvent.shiftKey &&
           !keyboardEvent.altKey &&
           keyboardEvent.key.toLowerCase() === "t",
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          latestArgsRef.current.openNewTab();
+        },
+      },
+      {
+        id: "closeTab",
+        matches: (keyboardEvent) =>
+          keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.shiftKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key.toLowerCase() === "w",
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          latestArgsRef.current.closeTab();
+        },
+      },
+      {
+        // ⌃Tab and ⇧⌘] go to the next tab, as in Finder and Safari.
+        id: "selectNextTab",
+        matches: (keyboardEvent) =>
+          (keyboardEvent.ctrlKey &&
+            !keyboardEvent.metaKey &&
+            !keyboardEvent.shiftKey &&
+            !keyboardEvent.altKey &&
+            keyboardEvent.key === "Tab") ||
+          (keyboardEvent.metaKey &&
+            keyboardEvent.shiftKey &&
+            !keyboardEvent.ctrlKey &&
+            !keyboardEvent.altKey &&
+            keyboardEvent.code === "BracketRight"),
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          latestArgsRef.current.activateAdjacentTab("next");
+        },
+      },
+      {
+        id: "selectPreviousTab",
+        matches: (keyboardEvent) =>
+          (keyboardEvent.ctrlKey &&
+            !keyboardEvent.metaKey &&
+            keyboardEvent.shiftKey &&
+            !keyboardEvent.altKey &&
+            keyboardEvent.key === "Tab") ||
+          (keyboardEvent.metaKey &&
+            keyboardEvent.shiftKey &&
+            !keyboardEvent.ctrlKey &&
+            !keyboardEvent.altKey &&
+            keyboardEvent.code === "BracketLeft"),
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          latestArgsRef.current.activateAdjacentTab("previous");
+        },
+      },
+      {
+        // ⌥⌘T; `code` because Option changes the character the key produces.
+        id: "openInTerminal",
+        matches: (keyboardEvent) =>
+          keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.shiftKey &&
+          keyboardEvent.altKey &&
+          keyboardEvent.code === "KeyT",
         run: (keyboardEvent) => {
           const current = latestArgsRef.current;
           const pathsToOpen = resolveOpenInTerminalPaths({
@@ -1153,6 +1224,22 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       }
       if (commandType === "rootTreeAtSelection") {
         current.rootTreeAtSelection();
+        return;
+      }
+      if (commandType === "newTab") {
+        current.openNewTab();
+        return;
+      }
+      if (commandType === "closeTab") {
+        current.closeTab();
+        return;
+      }
+      if (commandType === "selectNextTab") {
+        current.activateAdjacentTab("next");
+        return;
+      }
+      if (commandType === "selectPreviousTab") {
+        current.activateAdjacentTab("previous");
         return;
       }
       if (commandType !== "focusFileSearch") {
