@@ -6,33 +6,32 @@ import {
 } from "./themeVariants";
 
 describe("themeVariants", () => {
-  it("returns variant definitions for custom themes and null for base themes", () => {
-    expect(getThemeVariant("obsidian")).toMatchObject({
+  it("returns variant definitions for variant palettes and null for stylesheet palettes", () => {
+    expect(getThemeVariant("macos-dark")).toMatchObject({
       cssBase: "dark",
-      textDefaults: {
-        primary: "#f0f0f2",
-      },
+      surfaces: { page: "#1e1e20" },
     });
-    expect(getThemeVariant("dark")).toBeNull();
+    expect(getThemeVariant("sand")).toMatchObject({ cssBase: "light" });
+    expect(getThemeVariant("tomorrow-night")).toBeNull();
+    expect(getThemeVariant("catppuccin-mocha")).toBeNull();
   });
 
-  it("resolves css bases for both custom variants and built-in base themes", () => {
-    expect(resolveThemeCssBase("obsidian")).toBe("dark");
-    expect(resolveThemeCssBase("clean-white")).toBe("light");
+  it("resolves css bases for both variants and stylesheet palettes", () => {
+    expect(resolveThemeCssBase("macos-dark")).toBe("dark");
+    expect(resolveThemeCssBase("macos-light")).toBe("light");
+    expect(resolveThemeCssBase("warm-paper")).toBe("light");
     expect(resolveThemeCssBase("tomorrow-night")).toBe("tomorrow-night");
+    expect(resolveThemeCssBase("catppuccin-mocha")).toBe("catppuccin-mocha");
   });
 
-  it("builds css overrides for theme variants and exposes the shared override key list", () => {
-    const overrides = getThemeVariantCssOverrides("clean-white");
+  it("builds css overrides for variants and exposes the shared override key list", () => {
+    const overrides = getThemeVariantCssOverrides("warm-paper");
 
-    expect(overrides).toMatchObject({
-      "--bg-base": "#f3f3f3",
-      "--toolbar-bg": "#f7f7f7",
-      "--search-border": "#d0d0d0",
-      "--context-menu-bg-blur": "rgba(248, 248, 248, 0.88)",
-      "--scroll-thumb": "rgba(102, 102, 102, 0.22)",
-    });
-    expect(getThemeVariantCssOverrides("dark")).toEqual({});
+    expect(overrides).toMatchObject({ "--bg-base": "#f0ede7" });
+    expect(Object.keys(overrides)).toEqual(
+      expect.arrayContaining(["--toolbar-bg", "--search-border"]),
+    );
+    expect(getThemeVariantCssOverrides("tomorrow-night")).toEqual({});
     expect(THEME_VARIANT_OVERRIDE_KEYS).toContain("--bg-base");
     expect(THEME_VARIANT_OVERRIDE_KEYS).toContain("--context-menu-bg-blur");
     expect(new Set(THEME_VARIANT_OVERRIDE_KEYS).size).toBe(THEME_VARIANT_OVERRIDE_KEYS.length);

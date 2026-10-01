@@ -88,7 +88,7 @@ describe("ActionLogView", () => {
         entries={ENTRIES}
         loading={false}
         error={null}
-        theme="dark"
+        theme="macos-dark"
         accent="#daa520"
         onCopyEntryText={() => undefined}
         onRefresh={() => undefined}
@@ -105,7 +105,7 @@ describe("ActionLogView", () => {
         entries={ENTRIES}
         loading={false}
         error={null}
-        theme="dark"
+        theme="macos-dark"
         accent="#daa520"
         onCopyEntryText={() => undefined}
         onRefresh={() => undefined}
@@ -139,7 +139,7 @@ describe("ActionLogView", () => {
         entries={ENTRIES}
         loading={false}
         error={null}
-        theme="light"
+        theme="macos-light"
         accent="#daa520"
         onCopyEntryText={() => undefined}
         onRefresh={() => undefined}
@@ -166,7 +166,7 @@ describe("ActionLogView", () => {
         entries={[]}
         loading={false}
         error={null}
-        theme="light"
+        theme="macos-light"
         accent="#daa520"
         onCopyEntryText={() => undefined}
         onRefresh={() => undefined}
@@ -180,7 +180,7 @@ describe("ActionLogView", () => {
         entries={ENTRIES}
         loading={false}
         error={null}
-        theme="light"
+        theme="macos-light"
         accent="#daa520"
         onCopyEntryText={() => undefined}
         onRefresh={() => undefined}
@@ -198,7 +198,7 @@ describe("ActionLogView", () => {
         entries={ENTRIES}
         loading={false}
         error={null}
-        theme="dark"
+        theme="macos-dark"
         accent="#daa520"
         onCopyEntryText={() => undefined}
         onRefresh={() => undefined}
@@ -226,7 +226,7 @@ describe("ActionLogView", () => {
         entries={ENTRIES}
         loading={false}
         error={null}
-        theme="dark"
+        theme="macos-dark"
         accent="#daa520"
         onCopyEntryText={() => undefined}
         onRefresh={() => undefined}
@@ -251,7 +251,7 @@ describe("ActionLogView", () => {
         entries={ENTRIES}
         loading={false}
         error={null}
-        theme="dark"
+        theme="macos-dark"
         accent="#daa520"
         onCopyEntryText={handleCopy}
         onRefresh={() => undefined}
@@ -337,7 +337,7 @@ describe("ActionLogView", () => {
         entries={entries}
         loading={false}
         error={null}
-        theme="dark"
+        theme="macos-dark"
         accent="#daa520"
         onCopyEntryText={() => undefined}
         onRefresh={() => undefined}
@@ -430,7 +430,7 @@ describe("ActionLogView", () => {
         entries={entries}
         loading={false}
         error={null}
-        theme="light"
+        theme="macos-light"
         accent="#daa520"
         onCopyEntryText={onCopyEntryText}
         onRefresh={() => undefined}

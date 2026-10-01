@@ -37,7 +37,7 @@ describe("appPreferences helpers", () => {
 
   it("resolves known labels and falls back to the raw stored value", () => {
     expect(getThemeLabel("tomorrow-night")).toBe("Tomorrow Night");
-    expect(getThemeLabel("midnight")).toBe("Midnight");
+    expect(getThemeLabel("warm-paper")).toBe("Warm Paper");
     expect(getAccentLabel("#a78bfa")).toBe("Lavender");
     expect(getAccentLabel("#3dbf7a")).toBe("Emerald");
     expect(getUiFontLabel("jetbrains-mono")).toBe("JetBrains Mono");
@@ -53,10 +53,6 @@ describe("appPreferences helpers", () => {
       autoLightTheme: "macos-light",
       autoDarkTheme: "macos-dark",
       accent: "#d4845a",
-      accentToolbarButtons: false,
-      toolbarAccent: "#d4845a",
-      accentFavoriteItems: true,
-      favoriteAccent: "#58b9e8",
       zoomPercent: 100,
       uiFontFamily: "system",
       viewMode: "list",
@@ -124,9 +120,11 @@ describe("appPreferences helpers", () => {
   });
 
   it("resolves auto to the light or dark palette from the macOS appearance", () => {
-    expect(resolveEffectiveTheme("auto", false, "sand", "obsidian")).toBe("sand");
-    expect(resolveEffectiveTheme("auto", true, "sand", "obsidian")).toBe("obsidian");
-    expect(resolveEffectiveTheme("graphite", false, "sand", "obsidian")).toBe("graphite");
+    expect(resolveEffectiveTheme("auto", false, "sand", "tomorrow-night")).toBe("sand");
+    expect(resolveEffectiveTheme("auto", true, "sand", "tomorrow-night")).toBe("tomorrow-night");
+    expect(resolveEffectiveTheme("catppuccin-mocha", false, "sand", "tomorrow-night")).toBe(
+      "catppuccin-mocha",
+    );
     expect(getThemeLabel("auto")).toBe("Auto (follow macOS)");
   });
 });

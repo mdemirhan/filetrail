@@ -533,17 +533,29 @@ describe("TreePane", () => {
   it("renders theme options when the rail menu is open", () => {
     renderTreePane({
       showRail: true,
-      theme: "dark",
+      theme: "macos-dark",
       themeMenuOpen: true,
       favorites: [],
     });
 
-    const darkThemeButton = screen.getByRole("button", { name: /^Dark/ });
-    expect(darkThemeButton.closest(".sidebar-rail-menu-portal")?.parentElement).toBe(document.body);
-    expect(screen.getByRole("button", { name: /^macOS Dark/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Tomorrow Night/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Catppuccin Mocha/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Light/ })).toBeInTheDocument();
+    const darkThemeButton = screen.getByRole("button", { name: /^macOS Dark/ });
+    const menu = darkThemeButton.closest(".sidebar-rail-menu-portal");
+    expect(menu?.parentElement).toBe(document.body);
+    // Auto, then the three light palettes, then the three dark ones.
+    expect(
+      Array.from(menu?.querySelectorAll("button") ?? []).map((button) =>
+        button.textContent?.replace("✓", ""),
+      ),
+    ).toEqual([
+      "Auto (follow macOS)",
+      "macOS Light",
+      "Warm Paper",
+      "Sand",
+      "macOS Dark",
+      "Catppuccin Mocha",
+      "Tomorrow Night",
+    ]);
+    expect(darkThemeButton).toHaveAttribute("aria-pressed", "true");
   });
 
   it("uses the rail theme button as a menu trigger", () => {

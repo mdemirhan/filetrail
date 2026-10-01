@@ -8,7 +8,7 @@ describe("appStateStore", () => {
   it("persists through a temp file so a failed write keeps the previous state", () => {
     const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
     const filePath = resolveAppStatePath(userDataPath);
-    const store = createAppStateStore(filePath, { defaultTheme: "dark" });
+    const store = createAppStateStore(filePath, { defaultTheme: "macos-dark" });
     store.updatePreferences({ favoritesExpanded: false });
     store.flush();
     const persisted = readFileSync(filePath, "utf8");
@@ -17,7 +17,7 @@ describe("appStateStore", () => {
 
     const onPersistError = vi.fn();
     const failingStore = createAppStateStore(filePath, {
-      defaultTheme: "dark",
+      defaultTheme: "macos-dark",
       onPersistError,
       fs: {
         existsSync,
@@ -53,16 +53,8 @@ describe("appStateStore", () => {
       returnKeyAction: "rename",
       iconTheme: "native",
       accent: "#d4845a",
-      accentToolbarButtons: false,
-      toolbarAccent: "#d4845a",
-      accentFavoriteItems: true,
-      accentFavoriteText: false,
-      favoriteAccent: "#58b9e8",
       zoomPercent: 100,
       uiFontFamily: "system",
-      textPrimaryOverride: null,
-      textSecondaryOverride: null,
-      textMutedOverride: null,
       viewMode: "list",
       sortBy: "name",
       sortDirection: "asc",
@@ -168,23 +160,15 @@ describe("appStateStore", () => {
   it("persists preferences and window state in one file", () => {
     const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
     const store = createAppStateStore(resolveAppStatePath(userDataPath), {
-      defaultTheme: "dark",
+      defaultTheme: "macos-dark",
     });
 
     store.updatePreferences({
-      theme: "dark",
+      theme: "macos-dark",
       iconTheme: "colorblock",
       accent: "#2cb5a0",
-      accentToolbarButtons: false,
-      toolbarAccent: "#daa520",
-      accentFavoriteItems: true,
-      accentFavoriteText: true,
-      favoriteAccent: "#e8806a",
       zoomPercent: 115,
       uiFontFamily: "lexend",
-      textPrimaryOverride: "#ffffff",
-      textSecondaryOverride: "#cccccc",
-      textMutedOverride: "#999999",
       viewMode: "details",
       sortBy: "modified",
       sortDirection: "desc",
@@ -273,10 +257,10 @@ describe("appStateStore", () => {
     store.flush();
 
     const reloaded = createAppStateStore(resolveAppStatePath(userDataPath), {
-      defaultTheme: "dark",
+      defaultTheme: "macos-dark",
     });
     expect(reloaded.getPreferences()).toEqual({
-      theme: "dark",
+      theme: "macos-dark",
       autoLightTheme: "macos-light",
       autoDarkTheme: "macos-dark",
       showSidebarRail: false,
@@ -284,16 +268,8 @@ describe("appStateStore", () => {
       returnKeyAction: "rename",
       iconTheme: "colorblock",
       accent: "#2cb5a0",
-      accentToolbarButtons: false,
-      toolbarAccent: "#daa520",
-      accentFavoriteItems: true,
-      accentFavoriteText: true,
-      favoriteAccent: "#e8806a",
       zoomPercent: 115,
       uiFontFamily: "lexend",
-      textPrimaryOverride: "#ffffff",
-      textSecondaryOverride: "#cccccc",
-      textMutedOverride: "#999999",
       viewMode: "details",
       sortBy: "modified",
       sortDirection: "desc",
@@ -387,7 +363,11 @@ describe("appStateStore", () => {
     writeFileSync(
       filePath,
       JSON.stringify({
-        preferences: { theme: "auto", autoLightTheme: "obsidian", autoDarkTheme: "midnight" },
+        preferences: {
+          theme: "auto",
+          autoLightTheme: "tomorrow-night",
+          autoDarkTheme: "catppuccin-mocha",
+        },
       }),
       "utf8",
     );
@@ -396,7 +376,39 @@ describe("appStateStore", () => {
 
     expect(preferences.theme).toBe("auto");
     expect(preferences.autoLightTheme).toBe("macos-light");
-    expect(preferences.autoDarkTheme).toBe("midnight");
+    expect(preferences.autoDarkTheme).toBe("catppuccin-mocha");
+  });
+
+  it("moves removed palettes to the closest remaining one", () => {
+    const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
+    const filePath = resolveAppStatePath(userDataPath);
+    const load = (preferences: Record<string, string>) => {
+      writeFileSync(filePath, JSON.stringify({ preferences }), "utf8");
+      const loaded = createAppStateStore(filePath, { defaultTheme: "auto" }).getPreferences();
+      return [loaded.theme, loaded.autoLightTheme, loaded.autoDarkTheme];
+    };
+
+    expect(load({ theme: "light", autoLightTheme: "clean-white", autoDarkTheme: "dark" })).toEqual([
+      "macos-light",
+      "macos-light",
+      "macos-dark",
+    ]);
+    expect(load({ theme: "midnight", autoLightTheme: "stone", autoDarkTheme: "graphite" })).toEqual(
+      ["catppuccin-mocha", "macos-light", "tomorrow-night"],
+    );
+    expect(load({ theme: "obsidian", autoLightTheme: "sand", autoDarkTheme: "onyx" })).toEqual([
+      "macos-dark",
+      "sand",
+      "macos-dark",
+    ]);
+    // A removed dark palette saved for the light side is not a light palette: the default wins.
+    expect(load({ theme: "auto", autoLightTheme: "obsidian", autoDarkTheme: "onyx" })).toEqual([
+      "auto",
+      "macos-light",
+      "macos-dark",
+    ]);
+    // Unknown names fall back to the default theme.
+    expect(load({ theme: "no-such-theme" })[0]).toBe("auto");
   });
 
   it("upgrades untouched legacy detail columns to the new defaults but keeps customized ones", () => {
@@ -506,15 +518,10 @@ describe("appStateStore", () => {
     const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
     const filePath = resolveAppStatePath(userDataPath);
     const store = createAppStateStore(filePath, {
-      defaultTheme: "dark",
+      defaultTheme: "macos-dark",
     });
     store.updatePreferences({
       accent: "bad-accent" as never,
-      accentToolbarButtons: "nope" as never,
-      toolbarAccent: "bad-accent" as never,
-      accentFavoriteItems: "nope" as never,
-      accentFavoriteText: "nope" as never,
-      favoriteAccent: "bad-accent" as never,
       zoomPercent: 999,
       sortBy: "oops" as never,
       sortDirection: "sideways" as never,
@@ -526,7 +533,6 @@ describe("appStateStore", () => {
       uiFontFamily: "bad-font" as never,
       // Settings that no longer exist are dropped when loading.
       ...({ uiFontSize: 15, uiFontWeight: 600, favoritesPaneHeight: 224 } as object),
-      textPrimaryOverride: "oops" as never,
       typeaheadDebounceMs: 9999,
       terminalApp: {
         appPath: "   ",
@@ -568,14 +574,9 @@ describe("appStateStore", () => {
     store.flush();
 
     const reloaded = createAppStateStore(filePath, {
-      defaultTheme: "dark",
+      defaultTheme: "macos-dark",
     });
     expect(reloaded.getPreferences().accent).toBe("#d4845a");
-    expect(reloaded.getPreferences().accentToolbarButtons).toBe(false);
-    expect(reloaded.getPreferences().toolbarAccent).toBe("#d4845a");
-    expect(reloaded.getPreferences().accentFavoriteItems).toBe(true);
-    expect(reloaded.getPreferences().accentFavoriteText).toBe(false);
-    expect(reloaded.getPreferences().favoriteAccent).toBe("#58b9e8");
     expect(reloaded.getPreferences().zoomPercent).toBe(150);
     expect(reloaded.getPreferences().sortBy).toBe("name");
     expect(reloaded.getPreferences().sortDirection).toBe("asc");
@@ -591,7 +592,6 @@ describe("appStateStore", () => {
     expect(reloaded.getPreferences()).not.toHaveProperty("uiFontSize");
     expect(reloaded.getPreferences()).not.toHaveProperty("uiFontWeight");
     expect(reloaded.getPreferences()).not.toHaveProperty("favoritesPaneHeight");
-    expect(reloaded.getPreferences().textPrimaryOverride).toBeNull();
     expect(reloaded.getPreferences().typeaheadDebounceMs).toBe(1500);
     expect(reloaded.getPreferences().terminalApp).toBeNull();
     expect(reloaded.getPreferences().defaultTextEditor).toEqual({
@@ -642,7 +642,7 @@ describe("appStateStore", () => {
     const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
     const filePath = resolveAppStatePath(userDataPath);
     const store = createAppStateStore(filePath, {
-      defaultTheme: "dark",
+      defaultTheme: "macos-dark",
     });
 
     store.updatePreferences({
@@ -653,7 +653,7 @@ describe("appStateStore", () => {
 
     const fileContents = `{
   "preferences": {
-    "theme": "dark",
+    "theme": "macos-dark",
     "favoritePaths": ["/Users/demo/Documents", "/Applications", "/Users/demo/Documents"],
     "favoritesExpanded": false,
     "favoritesInitialized": true
@@ -662,7 +662,7 @@ describe("appStateStore", () => {
     writeFileSync(filePath, fileContents, "utf8");
 
     const reloaded = createAppStateStore(filePath, {
-      defaultTheme: "dark",
+      defaultTheme: "macos-dark",
     });
 
     // State this old also predates Macintosh HD as a default favorite.
@@ -678,7 +678,7 @@ describe("appStateStore", () => {
     const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
     const filePath = resolveAppStatePath(userDataPath);
     const store = createAppStateStore(filePath, {
-      defaultTheme: "dark",
+      defaultTheme: "macos-dark",
     });
 
     store.updatePreferences({
@@ -687,7 +687,7 @@ describe("appStateStore", () => {
     store.flush();
 
     const reloaded = createAppStateStore(filePath, {
-      defaultTheme: "dark",
+      defaultTheme: "macos-dark",
     });
 
     expect(reloaded.getPreferences().openWithApplications).toEqual([]);

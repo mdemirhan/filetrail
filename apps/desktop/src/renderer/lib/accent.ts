@@ -240,32 +240,6 @@ export function accentTokensToCssVariables(tokens: AccentTokens): Record<string,
   };
 }
 
-// "Accent toolbar buttons" colors only what is on or pressed (the current view, an open panel,
-// the chosen sort, primary buttons); icons at rest stay neutral like the rest of the toolbar.
-export function getToolbarAccentVariables(tokens: AccentTokens): Record<string, string> {
-  return {
-    "--tb-primary-bg": tokens.pillBg,
-    "--tb-primary-fg": tokens.pillText,
-    "--tb-primary-hover-bg": tokens.hoverBg,
-    "--toolbar-toggle-active-bg": tokens.activeStrongBg,
-    "--toolbar-toggle-icon-active": tokens.pathCrumbHover,
-    "--sidebar-rail-active-bg": tokens.activeStrongBg,
-    "--sidebar-rail-icon-active": tokens.pathCrumbHover,
-    "--sidebar-rail-menu-active-bg": tokens.hoverBg,
-    "--sidebar-rail-menu-active-fg": tokens.pathCrumbHover,
-    "--sidebar-rail-menu-check": tokens.pathCrumbHover,
-  };
-}
-
-export function getFavoriteAccentVariables(tokens: AccentTokens): Record<string, string> {
-  return {
-    "--favorite-accent-solid": tokens.solid,
-    "--favorite-accent-text": tokens.pathCrumbHover,
-    "--favorite-accent-selection-bg": tokens.selectionBg,
-    "--favorite-accent-on-selection": tokens.onSelection,
-  };
-}
-
 // WCAG relative luminance of an sRGB hex color (0 for black, 1 for white).
 export function relativeLuminance(value: string): number {
   const rgb = hexToRgb(value);

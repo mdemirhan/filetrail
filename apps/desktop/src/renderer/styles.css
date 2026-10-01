@@ -3273,20 +3273,10 @@ body.resizing-panels * {
   color: var(--icon-indigo);
 }
 
-:root[data-accent-favorite-items="true"]
-  .tree-row[data-tree-kind="favorite"]
-  .file-icon.favorite
-  .file-icon-favorite,
-:root[data-accent-favorite-items="true"]
-  .tree-row[data-tree-kind="favorites-root"]
-  .file-icon.favorite
-  .file-icon-favorite {
-  color: var(--favorite-accent-solid);
-}
-
-:root[data-accent-favorite-text="true"] .tree-row[data-tree-kind="favorite"] .tree-label,
-:root[data-accent-favorite-text="true"] .tree-row[data-tree-kind="favorites-root"] .tree-label {
-  color: var(--favorite-accent-text);
+/* Favorite icons take the accent color, as in Finder's sidebar. */
+.tree-row[data-tree-kind="favorite"] .file-icon.favorite .file-icon-favorite,
+.tree-row[data-tree-kind="favorites-root"] .file-icon.favorite .file-icon-favorite {
+  color: var(--ft-accent-solid);
 }
 
 /* ── Monoline icon theme: stroke-only folders ── */
@@ -6098,20 +6088,6 @@ body.settings-window-body {
 .sidebar-main-native .tree-row.active:not(.inactive) .tree-expand,
 .sidebar-main-native .tree-row.active:not(.inactive) .file-icon-favorite {
   color: var(--ft-accent-on-selection);
-}
-
-/* With "Accent favorite items" on, a selected favorite takes the favorite accent. */
-:root[data-accent-favorite-items="true"]
-  .sidebar-main-native
-  .tree-row[data-tree-kind="favorite"].active:not(.inactive) {
-  background: var(--favorite-accent-selection-bg);
-}
-
-:root[data-accent-favorite-items="true"]
-  .sidebar-main-native
-  .tree-row[data-tree-kind="favorite"].active:not(.inactive)
-  :is(.tree-label, .tree-expand, .file-icon-favorite) {
-  color: var(--favorite-accent-on-selection);
 }
 
 .sidebar-main-native .tree-label-badge {

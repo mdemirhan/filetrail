@@ -15,6 +15,7 @@ import {
   type DetailColumnWidths,
   clampOpenItemLimit,
   clampZoomPercent,
+  themeChoicePatch,
 } from "../shared/appPreferences";
 import { DEFAULT_TOP_TOOLBAR_ITEMS } from "../shared/toolbarItems";
 import { ActionLogView } from "./components/ActionLogView";
@@ -123,26 +124,10 @@ export function App() {
     setIconTheme,
     accent,
     setAccent,
-    accentToolbarButtons,
-    setAccentToolbarButtons,
-    toolbarAccent,
-    setToolbarAccent,
-    accentFavoriteItems,
-    setAccentFavoriteItems,
-    accentFavoriteText,
-    setAccentFavoriteText,
-    favoriteAccent,
-    setFavoriteAccent,
     zoomPercent,
     setZoomPercent,
     uiFontFamily,
     setUiFontFamily,
-    textPrimaryOverride,
-    setTextPrimaryOverride,
-    textSecondaryOverride,
-    setTextSecondaryOverride,
-    textMutedOverride,
-    setTextMutedOverride,
     includeHidden,
     setIncludeHidden,
     viewMode,
@@ -896,16 +881,8 @@ export function App() {
     autoDarkTheme,
     iconTheme,
     accent,
-    accentToolbarButtons,
-    toolbarAccent,
-    accentFavoriteItems,
-    accentFavoriteText,
-    favoriteAccent,
     zoomPercent,
     uiFontFamily,
-    textPrimaryOverride,
-    textSecondaryOverride,
-    textMutedOverride,
     viewMode,
     sortBy,
     sortDirection,
@@ -1066,16 +1043,8 @@ export function App() {
         setAutoDarkTheme(preferences.autoDarkTheme);
         setIconTheme(preferences.iconTheme);
         setAccent(preferences.accent);
-        setAccentToolbarButtons(preferences.accentToolbarButtons);
-        setToolbarAccent(preferences.toolbarAccent);
-        setAccentFavoriteItems(preferences.accentFavoriteItems);
-        setAccentFavoriteText(preferences.accentFavoriteText);
-        setFavoriteAccent(preferences.favoriteAccent);
         setZoomPercent(preferences.zoomPercent);
         setUiFontFamily(preferences.uiFontFamily);
-        setTextPrimaryOverride(preferences.textPrimaryOverride);
-        setTextSecondaryOverride(preferences.textSecondaryOverride);
-        setTextMutedOverride(preferences.textMutedOverride);
         setIncludeHidden(preferences.includeHidden);
         setSearchPatternMode(preferences.searchPatternMode);
         setSearchMatchScope(preferences.searchMatchScope);
@@ -1468,7 +1437,15 @@ export function App() {
               themeMenuRef,
               onToggleThemeMenu: () => setThemeMenuOpen((value) => !value),
               onSelectTheme: (nextTheme) => {
+                // A palette picked here also becomes the palette of its side for Auto.
+                const patch = themeChoicePatch(nextTheme);
                 setTheme(nextTheme);
+                if (patch.autoLightTheme) {
+                  setAutoLightTheme(patch.autoLightTheme);
+                }
+                if (patch.autoDarkTheme) {
+                  setAutoDarkTheme(patch.autoDarkTheme);
+                }
                 setThemeMenuOpen(false);
               },
               actionLogEnabled,

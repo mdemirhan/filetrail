@@ -10,7 +10,13 @@ function renderSettings() {
   const client = {
     invoke: vi.fn(async (channel: string) => {
       if (channel === "app:getPreferences") {
-        return { preferences: DEFAULT_APP_PREFERENCES };
+        return {
+          preferences: {
+            ...DEFAULT_APP_PREFERENCES,
+            // One favorite, so the Explorer tab has an icon picker (a pop-up) to open.
+            favorites: [{ path: "/Users/demo", icon: "home" }],
+          },
+        };
       }
       if (channel === "app:getHomeDirectory") {
         return { path: "/Users/demo" };
@@ -55,7 +61,7 @@ describe("SettingsWindowApp", () => {
   it("lets Escape close an open pop-up before it closes the window", async () => {
     renderSettings();
     await screen.findByText("Type to select");
-    fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
+    fireEvent.click(screen.getByRole("button", { name: "Explorer" }));
 
     const trigger = screen
       .getAllByRole("button")
@@ -65,7 +71,7 @@ describe("SettingsWindowApp", () => {
           !(button as HTMLButtonElement).disabled,
       );
     if (!trigger) {
-      throw new Error("No pop-up trigger found on the Appearance tab.");
+      throw new Error("No pop-up trigger found on the Explorer tab.");
     }
     fireEvent.click(trigger);
     expect(trigger).toHaveAttribute("aria-expanded", "true");

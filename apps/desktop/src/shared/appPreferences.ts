@@ -5,22 +5,16 @@ import {
   type ToolbarItemId,
 } from "./toolbarItems";
 
+// The palettes: three light and three dark.
 export type ThemeMode =
-  | "macos-dark"
   | "macos-light"
-  | "dark"
-  | "tomorrow-night"
-  | "catppuccin-mocha"
-  | "obsidian"
-  | "graphite"
-  | "midnight"
-  | "onyx"
-  | "light"
-  | "clean-white"
   | "warm-paper"
-  | "stone"
-  | "sand";
-// "auto" follows the macOS appearance, using autoLightTheme / autoDarkTheme as palettes.
+  | "sand"
+  | "macos-dark"
+  | "catppuccin-mocha"
+  | "tomorrow-night";
+// "auto" follows the macOS appearance, using autoLightTheme / autoDarkTheme as palettes. An
+// explicit palette pins the app to that palette's light or dark side.
 export type ThemePreference = "auto" | ThemeMode;
 export type AccentMode = string;
 // "native" shows the real macOS icons for files and folders (via NSWorkspace).
@@ -86,21 +80,37 @@ export type {
 // These option lists are used for both UI rendering and validation-like lookups.
 // Keep them stable unless the corresponding persisted preference values are migrated.
 export const THEME_OPTIONS = [
-  { value: "macos-dark", label: "macOS Dark", group: "dark" },
-  { value: "dark", label: "Dark", group: "dark" },
-  { value: "tomorrow-night", label: "Tomorrow Night", group: "dark" },
-  { value: "catppuccin-mocha", label: "Catppuccin Mocha", group: "dark" },
-  { value: "obsidian", label: "Obsidian", group: "dark" },
-  { value: "graphite", label: "Graphite", group: "dark" },
-  { value: "midnight", label: "Midnight", group: "dark" },
-  { value: "onyx", label: "Onyx", group: "dark" },
   { value: "macos-light", label: "macOS Light", group: "light" },
-  { value: "light", label: "Light", group: "light" },
-  { value: "clean-white", label: "Clean White", group: "light" },
   { value: "warm-paper", label: "Warm Paper", group: "light" },
-  { value: "stone", label: "Stone", group: "light" },
   { value: "sand", label: "Sand", group: "light" },
+  { value: "macos-dark", label: "macOS Dark", group: "dark" },
+  { value: "catppuccin-mocha", label: "Catppuccin Mocha", group: "dark" },
+  { value: "tomorrow-night", label: "Tomorrow Night", group: "dark" },
 ] as const;
+
+// Palettes that were removed, with the remaining palette closest to each. Saved state that
+// still names one is moved to its replacement when it loads.
+export const REMOVED_THEME_REPLACEMENTS: Readonly<Record<string, ThemeMode>> = {
+  light: "macos-light",
+  "clean-white": "macos-light",
+  stone: "macos-light",
+  dark: "macos-dark",
+  obsidian: "macos-dark",
+  onyx: "macos-dark",
+  graphite: "tomorrow-night",
+  midnight: "catppuccin-mocha",
+};
+
+// The palette a saved theme name stands for today, or null when the name is unknown.
+export function resolveSavedTheme(value: unknown): ThemeMode | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  if (THEME_OPTIONS.some((option) => option.value === value)) {
+    return value as ThemeMode;
+  }
+  return REMOVED_THEME_REPLACEMENTS[value] ?? null;
+}
 
 export const AUTO_THEME_OPTION = { value: "auto", label: "Auto (follow macOS)" } as const;
 export const LIGHT_THEME_OPTIONS = THEME_OPTIONS.filter((option) => option.group === "light");
@@ -108,16 +118,29 @@ export const DARK_THEME_OPTIONS = THEME_OPTIONS.filter((option) => option.group 
 
 export const THEME_GROUPS = [
   {
-    value: "dark",
-    label: "Dark Themes",
-    options: THEME_OPTIONS.filter((option) => option.group === "dark"),
-  },
-  {
     value: "light",
-    label: "Light Themes",
+    label: "Light",
     options: THEME_OPTIONS.filter((option) => option.group === "light"),
   },
+  {
+    value: "dark",
+    label: "Dark",
+    options: THEME_OPTIONS.filter((option) => option.group === "dark"),
+  },
 ] as const;
+
+// Choosing a palette (or Auto) from a single list: the palette becomes the theme and also
+// the palette of its side, so going back to Auto keeps it.
+export function themeChoicePatch(
+  choice: ThemePreference,
+): Partial<Pick<AppPreferences, "theme" | "autoLightTheme" | "autoDarkTheme">> {
+  if (choice === "auto") {
+    return { theme: "auto" };
+  }
+  return isThemeInGroup(choice, "light")
+    ? { theme: choice, autoLightTheme: choice }
+    : { theme: choice, autoDarkTheme: choice };
+}
 export const ICON_THEME_OPTIONS = [
   { value: "native", label: "macOS" },
   { value: "classic", label: "Classic" },
@@ -297,16 +320,8 @@ export type AppPreferences = {
   autoDarkTheme: ThemeMode;
   iconTheme: IconThemeMode;
   accent: AccentMode;
-  accentToolbarButtons: boolean;
-  toolbarAccent: AccentMode;
-  accentFavoriteItems: boolean;
-  accentFavoriteText: boolean;
-  favoriteAccent: AccentMode;
   zoomPercent: number;
   uiFontFamily: UiFontFamily;
-  textPrimaryOverride: string | null;
-  textSecondaryOverride: string | null;
-  textMutedOverride: string | null;
   viewMode: ExplorerViewMode;
   sortBy: "name" | "modified" | "kind" | "size";
   sortDirection: "asc" | "desc";
@@ -364,16 +379,8 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   autoDarkTheme: "macos-dark",
   iconTheme: "native",
   accent: "#d4845a",
-  accentToolbarButtons: false,
-  toolbarAccent: "#d4845a",
-  accentFavoriteItems: true,
-  accentFavoriteText: false,
-  favoriteAccent: "#58b9e8",
   zoomPercent: 100,
   uiFontFamily: "system",
-  textPrimaryOverride: null,
-  textSecondaryOverride: null,
-  textMutedOverride: null,
   viewMode: "list",
   sortBy: "name",
   sortDirection: "asc",

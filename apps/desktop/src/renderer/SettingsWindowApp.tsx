@@ -18,7 +18,6 @@ import { applyPreferencesPatch, useAppPreferences } from "./hooks/useAppPreferen
 import { type PreferencesPatch, usePreferencesSync } from "./hooks/usePreferencesSync";
 import { createFavorite, getDefaultFavorites, isFavoritePath } from "./lib/favorites";
 import { useFiletrailClient } from "./lib/filetrailClient";
-import { getThemeAppearanceDefaults } from "./lib/theme";
 
 const SETTINGS_TABS: ReadonlyArray<{ id: SettingsTab; label: string; icon: string }> = [
   {
@@ -75,15 +74,7 @@ export function SettingsWindowApp() {
     searchSkipGitIgnored: DEFAULT_APP_PREFERENCES.searchSkipGitIgnored,
     searchResultsFilterScope: DEFAULT_APP_PREFERENCES.searchResultsFilterScope,
   });
-  const {
-    preferencesReady,
-    setPreferencesReady,
-    theme,
-    effectiveTheme,
-    textPrimaryOverride,
-    textSecondaryOverride,
-    textMutedOverride,
-  } = preferences;
+  const { preferencesReady, setPreferencesReady, theme, effectiveTheme } = preferences;
 
   const payload: PreferencesPatch = {
     theme: preferences.theme,
@@ -91,16 +82,8 @@ export function SettingsWindowApp() {
     autoDarkTheme: preferences.autoDarkTheme,
     iconTheme: preferences.iconTheme,
     accent: preferences.accent,
-    accentToolbarButtons: preferences.accentToolbarButtons,
-    toolbarAccent: preferences.toolbarAccent,
-    accentFavoriteItems: preferences.accentFavoriteItems,
-    accentFavoriteText: preferences.accentFavoriteText,
-    favoriteAccent: preferences.favoriteAccent,
     zoomPercent: preferences.zoomPercent,
     uiFontFamily: preferences.uiFontFamily,
-    textPrimaryOverride,
-    textSecondaryOverride,
-    textMutedOverride,
     compactListView: preferences.compactListView,
     compactDetailsView: preferences.compactDetailsView,
     compactTreeView: preferences.compactTreeView,
@@ -183,8 +166,6 @@ export function SettingsWindowApp() {
     document.body.classList.add("settings-window-body");
     return () => document.body.classList.remove("settings-window-body");
   }, []);
-
-  const defaults = getThemeAppearanceDefaults(effectiveTheme);
 
   function applySearchDefaultsPatch(patch: Partial<AppPreferences>) {
     setSearchDefaults((current) => ({
@@ -331,16 +312,8 @@ export function SettingsWindowApp() {
             onAutoDarkThemeChange={preferences.setAutoDarkTheme}
             iconTheme={preferences.iconTheme}
             accent={preferences.accent}
-            accentToolbarButtons={preferences.accentToolbarButtons}
-            toolbarAccent={preferences.toolbarAccent}
-            accentFavoriteItems={preferences.accentFavoriteItems}
-            accentFavoriteText={preferences.accentFavoriteText}
-            favoriteAccent={preferences.favoriteAccent}
             zoomPercent={preferences.zoomPercent}
             uiFontFamily={preferences.uiFontFamily}
-            effectiveTextPrimaryColor={textPrimaryOverride ?? defaults.primary}
-            effectiveTextSecondaryColor={textSecondaryOverride ?? defaults.secondary}
-            effectiveTextMutedColor={textMutedOverride ?? defaults.muted}
             compactListView={preferences.compactListView}
             compactDetailsView={preferences.compactDetailsView}
             compactTreeView={preferences.compactTreeView}
@@ -371,7 +344,6 @@ export function SettingsWindowApp() {
             returnKeyAction={preferences.returnKeyAction}
             onReturnKeyActionChange={preferences.setReturnKeyAction}
             openItemLimit={preferences.openItemLimit}
-            themeOptions={[AUTO_THEME_OPTION, ...THEME_OPTIONS]}
             accentOptions={[...MACOS_ACCENT_OPTIONS]}
             uiFontOptions={[...UI_FONT_OPTIONS]}
             typeaheadDebounceOptions={[...TYPEAHEAD_DEBOUNCE_OPTIONS]}
@@ -379,16 +351,8 @@ export function SettingsWindowApp() {
             onThemeChange={preferences.setTheme}
             onIconThemeChange={preferences.setIconTheme}
             onAccentChange={preferences.setAccent}
-            onAccentToolbarButtonsChange={preferences.setAccentToolbarButtons}
-            onToolbarAccentChange={preferences.setToolbarAccent}
-            onAccentFavoriteItemsChange={preferences.setAccentFavoriteItems}
-            onAccentFavoriteTextChange={preferences.setAccentFavoriteText}
-            onFavoriteAccentChange={preferences.setFavoriteAccent}
             onZoomPercentChange={preferences.setZoomPercent}
             onUiFontFamilyChange={preferences.setUiFontFamily}
-            onTextPrimaryColorChange={preferences.setTextPrimaryOverride}
-            onTextSecondaryColorChange={preferences.setTextSecondaryOverride}
-            onTextMutedColorChange={preferences.setTextMutedOverride}
             onResetAppearance={preferences.resetAppearanceSettings}
             onCompactListViewChange={preferences.setCompactListView}
             onCompactDetailsViewChange={preferences.setCompactDetailsView}

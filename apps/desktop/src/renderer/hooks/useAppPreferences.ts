@@ -42,33 +42,9 @@ export function useAppPreferences() {
   );
   const [iconTheme, setIconTheme] = useState<IconThemeMode>(DEFAULT_APP_PREFERENCES.iconTheme);
   const [accent, setAccent] = useState<AccentMode>(DEFAULT_APP_PREFERENCES.accent);
-  const [accentToolbarButtons, setAccentToolbarButtons] = useState(
-    DEFAULT_APP_PREFERENCES.accentToolbarButtons,
-  );
-  const [toolbarAccent, setToolbarAccent] = useState<AccentMode>(
-    DEFAULT_APP_PREFERENCES.toolbarAccent,
-  );
-  const [accentFavoriteItems, setAccentFavoriteItems] = useState(
-    DEFAULT_APP_PREFERENCES.accentFavoriteItems,
-  );
-  const [accentFavoriteText, setAccentFavoriteText] = useState(
-    DEFAULT_APP_PREFERENCES.accentFavoriteText,
-  );
-  const [favoriteAccent, setFavoriteAccent] = useState<AccentMode>(
-    DEFAULT_APP_PREFERENCES.favoriteAccent,
-  );
   const [zoomPercent, setZoomPercent] = useState(DEFAULT_APP_PREFERENCES.zoomPercent);
   const [uiFontFamily, setUiFontFamily] = useState<UiFontFamily>(
     DEFAULT_APP_PREFERENCES.uiFontFamily,
-  );
-  const [textPrimaryOverride, setTextPrimaryOverride] = useState(
-    DEFAULT_APP_PREFERENCES.textPrimaryOverride,
-  );
-  const [textSecondaryOverride, setTextSecondaryOverride] = useState(
-    DEFAULT_APP_PREFERENCES.textSecondaryOverride,
-  );
-  const [textMutedOverride, setTextMutedOverride] = useState(
-    DEFAULT_APP_PREFERENCES.textMutedOverride,
   );
   const [includeHidden, setIncludeHidden] = useState(DEFAULT_APP_PREFERENCES.includeHidden);
   const [viewMode, setViewMode] = useState<ExplorerViewMode>(DEFAULT_APP_PREFERENCES.viewMode);
@@ -151,48 +127,14 @@ export function useAppPreferences() {
     DEFAULT_APP_PREFERENCES.returnKeyAction,
   );
   useEffect(() => {
-    applyAppearance({
-      theme: effectiveTheme,
-      iconTheme,
-      accent,
-      accentToolbarButtons,
-      toolbarAccent,
-      accentFavoriteItems,
-      accentFavoriteText,
-      favoriteAccent,
-      uiFontFamily,
-      textPrimaryOverride,
-      textSecondaryOverride,
-      textMutedOverride,
-    });
-  }, [
-    accent,
-    accentToolbarButtons,
-    toolbarAccent,
-    accentFavoriteItems,
-    accentFavoriteText,
-    favoriteAccent,
-    iconTheme,
-    textMutedOverride,
-    textPrimaryOverride,
-    textSecondaryOverride,
-    effectiveTheme,
-    uiFontFamily,
-  ]);
+    applyAppearance({ theme: effectiveTheme, iconTheme, accent, uiFontFamily });
+  }, [accent, iconTheme, effectiveTheme, uiFontFamily]);
 
   function resetAppearanceSettings() {
     setIconTheme(DEFAULT_APP_PREFERENCES.iconTheme);
     setAccent(DEFAULT_APP_PREFERENCES.accent);
     setZoomPercent(DEFAULT_APP_PREFERENCES.zoomPercent);
     setUiFontFamily(DEFAULT_APP_PREFERENCES.uiFontFamily);
-    setTextPrimaryOverride(null);
-    setTextSecondaryOverride(null);
-    setTextMutedOverride(null);
-    setAccentToolbarButtons(DEFAULT_APP_PREFERENCES.accentToolbarButtons);
-    setToolbarAccent(DEFAULT_APP_PREFERENCES.toolbarAccent);
-    setAccentFavoriteItems(DEFAULT_APP_PREFERENCES.accentFavoriteItems);
-    setAccentFavoriteText(DEFAULT_APP_PREFERENCES.accentFavoriteText);
-    setFavoriteAccent(DEFAULT_APP_PREFERENCES.favoriteAccent);
   }
 
   return {
@@ -209,26 +151,10 @@ export function useAppPreferences() {
     setIconTheme,
     accent,
     setAccent,
-    accentToolbarButtons,
-    setAccentToolbarButtons,
-    toolbarAccent,
-    setToolbarAccent,
-    accentFavoriteItems,
-    setAccentFavoriteItems,
-    accentFavoriteText,
-    setAccentFavoriteText,
-    favoriteAccent,
-    setFavoriteAccent,
     zoomPercent,
     setZoomPercent,
     uiFontFamily,
     setUiFontFamily,
-    textPrimaryOverride,
-    setTextPrimaryOverride,
-    textSecondaryOverride,
-    setTextSecondaryOverride,
-    textMutedOverride,
-    setTextMutedOverride,
     includeHidden,
     setIncludeHidden,
     viewMode,
@@ -343,16 +269,8 @@ export function applyPreferencesPatch(store: AppPreferencesStore, patch: Incomin
   set("autoDarkTheme", store.setAutoDarkTheme);
   set("iconTheme", store.setIconTheme);
   set("accent", store.setAccent);
-  set("accentToolbarButtons", store.setAccentToolbarButtons);
-  set("toolbarAccent", store.setToolbarAccent);
-  set("accentFavoriteItems", store.setAccentFavoriteItems);
-  set("accentFavoriteText", store.setAccentFavoriteText);
-  set("favoriteAccent", store.setFavoriteAccent);
   set("zoomPercent", store.setZoomPercent);
   set("uiFontFamily", store.setUiFontFamily);
-  set("textPrimaryOverride", store.setTextPrimaryOverride);
-  set("textSecondaryOverride", store.setTextSecondaryOverride);
-  set("textMutedOverride", store.setTextMutedOverride);
   set("compactListView", store.setCompactListView);
   set("compactDetailsView", store.setCompactDetailsView);
   set("compactTreeView", store.setCompactTreeView);

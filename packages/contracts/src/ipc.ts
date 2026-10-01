@@ -26,20 +26,12 @@ export const explorerEntryKindSchema = z.enum([
 ]);
 
 export const themeModeSchema = z.enum([
-  "macos-dark",
   "macos-light",
-  "dark",
-  "tomorrow-night",
-  "catppuccin-mocha",
-  "obsidian",
-  "graphite",
-  "midnight",
-  "onyx",
-  "light",
-  "clean-white",
   "warm-paper",
-  "stone",
   "sand",
+  "macos-dark",
+  "catppuccin-mocha",
+  "tomorrow-night",
 ]);
 export const accentModeSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 export const uiFontFamilySchema = z.enum([
@@ -50,10 +42,6 @@ export const uiFontFamilySchema = z.enum([
   "jetbrains-mono",
 ]);
 export const iconThemeModeSchema = z.enum(["native", "classic", "colorblock", "monoline", "vivid"]);
-export const colorOverrideSchema = z
-  .string()
-  .regex(/^#[0-9a-fA-F]{6}$/)
-  .nullable();
 export const explorerViewModeSchema = z.enum(["list", "details"]);
 export const directorySortBySchema = z.enum(["name", "modified", "kind", "size"]);
 export const sortDirectionSchema = z.enum(["asc", "desc"]);
@@ -647,16 +635,8 @@ export const appPreferencesSchema = z.object({
   autoDarkTheme: themeModeSchema,
   iconTheme: iconThemeModeSchema,
   accent: accentModeSchema,
-  accentToolbarButtons: z.boolean(),
-  toolbarAccent: accentModeSchema,
-  accentFavoriteItems: z.boolean(),
-  accentFavoriteText: z.boolean(),
-  favoriteAccent: accentModeSchema,
   zoomPercent: z.number().int().min(75).max(150),
   uiFontFamily: uiFontFamilySchema,
-  textPrimaryOverride: colorOverrideSchema,
-  textSecondaryOverride: colorOverrideSchema,
-  textMutedOverride: colorOverrideSchema,
   viewMode: explorerViewModeSchema,
   sortBy: directorySortBySchema,
   sortDirection: sortDirectionSchema,

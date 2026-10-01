@@ -31,35 +31,11 @@ export function toPreferencePatch(
   if (value.accent !== undefined) {
     patch.accent = value.accent;
   }
-  if (value.accentToolbarButtons !== undefined) {
-    patch.accentToolbarButtons = value.accentToolbarButtons;
-  }
-  if (value.toolbarAccent !== undefined) {
-    patch.toolbarAccent = value.toolbarAccent;
-  }
-  if (value.accentFavoriteItems !== undefined) {
-    patch.accentFavoriteItems = value.accentFavoriteItems;
-  }
-  if (value.accentFavoriteText !== undefined) {
-    patch.accentFavoriteText = value.accentFavoriteText;
-  }
-  if (value.favoriteAccent !== undefined) {
-    patch.favoriteAccent = value.favoriteAccent;
-  }
   if (value.zoomPercent !== undefined) {
     patch.zoomPercent = value.zoomPercent;
   }
   if (value.uiFontFamily !== undefined) {
     patch.uiFontFamily = value.uiFontFamily;
-  }
-  if (value.textPrimaryOverride !== undefined) {
-    patch.textPrimaryOverride = value.textPrimaryOverride;
-  }
-  if (value.textSecondaryOverride !== undefined) {
-    patch.textSecondaryOverride = value.textSecondaryOverride;
-  }
-  if (value.textMutedOverride !== undefined) {
-    patch.textMutedOverride = value.textMutedOverride;
   }
   if (value.viewMode !== undefined) {
     patch.viewMode = value.viewMode;

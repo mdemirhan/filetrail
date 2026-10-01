@@ -23,9 +23,9 @@ describe("usePreferencesSync", () => {
     expect(
       diffPreferencesPatch(
         { theme: "auto", accent: "#d4845a", favorites },
-        { theme: "dark", accent: "#d4845a", favorites },
+        { theme: "macos-dark", accent: "#d4845a", favorites },
       ),
-    ).toEqual({ theme: "dark" });
+    ).toEqual({ theme: "macos-dark" });
   });
 
   it("writes only changed keys after the debounce and does not echo remote changes", async () => {
@@ -51,19 +51,19 @@ describe("usePreferencesSync", () => {
       result.current.markSynced({ theme: "auto", accent: "#d4845a" });
     });
 
-    rerender({ payload: { theme: "dark", accent: "#d4845a" } });
+    rerender({ payload: { theme: "macos-dark", accent: "#d4845a" } });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(300);
     });
     expect(updateHandler).toHaveBeenCalledTimes(1);
-    expect(updateHandler).toHaveBeenLastCalledWith({ preferences: { theme: "dark" } });
+    expect(updateHandler).toHaveBeenLastCalledWith({ preferences: { theme: "macos-dark" } });
 
     // A change made in the Settings window is applied here and not written back.
     act(() => {
       remoteListener?.({ accent: "#4a9eff" });
     });
     expect(onRemotePatch).toHaveBeenCalledWith({ accent: "#4a9eff" });
-    rerender({ payload: { theme: "dark", accent: "#4a9eff" } });
+    rerender({ payload: { theme: "macos-dark", accent: "#4a9eff" } });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(300);
     });

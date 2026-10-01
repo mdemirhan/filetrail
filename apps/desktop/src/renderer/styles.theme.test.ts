@@ -3,12 +3,7 @@ import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import {
-  accentTokensToCssVariables,
-  generateAccentTokens,
-  getFavoriteAccentVariables,
-  getToolbarAccentVariables,
-} from "./lib/accent";
+import { accentTokensToCssVariables, generateAccentTokens } from "./lib/accent";
 import { THEME_VARIANT_OVERRIDE_KEYS } from "./lib/themeVariants";
 
 const styles = readFileSync(resolve(import.meta.dirname, "./styles.css"), "utf8");
@@ -125,7 +120,7 @@ describe("theme styles", () => {
 
   it("gives every dark palette a value for each color token the light palette defines", () => {
     const runtimeTokens = new Set([
-      ...Object.keys(accentTokensToCssVariables(generateAccentTokens("#daa520", "dark"))),
+      ...Object.keys(accentTokensToCssVariables(generateAccentTokens("#daa520", "macos-dark"))),
     ]);
     const lightTokens = customPropertiesDefinedBy(styles, ":root");
     const lightColorTokens = [...lightTokens].filter((name) => {
@@ -142,12 +137,10 @@ describe("theme styles", () => {
   });
 
   it("only reads custom properties that are defined, set at runtime, or given a fallback", () => {
-    const tokens = generateAccentTokens("#daa520", "dark");
+    const tokens = generateAccentTokens("#daa520", "macos-dark");
     const known = new Set<string>([
       ...[...styles.matchAll(/(--[a-z0-9-]+)\s*:/gi)].map((match) => match[1] ?? ""),
       ...Object.keys(accentTokensToCssVariables(tokens)),
-      ...Object.keys(getToolbarAccentVariables(tokens)),
-      ...Object.keys(getFavoriteAccentVariables(tokens)),
       ...THEME_VARIANT_OVERRIDE_KEYS,
     ]);
     const undefinedReads = [...styles.matchAll(/var\((--[a-z0-9-]+)\s*\)/gi)]

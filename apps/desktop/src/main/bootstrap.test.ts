@@ -23,14 +23,14 @@ describe("toPreferencePatch", () => {
       toPreferencePatch({
         theme: "auto",
         autoLightTheme: "sand",
-        autoDarkTheme: "obsidian",
+        autoDarkTheme: "tomorrow-night",
         showSidebarRail: true,
         returnKeyAction: "open",
       }),
     ).toEqual({
       theme: "auto",
       autoLightTheme: "sand",
-      autoDarkTheme: "obsidian",
+      autoDarkTheme: "tomorrow-night",
       showSidebarRail: true,
       returnKeyAction: "open",
     });

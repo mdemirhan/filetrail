@@ -4,8 +4,6 @@ import {
   contrastRatio,
   generateAccentTokens,
   getAccentPalette,
-  getFavoriteAccentVariables,
-  getToolbarAccentVariables,
   selectionColors,
   solidButtonColors,
 } from "./accent";
@@ -23,8 +21,8 @@ describe("accent helpers", () => {
   });
 
   it("generates light and dark accent tokens from the selected theme base", () => {
-    const lightTokens = generateAccentTokens("#2cb5a0", "light");
-    const variantTokens = generateAccentTokens("#2cb5a0", "obsidian");
+    const lightTokens = generateAccentTokens("#2cb5a0", "macos-light");
+    const variantTokens = generateAccentTokens("#2cb5a0", "macos-dark");
 
     expect(lightTokens).toMatchObject({
       id: "#2cb5a0",
@@ -44,7 +42,7 @@ describe("accent helpers", () => {
     });
   });
 
-  it("maps accent tokens into CSS variable groups for shared and toolbar styling", () => {
+  it("maps accent tokens into the CSS variables the stylesheet reads", () => {
     const tokens = generateAccentTokens("#e8729a", "tomorrow-night");
 
     expect(accentTokensToCssVariables(tokens)).toMatchObject({
@@ -52,24 +50,6 @@ describe("accent helpers", () => {
       "--accent-text": "#e8729a",
       "--ft-accent-solid": "#e8729a",
       "--ft-accent-ring-soft": "rgba(232, 114, 154, 0.15)",
-    });
-    expect(getToolbarAccentVariables(tokens)).toEqual({
-      "--tb-primary-bg": "rgba(232, 114, 154, 0.11)",
-      "--tb-primary-fg": "#e8729a",
-      "--tb-primary-hover-bg": "rgba(232, 114, 154, 0.11)",
-      "--toolbar-toggle-active-bg": "rgba(232, 114, 154, 0.14)",
-      "--toolbar-toggle-icon-active": "#e8729a",
-      "--sidebar-rail-active-bg": "rgba(232, 114, 154, 0.14)",
-      "--sidebar-rail-icon-active": "#e8729a",
-      "--sidebar-rail-menu-active-bg": "rgba(232, 114, 154, 0.11)",
-      "--sidebar-rail-menu-active-fg": "#e8729a",
-      "--sidebar-rail-menu-check": "#e8729a",
-    });
-    expect(getFavoriteAccentVariables(tokens)).toEqual({
-      "--favorite-accent-solid": "#e8729a",
-      "--favorite-accent-text": "#e8729a",
-      "--favorite-accent-selection-bg": "#b55978",
-      "--favorite-accent-on-selection": "#ffffff",
     });
   });
 
@@ -90,8 +70,10 @@ describe("accent helpers", () => {
     for (const option of [...ACCENT_OPTIONS, ...MACOS_ACCENT_OPTIONS]) {
       check(option.primary);
     }
-    expect(generateAccentTokens("#daa520", "dark").onSolid).toBe("#000000");
-    expect(accentTokensToCssVariables(generateAccentTokens("#4f46e5", "light"))).toMatchObject({
+    expect(generateAccentTokens("#daa520", "macos-dark").onSolid).toBe("#000000");
+    expect(
+      accentTokensToCssVariables(generateAccentTokens("#4f46e5", "macos-light")),
+    ).toMatchObject({
       "--ft-accent-solid-button": "#4f46e5",
       "--ft-accent-on-solid": "#ffffff",
     });
@@ -121,9 +103,11 @@ describe("accent helpers", () => {
           colors.background === darkenHex(option.primary, 0.34),
       ).toBe(true);
     }
-    expect(accentTokensToCssVariables(generateAccentTokens("#ffc600", "dark"))).toMatchObject({
-      "--ft-accent-on-selection": "#ffffff",
-      "--ft-accent-on-selection-soft": "rgba(255, 255, 255, 0.85)",
-    });
+    expect(accentTokensToCssVariables(generateAccentTokens("#ffc600", "macos-dark"))).toMatchObject(
+      {
+        "--ft-accent-on-selection": "#ffffff",
+        "--ft-accent-on-selection-soft": "rgba(255, 255, 255, 0.85)",
+      },
+    );
   });
 });

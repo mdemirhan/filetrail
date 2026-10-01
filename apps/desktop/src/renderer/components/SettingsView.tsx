@@ -39,6 +39,8 @@ import {
   ZOOM_PERCENT_MIN,
   clampOpenItemLimit,
   clampZoomPercent,
+  getThemeLabel,
+  isThemeInGroup,
   normalizeAccentColor,
 } from "../../shared/appPreferences";
 import {
@@ -776,102 +778,6 @@ function AppearanceModePicker({
   );
 }
 
-function ThemeSelectControl({
-  value,
-  themeOptions,
-  theme,
-  width = "100%",
-  onChange,
-  ariaLabel,
-}: {
-  value: string;
-  themeOptions: ReadonlyArray<{ value: string; label: string; group?: "dark" | "light" }>;
-  theme: ResolvedSettingsTheme;
-  width?: string;
-  onChange: (value: string) => void;
-  ariaLabel?: string;
-}) {
-  const darkOptions = themeOptions.filter((option) => option.group === "dark");
-  const lightOptions = themeOptions.filter((option) => option.group === "light");
-  const ungroupedOptions = themeOptions.filter(
-    (option) => option.group !== "dark" && option.group !== "light",
-  );
-  const groups: Array<{
-    label: string;
-    options: ReadonlyArray<{ value: string; label: string; group?: "dark" | "light" }>;
-  }> = [];
-  if (darkOptions.length > 0) {
-    groups.push({ label: "Dark Themes", options: darkOptions });
-  }
-  if (lightOptions.length > 0) {
-    groups.push({ label: "Light Themes", options: lightOptions });
-  }
-
-  return (
-    <div style={{ position: "relative", width }}>
-      <select
-        value={value}
-        aria-label={ariaLabel}
-        onChange={(event) => onChange(event.currentTarget.value)}
-        style={{
-          appearance: "none",
-          WebkitAppearance: "none",
-          width: "100%",
-          height: "26px",
-          padding: "0 28px 0 10px",
-          borderRadius: "6px",
-          background: theme.select.bg,
-          border: `1px solid ${theme.select.border}`,
-          color: theme.select.text,
-          fontSize: "13px",
-          fontFamily: sans,
-          fontWeight: 400,
-          boxShadow: "0 0.5px 1.5px rgba(0,0,0,0.12)",
-          cursor: "pointer",
-          outline: "none",
-        }}
-      >
-        {ungroupedOptions.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-        {groups.length > 0
-          ? groups.map((group) => (
-              <optgroup key={group.label} label={group.label}>
-                {group.options.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </optgroup>
-            ))
-          : null}
-      </select>
-      <svg
-        aria-hidden="true"
-        focusable="false"
-        width="10"
-        height="10"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke={theme.select.arrow}
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        style={{
-          position: "absolute",
-          right: "10px",
-          top: "50%",
-          transform: "translateY(-50%)",
-          pointerEvents: "none",
-        }}
-      >
-        <path d="M8 9.5l4-4 4 4M8 14.5l4 4 4-4" />
-      </svg>
-    </div>
-  );
-}
-
 // ── Icon Theme Picker with inline preview ──────────────────────────
 
 function IconThemePicker({
@@ -934,94 +840,11 @@ function IconThemePicker({
     />
   );
 }
-function ColorRow({
-  label,
-  value,
-  theme,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  theme: ResolvedSettingsTheme;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "8px 0",
-        cursor: "pointer",
-      }}
-    >
-      <span
-        style={{
-          fontSize: "12.5px",
-          fontFamily: sans,
-          fontWeight: 450,
-          color: theme.label.primary,
-        }}
-      >
-        {label}
-      </span>
-      <span style={{ display: "flex", alignItems: "center", gap: "6px", position: "relative" }}>
-        <span
-          style={{
-            width: "22px",
-            height: "22px",
-            borderRadius: "5px",
-            background: value,
-            border: `1.5px solid ${theme.color.swatchBorder}`,
-            position: "relative",
-            overflow: "hidden",
-          }}
-        >
-          <input
-            type="color"
-            aria-label={label}
-            value={value}
-            onChange={(event) => onChange(event.currentTarget.value)}
-            style={{
-              position: "absolute",
-              inset: 0,
-              opacity: 0,
-              cursor: "pointer",
-            }}
-          />
-        </span>
-        <span
-          style={{
-            padding: "3px 8px",
-            borderRadius: "4px",
-            background: theme.color.inputBg,
-            border: `1px solid ${theme.color.inputBorder}`,
-          }}
-        >
-          <span
-            style={{
-              fontSize: "11px",
-              fontFamily: mono,
-              color: theme.color.text,
-              fontWeight: 500,
-            }}
-          >
-            {value}
-          </span>
-        </span>
-      </span>
-    </label>
-  );
-}
-
+// The accent color as a row of swatches, with a custom color at the end.
 function AccentSelector({
   accent,
   accentOptions,
   theme,
-  disabled = false,
-  labelPrefix = "Accent color",
-  mode = "popover",
-  showSelectedLabel = true,
   onChange,
 }: {
   accent: AccentMode;
@@ -1031,26 +854,11 @@ function AccentSelector({
     primary: string;
   }>;
   theme: ResolvedSettingsTheme;
-  disabled?: boolean;
-  labelPrefix?: string;
-  mode?: "inline" | "popover";
-  showSelectedLabel?: boolean;
   onChange: (value: AccentMode) => void;
 }) {
   const selected = accentOptions.find((option) => option.value === accent);
   const isCustom = !selected;
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const popupRef = useRef<HTMLDialogElement | null>(null);
-  const inlineCustomInputRef = useRef<HTMLInputElement | null>(null);
-  const popupCustomInputRef = useRef<HTMLInputElement | null>(null);
-  const [open, setOpen] = useState(false);
-  const [popupPosition, setPopupPosition] = useState({ left: 0, top: 0 });
-
-  const popupColumns = 8;
-  const popupWidth = 20 + popupColumns * 28 + (popupColumns - 1) * 8;
-  const popupRows = Math.ceil((accentOptions.length + 1) / popupColumns);
-  const popupHeight = 20 + popupRows * 28 + (popupRows - 1) * 8;
+  const customInputRef = useRef<HTMLInputElement | null>(null);
 
   const customButtonShadow =
     "conic-gradient(from 210deg, #d84a4a, #f0b236, #23c7d9, #9580ff, #e8729a, #d84a4a)";
@@ -1068,308 +876,108 @@ function AccentSelector({
     input.click();
   }, []);
 
-  const renderCustomSwatch = ({
-    inputRef,
-    closeOnChange = false,
-  }: {
-    inputRef: { current: HTMLInputElement | null };
-    closeOnChange?: boolean;
-  }) => {
-    const active = isCustom;
-    return (
-      <button
-        type="button"
-        aria-label={`${labelPrefix} Custom`}
-        aria-pressed={active}
-        disabled={disabled}
-        onClick={() => openColorPicker(inputRef.current)}
+  return (
+    <div style={{ display: "grid", gap: "8px", width: "100%" }}>
+      <div
         style={{
-          width: "28px",
-          height: "28px",
-          borderRadius: "999px",
-          border: "none",
-          background: customButtonShadow,
-          boxShadow: active
-            ? `0 0 0 2px ${theme.card.bg}, 0 0 0 4px ${theme.accent.focusBorder}`
-            : `inset 0 0 0 1px ${theme.color.swatchBorder}`,
-          cursor: disabled ? "default" : "pointer",
-          transition: "box-shadow 0.14s ease, border-color 0.14s ease, transform 0.14s ease",
-          opacity: disabled ? 0.5 : 1,
-          outline: "none",
-          padding: active ? "3px" : 0,
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          position: "relative",
-          overflow: "hidden",
+          display: "grid",
+          gridTemplateColumns: `repeat(${accentOptions.length + 1}, 28px)`,
+          gridAutoRows: "28px",
+          gap: "8px",
         }}
       >
-        {active ? (
-          <span
-            aria-hidden="true"
+        {accentOptions.map((option) => {
+          const active = option.value === accent;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              aria-label={`Accent color ${option.label}`}
+              aria-pressed={active}
+              onClick={() => onChange(option.value)}
+              style={{
+                width: "28px",
+                height: "28px",
+                borderRadius: "999px",
+                border: `1px solid ${active ? theme.accent.border : theme.color.swatchBorder}`,
+                background: option.primary,
+                boxShadow: active
+                  ? `0 0 0 2px ${theme.card.bg}, 0 0 0 4px ${theme.accent.focusBorder}`
+                  : "inset 0 0 0 1px rgba(255,255,255,0.08)",
+                cursor: "pointer",
+                transition: "box-shadow 0.14s ease, border-color 0.14s ease, transform 0.14s ease",
+                outline: "none",
+              }}
+            />
+          );
+        })}
+        <button
+          type="button"
+          aria-label="Accent color Custom"
+          aria-pressed={isCustom}
+          onClick={() => openColorPicker(customInputRef.current)}
+          style={{
+            width: "28px",
+            height: "28px",
+            borderRadius: "999px",
+            border: "none",
+            background: customButtonShadow,
+            boxShadow: isCustom
+              ? `0 0 0 2px ${theme.card.bg}, 0 0 0 4px ${theme.accent.focusBorder}`
+              : `inset 0 0 0 1px ${theme.color.swatchBorder}`,
+            cursor: "pointer",
+            transition: "box-shadow 0.14s ease, border-color 0.14s ease, transform 0.14s ease",
+            outline: "none",
+            padding: isCustom ? "3px" : 0,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            position: "relative",
+            overflow: "hidden",
+          }}
+        >
+          {isCustom ? (
+            <span
+              aria-hidden="true"
+              style={{
+                width: "100%",
+                height: "100%",
+                borderRadius: "999px",
+                background: customPickerValue,
+                boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.18)",
+              }}
+            />
+          ) : null}
+          <input
+            ref={customInputRef}
+            type="color"
+            aria-label="Accent color Custom value"
+            value={customPickerValue}
+            onChange={(event) => {
+              const next = normalizeAccentColor(event.currentTarget.value);
+              if (next) {
+                onChange(next);
+              }
+            }}
             style={{
-              width: "100%",
-              height: "100%",
-              borderRadius: "999px",
-              background: customPickerValue,
-              boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.18)",
+              position: "absolute",
+              inset: 0,
+              opacity: 0,
+              pointerEvents: "none",
             }}
           />
-        ) : null}
-        <input
-          ref={inputRef}
-          type="color"
-          aria-label={`${labelPrefix} Custom value`}
-          value={customPickerValue}
-          disabled={disabled}
-          onChange={(event) => {
-            const next = normalizeAccentColor(event.currentTarget.value);
-            if (!next) {
-              return;
-            }
-            onChange(next);
-            if (closeOnChange) {
-              setOpen(false);
-            }
-          }}
-          style={{
-            position: "absolute",
-            inset: 0,
-            opacity: 0,
-            pointerEvents: "none",
-          }}
-        />
-      </button>
-    );
-  };
-
-  const updatePopupPosition = useCallback(() => {
-    const trigger = triggerRef.current;
-    if (!trigger) {
-      return;
-    }
-    const rect = trigger.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const margin = 12;
-    const gap = 10;
-    const preferredLeft = rect.right - popupWidth;
-    const maxLeft = Math.max(margin, viewportWidth - popupWidth - margin);
-    const left = Math.min(Math.max(preferredLeft, margin), maxLeft);
-    const fitsBelow = rect.bottom + gap + popupHeight <= viewportHeight - margin;
-    const top = fitsBelow ? rect.bottom + gap : Math.max(margin, rect.top - gap - popupHeight);
-    setPopupPosition({ left, top });
-  }, [popupHeight, popupWidth]);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (
-        !(target instanceof Node) ||
-        containerRef.current?.contains(target) ||
-        popupRef.current?.contains(target)
-      ) {
-        return;
-      }
-      setOpen(false);
-    };
-    const handleWindowChange = () => {
-      updatePopupPosition();
-    };
-    // Capture phase and preventDefault: Escape closes this pop-up, and the window's own
-    // Escape handling (which closes Settings) sees that the key is already used.
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setOpen(false);
-      }
-    };
-    updatePopupPosition();
-    window.addEventListener("pointerdown", handlePointerDown);
-    window.addEventListener("resize", handleWindowChange);
-    window.addEventListener("scroll", handleWindowChange, true);
-    window.addEventListener("keydown", handleEscape, true);
-    return () => {
-      window.removeEventListener("pointerdown", handlePointerDown);
-      window.removeEventListener("resize", handleWindowChange);
-      window.removeEventListener("scroll", handleWindowChange, true);
-      window.removeEventListener("keydown", handleEscape, true);
-    };
-  }, [open, updatePopupPosition]);
-
-  if (mode === "inline") {
-    return (
-      <div style={{ display: "grid", gap: "8px", width: "100%" }}>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: `repeat(${accentOptions.length + 1}, 28px)`,
-            gridAutoRows: "28px",
-            gap: "8px",
-          }}
-        >
-          {accentOptions.map((option) => {
-            const active = option.value === accent;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                aria-label={`${labelPrefix} ${option.label}`}
-                aria-pressed={active}
-                disabled={disabled}
-                onClick={() => onChange(option.value)}
-                style={{
-                  width: "28px",
-                  height: "28px",
-                  borderRadius: "999px",
-                  border: `1px solid ${active ? theme.accent.border : theme.color.swatchBorder}`,
-                  background: option.primary,
-                  boxShadow: active
-                    ? `0 0 0 2px ${theme.card.bg}, 0 0 0 4px ${theme.accent.focusBorder}`
-                    : "inset 0 0 0 1px rgba(255,255,255,0.08)",
-                  cursor: disabled ? "default" : "pointer",
-                  transition:
-                    "box-shadow 0.14s ease, border-color 0.14s ease, transform 0.14s ease",
-                  opacity: disabled ? 0.5 : 1,
-                  outline: "none",
-                }}
-              />
-            );
-          })}
-          {renderCustomSwatch({ inputRef: inlineCustomInputRef })}
-        </div>
-        {showSelectedLabel ? (
-          <span
-            style={{
-              fontSize: "11px",
-              fontFamily: sans,
-              fontWeight: 500,
-              color: theme.label.secondary,
-            }}
-          >
-            {selected?.label ?? "Custom"}
-          </span>
-        ) : null}
+        </button>
       </div>
-    );
-  }
-
-  return (
-    <div
-      ref={containerRef}
-      style={{ display: "inline-flex", position: "relative", alignItems: "center", gap: "8px" }}
-    >
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-label={`${labelPrefix} ${selected?.label ?? "Custom"}`}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        disabled={disabled}
-        onClick={() => {
-          if (!open) {
-            updatePopupPosition();
-          }
-          setOpen((current) => !current);
-        }}
+      <span
         style={{
-          width: "30px",
-          height: "30px",
-          borderRadius: "999px",
-          border: `1px solid ${selected || isCustom ? theme.accent.border : theme.color.swatchBorder}`,
-          background: selected?.primary ?? customPickerValue,
-          boxShadow: `0 0 0 2px ${theme.card.bg}, 0 0 0 4px ${
-            open ? theme.accent.focusBorder : "transparent"
-          }`,
-          cursor: disabled ? "default" : "pointer",
-          opacity: disabled ? 0.5 : 1,
-          transition: "box-shadow 0.14s ease, border-color 0.14s ease",
-          outline: "none",
+          fontSize: "11px",
+          fontFamily: sans,
+          fontWeight: 500,
+          color: theme.label.secondary,
         }}
-      />
-      {showSelectedLabel ? (
-        <span
-          style={{
-            fontSize: "11px",
-            fontFamily: sans,
-            fontWeight: 500,
-            color: theme.label.secondary,
-          }}
-        >
-          {selected?.label ?? "Custom"}
-        </span>
-      ) : null}
-      {open && !disabled
-        ? createPortal(
-            <dialog
-              ref={popupRef}
-              open
-              aria-label={`${labelPrefix} options`}
-              onCancel={(event) => {
-                event.preventDefault();
-              }}
-              style={{
-                position: "fixed",
-                top: `${popupPosition.top}px`,
-                left: `${popupPosition.left}px`,
-                zIndex: 1000,
-                width: `${popupWidth}px`,
-                margin: 0,
-                padding: "10px",
-                borderRadius: "12px",
-                background: theme.card.bg,
-                border: `1px solid ${theme.input.border}`,
-                boxShadow: theme.card.shadow,
-                display: "grid",
-              }}
-            >
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(8, 28px)",
-                  gridAutoRows: "28px",
-                  gap: "8px",
-                  justifyContent: "start",
-                }}
-              >
-                {accentOptions.map((option) => {
-                  const active = option.value === accent;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      aria-label={`${labelPrefix} ${option.label}`}
-                      aria-pressed={active}
-                      onClick={() => {
-                        onChange(option.value);
-                        setOpen(false);
-                      }}
-                      style={{
-                        width: "28px",
-                        height: "28px",
-                        borderRadius: "999px",
-                        border: `1px solid ${active ? theme.accent.border : theme.color.swatchBorder}`,
-                        background: option.primary,
-                        boxShadow: active
-                          ? `0 0 0 2px ${theme.card.bg}, 0 0 0 4px ${theme.accent.focusBorder}`
-                          : "inset 0 0 0 1px rgba(255,255,255,0.08)",
-                        cursor: "pointer",
-                        transition:
-                          "box-shadow 0.14s ease, border-color 0.14s ease, transform 0.14s ease",
-                        outline: "none",
-                      }}
-                    />
-                  );
-                })}
-                {renderCustomSwatch({ inputRef: popupCustomInputRef })}
-              </div>
-            </dialog>,
-            document.body,
-          )
-        : null}
+      >
+        {selected?.label ?? "Custom"}
+      </span>
     </div>
   );
 }
@@ -2471,22 +2079,14 @@ export function SettingsView({
   onSearchDefaultsChange = () => undefined,
   theme,
   effectiveTheme,
-  autoLightTheme = "light",
-  autoDarkTheme = "dark",
+  autoLightTheme = DEFAULT_APP_PREFERENCES.autoLightTheme,
+  autoDarkTheme = DEFAULT_APP_PREFERENCES.autoDarkTheme,
   onAutoLightThemeChange = () => undefined,
   onAutoDarkThemeChange = () => undefined,
   iconTheme,
   accent,
-  accentToolbarButtons,
-  toolbarAccent,
-  accentFavoriteItems,
-  accentFavoriteText,
-  favoriteAccent,
   zoomPercent,
   uiFontFamily,
-  effectiveTextPrimaryColor,
-  effectiveTextSecondaryColor,
-  effectiveTextMutedColor,
   compactListView,
   compactDetailsView,
   compactTreeView,
@@ -2517,7 +2117,6 @@ export function SettingsView({
   showSidebarBottomRail = true,
   onShowSidebarBottomRailChange = () => undefined,
   openItemLimit,
-  themeOptions,
   accentOptions,
   uiFontOptions,
   typeaheadDebounceOptions,
@@ -2525,16 +2124,8 @@ export function SettingsView({
   onThemeChange,
   onIconThemeChange,
   onAccentChange,
-  onAccentToolbarButtonsChange,
-  onToolbarAccentChange,
-  onAccentFavoriteItemsChange,
-  onAccentFavoriteTextChange,
-  onFavoriteAccentChange,
   onZoomPercentChange,
   onUiFontFamilyChange,
-  onTextPrimaryColorChange,
-  onTextSecondaryColorChange,
-  onTextMutedColorChange,
   onResetAppearance,
   onCompactListViewChange,
   onCompactDetailsViewChange,
@@ -2586,16 +2177,8 @@ export function SettingsView({
   onAutoDarkThemeChange?: (value: ThemeMode) => void;
   iconTheme: IconThemeMode;
   accent: AccentMode;
-  accentToolbarButtons: boolean;
-  toolbarAccent: AccentMode;
-  accentFavoriteItems: boolean;
-  accentFavoriteText: boolean;
-  favoriteAccent: AccentMode;
   zoomPercent: number;
   uiFontFamily: UiFontFamily;
-  effectiveTextPrimaryColor: string;
-  effectiveTextSecondaryColor: string;
-  effectiveTextMutedColor: string;
   compactListView: boolean;
   compactDetailsView: boolean;
   compactTreeView: boolean;
@@ -2626,7 +2209,6 @@ export function SettingsView({
   showSidebarBottomRail?: boolean;
   onShowSidebarBottomRailChange?: (value: boolean) => void;
   openItemLimit: number;
-  themeOptions: ReadonlyArray<{ value: ThemePreference; label: string; group?: "dark" | "light" }>;
   accentOptions: ReadonlyArray<{
     value: AccentMode;
     label: string;
@@ -2638,16 +2220,8 @@ export function SettingsView({
   onThemeChange: (value: ThemePreference) => void;
   onIconThemeChange: (value: IconThemeMode) => void;
   onAccentChange: (value: AccentMode) => void;
-  onAccentToolbarButtonsChange: (value: boolean) => void;
-  onToolbarAccentChange: (value: AccentMode) => void;
-  onAccentFavoriteItemsChange: (value: boolean) => void;
-  onAccentFavoriteTextChange: (value: boolean) => void;
-  onFavoriteAccentChange: (value: AccentMode) => void;
   onZoomPercentChange: (value: number) => void;
   onUiFontFamilyChange: (value: UiFontFamily) => void;
-  onTextPrimaryColorChange: (value: string | null) => void;
-  onTextSecondaryColorChange: (value: string | null) => void;
-  onTextMutedColorChange: (value: string | null) => void;
   onResetAppearance: () => void;
   onCompactListViewChange: (value: boolean) => void;
   onCompactDetailsViewChange: (value: boolean) => void;
@@ -2935,54 +2509,50 @@ export function SettingsView({
                 />
               }
             />
+            {/* One palette per side. Auto uses both; Light or Dark uses its own. */}
             <SettingRow
-              title="Theme"
+              title="Light palette"
+              desc="Colors used while the app is light."
               theme={palette}
               right={
-                <ThemeSelectControl
-                  value={theme}
-                  themeOptions={themeOptions}
+                <SelectControl
+                  value={autoLightTheme}
+                  options={LIGHT_THEME_OPTIONS.map((option) => option.value)}
                   theme={palette}
                   width="176px"
-                  ariaLabel="Theme"
-                  onChange={(value) => onThemeChange(value as ThemePreference)}
+                  ariaLabel="Light palette"
+                  onChange={(value) => {
+                    onAutoLightThemeChange(value as ThemeMode);
+                    // In Light mode the palette on screen is this one.
+                    if (theme !== "auto" && isThemeInGroup(theme, "light")) {
+                      onThemeChange(value as ThemeMode);
+                    }
+                  }}
+                  formatOption={(value) => getThemeLabel(value as ThemeMode)}
                 />
               }
             />
-            {theme === "auto" ? (
-              <>
-                <SettingRow
-                  title="Light appearance"
-                  desc="Palette used while macOS is in Light mode."
+            <SettingRow
+              title="Dark palette"
+              desc="Colors used while the app is dark."
+              theme={palette}
+              right={
+                <SelectControl
+                  value={autoDarkTheme}
+                  options={DARK_THEME_OPTIONS.map((option) => option.value)}
                   theme={palette}
-                  right={
-                    <ThemeSelectControl
-                      value={autoLightTheme}
-                      themeOptions={LIGHT_THEME_OPTIONS}
-                      theme={palette}
-                      width="176px"
-                      ariaLabel="Light appearance theme"
-                      onChange={(value) => onAutoLightThemeChange(value as ThemeMode)}
-                    />
-                  }
+                  width="176px"
+                  ariaLabel="Dark palette"
+                  onChange={(value) => {
+                    onAutoDarkThemeChange(value as ThemeMode);
+                    if (theme !== "auto" && isThemeInGroup(theme, "dark")) {
+                      onThemeChange(value as ThemeMode);
+                    }
+                  }}
+                  formatOption={(value) => getThemeLabel(value as ThemeMode)}
                 />
-                <SettingRow
-                  title="Dark appearance"
-                  desc="Palette used while macOS is in Dark mode."
-                  theme={palette}
-                  right={
-                    <ThemeSelectControl
-                      value={autoDarkTheme}
-                      themeOptions={DARK_THEME_OPTIONS}
-                      theme={palette}
-                      width="176px"
-                      ariaLabel="Dark appearance theme"
-                      onChange={(value) => onAutoDarkThemeChange(value as ThemeMode)}
-                    />
-                  }
-                />
-              </>
-            ) : null}
+              }
+            />
 
             <IconThemePicker value={iconTheme} theme={palette} onChange={onIconThemeChange} />
 
@@ -2995,76 +2565,9 @@ export function SettingsView({
                     accent={accent}
                     accentOptions={accentOptions}
                     theme={palette}
-                    labelPrefix="Accent color"
-                    mode="inline"
                     onChange={onAccentChange}
                   />
                 </div>
-              }
-            />
-
-            <SettingRow
-              title="Accent toolbar buttons"
-              desc="Highlight buttons that are on, such as the current view or an open panel, in this color. Icons stay neutral."
-              theme={palette}
-              right={
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <AccentSelector
-                    accent={toolbarAccent}
-                    accentOptions={accentOptions}
-                    theme={palette}
-                    disabled={!accentToolbarButtons}
-                    labelPrefix="Toolbar accent"
-                    showSelectedLabel={false}
-                    onChange={onToolbarAccentChange}
-                  />
-                  <Toggle
-                    checked={accentToolbarButtons}
-                    onToggle={() => onAccentToolbarButtonsChange(!accentToolbarButtons)}
-                    theme={palette}
-                    label="Accent toolbar buttons"
-                  />
-                </div>
-              }
-            />
-
-            <SettingRow
-              title="Accent favorite items"
-              desc="Use the dedicated favorite accent for favorite icons in the tree."
-              theme={palette}
-              right={
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <AccentSelector
-                    accent={favoriteAccent}
-                    accentOptions={accentOptions}
-                    theme={palette}
-                    disabled={!accentFavoriteItems}
-                    labelPrefix="Favorite accent"
-                    showSelectedLabel={false}
-                    onChange={onFavoriteAccentChange}
-                  />
-                  <Toggle
-                    checked={accentFavoriteItems}
-                    onToggle={() => onAccentFavoriteItemsChange(!accentFavoriteItems)}
-                    theme={palette}
-                    label="Accent favorite items"
-                  />
-                </div>
-              }
-            />
-
-            <SettingRow
-              title="Accent favorite text"
-              desc="Also apply the favorite accent to favorite labels in the tree."
-              theme={palette}
-              right={
-                <Toggle
-                  checked={accentFavoriteText}
-                  onToggle={() => onAccentFavoriteTextChange(!accentFavoriteText)}
-                  theme={palette}
-                  label="Accent favorite text"
-                  disabled={!accentFavoriteItems}
-                />
               }
             />
 
@@ -3097,37 +2600,6 @@ export function SettingsView({
                   }
                 />
               }
-            />
-
-            <div
-              style={{
-                paddingTop: "12px",
-                paddingBottom: "2px",
-                fontSize: "12px",
-                fontFamily: sans,
-                fontWeight: 600,
-                color: palette.label.secondary,
-              }}
-            >
-              Text colors
-            </div>
-            <ColorRow
-              label="Primary text"
-              value={effectiveTextPrimaryColor}
-              theme={palette}
-              onChange={(value) => onTextPrimaryColorChange(value)}
-            />
-            <ColorRow
-              label="Secondary"
-              value={effectiveTextSecondaryColor}
-              theme={palette}
-              onChange={(value) => onTextSecondaryColorChange(value)}
-            />
-            <ColorRow
-              label="Muted"
-              value={effectiveTextMutedColor}
-              theme={palette}
-              onChange={(value) => onTextMutedColorChange(value)}
             />
           </SectionCard>
         ) : null}

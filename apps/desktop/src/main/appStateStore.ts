@@ -16,9 +16,9 @@ import {
   ICON_THEME_OPTIONS,
   LEGACY_DEFAULT_DETAIL_COLUMN_VISIBILITY,
   OPTIONAL_DETAIL_COLUMN_KEYS,
-  THEME_OPTIONS,
   TYPEAHEAD_DEBOUNCE_MAX_MS,
   TYPEAHEAD_DEBOUNCE_MIN_MS,
+  type ThemeMode,
   type ThemePreference,
   UI_FONT_OPTIONS,
   clampDetailColumnWidth,
@@ -29,6 +29,7 @@ import {
   clampZoomPercent,
   isThemeInGroup,
   normalizeAccentColor,
+  resolveSavedTheme,
 } from "../shared/appPreferences";
 import {
   DEFAULT_TOP_TOOLBAR_ITEMS,
@@ -251,19 +252,18 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
   }
   const record = value;
   return {
-    theme:
-      typeof record.theme === "string" &&
-      (record.theme === "auto" || THEME_OPTIONS.some((option) => option.value === record.theme))
-        ? (record.theme as AppPreferences["theme"])
-        : defaultTheme,
-    autoLightTheme:
-      typeof record.autoLightTheme === "string" && isThemeInGroup(record.autoLightTheme, "light")
-        ? record.autoLightTheme
-        : currentDefaults.autoLightTheme,
-    autoDarkTheme:
-      typeof record.autoDarkTheme === "string" && isThemeInGroup(record.autoDarkTheme, "dark")
-        ? record.autoDarkTheme
-        : currentDefaults.autoDarkTheme,
+    // A removed palette is replaced by the closest remaining one (`resolveSavedTheme`).
+    theme: record.theme === "auto" ? "auto" : (resolveSavedTheme(record.theme) ?? defaultTheme),
+    autoLightTheme: resolveSavedThemeInGroup(
+      record.autoLightTheme,
+      "light",
+      currentDefaults.autoLightTheme,
+    ),
+    autoDarkTheme: resolveSavedThemeInGroup(
+      record.autoDarkTheme,
+      "dark",
+      currentDefaults.autoDarkTheme,
+    ),
     iconTheme:
       typeof record.iconTheme === "string" &&
       ICON_THEME_OPTIONS.some((option) => option.value === record.iconTheme)
@@ -273,26 +273,6 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
       typeof record.accent === "string"
         ? (normalizeAccentColor(record.accent) ?? currentDefaults.accent)
         : currentDefaults.accent,
-    accentToolbarButtons:
-      typeof record.accentToolbarButtons === "boolean"
-        ? record.accentToolbarButtons
-        : currentDefaults.accentToolbarButtons,
-    toolbarAccent:
-      typeof record.toolbarAccent === "string"
-        ? (normalizeAccentColor(record.toolbarAccent) ?? currentDefaults.toolbarAccent)
-        : currentDefaults.toolbarAccent,
-    accentFavoriteItems:
-      typeof record.accentFavoriteItems === "boolean"
-        ? record.accentFavoriteItems
-        : currentDefaults.accentFavoriteItems,
-    accentFavoriteText:
-      typeof record.accentFavoriteText === "boolean"
-        ? record.accentFavoriteText
-        : currentDefaults.accentFavoriteText,
-    favoriteAccent:
-      typeof record.favoriteAccent === "string"
-        ? (normalizeAccentColor(record.favoriteAccent) ?? currentDefaults.favoriteAccent)
-        : currentDefaults.favoriteAccent,
     zoomPercent: clampZoomPercent(
       typeof record.zoomPercent === "number" ? record.zoomPercent : currentDefaults.zoomPercent,
     ),
@@ -301,9 +281,6 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
       UI_FONT_OPTIONS.some((option) => option.value === record.uiFontFamily)
         ? (record.uiFontFamily as AppPreferences["uiFontFamily"])
         : currentDefaults.uiFontFamily,
-    textPrimaryOverride: normalizeColorOverride(record.textPrimaryOverride),
-    textSecondaryOverride: normalizeColorOverride(record.textSecondaryOverride),
-    textMutedOverride: normalizeColorOverride(record.textMutedOverride),
     viewMode: record.viewMode === "details" ? "details" : "list",
     sortBy:
       record.sortBy === "modified" ||
@@ -597,14 +574,6 @@ function inferLegacyFavoriteIcon(path: string): FavoriteIconId {
   return "folder";
 }
 
-function normalizeColorOverride(value: unknown): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const normalized = value.trim();
-  return /^#[0-9a-fA-F]{6}$/.test(normalized) ? normalized.toLowerCase() : null;
-}
-
 function sanitizeTerminalApplicationSelection(value: unknown): ApplicationSelection | null {
   if (value === null || value === undefined) {
     return null;
@@ -683,6 +652,17 @@ function sanitizeOpenWithApplications(
     ];
   });
   return entries.length === value.length ? entries : defaults.map((entry) => ({ ...entry }));
+}
+
+// A saved palette for one side of Auto: kept when it still exists on that side, replaced
+// when it was removed, and otherwise the default for that side.
+function resolveSavedThemeInGroup(
+  value: unknown,
+  group: "light" | "dark",
+  fallback: ThemeMode,
+): ThemeMode {
+  const theme = resolveSavedTheme(value);
+  return theme && isThemeInGroup(theme, group) ? theme : fallback;
 }
 
 function sanitizeDetailColumns(

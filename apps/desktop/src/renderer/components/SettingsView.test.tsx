@@ -3,26 +3,18 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 
-import { THEME_OPTIONS, type ThemeMode } from "../../shared/appPreferences";
+import type { ThemeMode } from "../../shared/appPreferences";
 import { DEFAULT_LEFT_TOOLBAR_ITEMS, DEFAULT_TOP_TOOLBAR_ITEMS } from "../../shared/toolbarItems";
 import { SettingsView } from "./SettingsView";
 
 function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsView>> = {}) {
   return render(
     <SettingsView
-      theme="dark"
+      theme="macos-dark"
       iconTheme="classic"
       accent="#daa520"
-      accentToolbarButtons={true}
-      toolbarAccent="#2cb5a0"
-      accentFavoriteItems={false}
-      accentFavoriteText={false}
-      favoriteAccent="#e8806a"
       zoomPercent={100}
       uiFontFamily="lexend"
-      effectiveTextPrimaryColor="#ffffff"
-      effectiveTextSecondaryColor="#cccccc"
-      effectiveTextMutedColor="#999999"
       compactListView={false}
       compactDetailsView={false}
       compactTreeView={false}
@@ -79,7 +71,6 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       ]}
       fileActivationAction="open"
       openItemLimit={5}
-      themeOptions={THEME_OPTIONS}
       accentOptions={[
         { value: "#daa520", label: "Gold", primary: "#daa520" },
         { value: "#d4845a", label: "Copper", primary: "#d4845a" },
@@ -95,16 +86,8 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       onThemeChange={() => undefined}
       onIconThemeChange={() => undefined}
       onAccentChange={() => undefined}
-      onAccentToolbarButtonsChange={() => undefined}
-      onToolbarAccentChange={() => undefined}
-      onAccentFavoriteItemsChange={() => undefined}
-      onAccentFavoriteTextChange={() => undefined}
-      onFavoriteAccentChange={() => undefined}
       onZoomPercentChange={() => undefined}
       onUiFontFamilyChange={() => undefined}
-      onTextPrimaryColorChange={() => undefined}
-      onTextSecondaryColorChange={() => undefined}
-      onTextMutedColorChange={() => undefined}
       onResetAppearance={() => undefined}
       onCompactListViewChange={() => undefined}
       onCompactDetailsViewChange={() => undefined}
@@ -163,12 +146,12 @@ describe("SettingsView", () => {
   });
 
   it.each([
-    ["light", "#edeef4"],
-    ["dark", "#181b22"],
+    ["macos-light", "#ffffff"],
+    ["warm-paper", "#f0ede7"],
+    ["sand", "#ece7dc"],
+    ["macos-dark", "#1e1e20"],
     ["tomorrow-night", "#151617"],
     ["catppuccin-mocha", "#0e0e18"],
-    ["obsidian", "#080809"],
-    ["clean-white", "#f3f3f3"],
   ] satisfies Array<[ThemeMode, string]>)(
     "applies the supplied %s theme palette to the page background",
     (theme, expectedBackground) => {
@@ -182,16 +165,100 @@ describe("SettingsView", () => {
     },
   );
 
-  it("renders the provided theme labels in the theme selector", () => {
+  it("offers one palette per side instead of a single list of themes", () => {
+    renderSettingsView({ theme: "auto", autoLightTheme: "sand", autoDarkTheme: "tomorrow-night" });
+
+    expect(screen.queryByRole("combobox", { name: "Theme" })).toBeNull();
+    const lightPalette = screen.getByLabelText("Light palette");
+    const darkPalette = screen.getByLabelText("Dark palette");
+    expect(lightPalette).toHaveValue("sand");
+    expect(darkPalette).toHaveValue("tomorrow-night");
+    expect(
+      within(lightPalette)
+        .getAllByRole("option")
+        .map((option) => option.textContent),
+    ).toEqual(["macOS Light", "Warm Paper", "Sand"]);
+    expect(
+      within(darkPalette)
+        .getAllByRole("option")
+        .map((option) => option.textContent),
+    ).toEqual(["macOS Dark", "Catppuccin Mocha", "Tomorrow Night"]);
+  });
+
+  it("changes only the palette of a side while Auto is on", () => {
+    const onThemeChange = vi.fn();
+    const onAutoLightThemeChange = vi.fn();
+    const onAutoDarkThemeChange = vi.fn();
+    renderSettingsView({
+      theme: "auto",
+      autoLightTheme: "macos-light",
+      autoDarkTheme: "macos-dark",
+      onThemeChange,
+      onAutoLightThemeChange,
+      onAutoDarkThemeChange,
+    });
+
+    fireEvent.change(screen.getByLabelText("Light palette"), { target: { value: "warm-paper" } });
+    fireEvent.change(screen.getByLabelText("Dark palette"), {
+      target: { value: "catppuccin-mocha" },
+    });
+
+    expect(onAutoLightThemeChange).toHaveBeenCalledWith("warm-paper");
+    expect(onAutoDarkThemeChange).toHaveBeenCalledWith("catppuccin-mocha");
+    expect(onThemeChange).not.toHaveBeenCalled();
+  });
+
+  it("applies a palette at once when it is the side on screen", () => {
+    const onThemeChange = vi.fn();
+    const onAutoLightThemeChange = vi.fn();
+    const onAutoDarkThemeChange = vi.fn();
+    renderSettingsView({
+      theme: "macos-dark",
+      autoLightTheme: "macos-light",
+      autoDarkTheme: "macos-dark",
+      onThemeChange,
+      onAutoLightThemeChange,
+      onAutoDarkThemeChange,
+    });
+
+    // Dark mode is showing: its palette changes the theme too.
+    fireEvent.change(screen.getByLabelText("Dark palette"), {
+      target: { value: "tomorrow-night" },
+    });
+    expect(onAutoDarkThemeChange).toHaveBeenCalledWith("tomorrow-night");
+    expect(onThemeChange).toHaveBeenCalledWith("tomorrow-night");
+
+    // The light palette is only stored for later.
+    fireEvent.change(screen.getByLabelText("Light palette"), { target: { value: "sand" } });
+    expect(onAutoLightThemeChange).toHaveBeenCalledWith("sand");
+    expect(onThemeChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("switches between Auto, Light and Dark with the palette of each side", () => {
+    const onThemeChange = vi.fn();
+    renderSettingsView({
+      theme: "auto",
+      autoLightTheme: "sand",
+      autoDarkTheme: "catppuccin-mocha",
+      onThemeChange,
+    });
+
+    expect(screen.getByRole("button", { name: "Auto" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Light" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dark" }));
+
+    expect(onThemeChange.mock.calls).toEqual([["sand"], ["catppuccin-mocha"]]);
+  });
+
+  it("has one accent color and no separate toolbar, favorite or text colors", () => {
     renderSettingsView();
 
-    const themeSelect = screen.getAllByLabelText("Theme")[0];
-    expect(themeSelect).toHaveTextContent("Light");
-    expect(themeSelect).toHaveTextContent("Dark");
-    expect(themeSelect).toHaveTextContent("Tomorrow Night");
-    expect(themeSelect).toHaveTextContent("Catppuccin Mocha");
-    expect(themeSelect).toHaveTextContent("Obsidian");
-    expect(themeSelect).toHaveTextContent("Clean White");
+    expect(screen.getByText("Accent color")).toBeInTheDocument();
+    expect(screen.queryByText("Accent toolbar buttons")).toBeNull();
+    expect(screen.queryByText("Accent favorite items")).toBeNull();
+    expect(screen.queryByText("Accent favorite text")).toBeNull();
+    expect(screen.queryByText("Text colors")).toBeNull();
+    expect(screen.queryByLabelText("Primary text")).toBeNull();
   });
 
   it("renders the supplied accent options and selected label", () => {
@@ -217,90 +284,6 @@ describe("SettingsView", () => {
     });
 
     expect(onAccentChange).toHaveBeenCalledWith("#123456");
-  });
-
-  it("forwards toolbar accent toggle changes", () => {
-    const onAccentToolbarButtonsChange = vi.fn();
-    const onToolbarAccentChange = vi.fn();
-    renderSettingsView({
-      accentToolbarButtons: true,
-      toolbarAccent: "#2cb5a0",
-      onAccentToolbarButtonsChange,
-      onToolbarAccentChange,
-    });
-
-    fireEvent.click(screen.getByLabelText("Toolbar accent Teal"));
-    const toolbarAccentDialog = screen.getByRole("dialog", { name: "Toolbar accent options" });
-    expect(toolbarAccentDialog.parentElement).toBe(document.body);
-    fireEvent.click(screen.getByLabelText("Toolbar accent Gold"));
-    fireEvent.click(screen.getByLabelText("Accent toolbar buttons"));
-
-    expect(onToolbarAccentChange).toHaveBeenCalledWith("#daa520");
-    expect(onAccentToolbarButtonsChange).toHaveBeenCalledWith(false);
-  });
-
-  it("supports custom toolbar accent colors from the popover", () => {
-    const onToolbarAccentChange = vi.fn();
-    renderSettingsView({
-      accentToolbarButtons: true,
-      toolbarAccent: "#2cb5a0",
-      onToolbarAccentChange,
-    });
-
-    fireEvent.click(screen.getByLabelText("Toolbar accent Teal"));
-    fireEvent.click(screen.getByLabelText("Toolbar accent Custom"));
-    expect(screen.queryByText("Custom color")).not.toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Toolbar accent Custom value"), {
-      target: { value: "#123456" },
-    });
-
-    expect(onToolbarAccentChange).toHaveBeenCalledWith("#123456");
-    expect(screen.getByRole("dialog", { name: "Toolbar accent options" })).toBeInTheDocument();
-  });
-
-  it("closes the toolbar accent popover on outside click", () => {
-    renderSettingsView({
-      accentToolbarButtons: true,
-      toolbarAccent: "#2cb5a0",
-    });
-
-    fireEvent.click(screen.getByLabelText("Toolbar accent Teal"));
-    expect(screen.getByRole("dialog", { name: "Toolbar accent options" })).toBeInTheDocument();
-
-    fireEvent.pointerDown(document.body);
-
-    expect(
-      screen.queryByRole("dialog", { name: "Toolbar accent options" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("forwards favorite accent preference changes", () => {
-    const onAccentFavoriteItemsChange = vi.fn();
-    const onAccentFavoriteTextChange = vi.fn();
-    const onFavoriteAccentChange = vi.fn();
-    renderSettingsView({
-      accentFavoriteItems: true,
-      accentFavoriteText: false,
-      favoriteAccent: "#e8806a",
-      onAccentFavoriteItemsChange,
-      onAccentFavoriteTextChange,
-      onFavoriteAccentChange,
-    });
-
-    fireEvent.click(screen.getByLabelText("Accent favorite items"));
-    fireEvent.click(screen.getByLabelText("Accent favorite text"));
-    fireEvent.click(screen.getByLabelText("Favorite accent Coral"));
-    const favoriteAccentDialog = screen.getByRole("dialog", { name: "Favorite accent options" });
-    expect(favoriteAccentDialog.parentElement).toBe(document.body);
-    expect(favoriteAccentDialog).toHaveStyle({ position: "fixed", zIndex: "1000" });
-    expect(favoriteAccentDialog.firstElementChild).toHaveStyle({
-      gridTemplateColumns: "repeat(8, 28px)",
-    });
-    fireEvent.click(screen.getByLabelText("Favorite accent Teal"));
-
-    expect(onAccentFavoriteItemsChange).toHaveBeenCalledWith(false);
-    expect(onAccentFavoriteTextChange).toHaveBeenCalledWith(true);
-    expect(onFavoriteAccentChange).toHaveBeenCalledWith("#2cb5a0");
   });
 
   it("updates the top toolbar editor and reset action", () => {
@@ -564,22 +547,6 @@ describe("SettingsView", () => {
     fireEvent.click(screen.getByLabelText("Single-click expand tree folders"));
 
     expect(onSingleClickExpandTreeItemsChange).toHaveBeenCalledWith(true);
-  });
-
-  it("disables the favorite accent swatch when favorite accents are off", () => {
-    renderSettingsView({
-      accentFavoriteItems: false,
-    });
-
-    expect(screen.getByLabelText("Favorite accent Coral")).toBeDisabled();
-  });
-
-  it("disables the toolbar accent swatch when toolbar accents are off", () => {
-    renderSettingsView({
-      accentToolbarButtons: false,
-    });
-
-    expect(screen.getByLabelText("Toolbar accent Teal")).toBeDisabled();
   });
 
   it("forwards hovered item highlight toggle changes", () => {
