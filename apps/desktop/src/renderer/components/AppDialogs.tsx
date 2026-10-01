@@ -17,11 +17,7 @@ import type { InternalMoveSourceSurface } from "../lib/internalDragAndDrop";
 import type { Place } from "../lib/places";
 import type { ShortcutContext } from "../lib/shortcutPolicy";
 import type { ToastEntry } from "../lib/toasts";
-import {
-  useDialogStore,
-  useNavigationStore,
-  usePreferencesStore,
-} from "../state/explorerStoreContext";
+import { useDialogStore, useNavigationStore } from "../state/explorerStoreContext";
 import { ActionNoticeDialog } from "./ActionNoticeDialog";
 import { CopyPasteDialog } from "./CopyPasteDialog";
 import { CopyPasteProgressCard } from "./CopyPasteProgressCard";
@@ -157,7 +153,6 @@ export function AppDialogs({
     writeOperationProgressEvent,
     toasts,
   } = useDialogStore();
-  const { tabSwitchesExplorerPanes } = usePreferencesStore();
   const contextMenuShortcutContext = resolveContextMenuShortcutContext(
     shortcutContext,
     contextMenuState,
@@ -172,7 +167,6 @@ export function AppDialogs({
         onForgetPlace={onForgetPlace}
         submitting={locationSubmitting}
         error={locationError}
-        tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
         onRequestPathSuggestions={onRequestPathSuggestions}
         onClose={() => setLocationSheetOpen(false)}
         onSubmit={(path) => onSubmitLocationPath(path)}
@@ -191,7 +185,6 @@ export function AppDialogs({
         submitLabel="Move"
         browseLabel="Browse"
         onBrowse={onBrowseForDirectoryPath}
-        tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
         onRequestPathSuggestions={onRequestPathSuggestions}
         onClose={() => setMoveDialogState(null)}
         onSubmit={(path) => onSubmitMoveDialog(path)}

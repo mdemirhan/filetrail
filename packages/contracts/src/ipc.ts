@@ -587,7 +587,6 @@ export const appPreferencesSchema = z.object({
   highlightHoveredItems: z.boolean(),
   detailColumns: detailColumnVisibilitySchema,
   detailColumnWidths: detailColumnWidthsSchema,
-  tabSwitchesExplorerPanes: z.boolean(),
   notificationsEnabled: z.boolean(),
   notificationDurationSeconds: z.number().int().min(2).max(10),
   propertiesOpen: z.boolean(),

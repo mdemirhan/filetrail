@@ -2021,7 +2021,6 @@ export function SettingsView({
   highlightHoveredItems = true,
   detailColumns,
   layoutMode = "wide",
-  tabSwitchesExplorerPanes,
   notificationsEnabled,
   notificationDurationSeconds,
   topToolbarItems,
@@ -2056,7 +2055,6 @@ export function SettingsView({
   onSingleClickExpandTreeItemsChange,
   onHighlightHoveredItemsChange = () => undefined,
   onDetailColumnsChange,
-  onTabSwitchesExplorerPanesChange,
   onNotificationsEnabledChange,
   onNotificationDurationSecondsChange,
   onTopToolbarItemsChange,
@@ -2106,7 +2104,6 @@ export function SettingsView({
   highlightHoveredItems?: boolean;
   detailColumns: DetailColumnVisibility;
   layoutMode?: "wide" | "narrow" | "compact";
-  tabSwitchesExplorerPanes: boolean;
   notificationsEnabled: boolean;
   notificationDurationSeconds: number;
   topToolbarItems: ToolbarItemId[];
@@ -2141,7 +2138,6 @@ export function SettingsView({
   onSingleClickExpandTreeItemsChange: (value: boolean) => void;
   onHighlightHoveredItemsChange?: (value: boolean) => void;
   onDetailColumnsChange: (value: DetailColumnVisibility) => void;
-  onTabSwitchesExplorerPanesChange: (value: boolean) => void;
   onNotificationsEnabledChange: (value: boolean) => void;
   onNotificationDurationSecondsChange: (value: number) => void;
   onTopToolbarItemsChange: (value: ToolbarItemId[]) => void;
@@ -2624,25 +2620,6 @@ export function SettingsView({
                 />
               ))}
             </div>
-          </SectionCard>
-        ) : null}
-
-        {showSection("general") ? (
-          <SectionCard icon="⌨" title="Keyboard" theme={palette}>
-            <SettingRow
-              title="Tab key switches between panes"
-              desc="Use Tab and Shift+Tab to move between the folder tree and file list while keeping native Tab behavior in dialogs and standard controls."
-              theme={palette}
-              isLast
-              right={
-                <Toggle
-                  checked={tabSwitchesExplorerPanes}
-                  onToggle={() => onTabSwitchesExplorerPanesChange(!tabSwitchesExplorerPanes)}
-                  theme={palette}
-                  label="Tab key switches between panes"
-                />
-              }
-            />
           </SectionCard>
         ) : null}
 

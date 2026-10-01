@@ -64,9 +64,6 @@ export function useAppPreferences() {
   const [detailColumnWidths, setDetailColumnWidths] = useState<DetailColumnWidths>(
     DEFAULT_DETAIL_COLUMN_WIDTHS,
   );
-  const [tabSwitchesExplorerPanes, setTabSwitchesExplorerPanes] = useState(
-    DEFAULT_APP_PREFERENCES.tabSwitchesExplorerPanes,
-  );
   const [notificationsEnabled, setNotificationsEnabled] = useState(
     DEFAULT_APP_PREFERENCES.notificationsEnabled,
   );
@@ -161,8 +158,6 @@ export function useAppPreferences() {
     setDetailColumns,
     detailColumnWidths,
     setDetailColumnWidths,
-    tabSwitchesExplorerPanes,
-    setTabSwitchesExplorerPanes,
     notificationsEnabled,
     setNotificationsEnabled,
     notificationDurationSeconds,
@@ -256,7 +251,6 @@ export function applyPreferencesPatch(store: AppPreferencesStore, patch: Incomin
   set("singleClickExpandTreeItems", store.setSingleClickExpandTreeItems);
   set("highlightHoveredItems", store.setHighlightHoveredItems);
   set("detailColumns", store.setDetailColumns);
-  set("tabSwitchesExplorerPanes", store.setTabSwitchesExplorerPanes);
   set("notificationsEnabled", store.setNotificationsEnabled);
   set("notificationDurationSeconds", store.setNotificationDurationSeconds);
   set("topToolbarItems", store.setTopToolbarItems);

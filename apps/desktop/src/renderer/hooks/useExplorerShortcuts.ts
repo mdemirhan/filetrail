@@ -152,7 +152,6 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
     contentColumns: navigation.contentColumns,
     setInfoPanelOpen: navigation.setInfoPanelOpen,
     setInfoRowOpen: navigation.setInfoRowOpen,
-    tabSwitchesExplorerPanes: preferences.tabSwitchesExplorerPanes,
     listFilterActive: navigation.listFilterQuery.length > 0,
     returnKeyAction: preferences.returnKeyAction,
     viewMode: preferences.viewMode,
@@ -229,7 +228,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         id: "paneTabSwitch",
         matches: (keyboardEvent) => {
           const current = latestArgsRef.current;
-          if (!current.tabSwitchesExplorerPanes || keyboardEvent.key !== "Tab") {
+          if (keyboardEvent.key !== "Tab") {
             return false;
           }
           // ⌃Tab moves between tabs.

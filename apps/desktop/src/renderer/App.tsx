@@ -145,8 +145,6 @@ export function App() {
     setDetailColumns,
     detailColumnWidths,
     setDetailColumnWidths,
-    tabSwitchesExplorerPanes,
-    setTabSwitchesExplorerPanes,
     notificationsEnabled,
     setNotificationsEnabled,
     notificationDurationSeconds,
@@ -981,7 +979,6 @@ export function App() {
     highlightHoveredItems,
     detailColumns,
     detailColumnWidths,
-    tabSwitchesExplorerPanes,
     notificationsEnabled,
     notificationDurationSeconds,
     topToolbarItems,
@@ -1146,7 +1143,6 @@ export function App() {
         setHighlightHoveredItems(preferences.highlightHoveredItems);
         setDetailColumns(preferences.detailColumns);
         setDetailColumnWidths(preferences.detailColumnWidths);
-        setTabSwitchesExplorerPanes(preferences.tabSwitchesExplorerPanes);
         setNotificationsEnabled(preferences.notificationsEnabled);
         setNotificationDurationSeconds(preferences.notificationDurationSeconds);
         setTopToolbarItems(preferences.topToolbarItems);
@@ -1768,7 +1764,6 @@ export function App() {
                 detailColumns,
                 detailColumnWidths,
                 onDetailColumnWidthsChange: setDetailColumnWidths,
-                tabSwitchesExplorerPanes,
                 inlineRename: renameDialogState?.inline
                   ? { path: renameDialogState.sourcePath, error: renameDialogState.error }
                   : null,

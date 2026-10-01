@@ -125,7 +125,6 @@ export function ContentPane({
   detailColumns = DEFAULT_DETAIL_COLUMN_VISIBILITY,
   detailColumnWidths = DEFAULT_DETAIL_COLUMN_WIDTHS,
   onDetailColumnWidthsChange = () => undefined,
-  tabSwitchesExplorerPanes = false,
   filterQuery = "",
   filterTotalCount = 0,
   onClearFilter = () => undefined,
@@ -188,7 +187,6 @@ export function ContentPane({
   detailColumns?: DetailColumnVisibility;
   detailColumnWidths?: DetailColumnWidths;
   onDetailColumnWidthsChange?: (value: DetailColumnWidths) => void;
-  tabSwitchesExplorerPanes?: boolean;
   /** What has been typed to narrow `entries`, which already are the matching ones. */
   filterQuery?: string;
   /** How many items the folder has before the filter. */
@@ -570,7 +568,7 @@ export function ContentPane({
                     previewSuggestion(nextIndex);
                     return;
                   }
-                  if (tabSwitchesExplorerPanes && event.key === "Tab" && suggestions.length > 0) {
+                  if (event.key === "Tab" && suggestions.length > 0) {
                     event.preventDefault();
                     focusSuggestion(event.shiftKey ? suggestions.length - 1 : 0);
                   }
@@ -581,7 +579,6 @@ export function ContentPane({
                 highlightedIndex={highlightedIndex}
                 suggestionsRef={suggestionsRef}
                 inputRef={pathInputRef}
-                tabSwitchesExplorerPanes={tabSwitchesExplorerPanes}
                 onPreviewSuggestion={previewSuggestion}
                 onFocusSuggestion={focusSuggestion}
                 onClearSuggestions={clearSuggestions}

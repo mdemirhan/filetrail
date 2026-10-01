@@ -48,16 +48,6 @@ describe("toPreferencePatch", () => {
     });
   });
 
-  it("preserves pane tab switching preferences", () => {
-    expect(
-      toPreferencePatch({
-        tabSwitchesExplorerPanes: false,
-      }),
-    ).toEqual({
-      tabSwitchesExplorerPanes: false,
-    });
-  });
-
   it("preserves hovered item highlight preference", () => {
     expect(
       toPreferencePatch({

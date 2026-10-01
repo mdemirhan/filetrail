@@ -29,7 +29,6 @@ export function GoToFolderDialog({
   selectFirstPlace = true,
   submitting,
   error,
-  tabSwitchesExplorerPanes,
   title = "Go To",
   inputAriaLabel = "Folder name or path",
   submitLabel = "Open",
@@ -51,7 +50,6 @@ export function GoToFolderDialog({
   selectFirstPlace?: boolean;
   submitting: boolean;
   error: string | null;
-  tabSwitchesExplorerPanes: boolean;
   title?: string;
   inputAriaLabel?: string;
   submitLabel?: string;
@@ -293,7 +291,7 @@ export function GoToFolderDialog({
           if (event.defaultPrevented) {
             return;
           }
-          if (event.key === "Tab" && tabSwitchesExplorerPanes) {
+          if (event.key === "Tab") {
             const dialog = dialogRef.current;
             if (!dialog) {
               return;

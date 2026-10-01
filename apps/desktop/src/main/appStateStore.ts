@@ -424,10 +424,6 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
       record.detailColumnWidths,
       currentDefaults.detailColumnWidths,
     ),
-    tabSwitchesExplorerPanes:
-      typeof record.tabSwitchesExplorerPanes === "boolean"
-        ? record.tabSwitchesExplorerPanes
-        : currentDefaults.tabSwitchesExplorerPanes,
     notificationsEnabled:
       typeof record.notificationsEnabled === "boolean"
         ? record.notificationsEnabled

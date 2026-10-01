@@ -27,7 +27,6 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
         created: false,
       }}
       layoutMode="wide"
-      tabSwitchesExplorerPanes={true}
       notificationsEnabled={true}
       notificationDurationSeconds={4}
       topToolbarItems={[...DEFAULT_TOP_TOOLBAR_ITEMS]}
@@ -90,7 +89,6 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       onSingleClickExpandTreeItemsChange={() => undefined}
       onHighlightHoveredItemsChange={() => undefined}
       onDetailColumnsChange={() => undefined}
-      onTabSwitchesExplorerPanesChange={() => undefined}
       onNotificationsEnabledChange={() => undefined}
       onNotificationDurationSecondsChange={() => undefined}
       onTopToolbarItemsChange={() => undefined}

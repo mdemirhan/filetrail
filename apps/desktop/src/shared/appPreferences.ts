@@ -317,7 +317,6 @@ export type AppPreferences = {
   highlightHoveredItems: boolean;
   detailColumns: DetailColumnVisibility;
   detailColumnWidths: DetailColumnWidths;
-  tabSwitchesExplorerPanes: boolean;
   notificationsEnabled: boolean;
   notificationDurationSeconds: number;
   propertiesOpen: boolean;
@@ -375,7 +374,6 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   highlightHoveredItems: false,
   detailColumns: DEFAULT_DETAIL_COLUMN_VISIBILITY,
   detailColumnWidths: DEFAULT_DETAIL_COLUMN_WIDTHS,
-  tabSwitchesExplorerPanes: true,
   notificationsEnabled: true,
   notificationDurationSeconds: 4,
   propertiesOpen: false,

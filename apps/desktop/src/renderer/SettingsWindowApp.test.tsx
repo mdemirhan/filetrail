@@ -45,7 +45,7 @@ describe("SettingsWindowApp", () => {
 
   it("closes with Escape", async () => {
     renderSettings();
-    await screen.findByText("Tab key switches between panes");
+    await screen.findByText("Restore last visited folder");
 
     fireEvent.keyDown(window, { key: "Escape" });
     expect(close).toHaveBeenCalledTimes(1);
@@ -60,7 +60,7 @@ describe("SettingsWindowApp", () => {
 
   it("lets Escape close an open pop-up before it closes the window", async () => {
     renderSettings();
-    await screen.findByText("Tab key switches between panes");
+    await screen.findByText("Restore last visited folder");
     fireEvent.click(screen.getByRole("button", { name: "Explorer" }));
 
     const trigger = screen

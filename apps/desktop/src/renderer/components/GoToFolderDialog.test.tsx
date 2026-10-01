@@ -37,7 +37,6 @@ function renderDialog(props: Partial<ComponentProps<typeof GoToFolderDialog>> = 
       places={PLACES}
       submitting={false}
       error={null}
-      tabSwitchesExplorerPanes={false}
       onClose={() => undefined}
       onSubmit={() => undefined}
       onRequestPathSuggestions={NO_SUGGESTIONS}
@@ -192,7 +191,6 @@ describe("GoToFolderDialog", () => {
       places: PLACES,
       submitting: false,
       error: null,
-      tabSwitchesExplorerPanes: false,
       onClose: () => undefined,
       onSubmit: () => undefined,
       onRequestPathSuggestions: NO_SUGGESTIONS,
@@ -215,7 +213,6 @@ describe("GoToFolderDialog", () => {
           places={PLACES}
           submitting={false}
           error={null}
-          tabSwitchesExplorerPanes={false}
           onClose={() => undefined}
           onSubmit={() => undefined}
           onRequestPathSuggestions={NO_SUGGESTIONS}

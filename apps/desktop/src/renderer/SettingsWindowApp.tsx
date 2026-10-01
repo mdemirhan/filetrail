@@ -87,7 +87,6 @@ export function SettingsWindowApp() {
     singleClickExpandTreeItems: preferences.singleClickExpandTreeItems,
     highlightHoveredItems: preferences.highlightHoveredItems,
     detailColumns: preferences.detailColumns,
-    tabSwitchesExplorerPanes: preferences.tabSwitchesExplorerPanes,
     notificationsEnabled: preferences.notificationsEnabled,
     notificationDurationSeconds: preferences.notificationDurationSeconds,
     topToolbarItems: preferences.topToolbarItems,
@@ -314,7 +313,6 @@ export function SettingsWindowApp() {
             highlightHoveredItems={preferences.highlightHoveredItems}
             detailColumns={preferences.detailColumns}
             layoutMode="wide"
-            tabSwitchesExplorerPanes={preferences.tabSwitchesExplorerPanes}
             notificationsEnabled={preferences.notificationsEnabled}
             notificationDurationSeconds={preferences.notificationDurationSeconds}
             topToolbarItems={preferences.topToolbarItems}
@@ -350,7 +348,6 @@ export function SettingsWindowApp() {
             onSingleClickExpandTreeItemsChange={preferences.setSingleClickExpandTreeItems}
             onHighlightHoveredItemsChange={preferences.setHighlightHoveredItems}
             onDetailColumnsChange={preferences.setDetailColumns}
-            onTabSwitchesExplorerPanesChange={preferences.setTabSwitchesExplorerPanes}
             onNotificationsEnabledChange={preferences.setNotificationsEnabled}
             onNotificationDurationSecondsChange={preferences.setNotificationDurationSeconds}
             onTopToolbarItemsChange={preferences.setTopToolbarItems}

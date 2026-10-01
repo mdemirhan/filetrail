@@ -58,9 +58,7 @@ describe("AppDialogs", () => {
   }
 
   function createPreferencesStore(): PreferencesStore {
-    return {
-      tabSwitchesExplorerPanes: false,
-    } as unknown as PreferencesStore;
+    return {} as unknown as PreferencesStore;
   }
 
   function renderAppDialogs(

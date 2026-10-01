@@ -174,7 +174,6 @@ describe("ipc contracts", () => {
             kind: 148,
             created: 168,
           },
-          tabSwitchesExplorerPanes: true,
           notificationsEnabled: true,
           notificationDurationSeconds: 4,
           propertiesOpen: false,
@@ -277,7 +276,6 @@ describe("ipc contracts", () => {
           kind: 148,
           created: 168,
         },
-        tabSwitchesExplorerPanes: true,
         notificationsEnabled: true,
         notificationDurationSeconds: 4,
         propertiesOpen: false,
@@ -385,7 +383,6 @@ describe("ipc contracts", () => {
             kind: 148,
             created: 168,
           },
-          tabSwitchesExplorerPanes: false,
           topToolbarItems: ["back", "search", "copyPath"],
           leftToolbarItems: {
             main: ["home", "copyPath"],
@@ -456,7 +453,6 @@ describe("ipc contracts", () => {
           kind: 148,
           created: 168,
         },
-        tabSwitchesExplorerPanes: false,
         topToolbarItems: ["back", "search", "copyPath"],
         leftToolbarItems: {
           main: ["home", "copyPath"],

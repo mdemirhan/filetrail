@@ -9,7 +9,6 @@ export function PathSuggestionDropdown({
   highlightedIndex,
   suggestionsRef,
   inputRef,
-  tabSwitchesExplorerPanes = false,
   className = "pathbar-suggestions",
   refocusInputOnAccept = false,
   onPreviewSuggestion,
@@ -21,7 +20,6 @@ export function PathSuggestionDropdown({
   highlightedIndex: number;
   suggestionsRef: RefObject<HTMLDivElement | null>;
   inputRef: RefObject<HTMLInputElement | null>;
-  tabSwitchesExplorerPanes?: boolean;
   className?: string;
   refocusInputOnAccept?: boolean;
   onPreviewSuggestion: (index: number) => void;
@@ -58,7 +56,7 @@ export function PathSuggestionDropdown({
               onFocusSuggestion(nextIndex);
               return;
             }
-            if (tabSwitchesExplorerPanes && event.key === "Tab") {
+            if (event.key === "Tab") {
               event.preventDefault();
               inputRef.current?.focus();
             }

@@ -1033,7 +1033,6 @@ describe("ContentPane", () => {
           ],
         })}
         onFocusChange={() => undefined}
-        tabSwitchesExplorerPanes
       />,
     );
 

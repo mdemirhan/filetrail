@@ -64,9 +64,6 @@ export function toPreferencePatch(
   if (value.detailColumnWidths !== undefined) {
     patch.detailColumnWidths = value.detailColumnWidths;
   }
-  if (value.tabSwitchesExplorerPanes !== undefined) {
-    patch.tabSwitchesExplorerPanes = value.tabSwitchesExplorerPanes;
-  }
   if (value.notificationsEnabled !== undefined) {
     patch.notificationsEnabled = value.notificationsEnabled;
   }

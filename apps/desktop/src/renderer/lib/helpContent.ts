@@ -72,7 +72,7 @@ export const SHORTCUT_ITEMS: readonly ShortcutItem[] = [
   {
     group: "navigation",
     shortcut: "Tab",
-    description: "Switch between the tree and the list (when enabled in Settings)",
+    description: "Switch between the tree and the list",
   },
   { group: "navigation", shortcut: "Ctrl+U", description: "Scroll one page up" },
   { group: "navigation", shortcut: "Ctrl+D", description: "Scroll one page down" },
