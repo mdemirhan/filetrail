@@ -318,7 +318,6 @@ export type AppPreferences = {
   lastGoToFolderPath: string | null;
   favorites: FavoritePreference[];
   favoritesPlacement: FavoritesPlacement;
-  favoritesPaneHeight: number | null;
   favoritesExpanded: boolean;
   favoritesInitialized: boolean;
 };
@@ -389,7 +388,6 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   lastGoToFolderPath: null,
   favorites: [],
   favoritesPlacement: "separate",
-  favoritesPaneHeight: null,
   favoritesExpanded: true,
   favoritesInitialized: false,
 };

@@ -699,7 +699,6 @@ export const appPreferencesSchema = z.object({
   lastGoToFolderPath: z.string().min(1).nullable(),
   favorites: z.array(favoritePreferenceSchema),
   favoritesPlacement: favoritesPlacementSchema,
-  favoritesPaneHeight: z.number().int().min(96).max(2400).nullable(),
   favoritesExpanded: z.boolean(),
   favoritesInitialized: z.boolean(),
 });

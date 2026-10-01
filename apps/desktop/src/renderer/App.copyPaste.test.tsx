@@ -1481,7 +1481,6 @@ describe("App copy/paste integration", () => {
         lastVisitedPath: "/Users/demo/Documents",
         lastVisitedFavoritePath: "/Users/demo/Documents",
         favoritesPlacement: "separate",
-        favoritesPaneHeight: 240,
         favorites: [
           { path: "/Users/demo", icon: "home" },
           { path: "/Users/demo/Documents", icon: "documents" },

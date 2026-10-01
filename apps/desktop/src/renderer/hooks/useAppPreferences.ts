@@ -128,9 +128,6 @@ export function useAppPreferences() {
   const [favoritesPlacement, setFavoritesPlacement] = useState<FavoritesPlacement>(
     DEFAULT_APP_PREFERENCES.favoritesPlacement,
   );
-  const [favoritesPaneHeight, setFavoritesPaneHeight] = useState<number | null>(
-    DEFAULT_APP_PREFERENCES.favoritesPaneHeight,
-  );
   const [favoritesExpanded, setFavoritesExpanded] = useState(
     DEFAULT_APP_PREFERENCES.favoritesExpanded,
   );
@@ -280,8 +277,6 @@ export function useAppPreferences() {
     setFavorites,
     favoritesPlacement,
     setFavoritesPlacement,
-    favoritesPaneHeight,
-    setFavoritesPaneHeight,
     favoritesExpanded,
     setFavoritesExpanded,
     favoritesInitialized,

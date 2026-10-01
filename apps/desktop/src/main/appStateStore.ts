@@ -491,13 +491,6 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
       record.favoritesPlacement === "separate" || record.favoritesPlacement === "integrated"
         ? record.favoritesPlacement
         : currentDefaults.favoritesPlacement,
-    favoritesPaneHeight:
-      typeof record.favoritesPaneHeight === "number" &&
-      Number.isFinite(record.favoritesPaneHeight) &&
-      record.favoritesPaneHeight >= 96 &&
-      record.favoritesPaneHeight <= 2400
-        ? Math.round(record.favoritesPaneHeight)
-        : currentDefaults.favoritesPaneHeight,
     favoritesExpanded:
       typeof record.favoritesExpanded === "boolean"
         ? record.favoritesExpanded

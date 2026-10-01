@@ -116,7 +116,6 @@ describe("appPreferences helpers", () => {
       lastVisitedFavoritePath: null,
       lastGoToFolderPath: null,
       favoritesPlacement: "separate",
-      favoritesPaneHeight: null,
     });
   });
 

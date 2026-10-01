@@ -151,7 +151,6 @@ describe("appStateStore", () => {
       lastGoToFolderPath: null,
       favorites: [],
       favoritesPlacement: "separate",
-      favoritesPaneHeight: null,
       favoritesExpanded: true,
       favoritesInitialized: false,
     });
@@ -253,7 +252,6 @@ describe("appStateStore", () => {
         { path: "/Applications", icon: "applications" },
       ],
       favoritesPlacement: "separate",
-      favoritesPaneHeight: 224,
       favoritesExpanded: false,
       favoritesInitialized: true,
     });
@@ -359,7 +357,6 @@ describe("appStateStore", () => {
         { path: "/Applications", icon: "applications" },
       ],
       favoritesPlacement: "separate",
-      favoritesPaneHeight: 224,
       favoritesExpanded: false,
       favoritesInitialized: true,
     });
@@ -479,7 +476,7 @@ describe("appStateStore", () => {
       } as never,
       uiFontFamily: "bad-font" as never,
       // Settings that no longer exist are dropped when loading.
-      ...({ uiFontSize: 15, uiFontWeight: 600 } as object),
+      ...({ uiFontSize: 15, uiFontWeight: 600, favoritesPaneHeight: 224 } as object),
       textPrimaryOverride: "oops" as never,
       typeaheadDebounceMs: 9999,
       terminalApp: {
@@ -542,6 +539,7 @@ describe("appStateStore", () => {
     expect(reloaded.getPreferences().uiFontFamily).toBe("system");
     expect(reloaded.getPreferences()).not.toHaveProperty("uiFontSize");
     expect(reloaded.getPreferences()).not.toHaveProperty("uiFontWeight");
+    expect(reloaded.getPreferences()).not.toHaveProperty("favoritesPaneHeight");
     expect(reloaded.getPreferences().textPrimaryOverride).toBeNull();
     expect(reloaded.getPreferences().typeaheadDebounceMs).toBe(1500);
     expect(reloaded.getPreferences().terminalApp).toBeNull();

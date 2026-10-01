@@ -191,8 +191,6 @@ export function App() {
     setFavorites,
     favoritesPlacement,
     setFavoritesPlacement,
-    favoritesPaneHeight,
-    setFavoritesPaneHeight,
     favoritesExpanded,
     setFavoritesExpanded,
     favoritesInitialized,
@@ -955,7 +953,6 @@ export function App() {
     lastGoToFolderPath,
     favorites,
     favoritesPlacement,
-    favoritesPaneHeight,
     favoritesExpanded,
     favoritesInitialized,
   };
@@ -1117,7 +1114,6 @@ export function App() {
         setLastGoToFolderPath(preferences.lastGoToFolderPath);
         setFavorites(preferences.favorites);
         setFavoritesPlacement(preferences.favoritesPlacement);
-        setFavoritesPaneHeight(preferences.favoritesPaneHeight);
         setFavoritesExpanded(preferences.favoritesExpanded);
         setFavoritesInitialized(preferences.favoritesInitialized);
         setTerminalApp(preferences.terminalApp);
