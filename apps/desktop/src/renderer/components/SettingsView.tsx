@@ -70,7 +70,6 @@ export type SearchDefaults = {
   searchRecursive: boolean;
   searchSkipGitFolders: boolean;
   searchSkipGitIgnored: boolean;
-  searchResultsFilterScope: "name" | "path";
 };
 
 const settingsBaseThemes = {
@@ -2908,6 +2907,7 @@ export function SettingsView({
               title="Skip files ignored by Git"
               desc="Inside a Git repository, leave out whatever its .gitignore excludes, such as build output."
               theme={palette}
+              isLast
               right={
                 <Toggle
                   checked={searchDefaults.searchSkipGitIgnored}
@@ -2918,25 +2918,6 @@ export function SettingsView({
                   }
                   theme={palette}
                   label="Skip files ignored by Git"
-                />
-              }
-            />
-            <SettingRow
-              title="Filter results by"
-              desc="What the results filter field matches against."
-              theme={palette}
-              isLast
-              right={
-                <SelectControl
-                  value={searchDefaults.searchResultsFilterScope}
-                  options={["name", "path"]}
-                  theme={palette}
-                  width="120px"
-                  ariaLabel="Default results filter scope"
-                  onChange={(value) =>
-                    onSearchDefaultsChange({ searchResultsFilterScope: value as "name" | "path" })
-                  }
-                  formatOption={(value) => (value === "path" ? "Path" : "Name")}
                 />
               }
             />

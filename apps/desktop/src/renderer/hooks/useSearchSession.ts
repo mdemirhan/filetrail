@@ -4,7 +4,6 @@ import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 
 import {
   DEFAULT_APP_PREFERENCES,
-  type SearchResultsFilterScopePreference,
   type SearchResultsSortByPreference,
   type SearchResultsSortDirectionPreference,
 } from "../../shared/appPreferences";
@@ -14,7 +13,6 @@ type SearchResultItem = IpcResponse<"search:getUpdate">["items"][number];
 type SearchPatternMode = IpcRequest<"search:start">["patternMode"];
 type SearchMatchScope = IpcRequest<"search:start">["matchScope"];
 type SearchJobStatus = IpcResponse<"search:getUpdate">["status"];
-type SearchResultsFilterScope = SearchResultsFilterScopePreference;
 type SearchResultsSortBy = SearchResultsSortByPreference;
 type SearchResultsSortDirection = SearchResultsSortDirectionPreference;
 
@@ -46,10 +44,11 @@ export function useSearchSession() {
   const [searchResultsScrollTop, setSearchResultsScrollTop] = useState(0);
   const [searchResultsFilterQuery, setSearchResultsFilterQuery] = useState("");
   const [debouncedSearchResultsFilterQuery, setDebouncedSearchResultsFilterQuery] = useState("");
-  const [searchResultsFilterScope, setSearchResultsFilterScope] =
-    useState<SearchResultsFilterScope>(DEFAULT_APP_PREFERENCES.searchResultsFilterScope);
   const [searchStatus, setSearchStatus] = useState<SearchJobStatus | "idle">("idle");
   const [searchError, setSearchError] = useState<string | null>(null);
+  // Whether the search on screen was started by typing rather than by Return. A pattern
+  // that is still being typed is not reported as a failure.
+  const [searchStartedLive, setSearchStartedLive] = useState(false);
   const [searchTruncated, setSearchTruncated] = useState(false);
   // Wall-clock duration of the last completed search, shown next to the result count.
   const [searchElapsedMs, setSearchElapsedMs] = useState<number | null>(null);
@@ -59,6 +58,10 @@ export function useSearchSession() {
   const searchJobIdRef = useRef<string | null>(null);
   const searchPointerIntentRef = useRef(false);
   const searchCommittedQueryRef = useRef("");
+  const searchDraftQueryRef = useRef("");
+  // The folder that was on screen when the current search started. A search is only
+  // continued (its scope kept, its results brought back) while that folder is still open.
+  const searchOriginPathRef = useRef("");
   const searchResultsRef = useRef<SearchResultItem[]>([]);
   const searchResultsVisibleRef = useRef(false);
   const searchResultsSortByRef = useRef<SearchResultsSortBy>(
@@ -77,6 +80,10 @@ export function useSearchSession() {
   useEffect(() => {
     searchCommittedQueryRef.current = searchCommittedQuery;
   }, [searchCommittedQuery]);
+
+  useEffect(() => {
+    searchDraftQueryRef.current = searchDraftQuery;
+  }, [searchDraftQuery]);
 
   useEffect(() => {
     searchResultsRef.current = searchResults;
@@ -135,12 +142,12 @@ export function useSearchSession() {
     setSearchResultsFilterQuery,
     debouncedSearchResultsFilterQuery,
     setDebouncedSearchResultsFilterQuery,
-    searchResultsFilterScope,
-    setSearchResultsFilterScope,
     searchStatus,
     setSearchStatus,
     searchError,
     setSearchError,
+    searchStartedLive,
+    setSearchStartedLive,
     searchTruncated,
     setSearchTruncated,
     searchPollTimeoutRef,
@@ -148,6 +155,8 @@ export function useSearchSession() {
     searchJobIdRef,
     searchPointerIntentRef,
     searchCommittedQueryRef,
+    searchDraftQueryRef,
+    searchOriginPathRef,
     searchResultsRef,
     searchResultsVisibleRef,
     searchResultsSortByRef,

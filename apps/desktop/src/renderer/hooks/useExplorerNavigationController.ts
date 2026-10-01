@@ -182,6 +182,7 @@ export function useExplorerNavigationController(args: {
     searchCommittedQuery,
     searchResultsVisible,
     setSearchResultsVisible,
+    setSearchDraftQuery,
     searchResultsVisibleRef,
     searchPointerIntentRef,
   } = search;
@@ -710,7 +711,10 @@ export function useExplorerNavigationController(args: {
     setVisiblePaths([]);
     setMetadataByPath(cachedMetadata);
     if (searchResultsVisibleRef.current && !keepSearchResultsOnReloadRef.current) {
+      // Opening a folder leaves the search; the field is cleared with it so it never shows
+      // a query for results that are no longer on screen.
       setSearchResultsVisible(false);
+      setSearchDraftQuery("");
     }
     const pendingPasteSelection =
       pendingPasteSelectionRef.current?.directoryPath === path

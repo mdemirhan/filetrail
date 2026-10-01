@@ -41,12 +41,10 @@ describe("toPreferencePatch", () => {
       toPreferencePatch({
         searchResultsSortBy: "name",
         searchResultsSortDirection: "desc",
-        searchResultsFilterScope: "path",
       }),
     ).toEqual({
       searchResultsSortBy: "name",
       searchResultsSortDirection: "desc",
-      searchResultsFilterScope: "path",
     });
   });
 

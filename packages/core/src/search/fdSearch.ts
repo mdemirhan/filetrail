@@ -299,7 +299,11 @@ export class FdSearchRuntime {
       return;
     }
     if (signal && signal !== "SIGTERM") {
-      this.finishJob(jobId, "error", job.stderr.trim() || `fd exited via signal ${signal}`);
+      this.finishJob(
+        jobId,
+        "error",
+        describeFdError(job.stderr) || `fd exited via signal ${signal}`,
+      );
       return;
     }
     if (code === 0) {
@@ -307,7 +311,11 @@ export class FdSearchRuntime {
       job.done = true;
       return;
     }
-    this.finishJob(jobId, "error", job.stderr.trim() || `fd exited with code ${code ?? "null"}`);
+    this.finishJob(
+      jobId,
+      "error",
+      describeFdError(job.stderr) || `fd exited with code ${code ?? "null"}`,
+    );
   }
 
   private finishJob(jobId: string, status: SearchJobStatus, error: string | null): void {
@@ -319,6 +327,15 @@ export class FdSearchRuntime {
     job.error = error;
     job.done = true;
   }
+}
+
+// What fd wrote about a failed search, without its own prefix and without the closing
+// advice about command-line flags, which means nothing in the app.
+function describeFdError(stderr: string): string {
+  return stderr
+    .replace(/\n\s*Note: [\s\S]*$/u, "")
+    .replace(/^\[fd error\]:\s*/u, "")
+    .trim();
 }
 
 // fd ends a folder's path with a slash, which tells folders from files without a stat call.

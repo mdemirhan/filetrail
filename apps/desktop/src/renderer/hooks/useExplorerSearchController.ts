@@ -3,7 +3,6 @@ import { useEffect, useMemo, useRef } from "react";
 import type { IpcResponse } from "@filetrail/contracts";
 
 import type {
-  SearchResultsFilterScopePreference,
   SearchResultsSortByPreference,
   SearchResultsSortDirectionPreference,
 } from "../../shared/appPreferences";
@@ -30,10 +29,13 @@ import type {
 
 type SearchResultsSortBy = SearchResultsSortByPreference;
 type SearchResultsSortDirection = SearchResultsSortDirectionPreference;
-type SearchResultsFilterScope = SearchResultsFilterScopePreference;
 type SearchStatus = IpcResponse<"search:getUpdate">["status"] | "idle";
 
 const SEARCH_POLL_INTERVAL_MS = 120;
+// Typing searches on its own once the text is this long and the keyboard has been still
+// for this long; Return searches at once, whatever the length.
+export const LIVE_SEARCH_MIN_LENGTH = 2;
+export const LIVE_SEARCH_DELAY_MS = 250;
 const logger = createRendererLogger("filetrail.renderer");
 
 export function useExplorerSearchController(args: {
@@ -77,18 +79,17 @@ export function useExplorerSearchController(args: {
     setSearchResultsFilterQuery,
     debouncedSearchResultsFilterQuery,
     setDebouncedSearchResultsFilterQuery,
-    searchResultsFilterScope,
-    setSearchResultsFilterScope,
     setSearchStatus,
     setSearchError,
+    setSearchStartedLive,
     setSearchTruncated,
     setSearchElapsedMs,
     searchStartedAtRef,
     searchPollTimeoutRef,
     searchSessionRef,
     searchJobIdRef,
-    searchCommittedQueryRef,
-    searchResultsVisibleRef,
+    searchDraftQueryRef,
+    searchOriginPathRef,
     searchResultsSortByRef,
     searchResultsSortDirectionRef,
     browseSelectionRef,
@@ -100,18 +101,13 @@ export function useExplorerSearchController(args: {
   const filteredSearchResults = useMemo(
     () =>
       sortSearchResults(
-        filterSearchResults(
-          searchResults,
-          debouncedSearchResultsFilterQuery,
-          searchResultsFilterScope,
-        ),
+        filterSearchResults(searchResults, debouncedSearchResultsFilterQuery),
         searchResultsSortBy,
         searchResultsSortDirection,
       ),
     [
       debouncedSearchResultsFilterQuery,
       searchResults,
-      searchResultsFilterScope,
       searchResultsSortBy,
       searchResultsSortDirection,
     ],
@@ -123,8 +119,16 @@ export function useExplorerSearchController(args: {
   const hasCachedSearch = searchCommittedQuery.trim().length > 0;
   const isSearchMode = searchResultsVisible && hasCachedSearch;
 
+  const liveSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The search whose first results replace what is on screen. Until they arrive the
+  // previous results stay, so the list does not blink empty on every keystroke.
+  const replaceResultsForSessionRef = useRef<number | null>(null);
+
   useEffect(
     () => () => {
+      if (liveSearchTimerRef.current) {
+        clearTimeout(liveSearchTimerRef.current);
+      }
       if (searchPollTimeoutRef.current) {
         clearTimeout(searchPollTimeoutRef.current);
       }
@@ -149,8 +153,13 @@ export function useExplorerSearchController(args: {
     void startSearch(searchCommittedQuery, { rootPath: searchRootPath || currentPath });
   }, [includeHidden]);
 
-  function showCachedSearchResults(options?: { focusPane?: boolean }) {
+  function showCachedSearchResults(options?: { focusPane?: boolean; fromField?: boolean }) {
     if (!hasCachedSearch) {
+      return;
+    }
+    // Focusing the field only brings a search back in the folder it was made from; in
+    // another folder the field starts empty, ready to search there (⇧⌘F still shows it).
+    if (options?.fromField && searchOriginPathRef.current !== currentPath) {
       return;
     }
     // The field mirrors what is on screen: showing cached results restores their query.
@@ -173,6 +182,7 @@ export function useExplorerSearchController(args: {
   }
 
   function hideSearchResults() {
+    cancelLiveSearch();
     // Leaving search mode clears the field so it never shows a query for results that are
     // no longer visible; the cached results stay available (focus the field or ⇧⌘F).
     setSearchDraftQuery("");
@@ -215,12 +225,16 @@ export function useExplorerSearchController(args: {
   }
 
   async function stopSearch() {
+    cancelLiveSearch();
     await cancelActiveSearch();
+    discardReplacedResults();
     setSearchStatus("cancelled");
     setSearchError(null);
   }
 
   async function clearCommittedSearch() {
+    cancelLiveSearch();
+    replaceResultsForSessionRef.current = null;
     await cancelActiveSearch();
     searchSessionRef.current += 1;
     setSearchCommittedQuery("");
@@ -255,11 +269,15 @@ export function useExplorerSearchController(args: {
         if (searchSessionRef.current !== sessionId || searchJobIdRef.current !== jobId) {
           return;
         }
-        setSearchResults((current) =>
-          typedResponse.items.length > 0
-            ? appendSearchResults(current, typedResponse.items)
-            : current,
-        );
+        const replacesResults =
+          replaceResultsForSessionRef.current === sessionId &&
+          (typedResponse.items.length > 0 || typedResponse.done);
+        if (replacesResults) {
+          replaceResultsForSessionRef.current = null;
+          setSearchResults(typedResponse.items);
+        } else if (typedResponse.items.length > 0) {
+          setSearchResults((current) => appendSearchResults(current, typedResponse.items));
+        }
         setSearchStatus(typedResponse.status);
         setSearchError(typedResponse.error);
         setSearchTruncated(typedResponse.truncated);
@@ -287,9 +305,36 @@ export function useExplorerSearchController(args: {
         });
         searchJobIdRef.current = null;
         clearSearchPolling();
+        discardReplacedResults();
         setSearchStatus("error");
         setSearchError(error instanceof Error ? error.message : String(error));
       });
+  }
+
+  // A search that ends before its first results arrive leaves nothing of the previous one.
+  function discardReplacedResults() {
+    if (replaceResultsForSessionRef.current !== null) {
+      replaceResultsForSessionRef.current = null;
+      setSearchResults([]);
+    }
+  }
+
+  function cancelLiveSearch() {
+    if (liveSearchTimerRef.current) {
+      clearTimeout(liveSearchTimerRef.current);
+      liveSearchTimerRef.current = null;
+    }
+  }
+
+  // Where a search typed now looks: the scope of the search on screen while its folder is
+  // still open (so a widened scope survives further typing), otherwise the open folder.
+  function resolveSearchRootPath() {
+    const continuesSearch =
+      hasCachedSearch &&
+      searchResultsVisible &&
+      searchRootPath.length > 0 &&
+      searchOriginPathRef.current === currentPath;
+    return continuesSearch ? searchRootPath : currentPath;
   }
 
   async function startSearch(
@@ -301,10 +346,13 @@ export function useExplorerSearchController(args: {
       skipGitFolders: boolean;
       skipGitIgnored: boolean;
       rootPath: string;
+      /** Started by typing: a pattern that does not parse yet is not shown as a failure. */
+      live: boolean;
     }> = {},
   ) {
     const trimmedQuery = query.trim();
     const rootPath = overrides.rootPath ?? currentPath;
+    cancelLiveSearch();
     if (trimmedQuery.length === 0) {
       await clearCommittedSearch();
       return;
@@ -312,14 +360,28 @@ export function useExplorerSearchController(args: {
     if (rootPath.length === 0) {
       return;
     }
-    await cancelActiveSearch();
-    browseSelectionRef.current = contentSelection;
+    // Starting from the folder list, remember its selection for when the search closes.
+    if (!searchResultsVisible) {
+      browseSelectionRef.current = contentSelection;
+    }
     const sessionId = searchSessionRef.current + 1;
     searchSessionRef.current = sessionId;
+    await cancelActiveSearch();
+    if (searchSessionRef.current !== sessionId) {
+      return;
+    }
     setSearchCommittedQuery(trimmedQuery);
     setSearchRootPath(rootPath);
     setSearchResultsVisible(true);
-    setSearchResults([]);
+    searchOriginPathRef.current = currentPath;
+    setSearchStartedLive(overrides.live === true);
+    // Results already on screen stay until this search has some of its own.
+    if (searchResultsVisible && searchResults.length > 0) {
+      replaceResultsForSessionRef.current = sessionId;
+    } else {
+      replaceResultsForSessionRef.current = null;
+      setSearchResults([]);
+    }
     setSearchResultsScrollTop(0);
     setSearchResultsFilterQuery("");
     setDebouncedSearchResultsFilterQuery("");
@@ -360,9 +422,60 @@ export function useExplorerSearchController(args: {
       });
       searchJobIdRef.current = null;
       clearSearchPolling();
+      discardReplacedResults();
       setSearchStatus("error");
       setSearchError(error instanceof Error ? error.message : String(error));
     }
+  }
+
+  const startSearchRef = useRef(startSearch);
+  startSearchRef.current = startSearch;
+  const resolveSearchRootPathRef = useRef(resolveSearchRootPath);
+  resolveSearchRootPathRef.current = resolveSearchRootPath;
+
+  // Typing in the search field: search once the keyboard rests. Text too short to search
+  // live shows the folder again (Return still searches for it).
+  function updateSearchDraftQuery(nextValue: string) {
+    setSearchDraftQuery(nextValue);
+    searchDraftQueryRef.current = nextValue;
+    cancelLiveSearch();
+    const trimmedQuery = nextValue.trim();
+    if (trimmedQuery.length < LIVE_SEARCH_MIN_LENGTH) {
+      if (hasCachedSearch) {
+        void clearCommittedSearch();
+      }
+      return;
+    }
+    liveSearchTimerRef.current = setTimeout(() => {
+      liveSearchTimerRef.current = null;
+      // The field may have been emptied or the folder left in the meantime.
+      if (searchDraftQueryRef.current.trim() !== trimmedQuery) {
+        return;
+      }
+      void startSearchRef.current(trimmedQuery, {
+        rootPath: resolveSearchRootPathRef.current(),
+        live: true,
+      });
+    }, LIVE_SEARCH_DELAY_MS);
+  }
+
+  // Return in the search field. What typing already found is kept; anything else is
+  // searched now. Resolves to whether the results for the query were already on screen.
+  async function submitSearch(query: string): Promise<boolean> {
+    cancelLiveSearch();
+    const trimmedQuery = query.trim();
+    const rootPath = resolveSearchRootPath();
+    const alreadyOnScreen =
+      trimmedQuery.length > 0 &&
+      searchResultsVisible &&
+      trimmedQuery === searchCommittedQuery &&
+      rootPath === searchRootPath;
+    if (alreadyOnScreen) {
+      setSearchStartedLive(false);
+      return true;
+    }
+    await startSearch(trimmedQuery, { rootPath });
+    return false;
   }
 
   function updateSearchPatternMode(nextValue: SearchPatternMode) {
@@ -452,11 +565,6 @@ export function useExplorerSearchController(args: {
     setSearchResultsScrollTop(0);
   }
 
-  function updateSearchResultsFilterScope(nextValue: SearchResultsFilterScope) {
-    setSearchResultsFilterScope(nextValue);
-    setSearchResultsScrollTop(0);
-  }
-
   function toggleSearchResultsSortDirection() {
     setSearchResultsSortDirection((current) => {
       const nextValue = current === "asc" ? "desc" : "asc";
@@ -479,6 +587,8 @@ export function useExplorerSearchController(args: {
     showCachedSearchResults,
     startSearch,
     stopSearch,
+    submitSearch,
+    updateSearchDraftQuery,
     toggleSearchResultsSortDirection,
     updateSearchMatchScope,
     updateSearchPatternMode,
@@ -486,7 +596,6 @@ export function useExplorerSearchController(args: {
     updateSearchSkipGitFolders,
     updateSearchSkipGitIgnored,
     updateSearchResultsFilterQuery,
-    updateSearchResultsFilterScope,
     updateSearchResultsSortBy,
   };
 }

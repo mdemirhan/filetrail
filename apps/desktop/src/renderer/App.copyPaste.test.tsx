@@ -481,10 +481,6 @@ vi.mock("./components/SearchResultsPane", () => ({
     onItemDragEnd?: (event: React.DragEvent<HTMLElement>) => void;
   }) => (
     <div data-testid="search-results-pane">
-      <label>
-        Filter search results
-        <input aria-label="Filter search results" defaultValue="source" />
-      </label>
       {results.map((result) => (
         <button
           key={result.path}
@@ -1226,26 +1222,6 @@ describe("App copy/paste integration", () => {
     expect(screen.queryByLabelText("Rename source.txt")).not.toBeInTheDocument();
 
     expectNativeEditActions(harness, ["copy", "paste", "selectAll"]);
-    expectNoFileClipboardActions(harness);
-  });
-
-  it("routes generic edit commands to the search results filter input", async () => {
-    const harness = createAppHarness();
-
-    render(
-      <FiletrailClientProvider value={harness.client}>
-        <App />
-      </FiletrailClientProvider>,
-    );
-
-    await openSearchResults();
-    const filterInput = await screen.findByLabelText("Filter search results");
-    await act(async () => {
-      filterInput.focus();
-      harness.emitCommand({ type: "editCopy" });
-    });
-
-    expectNativeEditActions(harness, ["copy"]);
     expectNoFileClipboardActions(harness);
   });
 
@@ -4818,7 +4794,6 @@ describe("App copy/paste integration", () => {
         "searchRecursive",
         "searchSkipGitFolders",
         "searchSkipGitIgnored",
-        "searchResultsFilterScope",
       ] as const) {
         expect(saved[key]).toBeUndefined();
       }
@@ -7144,6 +7119,105 @@ describe("App copy/paste integration", () => {
     });
     await screen.findByTestId("search-results-pane");
     expect(searchInput.value).toBe("source");
+  });
+
+  it("searches as you type once the keyboard rests, from two characters", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await screen.findByTestId("content-pane");
+    const searchInput = screen.getByPlaceholderText("Search") as HTMLInputElement;
+    const searchQueries = () =>
+      harness.invocations
+        .filter((call) => call.channel === "search:start")
+        .map((call) => (call.payload as IpcRequestInput<"search:start">).query);
+    const type = async (value: string, restMs: number) => {
+      await act(async () => {
+        fireEvent.change(searchInput, { target: { value } });
+        await new Promise((resolve) => setTimeout(resolve, restMs));
+      });
+    };
+
+    await act(async () => {
+      searchInput.focus();
+    });
+    // One character is not searched on its own.
+    await type("s", 320);
+    expect(searchQueries()).toEqual([]);
+    expect(screen.queryByTestId("search-results-pane")).not.toBeInTheDocument();
+
+    // Keys in quick succession make one search, for the text the typing stopped at.
+    await type("so", 60);
+    await type("sou", 60);
+    expect(searchQueries()).toEqual([]);
+    await type("sour", 320);
+    expect(searchQueries()).toEqual(["sour"]);
+    await screen.findByTestId("search-results-pane");
+    expect(
+      (
+        harness.invocations.find((call) => call.channel === "search:start")?.payload as
+          | IpcRequestInput<"search:start">
+          | undefined
+      )?.patternMode,
+    ).toBe("text");
+    // The field keeps the keyboard, so typing can go on.
+    expect(document.activeElement).toBe(searchInput);
+
+    // Return keeps what typing found and moves into the results, starting at the first.
+    const form = searchInput.closest("form");
+    if (!form) {
+      throw new Error("Missing search form.");
+    }
+    await act(async () => {
+      fireEvent.submit(form);
+    });
+    expect(searchQueries()).toEqual(["sour"]);
+    await vi.waitFor(() => {
+      expect(screen.getByTitle("search:/Users/demo/source.txt")).toHaveAttribute(
+        "data-selected",
+        "true",
+      );
+    });
+
+    // Text too short to search shows the folder again.
+    await type("s", 60);
+    await vi.waitFor(() => {
+      expect(screen.queryByTestId("search-results-pane")).not.toBeInTheDocument();
+    });
+    expect(searchInput.value).toBe("s");
+  });
+
+  it("ends the search with Escape in the search field", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await screen.findByTestId("content-pane");
+    const searchInput = screen.getByPlaceholderText("Search") as HTMLInputElement;
+    await act(async () => {
+      searchInput.focus();
+      fireEvent.change(searchInput, { target: { value: "source" } });
+      await new Promise((resolve) => setTimeout(resolve, 320));
+    });
+    await screen.findByTestId("search-results-pane");
+
+    await act(async () => {
+      fireEvent.keyDown(searchInput, { key: "Escape" });
+    });
+    await vi.waitFor(() => {
+      expect(screen.queryByTestId("search-results-pane")).not.toBeInTheDocument();
+    });
+    expect(searchInput.value).toBe("");
+    expect(document.activeElement).not.toBe(searchInput);
   });
 
   it("rejects dropping a search selection onto search results", async () => {

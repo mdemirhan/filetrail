@@ -448,11 +448,6 @@ function getThemeVariantCssOverridesFromVariant(
     "--search-pill-hover-fg": variant.text.secondary,
     "--srbar-canvas": variant.surfaces.page,
     "--srbar-separator": variant.separator,
-    "--srbar-action-icon": variant.menu.itemIcon,
-    "--srbar-filter-bg": variant.controls.inputBg,
-    "--srbar-filter-text": variant.text.secondary,
-    "--srbar-filter-placeholder": variant.search.placeholder,
-    "--srbar-filter-icon": variant.search.icon,
     "--scroll-thumb": withAlpha(variant.icons.active, isLight ? 0.22 : 0.3),
     "--scroll-thumb-hover": withAlpha(variant.icons.active, isLight ? 0.34 : 0.42),
   };

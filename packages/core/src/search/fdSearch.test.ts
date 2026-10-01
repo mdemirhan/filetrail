@@ -384,6 +384,32 @@ describe("fdSearch", () => {
     });
   });
 
+  it("reports what fd said about a bad pattern without its command-line advice", () => {
+    const process = createMockProcess();
+    const runtime = new FdSearchRuntime("/tmp/fd", {
+      spawn: vi.fn(() => process as never),
+    });
+    const started = runtime.startSearch({
+      rootPath: "/Users/demo/project",
+      query: "no(te",
+      patternMode: "regex",
+      matchScope: "name",
+      recursive: true,
+      includeHidden: false,
+      skipGitFolders: false,
+      skipGitIgnored: false,
+    });
+
+    process.stderr.write(
+      "[fd error]: regex parse error:\n    no(te\n      ^\nerror: unclosed group\n\nNote: You can search for literal substrings with '--fixed-strings' or literal strings with '--exact' options.",
+    );
+    process.emit("close", 1, null);
+
+    expect(runtime.getUpdate(started.jobId, 0).error).toBe(
+      "regex parse error:\n    no(te\n      ^\nerror: unclosed group",
+    );
+  });
+
   it("flushes a trailing stdout buffer on close and preserves root-relative parents", () => {
     const process = createMockProcess();
     const runtime = new FdSearchRuntime("/tmp/fd", {

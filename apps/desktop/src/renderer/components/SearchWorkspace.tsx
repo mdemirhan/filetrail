@@ -8,13 +8,11 @@ type ContentPaneProps = ComponentProps<typeof ContentPane>;
 
 export function SearchWorkspace({
   isSearchMode,
-  searchResultsKey,
   searchResultsPaneProps,
   contentPaneProps,
   infoRow,
 }: {
   isSearchMode: boolean;
-  searchResultsKey?: string;
   searchResultsPaneProps: SearchResultsPaneProps;
   contentPaneProps: ContentPaneProps;
   infoRow: ReactNode;
@@ -22,7 +20,7 @@ export function SearchWorkspace({
   return (
     <section className="main-shell">
       {isSearchMode ? (
-        <SearchResultsPane key={searchResultsKey} {...searchResultsPaneProps} />
+        <SearchResultsPane {...searchResultsPaneProps} />
       ) : (
         <ContentPane {...contentPaneProps} />
       )}

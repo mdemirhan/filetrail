@@ -11,11 +11,7 @@ describe("SearchResultsPane", () => {
     onSortColumn: () => undefined,
   };
   const defaultFilterProps = {
-    filterQuery: "",
-    filterScope: "name" as const,
     totalCount: 0,
-    onFilterQueryChange: () => undefined,
-    onFilterScopeChange: () => undefined,
   };
 
   it("renders empty-state copy after a completed search with no matches", () => {
@@ -278,8 +274,6 @@ describe("SearchResultsPane", () => {
     const handleSkipGitFoldersChange = vi.fn();
     const handleSkipGitIgnoredChange = vi.fn();
     const handleScrollTopChange = vi.fn();
-    const handleFilterQueryChange = vi.fn();
-    const handleFilterScopeChange = vi.fn();
 
     render(
       <SearchResultsPane
@@ -303,8 +297,6 @@ describe("SearchResultsPane", () => {
         selectionLeadPath={null}
         error={null}
         truncated={false}
-        filterQuery="App"
-        filterScope="name"
         totalCount={4}
         sortBy="path"
         sortDirection="asc"
@@ -328,8 +320,6 @@ describe("SearchResultsPane", () => {
         onStopSearch={() => undefined}
         onClearResults={() => undefined}
         onCloseResults={() => undefined}
-        onFilterQueryChange={handleFilterQueryChange}
-        onFilterScopeChange={handleFilterScopeChange}
         onSortColumn={handleSortColumn}
         onSelectionGesture={() => undefined}
         onClearSelection={() => undefined}
@@ -370,10 +360,6 @@ describe("SearchResultsPane", () => {
     expect(screen.queryByRole("menuitemcheckbox", { name: /hidden/i })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Options" }), { detail: 1 });
     expect(screen.queryByRole("menu")).toBeNull();
-    fireEvent.change(screen.getByLabelText("Filter search results"), { target: { value: "main" } });
-    fireEvent.change(screen.getByLabelText("Filter search results by"), {
-      target: { value: "path" },
-    });
     if (!scroll) {
       throw new Error("Missing search results scroll container.");
     }
@@ -389,8 +375,6 @@ describe("SearchResultsPane", () => {
     chooseOption("menuitemcheckbox", "Skip files ignored by Git");
     expect(handleSkipGitFoldersChange).toHaveBeenCalledWith(false);
     expect(handleSkipGitIgnoredChange).toHaveBeenCalledWith(true);
-    expect(handleFilterQueryChange).toHaveBeenCalledWith("main");
-    expect(handleFilterScopeChange).toHaveBeenCalledWith("path");
     expect(handleScrollTopChange).toHaveBeenCalledWith(96);
   });
 
@@ -472,56 +456,40 @@ describe("SearchResultsPane", () => {
     expect(handleScrollTopChange).toHaveBeenCalledWith(8);
   });
 
-  it("returns focus to search results when escape is pressed in the filter input", () => {
-    render(
-      <SearchResultsPane
-        isFocused
-        rootPath="/Users/demo/project"
-        query="app"
-        status="complete"
-        results={[
-          {
-            path: "/Users/demo/project/src/App.tsx",
-            name: "App.tsx",
-            extension: "tsx",
-            kind: "file",
-            isHidden: false,
-            isSymlink: false,
-            parentPath: "/Users/demo/project/src",
-            relativeParentPath: "src",
-          },
-        ]}
-        selectedPaths={[]}
-        selectionLeadPath={null}
-        error={null}
-        truncated={false}
-        filterQuery="app"
-        filterScope="name"
-        totalCount={1}
-        {...defaultSortProps}
-        onStopSearch={() => undefined}
-        onClearResults={() => undefined}
-        onCloseResults={() => undefined}
-        onFilterQueryChange={() => undefined}
-        onFilterScopeChange={() => undefined}
-        onSelectionGesture={() => undefined}
-        onClearSelection={() => undefined}
-        onActivateResult={() => undefined}
-        onItemContextMenu={() => undefined}
-        onFocusChange={() => undefined}
-      />,
-    );
+  it("treats a pattern that does not parse yet as unfinished while it is being typed", () => {
+    const renderPane = (errorIsQuiet: boolean) =>
+      render(
+        <SearchResultsPane
+          isFocused
+          rootPath="/Users/demo/project"
+          query="no(te"
+          status="error"
+          results={[]}
+          error="regex parse error: unclosed group"
+          errorIsQuiet={errorIsQuiet}
+          truncated={false}
+          totalCount={0}
+          {...defaultSortProps}
+          onStopSearch={() => undefined}
+          onClearResults={() => undefined}
+          onCloseResults={() => undefined}
+          onActivateResult={() => undefined}
+          onFocusChange={() => undefined}
+        />,
+      );
 
-    const filterInput = screen.getByLabelText("Filter search results");
-    const scroll = document.querySelector(".search-results-scroll");
-    if (!(scroll instanceof HTMLDivElement)) {
-      throw new Error("Missing search results scroll container.");
-    }
+    const typed = renderPane(true);
+    expect(screen.getByText("Incomplete pattern")).toBeInTheDocument();
+    expect(screen.queryByText("Search failed")).toBeNull();
+    expect(screen.queryByText(/unclosed group/u)).toBeNull();
+    typed.unmount();
 
-    filterInput.focus();
-    fireEvent.keyDown(filterInput, { key: "Escape" });
-
-    expect(document.activeElement).toBe(scroll);
+    // After Return the same error is shown in full.
+    renderPane(false);
+    expect(screen.getByText("Search failed")).toBeInTheDocument();
+    expect(screen.getByText(/unclosed group/u)).toBeInTheDocument();
+    // The bar has no second text field: typing in the search field refines the search.
+    expect(screen.queryByRole("textbox")).toBeNull();
   });
 
   it("highlights the matched part of names for plain regex name searches", () => {

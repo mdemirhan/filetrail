@@ -306,12 +306,11 @@ export function App() {
     setSearchResultsFilterQuery,
     debouncedSearchResultsFilterQuery,
     setDebouncedSearchResultsFilterQuery,
-    searchResultsFilterScope,
-    setSearchResultsFilterScope,
     searchStatus,
     setSearchStatus,
     searchError,
     setSearchError,
+    searchStartedLive,
     searchTruncated,
     searchElapsedMs,
     setSearchTruncated,
@@ -402,6 +401,8 @@ export function App() {
     showCachedSearchResults,
     startSearch,
     stopSearch,
+    submitSearch,
+    updateSearchDraftQuery,
     toggleSearchResultsSortDirection,
     updateSearchMatchScope,
     updateSearchPatternMode,
@@ -409,7 +410,6 @@ export function App() {
     updateSearchSkipGitFolders,
     updateSearchSkipGitIgnored,
     updateSearchResultsFilterQuery,
-    updateSearchResultsFilterScope,
     updateSearchResultsSortBy,
   } = useExplorerSearchController({
     services,
@@ -1018,9 +1018,6 @@ export function App() {
       if (patch.searchSkipGitIgnored !== undefined) {
         setSearchSkipGitIgnored(patch.searchSkipGitIgnored);
       }
-      if (patch.searchResultsFilterScope !== undefined) {
-        setSearchResultsFilterScope(patch.searchResultsFilterScope);
-      }
     },
   });
 
@@ -1055,7 +1052,6 @@ export function App() {
         searchResultsSortDirectionRef.current = preferences.searchResultsSortDirection;
         setSearchResultsSortBy(preferences.searchResultsSortBy);
         setSearchResultsSortDirection(preferences.searchResultsSortDirection);
-        setSearchResultsFilterScope(preferences.searchResultsFilterScope);
         setViewMode(preferences.viewMode);
         setFoldersFirst(preferences.foldersFirst);
         setCompactListView(preferences.compactListView);
@@ -1247,12 +1243,34 @@ export function App() {
   const canGoBack = historyIndex > 0;
   const canGoForward = historyIndex >= 0 && historyIndex < historyPaths.length - 1;
 
+  // Moving from the search field into the results starts at the first one.
+  function selectFirstSearchResult() {
+    const firstResult = searchResultEntries[0];
+    if (firstResult && contentSelection.paths.length === 0) {
+      setSingleContentSelection(firstResult.path);
+    }
+  }
+
+  // Return starts a search and moves into results that are not there yet; the first one is
+  // selected once the search has finished and the order is final.
+  const selectFirstSearchResultWhenDoneRef = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the search settles; it reads the latest results and selection.
+  useEffect(() => {
+    if (!selectFirstSearchResultWhenDoneRef.current || searchStatus === "running") {
+      return;
+    }
+    selectFirstSearchResultWhenDoneRef.current = false;
+    if (isSearchMode && focusedPane === "content") {
+      selectFirstSearchResult();
+    }
+  }, [searchStatus]);
+
   function focusFileSearch(selectContents = false) {
     searchPointerIntentRef.current = true;
     setFocusedPane(null);
     clearTypeahead();
     setSearchPopoverOpen(true);
-    showCachedSearchResults();
+    showCachedSearchResults({ fromField: true });
     window.requestAnimationFrame(() => {
       searchInputRef.current?.focus();
       if (selectContents) {
@@ -1500,7 +1518,6 @@ export function App() {
             }}
             searchWorkspaceProps={{
               isSearchMode,
-              searchResultsKey: `${searchRootPath}:${searchCommittedQuery}`,
               searchResultsPaneProps: {
                 paneRef: contentPaneRef,
                 isFocused: focusedPane === "content",
@@ -1512,9 +1529,9 @@ export function App() {
                 selectionLeadPath: contentSelection.leadPath,
                 highlightHoveredItems,
                 error: searchError,
+                // A pattern that does not parse while it is being typed is not a failure yet.
+                errorIsQuiet: searchStartedLive && searchPatternMode !== "text",
                 truncated: searchTruncated,
-                filterQuery: searchResultsFilterQuery,
-                filterScope: searchResultsFilterScope,
                 totalCount: searchResults.length,
                 sortBy: searchResultsSortBy,
                 sortDirection: searchResultsSortDirection,
@@ -1532,8 +1549,6 @@ export function App() {
                   hideSearchResults();
                   focusContentPane();
                 },
-                onFilterQueryChange: updateSearchResultsFilterQuery,
-                onFilterScopeChange: updateSearchResultsFilterScope,
                 onSortColumn: sortSearchResultsByColumn,
                 metadataByPath: searchMetadataByPath,
                 onVisiblePathsChange: loadSearchResultMetadata,
@@ -1778,9 +1793,21 @@ export function App() {
               });
             }}
             onSearchSubmit={() => {
-              void startSearch(searchDraftQuery).finally(() => {
+              void submitSearch(searchDraftQuery).then((resultsOnScreen) => {
                 dismissFileSearch({ focusBelow: true });
+                if (resultsOnScreen) {
+                  selectFirstSearchResult();
+                } else {
+                  selectFirstSearchResultWhenDoneRef.current = true;
+                }
               });
+            }}
+            onSearchInputArrowDown={() => {
+              // ↓ steps from the field into the results that typing found.
+              if (isSearchMode) {
+                dismissFileSearch({ focusBelow: true });
+                selectFirstSearchResult();
+              }
             }}
             searchInputRef={searchInputRef}
             searchDraftQuery={searchDraftQuery}
@@ -1789,15 +1816,14 @@ export function App() {
               setFocusedPane(null);
               clearTypeahead();
               setSearchPopoverOpen(true);
-              showCachedSearchResults();
+              showCachedSearchResults({ fromField: true });
             }}
-            onSearchDraftQueryChange={(nextValue) => {
-              setSearchDraftQuery(nextValue);
-              if (nextValue.trim().length === 0) {
-                void clearCommittedSearch();
-              }
-            }}
+            onSearchDraftQueryChange={updateSearchDraftQuery}
             onSearchInputEscape={() => {
+              // Esc ends the search and shows the folder again (⇧⌘F brings the results back).
+              if (isSearchMode) {
+                hideSearchResults();
+              }
               dismissFileSearch({ focusBelow: true });
             }}
             onClearSearchDraft={() => {

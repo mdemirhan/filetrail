@@ -118,6 +118,7 @@ function explorerWorkspaceElement(
       onSearchInputFocus={() => undefined}
       onSearchDraftQueryChange={() => undefined}
       onSearchInputEscape={() => undefined}
+      onSearchInputArrowDown={() => undefined}
       onClearSearchDraft={() => undefined}
       searchPatternMode="glob"
       onSearchPatternModeChange={() => undefined}

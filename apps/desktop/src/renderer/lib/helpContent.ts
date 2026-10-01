@@ -224,7 +224,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     id: "search",
     title: "Searching",
     intro:
-      "Search looks for files and folders in the folder you are browsing. Type in the search field and press Return. The magnifier in the field opens the options.",
+      "Search looks for files and folders in the folder you are browsing, as you type in the search field. Return or ↓ moves into the results and Esc shows the folder again. The magnifier in the field opens the options.",
     sections: [
       {
         title: "Plain text",
@@ -346,12 +346,13 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
               "The bar above the results switches between this folder, Home and the whole disk.",
           },
           {
-            label: "Filter",
-            description: "Narrows the results you already have, by name or by path.",
+            label: "Open",
+            description:
+              "Opening a folder in the results goes into it and closes the search. ⇧⌘F brings the results back.",
           },
           {
             label: "Limits",
-            description: "Search finds files, not folders, and stops at 20,000 results.",
+            description: "Search stops at 20,000 results. Aliases are not searched for.",
           },
         ],
       },

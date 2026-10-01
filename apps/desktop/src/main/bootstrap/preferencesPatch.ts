@@ -136,9 +136,6 @@ export function toPreferencePatch(
   if (value.searchResultsSortDirection !== undefined) {
     patch.searchResultsSortDirection = value.searchResultsSortDirection;
   }
-  if (value.searchResultsFilterScope !== undefined) {
-    patch.searchResultsFilterScope = value.searchResultsFilterScope;
-  }
   if (value.treeWidth !== undefined) {
     patch.treeWidth = value.treeWidth;
   }

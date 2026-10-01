@@ -32,7 +32,6 @@ export const SEARCH_PATTERN_MODE_LABELS: Record<SearchPatternModePreference, str
 export type SearchMatchScopePreference = "name" | "path";
 export type SearchResultsSortByPreference = "name" | "path";
 export type SearchResultsSortDirectionPreference = "asc" | "desc";
-export type SearchResultsFilterScopePreference = "name" | "path";
 export type DetailColumnKey = "name" | "modified" | "size" | "kind" | "created" | "permissions";
 export type OptionalDetailColumnKey = Exclude<DetailColumnKey, "name">;
 export type DetailColumnVisibility = Record<OptionalDetailColumnKey, boolean>;
@@ -343,7 +342,6 @@ export type AppPreferences = {
   searchSkipGitIgnored: boolean;
   searchResultsSortBy: SearchResultsSortByPreference;
   searchResultsSortDirection: SearchResultsSortDirectionPreference;
-  searchResultsFilterScope: SearchResultsFilterScopePreference;
   treeWidth: number;
   inspectorWidth: number;
   restoreLastVisitedFolderOnStartup: boolean;
@@ -405,7 +403,6 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   searchSkipGitIgnored: false,
   searchResultsSortBy: "path",
   searchResultsSortDirection: "asc",
-  searchResultsFilterScope: "name",
   treeWidth: 280,
   inspectorWidth: 320,
   restoreLastVisitedFolderOnStartup: false,

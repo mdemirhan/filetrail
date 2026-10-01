@@ -427,10 +427,6 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
       record.searchResultsSortDirection === "desc" || record.searchResultsSortDirection === "asc"
         ? record.searchResultsSortDirection
         : currentDefaults.searchResultsSortDirection,
-    searchResultsFilterScope:
-      record.searchResultsFilterScope === "name" || record.searchResultsFilterScope === "path"
-        ? record.searchResultsFilterScope
-        : currentDefaults.searchResultsFilterScope,
     treeWidth: clampPaneWidth(
       typeof record.treeWidth === "number" ? record.treeWidth : currentDefaults.treeWidth,
       220,

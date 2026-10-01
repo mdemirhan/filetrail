@@ -11,7 +11,6 @@ const TEST_PREFERENCES = {
   searchMatchScope: "name" as const,
   searchResultsSortBy: "path" as const,
   searchResultsSortDirection: "asc" as const,
-  searchResultsFilterScope: "name" as const,
 };
 
 function createHandlersThatFailOnSnapshot(): IpcHandlerMap {

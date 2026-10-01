@@ -22,7 +22,7 @@ Finder is great until you need to move fast through large folder trees, inspect 
 
 - Fast search powered by a bundled `fd` binary, so search is built into the app and does not depend on the user setting up extra tools.
 - Search controls that let you switch between plain text, glob and regex matching, target names or full paths, recurse deeply or stay shallow, and include hidden files when needed.
-- Search result tooling for sorting, live filtering, and quickly drilling into large result sets without losing context.
+- Search as you type, with results you can sort and open without losing your place.
 - On-demand folder size calculation with cached results, so you can inspect heavy directories without paying the cost every time you click around.
 - Native folder analysis that tracks logical size, allocated disk usage, and file counts for directory trees.
 - A dual-pane workflow with folder tree navigation, content browsing, favorites, and an inspector-style Get Info panel.
@@ -58,7 +58,7 @@ File Trail has a much deeper customization surface than a typical file explorer.
 - List and details views with adjustable density and configurable detail columns
 - Configurable toolbar items across the top bar, left rail and bottom rail
 - Favorite locations with customizable icons and placement options
-- Search defaults for pattern mode, match scope, recursion, hidden files, sorting, and filtering behavior
+- Search defaults for match mode, match scope, recursion and Git skipping
 - Default text editor, Terminal app, and open-with application shortcuts
 
 ## Feature Set

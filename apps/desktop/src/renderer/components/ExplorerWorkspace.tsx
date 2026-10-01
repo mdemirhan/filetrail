@@ -152,6 +152,7 @@ export function ExplorerWorkspace({
   onSearchInputFocus,
   onSearchDraftQueryChange,
   onSearchInputEscape,
+  onSearchInputArrowDown,
   onClearSearchDraft,
   searchPatternMode,
   onSearchPatternModeChange,
@@ -209,6 +210,7 @@ export function ExplorerWorkspace({
   onSearchInputFocus: () => void;
   onSearchDraftQueryChange: (value: string) => void;
   onSearchInputEscape: () => void;
+  onSearchInputArrowDown: () => void;
   onClearSearchDraft: () => void;
   searchPatternMode: SearchPatternMode;
   onSearchPatternModeChange: (value: SearchPatternMode) => void;
@@ -759,6 +761,11 @@ export function ExplorerWorkspace({
                   onFocus={onSearchInputFocus}
                   onChange={(event) => onSearchDraftQueryChange(event.currentTarget.value)}
                   onKeyDown={(event) => {
+                    if (event.key === "ArrowDown" && !event.nativeEvent.isComposing) {
+                      event.preventDefault();
+                      onSearchInputArrowDown();
+                      return;
+                    }
                     if (event.key !== "Escape") {
                       return;
                     }

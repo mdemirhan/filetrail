@@ -71,16 +71,17 @@ describe("search result ordering", () => {
       createSearchResult("/Users/demo/project/src/main.tsx"),
     ];
 
-    expect(filterSearchResults(items, "app", "name").map((item) => item.name)).toEqual(["App.tsx"]);
+    expect(filterSearchResults(items, "app").map((item) => item.name)).toEqual(["App.tsx"]);
   });
 
-  it("filters by path using case-insensitive contains matching", () => {
+  it("filters on the name only, not on the folders above it", () => {
     const items = [
       createSearchResult("/Users/demo/project/src/App.tsx"),
       createSearchResult("/Users/demo/project/tests/App.test.tsx"),
     ];
 
-    expect(filterSearchResults(items, "tests", "path").map((item) => item.path)).toEqual([
+    expect(filterSearchResults(items, "tests")).toEqual([]);
+    expect(filterSearchResults(items, "test").map((item) => item.path)).toEqual([
       "/Users/demo/project/tests/App.test.tsx",
     ]);
   });

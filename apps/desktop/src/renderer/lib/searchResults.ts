@@ -1,7 +1,6 @@
 import type { IpcResponse } from "@filetrail/contracts";
 
 import type {
-  SearchResultsFilterScopePreference,
   SearchResultsSortByPreference,
   SearchResultsSortDirectionPreference,
 } from "../../shared/appPreferences";
@@ -29,20 +28,13 @@ export function sortSearchResults(
 
 // Filtering only affects the in-memory result set currently loaded into the renderer; it
 // does not re-run the underlying filesystem search.
-export function filterSearchResults(
-  items: SearchResultItem[],
-  query: string,
-  scope: SearchResultsFilterScopePreference,
-): SearchResultItem[] {
+export function filterSearchResults(items: SearchResultItem[], query: string): SearchResultItem[] {
   const normalizedQuery = query.trim().toLocaleLowerCase();
   if (normalizedQuery.length === 0) {
     return items;
   }
 
-  return items.filter((item) => {
-    const haystack = scope === "path" ? item.path : item.name;
-    return haystack.toLocaleLowerCase().includes(normalizedQuery);
-  });
+  return items.filter((item) => item.name.toLocaleLowerCase().includes(normalizedQuery));
 }
 
 // Path is the deterministic tie-breaker so sort output remains stable across repeated runs.

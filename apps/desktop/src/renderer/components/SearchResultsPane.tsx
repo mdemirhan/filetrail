@@ -4,7 +4,6 @@ import type { IpcResponse } from "@filetrail/contracts";
 import type {
   SearchMatchScopePreference,
   SearchPatternModePreference,
-  SearchResultsFilterScopePreference,
   SearchResultsSortByPreference,
   SearchResultsSortDirectionPreference,
 } from "../../shared/appPreferences";
@@ -45,8 +44,7 @@ export function SearchResultsPane({
   highlightHoveredItems = true,
   error,
   truncated,
-  filterQuery,
-  filterScope,
+  errorIsQuiet = false,
   totalCount,
   sortBy,
   sortDirection,
@@ -66,8 +64,6 @@ export function SearchResultsPane({
   onStopSearch,
   onClearResults,
   onCloseResults,
-  onFilterQueryChange,
-  onFilterScopeChange,
   onSortColumn,
   metadataByPath = {},
   onVisiblePathsChange,
@@ -95,8 +91,8 @@ export function SearchResultsPane({
   highlightHoveredItems?: boolean;
   error: string | null;
   truncated: boolean;
-  filterQuery: string;
-  filterScope: SearchResultsFilterScopePreference;
+  /** The search was started by typing: a pattern that does not parse yet is not a failure. */
+  errorIsQuiet?: boolean;
   totalCount: number;
   sortBy: SearchResultsSortByPreference;
   sortDirection: SearchResultsSortDirectionPreference;
@@ -117,8 +113,6 @@ export function SearchResultsPane({
   onStopSearch: () => void;
   onClearResults: () => void;
   onCloseResults: () => void;
-  onFilterQueryChange: (value: string) => void;
-  onFilterScopeChange: (value: SearchResultsFilterScopePreference) => void;
   // Clicking a column header sorts by it immediately (again to reverse).
   onSortColumn: (value: SearchResultsSortByPreference) => void;
   // Modified date and size for visible results, loaded lazily by the parent.
@@ -292,55 +286,6 @@ export function SearchResultsPane({
             </button>
           ))}
           <span className="search-scope-spacer" />
-          <div className="search-results-filter-input-region">
-            <span className="search-results-filter-icon" aria-hidden="true">
-              <SearchGlyph />
-            </span>
-            <input
-              type="text"
-              className="search-results-filter-input"
-              value={filterQuery}
-              onChange={(event) => onFilterQueryChange(event.currentTarget.value)}
-              onKeyDown={(event) => {
-                if (event.key !== "Escape") {
-                  return;
-                }
-                event.preventDefault();
-                event.stopPropagation();
-                scrollRef.current?.focus({ preventScroll: true });
-              }}
-              placeholder="Filter"
-              spellCheck={false}
-              aria-label="Filter search results"
-            />
-            {filterQuery.length > 0 ? (
-              <button
-                type="button"
-                className="search-results-filter-clear"
-                aria-label="Clear result filter"
-                title="Clear result filter"
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                }}
-                onClick={() => onFilterQueryChange("")}
-              >
-                <CloseGlyph />
-              </button>
-            ) : null}
-          </div>
-          <select
-            className="search-scope-select"
-            value={filterScope}
-            onChange={(event) =>
-              onFilterScopeChange(event.currentTarget.value as SearchResultsFilterScopePreference)
-            }
-            title="Filter search results by"
-            aria-label="Filter search results by"
-          >
-            <option value="name">by name</option>
-            <option value="path">by path</option>
-          </select>
-          <span className="search-scope-divider" aria-hidden="true" />
           {/* The same menu as the magnifier in the toolbar search field. */}
           <SearchOptionsMenu
             trigger="label"
@@ -447,7 +392,15 @@ export function SearchResultsPane({
           {truncated ? (
             <div className="search-results-banner">Showing the first 20,000 matches.</div>
           ) : null}
-          {error ? (
+          {error && errorIsQuiet ? (
+            <div className="content-state content-empty">
+              <strong className="empty-state-title">Incomplete pattern</strong>
+              <span className="empty-state-message">
+                Keep typing, or press Return to see what is wrong with it.
+              </span>
+            </div>
+          ) : null}
+          {error && !errorIsQuiet ? (
             <div className="content-state content-error">
               <strong>Search failed</strong>
               <span>{error}</span>
@@ -468,7 +421,7 @@ export function SearchResultsPane({
             <div className="content-state content-empty">
               <strong className="empty-state-title">No matches</strong>
               <span className="empty-state-message">
-                Press Enter with a different pattern to search again.
+                Try other text, or another location above.
               </span>
             </div>
           ) : null}
@@ -558,24 +511,6 @@ export function SearchResultsPane({
         </div>
       </div>
     </section>
-  );
-}
-
-function CloseGlyph() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="search-results-control-icon">
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  );
-}
-
-function SearchGlyph() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="search-results-search-icon">
-      <circle cx="11" cy="11" r="7" />
-      <line x1="16.5" y1="16.5" x2="21" y2="21" />
-    </svg>
   );
 }
 

@@ -56,7 +56,7 @@ type ExplorerShortcutActions = {
   focusFileSearch: (selectContents?: boolean) => void;
   clearTypeahead: () => void;
   applyContentSelection: (selection: ContentSelectionState, entries: DirectoryEntry[]) => void;
-  showCachedSearchResults: (options?: { focusPane?: boolean }) => void;
+  showCachedSearchResults: (options?: { focusPane?: boolean; fromField?: boolean }) => void;
   hideSearchResults: () => void;
   goBack: () => void;
   goForward: () => void;
@@ -1148,13 +1148,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         latest.setFocusedPane(null);
         latest.clearTypeahead();
         latest.setSearchPopoverOpen(true);
-        if (latest.searchCommittedQueryRef.current.trim().length > 0) {
-          latest.setSearchResultsVisible(true);
-          latest.applyContentSelection(
-            latest.cachedSearchSelectionRef.current,
-            latest.searchResultEntries,
-          );
-        }
+        latest.showCachedSearchResults({ fromField: true });
         window.requestAnimationFrame(() => {
           latest.searchInputRef.current?.focus();
           latest.searchInputRef.current?.select();

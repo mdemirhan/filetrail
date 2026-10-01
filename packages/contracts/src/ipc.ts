@@ -48,7 +48,6 @@ export const sortDirectionSchema = z.enum(["asc", "desc"]);
 export const searchPatternModeSchema = z.enum(["text", "glob", "regex"]);
 export const searchMatchScopeSchema = z.enum(["name", "path"]);
 export const searchResultsSortBySchema = z.enum(["name", "path"]);
-export const searchResultsFilterScopeSchema = z.enum(["name", "path"]);
 export const detailColumnVisibilitySchema = z.object({
   modified: z.boolean(),
   size: z.boolean(),
@@ -674,7 +673,6 @@ export const appPreferencesSchema = z.object({
   searchSkipGitIgnored: z.boolean(),
   searchResultsSortBy: searchResultsSortBySchema,
   searchResultsSortDirection: sortDirectionSchema,
-  searchResultsFilterScope: searchResultsFilterScopeSchema,
   treeWidth: z.number().int().min(220).max(520),
   inspectorWidth: z.number().int().min(260).max(480),
   restoreLastVisitedFolderOnStartup: z.boolean(),

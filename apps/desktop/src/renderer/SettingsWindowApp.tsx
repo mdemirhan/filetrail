@@ -72,7 +72,6 @@ export function SettingsWindowApp() {
     searchRecursive: DEFAULT_APP_PREFERENCES.searchRecursive,
     searchSkipGitFolders: DEFAULT_APP_PREFERENCES.searchSkipGitFolders,
     searchSkipGitIgnored: DEFAULT_APP_PREFERENCES.searchSkipGitIgnored,
-    searchResultsFilterScope: DEFAULT_APP_PREFERENCES.searchResultsFilterScope,
   });
   const { preferencesReady, setPreferencesReady, theme, effectiveTheme } = preferences;
 
@@ -174,7 +173,6 @@ export function SettingsWindowApp() {
       searchRecursive: patch.searchRecursive ?? current.searchRecursive,
       searchSkipGitFolders: patch.searchSkipGitFolders ?? current.searchSkipGitFolders,
       searchSkipGitIgnored: patch.searchSkipGitIgnored ?? current.searchSkipGitIgnored,
-      searchResultsFilterScope: patch.searchResultsFilterScope ?? current.searchResultsFilterScope,
     }));
   }
 
