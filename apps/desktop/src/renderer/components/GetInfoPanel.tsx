@@ -300,14 +300,16 @@ function GetInfoPanelContent({
           <div ref={openWithRef} className="get-info-open-with">
             <button
               type="button"
-              className="get-info-button"
+              className="get-info-button pull-down"
               aria-haspopup="menu"
               aria-expanded={openWithMenuOpen}
               onClick={() => setOpenWithMenuOpen((value) => !value)}
             >
               Open With
-              <span className="get-info-button-chevron" aria-hidden="true">
-                ▾
+              <span className="get-info-button-chevron">
+                <svg viewBox="0 0 8 8" aria-hidden="true">
+                  <path d="M1.5 3 4 5.5 6.5 3" />
+                </svg>
               </span>
             </button>
             {openWithMenuOpen ? (
