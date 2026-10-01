@@ -187,6 +187,17 @@ function ContextMenuIcon({ name }: { name: ContextMenuIconName }) {
       </svg>
     );
   }
+  if (name === "rootTreeHere") {
+    return (
+      <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 5h8" />
+        <path d="M8 5v12h6" />
+        <path d="M8 11h6" />
+        <path d="M17 9l3 2-3 2" />
+        <path d="M17 15l3 2-3 2" />
+      </svg>
+    );
+  }
   if (name === "open") {
     return (
       <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react"
 import { clampZoomPercent } from "../../shared/appPreferences";
 import type { RendererCommandType } from "../../shared/rendererCommands";
 import type { ContentSelectionState } from "../lib/contentSelection";
-import { resolveNewFolderTargetPath } from "../lib/explorerAppUtils";
+import { isDirectoryLikeEntry, resolveNewFolderTargetPath } from "../lib/explorerAppUtils";
 import { parentDirectoryPath } from "../lib/explorerNavigation";
 import { getNextSelectionIndex } from "../lib/explorerNavigation";
 import type { DirectoryEntry } from "../lib/explorerTypes";
@@ -19,6 +19,7 @@ import {
   resolveEditSelectionPaths,
   resolveOpenInTerminalPaths,
   resolveOpenSelectionPaths,
+  resolveRootTreeTargetPath,
 } from "../lib/shortcutTargets";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
 import type {
@@ -59,6 +60,8 @@ type ExplorerShortcutActions = {
   hideSearchResults: () => void;
   goBack: () => void;
   goForward: () => void;
+  goHomeAndRootTree: () => void;
+  rootTreeAtPath: (path: string) => void;
   navigateTo: (path: string, historyMode: "push" | "replace" | "skip") => Promise<boolean>;
   navigateTreeFileSystemPath: (
     path: string,
@@ -165,6 +168,31 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
     },
     selectionLeadOrSelectedPath: () =>
       navigation.contentSelection.leadPath ?? derived.selectedEntry?.path ?? null,
+    rootTreeAtSelection: () => {
+      const contextMenu = writeOperations.contextMenuState;
+      const selectedContentEntry =
+        derived.selectedPathsInViewOrder.length === 1
+          ? (derived.activeContentEntries.find(
+              (entry) => entry.path === derived.selectedPathsInViewOrder[0],
+            ) ?? null)
+          : null;
+      const targetPath = resolveRootTreeTargetPath({
+        focusedPane: navigation.focusedPane,
+        lastFocusedPane: navigation.lastExplorerFocusPaneRef.current,
+        contextMenuFolderPath:
+          contextMenu?.surface === "treeFolder" || contextMenu?.surface === "favorite"
+            ? contextMenu.targetPath
+            : null,
+        selectedContentFolderPath: isDirectoryLikeEntry(selectedContentEntry)
+          ? selectedContentEntry.path
+          : null,
+        selectedTreePath: derived.selectedTreeTargetPath,
+        currentPath: navigation.currentPath,
+      });
+      if (targetPath) {
+        actions.rootTreeAtPath(targetPath);
+      }
+    },
   };
   const latestArgsRef = useRef(flatArgs);
   useLayoutEffect(() => {
@@ -649,6 +677,32 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         },
       },
       {
+        id: "goHomeRootTree",
+        matches: (keyboardEvent) =>
+          keyboardEvent.metaKey &&
+          keyboardEvent.shiftKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key.toLowerCase() === "h",
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          latestArgsRef.current.goHomeAndRootTree();
+        },
+      },
+      {
+        id: "rootTreeAtSelection",
+        matches: (keyboardEvent) =>
+          keyboardEvent.metaKey &&
+          keyboardEvent.shiftKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key.toLowerCase() === "r",
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          latestArgsRef.current.rootTreeAtSelection();
+        },
+      },
+      {
         id: "pagedScrollBackward",
         matches: (keyboardEvent) =>
           keyboardEvent.ctrlKey &&
@@ -1074,6 +1128,14 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       }
       if (commandType === "toggleInfoRow") {
         current.setInfoRowOpen((value) => !value);
+        return;
+      }
+      if (commandType === "goHomeRootTree") {
+        current.goHomeAndRootTree();
+        return;
+      }
+      if (commandType === "rootTreeAtSelection") {
+        current.rootTreeAtSelection();
         return;
       }
       if (commandType !== "focusFileSearch") {

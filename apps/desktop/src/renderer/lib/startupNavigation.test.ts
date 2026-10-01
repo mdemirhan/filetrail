@@ -1,7 +1,7 @@
 import { resolveStartupNavigation } from "./startupNavigation";
 
 describe("startup navigation", () => {
-  it("uses home as the tree root when the last visited folder is inside home", () => {
+  it("keeps a hand-picked tree root when the last visited folder is inside it", () => {
     expect(
       resolveStartupNavigation(
         {
@@ -14,12 +14,12 @@ describe("startup navigation", () => {
       ),
     ).toEqual({
       startupPath: "/Users/demo/projects/filetrail",
-      startupRootPath: "/Users/demo",
+      startupRootPath: "/Users/demo/projects",
       startupFavoritePath: null,
     });
   });
 
-  it("uses slash as the tree root when the last visited folder is above home", () => {
+  it("keeps a hand-picked tree root that is the last visited folder itself", () => {
     expect(
       resolveStartupNavigation(
         {
@@ -27,6 +27,42 @@ describe("startup navigation", () => {
           lastVisitedPath: "/Applications",
           lastVisitedFavoritePath: null,
           treeRootPath: "/Applications",
+        },
+        "/Users/demo",
+      ),
+    ).toEqual({
+      startupPath: "/Applications",
+      startupRootPath: "/Applications",
+      startupFavoritePath: null,
+    });
+  });
+
+  it("uses home as the tree root when the last visited folder is inside home but outside the saved root", () => {
+    expect(
+      resolveStartupNavigation(
+        {
+          restoreLastVisitedFolderOnStartup: true,
+          lastVisitedPath: "/Users/demo/Documents",
+          lastVisitedFavoritePath: null,
+          treeRootPath: "/Users/demo/projects",
+        },
+        "/Users/demo",
+      ),
+    ).toEqual({
+      startupPath: "/Users/demo/Documents",
+      startupRootPath: "/Users/demo",
+      startupFavoritePath: null,
+    });
+  });
+
+  it("uses slash as the tree root when the last visited folder is above home and outside the saved root", () => {
+    expect(
+      resolveStartupNavigation(
+        {
+          restoreLastVisitedFolderOnStartup: true,
+          lastVisitedPath: "/Applications",
+          lastVisitedFavoritePath: null,
+          treeRootPath: "/Users/demo/projects",
         },
         "/Users/demo",
       ),

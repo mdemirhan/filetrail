@@ -3565,6 +3565,95 @@ describe("App copy/paste integration", () => {
     });
   });
 
+  it("goes Home and roots the tree there with Cmd+Shift+H", async () => {
+    const harness = createAppHarness({
+      directorySnapshots: {
+        "/Users/demo": {
+          path: "/Users/demo",
+          parentPath: "/Users",
+          entries: [
+            createDirectoryEntry("/Users/demo/source.txt", "file"),
+            createDirectoryEntry("/Volumes/Shared/Project", "directory"),
+          ],
+        },
+        "/Volumes/Shared/Project": {
+          path: "/Volumes/Shared/Project",
+          parentPath: "/Volumes/Shared",
+          entries: [],
+        },
+      },
+      treeChildrenByPath: {
+        "/": [createTreeChild("/Users", "directory"), createTreeChild("/Volumes", "directory")],
+        "/Volumes": [createTreeChild("/Volumes/Shared", "directory")],
+        "/Volumes/Shared": [createTreeChild("/Volumes/Shared/Project", "directory")],
+        "/Users/demo": [createTreeChild("/Users/demo/Folder", "directory")],
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await openDirectory("/Volumes/Shared/Project");
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("tree-root")).toHaveTextContent("/");
+    });
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "H", metaKey: true, shiftKey: true });
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("tree-root")).toHaveTextContent("/Users/demo");
+      expect(screen.getByTestId("tree-selection")).toHaveTextContent("fs:/Users/demo");
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo");
+      expect(screen.getByTitle("/Users/demo/source.txt")).toBeInTheDocument();
+    });
+  });
+
+  it("roots the tree at the folder on screen, then falls back once a folder outside it opens", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await openDirectory("/Users/demo/Folder");
+
+    await act(async () => {
+      harness.emitCommand({ type: "rootTreeAtSelection" });
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("tree-root")).toHaveTextContent("/Users/demo/Folder");
+      expect(screen.getByTestId("tree-selection")).toHaveTextContent("fs:/Users/demo/Folder");
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/Folder");
+    });
+    await vi.waitFor(() => {
+      const lastUpdate = [...harness.invocations]
+        .reverse()
+        .find((call) => call.channel === "app:updatePreferences");
+      expect(lastUpdate?.payload).toMatchObject({
+        preferences: { treeRootPath: "/Users/demo/Folder" },
+      });
+    });
+
+    await focusTreePane();
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "ArrowUp", metaKey: true });
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("tree-root")).toHaveTextContent("/Users/demo");
+      expect(screen.getByTestId("tree-selection")).toHaveTextContent("fs:/Users/demo");
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo");
+    });
+  });
+
   it("clears the content pane when the integrated Favorites root is selected", async () => {
     const harness = createAppHarness();
 

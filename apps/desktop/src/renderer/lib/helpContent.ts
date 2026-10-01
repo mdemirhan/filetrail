@@ -43,6 +43,16 @@ export const SHORTCUT_ITEMS: readonly ShortcutItem[] = [
     description: "Open the selected item, or expand the folder in the tree",
   },
   { group: "navigation", shortcut: "Cmd+Shift+G", description: "Go to Folder" },
+  {
+    group: "navigation",
+    shortcut: "Cmd+Shift+H",
+    description: "Go Home and root the folder tree there",
+  },
+  {
+    group: "navigation",
+    shortcut: "Cmd+Shift+R",
+    description: "Root the folder tree at the selected folder",
+  },
   { group: "navigation", shortcut: "Cmd+1", description: "Focus the folder tree" },
   { group: "navigation", shortcut: "Cmd+2", description: "Focus the file list" },
   {
@@ -112,6 +122,11 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
             label: "Favorites",
             description:
               "Right-click a folder and choose Add to Favorites to pin it in the sidebar.",
+          },
+          {
+            label: "Tree root",
+            description:
+              "Root Tree at Selected Folder makes a folder the top of the folder tree, until you open a folder outside it. Go > Home returns the tree to your home folder.",
           },
         ],
       },

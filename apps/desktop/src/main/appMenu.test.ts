@@ -251,6 +251,27 @@ describe("createApplicationMenuTemplate", () => {
     });
   });
 
+  it("wires the Go menu's Home and Root Tree at Selected Folder to the renderer", () => {
+    const send = vi.fn();
+    const template = createApplicationMenuTemplate({ send } as never);
+    const goMenu = template.find((item) => item.label === "Go");
+    const submenu = Array.isArray(goMenu?.submenu) ? goMenu.submenu : [];
+    const expected = [
+      ["Home", "CommandOrControl+Shift+H", "goHomeRootTree"],
+      ["Root Tree at Selected Folder", "CommandOrControl+Shift+R", "rootTreeAtSelection"],
+    ] as const;
+
+    for (const [label, accelerator, type] of expected) {
+      const menuItem = submenu.find((item) => "label" in item && item.label === label);
+      if (!menuItem || !("click" in menuItem) || typeof menuItem.click !== "function") {
+        throw new Error(`${label} menu item missing.`);
+      }
+      expect(menuItem.accelerator).toBe(accelerator);
+      menuItem.click(undefined as never, undefined as never, undefined as never);
+      expect(send).toHaveBeenCalledWith("filetrail:command", { type });
+    }
+  });
+
   it("applies edit commands natively in another focused window instead of the explorer", () => {
     const send = vi.fn();
     const template = createApplicationMenuTemplate({ send } as never);

@@ -582,6 +582,27 @@ export function useExplorerNavigationController(args: {
     void loadTreeChildren(homePath, includeHidden, false, currentPathRef.current, true);
   }
 
+  // Opens `path` and makes it the top of the folder tree. The tree keeps that root until a
+  // folder outside it is opened, when `syncTreeToPath` falls back to home or `/`.
+  function rootTreeAtPath(path: string) {
+    if (path.length === 0) {
+      return;
+    }
+    void navigateTo(
+      path,
+      path === currentPathRef.current ? "replace" : "push",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { rerootTree: true },
+    );
+  }
+
+  function goHomeAndRootTree() {
+    rootTreeAtPath(homePath);
+  }
+
   function goQuickAccess(location: "root" | "applications" | "trash") {
     const targetPath =
       location === "root"
@@ -735,6 +756,7 @@ export function useExplorerNavigationController(args: {
       favoritePath?: string;
       persistOnError?: boolean;
       forceTreeReload?: boolean;
+      rerootTree?: boolean;
     } = {},
   ): Promise<boolean> {
     const requestId = ++directoryRequestRef.current;
@@ -760,6 +782,9 @@ export function useExplorerNavigationController(args: {
         }),
       );
       applyDirectorySnapshot(response.path, response.entries, cachedMetadata);
+      if (options.rerootTree) {
+        initializeTree(response.path);
+      }
       if (options.syncTree !== false) {
         await syncTreeToPath(response.path, includeHiddenOverride, {
           forceReload: options.forceTreeReload ?? false,
@@ -1770,6 +1795,8 @@ export function useExplorerNavigationController(args: {
     goForward,
     goHome,
     rerootTreeAtHome,
+    rootTreeAtPath,
+    goHomeAndRootTree,
     goQuickAccess,
     navigateToParentFolder,
     navigateTreeSelectionToParent,

@@ -283,6 +283,23 @@ describe("shortcutPolicy", () => {
     expect(getContextMenuShortcutLabel("copyPath", favoritesRootContext)).toBeNull();
   });
 
+  it("roots the tree from either pane, and badges Root Tree Here in the tree menus", () => {
+    for (const focusedPane of ["tree", "content", null] as const) {
+      const context = ctx({ focusedPane, selectedTreeTargetKind: "filesystemFolder" });
+      expect(canHandleRendererCommand("goHomeRootTree", context)).toBe(true);
+      expect(canHandleRendererCommand("rootTreeAtSelection", context)).toBe(true);
+      expect(canHandleRawExplorerShortcut("goHomeRootTree", context)).toBe(true);
+      expect(canHandleRawExplorerShortcut("rootTreeAtSelection", context)).toBe(true);
+    }
+    expect(canHandleRendererCommand("rootTreeAtSelection", ctx({ mainView: "help" }))).toBe(false);
+    expect(
+      getContextMenuShortcutLabel(
+        "rootTreeHere",
+        ctx({ focusedPane: "tree", selectedTreeTargetKind: "filesystemFolder" }),
+      ),
+    ).toBe("⇧⌘R");
+  });
+
   it("keeps renderer command tree-focus buckets exhaustive", () => {
     expect(Object.keys(RENDERER_COMMAND_TREE_FOCUS_BUCKETS).sort()).toEqual(
       [...RENDERER_COMMAND_TYPES].sort(),

@@ -9,6 +9,10 @@ function resolvePersistedStartupRoot(
   if (persistedRootPath === "/" || persistedRootPath === homePath) {
     return persistedRootPath;
   }
+  // A folder the tree was rooted at by hand is kept while the startup folder is inside it.
+  if (persistedRootPath && isPathWithinRoot(startupPath, persistedRootPath)) {
+    return persistedRootPath;
+  }
   return isPathWithinRoot(startupPath, homePath) ? homePath : "/";
 }
 

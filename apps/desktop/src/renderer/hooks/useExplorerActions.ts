@@ -241,6 +241,7 @@ export function useExplorerActions(args: {
       path: string,
       historyMode: "push" | "replace" | "skip",
     ) => Promise<boolean>;
+    rootTreeAtPath: (path: string) => void;
     toggleTreeNode: (path: string) => void;
     refreshDirectory: (options?: {
       path?: string;
@@ -345,6 +346,7 @@ export function useExplorerActions(args: {
     navigateTo,
     navigateTreeFileSystemPath,
     navigateFavoritePath,
+    rootTreeAtPath,
     toggleTreeNode,
     refreshDirectory,
   } = navActions;
@@ -475,6 +477,7 @@ export function useExplorerActions(args: {
         disabled.add("open");
         disabled.add("showInfo");
         disabled.add("toggleFavorite");
+        disabled.add("rootTreeHere");
         disabled.add("terminal");
         disabled.add("showInFinder");
         disabled.add("copyPath");
@@ -502,6 +505,7 @@ export function useExplorerActions(args: {
         disabled.add("revealInTree");
         disabled.add("showInfo");
         disabled.add("toggleFavorite");
+        disabled.add("rootTreeHere");
         disabled.add("terminal");
         disabled.add("showInFinder");
         disabled.add("copyPath");
@@ -2238,6 +2242,13 @@ export function useExplorerActions(args: {
       const targetPath = paths[0];
       if (targetPath) {
         await revealFavoriteInTree(targetPath);
+      }
+      return;
+    }
+    if (actionId === "rootTreeHere") {
+      const targetPath = contextMenuTargetPath ?? paths[0];
+      if (targetPath) {
+        rootTreeAtPath(targetPath);
       }
       return;
     }

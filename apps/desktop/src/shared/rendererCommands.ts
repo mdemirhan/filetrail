@@ -25,6 +25,8 @@ export const RENDERER_COMMAND_TYPES = [
   "refreshOrApplySearchSort",
   "toggleInfoPanel",
   "toggleInfoRow",
+  "goHomeRootTree",
+  "rootTreeAtSelection",
 ] as const;
 
 export type RendererCommandType = (typeof RENDERER_COMMAND_TYPES)[number];

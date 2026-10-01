@@ -49,6 +49,7 @@ const CONTEXT_MENU_SHORTCUT_LABELS = {
   newFolder: "⇧⌘N",
   terminal: "⌘T",
   copyPath: "⌥⌘C",
+  rootTreeHere: "⇧⌘R",
   trash: "⌘⌫",
 } as const satisfies Partial<Record<ContextMenuActionId, string>>;
 
@@ -79,6 +80,8 @@ export const RENDERER_COMMAND_TREE_FOCUS_BUCKETS = {
   refreshOrApplySearchSort: "globalExplorer",
   toggleInfoPanel: "globalExplorer",
   toggleInfoRow: "globalExplorer",
+  goHomeRootTree: "globalExplorer",
+  rootTreeAtSelection: "globalExplorer",
 } as const satisfies Record<RendererCommandType, TreeFocusShortcutBucket>;
 
 export const RAW_EXPLORER_SHORTCUT_IDS = [
@@ -109,6 +112,8 @@ export const RAW_EXPLORER_SHORTCUT_IDS = [
   "openLocationSheet",
   "toggleInfoRow",
   "toggleInfoPanel",
+  "goHomeRootTree",
+  "rootTreeAtSelection",
   "pagedScrollBackward",
   "pagedScrollForward",
   "typeahead",
@@ -149,6 +154,8 @@ export const RAW_EXPLORER_SHORTCUT_TREE_FOCUS_BUCKETS = {
   openLocationSheet: "globalExplorer",
   toggleInfoRow: "globalExplorer",
   toggleInfoPanel: "globalExplorer",
+  goHomeRootTree: "globalExplorer",
+  rootTreeAtSelection: "globalExplorer",
   pagedScrollBackward: "treeNavigation",
   pagedScrollForward: "treeNavigation",
   typeahead: "treeNavigation",
@@ -285,6 +292,9 @@ export function getContextMenuShortcutLabel(
       canHandleRendererCommand("copyPath", context))
   ) {
     return CONTEXT_MENU_SHORTCUT_LABELS.copyPath ?? null;
+  }
+  if (actionId === "rootTreeHere" && canHandleRendererCommand("rootTreeAtSelection", context)) {
+    return CONTEXT_MENU_SHORTCUT_LABELS.rootTreeHere ?? null;
   }
   if (actionId === "trash" && canHandleRawExplorerShortcut("trashSelection", context)) {
     return CONTEXT_MENU_SHORTCUT_LABELS.trash ?? null;

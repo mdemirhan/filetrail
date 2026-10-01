@@ -302,6 +302,9 @@ describe("ItemContextMenu", () => {
           if (label?.startsWith("Show Info")) {
             return "Show Info";
           }
+          if (label?.startsWith("Root Tree Here")) {
+            return "Root Tree Here";
+          }
           if (label?.startsWith("Open")) {
             return "Open";
           }
@@ -312,6 +315,7 @@ describe("ItemContextMenu", () => {
       "Show Info",
       "Calculate Size",
       "Add to Favorites",
+      "Root Tree Here",
       "Copy",
       "Cut",
       "Paste",
@@ -386,7 +390,7 @@ describe("ItemContextMenu", () => {
         anchorY={0}
         surface="favorite"
         favoriteToggleLabel="Remove from Favorites"
-        hiddenActionIds={["toggleFavorite", "paste", "newFolder"]}
+        hiddenActionIds={["toggleFavorite", "rootTreeHere", "paste", "newFolder"]}
         submenuItems={submenuItems}
         shortcutContext={{
           ...shortcutContext,

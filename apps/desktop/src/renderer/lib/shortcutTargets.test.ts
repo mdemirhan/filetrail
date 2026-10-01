@@ -2,6 +2,7 @@ import {
   resolveEditSelectionPaths,
   resolveOpenInTerminalPaths,
   resolveOpenSelectionPaths,
+  resolveRootTreeTargetPath,
 } from "./shortcutTargets";
 
 describe("shortcutTargets", () => {
@@ -160,5 +161,80 @@ describe("shortcutTargets", () => {
         selectedTreePath: "/tmp/tree-selected",
       }),
     ).toEqual(["/tmp/tree-selected"]);
+  });
+
+  it("roots the tree at the tree's selected folder when the tree pane is focused", () => {
+    expect(
+      resolveRootTreeTargetPath({
+        focusedPane: "tree",
+        lastFocusedPane: "content",
+        contextMenuFolderPath: null,
+        selectedContentFolderPath: "/tmp/content-folder",
+        selectedTreePath: "/tmp/tree-selected",
+        currentPath: "/tmp/current",
+      }),
+    ).toBe("/tmp/tree-selected");
+  });
+
+  it("roots the tree at the single folder selected in the file list", () => {
+    expect(
+      resolveRootTreeTargetPath({
+        focusedPane: "content",
+        lastFocusedPane: "tree",
+        contextMenuFolderPath: null,
+        selectedContentFolderPath: "/tmp/content-folder",
+        selectedTreePath: "/tmp/tree-selected",
+        currentPath: "/tmp/current",
+      }),
+    ).toBe("/tmp/content-folder");
+  });
+
+  it("roots the tree at the folder on screen when the selection is not a single folder", () => {
+    expect(
+      resolveRootTreeTargetPath({
+        focusedPane: "content",
+        lastFocusedPane: "content",
+        contextMenuFolderPath: null,
+        selectedContentFolderPath: null,
+        selectedTreePath: "/tmp/tree-selected",
+        currentPath: "/tmp/current",
+      }),
+    ).toBe("/tmp/current");
+    expect(
+      resolveRootTreeTargetPath({
+        focusedPane: null,
+        lastFocusedPane: "tree",
+        contextMenuFolderPath: null,
+        selectedContentFolderPath: null,
+        selectedTreePath: null,
+        currentPath: "/tmp/current",
+      }),
+    ).toBe("/tmp/current");
+  });
+
+  it("roots the tree at the right-clicked folder while its menu is open", () => {
+    expect(
+      resolveRootTreeTargetPath({
+        focusedPane: "tree",
+        lastFocusedPane: "tree",
+        contextMenuFolderPath: "/tmp/context",
+        selectedContentFolderPath: null,
+        selectedTreePath: "/tmp/tree-selected",
+        currentPath: "/tmp/current",
+      }),
+    ).toBe("/tmp/context");
+  });
+
+  it("has no tree root target when nothing is selected or on screen", () => {
+    expect(
+      resolveRootTreeTargetPath({
+        focusedPane: "tree",
+        lastFocusedPane: "tree",
+        contextMenuFolderPath: null,
+        selectedContentFolderPath: null,
+        selectedTreePath: null,
+        currentPath: "",
+      }),
+    ).toBeNull();
   });
 });

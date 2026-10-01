@@ -66,3 +66,23 @@ export function resolveEditSelectionPaths(input: {
 }): string[] {
   return resolveSelectionPaths(input);
 }
+
+// The folder "Root Tree at Selected Folder" acts on: the folder selected in the focused
+// pane, or the folder on screen when the selection is not a single folder.
+export function resolveRootTreeTargetPath(input: {
+  focusedPane: "tree" | "content" | null;
+  lastFocusedPane: "tree" | "content" | null;
+  contextMenuFolderPath: string | null;
+  selectedContentFolderPath: string | null;
+  selectedTreePath?: string | null;
+  currentPath: string;
+}): string | null {
+  if (input.contextMenuFolderPath) {
+    return input.contextMenuFolderPath;
+  }
+
+  const activePane = input.focusedPane ?? input.lastFocusedPane;
+  const selectedPath =
+    activePane === "tree" ? input.selectedTreePath : input.selectedContentFolderPath;
+  return selectedPath || input.currentPath || null;
+}

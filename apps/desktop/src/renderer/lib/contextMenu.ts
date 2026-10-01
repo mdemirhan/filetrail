@@ -23,6 +23,7 @@ export type ContextMenuActionId =
   | "terminal"
   | "showInFinder"
   | "copyPath"
+  | "rootTreeHere"
   | "trash"
   | "deleteImmediately"
   | "emptyTrash";
@@ -71,6 +72,7 @@ export type ContextMenuIconName =
   | "terminal"
   | "showInFinder"
   | "copyPath"
+  | "rootTreeHere"
   | "trash"
   | "deleteImmediately"
   | "emptyTrash"
@@ -127,6 +129,7 @@ export function getContextMenuItems(input: {
       { id: "calculateSize", label: "Calculate Size", icon: "calculateSize" },
       { type: "separator", key: "separator-tree-open" },
       { id: "toggleFavorite", label: favoriteToggleLabel, icon: "favorite" },
+      { id: "rootTreeHere", label: "Root Tree Here", icon: "rootTreeHere" },
       { type: "separator", key: "separator-tree-favorite" },
       { id: "copy", label: "Copy", icon: "copy" },
       { id: "cut", label: "Cut", icon: "cut" },
@@ -157,6 +160,7 @@ export function getContextMenuItems(input: {
       { id: "showInfo", label: "Show Info", icon: "showInfo" },
       { type: "separator", key: "separator-favorite-open" },
       { id: "toggleFavorite", label: favoriteToggleLabel, icon: "favorite" },
+      { id: "rootTreeHere", label: "Root Tree Here", icon: "rootTreeHere" },
       { type: "separator", key: "separator-favorite-toggle" },
       { id: "paste", label: "Paste", icon: "paste" },
       { type: "separator", key: "separator-favorite-between-paste-and-new-folder" },

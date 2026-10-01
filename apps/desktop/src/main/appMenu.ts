@@ -189,6 +189,21 @@ export function createApplicationMenuTemplate(
       ],
     },
     {
+      label: "Go",
+      submenu: [
+        {
+          label: "Home",
+          accelerator: "CommandOrControl+Shift+H",
+          click: (_item, window) => sendCommand("goHomeRootTree", window),
+        },
+        {
+          label: "Root Tree at Selected Folder",
+          accelerator: "CommandOrControl+Shift+R",
+          click: (_item, window) => sendCommand("rootTreeAtSelection", window),
+        },
+      ],
+    },
+    {
       label: "Window",
       submenu: [{ role: "minimize" }, { role: "zoom" }, { role: "front" }],
     },
