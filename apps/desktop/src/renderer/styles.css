@@ -6737,3 +6737,52 @@ body.settings-window-body {
 .copy-paste-conflict-alert .tb-btn:disabled {
   opacity: 0.6;
 }
+
+/* ── Narrow windows ───────────────────────────────────────────────────── */
+
+/* A grid's implicit column is as wide as its widest content. These panes must instead
+   shrink with the window, so the list can refit its columns (see `fitDetailColumns`). */
+.content-pane,
+.content-viewport {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* In the path bar row the item count gives way before the path does. */
+.content-pathbar-status {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The search field narrows rather than pushing the toolbar buttons over the title. */
+.window-toolbar .toolbar-search-slot {
+  flex-shrink: 1;
+  min-width: 110px;
+}
+
+/* Search results drop the date, then the size, as their pane narrows (SearchResultsPane
+   sets `data-columns` from the measured width). */
+.search-results-pane[data-columns="no-date"] .search-results-columns {
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 76px;
+}
+
+.search-results-pane[data-columns="no-date"] .search-result-row {
+  grid-template-columns: 18px minmax(0, 1.4fr) minmax(0, 1fr) 76px;
+}
+
+.search-results-pane[data-columns="names"] .search-results-columns {
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+}
+
+.search-results-pane[data-columns="names"] .search-result-row {
+  grid-template-columns: 18px minmax(0, 1.4fr) minmax(0, 1fr);
+}
+
+.search-results-pane:not([data-columns="full"])
+  .search-results-column-static:not(.search-results-column-size),
+.search-results-pane:not([data-columns="full"]) .search-result-meta:not(.search-result-size),
+.search-results-pane[data-columns="names"] .search-results-column-size,
+.search-results-pane[data-columns="names"] .search-result-size {
+  display: none;
+}

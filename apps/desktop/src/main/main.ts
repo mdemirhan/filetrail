@@ -168,8 +168,9 @@ function createWindow(): BrowserWindow {
     height: storedWindowState.height,
     ...(typeof storedWindowState.x === "number" ? { x: storedWindowState.x } : {}),
     ...(typeof storedWindowState.y === "number" ? { y: storedWindowState.y } : {}),
-    minWidth: 1080,
-    minHeight: 720,
+    // Small enough to sit beside another window; the renderer adapts down to this size.
+    minWidth: 760,
+    minHeight: 480,
     title: "File Trail",
     backgroundColor: windowBackgroundColor(appStateStore.getPreferences().theme),
     titleBarStyle: "hiddenInset",

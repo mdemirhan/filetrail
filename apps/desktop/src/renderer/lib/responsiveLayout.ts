@@ -1,5 +1,6 @@
 export type ExplorerToolbarLayout = "full" | "condensed" | "narrow" | "minimal";
 export type SinglePanelLayout = "wide" | "narrow" | "compact";
+export type SearchResultsColumnLayout = "full" | "no-date" | "names";
 
 // Keep these breakpoints aligned with the real toolbar control density before changing labels
 // or adding/removing groups.
@@ -26,4 +27,14 @@ export function resolveSinglePanelLayout(width: number): SinglePanelLayout {
     return "narrow";
   }
   return "compact";
+}
+
+// Search results drop the Date Modified column in a narrow pane, and the Size column too
+// in a very narrow one, so names and folders keep their room. A width of 0 means the pane
+// has not been measured yet. `[data-columns]` rules in styles.css match these names.
+export function resolveSearchResultsColumnLayout(width: number): SearchResultsColumnLayout {
+  if (width <= 0 || width > 600) {
+    return "full";
+  }
+  return width > 380 ? "no-date" : "names";
 }

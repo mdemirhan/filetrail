@@ -15,6 +15,7 @@ import type { DirectoryEntryMetadata } from "../lib/explorerTypes";
 import { FileIcon } from "../lib/fileIcons";
 import { isKeyboardOwnedFormControl } from "../lib/focusedEditTarget";
 import { formatDateTime, formatSize, splitDisplayName } from "../lib/formatting";
+import { resolveSearchResultsColumnLayout } from "../lib/responsiveLayout";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
 import { getVirtualRange } from "../lib/virtualization";
 import { SearchOptionsMenu } from "./SearchOptionsMenu";
@@ -139,7 +140,8 @@ export function SearchResultsPane({
   onScrollTopChange?: (value: number) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const { height } = useElementSize(scrollRef);
+  const { width, height } = useElementSize(scrollRef);
+  const columnLayout = resolveSearchResultsColumnLayout(width);
   const [internalScrollTop, setInternalScrollTop] = useState(scrollTop);
   const selectedPathSet = useMemo(() => new Set(selectedPaths), [selectedPaths]);
 
@@ -216,6 +218,7 @@ export function SearchResultsPane({
     <section
       ref={paneRef}
       className="content-pane pane pane-focus-target search-results-pane"
+      data-columns={columnLayout}
       data-searching={isSearching ? "true" : "false"}
       tabIndex={-1}
       onFocusCapture={() => onFocusChange(true)}

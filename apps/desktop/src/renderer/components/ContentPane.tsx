@@ -14,7 +14,7 @@ import { useElementSize } from "../hooks/useElementSize";
 import { usePathSuggestions } from "../hooks/usePathSuggestions";
 import { isSelectionNarrowingClick } from "../lib/contentSelection";
 import {
-  DETAILS_LAYOUT,
+  fitDetailColumns,
   getDetailsRowHeight,
   getDetailsTableWidth,
   getVisibleDetailColumns,
@@ -58,6 +58,9 @@ const PATHBAR_SEGMENT_HORIZONTAL_PADDING = 18;
 const PATHBAR_MAX_SEGMENT_WIDTH = 220;
 const PATHBAR_MAX_ACTIVE_SEGMENT_WIDTH = 320;
 const PATHBAR_SEGMENT_CLICK_DELAY_MS = 320;
+// Width of the list's vertical scrollbar (`.content-scroll::-webkit-scrollbar`), kept free
+// when the details columns are fitted to the pane.
+const DETAILS_SCROLLBAR_WIDTH = 8;
 type SelectionGestureModifiers = {
   metaKey: boolean;
   shiftKey: boolean;
@@ -1143,17 +1146,27 @@ function DetailsView({
   const scrollFrameRef = useRef<number | null>(null);
   const [scrollRowIndex, setScrollRowIndex] = useState(0);
   const selectedPathSet = useMemo(() => new Set(selectedPaths), [selectedPaths]);
-  const visibleColumns = useMemo(() => getVisibleDetailColumns(detailColumns), [detailColumns]);
+  // The chosen columns are fitted to the pane: in a narrow pane Name gives up width and
+  // then columns drop away from the right, instead of the table scrolling sideways.
+  const { columns: visibleColumns, widths: columnWidths } = useMemo(
+    () =>
+      fitDetailColumns({
+        columns: getVisibleDetailColumns(detailColumns),
+        widths: detailColumnWidths,
+        availableWidth: Math.max(0, viewportWidth - DETAILS_SCROLLBAR_WIDTH),
+      }),
+    [detailColumnWidths, detailColumns, viewportWidth],
+  );
   const rowHeight = getDetailsRowHeight(compactDetailsView);
   const gridTemplateColumns = useMemo(
-    () => visibleColumns.map((key) => `${detailColumnWidths[key]}px`).join(" "),
-    [detailColumnWidths, visibleColumns],
+    () => visibleColumns.map((key) => `${columnWidths[key]}px`).join(" "),
+    [columnWidths, visibleColumns],
   );
   // Header and body widths must come from the same visible-column set so the sticky
   // header remains aligned with the scrollable body.
   const tableWidth = useMemo(
-    () => getDetailsTableWidth(detailColumnWidths, visibleColumns),
-    [detailColumnWidths, visibleColumns],
+    () => getDetailsTableWidth(columnWidths, visibleColumns),
+    [columnWidths, visibleColumns],
   );
   const range = getVirtualRange({
     itemCount: entries.length,
@@ -1230,7 +1243,8 @@ function DetailsView({
     event.stopPropagation();
     const pointerId = event.pointerId;
     const startX = event.clientX;
-    const startWidth = detailColumnWidths[key];
+    // Start from the width on screen: Name may be showing narrower than its saved width.
+    const startWidth = columnWidths[key];
     const startWidths = detailColumnWidths;
     const finishResize = () => {
       resizeCleanupRef.current = null;
@@ -1267,7 +1281,7 @@ function DetailsView({
   }
 
   function nudgeColumnWidth(key: DetailColumnKey, direction: -1 | 1) {
-    const width = clampDetailColumnWidth(key, detailColumnWidths[key] + direction * 12);
+    const width = clampDetailColumnWidth(key, columnWidths[key] + direction * 12);
     if (width === detailColumnWidths[key]) {
       return;
     }
