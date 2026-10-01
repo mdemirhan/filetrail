@@ -1029,13 +1029,21 @@ async function waitForTerminalEvent(
   });
 }
 
+// Some of these tests copy real files, which takes as long as the disk takes: the wait is
+// bounded by time, not by a number of turns of the event loop, so a busy machine does not
+// fail it. It still returns as soon as the condition holds.
+const WAIT_FOR_TIMEOUT_MS = 4_000;
+
 async function waitFor<T>(read: () => T | null): Promise<T> {
-  for (let attempt = 0; attempt < 30; attempt += 1) {
+  const deadline = Date.now() + WAIT_FOR_TIMEOUT_MS;
+  for (;;) {
     const value = read();
     if (value !== null) {
       return value;
     }
+    if (Date.now() >= deadline) {
+      throw new Error("Timed out waiting for condition.");
+    }
     await new Promise((resolveWait) => setTimeout(resolveWait, 0));
   }
-  throw new Error("Timed out waiting for condition.");
 }
