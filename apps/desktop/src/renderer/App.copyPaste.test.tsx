@@ -9449,6 +9449,86 @@ describe("App tabs", () => {
     expect(screen.getAllByRole("tab")[1]).toHaveAttribute("aria-selected", "true");
   });
 
+  it("reopens the tab that was closed last, at its folder", async () => {
+    const harness = createAppHarness();
+    await renderApp(harness);
+    await pressKey({ key: "t", metaKey: true });
+    await openDirectory("/Users/demo/Folder");
+    await pressKey({ key: "w", metaKey: true });
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+
+    await pressKey({ key: "T", metaKey: true, shiftKey: true });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/Folder"),
+    );
+    expect(tabLabels()).toEqual(["demo", "Folder"]);
+    expect(activeTabLabel()).toBe("Folder");
+    // There is nothing more to bring back.
+    await pressKey({ key: "T", metaKey: true, shiftKey: true });
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
+  });
+
+  it("closes the other tabs and duplicates a tab from the tab's menu", async () => {
+    const harness = createAppHarness();
+    await renderApp(harness);
+    await pressKey({ key: "t", metaKey: true });
+    await openDirectory("/Users/demo/Folder");
+    const openTabMenu = async (index: number) => {
+      await act(async () => {
+        fireEvent.contextMenu(screen.getAllByRole("tab")[index] as HTMLElement);
+      });
+    };
+
+    await openTabMenu(0);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Duplicate Tab" }));
+    });
+
+    // The copy sits next to the tab it was made from and is on screen.
+    await waitFor(() => expect(tabLabels()).toEqual(["demo", "demo", "Folder"]));
+    expect(screen.getAllByRole("tab")[1]).toHaveAttribute("aria-selected", "true");
+    await waitFor(() =>
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent(/^\/Users\/demo$/),
+    );
+
+    await openTabMenu(2);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Close Other Tabs" }));
+    });
+
+    await waitFor(() => expect(screen.queryByRole("tablist")).not.toBeInTheDocument());
+    expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/Folder");
+  });
+
+  it("moves what is dropped on a tab into that tab's folder", async () => {
+    const harness = createAppHarness();
+    await renderApp(harness);
+    await pressKey({ key: "t", metaKey: true });
+    await openDirectory("/Users/demo/Folder");
+    await pressKey({ key: "Tab", ctrlKey: true });
+    const source = await within(screen.getByTestId("content-pane")).findByTitle(
+      "/Users/demo/source.txt",
+    );
+    const [ownTab, folderTab] = screen.getAllByRole("tab") as [HTMLElement, HTMLElement];
+
+    // The tab of the folder the item is already in does not take it.
+    await dragBetween(source, ownTab);
+    expect(harness.invocations.map((call) => call.channel)).not.toContain("copyPaste:analyzeStart");
+
+    await dragBetween(source, folderTab);
+
+    await waitFor(() =>
+      expect(
+        harness.invocations.find((call) => call.channel === "copyPaste:analyzeStart")?.payload,
+      ).toMatchObject({
+        mode: "cut",
+        sourcePaths: ["/Users/demo/source.txt"],
+        destinationDirectoryPath: "/Users/demo/Folder",
+      }),
+    );
+  });
+
   it("leaves the tab on screen alone while a dialog is open", async () => {
     const harness = createAppHarness();
     await renderApp(harness);

@@ -104,6 +104,7 @@ type ExplorerShortcutActions = {
   setSingleContentSelection: (path: string) => void;
   selectAllContentEntries: () => void;
   openNewTab: () => void;
+  reopenClosedTab: () => void;
   closeTab: () => void;
   activateAdjacentTab: (direction: "next" | "previous") => void;
 };
@@ -583,6 +584,19 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
           latestArgsRef.current.openNewTab();
+        },
+      },
+      {
+        id: "reopenClosedTab",
+        matches: (keyboardEvent) =>
+          keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
+          keyboardEvent.shiftKey &&
+          !keyboardEvent.altKey &&
+          keyboardEvent.key.toLowerCase() === "t",
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          latestArgsRef.current.reopenClosedTab();
         },
       },
       {
@@ -1228,6 +1242,10 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       }
       if (commandType === "newTab") {
         current.openNewTab();
+        return;
+      }
+      if (commandType === "reopenClosedTab") {
+        current.reopenClosedTab();
         return;
       }
       if (commandType === "closeTab") {

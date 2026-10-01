@@ -203,3 +203,36 @@ export function getPathAndAncestors(path: string): string[] {
   }
   return paths;
 }
+
+// Moves a tab to `toIndex` in the row; the other tabs keep their order.
+export function moveTabInList(
+  tabs: readonly ExplorerTab[],
+  tabId: string,
+  toIndex: number,
+): ExplorerTab[] {
+  const fromIndex = tabs.findIndex((tab) => tab.id === tabId);
+  const next = [...tabs];
+  if (fromIndex < 0) {
+    return next;
+  }
+  const [moved] = next.splice(fromIndex, 1);
+  if (moved) {
+    next.splice(Math.max(0, Math.min(toIndex, next.length)), 0, moved);
+  }
+  return next;
+}
+
+// How many closed tabs "Reopen Closed Tab" can bring back, most recent first.
+export const CLOSED_TABS_LIMIT = 10;
+
+// What is kept of a closed tab: its folder, its tree root, and how it showed the folder.
+// Its history, selection and search go with it.
+export function toReopenableSnapshot(snapshot: TabSnapshot): TabSnapshot {
+  return {
+    ...snapshot,
+    historyPaths: snapshot.currentPath.length > 0 ? [snapshot.currentPath] : [],
+    historyIndex: snapshot.currentPath.length > 0 ? 0 : -1,
+    view: null,
+    search: null,
+  };
+}

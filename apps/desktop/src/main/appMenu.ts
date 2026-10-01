@@ -54,6 +54,11 @@ export function createApplicationMenuTemplate(
           accelerator: "CommandOrControl+T",
           click: (_item, window) => sendCommand("newTab", window),
         },
+        {
+          label: "Reopen Closed Tab",
+          accelerator: "Shift+CommandOrControl+T",
+          click: (_item, window) => sendCommand("reopenClosedTab", window),
+        },
         { type: "separator" },
         {
           label: "Open",

@@ -4,6 +4,7 @@ import type { OpenTabPreference } from "../../shared/appPreferences";
 import { EMPTY_CONTENT_SELECTION } from "../lib/contentSelection";
 import { createTreeNode } from "../lib/explorerAppUtils";
 import {
+  CLOSED_TABS_LIMIT,
   type ExplorerTab,
   type ExplorerTabsState,
   type TabDescription,
@@ -11,9 +12,11 @@ import {
   type TabSnapshot,
   describeTab,
   describeTabSnapshot,
+  moveTabInList,
   resolveAdjacentTab,
   resolveTabAfterClose,
   settleTreeNodes,
+  toReopenableSnapshot,
 } from "../lib/explorerTabs";
 import {
   createFavoriteItemId,
@@ -51,6 +54,8 @@ type PendingActivation = {
 export type ExplorerTabItem = TabDescription & {
   id: string;
   active: boolean;
+  /** The folder the tab is on: where files dropped on the tab go. */
+  path: string;
 };
 
 let nextTabNumber = 1;
@@ -124,6 +129,21 @@ export function useExplorerTabs(args: {
 
   const pendingActivationRef = useRef<PendingActivation | null>(null);
   const [activationCount, setActivationCount] = useState(0);
+  // The tabs that were closed, most recent last, for Reopen Closed Tab. They are not kept
+  // between launches.
+  const closedTabsRef = useRef<TabSnapshot[]>([]);
+  const [closedTabCount, setClosedTabCount] = useState(0);
+
+  function rememberClosedTab(snapshot: TabSnapshot | null) {
+    if (!snapshot || snapshot.currentPath.length === 0) {
+      return;
+    }
+    closedTabsRef.current = [
+      ...closedTabsRef.current.slice(-(CLOSED_TABS_LIMIT - 1)),
+      toReopenableSnapshot(snapshot),
+    ];
+    setClosedTabCount(closedTabsRef.current.length);
+  }
 
   function commitState(next: ExplorerTabsState) {
     stateRef.current = next;
@@ -280,22 +300,22 @@ export function useExplorerTabs(args: {
     }
   }
 
-  // Leaves the tab on screen and shows `snapshot` in a new tab right after it.
+  // Leaves the tab on screen and shows `snapshot` in a new tab, placed right after the tab
+  // on screen (or after `afterTabId`).
   function openTabWithSnapshot(
     leftSnapshot: TabSnapshot,
     snapshot: TabSnapshot,
     mode: PendingActivation["mode"],
+    afterTabId: string = stateRef.current.activeTabId,
   ) {
     const current = stateRef.current;
     const id = createTabId();
     const tabs: ExplorerTab[] = [];
     for (const tab of current.tabs) {
-      if (tab.id !== current.activeTabId) {
-        tabs.push(tab);
-        continue;
+      tabs.push(tab.id === current.activeTabId ? { ...tab, snapshot: leftSnapshot } : tab);
+      if (tab.id === afterTabId) {
+        tabs.push({ id, snapshot: null, stale: false });
       }
-      tabs.push({ ...tab, snapshot: leftSnapshot });
-      tabs.push({ id, snapshot: null, stale: false });
     }
     commitState({ activeTabId: id, tabs });
     showSnapshot(snapshot, mode);
@@ -372,6 +392,7 @@ export function useExplorerTabs(args: {
     }
     if (tabId !== current.activeTabId) {
       cancelSearchJob(closing.snapshot?.search?.jobId ?? null);
+      rememberClosedTab(closing.snapshot);
       commitState({ ...current, tabs: current.tabs.filter((tab) => tab.id !== tabId) });
       return;
     }
@@ -380,7 +401,9 @@ export function useExplorerTabs(args: {
     if (!nextTab?.snapshot) {
       return;
     }
-    cancelSearchJob(searchSession.detach().jobId);
+    const closedSnapshot = captureLiveTab();
+    cancelSearchJob(closedSnapshot.search?.jobId ?? null);
+    rememberClosedTab(closedSnapshot);
     commitState({
       activeTabId: nextTab.id,
       tabs: current.tabs
@@ -390,6 +413,77 @@ export function useExplorerTabs(args: {
     showSnapshot(nextTab.snapshot, nextTab.snapshot.view ? "reload" : "load", {
       refreshExpandedTree: nextTab.stale,
     });
+  }
+
+  // Closes every tab but `tabId`, which is shown if it was not on screen.
+  function closeOtherTabs(tabId: string) {
+    const current = stateRef.current;
+    const kept = current.tabs.find((tab) => tab.id === tabId);
+    if (!kept || current.tabs.length < 2 || !canChangeTabs()) {
+      return;
+    }
+    for (const tab of current.tabs) {
+      if (tab.id === tabId || tab.id === current.activeTabId) {
+        continue;
+      }
+      cancelSearchJob(tab.snapshot?.search?.jobId ?? null);
+      rememberClosedTab(tab.snapshot);
+    }
+    if (tabId === current.activeTabId) {
+      commitState({ activeTabId: tabId, tabs: [kept] });
+      return;
+    }
+    if (!kept.snapshot) {
+      return;
+    }
+    const closedSnapshot = captureLiveTab();
+    cancelSearchJob(closedSnapshot.search?.jobId ?? null);
+    rememberClosedTab(closedSnapshot);
+    commitState({ activeTabId: tabId, tabs: [{ ...kept, snapshot: null, stale: false }] });
+    showSnapshot(kept.snapshot, kept.snapshot.view ? "reload" : "load", {
+      refreshExpandedTree: kept.stale,
+    });
+  }
+
+  // A second tab like `tabId`, next to it and in front: the same folder, tree, history and
+  // view. Its search is not copied; the new tab shows the folder.
+  function duplicateTab(tabId: string) {
+    const current = stateRef.current;
+    const source = current.tabs.find((tab) => tab.id === tabId);
+    if (!source || !canChangeTabs()) {
+      return;
+    }
+    const leftSnapshot = captureLiveTab();
+    if (tabId === current.activeTabId || !source.snapshot) {
+      openTabWithSnapshot(leftSnapshot, { ...leftSnapshot, search: null }, "none");
+      return;
+    }
+    openTabWithSnapshot(
+      leftSnapshot,
+      { ...source.snapshot, search: null },
+      source.snapshot.view ? "reload" : "load",
+      tabId,
+    );
+  }
+
+  // ⇧⌘T: brings back the tab that was closed last, at its folder.
+  function reopenClosedTab() {
+    const snapshot = closedTabsRef.current.at(-1);
+    if (!snapshot || !canChangeTabs()) {
+      return;
+    }
+    closedTabsRef.current = closedTabsRef.current.slice(0, -1);
+    setClosedTabCount(closedTabsRef.current.length);
+    openTabWithSnapshot(captureLiveTab(), snapshot, "load");
+  }
+
+  // Dragging a tab along the row.
+  function moveTab(tabId: string, toIndex: number) {
+    const current = stateRef.current;
+    if (current.tabs.findIndex((tab) => tab.id === tabId) === toIndex) {
+      return;
+    }
+    commitState({ ...current, tabs: moveTabInList(current.tabs, tabId, toIndex) });
   }
 
   // Sets up the tabs the window opens with. The tab on screen is loaded by the caller, the
@@ -552,11 +646,15 @@ export function useExplorerTabs(args: {
       state.tabs.map((tab) => ({
         id: tab.id,
         active: tab.id === state.activeTabId,
+        path:
+          tab.id === state.activeTabId || !tab.snapshot
+            ? navigation.currentPath
+            : tab.snapshot.currentPath,
         ...(tab.id === state.activeTabId || !tab.snapshot
           ? liveDescription
           : describeTabSnapshot(tab.snapshot)),
       })),
-    [liveDescription, state],
+    [liveDescription, navigation.currentPath, state],
   );
 
   // What is remembered of the tabs between launches. The list keeps its identity while
@@ -598,6 +696,11 @@ export function useExplorerTabs(args: {
     openNewTab,
     openPathInNewTab,
     closeTab,
+    closeOtherTabs,
+    duplicateTab,
+    reopenClosedTab,
+    canReopenClosedTab: closedTabCount > 0,
+    moveTab,
   };
 }
 

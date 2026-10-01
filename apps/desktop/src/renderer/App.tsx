@@ -767,6 +767,10 @@ export function App() {
     openNewTab,
     openPathInNewTab,
     closeTab,
+    closeOtherTabs,
+    duplicateTab,
+    reopenClosedTab,
+    moveTab,
   } = useExplorerTabs({
     services,
     navigation,
@@ -812,6 +816,10 @@ export function App() {
     handleTreeDragEnter,
     handleTreeDragOver,
     handleTreeDrop,
+    handleTabDragOver,
+    handleTabDragLeave,
+    handleTabDrop,
+    getTabDropIndicator,
   } = useExplorerDragAndDrop({
     activeEntries: activeContentEntries,
     selectedPathsInViewOrder,
@@ -825,6 +833,7 @@ export function App() {
       return outcome.status === "queued" || outcome.status === "review";
     },
     onToggleTreeNode: toggleTreeNode,
+    onActivateTab: activateTab,
   });
   const shortcutContext = useMemo(
     () => ({
@@ -936,6 +945,7 @@ export function App() {
       setSingleContentSelection,
       selectAllContentEntries,
       openNewTab,
+      reopenClosedTab,
       closeTab,
       activateAdjacentTab,
     },
@@ -1991,7 +2001,14 @@ export function App() {
                   tabs={tabItems}
                   onSelectTab={activateTab}
                   onCloseTab={closeTab}
+                  onCloseOtherTabs={closeOtherTabs}
+                  onDuplicateTab={duplicateTab}
+                  onMoveTab={moveTab}
                   onNewTab={openNewTab}
+                  onItemDragOver={handleTabDragOver}
+                  onItemDragLeave={handleTabDragLeave}
+                  onItemDrop={(tab, event) => void handleTabDrop(tab, event)}
+                  getDropIndicator={getTabDropIndicator}
                 />
               ) : null
             }

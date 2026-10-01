@@ -1,10 +1,13 @@
 import {
   type ExplorerTab,
+  type TabSnapshot,
   describeTab,
   getPathAndAncestors,
+  moveTabInList,
   resolveAdjacentTab,
   resolveTabAfterClose,
   settleTreeNodes,
+  toReopenableSnapshot,
 } from "./explorerTabs";
 
 const tabs: ExplorerTab[] = ["a", "b", "c"].map((id) => ({ id, snapshot: null, stale: false }));
@@ -67,6 +70,46 @@ describe("explorerTabs", () => {
     const loadingNodes = { "/a": node, "/b": { ...node, path: "/b", loading: true } };
     expect(settleTreeNodes(loadingNodes)["/b"]?.loading).toBe(false);
     expect(settleTreeNodes(loadingNodes)["/a"]).toBe(node);
+  });
+
+  it("moves a tab along the row without disturbing the order of the others", () => {
+    const ids = (list: ExplorerTab[]) => list.map((tab) => tab.id).join("");
+    expect(ids(moveTabInList(tabs, "a", 2))).toBe("bca");
+    expect(ids(moveTabInList(tabs, "c", 0))).toBe("cab");
+    expect(ids(moveTabInList(tabs, "b", 1))).toBe("abc");
+    expect(ids(moveTabInList(tabs, "a", 9))).toBe("bca");
+    expect(ids(moveTabInList(tabs, "missing", 0))).toBe("abc");
+  });
+
+  it("keeps a closed tab's folder and view, not its history or what it had on screen", () => {
+    const snapshot: TabSnapshot = {
+      currentPath: "/Users/demo/work",
+      historyPaths: ["/Users/demo", "/Users/demo/work"],
+      historyIndex: 1,
+      viewMode: "details",
+      sortBy: "size",
+      sortDirection: "desc",
+      treeRootPath: "/Users/demo",
+      selectedTreeItemId: null,
+      leftPaneSubview: "tree",
+      view: {
+        treeNodes: {},
+        currentEntries: [],
+        metadataByPath: {},
+        directoryError: null,
+        contentSelection: { paths: ["/Users/demo/work/a"], anchorPath: null, leadPath: null },
+        listFilterQuery: "a",
+        contentScroll: { top: 40, left: 0 },
+        treeScrollTop: 0,
+      },
+      search: null,
+    };
+    expect(toReopenableSnapshot(snapshot)).toEqual({
+      ...snapshot,
+      historyPaths: ["/Users/demo/work"],
+      historyIndex: 0,
+      view: null,
+    });
   });
 
   it("lists a folder and the folders above it, nearest first", () => {

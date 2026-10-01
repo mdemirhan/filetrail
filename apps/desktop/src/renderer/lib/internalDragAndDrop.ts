@@ -2,7 +2,8 @@ import { parentDirectoryPath } from "./explorerNavigation";
 import type { DirectoryEntry } from "./explorerTypes";
 
 export type InternalMoveSourceSurface = "content" | "search";
-export type InternalDropTargetSurface = "content" | "tree" | "favorite";
+// "tab" is a tab in the strip: what is dropped on it goes into the folder the tab is on.
+export type InternalDropTargetSurface = "content" | "tree" | "favorite" | "tab";
 
 export type InternalDragItem = {
   path: string;

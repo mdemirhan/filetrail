@@ -27,6 +27,7 @@ export const RENDERER_COMMAND_TYPES = [
   "goHomeRootTree",
   "rootTreeAtSelection",
   "newTab",
+  "reopenClosedTab",
   "closeTab",
   "selectNextTab",
   "selectPreviousTab",

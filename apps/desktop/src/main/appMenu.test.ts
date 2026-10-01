@@ -264,6 +264,7 @@ describe("createApplicationMenuTemplate", () => {
     const items = template.flatMap((menu) => (Array.isArray(menu.submenu) ? menu.submenu : []));
     const expected = [
       ["New Tab", "CommandOrControl+T", "newTab"],
+      ["Reopen Closed Tab", "Shift+CommandOrControl+T", "reopenClosedTab"],
       ["Close Tab", "CommandOrControl+W", "closeTab"],
       ["Show Next Tab", "Ctrl+Tab", "selectNextTab"],
       ["Show Previous Tab", "Ctrl+Shift+Tab", "selectPreviousTab"],

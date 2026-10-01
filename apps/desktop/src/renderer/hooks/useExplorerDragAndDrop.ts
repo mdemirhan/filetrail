@@ -12,6 +12,10 @@ import {
   validateInternalDrop,
 } from "../lib/internalDragAndDrop";
 
+// How long a drag is held over a tab before that tab comes to the front; the same as a
+// folder in the tree takes to open.
+const TAB_HOVER_SWITCH_MS = 700;
+
 type DropIndicatorState = "valid" | "invalid" | null;
 type ActiveDropTarget = {
   surface: InternalDropTargetSurface;
@@ -64,6 +68,8 @@ export function useExplorerDragAndDrop(args: {
     },
   ) => Promise<boolean>;
   onToggleTreeNode: (path: string) => void;
+  /** Holding a drag over a tab that is not on screen brings that tab to the front. */
+  onActivateTab: (tabId: string) => void;
 }) {
   const {
     activeEntries,
@@ -72,7 +78,11 @@ export function useExplorerDragAndDrop(args: {
     blocked,
     onMoveToDestination,
     onToggleTreeNode,
+    onActivateTab,
   } = args;
+  const onActivateTabRef = useRef(onActivateTab);
+  onActivateTabRef.current = onActivateTab;
+  const tabHoverSwitchRef = useRef<{ tabId: string; timerId: number } | null>(null);
   const [activeDropTarget, setActiveDropTarget] = useState<ActiveDropTarget | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const dragSessionRef = useRef<InternalDragSession | null>(null);
@@ -119,7 +129,16 @@ export function useExplorerDragAndDrop(args: {
     activeTreeDropElementRef.current = null;
   }
 
+  function clearTabHoverSwitch() {
+    if (!tabHoverSwitchRef.current) {
+      return;
+    }
+    window.clearTimeout(tabHoverSwitchRef.current.timerId);
+    tabHoverSwitchRef.current = null;
+  }
+
   function clearDragSession() {
+    clearTabHoverSwitch();
     clearTreeHoverExpand();
     clearTreeDropElementIndicator();
     setActiveDropTarget(null);
@@ -214,6 +233,9 @@ export function useExplorerDragAndDrop(args: {
     }
     dragSessionRef.current = session;
     setDragActive(true);
+    // Showing another tab during the drag takes the dragged row off the page, and a row
+    // that is off the page ends its drag without the list hearing of it.
+    event.currentTarget.addEventListener("dragend", () => clearDragSession(), { once: true });
     const dragPreview = createDragPreviewElement(session);
     dragPreviewRef.current = dragPreview;
     event.dataTransfer.effectAllowed = "move";
@@ -408,7 +430,76 @@ export function useExplorerDragAndDrop(args: {
     });
   }
 
+  // ── Tabs ──────────────────────────────────────────────────────────────────────────────
+  // A tab takes a drop for the folder it is on. Holding the drag over a tab that is not on
+  // screen shows that tab, so the items can be dropped on a folder inside it.
+  function resolveTabDropValidity(tab: { path: string }) {
+    return resolveDropValidity({
+      surface: "tab",
+      path: tab.path.length > 0 ? tab.path : null,
+      targetSupportsMove: tab.path.length > 0 && tab.path !== trashPath,
+    });
+  }
+
+  function handleTabDragOver(
+    tab: { id: string; path: string; active: boolean },
+    event: React.DragEvent<HTMLElement>,
+  ) {
+    if (!dragSessionRef.current) {
+      return;
+    }
+    const validity = resolveTabDropValidity(tab);
+    setDropIndicator("tab", tab.id, validity);
+    applyDropEffect(event, validity);
+    if (tab.active) {
+      clearTabHoverSwitch();
+      return;
+    }
+    if (tabHoverSwitchRef.current?.tabId === tab.id) {
+      return;
+    }
+    clearTabHoverSwitch();
+    tabHoverSwitchRef.current = {
+      tabId: tab.id,
+      timerId: window.setTimeout(() => {
+        tabHoverSwitchRef.current = null;
+        setActiveDropTarget(null);
+        onActivateTabRef.current(tab.id);
+      }, TAB_HOVER_SWITCH_MS),
+    };
+  }
+
+  function handleTabDragLeave(tab: { id: string }) {
+    if (tabHoverSwitchRef.current?.tabId === tab.id) {
+      clearTabHoverSwitch();
+    }
+    if (activeDropTarget?.surface === "tab" && activeDropTarget.path === tab.id) {
+      setActiveDropTarget(null);
+    }
+  }
+
+  async function handleTabDrop(
+    tab: { id: string; path: string },
+    event: React.DragEvent<HTMLElement>,
+  ) {
+    await handleDrop("tab", tab.path.length > 0 ? tab.path : null, event, {
+      targetSupportsMove: tab.path.length > 0 && tab.path !== trashPath,
+      validateWithItemProperties: true,
+    });
+  }
+
+  function getTabDropIndicator(tabId: string): DropIndicatorState {
+    if (activeDropTarget?.surface !== "tab" || activeDropTarget.path !== tabId) {
+      return null;
+    }
+    return activeDropTarget.validity;
+  }
+
   return {
+    handleTabDragOver,
+    handleTabDragLeave,
+    handleTabDrop,
+    getTabDropIndicator,
     dragActive,
     getContentItemDropIndicator,
     getTreeItemDropIndicator,

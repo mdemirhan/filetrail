@@ -65,6 +65,7 @@ export const SHORTCUT_ITEMS: readonly ShortcutItem[] = [
     shortcut: "Ctrl+Shift+Tab",
     description: "Previous tab (Cmd+Shift+[ also works)",
   },
+  { group: "navigation", shortcut: "Cmd+Shift+T", description: "Reopen the tab closed last" },
   { group: "navigation", shortcut: "Cmd+Shift+W", description: "Close the window" },
   { group: "navigation", shortcut: "Cmd+1", description: "Focus the folder tree" },
   { group: "navigation", shortcut: "Cmd+2", description: "Focus the file list" },
@@ -143,6 +144,47 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
               "Root Tree at Selected Folder makes a folder the top of the folder tree, until you open a folder outside it. Go > Home returns the tree to your home folder.",
           },
         ],
+      },
+      {
+        title: "Tabs",
+        rows: [
+          {
+            label: "New tab",
+            description:
+              "⌘T opens a tab on the folder you are in. The row of tabs appears with the second tab; with a single view the window looks as it always did.",
+          },
+          {
+            label: "Open in New Tab",
+            description:
+              "Right-click a folder, or ⌘-double-click it. ⌘-click works on a folder in the sidebar or the path bar.",
+          },
+          {
+            label: "Each tab",
+            description:
+              "Keeps its own folder, history, folder tree, selection, view, sort order and search. A search keeps running while its tab is in the background.",
+          },
+          {
+            label: "Moving between tabs",
+            description:
+              "Click a tab, or press ⌃Tab and ⌃⇧Tab. Drag a tab to move it along the row.",
+          },
+          {
+            label: "Closing",
+            description:
+              "⌘W closes the tab, and the window when a single view is left. ⇧⌘T brings back the tab closed last. Right-click a tab for Close Other Tabs and Duplicate Tab.",
+          },
+          {
+            label: "Between tabs",
+            description:
+              "Copy or cut in one tab and paste in another; the path bar shows what is waiting to be pasted. Drag items onto a tab to move them into its folder, or hold them over the tab to bring it to the front.",
+          },
+          {
+            label: "Next launch",
+            description:
+              "Settings → General → Restore open tabs reopens the tabs you had. They return to their own folders when Restore last visited folder is on.",
+          },
+        ],
+        note: "Only one copy, move or delete runs at a time, whichever tab it was started from. While it runs, the other tabs can browse, search, copy and cut.",
       },
       {
         title: "Path bar",
