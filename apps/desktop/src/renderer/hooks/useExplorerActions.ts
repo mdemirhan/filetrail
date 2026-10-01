@@ -23,6 +23,7 @@ import type {
   FileActivationAction,
   OpenWithApplication,
 } from "../../shared/appPreferences";
+import { FINDER_APP_PATH } from "../../shared/finder";
 import {
   type ContentSelectionState,
   EMPTY_CONTENT_SELECTION,
@@ -475,6 +476,7 @@ export function useExplorerActions(args: {
         disabled.add("showInfo");
         disabled.add("toggleFavorite");
         disabled.add("terminal");
+        disabled.add("showInFinder");
         disabled.add("copyPath");
         disabled.add("copy");
         disabled.add("cut");
@@ -501,6 +503,7 @@ export function useExplorerActions(args: {
         disabled.add("showInfo");
         disabled.add("toggleFavorite");
         disabled.add("terminal");
+        disabled.add("showInFinder");
         disabled.add("copyPath");
         disabled.add("newFolder");
       }
@@ -578,25 +581,14 @@ export function useExplorerActions(args: {
         key: "separator-submenu-main",
       });
     }
-    items.push(
-      {
-        action: {
-          kind: "finder",
-          id: "finder",
-          label: "Finder",
-          appPath: "Finder",
-          appName: "Finder",
-        },
+    items.push({
+      action: {
+        kind: "other",
+        id: "other",
+        label: "Other…",
+        appName: "Other…",
       },
-      {
-        action: {
-          kind: "other",
-          id: "other",
-          label: "Other…",
-          appName: "Other…",
-        },
-      },
-    );
+    });
     return items;
   }, [openWithApplications]);
 
@@ -1973,6 +1965,26 @@ export function useExplorerActions(args: {
     }
   }
 
+  // The main process reveals the items when the application is Finder itself.
+  async function showPathsInFinder(paths: string[]) {
+    try {
+      const response = await client.invoke("system:openPathsWithApplication", {
+        applicationPath: FINDER_APP_PATH,
+        paths,
+      });
+      if (!response.ok) {
+        throw new Error(response.error ?? "Finder did not respond.");
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      logger.error("show in finder failed", error);
+      setActionNotice({
+        title: "Show in Finder",
+        message: `Unable to show the selected ${paths.length === 1 ? "item" : "items"} in Finder. ${detail}`,
+      });
+    }
+  }
+
   async function addOpenWithApplication() {
     const selection = await pickApplicationForOpenWith(
       "Open With Applications",
@@ -2283,6 +2295,12 @@ export function useExplorerActions(args: {
       }
       return;
     }
+    if (actionId === "showInFinder") {
+      if (paths.length > 0) {
+        await showPathsInFinder(paths);
+      }
+      return;
+    }
     logger.error("unhandled context menu action", { actionId, paths, surface: contextMenuSurface });
     showModalNotice("Unsupported action", `File Trail could not run the "${actionId}" action.`);
   }
@@ -2301,10 +2319,6 @@ export function useExplorerActions(args: {
         return;
       }
       await openPathsWithApplication(paths, selection.appPath, selection.appName);
-      return;
-    }
-    if (action.kind === "finder") {
-      await openPathsWithApplication(paths, action.appPath, action.appName);
       return;
     }
     await openPathsWithApplication(paths, action.appPath, action.appName);
@@ -2885,6 +2899,7 @@ export function useExplorerActions(args: {
     openNewFolderDialog,
     openPathExternally,
     openPathInTerminal,
+    showPathsInFinder,
     openPaths,
     openRenameDialog,
     removeOpenWithApplication,

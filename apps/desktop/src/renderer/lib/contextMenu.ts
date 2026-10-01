@@ -21,6 +21,7 @@ export type ContextMenuActionId =
   | "newFolder"
   | "toggleFavorite"
   | "terminal"
+  | "showInFinder"
   | "copyPath"
   | "trash"
   | "deleteImmediately"
@@ -33,13 +34,6 @@ export type ContextMenuSubmenuAction =
       label: string;
       appPath: string;
       appName: string;
-    }
-  | {
-      kind: "finder";
-      id: "finder";
-      label: "Finder";
-      appName: "Finder";
-      appPath: "Finder";
     }
   | {
       kind: "other";
@@ -75,6 +69,7 @@ export type ContextMenuIconName =
   | "duplicate"
   | "newFolder"
   | "terminal"
+  | "showInFinder"
   | "copyPath"
   | "trash"
   | "deleteImmediately"
@@ -143,6 +138,7 @@ export function getContextMenuItems(input: {
       { id: "newFolder", label: "New Folder", icon: "newFolder" },
       { type: "separator", key: "separator-tree-copy-path" },
       { id: "terminal", label: "Open in Terminal", icon: "terminal" },
+      { id: "showInFinder", label: "Show in Finder", icon: "showInFinder" },
       { id: "copyPath", label: "Copy Path", icon: "copyPath" },
       { type: "separator", key: "separator-tree-write" },
       { id: "trash", label: "Move to Trash", icon: "trash", destructive: true },
@@ -167,6 +163,7 @@ export function getContextMenuItems(input: {
       { id: "newFolder", label: "New Folder", icon: "newFolder" },
       { type: "separator", key: "separator-favorite-copy-path" },
       { id: "terminal", label: "Open in Terminal", icon: "terminal" },
+      { id: "showInFinder", label: "Show in Finder", icon: "showInFinder" },
       { id: "copyPath", label: "Copy Path", icon: "copyPath" },
     ];
   }
@@ -191,6 +188,7 @@ export function getContextMenuItems(input: {
     { id: "toggleFavorite", label: favoriteToggleLabel, icon: "favorite" },
     { type: "separator", key: "separator-new-folder" },
     { id: "terminal", label: "Open in Terminal", icon: "terminal" },
+    { id: "showInFinder", label: "Show in Finder", icon: "showInFinder" },
     { id: "copyPath", label: "Copy Path", icon: "copyPath" },
     { type: "separator", key: "separator-copy-path" },
     { id: "trash", label: "Move to Trash", icon: "trash", destructive: true },

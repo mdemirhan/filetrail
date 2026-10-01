@@ -293,6 +293,32 @@ describe("openPathsWithApplication", () => {
     ]);
   });
 
+  it("shows the selected paths in Finder instead of opening them with it", async () => {
+    const runOpenCommand = vi.fn(async () => undefined);
+    const revealInFinder = vi.fn(async () => undefined);
+
+    await expect(
+      openPathsWithApplication(
+        {
+          applicationPath: "/System/Library/CoreServices/Finder.app",
+          paths: ["/Users/demo/file.txt", "/Users/demo/folder", "/Applications/Zed.app"],
+        },
+        runOpenCommand,
+        revealInFinder,
+      ),
+    ).resolves.toEqual({
+      ok: true,
+      error: null,
+    });
+
+    expect(revealInFinder).toHaveBeenCalledWith([
+      "/Users/demo/file.txt",
+      "/Users/demo/folder",
+      "/Applications/Zed.app",
+    ]);
+    expect(runOpenCommand).not.toHaveBeenCalled();
+  });
+
   it("returns the launch error when opening with an application fails", async () => {
     await expect(
       openPathsWithApplication(

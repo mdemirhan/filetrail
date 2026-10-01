@@ -36,15 +36,6 @@ describe("ItemContextMenu", () => {
     { type: "separator" as const, key: "fixed" },
     {
       action: {
-        kind: "finder" as const,
-        id: "finder" as const,
-        label: "Finder" as const,
-        appPath: "Finder" as const,
-        appName: "Finder" as const,
-      },
-    },
-    {
-      action: {
         kind: "other" as const,
         id: "other" as const,
         label: "Other…" as const,
@@ -186,9 +177,7 @@ describe("ItemContextMenu", () => {
     const labels = screen
       .getAllByRole("button")
       .map((button) => button.textContent)
-      .filter(
-        (label) => label && !["Zed", "Visual Studio Code", "Finder", "Other…"].includes(label),
-      )
+      .filter((label) => label && !["Zed", "Visual Studio Code", "Other…"].includes(label))
       .map((label) => {
         if (label?.startsWith("Open With")) {
           return "Open With";
@@ -302,9 +291,7 @@ describe("ItemContextMenu", () => {
       screen
         .getAllByRole("button")
         .map((button) => button.textContent)
-        .filter(
-          (label) => label && !["Zed", "Visual Studio Code", "Finder", "Other…"].includes(label),
-        )
+        .filter((label) => label && !["Zed", "Visual Studio Code", "Other…"].includes(label))
         .map((label) => {
           if (label?.startsWith("Open in Terminal")) {
             return "Open in Terminal";
@@ -333,6 +320,7 @@ describe("ItemContextMenu", () => {
       "Duplicate",
       "New Folder",
       "Open in Terminal",
+      "Show in Finder",
       "Copy Path",
       "Move to Trash",
       "Delete Immediately",
@@ -437,12 +425,11 @@ describe("ItemContextMenu", () => {
     const submenuButtons = screen
       .getAllByRole("button")
       .filter((button) =>
-        ["Zed", "Visual Studio Code", "Finder", "Other…"].includes(button.textContent ?? ""),
+        ["Zed", "Visual Studio Code", "Other…"].includes(button.textContent ?? ""),
       );
     expect(submenuButtons.map((button) => button.textContent)).toEqual([
       "Zed",
       "Visual Studio Code",
-      "Finder",
       "Other…",
     ]);
 

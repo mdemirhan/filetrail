@@ -654,6 +654,7 @@ export function App() {
     openNewFolderDialog,
     openPathExternally,
     openPathInTerminal,
+    showPathsInFinder,
     openPaths,
     openRenameDialog,
     openMoveDialog,
@@ -1692,6 +1693,11 @@ export function App() {
               onOpenInTerminal: () => {
                 if (infoPanelItem) {
                   void openPathInTerminal(infoPanelItem.path);
+                }
+              },
+              onShowInFinder: () => {
+                if (infoPanelItem) {
+                  void showPathsInFinder([infoPanelItem.path]);
                 }
               },
               onCopyPath: () => (infoPanelItem ? copyGetInfoPath(infoPanelItem.path) : false),

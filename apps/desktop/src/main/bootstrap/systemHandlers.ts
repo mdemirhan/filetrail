@@ -13,6 +13,7 @@ import {
 } from "electron";
 
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
+import { FINDER_APP_PATH } from "../../shared/finder";
 import { toErrorMessage } from "../ipc";
 import { getFileIcon } from "../originalFileSystem";
 
@@ -109,6 +110,8 @@ export async function openPathsWithApplication(
     applicationPath,
     paths,
   ) => execFileAsync("open", ["-a", applicationPath, ...paths]).then(() => undefined),
+  revealInFinder: (paths: string[]) => Promise<void> = (paths) =>
+    execFileAsync("open", ["-R", ...paths]).then(() => undefined),
 ): Promise<IpcResponse<"system:openPathsWithApplication">> {
   if (!isValidApplicationBundlePath(payload.applicationPath)) {
     return {
@@ -117,7 +120,13 @@ export async function openPathsWithApplication(
     };
   }
   try {
-    await runOpenCommand(payload.applicationPath, [...payload.paths]);
+    // Finder refuses to open a document handed to it with `open -a`, so choosing Finder shows
+    // the items selected in their folder instead: files, folders and packages alike.
+    if (normalize(payload.applicationPath.trim()) === FINDER_APP_PATH) {
+      await revealInFinder([...payload.paths]);
+    } else {
+      await runOpenCommand(payload.applicationPath, [...payload.paths]);
+    }
     return {
       ok: true,
       error: null,

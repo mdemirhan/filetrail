@@ -1592,6 +1592,36 @@ describe("App copy/paste integration", () => {
     });
   });
 
+  it("shows the selected item in Finder from the context menu", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceButton = await screen.findByTitle("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.click(sourceButton);
+      fireEvent.contextMenu(sourceButton);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Show in Finder" }));
+    });
+
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.find((call) => call.channel === "system:openPathsWithApplication")
+          ?.payload,
+      ).toEqual({
+        applicationPath: "/System/Library/CoreServices/Finder.app",
+        paths: ["/Users/demo/source.txt"],
+      });
+    });
+  });
+
   it("uses the Other menu item as a one-off picker without updating preferences", async () => {
     const harness = createAppHarness({
       pickApplicationResponse: {

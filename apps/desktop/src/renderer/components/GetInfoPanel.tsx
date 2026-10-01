@@ -25,6 +25,7 @@ export function InfoPanel({
   onNavigateToPath,
   onOpen,
   onOpenInTerminal,
+  onShowInFinder,
   onCopyPath,
   copyPathDisabled = false,
   folderSizeEntry,
@@ -42,6 +43,7 @@ export function InfoPanel({
   onNavigateToPath: (path: string) => void;
   onOpen: () => void;
   onOpenInTerminal: () => void;
+  onShowInFinder: () => void;
   onCopyPath: () => Promise<boolean> | boolean;
   copyPathDisabled?: boolean | undefined;
   folderSizeEntry?: FolderSizeEntry | undefined;
@@ -98,6 +100,7 @@ export function InfoPanel({
           onNavigateToPath={onNavigateToPath}
           onOpen={onOpen}
           onOpenInTerminal={onOpenInTerminal}
+          onShowInFinder={onShowInFinder}
           folderSizeEntry={folderSizeEntry}
           onCalculateFolderSize={onCalculateFolderSize}
           onRecalculateFolderSize={onRecalculateFolderSize}
@@ -122,6 +125,7 @@ function GetInfoPanelContent({
   onNavigateToPath,
   onOpen,
   onOpenInTerminal,
+  onShowInFinder,
   folderSizeEntry,
   onCalculateFolderSize,
   onRecalculateFolderSize,
@@ -138,6 +142,7 @@ function GetInfoPanelContent({
   onNavigateToPath: (path: string) => void;
   onOpen: () => void;
   onOpenInTerminal: () => void;
+  onShowInFinder: () => void;
   folderSizeEntry?: FolderSizeEntry | undefined;
   onCalculateFolderSize?: (() => void) | undefined;
   onRecalculateFolderSize?: (() => void) | undefined;
@@ -368,6 +373,9 @@ function GetInfoPanelContent({
           <GetInfoActionButton label="Terminal" shortcut="⌘T" onClick={onOpenInTerminal}>
             <InfoPanelGlyph name="terminal" />
           </GetInfoActionButton>
+          <GetInfoActionButton label="Show in Finder" onClick={onShowInFinder}>
+            <InfoPanelGlyph name="finder" />
+          </GetInfoActionButton>
         </div>
       </section>
     </div>
@@ -508,7 +516,7 @@ function FolderSizeCell({
 function InfoPanelGlyph({
   name,
 }: {
-  name: "open" | "terminal" | "copy" | "check" | "close" | "refresh";
+  name: "open" | "terminal" | "finder" | "copy" | "check" | "close" | "refresh";
 }) {
   // Inline glyphs keep the panel self-contained and visually consistent with its custom chrome.
   if (name === "open") {
@@ -526,6 +534,15 @@ function InfoPanelGlyph({
         <path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" />
         <path d="M7 9l3 3-3 3" />
         <path d="M13 15h4" />
+      </svg>
+    );
+  }
+  if (name === "finder") {
+    return (
+      <svg className="get-info-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+        <circle cx="11.5" cy="13" r="2.5" />
+        <path d="M13.5 15l2.5 2.5" />
       </svg>
     );
   }

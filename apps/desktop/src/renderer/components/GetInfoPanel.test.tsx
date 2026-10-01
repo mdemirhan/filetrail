@@ -42,6 +42,7 @@ describe("InfoPanel", () => {
         onNavigateToPath={() => undefined}
         onOpen={() => undefined}
         onOpenInTerminal={() => undefined}
+        onShowInFinder={() => undefined}
         onCopyPath={() => true}
       />,
     );
@@ -61,6 +62,7 @@ describe("InfoPanel", () => {
         onNavigateToPath={() => undefined}
         onOpen={() => undefined}
         onOpenInTerminal={() => undefined}
+        onShowInFinder={() => undefined}
         onCopyPath={() => true}
       />,
     );
@@ -85,6 +87,7 @@ describe("InfoPanel", () => {
         onNavigateToPath={() => undefined}
         onOpen={() => undefined}
         onOpenInTerminal={() => undefined}
+        onShowInFinder={() => undefined}
         onCopyPath={() => true}
       />,
     );
@@ -107,6 +110,7 @@ describe("InfoPanel", () => {
     const onNavigateToPath = vi.fn();
     const onOpen = vi.fn();
     const onOpenInTerminal = vi.fn();
+    const onShowInFinder = vi.fn();
     const onCopyPath = vi.fn().mockResolvedValue(true);
 
     render(
@@ -117,6 +121,7 @@ describe("InfoPanel", () => {
         onNavigateToPath={onNavigateToPath}
         onOpen={onOpen}
         onOpenInTerminal={onOpenInTerminal}
+        onShowInFinder={onShowInFinder}
         onCopyPath={onCopyPath}
       />,
     );
@@ -128,11 +133,13 @@ describe("InfoPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Open" }));
     fireEvent.click(screen.getByRole("button", { name: "Terminal" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show in Finder" }));
     fireEvent.click(screen.getByRole("button", { name: "Copy Path" }));
 
     await act(async () => {});
     expect(onOpen).toHaveBeenCalledTimes(1);
     expect(onOpenInTerminal).toHaveBeenCalledTimes(1);
+    expect(onShowInFinder).toHaveBeenCalledTimes(1);
     expect(onCopyPath).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument();
 
@@ -171,6 +178,7 @@ describe("InfoPanel", () => {
         onNavigateToPath={() => undefined}
         onOpen={() => undefined}
         onOpenInTerminal={() => undefined}
+        onShowInFinder={() => undefined}
         onCopyPath={() => true}
       />,
     );
@@ -202,6 +210,7 @@ describe("InfoPanel", () => {
         onNavigateToPath={() => undefined}
         onOpen={() => undefined}
         onOpenInTerminal={() => undefined}
+        onShowInFinder={() => undefined}
         onCopyPath={() => true}
         folderSizeEntry={{ status: "idle" }}
         onCalculateFolderSize={() => undefined}
@@ -222,6 +231,7 @@ describe("InfoPanel", () => {
         onNavigateToPath={() => undefined}
         onOpen={() => undefined}
         onOpenInTerminal={() => undefined}
+        onShowInFinder={() => undefined}
         onCopyPath={() => true}
         folderSizeEntry={{ status: "idle" }}
         onCalculateFolderSize={() => undefined}
@@ -255,6 +265,7 @@ describe("InfoPanel", () => {
         onNavigateToPath={() => undefined}
         onOpen={() => undefined}
         onOpenInTerminal={() => undefined}
+        onShowInFinder={() => undefined}
         onCopyPath={() => true}
         folderSizeEntry={{ status: "calculating", jobId: "job-1" }}
         onCalculateFolderSize={() => undefined}
@@ -289,6 +300,7 @@ describe("InfoPanel", () => {
         onNavigateToPath={() => undefined}
         onOpen={() => undefined}
         onOpenInTerminal={() => undefined}
+        onShowInFinder={() => undefined}
         onCopyPath={() => true}
         folderSizeEntry={{
           status: "ready",
@@ -321,6 +333,7 @@ describe("InfoPanel", () => {
         onNavigateToPath={() => undefined}
         onOpen={() => undefined}
         onOpenInTerminal={() => undefined}
+        onShowInFinder={() => undefined}
         onCopyPath={() => true}
         folderSizeEntry={{
           status: "ready",
@@ -360,6 +373,7 @@ describe("InfoPanel", () => {
         onNavigateToPath={() => undefined}
         onOpen={() => undefined}
         onOpenInTerminal={() => undefined}
+        onShowInFinder={() => undefined}
         onCopyPath={() => true}
         folderSizeEntry={{ status: "idle" }}
         onCalculateFolderSize={onCalculate}
@@ -394,6 +408,7 @@ describe("InfoPanel", () => {
         onNavigateToPath={() => undefined}
         onOpen={() => undefined}
         onOpenInTerminal={() => undefined}
+        onShowInFinder={() => undefined}
         onCopyPath={() => true}
         folderSizeEntry={{ status: "calculating", jobId: "job-1" }}
         onCalculateFolderSize={() => undefined}
@@ -425,6 +440,7 @@ describe("InfoPanel", () => {
           onNavigateToPath={() => undefined}
           onOpen={() => undefined}
           onOpenInTerminal={() => undefined}
+          onShowInFinder={() => undefined}
           onCopyPath={() => true}
           openWithItems={[
             {
