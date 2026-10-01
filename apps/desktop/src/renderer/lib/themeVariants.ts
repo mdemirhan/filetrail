@@ -423,7 +423,6 @@ function getThemeVariantCssOverridesFromVariant(
     "--get-info-meta-value": variant.inspector.metaValue,
     "--get-info-meta-value-muted": variant.text.muted,
     "--context-menu-bg": variant.menu.bg,
-    "--context-menu-bg-blur": withAlpha(variant.menu.bg, isLight ? 0.88 : 0.92),
     "--context-menu-border": variant.menu.border,
     "--context-menu-separator": variant.menu.separator,
     "--context-menu-text": variant.menu.itemText,

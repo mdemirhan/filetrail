@@ -169,18 +169,45 @@ describe("theme styles", () => {
 
   it("keeps menus and popovers that hang off the toolbar clickable", () => {
     // The toolbar drags the window, and descendants inherit that unless they opt out.
-    for (const selector of [
-      ".toolbar-search-options-button",
-      ".toolbar-sort-menu",
-      ".toolbar-search",
-    ]) {
+    // Every menu shares one rule, so the selector may be one of a list.
+    for (const selector of [".toolbar-search-options-button", ".toolbar-menu", ".toolbar-search"]) {
       expect(
         declarations.some(
           (d) =>
-            d.selector === selector && d.property === "-webkit-app-region" && d.value === "no-drag",
+            d.selector.split(", ").includes(selector) &&
+            d.property === "-webkit-app-region" &&
+            d.value === "no-drag",
         ),
         selector,
       ).toBe(true);
     }
+  });
+
+  it("gives every menu the same surface, rows and highlight", () => {
+    const shared = (property: string, selectors: string[]) =>
+      declarations.filter(
+        (d) =>
+          d.property === property && selectors.every((s) => d.selector.split(", ").includes(s)),
+      );
+    // One rule each: a menu that needs its own look is a menu that looks different.
+    for (const surface of [".toolbar-menu", ".context-menu", ".context-submenu"]) {
+      for (const property of ["background", "border", "border-radius", "box-shadow"]) {
+        expect(shared(property, [surface]), `${surface} ${property}`).toHaveLength(1);
+      }
+    }
+    expect(shared("padding", [".toolbar-menu", ".context-menu", ".context-submenu"])).toHaveLength(
+      1,
+    );
+    expect(
+      shared("font-size", [".toolbar-menu-item", ".context-menu-item", ".context-submenu-item"]),
+    ).toHaveLength(1);
+    expect(
+      shared("background", [
+        ".toolbar-menu-item:hover",
+        ".toolbar-menu-item.active",
+        ".context-menu-item.active:not(.disabled)",
+        ".context-submenu-item:hover",
+      ]).map((d) => d.value),
+    ).toEqual(["var(--ft-accent-solid-button)"]);
   });
 });

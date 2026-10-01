@@ -75,22 +75,15 @@
   --get-info-meta-value: #4a4a5a;
   --get-info-meta-value-muted: #a0a2ae;
   --context-menu-bg: #f0f1f5;
-  --context-menu-bg-blur: rgba(240, 241, 245, 0.88);
   --context-menu-border: #c8c9d0;
   --context-menu-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
   --context-menu-separator: #d4d5dc;
   --context-menu-text: #1a1a24;
   --context-menu-shortcut: #9a9aaa;
-  --context-menu-hover: var(--ft-accent-hover-bg);
-  --context-menu-hover-text: #1a1a24;
-  --context-menu-hover-accent: var(--ft-accent-path-crumb-hover);
   --context-menu-disabled: #b0b0be;
   --context-menu-destructive: #d44040;
-  --context-menu-destructive-hover: rgba(212, 64, 64, 0.1);
   --context-menu-icon: #5a5a6e;
-  --context-menu-icon-hover: var(--ft-accent-path-crumb-hover);
   --context-menu-submenu-arrow: #9a9aaa;
-  --context-menu-submenu-arrow-hover: var(--ft-accent-path-crumb-hover);
   --dropdown-bg: #eff0f5;
   --fg-bright: #1a1c2e;
   --fg-muted: #8b8da3;
@@ -202,22 +195,15 @@
   --get-info-meta-value: #9a9ba0;
   --get-info-meta-value-muted: #44454a;
   --context-menu-bg: #222326;
-  --context-menu-bg-blur: rgba(34, 35, 38, 0.92);
   --context-menu-border: #353638;
   --context-menu-shadow: 0 8px 40px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
   --context-menu-separator: #2e2f32;
   --context-menu-text: #c0c1c8;
   --context-menu-shortcut: #505158;
-  --context-menu-hover: var(--ft-accent-hover-bg);
-  --context-menu-hover-text: #dddee4;
-  --context-menu-hover-accent: var(--ft-accent-path-crumb-hover);
   --context-menu-disabled: #404148;
   --context-menu-destructive: #dc5555;
-  --context-menu-destructive-hover: rgba(220, 85, 85, 0.1);
   --context-menu-icon: #68696e;
-  --context-menu-icon-hover: var(--ft-accent-path-crumb-hover);
   --context-menu-submenu-arrow: #505158;
-  --context-menu-submenu-arrow-hover: var(--ft-accent-path-crumb-hover);
   --dropdown-bg: #2a2c2e;
   --fg-bright: #e0e0e0;
   --fg-muted: #969896;
@@ -320,22 +306,15 @@
   --get-info-meta-value: #a0a4b0;
   --get-info-meta-value-muted: #484b54;
   --context-menu-bg: #252830;
-  --context-menu-bg-blur: rgba(37, 40, 48, 0.92);
   --context-menu-border: #3a3d46;
   --context-menu-shadow: 0 8px 40px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.25);
   --context-menu-separator: #33363f;
   --context-menu-text: #c8cad4;
   --context-menu-shortcut: #555868;
-  --context-menu-hover: var(--ft-accent-hover-bg);
-  --context-menu-hover-text: #e0e2ec;
-  --context-menu-hover-accent: var(--ft-accent-path-crumb-hover);
   --context-menu-disabled: #44464e;
   --context-menu-destructive: #e05555;
-  --context-menu-destructive-hover: rgba(224, 85, 85, 0.1);
   --context-menu-icon: #6e7080;
-  --context-menu-icon-hover: var(--ft-accent-path-crumb-hover);
   --context-menu-submenu-arrow: #555868;
-  --context-menu-submenu-arrow-hover: var(--ft-accent-path-crumb-hover);
   --dropdown-bg: #2c2f3a;
   --fg-bright: #dcdee4;
   --fg-muted: #6e7283;
@@ -438,22 +417,15 @@
   --get-info-meta-value: #a0a6c4;
   --get-info-meta-value-muted: #3a3a52;
   --context-menu-bg: #1e1e2e;
-  --context-menu-bg-blur: rgba(30, 30, 46, 0.92);
   --context-menu-border: #363650;
   --context-menu-shadow: 0 8px 40px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
   --context-menu-separator: #2a2a40;
   --context-menu-text: #cdd6f5;
   --context-menu-shortcut: #50506e;
-  --context-menu-hover: var(--ft-accent-hover-bg);
-  --context-menu-hover-text: #e4e8ff;
-  --context-menu-hover-accent: var(--ft-accent-path-crumb-hover);
   --context-menu-disabled: #40405a;
   --context-menu-destructive: #f38ba8;
-  --context-menu-destructive-hover: rgba(243, 139, 168, 0.1);
   --context-menu-icon: #6c7086;
-  --context-menu-icon-hover: var(--ft-accent-path-crumb-hover);
   --context-menu-submenu-arrow: #50506e;
-  --context-menu-submenu-arrow-hover: var(--ft-accent-path-crumb-hover);
   --dropdown-bg: #313244;
   --fg-bright: #cdd6f4;
   --fg-muted: #a6adc8;
@@ -788,17 +760,6 @@ input:focus-visible {
   border-left: 1px solid var(--border);
 }
 
-.toolbar-sort-menu {
-  z-index: 100;
-  min-width: 164px;
-  padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--dropdown-bg);
-  box-shadow: var(--shadow-lg);
-  -webkit-app-region: no-drag;
-}
-
 .toolbar-search-shell {
   position: relative;
   width: 100%;
@@ -967,118 +928,130 @@ input:focus-visible {
   flex-basis: 170px;
 }
 
-.toolbar-menu {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  min-width: 180px;
-  padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--dropdown-bg);
-  box-shadow: var(--shadow-lg);
-  z-index: 40;
+/* ── Menus ───────────────────────────────────────────────────────────────
+   One look for every menu: the toolbar menus (View, Sort, Search options, Back and
+   Forward, the path bar's folders, Theme), the right-click menu with its submenu, and the
+   Info panel's Open With menu. The row under the pointer or the arrow keys is filled with
+   the accent colour, as in a macOS menu. */
+
+.toolbar-menu,
+.context-menu,
+.context-submenu {
+  z-index: 100;
+  min-width: 220px;
+  padding: 5px;
+  border: 0.5px solid var(--context-menu-border);
+  border-radius: 9px;
+  /* Opaque: a blurred, see-through menu does not blur what is in the sidebar, whose
+     text then shows through it. */
+  background: var(--context-menu-bg);
+  box-shadow: var(--context-menu-shadow);
+  -webkit-app-region: no-drag;
 }
 
-.toolbar-menu-item {
+.toolbar-menu-item,
+.context-menu-item,
+.context-submenu-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 6px;
   width: 100%;
-  padding: 8px 10px;
+  height: 24px;
+  padding: 0 10px 0 4px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 5px;
   background: transparent;
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 500;
+  color: var(--context-menu-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
   text-align: left;
+  white-space: nowrap;
+  cursor: default;
 }
 
 .toolbar-menu-item:hover,
-.toolbar-menu-item.active {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+.toolbar-menu-item:focus-visible,
+.toolbar-menu-item.active,
+.context-menu-item.active:not(.disabled),
+.context-submenu-item:hover,
+.context-submenu-item:focus-visible {
+  background: var(--ft-accent-solid-button);
+  color: var(--ft-accent-on-solid);
+  outline: none;
+  box-shadow: none;
 }
 
+/* The column for the tick of a checked item. */
 .toolbar-menu-check {
-  color: var(--accent-text);
+  flex: none;
+  width: 16px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
+  text-align: center;
 }
+
+.toolbar-menu-label,
+.context-menu-item-label {
+  flex: 1 1 auto;
+}
+
+.toolbar-menu-shortcut,
+.context-menu-item-shortcut {
+  margin-left: 14px;
+  color: var(--context-menu-shortcut);
+  font-variant-numeric: tabular-nums;
+}
+
+.toolbar-menu-item:hover .toolbar-menu-shortcut,
+.toolbar-menu-item:focus-visible .toolbar-menu-shortcut,
+.context-menu-item.active:not(.disabled) .context-menu-item-shortcut {
+  color: color-mix(in srgb, var(--ft-accent-on-solid) 85%, transparent);
+}
+
+.toolbar-menu-separator,
+.context-menu-separator {
+  height: 1px;
+  margin: 5px 10px;
+  border: 0;
+  background: var(--context-menu-separator);
+}
+
+/* A small caption above a group of related menu items. */
+.toolbar-menu-heading {
+  padding: 3px 10px 2px;
+  color: var(--context-menu-shortcut);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Menus worked with the arrow keys mark the current row themselves (`.active`); the
+   keyboard focus stays in the list behind them, and the pointer moves the same mark. */
+.history-menu .toolbar-menu-item:hover:not(.active),
+.pathbar-folder-menu .toolbar-menu-item:hover:not(.active) {
+  background: transparent;
+  color: var(--context-menu-text);
+}
+
+.history-menu .toolbar-menu-item.active .history-menu-detail {
+  color: inherit;
+  opacity: 0.8;
+}
+
+/* The right-click menu: an icon before each label, and a submenu for Open With. */
 
 .context-menu-layer {
   position: fixed;
   z-index: 150;
 }
 
-.context-menu,
-.context-submenu {
-  min-width: 240px;
-  padding: 4px 0;
-  border: 1px solid var(--context-menu-border);
-  border-radius: 8px;
-  background: var(--context-menu-bg-blur);
-  box-shadow: var(--context-menu-shadow);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-}
-
 .context-menu {
   position: relative;
 }
 
-.context-menu-separator {
-  height: 1px;
-  margin: 4px 8px;
-  background: var(--context-menu-separator);
-}
-
-.context-menu-item,
-.context-submenu-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: calc(100% - 8px);
-  margin: 0 4px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-}
-
 .context-menu-item {
-  position: relative;
-  padding: 5px 12px 5px 10px;
-}
-
-.context-submenu-item {
-  padding: 5px 12px;
-  color: var(--context-menu-text);
-  font-size: 12.5px;
-  font-weight: 450;
-  letter-spacing: -0.01em;
-}
-
-.context-menu-item.active,
-.context-submenu-item:hover,
-.context-submenu-item:focus-visible {
-  background: var(--context-menu-hover);
-}
-
-.context-menu-item.disabled {
-  cursor: default;
-}
-
-.context-menu-item.disabled.active {
-  background: color-mix(in srgb, var(--context-menu-hover) 35%, transparent);
-}
-
-.context-menu-item.destructive.active:not(.disabled) {
-  background: var(--context-menu-destructive-hover);
+  gap: 8px;
+  padding: 0 10px 0 8px;
 }
 
 .context-menu-item-icon {
@@ -1089,19 +1062,6 @@ input:focus-visible {
   height: 14px;
   flex: 0 0 auto;
   color: var(--context-menu-icon);
-}
-
-.context-menu-item.active .context-menu-item-icon {
-  color: var(--context-menu-icon-hover);
-}
-
-.context-menu-item.disabled .context-menu-item-icon,
-.context-menu-item.disabled.active .context-menu-item-icon {
-  color: var(--context-menu-disabled);
-}
-
-.context-menu-item.destructive.active:not(.disabled) .context-menu-item-icon {
-  color: var(--context-menu-destructive);
 }
 
 .context-menu-icon-svg,
@@ -1122,59 +1082,30 @@ input:focus-visible {
   stroke-width: 2.5;
 }
 
-.context-menu-item-label {
-  flex: 1;
-  color: var(--context-menu-text);
-  font-size: 12.5px;
-  font-weight: 450;
-  letter-spacing: -0.01em;
-}
-
-.context-menu-item.active .context-menu-item-label,
-.context-submenu-item:hover,
-.context-submenu-item:focus-visible {
-  color: var(--context-menu-hover-text);
-}
-
-.context-menu-item.disabled .context-menu-item-label,
-.context-menu-item.disabled.active .context-menu-item-label {
-  color: var(--context-menu-disabled);
-}
-
-.context-menu-item-shortcut {
-  color: var(--context-menu-shortcut);
-  font-family: var(--font-sans);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  font-variant-numeric: tabular-nums;
-}
-
-.context-menu-item.active .context-menu-item-shortcut {
-  color: var(--context-menu-hover-accent);
-}
-
-.context-menu-item.disabled .context-menu-item-shortcut,
-.context-menu-item.disabled.active .context-menu-item-shortcut,
-.context-menu-item.disabled .context-menu-submenu-arrow,
-.context-menu-item.disabled.active .context-menu-submenu-arrow {
-  color: var(--context-menu-disabled);
-}
-
-.context-menu-item.destructive.active:not(.disabled) .context-menu-item-label,
-.context-menu-item.destructive.active:not(.disabled) .context-menu-item-shortcut {
-  color: var(--context-menu-destructive);
-}
-
 .context-menu-submenu-arrow {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  margin-left: 14px;
   color: var(--context-menu-submenu-arrow);
 }
 
-.context-menu-item.active .context-menu-submenu-arrow {
-  color: var(--context-menu-submenu-arrow-hover);
+.context-menu-item.active:not(.disabled) .context-menu-item-icon,
+.context-menu-item.active:not(.disabled) .context-menu-submenu-arrow {
+  color: inherit;
+}
+
+/* A destructive item is red until it is the highlighted row. */
+.context-menu-item.destructive:not(.disabled):not(.active),
+.context-menu-item.destructive:not(.disabled):not(.active) .context-menu-item-icon {
+  color: var(--context-menu-destructive);
+}
+
+/* A disabled item is grey and never highlights. */
+.context-menu-item.disabled,
+.context-menu-item.disabled .context-menu-item-icon,
+.context-menu-item.disabled .context-menu-submenu-arrow {
+  color: var(--context-menu-disabled);
 }
 
 /* Placed beside its parent item by ItemContextMenu once both are measured. */
@@ -1185,8 +1116,8 @@ input:focus-visible {
   min-width: 180px;
 }
 
-.context-submenu-item:focus-visible {
-  outline: none;
+.context-submenu-item {
+  padding: 0 10px;
 }
 
 .action-notice-backdrop {
@@ -2019,25 +1950,6 @@ body.resizing-panels * {
   box-shadow: 0 0 0 2px var(--accent-blue-dim);
 }
 
-/* Menus worked with the arrow keys mark the current row themselves; the keyboard focus
-   stays in the list behind them. */
-.history-menu .toolbar-menu-item.active,
-.pathbar-folder-menu .toolbar-menu-item.active {
-  background: var(--ft-accent-solid-button);
-  color: var(--ft-accent-on-solid);
-}
-
-.history-menu .toolbar-menu-item:hover:not(.active),
-.pathbar-folder-menu .toolbar-menu-item:hover:not(.active) {
-  background: transparent;
-  color: var(--context-menu-text);
-}
-
-.history-menu .toolbar-menu-item.active .history-menu-detail {
-  color: inherit;
-  opacity: 0.8;
-}
-
 .pathbar-folder-menu {
   min-width: 200px;
   max-width: min(360px, calc(100vw - 16px));
@@ -2294,54 +2206,6 @@ body.resizing-panels * {
 .sidebar-rail-menu-anchor {
   position: relative;
   overflow: visible;
-}
-
-.sidebar-rail-menu {
-  position: absolute;
-  left: calc(100% + 10px);
-  bottom: 0;
-  z-index: 30;
-  min-width: 176px;
-  padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--dropdown-bg);
-  box-shadow: var(--shadow-lg);
-}
-
-.sidebar-rail-menu-portal {
-  z-index: 100;
-}
-
-.sidebar-rail-menu-separator {
-  height: 1px;
-  margin: 4px 6px;
-  border-radius: 999px;
-  background: var(--context-menu-separator, var(--border-light));
-}
-
-.sidebar-rail-menu-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  width: 100%;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--text-secondary);
-  padding: 8px 10px;
-  text-align: left;
-}
-
-.sidebar-rail-menu-item:hover,
-.sidebar-rail-menu-item.active {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.sidebar-rail-menu-check {
-  color: var(--accent-text);
 }
 
 .sidebar-main {
@@ -4735,76 +4599,6 @@ body.platform-macos .settings-view[data-layout="compact"] {
   -webkit-app-region: no-drag;
 }
 
-.toolbar-menu {
-  z-index: 100;
-  min-width: 220px;
-  padding: 5px;
-  border: 0.5px solid var(--context-menu-border);
-  border-radius: 9px;
-  background: var(--context-menu-bg-blur, var(--context-menu-bg));
-  box-shadow: var(--context-menu-shadow);
-  backdrop-filter: blur(20px) saturate(1.6);
-  -webkit-backdrop-filter: blur(20px) saturate(1.6);
-}
-
-.toolbar-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  height: 24px;
-  padding: 0 10px 0 4px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--context-menu-text);
-  font-size: 13px;
-  text-align: left;
-  cursor: default;
-}
-
-.toolbar-menu-item:hover,
-.toolbar-menu-item:focus-visible {
-  background: var(--ft-accent-solid-button);
-  color: var(--ft-accent-on-solid);
-  outline: none;
-  box-shadow: none;
-}
-
-.toolbar-menu-check {
-  width: 16px;
-  text-align: center;
-  font-size: 12px;
-}
-
-.toolbar-menu-label {
-  flex: 1 1 auto;
-}
-
-.toolbar-menu-shortcut {
-  color: var(--context-menu-shortcut);
-}
-
-.toolbar-menu-item:hover .toolbar-menu-shortcut,
-.toolbar-menu-item:focus-visible .toolbar-menu-shortcut {
-  color: color-mix(in srgb, var(--ft-accent-on-solid) 85%, transparent);
-}
-
-.toolbar-menu-separator {
-  height: 1px;
-  margin: 5px 10px;
-  border: 0;
-  background: var(--context-menu-separator);
-}
-
-/* A small caption above a group of related menu items. */
-.toolbar-menu-heading {
-  padding: 3px 10px 2px;
-  color: var(--context-menu-shortcut);
-  font-size: 11px;
-  font-weight: 600;
-}
-
 /* ── Help: topics on the left, one readable column on the right ───────── */
 
 .help-view {
@@ -5571,21 +5365,6 @@ body.platform-macos .settings-view[data-layout="compact"] {
   margin-left: auto;
   color: var(--text-tertiary);
   font-size: 12px;
-}
-
-/* ── Context menu: ⌘ glyph shortcuts in the system font; destructive items in red ── */
-
-.context-menu-item-shortcut {
-  font-family: var(--font-sans);
-  letter-spacing: 0.02em;
-}
-
-/* A disabled destructive item stays grey like every other disabled item. */
-.context-menu-item.destructive:not(.disabled),
-.context-menu-item.destructive:not(.disabled) .context-menu-item-label,
-.context-menu-item.destructive:not(.disabled) .context-menu-icon-svg {
-  color: var(--context-menu-destructive);
-  stroke: var(--context-menu-destructive);
 }
 
 /* ── Help / Action Log: a toolbar with a way back to the files ────────── */

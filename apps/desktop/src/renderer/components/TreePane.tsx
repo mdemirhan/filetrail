@@ -336,7 +336,8 @@ export function TreePane({
         return;
       }
       const rect = button.getBoundingClientRect();
-      const menuWidth = 176;
+      // The narrowest a menu gets (`.toolbar-menu`).
+      const menuWidth = 220;
       const maxLeft = window.innerWidth - menuWidth - 12;
       // The menu opens above a bottom rail button, and beside a left rail button.
       setThemeMenuViewportPosition(
@@ -711,45 +712,40 @@ export function TreePane({
       );
     }
     if (itemId === "theme") {
+      const renderThemeMenuItem = (option: { value: ThemePreference; label: string }) => (
+        <button
+          key={option.value}
+          type="button"
+          className="toolbar-menu-item"
+          role="menuitemradio"
+          aria-checked={theme === option.value}
+          onClick={() => onSelectTheme(option.value)}
+        >
+          <span className="toolbar-menu-check" aria-hidden="true">
+            {theme === option.value ? "✓" : ""}
+          </span>
+          <span className="toolbar-menu-label">{option.label}</span>
+        </button>
+      );
       const themeMenu =
         themeMenuOpen && themeMenuViewportPosition
           ? createPortal(
               <div
                 ref={themeMenuRef}
-                className="sidebar-rail-menu sidebar-rail-menu-portal"
-                tabIndex={-1}
+                className="toolbar-menu theme-menu"
+                role="menu"
+                aria-label="Theme"
                 style={{
                   position: "fixed",
                   left: `${themeMenuViewportPosition.left}px`,
                   bottom: `${themeMenuViewportPosition.bottom}px`,
                 }}
               >
-                <button
-                  type="button"
-                  className={`sidebar-rail-menu-item${theme === "auto" ? " active" : ""}`}
-                  onClick={() => onSelectTheme(AUTO_THEME_OPTION.value)}
-                  aria-pressed={theme === "auto"}
-                >
-                  <span>{AUTO_THEME_OPTION.label}</span>
-                  {theme === "auto" ? <span className="sidebar-rail-menu-check">✓</span> : null}
-                </button>
+                {renderThemeMenuItem(AUTO_THEME_OPTION)}
                 {THEME_GROUPS.map((group) => (
                   <Fragment key={group.value}>
-                    <hr className="sidebar-rail-menu-separator" />
-                    {group.options.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        className={`sidebar-rail-menu-item${theme === option.value ? " active" : ""}`}
-                        onClick={() => onSelectTheme(option.value)}
-                        aria-pressed={theme === option.value}
-                      >
-                        <span>{option.label}</span>
-                        {theme === option.value ? (
-                          <span className="sidebar-rail-menu-check">✓</span>
-                        ) : null}
-                      </button>
-                    ))}
+                    <hr className="toolbar-menu-separator" />
+                    {group.options.map(renderThemeMenuItem)}
                   </Fragment>
                 ))}
               </div>,
@@ -765,7 +761,7 @@ export function TreePane({
             onClick={onToggleThemeMenu}
             title={`Theme: ${getThemeLabel(theme)}`}
             aria-label="Choose theme"
-            aria-haspopup="listbox"
+            aria-haspopup="menu"
             aria-expanded={themeMenuOpen}
           >
             <ToolbarIcon name="theme" />

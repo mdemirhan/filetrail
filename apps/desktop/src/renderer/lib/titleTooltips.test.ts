@@ -111,6 +111,24 @@ describe("titleTooltips", () => {
     expect(tooltipText()).toBe("Trash");
   });
 
+  it("stays quiet over a button whose menu is open", () => {
+    element("help").setAttribute("aria-expanded", "true");
+    hover("help");
+    vi.advanceTimersByTime(1000);
+
+    expect(tooltipText()).toBeNull();
+    // The title is still held back, so the system does not draw its own tooltip either.
+    expect(element("help")).not.toHaveAttribute("title");
+
+    hover("plain");
+    expect(element("help")).toHaveAttribute("title", "Help");
+    element("help").setAttribute("aria-expanded", "false");
+    vi.advanceTimersByTime(1000);
+    hover("help");
+    vi.advanceTimersByTime(600);
+    expect(tooltipText()).toBe("Help");
+  });
+
   it("hides when a key is pressed, the view scrolls, or the pointer leaves the window", () => {
     for (const dismiss of [
       () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true })),

@@ -538,14 +538,15 @@ describe("TreePane", () => {
       favorites: [],
     });
 
-    const darkThemeButton = screen.getByRole("button", { name: /^macOS Dark/ });
-    const menu = darkThemeButton.closest(".sidebar-rail-menu-portal");
-    expect(menu?.parentElement).toBe(document.body);
+    // The same menu as the toolbar's, drawn over the window rather than inside the rail.
+    const menu = screen.getByRole("menu", { name: "Theme" });
+    expect(menu).toHaveClass("toolbar-menu");
+    expect(menu.parentElement).toBe(document.body);
     // Auto, then the three light palettes, then the three dark ones.
     expect(
-      Array.from(menu?.querySelectorAll("button") ?? []).map((button) =>
-        button.textContent?.replace("✓", ""),
-      ),
+      within(menu)
+        .getAllByRole("menuitemradio")
+        .map((item) => item.textContent?.replace("✓", "")),
     ).toEqual([
       "Auto (follow macOS)",
       "macOS Light",
@@ -555,7 +556,13 @@ describe("TreePane", () => {
       "Catppuccin Mocha",
       "Tomorrow Night",
     ]);
-    expect(darkThemeButton).toHaveAttribute("aria-pressed", "true");
+    // Only the theme in use is ticked.
+    expect(
+      within(menu)
+        .getAllByRole("menuitemradio")
+        .filter((item) => item.getAttribute("aria-checked") === "true")
+        .map((item) => item.textContent),
+    ).toEqual(["✓macOS Dark"]);
   });
 
   it("uses the rail theme button as a menu trigger", () => {

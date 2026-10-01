@@ -104,7 +104,8 @@ export function installTitleTooltips(doc: Document = document): () => void {
       return;
     }
     const text = (stashedTitle ?? "").trim();
-    if (text.length === 0) {
+    // A button whose menu is open stays quiet: its tooltip would sit on top of the menu.
+    if (text.length === 0 || anchor.getAttribute("aria-expanded") === "true") {
       return;
     }
 

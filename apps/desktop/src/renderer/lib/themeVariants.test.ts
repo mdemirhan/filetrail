@@ -33,7 +33,7 @@ describe("themeVariants", () => {
     );
     expect(getThemeVariantCssOverrides("tomorrow-night")).toEqual({});
     expect(THEME_VARIANT_OVERRIDE_KEYS).toContain("--bg-base");
-    expect(THEME_VARIANT_OVERRIDE_KEYS).toContain("--context-menu-bg-blur");
+    expect(THEME_VARIANT_OVERRIDE_KEYS).toContain("--context-menu-bg");
     expect(new Set(THEME_VARIANT_OVERRIDE_KEYS).size).toBe(THEME_VARIANT_OVERRIDE_KEYS.length);
   });
 });
