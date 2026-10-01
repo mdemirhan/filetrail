@@ -51,8 +51,26 @@ export function usePreferencesSync({
     if (Object.keys(patch).length === 0) {
       return;
     }
-    syncedRef.current = { ...syncedRef.current, ...patch };
-    void client.invoke("app:updatePreferences", { preferences: patch });
+    const previous = syncedRef.current;
+    syncedRef.current = { ...previous, ...patch };
+    void Promise.resolve(client.invoke("app:updatePreferences", { preferences: patch })).catch(
+      () => {
+        // The write was refused, so nothing in it was saved. Each value that has not been
+        // sent again since goes back to what was last saved, and is sent with the next change.
+        const synced: Record<string, unknown> = { ...syncedRef.current };
+        for (const key of Object.keys(patch) as Array<keyof PreferencesPatch>) {
+          if (!Object.is(synced[key], patch[key])) {
+            continue;
+          }
+          if (key in previous) {
+            synced[key] = previous[key];
+          } else {
+            delete synced[key];
+          }
+        }
+        syncedRef.current = synced as PreferencesPatch;
+      },
+    );
   }, [client]);
 
   // Called once persisted preferences are loaded so hydration itself is not written back.

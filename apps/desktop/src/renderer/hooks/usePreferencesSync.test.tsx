@@ -69,4 +69,37 @@ describe("usePreferencesSync", () => {
     });
     expect(updateHandler).toHaveBeenCalledTimes(1);
   });
+
+  it("sends a value again with the next change when its write was refused", async () => {
+    const updateHandler = vi
+      .fn<(payload: { preferences: PreferencesPatch }) => Promise<{ preferences: object }>>()
+      .mockRejectedValueOnce(new Error("refused"))
+      .mockResolvedValue({ preferences: {} });
+    const client = createMockFiletrailClient({ "app:updatePreferences": updateHandler as never });
+
+    const { result, rerender } = renderHook(
+      ({ payload }: { payload: PreferencesPatch }) =>
+        usePreferencesSync({ client, ready: true, payload, onRemotePatch: () => undefined }),
+      { initialProps: { payload: { theme: "auto", accent: "#d4845a" } as PreferencesPatch } },
+    );
+    act(() => {
+      result.current.markSynced({ theme: "auto", accent: "#d4845a" });
+    });
+
+    rerender({ payload: { theme: "macos-dark", accent: "#d4845a" } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(updateHandler).toHaveBeenCalledTimes(1);
+
+    // The theme was not saved, so it goes out again with the accent that changes next.
+    rerender({ payload: { theme: "macos-dark", accent: "#007aff" } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(updateHandler).toHaveBeenCalledTimes(2);
+    expect(updateHandler).toHaveBeenLastCalledWith({
+      preferences: { theme: "macos-dark", accent: "#007aff" },
+    });
+  });
 });

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
-import type { OpenTabPreference } from "../../shared/appPreferences";
+import { OPEN_TABS_LIMIT, type OpenTabPreference } from "../../shared/appPreferences";
 import { EMPTY_CONTENT_SELECTION } from "../lib/contentSelection";
 import { createTreeNode } from "../lib/explorerAppUtils";
 import {
@@ -770,11 +770,15 @@ export function useExplorerTabs(args: {
     sortBy: navigation.sortBy,
     sortDirection: navigation.sortDirection,
   };
-  const nextOpenTabs = state.tabs.map((tab) =>
-    tab.id === state.activeTabId || !tab.snapshot
-      ? liveTabPreference
-      : toOpenTabPreference(tab.snapshot),
-  );
+  // No more tabs are remembered than a saved list may hold; a longer list would be refused
+  // as a whole, along with everything saved in the same write.
+  const nextOpenTabs = state.tabs
+    .slice(0, OPEN_TABS_LIMIT)
+    .map((tab) =>
+      tab.id === state.activeTabId || !tab.snapshot
+        ? liveTabPreference
+        : toOpenTabPreference(tab.snapshot),
+    );
   const openTabsRef = useRef(nextOpenTabs);
   if (JSON.stringify(openTabsRef.current) !== JSON.stringify(nextOpenTabs)) {
     openTabsRef.current = nextOpenTabs;
@@ -782,9 +786,12 @@ export function useExplorerTabs(args: {
 
   return {
     openTabs: openTabsRef.current,
-    activeTabIndex: Math.max(
-      0,
-      state.tabs.findIndex((tab) => tab.id === state.activeTabId),
+    activeTabIndex: Math.min(
+      OPEN_TABS_LIMIT - 1,
+      Math.max(
+        0,
+        state.tabs.findIndex((tab) => tab.id === state.activeTabId),
+      ),
     ),
     restoreTabs,
     tabItems,
