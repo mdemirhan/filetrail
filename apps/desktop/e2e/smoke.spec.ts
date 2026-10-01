@@ -1,4 +1,6 @@
+import { mkdtempSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { _electron as electron } from "playwright";
@@ -10,9 +12,12 @@ const require = createRequire(import.meta.url);
 const electronExecutablePath = require("electron") as unknown as string;
 
 test("built app launches, shows the File Trail window, and renders the explorer shell", async () => {
+  // A profile of its own: the test neither reads nor writes the real one, and it still
+  // starts while a copy of the app is open (which holds the single-instance lock).
+  const userDataDir = mkdtempSync(join(tmpdir(), "filetrail-smoke-"));
   const electronApp = await electron.launch({
     executablePath: electronExecutablePath,
-    args: [appDir],
+    args: [appDir, `--user-data-dir=${userDataDir}`],
     cwd: appDir,
   });
 
@@ -22,5 +27,6 @@ test("built app launches, shows the File Trail window, and renders the explorer 
     await expect(window.locator("main.app-shell")).toBeVisible({ timeout: 30_000 });
   } finally {
     await electronApp.close();
+    rmSync(userDataDir, { recursive: true, force: true });
   }
 });
