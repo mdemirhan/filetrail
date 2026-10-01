@@ -1399,6 +1399,9 @@ export function App() {
     infoPanelItem !== null &&
     (infoPanelItem.kind === "directory" || infoPanelItem.kind === "symlink_directory") &&
     infoPanelItem.path !== getTrashPath(homePath);
+  const infoPanelCanRootTree =
+    infoPanelItem !== null &&
+    (infoPanelItem.kind === "directory" || infoPanelItem.kind === "symlink_directory");
   const infoPanelFolderSizePath =
     infoPanelItem && isFolderSizeEligibleKind(infoPanelItem.kind) ? infoPanelItem.path : null;
   const infoRowActiveEntry =
@@ -1732,6 +1735,9 @@ export function App() {
               isFavorite: infoPanelCanFavorite && isFavoritePath(favorites, infoPanelItem.path),
               onToggleFavorite: infoPanelCanFavorite
                 ? () => toggleFavoritePath(infoPanelItem.path)
+                : undefined,
+              onRootTree: infoPanelCanRootTree
+                ? () => rootTreeAtPath(infoPanelItem.path)
                 : undefined,
               openWithItems: contextMenuSubmenuItems,
               onOpenWith: (action) => {

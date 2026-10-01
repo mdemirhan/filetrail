@@ -190,6 +190,7 @@ export function getContextMenuItems(input: {
     { type: "separator", key: "separator-duplicate" },
     { id: "newFolder", label: "New Folder", icon: "newFolder" },
     { id: "toggleFavorite", label: favoriteToggleLabel, icon: "favorite" },
+    { id: "rootTreeHere", label: "Root Tree Here", icon: "rootTreeHere" },
     { type: "separator", key: "separator-new-folder" },
     { id: "terminal", label: "Open in Terminal", icon: "terminal" },
     { id: "showInFinder", label: "Show in Finder", icon: "showInFinder" },

@@ -3654,6 +3654,35 @@ describe("App copy/paste integration", () => {
     });
   });
 
+  it("offers Root Tree Here for a folder in the file list, but not for a file", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceButton = await screen.findByTitle("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.contextMenu(sourceButton);
+    });
+    expect(screen.getByRole("button", { name: /^Copy Path/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Root Tree Here/ })).not.toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.contextMenu(screen.getByTitle("/Users/demo/Folder"));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Root Tree Here/ }));
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("tree-root")).toHaveTextContent("/Users/demo/Folder");
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/Folder");
+    });
+  });
+
   it("clears the content pane when the integrated Favorites root is selected", async () => {
     const harness = createAppHarness();
 

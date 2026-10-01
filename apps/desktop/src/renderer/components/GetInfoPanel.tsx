@@ -32,6 +32,7 @@ export function InfoPanel({
   onEdit,
   isFavorite = false,
   onToggleFavorite,
+  onRootTree,
   copyPathDisabled = false,
   folderSizeEntry,
   onCalculateFolderSize,
@@ -57,6 +58,8 @@ export function InfoPanel({
   isFavorite?: boolean;
   // Given only for folders that can be added to or removed from Favorites.
   onToggleFavorite?: (() => void) | undefined;
+  // Given only for folders, which the folder tree can be rooted at.
+  onRootTree?: (() => void) | undefined;
   copyPathDisabled?: boolean | undefined;
   folderSizeEntry?: FolderSizeEntry | undefined;
   onCalculateFolderSize?: (() => void) | undefined;
@@ -120,6 +123,7 @@ export function InfoPanel({
           onEdit={onEdit}
           isFavorite={isFavorite}
           onToggleFavorite={onToggleFavorite}
+          onRootTree={onRootTree}
           onNavigateToPath={onNavigateToPath}
           onOpen={onOpen}
           onOpenInTerminal={onOpenInTerminal}
@@ -150,6 +154,7 @@ function GetInfoPanelContent({
   onEdit,
   isFavorite,
   onToggleFavorite,
+  onRootTree,
   onNavigateToPath,
   onOpen,
   onOpenInTerminal,
@@ -172,6 +177,7 @@ function GetInfoPanelContent({
   onEdit?: (() => void) | undefined;
   isFavorite: boolean;
   onToggleFavorite?: (() => void) | undefined;
+  onRootTree?: (() => void) | undefined;
   onNavigateToPath: (path: string) => void;
   onOpen: () => void;
   onOpenInTerminal: () => void;
@@ -436,6 +442,11 @@ function GetInfoPanelContent({
               <InfoPanelGlyph name="favorite" />
             </GetInfoActionButton>
           ) : null}
+          {onRootTree ? (
+            <GetInfoActionButton label="Root Tree Here" shortcut="⇧⌘R" onClick={onRootTree}>
+              <InfoPanelGlyph name="rootTree" />
+            </GetInfoActionButton>
+          ) : null}
         </div>
       </section>
     </div>
@@ -584,6 +595,7 @@ function InfoPanelGlyph({
     | "edit"
     | "name"
     | "favorite"
+    | "rootTree"
     | "copy"
     | "check"
     | "close"
@@ -637,6 +649,17 @@ function InfoPanelGlyph({
     return (
       <svg className="get-info-icon" viewBox="0 0 24 24" aria-hidden="true">
         <path d="m12 17.27-5.18 3.05 1.39-5.88L3 9.97l6.01-.5L12 4l2.99 5.47 6.01.5-5.21 4.47 1.39 5.88Z" />
+      </svg>
+    );
+  }
+  if (name === "rootTree") {
+    return (
+      <svg className="get-info-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 5h8" />
+        <path d="M8 5v12h6" />
+        <path d="M8 11h6" />
+        <path d="M17 9l3 2-3 2" />
+        <path d="M17 15l3 2-3 2" />
       </svg>
     );
   }

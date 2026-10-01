@@ -413,6 +413,17 @@ export function useExplorerActions(args: {
     ) {
       hidden.add("calculateSize");
     }
+    // In the file list and search results the tree can be rooted at one selected folder.
+    const isTreeSurface =
+      contextMenuState.surface === "treeFolder" || contextMenuState.surface === "favorite";
+    if (
+      !isTreeSurface &&
+      (contextMenuState.surface === "trash" ||
+        contextMenuTargetEntries.length !== 1 ||
+        !isDirectoryLikeEntry(contextMenuTargetEntries[0] ?? null))
+    ) {
+      hidden.add("rootTreeHere");
+    }
     if (contextMenuState.surface === "trash") {
       // "Show Package Contents" is only visible for bundle entries (.app, .framework, etc.)
       const hasBundle = contextMenuTargetEntries.some((entry) => entry.kind === "bundle");

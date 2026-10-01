@@ -162,6 +162,7 @@ describe("InfoPanel", () => {
     const onEdit = vi.fn();
     const onCopyName = vi.fn().mockResolvedValue(true);
     const onToggleFavorite = vi.fn();
+    const onRootTree = vi.fn();
     const requiredProps = {
       loading: false,
       item: baseItem,
@@ -175,7 +176,7 @@ describe("InfoPanel", () => {
 
     const { rerender } = render(<InfoPanel {...requiredProps} />);
 
-    for (const name of ["Quick Look", "Edit", "Copy Name", "Add to Favorites"]) {
+    for (const name of ["Quick Look", "Edit", "Copy Name", "Add to Favorites", "Root Tree Here"]) {
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
     }
 
@@ -186,9 +187,11 @@ describe("InfoPanel", () => {
         onEdit={onEdit}
         onCopyName={onCopyName}
         onToggleFavorite={onToggleFavorite}
+        onRootTree={onRootTree}
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Root Tree Here" }));
     fireEvent.click(screen.getByRole("button", { name: "Quick Look" }));
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     fireEvent.click(screen.getByRole("button", { name: "Add to Favorites" }));
@@ -198,6 +201,7 @@ describe("InfoPanel", () => {
     expect(onQuickLook).toHaveBeenCalledTimes(1);
     expect(onEdit).toHaveBeenCalledTimes(1);
     expect(onToggleFavorite).toHaveBeenCalledTimes(1);
+    expect(onRootTree).toHaveBeenCalledTimes(1);
     expect(onCopyName).toHaveBeenCalledTimes(1);
     // Only the row that was used confirms the copy.
     expect(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument();
