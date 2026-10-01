@@ -106,6 +106,7 @@ export function ContentPane({
   onLayoutColumnsChange,
   onVisiblePathsChange,
   onNavigatePath,
+  onOpenPathInNewTab,
   onRequestPathSuggestions,
   onRequestFolderChildren,
   onFocusChange,
@@ -153,11 +154,13 @@ export function ContentPane({
   onSelectPath?: (path: string) => void;
   onSelectionGesture?: (path: string, modifiers: SelectionGestureModifiers) => void;
   onClearSelection?: () => void;
-  onActivateEntry: (entry: DirectoryEntry) => void;
+  onActivateEntry: (entry: DirectoryEntry, inNewTab?: boolean) => void;
   onSortChange: (sortBy: IpcRequest<"directory:getSnapshot">["sortBy"]) => void;
   onLayoutColumnsChange: (columns: number) => void;
   onVisiblePathsChange: (paths: string[]) => void;
   onNavigatePath: (path: string) => void;
+  /** ⌘-click on a folder of the path bar. */
+  onOpenPathInNewTab?: (path: string) => void;
   onRequestPathSuggestions: (inputPath: string) => Promise<IpcResponse<"path:getSuggestions">>;
   /** The folders inside `path`, for the menus on the path bar's separators. */
   onRequestFolderChildren?: ((path: string) => Promise<PathbarFolder[]>) | undefined;
@@ -625,8 +628,12 @@ export function ContentPane({
                     type="button"
                     className={`pathbar-segment${item.isActive ? " active" : ""}`}
                     aria-disabled={item.segment.path.length === 0}
-                    onClick={() => {
+                    onClick={(event) => {
                       if (item.segment.path.length === 0) {
+                        return;
+                      }
+                      if (event.metaKey && onOpenPathInNewTab) {
+                        onOpenPathInNewTab(item.segment.path);
                         return;
                       }
                       if (segmentClickTimeoutRef.current !== null) {
@@ -883,7 +890,7 @@ function FlowListView({
   viewportHeight: number;
   onSelectionGesture: (path: string, modifiers: SelectionGestureModifiers) => void;
   onClearSelection: () => void;
-  onActivateEntry: (entry: DirectoryEntry) => void;
+  onActivateEntry: (entry: DirectoryEntry, inNewTab?: boolean) => void;
   onLayoutColumnsChange: (columns: number) => void;
   onVisiblePathsChange: (paths: string[]) => void;
   onItemContextMenu?: (path: string | null, position: { x: number; y: number }) => void;
@@ -1158,7 +1165,7 @@ function FlowListView({
                     canAcceptDrop ? (event) => onItemDragLeave?.(entry, event) : undefined
                   }
                   onDrop={canAcceptDrop ? (event) => onItemDrop?.(entry, event) : undefined}
-                  onDoubleClick={() => onActivateEntry(entry)}
+                  onDoubleClick={(event) => onActivateEntry(entry, event.metaKey)}
                   title={entry.name}
                   aria-selected={selectedPathSet.has(entry.path)}
                 >
@@ -1232,7 +1239,7 @@ function DetailsView({
   viewportHeight: number;
   onSelectionGesture: (path: string, modifiers: SelectionGestureModifiers) => void;
   onClearSelection: () => void;
-  onActivateEntry: (entry: DirectoryEntry) => void;
+  onActivateEntry: (entry: DirectoryEntry, inNewTab?: boolean) => void;
   onSortChange: (sortBy: IpcRequest<"directory:getSnapshot">["sortBy"]) => void;
   onLayoutColumnsChange: (columns: number) => void;
   onVisiblePathsChange: (paths: string[]) => void;
@@ -1625,7 +1632,7 @@ function DetailsView({
                 onDragOver={canAcceptDrop ? (event) => onItemDragOver?.(entry, event) : undefined}
                 onDragLeave={canAcceptDrop ? (event) => onItemDragLeave?.(entry, event) : undefined}
                 onDrop={canAcceptDrop ? (event) => onItemDrop?.(entry, event) : undefined}
-                onDoubleClick={() => onActivateEntry(entry)}
+                onDoubleClick={(event) => onActivateEntry(entry, event.metaKey)}
                 title={entry.path}
                 aria-selected={selectedPathSet.has(entry.path)}
                 style={{

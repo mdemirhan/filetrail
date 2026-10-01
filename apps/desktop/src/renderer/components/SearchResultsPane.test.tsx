@@ -78,8 +78,10 @@ describe("SearchResultsPane", () => {
     fireEvent.doubleClick(row);
 
     expect(handleSelect).toHaveBeenCalledWith("/Users/demo/project/src/App.tsx");
+    // The second argument is whether ⌘ was held, which opens a folder in a new tab.
     expect(handleActivate).toHaveBeenCalledWith(
       expect.objectContaining({ path: "/Users/demo/project/src/App.tsx" }),
+      false,
     );
   });
 

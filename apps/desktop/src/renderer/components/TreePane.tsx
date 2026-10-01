@@ -109,6 +109,7 @@ export function TreePane({
   onToggleExpand,
   onNavigate,
   onNavigateFavorite,
+  onOpenInNewTab,
   onSelectFavoritesRoot,
   onItemContextMenu,
   onItemDragEnter,
@@ -174,6 +175,8 @@ export function TreePane({
   onToggleExpand: (path: string) => void;
   onNavigate: (path: string) => Promise<boolean | undefined> | undefined;
   onNavigateFavorite: (path: string) => Promise<boolean | undefined> | undefined;
+  /** ⌘-click on a folder or a favorite. */
+  onOpenInNewTab?: ((path: string) => void) | undefined;
   onSelectFavoritesRoot?: (() => Promise<boolean | undefined> | undefined) | undefined;
   onItemContextMenu?:
     | ((
@@ -849,6 +852,7 @@ export function TreePane({
           onClearSelection={onClearSelection}
           onNavigate={onNavigate}
           onNavigateFavorite={onNavigateFavorite}
+          onOpenInNewTab={onOpenInNewTab}
           onSelectFavoritesRoot={onSelectFavoritesRoot}
           onItemContextMenu={onItemContextMenu}
           getItemDropIndicator={getItemDropIndicator}
@@ -978,6 +982,7 @@ export function TreePane({
                         onClearSelection={onClearSelection}
                         onNavigate={onNavigate}
                         onNavigateFavorite={onNavigateFavorite}
+                        onOpenInNewTab={onOpenInNewTab}
                         onSelectFavoritesRoot={onSelectFavoritesRoot}
                         onItemContextMenu={onItemContextMenu}
                         onItemDragEnter={onItemDragEnter}
@@ -1031,6 +1036,7 @@ export function TreePane({
                 onClearSelection={onClearSelection}
                 onNavigate={onNavigate}
                 onNavigateFavorite={onNavigateFavorite}
+                onOpenInNewTab={onOpenInNewTab}
                 onSelectFavoritesRoot={onSelectFavoritesRoot}
                 onItemContextMenu={onItemContextMenu}
                 onItemDragEnter={onItemDragEnter}
@@ -1090,6 +1096,7 @@ function TreeList({
   onClearSelection,
   onNavigate,
   onNavigateFavorite,
+  onOpenInNewTab,
   onSelectFavoritesRoot,
   onItemContextMenu,
   onItemDragEnter,
@@ -1113,6 +1120,8 @@ function TreeList({
   onClearSelection: () => void;
   onNavigate: (path: string) => Promise<boolean | undefined> | undefined;
   onNavigateFavorite: (path: string) => Promise<boolean | undefined> | undefined;
+  /** ⌘-click on a folder or a favorite. */
+  onOpenInNewTab?: ((path: string) => void) | undefined;
   onSelectFavoritesRoot?: (() => Promise<boolean | undefined> | undefined) | undefined;
   onItemContextMenu?:
     | ((
@@ -1172,6 +1181,7 @@ function TreeList({
               onClearSelection={onClearSelection}
               onNavigate={onNavigate}
               onNavigateFavorite={onNavigateFavorite}
+              onOpenInNewTab={onOpenInNewTab}
               onSelectFavoritesRoot={onSelectFavoritesRoot}
               onItemContextMenu={onItemContextMenu}
               onItemDragEnter={onItemDragEnter}
@@ -1202,6 +1212,7 @@ function TreeItemRow({
   onClearSelection,
   onNavigate,
   onNavigateFavorite,
+  onOpenInNewTab,
   onSelectFavoritesRoot,
   onItemContextMenu,
   onItemDragEnter,
@@ -1224,6 +1235,8 @@ function TreeItemRow({
   onClearSelection: () => void;
   onNavigate: (path: string) => Promise<boolean | undefined> | undefined;
   onNavigateFavorite: (path: string) => Promise<boolean | undefined> | undefined;
+  /** ⌘-click on a folder or a favorite. */
+  onOpenInNewTab?: ((path: string) => void) | undefined;
   onSelectFavoritesRoot?: (() => Promise<boolean | undefined> | undefined) | undefined;
   onItemContextMenu?:
     | ((
@@ -1273,6 +1286,10 @@ function TreeItemRow({
   const itemPath = item.path;
   const dropIndicator = getItemDropIndicator?.(item, subview) ?? null;
 
+  // ⌘-click on a folder that is not on screen opens it in a new tab; the tab on screen and
+  // its selection in the tree stay as they are.
+  const opensInNewTab = Boolean(onOpenInNewTab) && !isCurrent && !isFavoritesRoot && itemPath;
+
   function handleActivatePointerDown(metaKey: boolean, button: number) {
     if (button !== 0) {
       return;
@@ -1280,6 +1297,9 @@ function TreeItemRow({
     onSubviewFocus();
     if (metaKey && isCurrent) {
       setOptimisticSelectedItemId(null);
+      return;
+    }
+    if (metaKey && opensInNewTab) {
       return;
     }
     setOptimisticSelectedItemId(item.id);
@@ -1294,6 +1314,10 @@ function TreeItemRow({
       }
       setOptimisticSelectedItemId(null);
       onClearSelection();
+      return;
+    }
+    if (metaKey && opensInNewTab && itemPath) {
+      onOpenInNewTab?.(itemPath);
       return;
     }
     if (isFavoritesRoot) {

@@ -14,6 +14,7 @@ export type ContextMenuActionId =
   | "revealInFolder"
   | "revealInTree"
   | "open"
+  | "openInNewTab"
   | "openWith"
   | "showPackageContents"
   | "edit"
@@ -64,6 +65,7 @@ export type ContextMenuIconName =
   | "revealInFolder"
   | "revealInTree"
   | "open"
+  | "openInNewTab"
   | "openWith"
   | "showPackageContents"
   | "edit"
@@ -133,6 +135,7 @@ export function getContextMenuItems(input: {
   if (input.surface === "treeFolder") {
     return [
       { id: "open", label: "Open", icon: "open" },
+      { id: "openInNewTab", label: "Open in New Tab", icon: "openInNewTab" },
       { id: "rootTreeHere", label: "Root Tree Here", icon: "rootTreeHere" },
       { type: "separator", key: "separator-tree-open" },
       { id: "showInfo", label: "Show Info", icon: "showInfo" },
@@ -179,6 +182,7 @@ export function getContextMenuItems(input: {
 
   if (input.surface === "favorite") {
     return [
+      { id: "openInNewTab", label: "Open in New Tab", icon: "openInNewTab" },
       { id: "revealInTree", label: "Reveal in Tree", icon: "revealInTree" },
       { id: "rootTreeHere", label: "Root Tree Here", icon: "rootTreeHere" },
       { type: "separator", key: "separator-favorite-open" },
@@ -198,6 +202,7 @@ export function getContextMenuItems(input: {
 
   return [
     { id: "open", label: "Open", icon: "open" },
+    { id: "openInNewTab", label: "Open in New Tab", icon: "openInNewTab" },
     { id: "openWith", label: "Open With", icon: "openWith", hasSubmenu: true },
     { id: "edit", label: "Edit", icon: "edit" },
     { id: "showPackageContents", label: "Show Package Contents", icon: "showPackageContents" },

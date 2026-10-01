@@ -299,6 +299,9 @@ describe("ItemContextMenu", () => {
           if (label?.startsWith("Root Tree Here")) {
             return "Root Tree Here";
           }
+          if (label?.startsWith("Open in New Tab")) {
+            return "Open in New Tab";
+          }
           if (label?.startsWith("Open")) {
             return "Open";
           }
@@ -306,6 +309,7 @@ describe("ItemContextMenu", () => {
         }),
     ).toEqual([
       "Open",
+      "Open in New Tab",
       "Root Tree Here",
       "Show Info",
       "Calculate Size",

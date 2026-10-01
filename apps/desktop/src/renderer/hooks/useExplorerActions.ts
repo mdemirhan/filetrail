@@ -253,6 +253,7 @@ export function useExplorerActions(args: {
   };
   callbacks: {
     restartActiveSearch?: (() => Promise<void>) | null;
+    openPathInNewTab: (path: string) => void;
   };
 }) {
   const {
@@ -427,6 +428,8 @@ export function useExplorerActions(args: {
         !isDirectoryLikeEntry(contextMenuTargetEntries[0] ?? null))
     ) {
       hidden.add("rootTreeHere");
+      // A new tab is opened on a folder, as the tree is rooted at one.
+      hidden.add("openInNewTab");
     }
     if (contextMenuState.surface === "trash") {
       // "Show Package Contents" is only visible for bundle entries (.app, .framework, etc.)
@@ -508,6 +511,7 @@ export function useExplorerActions(args: {
       disabled.add("edit");
       if (!contextMenuState.targetPath) {
         disabled.add("open");
+        disabled.add("openInNewTab");
         disabled.add("showInfo");
         disabled.add("toggleFavorite");
         disabled.add("rootTreeHere");
@@ -535,6 +539,7 @@ export function useExplorerActions(args: {
       disabled.add("trash");
       if (!contextMenuState.targetPath) {
         disabled.add("open");
+        disabled.add("openInNewTab");
         disabled.add("revealInTree");
         disabled.add("showInfo");
         disabled.add("toggleFavorite");
@@ -2295,6 +2300,13 @@ export function useExplorerActions(args: {
       }
       return;
     }
+    if (actionId === "openInNewTab") {
+      const targetPath = contextMenuTargetPath ?? paths[0];
+      if (targetPath) {
+        await openFolderInNewTab(targetPath);
+      }
+      return;
+    }
     if (actionId === "move") {
       openMoveDialog(paths);
       return;
@@ -2432,6 +2444,16 @@ export function useExplorerActions(args: {
 
   async function activateContentEntry(entry: DirectoryEntry) {
     await activateContentPaths([entry.path]);
+  }
+
+  // Opens a folder in a new tab. A folder alias opens the folder it points to, as it does
+  // when it is opened in place.
+  async function openFolderInNewTab(path: string) {
+    const entry = activeContentEntries.find((candidate) => candidate.path === path) ?? null;
+    const targetPath = entry?.kind === "symlink_directory" ? await resolveTargetPath(path) : path;
+    if (targetPath) {
+      callbacks.openPathInNewTab(targetPath);
+    }
   }
 
   async function resolveTargetPath(path: string): Promise<string | null> {
@@ -3018,6 +3040,7 @@ export function useExplorerActions(args: {
     updateCopyPasteChoices,
     activateContentEntry,
     activateContentPaths,
+    openFolderInNewTab,
     addOpenWithApplication,
     cancelWriteOperation,
   };

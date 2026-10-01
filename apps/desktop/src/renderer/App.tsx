@@ -651,10 +651,14 @@ export function App() {
       }),
     [navigateTo],
   );
+  // Tabs are set up after the actions (they need to know whether a dialog is open), so the
+  // actions reach "open in a new tab" through this.
+  const openPathInNewTabRef = useRef<(path: string) => void>(() => undefined);
   const {
     closeContextMenu,
     activateContentEntry,
     activateContentPaths,
+    openFolderInNewTab,
     applyContentSelection,
     browseForDirectoryPath,
     cancelWriteOperation,
@@ -732,6 +736,7 @@ export function App() {
       refreshDirectory,
     },
     callbacks: {
+      openPathInNewTab: (path) => openPathInNewTabRef.current(path),
       restartActiveSearch: async () => {
         if (searchCommittedQuery.trim().length === 0) {
           return;
@@ -786,6 +791,7 @@ export function App() {
       blocked: copyPasteModalOpen || locationDialogOpen || actionNotice !== null,
     },
   });
+  openPathInNewTabRef.current = openPathInNewTab;
   const dragDropBlocked =
     mainView !== "explorer" ||
     actionNotice !== null ||
@@ -1585,6 +1591,7 @@ export function App() {
                   favoritePath: path,
                   persistOnError: true,
                 }),
+              onOpenInNewTab: openPathInNewTab,
               onClearSelection: clearTreeSelection,
               onSelectFavoritesRoot: async () => {
                 await selectTreeItem(getFavoritesRootItemId(), "skip");
@@ -1669,8 +1676,13 @@ export function App() {
                 onSkipGitIgnoredChange: updateSearchSkipGitIgnored,
                 onSelectionGesture: handleContentSelectionGesture,
                 onClearSelection: clearContentSelection,
-                onActivateResult: (item) => {
-                  void activateContentEntry(toDirectoryEntryFromSearchResult(item));
+                onActivateResult: (item, inNewTab) => {
+                  const entry = toDirectoryEntryFromSearchResult(item);
+                  if (inNewTab && isDirectoryLikeEntry(entry)) {
+                    void openFolderInNewTab(entry.path);
+                    return;
+                  }
+                  void activateContentEntry(entry);
                 },
                 onItemContextMenu: (path, position) => {
                   openItemContextMenu(path, position, "search");
@@ -1704,7 +1716,12 @@ export function App() {
                 viewMode,
                 onSelectionGesture: handleContentSelectionGesture,
                 onClearSelection: clearContentSelection,
-                onActivateEntry: (entry) => {
+                onActivateEntry: (entry, inNewTab) => {
+                  // ⌘-double-click opens a folder in a new tab, as in Finder.
+                  if (inNewTab && isDirectoryLikeEntry(entry)) {
+                    void openFolderInNewTab(entry.path);
+                    return;
+                  }
                   void activateContentEntry(entry);
                 },
                 onFocusChange: (focused) => setFocusedPane(focused ? "content" : null),
@@ -1714,6 +1731,7 @@ export function App() {
                 onLayoutColumnsChange: setContentColumns,
                 onVisiblePathsChange: setVisiblePaths,
                 onNavigatePath: (path) => void navigateTo(path, "push"),
+                onOpenPathInNewTab: openPathInNewTab,
                 onRequestPathSuggestions: (inputPath) =>
                   requestPathSuggestions({
                     client,

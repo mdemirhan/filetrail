@@ -73,12 +73,15 @@ vi.mock("./components/ContentPane", () => ({
         shiftKey: boolean;
       },
     ) => void;
-    onActivateEntry: (entry: {
-      path: string;
-      name: string;
-      kind: string;
-      isSymlink?: boolean;
-    }) => void;
+    onActivateEntry: (
+      entry: {
+        path: string;
+        name: string;
+        kind: string;
+        isSymlink?: boolean;
+      },
+      inNewTab?: boolean,
+    ) => void;
   }) => (
     <div data-testid="content-pane" onPointerDown={() => onFocusChange(true)}>
       <output data-testid="content-current-path">{currentPath}</output>
@@ -148,7 +151,7 @@ vi.mock("./components/ContentPane", () => ({
           onDragOver={(event) => onItemDragOver?.(entry, event)}
           onDragLeave={(event) => onItemDragLeave?.(entry, event)}
           onDrop={(event) => onItemDrop?.(entry, event)}
-          onDoubleClick={() => onActivateEntry(entry)}
+          onDoubleClick={(event) => onActivateEntry(entry, event.metaKey)}
         >
           {entry.name}
         </button>
@@ -9405,6 +9408,45 @@ describe("App tabs", () => {
         { ...savedTab("/Users/demo/Folder") },
       ]);
     });
+  });
+
+  it("opens a folder in a new tab with Cmd-double-click and from its menu", async () => {
+    const harness = createAppHarness();
+    await renderApp(harness);
+
+    // Tabs carry their folder as a tooltip too, so the folder is looked up in the list.
+    const listItem = (path: string) => within(screen.getByTestId("content-pane")).getByTitle(path);
+    await act(async () => {
+      fireEvent.doubleClick(listItem("/Users/demo/Folder"), { metaKey: true });
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/Folder"),
+    );
+    expect(tabLabels()).toEqual(["demo", "Folder"]);
+    expect(activeTabLabel()).toBe("Folder");
+    // Opening a folder in a new tab is a visit, like opening it in place.
+    expect(
+      harness.invocations.findLast((call) => call.channel === "places:recordVisit")?.payload,
+    ).toEqual({ path: "/Users/demo/Folder" });
+
+    // Back in the first tab, the folder's menu offers the same; a file's menu does not.
+    await pressKey({ key: "Tab", ctrlKey: true });
+    await screen.findByTitle("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.contextMenu(listItem("/Users/demo/source.txt"));
+    });
+    expect(screen.queryByRole("button", { name: "Open in New Tab" })).not.toBeInTheDocument();
+    await pressKey({ key: "Escape" });
+    await act(async () => {
+      fireEvent.contextMenu(listItem("/Users/demo/Folder"));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Open in New Tab" }));
+    });
+
+    await waitFor(() => expect(tabLabels()).toEqual(["demo", "Folder", "Folder"]));
+    expect(screen.getAllByRole("tab")[1]).toHaveAttribute("aria-selected", "true");
   });
 
   it("leaves the tab on screen alone while a dialog is open", async () => {

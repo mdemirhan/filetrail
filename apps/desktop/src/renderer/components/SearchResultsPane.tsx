@@ -125,7 +125,7 @@ export function SearchResultsPane({
   onSelectPath?: (path: string) => void;
   onSelectionGesture?: (path: string, modifiers: SelectionGestureModifiers) => void;
   onClearSelection?: () => void;
-  onActivateResult: (item: SearchResultItem) => void;
+  onActivateResult: (item: SearchResultItem, inNewTab?: boolean) => void;
   onItemContextMenu?: (path: string | null, position: { x: number; y: number }) => void;
   onItemDragStart?:
     | ((item: SearchResultItem, event: React.DragEvent<HTMLElement>) => void)
@@ -530,7 +530,7 @@ export function SearchResultsPane({
                   }}
                   onDragStart={(event) => onItemDragStart?.(result, event)}
                   onDragEnd={(event) => onItemDragEnd?.(event)}
-                  onDoubleClick={() => onActivateResult(result)}
+                  onDoubleClick={(event) => onActivateResult(result, event.metaKey)}
                   title={result.path}
                   aria-selected={selectedPathSet.has(result.path)}
                 >
