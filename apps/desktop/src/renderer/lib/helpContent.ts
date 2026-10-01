@@ -136,6 +136,11 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
         rows: [
           { label: "Click a folder", description: "Jumps straight to that folder." },
           {
+            label: "Click a ›",
+            description:
+              "Lists the folders at that level, with the one on your path ticked, so a neighbouring folder is one click away.",
+          },
+          {
             label: "Double-click the bar",
             description:
               "Edit the path as text. Suggestions come from the folder you are typing in, and Esc cancels.",

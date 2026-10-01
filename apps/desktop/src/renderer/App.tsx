@@ -1674,6 +1674,8 @@ export function App() {
                     homePath,
                     inputPath,
                   }),
+                onRequestFolderChildren: async (path) =>
+                  (await client.invoke("tree:getChildren", { path, includeHidden })).children,
                 onTypeaheadInput: (key) => handleTypeaheadInput(key, "content"),
                 onItemContextMenu: (path, position) => {
                   openItemContextMenu(path, position, "content");

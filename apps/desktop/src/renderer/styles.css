@@ -1998,6 +1998,50 @@ body.resizing-panels * {
   font-size: var(--ui-font-size-sm);
 }
 
+/* A separator is a button: it lists the folders at that level of the path. */
+.pathbar-separator-button {
+  justify-content: center;
+  min-width: 16px;
+  height: 22px;
+  padding: 0 3px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  font-family: inherit;
+  cursor: default;
+}
+
+.pathbar-separator-button:hover,
+.pathbar-separator-button.active {
+  background: var(--crumb-hover-bg);
+  color: var(--text-primary);
+}
+
+.pathbar-separator-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-blue-dim);
+}
+
+.pathbar-folder-menu {
+  min-width: 200px;
+  max-width: min(360px, calc(100vw - 16px));
+  max-height: min(440px, calc(100vh - 16px));
+  overflow-y: auto;
+}
+
+.pathbar-folder-menu .toolbar-menu-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pathbar-folder-menu-note {
+  padding: 5px 10px;
+  color: var(--context-menu-shortcut, var(--text-tertiary));
+  font-size: 12px;
+}
+
 .pathbar-segment {
   display: inline-flex;
   flex: 0 1 auto;

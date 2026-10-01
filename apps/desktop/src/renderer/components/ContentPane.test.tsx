@@ -1140,6 +1140,57 @@ describe("ContentPane", () => {
     expect(screen.getByText("This directory is empty.")).toBeInTheDocument();
   });
 
+  it("lists the folders at a level of the path from the separator before it", async () => {
+    const handleNavigate = vi.fn();
+    const handleRequestFolders = vi.fn().mockResolvedValue([
+      { path: "/Users/demo/Documents", name: "Documents" },
+      { path: "/Users/demo/src", name: "src" },
+    ]);
+    render(
+      <ContentPane
+        isFocused
+        currentPath="/Users/demo/src"
+        entries={[]}
+        viewMode="list"
+        loading={false}
+        error={null}
+        includeHidden={false}
+        metadataByPath={{}}
+        sortBy="name"
+        sortDirection="asc"
+        onSelectPath={() => undefined}
+        onActivateEntry={() => undefined}
+        onSortChange={() => undefined}
+        onLayoutColumnsChange={() => undefined}
+        onVisiblePathsChange={() => undefined}
+        onNavigatePath={handleNavigate}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+        onRequestFolderChildren={handleRequestFolders}
+        onFocusChange={() => undefined}
+      />,
+    );
+
+    // One separator per level below the top of the disk.
+    expect(
+      screen.getAllByRole("button", { name: /^Folders in / }).map((button) => button.title),
+    ).toEqual(["Folders in Macintosh HD", "Folders in Users", "Folders in demo"]);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Folders in demo" }));
+    });
+    expect(handleRequestFolders).toHaveBeenCalledWith("/Users/demo");
+    expect(screen.getByRole("menuitemradio", { name: /src/u })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Documents" }));
+    expect(handleNavigate).toHaveBeenCalledWith("/Users/demo/Documents");
+  });
+
   it("shows what was typed to filter the list, with a way to clear it", () => {
     const handleClearFilter = vi.fn();
     const entry = (name: string) => ({

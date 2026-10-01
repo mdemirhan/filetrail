@@ -38,6 +38,7 @@ import { buildColumnMajorRows, computeRowsPerColumn, getVirtualRange } from "../
 import { InlineRenameField } from "./InlineRenameField";
 import { ListFilterPill } from "./ListFilterPill";
 import { PathSuggestionDropdown } from "./PathSuggestionDropdown";
+import { type PathbarFolder, PathbarFolderMenu } from "./PathbarFolderMenu";
 
 type DirectoryEntry = IpcResponse<"directory:getSnapshot">["entries"][number];
 type DirectoryEntryMetadata = IpcResponse<"directory:getMetadataBatch">["items"][number];
@@ -96,6 +97,7 @@ export function ContentPane({
   onVisiblePathsChange,
   onNavigatePath,
   onRequestPathSuggestions,
+  onRequestFolderChildren,
   onFocusChange,
   onTypeaheadInput,
   onItemContextMenu = () => undefined,
@@ -145,6 +147,8 @@ export function ContentPane({
   onVisiblePathsChange: (paths: string[]) => void;
   onNavigatePath: (path: string) => void;
   onRequestPathSuggestions: (inputPath: string) => Promise<IpcResponse<"path:getSuggestions">>;
+  /** The folders inside `path`, for the menus on the path bar's separators. */
+  onRequestFolderChildren?: ((path: string) => Promise<PathbarFolder[]>) | undefined;
   onFocusChange: (focused: boolean) => void;
   onTypeaheadInput?: (key: string) => void;
   onItemContextMenu?: (path: string | null, position: { x: number; y: number }) => void;
@@ -262,6 +266,10 @@ export function ContentPane({
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (target instanceof Node && pathbarRef.current?.contains(target)) {
+        return;
+      }
+      // A menu opened from a separator belongs to the path bar, though it is drawn outside it.
+      if (target instanceof Element && target.closest(".pathbar-folder-menu")) {
         return;
       }
       setPathbarExpanded(false);
@@ -575,7 +583,23 @@ export function ContentPane({
                 key={item.kind === "segment" ? item.segment.path : item.key}
                 className="pathbar-item"
               >
-                {index > 0 ? <span className="pathbar-separator">›</span> : null}
+                {index > 0 ? (
+                  item.kind === "segment" && onRequestFolderChildren ? (
+                    // The separator lists the folders next to the one that follows it.
+                    <PathbarFolderMenu
+                      parentPath={getParentPath(item.segment.path)}
+                      parentLabel={getPathSegmentLabel(getParentPath(item.segment.path))}
+                      activePath={item.segment.path}
+                      onRequestFolders={onRequestFolderChildren}
+                      onNavigatePath={(path) => {
+                        setPathbarExpanded(false);
+                        onNavigatePath(path);
+                      }}
+                    />
+                  ) : (
+                    <span className="pathbar-separator">›</span>
+                  )
+                ) : null}
                 {item.kind === "segment" ? (
                   <button
                     type="button"
@@ -630,6 +654,15 @@ export function ContentPane({
       </div>
     </section>
   );
+}
+
+// The folder a path bar segment is in ("/" for the folders at the top of the disk).
+function getParentPath(path: string): string {
+  return path.slice(0, Math.max(1, path.lastIndexOf("/")));
+}
+
+function getPathSegmentLabel(path: string): string {
+  return path === "/" ? "Macintosh HD" : (path.split("/").filter(Boolean).at(-1) ?? path);
 }
 
 function buildPathSegments(path: string): Array<PathbarSegment> {
