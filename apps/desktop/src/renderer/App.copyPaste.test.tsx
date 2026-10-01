@@ -2550,6 +2550,109 @@ describe("App copy/paste integration", () => {
     );
   });
 
+  it("offers only current-folder actions on background context, all of them enabled", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const backgroundButton = await screen.findByTestId("content-pane-background");
+    await act(async () => {
+      fireEvent.contextMenu(backgroundButton);
+    });
+
+    const menu = document.querySelector(".context-menu");
+    expect(menu).not.toBeNull();
+    const labels = Array.from(menu?.querySelectorAll(".context-menu-item-label") ?? []).map(
+      (label) => label.textContent,
+    );
+    expect(labels).toEqual([
+      "Show Info",
+      "Paste",
+      "Copy Path",
+      "New Folder",
+      "Open in Terminal",
+      "Show in Finder",
+    ]);
+    // Nothing is on the clipboard, so Paste is the one item that cannot run.
+    expect(
+      Array.from(menu?.querySelectorAll(".context-menu-item.disabled") ?? []).map(
+        (item) => item.querySelector(".context-menu-item-label")?.textContent,
+      ),
+    ).toEqual(["Paste"]);
+  });
+
+  it("runs background context actions on the current folder", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const backgroundButton = await screen.findByTestId("content-pane-background");
+    const openBackgroundMenu = async () => {
+      await act(async () => {
+        fireEvent.contextMenu(backgroundButton);
+      });
+      const menu = document.querySelector(".context-menu");
+      if (!(menu instanceof HTMLElement)) {
+        throw new Error("Missing background context menu.");
+      }
+      return within(menu);
+    };
+
+    await act(async () => {
+      fireEvent.click((await openBackgroundMenu()).getByRole("button", { name: /^Copy Path/ }));
+    });
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.find((call) => call.channel === "system:copyText")?.payload,
+      ).toEqual({ text: "/Users/demo" });
+    });
+
+    await act(async () => {
+      fireEvent.click((await openBackgroundMenu()).getByRole("button", { name: "Show in Finder" }));
+    });
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.find((call) => call.channel === "system:openPathsWithApplication")
+          ?.payload,
+      ).toEqual({
+        applicationPath: "/System/Library/CoreServices/Finder.app",
+        paths: ["/Users/demo"],
+      });
+    });
+
+    await act(async () => {
+      fireEvent.click(
+        (await openBackgroundMenu()).getByRole("button", { name: /^Open in Terminal/ }),
+      );
+    });
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.find((call) => call.channel === "system:openInTerminal")?.payload,
+      ).toEqual(expect.objectContaining({ path: "/Users/demo" }));
+    });
+
+    await act(async () => {
+      fireEvent.click((await openBackgroundMenu()).getByRole("button", { name: /^Show Info/ }));
+    });
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.some(
+          (call) =>
+            call.channel === "item:getProperties" &&
+            (call.payload as { path: string }).path === "/Users/demo",
+        ),
+      ).toBe(true);
+    });
+  });
+
   it("does not open New Folder when a file is selected", async () => {
     const harness = createAppHarness();
 

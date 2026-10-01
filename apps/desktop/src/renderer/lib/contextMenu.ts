@@ -1,4 +1,11 @@
-export type ContextMenuSurface = "content" | "search" | "treeFolder" | "favorite" | "trash";
+// "background" is the empty space of the file list: its menu acts on the folder on screen.
+export type ContextMenuSurface =
+  | "content"
+  | "search"
+  | "treeFolder"
+  | "favorite"
+  | "trash"
+  | "background";
 export type ContextMenuTargetKind = "contentEntry" | "treeFolder" | "favorite";
 export type ContextMenuScope = "selection" | "background";
 export type ContextMenuSourceSubview = "tree" | "favorites" | null;
@@ -153,6 +160,20 @@ export function getContextMenuItems(input: {
         icon: "deleteImmediately",
         destructive: true,
       },
+    ];
+  }
+
+  if (input.surface === "background") {
+    return [
+      { id: "showInfo", label: "Show Info", icon: "showInfo" },
+      { type: "separator", key: "separator-background-info" },
+      { id: "paste", label: "Paste", icon: "paste" },
+      { id: "copyPath", label: "Copy Path", icon: "copyPath" },
+      { type: "separator", key: "separator-background-clipboard" },
+      { id: "newFolder", label: "New Folder", icon: "newFolder" },
+      { type: "separator", key: "separator-background-organize" },
+      { id: "terminal", label: "Open in Terminal", icon: "terminal" },
+      { id: "showInFinder", label: "Show in Finder", icon: "showInFinder" },
     ];
   }
 

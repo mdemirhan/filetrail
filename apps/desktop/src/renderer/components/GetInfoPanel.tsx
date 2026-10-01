@@ -3,6 +3,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { IpcResponse } from "@filetrail/contracts";
 
 import type { FolderSizeEntry } from "../hooks/useFolderSizeCache";
+import { useKeepInViewport } from "../hooks/useKeepInViewport";
 import type { ContextMenuSubmenuAction, ContextMenuSubmenuItem } from "../lib/contextMenu";
 import { isFolderSizeEligibleKind } from "../lib/explorerAppUtils";
 import { FileIcon } from "../lib/fileIcons";
@@ -191,6 +192,8 @@ function GetInfoPanelContent({
 }) {
   const [openWithMenuOpen, setOpenWithMenuOpen] = useState(false);
   const openWithRef = useRef<HTMLDivElement | null>(null);
+  const openWithMenuRef = useRef<HTMLDivElement | null>(null);
+  useKeepInViewport(openWithMenuRef, openWithMenuOpen);
 
   // Close the Open With menu on any click outside it (focus does not move when clicking
   // empty panel space, so blur alone is not enough) and on Escape.
@@ -358,7 +361,11 @@ function GetInfoPanelContent({
             </button>
             {openWithMenuOpen ? (
               // Same markup and styles as the right-click menu's Open With submenu.
-              <div className="context-submenu get-info-open-with-menu" role="menu">
+              <div
+                ref={openWithMenuRef}
+                className="context-submenu get-info-open-with-menu"
+                role="menu"
+              >
                 {openWithItems.map((entry) =>
                   entry.type === "separator" ? (
                     <div key={entry.key} className="context-menu-separator" />

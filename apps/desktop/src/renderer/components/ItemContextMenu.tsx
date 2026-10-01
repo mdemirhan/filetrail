@@ -1,4 +1,14 @@
-import { type CSSProperties, Fragment, useEffect, useMemo, useState } from "react";
+import {
+  type CSSProperties,
+  Fragment,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+import { useKeepInViewport } from "../hooks/useKeepInViewport";
 
 import {
   type ContextMenuActionId,
@@ -8,6 +18,7 @@ import {
   type ContextMenuSurface,
   getContextMenuItems,
 } from "../lib/contextMenu";
+import { placeSubmenu } from "../lib/menuPlacement";
 import { type ShortcutContext, getContextMenuShortcutLabel } from "../lib/shortcutPolicy";
 
 export type { ContextMenuActionId, ContextMenuSubmenuAction, ContextMenuSubmenuItem };
@@ -78,7 +89,10 @@ export function ItemContextMenu({
     setActiveItemId(null);
   }, [open]);
 
-  const submenuOpen = activeItemId === "openWith";
+  const submenuOpen =
+    activeItemId === "openWith" &&
+    !disabledActionIdSet.has("openWith") &&
+    items.some((item) => item.type !== "separator" && item.id === "openWith");
   const menuStyle = useMemo(
     () =>
       ({
@@ -87,13 +101,50 @@ export function ItemContextMenu({
       }) satisfies CSSProperties,
     [anchorX, anchorY],
   );
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const submenuParentRef = useRef<HTMLButtonElement | null>(null);
+  const submenuRef = useRef<HTMLDivElement | null>(null);
+  // The menu opens at the pointer and is then moved back inside the window; a menu taller
+  // than the window scrolls.
+  useKeepInViewport(menuRef, open);
+  // The submenu is a sibling of the menu rather than a child, so a scrolling menu cannot
+  // clip it. It is placed beside its parent item once both are measured.
+  useLayoutEffect(() => {
+    const menu = menuRef.current;
+    const parent = submenuParentRef.current;
+    const submenu = submenuRef.current;
+    if (!open || !submenuOpen || !menu || !parent || !submenu) {
+      return;
+    }
+    const menuRect = menu.getBoundingClientRect();
+    const parentRect = parent.getBoundingClientRect();
+    const submenuRect = submenu.getBoundingClientRect();
+    const position = placeSubmenu({
+      // Beside the menu's own edge, level with the parent item.
+      item: {
+        left: menuRect.left,
+        right: menuRect.right,
+        top: parentRect.top,
+        bottom: parentRect.bottom,
+      },
+      submenu: { width: submenuRect.width, height: submenuRect.height },
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+    });
+    submenu.style.left = `${position.left}px`;
+    submenu.style.top = `${position.top}px`;
+  });
   if (!open) {
     return null;
   }
 
   return (
     <div className="context-menu-layer" style={menuStyle}>
-      <div className="context-menu">
+      <div
+        ref={menuRef}
+        className="context-menu"
+        // The submenu is placed against its parent item, which moves when the menu scrolls.
+        onScroll={() => setActiveItemId(null)}
+      >
         {items.map((item) => {
           if (item.type === "separator") {
             return <div key={item.key} className="context-menu-separator" />;
@@ -108,6 +159,7 @@ export function ItemContextMenu({
           }`;
           const itemButton = (
             <button
+              ref={item.hasSubmenu ? submenuParentRef : undefined}
               type="button"
               aria-disabled={isDisabled}
               className={itemClassName}
@@ -135,34 +187,28 @@ export function ItemContextMenu({
             </button>
           );
 
-          if (!item.hasSubmenu || isDisabled || !submenuOpen) {
-            return <Fragment key={item.id}>{itemButton}</Fragment>;
-          }
-
-          return (
-            <div key={item.id} className="context-menu-item-group">
-              {itemButton}
-              <div className="context-submenu">
-                {submenuItems.map((submenuItem) => {
-                  if (submenuItem.type === "separator") {
-                    return <div key={submenuItem.key} className="context-menu-separator" />;
-                  }
-                  return (
-                    <button
-                      key={submenuItem.action.id}
-                      type="button"
-                      className="context-submenu-item"
-                      onClick={() => onSubmenuAction(submenuItem.action)}
-                    >
-                      {submenuItem.action.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          );
+          return <Fragment key={item.id}>{itemButton}</Fragment>;
         })}
       </div>
+      {submenuOpen ? (
+        <div ref={submenuRef} className="context-submenu">
+          {submenuItems.map((submenuItem) => {
+            if (submenuItem.type === "separator") {
+              return <div key={submenuItem.key} className="context-menu-separator" />;
+            }
+            return (
+              <button
+                key={submenuItem.action.id}
+                type="button"
+                className="context-submenu-item"
+                onClick={() => onSubmenuAction(submenuItem.action)}
+              >
+                {submenuItem.action.label}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }

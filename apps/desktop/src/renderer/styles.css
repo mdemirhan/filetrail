@@ -1071,10 +1071,6 @@ input:focus-visible {
   background: var(--context-menu-separator);
 }
 
-.context-menu-item-group {
-  position: relative;
-}
-
 .context-menu-item,
 .context-submenu-item {
   display: flex;
@@ -1117,7 +1113,7 @@ input:focus-visible {
   background: color-mix(in srgb, var(--context-menu-hover) 35%, transparent);
 }
 
-.context-menu-item.destructive.active {
+.context-menu-item.destructive.active:not(.disabled) {
   background: var(--context-menu-destructive-hover);
 }
 
@@ -1140,7 +1136,7 @@ input:focus-visible {
   color: var(--context-menu-disabled);
 }
 
-.context-menu-item.destructive.active .context-menu-item-icon {
+.context-menu-item.destructive.active:not(.disabled) .context-menu-item-icon {
   color: var(--context-menu-destructive);
 }
 
@@ -1201,8 +1197,8 @@ input:focus-visible {
   color: var(--context-menu-disabled);
 }
 
-.context-menu-item.destructive.active .context-menu-item-label,
-.context-menu-item.destructive.active .context-menu-item-shortcut {
+.context-menu-item.destructive.active:not(.disabled) .context-menu-item-label,
+.context-menu-item.destructive.active:not(.disabled) .context-menu-item-shortcut {
   color: var(--context-menu-destructive);
 }
 
@@ -1217,10 +1213,11 @@ input:focus-visible {
   color: var(--context-menu-submenu-arrow-hover);
 }
 
+/* Placed beside its parent item by ItemContextMenu once both are measured. */
 .context-submenu {
-  position: absolute;
-  top: -4px;
-  left: calc(100% + 6px);
+  position: fixed;
+  top: 0;
+  left: 0;
   min-width: 180px;
 }
 
@@ -5707,9 +5704,10 @@ body.platform-macos .settings-view[data-layout="compact"] {
   letter-spacing: 0.02em;
 }
 
-.context-menu-item.destructive,
-.context-menu-item.destructive .context-menu-item-label,
-.context-menu-item.destructive .context-menu-icon-svg {
+/* A disabled destructive item stays grey like every other disabled item. */
+.context-menu-item.destructive:not(.disabled),
+.context-menu-item.destructive:not(.disabled) .context-menu-item-label,
+.context-menu-item.destructive:not(.disabled) .context-menu-icon-svg {
   color: var(--context-menu-destructive);
   stroke: var(--context-menu-destructive);
 }

@@ -25,6 +25,7 @@ import {
   type ToolbarItemId,
   getToolbarItemDefinition,
 } from "../../shared/toolbarItems";
+import { useKeepInViewport } from "../hooks/useKeepInViewport";
 import {
   type TreeItemId,
   type TreePresentationItem,
@@ -312,6 +313,8 @@ export function TreePane({
     lastRegisteredSelectedItemIdRef.current = selectedTreeItemId;
     lastRegisteredSelectedRowRef.current = null;
   }, [selectedTreeItemId]);
+
+  useKeepInViewport(themeMenuRef, themeMenuOpen);
 
   useLayoutEffect(() => {
     if (!themeMenuOpen) {

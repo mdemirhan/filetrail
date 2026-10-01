@@ -15,6 +15,7 @@ import type { IpcRequest } from "@filetrail/contracts";
 import type { ExplorerViewMode } from "../../shared/appPreferences";
 import type { RendererCommandType } from "../../shared/rendererCommands";
 import { type ToolbarItemId, getToolbarItemDefinition } from "../../shared/toolbarItems";
+import { useKeepInViewport } from "../hooks/useKeepInViewport";
 import { parentDirectoryPath } from "../lib/explorerNavigation";
 import { EXPLORER_LAYOUT } from "../lib/layoutTokens";
 import { InfoPanel } from "./GetInfoPanel";
@@ -255,6 +256,8 @@ export function ExplorerWorkspace({
     top: number;
   } | null>(null);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  useKeepInViewport(sortMenuRef, sortMenuOpen);
+  useKeepInViewport(viewOptionsMenuRef, viewOptionsPosition !== null);
   const [sortMenuViewportPosition, setSortMenuViewportPosition] = useState<{
     left: number;
     top: number;

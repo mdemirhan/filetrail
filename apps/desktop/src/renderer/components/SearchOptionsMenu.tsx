@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 
 import type { IpcRequest } from "@filetrail/contracts";
 
+import { useKeepInViewport } from "../hooks/useKeepInViewport";
 import { ToolbarIcon } from "./ToolbarIcon";
 
 type SearchPatternMode = IpcRequest<"search:start">["patternMode"];
@@ -51,6 +52,7 @@ export function SearchOptionsMenu({
   const [open, setOpen] = useState(false);
   // The field sits at the right end of the toolbar, so the menu lines up with its right edge.
   const [position, setPosition] = useState<{ right: number; top: number } | null>(null);
+  useKeepInViewport(menuRef, open && position !== null);
   // Opened from the keyboard: the first item takes focus, as in a native menu.
   const focusFirstItemRef = useRef(false);
 

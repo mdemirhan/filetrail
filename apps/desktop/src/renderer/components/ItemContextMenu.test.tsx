@@ -61,27 +61,13 @@ describe("ItemContextMenu", () => {
     expect(document.querySelector(".context-menu-item.active")).toBeNull();
   });
 
-  it("disables all background actions except New Folder", () => {
+  it("lists only the current-folder actions in the background menu", () => {
     render(
       <ItemContextMenu
         anchorX={0}
         anchorY={0}
-        surface="content"
-        disabledActionIds={[
-          "open",
-          "openWith",
-          "edit",
-          "showInfo",
-          "cut",
-          "copy",
-          "paste",
-          "move",
-          "rename",
-          "duplicate",
-          "terminal",
-          "copyPath",
-          "trash",
-        ]}
+        surface="background"
+        disabledActionIds={["paste"]}
         submenuItems={submenuItems}
         shortcutContext={shortcutContext}
         open
@@ -90,12 +76,20 @@ describe("ItemContextMenu", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Open" })).toHaveAttribute("aria-disabled", "true");
-    expect(screen.getByRole("button", { name: "Edit" })).toHaveAttribute("aria-disabled", "true");
-    expect(screen.getByRole("button", { name: "New Folder⇧⌘N" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Copy Path" })).toHaveAttribute(
+    expect(
+      screen.getAllByRole("button").map((button) => button.textContent?.replace(/[⌘⇧⌥⌃].*$/u, "")),
+    ).toEqual([
+      "Show Info",
+      "Paste",
+      "Copy Path",
+      "New Folder",
+      "Open in Terminal",
+      "Show in Finder",
+    ]);
+    expect(screen.getByRole("button", { name: "Paste" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: /^New Folder/ })).toHaveAttribute(
       "aria-disabled",
-      "true",
+      "false",
     );
   });
 

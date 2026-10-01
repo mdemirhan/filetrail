@@ -105,10 +105,6 @@ const RETRY_COPY_PASTE_POLICY: CopyPastePolicy = {
   directory: "merge",
   mismatch: "skip",
 };
-const CONTEXT_MENU_WIDTH = 240;
-const CONTEXT_SUBMENU_WIDTH = 180;
-const CONTEXT_MENU_SAFE_MARGIN = 12;
-const CONTEXT_MENU_MAX_HEIGHT = 420;
 const WRITE_LOCKED_CONTEXT_ACTION_IDS: ContextMenuActionId[] = [
   "cut",
   "copy",
@@ -119,6 +115,13 @@ const WRITE_LOCKED_CONTEXT_ACTION_IDS: ContextMenuActionId[] = [
   "newFolder",
   "copyPath",
   "trash",
+];
+// Background-menu actions that act on the folder on screen rather than on a selection.
+const BACKGROUND_FOLDER_ACTION_IDS: ContextMenuActionId[] = [
+  "showInfo",
+  "copyPath",
+  "terminal",
+  "showInFinder",
 ];
 
 function createOpenWithApplicationId(): string {
@@ -435,6 +438,14 @@ export function useExplorerActions(args: {
     if (contextMenuState.surface === "favorite") {
       return Array.from(hidden);
     }
+    if (contextMenuState.surface === "background") {
+      // Nothing is pasted into or created in the Trash.
+      if (isPathInsideTrash(currentPath, homePath)) {
+        hidden.add("paste");
+        hidden.add("newFolder");
+      }
+      return Array.from(hidden);
+    }
     if (contextMenuState.surface === "treeFolder") {
       hidden.delete("calculateSize");
       // "Delete Immediately" is only shown for tree items inside the Trash.
@@ -453,7 +464,13 @@ export function useExplorerActions(args: {
       hidden.add("showPackageContents");
     }
     return Array.from(hidden);
-  }, [contextMenuFavoriteToggleLabel, contextMenuState, contextMenuTargetEntries, homePath]);
+  }, [
+    contextMenuFavoriteToggleLabel,
+    contextMenuState,
+    contextMenuTargetEntries,
+    currentPath,
+    homePath,
+  ]);
 
   const contextMenuDisabledActionIds = useMemo(() => {
     if (!contextMenuState) {
@@ -480,6 +497,10 @@ export function useExplorerActions(args: {
       for (const actionId of WRITE_LOCKED_CONTEXT_ACTION_IDS) {
         disabled.add(actionId);
       }
+    }
+    // The background menu lists only what applies to the folder on screen.
+    if (contextMenuState.surface === "background") {
+      return Array.from(disabled);
     }
     if (isTreeFolderContext) {
       disabled.add("openWith");
@@ -534,12 +555,6 @@ export function useExplorerActions(args: {
       disabled.add("newFolder");
       disabled.add("trash");
     } else {
-      if (contextMenuState.scope === "background") {
-        disabled.add("move");
-        disabled.add("rename");
-        disabled.add("duplicate");
-        disabled.add("trash");
-      }
       if (!hasSingleContextItem) {
         disabled.add("rename");
       }
@@ -548,10 +563,7 @@ export function useExplorerActions(args: {
         disabled.add("duplicate");
         disabled.add("trash");
       }
-      const canCreateNewFolder =
-        contextMenuState.scope === "background" ||
-        (contextMenuState.paths.length === 1 && hasSingleSelectedFolder);
-      if (!canCreateNewFolder) {
+      if (!hasSingleSelectedFolder) {
         disabled.add("newFolder");
       }
     }
@@ -778,16 +790,6 @@ export function useExplorerActions(args: {
     setContextMenuState(null);
   }
 
-  function resolveContextMenuPosition(x: number, y: number) {
-    const maxX =
-      window.innerWidth - (CONTEXT_MENU_WIDTH + CONTEXT_SUBMENU_WIDTH + CONTEXT_MENU_SAFE_MARGIN);
-    const maxY = window.innerHeight - (CONTEXT_MENU_MAX_HEIGHT + CONTEXT_MENU_SAFE_MARGIN);
-    return {
-      x: Math.max(CONTEXT_MENU_SAFE_MARGIN, Math.min(x, maxX)),
-      y: Math.max(CONTEXT_MENU_SAFE_MARGIN, Math.min(y, maxY)),
-    };
-  }
-
   function syncContentSelectionRefs(
     selection: ContentSelectionState,
     entries: DirectoryEntry[] = activeContentEntries,
@@ -868,7 +870,6 @@ export function useExplorerActions(args: {
     position: { x: number; y: number },
     surface: "content" | "search" = "content",
   ) {
-    const resolvedPosition = resolveContextMenuPosition(position.x, position.y);
     let contextPaths: string[] = [];
     if (path) {
       if (selectedPathSet.has(path)) {
@@ -884,11 +885,32 @@ export function useExplorerActions(args: {
     window.requestAnimationFrame(() => {
       contentPaneRef.current?.focus({ preventScroll: true });
     });
+    if (!path) {
+      // Empty space: a short menu for the folder on screen. Search results have no single
+      // folder behind them, so there is no menu there.
+      if (surface === "search" || currentPath.length === 0) {
+        setContextMenuState(null);
+        return;
+      }
+      setContextMenuState({
+        ...position,
+        // Left empty on purpose: shortcuts pressed while the menu is open act on these
+        // paths, and they must not reach the folder itself.
+        paths: [],
+        targetPath: null,
+        surface: "background",
+        targetKind: "contentEntry",
+        sourceSubview: null,
+        scope: "background",
+        folderExpansionLabel: null,
+      });
+      return;
+    }
     // Inside Trash, items get the full content menu plus "Delete Immediately".
     const resolvedSurface =
       surface === "content" && isPathInsideTrash(currentPath, homePath) ? "trash" : surface;
     setContextMenuState({
-      ...resolvedPosition,
+      ...position,
       paths: contextPaths,
       targetPath: path,
       surface: resolvedSurface,
@@ -907,10 +929,10 @@ export function useExplorerActions(args: {
       folderExpansionLabel: "Expand" | "Collapse" | null;
     } & { position: { x: number; y: number } },
   ) {
-    const resolvedPosition = resolveContextMenuPosition(input.position.x, input.position.y);
     setFocusedPane("tree");
     setContextMenuState({
-      ...resolvedPosition,
+      x: input.position.x,
+      y: input.position.y,
       paths: [input.path],
       targetPath: input.path,
       surface: input.targetKind,
@@ -2189,6 +2211,23 @@ export function useExplorerActions(args: {
     closeContextMenu();
     if (WRITE_LOCKED_CONTEXT_ACTION_IDS.includes(actionId) && isWriteOperationInFlight()) {
       showWriteOperationBusyToast();
+      return;
+    }
+    if (contextMenuSurface === "background" && BACKGROUND_FOLDER_ACTION_IDS.includes(actionId)) {
+      // These act on the folder on screen, which the menu state does not carry as a path.
+      const folderPath = currentPathRef.current;
+      if (folderPath.length === 0) {
+        return;
+      }
+      if (actionId === "showInfo") {
+        await showInfoForPath(folderPath);
+      } else if (actionId === "copyPath") {
+        await runCopyPathAction([folderPath]);
+      } else if (actionId === "terminal") {
+        await openPathInTerminal(folderPath);
+      } else {
+        await showPathsInFinder([folderPath]);
+      }
       return;
     }
     if (actionId === "revealInFolder") {
