@@ -1025,6 +1025,9 @@ input:focus-visible {
   box-shadow: var(--search-shadow-active);
   z-index: 54;
   overflow: hidden;
+  /* The toolbar is a window-drag region and Chromium passes that on to its children, so
+     without this, clicks on the Recursive and Hidden toggles dragged the window instead. */
+  -webkit-app-region: no-drag;
 }
 
 .toolbar-search-options {

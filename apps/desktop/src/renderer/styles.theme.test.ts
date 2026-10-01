@@ -169,4 +169,17 @@ describe("theme styles", () => {
       }
     }
   });
+
+  it("keeps menus and popovers that hang off the toolbar clickable", () => {
+    // The toolbar drags the window, and descendants inherit that unless they opt out.
+    for (const selector of [".toolbar-search-popover", ".toolbar-sort-menu", ".toolbar-search"]) {
+      expect(
+        declarations.some(
+          (d) =>
+            d.selector === selector && d.property === "-webkit-app-region" && d.value === "no-drag",
+        ),
+        selector,
+      ).toBe(true);
+    }
+  });
 });
