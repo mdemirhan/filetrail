@@ -31,7 +31,7 @@ describe("resolveBundledFdBinaryPath", () => {
         encoding: "utf8",
       });
 
-      expect(output).toContain("fd 10.3.0");
+      expect(output).toContain("fd 10.5.0");
     },
   );
 });
