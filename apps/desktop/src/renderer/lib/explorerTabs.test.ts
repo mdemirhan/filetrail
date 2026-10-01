@@ -1,7 +1,10 @@
 import {
   type ExplorerTab,
+  type TabSearchSession,
   type TabSnapshot,
+  applyBackgroundSearchUpdate,
   describeTab,
+  disambiguateTabLabels,
   getPathAndAncestors,
   moveTabInList,
   resolveAdjacentTab,
@@ -111,6 +114,94 @@ describe("explorerTabs", () => {
       historyIndex: 0,
       view: null,
     });
+  });
+
+  describe("a search running in a background tab", () => {
+    const result = (name: string) => ({
+      path: `/Users/demo/${name}`,
+      name,
+      extension: "txt",
+      kind: "file" as const,
+      isHidden: false,
+      isSymlink: false,
+      parentPath: "/Users/demo",
+      relativeParentPath: ".",
+    });
+    const session = {
+      results: [result("a.txt")],
+      cursor: 1,
+      status: "running",
+      error: null,
+      truncated: false,
+      elapsedMs: null,
+      jobId: "job-1",
+      pollInFlight: false,
+      interrupted: false,
+      keptResultPaths: new Set<string>(),
+    } as unknown as TabSearchSession;
+    const update = (items: ReturnType<typeof result>[], done: boolean) => ({
+      jobId: "job-1",
+      status: done ? ("complete" as const) : ("running" as const),
+      items,
+      nextCursor: 1 + items.length,
+      done,
+      truncated: false,
+      error: null,
+    });
+
+    it("adds what was found since and keeps asking while the search runs", () => {
+      const next = applyBackgroundSearchUpdate(session, update([result("b.txt")], false));
+      expect(next.results.map((item) => item.name)).toEqual(["a.txt", "b.txt"]);
+      expect(next).toMatchObject({ cursor: 2, status: "running", jobId: "job-1" });
+    });
+
+    it("lets go of a search that has finished", () => {
+      const next = applyBackgroundSearchUpdate(session, update([result("b.txt")], true));
+      expect(next).toMatchObject({ status: "complete", jobId: null, elapsedMs: null });
+      expect(next.results).toHaveLength(2);
+    });
+
+    it("leaves out results that were kept from the search before", () => {
+      const next = applyBackgroundSearchUpdate(
+        { ...session, keptResultPaths: new Set(["/Users/demo/a.txt"]) },
+        update([result("a.txt"), result("b.txt")], false),
+      );
+      expect(next.results.map((item) => item.name)).toEqual(["a.txt", "b.txt"]);
+    });
+
+    it("marks the search to run again when its last answer was thrown away", () => {
+      const next = applyBackgroundSearchUpdate(
+        { ...session, pollInFlight: true },
+        update([], true),
+      );
+      expect(next).toMatchObject({ jobId: null, status: "cancelled", interrupted: true });
+      // An answer that still carries results shows that nothing was lost.
+      expect(
+        applyBackgroundSearchUpdate({ ...session, pollInFlight: true }, update([], false)),
+      ).toMatchObject({ jobId: "job-1", pollInFlight: false, interrupted: false });
+    });
+  });
+
+  it("tells tabs on folders of the same name apart by the folder each is in", () => {
+    const tab = (label: string, path: string, kind = "folder") => ({ label, path, kind });
+    expect(
+      disambiguateTabLabels([
+        tab("src", "/Users/demo/filetrail/src"),
+        tab("src", "/Users/demo/codetrail/src"),
+        tab("Documents", "/Users/demo/Documents"),
+        // Two tabs on the same folder are the same place.
+        tab("Downloads", "/Users/demo/Downloads"),
+        tab("Downloads", "/Users/demo/Downloads"),
+        tab("“src” in demo", "/Users/demo", "search"),
+      ]).map((item) => item.label),
+    ).toEqual([
+      "src — filetrail",
+      "src — codetrail",
+      "Documents",
+      "Downloads",
+      "Downloads",
+      "“src” in demo",
+    ]);
   });
 
   it("lists a folder and the folders above it, nearest first", () => {

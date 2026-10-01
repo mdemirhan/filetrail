@@ -10,6 +10,7 @@ import {
   type TabDescription,
   type TabSearchSession,
   type TabSnapshot,
+  applyBackgroundSearchUpdate,
   describeTab,
   describeTabSnapshot,
   moveTabInList,
@@ -33,6 +34,9 @@ import type {
   WriteOperationsStore,
 } from "../state/explorerStores";
 
+// How often a search running in a background tab is asked how it is doing. Nothing is asked
+// while no background tab has a search running.
+const BACKGROUND_SEARCH_POLL_MS = 1000;
 const CONTENT_SCROLL_SELECTOR = ".details-scroll, .flow-list";
 const TREE_SCROLL_SELECTOR = ".tree-scroll";
 
@@ -151,6 +155,68 @@ export function useExplorerTabs(args: {
     stateRef.current = next;
     navigation.activeTabIdRef.current = next.activeTabId;
     setState(next);
+  }
+
+  // The background tabs whose search is being asked for an update right now.
+  const backgroundPollsRef = useRef(new Set<string>());
+
+  // The state a tab is shown from. If its search was just asked for an update, that answer
+  // will be thrown away, which the search has to know about (see `pollInFlight`).
+  function getSnapshotToShow(tab: ExplorerTab): TabSnapshot | null {
+    const snapshot = tab.snapshot;
+    if (!snapshot?.search || !backgroundPollsRef.current.has(tab.id)) {
+      return snapshot;
+    }
+    return { ...snapshot, search: { ...snapshot.search, pollInFlight: true } };
+  }
+
+  // Asks the worker about each search that is running in a background tab, so the tab can
+  // show when it has finished and has its results at hand when it is shown.
+  function pollBackgroundSearches() {
+    for (const tab of stateRef.current.tabs) {
+      const session = tab.snapshot?.search;
+      if (!session || session.jobId === null || backgroundPollsRef.current.has(tab.id)) {
+        continue;
+      }
+      const { jobId, cursor } = session;
+      const tabId = tab.id;
+      backgroundPollsRef.current.add(tabId);
+      const applyUpdate = (update: (current: TabSearchSession) => TabSearchSession) => {
+        backgroundPollsRef.current.delete(tabId);
+        const current = stateRef.current;
+        const target = current.tabs.find((candidate) => candidate.id === tabId);
+        const targetSession = target?.snapshot?.search;
+        // The tab was shown or closed meanwhile; if shown, its own polling took over.
+        if (
+          !target?.snapshot ||
+          !targetSession ||
+          targetSession.jobId !== jobId ||
+          targetSession.cursor !== cursor
+        ) {
+          return;
+        }
+        const snapshot = { ...target.snapshot, search: update(targetSession) };
+        commitState({
+          ...current,
+          tabs: current.tabs.map((candidate) =>
+            candidate.id === tabId ? { ...candidate, snapshot } : candidate,
+          ),
+        });
+      };
+      void client
+        .invoke("search:getUpdate", { jobId, cursor })
+        .then((response) => {
+          applyUpdate((current) => applyBackgroundSearchUpdate(current, response));
+        })
+        .catch((error) => {
+          applyUpdate((current) => ({
+            ...current,
+            jobId: null,
+            status: "error",
+            error: error instanceof Error ? error.message : String(error),
+          }));
+        });
+    }
   }
 
   // Takes the tab on screen out of the window and hands back the state it is left in.
@@ -295,7 +361,8 @@ export function useExplorerTabs(args: {
             : tab,
       ),
     });
-    showSnapshot(target.snapshot, target.snapshot.view ? "reload" : "load", {
+    const snapshot = getSnapshotToShow(target) ?? target.snapshot;
+    showSnapshot(snapshot, snapshot.view ? "reload" : "load", {
       refreshExpandedTree: target.stale,
     });
   }
@@ -421,7 +488,8 @@ export function useExplorerTabs(args: {
         .filter((tab) => tab.id !== tabId)
         .map((tab) => (tab.id === nextTab.id ? { ...tab, snapshot: null, stale: false } : tab)),
     });
-    showSnapshot(nextTab.snapshot, nextTab.snapshot.view ? "reload" : "load", {
+    const nextSnapshot = getSnapshotToShow(nextTab) ?? nextTab.snapshot;
+    showSnapshot(nextSnapshot, nextSnapshot.view ? "reload" : "load", {
       refreshExpandedTree: nextTab.stale,
     });
   }
@@ -451,7 +519,8 @@ export function useExplorerTabs(args: {
     cancelSearchJob(closedSnapshot.search?.jobId ?? null);
     rememberClosedTab(closedSnapshot);
     commitState({ activeTabId: tabId, tabs: [{ ...kept, snapshot: null, stale: false }] });
-    showSnapshot(kept.snapshot, kept.snapshot.view ? "reload" : "load", {
+    const keptSnapshot = getSnapshotToShow(kept) ?? kept.snapshot;
+    showSnapshot(keptSnapshot, keptSnapshot.view ? "reload" : "load", {
       refreshExpandedTree: kept.stale,
     });
   }
@@ -619,6 +688,19 @@ export function useExplorerTabs(args: {
       favoritePath ? { syncTree: false, treeSelectionMode: "favorite", favoritePath } : {},
     );
   }, [activationCount]);
+
+  // A search left running in a background tab is asked how it is doing once in a while.
+  const hasBackgroundSearch = state.tabs.some(
+    (tab) => (tab.snapshot?.search?.jobId ?? null) !== null,
+  );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the timer runs while any background tab has a search running; what it asks about is read when it fires.
+  useEffect(() => {
+    if (!hasBackgroundSearch) {
+      return;
+    }
+    const timer = window.setInterval(() => pollBackgroundSearches(), BACKGROUND_SEARCH_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [hasBackgroundSearch]);
 
   // A file operation that ends may have changed folders that background tabs show. Their
   // folder is read again when they are shown anyway; this makes that read cover the tree.

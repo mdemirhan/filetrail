@@ -758,6 +758,7 @@ export function App() {
     openTabs,
     activeTabIndex,
     restoreTabs,
+    activeTabId,
     tabItems,
     tabCount,
     activateTab,
@@ -1359,6 +1360,11 @@ export function App() {
   // Return starts a search and moves into results that are not there yet; the first one is
   // selected once the search has finished and the order is final.
   const selectFirstSearchResultWhenDoneRef = useRef(false);
+  // It was asked for in the tab that was on screen then, not in the one shown since.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: forgets the request whenever another tab is shown.
+  useLayoutEffect(() => {
+    selectFirstSearchResultWhenDoneRef.current = false;
+  }, [activeTabId]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the search settles; it reads the latest results and selection.
   useEffect(() => {
     if (!selectFirstSearchResultWhenDoneRef.current || searchStatus === "running") {

@@ -8381,6 +8381,8 @@ function createAppHarness(
     searchJobs?: (query: string) => { names: string[]; running?: boolean; truncated?: boolean };
     // Reading this folder's subfolders for the tree waits until `releaseTreeChildren`.
     holdTreeChildrenFor?: string;
+    // Answers about a scripted search wait until `releaseSearchUpdates`.
+    holdSearchUpdates?: boolean;
     copyPastePlanError?: Error;
     deferCopyPastePlan?: boolean;
     deferCopyPastePlanCalls?: number[];
@@ -8400,6 +8402,7 @@ function createAppHarness(
   // The folder is gone from disk: reading it fails from now on.
   removeDirectory: (path: string) => void;
   releaseTreeChildren: () => void;
+  releaseSearchUpdates: () => void;
   resolveCopyPastePlan: () => void;
   resolveCopyPasteStart: () => void;
 } {
@@ -8440,6 +8443,14 @@ function createAppHarness(
   const heldTreeChildren = new Promise<void>((resolve) => {
     releaseTreeChildren = resolve;
   });
+  let releaseSearchUpdates: () => void = () => undefined;
+  const heldSearchUpdates = args.holdSearchUpdates
+    ? new Promise<void>((resolve) => {
+        releaseSearchUpdates = resolve;
+      })
+    : Promise.resolve();
+  // Like the worker, a search that has reported its end keeps no results to hand out again.
+  const finishedSearchJobs = new Set<string>();
   let commandListener: ((command: RendererCommand) => void) | null = null;
   let writeOperationProgressListener: ((event: WriteOperationProgressEvent) => void) | null = null;
   let copyPasteProgressListener: ((event: WriteOperationProgressEvent) => void) | null = null;
@@ -8653,8 +8664,15 @@ function createAppHarness(
         // A scripted search: which names it finds, and whether it has finished.
         const { jobId, cursor = 0 } = payload as IpcRequestInput<"search:getUpdate">;
         const job = args.searchJobs(searchJobQueries.get(jobId) ?? "");
-        const items = cursor === 0 ? job.names.map((name) => createSearchResult(name)) : [];
+        const items =
+          cursor === 0 && !finishedSearchJobs.has(jobId)
+            ? job.names.map((name) => createSearchResult(name))
+            : [];
         const running = job.running === true;
+        if (!running) {
+          finishedSearchJobs.add(jobId);
+        }
+        await heldSearchUpdates;
         return {
           jobId,
           status: running ? "running" : job.truncated ? "truncated" : "complete",
@@ -8832,6 +8850,9 @@ function createAppHarness(
     },
     releaseTreeChildren() {
       releaseTreeChildren();
+    },
+    releaseSearchUpdates() {
+      releaseSearchUpdates();
     },
     resolveCopyPastePlan() {
       resolveCopyPastePlanPromises.shift()?.();
@@ -9388,6 +9409,105 @@ describe("App tabs", () => {
     expect(await screen.findByTestId("search-results-pane")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Search")).toHaveValue("source");
     expect(harness.invocations.filter((call) => call.channel === "search:cancel")).toHaveLength(0);
+  });
+
+  it("notices when a search finishes in a background tab, and has its results on return", async () => {
+    let finished = false;
+    const harness = createAppHarness({
+      searchJobs: () =>
+        finished ? { names: ["source.txt", "sonar.txt"] } : { names: [], running: true },
+    });
+    await renderApp(harness);
+    await openSearchResults();
+    await pressKey({ key: "t", metaKey: true });
+    const searchingTabs = () => document.querySelectorAll(".tab-strip-search.searching").length;
+    expect(tabLabels()).toEqual(["“source” in demo", "demo"]);
+    expect(searchingTabs()).toBe(1);
+    const updatesBefore = harness.invocations.filter(
+      (call) => call.channel === "search:getUpdate",
+    ).length;
+
+    // The search ends while its tab is in the background.
+    finished = true;
+    await waitFor(() => expect(searchingTabs()).toBe(0), { timeout: 3000 });
+
+    // Once it has ended there is nothing left to ask about.
+    const updatesWhenDone = harness.invocations.filter(
+      (call) => call.channel === "search:getUpdate",
+    ).length;
+    expect(updatesWhenDone).toBeGreaterThan(updatesBefore);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+    });
+    expect(harness.invocations.filter((call) => call.channel === "search:getUpdate")).toHaveLength(
+      updatesWhenDone,
+    );
+
+    await pressKey({ key: "Tab", ctrlKey: true });
+    await waitFor(() => expect(screen.queryAllByTitle(/^search:/u)).toHaveLength(2));
+    expect(harness.invocations.filter((call) => call.channel === "search:start")).toHaveLength(1);
+  });
+
+  it("searches again when the last answer of a search was lost by leaving its tab", async () => {
+    const harness = createAppHarness({
+      searchJobs: () => ({ names: ["source.txt", "sonar.txt"] }),
+      holdSearchUpdates: true,
+    });
+    await renderApp(harness);
+    const searchInput = screen.getByPlaceholderText("Search") as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(searchInput, { target: { value: "so" } });
+      fireEvent.submit(searchInput.closest("form") as HTMLFormElement);
+    });
+    await waitFor(() =>
+      expect(harness.invocations.map((call) => call.channel)).toContain("search:getUpdate"),
+    );
+
+    // The tab is left while the answer that carries the results is on its way. The worker
+    // has let go of them by the time the tab is back.
+    await act(async () => {
+      harness.emitCommand({ type: "newTab" });
+    });
+    await act(async () => {
+      harness.releaseSearchUpdates();
+    });
+    await act(async () => {
+      harness.emitCommand({ type: "selectNextTab" });
+    });
+
+    await waitFor(() => expect(screen.queryAllByTitle(/^search:/u)).toHaveLength(2));
+    expect(harness.invocations.filter((call) => call.channel === "search:start")).toHaveLength(2);
+  });
+
+  it("searches for what was being typed when the tab was left, once the tab is back", async () => {
+    const harness = createAppHarness({
+      searchJobs: () => ({ names: ["source.txt"] }),
+    });
+    await renderApp(harness);
+    const searchInput = screen.getByPlaceholderText("Search") as HTMLInputElement;
+    const searchQueries = () =>
+      harness.invocations
+        .filter((call) => call.channel === "search:start")
+        .map((call) => (call.payload as IpcRequestInput<"search:start">).query);
+    await act(async () => {
+      searchInput.focus();
+      fireEvent.change(searchInput, { target: { value: "sou" } });
+    });
+
+    // Another tab is opened before the keyboard has rested: nothing is searched there.
+    await act(async () => {
+      harness.emitCommand({ type: "newTab" });
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    });
+    expect(searchQueries()).toEqual([]);
+
+    await act(async () => {
+      harness.emitCommand({ type: "selectNextTab" });
+    });
+    expect(searchInput.value).toBe("sou");
+    await waitFor(() => expect(searchQueries()).toEqual(["sou"]), { timeout: 2000 });
   });
 
   it("closes a background tab from its close button and keeps the tab on screen", async () => {

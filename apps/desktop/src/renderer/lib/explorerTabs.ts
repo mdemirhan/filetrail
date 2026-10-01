@@ -48,6 +48,11 @@ export type TabSearchSession = {
   startedAt: number | null;
   jobId: string | null;
   cursor: number;
+  // An answer from the search was on its way when the tab was left, and was thrown away.
+  // If it was the last one, the worker has let go of the results it carried.
+  pollInFlight: boolean;
+  // Text typed into the field that was still waiting for the keyboard to rest.
+  pendingLiveQuery: string | null;
   keptResultPaths: Set<string>;
   interrupted: boolean;
   searchedHidden: boolean;
@@ -237,4 +242,57 @@ export function toReopenableSnapshot(snapshot: TabSnapshot): TabSnapshot {
     view: null,
     search: null,
   };
+}
+
+type SearchUpdate = IpcResponse<"search:getUpdate">;
+
+// What a background tab's search becomes once the worker has been asked how it is doing:
+// the results found since the last time are added, and a search that has finished is let go.
+// How long it took is not known, only when it was found finished.
+export function applyBackgroundSearchUpdate(
+  session: TabSearchSession,
+  update: SearchUpdate,
+): TabSearchSession {
+  // The answer that was thrown away when the tab was left turned out to be the last one:
+  // its results are gone, so the search is marked to run again when the tab is shown.
+  if (session.pollInFlight && update.done && update.items.length === 0) {
+    return { ...session, jobId: null, status: "cancelled", interrupted: true, pollInFlight: false };
+  }
+  const newItems =
+    session.keptResultPaths.size === 0
+      ? update.items
+      : update.items.filter((item) => !session.keptResultPaths.has(item.path));
+  return {
+    ...session,
+    pollInFlight: false,
+    results: newItems.length > 0 ? [...session.results, ...newItems] : session.results,
+    cursor: update.nextCursor,
+    status: update.status,
+    error: update.error,
+    truncated: update.truncated,
+    ...(update.done ? { jobId: null, elapsedMs: null } : {}),
+  };
+}
+
+// Tabs on folders with the same name are told apart by the folder each one is in. Tabs on
+// the same folder, and search tabs, keep their labels.
+export function disambiguateTabLabels<T extends { label: string; kind: string; path: string }>(
+  items: readonly T[],
+): T[] {
+  return items.map((item) => {
+    if (item.kind !== "folder") {
+      return item;
+    }
+    const clashes = items.some(
+      (other) =>
+        other !== item &&
+        other.kind === "folder" &&
+        other.label === item.label &&
+        other.path !== item.path,
+    );
+    const parentPath = clashes ? parentDirectoryPath(item.path) : null;
+    return parentPath
+      ? { ...item, label: `${item.label} — ${getFolderDisplayName(parentPath)}` }
+      : item;
+  });
 }

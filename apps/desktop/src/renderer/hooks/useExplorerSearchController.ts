@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { IpcResponse } from "@filetrail/contracts";
 
@@ -165,6 +165,14 @@ export function useExplorerSearchController(args: {
   // How far into the running search's results this window has read. A tab left while its
   // search runs picks the results up from here when it is shown again.
   const searchCursorRef = useRef(0);
+  // Whether an answer from the running search is on its way.
+  const pollInFlightRef = useRef(false);
+  // The tab was left while an answer was on its way. If the search is found finished with
+  // nothing new, that answer was the last one and its results are gone: search again.
+  const verifyFirstUpdateAfterAttachRef = useRef(false);
+  const [rerunRequestCount, setRerunRequestCount] = useState(0);
+  // The text the live-search timer is waiting to search for.
+  const pendingLiveQueryRef = useRef<string | null>(null);
   // Set while the first answer after a tab comes back is awaited. A search that turns out
   // to have finished while its tab was in the background has no known duration: the time
   // until the tab was shown again is not how long the search took.
@@ -284,7 +292,12 @@ export function useExplorerSearchController(args: {
 
   async function stopSearch() {
     cancelLiveSearch();
+    const sessionId = searchSessionRef.current;
     await cancelActiveSearch();
+    // Another tab's search may be on screen by now; this one was stopped where it was left.
+    if (searchSessionRef.current !== sessionId) {
+      return;
+    }
     setSearchStatus("cancelled");
     setSearchError(null);
   }
@@ -292,7 +305,11 @@ export function useExplorerSearchController(args: {
   async function clearCommittedSearch() {
     cancelLiveSearch();
     searchInterruptedRef.current = false;
+    const sessionId = searchSessionRef.current;
     await cancelActiveSearch();
+    if (searchSessionRef.current !== sessionId) {
+      return;
+    }
     searchSessionRef.current += 1;
     setSearchCommittedQuery("");
     setSearchBaseQuery("");
@@ -314,9 +331,13 @@ export function useExplorerSearchController(args: {
   }
 
   function pollSearch(jobId: string, cursor: number, sessionId: number): void {
+    pollInFlightRef.current = true;
     void client
       .invoke("search:getUpdate", { jobId, cursor })
       .then((response) => {
+        if (searchSessionRef.current === sessionId) {
+          pollInFlightRef.current = false;
+        }
         const typedResponse = response as {
           items: SearchResultItem[];
           status: IpcResponse<"search:getUpdate">["status"];
@@ -326,6 +347,17 @@ export function useExplorerSearchController(args: {
           nextCursor: number;
         };
         if (searchSessionRef.current !== sessionId || searchJobIdRef.current !== jobId) {
+          return;
+        }
+        const mayHaveLostResults =
+          verifyFirstUpdateAfterAttachRef.current &&
+          typedResponse.done &&
+          typedResponse.items.length === 0;
+        verifyFirstUpdateAfterAttachRef.current = false;
+        if (mayHaveLostResults) {
+          // Searched again once the window has rendered the tab that just came back: the
+          // answer can arrive before that, and the search is started from what is on screen.
+          setRerunRequestCount((count) => count + 1);
           return;
         }
         const keptPaths = keptResultPathsRef.current;
@@ -379,6 +411,7 @@ export function useExplorerSearchController(args: {
         if (searchSessionRef.current !== sessionId || searchJobIdRef.current !== jobId) {
           return;
         }
+        pollInFlightRef.current = false;
         logger.error("search update failed", error, {
           jobId,
           cursor,
@@ -395,6 +428,26 @@ export function useExplorerSearchController(args: {
       clearTimeout(liveSearchTimerRef.current);
       liveSearchTimerRef.current = null;
     }
+    pendingLiveQueryRef.current = null;
+  }
+
+  // Searches for `trimmedQuery` once the keyboard has rested, unless the field has changed
+  // by then.
+  function scheduleLiveSearch(trimmedQuery: string) {
+    pendingLiveQueryRef.current = trimmedQuery;
+    liveSearchTimerRef.current = setTimeout(() => {
+      liveSearchTimerRef.current = null;
+      pendingLiveQueryRef.current = null;
+      // The field may have been emptied or the folder left in the meantime.
+      if (searchDraftQueryRef.current.trim() !== trimmedQuery) {
+        return;
+      }
+      void startSearchRef.current(trimmedQuery, {
+        rootPath: resolveSearchRootPathRef.current(),
+        live: true,
+        keepMatchingResults: true,
+      });
+    }, LIVE_SEARCH_DELAY_MS);
   }
 
   // Where a search typed now looks: the scope of the search on screen while its folder is
@@ -573,18 +626,7 @@ export function useExplorerSearchController(args: {
       refineSearch(trimmedQuery);
       return;
     }
-    liveSearchTimerRef.current = setTimeout(() => {
-      liveSearchTimerRef.current = null;
-      // The field may have been emptied or the folder left in the meantime.
-      if (searchDraftQueryRef.current.trim() !== trimmedQuery) {
-        return;
-      }
-      void startSearchRef.current(trimmedQuery, {
-        rootPath: resolveSearchRootPathRef.current(),
-        live: true,
-        keepMatchingResults: true,
-      });
-    }, LIVE_SEARCH_DELAY_MS);
+    scheduleLiveSearch(trimmedQuery);
   }
 
   // Return in the search field. What typing already found is kept; anything else is
@@ -679,6 +721,13 @@ export function useExplorerSearchController(args: {
     void startSearch(searchCommittedQuery, { rootPath: searchRootPath || currentPath });
   }
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs once per request, with the search that is on screen then.
+  useEffect(() => {
+    if (rerunRequestCount > 0) {
+      rerunSearch();
+    }
+  }, [rerunRequestCount]);
+
   function changeSearchRoot(rootPath: string) {
     if (!hasCachedSearch || rootPath.length === 0) {
       return;
@@ -720,9 +769,12 @@ export function useExplorerSearchController(args: {
   // is running keeps running in the worker; nothing asks it for results until it is
   // attached again.
   function detachSearchSession(): TabSearchSession {
+    const pendingLiveQuery = pendingLiveQueryRef.current;
     cancelLiveSearch();
     clearSearchPolling();
     const session: TabSearchSession = {
+      pollInFlight: pollInFlightRef.current && searchJobIdRef.current !== null,
+      pendingLiveQuery,
       draftQuery: searchDraftQuery,
       committedQuery: searchCommittedQuery,
       baseQuery: searchBaseQuery,
@@ -755,6 +807,7 @@ export function useExplorerSearchController(args: {
     // Answers still on their way belong to the search that was just taken out.
     searchSessionRef.current += 1;
     searchJobIdRef.current = null;
+    pollInFlightRef.current = false;
     return session;
   }
 
@@ -805,14 +858,23 @@ export function useExplorerSearchController(args: {
     searchJobIdRef.current = session.jobId;
     searchCursorRef.current = session.cursor;
     awaitingFirstUpdateAfterAttachRef.current = session.jobId !== null;
+    verifyFirstUpdateAfterAttachRef.current = session.jobId !== null && session.pollInFlight;
+    // What was being typed when the tab was left is searched for as if it had just been typed.
+    if (session.pendingLiveQuery !== null) {
+      scheduleLiveSearch(session.pendingLiveQuery);
+    }
     if (session.jobId !== null) {
       pollSearch(session.jobId, session.cursor, sessionId);
     }
     const hasQuery = session.committedQuery.trim().length > 0;
+    // A search that stopped at its limit in the background, with narrower text in the
+    // field than it looked for, may have missed matches (see the same case in pollSearch).
+    const stoppedShort =
+      session.jobId === null && session.truncated && session.committedQuery !== session.baseQuery;
     return (
       hasQuery &&
       session.resultsVisible &&
-      (cutOff || session.interrupted || session.searchedHidden !== includeHidden)
+      (cutOff || session.interrupted || stoppedShort || session.searchedHidden !== includeHidden)
     );
   }
 
@@ -843,6 +905,8 @@ export function useExplorerSearchController(args: {
       startedAt: null,
       jobId: null,
       cursor: 0,
+      pollInFlight: false,
+      pendingLiveQuery: null,
       keptResultPaths: new Set(),
       interrupted: false,
       searchedHidden: includeHidden,
