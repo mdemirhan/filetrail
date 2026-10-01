@@ -9,6 +9,7 @@ import {
   selectionColors,
   solidButtonColors,
 } from "./accent";
+import { darkenHex } from "./colorUtils";
 
 describe("accent helpers", () => {
   it("looks up palettes by persisted accent color", () => {
@@ -67,8 +68,8 @@ describe("accent helpers", () => {
     expect(getFavoriteAccentVariables(tokens)).toEqual({
       "--favorite-accent-solid": "#e8729a",
       "--favorite-accent-text": "#e8729a",
-      "--favorite-accent-selection-bg": "#c86284",
-      "--favorite-accent-on-selection": "#000000",
+      "--favorite-accent-selection-bg": "#b55978",
+      "--favorite-accent-on-selection": "#ffffff",
     });
   });
 
@@ -96,26 +97,33 @@ describe("accent helpers", () => {
     });
   });
 
-  it("keeps selected-row text white where it reads well and switches to black otherwise", () => {
-    // Selections are the accent darkened like `color-mix(accent 86%, black)`.
+  it("fills selected rows with the accent, darkened as far as white text needs", () => {
+    // Selections start from the accent darkened like `color-mix(accent 86%, black)`.
     expect(selectionColors("#007aff")).toEqual({ background: "#0069db", foreground: "#ffffff" });
     expect(selectionColors("#4f46e5").foreground).toBe("#ffffff");
-    // Yellow and gold stay light even darkened: black text reads far better.
-    expect(selectionColors("#ffc600").foreground).toBe("#000000");
-    expect(selectionColors("#daa520").foreground).toBe("#000000");
+    // The default copper is darkened a little further so white reads at 4.5:1.
+    const copper = selectionColors("#d4845a");
+    expect(copper.foreground).toBe("#ffffff");
+    expect(copper.background).toBe("#a56746");
+    expect(contrastRatio("#ffffff", copper.background)).toBeGreaterThanOrEqual(4.5);
+    // Yellow and gold stop at the darkest allowed shade and still get white text.
+    expect(selectionColors("#ffc600")).toEqual({
+      background: darkenHex("#ffc600", 0.34),
+      foreground: "#ffffff",
+    });
+    expect(selectionColors("#daa520").foreground).toBe("#ffffff");
     for (const option of [...ACCENT_OPTIONS, ...MACOS_ACCENT_OPTIONS]) {
       const colors = selectionColors(option.primary);
-      const other = colors.foreground === "#ffffff" ? "#000000" : "#ffffff";
-      // Whichever is chosen is readable, or at least the better of the two.
+      expect(colors.foreground).toBe("#ffffff");
+      // Readable, or already at the darkest shade that still looks like the accent.
       expect(
-        contrastRatio(colors.foreground, colors.background) >= 4.5 ||
-          contrastRatio(colors.foreground, colors.background) >=
-            contrastRatio(other, colors.background),
+        contrastRatio("#ffffff", colors.background) >= 4.5 ||
+          colors.background === darkenHex(option.primary, 0.34),
       ).toBe(true);
     }
     expect(accentTokensToCssVariables(generateAccentTokens("#ffc600", "dark"))).toMatchObject({
-      "--ft-accent-on-selection": "#000000",
-      "--ft-accent-on-selection-soft": "rgba(0, 0, 0, 0.85)",
+      "--ft-accent-on-selection": "#ffffff",
+      "--ft-accent-on-selection-soft": "rgba(255, 255, 255, 0.85)",
     });
   });
 });

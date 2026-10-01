@@ -35,9 +35,9 @@ export type AccentTokens = {
   solidButton: string;
   /** Text on `solidButton`: white or black, always at least 4.5:1. */
   onSolid: string;
-  /** Background of a selected row in the focused pane: the accent, slightly darkened. */
+  /** Background of a selected row in the focused pane: the accent, darkened for white text. */
   selectionBg: string;
-  /** Text on `selectionBg`: white when it reads well (as on macOS), otherwise black. */
+  /** Text on `selectionBg`: always white, as on macOS. */
   onSelection: string;
   hoverBg: string;
   pillBg: string;
@@ -228,7 +228,6 @@ export function accentTokensToCssVariables(tokens: AccentTokens): Record<string,
     "--ft-accent-selection-bg": tokens.selectionBg,
     "--ft-accent-on-selection": tokens.onSelection,
     "--ft-accent-on-selection-soft": withAlpha(tokens.onSelection, 0.85),
-    "--ft-accent-on-selection-faint": withAlpha(tokens.onSelection, 0.28),
     "--ft-accent-hover-bg": tokens.hoverBg,
     "--ft-accent-border": tokens.border,
     "--ft-accent-soft-bg": tokens.softBg,
@@ -304,24 +303,31 @@ export function solidButtonColors(accent: string): { background: string; foregro
   return { background: accent, foreground: "#000000" };
 }
 
-// How much a selected row darkens the accent, so selections read as a deeper shade of it.
-const SELECTION_DARKENING = 0.14;
+// How much a selected row darkens the accent at the least (in percent), so selections read
+// as a deeper shade of it.
+const SELECTION_DARKENING_PERCENT = 14;
+// Lighter accents are darkened further until white text is readable, up to this much; past
+// it the fill would no longer look like the accent.
+const MAX_SELECTION_DARKENING_PERCENT = 34;
 
-// Colors for a selected row. The text is white like macOS whenever that stays readable
-// (4.5:1); on light accents such as yellow or gold it switches to black, whichever of the
-// two contrasts more.
+// Colors for a selected row in the focused pane: the accent as a fill with white text, as
+// in Finder. The fill is darkened just far enough for white to reach 4.5:1; the lightest
+// accents (yellow, gold) stop at the darkest allowed shade and stay a little under that.
 export function selectionColors(accent: string): { background: string; foreground: string } {
   if (!/^#[0-9a-f]{6}$/iu.test(accent)) {
     return {
-      background: `color-mix(in srgb, ${accent} ${100 - SELECTION_DARKENING * 100}%, black)`,
+      background: `color-mix(in srgb, ${accent} ${100 - SELECTION_DARKENING_PERCENT}%, black)`,
       foreground: "#ffffff",
     };
   }
-  const background = darkenHex(accent, SELECTION_DARKENING);
-  const white = contrastRatio("#ffffff", background);
-  const foreground =
-    white >= MIN_TEXT_CONTRAST || white >= contrastRatio("#000000", background)
-      ? "#ffffff"
-      : "#000000";
-  return { background, foreground };
+  let percent = SELECTION_DARKENING_PERCENT;
+  let background = darkenHex(accent, percent / 100);
+  while (
+    percent < MAX_SELECTION_DARKENING_PERCENT &&
+    contrastRatio("#ffffff", background) < MIN_TEXT_CONTRAST
+  ) {
+    percent += 1;
+    background = darkenHex(accent, percent / 100);
+  }
+  return { background, foreground: "#ffffff" };
 }

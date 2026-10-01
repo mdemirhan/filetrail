@@ -63,7 +63,7 @@ describe("theme helpers", () => {
       "#e8806a",
     );
     expect(document.documentElement.style.getPropertyValue("--favorite-accent-selection-bg")).toBe(
-      "#c86e5b",
+      "#ae6050",
     );
     expect(document.documentElement.style.getPropertyValue("--text-primary")).toBe("#ffffff");
   });

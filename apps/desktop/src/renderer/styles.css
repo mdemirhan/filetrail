@@ -5255,8 +5255,8 @@ body.platform-macos .settings-view[data-layout="compact"] {
   gap: 8px;
 }
 
-/* Focused selection is a solid accent with white text (black on light accents, see
-   `selectionColors`); unfocused selection turns gray. */
+/* Focused selection is the accent as a fill with white text (see `selectionColors`);
+   unfocused selection turns gray. */
 .flow-item.active:not(.inactive),
 .details-row.active:not(.inactive),
 .search-result-row.active:not(.inactive) {
