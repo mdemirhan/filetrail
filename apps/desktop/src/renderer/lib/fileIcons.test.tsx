@@ -29,6 +29,7 @@ function createEntry(
     kind: "file" | "directory" | "symlink_file" | "symlink_directory";
     isHidden: boolean;
     isSymlink: boolean;
+    isExecutable: boolean;
   }> = {},
 ) {
   return {
@@ -282,6 +283,31 @@ describe("native icons", () => {
     await act(async () => undefined);
     expect(invoke).toHaveBeenCalledTimes(1);
     expect(second.container.querySelector("img")).not.toBeNull();
+  });
+
+  it("shares one icon among executables without an extension and another among the rest", async () => {
+    const { invoke, wrap } = renderWithClient();
+    const { container } = render(
+      wrap(
+        <>
+          <FileIcon entry={{ ...tool("ls"), isExecutable: true }} />
+          <FileIcon entry={{ ...tool("zip"), isExecutable: true }} />
+          <FileIcon entry={{ ...tool("hosts"), isExecutable: false }} />
+          <FileIcon entry={{ ...tool("Makefile"), isExecutable: false }} />
+          <FileIcon entry={createEntry({ path: "/a/one.txt", name: "one.txt" })} />
+          <FileIcon entry={createEntry({ path: "/a/two.txt", name: "two.txt" })} />
+        </>,
+      ),
+    );
+    await act(async () => undefined);
+
+    // Six files, three icons: asked for by kind, not by each file.
+    expect(invoke.mock.calls.map(([, payload]) => payload)).toEqual([
+      { path: "/usr/bin/ls", size: 64, generic: "executable" },
+      { path: "/usr/bin/hosts", size: 64, generic: "file" },
+      { path: "/a/one.txt", size: 64 },
+    ]);
+    expect(container.querySelectorAll("img")).toHaveLength(6);
   });
 
   it("waits before asking when deferred, so items passed quickly are never asked for", async () => {

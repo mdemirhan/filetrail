@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, statfs } from "node:fs/promises";
+import { chmod, mkdir, readdir, rmdir, statfs, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, normalize, sep } from "node:path";
 import { promisify } from "node:util";
@@ -255,20 +255,54 @@ export async function emptyTrash(): Promise<IpcResponse<"system:emptyTrash">> {
   }
 }
 
-let genericFolderPathPromise: Promise<string> | null = null;
+type GenericIconKind = NonNullable<IpcRequest<"system:getFileIcon">["generic"]>;
 
-// An empty folder we own, so NSWorkspace returns the ordinary folder icon (folders such as
-// "/" or ~/Library carry custom icons and must not stand in for all folders).
-function getGenericFolderPath(): Promise<string> {
-  genericFolderPathPromise ??= mkdtemp(join(tmpdir(), "filetrail-folder-icon-"));
-  return genericFolderPathPromise;
+let iconSamplesPromise: Promise<Record<GenericIconKind, string>> | null = null;
+
+// Items we own, so NSWorkspace returns the ordinary icon for their kind: an empty folder
+// (folders such as "/" or ~/Library carry custom icons and must not stand in for all
+// folders), and an empty file without an extension, once plain and once executable. They
+// live in one fixed folder that every launch reuses.
+function getIconSamples(): Promise<Record<GenericIconKind, string>> {
+  iconSamplesPromise ??= createIconSamples().catch((error: unknown) => {
+    iconSamplesPromise = null;
+    throw error;
+  });
+  return iconSamplesPromise;
+}
+
+async function createIconSamples(): Promise<Record<GenericIconKind, string>> {
+  const root = join(tmpdir(), "filetrail-icon-samples");
+  const samples = {
+    folder: join(root, "folder"),
+    file: join(root, "document"),
+    executable: join(root, "executable"),
+  };
+  await mkdir(samples.folder, { recursive: true });
+  await writeFile(samples.file, "");
+  await writeFile(samples.executable, "");
+  await chmod(samples.file, 0o644);
+  await chmod(samples.executable, 0o755);
+  void removeLegacyIconSampleFolders();
+  return samples;
+}
+
+// Earlier versions made a new empty folder for the folder icon on every launch and left it
+// behind. `rmdir` only removes a folder that is empty.
+async function removeLegacyIconSampleFolders(): Promise<void> {
+  const names = await readdir(tmpdir()).catch(() => [] as string[]);
+  await Promise.all(
+    names
+      .filter((name) => name.startsWith("filetrail-folder-icon-"))
+      .map((name) => rmdir(join(tmpdir(), name)).catch(() => undefined)),
+  );
 }
 
 export async function getFileIconHandler(
   payload: IpcRequest<"system:getFileIcon">,
 ): Promise<IpcResponse<"system:getFileIcon">> {
   try {
-    const iconPath = payload.genericFolder ? await getGenericFolderPath() : payload.path;
+    const iconPath = payload.generic ? (await getIconSamples())[payload.generic] : payload.path;
     const buffer = await getFileIcon(iconPath, payload.size);
     return {
       pngBase64: buffer ? buffer.toString("base64") : null,

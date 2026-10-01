@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -43,6 +43,40 @@ describe("explorerService", () => {
 
     const tree = await listTreeChildren("/workspace", false, fakeFileSystem);
     expect(tree.children.map((entry) => entry.name)).toEqual(["Alpha"]);
+  });
+
+  it("says whether a file without an extension is executable, and looks at no other entry for it", async () => {
+    const root = await mkdtemp(join(tmpdir(), "filetrail-core-"));
+    await mkdir(join(root, "folder"));
+    await writeFile(join(root, "notes.txt"), "text");
+    await writeFile(join(root, "Makefile"), "all:");
+    await writeFile(join(root, ".profile"), "export A=1");
+    await writeFile(join(root, "run"), "#!/bin/sh");
+    await chmod(join(root, "run"), 0o755);
+    const lstatSpy = vi.fn(lstat);
+    const statSpy = vi.fn(stat);
+
+    const snapshot = await listDirectorySnapshot(root, true, "name", "asc", true, {
+      readdir: (path, options) => readdir(path, options) as never,
+      stat: statSpy as never,
+      lstat: lstatSpy as never,
+      realpath: (path) => realpath(path),
+    });
+
+    expect(
+      Object.fromEntries(snapshot.entries.map((entry) => [entry.name, entry.isExecutable])),
+    ).toEqual({
+      folder: undefined,
+      "notes.txt": undefined,
+      Makefile: false,
+      ".profile": false,
+      run: true,
+    });
+    const looked = [...statSpy.mock.calls, ...lstatSpy.mock.calls].map(([path]) =>
+      String(path).split("/").at(-1),
+    );
+    expect(looked).not.toContain("notes.txt");
+    expect(looked).not.toContain("folder");
   });
 
   it("reads real file properties from the filesystem", async () => {

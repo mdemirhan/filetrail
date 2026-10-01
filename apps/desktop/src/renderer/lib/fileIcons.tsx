@@ -155,9 +155,10 @@ export function FileIcon({
   );
 }
 
-// macOS icon theme: files share one icon per extension (and folders one generic icon), so a
-// directory costs a handful of native lookups instead of one per entry. Apps and bundles
-// keep per-path icons because each has its own.
+// macOS icon theme: files share one icon per extension, files without an extension one of
+// two (a document, or an executable), and folders one generic icon, so a directory costs a
+// handful of native lookups instead of one per entry. Apps and bundles keep per-path icons
+// because each has its own.
 // Folders macOS draws with their own icon; everything else shares the plain folder icon.
 const SPECIAL_FOLDER_NAMES = new Set([
   "Applications",
@@ -173,7 +174,13 @@ const SPECIAL_FOLDER_NAMES = new Set([
   "System",
   "Users",
 ]);
-const GENERIC_FOLDER_KEY = "kind:directory";
+// Cache keys for the icons shared by a whole kind of item, and what to ask the main process
+// for to get each (see `generic` in the `system:getFileIcon` contract).
+const GENERIC_ICON_KINDS = {
+  "kind:directory": "folder",
+  "kind:file": "file",
+  "kind:executable": "executable",
+} as const;
 
 function nativeIconCacheKey(entry: Entry): string {
   if (entry.kind === "bundle" || entry.kind === "other") {
@@ -183,10 +190,18 @@ function nativeIconCacheKey(entry: Entry): string {
     const name = entry.name || entry.path.split("/").filter(Boolean).at(-1) || "";
     return entry.path === "/" || SPECIAL_FOLDER_NAMES.has(name)
       ? `path:${entry.path}`
-      : GENERIC_FOLDER_KEY;
+      : "kind:directory";
   }
   const extension = entry.extension.toLowerCase();
-  return extension.length > 0 ? `ext:${extension}` : `path:${entry.path}`;
+  if (extension.length > 0) {
+    return `ext:${extension}`;
+  }
+  // A listing says whether such a file is executable; anything else (a search result) does
+  // not, and is asked for by path.
+  if (entry.kind === "file" && entry.isExecutable !== undefined) {
+    return entry.isExecutable ? "kind:executable" : "kind:file";
+  }
+  return `path:${entry.path}`;
 }
 
 function NativeFileIcon({
@@ -218,7 +233,9 @@ function NativeFileIcon({
           .invoke("system:getFileIcon", {
             path: entry.path,
             size: 64,
-            ...(cacheKey === GENERIC_FOLDER_KEY ? { genericFolder: true } : {}),
+            ...(cacheKey in GENERIC_ICON_KINDS
+              ? { generic: GENERIC_ICON_KINDS[cacheKey as keyof typeof GENERIC_ICON_KINDS] }
+              : {}),
           })
           .then((response) => response.pngBase64)
           .catch(() => null)

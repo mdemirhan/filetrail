@@ -111,17 +111,22 @@ export async function listDirectorySnapshot(
       }
       const entryPath = resolve(directoryPath, dirent.name);
       const kind = await classifyEntry(dirent, entryPath, fileSystem);
+      const extension = extname(dirent.name).replace(/^\./, "").toLowerCase();
+      // A file without an extension is drawn as a document or as an executable, which only
+      // its permissions tell apart. Other entries are not looked at unless the sort needs it.
+      const needsExecutableFlag = kind === "file" && extension.length === 0;
       const stats =
-        sortBy === "modified" || sortBy === "size"
+        sortBy === "modified" || sortBy === "size" || needsExecutableFlag
           ? await readBestEffortStats(entryPath, fileSystem)
           : null;
       return {
         path: entryPath,
         name: dirent.name,
-        extension: extname(dirent.name).replace(/^\./, "").toLowerCase(),
+        extension,
         kind,
         isHidden: isHiddenName(dirent.name),
         isSymlink: kind === "symlink_directory" || kind === "symlink_file",
+        ...(needsExecutableFlag && stats ? { isExecutable: (stats.mode & 0o111) !== 0 } : {}),
         sortModifiedAt: stats ? stats.mtime.getTime() : null,
         sortSizeBytes: stats && (kind === "file" || kind === "symlink_file") ? stats.size : null,
       };

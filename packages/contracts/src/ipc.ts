@@ -249,6 +249,9 @@ export const directoryEntrySchema = z.object({
   kind: explorerEntryKindSchema,
   isHidden: z.boolean(),
   isSymlink: z.boolean(),
+  // Only for a file without an extension: whether it can be run. macOS draws such files
+  // with one of two icons, and this says which.
+  isExecutable: z.boolean().optional(),
   // Only when listed sorted by size, and only for files: the renderer merges these with
   // the folder sizes it learns later to keep the whole list in size order.
   sizeBytes: z.number().int().nonnegative().nullable().optional(),
@@ -1055,8 +1058,9 @@ export const ipcContractSchemas = {
     request: z.object({
       path: z.string().min(1),
       size: z.number().int().min(16).max(512),
-      // Return the plain folder icon regardless of `path` (which may have a custom icon).
-      genericFolder: z.boolean().optional(),
+      // Return the ordinary icon for a kind of item, regardless of `path`: a folder (which
+      // may itself have a custom icon), or a file without an extension, plain or executable.
+      generic: z.enum(["folder", "file", "executable"]).optional(),
     }),
     response: z.object({
       pngBase64: z.string().nullable(),
