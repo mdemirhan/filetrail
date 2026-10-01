@@ -16,8 +16,6 @@ import {
   ICON_THEME_OPTIONS,
   LEGACY_DEFAULT_DETAIL_COLUMN_VISIBILITY,
   OPTIONAL_DETAIL_COLUMN_KEYS,
-  TYPEAHEAD_DEBOUNCE_MAX_MS,
-  TYPEAHEAD_DEBOUNCE_MIN_MS,
   type ThemeMode,
   type ThemePreference,
   UI_FONT_OPTIONS,
@@ -25,7 +23,6 @@ import {
   clampNotificationDurationSeconds,
   clampOpenItemLimit,
   clampPaneWidth,
-  clampTypeaheadDebounceMs,
   clampZoomPercent,
   isThemeInGroup,
   normalizeAccentColor,
@@ -320,17 +317,6 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
       typeof record.tabSwitchesExplorerPanes === "boolean"
         ? record.tabSwitchesExplorerPanes
         : currentDefaults.tabSwitchesExplorerPanes,
-    typeaheadEnabled:
-      typeof record.typeaheadEnabled === "boolean"
-        ? record.typeaheadEnabled
-        : currentDefaults.typeaheadEnabled,
-    typeaheadDebounceMs: clampTypeaheadDebounceMs(
-      typeof record.typeaheadDebounceMs === "number"
-        ? record.typeaheadDebounceMs
-        : currentDefaults.typeaheadDebounceMs,
-      TYPEAHEAD_DEBOUNCE_MIN_MS,
-      TYPEAHEAD_DEBOUNCE_MAX_MS,
-    ),
     notificationsEnabled:
       typeof record.notificationsEnabled === "boolean"
         ? record.notificationsEnabled

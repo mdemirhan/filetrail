@@ -55,7 +55,6 @@ type ExplorerShortcutActions = {
   openLocationSheet: () => void;
   focusFileSearch: (selectContents?: boolean) => void;
   clearTypeahead: () => void;
-  applyContentSelection: (selection: ContentSelectionState, entries: DirectoryEntry[]) => void;
   showCachedSearchResults: (options?: { focusPane?: boolean; fromField?: boolean }) => void;
   hideSearchResults: () => void;
   goBack: () => void;
@@ -94,6 +93,9 @@ type ExplorerShortcutActions = {
   focusContentPane: () => void;
   handlePagedPaneScroll: (direction: "backward" | "forward") => boolean;
   handleTypeaheadInput: (key: string, pane: "tree" | "content") => void;
+  eraseListFilterCharacter: () => void;
+  clearListFilter: () => void;
+  listFilterTakesSpace: () => boolean;
   handleTreeKeyboardAction: (
     key: "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight" | "Home" | "End",
   ) => Promise<boolean>;
@@ -114,7 +116,6 @@ type UseExplorerShortcutsArgs = {
     shortcutContext: ShortcutContext;
     copyPasteModalOpen: boolean;
     locationDialogOpen: boolean;
-    searchResultEntries: DirectoryEntry[];
     selectedTreeTargetPath: string | null;
     selectedPathsInViewOrder: string[];
     selectedEntry: DirectoryEntry | null;
@@ -149,15 +150,10 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
     setInfoPanelOpen: navigation.setInfoPanelOpen,
     setInfoRowOpen: navigation.setInfoRowOpen,
     tabSwitchesExplorerPanes: preferences.tabSwitchesExplorerPanes,
-    typeaheadEnabled: preferences.typeaheadEnabled,
+    listFilterActive: navigation.listFilterQuery.length > 0,
     returnKeyAction: preferences.returnKeyAction,
     viewMode: preferences.viewMode,
     setZoomPercent: preferences.setZoomPercent,
-    setSearchPopoverOpen: search.setSearchPopoverOpen,
-    setSearchResultsVisible: search.setSearchResultsVisible,
-    searchPointerIntentRef: search.searchPointerIntentRef,
-    searchCommittedQueryRef: search.searchCommittedQueryRef,
-    cachedSearchSelectionRef: search.cachedSearchSelectionRef,
     actionNotice: writeOperations.actionNotice,
     contextMenuState: writeOperations.contextMenuState,
     setContextMenuState: writeOperations.setContextMenuState,
@@ -733,9 +729,33 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         },
       },
       {
+        // While a filter is typed into the file list, Backspace and Esc edit it, and Space
+        // is part of the text for a moment after each character.
+        id: "listFilterEdit",
+        matches: (keyboardEvent) =>
+          latestArgsRef.current.listFilterActive &&
+          latestArgsRef.current.focusedPane === "content" &&
+          !keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
+          !keyboardEvent.altKey &&
+          (keyboardEvent.key === "Backspace" ||
+            keyboardEvent.key === "Escape" ||
+            (keyboardEvent.key === " " && latestArgsRef.current.listFilterTakesSpace())),
+        run: (keyboardEvent) => {
+          const current = latestArgsRef.current;
+          keyboardEvent.preventDefault();
+          if (keyboardEvent.key === "Backspace") {
+            current.eraseListFilterCharacter();
+          } else if (keyboardEvent.key === "Escape") {
+            current.clearListFilter();
+          } else {
+            current.handleTypeaheadInput(" ", "content");
+          }
+        },
+      },
+      {
         id: "typeahead",
         matches: (keyboardEvent) =>
-          latestArgsRef.current.typeaheadEnabled &&
           !keyboardEvent.metaKey &&
           !keyboardEvent.ctrlKey &&
           !keyboardEvent.altKey &&
@@ -1143,17 +1163,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       }
       current.setMainView("explorer");
       window.requestAnimationFrame(() => {
-        const latest = latestArgsRef.current;
-        latest.searchPointerIntentRef.current = true;
-        latest.setFocusedPane(null);
-        latest.clearTypeahead();
-        latest.setSearchPopoverOpen(true);
-        latest.showCachedSearchResults({ fromField: true });
-        window.requestAnimationFrame(() => {
-          latest.searchInputRef.current?.focus();
-          latest.searchInputRef.current?.select();
-          latest.searchPointerIntentRef.current = false;
-        });
+        latestArgsRef.current.focusFileSearch(true);
       });
     },
     [runGenericEditCommand],

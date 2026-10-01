@@ -2089,8 +2089,6 @@ export function SettingsView({
   detailColumns,
   layoutMode = "wide",
   tabSwitchesExplorerPanes,
-  typeaheadEnabled,
-  typeaheadDebounceMs,
   notificationsEnabled,
   notificationDurationSeconds,
   actionLogEnabled,
@@ -2113,7 +2111,6 @@ export function SettingsView({
   openItemLimit,
   accentOptions,
   uiFontOptions,
-  typeaheadDebounceOptions,
   notificationDurationSecondsOptions,
   onThemeChange,
   onIconThemeChange,
@@ -2128,8 +2125,6 @@ export function SettingsView({
   onHighlightHoveredItemsChange = () => undefined,
   onDetailColumnsChange,
   onTabSwitchesExplorerPanesChange,
-  onTypeaheadEnabledChange,
-  onTypeaheadDebounceMsChange,
   onNotificationsEnabledChange,
   onNotificationDurationSecondsChange,
   onActionLogEnabledChange,
@@ -2181,8 +2176,6 @@ export function SettingsView({
   detailColumns: DetailColumnVisibility;
   layoutMode?: "wide" | "narrow" | "compact";
   tabSwitchesExplorerPanes: boolean;
-  typeaheadEnabled: boolean;
-  typeaheadDebounceMs: number;
   notificationsEnabled: boolean;
   notificationDurationSeconds: number;
   actionLogEnabled: boolean;
@@ -2205,7 +2198,6 @@ export function SettingsView({
   openItemLimit: number;
   accentOptions: ReadonlyArray<{ value: AccentMode; label: string }>;
   uiFontOptions: ReadonlyArray<{ value: UiFontFamily; label: string }>;
-  typeaheadDebounceOptions: ReadonlyArray<number>;
   notificationDurationSecondsOptions: ReadonlyArray<number>;
   onThemeChange: (value: ThemePreference) => void;
   onIconThemeChange: (value: IconThemeMode) => void;
@@ -2220,8 +2212,6 @@ export function SettingsView({
   onHighlightHoveredItemsChange?: (value: boolean) => void;
   onDetailColumnsChange: (value: DetailColumnVisibility) => void;
   onTabSwitchesExplorerPanesChange: (value: boolean) => void;
-  onTypeaheadEnabledChange: (value: boolean) => void;
-  onTypeaheadDebounceMsChange: (value: number) => void;
   onNotificationsEnabledChange: (value: boolean) => void;
   onNotificationDurationSecondsChange: (value: number) => void;
   onActionLogEnabledChange: (value: boolean) => void;
@@ -2715,42 +2705,13 @@ export function SettingsView({
               title="Tab switches between panes"
               desc="Use Tab and Shift+Tab to move between the folder tree and file list while keeping native Tab behavior in dialogs and standard controls."
               theme={palette}
+              isLast
               right={
                 <Toggle
                   checked={tabSwitchesExplorerPanes}
                   onToggle={() => onTabSwitchesExplorerPanesChange(!tabSwitchesExplorerPanes)}
                   theme={palette}
                   label="Tab switches between panes"
-                />
-              }
-            />
-            <SettingRow
-              title="Type to select"
-              desc="Jump to the first visible matching item while typing in the tree, list, or detail view."
-              theme={palette}
-              right={
-                <Toggle
-                  checked={typeaheadEnabled}
-                  onToggle={() => onTypeaheadEnabledChange(!typeaheadEnabled)}
-                  theme={palette}
-                  label="Type to select"
-                />
-              }
-            />
-            <SettingRow
-              title="Reset delay"
-              theme={palette}
-              isLast
-              right={
-                <SelectControl
-                  value={typeaheadDebounceMs}
-                  options={typeaheadDebounceOptions}
-                  theme={palette}
-                  width="110px"
-                  ariaLabel="Reset delay"
-                  disabled={!typeaheadEnabled}
-                  onChange={(value) => onTypeaheadDebounceMsChange(Number(value))}
-                  formatOption={(value) => `${value} ms`}
                 />
               }
             />

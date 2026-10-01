@@ -30,7 +30,6 @@ describe("ContentPane", () => {
           suggestions: [],
         })}
         onFocusChange={() => undefined}
-        typeaheadQuery=""
       />,
     );
 
@@ -62,7 +61,6 @@ describe("ContentPane", () => {
           suggestions: [],
         })}
         onFocusChange={() => undefined}
-        typeaheadQuery=""
         statusSummary="0 items · 212 GB available"
       />,
     );
@@ -96,7 +94,6 @@ describe("ContentPane", () => {
           suggestions: [],
         })}
         onFocusChange={() => undefined}
-        typeaheadQuery=""
       />,
     );
 
@@ -137,7 +134,6 @@ describe("ContentPane", () => {
           suggestions: [],
         })}
         onFocusChange={() => undefined}
-        typeaheadQuery=""
       />,
     );
 
@@ -170,7 +166,6 @@ describe("ContentPane", () => {
           suggestions: [],
         })}
         onFocusChange={() => undefined}
-        typeaheadQuery=""
       />,
     );
 
@@ -207,7 +202,6 @@ describe("ContentPane", () => {
           suggestions: [],
         })}
         onFocusChange={() => undefined}
-        typeaheadQuery=""
       />,
     );
 
@@ -250,7 +244,6 @@ describe("ContentPane", () => {
           suggestions: [],
         })}
         onFocusChange={() => undefined}
-        typeaheadQuery=""
       />,
     );
 
@@ -307,7 +300,6 @@ describe("ContentPane", () => {
           suggestions: [],
         })}
         onFocusChange={() => undefined}
-        typeaheadQuery=""
       />,
     );
 
@@ -387,7 +379,6 @@ describe("ContentPane", () => {
           suggestions: [],
         })}
         onFocusChange={() => undefined}
-        typeaheadQuery=""
       />,
     );
 
@@ -452,7 +443,6 @@ describe("ContentPane", () => {
           suggestions: [],
         })}
         onFocusChange={() => undefined}
-        typeaheadQuery=""
       />,
     );
 
@@ -520,7 +510,6 @@ describe("ContentPane", () => {
             suggestions: [],
           })}
           onFocusChange={() => undefined}
-          typeaheadQuery=""
           inlineRename={{ path: "/Users/demo/alpha.txt", error: null }}
           onInlineRenameSubmit={handleSubmit}
           onInlineRenameCancel={handleCancel}
@@ -588,7 +577,6 @@ describe("ContentPane", () => {
         })}
         onFocusChange={() => undefined}
         onTypeaheadInput={handleTypeaheadInput}
-        typeaheadQuery=""
       />,
     );
 
@@ -623,7 +611,6 @@ describe("ContentPane", () => {
           suggestions: [],
         })}
         onFocusChange={handleFocusChange}
-        typeaheadQuery=""
       />,
     );
 
@@ -665,7 +652,6 @@ describe("ContentPane", () => {
           suggestions: [],
         })}
         onFocusChange={handleFocusChange}
-        typeaheadQuery=""
       />,
     );
 
@@ -711,7 +697,6 @@ describe("ContentPane", () => {
           suggestions: [],
         })}
         onFocusChange={() => undefined}
-        typeaheadQuery=""
       />,
     );
 
@@ -751,7 +736,6 @@ describe("ContentPane", () => {
           suggestions: [],
         })}
         onFocusChange={() => undefined}
-        typeaheadQuery=""
       />,
     );
 
@@ -797,7 +781,6 @@ describe("ContentPane", () => {
           suggestions: [],
         })}
         onFocusChange={() => undefined}
-        typeaheadQuery=""
       />,
     );
 
@@ -850,7 +833,6 @@ describe("ContentPane", () => {
             suggestions: [],
           })}
           onFocusChange={() => undefined}
-          typeaheadQuery=""
         />,
       );
 
@@ -901,7 +883,6 @@ describe("ContentPane", () => {
           ],
         })}
         onFocusChange={() => undefined}
-        typeaheadQuery=""
       />,
     );
 
@@ -943,7 +924,6 @@ describe("ContentPane", () => {
           ],
         })}
         onFocusChange={() => undefined}
-        typeaheadQuery=""
       />,
     );
 
@@ -996,7 +976,6 @@ describe("ContentPane", () => {
           ],
         })}
         onFocusChange={() => undefined}
-        typeaheadQuery=""
       />,
     );
 
@@ -1055,7 +1034,6 @@ describe("ContentPane", () => {
         })}
         onFocusChange={() => undefined}
         tabSwitchesExplorerPanes
-        typeaheadQuery=""
       />,
     );
 
@@ -1108,7 +1086,6 @@ describe("ContentPane", () => {
               : [{ path: "/Users/demo/Desktop", name: "Desktop", isDirectory: true }],
         })}
         onFocusChange={() => undefined}
-        typeaheadQuery=""
       />,
     );
 
@@ -1157,44 +1134,70 @@ describe("ContentPane", () => {
           suggestions: [],
         })}
         onFocusChange={() => undefined}
-        typeaheadQuery=""
       />,
     );
 
     expect(screen.getByText("This directory is empty.")).toBeInTheDocument();
   });
 
-  it("shows the transient typeahead query", () => {
-    render(
-      <ContentPane
-        isFocused
-        currentPath="/Users/demo"
-        entries={[]}
-        viewMode="list"
-        loading={false}
-        error={null}
-        includeHidden={false}
-        metadataByPath={{}}
-        sortBy="name"
-        sortDirection="asc"
-        onSelectPath={() => undefined}
-        onActivateEntry={() => undefined}
-        onSortChange={() => undefined}
-        onLayoutColumnsChange={() => undefined}
-        onVisiblePathsChange={() => undefined}
-        onNavigatePath={() => undefined}
-        onRequestPathSuggestions={async () => ({
-          inputPath: "",
-          basePath: null,
-          suggestions: [],
-        })}
-        onFocusChange={() => undefined}
-        typeaheadQuery="doc"
-      />,
-    );
+  it("shows what was typed to filter the list, with a way to clear it", () => {
+    const handleClearFilter = vi.fn();
+    const entry = (name: string) => ({
+      path: `/Users/demo/${name}`,
+      name,
+      extension: "txt",
+      kind: "file" as const,
+      isHidden: false,
+      isSymlink: false,
+    });
+    const renderPane = (entries: ReturnType<typeof entry>[], onSearchForFilter?: () => void) =>
+      render(
+        <ContentPane
+          isFocused
+          currentPath="/Users/demo"
+          entries={entries}
+          viewMode="list"
+          loading={false}
+          error={null}
+          includeHidden={false}
+          metadataByPath={{}}
+          sortBy="name"
+          sortDirection="asc"
+          onSelectPath={() => undefined}
+          onActivateEntry={() => undefined}
+          onSortChange={() => undefined}
+          onLayoutColumnsChange={() => undefined}
+          onVisiblePathsChange={() => undefined}
+          onNavigatePath={() => undefined}
+          onRequestPathSuggestions={async () => ({
+            inputPath: "",
+            basePath: null,
+            suggestions: [],
+          })}
+          onFocusChange={() => undefined}
+          filterQuery="doc"
+          filterTotalCount={12}
+          onClearFilter={handleClearFilter}
+          onSearchForFilter={onSearchForFilter}
+        />,
+      );
 
-    expect(screen.getByText("Select")).toBeInTheDocument();
+    const filtered = renderPane([entry("docs.txt"), entry("my doc.txt")]);
+    expect(screen.getByText("Filter")).toBeInTheDocument();
     expect(screen.getByText("doc")).toBeInTheDocument();
+    expect(screen.getByText("2 of 12")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filter" }));
+    expect(handleClearFilter).toHaveBeenCalledTimes(1);
+    filtered.unmount();
+
+    // Nothing matches: say so, rather than calling the folder empty, and offer the search.
+    const handleSearch = vi.fn();
+    renderPane([], handleSearch);
+    expect(screen.getByText("No items match “doc”")).toBeInTheDocument();
+    expect(screen.queryByText("This folder is empty")).toBeNull();
+    expect(screen.getByText("0 of 12")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Search subfolders" }));
+    expect(handleSearch).toHaveBeenCalledTimes(1);
   });
 
   it("forwards modifier selection and background context-menu events in list view", () => {
@@ -1247,7 +1250,6 @@ describe("ContentPane", () => {
         })}
         onFocusChange={() => undefined}
         onItemContextMenu={handleContextMenu}
-        typeaheadQuery=""
       />,
     );
 
@@ -1311,7 +1313,6 @@ describe("ContentPane", () => {
           suggestions: [],
         })}
         onFocusChange={() => undefined}
-        typeaheadQuery=""
       />,
     );
 
@@ -1354,7 +1355,6 @@ describe("ContentPane", () => {
           suggestions: [],
         })}
         onFocusChange={() => undefined}
-        typeaheadQuery=""
       />,
     );
 
@@ -1401,7 +1401,6 @@ describe("ContentPane", () => {
             suggestions: [],
           })}
           onFocusChange={() => undefined}
-          typeaheadQuery=""
         />,
       );
 

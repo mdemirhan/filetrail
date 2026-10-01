@@ -149,9 +149,13 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
             description: "Move the selection. In the tree, left and right collapse and expand.",
           },
           {
-            label: "Type a name",
+            label: "Type in the list",
             description:
-              "Jumps to the first item that starts with what you type (Settings → General).",
+              "Narrows the folder to the names containing what you type and selects the best match. Backspace takes a character back; Esc shows everything again and keeps the selection. ⌘F looks for the same text in the subfolders.",
+          },
+          {
+            label: "Type in the sidebar",
+            description: "Jumps to the first folder that starts with what you type.",
           },
         ],
       },

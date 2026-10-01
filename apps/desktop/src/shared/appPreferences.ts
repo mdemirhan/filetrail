@@ -178,9 +178,6 @@ export const UI_FONT_OPTIONS = [
 ] as const;
 export const ZOOM_PERCENT_MIN = 75;
 export const ZOOM_PERCENT_MAX = 150;
-export const TYPEAHEAD_DEBOUNCE_OPTIONS = [250, 500, 750, 1000, 1500] as const;
-export const TYPEAHEAD_DEBOUNCE_MIN_MS = 250;
-export const TYPEAHEAD_DEBOUNCE_MAX_MS = 1500;
 export const NOTIFICATION_DURATION_SECONDS_OPTIONS = [2, 3, 4, 5, 6, 8, 10] as const;
 export const NOTIFICATION_DURATION_SECONDS_MIN = 2;
 export const NOTIFICATION_DURATION_SECONDS_MAX = 10;
@@ -317,8 +314,6 @@ export type AppPreferences = {
   detailColumns: DetailColumnVisibility;
   detailColumnWidths: DetailColumnWidths;
   tabSwitchesExplorerPanes: boolean;
-  typeaheadEnabled: boolean;
-  typeaheadDebounceMs: number;
   notificationsEnabled: boolean;
   notificationDurationSeconds: number;
   actionLogEnabled: boolean;
@@ -375,8 +370,6 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   detailColumns: DEFAULT_DETAIL_COLUMN_VISIBILITY,
   detailColumnWidths: DEFAULT_DETAIL_COLUMN_WIDTHS,
   tabSwitchesExplorerPanes: true,
-  typeaheadEnabled: true,
-  typeaheadDebounceMs: 1000,
   notificationsEnabled: true,
   notificationDurationSeconds: 4,
   actionLogEnabled: true,
@@ -424,12 +417,6 @@ export function clampPaneWidth(value: number, min: number, max: number): number 
 
 export function clampZoomPercent(value: number): number {
   return Math.round(Math.max(ZOOM_PERCENT_MIN, Math.min(ZOOM_PERCENT_MAX, value)));
-}
-
-// Typeahead timing is user-tunable but is kept inside a narrow, predictable range so
-// the shared debounce logic behaves consistently across tree, list, details, and search.
-export function clampTypeaheadDebounceMs(value: number, min: number, max: number): number {
-  return Math.round(Math.max(min, Math.min(max, value)));
 }
 
 export function clampNotificationDurationSeconds(value: number): number {

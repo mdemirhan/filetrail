@@ -69,12 +69,6 @@ export function useAppPreferences() {
   const [tabSwitchesExplorerPanes, setTabSwitchesExplorerPanes] = useState(
     DEFAULT_APP_PREFERENCES.tabSwitchesExplorerPanes,
   );
-  const [typeaheadEnabled, setTypeaheadEnabled] = useState(
-    DEFAULT_APP_PREFERENCES.typeaheadEnabled,
-  );
-  const [typeaheadDebounceMs, setTypeaheadDebounceMs] = useState(
-    DEFAULT_APP_PREFERENCES.typeaheadDebounceMs,
-  );
   const [notificationsEnabled, setNotificationsEnabled] = useState(
     DEFAULT_APP_PREFERENCES.notificationsEnabled,
   );
@@ -177,10 +171,6 @@ export function useAppPreferences() {
     setDetailColumnWidths,
     tabSwitchesExplorerPanes,
     setTabSwitchesExplorerPanes,
-    typeaheadEnabled,
-    setTypeaheadEnabled,
-    typeaheadDebounceMs,
-    setTypeaheadDebounceMs,
     notificationsEnabled,
     setNotificationsEnabled,
     notificationDurationSeconds,
@@ -278,8 +268,6 @@ export function applyPreferencesPatch(store: AppPreferencesStore, patch: Incomin
   set("highlightHoveredItems", store.setHighlightHoveredItems);
   set("detailColumns", store.setDetailColumns);
   set("tabSwitchesExplorerPanes", store.setTabSwitchesExplorerPanes);
-  set("typeaheadEnabled", store.setTypeaheadEnabled);
-  set("typeaheadDebounceMs", store.setTypeaheadDebounceMs);
   set("notificationsEnabled", store.setNotificationsEnabled);
   set("notificationDurationSeconds", store.setNotificationDurationSeconds);
   set("actionLogEnabled", store.setActionLogEnabled);

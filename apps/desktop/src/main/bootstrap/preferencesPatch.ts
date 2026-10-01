@@ -70,12 +70,6 @@ export function toPreferencePatch(
   if (value.tabSwitchesExplorerPanes !== undefined) {
     patch.tabSwitchesExplorerPanes = value.tabSwitchesExplorerPanes;
   }
-  if (value.typeaheadEnabled !== undefined) {
-    patch.typeaheadEnabled = value.typeaheadEnabled;
-  }
-  if (value.typeaheadDebounceMs !== undefined) {
-    patch.typeaheadDebounceMs = value.typeaheadDebounceMs;
-  }
   if (value.notificationsEnabled !== undefined) {
     patch.notificationsEnabled = value.notificationsEnabled;
   }

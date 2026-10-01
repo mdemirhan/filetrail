@@ -17,6 +17,7 @@ import { formatDateTime, formatSize, splitDisplayName } from "../lib/formatting"
 import { resolveSearchResultsColumnLayout } from "../lib/responsiveLayout";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
 import { getVirtualRange } from "../lib/virtualization";
+import { ListFilterPill } from "./ListFilterPill";
 import { SearchOptionsMenu } from "./SearchOptionsMenu";
 type SearchResultItem = IpcResponse<"search:getUpdate">["items"][number];
 type SearchStatus = IpcResponse<"search:getUpdate">["status"] | "idle";
@@ -76,7 +77,8 @@ export function SearchResultsPane({
   onItemDragEnd,
   onFocusChange,
   onTypeaheadInput,
-  typeaheadQuery,
+  filterQuery = "",
+  onClearFilter = () => undefined,
   scrollTop = 0,
   onScrollTopChange = () => undefined,
 }: {
@@ -129,7 +131,9 @@ export function SearchResultsPane({
   onItemDragEnd?: ((event: React.DragEvent<HTMLElement>) => void) | undefined;
   onFocusChange: (focused: boolean) => void;
   onTypeaheadInput?: (key: string) => void;
-  typeaheadQuery?: string;
+  /** What has been typed to narrow `results`, which already are the matching ones. */
+  filterQuery?: string;
+  onClearFilter?: () => void;
   scrollTop?: number;
   onScrollTopChange?: (value: number) => void;
 }) {
@@ -351,12 +355,12 @@ export function SearchResultsPane({
         </div>
       </div>
       <div className="search-results-body">
-        {typeaheadQuery ? (
-          <div className="pane-typeahead pane-typeahead-center" aria-live="polite">
-            <span className="pane-typeahead-label">Select</span>
-            <span className="pane-typeahead-value">{typeaheadQuery}</span>
-          </div>
-        ) : null}
+        <ListFilterPill
+          query={filterQuery}
+          shownCount={results.length}
+          totalCount={totalCount}
+          onClear={onClearFilter}
+        />
         <div
           ref={scrollRef}
           className="content-scroll search-results-scroll"
@@ -413,8 +417,8 @@ export function SearchResultsPane({
           ) : null}
           {status !== "running" && results.length === 0 && totalCount > 0 && !error ? (
             <div className="content-state content-empty">
-              <strong className="empty-state-title">No matching filtered results</strong>
-              <span className="empty-state-message">Try a different filter or clear it.</span>
+              <strong className="empty-state-title">No results match “{filterQuery}”</strong>
+              <span className="empty-state-message">Press Esc to see all the results again.</span>
             </div>
           ) : null}
           {status !== "running" && results.length === 0 && totalCount === 0 && !error ? (

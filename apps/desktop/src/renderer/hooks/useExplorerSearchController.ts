@@ -18,8 +18,9 @@ import type {
   SearchPatternMode,
   SearchResultItem,
 } from "../lib/explorerTypes";
+import { filterEntriesByName } from "../lib/listFilter";
 import { createRendererLogger } from "../lib/logging";
-import { appendSearchResults, filterSearchResults, sortSearchResults } from "../lib/searchResults";
+import { appendSearchResults, sortSearchResults } from "../lib/searchResults";
 import type {
   ExplorerServices,
   NavigationStore,
@@ -48,7 +49,7 @@ export function useExplorerSearchController(args: {
 }) {
   const { services, navigation, search, selection, includeHidden } = args;
   const { client, searchInputRef } = services;
-  const { currentPath, currentEntries, contentSelection } = navigation;
+  const { currentPath, currentEntries, contentSelection, listFilterQuery } = navigation;
   const { applyContentSelection, focusContentPane } = selection;
   const {
     setSearchCommittedQuery,
@@ -76,9 +77,6 @@ export function useExplorerSearchController(args: {
     searchResults,
     setSearchResults,
     setSearchResultsScrollTop,
-    setSearchResultsFilterQuery,
-    debouncedSearchResultsFilterQuery,
-    setDebouncedSearchResultsFilterQuery,
     setSearchStatus,
     setSearchError,
     setSearchStartedLive,
@@ -98,23 +96,22 @@ export function useExplorerSearchController(args: {
 
   // Sorting is live: results stream in from fd in arbitrary order and are kept sorted by
   // the chosen column instead of waiting for an explicit "apply".
+  const sortedSearchResults = useMemo(
+    () => sortSearchResults(searchResults, searchResultsSortBy, searchResultsSortDirection),
+    [searchResults, searchResultsSortBy, searchResultsSortDirection],
+  );
+  // Typing in the results narrows them by name, like typing in the file list.
   const filteredSearchResults = useMemo(
-    () =>
-      sortSearchResults(
-        filterSearchResults(searchResults, debouncedSearchResultsFilterQuery),
-        searchResultsSortBy,
-        searchResultsSortDirection,
-      ),
-    [
-      debouncedSearchResultsFilterQuery,
-      searchResults,
-      searchResultsSortBy,
-      searchResultsSortDirection,
-    ],
+    () => filterEntriesByName(sortedSearchResults, listFilterQuery),
+    [listFilterQuery, sortedSearchResults],
   );
   const searchResultEntries = useMemo(
     () => filteredSearchResults.map((result) => toDirectoryEntryFromSearchResult(result)),
     [filteredSearchResults],
+  );
+  const allSearchResultEntries = useMemo(
+    () => sortedSearchResults.map((result) => toDirectoryEntryFromSearchResult(result)),
+    [sortedSearchResults],
   );
   const hasCachedSearch = searchCommittedQuery.trim().length > 0;
   const isSearchMode = searchResultsVisible && hasCachedSearch;
@@ -241,8 +238,6 @@ export function useExplorerSearchController(args: {
     setSearchRootPath("");
     setSearchResults([]);
     setSearchResultsScrollTop(0);
-    setSearchResultsFilterQuery("");
-    setDebouncedSearchResultsFilterQuery("");
     setSearchStatus("idle");
     setSearchError(null);
     setSearchTruncated(false);
@@ -383,8 +378,6 @@ export function useExplorerSearchController(args: {
       setSearchResults([]);
     }
     setSearchResultsScrollTop(0);
-    setSearchResultsFilterQuery("");
-    setDebouncedSearchResultsFilterQuery("");
     setSearchStatus("running");
     setSearchError(null);
     setSearchTruncated(false);
@@ -560,11 +553,6 @@ export function useExplorerSearchController(args: {
     setSearchResultsSortBy(nextValue);
   }
 
-  function updateSearchResultsFilterQuery(nextValue: string) {
-    setSearchResultsFilterQuery(nextValue);
-    setSearchResultsScrollTop(0);
-  }
-
   function toggleSearchResultsSortDirection() {
     setSearchResultsSortDirection((current) => {
       const nextValue = current === "asc" ? "desc" : "asc";
@@ -584,6 +572,7 @@ export function useExplorerSearchController(args: {
     hideSearchResults,
     isSearchMode,
     searchResultEntries,
+    allSearchResultEntries,
     showCachedSearchResults,
     startSearch,
     stopSearch,
@@ -595,7 +584,6 @@ export function useExplorerSearchController(args: {
     updateSearchRecursive,
     updateSearchSkipGitFolders,
     updateSearchSkipGitIgnored,
-    updateSearchResultsFilterQuery,
     updateSearchResultsSortBy,
   };
 }

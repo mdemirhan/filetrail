@@ -7,7 +7,6 @@ import {
   clampNotificationDurationSeconds,
   clampOpenItemLimit,
   clampPaneWidth,
-  clampTypeaheadDebounceMs,
   clampZoomPercent,
   getThemeLabel,
   getUiFontLabel,
@@ -19,7 +18,6 @@ describe("appPreferences helpers", () => {
   it("clamps numeric preferences and rounds to whole pixels", () => {
     expect(clampPaneWidth(279.6, 200, 320)).toBe(280);
     expect(clampPaneWidth(99.2, 200, 320)).toBe(200);
-    expect(clampTypeaheadDebounceMs(1600.4, 250, 1500)).toBe(1500);
     expect(clampNotificationDurationSeconds(1.2)).toBe(2);
     expect(clampNotificationDurationSeconds(10.8)).toBe(10);
     expect(clampOpenItemLimit(0.3)).toBe(1);
@@ -99,7 +97,6 @@ describe("appPreferences helpers", () => {
         created: 168,
       },
       restoreLastVisitedFolderOnStartup: false,
-      typeaheadDebounceMs: 1000,
       notificationsEnabled: true,
       notificationDurationSeconds: 4,
       actionLogEnabled: true,

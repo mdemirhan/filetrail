@@ -256,7 +256,6 @@ describe("SearchResultsPane", () => {
         onActivateResult={() => undefined}
         onFocusChange={() => undefined}
         onTypeaheadInput={handleTypeaheadInput}
-        typeaheadQuery=""
       />,
     );
 

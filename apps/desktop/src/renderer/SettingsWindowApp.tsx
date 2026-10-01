@@ -9,7 +9,6 @@ import {
   type FavoritePreference,
   NOTIFICATION_DURATION_SECONDS_OPTIONS,
   THEME_OPTIONS,
-  TYPEAHEAD_DEBOUNCE_OPTIONS,
   UI_FONT_OPTIONS,
 } from "../shared/appPreferences";
 import { DEFAULT_LEFT_TOOLBAR_ITEMS, DEFAULT_TOP_TOOLBAR_ITEMS } from "../shared/toolbarItems";
@@ -90,8 +89,6 @@ export function SettingsWindowApp() {
     highlightHoveredItems: preferences.highlightHoveredItems,
     detailColumns: preferences.detailColumns,
     tabSwitchesExplorerPanes: preferences.tabSwitchesExplorerPanes,
-    typeaheadEnabled: preferences.typeaheadEnabled,
-    typeaheadDebounceMs: preferences.typeaheadDebounceMs,
     notificationsEnabled: preferences.notificationsEnabled,
     notificationDurationSeconds: preferences.notificationDurationSeconds,
     actionLogEnabled: preferences.actionLogEnabled,
@@ -320,8 +317,6 @@ export function SettingsWindowApp() {
             detailColumns={preferences.detailColumns}
             layoutMode="wide"
             tabSwitchesExplorerPanes={preferences.tabSwitchesExplorerPanes}
-            typeaheadEnabled={preferences.typeaheadEnabled}
-            typeaheadDebounceMs={preferences.typeaheadDebounceMs}
             notificationsEnabled={preferences.notificationsEnabled}
             notificationDurationSeconds={preferences.notificationDurationSeconds}
             actionLogEnabled={preferences.actionLogEnabled}
@@ -344,7 +339,6 @@ export function SettingsWindowApp() {
             openItemLimit={preferences.openItemLimit}
             accentOptions={ACCENT_OPTIONS}
             uiFontOptions={[...UI_FONT_OPTIONS]}
-            typeaheadDebounceOptions={[...TYPEAHEAD_DEBOUNCE_OPTIONS]}
             notificationDurationSecondsOptions={[...NOTIFICATION_DURATION_SECONDS_OPTIONS]}
             onThemeChange={preferences.setTheme}
             onIconThemeChange={preferences.setIconTheme}
@@ -359,8 +353,6 @@ export function SettingsWindowApp() {
             onHighlightHoveredItemsChange={preferences.setHighlightHoveredItems}
             onDetailColumnsChange={preferences.setDetailColumns}
             onTabSwitchesExplorerPanesChange={preferences.setTabSwitchesExplorerPanes}
-            onTypeaheadEnabledChange={preferences.setTypeaheadEnabled}
-            onTypeaheadDebounceMsChange={preferences.setTypeaheadDebounceMs}
             onNotificationsEnabledChange={preferences.setNotificationsEnabled}
             onNotificationDurationSecondsChange={preferences.setNotificationDurationSeconds}
             onActionLogEnabledChange={preferences.setActionLogEnabled}

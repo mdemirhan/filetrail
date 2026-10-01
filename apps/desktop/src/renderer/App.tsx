@@ -74,6 +74,7 @@ import { useFiletrailClient } from "./lib/filetrailClient";
 import { formatDateTime, formatPermissionMode, formatSize } from "./lib/formatting";
 import { resolveInfoItem } from "./lib/infoPreview";
 import { EXPLORER_LAYOUT } from "./lib/layoutTokens";
+import { filterEntriesByName, formatItemCount } from "./lib/listFilter";
 import { createRendererLogger } from "./lib/logging";
 import { expandHomeShortcut } from "./lib/pathUtils";
 import { canRunToolbarRendererCommand } from "./lib/rendererCommandAvailability";
@@ -150,10 +151,6 @@ export function App() {
     setDetailColumnWidths,
     tabSwitchesExplorerPanes,
     setTabSwitchesExplorerPanes,
-    typeaheadEnabled,
-    setTypeaheadEnabled,
-    typeaheadDebounceMs,
-    setTypeaheadDebounceMs,
     notificationsEnabled,
     setNotificationsEnabled,
     notificationDurationSeconds,
@@ -244,6 +241,7 @@ export function App() {
     setLeftPaneSubview,
     themeMenuOpen,
     setThemeMenuOpen,
+    listFilterQuery,
     typeaheadQuery,
     setTypeaheadQuery,
     typeaheadPane,
@@ -302,10 +300,6 @@ export function App() {
     setSearchResults,
     searchResultsScrollTop,
     setSearchResultsScrollTop,
-    searchResultsFilterQuery,
-    setSearchResultsFilterQuery,
-    debouncedSearchResultsFilterQuery,
-    setDebouncedSearchResultsFilterQuery,
     searchStatus,
     setSearchStatus,
     searchError,
@@ -398,6 +392,7 @@ export function App() {
     hideSearchResults,
     isSearchMode,
     searchResultEntries,
+    allSearchResultEntries,
     showCachedSearchResults,
     startSearch,
     stopSearch,
@@ -409,7 +404,6 @@ export function App() {
     updateSearchRecursive,
     updateSearchSkipGitFolders,
     updateSearchSkipGitIgnored,
-    updateSearchResultsFilterQuery,
     updateSearchResultsSortBy,
   } = useExplorerSearchController({
     services,
@@ -460,10 +454,17 @@ export function App() {
       searchResultEntries,
     ],
   );
-  const activeContentEntries = useMemo(
-    () => (isSearchMode ? searchResultEntries : browseEntries),
-    [browseEntries, isSearchMode, searchResultEntries],
+  // Typing in the list narrows it by name; the search results are narrowed in their
+  // controller the same way.
+  const visibleBrowseEntries = useMemo(
+    () => filterEntriesByName(browseEntries, listFilterQuery),
+    [browseEntries, listFilterQuery],
   );
+  const activeContentEntries = useMemo(
+    () => (isSearchMode ? searchResultEntries : visibleBrowseEntries),
+    [isSearchMode, searchResultEntries, visibleBrowseEntries],
+  );
+  const unfilteredContentEntries = isSearchMode ? allSearchResultEntries : browseEntries;
   const selectedPathSet = useMemo(() => new Set(contentSelection.paths), [contentSelection.paths]);
   const selectedPathsInViewOrder = useMemo(
     () =>
@@ -567,6 +568,9 @@ export function App() {
     restoreExplorerPaneFocus,
     handlePagedPaneScroll,
     handleTypeaheadInput,
+    eraseListFilterCharacter,
+    clearListFilter,
+    listFilterTakesSpace,
     handleTreeKeyboardAction,
     goBack,
     goForward,
@@ -600,6 +604,7 @@ export function App() {
     selection: selectionActions,
     derived: {
       activeContentEntries,
+      unfilteredContentEntries,
       locationDialogOpen,
       explorerFocusSuppressed,
     },
@@ -809,7 +814,6 @@ export function App() {
       shortcutContext,
       copyPasteModalOpen,
       locationDialogOpen,
-      searchResultEntries,
       selectedTreeTargetPath,
       selectedPathsInViewOrder,
       selectedEntry,
@@ -825,7 +829,6 @@ export function App() {
       openLocationSheet,
       focusFileSearch,
       clearTypeahead,
-      applyContentSelection,
       showCachedSearchResults,
       hideSearchResults,
       goBack,
@@ -854,6 +857,9 @@ export function App() {
       focusContentPane,
       handlePagedPaneScroll,
       handleTypeaheadInput,
+      eraseListFilterCharacter,
+      clearListFilter,
+      listFilterTakesSpace,
       handleTreeKeyboardAction,
       navigateTreeSelectionToParent,
       activateContentPaths,
@@ -895,8 +901,6 @@ export function App() {
     detailColumns,
     detailColumnWidths,
     tabSwitchesExplorerPanes,
-    typeaheadEnabled,
-    typeaheadDebounceMs,
     notificationsEnabled,
     notificationDurationSeconds,
     actionLogEnabled,
@@ -1062,8 +1066,6 @@ export function App() {
         setDetailColumns(preferences.detailColumns);
         setDetailColumnWidths(preferences.detailColumnWidths);
         setTabSwitchesExplorerPanes(preferences.tabSwitchesExplorerPanes);
-        setTypeaheadEnabled(preferences.typeaheadEnabled);
-        setTypeaheadDebounceMs(preferences.typeaheadDebounceMs);
         setNotificationsEnabled(preferences.notificationsEnabled);
         setNotificationDurationSeconds(preferences.notificationDurationSeconds);
         setActionLogEnabled(preferences.actionLogEnabled);
@@ -1265,11 +1267,28 @@ export function App() {
     }
   }, [searchStatus]);
 
+  // What was typed to filter the folder becomes the search text; the search runs as if it
+  // had been typed into the search field.
+  function searchFromListFilter() {
+    const text = listFilterQuery;
+    clearListFilter();
+    updateSearchDraftQuery(text);
+    window.requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+      searchPointerIntentRef.current = false;
+    });
+  }
+
   function focusFileSearch(selectContents = false) {
     searchPointerIntentRef.current = true;
     setFocusedPane(null);
     clearTypeahead();
     setSearchPopoverOpen(true);
+    if (listFilterQuery.length > 0 && !isSearchMode) {
+      // ⌘F with a filter typed: look for the same text in the subfolders too.
+      searchFromListFilter();
+      return;
+    }
     showCachedSearchResults({ fromField: true });
     window.requestAnimationFrame(() => {
       searchInputRef.current?.focus();
@@ -1578,7 +1597,8 @@ export function App() {
                 onItemDragEnd: handleDragEnd,
                 onFocusChange: (focused) => setFocusedPane(focused ? "content" : null),
                 onTypeaheadInput: (key) => handleTypeaheadInput(key, "content"),
-                typeaheadQuery: focusedPane === "content" ? typeaheadQuery : "",
+                filterQuery: listFilterQuery,
+                onClearFilter: clearListFilter,
                 scrollTop: searchResultsScrollTop,
                 onScrollTopChange: setSearchResultsScrollTop,
               },
@@ -1586,7 +1606,11 @@ export function App() {
                 paneRef: contentPaneRef,
                 isFocused: focusedPane === "content",
                 currentPath,
-                entries: browseEntries,
+                entries: visibleBrowseEntries,
+                filterQuery: listFilterQuery,
+                filterTotalCount: browseEntries.length,
+                onClearFilter: clearListFilter,
+                onSearchForFilter: searchFromListFilter,
                 loading: directoryLoading,
                 error: directoryError,
                 includeHidden,
@@ -1631,7 +1655,6 @@ export function App() {
                 detailColumnWidths,
                 onDetailColumnWidthsChange: setDetailColumnWidths,
                 tabSwitchesExplorerPanes,
-                typeaheadQuery: focusedPane === "content" ? typeaheadQuery : "",
                 inlineRename: renameDialogState?.inline
                   ? { path: renameDialogState.sourcePath, error: renameDialogState.error }
                   : null,
@@ -1863,7 +1886,7 @@ export function App() {
                   })
                 : directoryLoading
                   ? "Loading…"
-                  : `${currentEntries.length} ${currentEntries.length === 1 ? "item" : "items"}`
+                  : formatItemCount(visibleBrowseEntries.length, currentEntries.length)
             }
           />
         ) : (

@@ -36,6 +36,7 @@ import {
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
 import { buildColumnMajorRows, computeRowsPerColumn, getVirtualRange } from "../lib/virtualization";
 import { InlineRenameField } from "./InlineRenameField";
+import { ListFilterPill } from "./ListFilterPill";
 import { PathSuggestionDropdown } from "./PathSuggestionDropdown";
 
 type DirectoryEntry = IpcResponse<"directory:getSnapshot">["entries"][number];
@@ -112,7 +113,10 @@ export function ContentPane({
   detailColumnWidths = DEFAULT_DETAIL_COLUMN_WIDTHS,
   onDetailColumnWidthsChange = () => undefined,
   tabSwitchesExplorerPanes = false,
-  typeaheadQuery,
+  filterQuery = "",
+  filterTotalCount = 0,
+  onClearFilter = () => undefined,
+  onSearchForFilter,
   getFolderSizeLabel,
   statusSummary,
   inlineRename = null,
@@ -166,7 +170,13 @@ export function ContentPane({
   detailColumnWidths?: DetailColumnWidths;
   onDetailColumnWidthsChange?: (value: DetailColumnWidths) => void;
   tabSwitchesExplorerPanes?: boolean;
-  typeaheadQuery?: string;
+  /** What has been typed to narrow `entries`, which already are the matching ones. */
+  filterQuery?: string;
+  /** How many items the folder has before the filter. */
+  filterTotalCount?: number;
+  onClearFilter?: () => void;
+  /** Looks for the filter text in the subfolders too (offered when nothing here matches). */
+  onSearchForFilter?: (() => void) | undefined;
   // Cached folder size text for the details Size column, or null when none is known.
   getFolderSizeLabel?: ((path: string) => string | null) | undefined;
   // Item/selection count and free space, shown at the right end of the path bar.
@@ -364,13 +374,30 @@ export function ContentPane({
       }}
     >
       <div ref={viewportRef} className="content-viewport">
-        {viewMode === "list" && typeaheadQuery ? (
-          <div className="pane-typeahead pane-typeahead-center" aria-live="polite">
-            <span className="pane-typeahead-label">Select</span>
-            <span className="pane-typeahead-value">{typeaheadQuery}</span>
+        <ListFilterPill
+          query={filterQuery}
+          shownCount={entries.length}
+          totalCount={filterTotalCount}
+          onClear={onClearFilter}
+        />
+        {filterQuery.length > 0 && entries.length === 0 && !loading && !error ? (
+          <div className="content-state content-empty">
+            <strong className="empty-state-title">No items match “{filterQuery}”</strong>
+            <span className="empty-state-message">
+              Nothing in this folder has that in its name.
+            </span>
+            {onSearchForFilter ? (
+              <button
+                type="button"
+                className="empty-state-action"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={onSearchForFilter}
+              >
+                Search subfolders
+              </button>
+            ) : null}
           </div>
-        ) : null}
-        {viewMode === "list" ? (
+        ) : viewMode === "list" ? (
           <FlowListView
             key={currentPath}
             currentPath={currentPath}
@@ -398,7 +425,6 @@ export function ContentPane({
             getItemDropIndicator={getItemDropIndicator}
             compactListView={compactListView}
             highlightHoveredItems={highlightHoveredItems}
-            typeaheadQuery={typeaheadQuery ?? ""}
             inlineRename={inlineRename}
             onInlineRenameSubmit={onInlineRenameSubmit}
             onInlineRenameCancel={onInlineRenameCancel}
@@ -438,7 +464,6 @@ export function ContentPane({
             detailColumns={detailColumns}
             detailColumnWidths={detailColumnWidths}
             onDetailColumnWidthsChange={onDetailColumnWidthsChange}
-            typeaheadQuery={typeaheadQuery ?? ""}
             getFolderSizeLabel={getFolderSizeLabel}
             inlineRename={inlineRename}
             onInlineRenameSubmit={onInlineRenameSubmit}
@@ -786,7 +811,6 @@ function FlowListView({
   getItemDropIndicator,
   compactListView = false,
   highlightHoveredItems = true,
-  typeaheadQuery,
   inlineRename,
   onInlineRenameSubmit,
   onInlineRenameCancel,
@@ -824,7 +848,6 @@ function FlowListView({
   getItemDropIndicator?: ((path: string) => "valid" | "invalid" | null) | undefined;
   compactListView?: boolean;
   highlightHoveredItems?: boolean;
-  typeaheadQuery?: string;
   inlineRename: InlineRenameState | null;
   onInlineRenameSubmit: (nextName: string) => void;
   onInlineRenameCancel: () => void;
@@ -1132,7 +1155,6 @@ function DetailsView({
   detailColumns = DEFAULT_DETAIL_COLUMN_VISIBILITY,
   detailColumnWidths = DEFAULT_DETAIL_COLUMN_WIDTHS,
   onDetailColumnWidthsChange = () => undefined,
-  typeaheadQuery,
   getFolderSizeLabel,
   inlineRename,
   onInlineRenameSubmit,
@@ -1178,7 +1200,6 @@ function DetailsView({
   detailColumns?: DetailColumnVisibility;
   detailColumnWidths?: DetailColumnWidths;
   onDetailColumnWidthsChange?: (value: DetailColumnWidths) => void;
-  typeaheadQuery?: string;
   getFolderSizeLabel?: ((path: string) => string | null) | undefined;
   inlineRename: InlineRenameState | null;
   onInlineRenameSubmit: (nextName: string) => void;
@@ -1346,12 +1367,6 @@ function DetailsView({
   return (
     // biome-ignore lint/a11y/useSemanticElements: the virtualized details view is built from styled divs/buttons; a native table cannot express it.
     <div className="details-wrapper" role="grid" aria-multiselectable="true">
-      {typeaheadQuery ? (
-        <div className="pane-typeahead pane-typeahead-center" aria-live="polite">
-          <span className="pane-typeahead-label">Select</span>
-          <span className="pane-typeahead-value">{typeaheadQuery}</span>
-        </div>
-      ) : null}
       {/* biome-ignore lint/a11y/useSemanticElements: see grid note above; header markup mirrors the styled-div table. */}
       <div className="details-header-shell" role="rowgroup">
         {/* biome-ignore lint/a11y/useFocusableInteractive: focus is owned by the scroll container; header cells expose focusable controls. */}

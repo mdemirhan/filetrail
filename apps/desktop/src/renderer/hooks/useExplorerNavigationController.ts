@@ -11,6 +11,10 @@ import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 
 import { SEARCH_RESULT_ROW_HEIGHT } from "../components/SearchResultsPane";
 import type { TreeNodeState } from "../components/TreePane";
+import {
+  EMPTY_CONTENT_SELECTION,
+  setSingleContentSelection as createSingleContentSelection,
+} from "../lib/contentSelection";
 import { getDetailsRowHeight } from "../lib/detailsLayout";
 import {
   createTreeNode,
@@ -44,10 +48,14 @@ import {
 } from "../lib/favorites";
 import { getFlowListColumnStep } from "../lib/flowListLayout";
 import { EXPLORER_LAYOUT, getTreeRowHeight } from "../lib/layoutTokens";
+import {
+  LIST_FILTER_SPACE_WINDOW_MS,
+  filterEntriesByName,
+  findListFilterSelection,
+} from "../lib/listFilter";
 import { createRendererLogger } from "../lib/logging";
 import { pageScrollElement, scrollElementByAmount } from "../lib/pagedScroll";
 import { expandHomeShortcut } from "../lib/pathUtils";
-import { findContentTypeaheadMatch } from "../lib/typeahead";
 import type {
   ExplorerServices,
   NavigationStore,
@@ -68,6 +76,8 @@ export function useExplorerNavigationController(args: {
   selection: SelectionActions;
   derived: {
     activeContentEntries: DirectoryEntry[];
+    /** The list on screen before the typed filter narrows it. */
+    unfilteredContentEntries: DirectoryEntry[];
     locationDialogOpen: boolean;
     explorerFocusSuppressed: boolean;
   };
@@ -135,6 +145,8 @@ export function useExplorerNavigationController(args: {
     setFocusedPane,
     leftPaneSubview,
     setLeftPaneSubview,
+    listFilterQuery,
+    setListFilterQuery,
     typeaheadQuery,
     typeaheadPane,
     setTypeaheadPane,
@@ -163,8 +175,6 @@ export function useExplorerNavigationController(args: {
   } = navigation;
   const {
     preferencesReady,
-    typeaheadDebounceMs,
-    typeaheadEnabled,
     favorites,
     favoritesPlacement,
     favoritesExpanded,
@@ -188,7 +198,12 @@ export function useExplorerNavigationController(args: {
   } = search;
   const { actionNotice, contextMenuState, pendingPasteSelectionRef } = writeOperations;
   const { applyContentSelection, setSingleContentSelection } = selection;
-  const { activeContentEntries, locationDialogOpen, explorerFocusSuppressed } = derived;
+  const {
+    activeContentEntries,
+    unfilteredContentEntries,
+    locationDialogOpen,
+    explorerFocusSuppressed,
+  } = derived;
   const { onLocationPathSubmitted } = callbacks;
 
   const hasCachedSearch = searchCommittedQuery.trim().length > 0;
@@ -482,6 +497,84 @@ export function useExplorerNavigationController(args: {
     return didScroll;
   }
 
+  // ── Typing in the file list filters it ────────────────────────────────────────────────
+  const listFilterQueryRef = useRef(listFilterQuery);
+  const lastListFilterInputAtRef = useRef(0);
+
+  // Narrows the list on screen to `nextQuery` and selects what type-to-select would have:
+  // the first name starting with the text, otherwise the first match.
+  function applyListFilter(nextQuery: string) {
+    listFilterQueryRef.current = nextQuery;
+    setListFilterQuery(nextQuery);
+    if (nextQuery.length === 0) {
+      return;
+    }
+    const matches = filterEntriesByName(unfilteredContentEntries, nextQuery);
+    const selected = findListFilterSelection(matches, nextQuery);
+    applyContentSelection(
+      selected ? createSingleContentSelection(selected.path) : EMPTY_CONTENT_SELECTION,
+      matches,
+    );
+  }
+
+  function typeIntoListFilter(text: string) {
+    lastListFilterInputAtRef.current = Date.now();
+    applyListFilter(`${listFilterQueryRef.current}${text}`);
+  }
+
+  // Backspace takes the last character back; the selection stays where it is.
+  function eraseListFilterCharacter() {
+    lastListFilterInputAtRef.current = Date.now();
+    applyListFilter(listFilterQueryRef.current.slice(0, -1));
+  }
+
+  // Esc, the ✕, or leaving the folder: the whole list returns and the selection is kept,
+  // so something found by filtering can then be seen among its neighbours.
+  const clearListFilter = useCallback(() => {
+    listFilterQueryRef.current = "";
+    setListFilterQuery("");
+  }, [setListFilterQuery]);
+
+  // Space is part of the text while typing is under way ("my doc"); after a pause it is
+  // Quick Look again.
+  function listFilterTakesSpace() {
+    return (
+      listFilterQueryRef.current.length > 0 &&
+      Date.now() - lastListFilterInputAtRef.current < LIST_FILTER_SPACE_WINDOW_MS
+    );
+  }
+
+  useEffect(() => {
+    listFilterQueryRef.current = listFilterQuery;
+  }, [listFilterQuery]);
+
+  // A filter belongs to the list it was typed into.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: clears when the folder or the kind of list changes, not when the filter itself does.
+  useEffect(() => {
+    clearListFilter();
+  }, [currentPath, isSearchMode, searchCommittedQuery, clearListFilter]);
+
+  // Something outside the filter was selected (a new folder, a pasted or renamed item, a
+  // reveal): show the whole list again so the selection is on screen.
+  useEffect(() => {
+    const leadPath = contentSelection.leadPath;
+    if (listFilterQuery.length === 0 || leadPath === null) {
+      return;
+    }
+    if (activeContentEntries.some((entry) => entry.path === leadPath)) {
+      return;
+    }
+    if (unfilteredContentEntries.some((entry) => entry.path === leadPath)) {
+      clearListFilter();
+    }
+  }, [
+    activeContentEntries,
+    clearListFilter,
+    contentSelection.leadPath,
+    listFilterQuery,
+    unfilteredContentEntries,
+  ]);
+
   function scheduleTypeaheadClear() {
     if (typeaheadTimeoutRef.current) {
       clearTimeout(typeaheadTimeoutRef.current);
@@ -492,10 +585,16 @@ export function useExplorerNavigationController(args: {
       typeaheadPaneRef.current = null;
       setTypeaheadQuery("");
       setTypeaheadPane(null);
-    }, typeaheadDebounceMs);
+    }, TREE_TYPEAHEAD_RESET_MS);
   }
 
+  // Typing in the file list filters it; typing in the sidebar selects the first visible
+  // item whose name starts with the text.
   function handleTypeaheadInput(key: string, pane: "tree" | "content") {
+    if (pane === "content") {
+      typeIntoListFilter(key);
+      return;
+    }
     const baseQuery = typeaheadPaneRef.current === pane ? typeaheadQueryRef.current : "";
     const nextQuery = `${baseQuery}${key}`;
     typeaheadQueryRef.current = nextQuery;
@@ -503,14 +602,6 @@ export function useExplorerNavigationController(args: {
     setTypeaheadQuery(nextQuery);
     setTypeaheadPane(pane);
     scheduleTypeaheadClear();
-
-    if (pane === "content") {
-      const match = findContentTypeaheadMatch(activeContentEntries, nextQuery);
-      if (match) {
-        setSingleContentSelection(match.path);
-      }
-      return;
-    }
 
     const normalizedQuery = nextQuery.trim().toLocaleLowerCase();
     if (normalizedQuery.length === 0) {
@@ -1597,13 +1688,6 @@ export function useExplorerNavigationController(args: {
   }, [leftPaneSubview, leftPaneSubviewRef, lastLeftPaneSubviewRef]);
 
   useEffect(() => {
-    if (typeaheadEnabled) {
-      return;
-    }
-    clearTypeahead();
-  }, [clearTypeahead, typeaheadEnabled]);
-
-  useEffect(() => {
     if (
       !preferencesReady ||
       mainView !== "explorer" ||
@@ -1794,6 +1878,9 @@ export function useExplorerNavigationController(args: {
     restoreExplorerPaneFocus,
     handlePagedPaneScroll,
     handleTypeaheadInput,
+    eraseListFilterCharacter,
+    clearListFilter,
+    listFilterTakesSpace,
     handleTreeKeyboardAction,
     goBack,
     goForward,
@@ -1824,6 +1911,8 @@ export function useExplorerNavigationController(args: {
 
 type ItemProperties = IpcResponse<"item:getProperties">["item"];
 
+// The sidebar's type-to-select forgets what was typed after this long without a key.
+const TREE_TYPEAHEAD_RESET_MS = 1000;
 const INFO_FETCH_DELAY_MS = 80;
 const INFO_PROPERTIES_CACHE_LIMIT = 200;
 

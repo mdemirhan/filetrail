@@ -80,8 +80,6 @@ describe("appStateStore", () => {
         created: 168,
       },
       tabSwitchesExplorerPanes: true,
-      typeaheadEnabled: true,
-      typeaheadDebounceMs: 1000,
       notificationsEnabled: true,
       notificationDurationSeconds: 4,
       actionLogEnabled: true,
@@ -193,8 +191,6 @@ describe("appStateStore", () => {
         created: 168,
       },
       tabSwitchesExplorerPanes: false,
-      typeaheadEnabled: false,
-      typeaheadDebounceMs: 1000,
       notificationsEnabled: true,
       notificationDurationSeconds: 4,
       actionLogEnabled: true,
@@ -293,8 +289,6 @@ describe("appStateStore", () => {
         created: 168,
       },
       tabSwitchesExplorerPanes: false,
-      typeaheadEnabled: false,
-      typeaheadDebounceMs: 1000,
       notificationsEnabled: true,
       notificationDurationSeconds: 4,
       actionLogEnabled: true,
@@ -544,8 +538,14 @@ describe("appStateStore", () => {
       } as never,
       uiFontFamily: "bad-font" as never,
       // Settings that no longer exist are dropped when loading.
-      ...({ uiFontSize: 15, uiFontWeight: 600, favoritesPaneHeight: 224 } as object),
-      typeaheadDebounceMs: 9999,
+      ...({
+        uiFontSize: 15,
+        uiFontWeight: 600,
+        favoritesPaneHeight: 224,
+        typeaheadEnabled: false,
+        typeaheadDebounceMs: 9999,
+        searchResultsFilterScope: "path",
+      } as object),
       terminalApp: {
         appPath: "   ",
         appName: "iTerm",
@@ -604,7 +604,9 @@ describe("appStateStore", () => {
     expect(reloaded.getPreferences()).not.toHaveProperty("uiFontSize");
     expect(reloaded.getPreferences()).not.toHaveProperty("uiFontWeight");
     expect(reloaded.getPreferences()).not.toHaveProperty("favoritesPaneHeight");
-    expect(reloaded.getPreferences().typeaheadDebounceMs).toBe(1500);
+    expect(reloaded.getPreferences()).not.toHaveProperty("typeaheadEnabled");
+    expect(reloaded.getPreferences()).not.toHaveProperty("typeaheadDebounceMs");
+    expect(reloaded.getPreferences()).not.toHaveProperty("searchResultsFilterScope");
     expect(reloaded.getPreferences().terminalApp).toBeNull();
     expect(reloaded.getPreferences().defaultTextEditor).toEqual({
       appPath: "/System/Applications/TextEdit.app",

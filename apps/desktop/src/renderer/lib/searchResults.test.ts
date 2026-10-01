@@ -1,6 +1,6 @@
 import type { IpcResponse } from "@filetrail/contracts";
 
-import { appendSearchResults, filterSearchResults, sortSearchResults } from "./searchResults";
+import { appendSearchResults, sortSearchResults } from "./searchResults";
 
 type SearchResultItem = IpcResponse<"search:getUpdate">["items"][number];
 
@@ -62,27 +62,6 @@ describe("search result ordering", () => {
       "zeta.ts",
       "beta.ts",
       "alpha.ts",
-    ]);
-  });
-
-  it("filters by name using case-insensitive contains matching", () => {
-    const items = [
-      createSearchResult("/Users/demo/project/src/App.tsx"),
-      createSearchResult("/Users/demo/project/src/main.tsx"),
-    ];
-
-    expect(filterSearchResults(items, "app").map((item) => item.name)).toEqual(["App.tsx"]);
-  });
-
-  it("filters on the name only, not on the folders above it", () => {
-    const items = [
-      createSearchResult("/Users/demo/project/src/App.tsx"),
-      createSearchResult("/Users/demo/project/tests/App.test.tsx"),
-    ];
-
-    expect(filterSearchResults(items, "tests")).toEqual([]);
-    expect(filterSearchResults(items, "test").map((item) => item.path)).toEqual([
-      "/Users/demo/project/tests/App.test.tsx",
     ]);
   });
 });

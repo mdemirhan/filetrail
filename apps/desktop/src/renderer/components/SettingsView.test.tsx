@@ -29,8 +29,6 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       }}
       layoutMode="wide"
       tabSwitchesExplorerPanes={true}
-      typeaheadEnabled={true}
-      typeaheadDebounceMs={750}
       notificationsEnabled={true}
       notificationDurationSeconds={4}
       actionLogEnabled={true}
@@ -81,7 +79,6 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
         { value: "#2cb5a0", label: "Teal" },
       ]}
       uiFontOptions={[{ value: "lexend", label: "Lexend" }]}
-      typeaheadDebounceOptions={[750]}
       notificationDurationSecondsOptions={[4, 6]}
       onThemeChange={() => undefined}
       onIconThemeChange={() => undefined}
@@ -96,8 +93,6 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       onHighlightHoveredItemsChange={() => undefined}
       onDetailColumnsChange={() => undefined}
       onTabSwitchesExplorerPanesChange={() => undefined}
-      onTypeaheadEnabledChange={() => undefined}
-      onTypeaheadDebounceMsChange={() => undefined}
       onNotificationsEnabledChange={() => undefined}
       onNotificationDurationSecondsChange={() => undefined}
       onActionLogEnabledChange={() => undefined}

@@ -42,8 +42,6 @@ export function useSearchSession() {
   const [searchResultsVisible, setSearchResultsVisible] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
   const [searchResultsScrollTop, setSearchResultsScrollTop] = useState(0);
-  const [searchResultsFilterQuery, setSearchResultsFilterQuery] = useState("");
-  const [debouncedSearchResultsFilterQuery, setDebouncedSearchResultsFilterQuery] = useState("");
   const [searchStatus, setSearchStatus] = useState<SearchJobStatus | "idle">("idle");
   const [searchError, setSearchError] = useState<string | null>(null);
   // Whether the search on screen was started by typing rather than by Return. A pattern
@@ -90,15 +88,6 @@ export function useSearchSession() {
   }, [searchResults]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setDebouncedSearchResultsFilterQuery(searchResultsFilterQuery);
-    }, 500);
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [searchResultsFilterQuery]);
-
-  useEffect(() => {
     searchResultsSortByRef.current = searchResultsSortBy;
   }, [searchResultsSortBy]);
 
@@ -138,10 +127,6 @@ export function useSearchSession() {
     setSearchResults,
     searchResultsScrollTop,
     setSearchResultsScrollTop,
-    searchResultsFilterQuery,
-    setSearchResultsFilterQuery,
-    debouncedSearchResultsFilterQuery,
-    setDebouncedSearchResultsFilterQuery,
     searchStatus,
     setSearchStatus,
     searchError,

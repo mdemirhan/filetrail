@@ -7121,6 +7121,113 @@ describe("App copy/paste integration", () => {
     expect(searchInput.value).toBe("source");
   });
 
+  it("filters the file list while typing and brings it back with Escape", async () => {
+    const harness = createAppHarness({
+      directorySnapshots: {
+        "/Users/demo": {
+          path: "/Users/demo",
+          parentPath: "/Users",
+          entries: [
+            createDirectoryEntry("/Users/demo/Android", "directory"),
+            createDirectoryEntry("/Users/demo/Documents", "directory"),
+            createDirectoryEntry("/Users/demo/my doc.txt", "file"),
+            createDirectoryEntry("/Users/demo/notes.txt", "file"),
+          ],
+        },
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const contentPane = await screen.findByTestId("content-pane");
+    const shownCount = () => screen.getByTestId("content-entry-count").textContent;
+    const isSelected = (path: string) => screen.getByTitle(path).getAttribute("data-selected");
+    const press = async (key: string) => {
+      await act(async () => {
+        fireEvent.keyDown(window, { key });
+      });
+    };
+    await vi.waitFor(() => expect(shownCount()).toBe("4"));
+    await act(async () => {
+      fireEvent.pointerDown(contentPane);
+    });
+
+    // "d" is in three names; the one that starts with it is selected, not the first.
+    await press("d");
+    expect(shownCount()).toBe("3");
+    expect(screen.queryByTitle("/Users/demo/notes.txt")).toBeNull();
+    expect(isSelected("/Users/demo/Documents")).toBe("true");
+    expect(isSelected("/Users/demo/Android")).toBe("false");
+
+    await press("o");
+    expect(shownCount()).toBe("2");
+    // Space right after a character is part of the text ("my doc"), not Quick Look.
+    await press("c");
+    await press("Backspace");
+    await press("Backspace");
+    await press("Backspace");
+    await press("y");
+    await press(" ");
+    await press("d");
+    expect(shownCount()).toBe("1");
+    expect(isSelected("/Users/demo/my doc.txt")).toBe("true");
+    expect(harness.invocations.some((call) => call.channel === "system:quickLook")).toBe(false);
+
+    // Text nothing matches empties the list; Backspace takes a character back.
+    await press("z");
+    expect(shownCount()).toBe("0");
+    await press("Backspace");
+    expect(shownCount()).toBe("1");
+
+    // Escape shows the whole folder again and keeps what was found selected.
+    await press("Escape");
+    expect(shownCount()).toBe("4");
+    expect(isSelected("/Users/demo/my doc.txt")).toBe("true");
+
+    // With no filter, Space is Quick Look again and Backspace does nothing to the list.
+    await press(" ");
+    expect(harness.invocations.some((call) => call.channel === "system:quickLook")).toBe(true);
+    await press("Backspace");
+    expect(shownCount()).toBe("4");
+  });
+
+  it("carries the filter text into search with ⌘F", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const contentPane = await screen.findByTestId("content-pane");
+    await act(async () => {
+      fireEvent.pointerDown(contentPane);
+    });
+    for (const key of ["s", "o", "u"]) {
+      await act(async () => {
+        fireEvent.keyDown(window, { key });
+      });
+    }
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "f", metaKey: true });
+      await new Promise((resolve) => setTimeout(resolve, 320));
+    });
+
+    const searchInput = screen.getByPlaceholderText("Search") as HTMLInputElement;
+    expect(searchInput.value).toBe("sou");
+    await screen.findByTestId("search-results-pane");
+    expect(
+      harness.invocations
+        .filter((call) => call.channel === "search:start")
+        .map((call) => (call.payload as IpcRequestInput<"search:start">).query),
+    ).toEqual(["sou"]);
+  });
+
   it("searches as you type once the keyboard rests, from two characters", async () => {
     const harness = createAppHarness();
 

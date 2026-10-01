@@ -1748,6 +1748,97 @@ input:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+/* The filter typed into a list: floats over the foot of the list it narrows. */
+.list-filter-pill {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  z-index: 14;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 32px);
+  padding: 5px 6px 5px 12px;
+  border: 1px solid var(--ft-accent-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-elevated) 94%, transparent);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-secondary);
+  font-size: 12px;
+  transform: translateX(-50%);
+  backdrop-filter: blur(10px);
+}
+
+.list-filter-pill-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.list-filter-pill-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* Spaces are part of what was typed. */
+  white-space: pre;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.list-filter-pill-count {
+  flex: none;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.list-filter-pill-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: default;
+}
+
+.list-filter-pill-clear:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.list-filter-pill-clear svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.empty-state-action {
+  justify-self: start;
+  height: 24px;
+  margin-top: 4px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: default;
+}
+
+.empty-state-action:hover {
+  background: var(--bg-hover);
+}
+
 .tree-expand:focus-visible,
 .tree-label:focus-visible,
 .flow-item:focus-visible,

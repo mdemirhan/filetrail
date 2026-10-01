@@ -26,17 +26,6 @@ export function sortSearchResults(
   return [...items].sort((left, right) => compareSearchResults(left, right, sortBy) * direction);
 }
 
-// Filtering only affects the in-memory result set currently loaded into the renderer; it
-// does not re-run the underlying filesystem search.
-export function filterSearchResults(items: SearchResultItem[], query: string): SearchResultItem[] {
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  if (normalizedQuery.length === 0) {
-    return items;
-  }
-
-  return items.filter((item) => item.name.toLocaleLowerCase().includes(normalizedQuery));
-}
-
 // Path is the deterministic tie-breaker so sort output remains stable across repeated runs.
 export function compareSearchResults(
   left: SearchResultItem,

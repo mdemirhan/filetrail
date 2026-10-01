@@ -44,6 +44,8 @@ export function useExplorerNavigation() {
   const [focusedPane, setFocusedPane] = useState<"tree" | "content" | null>(null);
   const [leftPaneSubview, setLeftPaneSubview] = useState<"favorites" | "tree">("tree");
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
+  // What has been typed into the file list (or the search results) to narrow it.
+  const [listFilterQuery, setListFilterQuery] = useState("");
   const [typeaheadQuery, setTypeaheadQuery] = useState("");
   const [typeaheadPane, setTypeaheadPane] = useState<"tree" | "content" | null>(null);
   const [infoTargetPathOverride, setInfoTargetPathOverride] = useState<string | null>(null);
@@ -121,6 +123,8 @@ export function useExplorerNavigation() {
     setLeftPaneSubview,
     themeMenuOpen,
     setThemeMenuOpen,
+    listFilterQuery,
+    setListFilterQuery,
     typeaheadQuery,
     setTypeaheadQuery,
     typeaheadPane,

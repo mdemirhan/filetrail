@@ -1,40 +1,10 @@
-import {
-  findContentTypeaheadMatch,
-  findTreeTypeaheadMatch,
-  isTypeaheadCharacterKey,
-} from "./typeahead";
+import { findTreeTypeaheadMatch, isTypeaheadCharacterKey } from "./typeahead";
 
 describe("typeahead helpers", () => {
   it("detects printable character keys", () => {
     expect(isTypeaheadCharacterKey("a")).toBe(true);
     expect(isTypeaheadCharacterKey(" ")).toBe(false);
     expect(isTypeaheadCharacterKey("ArrowDown")).toBe(false);
-  });
-
-  it("matches the first content entry by prefix case-insensitively", () => {
-    expect(
-      findContentTypeaheadMatch(
-        [
-          {
-            path: "/Users/demo/Downloads",
-            name: "Downloads",
-            extension: "",
-            kind: "directory",
-            isHidden: false,
-            isSymlink: false,
-          },
-          {
-            path: "/Users/demo/Documents",
-            name: "Documents",
-            extension: "",
-            kind: "directory",
-            isHidden: false,
-            isSymlink: false,
-          },
-        ],
-        "do",
-      )?.path,
-    ).toBe("/Users/demo/Downloads");
   });
 
   it("matches the first visible tree node by prefix", () => {
