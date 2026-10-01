@@ -2669,7 +2669,7 @@ describe("App copy/paste integration", () => {
     });
   });
 
-  it("does not open New Folder when a file is selected", async () => {
+  it("creates the folder in the folder on screen with Cmd+Shift+N when a file is selected", async () => {
     const harness = createAppHarness();
 
     render(
@@ -2686,10 +2686,38 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "n", metaKey: true, shiftKey: true });
     });
 
-    expect(screen.queryByRole("dialog", { name: "New Folder" })).not.toBeInTheDocument();
-    expect(
-      harness.invocations.find((call) => call.channel === "writeOperation:createFolder"),
-    ).toBeUndefined();
+    // A file cannot hold the new folder, so it goes next to it.
+    expect(await screen.findByRole("dialog", { name: "New Folder" })).toHaveTextContent(
+      "Create in /Users/demo",
+    );
+  });
+
+  it("creates the folder in the folder on screen when several items are selected", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const sourceButton = await screen.findByTitle("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.click(sourceButton);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTitle("/Users/demo/Folder"), { metaKey: true });
+    });
+    expect(sourceButton).toHaveAttribute("data-selected", "true");
+    expect(screen.getByTitle("/Users/demo/Folder")).toHaveAttribute("data-selected", "true");
+    // The menu bar command behaves like the shortcut.
+    await act(async () => {
+      harness.emitCommand({ type: "newFolder" });
+    });
+
+    expect(await screen.findByRole("dialog", { name: "New Folder" })).toHaveTextContent(
+      "Create in /Users/demo",
+    );
   });
 
   it("shows Add to Favorites for non-favorite folders and persists the change", async () => {

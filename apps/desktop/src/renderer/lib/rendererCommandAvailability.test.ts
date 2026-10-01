@@ -236,7 +236,7 @@ describe("canRunToolbarRendererCommand", () => {
     expect(canRunToolbarRendererCommand("pasteSelection", searchContext)).toBe(false);
   });
 
-  it("allows new folder only when the target path can be resolved", () => {
+  it("allows new folder whenever there is a folder to make it in", () => {
     expect(
       canRunToolbarRendererCommand(
         "newFolder",
@@ -258,11 +258,21 @@ describe("canRunToolbarRendererCommand", () => {
       ),
     ).toBe(true);
 
+    // With files selected, or several items, the folder goes into the folder on screen.
     expect(
       canRunToolbarRendererCommand(
         "newFolder",
         availabilityContext({
           selectedPathsInViewOrder: ["/Users/demo/file.txt", "/Users/demo/notes.md"],
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      canRunToolbarRendererCommand(
+        "newFolder",
+        availabilityContext({
+          currentPath: "",
+          selectedPathsInViewOrder: ["/Users/demo/file.txt"],
         }),
       ),
     ).toBe(false);

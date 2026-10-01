@@ -5,6 +5,7 @@ import {
   isExpectedPlannedSkipResult,
   isFolderSizeEligibleKind,
   resolveExplorerTreeRootPath,
+  resolveNewFolderTargetPath,
   resolvePasteDestinationPath,
   resolveWriteOperationRefreshPath,
   resolveWriteOperationTreeReloadPaths,
@@ -310,6 +311,61 @@ describe("explorerAppUtils", () => {
 
     expect(isExpectedPlannedSkipResult(event)).toBe(false);
     expect(shouldRenderCopyPasteResultDialog(event)).toBe(true);
+  });
+});
+
+describe("resolveNewFolderTargetPath", () => {
+  const entry = (name: string, kind: DirectoryEntry["kind"]): DirectoryEntry => ({
+    path: `/Users/demo/${name}`,
+    name,
+    extension: "",
+    kind,
+    isHidden: false,
+    isSymlink: false,
+  });
+  const folder = entry("Folder", "directory");
+  const file = entry("notes.txt", "file");
+  const target = (
+    selection: DirectoryEntry[],
+    options: { contextScope?: "selection" | "background"; isSearchMode?: boolean } = {},
+  ) =>
+    resolveNewFolderTargetPath({
+      currentPath: "/Users/demo",
+      selectedEntry: selection[0] ?? null,
+      selectedPaths: selection.map((item) => item.path),
+      isSearchMode: options.isSearchMode ?? false,
+      ...(options.contextScope ? { contextScope: options.contextScope } : {}),
+    });
+
+  it("makes the folder inside the one selected folder, otherwise in the folder on screen", () => {
+    expect(target([])).toBe("/Users/demo");
+    expect(target([folder])).toBe("/Users/demo/Folder");
+    // A file cannot hold it, and several items do not say where: next to them, as in Finder.
+    expect(target([file])).toBe("/Users/demo");
+    expect(target([folder, file])).toBe("/Users/demo");
+    expect(target([file, entry("more.txt", "file")])).toBe("/Users/demo");
+  });
+
+  it("offers nothing in the menu opened on a file or on several items", () => {
+    expect(target([folder], { contextScope: "selection" })).toBe("/Users/demo/Folder");
+    expect(target([file], { contextScope: "selection" })).toBeNull();
+    expect(target([folder, file], { contextScope: "selection" })).toBeNull();
+    expect(target([], { contextScope: "selection" })).toBe("/Users/demo");
+    // The menu opened on empty space is about the folder on screen, whatever is selected.
+    expect(target([file], { contextScope: "background" })).toBe("/Users/demo");
+  });
+
+  it("has no target in search results or without a folder on screen", () => {
+    expect(target([], { isSearchMode: true })).toBeNull();
+    expect(target([file], { isSearchMode: true })).toBeNull();
+    expect(
+      resolveNewFolderTargetPath({
+        currentPath: "",
+        selectedEntry: file,
+        selectedPaths: [file.path],
+        isSearchMode: false,
+      }),
+    ).toBeNull();
   });
 });
 
