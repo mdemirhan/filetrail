@@ -3,10 +3,8 @@ import { dirname, join, resolve } from "node:path";
 import { shell } from "electron";
 
 import {
-  type ActionLogRuntimeConflict,
   type IpcRequest,
   type WriteOperationAction,
-  type WriteOperationInitiator,
   type WriteOperationProgressEvent,
   type WriteOperationResult,
   isAbortError,
@@ -60,40 +58,11 @@ type PreparedCreateFolderOperation = {
   destinationPath: string;
 };
 
-export function createWriteOperationCoordinator(
-  writeService: WriteService,
-  fs: WriteOperationFs,
-  options: {
-    recordWriteOperation?: (args: {
-      action: WriteOperationAction;
-      operationId: string;
-      result: WriteOperationResult;
-      sourcePaths: string[];
-      destinationPaths: string[];
-      initiator?: WriteOperationInitiator | null;
-      requestedDestinationPath?: string | null;
-      runtimeConflicts?: ActionLogRuntimeConflict[];
-      metadata?: Record<string, string | number | boolean | null>;
-    }) => Promise<void>;
-  } = {},
-) {
+export function createWriteOperationCoordinator(writeService: WriteService, fs: WriteOperationFs) {
   const writeOperationSenders = new Map<string, WriteOperationSender>();
   const senderDetachers = new Map<string, () => void>();
   const copyPasteRequests = new Map<string, IpcRequest<"copyPaste:start">>();
   const localWriteOperationControllers = new Map<string, AbortController>();
-  const writeOperationMetadata = new Map<
-    string,
-    {
-      kind: string;
-      action: WriteOperationAction;
-      sourcePaths: string[];
-      targetPaths: string[];
-      initiator: WriteOperationInitiator | null;
-      requestedDestinationPath: string | null;
-      runtimeConflicts: Map<string, ActionLogRuntimeConflict>;
-      metadata?: Record<string, string | number | boolean | null>;
-    }
-  >();
   let activeWriteOperationId: string | null = null;
   let localWriteOperationSequence = 0;
 
@@ -112,71 +81,8 @@ export function createWriteOperationCoordinator(
   const writeServiceUnsubscribe = writeService.subscribe((event) => {
     const request = copyPasteRequests.get(event.operationId);
     const action = request?.action ?? "paste";
-    const metadata = writeOperationMetadata.get(event.operationId);
-    if (event.runtimeConflict && metadata) {
-      metadata.runtimeConflicts.set(
-        event.runtimeConflict.conflictId,
-        mergeRuntimeConflictRecord(
-          metadata.runtimeConflicts.get(event.runtimeConflict.conflictId) ?? null,
-          event.runtimeConflict,
-        ),
-      );
-    }
-    // A conflict answered by an earlier "do the same for the rest" never reaches the user,
-    // but it still belongs in the Action Log together with the answer that was applied.
-    const autoResolved = event.autoResolvedRuntimeConflict ?? null;
-    if (autoResolved && metadata) {
-      metadata.runtimeConflicts.set(autoResolved.conflict.conflictId, {
-        ...mergeRuntimeConflictRecord(
-          metadata.runtimeConflicts.get(autoResolved.conflict.conflictId) ?? null,
-          autoResolved.conflict,
-        ),
-        resolution: autoResolved.resolution,
-      });
-    }
     if (isTerminalStatus(event.status)) {
-      const logMetadata =
-        metadata?.metadata ??
-        (request
-          ? {
-              transferMode: event.mode,
-            }
-          : null);
-      if (event.result && options.recordWriteOperation) {
-        void options.recordWriteOperation({
-          action: metadata?.action ?? action,
-          operationId: event.operationId,
-          result: {
-            operationId: event.result.operationId,
-            action,
-            status: event.result.status,
-            targetPath: event.result.destinationDirectoryPath,
-            startedAt: event.result.startedAt,
-            finishedAt: event.result.finishedAt,
-            summary: event.result.summary,
-            items: event.result.items,
-            error: event.result.error,
-          },
-          sourcePaths:
-            metadata?.sourcePaths ??
-            (request && "sourcePaths" in request ? request.sourcePaths : []),
-          destinationPaths:
-            metadata?.targetPaths ??
-            (request && "destinationDirectoryPath" in request
-              ? [request.destinationDirectoryPath]
-              : []),
-          initiator: metadata?.initiator ?? request?.initiator ?? null,
-          requestedDestinationPath:
-            metadata?.requestedDestinationPath ??
-            (request && "destinationDirectoryPath" in request
-              ? request.destinationDirectoryPath
-              : null),
-          runtimeConflicts: metadata ? Array.from(metadata.runtimeConflicts.values()) : [],
-          ...(logMetadata ? { metadata: logMetadata } : {}),
-        });
-      }
       copyPasteRequests.delete(event.operationId);
-      writeOperationMetadata.delete(event.operationId);
       if (activeWriteOperationId === event.operationId) {
         activeWriteOperationId = null;
       }
@@ -199,7 +105,6 @@ export function createWriteOperationCoordinator(
           currentSourcePath: event.currentSourcePath,
           currentDestinationPath: event.currentDestinationPath,
           runtimeConflict: event.runtimeConflict,
-          autoResolvedRuntimeConflict: autoResolved,
           result: event.result
             ? {
                 operationId: event.result.operationId,
@@ -305,10 +210,6 @@ export function createWriteOperationCoordinator(
 
   function queueLocalWriteOperation(args: {
     action: WriteOperationAction;
-    kind: string;
-    sourcePaths: string[];
-    targetPaths: string[];
-    metadata: Record<string, string | number | boolean | null> | null;
     sender: WriteOperationSender;
     execute: (operationId: string, controller: AbortController) => Promise<void>;
   }): { operationId: string; status: "queued" } {
@@ -317,16 +218,6 @@ export function createWriteOperationCoordinator(
     activeWriteOperationId = operationId;
     localWriteOperationControllers.set(operationId, controller);
     attachSender(operationId, args.sender);
-    writeOperationMetadata.set(operationId, {
-      kind: args.kind,
-      action: args.action,
-      sourcePaths: args.sourcePaths,
-      targetPaths: args.targetPaths,
-      initiator: null,
-      requestedDestinationPath: args.targetPaths[0] ?? null,
-      runtimeConflicts: new Map(),
-      ...(args.metadata ? { metadata: args.metadata } : {}),
-    });
     emitLocalWriteOperationEvent({
       operationId,
       action: args.action,
@@ -357,7 +248,6 @@ export function createWriteOperationCoordinator(
 
   function releaseLocalWriteOperation(operationId: string): void {
     detachSender(operationId);
-    writeOperationMetadata.delete(operationId);
     localWriteOperationControllers.delete(operationId);
     if (activeWriteOperationId === operationId) {
       activeWriteOperationId = null;
@@ -369,20 +259,6 @@ export function createWriteOperationCoordinator(
     // Release the operation before telling the window, so a failed send can't leave the
     // write slot held and a renderer reacting to the final event can start the next write.
     if (isTerminalStatus(event.status)) {
-      const metadata = writeOperationMetadata.get(event.operationId);
-      if (event.result && options.recordWriteOperation) {
-        void options.recordWriteOperation({
-          action: metadata?.action ?? event.action,
-          operationId: event.operationId,
-          result: event.result,
-          sourcePaths: metadata?.sourcePaths ?? [],
-          destinationPaths: metadata?.targetPaths ?? [],
-          initiator: metadata?.initiator ?? null,
-          requestedDestinationPath: metadata?.requestedDestinationPath ?? null,
-          runtimeConflicts: metadata ? Array.from(metadata.runtimeConflicts.values()) : [],
-          ...(metadata?.metadata ? { metadata: metadata.metadata } : {}),
-        });
-      }
       releaseLocalWriteOperation(event.operationId);
     }
     if (sender) {
@@ -922,29 +798,8 @@ export function createWriteOperationCoordinator(
                 destinationDirectoryPath: payload.destinationDirectoryPath,
                 conflictResolution: payload.conflictResolution,
               });
-        const transferMode =
-          "analysisId" in payload
-            ? (writeService.getCopyPasteAnalysisUpdate(payload.analysisId).report?.mode ?? null)
-            : payload.mode;
         activeWriteOperationId = handle.operationId;
         copyPasteRequests.set(handle.operationId, payload);
-        writeOperationMetadata.set(handle.operationId, {
-          kind: "copyPaste",
-          action: payload.action,
-          sourcePaths: "sourcePaths" in payload ? payload.sourcePaths : [],
-          targetPaths:
-            "destinationDirectoryPath" in payload ? [payload.destinationDirectoryPath] : [],
-          initiator: payload.initiator ?? null,
-          requestedDestinationPath:
-            "destinationDirectoryPath" in payload
-              ? payload.destinationDirectoryPath
-              : (writeService.getCopyPasteAnalysisUpdate(payload.analysisId).report
-                  ?.destinationDirectoryPath ?? null),
-          runtimeConflicts: new Map(),
-          metadata: {
-            transferMode,
-          },
-        });
         attachSender(handle.operationId, event.sender);
         return handle;
       },
@@ -962,22 +817,12 @@ export function createWriteOperationCoordinator(
         if (!isOperationOwner(payload.operationId, event.sender)) {
           return REJECTED_REQUEST;
         }
-        const response = writeService.resolveRuntimeConflict(
+        return writeService.resolveRuntimeConflict(
           payload.operationId,
           payload.conflictId,
           payload.resolution,
           payload.applyToRemaining ?? false,
         );
-        // Only an answer the service accepted was applied, so only that one is logged.
-        const metadata = writeOperationMetadata.get(payload.operationId);
-        const currentConflict = metadata?.runtimeConflicts.get(payload.conflictId) ?? null;
-        if (response.ok && metadata && currentConflict) {
-          metadata.runtimeConflicts.set(payload.conflictId, {
-            ...currentConflict,
-            resolution: payload.resolution,
-          });
-        }
-        return response;
       },
       "writeOperation:rename": async (
         payload: IpcRequest<"writeOperation:rename">,
@@ -986,10 +831,6 @@ export function createWriteOperationCoordinator(
         const operation = await prepareWithReservedSlot(() => prepareRenameOperation(payload));
         return queueLocalWriteOperation({
           action: "rename",
-          kind: "rename",
-          sourcePaths: [operation.sourcePath],
-          targetPaths: [operation.destinationPath],
-          metadata: null,
           sender: event.sender,
           execute: (operationId, controller) =>
             executeRenameOperation(operation, operationId, controller),
@@ -1004,10 +845,6 @@ export function createWriteOperationCoordinator(
         );
         return queueLocalWriteOperation({
           action: "new_folder",
-          kind: "newFolder",
-          sourcePaths: [],
-          targetPaths: [operation.destinationPath],
-          metadata: null,
           sender: event.sender,
           execute: (operationId, controller) =>
             executeCreateFolderOperation(operation, operationId, controller),
@@ -1021,10 +858,6 @@ export function createWriteOperationCoordinator(
         ensureNoWriteOperationInFlight();
         return queueLocalWriteOperation({
           action: "trash",
-          kind: "trash",
-          sourcePaths: payload.paths,
-          targetPaths: [],
-          metadata: null,
           sender: event.sender,
           execute: (operationId, controller) =>
             executeTrashOperation(payload, operationId, controller),
@@ -1038,10 +871,6 @@ export function createWriteOperationCoordinator(
         ensureNoWriteOperationInFlight();
         return queueLocalWriteOperation({
           action: "delete_immediately",
-          kind: "deleteImmediately",
-          sourcePaths: payload.paths,
-          targetPaths: [],
-          metadata: null,
           sender: event.sender,
           execute: (operationId, controller) =>
             executeDeleteImmediatelyOperation(payload, operationId, controller),
@@ -1064,25 +893,8 @@ export function createWriteOperationCoordinator(
       writeOperationSenders.clear();
       copyPasteRequests.clear();
       localWriteOperationControllers.clear();
-      writeOperationMetadata.clear();
       activeWriteOperationId = null;
     },
-  };
-}
-
-function mergeRuntimeConflictRecord(
-  current: ActionLogRuntimeConflict | null,
-  runtimeConflict: NonNullable<WriteOperationProgressEvent["runtimeConflict"]>,
-): ActionLogRuntimeConflict {
-  return {
-    conflictId: runtimeConflict.conflictId,
-    sourcePath: runtimeConflict.sourcePath,
-    destinationPath: runtimeConflict.destinationPath,
-    sourceKind: runtimeConflict.sourceKind,
-    destinationKind: runtimeConflict.destinationKind,
-    conflictClass: runtimeConflict.conflictClass,
-    reason: runtimeConflict.reason,
-    resolution: current?.resolution ?? null,
   };
 }
 

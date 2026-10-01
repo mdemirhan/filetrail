@@ -147,7 +147,7 @@ export async function executeCopyPasteFromAnalysis(args: {
     try {
       const outcome = await executeResolvedNode(context, node);
       itemResults.push(outcomeItemResult(node, outcome));
-      // Surface children (files, and folders that failed) so they appear in the action log
+      // Surface children (files, and folders that failed) in the result.
       itemResults.push(...outcome.childItems);
     } catch (error) {
       if (isAbortError(error) || args.signal.aborted) {
@@ -206,7 +206,7 @@ type ExecuteNodeResult = {
   error: string | null;
   // Where the item ended up (or was headed), after any runtime answer.
   destinationPath: string;
-  // Children to surface in the action log (files, and folders that failed themselves).
+  // Children to surface in the result (files, and folders that failed themselves).
   childItems: CopyPasteItemResult[];
 };
 
@@ -266,10 +266,6 @@ function emitProgress(
   status: "running" | "awaiting_resolution",
   node: ResolvedCopyPasteNode | null,
   runtimeConflict: CopyPasteRuntimeConflict | null,
-  autoResolvedRuntimeConflict?: {
-    conflict: CopyPasteRuntimeConflict;
-    resolution: CopyPasteRuntimeResolutionAction;
-  },
 ): void {
   context.emit({
     operationId: context.operationId,
@@ -283,14 +279,6 @@ function emitProgress(
     currentSourcePath: node?.node.sourcePath ?? null,
     currentDestinationPath: node ? displayPath(node.destinationPath) : null,
     runtimeConflict: runtimeConflict ? displayConflict(runtimeConflict) : null,
-    ...(autoResolvedRuntimeConflict
-      ? {
-          autoResolvedRuntimeConflict: {
-            ...autoResolvedRuntimeConflict,
-            conflict: displayConflict(autoResolvedRuntimeConflict.conflict),
-          },
-        }
-      : {}),
     result: null,
   });
 
@@ -360,8 +348,6 @@ async function answerRuntimeConflict(
 ): Promise<CopyPasteRuntimeResolutionAction> {
   const standing = context.autoResolve(conflict);
   if (standing !== null) {
-    // Nothing is shown, but the answer is still recorded (the Action Log lists it).
-    emitProgress(context, "running", node, null, { conflict, resolution: standing });
     return standing;
   }
   // Asked for before the question goes out, so an answer given right away isn't lost.
@@ -565,7 +551,7 @@ async function executeDirectoryNode(
     if (childResult.itemStatus === "failed") {
       hasChildFailure = true;
     }
-    // Bubble up file items, and folders that failed themselves, for the action log.
+    // Bubble up file items, and folders that failed themselves, into the result.
     if (child.node.sourceKind !== "directory" || childResult.error !== null) {
       bubbledChildItems.push(outcomeItemResult(child, childResult));
     }

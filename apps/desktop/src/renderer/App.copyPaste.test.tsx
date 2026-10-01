@@ -695,9 +695,6 @@ vi.mock("./components/HelpView", () => ({
     </div>
   ),
 }));
-vi.mock("./components/ActionLogView", () => ({
-  ActionLogView: () => <div data-testid="action-log-view">Action Log</div>,
-}));
 vi.mock("./components/ToolbarIcon", () => ({
   ToolbarIcon: () => null,
 }));
@@ -8731,9 +8728,6 @@ function createAppHarness(
       }
       if (channel === "app:writeLog") {
         return { ok: true } as IpcResponse<C>;
-      }
-      if (channel === "actionLog:list") {
-        return { items: [] } as IpcResponse<C>;
       }
       throw new Error(`Unhandled channel in test harness: ${channel}`);
     },

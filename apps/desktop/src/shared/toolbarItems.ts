@@ -20,7 +20,6 @@ export type ToolbarIconName =
   | "close"
   | "sortAsc"
   | "sortDesc"
-  | "actionLog"
   | "help"
   | "settings"
   | "search"
@@ -69,7 +68,6 @@ export type ToolbarItemId =
   | "hidden"
   | "infoPanel"
   | "infoRow"
-  | "actionLog"
   | "help"
   | "theme"
   | "settings"
@@ -266,14 +264,6 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     shortcutLabel: "Cmd+Shift+I",
   },
   {
-    id: "actionLog",
-    label: "Action Log",
-    icon: "actionLog",
-    kind: "button",
-    surfaces: ["left"],
-    commandType: "openActionLog",
-  },
-  {
     id: "help",
     label: "Help",
     icon: "help",
@@ -459,7 +449,7 @@ export const DEFAULT_LEFT_TOOLBAR_ITEMS: LeftToolbarItems = {
     "infoPanel",
     "infoRow",
   ],
-  utility: ["actionLog", "help", "leftSeparator", "theme", "settings"],
+  utility: ["help", "leftSeparator", "theme", "settings"],
 };
 
 const TOOLBAR_ITEM_ID_SET = new Set<ToolbarItemId>(TOOLBAR_ITEM_IDS);

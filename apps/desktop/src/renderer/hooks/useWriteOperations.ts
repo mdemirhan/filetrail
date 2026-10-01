@@ -45,7 +45,6 @@ type CopyPasteDialogState =
       analysisId: string;
       action: "paste" | "move_to" | "duplicate";
       clearClipboardOnStart: boolean;
-      initiator?: "clipboard" | "drag_drop" | "move_dialog" | null;
       sourceSurface?: InternalMoveSourceSurface | null;
       pendingTreeSelectionPath?: string | null;
     }
@@ -57,7 +56,6 @@ type CopyPasteDialogState =
       overrides: Readonly<Record<string, CopyPasteChoice>>;
       action: "paste" | "move_to" | "duplicate";
       clearClipboardOnStart: boolean;
-      initiator?: "clipboard" | "drag_drop" | "move_dialog" | null;
       sourceSurface?: InternalMoveSourceSurface | null;
       pendingTreeSelectionPath?: string | null;
     }

@@ -92,7 +92,7 @@ export const SHORTCUT_ITEMS: readonly ShortcutItem[] = [
   { group: "views", shortcut: "Cmd+0", description: "Actual size" },
   { group: "views", shortcut: "Cmd+,", description: "Settings" },
   { group: "views", shortcut: "?", description: "Help" },
-  { group: "views", shortcut: "Esc", description: "Return from Help or the Action Log" },
+  { group: "views", shortcut: "Esc", description: "Return from Help" },
 ];
 
 export const HELP_TOPICS: readonly HelpTopic[] = [
@@ -206,11 +206,6 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
             label: "Same name",
             description:
               "If an item already exists, you choose: Replace, Keep both, Merge (for folders) or Skip. Replaced items go to the Trash.",
-          },
-          {
-            label: "Action Log",
-            description:
-              "A record of what was copied, moved and deleted, in the View menu (Settings → General turns it on).",
           },
         ],
       },
@@ -429,7 +424,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           { label: "Zoom", description: "Makes everything larger or smaller, text included." },
           {
             label: "Theme, accent, font",
-            description: "Settings → Appearance. Help and the Action Log follow them too.",
+            description: "Settings → Appearance. Help follows them too.",
           },
         ],
       },

@@ -1,14 +1,8 @@
-import { dirname } from "node:path";
 import { app, clipboard, ipcMain, shell } from "electron";
 
 import type { AppLogEntry } from "@filetrail/contracts";
 import { ExplorerWorkerClient, createWriteService, getPathSuggestions } from "@filetrail/core";
 import type { AppPreferences } from "../shared/appPreferences";
-import {
-  createActionLogRecorder,
-  createActionLogStore,
-  resolveActionLogFilePath,
-} from "./actionLog";
 import { type AppLogger, writeStructuredAppLogEntry } from "./appLog";
 import type { AppStateStore } from "./appStateStore";
 import { toPreferencePatch } from "./bootstrap/preferencesPatch";
@@ -70,31 +64,13 @@ export async function bootstrapMainProcess(
     // Items replaced by a paste go to the Trash, so a replace can always be undone.
     fileSystem: { ...originalFileSystem, trash: (path) => shell.trashItem(path) },
   });
-  const actionLogStore = createActionLogStore(
-    resolveActionLogFilePath(dirname(appStateStore.getFilePath())),
-    {
-      onError: (error) => {
-        logger.error("[filetrail] action log failed", error);
-      },
-    },
-  );
-  const actionLogRecorder = createActionLogRecorder(actionLogStore);
-  const writeCoordinator = createWriteOperationCoordinator(
-    writeService,
-    {
-      lstat: originalFileSystem.lstat,
-      stat: originalFileSystem.stat,
-      mkdir: (path) => originalFileSystem.mkdir(path),
-      rename: originalRename,
-      rm: (path, options) => originalFileSystem.rm(path, options),
-    },
-    {
-      recordWriteOperation: (args) =>
-        appStateStore.getPreferences().actionLogEnabled
-          ? actionLogRecorder.recordWriteOperation(args)
-          : Promise.resolve(),
-    },
-  );
+  const writeCoordinator = createWriteOperationCoordinator(writeService, {
+    lstat: originalFileSystem.lstat,
+    stat: originalFileSystem.stat,
+    mkdir: (path) => originalFileSystem.mkdir(path),
+    rename: originalRename,
+    rm: (path, options) => originalFileSystem.rm(path, options),
+  });
   const folderSizeHandlers = createFolderSizeHandlers({ getFolderSize, cancelFolderSize });
   activeWorkerClient = workerClient;
   disposeWriteCoordinator?.();
@@ -110,9 +86,6 @@ export async function bootstrapMainProcess(
       }),
       "app:getPreferences": () => ({
         preferences: appStateStore.getPreferences(),
-      }),
-      "actionLog:list": async () => ({
-        items: await actionLogStore.list(),
       }),
       "app:getLaunchContext": () => launchContext,
       "app:updatePreferences": (payload, event) => {
@@ -209,56 +182,14 @@ export async function bootstrapMainProcess(
       "folderSize:start": (payload) => folderSizeHandlers.start(payload),
       "folderSize:getStatus": (payload) => folderSizeHandlers.getStatus(payload),
       "folderSize:cancel": (payload) => folderSizeHandlers.cancel(payload),
-      "system:openPath": async (payload) => {
-        const startedAtMs = Date.now();
-        const response = await openPath(payload);
-        if (appStateStore.getPreferences().actionLogEnabled) {
-          void actionLogRecorder.recordOpenPath({
-            path: payload.path,
-            ok: response.ok,
-            error: response.error,
-            startedAtMs,
-            finishedAtMs: Date.now(),
-          });
-        }
-        return response;
-      },
+      "system:openPath": (payload) => openPath(payload),
       "system:quickLook": (payload, event) => quickLookPath(payload, event),
       "system:getVolumeInfo": (payload) => getVolumeInfo(payload),
       "system:pickApplication": (_payload, event) => pickApplication(event),
       "system:pickDirectory": (payload, event) => pickDirectory(payload, event),
-      "system:openPathsWithApplication": async (payload) => {
-        const startedAtMs = Date.now();
-        const response = await openPathsWithApplication(payload);
-        if (appStateStore.getPreferences().actionLogEnabled) {
-          void actionLogRecorder.recordOpenWithApplication({
-            applicationPath: payload.applicationPath,
-            applicationName: resolveApplicationDisplayName(payload.applicationPath),
-            paths: payload.paths,
-            ok: response.ok,
-            error: response.error,
-            startedAtMs,
-            finishedAtMs: Date.now(),
-          });
-        }
-        return response;
-      },
+      "system:openPathsWithApplication": (payload) => openPathsWithApplication(payload),
       "system:openInTerminal": async (payload) => {
-        const startedAtMs = Date.now();
-        const terminalApp = appStateStore.getPreferences().terminalApp;
-        const terminalName = resolveTerminalApplicationName(terminalApp);
-        const response = await openInTerminal(payload, terminalApp);
-        if (appStateStore.getPreferences().actionLogEnabled) {
-          void actionLogRecorder.recordOpenInTerminal({
-            requestedPath: payload.path,
-            targetPath: response.targetPath,
-            terminalName: response.terminalName ?? terminalName,
-            ok: response.ok,
-            error: response.error,
-            startedAtMs,
-            finishedAtMs: Date.now(),
-          });
-        }
+        const response = await openInTerminal(payload, appStateStore.getPreferences().terminalApp);
         return {
           ok: response.ok,
           error: response.error,

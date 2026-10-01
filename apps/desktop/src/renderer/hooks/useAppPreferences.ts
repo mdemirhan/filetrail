@@ -75,9 +75,6 @@ export function useAppPreferences() {
   const [notificationDurationSeconds, setNotificationDurationSeconds] = useState(
     DEFAULT_APP_PREFERENCES.notificationDurationSeconds,
   );
-  const [actionLogEnabled, setActionLogEnabled] = useState(
-    DEFAULT_APP_PREFERENCES.actionLogEnabled,
-  );
   const [topToolbarItems, setTopToolbarItems] = useState(DEFAULT_APP_PREFERENCES.topToolbarItems);
   const [leftToolbarItems, setLeftToolbarItems] = useState<LeftToolbarItems>(
     DEFAULT_APP_PREFERENCES.leftToolbarItems,
@@ -172,8 +169,6 @@ export function useAppPreferences() {
     setNotificationsEnabled,
     notificationDurationSeconds,
     setNotificationDurationSeconds,
-    actionLogEnabled,
-    setActionLogEnabled,
     topToolbarItems,
     setTopToolbarItems,
     leftToolbarItems,
@@ -265,7 +260,6 @@ export function applyPreferencesPatch(store: AppPreferencesStore, patch: Incomin
   set("tabSwitchesExplorerPanes", store.setTabSwitchesExplorerPanes);
   set("notificationsEnabled", store.setNotificationsEnabled);
   set("notificationDurationSeconds", store.setNotificationDurationSeconds);
-  set("actionLogEnabled", store.setActionLogEnabled);
   set("topToolbarItems", store.setTopToolbarItems);
   set("leftToolbarItems", store.setLeftToolbarItems);
   set("showSidebarRail", store.setShowSidebarRail);

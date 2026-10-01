@@ -151,16 +151,6 @@ export function ToolbarIcon({
       </svg>
     );
   }
-  /* --- Modernized: actionLog — list lines with clock badge --- */
-  if (name === "actionLog") {
-    return (
-      <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" role="presentation">
-        <path d="M3 6h14M3 10h14M3 14h10M3 18h8" />
-        <circle cx="19" cy="17" r="4" />
-        <path d="M19 15v2.5l1.5 1" />
-      </svg>
-    );
-  }
   /* --- Modernized: drawer — right-biased panel split --- */
   if (name === "drawer") {
     return (

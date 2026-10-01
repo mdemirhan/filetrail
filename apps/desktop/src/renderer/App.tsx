@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
-import type {
-  ActionLogEntry,
-  IpcRequest,
-  IpcResponse,
-  WriteOperationProgressEvent,
-} from "@filetrail/contracts";
+import type { IpcRequest, IpcResponse, WriteOperationProgressEvent } from "@filetrail/contracts";
 
 import {
   type AppPreferences,
@@ -19,7 +14,6 @@ import {
 } from "../shared/appPreferences";
 import { DEFAULT_TOP_TOOLBAR_ITEMS } from "../shared/toolbarItems";
 import { type VisitedFolder, forgetVisitedFolder } from "../shared/visitedFolders";
-import { ActionLogView } from "./components/ActionLogView";
 import { AppDialogs } from "./components/AppDialogs";
 import { ExplorerWorkspace } from "./components/ExplorerWorkspace";
 import { HelpView } from "./components/HelpView";
@@ -100,9 +94,6 @@ export function App() {
 
   const client = useFiletrailClient();
   const folderSizeCache = useFolderSizeCache(client);
-  const [actionLogEntries, setActionLogEntries] = useState<ActionLogEntry[]>([]);
-  const [actionLogLoading, setActionLogLoading] = useState(false);
-  const [actionLogError, setActionLogError] = useState<string | null>(null);
   // The folders that have been opened, loaded each time the Go To or Move To box opens.
   const [visitedFolders, setVisitedFolders] = useState<VisitedFolder[]>([]);
   const [volumeAvailableBytes, setVolumeAvailableBytes] = useState<number | null>(null);
@@ -159,8 +150,6 @@ export function App() {
     setNotificationsEnabled,
     notificationDurationSeconds,
     setNotificationDurationSeconds,
-    actionLogEnabled,
-    setActionLogEnabled,
     topToolbarItems,
     setTopToolbarItems,
     leftToolbarItems,
@@ -851,7 +840,6 @@ export function App() {
     actions: {
       dismissActionNotice,
       handleCopyPasteDialogEscape,
-      openActionLogView,
       openSettingsView,
       openLocationSheet,
       focusFileSearch,
@@ -930,7 +918,6 @@ export function App() {
     tabSwitchesExplorerPanes,
     notificationsEnabled,
     notificationDurationSeconds,
-    actionLogEnabled,
     topToolbarItems,
     leftToolbarItems,
     showSidebarRail,
@@ -1094,7 +1081,6 @@ export function App() {
         setTabSwitchesExplorerPanes(preferences.tabSwitchesExplorerPanes);
         setNotificationsEnabled(preferences.notificationsEnabled);
         setNotificationDurationSeconds(preferences.notificationDurationSeconds);
-        setActionLogEnabled(preferences.actionLogEnabled);
         setTopToolbarItems(preferences.topToolbarItems);
         setLeftToolbarItems(preferences.leftToolbarItems);
         setShowSidebarRail(preferences.showSidebarRail);
@@ -1407,51 +1393,6 @@ export function App() {
     });
   }
 
-  function openActionLogView() {
-    if (!actionLogEnabled) {
-      return;
-    }
-    setLocationSheetOpen(false);
-    setLocationError(null);
-    setThemeMenuOpen(false);
-    setSearchPopoverOpen(false);
-    setMainView("action-log");
-  }
-
-  const refreshActionLog = useCallback(async () => {
-    if (!actionLogEnabled) {
-      setActionLogEntries([]);
-      setActionLogError(null);
-      return;
-    }
-    setActionLogLoading(true);
-    setActionLogError(null);
-    try {
-      const response = await client.invoke("actionLog:list", {});
-      setActionLogEntries(response.items);
-    } catch (error) {
-      logger.error("action log load failed", error);
-      setActionLogError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setActionLogLoading(false);
-    }
-  }, [actionLogEnabled, client]);
-
-  async function copyActionLogEntryText(text: string) {
-    await client.invoke("system:copyText", { text });
-  }
-
-  useEffect(() => {
-    if (!actionLogEnabled && mainView === "action-log") {
-      setMainView("explorer");
-      return;
-    }
-    if (mainView !== "action-log" || !actionLogEnabled) {
-      return;
-    }
-    void refreshActionLog();
-  }, [actionLogEnabled, mainView, refreshActionLog, setMainView]);
-
   function navigateDownAction() {
     if (focusedPane === "tree") {
       void openTreeNode();
@@ -1559,8 +1500,6 @@ export function App() {
                 }
                 setThemeMenuOpen(false);
               },
-              actionLogEnabled,
-              onOpenActionLog: openActionLogView,
               onOpenHelp: () => setMainView("help"),
               onOpenSettings: openSettingsView,
               includeHidden,
@@ -1981,27 +1920,10 @@ export function App() {
                 <ToolbarIcon name="back" />
                 <span>Files</span>
               </button>
-              <span className="single-panel-title">
-                {mainView === "action-log" ? "Action Log" : "Help"}
-              </span>
+              <span className="single-panel-title">Help</span>
             </header>
             <section ref={singlePanelRef} className="pane single-panel-pane">
-              {mainView === "help" ? (
-                <HelpView layoutMode={singlePanelLayout} />
-              ) : mainView === "action-log" ? (
-                <ActionLogView
-                  entries={actionLogEntries}
-                  loading={actionLogLoading}
-                  error={actionLogError}
-                  theme={effectiveTheme}
-                  accent={accent}
-                  layoutMode={singlePanelLayout}
-                  onCopyEntryText={copyActionLogEntryText}
-                  onRefresh={() => {
-                    void refreshActionLog();
-                  }}
-                />
-              ) : null}
+              {mainView === "help" ? <HelpView layoutMode={singlePanelLayout} /> : null}
             </section>
           </section>
         )}

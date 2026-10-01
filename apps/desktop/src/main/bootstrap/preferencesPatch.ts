@@ -76,9 +76,6 @@ export function toPreferencePatch(
   if (value.notificationDurationSeconds !== undefined) {
     patch.notificationDurationSeconds = value.notificationDurationSeconds;
   }
-  if (value.actionLogEnabled !== undefined) {
-    patch.actionLogEnabled = value.actionLogEnabled;
-  }
   if (value.propertiesOpen !== undefined) {
     patch.propertiesOpen = value.propertiesOpen;
   }

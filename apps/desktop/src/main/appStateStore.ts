@@ -399,10 +399,6 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
         ? record.notificationDurationSeconds
         : currentDefaults.notificationDurationSeconds,
     ),
-    actionLogEnabled:
-      typeof record.actionLogEnabled === "boolean"
-        ? record.actionLogEnabled
-        : currentDefaults.actionLogEnabled,
     propertiesOpen:
       typeof record.propertiesOpen === "boolean"
         ? record.propertiesOpen

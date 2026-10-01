@@ -101,8 +101,6 @@ export function TreePane({
   themeMenuRef,
   onToggleThemeMenu,
   onSelectTheme,
-  actionLogEnabled,
-  onOpenActionLog,
   onClearSelection,
   onOpenHelp,
   onOpenSettings,
@@ -168,8 +166,6 @@ export function TreePane({
   themeMenuRef: React.RefObject<HTMLDivElement | null>;
   onToggleThemeMenu: () => void;
   onSelectTheme: (theme: ThemePreference) => void;
-  actionLogEnabled: boolean;
-  onOpenActionLog: () => void;
   onClearSelection: () => void;
   onOpenHelp: () => void;
   onOpenSettings: () => void;
@@ -676,24 +672,6 @@ export function TreePane({
           aria-pressed={infoRowOpen}
         >
           <ToolbarIcon name="infoRow" />
-        </button>
-      );
-    }
-    if (itemId === "actionLog") {
-      // No button while the action log is turned off in Settings.
-      if (!actionLogEnabled) {
-        return null;
-      }
-      return (
-        <button
-          key={itemId}
-          type="button"
-          className="sidebar-rail-button"
-          onClick={onOpenActionLog}
-          title={getToolbarTooltip(itemId)}
-          aria-label="Open action log"
-        >
-          <ToolbarIcon name="actionLog" />
         </button>
       );
     }

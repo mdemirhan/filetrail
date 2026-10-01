@@ -16,10 +16,9 @@ const NATIVE_EDIT_COMMANDS: Partial<Record<RendererCommandType, keyof NativeEdit
 export function createApplicationMenuTemplate(
   webContents: Pick<WebContents, "send">,
   options: {
-    actionLogEnabled: boolean;
     // Settings is its own window; main opens it directly when provided.
     onOpenSettings?: () => void;
-  } = { actionLogEnabled: true },
+  } = {},
 ): MenuItemConstructorOptions[] {
   const sendCommand = (type: RendererCommandType, focusedWindow?: unknown) => {
     // The menu is shared by every window. When another window (Settings) is focused, edit
@@ -154,15 +153,6 @@ export function createApplicationMenuTemplate(
           accelerator: "CommandOrControl+Shift+I",
           click: (_item, window) => sendCommand("toggleInfoRow", window),
         },
-        ...(options.actionLogEnabled
-          ? [
-              { type: "separator" as const },
-              {
-                label: "Action Log",
-                click: (_item: unknown, window: unknown) => sendCommand("openActionLog", window),
-              },
-            ]
-          : []),
         { type: "separator" },
         {
           label: "Refresh",

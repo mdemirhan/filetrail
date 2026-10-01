@@ -91,7 +91,6 @@ export function SettingsWindowApp() {
     tabSwitchesExplorerPanes: preferences.tabSwitchesExplorerPanes,
     notificationsEnabled: preferences.notificationsEnabled,
     notificationDurationSeconds: preferences.notificationDurationSeconds,
-    actionLogEnabled: preferences.actionLogEnabled,
     topToolbarItems: preferences.topToolbarItems,
     leftToolbarItems: preferences.leftToolbarItems,
     showSidebarRail: preferences.showSidebarRail,
@@ -319,7 +318,6 @@ export function SettingsWindowApp() {
             tabSwitchesExplorerPanes={preferences.tabSwitchesExplorerPanes}
             notificationsEnabled={preferences.notificationsEnabled}
             notificationDurationSeconds={preferences.notificationDurationSeconds}
-            actionLogEnabled={preferences.actionLogEnabled}
             topToolbarItems={preferences.topToolbarItems}
             leftToolbarItems={preferences.leftToolbarItems}
             showSidebarRail={preferences.showSidebarRail}
@@ -355,7 +353,6 @@ export function SettingsWindowApp() {
             onTabSwitchesExplorerPanesChange={preferences.setTabSwitchesExplorerPanes}
             onNotificationsEnabledChange={preferences.setNotificationsEnabled}
             onNotificationDurationSecondsChange={preferences.setNotificationDurationSeconds}
-            onActionLogEnabledChange={preferences.setActionLogEnabled}
             onTopToolbarItemsChange={preferences.setTopToolbarItems}
             onLeftToolbarItemsChange={preferences.setLeftToolbarItems}
             onResetTopToolbar={() => preferences.setTopToolbarItems([...DEFAULT_TOP_TOOLBAR_ITEMS])}

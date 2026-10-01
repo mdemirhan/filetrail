@@ -124,16 +124,6 @@ describe("toPreferencePatch", () => {
     });
   });
 
-  it("preserves action log preference fields", () => {
-    expect(
-      toPreferencePatch({
-        actionLogEnabled: false,
-      }),
-    ).toEqual({
-      actionLogEnabled: false,
-    });
-  });
-
   it("preserves toolbar layout preferences", () => {
     expect(
       toPreferencePatch({

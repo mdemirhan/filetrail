@@ -31,7 +31,6 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       tabSwitchesExplorerPanes={true}
       notificationsEnabled={true}
       notificationDurationSeconds={4}
-      actionLogEnabled={true}
       topToolbarItems={[...DEFAULT_TOP_TOOLBAR_ITEMS]}
       leftToolbarItems={{
         main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
@@ -95,7 +94,6 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       onTabSwitchesExplorerPanesChange={() => undefined}
       onNotificationsEnabledChange={() => undefined}
       onNotificationDurationSecondsChange={() => undefined}
-      onActionLogEnabledChange={() => undefined}
       onTopToolbarItemsChange={() => undefined}
       onLeftToolbarItemsChange={() => undefined}
       onResetTopToolbar={() => undefined}
@@ -434,9 +432,7 @@ describe("SettingsView", () => {
     const leftRailEditor = screen.getByRole("group", { name: "Left rail" });
     const utilityZoneEditor = screen.getByRole("group", { name: "Bottom rail" });
 
-    fireEvent.click(
-      within(leftRailEditor).getByRole("button", { name: "Add Action Log to Left rail" }),
-    );
+    fireEvent.click(within(leftRailEditor).getByRole("button", { name: "Add Trash to Left rail" }));
     fireEvent.click(
       within(utilityZoneEditor).getByRole("button", { name: "Add Trash to Bottom rail" }),
     );
@@ -444,7 +440,7 @@ describe("SettingsView", () => {
     fireEvent.click(within(leftRailEditor).getByRole("button", { name: "Reset" }));
 
     expect(onLeftToolbarItemsChange).toHaveBeenNthCalledWith(1, {
-      main: ["home", "help", "actionLog"],
+      main: ["home", "help", "trash"],
       utility: ["settings"],
     });
     expect(onLeftToolbarItemsChange).toHaveBeenNthCalledWith(2, {
@@ -468,7 +464,6 @@ describe("SettingsView", () => {
     expect(
       screen.queryByRole("button", { name: "Add Root Tree At Home to Top toolbar" }),
     ).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add Action Log to Top toolbar" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add Help to Top toolbar" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add Back to Left rail" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add Forward to Left rail" })).toBeNull();
@@ -558,9 +553,9 @@ describe("SettingsView", () => {
       utilityAddButtons.slice(0, 4).map((button) => button.getAttribute("aria-label")),
     ).toEqual([
       "Add Separator to Bottom rail",
-      "Add Action Log to Bottom rail",
       "Add Help to Bottom rail",
       "Add Theme to Bottom rail",
+      "Add Home to Bottom rail",
     ]);
   });
 
@@ -723,18 +718,6 @@ describe("SettingsView", () => {
 
     expect(onNotificationsEnabledChange).toHaveBeenCalledWith(false);
     expect(onNotificationDurationSecondsChange).toHaveBeenCalledWith(6);
-  });
-
-  it("forwards action log preference changes", () => {
-    const onActionLogEnabledChange = vi.fn();
-    renderSettingsView({
-      actionLogEnabled: true,
-      onActionLogEnabledChange,
-    });
-
-    fireEvent.click(screen.getByLabelText("Enable action log"));
-
-    expect(onActionLogEnabledChange).toHaveBeenCalledWith(false);
   });
 
   it("renders configured Open With applications", () => {

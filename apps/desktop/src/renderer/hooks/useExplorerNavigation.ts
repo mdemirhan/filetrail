@@ -14,9 +14,7 @@ export function useExplorerNavigation() {
   type SortBy = IpcRequest<"directory:getSnapshot">["sortBy"];
   type SortDirection = IpcRequest<"directory:getSnapshot">["sortDirection"];
 
-  const [mainView, setMainView] = useState<"explorer" | "help" | "settings" | "action-log">(
-    "explorer",
-  );
+  const [mainView, setMainView] = useState<"explorer" | "help" | "settings">("explorer");
   const [treeRootPath, setTreeRootPath] = useState("");
   const [homePath, setHomePath] = useState("");
   const [treeNodes, setTreeNodes] = useState<Record<string, TreeNodeState>>({});

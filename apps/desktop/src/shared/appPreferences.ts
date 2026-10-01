@@ -316,7 +316,6 @@ export type AppPreferences = {
   tabSwitchesExplorerPanes: boolean;
   notificationsEnabled: boolean;
   notificationDurationSeconds: number;
-  actionLogEnabled: boolean;
   propertiesOpen: boolean;
   detailRowOpen: boolean;
   topToolbarItems: ToolbarItemId[];
@@ -371,7 +370,6 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   tabSwitchesExplorerPanes: true,
   notificationsEnabled: true,
   notificationDurationSeconds: 4,
-  actionLogEnabled: true,
   propertiesOpen: false,
   detailRowOpen: false,
   topToolbarItems: [...DEFAULT_TOP_TOOLBAR_ITEMS],

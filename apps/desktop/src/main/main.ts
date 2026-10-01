@@ -4,13 +4,13 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { BrowserWindow, Menu, app, nativeImage, nativeTheme, shell } from "electron";
 
 import { type AppPreferences, isThemeInGroup } from "../shared/appPreferences";
-import { resolveActionLogFilePath } from "./actionLog";
 import { createAppLogger, isDebugLoggingEnabled, resolveAppLogFilePath } from "./appLog";
 import { createApplicationMenuTemplate } from "./appMenu";
 import { type AppStateStore, createAppStateStore, resolveAppStatePath } from "./appStateStore";
 import { bootstrapMainProcess, getMainProcessStatus, shutdownMainProcess } from "./bootstrap";
 import { resolveBundledFdBinaryPath } from "./fdBinary";
 import { resolveStartupFolderPath } from "./launchContext";
+import { removeRetiredActionLogFiles } from "./logRotation";
 let mainWindowRef: BrowserWindow | null = null;
 let settingsWindowRef: BrowserWindow | null = null;
 let appStateStoreRef: AppStateStore | null = null;
@@ -32,13 +32,13 @@ if (hasSingleInstanceLock) {
     .then(async () => {
       const userDataPath = app.getPath("userData");
       const appLogPath = resolveAppLogFilePath(userDataPath);
-      const actionLogPath = resolveActionLogFilePath(userDataPath);
       const debugEnabled = isDebugLoggingEnabled();
       const appLogger = createAppLogger(appLogPath, {
         debugEnabled,
       });
       appLoggerRef = appLogger;
       installProcessLoggingHandlers(appLogger);
+      void removeRetiredActionLogFiles(dirname(appLogPath));
       const launchContext = {
         startupFolderPath: resolveStartupFolderPath(process.argv, resolveLaunchWorkingDirectory(), {
           appPath: app.getAppPath(),
@@ -56,7 +56,6 @@ if (hasSingleInstanceLock) {
         pid: process.pid,
         userDataPath,
         appLogPath,
-        actionLogPath,
         startupFolderPath: launchContext.startupFolderPath,
         debugEnabled,
         fdBinaryPath: fdStatus.path,
@@ -105,10 +104,6 @@ if (hasSingleInstanceLock) {
             if (window.webContents.id !== change.senderId) {
               window.webContents.send("filetrail:preferencesChanged", change.patch);
             }
-          }
-          const window = mainWindowRef ?? BrowserWindow.getAllWindows()[0] ?? null;
-          if (change.patch.actionLogEnabled !== undefined && window && !window.isDestroyed()) {
-            applyApplicationMenu(window, preferences.actionLogEnabled);
           }
           if (change.patch.theme !== undefined) {
             applyNativeAppearance(preferences.theme);
@@ -257,7 +252,7 @@ function createWindow(): BrowserWindow {
     if (storedWindowState.maximized) {
       mainWindow.maximize();
     }
-    applyApplicationMenu(mainWindow, appStateStore.getPreferences().actionLogEnabled);
+    applyApplicationMenu(mainWindow);
     mainWindow.show();
   });
 
@@ -404,11 +399,10 @@ function keepWindowZoom(window: BrowserWindow, appStateStore: AppStateStore): vo
   });
 }
 
-function applyApplicationMenu(mainWindow: BrowserWindow, actionLogEnabled: boolean): void {
+function applyApplicationMenu(mainWindow: BrowserWindow): void {
   Menu.setApplicationMenu(
     Menu.buildFromTemplate(
       createApplicationMenuTemplate(mainWindow.webContents, {
-        actionLogEnabled,
         onOpenSettings: openSettingsWindow,
       }),
     ),

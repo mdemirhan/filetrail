@@ -114,14 +114,6 @@ describe("writeService runtime conflicts", () => {
       ["/source/a.txt", "destination_created"],
       ["/source/b.txt", "source_changed"],
     ]);
-    const autoResolved = events.flatMap((event) =>
-      event.autoResolvedRuntimeConflict ? [event.autoResolvedRuntimeConflict] : [],
-    );
-    expect(autoResolved).toHaveLength(1);
-    expect(autoResolved[0]?.conflict.sourcePath).toBe("/source/c.txt");
-    expect(autoResolved[0]?.resolution).toBe("keep_both");
-    const autoResolvedEvent = events.find((event) => event.autoResolvedRuntimeConflict);
-    expect(autoResolvedEvent).toMatchObject({ status: "running", runtimeConflict: null });
     expect(result?.items.map((item) => [item.destinationPath, item.status])).toEqual([
       ["/target/a copy.txt", "completed"],
       ["/target/b.txt", "skipped"],

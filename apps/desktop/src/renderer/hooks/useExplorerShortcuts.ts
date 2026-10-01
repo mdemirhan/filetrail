@@ -50,7 +50,6 @@ type RawShortcutBinding = {
 type ExplorerShortcutActions = {
   dismissActionNotice: () => void;
   handleCopyPasteDialogEscape: () => void;
-  openActionLogView: () => void;
   openSettingsView: () => void;
   openLocationSheet: () => void;
   focusFileSearch: (selectContents?: boolean) => void;
@@ -1104,10 +1103,6 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       }
       if (commandType === "openSettings") {
         current.openSettingsView();
-        return;
-      }
-      if (commandType === "openActionLog") {
-        current.openActionLogView();
         return;
       }
       if (commandType === "zoomIn") {

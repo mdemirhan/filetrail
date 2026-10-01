@@ -1,4 +1,4 @@
-import { rename, stat, unlink } from "node:fs/promises";
+import { readdir, rename, stat, unlink } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
 
 export async function readFileSize(filePath: string): Promise<number> {
@@ -25,9 +25,20 @@ export async function rotateLogFiles(filePath: string, maxFiles: number): Promis
   await rename(filePath, resolveRotatedLogPath(filePath, 1)).catch(() => undefined);
 }
 
-export function resolveRotatedLogPath(filePath: string, index: number): string {
+function resolveRotatedLogPath(filePath: string, index: number): string {
   const extension = extname(filePath);
   const directoryPath = dirname(filePath);
   const filename = basename(filePath, extension);
   return join(directoryPath, `${filename}.${index}${extension}`);
+}
+
+// The action log was removed from the app. What it left behind (up to ten files of 5 MB)
+// is deleted the next time the app starts.
+export async function removeRetiredActionLogFiles(logsDirectoryPath: string): Promise<void> {
+  const names = await readdir(logsDirectoryPath).catch(() => [] as string[]);
+  await Promise.all(
+    names
+      .filter((name) => /^action-log(\.\d+)?\.jsonl$/.test(name))
+      .map((name) => unlink(join(logsDirectoryPath, name)).catch(() => undefined)),
+  );
 }

@@ -290,14 +290,12 @@ const LEFT_MAIN_AVAILABLE_ITEM_ORDER: ToolbarItemId[] = [
   "trashSelection",
   "openInTerminal",
   "copyPath",
-  "actionLog",
   "help",
   "theme",
 ];
 
 const LEFT_UTILITY_AVAILABLE_ITEM_ORDER: ToolbarItemId[] = [
   "leftSeparator",
-  "actionLog",
   "help",
   "theme",
   "home",
@@ -2091,7 +2089,6 @@ export function SettingsView({
   tabSwitchesExplorerPanes,
   notificationsEnabled,
   notificationDurationSeconds,
-  actionLogEnabled,
   topToolbarItems,
   leftToolbarItems,
   restoreLastVisitedFolderOnStartup,
@@ -2127,7 +2124,6 @@ export function SettingsView({
   onTabSwitchesExplorerPanesChange,
   onNotificationsEnabledChange,
   onNotificationDurationSecondsChange,
-  onActionLogEnabledChange,
   onTopToolbarItemsChange,
   onLeftToolbarItemsChange,
   onResetTopToolbar,
@@ -2178,7 +2174,6 @@ export function SettingsView({
   tabSwitchesExplorerPanes: boolean;
   notificationsEnabled: boolean;
   notificationDurationSeconds: number;
-  actionLogEnabled: boolean;
   topToolbarItems: ToolbarItemId[];
   leftToolbarItems: LeftToolbarItems;
   restoreLastVisitedFolderOnStartup: boolean;
@@ -2214,7 +2209,6 @@ export function SettingsView({
   onTabSwitchesExplorerPanesChange: (value: boolean) => void;
   onNotificationsEnabledChange: (value: boolean) => void;
   onNotificationDurationSecondsChange: (value: number) => void;
-  onActionLogEnabledChange: (value: boolean) => void;
   onTopToolbarItemsChange: (value: ToolbarItemId[]) => void;
   onLeftToolbarItemsChange: (value: LeftToolbarItems) => void;
   onResetTopToolbar: () => void;
@@ -2747,25 +2741,6 @@ export function SettingsView({
                   disabled={!notificationsEnabled}
                   onChange={(value) => onNotificationDurationSecondsChange(Number(value))}
                   formatOption={(value) => `${value} s`}
-                />
-              }
-            />
-          </SectionCard>
-        ) : null}
-
-        {showSection("general") ? (
-          <SectionCard icon="🧾" title="Action Log" theme={palette}>
-            <SettingRow
-              title="Enable action log"
-              desc="Record file actions and launches, and show Action Log in the View menu and left toolbar."
-              theme={palette}
-              isLast
-              right={
-                <Toggle
-                  checked={actionLogEnabled}
-                  onToggle={() => onActionLogEnabledChange(!actionLogEnabled)}
-                  theme={palette}
-                  label="Enable action log"
                 />
               }
             />

@@ -346,11 +346,6 @@ export type CopyPasteProgressEvent = {
   currentSourcePath: string | null;
   currentDestinationPath: string | null;
   runtimeConflict?: CopyPasteRuntimeConflict | null;
-  /** A conflict answered automatically by an earlier "apply to remaining" answer. */
-  autoResolvedRuntimeConflict?: {
-    conflict: CopyPasteRuntimeConflict;
-    resolution: CopyPasteRuntimeResolutionAction;
-  } | null;
   result: CopyPasteOperationResult | null;
 };
 

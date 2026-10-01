@@ -5367,7 +5367,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
   font-size: 12px;
 }
 
-/* ── Help / Action Log: a toolbar with a way back to the files ────────── */
+/* ── Help: a toolbar with a way back to the files ─────────────── ────────── */
 
 .single-panel-layout {
   grid-template-rows: auto minmax(0, 1fr);

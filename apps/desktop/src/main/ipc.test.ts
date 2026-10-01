@@ -19,9 +19,6 @@ function createHandlersThatFailOnSnapshot(): IpcHandlerMap {
     "app:getPreferences": async () => ({
       preferences: TEST_PREFERENCES,
     }),
-    "actionLog:list": async () => ({
-      items: [],
-    }),
     "app:getLaunchContext": async () => ({
       startupFolderPath: null,
     }),

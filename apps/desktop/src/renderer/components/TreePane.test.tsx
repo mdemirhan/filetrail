@@ -97,8 +97,6 @@ function renderTreePane(overrides: Partial<ComponentProps<typeof TreePane>> = {}
       themeMenuRef={themeMenuRef}
       onToggleThemeMenu={() => undefined}
       onSelectTheme={() => undefined}
-      actionLogEnabled
-      onOpenActionLog={() => undefined}
       onClearSelection={() => undefined}
       onOpenHelp={() => undefined}
       onOpenSettings={() => undefined}
@@ -704,13 +702,6 @@ describe("TreePane", () => {
     }
   });
 
-  it("leaves the action log button out while the action log is turned off", () => {
-    renderTreePane({ actionLogEnabled: false });
-
-    expect(screen.queryByRole("button", { name: "Open action log" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Open help" })).toBeInTheDocument();
-  });
-
   it("does not scroll the selected row into view when it is already fully visible", () => {
     vi.useFakeTimers();
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
@@ -874,8 +865,6 @@ describe("TreePane", () => {
         themeMenuRef={themeMenuRef}
         onToggleThemeMenu={() => undefined}
         onSelectTheme={() => undefined}
-        actionLogEnabled
-        onOpenActionLog={() => undefined}
         onClearSelection={() => undefined}
         onOpenHelp={() => undefined}
         onOpenSettings={() => undefined}
@@ -1026,8 +1015,6 @@ describe("TreePane", () => {
         themeMenuRef={themeMenuRef}
         onToggleThemeMenu={() => undefined}
         onSelectTheme={() => undefined}
-        actionLogEnabled
-        onOpenActionLog={() => undefined}
         onClearSelection={() => undefined}
         onOpenHelp={() => undefined}
         onOpenSettings={() => undefined}

@@ -19,8 +19,7 @@ vi.mock("electron", () => ({
 }));
 
 describe("createWriteOperationCoordinator", () => {
-  it("renames a local item, emits progress, and records the write operation", async () => {
-    const recordWriteOperation = vi.fn(async () => undefined);
+  it("renames a local item and emits progress", async () => {
     const sender = createSender();
     const fs = createWriteOperationFs({
       lstat: vi.fn(async (path: string) => {
@@ -30,9 +29,7 @@ describe("createWriteOperationCoordinator", () => {
         throw new Error("missing");
       }),
     });
-    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs, {
-      recordWriteOperation,
-    });
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs);
 
     await expect(
       coordinator.handlers["writeOperation:rename"](
@@ -54,15 +51,6 @@ describe("createWriteOperationCoordinator", () => {
         currentDestinationPath: "/Users/demo/renamed.txt",
       }),
     );
-    expect(recordWriteOperation).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: "rename",
-        operationId: "write-op-1",
-        sourcePaths: ["/Users/demo/source.txt"],
-        destinationPaths: ["/Users/demo/renamed.txt"],
-      }),
-    );
-
     coordinator.shutdown();
   });
 
@@ -317,167 +305,6 @@ describe("createWriteOperationCoordinator", () => {
     coordinator.shutdown();
   });
 
-  it("records initiator, requested destination, and runtime conflict resolutions for copy-paste operations", async () => {
-    const subscribers: Array<(event: Record<string, unknown>) => void> = [];
-    const recordWriteOperation = vi.fn(async () => undefined);
-    const writeService = {
-      subscribe: vi.fn((callback: (event: Record<string, unknown>) => void) => {
-        subscribers.push(callback);
-        return () => undefined;
-      }),
-      startCopyPaste: vi.fn(() => ({ operationId: "copy-op-1", status: "queued" as const })),
-      getCopyPasteAnalysisUpdate: vi.fn(() => ({
-        report: {
-          mode: "cut" as const,
-          destinationDirectoryPath: "/Users/demo/target",
-        },
-      })),
-      resolveRuntimeConflict: vi.fn(() => ({ ok: true })),
-      cancelOperation: vi.fn(() => ({ ok: true })),
-      startCopyPasteAnalysis: vi.fn(),
-      cancelCopyPasteAnalysis: vi.fn(),
-      planCopyPaste: vi.fn(),
-    } as unknown as WriteService;
-    const coordinator = createWriteOperationCoordinator(
-      writeService,
-      {
-        lstat: vi.fn(),
-        stat: vi.fn(),
-        mkdir: vi.fn(),
-        rename: vi.fn(),
-        rm: vi.fn(),
-      },
-      { recordWriteOperation },
-    );
-
-    const sender = createSender();
-    coordinator.handlers["copyPaste:start"](
-      {
-        analysisId: "analysis-1",
-        action: "move_to",
-        initiator: "drag_drop",
-        policy: {
-          file: "skip",
-          directory: "merge",
-          mismatch: "skip",
-        },
-      },
-      { sender },
-    );
-
-    const emit = subscribers[0];
-    if (!emit) {
-      throw new Error("Expected write-service subscriber to be registered.");
-    }
-
-    emit({
-      operationId: "copy-op-1",
-      mode: "cut",
-      status: "awaiting_resolution",
-      completedItemCount: 1,
-      totalItemCount: 2,
-      completedByteCount: 0,
-      totalBytes: null,
-      currentSourcePath: "/Users/demo/source/b.txt",
-      currentDestinationPath: "/Users/demo/target/b.txt",
-      runtimeConflict: {
-        conflictId: "conflict-1",
-        analysisId: "analysis-1",
-        sourcePath: "/Users/demo/source/b.txt",
-        destinationPath: "/Users/demo/target/b.txt",
-        sourceKind: "file",
-        destinationKind: "file",
-        conflictClass: "file_conflict",
-        reason: "destination_changed",
-        sourceFingerprint: createNodeFingerprint(),
-        destinationFingerprint: createNodeFingerprint(),
-        currentSourceFingerprint: createNodeFingerprint(),
-        currentDestinationFingerprint: createNodeFingerprint(),
-      },
-      result: null,
-      action: "move_to",
-    });
-
-    coordinator.handlers["copyPaste:resolveConflict"](
-      {
-        operationId: "copy-op-1",
-        conflictId: "conflict-1",
-        resolution: "skip",
-      },
-      { sender },
-    );
-
-    emit({
-      operationId: "copy-op-1",
-      mode: "cut",
-      status: "partial",
-      completedItemCount: 1,
-      totalItemCount: 2,
-      completedByteCount: 0,
-      totalBytes: null,
-      currentSourcePath: null,
-      currentDestinationPath: null,
-      runtimeConflict: null,
-      result: {
-        operationId: "copy-op-1",
-        mode: "cut",
-        status: "partial",
-        destinationDirectoryPath: "/Users/demo/target",
-        startedAt: "2026-03-10T12:00:00.000Z",
-        finishedAt: "2026-03-10T12:00:00.050Z",
-        summary: {
-          topLevelItemCount: 1,
-          totalItemCount: 2,
-          completedItemCount: 1,
-          failedItemCount: 0,
-          skippedItemCount: 1,
-          cancelledItemCount: 0,
-          completedByteCount: 0,
-          totalBytes: null,
-        },
-        items: [
-          {
-            sourcePath: "/Users/demo/source/a.txt",
-            destinationPath: "/Users/demo/target/a.txt",
-            status: "completed",
-            error: null,
-            skipReason: null,
-          },
-          {
-            sourcePath: "/Users/demo/source/b.txt",
-            destinationPath: "/Users/demo/target/b.txt",
-            status: "skipped",
-            error: null,
-            skipReason: "runtime_conflict_resolution",
-          },
-        ],
-        error: null,
-      },
-      action: "move_to",
-    });
-
-    expect(recordWriteOperation).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: "move_to",
-        initiator: "drag_drop",
-        requestedDestinationPath: "/Users/demo/target",
-        metadata: {
-          transferMode: "cut",
-        },
-        runtimeConflicts: [
-          expect.objectContaining({
-            conflictId: "conflict-1",
-            resolution: "skip",
-            sourcePath: "/Users/demo/source/b.txt",
-            destinationPath: "/Users/demo/target/b.txt",
-          }),
-        ],
-      }),
-    );
-
-    coordinator.shutdown();
-  });
-
   it("cancels a paste whose window crashed or closed, so writes don't stay locked", () => {
     const writeService = createWriteServiceStub();
     const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs());
@@ -638,7 +465,6 @@ describe("createWriteOperationCoordinator", () => {
     process.on("unhandledRejection", unhandled);
     try {
       let finishRename: (() => void) | null = null;
-      const recordWriteOperation = vi.fn(async () => undefined);
       const fs = createWriteOperationFs({
         lstat: vi.fn(async (path: string) => {
           if (path === "/Users/demo/source.txt") {
@@ -653,9 +479,7 @@ describe("createWriteOperationCoordinator", () => {
             }),
         ),
       });
-      const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs, {
-        recordWriteOperation,
-      });
+      const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs);
       // Mirrors a WebContents torn down mid-operation: isDestroyed has not caught up yet,
       // but send already throws.
       const sender = createLifecycleSender();
@@ -668,7 +492,7 @@ describe("createWriteOperationCoordinator", () => {
         throw new Error("Object has been destroyed");
       });
       (finishRename as (() => void) | null)?.();
-      await waitFor(() => (recordWriteOperation.mock.calls.length > 0 ? true : null));
+      await waitFor(() => (countLifecycleListeners(sender) === 0 ? true : null));
       await new Promise((resolveWait) => setTimeout(resolveWait, 0));
 
       expect(unhandled).not.toHaveBeenCalled();
@@ -687,10 +511,7 @@ describe("createWriteOperationCoordinator", () => {
 
   it("skips sending to a destroyed window and still frees the slot for write-service operations", () => {
     const { writeService, emit } = createSubscribingWriteService();
-    const recordWriteOperation = vi.fn(async () => undefined);
-    const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs(), {
-      recordWriteOperation,
-    });
+    const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs());
     const sender = createLifecycleSender();
     startPaste(coordinator, sender);
 
@@ -703,7 +524,6 @@ describe("createWriteOperationCoordinator", () => {
     expect(() => emit(createCopyPasteTerminalEvent("copy-op-1", "cancelled"))).not.toThrow();
 
     expect(sender.send).not.toHaveBeenCalled();
-    expect(recordWriteOperation).toHaveBeenCalledTimes(1);
     expect(countLifecycleListeners(sender)).toBe(0);
     expect(() => startPaste(coordinator, createSender())).not.toThrow();
     coordinator.shutdown();
@@ -768,12 +588,9 @@ describe("createWriteOperationCoordinator", () => {
     coordinator.shutdown();
   });
 
-  it("does not record an answer the write service rejected", () => {
+  it("passes back the write service's rejection of a conflict answer", () => {
     const { writeService, emit } = createSubscribingWriteService();
-    const recordWriteOperation = vi.fn(async () => undefined);
-    const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs(), {
-      recordWriteOperation,
-    });
+    const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs());
     const sender = createSender();
     startPaste(coordinator, sender);
     emit({
@@ -789,18 +606,11 @@ describe("createWriteOperationCoordinator", () => {
         { sender },
       ),
     ).toEqual({ ok: false });
-    // An unknown conflict id is passed to the service (which rejects it) and changes nothing.
-    vi.mocked(writeService.resolveRuntimeConflict).mockReturnValueOnce({ ok: false });
-    coordinator.handlers["copyPaste:resolveConflict"](
-      { operationId: "copy-op-1", conflictId: "stale-conflict", resolution: "skip" },
-      { sender },
-    );
-    emit(createCopyPasteTerminalEvent("copy-op-1", "cancelled"));
-
-    expect(recordWriteOperation).toHaveBeenCalledWith(
-      expect.objectContaining({
-        runtimeConflicts: [expect.objectContaining({ conflictId: "conflict-1", resolution: null })],
-      }),
+    expect(writeService.resolveRuntimeConflict).toHaveBeenCalledWith(
+      "copy-op-1",
+      "conflict-1",
+      "overwrite",
+      false,
     );
     coordinator.shutdown();
   });
@@ -871,43 +681,6 @@ describe("createWriteOperationCoordinator", () => {
     const terminal = await waitForTerminalEvent(owner, "write-op-1");
     expect(terminal.status).toBe("completed");
     localCoordinator.shutdown();
-  });
-
-  it("records conflicts answered automatically by a standing answer without prompting", () => {
-    const { writeService, emit } = createSubscribingWriteService();
-    const recordWriteOperation = vi.fn(async () => undefined);
-    const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs(), {
-      recordWriteOperation,
-    });
-    const sender = createSender();
-    startPaste(coordinator, sender);
-
-    emit({
-      ...createCopyPasteTerminalEvent("copy-op-1", "running"),
-      result: null,
-      autoResolvedRuntimeConflict: {
-        conflict: { ...createRuntimeConflict("conflict-2"), reason: "trash_unavailable" },
-        resolution: "overwrite",
-      },
-    });
-    const sentRunning = sender.send.mock.calls
-      .map(([, payload]) => payload as WriteOperationProgressEvent)
-      .find((payload) => payload.status === "running");
-    expect(sentRunning?.runtimeConflict ?? null).toBeNull();
-
-    emit(createCopyPasteTerminalEvent("copy-op-1", "completed"));
-    expect(recordWriteOperation).toHaveBeenCalledWith(
-      expect.objectContaining({
-        runtimeConflicts: [
-          expect.objectContaining({
-            conflictId: "conflict-2",
-            reason: "trash_unavailable",
-            resolution: "overwrite",
-          }),
-        ],
-      }),
-    );
-    coordinator.shutdown();
   });
 });
 

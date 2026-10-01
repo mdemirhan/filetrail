@@ -43,7 +43,6 @@ const ICON_NAMES = [
   "rerootHome",
   "infoRow",
   "foldersFirst",
-  "actionLog",
   "copy",
   "cut",
   "paste",

@@ -122,7 +122,6 @@ export const toolbarItemIdSchema = z.enum([
   "hidden",
   "infoPanel",
   "infoRow",
-  "actionLog",
   "help",
   "theme",
   "settings",
@@ -194,7 +193,6 @@ export const copyPasteRuntimeConflictReasonSchema = z.enum([
   "source_deleted",
   "trash_unavailable",
 ]);
-export const writeOperationInitiatorSchema = z.enum(["clipboard", "drag_drop", "move_dialog"]);
 export const copyPastePlanItemStatusSchema = z.enum(["ready", "conflict", "blocked"]);
 export const copyPastePlanIssueCodeSchema = z.enum([
   "destination_missing",
@@ -221,19 +219,6 @@ export const writeOperationActionSchema = z.enum([
   "rename",
   "new_folder",
 ]);
-export const actionLogActionSchema = z.enum([
-  "open",
-  "open_with",
-  "open_in_terminal",
-  "paste",
-  "move_to",
-  "duplicate",
-  "trash",
-  "delete_immediately",
-  "rename",
-  "new_folder",
-]);
-export const actionLogStatusSchema = z.enum(["completed", "failed", "cancelled", "partial"]);
 export const appLogLevelSchema = z.enum(["debug", "info", "warn", "error"]);
 export const sizeStatusSchema = z.enum(["ready", "deferred", "unavailable"]);
 const emptyRequestSchema = z.object({});
@@ -443,10 +428,6 @@ export const copyPasteRuntimeConflictSchema = z.object({
   currentSourceFingerprint: nodeFingerprintSchema,
   currentDestinationFingerprint: nodeFingerprintSchema,
 });
-export const autoResolvedRuntimeConflictSchema = z.object({
-  conflict: copyPasteRuntimeConflictSchema,
-  resolution: copyPasteRuntimeResolutionActionSchema,
-});
 export const copyPastePlanSchema = z.object({
   mode: copyPasteModeSchema,
   sourcePaths: z.array(z.string().min(1)).min(1).max(500),
@@ -514,9 +495,6 @@ export const copyPasteProgressEventSchema = z.object({
   currentSourcePath: z.string().nullable(),
   currentDestinationPath: z.string().nullable(),
   runtimeConflict: copyPasteRuntimeConflictSchema.nullable().optional(),
-  // A conflict answered automatically by an earlier "Do the same for any other changes".
-  // Recorded in the Action Log; nothing is shown.
-  autoResolvedRuntimeConflict: autoResolvedRuntimeConflictSchema.nullable().optional(),
   result: copyPasteOperationResultSchema.nullable(),
 });
 export const writeOperationItemResultSchema = z.object({
@@ -563,61 +541,7 @@ export const writeOperationProgressEventSchema = z.object({
   currentSourcePath: z.string().nullable(),
   currentDestinationPath: z.string().nullable(),
   runtimeConflict: copyPasteRuntimeConflictSchema.nullable().optional(),
-  // A conflict answered automatically by an earlier "Do the same for any other changes".
-  // Recorded in the Action Log; nothing is shown.
-  autoResolvedRuntimeConflict: autoResolvedRuntimeConflictSchema.nullable().optional(),
   result: writeOperationResultSchema.nullable(),
-});
-export const actionLogItemSchema = z.object({
-  sourcePath: z.string().nullable(),
-  destinationPath: z.string().nullable(),
-  sourceKind: z.enum(["file", "directory", "symlink"]).nullable().default(null),
-  status: z.enum(["completed", "skipped", "failed", "cancelled"]),
-  error: z.string().nullable(),
-  skipReason: z
-    .enum(["planned_conflict_policy", "runtime_conflict_resolution"])
-    .nullable()
-    .optional(),
-  // For a folder: how many items inside it failed. A folder whose only problem is failures
-  // inside it has status "failed" and a null error.
-  childFailureCount: z.number().int().nonnegative().optional(),
-});
-export const actionLogRuntimeConflictSchema = z.object({
-  conflictId: z.string().min(1),
-  sourcePath: z.string().min(1),
-  destinationPath: z.string().min(1),
-  sourceKind: z.enum(["file", "directory", "symlink"]),
-  destinationKind: copyPasteNodeKindSchema,
-  conflictClass: copyPasteConflictClassSchema,
-  reason: copyPasteRuntimeConflictReasonSchema,
-  resolution: copyPasteRuntimeResolutionActionSchema.nullable().default(null),
-});
-export const actionLogEntrySchema = z.object({
-  id: z.string().min(1),
-  occurredAt: z.string().min(1),
-  action: actionLogActionSchema,
-  status: actionLogStatusSchema,
-  operationId: z.string().min(1).nullable(),
-  sourcePaths: z.array(z.string().min(1)),
-  destinationPaths: z.array(z.string().min(1)),
-  sourceSummary: z.string().min(1).nullable(),
-  destinationSummary: z.string().min(1).nullable(),
-  title: z.string().min(1),
-  message: z.string().min(1),
-  durationMs: z.number().int().nonnegative().nullable(),
-  error: z.string().nullable(),
-  summary: z.object({
-    totalItemCount: z.number().int().nonnegative(),
-    completedItemCount: z.number().int().nonnegative(),
-    failedItemCount: z.number().int().nonnegative(),
-    skippedItemCount: z.number().int().nonnegative(),
-    cancelledItemCount: z.number().int().nonnegative(),
-  }),
-  items: z.array(actionLogItemSchema),
-  initiator: writeOperationInitiatorSchema.nullable().default(null),
-  requestedDestinationPath: z.string().min(1).nullable().default(null),
-  runtimeConflicts: z.array(actionLogRuntimeConflictSchema).default([]),
-  metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
 });
 
 export const launchContextSchema = z.object({
@@ -656,7 +580,6 @@ export const appPreferencesSchema = z.object({
   tabSwitchesExplorerPanes: z.boolean(),
   notificationsEnabled: z.boolean(),
   notificationDurationSeconds: z.number().int().min(2).max(10),
-  actionLogEnabled: z.boolean(),
   propertiesOpen: z.boolean(),
   detailRowOpen: z.boolean(),
   topToolbarItems: z.array(toolbarItemIdSchema),
@@ -764,12 +687,6 @@ export const ipcContractSchemas = {
     request: appLogEntrySchema,
     response: z.object({
       ok: z.literal(true),
-    }),
-  },
-  "actionLog:list": {
-    request: emptyRequestSchema,
-    response: z.object({
-      items: z.array(actionLogEntrySchema),
     }),
   },
   "tree:getChildren": {
@@ -928,7 +845,6 @@ export const ipcContractSchemas = {
         action: writeOperationActionSchema
           .extract(["paste", "move_to", "duplicate"])
           .default("paste"),
-        initiator: writeOperationInitiatorSchema.nullable().optional(),
       }),
       z.object({
         analysisId: z.string().min(1),
@@ -946,7 +862,6 @@ export const ipcContractSchemas = {
           )
           .max(100_000)
           .optional(),
-        initiator: writeOperationInitiatorSchema.nullable().optional(),
       }),
     ]),
     response: z.object({
@@ -1162,14 +1077,8 @@ export type CopyPasteRuntimeResolutionAction = z.output<
   typeof copyPasteRuntimeResolutionActionSchema
 >;
 export type WriteOperationAction = z.output<typeof writeOperationActionSchema>;
-export type WriteOperationInitiator = z.output<typeof writeOperationInitiatorSchema>;
 export type WriteOperationResult = z.output<typeof writeOperationResultSchema>;
 export type WriteOperationProgressEvent = z.output<typeof writeOperationProgressEventSchema>;
-export type ActionLogAction = z.output<typeof actionLogActionSchema>;
-export type ActionLogStatus = z.output<typeof actionLogStatusSchema>;
-export type ActionLogItem = z.output<typeof actionLogItemSchema>;
-export type ActionLogRuntimeConflict = z.output<typeof actionLogRuntimeConflictSchema>;
-export type ActionLogEntry = z.output<typeof actionLogEntrySchema>;
 export type AppLogLevel = z.output<typeof appLogLevelSchema>;
 export type AppLogEntry = z.output<typeof appLogEntrySchema>;
 

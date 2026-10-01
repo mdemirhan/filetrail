@@ -199,7 +199,6 @@ describe("appStateStore", () => {
       tabSwitchesExplorerPanes: true,
       notificationsEnabled: true,
       notificationDurationSeconds: 4,
-      actionLogEnabled: true,
       propertiesOpen: false,
       detailRowOpen: false,
       topToolbarItems: ["back", "forward", "view", "sort", "infoPanel", "search"],
@@ -218,7 +217,7 @@ describe("appStateStore", () => {
           "infoPanel",
           "infoRow",
         ],
-        utility: ["actionLog", "help", "leftSeparator", "theme", "settings"],
+        utility: ["help", "leftSeparator", "theme", "settings"],
       },
       terminalApp: null,
       defaultTextEditor: {
@@ -309,7 +308,6 @@ describe("appStateStore", () => {
       tabSwitchesExplorerPanes: false,
       notificationsEnabled: true,
       notificationDurationSeconds: 4,
-      actionLogEnabled: true,
       topToolbarItems: ["back", "search", "copyPath"],
       leftToolbarItems: {
         main: ["home", "copyPath"],
@@ -406,7 +404,6 @@ describe("appStateStore", () => {
       tabSwitchesExplorerPanes: false,
       notificationsEnabled: true,
       notificationDurationSeconds: 4,
-      actionLogEnabled: true,
       topToolbarItems: ["back", "search", "copyPath"],
       leftToolbarItems: {
         main: ["home", "copyPath"],

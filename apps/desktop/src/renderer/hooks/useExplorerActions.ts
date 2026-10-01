@@ -1329,14 +1329,12 @@ export function useExplorerActions(args: {
       clearClipboardOnStart?: boolean;
       sourceSurface?: InternalMoveSourceSurface | null;
       pendingTreeSelectionPath?: string | null;
-      initiator?: "clipboard" | "drag_drop" | "move_dialog" | null;
       overrides?: CopyPasteOverrides;
     } = {},
   ): Promise<CopyLikePreStartOutcome> {
     const pasteAttemptId = options.pasteAttemptId ?? null;
     const clearClipboardOnStart = options.clearClipboardOnStart ?? false;
     const sourceSurface = options.sourceSurface ?? null;
-    const initiator = options.initiator ?? null;
     rememberPendingTreeSelectionPath(options.pendingTreeSelectionPath ?? null);
     if (pasteAttemptId !== null) {
       const pendingAttempt = pendingPasteAttemptRef.current;
@@ -1368,7 +1366,6 @@ export function useExplorerActions(args: {
         action,
         policy,
         ...(overrides.length > 0 ? { overrides } : {}),
-        initiator,
       });
       if (action === "move_to" && sourceSurface) {
         moveOperationSourceSurfaceRef.current.set(response.operationId, sourceSurface);
@@ -1471,7 +1468,6 @@ export function useExplorerActions(args: {
       clearClipboardOnStart: boolean;
       sourceSurface?: InternalMoveSourceSurface | null;
       pendingTreeSelectionPath?: string | null;
-      initiator?: "clipboard" | "drag_drop" | "move_dialog" | null;
       overrides?: CopyPasteOverrides;
     },
   ): Promise<boolean> {
@@ -1523,7 +1519,6 @@ export function useExplorerActions(args: {
         analysisId: handle.analysisId,
         action: args.action,
         clearClipboardOnStart: args.clearClipboardOnStart,
-        initiator: args.initiator ?? null,
         sourceSurface: args.sourceSurface ?? null,
         pendingTreeSelectionPath: args.pendingTreeSelectionPath ?? null,
       });
@@ -1621,7 +1616,6 @@ export function useExplorerActions(args: {
             clearClipboardOnStart: args.clearClipboardOnStart,
             sourceSurface: args.sourceSurface ?? null,
             pendingTreeSelectionPath: args.pendingTreeSelectionPath ?? null,
-            initiator: args.initiator ?? null,
           });
           return { status: "review" };
         }
@@ -1630,7 +1624,6 @@ export function useExplorerActions(args: {
           clearClipboardOnStart: args.clearClipboardOnStart,
           sourceSurface: args.sourceSurface ?? null,
           pendingTreeSelectionPath: args.pendingTreeSelectionPath ?? null,
-          initiator: args.initiator ?? null,
         });
       }
     } catch (error) {

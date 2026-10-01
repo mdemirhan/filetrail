@@ -99,7 +99,6 @@ describe("appPreferences helpers", () => {
       restoreLastVisitedFolderOnStartup: false,
       notificationsEnabled: true,
       notificationDurationSeconds: 4,
-      actionLogEnabled: true,
       propertiesOpen: false,
       topToolbarItems: DEFAULT_TOP_TOOLBAR_ITEMS,
       leftToolbarItems: {

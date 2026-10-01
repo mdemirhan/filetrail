@@ -27,7 +27,6 @@ Finder is great until you need to move fast through large folder trees, inspect 
 - Native folder analysis that tracks logical size, allocated disk usage, and file counts for directory trees.
 - A dual-pane workflow with folder tree navigation, content browsing, favorites, and an inspector-style Get Info panel.
 - File operations for opening, editing, renaming, duplicating, moving, copying, pasting, trashing, and opening locations in Terminal.
-- An action log for reviewing recent file operations.
 
 ## Efficient Search
 
@@ -70,7 +69,6 @@ File Trail has a much deeper customization surface than a typical file explorer.
 - Folders-first sorting
 - Go To (⌘K): jump to any folder you have opened before from a few letters of its name, or type a path
 - Keyboard shortcuts for common navigation and browsing actions
-- Action log tracking for file operations
 
 ## Current Platform
 

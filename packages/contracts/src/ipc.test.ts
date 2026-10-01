@@ -178,7 +178,6 @@ describe("ipc contracts", () => {
           tabSwitchesExplorerPanes: true,
           notificationsEnabled: true,
           notificationDurationSeconds: 4,
-          actionLogEnabled: true,
           propertiesOpen: false,
           detailRowOpen: true,
           topToolbarItems: ["back", "forward", "up", "down", "refresh", "view", "sort", "search"],
@@ -195,7 +194,7 @@ describe("ipc contracts", () => {
               "infoPanel",
               "infoRow",
             ],
-            utility: ["actionLog", "help", "theme", "settings"],
+            utility: ["help", "theme", "settings"],
           },
           terminalApp: null,
           defaultTextEditor: {
@@ -280,7 +279,6 @@ describe("ipc contracts", () => {
         tabSwitchesExplorerPanes: true,
         notificationsEnabled: true,
         notificationDurationSeconds: 4,
-        actionLogEnabled: true,
         propertiesOpen: false,
         detailRowOpen: true,
         topToolbarItems: ["back", "forward", "up", "down", "refresh", "view", "sort", "search"],
@@ -297,7 +295,7 @@ describe("ipc contracts", () => {
             "infoPanel",
             "infoRow",
           ],
-          utility: ["actionLog", "help", "theme", "settings"],
+          utility: ["help", "theme", "settings"],
         },
         terminalApp: null,
         defaultTextEditor: {
