@@ -105,8 +105,6 @@
   --tb-primary-hover-bg: rgba(124, 58, 237, 0.16);
   --tb-primary-shadow: none;
   --tb-primary-hover-shadow: none;
-  --radius-md: 8px;
-  --radius-lg: 12px;
   /* Fallbacks until the Font preference is applied; they match its "System" default. */
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
   --font-mono: "SF Mono", "SFMono-Regular", ui-monospace, Menlo, monospace;
@@ -116,7 +114,6 @@
   --ui-font-size-xs: calc(var(--ui-font-size) - 3px);
   --ui-font-size-sm: calc(var(--ui-font-size) - 1px);
   --ui-font-size-md: var(--ui-font-size);
-  --ui-font-size-lg: calc(var(--ui-font-size) + 1px);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-lg: 0 12px 32px rgba(30, 32, 48, 0.18);
   --crumb-hover-bg: rgba(0, 0, 0, 0.035);
