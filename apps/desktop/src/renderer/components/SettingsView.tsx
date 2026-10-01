@@ -1204,6 +1204,57 @@ function ActionButton({
   );
 }
 
+// A toolbar item in the Toolbars editor: an icon tile with its name under it, so the item
+// can be told apart without hovering.
+const TOOLBAR_TILE_WIDTH = "66px";
+
+const toolbarTileButtonStyle = {
+  width: TOOLBAR_TILE_WIDTH,
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  gap: "4px",
+  border: 0,
+  background: "transparent",
+  padding: 0,
+  transition: "opacity 0.12s ease",
+} as const;
+
+const toolbarTileIconStyle = {
+  width: "40px",
+  height: "38px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: "8px",
+  flexShrink: 0,
+  transition: "all 0.12s ease",
+} as const;
+
+function ToolbarTileLabel({ label, theme }: { label: string; theme: ResolvedSettingsTheme }) {
+  return (
+    <span
+      // The button carries the name; this copy is for the eye.
+      aria-hidden="true"
+      style={{
+        display: "-webkit-box",
+        WebkitBoxOrient: "vertical",
+        WebkitLineClamp: 2,
+        overflow: "hidden",
+        maxWidth: "100%",
+        minHeight: "24px",
+        color: theme.label.secondary,
+        fontFamily: sans,
+        fontSize: "10px",
+        lineHeight: 1.2,
+        textAlign: "center",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
 function ToolbarSurfaceEditor({
   title,
   note,
@@ -1236,7 +1287,6 @@ function ToolbarSurfaceEditor({
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [hoveredActiveIndex, setHoveredActiveIndex] = useState<number | null>(null);
   const [hoveredAvailableId, setHoveredAvailableId] = useState<ToolbarItemId | null>(null);
-  const [tooltip, setTooltip] = useState<{ label: string; x: number; y: number } | null>(null);
 
   const itemDefinitions = items.map((itemId, index) => ({
     definition: getToolbarItemDefinition(itemId),
@@ -1276,17 +1326,6 @@ function ToolbarSurfaceEditor({
     },
     [lockedItemSet, theme],
   );
-
-  const hideTooltip = useCallback(() => setTooltip(null), []);
-  const showTooltip = useCallback((label: string, element: HTMLElement) => {
-    const rect = element.getBoundingClientRect();
-    const containerRect = rootRef.current?.getBoundingClientRect() ?? { left: 0, top: 0 };
-    setTooltip({
-      label,
-      x: rect.left - containerRect.left + rect.width / 2,
-      y: rect.bottom - containerRect.top + 8,
-    });
-  }, []);
 
   const getInsertSide = useCallback(
     (index: number) => {
@@ -1371,7 +1410,6 @@ function ToolbarSurfaceEditor({
         }
         setDraggedIndex(null);
         setDragOverIndex(null);
-        hideTooltip();
       }}
       style={{
         display: "grid",
@@ -1383,30 +1421,6 @@ function ToolbarSurfaceEditor({
         padding: 0,
       }}
     >
-      {tooltip ? (
-        <div
-          style={{
-            position: "absolute",
-            left: tooltip.x,
-            top: tooltip.y,
-            transform: "translateX(-50%)",
-            background: theme.page.bg,
-            border: `1px solid ${theme.input.border}`,
-            color: theme.label.primary,
-            fontSize: "11px",
-            fontFamily: sans,
-            fontWeight: 500,
-            padding: "4px 10px",
-            borderRadius: "6px",
-            whiteSpace: "nowrap",
-            pointerEvents: "none",
-            zIndex: 12,
-            boxShadow: theme.card.shadow,
-          }}
-        >
-          {tooltip.label}
-        </div>
-      ) : null}
       <div
         style={{
           display: "flex",
@@ -1418,12 +1432,11 @@ function ToolbarSurfaceEditor({
         <div>
           <div
             style={{
-              fontSize: "18px",
+              fontSize: "13px",
               fontFamily: sans,
               fontWeight: 600,
               color: theme.section.title,
-              letterSpacing: "-0.02em",
-              marginBottom: "3px",
+              marginBottom: "2px",
             }}
           >
             {title}
@@ -1445,14 +1458,13 @@ function ToolbarSurfaceEditor({
       <div
         ref={activeSurfaceRef}
         style={{
-          padding: "14px",
+          padding: "12px 10px 8px",
           background: theme.input.bg,
-          borderRadius: "12px",
+          borderRadius: "10px",
           border: `1px solid ${theme.input.border}`,
-          overflowX: "auto",
         }}
       >
-        <div style={{ display: "flex", gap: "5px", flexWrap: "nowrap", minHeight: "40px" }}>
+        <div style={{ display: "flex", gap: "8px 2px", flexWrap: "wrap", minHeight: "58px" }}>
           {itemDefinitions.map(({ definition, index }) => {
             const itemId = definition.id;
             const locked = lockedItemSet.has(itemId);
@@ -1464,18 +1476,14 @@ function ToolbarSurfaceEditor({
             return (
               <div
                 key={`${title}-${itemId}-${index}`}
-                onMouseEnter={(event) => {
-                  setHoveredActiveIndex(index);
-                  showTooltip(definition.label, event.currentTarget);
-                }}
-                onMouseLeave={() => {
-                  setHoveredActiveIndex((current) => (current === index ? null : current));
-                  hideTooltip();
-                }}
+                onMouseEnter={() => setHoveredActiveIndex(index)}
+                onMouseLeave={() =>
+                  setHoveredActiveIndex((current) => (current === index ? null : current))
+                }
                 style={{
                   position: "relative",
                   display: "flex",
-                  alignItems: "center",
+                  alignItems: "flex-start",
                   flexShrink: 0,
                 }}
               >
@@ -1486,12 +1494,12 @@ function ToolbarSurfaceEditor({
                       height: "26px",
                       background: theme.accent.solid,
                       borderRadius: "999px",
-                      margin: "0 -1px",
+                      margin: "6px -1px 0",
                       boxShadow: `0 0 10px ${theme.accent.softBg}`,
                     }}
                   />
                 ) : null}
-                <div style={{ position: "relative", flexShrink: 0 }}>
+                <div style={{ position: "relative", flexShrink: 0, width: TOOLBAR_TILE_WIDTH }}>
                   <button
                     type="button"
                     draggable={!locked}
@@ -1527,36 +1535,32 @@ function ToolbarSurfaceEditor({
                       setHoveredActiveIndex(null);
                     }}
                     style={{
-                      width: "40px",
-                      height: "38px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      borderRadius: "8px",
-                      border: `1px solid ${swatchBorder}`,
-                      background: isHovered && !locked ? appearance.hover : theme.page.bg,
-                      color: appearance.icon,
+                      ...toolbarTileButtonStyle,
                       cursor: locked ? "default" : "grab",
                       opacity: isDragged ? 0.22 : 1,
-                      transition: "all 0.12s ease",
-                      padding: 0,
-                      flexShrink: 0,
                     }}
                   >
-                    <ToolbarIcon name={definition.icon} />
+                    <span
+                      style={{
+                        ...toolbarTileIconStyle,
+                        border: `1px solid ${swatchBorder}`,
+                        background: isHovered && !locked ? appearance.hover : theme.page.bg,
+                        color: appearance.icon,
+                      }}
+                    >
+                      <ToolbarIcon name={definition.icon} />
+                    </span>
+                    <ToolbarTileLabel label={definition.label} theme={theme} />
                   </button>
                   {isHovered && !locked ? (
                     <button
                       type="button"
                       aria-label={`Remove ${definition.label} from ${title}`}
-                      onClick={() => {
-                        onRemoveItem(index);
-                        hideTooltip();
-                      }}
+                      onClick={() => onRemoveItem(index)}
                       style={{
                         position: "absolute",
                         top: "-6px",
-                        right: "-6px",
+                        right: "8px",
                         width: "18px",
                         height: "18px",
                         borderRadius: "999px",
@@ -1581,8 +1585,8 @@ function ToolbarSurfaceEditor({
                     <div
                       style={{
                         position: "absolute",
-                        bottom: "-3px",
-                        right: "-3px",
+                        top: "28px",
+                        right: "11px",
                         width: "13px",
                         height: "13px",
                         borderRadius: "999px",
@@ -1606,7 +1610,7 @@ function ToolbarSurfaceEditor({
                       height: "26px",
                       background: theme.accent.solid,
                       borderRadius: "999px",
-                      margin: "0 -1px",
+                      margin: "6px -1px 0",
                       boxShadow: `0 0 10px ${theme.accent.softBg}`,
                     }}
                   />
@@ -1630,8 +1634,15 @@ function ToolbarSurfaceEditor({
         </div>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", margin: "6px 0 2px" }}>
-        <div style={{ flex: 1, height: "1px", background: theme.separator }} />
+      <div
+        style={{
+          fontSize: "11px",
+          fontFamily: sans,
+          color: theme.label.secondary,
+          marginTop: "2px",
+        }}
+      >
+        Available · click to add
       </div>
 
       <div style={{ display: "grid", gap: "12px" }}>
@@ -1654,8 +1665,8 @@ function ToolbarSurfaceEditor({
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, 42px)",
-              gap: "5px",
+              gridTemplateColumns: `repeat(auto-fill, ${TOOLBAR_TILE_WIDTH})`,
+              gap: "8px 2px",
               justifyContent: "start",
             }}
           >
@@ -1667,42 +1678,28 @@ function ToolbarSurfaceEditor({
                   key={`${title}-add-${definition.id}`}
                   type="button"
                   aria-label={`Add ${definition.label} to ${title}`}
-                  onClick={() => {
-                    onAddItem(definition.id);
-                    hideTooltip();
-                  }}
-                  onMouseEnter={(event) => {
-                    setHoveredAvailableId(definition.id);
-                    showTooltip(definition.label, event.currentTarget);
-                  }}
-                  onMouseLeave={() => {
-                    setHoveredAvailableId(null);
-                    hideTooltip();
-                  }}
-                  style={{
-                    position: "relative",
-                    width: "42px",
-                    height: "40px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    borderRadius: "8px",
-                    border: `1px solid ${isHovered ? appearance.hover : theme.separator}`,
-                    background: isHovered ? appearance.hover : theme.input.bg,
-                    color: isHovered ? appearance.icon : theme.label.secondary,
-                    cursor: "pointer",
-                    transition: "all 0.12s ease",
-                    transform: isHovered ? "translateY(-1px)" : "none",
-                    padding: 0,
-                  }}
+                  onClick={() => onAddItem(definition.id)}
+                  onMouseEnter={() => setHoveredAvailableId(definition.id)}
+                  onMouseLeave={() => setHoveredAvailableId(null)}
+                  style={{ ...toolbarTileButtonStyle, position: "relative", cursor: "pointer" }}
                 >
-                  <ToolbarIcon name={definition.icon} />
+                  <span
+                    style={{
+                      ...toolbarTileIconStyle,
+                      border: `1px solid ${isHovered ? appearance.hover : theme.separator}`,
+                      background: isHovered ? appearance.hover : theme.input.bg,
+                      color: isHovered ? appearance.icon : theme.label.secondary,
+                    }}
+                  >
+                    <ToolbarIcon name={definition.icon} />
+                  </span>
+                  <ToolbarTileLabel label={definition.label} theme={theme} />
                   {isHovered ? (
                     <div
                       style={{
                         position: "absolute",
                         top: "-4px",
-                        right: "-4px",
+                        right: "10px",
                         width: "14px",
                         height: "14px",
                         borderRadius: "999px",
@@ -3355,55 +3352,60 @@ export function SettingsView({
                 onReset={onResetTopToolbar}
               />
 
-              <div style={{ height: "1px", background: palette.separator }} />
-              <ToolbarSurfaceEditor
-                title="Left rail"
-                note={showSidebarRail ? undefined : "Hidden. Turn on Show left rail to see these."}
-                items={customizableLeftMainItems}
-                availableItems={sortedLeftMainAvailableItems}
-                theme={palette}
-                onReorderItem={(sourceIndex, targetIndex) =>
-                  handleLeftToolbarMove("main", sourceIndex, targetIndex)
-                }
-                onRemoveItem={(index) => handleLeftToolbarRemove("main", index)}
-                onAddItem={(itemId) => handleLeftToolbarAdd("main", itemId)}
-                onReset={() =>
-                  onLeftToolbarItemsChange({
-                    ...leftToolbarItems,
-                    main: DEFAULT_LEFT_TOOLBAR_ITEMS.main.filter((itemId) => itemId !== "settings"),
-                  })
-                }
-              />
-              <div style={{ height: "1px", background: palette.separator }} />
-              <ToolbarSurfaceEditor
-                title="Bottom rail"
-                note={
-                  showSidebarBottomRail
-                    ? undefined
-                    : showSidebarRail
-                      ? "Shown at the foot of the left rail."
-                      : "Hidden. Turn on Show bottom rail to see these."
-                }
-                items={customizableLeftUtilityItems}
-                availableItems={sortedLeftUtilityAvailableItems}
-                theme={palette}
-                onReorderItem={(sourceIndex, targetIndex) =>
-                  handleLeftToolbarMove("utility", sourceIndex, targetIndex)
-                }
-                onRemoveItem={(index) => handleLeftToolbarRemove("utility", index)}
-                onAddItem={(itemId) => handleLeftToolbarAdd("utility", itemId)}
-                onReset={() =>
-                  onLeftToolbarItemsChange({
-                    ...leftToolbarItems,
-                    utility: [
-                      ...DEFAULT_LEFT_TOOLBAR_ITEMS.utility.filter(
-                        (itemId) => itemId !== "settings",
-                      ),
-                      "settings",
-                    ],
-                  })
-                }
-              />
+              {/* A rail's editor shows only while that rail is on screen. */}
+              {showSidebarRail ? (
+                <>
+                  <div style={{ height: "1px", background: palette.separator }} />
+                  <ToolbarSurfaceEditor
+                    title="Left rail"
+                    items={customizableLeftMainItems}
+                    availableItems={sortedLeftMainAvailableItems}
+                    theme={palette}
+                    onReorderItem={(sourceIndex, targetIndex) =>
+                      handleLeftToolbarMove("main", sourceIndex, targetIndex)
+                    }
+                    onRemoveItem={(index) => handleLeftToolbarRemove("main", index)}
+                    onAddItem={(itemId) => handleLeftToolbarAdd("main", itemId)}
+                    onReset={() =>
+                      onLeftToolbarItemsChange({
+                        ...leftToolbarItems,
+                        main: DEFAULT_LEFT_TOOLBAR_ITEMS.main.filter(
+                          (itemId) => itemId !== "settings",
+                        ),
+                      })
+                    }
+                  />
+                </>
+              ) : null}
+              {/* With only the left rail on, the bottom rail's buttons sit at its foot. */}
+              {showSidebarBottomRail || showSidebarRail ? (
+                <>
+                  <div style={{ height: "1px", background: palette.separator }} />
+                  <ToolbarSurfaceEditor
+                    title="Bottom rail"
+                    note={showSidebarBottomRail ? undefined : "Shown at the foot of the left rail."}
+                    items={customizableLeftUtilityItems}
+                    availableItems={sortedLeftUtilityAvailableItems}
+                    theme={palette}
+                    onReorderItem={(sourceIndex, targetIndex) =>
+                      handleLeftToolbarMove("utility", sourceIndex, targetIndex)
+                    }
+                    onRemoveItem={(index) => handleLeftToolbarRemove("utility", index)}
+                    onAddItem={(itemId) => handleLeftToolbarAdd("utility", itemId)}
+                    onReset={() =>
+                      onLeftToolbarItemsChange({
+                        ...leftToolbarItems,
+                        utility: [
+                          ...DEFAULT_LEFT_TOOLBAR_ITEMS.utility.filter(
+                            (itemId) => itemId !== "settings",
+                          ),
+                          "settings",
+                        ],
+                      })
+                    }
+                  />
+                </>
+              ) : null}
             </div>
           </SectionCard>
         ) : null}

@@ -311,10 +311,54 @@ describe("SettingsView", () => {
     expect(onResetTopToolbar).toHaveBeenCalledTimes(1);
   });
 
+  it("names every toolbar tile, in the toolbar and in the list of items to add", () => {
+    renderSettingsView({ topToolbarItems: ["back", "forward", "search"] });
+
+    const topToolbarEditor = screen.getByRole("group", { name: "Top toolbar" });
+    // The name under each tile is shown as text, not only as a hover tooltip.
+    for (const label of ["Back", "Forward", "Refresh", "Go To Folder", "Open In Terminal"]) {
+      expect(within(topToolbarEditor).getByText(label)).toBeVisible();
+    }
+    expect(within(topToolbarEditor).getByText("Available · click to add")).toBeInTheDocument();
+    // The buttons keep their own names for assistive technology.
+    expect(within(topToolbarEditor).getByRole("button", { name: "Back" })).toBeInTheDocument();
+    expect(
+      within(topToolbarEditor).getByRole("button", { name: "Add Refresh to Top toolbar" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a rail's editor only while that rail is on", () => {
+    const toolbarEditors = () =>
+      screen
+        .getAllByRole("group")
+        .map((group) => group.getAttribute("aria-label"))
+        .filter((label) => label !== null);
+
+    // Both rails off: only the top toolbar can be edited, and the rails stay switchable.
+    const bothOff = renderSettingsView({ showSidebarRail: false, showSidebarBottomRail: false });
+    expect(toolbarEditors()).toEqual(["Top toolbar"]);
+    expect(screen.getByLabelText("Show left rail")).toBeInTheDocument();
+    expect(screen.getByLabelText("Show bottom rail")).toBeInTheDocument();
+    bothOff.unmount();
+
+    renderSettingsView({ showSidebarRail: false, showSidebarBottomRail: true });
+    expect(toolbarEditors()).toEqual(["Top toolbar", "Bottom rail"]);
+  });
+
+  it("keeps the bottom rail's editor while its buttons sit at the foot of the left rail", () => {
+    renderSettingsView({ showSidebarRail: true, showSidebarBottomRail: false });
+
+    expect(screen.getByRole("group", { name: "Left rail" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Bottom rail" })).toHaveTextContent(
+      "Shown at the foot of the left rail.",
+    );
+  });
+
   it("allows adding repeatable separators and restores grouped defaults on reset", () => {
     const onTopToolbarItemsChange = vi.fn();
     const onLeftToolbarItemsChange = vi.fn();
     renderSettingsView({
+      showSidebarRail: true,
       topToolbarItems: ["back", "topSeparator", "search"],
       leftToolbarItems: {
         main: ["home", "leftSeparator"],
@@ -382,6 +426,7 @@ describe("SettingsView", () => {
     const onResetLeftToolbar = vi.fn();
     const onResetToolbars = vi.fn();
     renderSettingsView({
+      showSidebarRail: true,
       leftToolbarItems: {
         main: ["home", "help"],
         utility: ["settings"],
@@ -442,6 +487,7 @@ describe("SettingsView", () => {
 
   it("shows toolbar actions in a stable grouped order across the add lists", () => {
     renderSettingsView({
+      showSidebarRail: true,
       topToolbarItems: ["back", "search"],
       leftToolbarItems: {
         main: ["home"],
