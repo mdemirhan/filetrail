@@ -13,12 +13,14 @@ const MENU_ITEM_SELECTOR = '[role="menuitemradio"], [role="menuitemcheckbox"]';
 
 // The magnifier inside the toolbar search field doubles as a menu button (as in Mail or
 // Xcode): it opens the search options as an ordinary menu with checkmarks, so the field
-// itself stays a plain field. The same options are in the bar above the search results.
+// itself stays a plain field. The bar above the search results opens the same menu from
+// an "Options" button (`trigger="label"`).
 // Hidden files are not an option here: search includes them when the file list shows them.
 export function SearchOptionsMenu({
   anchorRef,
   inputRef,
   interactive,
+  trigger = "magnifier",
   patternMode,
   onPatternModeChange,
   matchScope,
@@ -30,12 +32,17 @@ export function SearchOptionsMenu({
   skipGitIgnored,
   onSkipGitIgnoredChange,
 }: {
-  /** The search field; the menu hangs below it. */
-  anchorRef: RefObject<HTMLElement | null>;
-  /** Keeps (or gets back) the keyboard focus so Return still runs the search. */
-  inputRef: RefObject<HTMLInputElement | null>;
+  /** What the menu hangs below: the search field. Defaults to the menu button itself. */
+  anchorRef?: RefObject<HTMLElement | null>;
+  /**
+   * The search field, which keeps (or gets back) the keyboard focus so Return still runs
+   * the search. Without it the focus returns to the menu button.
+   */
+  inputRef?: RefObject<HTMLInputElement | null>;
   /** False for the off-screen copy the toolbar measures; it never opens a menu. */
   interactive: boolean;
+  /** The magnifier inside the search field, or a labeled "Options" button. */
+  trigger?: "magnifier" | "label";
   patternMode: SearchPatternMode;
   onPatternModeChange: (value: SearchPatternMode) => void;
   matchScope: SearchMatchScope;
@@ -55,6 +62,9 @@ export function SearchOptionsMenu({
   useKeepInViewport(menuRef, open && position !== null);
   // Opened from the keyboard: the first item takes focus, as in a native menu.
   const focusFirstItemRef = useRef(false);
+  const restoreFocus = () => {
+    (inputRef?.current ?? buttonRef.current)?.focus();
+  };
 
   useLayoutEffect(() => {
     if (!open) {
@@ -62,7 +72,7 @@ export function SearchOptionsMenu({
       return;
     }
     const updatePosition = () => {
-      const anchor = anchorRef.current;
+      const anchor = anchorRef?.current ?? buttonRef.current;
       if (!anchor) {
         return;
       }
@@ -91,10 +101,10 @@ export function SearchOptionsMenu({
     if (!open) {
       return;
     }
-    const close = (restoreFocus: boolean) => {
+    const close = (returnFocus: boolean) => {
       setOpen(false);
-      if (restoreFocus) {
-        inputRef.current?.focus();
+      if (returnFocus) {
+        (inputRef?.current ?? buttonRef.current)?.focus();
       }
     };
     const handlePointerDown = (event: PointerEvent) => {
@@ -172,7 +182,7 @@ export function SearchOptionsMenu({
   const choose = (apply: () => void) => {
     apply();
     setOpen(false);
-    inputRef.current?.focus();
+    restoreFocus();
   };
 
   const radioItem = (label: string, checked: boolean, apply: () => void) => (
@@ -244,8 +254,13 @@ export function SearchOptionsMenu({
       <button
         ref={interactive ? buttonRef : undefined}
         type="button"
-        className="toolbar-search-icon toolbar-search-options-button"
-        aria-label="Search options"
+        className={
+          trigger === "label"
+            ? "search-scope-action search-scope-options-button"
+            : "toolbar-search-icon toolbar-search-options-button"
+        }
+        // The labeled button is named by its text, so it never shares a name with the magnifier.
+        aria-label={trigger === "label" ? undefined : "Search options"}
         title="Search options"
         aria-haspopup="menu"
         aria-expanded={open}
@@ -258,14 +273,14 @@ export function SearchOptionsMenu({
                 focusFirstItemRef.current = event.detail === 0;
                 if (event.detail !== 0) {
                   // Opened with the mouse: typing still goes to the search field.
-                  inputRef.current?.focus();
+                  inputRef?.current?.focus();
                 }
                 setOpen((value) => !value);
               }
             : undefined
         }
       >
-        <ToolbarIcon name="search" />
+        {trigger === "label" ? "Options" : <ToolbarIcon name="search" />}
         <svg className="toolbar-search-options-chevron" viewBox="0 0 8 8" aria-hidden="true">
           <path d="M1.5 3 4 5.5 6.5 3" />
         </svg>

@@ -80,6 +80,10 @@ const ALLOWED_HARD_CODED_COLORS: ReadonlyArray<{ selector: RegExp; reason: strin
     reason: "focused selection is white text on the accent, as in Finder",
   },
   { selector: /^\.search-result-match$/, reason: "yellow find highlight, as in macOS" },
+  {
+    selector: /\.filesystem-tree-section \.tree-scroll$/,
+    reason: "alpha mask, not a color: black keeps the rows, transparent fades them out",
+  },
 ];
 
 // Shadows and tints derived from a token (a token mixed with white/black) are theme-safe.

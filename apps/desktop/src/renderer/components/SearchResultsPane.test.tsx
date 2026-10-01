@@ -357,11 +357,19 @@ describe("SearchResultsPane", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sort by name" }));
     fireEvent.click(screen.getByRole("button", { name: "Home" }));
     fireEvent.click(screen.getByRole("button", { name: "“project”" }));
-    fireEvent.change(screen.getByLabelText("Pattern type"), { target: { value: "glob" } });
-    fireEvent.change(screen.getByLabelText("Match on"), { target: { value: "path" } });
-    fireEvent.click(screen.getByLabelText("Search subfolders"));
-    // Hidden files follow the file list, so the bar has no option for them.
-    expect(screen.queryByLabelText("Include hidden files")).toBeNull();
+    // The search options live behind one Options button, so the bar stays on one line.
+    const chooseOption = (role: "menuitemradio" | "menuitemcheckbox", name: string) => {
+      fireEvent.click(screen.getByRole("button", { name: "Options" }), { detail: 1 });
+      fireEvent.click(screen.getByRole(role, { name }));
+    };
+    chooseOption("menuitemradio", "Glob");
+    chooseOption("menuitemradio", "Full path");
+    chooseOption("menuitemcheckbox", "Search subfolders");
+    // Hidden files follow the file list, so the menu has no option for them.
+    fireEvent.click(screen.getByRole("button", { name: "Options" }), { detail: 1 });
+    expect(screen.queryByRole("menuitemcheckbox", { name: /hidden/i })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Options" }), { detail: 1 });
+    expect(screen.queryByRole("menu")).toBeNull();
     fireEvent.change(screen.getByLabelText("Filter search results"), { target: { value: "main" } });
     fireEvent.change(screen.getByLabelText("Filter search results by"), {
       target: { value: "path" },
@@ -377,8 +385,8 @@ describe("SearchResultsPane", () => {
     expect(handlePatternModeChange).toHaveBeenCalledWith("glob");
     expect(handleMatchScopeChange).toHaveBeenCalledWith("path");
     expect(handleRecursiveChange).toHaveBeenCalledWith(false);
-    fireEvent.click(screen.getByLabelText("Skip .git folders"));
-    fireEvent.click(screen.getByLabelText("Skip files ignored by Git"));
+    chooseOption("menuitemcheckbox", "Skip .git folders");
+    chooseOption("menuitemcheckbox", "Skip files ignored by Git");
     expect(handleSkipGitFoldersChange).toHaveBeenCalledWith(false);
     expect(handleSkipGitIgnoredChange).toHaveBeenCalledWith(true);
     expect(handleFilterQueryChange).toHaveBeenCalledWith("main");

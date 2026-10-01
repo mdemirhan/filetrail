@@ -5339,19 +5339,6 @@ body.platform-macos .settings-view[data-layout="compact"] {
   font-size: 12px;
 }
 
-.search-scope-check {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--text-primary);
-  white-space: nowrap;
-}
-
-.search-scope-check input {
-  margin: 0;
-  accent-color: var(--ft-accent-solid);
-}
-
 .search-scope-action {
   height: 22px;
   padding: 0 10px;
@@ -6177,6 +6164,36 @@ body.settings-window-body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
+}
+
+/* A long folder name must not push the rest of the bar onto a second line. */
+.search-scope-button {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Rows scrolling up under the "Folders" label fade out instead of being cut off mid-letter
+   right below it. The fade spans the list's own top padding, so the first row is untouched
+   while the tree is scrolled to the top. */
+.sidebar-main-native .sidebar-header {
+  padding-bottom: 0;
+}
+
+.sidebar-main-native .filesystem-tree-section .tree-scroll {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 10px);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 10px);
+}
+
+.sidebar-main-native .filesystem-tree-section .tree-list {
+  padding-top: 10px;
+}
+
+/* A row brought into view stops below the fade rather than under it. */
+.sidebar-main-native .filesystem-tree-section .tree-row {
+  scroll-margin-top: 10px;
 }
 
 .search-results-columns {
@@ -6220,8 +6237,13 @@ body.settings-window-body {
   color: inherit;
 }
 
+/* On a selected row the match is underlined: a tinted box there turns into a dark or
+   washed-out block, depending on the accent, and costs the name its contrast. */
 .search-result-row.active:not(.inactive) .search-result-match {
-  background: var(--ft-accent-on-selection-faint);
+  background: transparent;
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 2px;
 }
 
 /* ── Collapsible sidebar section header (Favorites) ────────────────────── */

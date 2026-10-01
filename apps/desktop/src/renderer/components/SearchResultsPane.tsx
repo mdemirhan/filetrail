@@ -17,6 +17,7 @@ import { isKeyboardOwnedFormControl } from "../lib/focusedEditTarget";
 import { formatDateTime, formatSize, splitDisplayName } from "../lib/formatting";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
 import { getVirtualRange } from "../lib/virtualization";
+import { SearchOptionsMenu } from "./SearchOptionsMenu";
 type SearchResultItem = IpcResponse<"search:getUpdate">["items"][number];
 type SearchStatus = IpcResponse<"search:getUpdate">["status"] | "idle";
 type SelectionGestureModifiers = {
@@ -337,54 +338,21 @@ export function SearchResultsPane({
             <option value="path">by path</option>
           </select>
           <span className="search-scope-divider" aria-hidden="true" />
-          <select
-            className="search-scope-select"
-            value={matchScope}
-            onChange={(event) =>
-              onMatchScopeChange(event.currentTarget.value as SearchMatchScopePreference)
-            }
-            aria-label="Match on"
-            title="Match on"
-          >
-            <option value="name">Match name</option>
-            <option value="path">Match full path</option>
-          </select>
-          <select
-            className="search-scope-select"
-            value={patternMode}
-            onChange={(event) =>
-              onPatternModeChange(event.currentTarget.value as SearchPatternModePreference)
-            }
-            aria-label="Pattern type"
-            title="Pattern type"
-          >
-            <option value="glob">Glob</option>
-            <option value="regex">Regex</option>
-          </select>
-          <label className="search-scope-check">
-            <input
-              type="checkbox"
-              checked={recursive}
-              onChange={(event) => onRecursiveChange(event.currentTarget.checked)}
-            />
-            Search subfolders
-          </label>
-          <label className="search-scope-check">
-            <input
-              type="checkbox"
-              checked={skipGitFolders}
-              onChange={(event) => onSkipGitFoldersChange(event.currentTarget.checked)}
-            />
-            Skip .git folders
-          </label>
-          <label className="search-scope-check">
-            <input
-              type="checkbox"
-              checked={skipGitIgnored}
-              onChange={(event) => onSkipGitIgnoredChange(event.currentTarget.checked)}
-            />
-            Skip files ignored by Git
-          </label>
+          {/* The same menu as the magnifier in the toolbar search field. */}
+          <SearchOptionsMenu
+            trigger="label"
+            interactive
+            patternMode={patternMode}
+            onPatternModeChange={onPatternModeChange}
+            matchScope={matchScope}
+            onMatchScopeChange={onMatchScopeChange}
+            recursive={recursive}
+            onRecursiveChange={onRecursiveChange}
+            skipGitFolders={skipGitFolders}
+            onSkipGitFoldersChange={onSkipGitFoldersChange}
+            skipGitIgnored={skipGitIgnored}
+            onSkipGitIgnoredChange={onSkipGitIgnoredChange}
+          />
           {isSearching ? (
             <button
               type="button"
