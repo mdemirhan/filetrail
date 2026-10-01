@@ -53,7 +53,7 @@ export function SearchResultsPane({
   elapsedMs = null,
   scopeOptions = [],
   onScopeChange = () => undefined,
-  patternMode = "regex",
+  patternMode = "text",
   onPatternModeChange = () => undefined,
   matchScope = "name",
   onMatchScopeChange = () => undefined,
@@ -455,8 +455,7 @@ export function SearchResultsPane({
           ) : null}
           {status === "running" && results.length === 0 ? (
             <div className="content-state content-loading">
-              <strong>Searching files</strong>
-              <span>Running bundled fd in the current folder…</span>
+              <strong>Searching…</strong>
             </div>
           ) : null}
           {status !== "running" && results.length === 0 && totalCount > 0 && !error ? (
@@ -467,7 +466,7 @@ export function SearchResultsPane({
           ) : null}
           {status !== "running" && results.length === 0 && totalCount === 0 && !error ? (
             <div className="content-state content-empty">
-              <strong className="empty-state-title">No matching files</strong>
+              <strong className="empty-state-title">No matches</strong>
               <span className="empty-state-message">
                 Press Enter with a different pattern to search again.
               </span>
@@ -581,7 +580,7 @@ function SearchGlyph() {
 }
 
 // Highlights what matched in the name for name searches. fd uses smart case (case-sensitive
-// only when the pattern has uppercase); glob patterns match the whole name, so they are not
+// only when the query has uppercase); glob patterns match the whole name, so they are not
 // highlighted. Patterns JavaScript cannot parse are simply not highlighted.
 export function buildHighlightPattern(
   query: string,
@@ -589,11 +588,12 @@ export function buildHighlightPattern(
   matchScope: SearchMatchScopePreference,
 ): RegExp | null {
   const trimmed = query.trim();
-  if (trimmed.length === 0 || patternMode !== "regex" || matchScope !== "name") {
+  if (trimmed.length === 0 || patternMode === "glob" || matchScope !== "name") {
     return null;
   }
+  const source = patternMode === "text" ? trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : trimmed;
   try {
-    return new RegExp(trimmed, /[A-Z]/.test(trimmed) ? "" : "i");
+    return new RegExp(source, /\p{Lu}/u.test(trimmed) ? "" : "i");
   } catch {
     return null;
   }

@@ -398,7 +398,9 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
         ? record.includeHidden
         : currentDefaults.includeHidden,
     searchPatternMode:
-      record.searchPatternMode === "glob" || record.searchPatternMode === "regex"
+      record.searchPatternMode === "text" ||
+      record.searchPatternMode === "glob" ||
+      record.searchPatternMode === "regex"
         ? record.searchPatternMode
         : currentDefaults.searchPatternMode,
     searchMatchScope:

@@ -21,7 +21,14 @@ export type AccentMode = string;
 export type IconThemeMode = "native" | "classic" | "colorblock" | "monoline" | "vivid";
 export type ExplorerViewMode = "list" | "details";
 export type UiFontFamily = "system" | "dm-sans" | "lexend" | "fira-code" | "jetbrains-mono";
-export type SearchPatternModePreference = "glob" | "regex";
+export type SearchPatternModePreference = "text" | "glob" | "regex";
+// How the search text is matched, in the order the menus list the choices.
+export const SEARCH_PATTERN_MODES = ["text", "glob", "regex"] as const;
+export const SEARCH_PATTERN_MODE_LABELS: Record<SearchPatternModePreference, string> = {
+  text: "Plain text",
+  glob: "Glob",
+  regex: "Regex",
+};
 export type SearchMatchScopePreference = "name" | "path";
 export type SearchResultsSortByPreference = "name" | "path";
 export type SearchResultsSortDirectionPreference = "asc" | "desc";
@@ -391,7 +398,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   returnKeyAction: "rename",
   openItemLimit: 5,
   includeHidden: false,
-  searchPatternMode: "regex",
+  searchPatternMode: "text",
   searchMatchScope: "name",
   searchRecursive: true,
   searchSkipGitFolders: true,

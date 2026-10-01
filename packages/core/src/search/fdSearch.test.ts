@@ -33,6 +33,8 @@ describe("fdSearch", () => {
     ).toEqual([
       "--type",
       "f",
+      "--type",
+      "d",
       "--print0",
       "--absolute-path",
       "--color",
@@ -59,7 +61,7 @@ describe("fdSearch", () => {
       includeHidden: true,
     };
     const flags = (options: { skipGitFolders: boolean; skipGitIgnored: boolean }) =>
-      buildFdSearchArgs({ ...base, ...options }).slice(6, -3);
+      buildFdSearchArgs({ ...base, ...options }).slice(8, -3);
 
     // Nothing skipped: fd is told not to read ignore files at all.
     expect(flags({ skipGitFolders: false, skipGitIgnored: false })).toEqual([
@@ -79,6 +81,99 @@ describe("fdSearch", () => {
       "--exclude",
       ".git",
       "--hidden",
+    ]);
+  });
+
+  it("matches the query literally in plain-text mode and as a pattern otherwise", () => {
+    const args = (patternMode: "text" | "glob" | "regex") =>
+      buildFdSearchArgs({
+        rootPath: "/Users/demo/project",
+        query: "report (1).pdf",
+        patternMode,
+        matchScope: "name",
+        recursive: true,
+        includeHidden: false,
+        skipGitFolders: false,
+        skipGitIgnored: false,
+      });
+
+    expect(args("text")).toContain("--fixed-strings");
+    expect(args("text")).not.toContain("--glob");
+    expect(args("glob")).toContain("--glob");
+    expect(args("glob")).not.toContain("--fixed-strings");
+    expect(args("regex")).not.toContain("--fixed-strings");
+    expect(args("regex")).not.toContain("--glob");
+    // The query itself is always passed through untouched.
+    expect(args("text").slice(-2)).toEqual(["report (1).pdf", "/Users/demo/project"]);
+  });
+
+  it("reports folders and packages, which fd marks with a trailing slash", () => {
+    const process = createMockProcess();
+    const runtime = new FdSearchRuntime("/tmp/fd", {
+      spawn: vi.fn(() => process as never),
+    });
+    const started = runtime.startSearch({
+      rootPath: "/Users/demo",
+      query: "app",
+      patternMode: "text",
+      matchScope: "name",
+      recursive: true,
+      includeHidden: false,
+      skipGitFolders: false,
+      skipGitIgnored: false,
+    });
+
+    process.stdout.write(
+      Buffer.from(
+        "/Users/demo/apps/\0/Users/demo/Notes.app/\0/Users/demo/apps/app.v2/\0/Users/demo/app.ts\0",
+        "utf8",
+      ),
+    );
+
+    expect(
+      runtime
+        .getUpdate(started.jobId, 0)
+        .items.map(({ path, name, extension, kind, parentPath, relativeParentPath }) => ({
+          path,
+          name,
+          extension,
+          kind,
+          parentPath,
+          relativeParentPath,
+        })),
+    ).toEqual([
+      {
+        path: "/Users/demo/apps",
+        name: "apps",
+        extension: "",
+        kind: "directory",
+        parentPath: "/Users/demo",
+        relativeParentPath: ".",
+      },
+      {
+        path: "/Users/demo/Notes.app",
+        name: "Notes.app",
+        extension: "app",
+        kind: "bundle",
+        parentPath: "/Users/demo",
+        relativeParentPath: ".",
+      },
+      {
+        path: "/Users/demo/apps/app.v2",
+        name: "app.v2",
+        extension: "v2",
+        kind: "directory",
+        parentPath: "/Users/demo/apps",
+        relativeParentPath: "apps",
+      },
+      {
+        path: "/Users/demo/app.ts",
+        name: "app.ts",
+        extension: "ts",
+        kind: "file",
+        parentPath: "/Users/demo",
+        relativeParentPath: ".",
+      },
     ]);
   });
 

@@ -1,5 +1,7 @@
 import { basename, dirname, extname, relative, resolve } from "node:path";
 
+import { isMacOSPackageName } from "../fs/explorerService";
+
 import type { Readable } from "node:stream";
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 
@@ -59,7 +61,8 @@ export type FdSearchRuntimeDependencies = {
 };
 
 export function buildFdSearchArgs(request: SearchStartRequest): string[] {
-  const args = ["--type", "f", "--print0", "--absolute-path", "--color", "never"];
+  // Files and folders. Symbolic links are left out, as they always have been.
+  const args = ["--type", "f", "--type", "d", "--print0", "--absolute-path", "--color", "never"];
 
   // fd leaves out what Git ignores (.gitignore, .ignore, .fdignore and the global ignore
   // file, inside Git repositories) unless told otherwise.
@@ -74,6 +77,9 @@ export function buildFdSearchArgs(request: SearchStartRequest): string[] {
 
   if (request.patternMode === "glob") {
     args.push("--glob");
+  } else if (request.patternMode === "text") {
+    // The query is the text to find, not a pattern: "c++" and "report (1)" match as typed.
+    args.push("--fixed-strings");
   }
   if (request.matchScope === "path") {
     args.push("--full-path");
@@ -315,7 +321,10 @@ export class FdSearchRuntime {
   }
 }
 
-function toSearchResultItem(rootPath: string, entryPath: string): SearchResultItem {
+// fd ends a folder's path with a slash, which tells folders from files without a stat call.
+function toSearchResultItem(rootPath: string, outputPath: string): SearchResultItem {
+  const isFolder = outputPath.length > 1 && outputPath.endsWith("/");
+  const entryPath = isFolder ? outputPath.slice(0, -1) : outputPath;
   const name = basename(entryPath);
   const parentPath = dirname(entryPath);
   const relativeParentPath = relative(rootPath, parentPath);
@@ -324,7 +333,8 @@ function toSearchResultItem(rootPath: string, entryPath: string): SearchResultIt
     path: entryPath,
     name,
     extension: extname(name).replace(/^\./, "").toLowerCase(),
-    kind: "file",
+    // Packages (.app and the like) are folders on disk but single items to the user.
+    kind: !isFolder ? "file" : isMacOSPackageName(name) ? "bundle" : "directory",
     isHidden: name.startsWith("."),
     isSymlink: false,
     parentPath,

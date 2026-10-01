@@ -39,7 +39,7 @@ describe("SearchResultsPane", () => {
       />,
     );
 
-    expect(screen.getByText("No matching files")).toBeInTheDocument();
+    expect(screen.getByText("No matches")).toBeInTheDocument();
   });
 
   it("calls selection and activation handlers for result rows", () => {
@@ -531,5 +531,12 @@ describe("SearchResultsPane", () => {
     expect(buildHighlightPattern("*.ts", "glob", "name")).toBeNull();
     expect(buildHighlightPattern("src/app", "regex", "path")).toBeNull();
     expect(buildHighlightPattern("(", "regex", "name")).toBeNull();
+    // Plain text is found as typed, with the same smart case.
+    expect(buildHighlightPattern("(1).pdf", "text", "name")?.exec("report (1).pdf")?.[0]).toBe(
+      "(1).pdf",
+    );
+    expect(buildHighlightPattern("c++", "text", "name")?.exec("My C++ notes")?.[0]).toBe("C++");
+    expect(buildHighlightPattern("C++", "text", "name")?.exec("my c++ notes")).toBeNull();
+    expect(buildHighlightPattern("a.c", "text", "name")?.exec("abc")).toBeNull();
   });
 });

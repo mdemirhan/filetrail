@@ -20,6 +20,7 @@ import type {
   LeftToolbarItems,
   OpenWithApplication,
   ReturnKeyAction,
+  SearchPatternModePreference,
   ThemeMode,
   ThemePreference,
   ToolbarItemId,
@@ -35,6 +36,8 @@ import {
   ICON_THEME_OPTIONS,
   LIGHT_THEME_OPTIONS,
   OPTIONAL_DETAIL_COLUMN_KEYS,
+  SEARCH_PATTERN_MODES,
+  SEARCH_PATTERN_MODE_LABELS,
   ZOOM_PERCENT_MAX,
   ZOOM_PERCENT_MIN,
   clampOpenItemLimit,
@@ -62,7 +65,7 @@ import { ToolbarIcon } from "./ToolbarIcon";
 export type SettingsTab = "general" | "appearance" | "explorer" | "search" | "files" | "toolbars";
 
 export type SearchDefaults = {
-  searchPatternMode: "regex" | "glob";
+  searchPatternMode: SearchPatternModePreference;
   searchMatchScope: "name" | "path";
   searchRecursive: boolean;
   searchSkipGitFolders: boolean;
@@ -2832,20 +2835,24 @@ export function SettingsView({
         {searchDefaults && showSection("search") ? (
           <SectionCard title="Search" theme={palette}>
             <SettingRow
-              title="Pattern type"
-              desc="How the search field text is matched. Regex supports partial matches."
+              title="Match as"
+              desc="Plain text finds the text anywhere in a name. Glob and Regex treat it as a pattern."
               theme={palette}
               right={
                 <SelectControl
                   value={searchDefaults.searchPatternMode}
-                  options={["regex", "glob"]}
+                  options={SEARCH_PATTERN_MODES}
                   theme={palette}
                   width="120px"
-                  ariaLabel="Default pattern type"
+                  ariaLabel="Default match mode"
                   onChange={(value) =>
-                    onSearchDefaultsChange({ searchPatternMode: value as "regex" | "glob" })
+                    onSearchDefaultsChange({
+                      searchPatternMode: value as SearchPatternModePreference,
+                    })
                   }
-                  formatOption={(value) => (value === "glob" ? "Glob" : "Regex")}
+                  formatOption={(value) =>
+                    SEARCH_PATTERN_MODE_LABELS[value as SearchPatternModePreference]
+                  }
                 />
               }
             />

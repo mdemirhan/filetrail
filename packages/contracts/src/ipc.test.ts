@@ -623,7 +623,7 @@ describe("ipc contracts", () => {
     });
   });
 
-  it("defaults file search requests to regex name matching with recursive search", () => {
+  it("defaults search requests to plain-text name matching with recursive search", () => {
     const parsed = ipcContractSchemas["search:start"].request.parse({
       rootPath: "/Users/demo/project",
       query: "*.tsx",
@@ -632,7 +632,7 @@ describe("ipc contracts", () => {
     expect(parsed).toEqual({
       rootPath: "/Users/demo/project",
       query: "*.tsx",
-      patternMode: "regex",
+      patternMode: "text",
       matchScope: "name",
       recursive: true,
       includeHidden: false,

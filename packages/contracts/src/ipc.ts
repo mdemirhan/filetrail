@@ -45,7 +45,7 @@ export const iconThemeModeSchema = z.enum(["native", "classic", "colorblock", "m
 export const explorerViewModeSchema = z.enum(["list", "details"]);
 export const directorySortBySchema = z.enum(["name", "modified", "kind", "size"]);
 export const sortDirectionSchema = z.enum(["asc", "desc"]);
-export const searchPatternModeSchema = z.enum(["glob", "regex"]);
+export const searchPatternModeSchema = z.enum(["text", "glob", "regex"]);
 export const searchMatchScopeSchema = z.enum(["name", "path"]);
 export const searchResultsSortBySchema = z.enum(["name", "path"]);
 export const searchResultsFilterScopeSchema = z.enum(["name", "path"]);
@@ -812,7 +812,7 @@ export const ipcContractSchemas = {
     request: z.object({
       rootPath: z.string().min(1),
       query: z.string().min(1),
-      patternMode: searchPatternModeSchema.default("regex"),
+      patternMode: searchPatternModeSchema.default("text"),
       matchScope: searchMatchScopeSchema.default("name"),
       recursive: z.boolean().default(true),
       includeHidden: z.boolean().default(false),

@@ -224,8 +224,20 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     id: "search",
     title: "Searching",
     intro:
-      "Search looks for files in the folder you are browsing. Type in the search field and press Return. The magnifier in the field opens the options.",
+      "Search looks for files and folders in the folder you are browsing. Type in the search field and press Return. The magnifier in the field opens the options.",
     sections: [
+      {
+        title: "Plain text",
+        rows: [
+          { label: "draft", code: true, description: "Names containing “draft”" },
+          {
+            label: "report (1).pdf",
+            code: true,
+            description: "Found exactly as typed: brackets, dots and `+` have no special meaning",
+          },
+        ],
+        note: "Plain text is how a new search matches. Choose Glob or Regex under Match as in the options to search with a pattern instead.",
+      },
       {
         title: "Glob patterns",
         rows: [
@@ -287,7 +299,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "**/docs/*",
             code: true,
-            description: "Glob: files directly inside any folder named “docs”",
+            description: "Glob: items directly inside any folder named “docs”",
           },
           {
             label: "/src/.*\\.ts$",
@@ -295,7 +307,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
             description: "Regex: the same .ts files under “src”",
           },
         ],
-        note: "With Match set to Full path, the pattern is compared with the whole path from the top of the disk, including the folders above the one you search. Start a glob with `**/`. For file names alone, use Match: Name.",
+        note: "With Match set to Full path, the pattern is compared with the whole path from the top of the disk, including the folders above the one you search. Start a glob with `**/`. For names alone, use Match: Name.",
       },
       {
         title: "Options",

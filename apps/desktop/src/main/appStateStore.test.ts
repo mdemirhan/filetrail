@@ -130,7 +130,7 @@ describe("appStateStore", () => {
       fileActivationAction: "open",
       openItemLimit: 5,
       includeHidden: false,
-      searchPatternMode: "regex",
+      searchPatternMode: "text",
       searchMatchScope: "name",
       searchRecursive: true,
       searchSkipGitFolders: true,
@@ -512,6 +512,21 @@ describe("appStateStore", () => {
     // Saved after the change: a removed Macintosh HD stays removed.
     writeFileSync(filePath, withFavorites({ showSidebarRail: false }));
     expect(createAppStateStore(filePath).getPreferences().favorites).toEqual(savedFavorites);
+  });
+
+  it("keeps a saved search match mode and defaults to plain text", () => {
+    const load = (searchPatternMode: unknown) => {
+      const filePath = resolveAppStatePath(mkdtempSync(join(tmpdir(), "filetrail-app-state-")));
+      writeFileSync(filePath, JSON.stringify({ preferences: { searchPatternMode } }), "utf8");
+      return createAppStateStore(filePath).getPreferences().searchPatternMode;
+    };
+
+    // Regex was the default before plain text existed; a profile that has it keeps it.
+    expect(load("regex")).toBe("regex");
+    expect(load("glob")).toBe("glob");
+    expect(load("text")).toBe("text");
+    expect(load(undefined)).toBe("text");
+    expect(load("fuzzy")).toBe("text");
   });
 
   it("sanitizes invalid persisted values", () => {

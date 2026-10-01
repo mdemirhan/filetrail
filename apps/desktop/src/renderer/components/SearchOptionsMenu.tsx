@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 
 import type { IpcRequest } from "@filetrail/contracts";
 
+import { SEARCH_PATTERN_MODE_LABELS } from "../../shared/appPreferences";
 import { useKeepInViewport } from "../hooks/useKeepInViewport";
 import { ToolbarIcon } from "./ToolbarIcon";
 
@@ -232,9 +233,16 @@ export function SearchOptionsMenu({
             {radioItem("Name", matchScope === "name", () => onMatchScopeChange("name"))}
             {radioItem("Full path", matchScope === "path", () => onMatchScopeChange("path"))}
             <hr className="toolbar-menu-separator" />
-            <div className="toolbar-menu-heading">Pattern</div>
-            {radioItem("Glob", patternMode === "glob", () => onPatternModeChange("glob"))}
-            {radioItem("Regex", patternMode === "regex", () => onPatternModeChange("regex"))}
+            <div className="toolbar-menu-heading">Match as</div>
+            {radioItem(SEARCH_PATTERN_MODE_LABELS.text, patternMode === "text", () =>
+              onPatternModeChange("text"),
+            )}
+            {radioItem(SEARCH_PATTERN_MODE_LABELS.glob, patternMode === "glob", () =>
+              onPatternModeChange("glob"),
+            )}
+            {radioItem(SEARCH_PATTERN_MODE_LABELS.regex, patternMode === "regex", () =>
+              onPatternModeChange("regex"),
+            )}
             <hr className="toolbar-menu-separator" />
             {checkboxItem("Search subfolders", recursive, () => onRecursiveChange(!recursive))}
             <hr className="toolbar-menu-separator" />

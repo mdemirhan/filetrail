@@ -21,7 +21,7 @@ Finder is great until you need to move fast through large folder trees, inspect 
 ## Highlights
 
 - Fast search powered by a bundled `fd` binary, so search is built into the app and does not depend on the user setting up extra tools.
-- Search controls that let you switch between regex and glob matching, target names or full paths, recurse deeply or stay shallow, and include hidden files when needed.
+- Search controls that let you switch between plain text, glob and regex matching, target names or full paths, recurse deeply or stay shallow, and include hidden files when needed.
 - Search result tooling for sorting, live filtering, and quickly drilling into large result sets without losing context.
 - On-demand folder size calculation with cached results, so you can inspect heavy directories without paying the cost every time you click around.
 - Native folder analysis that tracks logical size, allocated disk usage, and file counts for directory trees.
@@ -33,7 +33,7 @@ Finder is great until you need to move fast through large folder trees, inspect 
 
 Search is one of the main reasons to use File Trail. The app runs a bundled `fd` binary under the hood, which makes file discovery feel dramatically faster than the slow, blocking search experiences people are used to in general-purpose file browsers.
 
-If you work inside large codebases, monorepos, media folders, or messy home directories, this matters. You can search by filename or full path, choose regex or glob patterns, include hidden files when necessary, and refine the result list after the scan finishes. The result is a search flow that feels made for real work instead of occasional lookup.
+If you work inside large codebases, monorepos, media folders, or messy home directories, this matters. You can search by filename or full path, search for plain text or with glob and regex patterns, include hidden files when necessary, and refine the result list after the scan finishes. The result is a search flow that feels made for real work instead of occasional lookup.
 
 ## Folder Size Calculation
 
