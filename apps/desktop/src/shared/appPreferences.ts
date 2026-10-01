@@ -18,7 +18,6 @@ export type ThemeMode =
 export type ThemePreference = "auto" | ThemeMode;
 export type AccentMode = string;
 // "native" shows the real macOS icons for files and folders (via NSWorkspace).
-export type IconThemeMode = "native" | "classic" | "colorblock" | "monoline" | "vivid";
 export type ExplorerViewMode = "list" | "details";
 export type UiFontFamily = "system" | "dm-sans" | "lexend" | "fira-code" | "jetbrains-mono";
 export type SearchPatternModePreference = "text" | "glob" | "regex";
@@ -147,13 +146,6 @@ export function themeChoicePatch(
     ? { theme: choice, autoLightTheme: choice }
     : { theme: choice, autoDarkTheme: choice };
 }
-export const ICON_THEME_OPTIONS = [
-  { value: "native", label: "macOS" },
-  { value: "classic", label: "Classic" },
-  { value: "colorblock", label: "Color Block" },
-  { value: "monoline", label: "Monoline" },
-  { value: "vivid", label: "Vivid" },
-] as const;
 // The accent colors offered in Settings: macOS's own, in System Settings order, then the
 // copper the app used to default to. Any other saved color shows up as a custom color.
 export const ACCENT_OPTIONS = [
@@ -298,7 +290,6 @@ export type AppPreferences = {
   theme: ThemePreference;
   autoLightTheme: ThemeMode;
   autoDarkTheme: ThemeMode;
-  iconTheme: IconThemeMode;
   accent: AccentMode;
   zoomPercent: number;
   uiFontFamily: UiFontFamily;
@@ -352,7 +343,6 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   theme: "auto",
   autoLightTheme: "macos-light",
   autoDarkTheme: "macos-dark",
-  iconTheme: "native",
   accent: DEFAULT_ACCENT,
   zoomPercent: 100,
   uiFontFamily: "system",
@@ -453,10 +443,6 @@ export function resolveEffectiveTheme(
     return theme;
   }
   return systemPrefersDark ? autoDarkTheme : autoLightTheme;
-}
-
-export function getIconThemeLabel(iconTheme: IconThemeMode): string {
-  return ICON_THEME_OPTIONS.find((option) => option.value === iconTheme)?.label ?? iconTheme;
 }
 
 export function normalizeAccentColor(value: string): string | null {

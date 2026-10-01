@@ -1,23 +1,8 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { IpcResponse } from "@filetrail/contracts";
-import type { FavoriteIconId, IconThemeMode } from "../../shared/appPreferences";
+import type { FavoriteIconId } from "../../shared/appPreferences";
 import { useFiletrailClient } from "./filetrailClient";
-import {
-  ColorblockDocumentSvg,
-  resolveColorblockIconType,
-  resolveColorblockIconTypeByName,
-} from "./iconThemeColorblock";
-import {
-  MonolineDocumentSvg,
-  resolveMonolineIconType,
-  resolveMonolineIconTypeByName,
-} from "./iconThemeMonoline";
-import {
-  VividDocumentSvg,
-  resolveVividIconType,
-  resolveVividIconTypeByName,
-} from "./iconThemeVivid";
 
 type Entry = IpcResponse<"directory:getSnapshot">["entries"][number];
 
@@ -60,157 +45,14 @@ function scheduleIconLoad(load: () => void, deferLoad: boolean): () => void {
   return () => window.clearTimeout(timer);
 }
 
-// The icon theme comes from React (App provides the preference) so a change re-renders
-// every icon at once. Reading the root `data-icon-theme` instead would lag a change by one
-// render, because that attribute is written in an effect after the render. The attribute is
-// only a fallback for icons rendered outside a provider.
-const IconThemeContext = createContext<IconThemeMode | null>(null);
-export const IconThemeProvider = IconThemeContext.Provider;
-
-function useIconTheme(): string | undefined {
-  const iconTheme = useContext(IconThemeContext);
-  if (iconTheme) {
-    return iconTheme;
-  }
-  return typeof document === "undefined" ? undefined : document.documentElement.dataset.iconTheme;
-}
-
-// Icon rendering is intentionally lightweight and CSS-driven. Classic mode classifies
-// entries into a small visual vocabulary and lets CSS handle the final appearance.
-// Colorblock mode uses per-extension classification with colored blocks and symbols.
+// Files and folders are shown with the icons macOS itself draws for them. Until an icon
+// arrives (or if macOS has none), a plain folder or document shape stands in.
 export function FileIcon({
   entry,
   deferLoad = false,
 }: {
   entry: Entry;
   /** Wait a moment before asking for an icon that is not known yet (see above). */
-  deferLoad?: boolean;
-}) {
-  const activeIconTheme = useIconTheme();
-  const type = resolveIconType(entry);
-  if (
-    activeIconTheme === "native" &&
-    entry.kind !== "symlink_directory" &&
-    entry.kind !== "symlink_file"
-  ) {
-    return <NativeFileIcon entry={entry} fallbackType={type} deferLoad={deferLoad} />;
-  }
-  if (type === "folder") {
-    return (
-      <span className="file-icon folder" aria-hidden>
-        <FolderSvg />
-      </span>
-    );
-  }
-  if (type === "alias-folder") {
-    return (
-      <span className="file-icon folder alias" aria-hidden>
-        <FolderSvg open />
-        <span className="alias-badge">↗</span>
-      </span>
-    );
-  }
-  // macOS .app bundles get native icons loaded from NSWorkspace.
-  if (entry.kind === "bundle" && entry.extension.toLowerCase() === "app") {
-    return <NativeAppIcon path={entry.path} deferLoad={deferLoad} />;
-  }
-  // Non-classic themes: per-extension classification with inline colored SVGs.
-  const isSymlink = entry.kind === "symlink_file";
-  if (activeIconTheme === "colorblock") {
-    const extension = entry.extension.toLowerCase();
-    const cbType =
-      resolveColorblockIconTypeByName(entry.name) ?? resolveColorblockIconType(extension);
-    return (
-      <span className={`file-icon document colorblock${isSymlink ? " alias" : ""}`} aria-hidden>
-        <ColorblockDocumentSvg iconType={cbType} label={resolveDocumentLabel(entry)} />
-        {isSymlink && <span className="alias-badge">↗</span>}
-      </span>
-    );
-  }
-  if (activeIconTheme === "monoline") {
-    const extension = entry.extension.toLowerCase();
-    const mlType = resolveMonolineIconTypeByName(entry.name) ?? resolveMonolineIconType(extension);
-    return (
-      <span className={`file-icon document monoline${isSymlink ? " alias" : ""}`} aria-hidden>
-        <MonolineDocumentSvg iconType={mlType} label={resolveDocumentLabel(entry)} />
-        {isSymlink && <span className="alias-badge">↗</span>}
-      </span>
-    );
-  }
-  if (activeIconTheme === "vivid") {
-    const extension = entry.extension.toLowerCase();
-    const vType = resolveVividIconTypeByName(entry.name) ?? resolveVividIconType(extension);
-    return (
-      <span className={`file-icon document vivid${isSymlink ? " alias" : ""}`} aria-hidden>
-        <VividDocumentSvg iconType={vType} label={resolveDocumentLabel(entry)} />
-        {isSymlink && <span className="alias-badge">↗</span>}
-      </span>
-    );
-  }
-  // Classic theme (default): broader category classification with CSS-driven colors.
-  return (
-    <span className={`file-icon document ${type}`} aria-hidden>
-      <DocumentSvg label={resolveDocumentLabel(entry)} />
-    </span>
-  );
-}
-
-// macOS icon theme: files share one icon per extension, files without an extension one of
-// two (a document, or an executable), and folders one generic icon, so a directory costs a
-// handful of native lookups instead of one per entry. Apps and bundles keep per-path icons
-// because each has its own.
-// Folders macOS draws with their own icon; everything else shares the plain folder icon.
-const SPECIAL_FOLDER_NAMES = new Set([
-  "Applications",
-  "Desktop",
-  "Developer",
-  "Documents",
-  "Downloads",
-  "Library",
-  "Movies",
-  "Music",
-  "Pictures",
-  "Public",
-  "System",
-  "Users",
-]);
-// Cache keys for the icons shared by a whole kind of item, and what to ask the main process
-// for to get each (see `generic` in the `system:getFileIcon` contract).
-const GENERIC_ICON_KINDS = {
-  "kind:directory": "folder",
-  "kind:file": "file",
-  "kind:executable": "executable",
-} as const;
-
-function nativeIconCacheKey(entry: Entry): string {
-  if (entry.kind === "bundle" || entry.kind === "other") {
-    return `path:${entry.path}`;
-  }
-  if (entry.kind === "directory") {
-    const name = entry.name || entry.path.split("/").filter(Boolean).at(-1) || "";
-    return entry.path === "/" || SPECIAL_FOLDER_NAMES.has(name)
-      ? `path:${entry.path}`
-      : "kind:directory";
-  }
-  const extension = entry.extension.toLowerCase();
-  if (extension.length > 0) {
-    return `ext:${extension}`;
-  }
-  // A listing says whether such a file is executable; anything else (a search result) does
-  // not, and is asked for by path.
-  if (entry.kind === "file" && entry.isExecutable !== undefined) {
-    return entry.isExecutable ? "kind:executable" : "kind:file";
-  }
-  return `path:${entry.path}`;
-}
-
-function NativeFileIcon({
-  entry,
-  fallbackType,
-  deferLoad = false,
-}: {
-  entry: Entry;
-  fallbackType: string;
   deferLoad?: boolean;
 }) {
   const client = useFiletrailClient();
@@ -270,7 +112,7 @@ function NativeFileIcon({
       </span>
     );
   }
-  if (fallbackType === "folder") {
+  if (entry.kind === "directory" || entry.kind === "symlink_directory") {
     return (
       <span className="file-icon folder" aria-hidden>
         <FolderSvg />
@@ -278,85 +120,81 @@ function NativeFileIcon({
     );
   }
   return (
-    <span className={`file-icon document ${fallbackType}`} aria-hidden>
-      <DocumentSvg label={resolveDocumentLabel(entry)} />
+    <span className="file-icon document" aria-hidden>
+      <DocumentSvg />
     </span>
   );
 }
 
 const pendingNativeIconRequests = new Map<string, Promise<string | null>>();
 
-function NativeAppIcon({ path, deferLoad = false }: { path: string; deferLoad?: boolean }) {
-  const client = useFiletrailClient();
-  const [iconSrc, setIconSrc] = useState<string | null>(() => nativeIconCache.get(path) ?? null);
+// Files share one icon per extension, files without an extension one of two (a document, or
+// an executable), and folders one generic icon, so a directory costs a handful of lookups
+// instead of one per entry. Apps, bundles and symlinks are asked for one by one: each app
+// has its own icon, and macOS draws a symlink as what it points to, with an arrow.
+// Folders macOS draws with their own icon; everything else shares the plain folder icon.
+const SPECIAL_FOLDER_NAMES = new Set([
+  "Applications",
+  "Desktop",
+  "Developer",
+  "Documents",
+  "Downloads",
+  "Library",
+  "Movies",
+  "Music",
+  "Pictures",
+  "Public",
+  "System",
+  "Users",
+]);
+// Cache keys for the icons shared by a whole kind of item, and what to ask the main process
+// for to get each (see `generic` in the `system:getFileIcon` contract).
+const GENERIC_ICON_KINDS = {
+  "kind:directory": "folder",
+  "kind:file": "file",
+  "kind:executable": "executable",
+} as const;
 
-  useEffect(() => {
-    const cached = readNativeIcon(path);
-    if (cached !== undefined) {
-      setIconSrc(cached);
-      return;
-    }
-    let cancelled = false;
-    const cancelLoad = scheduleIconLoad(() => {
-      client
-        .invoke("system:getFileIcon", { path, size: 64 })
-        .then((res) => {
-          if (cancelled) return;
-          rememberNativeIcon(path, res.pngBase64);
-          setIconSrc(res.pngBase64);
-        })
-        .catch(() => {
-          if (!cancelled) setIconSrc(null);
-        });
-    }, deferLoad);
-    return () => {
-      cancelled = true;
-      cancelLoad();
-    };
-  }, [path, client, deferLoad]);
-
-  if (iconSrc) {
-    return (
-      <span className="file-icon native-app-icon" aria-hidden>
-        <img
-          src={`data:image/png;base64,${iconSrc}`}
-          alt=""
-          className="file-icon-native-img"
-          draggable={false}
-        />
-      </span>
-    );
+function nativeIconCacheKey(entry: Entry): string {
+  if (
+    entry.kind === "bundle" ||
+    entry.kind === "other" ||
+    entry.kind === "symlink_file" ||
+    entry.kind === "symlink_directory"
+  ) {
+    return `path:${entry.path}`;
   }
-  // Fallback: generic app document icon while loading or on failure.
-  return (
-    <span className="file-icon document app" aria-hidden>
-      <DocumentSvg label="APP" />
-    </span>
-  );
+  if (entry.kind === "directory") {
+    const name = entry.name || entry.path.split("/").filter(Boolean).at(-1) || "";
+    return entry.path === "/" || SPECIAL_FOLDER_NAMES.has(name)
+      ? `path:${entry.path}`
+      : "kind:directory";
+  }
+  const extension = entry.extension.toLowerCase();
+  if (extension.length > 0) {
+    return `ext:${extension}`;
+  }
+  // A listing says whether such a file is executable; anything else (a search result) does
+  // not, and is asked for by path.
+  if (entry.kind === "file" && entry.isExecutable !== undefined) {
+    return entry.isExecutable ? "kind:executable" : "kind:file";
+  }
+  return `path:${entry.path}`;
 }
 
+// The folder drawn in an empty file list.
 export function FolderIcon({
-  alias = false,
   className = "",
   open = false,
   variant = "filled",
   showCue = false,
 }: {
-  alias?: boolean;
   className?: string;
   open?: boolean;
   variant?: "filled" | "outline";
   showCue?: boolean;
 }) {
   const iconClassName = className.length > 0 ? `file-icon folder ${className}` : "file-icon folder";
-  if (alias) {
-    return (
-      <span className={`${iconClassName} alias`} aria-hidden>
-        <FolderSvg open />
-        <span className="alias-badge">↗</span>
-      </span>
-    );
-  }
   return (
     <span className={iconClassName} aria-hidden>
       <FolderSvg open={open} variant={variant} showCue={showCue} />
@@ -364,46 +202,32 @@ export function FolderIcon({
   );
 }
 
-export function TreeFolderIcon({
-  open = false,
-  alias = false,
-  path,
-}: { open?: boolean; alias?: boolean; path?: string | null }) {
-  const activeIconTheme = useIconTheme();
-  // The macOS icon theme uses the same system folder icon in the tree as in the list.
-  if (path && !alias && activeIconTheme === "native") {
+// A folder in the tree: the same icon the file list shows for it.
+export function TreeFolderIcon({ alias = false, path }: { alias?: boolean; path?: string | null }) {
+  if (!path) {
     return (
-      <NativeFileIcon
-        entry={{
-          path,
-          name: "",
-          extension: "",
-          kind: "directory",
-          isHidden: false,
-          isSymlink: false,
-        }}
-        fallbackType="folder"
-      />
-    );
-  }
-  if (alias) {
-    return (
-      <span className="file-icon folder alias" aria-hidden>
-        <FolderSvg open />
-        <span className="alias-badge">↗</span>
+      <span className="file-icon folder" aria-hidden>
+        <FolderSvg />
       </span>
     );
   }
   return (
-    <span className="file-icon folder" aria-hidden>
-      <FolderSvg open={open} />
-    </span>
+    <FileIcon
+      entry={{
+        path,
+        name: "",
+        extension: "",
+        kind: alias ? "symlink_directory" : "directory",
+        isHidden: false,
+        isSymlink: alias,
+      }}
+    />
   );
 }
 
 export function FavoriteItemIcon({ icon }: { icon: FavoriteIconId }) {
   return (
-    <span className={`file-icon favorite favorite-icon-${icon}`} aria-hidden>
+    <span className="file-icon favorite" aria-hidden>
       <svg
         className="file-icon-svg file-icon-favorite"
         viewBox="0 0 24 24"
@@ -487,9 +311,8 @@ function FolderSvg({
   );
 }
 
-// Documents render a short in-icon label based on extension/category rather than unique
-// per-type artwork. This keeps icon rendering cheap in heavily virtualized views.
-function DocumentSvg({ label }: { label: string }) {
+// The plain document that stands in for a file whose icon has not arrived.
+function DocumentSvg() {
   return (
     <svg
       className="file-icon-svg file-icon-document"
@@ -504,255 +327,8 @@ function DocumentSvg({ label }: { label: string }) {
         strokeLinejoin="round"
       />
       <path d="M14 2v6h6" className="file-icon-document-fold" strokeLinejoin="round" />
-      <text x="12" y="17" textAnchor="middle" className="file-icon-document-text">
-        {label}
-      </text>
     </svg>
   );
-}
-
-function resolveDocumentLabel(entry: Entry): string {
-  // Symlinked files are called out explicitly because their extension may not reveal that
-  // following the item leaves the current directory context.
-  if (entry.kind === "symlink_file") {
-    return "AL";
-  }
-  const extension = entry.extension.toUpperCase();
-  if (extension.length > 0) {
-    return extension.slice(0, 4);
-  }
-  // Name-based labels for extensionless files that have specific classifications.
-  const lower = entry.name.toLowerCase();
-  if (lower === "dockerfile" || lower.startsWith("dockerfile.")) return "DOCK";
-  if (lower === "makefile" || lower === "cmakelists.txt" || lower === "rakefile") return "MAKE";
-  if (lower === "gemfile" || lower === "podfile") return "DEPS";
-  if (lower === "license" || lower.startsWith("license.")) return "LIC";
-  if (lower === "changelog" || lower.startsWith("changelog.")) return "LOG";
-  return "TXT";
-}
-
-function resolveIconType(entry: Entry): string {
-  // Classic classification: broader than single-language granularity but covers all common
-  // file families. CSS maps each category to a distinct color.
-  if (entry.kind === "directory") {
-    return "folder";
-  }
-  if (entry.kind === "symlink_directory") {
-    return "alias-folder";
-  }
-  // macOS bundles (.app, .framework, etc.) render as document-style icons.
-  if (entry.kind === "bundle") {
-    return "app";
-  }
-  const extension = entry.extension.toLowerCase();
-  const name = entry.name.toLowerCase();
-
-  // Code languages
-  if (
-    [
-      "ts",
-      "tsx",
-      "mts",
-      "cts",
-      "js",
-      "jsx",
-      "mjs",
-      "cjs",
-      "py",
-      "pyw",
-      "pyi",
-      "rs",
-      "go",
-      "java",
-      "jar",
-      "class",
-      "c",
-      "h",
-      "cpp",
-      "hpp",
-      "cc",
-      "cxx",
-      "hxx",
-      "cs",
-      "csx",
-      "rb",
-      "erb",
-      "rake",
-      "php",
-      "phtml",
-      "swift",
-      "kt",
-      "kts",
-      "dart",
-      "lua",
-      "r",
-      "rmd",
-      "scala",
-      "sc",
-      "pl",
-      "pm",
-      "ex",
-      "exs",
-      "hs",
-      "lhs",
-      "zig",
-      "jl",
-      "tex",
-      "sty",
-      "bib",
-      "cls",
-    ].includes(extension)
-  ) {
-    return "code";
-  }
-  // Web markup & styling
-  if (["html", "htm", "css", "scss", "less", "sass"].includes(extension)) {
-    return "web";
-  }
-  // Data & structured formats
-  if (
-    [
-      "json",
-      "jsonc",
-      "json5",
-      "ndjson",
-      "jsonl",
-      "yaml",
-      "yml",
-      "toml",
-      "sql",
-      "xml",
-      "xsl",
-      "xslt",
-      "xsd",
-      "plist",
-      "xls",
-      "xlsx",
-      "csv",
-      "tsv",
-      "ods",
-      "numbers",
-      "ppt",
-      "pptx",
-      "odp",
-      "keynote",
-      "graphql",
-      "gql",
-      "proto",
-      "db",
-      "sqlite",
-      "sqlite3",
-    ].includes(extension)
-  ) {
-    return "data";
-  }
-  // Markdown / documentation
-  if (["md", "mdx"].includes(extension)) {
-    return "markdown";
-  }
-  // Shell scripts
-  if (["sh", "bash", "zsh", "fish"].includes(extension)) {
-    return "shell";
-  }
-  // Dockerfiles (name-based)
-  if (name === "dockerfile" || name.startsWith("dockerfile.")) {
-    return "config";
-  }
-  // Config files
-  if (
-    ["env", "ini", "cfg", "conf", "pem", "crt", "cer", "key", "p12", "pfx"].includes(extension) ||
-    name === ".env" ||
-    name.startsWith(".env.") ||
-    name === ".gitignore" ||
-    name === ".gitattributes" ||
-    name === ".editorconfig"
-  ) {
-    return "config";
-  }
-  if (
-    name === "makefile" ||
-    name === "cmakelists.txt" ||
-    name === "rakefile" ||
-    name === "gemfile" ||
-    name === "podfile"
-  ) {
-    return "config";
-  }
-  // Images (raster)
-  if (
-    [
-      "png",
-      "jpg",
-      "jpeg",
-      "gif",
-      "webp",
-      "heic",
-      "ico",
-      "bmp",
-      "tiff",
-      "avif",
-      "raw",
-      "psd",
-      "ai",
-      "cr2",
-      "nef",
-      "arw",
-    ].includes(extension)
-  ) {
-    return "image";
-  }
-  // SVG (vector)
-  if (extension === "svg") {
-    return "svg";
-  }
-  // Video
-  if (["mov", "mp4", "mkv", "avi", "webm", "flv", "wmv", "m4v"].includes(extension)) {
-    return "video";
-  }
-  // Audio
-  if (
-    ["mp3", "wav", "flac", "aac", "m4a", "ogg", "mid", "midi", "aiff", "wma"].includes(extension)
-  ) {
-    return "audio";
-  }
-  // Archives
-  if (
-    ["zip", "tar", "gz", "xz", "rar", "7z", "bz2", "iso", "deb", "rpm", "pkg", "cab"].includes(
-      extension,
-    )
-  ) {
-    return "archive";
-  }
-  // PDF
-  if (extension === "pdf") {
-    return "pdf";
-  }
-  // Applications
-  if (["app", "dmg"].includes(extension)) {
-    return "app";
-  }
-  // Fonts
-  if (["ttf", "otf", "woff", "woff2"].includes(extension)) {
-    return "font";
-  }
-  // Binary / executable
-  if (["exe", "bin", "dll", "dylib", "so", "wasm", "wat"].includes(extension)) {
-    return "binary";
-  }
-  // Plain text & documents
-  if (["txt", "rtf", "log", "doc", "docx", "odt", "pages", "epub", "mobi"].includes(extension)) {
-    return "text";
-  }
-  // Name-based text
-  if (
-    name === "license" ||
-    name.startsWith("license.") ||
-    name === "changelog" ||
-    name.startsWith("changelog.")
-  ) {
-    return "text";
-  }
-  return "generic";
 }
 
 function resolveFavoriteIconPath(icon: FavoriteIconId): string {

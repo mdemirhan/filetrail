@@ -41,7 +41,6 @@ export const uiFontFamilySchema = z.enum([
   "fira-code",
   "jetbrains-mono",
 ]);
-export const iconThemeModeSchema = z.enum(["native", "classic", "colorblock", "monoline", "vivid"]);
 export const explorerViewModeSchema = z.enum(["list", "details"]);
 export const directorySortBySchema = z.enum(["name", "modified", "kind", "size"]);
 export const sortDirectionSchema = z.enum(["asc", "desc"]);
@@ -565,7 +564,6 @@ export const appPreferencesSchema = z.object({
   theme: themePreferenceSchema,
   autoLightTheme: themeModeSchema,
   autoDarkTheme: themeModeSchema,
-  iconTheme: iconThemeModeSchema,
   accent: accentModeSchema,
   zoomPercent: z.number().int().min(75).max(150),
   uiFontFamily: uiFontFamilySchema,

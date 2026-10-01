@@ -64,7 +64,7 @@ import {
   isFavoritePath,
   isFavoritesRootItemId,
 } from "./lib/favorites";
-import { FileIcon, IconThemeProvider } from "./lib/fileIcons";
+import { FileIcon } from "./lib/fileIcons";
 import { useFiletrailClient } from "./lib/filetrailClient";
 import { formatDateTime, formatPermissionMode, formatSize } from "./lib/formatting";
 import { getBackHistoryEntries, getForwardHistoryEntries } from "./lib/historyMenu";
@@ -116,8 +116,6 @@ export function App() {
     autoDarkTheme,
     setAutoDarkTheme,
     effectiveTheme,
-    iconTheme,
-    setIconTheme,
     accent,
     setAccent,
     zoomPercent,
@@ -900,7 +898,6 @@ export function App() {
     theme,
     autoLightTheme,
     autoDarkTheme,
-    iconTheme,
     accent,
     zoomPercent,
     uiFontFamily,
@@ -1055,7 +1052,6 @@ export function App() {
         setTheme(preferences.theme);
         setAutoLightTheme(preferences.autoLightTheme);
         setAutoDarkTheme(preferences.autoDarkTheme);
-        setIconTheme(preferences.iconTheme);
         setAccent(preferences.accent);
         setZoomPercent(preferences.zoomPercent);
         setUiFontFamily(preferences.uiFontFamily);
@@ -1989,8 +1985,7 @@ export function App() {
       </main>
     </ExplorerStoreProvider>
   );
-  // Icons take the icon theme from here so a change re-renders them all at once.
-  return <IconThemeProvider value={iconTheme}>{workspace}</IconThemeProvider>;
+  return workspace;
 }
 
 // Search scopes: the folder being browsed, Home, and the whole disk (deduplicated).

@@ -168,7 +168,6 @@ describe("appStateStore", () => {
       showSidebarRail: false,
       showSidebarBottomRail: true,
       returnKeyAction: "rename",
-      iconTheme: "native",
       accent: "#007aff",
       zoomPercent: 100,
       uiFontFamily: "system",
@@ -277,7 +276,6 @@ describe("appStateStore", () => {
 
     store.updatePreferences({
       theme: "macos-dark",
-      iconTheme: "colorblock",
       accent: "#2cb5a0",
       zoomPercent: 115,
       uiFontFamily: "lexend",
@@ -373,7 +371,6 @@ describe("appStateStore", () => {
       showSidebarRail: false,
       showSidebarBottomRail: true,
       returnKeyAction: "rename",
-      iconTheme: "colorblock",
       accent: "#2cb5a0",
       zoomPercent: 115,
       uiFontFamily: "lexend",

@@ -16,7 +16,6 @@ import type {
   FavoritePreference,
   FavoritesPlacement,
   FileActivationAction,
-  IconThemeMode,
   LeftToolbarItems,
   OpenWithApplication,
   ReturnKeyAction,
@@ -33,7 +32,6 @@ import {
   DEFAULT_TEXT_EDITOR,
   DETAIL_COLUMN_LABELS,
   FAVORITE_ICON_OPTIONS,
-  ICON_THEME_OPTIONS,
   LIGHT_THEME_OPTIONS,
   OPTIONAL_DETAIL_COLUMN_KEYS,
   SEARCH_PATTERN_MODES,
@@ -778,68 +776,6 @@ function AppearanceModePicker({
   );
 }
 
-// ── Icon Theme Picker with inline preview ──────────────────────────
-
-function IconThemePicker({
-  value,
-  theme,
-  onChange,
-}: {
-  value: IconThemeMode;
-  theme: ResolvedSettingsTheme;
-  onChange: (value: IconThemeMode) => void;
-}) {
-  // A macOS segmented control: one segment per icon style, the selected one raised.
-  return (
-    <SettingRow
-      title="File icons"
-      desc={value === "native" ? "The icons Finder shows for each file type." : undefined}
-      theme={theme}
-      right={
-        <div
-          role="radiogroup"
-          aria-label="Icon theme"
-          style={{
-            display: "inline-flex",
-            gap: "2px",
-            padding: "2px",
-            borderRadius: "7px",
-            background: theme.toggle.trackOff,
-          }}
-        >
-          {ICON_THEME_OPTIONS.map((option) => {
-            const selected = option.value === value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                aria-label={`Icon theme: ${option.label}`}
-                aria-pressed={selected}
-                onClick={() => onChange(option.value)}
-                style={{
-                  height: "22px",
-                  padding: "0 10px",
-                  border: 0,
-                  borderRadius: "5px",
-                  background: selected ? theme.card.bg : "transparent",
-                  boxShadow: selected ? "0 0.5px 1.5px rgba(0,0,0,0.2)" : "none",
-                  color: theme.label.primary,
-                  fontFamily: sans,
-                  fontSize: "12px",
-                  fontWeight: selected ? 600 : 400,
-                  cursor: "default",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {option.label}
-              </button>
-            );
-          })}
-        </div>
-      }
-    />
-  );
-}
 // The accent color as a row of swatches, with a custom color at the end.
 function AccentSelector({
   accent,
@@ -2075,7 +2011,6 @@ export function SettingsView({
   autoDarkTheme = DEFAULT_APP_PREFERENCES.autoDarkTheme,
   onAutoLightThemeChange = () => undefined,
   onAutoDarkThemeChange = () => undefined,
-  iconTheme,
   accent,
   zoomPercent,
   uiFontFamily,
@@ -2110,7 +2045,6 @@ export function SettingsView({
   uiFontOptions,
   notificationDurationSecondsOptions,
   onThemeChange,
-  onIconThemeChange,
   onAccentChange,
   onZoomPercentChange,
   onUiFontFamilyChange,
@@ -2160,7 +2094,6 @@ export function SettingsView({
   autoDarkTheme?: ThemeMode;
   onAutoLightThemeChange?: (value: ThemeMode) => void;
   onAutoDarkThemeChange?: (value: ThemeMode) => void;
-  iconTheme: IconThemeMode;
   accent: AccentMode;
   zoomPercent: number;
   uiFontFamily: UiFontFamily;
@@ -2195,7 +2128,6 @@ export function SettingsView({
   uiFontOptions: ReadonlyArray<{ value: UiFontFamily; label: string }>;
   notificationDurationSecondsOptions: ReadonlyArray<number>;
   onThemeChange: (value: ThemePreference) => void;
-  onIconThemeChange: (value: IconThemeMode) => void;
   onAccentChange: (value: AccentMode) => void;
   onZoomPercentChange: (value: number) => void;
   onUiFontFamilyChange: (value: UiFontFamily) => void;
@@ -2527,8 +2459,6 @@ export function SettingsView({
                 />
               }
             />
-
-            <IconThemePicker value={iconTheme} theme={palette} onChange={onIconThemeChange} />
 
             <SettingRow
               title="Accent color"

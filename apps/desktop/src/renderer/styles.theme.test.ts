@@ -65,10 +65,6 @@ const ALLOWED_HARD_CODED_COLORS: ReadonlyArray<{ selector: RegExp; reason: strin
     selector: /^\.copy-paste-progress-card-track-shimmer$/,
     reason: "white sheen over the accent-colored progress fill",
   },
-  {
-    selector: /\.file-icon\.document\.(?:colorblock|vivid) \.file-icon-document-text$/,
-    reason: "file-type icon artwork: white label on a colored icon block",
-  },
   { selector: /^\.settings-toggle-track::after$/, reason: "white switch knob, as in macOS" },
   {
     selector: /\.active:not\(\.inactive\)/,

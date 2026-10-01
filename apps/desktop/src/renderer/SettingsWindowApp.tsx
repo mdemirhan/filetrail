@@ -78,7 +78,6 @@ export function SettingsWindowApp() {
     theme: preferences.theme,
     autoLightTheme: preferences.autoLightTheme,
     autoDarkTheme: preferences.autoDarkTheme,
-    iconTheme: preferences.iconTheme,
     accent: preferences.accent,
     zoomPercent: preferences.zoomPercent,
     uiFontFamily: preferences.uiFontFamily,
@@ -304,7 +303,6 @@ export function SettingsWindowApp() {
             autoDarkTheme={preferences.autoDarkTheme}
             onAutoLightThemeChange={preferences.setAutoLightTheme}
             onAutoDarkThemeChange={preferences.setAutoDarkTheme}
-            iconTheme={preferences.iconTheme}
             accent={preferences.accent}
             zoomPercent={preferences.zoomPercent}
             uiFontFamily={preferences.uiFontFamily}
@@ -339,7 +337,6 @@ export function SettingsWindowApp() {
             uiFontOptions={[...UI_FONT_OPTIONS]}
             notificationDurationSecondsOptions={[...NOTIFICATION_DURATION_SECONDS_OPTIONS]}
             onThemeChange={preferences.setTheme}
-            onIconThemeChange={preferences.setIconTheme}
             onAccentChange={preferences.setAccent}
             onZoomPercentChange={preferences.setZoomPercent}
             onUiFontFamilyChange={preferences.setUiFontFamily}

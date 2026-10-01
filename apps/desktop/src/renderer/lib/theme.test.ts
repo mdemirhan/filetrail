@@ -9,7 +9,6 @@ describe("theme helpers", () => {
   it("applies the palette, accent and typography variables to the document root", () => {
     applyAppearance({
       theme: "tomorrow-night",
-      iconTheme: "classic",
       accent: "#2cb5a0",
       uiFontFamily: "lexend",
     });
@@ -17,7 +16,6 @@ describe("theme helpers", () => {
     const root = document.documentElement;
     expect(root.dataset.theme).toBe("tomorrow-night");
     expect(root.dataset.themeVariant).toBe("tomorrow-night");
-    expect(root.dataset.iconTheme).toBe("classic");
     expect(root.dataset.accent).toBe("#2cb5a0");
     expect(root.style.getPropertyValue("--font-sans")).toContain("Lexend");
     expect(root.style.getPropertyValue("--font-mono")).toContain("SF Mono");
@@ -29,7 +27,6 @@ describe("theme helpers", () => {
   it("uses one accent everywhere: no toolbar, favorite or text color overrides", () => {
     applyAppearance({
       theme: "macos-dark",
-      iconTheme: "classic",
       accent: "#e8729a",
       uiFontFamily: "system",
     });
@@ -50,7 +47,6 @@ describe("theme helpers", () => {
   it("maps variant palettes onto a css base and applies their overrides", () => {
     applyAppearance({
       theme: "warm-paper",
-      iconTheme: "classic",
       accent: "#daa520",
       uiFontFamily: "lexend",
     });
@@ -61,7 +57,7 @@ describe("theme helpers", () => {
   });
 
   it("clears a variant's overrides when a stylesheet palette takes over", () => {
-    const base = { iconTheme: "classic", accent: "#007aff", uiFontFamily: "system" } as const;
+    const base = { accent: "#007aff", uiFontFamily: "system" } as const;
     const style = document.documentElement.style;
 
     applyAppearance({ ...base, theme: "macos-dark" });
@@ -101,7 +97,6 @@ describe("theme helpers", () => {
       expect(() =>
         applyAppearance({
           theme: "macos-dark",
-          iconTheme: "classic",
           accent: "#daa520",
           uiFontFamily: "lexend",
         }),

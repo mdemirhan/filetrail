@@ -13,7 +13,6 @@ import {
   FAVORITE_ICON_OPTIONS,
   type FavoriteIconId,
   type FavoritePreference,
-  ICON_THEME_OPTIONS,
   LEGACY_DEFAULT_DETAIL_COLUMN_VISIBILITY,
   OPTIONAL_DETAIL_COLUMN_KEYS,
   type ThemeMode,
@@ -334,11 +333,6 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
       "dark",
       currentDefaults.autoDarkTheme,
     ),
-    iconTheme:
-      typeof record.iconTheme === "string" &&
-      ICON_THEME_OPTIONS.some((option) => option.value === record.iconTheme)
-        ? (record.iconTheme as AppPreferences["iconTheme"])
-        : currentDefaults.iconTheme,
     accent:
       typeof record.accent === "string"
         ? (normalizeAccentColor(record.accent) ?? currentDefaults.accent)

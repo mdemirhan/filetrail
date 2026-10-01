@@ -147,7 +147,6 @@ describe("ipc contracts", () => {
           showSidebarRail: false,
           showSidebarBottomRail: true,
           returnKeyAction: "rename",
-          iconTheme: "classic",
           accent: "#daa520",
           zoomPercent: 100,
           uiFontFamily: "lexend",
@@ -248,7 +247,6 @@ describe("ipc contracts", () => {
         showSidebarRail: false,
         showSidebarBottomRail: true,
         returnKeyAction: "rename",
-        iconTheme: "classic",
         accent: "#daa520",
         zoomPercent: 100,
         uiFontFamily: "lexend",
@@ -346,7 +344,6 @@ describe("ipc contracts", () => {
       ipcContractSchemas["app:updatePreferences"].request.parse({
         preferences: {
           theme: "tomorrow-night",
-          iconTheme: "colorblock",
           accent: "#84b840",
           zoomPercent: 125,
           uiFontFamily: "fira-code",
@@ -418,7 +415,6 @@ describe("ipc contracts", () => {
     ).toEqual({
       preferences: {
         theme: "tomorrow-night",
-        iconTheme: "colorblock",
         accent: "#84b840",
         zoomPercent: 125,
         uiFontFamily: "fira-code",

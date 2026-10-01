@@ -25,9 +25,6 @@ export function toPreferencePatch(
   if (value.returnKeyAction !== undefined) {
     patch.returnKeyAction = value.returnKeyAction;
   }
-  if (value.iconTheme !== undefined) {
-    patch.iconTheme = value.iconTheme;
-  }
   if (value.accent !== undefined) {
     patch.accent = value.accent;
   }

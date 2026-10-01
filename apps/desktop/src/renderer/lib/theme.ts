@@ -1,9 +1,4 @@
-import type {
-  AccentMode,
-  IconThemeMode,
-  ThemeMode,
-  UiFontFamily,
-} from "../../shared/appPreferences";
+import type { AccentMode, ThemeMode, UiFontFamily } from "../../shared/appPreferences";
 import { accentTokensToCssVariables, generateAccentTokens } from "./accent";
 import {
   THEME_VARIANT_OVERRIDE_KEYS,
@@ -25,12 +20,10 @@ export const UI_MONO_FONT_STACK = '"SF Mono", "SFMono-Regular", ui-monospace, Me
 
 export function applyAppearance({
   theme,
-  iconTheme,
   accent,
   uiFontFamily,
 }: {
   theme: ThemeMode;
-  iconTheme: IconThemeMode;
   accent: AccentMode;
   uiFontFamily: UiFontFamily;
 }): void {
@@ -42,7 +35,6 @@ export function applyAppearance({
   const root = document.documentElement;
   root.dataset.theme = resolveThemeCssBase(theme);
   root.dataset.themeVariant = theme;
-  root.dataset.iconTheme = iconTheme;
   root.dataset.accent = accent;
   root.style.setProperty("--font-sans", UI_FONT_STACKS[uiFontFamily]);
   root.style.setProperty("--font-mono", UI_MONO_FONT_STACK);

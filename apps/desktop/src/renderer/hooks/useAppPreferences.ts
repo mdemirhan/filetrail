@@ -13,7 +13,6 @@ import {
   type FavoritePreference,
   type FavoritesPlacement,
   type FileActivationAction,
-  type IconThemeMode,
   type LeftToolbarItems,
   type OpenWithApplication,
   type ReturnKeyAction,
@@ -40,7 +39,6 @@ export function useAppPreferences() {
     autoLightTheme,
     autoDarkTheme,
   );
-  const [iconTheme, setIconTheme] = useState<IconThemeMode>(DEFAULT_APP_PREFERENCES.iconTheme);
   const [accent, setAccent] = useState<AccentMode>(DEFAULT_APP_PREFERENCES.accent);
   const [zoomPercent, setZoomPercent] = useState(DEFAULT_APP_PREFERENCES.zoomPercent);
   const [uiFontFamily, setUiFontFamily] = useState<UiFontFamily>(
@@ -115,11 +113,10 @@ export function useAppPreferences() {
     DEFAULT_APP_PREFERENCES.returnKeyAction,
   );
   useEffect(() => {
-    applyAppearance({ theme: effectiveTheme, iconTheme, accent, uiFontFamily });
-  }, [accent, iconTheme, effectiveTheme, uiFontFamily]);
+    applyAppearance({ theme: effectiveTheme, accent, uiFontFamily });
+  }, [accent, effectiveTheme, uiFontFamily]);
 
   function resetAppearanceSettings() {
-    setIconTheme(DEFAULT_APP_PREFERENCES.iconTheme);
     setAccent(DEFAULT_APP_PREFERENCES.accent);
     setZoomPercent(DEFAULT_APP_PREFERENCES.zoomPercent);
     setUiFontFamily(DEFAULT_APP_PREFERENCES.uiFontFamily);
@@ -135,8 +132,6 @@ export function useAppPreferences() {
     autoDarkTheme,
     setAutoDarkTheme,
     effectiveTheme,
-    iconTheme,
-    setIconTheme,
     accent,
     setAccent,
     zoomPercent,
@@ -247,7 +242,6 @@ export function applyPreferencesPatch(store: AppPreferencesStore, patch: Incomin
   set("theme", store.setTheme);
   set("autoLightTheme", store.setAutoLightTheme);
   set("autoDarkTheme", store.setAutoDarkTheme);
-  set("iconTheme", store.setIconTheme);
   set("accent", store.setAccent);
   set("zoomPercent", store.setZoomPercent);
   set("uiFontFamily", store.setUiFontFamily);

@@ -51,7 +51,7 @@ This makes the app useful not just for navigation, but also for cleanup, audits,
 File Trail has a much deeper customization surface than a typical file explorer. You can tailor both the look and the workflow:
 
 - Auto, Light and Dark appearance, with three palettes for each side: macOS Light, Warm Paper and Sand; macOS Dark, Catppuccin Mocha and Tomorrow Night
-- Multiple icon styles, including classic, color block, monoline, and vivid
+- The icons macOS itself draws for files, folders, apps and symlinks
 - One accent color for the whole app, from the macOS set or a custom color
 - UI font family, font size, font weight, and zoom controls
 - List and details views with adjustable density and configurable detail columns

@@ -1475,7 +1475,7 @@ function TreeItemRow({
           {isFavorite || isFavoritesRoot ? (
             <FavoriteItemIcon icon={item.icon ?? "folder"} />
           ) : (
-            <TreeFolderIcon open={item.expanded} alias={item.isSymlink} path={itemPath} />
+            <TreeFolderIcon alias={item.isSymlink} path={itemPath} />
           )}
           <span className="tree-label-text">{item.label}</span>
           {item.isSymlink ? <span className="tree-label-badge">Alias</span> : null}

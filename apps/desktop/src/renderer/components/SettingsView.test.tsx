@@ -11,7 +11,6 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
   return render(
     <SettingsView
       theme="macos-dark"
-      iconTheme="classic"
       accent="#daa520"
       zoomPercent={100}
       uiFontFamily="lexend"
@@ -80,7 +79,6 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       uiFontOptions={[{ value: "lexend", label: "Lexend" }]}
       notificationDurationSecondsOptions={[4, 6]}
       onThemeChange={() => undefined}
-      onIconThemeChange={() => undefined}
       onAccentChange={() => undefined}
       onZoomPercentChange={() => undefined}
       onUiFontFamilyChange={() => undefined}
@@ -557,20 +555,6 @@ describe("SettingsView", () => {
       "Add Theme to Bottom rail",
       "Add Home to Bottom rail",
     ]);
-  });
-
-  it("renders the icon theme picker with 4 theme cards", () => {
-    const onIconThemeChange = vi.fn();
-    renderSettingsView({ iconTheme: "monoline", onIconThemeChange });
-
-    const monolineCard = screen.getByLabelText("Icon theme: Monoline");
-    expect(monolineCard).toHaveAttribute("aria-pressed", "true");
-
-    const classicCard = screen.getByLabelText("Icon theme: Classic");
-    expect(classicCard).toHaveAttribute("aria-pressed", "false");
-
-    fireEvent.click(classicCard);
-    expect(onIconThemeChange).toHaveBeenCalledWith("classic");
   });
 
   it("forwards single-click tree expansion preference changes", () => {
