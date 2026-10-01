@@ -4820,6 +4820,24 @@ body.platform-macos .settings-view[data-layout="compact"] {
   flex: 0 0 auto;
 }
 
+/* Tooltips drawn by the app for icon-only buttons (see lib/titleTooltips.ts). */
+.app-tooltip {
+  position: fixed;
+  z-index: 10000;
+  max-width: 420px;
+  padding: 3px 7px;
+  border: 0.5px solid var(--context-menu-border);
+  border-radius: 5px;
+  background: var(--context-menu-bg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+  color: var(--context-menu-text);
+  font-size: 11.5px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  -webkit-app-region: no-drag;
+}
+
 .toolbar-menu {
   z-index: 100;
   min-width: 220px;
