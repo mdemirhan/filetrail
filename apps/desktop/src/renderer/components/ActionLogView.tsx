@@ -11,7 +11,7 @@ import type { AccentMode, ThemeMode } from "../../shared/appPreferences";
 import { generateAccentTokens } from "../lib/accent";
 import { withAlpha } from "../lib/colorUtils";
 import { formatDateTime } from "../lib/formatting";
-import { getThemeVariant, resolveThemeCssBase } from "../lib/themeVariants";
+import { resolveThemeCssBase } from "../lib/themeVariants";
 import { VIEW_PAGE_BG, VIEW_TEXT } from "../lib/viewColors";
 import { uiMonoFontStack as mono, uiSansFontStack as sans } from "../lib/viewFonts";
 
@@ -74,7 +74,6 @@ export function ActionLogView({
   const copyFeedbackTimeoutRef = useRef<number | null>(null);
   const deferredQuery = useDeferredValue(query.trim().toLowerCase());
   const palette = resolveActionLogTheme(theme, accent);
-  const controlHeight = layoutMode === "compact" ? 38 : 40;
   const hasActiveFilters =
     query.trim().length > 0 || actionFilter !== "all" || statusFilter !== "all";
 
@@ -124,7 +123,6 @@ export function ActionLogView({
   );
 
   const totalFailed = entries.reduce((count, entry) => count + entry.summary.failedItemCount, 0);
-  const latestEntry = entries[0] ?? null;
 
   useEffect(
     () => () => {
@@ -155,265 +153,209 @@ export function ActionLogView({
     }
   }
 
+  // One column template for the header and every row, so the columns line up.
+  const columnTemplate =
+    layoutMode === "narrow"
+      ? "16px 92px 104px minmax(0, 1fr) auto"
+      : "16px 104px 124px minmax(0, 1fr) auto";
+  const summaryText = [
+    hasActiveFilters
+      ? `${filteredEntries.length} of ${formatCount(entries.length, "entry", "entries")}`
+      : formatCount(entries.length, "entry", "entries"),
+    totalFailed > 0 ? formatCount(totalFailed, "failed item", "failed items") : null,
+  ]
+    .filter((part): part is string => part !== null)
+    .join(" · ");
+
   return (
     <section
       className="action-log-view"
       data-layout={layoutMode}
       style={{
+        display: "flex",
+        flexDirection: "column",
         minHeight: 0,
         height: "100%",
         overflowX: "hidden",
         overflowY: "auto",
-        padding:
-          layoutMode === "compact"
-            ? "24px 14px 22px"
-            : layoutMode === "narrow"
-              ? "28px 18px 24px"
-              : "30px 20px 26px",
+        padding: 0,
         background: palette.pageBg,
         color: palette.textPrimary,
         fontFamily: sans,
       }}
     >
+      {/* A filter strip like the one above search results, then a plain table. */}
       <div
+        role="toolbar"
+        aria-label="Action log filters"
         style={{
-          width: "100%",
-          maxWidth: layoutMode === "wide" ? "1200px" : "100%",
-          margin: "0 auto",
+          position: "sticky",
+          top: 0,
+          zIndex: 2,
+          display: "flex",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: "6px",
+          padding: "6px 12px",
+          borderBottom: `1px solid ${palette.line}`,
+          background: palette.pageBg,
+          fontSize: "12px",
         }}
       >
-        <div
-          className="action-log-page-header"
+        <span
           style={{
-            display: "flex",
-            alignItems: layoutMode === "compact" ? "flex-start" : "center",
-            justifyContent: "space-between",
-            gap: "14px",
-            flexDirection: layoutMode === "compact" ? "column" : "row",
-            marginBottom: "18px",
+            position: "relative",
+            display: "block",
+            flex: "1 1 220px",
+            maxWidth: "360px",
+            minWidth: 0,
           }}
         >
-          <div className="action-log-page-header-left">
-            <span
-              className="action-log-page-eyebrow"
-              style={{
-                margin: 0,
-                color: palette.accentText,
-                fontFamily: sans,
-                fontSize: "10px",
-                fontWeight: 600,
-                letterSpacing: "0.1em",
-                textTransform: "uppercase",
-              }}
-            >
-              File Trail
-            </span>
-            <h1
-              style={{
-                margin: "4px 0 0",
-                fontSize: "20px",
-                lineHeight: 1.1,
-                letterSpacing: "-0.02em",
-                color: palette.textPrimary,
-              }}
-            >
-              Action Log
-            </h1>
-          </div>
+          <span
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              left: "8px",
+              top: "50%",
+              display: "inline-flex",
+              transform: "translateY(-50%)",
+              pointerEvents: "none",
+            }}
+          >
+            <SearchIcon color={palette.textMuted} />
+          </span>
+          <input
+            aria-label="Search action log"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Filter by path, action or error"
+            spellCheck={false}
+            style={inputStyle(palette, true)}
+          />
+        </span>
+        <select
+          aria-label="Filter by action"
+          value={actionFilter}
+          onChange={(event) => setActionFilter(event.target.value as "all" | ActionLogAction)}
+          style={inputStyle(palette, false)}
+        >
+          {ACTION_FILTER_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Filter by result"
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value as "all" | ActionLogStatus)}
+          style={inputStyle(palette, false)}
+        >
+          {STATUS_FILTER_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        {hasActiveFilters ? (
           <button
             type="button"
-            onClick={onRefresh}
-            disabled={loading}
-            style={refreshButtonStyle(palette, controlHeight)}
+            onClick={() => {
+              setQuery("");
+              setActionFilter("all");
+              setStatusFilter("all");
+            }}
+            style={buttonStyle(palette)}
           >
-            <RefreshIcon color={palette.accentText} />
-            {loading ? "Refreshing..." : "Refresh"}
+            Reset Filters
           </button>
-        </div>
+        ) : null}
+        <span style={{ flex: "1 1 auto" }} />
+        <span
+          aria-label="Action log summary"
+          style={{
+            color: palette.textMuted,
+            fontSize: "11px",
+            fontVariantNumeric: "tabular-nums",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {summaryText}
+        </span>
+        <button type="button" onClick={onRefresh} disabled={loading} style={buttonStyle(palette)}>
+          {loading ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
 
+      {error ? (
+        <div role="alert" style={{ padding: "10px 16px", color: palette.error, fontSize: "12px" }}>
+          Unable to load Action Log. {error}
+        </div>
+      ) : null}
+      {!error && !loading && filteredEntries.length === 0 ? (
         <div
           style={{
             display: "flex",
+            flex: "1 1 auto",
+            flexDirection: "column",
             alignItems: "center",
-            gap: "14px",
-            flexWrap: "wrap",
-            padding: layoutMode === "compact" ? "10px 12px" : "11px 14px",
-            borderRadius: "12px",
-            background: palette.summaryBg,
-            border: `1px solid ${palette.line}`,
-            boxShadow: palette.shadow,
-            marginBottom: "14px",
-            color: palette.textSecondary,
-            fontSize: "11.5px",
-          }}
-          aria-label="Action log summary"
-        >
-          <SummaryMetric label="Entries" value={String(entries.length)} palette={palette} />
-          <SummarySeparator palette={palette} />
-          <SummaryMetric label="Visible" value={String(filteredEntries.length)} palette={palette} />
-          <SummarySeparator palette={palette} />
-          <SummaryMetric
-            label="Failed items"
-            value={String(totalFailed)}
-            palette={palette}
-            highlight={totalFailed > 0 ? "error" : "none"}
-          />
-          <SummarySeparator palette={palette} />
-          <SummaryMetric
-            label="Latest"
-            value={latestEntry ? formatRelativeTime(latestEntry.occurredAt) : "No entries"}
-            palette={palette}
-          />
-        </div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns:
-              layoutMode === "compact"
-                ? "1fr"
-                : layoutMode === "narrow"
-                  ? "minmax(0, 1fr) minmax(0, 1fr)"
-                  : "minmax(220px, 1.8fr) 160px 160px auto",
-            gap: "10px",
-            alignItems: "end",
-            marginBottom: "12px",
+            justifyContent: "center",
+            gap: "4px",
+            padding: "32px 16px",
+            textAlign: "center",
           }}
         >
-          <label style={fieldLabelStyle(palette)}>
-            Search
-            <span style={{ position: "relative", display: "block", marginTop: "6px" }}>
-              <span
-                aria-hidden="true"
-                style={{
-                  position: "absolute",
-                  left: "10px",
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  color: palette.textMuted,
-                  pointerEvents: "none",
-                }}
-              >
-                <SearchIcon color={palette.textMuted} />
-              </span>
-              <input
-                aria-label="Search action log"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Filter by path, action, error..."
-                style={inputStyle(palette, controlHeight, true)}
-              />
-            </span>
-          </label>
-          <label style={fieldLabelStyle(palette)}>
-            Action
-            <select
-              aria-label="Filter by action"
-              value={actionFilter}
-              onChange={(event) => setActionFilter(event.target.value as "all" | ActionLogAction)}
-              style={inputStyle(palette, controlHeight, false)}
-            >
-              {ACTION_FILTER_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label style={fieldLabelStyle(palette)}>
-            Result
-            <select
-              aria-label="Filter by result"
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as "all" | ActionLogStatus)}
-              style={inputStyle(palette, controlHeight, false)}
-            >
-              {STATUS_FILTER_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: "8px" }}>
-            <button
-              type="button"
-              onClick={() => {
-                setQuery("");
-                setActionFilter("all");
-                setStatusFilter("all");
-              }}
-              style={secondaryButtonStyle(palette, controlHeight, hasActiveFilters)}
-            >
-              Reset Filters
-            </button>
-          </div>
-        </div>
-
-        {error ? (
-          <div style={noticeStyle(palette, "error")}>Unable to load Action Log. {error}</div>
-        ) : null}
-        {!error && !loading && filteredEntries.length === 0 ? (
-          <div style={noticeStyle(palette, "empty")}>
+          <strong style={{ fontSize: "13px", fontWeight: 600 }}>
+            {entries.length === 0 ? "No actions yet" : "No matching actions"}
+          </strong>
+          <span style={{ color: palette.textMuted, fontSize: "12px" }}>
             {entries.length === 0
               ? "No action history has been recorded yet."
               : "No actions match the current filters."}
-          </div>
-        ) : null}
+          </span>
+        </div>
+      ) : null}
 
-        <section
-          aria-label="Action log entries"
-          style={{
-            borderRadius: "14px",
-            overflow: "hidden",
-            border: `1px solid ${palette.line}`,
-            background: palette.tableBg,
-            boxShadow: palette.shadow,
-          }}
-        >
+      {filteredEntries.length > 0 ? (
+        <section aria-label="Action log entries">
           {layoutMode !== "compact" ? (
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns:
-                  layoutMode === "narrow"
-                    ? "100px 92px minmax(0, 1fr) 110px 46px"
-                    : "110px 104px minmax(0, 1fr) 132px 46px",
-                gap: "0",
-                padding: "9px 14px",
+                gridTemplateColumns: columnTemplate,
+                alignItems: "center",
+                columnGap: "12px",
+                height: "26px",
+                padding: "0 46px 0 12px",
                 borderBottom: `1px solid ${palette.line}`,
-                background: palette.headerBg,
-                color: palette.textMuted,
-                fontFamily: sans,
-                fontSize: "10px",
-                fontWeight: 600,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
+                color: palette.textSecondary,
+                fontSize: "11px",
+                fontWeight: 500,
               }}
             >
+              <span />
               <span>Time</span>
               <span>Action</span>
-              <span>Path</span>
+              <span>Item</span>
               <span style={{ textAlign: "right" }}>Result</span>
-              <span />
             </div>
           ) : null}
 
           {filteredEntries.map((entry, index) => {
             const expanded = expandedIds[entry.id] ?? false;
-            const showRowBorder = index < filteredEntries.length - 1 || expanded;
             return (
-              <article
-                key={entry.id}
-                style={{ borderBottom: showRowBorder ? `1px solid ${palette.line}` : "none" }}
-              >
+              <article key={entry.id}>
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns:
-                      layoutMode === "compact" ? "1fr auto" : "minmax(0, 1fr) auto",
+                    gridTemplateColumns: "minmax(0, 1fr) auto",
                     alignItems: "stretch",
-                    background: expanded ? palette.expandedRowBg : "transparent",
+                    // Alternating rows, as in the details view of the file list.
+                    background: expanded
+                      ? palette.expandedRowBg
+                      : index % 2 === 1
+                        ? palette.stripeBg
+                        : "transparent",
                   }}
                 >
                   <button
@@ -426,126 +368,84 @@ export function ActionLogView({
                     }
                     style={{
                       width: "100%",
+                      minWidth: 0,
                       border: 0,
                       background: "transparent",
                       color: "inherit",
                       padding: "0",
-                      cursor: "pointer",
+                      cursor: "default",
                       textAlign: "left",
+                      font: "inherit",
                     }}
                     aria-expanded={expanded}
                   >
-                    <div
-                      style={
-                        layoutMode === "compact"
-                          ? {
-                              display: "grid",
-                              gridTemplateColumns: "1fr",
-                              gap: "10px",
-                              padding: "12px 14px",
-                            }
-                          : {
-                              display: "grid",
-                              gridTemplateColumns:
-                                layoutMode === "narrow"
-                                  ? "100px 92px minmax(0, 1fr) 110px 46px"
-                                  : "110px 104px minmax(0, 1fr) 132px 46px",
-                              gap: "0",
-                              alignItems: "center",
-                              padding: "10px 14px",
-                            }
-                      }
-                    >
-                      {layoutMode === "compact" ? (
-                        <>
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              gap: "10px",
-                            }}
-                          >
-                            <span
-                              style={{
-                                color: palette.textSecondary,
-                                fontSize: "11px",
-                                fontFamily: sans,
-                              }}
-                            >
-                              {formatRelativeTime(entry.occurredAt)}
-                            </span>
-                            <ActionBadge action={entry.action} palette={palette} />
-                          </div>
-                          <div style={{ minWidth: 0 }}>
-                            <PathCell entry={entry} palette={palette} />
-                          </div>
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              gap: "10px",
-                            }}
-                          >
-                            <ResultBadge entry={entry} palette={palette} />
-                            <span
-                              style={{
-                                color: palette.textMuted,
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "6px",
-                              }}
-                            >
-                              <DetailIcon
-                                color={expanded ? palette.accentText : palette.textMuted}
-                              />
-                              <span style={{ fontSize: "11px", fontFamily: sans }}>
-                                {expanded ? "Hide" : "Details"}
-                              </span>
-                            </span>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <span
-                            style={{
-                              color: palette.textSecondary,
-                              fontSize: "11px",
-                              fontFamily: sans,
-                            }}
-                          >
+                    {layoutMode === "compact" ? (
+                      <div style={{ display: "grid", gap: "2px", padding: "6px 0 6px 12px" }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            fontSize: "13px",
+                          }}
+                        >
+                          <DisclosureIcon expanded={expanded} color={palette.textMuted} />
+                          <span>{formatActionLabel(entry.action)}</span>
+                          <span style={{ color: palette.textMuted, fontSize: "11px" }}>
                             {formatRelativeTime(entry.occurredAt)}
                           </span>
-                          <span>
-                            <ActionBadge action={entry.action} palette={palette} />
-                          </span>
-                          <span style={{ minWidth: 0, overflow: "hidden" }}>
-                            <PathCell entry={entry} palette={palette} />
-                          </span>
-                          <span style={{ justifySelf: "end" }}>
-                            <ResultBadge entry={entry} palette={palette} align="end" />
-                          </span>
-                          <span
-                            style={{
-                              display: "flex",
-                              justifyContent: "center",
-                              color: expanded ? palette.accentText : palette.textMuted,
-                            }}
-                          >
-                            <DetailIcon color={expanded ? palette.accentText : palette.textMuted} />
-                          </span>
-                        </>
-                      )}
-                    </div>
+                          <span style={{ flex: "1 1 auto" }} />
+                          <ResultBadge entry={entry} palette={palette} align="end" />
+                        </div>
+                        <div style={{ minWidth: 0, paddingLeft: "24px" }}>
+                          <PathCell entry={entry} palette={palette} />
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: columnTemplate,
+                          alignItems: "center",
+                          columnGap: "12px",
+                          minHeight: "28px",
+                          padding: "0 0 0 12px",
+                          fontSize: "13px",
+                        }}
+                      >
+                        <DisclosureIcon expanded={expanded} color={palette.textMuted} />
+                        <span
+                          style={{
+                            color: palette.textSecondary,
+                            fontSize: "12px",
+                            fontVariantNumeric: "tabular-nums",
+                            whiteSpace: "nowrap",
+                          }}
+                          title={formatDateTime(entry.occurredAt)}
+                        >
+                          {formatRelativeTime(entry.occurredAt)}
+                        </span>
+                        <span style={{ whiteSpace: "nowrap" }}>
+                          {formatActionLabel(entry.action)}
+                        </span>
+                        <span style={{ minWidth: 0, overflow: "hidden" }}>
+                          <PathCell entry={entry} palette={palette} />
+                        </span>
+                        <span style={{ justifySelf: "end" }}>
+                          <ResultBadge entry={entry} palette={palette} align="end" />
+                        </span>
+                      </div>
+                    )}
                   </button>
 
                   <div
                     style={{
                       display: "flex",
-                      alignItems: layoutMode === "compact" ? "flex-start" : "center",
-                      gap: "8px",
-                      padding: layoutMode === "compact" ? "12px 14px 12px 0" : "10px 14px 10px 0",
+                      alignItems: "center",
+                      justifyContent: "flex-end",
+                      gap: "6px",
+                      minWidth: "46px",
+                      padding: "0 12px 0 6px",
                     }}
                   >
                     {copyFeedback?.entryId === entry.id ? (
@@ -554,8 +454,6 @@ export function ActionLogView({
                           color:
                             copyFeedback.status === "failed" ? palette.error : palette.textMuted,
                           fontSize: "11px",
-                          fontFamily: sans,
-                          letterSpacing: "0.02em",
                           whiteSpace: "nowrap",
                         }}
                       >
@@ -579,8 +477,9 @@ export function ActionLogView({
                 {expanded ? (
                   <div
                     style={{
-                      padding: "12px 14px 14px",
-                      background: palette.detailBg,
+                      padding: "10px 16px 14px 40px",
+                      borderBottom: `1px solid ${palette.line}`,
+                      background: palette.expandedRowBg,
                     }}
                   >
                     <div
@@ -592,7 +491,7 @@ export function ActionLogView({
                             : layoutMode === "narrow"
                               ? "repeat(2, minmax(0, 1fr))"
                               : "repeat(4, minmax(0, 1fr))",
-                        gap: "10px",
+                        gap: "12px 20px",
                       }}
                     >
                       <DetailStat label="Summary" value={entry.message} palette={palette} />
@@ -631,7 +530,7 @@ export function ActionLogView({
                     </div>
 
                     {entry.error ? (
-                      <div style={{ marginTop: "10px" }}>
+                      <div style={{ marginTop: "12px" }}>
                         <DetailStat
                           label="Failure Detail"
                           value={entry.error}
@@ -642,22 +541,20 @@ export function ActionLogView({
                     ) : null}
 
                     {entry.runtimeConflicts.length > 0 ? (
-                      <div style={{ marginTop: "12px" }}>
+                      <div style={{ marginTop: "14px" }}>
                         <div style={sectionTitleStyle(palette)}>Runtime Conflicts</div>
-                        <div style={{ display: "grid", gap: "8px", marginTop: "8px" }}>
+                        <div style={{ marginTop: "4px" }}>
                           {entry.runtimeConflicts.map((conflict) => (
                             <div
                               key={`${entry.id}-${conflict.conflictId}`}
                               style={{
                                 display: "grid",
-                                gap: "8px",
-                                padding: "10px",
-                                borderRadius: "10px",
-                                border: `1px solid ${palette.line}`,
-                                background: palette.itemBg,
+                                gap: "6px",
+                                padding: "8px 0",
+                                borderTop: `1px solid ${palette.line}`,
                               }}
                             >
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
                                 <span style={chipStyle(palette)}>
                                   {formatConflictClassLabel(conflict.conflictClass)}
                                 </span>
@@ -675,11 +572,11 @@ export function ActionLogView({
                                 </span>
                               </div>
                               <div>
-                                <div style={eyebrowStyle(palette)}>Source</div>
+                                <div style={fieldLabelStyle(palette)}>Source</div>
                                 <div style={pathValueStyle(palette)}>{conflict.sourcePath}</div>
                               </div>
                               <div>
-                                <div style={eyebrowStyle(palette)}>Destination</div>
+                                <div style={fieldLabelStyle(palette)}>Destination</div>
                                 <div style={pathValueStyle(palette)}>
                                   {conflict.destinationPath}
                                 </div>
@@ -691,14 +588,14 @@ export function ActionLogView({
                     ) : null}
 
                     {Object.keys(entry.metadata).length > 0 ? (
-                      <div style={{ marginTop: "12px" }}>
+                      <div style={{ marginTop: "14px" }}>
                         <div style={sectionTitleStyle(palette)}>Metadata</div>
                         <div
                           style={{
                             display: "flex",
                             flexWrap: "wrap",
-                            gap: "8px",
-                            marginTop: "8px",
+                            gap: "6px",
+                            marginTop: "6px",
                           }}
                         >
                           {Object.entries(entry.metadata).map(([key, value]) => (
@@ -711,7 +608,7 @@ export function ActionLogView({
                     ) : null}
 
                     {entry.items.length > 0 ? (
-                      <div style={{ marginTop: "12px" }}>
+                      <div style={{ marginTop: "14px" }}>
                         <div style={sectionTitleStyle(palette)}>Items</div>
                         {(
                           [
@@ -744,7 +641,7 @@ export function ActionLogView({
                             const isCollapsed =
                               collapsedSections[sectionKey] ?? cat.key !== "failed";
                             return (
-                              <div key={cat.key} style={{ marginTop: "8px" }}>
+                              <div key={cat.key} style={{ marginTop: "4px" }}>
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -760,22 +657,21 @@ export function ActionLogView({
                                     padding: "4px 0",
                                     background: "none",
                                     border: "none",
-                                    cursor: "pointer",
+                                    cursor: "default",
                                     color: palette.textSecondary,
-                                    fontSize: "11px",
-                                    fontWeight: 600,
+                                    fontSize: "12px",
+                                    fontWeight: 500,
                                     fontFamily: sans,
-                                    letterSpacing: "0.04em",
-                                    textTransform: "uppercase",
                                   }}
                                 >
-                                  <span style={{ fontSize: "9px", lineHeight: 1 }}>
-                                    {isCollapsed ? "\u25B6" : "\u25BC"}
-                                  </span>
+                                  <DisclosureIcon
+                                    expanded={!isCollapsed}
+                                    color={palette.textMuted}
+                                  />
                                   {cat.label} ({cat.items.length})
                                 </button>
                                 {!isCollapsed ? (
-                                  <div style={{ display: "grid", gap: "8px", marginTop: "4px" }}>
+                                  <div style={{ paddingLeft: "22px" }}>
                                     {cat.items.map((item, itemIndex) => (
                                       <ItemRow
                                         key={`${entry.id}-${cat.key}-${itemIndex}`}
@@ -797,59 +693,39 @@ export function ActionLogView({
             );
           })}
         </section>
-      </div>
+      ) : null}
     </section>
   );
 }
 
+function formatCount(count: number, singular: string, plural: string): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+// Colors come from the root theme tokens, so the view follows the theme like the file list.
 function resolveActionLogTheme(theme: ThemeMode, accent: AccentMode) {
-  const variant = getThemeVariant(theme);
   const accentTokens = generateAccentTokens(accent, theme);
   const isLight = resolveThemeCssBase(theme) === "light";
-  // Text and the page use the root tokens so the theme and the text color overrides apply.
-  const textPrimary = VIEW_TEXT.primary;
-  const textSecondary = VIEW_TEXT.secondary;
-  const textMuted = VIEW_TEXT.muted;
-  const baseCard = variant?.surfaces.card ?? (isLight ? "#fbfcff" : "#1a1f27");
-  const border =
-    variant?.surfaces.cardBorder ?? (isLight ? "rgba(17, 24, 39, 0.08)" : "rgba(255,255,255,0.08)");
-  const success = isLight ? "#1f8a55" : "#68d29a";
-  const warning = isLight ? "#8b6a1f" : "#f0c46a";
-  const error = isLight ? "#bf3f4f" : "#ff8e9d";
 
   return {
     pageBg: VIEW_PAGE_BG,
-    tableBg: baseCard,
-    summaryBg: withAlpha(baseCard, isLight ? 0.92 : 1),
-    headerBg: isLight ? "rgba(255,255,255,0.54)" : "rgba(255,255,255,0.02)",
-    detailBg: isLight ? "rgba(255,255,255,0.58)" : "rgba(9, 12, 17, 0.42)",
-    itemBg: isLight ? "rgba(255,255,255,0.84)" : "rgba(255,255,255,0.03)",
-    inputBg: variant?.controls.inputBg ?? baseCard,
-    inputBorder: variant?.controls.inputBorder ?? border,
-    line: border,
-    textPrimary,
-    textSecondary,
-    textMuted,
-    textPlaceholder: variant?.text.placeholder ?? textMuted,
-    accentSoft: accentTokens.softBg,
-    accentStrong: accentTokens.solid,
-    accentBorder: accentTokens.border,
-    accentText: accentTokens.pathCrumbHover,
-    rowHoverBg: accentTokens.softBg,
-    expandedRowBg: withAlpha(accentTokens.solid, isLight ? 0.04 : 0.06),
-    actionHoverBg: accentTokens.actionHoverBg,
-    success,
-    warning,
-    error,
-    successBg: withAlpha(success, isLight ? 0.12 : 0.18),
-    warningBg: withAlpha(warning, isLight ? 0.14 : 0.16),
-    errorBg: withAlpha(error, isLight ? 0.1 : 0.16),
-    successBorder: withAlpha(success, isLight ? 0.22 : 0.28),
-    warningBorder: withAlpha(warning, isLight ? 0.2 : 0.24),
-    errorBorder: withAlpha(error, isLight ? 0.22 : 0.3),
-    shadow: isLight ? "0 18px 36px rgba(15, 23, 42, 0.08)" : "0 18px 36px rgba(0, 0, 0, 0.22)",
+    line: "var(--border-light)",
+    inputBg: "var(--bg-input)",
+    inputBorder: "var(--border)",
+    buttonBg: "var(--bg-elevated)",
+    // The same stripe as odd rows of the details view.
+    stripeBg: "color-mix(in srgb, var(--neutral-ink) 3.5%, transparent)",
+    expandedRowBg: withAlpha(accentTokens.solid, isLight ? 0.05 : 0.08),
+    textPrimary: VIEW_TEXT.primary,
+    textSecondary: VIEW_TEXT.secondary,
+    textMuted: VIEW_TEXT.muted,
+    success: isLight ? "#1f8a55" : "#68d29a",
+    warning: isLight ? "#8b6a1f" : "#f0c46a",
+    error: isLight ? "#bf3f4f" : "#ff8e9d",
   };
 }
+
+type ActionLogPalette = ReturnType<typeof resolveActionLogTheme>;
 
 function formatActionLabel(action: ActionLogAction): string {
   if (action === "open_with") {
@@ -1029,177 +905,45 @@ function formatRelativeTime(value: string): string {
   return formatDateTime(value);
 }
 
-function resolveActionTone(
-  action: ActionLogAction,
-  palette: ReturnType<typeof resolveActionLogTheme>,
-): { bg: string; border: string; color: string } {
-  if (action === "trash") {
-    return {
-      bg: palette.errorBg,
-      border: palette.errorBorder,
-      color: palette.error,
-    };
+function resolveStatusColor(
+  status: ActionLogStatus | "skipped",
+  palette: ActionLogPalette,
+): string {
+  if (status === "completed") {
+    return palette.success;
   }
-  if (action === "new_folder" || action === "duplicate") {
-    return {
-      bg: palette.successBg,
-      border: palette.successBorder,
-      color: palette.success,
-    };
+  if (status === "failed") {
+    return palette.error;
   }
-  if (action === "move_to") {
-    return {
-      bg: palette.warningBg,
-      border: palette.warningBorder,
-      color: palette.warning,
-    };
-  }
-  if (action === "rename") {
-    return {
-      bg: palette.accentSoft,
-      border: palette.accentBorder,
-      color: palette.accentText,
-    };
-  }
-  return {
-    bg: withAlpha(palette.accentStrong, 0.1),
-    border: withAlpha(palette.accentStrong, 0.22),
-    color: palette.accentText,
-  };
+  return status === "skipped" ? palette.textMuted : palette.warning;
 }
 
-function ActionBadge({
-  action,
-  palette,
-}: {
-  action: ActionLogAction;
-  palette: ReturnType<typeof resolveActionLogTheme>;
-}) {
-  const tone = resolveActionTone(action, palette);
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        padding: "3px 8px",
-        borderRadius: "6px",
-        fontSize: "11px",
-        fontWeight: 600,
-        letterSpacing: "0.01em",
-        whiteSpace: "nowrap",
-        background: tone.bg,
-        border: `1px solid ${tone.border}`,
-        color: tone.color,
-      }}
-    >
-      {formatActionLabel(action)}
-    </span>
-  );
-}
-
+// The outcome as plain text: the status word in its color, then the item counts.
 function ResultBadge({
   entry,
   palette,
   align = "start",
 }: {
   entry: ActionLogEntry;
-  palette: ReturnType<typeof resolveActionLogTheme>;
+  palette: ActionLogPalette;
   align?: "start" | "end";
 }) {
-  const statusColor =
-    entry.status === "completed"
-      ? palette.success
-      : entry.status === "failed"
-        ? palette.error
-        : palette.warning;
-
   return (
     <span
       style={{
         display: "inline-flex",
         justifyContent: align === "end" ? "flex-end" : "flex-start",
-        alignItems: "center",
-        gap: "7px",
-        width: "100%",
-        fontSize: "11px",
-        color: palette.textSecondary,
+        alignItems: "baseline",
+        gap: "6px",
+        fontSize: "12px",
         fontVariantNumeric: "tabular-nums",
         whiteSpace: "nowrap",
       }}
     >
-      <span
-        aria-hidden="true"
-        style={{
-          width: "6px",
-          height: "6px",
-          borderRadius: "999px",
-          background: statusColor,
-          boxShadow: `0 0 0 3px ${withAlpha(statusColor, 0.12)}`,
-          flexShrink: 0,
-        }}
-      />
-      <span style={{ color: statusColor, fontWeight: 600 }}>
+      <span style={{ color: resolveStatusColor(entry.status, palette) }}>
         {formatActionStatusLabel(entry.status)}
       </span>
       <span style={{ color: palette.textMuted }}>{formatSummary(entry)}</span>
-    </span>
-  );
-}
-
-function StatusBadge({
-  status,
-  palette,
-  compact = false,
-}: {
-  status: ActionLogStatus | "completed" | "failed" | "cancelled" | "partial" | "skipped";
-  palette: ReturnType<typeof resolveActionLogTheme>;
-  compact?: boolean;
-}) {
-  const color =
-    status === "completed"
-      ? palette.success
-      : status === "failed"
-        ? palette.error
-        : status === "cancelled"
-          ? palette.warning
-          : status === "skipped"
-            ? palette.textMuted
-            : palette.warning;
-  const background =
-    status === "completed"
-      ? palette.successBg
-      : status === "failed"
-        ? palette.errorBg
-        : status === "cancelled"
-          ? palette.warningBg
-          : palette.accentSoft;
-  const border =
-    status === "completed"
-      ? palette.successBorder
-      : status === "failed"
-        ? palette.errorBorder
-        : status === "cancelled"
-          ? palette.warningBorder
-          : palette.accentBorder;
-
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "6px",
-        borderRadius: "999px",
-        padding: compact ? "4px 8px" : "4px 10px",
-        background,
-        border: `1px solid ${border}`,
-        color,
-        fontFamily: sans,
-        fontSize: "11px",
-        textTransform: "uppercase",
-        letterSpacing: "0.06em",
-      }}
-    >
-      {formatActionStatusLabel(status)}
     </span>
   );
 }
@@ -1211,7 +955,7 @@ function ItemRow({
 }: {
   item: ActionLogItem;
   layoutMode: LayoutMode;
-  palette: ReturnType<typeof resolveActionLogTheme>;
+  palette: ActionLogPalette;
 }) {
   return (
     <div
@@ -1223,35 +967,39 @@ function ItemRow({
             : layoutMode === "narrow"
               ? "110px minmax(0, 1fr)"
               : "110px minmax(0, 1fr) minmax(0, 1fr)",
-        gap: "10px",
-        padding: "10px",
-        borderRadius: "10px",
-        border: `1px solid ${palette.line}`,
-        background: palette.itemBg,
+        gap: "4px 16px",
+        padding: "6px 0",
+        borderTop: `1px solid ${palette.line}`,
       }}
     >
       <div>
-        <div style={eyebrowStyle(palette)}>
+        <div style={fieldLabelStyle(palette)}>
           {item.sourceKind ? formatSourceKindLabel(item.sourceKind) : "Item"}
         </div>
-        <div style={{ marginTop: "6px" }}>
-          <StatusBadge status={item.status} palette={palette} compact />
+        <div
+          style={{
+            marginTop: "2px",
+            color: resolveStatusColor(item.status, palette),
+            fontSize: "12px",
+          }}
+        >
+          {formatActionStatusLabel(item.status)}
         </div>
       </div>
       <div>
-        <div style={eyebrowStyle(palette)}>Source</div>
+        <div style={fieldLabelStyle(palette)}>Source</div>
         <div style={pathValueStyle(palette)}>{item.sourcePath ?? "None"}</div>
       </div>
       {layoutMode === "narrow" ? null : (
         <div>
-          <div style={eyebrowStyle(palette)}>Destination</div>
+          <div style={fieldLabelStyle(palette)}>Destination</div>
           <div style={pathValueStyle(palette)}>{item.destinationPath ?? "None"}</div>
           <ItemProblem item={item} palette={palette} />
         </div>
       )}
       {layoutMode === "narrow" && item.destinationPath ? (
         <div>
-          <div style={eyebrowStyle(palette)}>Destination</div>
+          <div style={fieldLabelStyle(palette)}>Destination</div>
           <div style={pathValueStyle(palette)}>{item.destinationPath}</div>
           <ItemProblem item={item} palette={palette} />
         </div>
@@ -1265,14 +1013,14 @@ function ItemProblem({
   palette,
 }: {
   item: ActionLogItem;
-  palette: ReturnType<typeof resolveActionLogTheme>;
+  palette: ActionLogPalette;
 }) {
   const problems = [item.error, formatChildFailureLabel(item)].filter(Boolean);
   if (problems.length === 0) {
     return null;
   }
   return (
-    <div style={{ marginTop: "8px", color: palette.error, fontSize: "12px" }}>
+    <div style={{ marginTop: "4px", color: palette.error, fontSize: "12px" }}>
       {problems.join(" · ")}
     </div>
   );
@@ -1283,7 +1031,7 @@ function PathCell({
   palette,
 }: {
   entry: ActionLogEntry;
-  palette: ReturnType<typeof resolveActionLogTheme>;
+  palette: ActionLogPalette;
 }) {
   const source = entry.sourceSummary ?? entry.sourcePaths[0] ?? null;
   const destination = entry.destinationSummary ?? entry.destinationPaths[0] ?? null;
@@ -1291,55 +1039,17 @@ function PathCell({
   if (source && destination) {
     return (
       <span style={{ display: "flex", alignItems: "center", gap: "7px", minWidth: 0 }}>
-        <span style={{ ...sourcePathTextStyle(palette), flexShrink: 1 }}>{source}</span>
+        <span style={{ ...rowPathStyle(palette), flexShrink: 1 }}>{source}</span>
         <ArrowIcon color={palette.textMuted} />
-        <span style={{ ...destinationPathTextStyle(palette), flexShrink: 1 }}>{destination}</span>
+        <span style={{ ...rowPathStyle(palette), flexShrink: 1 }}>{destination}</span>
       </span>
     );
   }
 
-  return <span style={sourcePathTextStyle(palette)}>{source ?? destination ?? "None"}</span>;
+  return <span style={rowPathStyle(palette)}>{source ?? destination ?? "None"}</span>;
 }
 
-function SummaryMetric({
-  label,
-  value,
-  palette,
-  highlight = "none",
-}: {
-  label: string;
-  value: string;
-  palette: ReturnType<typeof resolveActionLogTheme>;
-  highlight?: "none" | "error";
-}) {
-  return (
-    <span
-      style={{
-        display: "inline-flex",
-        alignItems: "baseline",
-        gap: "6px",
-        whiteSpace: "nowrap",
-      }}
-    >
-      <span style={{ ...eyebrowStyle(palette), fontSize: "10px" }}>{label}</span>
-      <span
-        style={{
-          color: highlight === "error" ? palette.error : palette.textPrimary,
-          fontSize: "13px",
-          fontWeight: 600,
-          fontVariantNumeric: "tabular-nums",
-        }}
-      >
-        {value}
-      </span>
-    </span>
-  );
-}
-
-function SummarySeparator({ palette }: { palette: ReturnType<typeof resolveActionLogTheme> }) {
-  return <span style={{ color: palette.textMuted, opacity: 0.6 }}>·</span>;
-}
-
+// A labeled value in the expanded details: plain text, no card around it.
 function DetailStat({
   label,
   value,
@@ -1349,23 +1059,16 @@ function DetailStat({
 }: {
   label: string;
   value: string;
-  palette: ReturnType<typeof resolveActionLogTheme>;
+  palette: ActionLogPalette;
   tone?: "default" | "muted" | "error";
   monoText?: boolean;
 }) {
   return (
-    <div
-      style={{
-        borderRadius: "10px",
-        padding: "12px",
-        border: `1px solid ${palette.line}`,
-        background: palette.itemBg,
-      }}
-    >
-      <div style={eyebrowStyle(palette)}>{label}</div>
+    <div style={{ minWidth: 0 }}>
+      <div style={fieldLabelStyle(palette)}>{label}</div>
       <pre
         style={{
-          margin: "8px 0 0",
+          margin: "3px 0 0",
           whiteSpace: "pre-wrap",
           wordBreak: "break-word",
           fontFamily: monoText ? mono : sans,
@@ -1385,135 +1088,69 @@ function DetailStat({
   );
 }
 
-function refreshButtonStyle(
-  palette: ReturnType<typeof resolveActionLogTheme>,
-  height: number,
-): CSSProperties {
+// Buttons and fields match the bar above search results: 22px tall, 12px text.
+function buttonStyle(palette: ActionLogPalette): CSSProperties {
   return {
-    minHeight: `${height}px`,
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "7px",
-    borderRadius: "8px",
-    padding: "0 14px",
-    border: `1px solid ${palette.accentBorder}`,
-    background: palette.accentSoft,
-    color: palette.accentText,
-    fontWeight: 600,
-    fontSize: "12px",
-    cursor: "pointer",
-  };
-}
-
-function secondaryButtonStyle(
-  palette: ReturnType<typeof resolveActionLogTheme>,
-  height: number,
-  active: boolean,
-): CSSProperties {
-  return {
-    minHeight: `${height}px`,
-    borderRadius: "8px",
-    padding: "0 12px",
-    border: `1px solid ${active ? palette.accentBorder : palette.line}`,
-    background: active ? palette.accentSoft : palette.inputBg,
-    color: active ? palette.accentText : palette.textSecondary,
-    fontWeight: 500,
-    fontSize: "12px",
-    cursor: "pointer",
-  };
-}
-
-function inputStyle(
-  palette: ReturnType<typeof resolveActionLogTheme>,
-  height: number,
-  withSearchPadding: boolean,
-): CSSProperties {
-  return {
-    width: "100%",
-    minHeight: `${height}px`,
-    height: `${height}px`,
-    borderRadius: "8px",
+    height: "22px",
+    padding: "0 10px",
     border: `1px solid ${palette.inputBorder}`,
-    background: palette.inputBg,
+    borderRadius: "6px",
+    background: palette.buttonBg,
     color: palette.textPrimary,
-    padding: withSearchPadding ? "0 12px 0 32px" : "0 12px",
+    fontFamily: sans,
+    fontSize: "12px",
+    whiteSpace: "nowrap",
+    cursor: "default",
+  };
+}
+
+function inputStyle(palette: ActionLogPalette, withSearchPadding: boolean): CSSProperties {
+  return {
+    width: withSearchPadding ? "100%" : "auto",
+    height: "22px",
+    border: withSearchPadding ? "0" : `1px solid ${palette.inputBorder}`,
+    borderRadius: "6px",
+    background: withSearchPadding ? palette.inputBg : palette.buttonBg,
+    color: palette.textPrimary,
+    padding: withSearchPadding ? "0 8px 0 26px" : "0 6px",
     fontFamily: sans,
     fontSize: "12px",
     outline: "none",
-    appearance: "none",
   };
 }
 
-function fieldLabelStyle(palette: ReturnType<typeof resolveActionLogTheme>): CSSProperties {
+function fieldLabelStyle(palette: ActionLogPalette): CSSProperties {
   return {
-    fontSize: "10px",
     color: palette.textMuted,
-    display: "block",
     fontFamily: sans,
-    textTransform: "uppercase",
-    letterSpacing: "0.08em",
+    fontSize: "11px",
   };
 }
 
-function noticeStyle(
-  palette: ReturnType<typeof resolveActionLogTheme>,
-  tone: "error" | "empty",
-): CSSProperties {
+function sectionTitleStyle(palette: ActionLogPalette): CSSProperties {
   return {
-    padding: "14px 16px",
-    marginBottom: "12px",
-    borderRadius: "12px",
-    border: `1px solid ${tone === "error" ? palette.errorBorder : palette.line}`,
-    background: tone === "error" ? palette.errorBg : palette.summaryBg,
-    color: tone === "error" ? palette.error : palette.textMuted,
-    fontSize: "13px",
-  };
-}
-
-function sectionTitleStyle(palette: ReturnType<typeof resolveActionLogTheme>): CSSProperties {
-  return {
+    color: palette.textSecondary,
     fontFamily: sans,
-    fontSize: "10px",
-    letterSpacing: "0.08em",
-    textTransform: "uppercase",
-    color: palette.textMuted,
+    fontSize: "11px",
+    fontWeight: 600,
   };
 }
 
-function eyebrowStyle(palette: ReturnType<typeof resolveActionLogTheme>): CSSProperties {
-  return {
-    fontFamily: sans,
-    fontSize: "9px",
-    letterSpacing: "0.08em",
-    textTransform: "uppercase",
-    color: palette.textMuted,
-  };
-}
-
-function sourcePathTextStyle(palette: ReturnType<typeof resolveActionLogTheme>): CSSProperties {
+// The item in a table row: plain interface text, cut with an ellipsis when it is long.
+function rowPathStyle(palette: ActionLogPalette): CSSProperties {
   return {
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
     color: palette.textSecondary,
-    fontFamily: mono,
-    fontSize: "11px",
+    fontSize: "12px",
     minWidth: 0,
   };
 }
 
-function destinationPathTextStyle(
-  palette: ReturnType<typeof resolveActionLogTheme>,
-): CSSProperties {
+function pathValueStyle(palette: ActionLogPalette): CSSProperties {
   return {
-    ...sourcePathTextStyle(palette),
-    color: palette.textPrimary,
-  };
-}
-
-function pathValueStyle(palette: ReturnType<typeof resolveActionLogTheme>): CSSProperties {
-  return {
-    marginTop: "4px",
+    marginTop: "2px",
     fontSize: "12px",
     lineHeight: 1.45,
     wordBreak: "break-word",
@@ -1522,31 +1159,30 @@ function pathValueStyle(palette: ReturnType<typeof resolveActionLogTheme>): CSSP
   };
 }
 
-function chipStyle(palette: ReturnType<typeof resolveActionLogTheme>): CSSProperties {
+function chipStyle(palette: ActionLogPalette): CSSProperties {
   return {
     display: "inline-flex",
     alignItems: "center",
-    padding: "5px 9px",
-    borderRadius: "999px",
+    padding: "2px 7px",
+    borderRadius: "5px",
     border: `1px solid ${palette.line}`,
-    background: palette.itemBg,
     color: palette.textPrimary,
     fontSize: "11px",
   };
 }
 
-function copyButtonStyle(palette: ReturnType<typeof resolveActionLogTheme>): CSSProperties {
+function copyButtonStyle(palette: ActionLogPalette): CSSProperties {
   return {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    width: "30px",
-    height: "30px",
-    borderRadius: "8px",
-    border: `1px solid ${palette.line}`,
-    background: palette.itemBg,
+    width: "22px",
+    height: "22px",
+    border: "0",
+    borderRadius: "5px",
+    background: "transparent",
     color: palette.textMuted,
-    cursor: "pointer",
+    cursor: "default",
     flexShrink: 0,
   };
 }
@@ -1556,8 +1192,8 @@ function SearchIcon({ color }: { color: string }) {
     <svg
       aria-hidden="true"
       focusable="false"
-      width="13"
-      height="13"
+      width="12"
+      height="12"
       viewBox="0 0 16 16"
       fill="none"
     >
@@ -1590,41 +1226,24 @@ function ArrowIcon({ color }: { color: string }) {
   );
 }
 
-function DetailIcon({ color }: { color: string }) {
+// The disclosure triangle of a row or section, pointing right when closed and down when open.
+function DisclosureIcon({ expanded, color }: { expanded: boolean; color: string }) {
   return (
     <svg
       aria-hidden="true"
       focusable="false"
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
+      width="10"
+      height="10"
+      viewBox="0 0 10 10"
       fill="none"
-    >
-      <circle cx="8" cy="8" r="1" fill={color} />
-      <circle cx="8" cy="4" r="1" fill={color} />
-      <circle cx="8" cy="12" r="1" fill={color} />
-    </svg>
-  );
-}
-
-function RefreshIcon({ color }: { color: string }) {
-  return (
-    <svg
-      aria-hidden="true"
-      focusable="false"
-      width="13"
-      height="13"
-      viewBox="0 0 16 16"
-      fill="none"
+      style={{
+        flexShrink: 0,
+        transform: expanded ? "rotate(90deg)" : "none",
+        transition: "transform 0.12s ease",
+      }}
     >
       <path
-        d="M13.5 8a5.5 5.5 0 11-1.5-3.8"
-        stroke={color}
-        strokeWidth="1.4"
-        strokeLinecap="round"
-      />
-      <path
-        d="M13.5 2.5v2.5H11"
+        d="M3.5 2l3 3-3 3"
         stroke={color}
         strokeWidth="1.4"
         strokeLinecap="round"

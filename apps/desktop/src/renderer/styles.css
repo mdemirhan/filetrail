@@ -4405,8 +4405,7 @@ body.resizing-panels * {
   -webkit-backdrop-filter: blur(14px);
 }
 
-.settings-view,
-.action-log-view {
+.settings-view {
   min-height: 0;
   height: 100%;
   background: var(--bg-base);
@@ -4415,8 +4414,7 @@ body.resizing-panels * {
   padding: 26px 16px 28px;
 }
 
-body.platform-macos .settings-view,
-body.platform-macos .action-log-view {
+body.platform-macos .settings-view {
   padding-top: 58px;
 }
 
@@ -4428,8 +4426,7 @@ body.platform-macos .action-log-view {
   width: min(820px, 100%);
 }
 
-.settings-page-header,
-.action-log-page-header {
+.settings-page-header {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -4437,15 +4434,13 @@ body.platform-macos .action-log-view {
   margin-bottom: 18px;
 }
 
-.settings-page-header-left,
-.action-log-page-header-left {
+.settings-page-header-left {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.settings-page-eyebrow,
-.action-log-page-eyebrow {
+.settings-page-eyebrow {
   font-family: var(--font-sans);
   font-size: 10px;
   font-weight: 400;
@@ -4455,9 +4450,7 @@ body.platform-macos .action-log-view {
   font-variant-numeric: tabular-nums;
 }
 
-.settings-page-header h2,
-.action-log-page-header h2,
-.action-log-page-header h1 {
+.settings-page-header h2 {
   font-size: 22px;
   line-height: 1.12;
   letter-spacing: -0.02em;
@@ -4482,8 +4475,7 @@ body.platform-macos .settings-view[data-layout="narrow"] {
   padding-top: 52px;
 }
 
-.settings-view[data-layout="narrow"] .settings-page-header,
-.action-log-view[data-layout="narrow"] .action-log-page-header {
+.settings-view[data-layout="narrow"] .settings-page-header {
   align-items: flex-start;
   flex-direction: column;
 }
@@ -4497,10 +4489,6 @@ body.platform-macos .settings-view[data-layout="compact"] {
 }
 
 .settings-view[data-layout="compact"] .settings-page-header h2 {
-  font-size: 20px;
-}
-
-.action-log-view[data-layout="compact"] .action-log-page-header h1 {
   font-size: 20px;
 }
 
@@ -5413,8 +5401,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
 .pane-header,
 .get-info-header,
 .get-info-meta-label,
-.settings-page-eyebrow,
-.action-log-page-eyebrow {
+.settings-page-eyebrow {
   letter-spacing: 0;
   text-transform: none;
 }

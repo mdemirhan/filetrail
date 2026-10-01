@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 
 import type { ActionLogEntry } from "@filetrail/contracts";
 
@@ -99,7 +99,7 @@ describe("ActionLogView", () => {
     expect(container.firstElementChild).toHaveStyle({ overflowY: "auto", height: "100%" });
   });
 
-  it("renders a compact summary strip and aligned filter controls", () => {
+  it("shows one filter strip with a plain-text summary, and Reset only while filtering", () => {
     render(
       <ActionLogView
         entries={ENTRIES}
@@ -112,15 +112,84 @@ describe("ActionLogView", () => {
       />,
     );
 
-    const summary = screen.getByLabelText("Action log summary");
-    expect(summary).toHaveTextContent("Entries");
-    expect(summary).toHaveTextContent("2");
-    expect(summary).toHaveTextContent("Visible");
-    expect(summary).toHaveTextContent("Failed items");
-    expect(summary).toHaveTextContent("1");
+    const filters = screen.getByRole("toolbar", { name: "Action log filters" });
+    expect(within(filters).getByLabelText("Search action log")).toBeInTheDocument();
+    expect(within(filters).getByLabelText("Filter by action")).toBeInTheDocument();
+    expect(within(filters).getByLabelText("Filter by result")).toBeInTheDocument();
+    expect(within(filters).getByRole("button", { name: "Refresh" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Action log summary")).toHaveTextContent(
+      "2 entries · 1 failed item",
+    );
+    expect(screen.queryByRole("button", { name: "Reset Filters" })).toBeNull();
 
-    const resetButton = screen.getByRole("button", { name: "Reset Filters" });
-    expect(resetButton).toHaveStyle({ minHeight: "40px" });
+    fireEvent.change(screen.getByLabelText("Filter by result"), { target: { value: "failed" } });
+    expect(screen.getByLabelText("Action log summary")).toHaveTextContent(
+      "1 of 2 entries · 1 failed item",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Reset Filters" }));
+    expect(screen.getByLabelText("Filter by result")).toHaveValue("all");
+    expect(screen.getByLabelText("Action log summary")).toHaveTextContent(
+      "2 entries · 1 failed item",
+    );
+  });
+
+  it("is a plain table: column headers, no page title of its own, no cards", () => {
+    const { container } = render(
+      <ActionLogView
+        entries={ENTRIES}
+        loading={false}
+        error={null}
+        theme="light"
+        accent="#daa520"
+        onCopyEntryText={() => undefined}
+        onRefresh={() => undefined}
+      />,
+    );
+
+    // The window toolbar already says "Action Log"; the view does not repeat it.
+    expect(screen.queryByRole("heading")).toBeNull();
+    expect(screen.queryByText("File Trail")).toBeNull();
+    const entries = screen.getByRole("region", { name: "Action log entries" });
+    for (const header of ["Time", "Action", "Item", "Result"]) {
+      expect(within(entries).getByText(header)).toBeInTheDocument();
+    }
+    // Rows are flat: nothing in the view is drawn as a shadowed or rounded card.
+    for (const element of Array.from(container.querySelectorAll<HTMLElement>("section, article"))) {
+      expect(element.style.boxShadow).toBe("");
+      expect(element.style.borderRadius).toBe("");
+    }
+  });
+
+  it("explains an empty log, and filters that match nothing, in the table area", () => {
+    const { rerender } = render(
+      <ActionLogView
+        entries={[]}
+        loading={false}
+        error={null}
+        theme="light"
+        accent="#daa520"
+        onCopyEntryText={() => undefined}
+        onRefresh={() => undefined}
+      />,
+    );
+    expect(screen.getByText("No actions yet")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Action log entries" })).toBeNull();
+
+    rerender(
+      <ActionLogView
+        entries={ENTRIES}
+        loading={false}
+        error={null}
+        theme="light"
+        accent="#daa520"
+        onCopyEntryText={() => undefined}
+        onRefresh={() => undefined}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Search action log"), {
+      target: { value: "nothing-matches-this" },
+    });
+    expect(screen.getByText("No matching actions")).toBeInTheDocument();
   });
 
   it("renders entries and expands details", () => {
@@ -136,23 +205,8 @@ describe("ActionLogView", () => {
       />,
     );
 
-    expect(screen.getByText("Action Log")).toBeInTheDocument();
-    expect(screen.getByText("File Trail")).toBeInTheDocument();
-    expect(screen.queryByText("Action History")).not.toBeInTheDocument();
-    expect(
-      screen.queryByText(
-        /Review file mutations and launch actions with readable status, source, destination, and full failure detail\./i,
-      ),
-    ).not.toBeInTheDocument();
     expect(screen.getByText("/Users/demo/a.txt")).toBeInTheDocument();
     expect(screen.getByText("/Users/demo/app.log")).toBeInTheDocument();
-
-    expect(screen.getByRole("heading", { name: "Action Log" })).toHaveStyle({
-      fontSize: "20px",
-    });
-    expect(screen.getByRole("heading", { name: "Action Log" })).not.toHaveStyle({
-      color: "rgb(218, 165, 32)",
-    });
 
     const rowButton = screen.getByText("/Users/demo/a.txt").closest("button");
     if (!(rowButton instanceof HTMLButtonElement)) {
