@@ -165,6 +165,10 @@ export function useExplorerSearchController(args: {
   // How far into the running search's results this window has read. A tab left while its
   // search runs picks the results up from here when it is shown again.
   const searchCursorRef = useRef(0);
+  // Set while the first answer after a tab comes back is awaited. A search that turns out
+  // to have finished while its tab was in the background has no known duration: the time
+  // until the tab was shown again is not how long the search took.
+  const awaitingFirstUpdateAfterAttachRef = useRef(false);
 
   useEffect(
     () => () => {
@@ -352,10 +356,15 @@ export function useExplorerSearchController(args: {
         setSearchStatus(typedResponse.status);
         setSearchError(typedResponse.error);
         setSearchTruncated(typedResponse.truncated);
+        const finishedInBackground =
+          awaitingFirstUpdateAfterAttachRef.current && typedResponse.done;
+        awaitingFirstUpdateAfterAttachRef.current = false;
         if (typedResponse.done) {
           searchJobIdRef.current = null;
           clearSearchPolling();
-          if (searchStartedAtRef.current !== null) {
+          if (finishedInBackground) {
+            setSearchElapsedMs(null);
+          } else if (searchStartedAtRef.current !== null) {
             setSearchElapsedMs(
               Math.max(0, Math.round(performance.now() - searchStartedAtRef.current)),
             );
@@ -498,6 +507,7 @@ export function useExplorerSearchController(args: {
       }
       searchJobIdRef.current = response.jobId;
       searchCursorRef.current = 0;
+      awaitingFirstUpdateAfterAttachRef.current = false;
       setSearchStatus(response.status);
       pollSearch(response.jobId, 0, sessionId);
     } catch (error) {
@@ -794,6 +804,7 @@ export function useExplorerSearchController(args: {
     cachedSearchSelectionRef.current = session.cachedSearchSelection;
     searchJobIdRef.current = session.jobId;
     searchCursorRef.current = session.cursor;
+    awaitingFirstUpdateAfterAttachRef.current = session.jobId !== null;
     if (session.jobId !== null) {
       pollSearch(session.jobId, session.cursor, sessionId);
     }

@@ -68,6 +68,7 @@ File Trail has a much deeper customization surface than a typical file explorer.
 - Hidden file toggle
 - Folders-first sorting
 - Go To (⌘K): jump to any folder you have opened before from a few letters of its name, or type a path
+- Tabs (⌘T): each with its own folder, history, folder tree, view and search; copy in one tab and paste in another, or drag items onto a tab
 - Keyboard shortcuts for common navigation and browsing actions
 
 ## Current Platform
