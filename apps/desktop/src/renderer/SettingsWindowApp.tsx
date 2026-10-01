@@ -163,6 +163,20 @@ export function SettingsWindowApp() {
     };
   }, [client]);
 
+  // Escape closes Settings, like ⌘W. A pop-up inside Settings (the accent or icon picker)
+  // takes the key first and marks it used, so that Escape only closes the pop-up.
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) {
+        return;
+      }
+      event.preventDefault();
+      window.close();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   useEffect(() => {
     document.title = "Settings";
     document.body.classList.add("settings-window-body");

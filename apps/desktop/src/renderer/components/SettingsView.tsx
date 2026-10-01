@@ -1177,8 +1177,11 @@ function AccentSelector({
     const handleWindowChange = () => {
       updatePopupPosition();
     };
+    // Capture phase and preventDefault: Escape closes this pop-up, and the window's own
+    // Escape handling (which closes Settings) sees that the key is already used.
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        event.preventDefault();
         setOpen(false);
       }
     };
@@ -1186,12 +1189,12 @@ function AccentSelector({
     window.addEventListener("pointerdown", handlePointerDown);
     window.addEventListener("resize", handleWindowChange);
     window.addEventListener("scroll", handleWindowChange, true);
-    window.addEventListener("keydown", handleEscape);
+    window.addEventListener("keydown", handleEscape, true);
     return () => {
       window.removeEventListener("pointerdown", handlePointerDown);
       window.removeEventListener("resize", handleWindowChange);
       window.removeEventListener("scroll", handleWindowChange, true);
-      window.removeEventListener("keydown", handleEscape);
+      window.removeEventListener("keydown", handleEscape, true);
     };
   }, [open, updatePopupPosition]);
 
@@ -1427,8 +1430,11 @@ function FavoriteIconPicker({
     const handleWindowChange = () => {
       updatePopupPosition();
     };
+    // Capture phase and preventDefault: Escape closes this pop-up, and the window's own
+    // Escape handling (which closes Settings) sees that the key is already used.
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        event.preventDefault();
         setOpen(false);
       }
     };
@@ -1436,12 +1442,12 @@ function FavoriteIconPicker({
     window.addEventListener("pointerdown", handlePointerDown);
     window.addEventListener("resize", handleWindowChange);
     window.addEventListener("scroll", handleWindowChange, true);
-    window.addEventListener("keydown", handleEscape);
+    window.addEventListener("keydown", handleEscape, true);
     return () => {
       window.removeEventListener("pointerdown", handlePointerDown);
       window.removeEventListener("resize", handleWindowChange);
       window.removeEventListener("scroll", handleWindowChange, true);
-      window.removeEventListener("keydown", handleEscape);
+      window.removeEventListener("keydown", handleEscape, true);
     };
   }, [open, updatePopupPosition]);
 

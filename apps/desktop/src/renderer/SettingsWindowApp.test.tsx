@@ -1,0 +1,80 @@
+// @vitest-environment jsdom
+
+import { fireEvent, render, screen } from "@testing-library/react";
+
+import { DEFAULT_APP_PREFERENCES } from "../shared/appPreferences";
+import { SettingsWindowApp } from "./SettingsWindowApp";
+import { type FiletrailClient, FiletrailClientProvider } from "./lib/filetrailClient";
+
+function renderSettings() {
+  const client = {
+    invoke: vi.fn(async (channel: string) => {
+      if (channel === "app:getPreferences") {
+        return { preferences: DEFAULT_APP_PREFERENCES };
+      }
+      if (channel === "app:getHomeDirectory") {
+        return { path: "/Users/demo" };
+      }
+      return {};
+    }),
+    onPreferencesChanged: () => () => undefined,
+  } as unknown as FiletrailClient;
+  return render(
+    <FiletrailClientProvider value={client}>
+      <SettingsWindowApp />
+    </FiletrailClientProvider>,
+  );
+}
+
+describe("SettingsWindowApp", () => {
+  let close: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    close = vi.spyOn(window, "close").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    close.mockRestore();
+  });
+
+  it("closes with Escape", async () => {
+    renderSettings();
+    await screen.findByText("Type to select");
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(close).toHaveBeenCalledTimes(1);
+
+    // Other keys, and an Escape something else already used, leave the window open.
+    fireEvent.keyDown(window, { key: "Enter" });
+    const used = new KeyboardEvent("keydown", { key: "Escape", cancelable: true });
+    used.preventDefault();
+    window.dispatchEvent(used);
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets Escape close an open pop-up before it closes the window", async () => {
+    renderSettings();
+    await screen.findByText("Type to select");
+    fireEvent.click(screen.getByRole("button", { name: "Appearance" }));
+
+    const trigger = screen
+      .getAllByRole("button")
+      .find(
+        (button) =>
+          button.getAttribute("aria-haspopup") === "dialog" &&
+          !(button as HTMLButtonElement).disabled,
+      );
+    if (!trigger) {
+      throw new Error("No pop-up trigger found on the Appearance tab.");
+    }
+    fireEvent.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(close).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+});
