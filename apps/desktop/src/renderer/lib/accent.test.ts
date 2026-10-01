@@ -49,7 +49,7 @@ describe("accent helpers", () => {
     expect(accentTokensToCssVariables(tokens)).toMatchObject({
       "--accent": "#e8729a",
       "--accent-text": "#e8729a",
-      "--ft-accent-pill-text": "#e8729a",
+      "--ft-accent-solid": "#e8729a",
       "--ft-accent-ring-soft": "rgba(232, 114, 154, 0.15)",
     });
     expect(getToolbarAccentVariables(tokens)).toEqual({

@@ -922,13 +922,11 @@ export function App() {
     returnKeyAction,
     openItemLimit,
     includeHidden,
-    searchPatternMode,
-    searchMatchScope,
-    searchRecursive,
-    searchIncludeHidden,
+    // The search options (pattern, match, subfolders, hidden files, filter scope) are left
+    // out on purpose: what is chosen in the search field or results bar lasts for this run
+    // only. Settings owns the saved defaults, which each launch starts from.
     searchResultsSortBy,
     searchResultsSortDirection,
-    searchResultsFilterScope,
     treeWidth: panes.treeWidth,
     inspectorWidth: panes.inspectorWidth,
     restoreLastVisitedFolderOnStartup,
@@ -1238,6 +1236,10 @@ export function App() {
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target;
       if (target instanceof Node && searchShellRef.current?.contains(target)) {
+        return;
+      }
+      // The search options menu is drawn outside the field but belongs to it.
+      if (target instanceof Element && target.closest(".toolbar-search-menu")) {
         return;
       }
       setSearchPopoverOpen(false);

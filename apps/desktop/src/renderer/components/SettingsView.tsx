@@ -3422,7 +3422,7 @@ export function SettingsView({
                   onChange={(value) =>
                     onSearchDefaultsChange({ searchMatchScope: value as "name" | "path" })
                   }
-                  formatOption={(value) => (value === "path" ? "Full Path" : "Name")}
+                  formatOption={(value) => (value === "path" ? "Full path" : "Name")}
                 />
               }
             />

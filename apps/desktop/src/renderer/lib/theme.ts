@@ -160,9 +160,7 @@ const TEXT_OVERRIDE_TARGETS = {
     "--get-info-meta-value-muted",
     "--context-menu-shortcut",
     "--context-menu-submenu-arrow",
-    "--search-shortcut-fg",
     "--search-pill-fg",
-    "--search-meta-fg",
   ],
 } as const;
 const TEXT_OVERRIDE_KEYS = Object.values(TEXT_OVERRIDE_TARGETS).flat();

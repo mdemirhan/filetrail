@@ -28,13 +28,11 @@
   --ft-accent-solid-button: #daa520;
   --ft-accent-on-solid: #000000;
   --ft-accent-hover-bg: rgba(218, 165, 32, 0.14);
-  --ft-accent-pill-text: #b8860b;
   --ft-accent-border: rgba(218, 165, 32, 0.3);
   --ft-accent-soft-bg: rgba(218, 165, 32, 0.08);
   --ft-accent-hero-icon-bg: rgba(218, 165, 32, 0.1);
   --ft-accent-path-crumb-hover: #b8860b;
   --ft-accent-action-hover-bg: rgba(218, 165, 32, 0.1);
-  --ft-accent-search-pill-bg: rgba(218, 165, 32, 0.08);
   --ft-accent-search-pill-border: rgba(218, 165, 32, 0.55);
   --ft-accent-location-ring: rgba(218, 165, 32, 0.16);
   --ft-accent-ring-soft: rgba(218, 165, 32, 0.15);
@@ -132,10 +130,8 @@
   --scroll-thumb: rgba(60, 63, 86, 0.22);
   --scroll-thumb-hover: rgba(60, 63, 86, 0.34);
   --search-surface: #f7f8fa;
-  --search-surface-strong: #f7f8fa;
   --search-border: #c8c8d2;
   --search-border-active: var(--ft-accent-solid);
-  --search-panel-separator: #d0d0da;
   --search-shadow: none;
   --search-shadow-active: 0 0 0 1px var(--ft-accent-ring-soft);
   --search-text: #555566;
@@ -143,17 +139,13 @@
   --search-icon-active: var(--ft-accent-solid);
   --search-placeholder: #b0b0be;
   --search-caret: var(--ft-accent-solid);
-  --search-shortcut-fg: #9a9aa8;
   --search-pill-bg: transparent;
   --search-pill-border: #d0d0da;
   --search-pill-fg: #7e808f;
   --search-pill-hover-bg: rgba(0, 0, 0, 0.015);
   --search-pill-hover-border: #c1c4ce;
   --search-pill-hover-fg: #555566;
-  --search-pill-active-bg: var(--ft-accent-search-pill-bg);
   --search-pill-active-border: var(--ft-accent-search-pill-border);
-  --search-pill-active-fg: var(--ft-accent-pill-text);
-  --search-meta-fg: #8f91a0;
   --srbar-canvas: #f2f3f8;
   --srbar-separator: rgba(0, 0, 0, 0.08);
   --srbar-action-bg-hover: rgba(0, 0, 0, 0.06);
@@ -267,10 +259,8 @@
   --scroll-thumb: rgba(197, 200, 198, 0.1);
   --scroll-thumb-hover: rgba(197, 200, 198, 0.2);
   --search-surface: #222126;
-  --search-surface-strong: #222126;
   --search-border: #595a5e;
   --search-border-active: var(--ft-accent-solid);
-  --search-panel-separator: #444448;
   --search-shadow: none;
   --search-shadow-active: 0 0 0 1px var(--ft-accent-ring-soft);
   --search-text: #b8b8c2;
@@ -278,17 +268,13 @@
   --search-icon-active: var(--ft-accent-solid);
   --search-placeholder: #505058;
   --search-caret: var(--ft-accent-solid);
-  --search-shortcut-fg: #656568;
   --search-pill-bg: transparent;
   --search-pill-border: #444448;
   --search-pill-fg: #808187;
   --search-pill-hover-bg: rgba(255, 255, 255, 0.02);
   --search-pill-hover-border: #55565a;
   --search-pill-hover-fg: #b8b8c2;
-  --search-pill-active-bg: var(--ft-accent-search-pill-bg);
   --search-pill-active-border: var(--ft-accent-search-pill-border);
-  --search-pill-active-fg: var(--ft-accent-pill-text);
-  --search-meta-fg: #75767b;
   --srbar-canvas: #18191b;
   --srbar-separator: rgba(255, 255, 255, 0.05);
   --srbar-action-bg-hover: rgba(255, 255, 255, 0.05);
@@ -402,10 +388,8 @@
   --scroll-thumb: rgba(255, 255, 255, 0.1);
   --scroll-thumb-hover: rgba(255, 255, 255, 0.2);
   --search-surface: #27272f;
-  --search-surface-strong: #27272f;
   --search-border: #5e5e66;
   --search-border-active: var(--ft-accent-solid);
-  --search-panel-separator: #484850;
   --search-shadow: none;
   --search-shadow-active: 0 0 0 1px var(--ft-accent-ring-soft);
   --search-text: #c0c2cc;
@@ -413,17 +397,13 @@
   --search-icon-active: var(--ft-accent-solid);
   --search-placeholder: #55555f;
   --search-caret: var(--ft-accent-solid);
-  --search-shortcut-fg: #6a6a74;
   --search-pill-bg: transparent;
   --search-pill-border: #484850;
   --search-pill-fg: #81838d;
   --search-pill-hover-bg: rgba(255, 255, 255, 0.025);
   --search-pill-hover-border: #585a62;
   --search-pill-hover-fg: #c0c2cc;
-  --search-pill-active-bg: var(--ft-accent-search-pill-bg);
   --search-pill-active-border: var(--ft-accent-search-pill-border);
-  --search-pill-active-fg: var(--ft-accent-pill-text);
-  --search-meta-fg: #727582;
   --srbar-canvas: #1c1f26;
   --srbar-separator: rgba(255, 255, 255, 0.06);
   --srbar-action-bg-hover: rgba(255, 255, 255, 0.06);
@@ -537,10 +517,8 @@
   --scroll-thumb: #45475a;
   --scroll-thumb-hover: #585b70;
   --search-surface: #212332;
-  --search-surface-strong: #212332;
   --search-border: #58596b;
   --search-border-active: var(--ft-accent-solid);
-  --search-panel-separator: #404058;
   --search-shadow: none;
   --search-shadow-active: 0 0 0 1px var(--ft-accent-ring-soft);
   --search-text: #b0b4cc;
@@ -548,17 +526,13 @@
   --search-icon-active: var(--ft-accent-solid);
   --search-placeholder: #454560;
   --search-caret: var(--ft-accent-solid);
-  --search-shortcut-fg: #5a5a74;
   --search-pill-bg: transparent;
   --search-pill-border: #404058;
   --search-pill-fg: #7c8098;
   --search-pill-hover-bg: rgba(255, 255, 255, 0.025);
   --search-pill-hover-border: #525264;
   --search-pill-hover-fg: #b0b4cc;
-  --search-pill-active-bg: var(--ft-accent-search-pill-bg);
   --search-pill-active-border: var(--ft-accent-search-pill-border);
-  --search-pill-active-fg: var(--ft-accent-pill-text);
-  --search-meta-fg: #747891;
   --srbar-canvas: #11111b;
   --srbar-separator: rgba(255, 255, 255, 0.05);
   --srbar-action-bg-hover: rgba(255, 255, 255, 0.05);
@@ -899,8 +873,6 @@ input:focus-visible {
 
 .toolbar-search-shell.active .toolbar-search {
   border-color: var(--search-border-active);
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
   box-shadow: var(--search-shadow-active);
 }
 
@@ -929,6 +901,40 @@ input:focus-visible {
   width: 13px;
   height: 13px;
   stroke-width: 2.4;
+}
+
+/* The magnifier is a menu button for the search options (see SearchOptionsMenu). */
+.toolbar-search-options-button {
+  gap: 1px;
+  height: 20px;
+  margin: 0 -3px;
+  padding: 0 3px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: default;
+  -webkit-app-region: no-drag;
+}
+
+.toolbar-search-options-button:hover,
+.toolbar-search-options-button[aria-expanded="true"] {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.toolbar-search-options-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--search-border-active);
+}
+
+.toolbar-search-options-chevron {
+  width: 8px;
+  height: 8px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .toolbar-search-input {
@@ -979,8 +985,7 @@ input:focus-visible {
   color: var(--search-pill-hover-fg);
 }
 
-.toolbar-search-clear:focus-visible,
-.toolbar-search-pill:focus-visible {
+.toolbar-search-clear:focus-visible {
   box-shadow: none;
   outline: none;
   border-color: var(--search-pill-active-border);
@@ -1009,159 +1014,6 @@ input:focus-visible {
 
 .titlebar-actions[data-layout="minimal"] .toolbar-search-slot {
   flex-basis: 170px;
-}
-
-.toolbar-search-popover {
-  position: absolute;
-  top: calc(100% - 1px);
-  left: 0;
-  right: 0;
-  display: grid;
-  gap: 0;
-  border: 1px solid var(--search-border-active);
-  border-top: 0;
-  border-radius: 0 0 6px 6px;
-  background: var(--search-surface-strong);
-  box-shadow: var(--search-shadow-active);
-  z-index: 54;
-  overflow: hidden;
-  /* The toolbar is a window-drag region and Chromium passes that on to its children, so
-     without this, clicks on the Recursive and Hidden toggles dragged the window instead. */
-  -webkit-app-region: no-drag;
-}
-
-.toolbar-search-options {
-  display: grid;
-  gap: 8px;
-  padding: 8px 10px 6px;
-  border-top: 1px solid var(--search-panel-separator);
-}
-
-.toolbar-search-option-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.toolbar-search-option-row-primary {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.toolbar-search-option-row-secondary {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.toolbar-search-listbox {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-.toolbar-search-listbox-label {
-  min-width: 0;
-  color: var(--search-meta-fg);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.toolbar-search-select {
-  width: 100%;
-  min-width: 0;
-  height: 31px;
-  padding: 0 32px 0 12px;
-  border: 1px solid var(--search-pill-border);
-  border-radius: 7px;
-  background-color: var(--search-pill-bg);
-  color: var(--search-text);
-  font-family: var(--font-sans);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1;
-  appearance: none;
-  outline: none;
-  box-shadow: none;
-  -webkit-appearance: none;
-  -webkit-app-region: no-drag;
-  background-image: linear-gradient(45deg, transparent 50%, var(--search-shortcut-fg) 50%),
-    linear-gradient(135deg, var(--search-shortcut-fg) 50%, transparent 50%);
-  background-position: calc(100% - 16px) calc(50% - 2px), calc(100% - 10px) calc(50% - 2px);
-  background-size: 6px 6px, 6px 6px;
-  background-repeat: no-repeat;
-  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
-  font-variant-numeric: tabular-nums;
-}
-
-.toolbar-search-select:hover {
-  border-color: var(--search-pill-hover-border);
-  background-color: var(--search-pill-hover-bg);
-  color: var(--search-pill-hover-fg);
-}
-
-.toolbar-search-select:focus,
-.toolbar-search-select:focus-visible {
-  outline: none;
-  border-color: var(--search-pill-active-border);
-  background-color: var(--search-pill-active-bg);
-  color: var(--search-pill-active-fg);
-  box-shadow: none;
-}
-
-.toolbar-search-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 31px;
-  padding: 0 14px;
-  border: 1px solid var(--search-pill-border);
-  border-radius: 7px;
-  background: var(--search-pill-bg);
-  color: var(--search-pill-fg);
-  font-family: var(--font-sans);
-  font-size: 12.5px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
-  font-variant-numeric: tabular-nums;
-}
-
-.toolbar-search-pill:hover {
-  border-color: var(--search-pill-hover-border);
-  background: var(--search-pill-hover-bg);
-  color: var(--search-pill-hover-fg);
-}
-
-.toolbar-search-pill.active {
-  border-color: var(--search-pill-active-border);
-  background: var(--search-pill-active-bg);
-  color: var(--search-pill-active-fg);
-  font-weight: 700;
-}
-
-.toolbar-search-meta {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  min-width: 0;
-  padding: 0 10px 8px;
-  color: var(--search-meta-fg);
-  font-family: var(--font-sans);
-  font-size: 12px;
-  line-height: 1.4;
-  font-variant-numeric: tabular-nums;
-}
-
-.toolbar-search-status {
-  flex: 0 0 auto;
-  white-space: nowrap;
 }
 
 .toolbar-menu {
@@ -5102,6 +4954,14 @@ body.platform-macos .settings-view[data-layout="compact"] {
   margin: 5px 10px;
   border: 0;
   background: var(--context-menu-separator);
+}
+
+/* A small caption above a group of related menu items. */
+.toolbar-menu-heading {
+  padding: 3px 10px 2px;
+  color: var(--context-menu-shortcut);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 /* ── Path bar and status bar (Finder-style, below the list) ───────────── */

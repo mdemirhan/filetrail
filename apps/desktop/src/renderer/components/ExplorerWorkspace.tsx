@@ -18,6 +18,7 @@ import { type ToolbarItemId, getToolbarItemDefinition } from "../../shared/toolb
 import { parentDirectoryPath } from "../lib/explorerNavigation";
 import { EXPLORER_LAYOUT } from "../lib/layoutTokens";
 import { InfoPanel } from "./GetInfoPanel";
+import { SearchOptionsMenu } from "./SearchOptionsMenu";
 import { SearchWorkspace } from "./SearchWorkspace";
 import { ToolbarIcon } from "./ToolbarIcon";
 import { TreePane } from "./TreePane";
@@ -716,9 +717,19 @@ export function ExplorerWorkspace({
               }}
             >
               <div className="toolbar-search-row">
-                <span className="toolbar-search-icon">
-                  <ToolbarIcon name="search" />
-                </span>
+                <SearchOptionsMenu
+                  anchorRef={searchShellRef}
+                  inputRef={searchInputRef}
+                  interactive={mode === "interactive"}
+                  patternMode={searchPatternMode}
+                  onPatternModeChange={onSearchPatternModeChange}
+                  matchScope={searchMatchScope}
+                  onMatchScopeChange={onSearchMatchScopeChange}
+                  recursive={searchRecursive}
+                  onRecursiveChange={onSearchRecursiveChange}
+                  includeHidden={searchIncludeHidden}
+                  onIncludeHiddenChange={onSearchIncludeHiddenChange}
+                />
                 <input
                   ref={searchInputRef}
                   className="toolbar-search-input"
@@ -752,67 +763,6 @@ export function ExplorerWorkspace({
                 ) : null}
               </div>
             </form>
-            {searchPopoverOpen ? (
-              <div className="toolbar-search-popover">
-                <div className="toolbar-search-options">
-                  <div className="toolbar-search-option-row toolbar-search-option-row-primary">
-                    <label className="toolbar-search-listbox">
-                      <span className="toolbar-search-listbox-label">Pattern</span>
-                      <select
-                        className="toolbar-search-select"
-                        value={searchPatternMode}
-                        onChange={(event) =>
-                          onSearchPatternModeChange(event.currentTarget.value as SearchPatternMode)
-                        }
-                        aria-label="Search pattern mode"
-                      >
-                        <option value="regex">Regex</option>
-                        <option value="glob">Glob</option>
-                      </select>
-                    </label>
-                    <label className="toolbar-search-listbox">
-                      <span className="toolbar-search-listbox-label">Match</span>
-                      <select
-                        className="toolbar-search-select"
-                        value={searchMatchScope}
-                        onChange={(event) =>
-                          onSearchMatchScopeChange(event.currentTarget.value as SearchMatchScope)
-                        }
-                        aria-label="Search match scope"
-                      >
-                        <option value="name">Name</option>
-                        <option value="path">Path</option>
-                      </select>
-                    </label>
-                  </div>
-                  <div className="toolbar-search-option-row toolbar-search-option-row-secondary">
-                    <button
-                      type="button"
-                      className={
-                        searchRecursive ? "toolbar-search-pill active" : "toolbar-search-pill"
-                      }
-                      onClick={() => onSearchRecursiveChange(!searchRecursive)}
-                      aria-pressed={searchRecursive}
-                    >
-                      Recursive
-                    </button>
-                    <button
-                      type="button"
-                      className={
-                        searchIncludeHidden ? "toolbar-search-pill active" : "toolbar-search-pill"
-                      }
-                      onClick={() => onSearchIncludeHiddenChange(!searchIncludeHidden)}
-                      aria-pressed={searchIncludeHidden}
-                    >
-                      Hidden
-                    </button>
-                  </div>
-                  <div className="toolbar-search-meta">
-                    <span className="toolbar-search-status">Press Enter to search</span>
-                  </div>
-                </div>
-              </div>
-            ) : null}
           </div>
         </div>
       );

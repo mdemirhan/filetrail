@@ -177,7 +177,7 @@ describe("theme helpers", () => {
     expect(style.getPropertyValue("--search-text")).toBe("#222222");
     expect(style.getPropertyValue("--get-info-meta-value")).toBe("#222222");
     expect(style.getPropertyValue("--context-menu-shortcut")).toBe("#333333");
-    expect(style.getPropertyValue("--search-meta-fg")).toBe("#333333");
+    expect(style.getPropertyValue("--get-info-meta-label")).toBe("#333333");
 
     // Cleared overrides hand these back to the stylesheet's theme palette.
     applyAppearance({

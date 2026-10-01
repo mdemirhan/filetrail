@@ -4494,6 +4494,65 @@ describe("App copy/paste integration", () => {
     expect(document.activeElement).toBe(activeElementBeforePasteWarning);
   });
 
+  it("keeps search options for the session without saving them over the Settings defaults", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await screen.findByTestId("content-pane");
+    await vi.waitFor(() => {
+      expect(harness.invocations.some((call) => call.channel === "app:updatePreferences")).toBe(
+        true,
+      );
+    });
+    const optionsButton = screen.getAllByRole("button", { name: "Search options" })[0];
+    if (!optionsButton) {
+      throw new Error("Search options button not found.");
+    }
+    const hiddenItem = () => screen.getByRole("menuitemcheckbox", { name: "Include hidden files" });
+
+    fireEvent.click(optionsButton, { detail: 1 });
+    const before = hiddenItem().getAttribute("aria-checked");
+    fireEvent.click(hiddenItem());
+    // Reopening the menu later in the same run shows what was chosen.
+    fireEvent.click(optionsButton, { detail: 1 });
+    expect(hiddenItem().getAttribute("aria-checked")).toBe(before === "true" ? "false" : "true");
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    // Another preference change forces a save; the search options are not part of any save.
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "i", metaKey: true, shiftKey: true });
+    });
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.some(
+          (call) =>
+            call.channel === "app:updatePreferences" &&
+            (call.payload as IpcRequestInput<"app:updatePreferences">).preferences.detailRowOpen !==
+              undefined,
+        ),
+      ).toBe(true);
+    });
+    for (const call of harness.invocations.filter(
+      (entry) => entry.channel === "app:updatePreferences",
+    )) {
+      const saved = (call.payload as IpcRequestInput<"app:updatePreferences">).preferences;
+      for (const key of [
+        "searchPatternMode",
+        "searchMatchScope",
+        "searchRecursive",
+        "searchIncludeHidden",
+        "searchResultsFilterScope",
+      ] as const) {
+        expect(saved[key]).toBeUndefined();
+      }
+    }
+  });
+
   it("debounces preference persists so a burst of changes writes one latest snapshot", async () => {
     const harness = createAppHarness();
 

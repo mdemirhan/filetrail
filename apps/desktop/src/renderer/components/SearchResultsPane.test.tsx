@@ -311,8 +311,8 @@ describe("SearchResultsPane", () => {
     fireEvent.click(screen.getByRole("button", { name: "“project”" }));
     fireEvent.change(screen.getByLabelText("Pattern type"), { target: { value: "glob" } });
     fireEvent.change(screen.getByLabelText("Match on"), { target: { value: "path" } });
-    fireEvent.click(screen.getByLabelText("Subfolders"));
-    fireEvent.click(screen.getByLabelText("Hidden Files"));
+    fireEvent.click(screen.getByLabelText("Search subfolders"));
+    fireEvent.click(screen.getByLabelText("Include hidden files"));
     fireEvent.change(screen.getByLabelText("Filter search results"), { target: { value: "main" } });
     fireEvent.change(screen.getByLabelText("Filter search results by"), {
       target: { value: "path" },

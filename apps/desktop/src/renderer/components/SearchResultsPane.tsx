@@ -328,8 +328,8 @@ export function SearchResultsPane({
             title="Filter search results by"
             aria-label="Filter search results by"
           >
-            <option value="name">by Name</option>
-            <option value="path">by Path</option>
+            <option value="name">by name</option>
+            <option value="path">by path</option>
           </select>
           <span className="search-scope-divider" aria-hidden="true" />
           <select
@@ -341,8 +341,8 @@ export function SearchResultsPane({
             aria-label="Match on"
             title="Match on"
           >
-            <option value="name">Match Name</option>
-            <option value="path">Match Full Path</option>
+            <option value="name">Match name</option>
+            <option value="path">Match full path</option>
           </select>
           <select
             className="search-scope-select"
@@ -353,8 +353,8 @@ export function SearchResultsPane({
             aria-label="Pattern type"
             title="Pattern type"
           >
-            <option value="regex">Regex</option>
             <option value="glob">Glob</option>
+            <option value="regex">Regex</option>
           </select>
           <label className="search-scope-check">
             <input
@@ -362,7 +362,7 @@ export function SearchResultsPane({
               checked={recursive}
               onChange={(event) => onRecursiveChange(event.currentTarget.checked)}
             />
-            Subfolders
+            Search subfolders
           </label>
           <label className="search-scope-check">
             <input
@@ -370,7 +370,7 @@ export function SearchResultsPane({
               checked={includeHidden}
               onChange={(event) => onIncludeHiddenChange(event.currentTarget.checked)}
             />
-            Hidden Files
+            Include hidden files
           </label>
           {isSearching ? (
             <button

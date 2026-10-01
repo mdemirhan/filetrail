@@ -172,7 +172,11 @@ describe("theme styles", () => {
 
   it("keeps menus and popovers that hang off the toolbar clickable", () => {
     // The toolbar drags the window, and descendants inherit that unless they opt out.
-    for (const selector of [".toolbar-search-popover", ".toolbar-sort-menu", ".toolbar-search"]) {
+    for (const selector of [
+      ".toolbar-search-options-button",
+      ".toolbar-sort-menu",
+      ".toolbar-search",
+    ]) {
       expect(
         declarations.some(
           (d) =>
