@@ -1191,6 +1191,82 @@ describe("ContentPane", () => {
     expect(handleNavigate).toHaveBeenCalledWith("/Users/demo/Documents");
   });
 
+  it("draws a bar behind each known size, as a share of the largest", () => {
+    const entry = (name: string, kind: "file" | "directory", sizeBytes?: number) => ({
+      path: `/Users/demo/${name}`,
+      name,
+      extension: "",
+      kind,
+      isHidden: false,
+      isSymlink: false,
+      ...(sizeBytes === undefined ? {} : { sizeBytes }),
+    });
+    const entries = [
+      entry("big", "directory"),
+      entry("half.bin", "file", 500),
+      entry("tiny.bin", "file", 1),
+      entry("empty.bin", "file", 0),
+      entry("unsized", "directory"),
+    ];
+    const folderSizes: Record<string, number> = { "/Users/demo/big": 1000 };
+    const renderPane = (withBars: boolean) =>
+      render(
+        <ContentPane
+          isFocused
+          currentPath="/Users/demo"
+          entries={entries}
+          viewMode="details"
+          loading={false}
+          error={null}
+          includeHidden={false}
+          metadataByPath={{}}
+          sortBy="size"
+          sortDirection="desc"
+          onSelectPath={() => undefined}
+          onActivateEntry={() => undefined}
+          onSortChange={() => undefined}
+          onLayoutColumnsChange={() => undefined}
+          onVisiblePathsChange={() => undefined}
+          onNavigatePath={() => undefined}
+          onRequestPathSuggestions={async () => ({
+            inputPath: "",
+            basePath: null,
+            suggestions: [],
+          })}
+          onFocusChange={() => undefined}
+          sizeBars={
+            withBars
+              ? {
+                  maxBytes: 1000,
+                  getSizeBytes: (item) =>
+                    item.kind === "directory"
+                      ? (folderSizes[item.path] ?? null)
+                      : (item.sizeBytes ?? null),
+                }
+              : null
+          }
+        />,
+      );
+    const barWidth = (name: string) => {
+      const row = screen.getByText(name).closest(".details-row");
+      const bar = row?.querySelector<HTMLElement>(".details-size-bar");
+      return bar ? bar.style.width : null;
+    };
+
+    const withBars = renderPane(true);
+    expect(barWidth("big")).toBe("100%");
+    expect(barWidth("half.bin")).toBe("50%");
+    // Too small to see at this scale: still drawn (the stylesheet keeps it a sliver wide).
+    expect(barWidth("tiny.bin")).toBe("0.1%");
+    // Nothing for zero bytes, and nothing for a folder that has not been sized.
+    expect(barWidth("empty.bin")).toBeNull();
+    expect(barWidth("unsized")).toBeNull();
+    withBars.unmount();
+
+    renderPane(false);
+    expect(document.querySelector(".details-size-bar")).toBeNull();
+  });
+
   it("shows what was typed to filter the list, with a way to clear it", () => {
     const handleClearFilter = vi.fn();
     const entry = (name: string) => ({

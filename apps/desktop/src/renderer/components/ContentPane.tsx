@@ -62,6 +62,14 @@ const PATHBAR_SEGMENT_HORIZONTAL_PADDING = 18;
 const PATHBAR_MAX_SEGMENT_WIDTH = 220;
 const PATHBAR_MAX_ACTIVE_SEGMENT_WIDTH = 320;
 const PATHBAR_SEGMENT_CLICK_DELAY_MS = 320;
+
+// Bars behind the sizes of the Details view, which turn the Size column into a picture of
+// what takes the space. Each bar is the item's size as a share of the largest in the folder.
+export type SizeBars = {
+  maxBytes: number;
+  /** The size of a file, or of a folder once it has been calculated; null when unknown. */
+  getSizeBytes: (entry: DirectoryEntry) => number | null;
+};
 // Width of the list's vertical scrollbar (`.content-scroll::-webkit-scrollbar`), kept free
 // when the details columns are fitted to the pane.
 const DETAILS_SCROLLBAR_WIDTH = 8;
@@ -120,6 +128,7 @@ export function ContentPane({
   onClearFilter = () => undefined,
   onSearchForFilter,
   getFolderSizeLabel,
+  sizeBars = null,
   statusSummary,
   inlineRename = null,
   onInlineRenameSubmit = () => undefined,
@@ -183,6 +192,7 @@ export function ContentPane({
   onSearchForFilter?: (() => void) | undefined;
   // Cached folder size text for the details Size column, or null when none is known.
   getFolderSizeLabel?: ((path: string) => string | null) | undefined;
+  sizeBars?: SizeBars | null;
   // Item/selection count and free space, shown at the right end of the path bar.
   statusSummary?: string | undefined;
   // The item whose name is being edited in its row, with the reason the last name was refused.
@@ -473,6 +483,7 @@ export function ContentPane({
             detailColumnWidths={detailColumnWidths}
             onDetailColumnWidthsChange={onDetailColumnWidthsChange}
             getFolderSizeLabel={getFolderSizeLabel}
+            sizeBars={sizeBars}
             inlineRename={inlineRename}
             onInlineRenameSubmit={onInlineRenameSubmit}
             onInlineRenameCancel={onInlineRenameCancel}
@@ -1189,6 +1200,7 @@ function DetailsView({
   detailColumnWidths = DEFAULT_DETAIL_COLUMN_WIDTHS,
   onDetailColumnWidthsChange = () => undefined,
   getFolderSizeLabel,
+  sizeBars = null,
   inlineRename,
   onInlineRenameSubmit,
   onInlineRenameCancel,
@@ -1234,6 +1246,7 @@ function DetailsView({
   detailColumnWidths?: DetailColumnWidths;
   onDetailColumnWidthsChange?: (value: DetailColumnWidths) => void;
   getFolderSizeLabel?: ((path: string) => string | null) | undefined;
+  sizeBars?: SizeBars | null;
   inlineRename: InlineRenameState | null;
   onInlineRenameSubmit: (nextName: string) => void;
   onInlineRenameCancel: () => void;
@@ -1531,6 +1544,9 @@ function DetailsView({
                           ? (getFolderSizeLabel?.(entry.path) ?? null)
                           : null
                       }
+                      sizeBarFraction={
+                        columnKey === "size" ? getSizeBarFraction(entry, sizeBars) : null
+                      }
                       nameEditor={
                         <InlineRenameField
                           name={entry.name}
@@ -1617,6 +1633,9 @@ function DetailsView({
                         ? (getFolderSizeLabel?.(entry.path) ?? null)
                         : null
                     }
+                    sizeBarFraction={
+                      columnKey === "size" ? getSizeBarFraction(entry, sizeBars) : null
+                    }
                   />
                 ))}
               </button>
@@ -1695,17 +1714,33 @@ function DetailsHeaderCell({
   );
 }
 
+// A size as a share of the largest size in the folder, for the bar behind it; null when
+// bars are off or the size is not known.
+function getSizeBarFraction(entry: DirectoryEntry, sizeBars: SizeBars | null): number | null {
+  if (!sizeBars || sizeBars.maxBytes <= 0) {
+    return null;
+  }
+  const sizeBytes = sizeBars.getSizeBytes(entry);
+  if (sizeBytes === null) {
+    return null;
+  }
+  return Math.max(0, Math.min(1, sizeBytes / sizeBars.maxBytes));
+}
+
 function DetailsCell({
   columnKey,
   entry,
   metadata,
   folderSizeLabel = null,
+  sizeBarFraction = null,
   nameEditor = null,
 }: {
   columnKey: DetailColumnKey;
   entry: DirectoryEntry;
   metadata: DirectoryEntryMetadata | undefined;
   folderSizeLabel?: string | null;
+  /** 0 to 1: how much of the size cell its bar fills. */
+  sizeBarFraction?: number | null;
   // Shown in place of the name while it is being edited.
   nameEditor?: React.ReactNode;
 }) {
@@ -1728,9 +1763,23 @@ function DetailsCell({
     );
   }
   if (columnKey === "size") {
-    // biome-ignore lint/a11y/useFocusableInteractive: see note above.
-    // biome-ignore lint/a11y/useSemanticElements: see note above.
-    return <span role="gridcell">{folderSizeLabel ?? formatDetailSize(entry, metadata)}</span>;
+    return (
+      // biome-ignore lint/a11y/useFocusableInteractive: see note above.
+      // biome-ignore lint/a11y/useSemanticElements: see note above.
+      <span role="gridcell" className="details-size">
+        {sizeBarFraction !== null && sizeBarFraction > 0 ? (
+          // A size too small to see at this scale still shows a sliver (a minimum width).
+          <span
+            className="details-size-bar"
+            aria-hidden="true"
+            style={{ width: `${sizeBarFraction * 100}%` }}
+          />
+        ) : null}
+        <span className="details-size-text">
+          {folderSizeLabel ?? formatDetailSize(entry, metadata)}
+        </span>
+      </span>
+    );
   }
   if (columnKey === "modified") {
     // biome-ignore lint/a11y/useFocusableInteractive: see note above.

@@ -404,7 +404,12 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Folder sizes",
             description:
-              "Folders show no size until you ask: click Calculate in the Info panel, or right-click and choose Calculate Size.",
+              "Folders show no size until you ask: click Calculate in the Info panel, or right-click and choose Calculate Size. Sizing a folder also sizes every folder inside it.",
+          },
+          {
+            label: "What takes the space",
+            description:
+              "Sort the Details view by Size: each size gets a bar showing its share of the largest item, so the big ones stand out. Folders get a bar once their size is known.",
           },
         ],
       },

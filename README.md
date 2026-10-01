@@ -23,7 +23,7 @@ Finder is great until you need to move fast through large folder trees, inspect 
 - Fast search powered by a bundled `fd` binary, so search is built into the app and does not depend on the user setting up extra tools.
 - Search controls that let you switch between plain text, glob and regex matching, target names or full paths, recurse deeply or stay shallow, and include hidden files when needed.
 - Search as you type, with results you can sort and open without losing your place.
-- On-demand folder size calculation with cached results, so you can inspect heavy directories without paying the cost every time you click around.
+- On-demand folder size calculation with cached results, so you can inspect heavy directories without paying the cost every time you click around. Sorted by size, the list draws a bar behind each size to show what takes the space.
 - Native folder analysis that tracks logical size, allocated disk usage, and file counts for directory trees.
 - A dual-pane workflow with folder tree navigation, content browsing, favorites, and an inspector-style Get Info panel.
 - File operations for opening, editing, renaming, duplicating, moving, copying, pasting, trashing, and opening locations in Terminal.

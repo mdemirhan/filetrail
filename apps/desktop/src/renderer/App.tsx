@@ -432,6 +432,28 @@ export function App() {
       },
     });
   }, [currentEntries, sortBy, sortDirection, foldersFirst, getFolderSizeEntry, folderSizeVersion]);
+  // While the list is sorted by size, the Details view draws a bar behind each size: the
+  // item's share of the largest size in the folder. Files have their size from the listing;
+  // a folder gets a bar once its size has been calculated (Calculate Size on the folder it
+  // is in sizes every folder inside).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: folderSizeVersion changes whenever a cached folder size does; getEntry reads that cache.
+  const sizeBars = useMemo(() => {
+    if (sortBy !== "size") {
+      return null;
+    }
+    const getSizeBytes = (entry: DirectoryEntry) => {
+      if (!isFolderSizeEligibleKind(entry.kind)) {
+        return entry.sizeBytes ?? null;
+      }
+      const folderSize = getFolderSizeEntry(entry.path);
+      return folderSize.status === "ready" ? folderSize.sizeBytes : null;
+    };
+    let maxBytes = 0;
+    for (const entry of currentEntries) {
+      maxBytes = Math.max(maxBytes, getSizeBytes(entry) ?? 0);
+    }
+    return maxBytes > 0 ? { maxBytes, getSizeBytes } : null;
+  }, [currentEntries, sortBy, getFolderSizeEntry, folderSizeVersion]);
   // The info panel shows the selected item, or the folder on screen when nothing is
   // selected, updating in place from what the list knows until its details arrive.
   const infoPanelTargetPath = currentPath
@@ -1716,6 +1738,7 @@ export function App() {
                   },
                   availableBytes: volumeAvailableBytes,
                 }),
+                sizeBars,
                 getFolderSizeLabel: (path) => {
                   const entry = folderSizeCache.getEntry(path);
                   if (entry.status === "ready") {
