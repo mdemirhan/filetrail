@@ -13,6 +13,7 @@ const MENU_ITEM_SELECTOR = '[role="menuitemradio"], [role="menuitemcheckbox"]';
 // The magnifier inside the toolbar search field doubles as a menu button (as in Mail or
 // Xcode): it opens the search options as an ordinary menu with checkmarks, so the field
 // itself stays a plain field. The same options are in the bar above the search results.
+// Hidden files are not an option here: search includes them when the file list shows them.
 export function SearchOptionsMenu({
   anchorRef,
   inputRef,
@@ -23,8 +24,6 @@ export function SearchOptionsMenu({
   onMatchScopeChange,
   recursive,
   onRecursiveChange,
-  includeHidden,
-  onIncludeHiddenChange,
 }: {
   /** The search field; the menu hangs below it. */
   anchorRef: RefObject<HTMLElement | null>;
@@ -38,8 +37,6 @@ export function SearchOptionsMenu({
   onMatchScopeChange: (value: SearchMatchScope) => void;
   recursive: boolean;
   onRecursiveChange: (value: boolean) => void;
-  includeHidden: boolean;
-  onIncludeHiddenChange: (value: boolean) => void;
 }) {
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -220,9 +217,6 @@ export function SearchOptionsMenu({
             {radioItem("Regex", patternMode === "regex", () => onPatternModeChange("regex"))}
             <hr className="toolbar-menu-separator" />
             {checkboxItem("Search subfolders", recursive, () => onRecursiveChange(!recursive))}
-            {checkboxItem("Include hidden files", includeHidden, () =>
-              onIncludeHiddenChange(!includeHidden),
-            )}
           </div>,
           document.body,
         )

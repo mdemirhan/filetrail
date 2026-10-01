@@ -56,8 +56,6 @@ export function SearchResultsPane({
   onMatchScopeChange = () => undefined,
   recursive = true,
   onRecursiveChange = () => undefined,
-  includeHidden = false,
-  onIncludeHiddenChange = () => undefined,
   onStopSearch,
   onClearResults,
   onCloseResults,
@@ -105,8 +103,6 @@ export function SearchResultsPane({
   onMatchScopeChange?: (value: SearchMatchScopePreference) => void;
   recursive?: boolean;
   onRecursiveChange?: (value: boolean) => void;
-  includeHidden?: boolean;
-  onIncludeHiddenChange?: (value: boolean) => void;
   onStopSearch: () => void;
   onClearResults: () => void;
   onCloseResults: () => void;
@@ -363,14 +359,6 @@ export function SearchResultsPane({
               onChange={(event) => onRecursiveChange(event.currentTarget.checked)}
             />
             Search subfolders
-          </label>
-          <label className="search-scope-check">
-            <input
-              type="checkbox"
-              checked={includeHidden}
-              onChange={(event) => onIncludeHiddenChange(event.currentTarget.checked)}
-            />
-            Include hidden files
           </label>
           {isSearching ? (
             <button

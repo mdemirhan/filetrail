@@ -10,7 +10,6 @@ function renderMenu(overrides: Partial<Parameters<typeof SearchOptionsMenu>[0]> 
     onPatternModeChange: vi.fn(),
     onMatchScopeChange: vi.fn(),
     onRecursiveChange: vi.fn(),
-    onIncludeHiddenChange: vi.fn(),
   };
   const anchorRef = createRef<HTMLDivElement>();
   const inputRef = createRef<HTMLInputElement>();
@@ -23,7 +22,6 @@ function renderMenu(overrides: Partial<Parameters<typeof SearchOptionsMenu>[0]> 
         patternMode="glob"
         matchScope="name"
         recursive
-        includeHidden={false}
         {...handlers}
         {...overrides}
       />
@@ -53,24 +51,20 @@ describe("SearchOptionsMenu", () => {
     );
     expect(screen.getByRole("menuitemradio", { name: "Glob" })).toBeChecked();
     expect(screen.getByRole("menuitemcheckbox", { name: "Search subfolders" })).toBeChecked();
-    expect(
-      screen.getByRole("menuitemcheckbox", { name: "Include hidden files" }),
-    ).not.toBeChecked();
+    // Hidden files follow the file list (⇧⌘.), so the menu has no item for them.
+    expect(screen.queryByRole("menuitemcheckbox", { name: "Include hidden files" })).toBeNull();
   });
 
   it("applies a choice, closes, and leaves the focus in the search field", () => {
     const { handlers, input } = renderMenu();
     fireEvent.click(screen.getByRole("button", { name: "Search options" }), { detail: 1 });
 
-    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Include hidden files" }));
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Search subfolders" }));
 
-    expect(handlers.onIncludeHiddenChange).toHaveBeenCalledWith(true);
+    expect(handlers.onRecursiveChange).toHaveBeenCalledWith(false);
     expect(screen.queryByRole("menu")).toBeNull();
     expect(input()).toHaveFocus();
 
-    fireEvent.click(screen.getByRole("button", { name: "Search options" }), { detail: 1 });
-    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Search subfolders" }));
-    expect(handlers.onRecursiveChange).toHaveBeenCalledWith(false);
     fireEvent.click(screen.getByRole("button", { name: "Search options" }), { detail: 1 });
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Regex" }));
     expect(handlers.onPatternModeChange).toHaveBeenCalledWith("regex");
@@ -89,10 +83,10 @@ describe("SearchOptionsMenu", () => {
     expect(screen.getByRole("menuitemradio", { name: "Full path" })).toHaveFocus();
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "ArrowUp" });
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "ArrowUp" });
-    expect(screen.getByRole("menuitemcheckbox", { name: "Include hidden files" })).toHaveFocus();
+    expect(screen.getByRole("menuitemcheckbox", { name: "Search subfolders" })).toHaveFocus();
 
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "Enter" });
-    expect(handlers.onIncludeHiddenChange).toHaveBeenCalledWith(true);
+    expect(handlers.onRecursiveChange).toHaveBeenCalledWith(false);
     expect(screen.queryByRole("menu")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Search options" }), { detail: 1 });

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import type { IpcResponse } from "@filetrail/contracts";
 
@@ -41,8 +41,10 @@ export function useExplorerSearchController(args: {
   navigation: NavigationStore;
   search: SearchStore;
   selection: SelectionActions;
+  /** Whether the file list shows hidden files (⇧⌘.); search includes them exactly then. */
+  includeHidden: boolean;
 }) {
-  const { services, navigation, search, selection } = args;
+  const { services, navigation, search, selection, includeHidden } = args;
   const { client, searchInputRef } = services;
   const { currentPath, currentEntries, contentSelection } = navigation;
   const { applyContentSelection, focusContentPane } = selection;
@@ -58,8 +60,6 @@ export function useExplorerSearchController(args: {
     setSearchMatchScope,
     searchRecursive,
     setSearchRecursive,
-    searchIncludeHidden,
-    setSearchIncludeHidden,
     searchResultsSortBy,
     setSearchResultsSortBy,
     searchResultsSortDirection,
@@ -133,12 +133,31 @@ export function useExplorerSearchController(args: {
     [client, searchJobIdRef, searchPollTimeoutRef],
   );
 
+  // Search has no hidden-files option of its own: it follows the file list. `searchedHiddenRef`
+  // is the setting the current results were found with; when the setting changes, results on
+  // screen are searched again, and cached ones are searched again the next time they show.
+  const searchedHiddenRef = useRef(includeHidden);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs only when the hidden-files setting changes; the search it restarts reads the latest state.
+  useEffect(() => {
+    if (!hasCachedSearch || !searchResultsVisible || searchedHiddenRef.current === includeHidden) {
+      return;
+    }
+    void startSearch(searchCommittedQuery, { rootPath: searchRootPath || currentPath });
+  }, [includeHidden]);
+
   function showCachedSearchResults(options?: { focusPane?: boolean }) {
     if (!hasCachedSearch) {
       return;
     }
     // The field mirrors what is on screen: showing cached results restores their query.
     setSearchDraftQuery(searchCommittedQuery);
+    if (searchedHiddenRef.current !== includeHidden) {
+      void startSearch(searchCommittedQuery, { rootPath: searchRootPath || currentPath });
+      if (options?.focusPane) {
+        focusContentPane();
+      }
+      return;
+    }
     setSearchResultsVisible(true);
     applyContentSelection(
       sanitizeContentSelection(cachedSearchSelectionRef.current, searchResultEntries),
@@ -275,7 +294,6 @@ export function useExplorerSearchController(args: {
       patternMode: SearchPatternMode;
       matchScope: SearchMatchScope;
       recursive: boolean;
-      includeHidden: boolean;
       rootPath: string;
     }> = {},
   ) {
@@ -304,6 +322,7 @@ export function useExplorerSearchController(args: {
     setSearchTruncated(false);
     setSearchElapsedMs(null);
     searchStartedAtRef.current = performance.now();
+    searchedHiddenRef.current = includeHidden;
     cachedSearchSelectionRef.current = EMPTY_CONTENT_SELECTION;
     applyContentSelection(EMPTY_CONTENT_SELECTION, searchResultEntries);
 
@@ -314,7 +333,7 @@ export function useExplorerSearchController(args: {
         patternMode: overrides.patternMode ?? searchPatternMode,
         matchScope: overrides.matchScope ?? searchMatchScope,
         recursive: overrides.recursive ?? searchRecursive,
-        includeHidden: overrides.includeHidden ?? searchIncludeHidden,
+        includeHidden,
       })) as { jobId: string; status: IpcResponse<"search:start">["status"] };
       if (searchSessionRef.current !== sessionId) {
         await client.invoke("search:cancel", { jobId: response.jobId }).catch(() => undefined);
@@ -418,16 +437,6 @@ export function useExplorerSearchController(args: {
     });
   }
 
-  function updateSearchIncludeHidden(nextValue: boolean) {
-    setSearchIncludeHidden(nextValue);
-    if (hasCachedSearch) {
-      void startSearch(searchCommittedQuery, {
-        includeHidden: nextValue,
-        rootPath: searchRootPath || currentPath,
-      });
-    }
-  }
-
   return {
     rerunSearch,
     changeSearchRoot,
@@ -443,7 +452,6 @@ export function useExplorerSearchController(args: {
     startSearch,
     stopSearch,
     toggleSearchResultsSortDirection,
-    updateSearchIncludeHidden,
     updateSearchMatchScope,
     updateSearchPatternMode,
     updateSearchRecursive,

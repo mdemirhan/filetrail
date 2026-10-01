@@ -426,10 +426,6 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
       typeof record.searchRecursive === "boolean"
         ? record.searchRecursive
         : currentDefaults.searchRecursive,
-    searchIncludeHidden:
-      typeof record.searchIncludeHidden === "boolean"
-        ? record.searchIncludeHidden
-        : currentDefaults.searchIncludeHidden,
     searchResultsSortBy:
       record.searchResultsSortBy === "name" || record.searchResultsSortBy === "path"
         ? record.searchResultsSortBy

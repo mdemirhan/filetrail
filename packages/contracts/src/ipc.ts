@@ -684,7 +684,6 @@ export const appPreferencesSchema = z.object({
   searchPatternMode: searchPatternModeSchema,
   searchMatchScope: searchMatchScopeSchema,
   searchRecursive: z.boolean(),
-  searchIncludeHidden: z.boolean(),
   searchResultsSortBy: searchResultsSortBySchema,
   searchResultsSortDirection: sortDirectionSchema,
   searchResultsFilterScope: searchResultsFilterScopeSchema,

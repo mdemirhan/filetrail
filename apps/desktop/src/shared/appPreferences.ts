@@ -303,7 +303,6 @@ export type AppPreferences = {
   searchPatternMode: SearchPatternModePreference;
   searchMatchScope: SearchMatchScopePreference;
   searchRecursive: boolean;
-  searchIncludeHidden: boolean;
   searchResultsSortBy: SearchResultsSortByPreference;
   searchResultsSortDirection: SearchResultsSortDirectionPreference;
   searchResultsFilterScope: SearchResultsFilterScopePreference;
@@ -372,7 +371,6 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   searchPatternMode: "regex",
   searchMatchScope: "name",
   searchRecursive: true,
-  searchIncludeHidden: false,
   searchResultsSortBy: "path",
   searchResultsSortDirection: "asc",
   searchResultsFilterScope: "name",

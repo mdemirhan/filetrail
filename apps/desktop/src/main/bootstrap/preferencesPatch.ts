@@ -145,9 +145,6 @@ export function toPreferencePatch(
   if (value.searchRecursive !== undefined) {
     patch.searchRecursive = value.searchRecursive;
   }
-  if (value.searchIncludeHidden !== undefined) {
-    patch.searchIncludeHidden = value.searchIncludeHidden;
-  }
   if (value.searchResultsSortBy !== undefined) {
     patch.searchResultsSortBy = value.searchResultsSortBy;
   }

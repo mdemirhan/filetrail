@@ -157,8 +157,6 @@ export function ExplorerWorkspace({
   onSearchMatchScopeChange,
   searchRecursive,
   onSearchRecursiveChange,
-  searchIncludeHidden,
-  onSearchIncludeHiddenChange,
   canRunRendererCommand,
   onRendererCommand,
   onPaneResizeKey,
@@ -211,8 +209,6 @@ export function ExplorerWorkspace({
   onSearchMatchScopeChange: (value: SearchMatchScope) => void;
   searchRecursive: boolean;
   onSearchRecursiveChange: (value: boolean) => void;
-  searchIncludeHidden: boolean;
-  onSearchIncludeHiddenChange: (value: boolean) => void;
   canRunRendererCommand: (command: RendererCommandType) => boolean;
   onRendererCommand: (command: RendererCommandType) => void;
   onPaneResizeKey: (pane: "tree" | "inspector", event: ReactKeyboardEvent<HTMLDivElement>) => void;
@@ -727,8 +723,6 @@ export function ExplorerWorkspace({
                   onMatchScopeChange={onSearchMatchScopeChange}
                   recursive={searchRecursive}
                   onRecursiveChange={onSearchRecursiveChange}
-                  includeHidden={searchIncludeHidden}
-                  onIncludeHiddenChange={onSearchIncludeHiddenChange}
                 />
                 <input
                   ref={searchInputRef}

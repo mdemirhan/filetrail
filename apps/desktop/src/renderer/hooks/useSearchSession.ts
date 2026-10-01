@@ -29,9 +29,6 @@ export function useSearchSession() {
     DEFAULT_APP_PREFERENCES.searchMatchScope,
   );
   const [searchRecursive, setSearchRecursive] = useState(DEFAULT_APP_PREFERENCES.searchRecursive);
-  const [searchIncludeHidden, setSearchIncludeHidden] = useState(
-    DEFAULT_APP_PREFERENCES.searchIncludeHidden,
-  );
   const [searchResultsSortBy, setSearchResultsSortBy] = useState<SearchResultsSortBy>(
     DEFAULT_APP_PREFERENCES.searchResultsSortBy,
   );
@@ -112,8 +109,6 @@ export function useSearchSession() {
     setSearchMatchScope,
     searchRecursive,
     setSearchRecursive,
-    searchIncludeHidden,
-    setSearchIncludeHidden,
     searchResultsSortBy,
     setSearchResultsSortBy,
     searchResultsSortDirection,

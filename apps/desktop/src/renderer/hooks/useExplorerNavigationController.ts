@@ -688,7 +688,7 @@ export function useExplorerNavigationController(args: {
     setCurrentEntries(entries);
     setVisiblePaths([]);
     setMetadataByPath(cachedMetadata);
-    if (searchResultsVisibleRef.current) {
+    if (searchResultsVisibleRef.current && !keepSearchResultsOnReloadRef.current) {
       setSearchResultsVisible(false);
     }
     const pendingPasteSelection =
@@ -1319,6 +1319,11 @@ export function useExplorerNavigationController(args: {
     return true;
   }
 
+  // Set while the folder reloads for a hidden-files change made with search results on
+  // screen: search follows that setting and runs again (useExplorerSearchController), so the
+  // reload underneath must not close the results as a navigation would.
+  const keepSearchResultsOnReloadRef = useRef(false);
+
   function toggleHiddenFiles() {
     const nextValue = !includeHidden;
     setIncludeHidden(nextValue);
@@ -1329,6 +1334,7 @@ export function useExplorerNavigationController(args: {
     if (!reloadOptions) {
       reinitializeTree(treeRootPath || currentPath, currentPath);
     }
+    keepSearchResultsOnReloadRef.current = searchResultsVisibleRef.current;
     void navigateTo(
       currentPath,
       "replace",
@@ -1337,7 +1343,9 @@ export function useExplorerNavigationController(args: {
       undefined,
       undefined,
       reloadOptions,
-    );
+    ).finally(() => {
+      keepSearchResultsOnReloadRef.current = false;
+    });
   }
 
   async function refreshVisibleTreePath(

@@ -230,7 +230,6 @@ describe("SearchResultsPane", () => {
     const handlePatternModeChange = vi.fn();
     const handleMatchScopeChange = vi.fn();
     const handleRecursiveChange = vi.fn();
-    const handleIncludeHiddenChange = vi.fn();
     const handleScrollTopChange = vi.fn();
     const handleFilterQueryChange = vi.fn();
     const handleFilterScopeChange = vi.fn();
@@ -275,8 +274,6 @@ describe("SearchResultsPane", () => {
         onMatchScopeChange={handleMatchScopeChange}
         recursive
         onRecursiveChange={handleRecursiveChange}
-        includeHidden={false}
-        onIncludeHiddenChange={handleIncludeHiddenChange}
         onStopSearch={() => undefined}
         onClearResults={() => undefined}
         onCloseResults={() => undefined}
@@ -312,7 +309,8 @@ describe("SearchResultsPane", () => {
     fireEvent.change(screen.getByLabelText("Pattern type"), { target: { value: "glob" } });
     fireEvent.change(screen.getByLabelText("Match on"), { target: { value: "path" } });
     fireEvent.click(screen.getByLabelText("Search subfolders"));
-    fireEvent.click(screen.getByLabelText("Include hidden files"));
+    // Hidden files follow the file list, so the bar has no option for them.
+    expect(screen.queryByLabelText("Include hidden files")).toBeNull();
     fireEvent.change(screen.getByLabelText("Filter search results"), { target: { value: "main" } });
     fireEvent.change(screen.getByLabelText("Filter search results by"), {
       target: { value: "path" },
@@ -328,7 +326,6 @@ describe("SearchResultsPane", () => {
     expect(handlePatternModeChange).toHaveBeenCalledWith("glob");
     expect(handleMatchScopeChange).toHaveBeenCalledWith("path");
     expect(handleRecursiveChange).toHaveBeenCalledWith(false);
-    expect(handleIncludeHiddenChange).toHaveBeenCalledWith(true);
     expect(handleFilterQueryChange).toHaveBeenCalledWith("main");
     expect(handleFilterScopeChange).toHaveBeenCalledWith("path");
     expect(handleScrollTopChange).toHaveBeenCalledWith(96);

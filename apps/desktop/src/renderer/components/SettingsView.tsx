@@ -61,7 +61,6 @@ export type SearchDefaults = {
   searchPatternMode: "regex" | "glob";
   searchMatchScope: "name" | "path";
   searchRecursive: boolean;
-  searchIncludeHidden: boolean;
   searchResultsFilterScope: "name" | "path";
 };
 
@@ -3437,22 +3436,6 @@ export function SettingsView({
                   }
                   theme={palette}
                   label="Search subfolders"
-                />
-              }
-            />
-            <SettingRow
-              title="Include hidden files"
-              theme={palette}
-              right={
-                <Toggle
-                  checked={searchDefaults.searchIncludeHidden}
-                  onToggle={() =>
-                    onSearchDefaultsChange({
-                      searchIncludeHidden: !searchDefaults.searchIncludeHidden,
-                    })
-                  }
-                  theme={palette}
-                  label="Include hidden files"
                 />
               }
             />

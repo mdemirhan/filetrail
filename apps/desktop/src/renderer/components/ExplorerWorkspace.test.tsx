@@ -125,8 +125,6 @@ function renderExplorerWorkspace(
       onSearchMatchScopeChange={() => undefined}
       searchRecursive={false}
       onSearchRecursiveChange={() => undefined}
-      searchIncludeHidden={false}
-      onSearchIncludeHiddenChange={() => undefined}
       canRunRendererCommand={() => true}
       onRendererCommand={() => undefined}
       onPaneResizeKey={() => undefined}

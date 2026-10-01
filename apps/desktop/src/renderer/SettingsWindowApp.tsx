@@ -71,7 +71,6 @@ export function SettingsWindowApp() {
     searchPatternMode: DEFAULT_APP_PREFERENCES.searchPatternMode,
     searchMatchScope: DEFAULT_APP_PREFERENCES.searchMatchScope,
     searchRecursive: DEFAULT_APP_PREFERENCES.searchRecursive,
-    searchIncludeHidden: DEFAULT_APP_PREFERENCES.searchIncludeHidden,
     searchResultsFilterScope: DEFAULT_APP_PREFERENCES.searchResultsFilterScope,
   });
   const {
@@ -175,7 +174,6 @@ export function SettingsWindowApp() {
       searchPatternMode: patch.searchPatternMode ?? current.searchPatternMode,
       searchMatchScope: patch.searchMatchScope ?? current.searchMatchScope,
       searchRecursive: patch.searchRecursive ?? current.searchRecursive,
-      searchIncludeHidden: patch.searchIncludeHidden ?? current.searchIncludeHidden,
       searchResultsFilterScope: patch.searchResultsFilterScope ?? current.searchResultsFilterScope,
     }));
   }

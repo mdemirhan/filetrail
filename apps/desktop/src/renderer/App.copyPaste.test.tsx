@@ -4513,14 +4513,17 @@ describe("App copy/paste integration", () => {
     if (!optionsButton) {
       throw new Error("Search options button not found.");
     }
-    const hiddenItem = () => screen.getByRole("menuitemcheckbox", { name: "Include hidden files" });
+    const subfoldersItem = () =>
+      screen.getByRole("menuitemcheckbox", { name: "Search subfolders" });
 
     fireEvent.click(optionsButton, { detail: 1 });
-    const before = hiddenItem().getAttribute("aria-checked");
-    fireEvent.click(hiddenItem());
+    const before = subfoldersItem().getAttribute("aria-checked");
+    fireEvent.click(subfoldersItem());
     // Reopening the menu later in the same run shows what was chosen.
     fireEvent.click(optionsButton, { detail: 1 });
-    expect(hiddenItem().getAttribute("aria-checked")).toBe(before === "true" ? "false" : "true");
+    expect(subfoldersItem().getAttribute("aria-checked")).toBe(
+      before === "true" ? "false" : "true",
+    );
     fireEvent.keyDown(window, { key: "Escape" });
 
     // Another preference change forces a save; the search options are not part of any save.
@@ -4545,12 +4548,73 @@ describe("App copy/paste integration", () => {
         "searchPatternMode",
         "searchMatchScope",
         "searchRecursive",
-        "searchIncludeHidden",
         "searchResultsFilterScope",
       ] as const) {
         expect(saved[key]).toBeUndefined();
       }
     }
+  });
+
+  it("searches hidden files exactly when the file list shows them, and again when that changes", async () => {
+    const harness = createAppHarness();
+    // The folder reload that follows ⇧⌘. arrives after the search has restarted, as it
+    // does in the app (a real listing is slower than starting a search).
+    let delaySnapshots = false;
+    const client: FiletrailClient = {
+      ...harness.client,
+      invoke: (async (channel: IpcChannel, payload: unknown) => {
+        if (delaySnapshots && channel === "directory:getSnapshot") {
+          await new Promise((resolve) => setTimeout(resolve, 40));
+        }
+        return harness.client.invoke(channel as never, payload as never);
+      }) as FiletrailClient["invoke"],
+    };
+
+    render(
+      <FiletrailClientProvider value={client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await screen.findByTestId("content-pane");
+    const searchInput = screen.getAllByPlaceholderText("Search")[0];
+    if (!searchInput) {
+      throw new Error("Search field not found.");
+    }
+    const searchStarts = () =>
+      harness.invocations
+        .filter((call) => call.channel === "search:start")
+        .map((call) => (call.payload as IpcRequestInput<"search:start">).includeHidden);
+    const snapshotCount = () =>
+      harness.invocations.filter((call) => call.channel === "directory:getSnapshot").length;
+
+    await act(async () => {
+      fireEvent.focus(searchInput);
+      fireEvent.change(searchInput, { target: { value: "source" } });
+      fireEvent.submit(searchInput);
+    });
+    await vi.waitFor(() => {
+      expect(searchStarts()).toEqual([false]);
+    });
+    await screen.findByTestId("search-results-pane");
+
+    // ⇧⌘. shows hidden files in the list; the results on screen are searched again with them.
+    const snapshotsBefore = snapshotCount();
+    delaySnapshots = true;
+    await act(async () => {
+      fireEvent.keyDown(window, { key: ".", metaKey: true, shiftKey: true });
+    });
+    await vi.waitFor(() => {
+      expect(searchStarts()).toEqual([false, true]);
+    });
+    // The folder reloads underneath, but the results stay on screen.
+    await vi.waitFor(() => {
+      expect(snapshotCount()).toBeGreaterThan(snapshotsBefore);
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(screen.getByTestId("search-results-pane")).toBeInTheDocument();
   });
 
   it("debounces preference persists so a burst of changes writes one latest snapshot", async () => {
