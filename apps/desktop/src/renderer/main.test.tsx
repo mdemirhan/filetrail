@@ -49,8 +49,22 @@ describe("renderer main entry", () => {
     await import("./main");
 
     expect(document.body).toHaveClass("platform-macos");
+    // The explorer window shows the macOS sidebar material through its sidebar.
+    expect(document.body).toHaveClass("vibrant-window");
     expect(mainEntryMock.createRoot).toHaveBeenCalledWith(document.getElementById("root"));
     expect(mainEntryMock.render).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the Settings window opaque", async () => {
+    document.body.innerHTML = '<div id="root"></div>';
+    window.location.hash = "#settings";
+    try {
+      await import("./main");
+      expect(document.body).toHaveClass("platform-macos");
+      expect(document.body).not.toHaveClass("vibrant-window");
+    } finally {
+      window.location.hash = "";
+    }
   });
 
   it("throws when the renderer root element is missing", async () => {

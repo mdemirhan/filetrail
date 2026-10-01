@@ -172,7 +172,13 @@ function createWindow(): BrowserWindow {
     minWidth: 760,
     minHeight: 480,
     title: "File Trail",
-    backgroundColor: windowBackgroundColor(appStateStore.getPreferences().theme),
+    // The window sits on the macOS sidebar material and the page paints everything except
+    // the sidebar over it, which makes the sidebar translucent like Finder's. The material
+    // follows the window (it goes flat when the window is inactive) and turns opaque by
+    // itself when "Reduce transparency" is on in System Settings.
+    vibrancy: "sidebar",
+    visualEffectState: "followWindow",
+    backgroundColor: TRANSPARENT_WINDOW_BACKGROUND,
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 14, y: 16 },
     webPreferences: {
@@ -356,11 +362,14 @@ function applyNativeAppearance(theme: AppPreferences["theme"]): void {
     theme === "auto" ? "system" : isThemeInGroup(theme, "dark") ? "dark" : "light";
   const color = windowBackgroundColor(theme);
   for (const window of BrowserWindow.getAllWindows()) {
-    if (!window.isDestroyed()) {
+    // The explorer window stays transparent: a color would cover its sidebar material.
+    if (!window.isDestroyed() && window !== mainWindowRef) {
       window.setBackgroundColor(color);
     }
   }
 }
+
+const TRANSPARENT_WINDOW_BACKGROUND = "#00000000";
 
 // Shown only before the page paints (opening, resizing), so light or dark is enough.
 function windowBackgroundColor(theme: AppPreferences["theme"]): string {

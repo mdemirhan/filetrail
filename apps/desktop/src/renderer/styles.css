@@ -6819,3 +6819,22 @@ body.settings-window-body {
   font-size: 11.5px;
   line-height: 1.35;
 }
+
+/* ── Translucent sidebar ──────────────────────────────────────────────── */
+
+/* The explorer window has the macOS sidebar material behind the page (`vibrancy` in
+   main.ts). The page stays clear over the sidebar, which lays a tint of the theme's
+   sidebar color on the material; everything else paints its own opaque background. */
+body.vibrant-window,
+body.vibrant-window .explorer-workspace {
+  background: transparent;
+}
+
+body.vibrant-window .explorer-workspace .sidebar {
+  background: color-mix(in srgb, var(--sidebar-bg) 62%, transparent);
+}
+
+/* The dividers beside the panes belong to the opaque part of the window. */
+body.vibrant-window .explorer-workspace .pane-resizer {
+  background: var(--bg-base);
+}

@@ -43,6 +43,11 @@ logger.info("renderer boot", {
 
 // The same bundle serves the explorer window and the Settings window (`#settings`).
 const isSettingsWindow = window.location.hash === "#settings";
+// The explorer window is created with a translucent macOS material behind it (see
+// `createWindow` in main.ts); this class lets the sidebar show it through.
+if (!isSettingsWindow) {
+  document.body.classList.add("vibrant-window");
+}
 
 createRoot(rootElement).render(
   <StrictMode>{isSettingsWindow ? <SettingsWindowApp /> : <App />}</StrictMode>,
