@@ -12,6 +12,7 @@ import {
 } from "../../shared/appPreferences";
 import { useElementSize } from "../hooks/useElementSize";
 import { usePathSuggestions } from "../hooks/usePathSuggestions";
+import { isSelectionNarrowingClick } from "../lib/contentSelection";
 import {
   DETAILS_LAYOUT,
   getDetailsRowHeight,
@@ -1000,6 +1001,17 @@ function FlowListView({
                     }
                     containerRef.current?.focus();
                   }}
+                  onClick={(event) => {
+                    if (
+                      isSelectionNarrowingClick(
+                        event,
+                        selectedPaths.length,
+                        selectedPathSet.has(entry.path),
+                      )
+                    ) {
+                      onSelectionGesture(entry.path, { metaKey: false, shiftKey: false });
+                    }
+                  }}
                   onContextMenu={(event) => {
                     event.preventDefault();
                     containerRef.current?.focus();
@@ -1401,6 +1413,17 @@ function DetailsView({
                     });
                   }
                   containerRef.current?.focus();
+                }}
+                onClick={(event) => {
+                  if (
+                    isSelectionNarrowingClick(
+                      event,
+                      selectedPaths.length,
+                      selectedPathSet.has(entry.path),
+                    )
+                  ) {
+                    onSelectionGesture(entry.path, { metaKey: false, shiftKey: false });
+                  }
                 }}
                 onContextMenu={(event) => {
                   event.preventDefault();

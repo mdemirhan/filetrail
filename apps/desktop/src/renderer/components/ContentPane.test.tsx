@@ -1206,4 +1206,68 @@ describe("ContentPane", () => {
 
     expect(list.scrollLeft).toBe(282);
   });
+
+  it.each(["list", "details"] as const)(
+    "narrows a multi-selection to the clicked item in %s view, but not on pointer down",
+    (viewMode) => {
+      const handleSelectionGesture = vi.fn();
+      const entries = ["alpha.txt", "beta.txt", "gamma.txt"].map((name) => ({
+        path: `/Users/demo/${name}`,
+        name,
+        extension: "txt",
+        kind: "file" as const,
+        isHidden: false,
+        isSymlink: false,
+      }));
+
+      render(
+        <ContentPane
+          isFocused
+          currentPath="/Users/demo"
+          entries={entries}
+          viewMode={viewMode}
+          loading={false}
+          error={null}
+          includeHidden={false}
+          selectedPaths={["/Users/demo/alpha.txt", "/Users/demo/beta.txt"]}
+          selectionLeadPath="/Users/demo/beta.txt"
+          metadataByPath={{}}
+          sortBy="name"
+          sortDirection="asc"
+          onSelectionGesture={handleSelectionGesture}
+          onClearSelection={() => undefined}
+          onActivateEntry={() => undefined}
+          onSortChange={() => undefined}
+          onLayoutColumnsChange={() => undefined}
+          onVisiblePathsChange={() => undefined}
+          onNavigatePath={() => undefined}
+          onRequestPathSuggestions={async () => ({
+            inputPath: "",
+            basePath: null,
+            suggestions: [],
+          })}
+          onFocusChange={() => undefined}
+          typeaheadQuery=""
+        />,
+      );
+
+      const role = viewMode === "list" ? "option" : "row";
+      const selectedRow = screen.getByRole(role, { name: /alpha\.txt/i });
+
+      // Pressing a selected item must leave the selection alone so it can be dragged.
+      fireEvent.pointerDown(selectedRow, { button: 0 });
+      expect(handleSelectionGesture).not.toHaveBeenCalled();
+
+      fireEvent.click(selectedRow, { button: 0, detail: 1 });
+      expect(handleSelectionGesture).toHaveBeenCalledTimes(1);
+      expect(handleSelectionGesture).toHaveBeenCalledWith("/Users/demo/alpha.txt", {
+        metaKey: false,
+        shiftKey: false,
+      });
+
+      // A Cmd-click toggles on pointer down and must not narrow on the click that follows.
+      fireEvent.click(selectedRow, { button: 0, detail: 1, metaKey: true });
+      expect(handleSelectionGesture).toHaveBeenCalledTimes(1);
+    },
+  );
 });

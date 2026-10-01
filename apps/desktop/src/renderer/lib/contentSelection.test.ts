@@ -2,6 +2,7 @@ import {
   EMPTY_CONTENT_SELECTION,
   extendContentSelectionToPath,
   getSelectionRangePaths,
+  isSelectionNarrowingClick,
   mergeSelectionPathsInEntryOrder,
   sanitizeContentSelection,
   selectAllContentEntries,
@@ -106,5 +107,18 @@ describe("contentSelection", () => {
       leadPath: "/demo/delta",
     });
     expect(selectAllContentEntries([])).toEqual(EMPTY_CONTENT_SELECTION);
+  });
+
+  it("narrows a multi-selection only on a plain mouse click of a selected item", () => {
+    const plainClick = { button: 0, detail: 1, metaKey: false, shiftKey: false, ctrlKey: false };
+
+    expect(isSelectionNarrowingClick(plainClick, 3, true)).toBe(true);
+    expect(isSelectionNarrowingClick(plainClick, 1, true)).toBe(false);
+    expect(isSelectionNarrowingClick(plainClick, 3, false)).toBe(false);
+    expect(isSelectionNarrowingClick({ ...plainClick, metaKey: true }, 3, true)).toBe(false);
+    expect(isSelectionNarrowingClick({ ...plainClick, shiftKey: true }, 3, true)).toBe(false);
+    expect(isSelectionNarrowingClick({ ...plainClick, ctrlKey: true }, 3, true)).toBe(false);
+    // Keyboard-generated clicks (Space or Return on a focused row) report detail 0.
+    expect(isSelectionNarrowingClick({ ...plainClick, detail: 0 }, 3, true)).toBe(false);
   });
 });

@@ -10,6 +10,7 @@ import type {
 } from "../../shared/appPreferences";
 
 import { useElementSize } from "../hooks/useElementSize";
+import { isSelectionNarrowingClick } from "../lib/contentSelection";
 import type { DirectoryEntryMetadata } from "../lib/explorerTypes";
 import { FileIcon } from "../lib/fileIcons";
 import { isKeyboardOwnedFormControl } from "../lib/focusedEditTarget";
@@ -529,6 +530,17 @@ export function SearchResultsPane({
                       });
                     }
                     scrollRef.current?.focus();
+                  }}
+                  onClick={(event) => {
+                    if (
+                      isSelectionNarrowingClick(
+                        event,
+                        selectedPaths.length,
+                        selectedPathSet.has(result.path),
+                      )
+                    ) {
+                      onSelectionGesture(result.path, { metaKey: false, shiftKey: false });
+                    }
                   }}
                   onContextMenu={(event) => {
                     event.preventDefault();

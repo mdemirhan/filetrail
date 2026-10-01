@@ -87,6 +87,51 @@ describe("SearchResultsPane", () => {
     );
   });
 
+  it("narrows a multi-selection to the clicked result", () => {
+    const handleSelectionGesture = vi.fn();
+    const results = ["App.tsx", "main.tsx"].map((name) => ({
+      path: `/Users/demo/project/src/${name}`,
+      name,
+      extension: "tsx",
+      kind: "file" as const,
+      isHidden: false,
+      isSymlink: false,
+      parentPath: "/Users/demo/project/src",
+      relativeParentPath: "src",
+    }));
+
+    render(
+      <SearchResultsPane
+        isFocused
+        rootPath="/Users/demo/project"
+        query="tsx"
+        status="complete"
+        results={results}
+        selectedPaths={results.map((result) => result.path)}
+        error={null}
+        truncated={false}
+        {...defaultFilterProps}
+        {...defaultSortProps}
+        onStopSearch={() => undefined}
+        onClearResults={() => undefined}
+        onCloseResults={() => undefined}
+        onSelectionGesture={handleSelectionGesture}
+        onActivateResult={() => undefined}
+        onFocusChange={() => undefined}
+      />,
+    );
+
+    const row = screen.getByRole("button", { name: /App\.tsx/i });
+    fireEvent.pointerDown(row, { button: 0 });
+    expect(handleSelectionGesture).not.toHaveBeenCalled();
+
+    fireEvent.click(row, { button: 0, detail: 1 });
+    expect(handleSelectionGesture).toHaveBeenCalledWith("/Users/demo/project/src/App.tsx", {
+      metaKey: false,
+      shiftKey: false,
+    });
+  });
+
   it("shows a stop action while a search is running", () => {
     const handleStop = vi.fn();
 

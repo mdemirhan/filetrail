@@ -133,3 +133,30 @@ export function selectAllContentEntries<T extends PathEntry>(entries: T[]): Cont
     leadPath: entries.at(-1)?.path ?? null,
   };
 }
+
+type SelectionClickEvent = {
+  button: number;
+  detail: number;
+  metaKey: boolean;
+  shiftKey: boolean;
+  ctrlKey: boolean;
+};
+
+// A plain click on one of several selected items narrows the selection to that item. Rows
+// act on the click rather than on pointer down, so pressing a selected item can still
+// start a drag of the whole selection. `detail` is 0 for keyboard-generated clicks.
+export function isSelectionNarrowingClick(
+  event: SelectionClickEvent,
+  selectedCount: number,
+  isSelected: boolean,
+): boolean {
+  return (
+    isSelected &&
+    selectedCount > 1 &&
+    event.button === 0 &&
+    event.detail > 0 &&
+    !event.metaKey &&
+    !event.shiftKey &&
+    !event.ctrlKey
+  );
+}
