@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 
 import {
+  ACCENT_OPTIONS,
   AUTO_THEME_OPTION,
   type AppPreferences,
   DEFAULT_APP_PREFERENCES,
   DEFAULT_TEXT_EDITOR,
   type FavoritePreference,
-  MACOS_ACCENT_OPTIONS,
   NOTIFICATION_DURATION_SECONDS_OPTIONS,
   THEME_OPTIONS,
   TYPEAHEAD_DEBOUNCE_OPTIONS,
@@ -344,7 +344,7 @@ export function SettingsWindowApp() {
             returnKeyAction={preferences.returnKeyAction}
             onReturnKeyActionChange={preferences.setReturnKeyAction}
             openItemLimit={preferences.openItemLimit}
-            accentOptions={[...MACOS_ACCENT_OPTIONS]}
+            accentOptions={ACCENT_OPTIONS}
             uiFontOptions={[...UI_FONT_OPTIONS]}
             typeaheadDebounceOptions={[...TYPEAHEAD_DEBOUNCE_OPTIONS]}
             notificationDurationSecondsOptions={[...NOTIFICATION_DURATION_SECONDS_OPTIONS]}

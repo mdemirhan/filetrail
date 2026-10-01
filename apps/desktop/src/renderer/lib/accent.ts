@@ -1,4 +1,4 @@
-import { ACCENT_OPTIONS, type AccentMode, type ThemeMode } from "../../shared/appPreferences";
+import type { AccentMode, ThemeMode } from "../../shared/appPreferences";
 import { darkenHex, hexToRgb, withAlpha } from "./colorUtils";
 import { type ThemeCssBase, resolveThemeCssBase } from "./themeVariants";
 
@@ -6,29 +6,16 @@ type AccentThemeProfile = {
   isLight: boolean;
   hoverBgAlpha: number;
   activeBgAlpha: number;
-  activeStrongAlpha: number;
   pillBgAlpha: number;
-  pillBorderAlpha: number;
   focusBorderAlpha: number;
   heroIconBgAlpha: number;
   actionHoverBgAlpha: number;
-  calloutBgAlpha: number;
-  calloutBorderAlpha: number;
-  searchPillBgAlpha: number;
   searchPillBorderAlpha: number;
-  searchStopBgAlpha: number;
-  searchStopBgHoverAlpha: number;
-  searchStopBorderAlpha: number;
-  searchToggleBgAlpha: number;
   locationRingAlpha: number;
   folderTintAlpha: number;
 };
 
 export type AccentTokens = {
-  id: AccentMode;
-  name: string;
-  primary: string;
-  dark: string;
   solid: string;
   solidDark: string;
   /** Background of solid (default) buttons: the accent, a touch darker if that keeps white text. */
@@ -41,26 +28,16 @@ export type AccentTokens = {
   onSelection: string;
   hoverBg: string;
   pillBg: string;
-  pillBorder: string;
   pillText: string;
   border: string;
-  borderSoft: string;
   focusBorder: string;
   softBg: string;
   activeBg: string;
-  activeStrongBg: string;
   heroIconBg: string;
   folderTint: string;
   pathCrumbHover: string;
   actionHoverBg: string;
-  calloutBg: string;
-  calloutBorder: string;
-  searchPillBg: string;
   searchPillBorder: string;
-  searchStopBg: string;
-  searchStopBgHover: string;
-  searchStopBorder: string;
-  searchToggleBg: string;
   locationRing: string;
   ringSoft: string;
 };
@@ -70,20 +47,11 @@ const ACCENT_THEME_PROFILES: Record<ThemeCssBase, AccentThemeProfile> = {
     isLight: true,
     hoverBgAlpha: 0.14,
     activeBgAlpha: 0.08,
-    activeStrongAlpha: 0.14,
     pillBgAlpha: 0.14,
-    pillBorderAlpha: 0.3,
     focusBorderAlpha: 0.5,
     heroIconBgAlpha: 0.1,
     actionHoverBgAlpha: 0.1,
-    calloutBgAlpha: 0.06,
-    calloutBorderAlpha: 0.15,
-    searchPillBgAlpha: 0.08,
     searchPillBorderAlpha: 0.55,
-    searchStopBgAlpha: 0.08,
-    searchStopBgHoverAlpha: 0.15,
-    searchStopBorderAlpha: 0.25,
-    searchToggleBgAlpha: 0.14,
     locationRingAlpha: 0.16,
     folderTintAlpha: 0.16,
   },
@@ -91,20 +59,11 @@ const ACCENT_THEME_PROFILES: Record<ThemeCssBase, AccentThemeProfile> = {
     isLight: false,
     hoverBgAlpha: 0.12,
     activeBgAlpha: 0.1,
-    activeStrongAlpha: 0.16,
     pillBgAlpha: 0.12,
-    pillBorderAlpha: 0.3,
     focusBorderAlpha: 0.4,
     heroIconBgAlpha: 0.08,
     actionHoverBgAlpha: 0.1,
-    calloutBgAlpha: 0.06,
-    calloutBorderAlpha: 0.12,
-    searchPillBgAlpha: 0.12,
     searchPillBorderAlpha: 0.5,
-    searchStopBgAlpha: 0.08,
-    searchStopBgHoverAlpha: 0.14,
-    searchStopBorderAlpha: 0.2,
-    searchToggleBgAlpha: 0.12,
     locationRingAlpha: 0.14,
     folderTintAlpha: 0.14,
   },
@@ -112,20 +71,11 @@ const ACCENT_THEME_PROFILES: Record<ThemeCssBase, AccentThemeProfile> = {
     isLight: false,
     hoverBgAlpha: 0.11,
     activeBgAlpha: 0.1,
-    activeStrongAlpha: 0.14,
     pillBgAlpha: 0.11,
-    pillBorderAlpha: 0.28,
     focusBorderAlpha: 0.4,
     heroIconBgAlpha: 0.07,
     actionHoverBgAlpha: 0.09,
-    calloutBgAlpha: 0.05,
-    calloutBorderAlpha: 0.1,
-    searchPillBgAlpha: 0.12,
     searchPillBorderAlpha: 0.5,
-    searchStopBgAlpha: 0.07,
-    searchStopBgHoverAlpha: 0.13,
-    searchStopBorderAlpha: 0.18,
-    searchToggleBgAlpha: 0.11,
     locationRingAlpha: 0.18,
     folderTintAlpha: 0.18,
   },
@@ -133,78 +83,47 @@ const ACCENT_THEME_PROFILES: Record<ThemeCssBase, AccentThemeProfile> = {
     isLight: false,
     hoverBgAlpha: 0.11,
     activeBgAlpha: 0.1,
-    activeStrongAlpha: 0.18,
     pillBgAlpha: 0.1,
-    pillBorderAlpha: 0.25,
     focusBorderAlpha: 0.35,
     heroIconBgAlpha: 0.07,
     actionHoverBgAlpha: 0.08,
-    calloutBgAlpha: 0.05,
-    calloutBorderAlpha: 0.1,
-    searchPillBgAlpha: 0.12,
     searchPillBorderAlpha: 0.5,
-    searchStopBgAlpha: 0.07,
-    searchStopBgHoverAlpha: 0.12,
-    searchStopBorderAlpha: 0.18,
-    searchToggleBgAlpha: 0.1,
     locationRingAlpha: 0.18,
     folderTintAlpha: 0.18,
   },
 };
 
-export function getAccentPalette(accent: AccentMode) {
-  return (
-    ACCENT_OPTIONS.find((option) => option.value === accent) ?? {
-      id: "custom",
-      value: accent,
-      label: "Custom",
-      primary: accent,
-      dark: darkenHex(accent, 0.18),
-    }
-  );
-}
+// How much darker the accent's deep shade is: link-like text on light palettes, where the
+// accent itself is too pale to read.
+const ACCENT_DARK_SHADE = 0.18;
 
 export function generateAccentTokens(accent: AccentMode, theme: ThemeMode): AccentTokens {
-  const palette = getAccentPalette(accent);
+  const dark = darkenHex(accent, ACCENT_DARK_SHADE);
   const profile = ACCENT_THEME_PROFILES[resolveThemeCssBase(theme)];
-  const button = solidButtonColors(palette.primary);
-  const selection = selectionColors(palette.primary);
+  const button = solidButtonColors(accent);
+  const selection = selectionColors(accent);
 
   return {
-    id: accent,
-    name: palette.label,
-    primary: palette.primary,
-    dark: palette.dark,
-    solid: palette.primary,
-    solidDark: palette.dark,
+    solid: accent,
+    solidDark: dark,
     solidButton: button.background,
     onSolid: button.foreground,
     selectionBg: selection.background,
     onSelection: selection.foreground,
-    hoverBg: withAlpha(palette.primary, profile.hoverBgAlpha),
-    pillBg: withAlpha(palette.primary, profile.pillBgAlpha),
-    pillBorder: withAlpha(palette.primary, profile.pillBorderAlpha),
-    pillText: profile.isLight ? palette.dark : palette.primary,
-    border: withAlpha(palette.primary, 0.3),
-    borderSoft: withAlpha(palette.primary, 0.18),
-    focusBorder: withAlpha(palette.primary, profile.focusBorderAlpha),
-    softBg: withAlpha(palette.primary, 0.08),
-    activeBg: withAlpha(palette.primary, profile.activeBgAlpha),
-    activeStrongBg: withAlpha(palette.primary, profile.activeStrongAlpha),
-    heroIconBg: withAlpha(palette.primary, profile.heroIconBgAlpha),
-    folderTint: withAlpha(palette.primary, profile.folderTintAlpha),
-    pathCrumbHover: profile.isLight ? palette.dark : palette.primary,
-    actionHoverBg: withAlpha(palette.primary, profile.actionHoverBgAlpha),
-    calloutBg: withAlpha(palette.primary, profile.calloutBgAlpha),
-    calloutBorder: withAlpha(palette.primary, profile.calloutBorderAlpha),
-    searchPillBg: withAlpha(palette.primary, profile.searchPillBgAlpha),
-    searchPillBorder: withAlpha(palette.primary, profile.searchPillBorderAlpha),
-    searchStopBg: withAlpha(palette.primary, profile.searchStopBgAlpha),
-    searchStopBgHover: withAlpha(palette.primary, profile.searchStopBgHoverAlpha),
-    searchStopBorder: withAlpha(palette.primary, profile.searchStopBorderAlpha),
-    searchToggleBg: withAlpha(palette.primary, profile.searchToggleBgAlpha),
-    locationRing: withAlpha(palette.primary, profile.locationRingAlpha),
-    ringSoft: withAlpha(palette.primary, 0.15),
+    hoverBg: withAlpha(accent, profile.hoverBgAlpha),
+    pillBg: withAlpha(accent, profile.pillBgAlpha),
+    pillText: profile.isLight ? dark : accent,
+    border: withAlpha(accent, 0.3),
+    focusBorder: withAlpha(accent, profile.focusBorderAlpha),
+    softBg: withAlpha(accent, 0.08),
+    activeBg: withAlpha(accent, profile.activeBgAlpha),
+    heroIconBg: withAlpha(accent, profile.heroIconBgAlpha),
+    folderTint: withAlpha(accent, profile.folderTintAlpha),
+    pathCrumbHover: profile.isLight ? dark : accent,
+    actionHoverBg: withAlpha(accent, profile.actionHoverBgAlpha),
+    searchPillBorder: withAlpha(accent, profile.searchPillBorderAlpha),
+    locationRing: withAlpha(accent, profile.locationRingAlpha),
+    ringSoft: withAlpha(accent, 0.15),
   };
 }
 

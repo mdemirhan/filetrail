@@ -52,7 +52,7 @@ describe("appStateStore", () => {
       showSidebarBottomRail: true,
       returnKeyAction: "rename",
       iconTheme: "native",
-      accent: "#d4845a",
+      accent: "#007aff",
       zoomPercent: 100,
       uiFontFamily: "system",
       viewMode: "list",
@@ -576,7 +576,7 @@ describe("appStateStore", () => {
     const reloaded = createAppStateStore(filePath, {
       defaultTheme: "macos-dark",
     });
-    expect(reloaded.getPreferences().accent).toBe("#d4845a");
+    expect(reloaded.getPreferences().accent).toBe("#007aff");
     expect(reloaded.getPreferences().zoomPercent).toBe(150);
     expect(reloaded.getPreferences().sortBy).toBe("name");
     expect(reloaded.getPreferences().sortDirection).toBe("asc");
@@ -587,7 +587,7 @@ describe("appStateStore", () => {
     });
     expect(reloaded.getPreferences().treeWidth).toBe(220);
     expect(reloaded.getPreferences().inspectorWidth).toBe(480);
-    expect(reloaded.getPreferences().accent).toBe("#d4845a");
+    expect(reloaded.getPreferences().accent).toBe("#007aff");
     expect(reloaded.getPreferences().uiFontFamily).toBe("system");
     expect(reloaded.getPreferences()).not.toHaveProperty("uiFontSize");
     expect(reloaded.getPreferences()).not.toHaveProperty("uiFontWeight");

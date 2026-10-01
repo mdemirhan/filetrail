@@ -341,7 +341,7 @@ function resolveSettingsTheme(theme: ThemeMode, accent: AccentMode) {
   const base = resolveSettingsBaseTheme(theme);
   const accentTokens = generateAccentTokens(accent, theme);
 
-  // Text uses the root tokens so the text color overrides apply here too.
+  // Text uses the root tokens, so it follows the palette like the rest of the app.
   return {
     ...base,
     header: {
@@ -848,11 +848,7 @@ function AccentSelector({
   onChange,
 }: {
   accent: AccentMode;
-  accentOptions: ReadonlyArray<{
-    value: AccentMode;
-    label: string;
-    primary: string;
-  }>;
+  accentOptions: ReadonlyArray<{ value: AccentMode; label: string }>;
   theme: ResolvedSettingsTheme;
   onChange: (value: AccentMode) => void;
 }) {
@@ -862,8 +858,7 @@ function AccentSelector({
 
   const customButtonShadow =
     "conic-gradient(from 210deg, #d84a4a, #f0b236, #23c7d9, #9580ff, #e8729a, #d84a4a)";
-  const customPickerValue =
-    normalizeAccentColor(accent) ?? selected?.primary ?? accentOptions[0]?.value ?? "#d4845a";
+  const customPickerValue = normalizeAccentColor(accent) ?? DEFAULT_APP_PREFERENCES.accent;
 
   const openColorPicker = useCallback((input: HTMLInputElement | null) => {
     if (!input) {
@@ -900,7 +895,7 @@ function AccentSelector({
                 height: "28px",
                 borderRadius: "999px",
                 border: `1px solid ${active ? theme.accent.border : theme.color.swatchBorder}`,
-                background: option.primary,
+                background: option.value,
                 boxShadow: active
                   ? `0 0 0 2px ${theme.card.bg}, 0 0 0 4px ${theme.accent.focusBorder}`
                   : "inset 0 0 0 1px rgba(255,255,255,0.08)",
@@ -2206,11 +2201,7 @@ export function SettingsView({
   showSidebarBottomRail?: boolean;
   onShowSidebarBottomRailChange?: (value: boolean) => void;
   openItemLimit: number;
-  accentOptions: ReadonlyArray<{
-    value: AccentMode;
-    label: string;
-    primary: string;
-  }>;
+  accentOptions: ReadonlyArray<{ value: AccentMode; label: string }>;
   uiFontOptions: ReadonlyArray<{ value: UiFontFamily; label: string }>;
   typeaheadDebounceOptions: ReadonlyArray<number>;
   notificationDurationSecondsOptions: ReadonlyArray<number>;

@@ -1,4 +1,6 @@
 import {
+  ACCENT_OPTIONS,
+  DEFAULT_ACCENT,
   DEFAULT_APP_PREFERENCES,
   DETAIL_COLUMN_WIDTH_LIMITS,
   clampDetailColumnWidth,
@@ -7,7 +9,6 @@ import {
   clampPaneWidth,
   clampTypeaheadDebounceMs,
   clampZoomPercent,
-  getAccentLabel,
   getThemeLabel,
   getUiFontLabel,
   resolveEffectiveTheme,
@@ -38,13 +39,16 @@ describe("appPreferences helpers", () => {
   it("resolves known labels and falls back to the raw stored value", () => {
     expect(getThemeLabel("tomorrow-night")).toBe("Tomorrow Night");
     expect(getThemeLabel("warm-paper")).toBe("Warm Paper");
-    expect(getAccentLabel("#a78bfa")).toBe("Lavender");
-    expect(getAccentLabel("#3dbf7a")).toBe("Emerald");
     expect(getUiFontLabel("jetbrains-mono")).toBe("JetBrains Mono");
     expect(getThemeLabel("aurora" as never)).toBe("aurora");
-    expect(getAccentLabel("#112233")).toBe("Custom");
-    expect(getAccentLabel("sunset" as never)).toBe("sunset");
     expect(getUiFontLabel("mono" as never)).toBe("mono");
+  });
+
+  it("defaults to blue, the first accent offered", () => {
+    expect(ACCENT_OPTIONS[0]).toEqual({ value: "#007aff", label: "Blue" });
+    expect(DEFAULT_ACCENT).toBe("#007aff");
+    expect(DEFAULT_APP_PREFERENCES.accent).toBe(DEFAULT_ACCENT);
+    expect(new Set(ACCENT_OPTIONS.map((option) => option.value)).size).toBe(ACCENT_OPTIONS.length);
   });
 
   it("ships expected defaults for the persisted preference shape", () => {
@@ -52,7 +56,7 @@ describe("appPreferences helpers", () => {
       theme: "auto",
       autoLightTheme: "macos-light",
       autoDarkTheme: "macos-dark",
-      accent: "#d4845a",
+      accent: "#007aff",
       zoomPercent: 100,
       uiFontFamily: "system",
       viewMode: "list",

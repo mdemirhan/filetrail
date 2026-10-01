@@ -1,43 +1,29 @@
-import { ACCENT_OPTIONS, MACOS_ACCENT_OPTIONS } from "../../shared/appPreferences";
+import { ACCENT_OPTIONS } from "../../shared/appPreferences";
 import {
   accentTokensToCssVariables,
   contrastRatio,
   generateAccentTokens,
-  getAccentPalette,
   selectionColors,
   solidButtonColors,
 } from "./accent";
 import { darkenHex } from "./colorUtils";
 
 describe("accent helpers", () => {
-  it("looks up palettes by persisted accent color", () => {
-    expect(getAccentPalette("#2cb5a0")).toEqual({
-      id: "teal",
-      value: "#2cb5a0",
-      label: "Teal",
-      primary: "#2cb5a0",
-      dark: "#1e9a87",
-    });
-  });
-
   it("generates light and dark accent tokens from the selected theme base", () => {
     const lightTokens = generateAccentTokens("#2cb5a0", "macos-light");
     const variantTokens = generateAccentTokens("#2cb5a0", "macos-dark");
 
     expect(lightTokens).toMatchObject({
-      id: "#2cb5a0",
-      name: "Teal",
-      primary: "#2cb5a0",
-      solidDark: "#1e9a87",
+      solid: "#2cb5a0",
+      solidDark: "#249483",
       hoverBg: "rgba(44, 181, 160, 0.14)",
-      pillText: "#1e9a87",
-      pathCrumbHover: "#1e9a87",
+      pillText: "#249483",
+      pathCrumbHover: "#249483",
       locationRing: "rgba(44, 181, 160, 0.16)",
     });
     expect(variantTokens).toMatchObject({
       pillText: "#2cb5a0",
       pathCrumbHover: "#2cb5a0",
-      activeStrongBg: "rgba(44, 181, 160, 0.16)",
       locationRing: "rgba(44, 181, 160, 0.14)",
     });
   });
@@ -67,8 +53,8 @@ describe("accent helpers", () => {
     expect(check("#4f46e5")).toEqual({ background: "#4f46e5", foreground: "#ffffff" });
     expect(check("#007aff").foreground).toBe("#ffffff");
     expect(check("#e0383e").foreground).toBe("#ffffff");
-    for (const option of [...ACCENT_OPTIONS, ...MACOS_ACCENT_OPTIONS]) {
-      check(option.primary);
+    for (const option of ACCENT_OPTIONS) {
+      check(option.value);
     }
     expect(generateAccentTokens("#daa520", "macos-dark").onSolid).toBe("#000000");
     expect(
@@ -83,7 +69,7 @@ describe("accent helpers", () => {
     // Selections start from the accent darkened like `color-mix(accent 86%, black)`.
     expect(selectionColors("#007aff")).toEqual({ background: "#0069db", foreground: "#ffffff" });
     expect(selectionColors("#4f46e5").foreground).toBe("#ffffff");
-    // The default copper is darkened a little further so white reads at 4.5:1.
+    // Copper is darkened a little further so white reads at 4.5:1.
     const copper = selectionColors("#d4845a");
     expect(copper.foreground).toBe("#ffffff");
     expect(copper.background).toBe("#a56746");
@@ -94,13 +80,13 @@ describe("accent helpers", () => {
       foreground: "#ffffff",
     });
     expect(selectionColors("#daa520").foreground).toBe("#ffffff");
-    for (const option of [...ACCENT_OPTIONS, ...MACOS_ACCENT_OPTIONS]) {
-      const colors = selectionColors(option.primary);
+    for (const option of ACCENT_OPTIONS) {
+      const colors = selectionColors(option.value);
       expect(colors.foreground).toBe("#ffffff");
       // Readable, or already at the darkest shade that still looks like the accent.
       expect(
         contrastRatio("#ffffff", colors.background) >= 4.5 ||
-          colors.background === darkenHex(option.primary, 0.34),
+          colors.background === darkenHex(option.value, 0.34),
       ).toBe(true);
     }
     expect(accentTokensToCssVariables(generateAccentTokens("#ffc600", "macos-dark"))).toMatchObject(

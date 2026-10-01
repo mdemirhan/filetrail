@@ -72,13 +72,13 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       fileActivationAction="open"
       openItemLimit={5}
       accentOptions={[
-        { value: "#daa520", label: "Gold", primary: "#daa520" },
-        { value: "#d4845a", label: "Copper", primary: "#d4845a" },
-        { value: "#e8806a", label: "Coral", primary: "#e8806a" },
-        { value: "#d84a4a", label: "Ruby", primary: "#d84a4a" },
-        { value: "#8094b8", label: "Slate", primary: "#8094b8" },
-        { value: "#23c7d9", label: "Aqua", primary: "#23c7d9" },
-        { value: "#2cb5a0", label: "Teal", primary: "#2cb5a0" },
+        { value: "#daa520", label: "Gold" },
+        { value: "#d4845a", label: "Copper" },
+        { value: "#e8806a", label: "Coral" },
+        { value: "#d84a4a", label: "Ruby" },
+        { value: "#8094b8", label: "Slate" },
+        { value: "#23c7d9", label: "Aqua" },
+        { value: "#2cb5a0", label: "Teal" },
       ]}
       uiFontOptions={[{ value: "lexend", label: "Lexend" }]}
       typeaheadDebounceOptions={[750]}

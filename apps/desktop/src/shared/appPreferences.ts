@@ -148,43 +148,20 @@ export const ICON_THEME_OPTIONS = [
   { value: "monoline", label: "Monoline" },
   { value: "vivid", label: "Vivid" },
 ] as const;
+// The accent colors offered in Settings: macOS's own, in System Settings order, then the
+// copper the app used to default to. Any other saved color shows up as a custom color.
 export const ACCENT_OPTIONS = [
-  { id: "gold", value: "#daa520", label: "Gold", primary: "#daa520", dark: "#b8860b" },
-  { id: "copper", value: "#d4845a", label: "Copper", primary: "#d4845a", dark: "#b86e48" },
-  { id: "coral", value: "#e8806a", label: "Coral", primary: "#e8806a", dark: "#c86850" },
-  { id: "ruby", value: "#d84a4a", label: "Ruby", primary: "#d84a4a", dark: "#b63838" },
-  { id: "rose", value: "#e8729a", label: "Rose", primary: "#e8729a", dark: "#c75a80" },
-  { id: "violet", value: "#9580ff", label: "Violet", primary: "#9580ff", dark: "#7a62e0" },
-  { id: "lavender", value: "#a78bfa", label: "Lavender", primary: "#a78bfa", dark: "#7c5fd6" },
-  { id: "indigo", value: "#6366f1", label: "Indigo", primary: "#6366f1", dark: "#4f46e5" },
-  { id: "slate", value: "#8094b8", label: "Slate", primary: "#8094b8", dark: "#617699" },
-  { id: "blue", value: "#4a9eff", label: "Blue", primary: "#4a9eff", dark: "#2d7fd4" },
-  { id: "sky", value: "#58b9e8", label: "Sky", primary: "#58b9e8", dark: "#3a9acb" },
-  { id: "aqua", value: "#23c7d9", label: "Aqua", primary: "#23c7d9", dark: "#149dae" },
-  { id: "teal", value: "#2cb5a0", label: "Teal", primary: "#2cb5a0", dark: "#1e9a87" },
-  { id: "emerald", value: "#3dbf7a", label: "Emerald", primary: "#3dbf7a", dark: "#2a9e62" },
-  { id: "lime", value: "#84b840", label: "Lime", primary: "#84b840", dark: "#6a9830" },
+  { value: "#007aff", label: "Blue" },
+  { value: "#a550a7", label: "Purple" },
+  { value: "#f74f9e", label: "Pink" },
+  { value: "#e0383e", label: "Red" },
+  { value: "#f7821b", label: "Orange" },
+  { value: "#ffc600", label: "Yellow" },
+  { value: "#62ba46", label: "Green" },
+  { value: "#8c8c8c", label: "Graphite" },
+  { value: "#d4845a", label: "Copper" },
 ] as const;
-
-// The Settings window offers macOS's accent colors (plus the app's copper default); older
-// accent values keep working and show up as a custom color.
-export const MACOS_ACCENT_OPTIONS = [
-  { id: "copper", value: "#d4845a", label: "Copper", primary: "#d4845a", dark: "#b86e48" },
-  { id: "macos-blue", value: "#007aff", label: "Blue", primary: "#007aff", dark: "#0062cc" },
-  { id: "macos-purple", value: "#a550a7", label: "Purple", primary: "#a550a7", dark: "#843f86" },
-  { id: "macos-pink", value: "#f74f9e", label: "Pink", primary: "#f74f9e", dark: "#c63f7e" },
-  { id: "macos-red", value: "#e0383e", label: "Red", primary: "#e0383e", dark: "#b32d32" },
-  { id: "macos-orange", value: "#f7821b", label: "Orange", primary: "#f7821b", dark: "#c66816" },
-  { id: "macos-yellow", value: "#ffc600", label: "Yellow", primary: "#ffc600", dark: "#cc9e00" },
-  { id: "macos-green", value: "#62ba46", label: "Green", primary: "#62ba46", dark: "#4e9538" },
-  {
-    id: "macos-graphite",
-    value: "#8c8c8c",
-    label: "Graphite",
-    primary: "#8c8c8c",
-    dark: "#707070",
-  },
-] as const;
+export const DEFAULT_ACCENT: AccentMode = ACCENT_OPTIONS[0].value;
 
 export const UI_FONT_OPTIONS = [
   { value: "system", label: "System (SF Pro)" },
@@ -378,7 +355,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   autoLightTheme: "macos-light",
   autoDarkTheme: "macos-dark",
   iconTheme: "native",
-  accent: "#d4845a",
+  accent: DEFAULT_ACCENT,
   zoomPercent: 100,
   uiFontFamily: "system",
   viewMode: "list",
@@ -493,18 +470,6 @@ export function resolveEffectiveTheme(
 
 export function getIconThemeLabel(iconTheme: IconThemeMode): string {
   return ICON_THEME_OPTIONS.find((option) => option.value === iconTheme)?.label ?? iconTheme;
-}
-
-export function getAccentLabel(accent: AccentMode): string {
-  const normalized = normalizeAccentColor(accent);
-  if (!normalized) {
-    return accent;
-  }
-  return (
-    ACCENT_OPTIONS.find((option) => option.value === normalized)?.label ??
-    MACOS_ACCENT_OPTIONS.find((option) => option.value === normalized)?.label ??
-    "Custom"
-  );
 }
 
 export function normalizeAccentColor(value: string): string | null {
