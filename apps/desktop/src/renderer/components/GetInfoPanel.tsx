@@ -27,6 +27,11 @@ export function InfoPanel({
   onOpenInTerminal,
   onShowInFinder,
   onCopyPath,
+  onCopyName,
+  onQuickLook,
+  onEdit,
+  isFavorite = false,
+  onToggleFavorite,
   copyPathDisabled = false,
   folderSizeEntry,
   onCalculateFolderSize,
@@ -45,6 +50,13 @@ export function InfoPanel({
   onOpenInTerminal: () => void;
   onShowInFinder: () => void;
   onCopyPath: () => Promise<boolean> | boolean;
+  onCopyName?: (() => Promise<boolean> | boolean) | undefined;
+  onQuickLook?: (() => void) | undefined;
+  // Given only for files, which the text editor can open.
+  onEdit?: (() => void) | undefined;
+  isFavorite?: boolean;
+  // Given only for folders that can be added to or removed from Favorites.
+  onToggleFavorite?: (() => void) | undefined;
   copyPathDisabled?: boolean | undefined;
   folderSizeEntry?: FolderSizeEntry | undefined;
   onCalculateFolderSize?: (() => void) | undefined;
@@ -53,7 +65,7 @@ export function InfoPanel({
   openWithItems?: readonly ContextMenuSubmenuItem[];
   onOpenWith?: ((action: ContextMenuSubmenuAction) => void) | undefined;
 }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"path" | "name" | null>(null);
   const showSpinner = useDelayedFlag(pending || (loading && !item), SPINNER_DELAY_MS);
   const permissionParts = useMemo(() => splitPermissionMode(item?.permissionMode ?? null), [item]);
 
@@ -61,13 +73,19 @@ export function InfoPanel({
     if (!copied) {
       return;
     }
-    const timeout = window.setTimeout(() => setCopied(false), 1500);
+    const timeout = window.setTimeout(() => setCopied(null), 1500);
     return () => window.clearTimeout(timeout);
   }, [copied]);
 
   async function handleCopyPath() {
     if (await onCopyPath()) {
-      setCopied(true);
+      setCopied("path");
+    }
+  }
+
+  async function handleCopyName() {
+    if (await onCopyName?.()) {
+      setCopied("name");
     }
   }
 
@@ -97,6 +115,11 @@ export function InfoPanel({
           permissionParts={permissionParts}
           copyPathDisabled={copyPathDisabled}
           onCopyPath={handleCopyPath}
+          onCopyName={onCopyName ? handleCopyName : undefined}
+          onQuickLook={onQuickLook}
+          onEdit={onEdit}
+          isFavorite={isFavorite}
+          onToggleFavorite={onToggleFavorite}
           onNavigateToPath={onNavigateToPath}
           onOpen={onOpen}
           onOpenInTerminal={onOpenInTerminal}
@@ -122,6 +145,11 @@ function GetInfoPanelContent({
   permissionParts,
   copyPathDisabled,
   onCopyPath,
+  onCopyName,
+  onQuickLook,
+  onEdit,
+  isFavorite,
+  onToggleFavorite,
   onNavigateToPath,
   onOpen,
   onOpenInTerminal,
@@ -133,12 +161,17 @@ function GetInfoPanelContent({
   openWithItems,
   onOpenWith,
 }: {
-  copied: boolean;
+  copied: "path" | "name" | null;
   item: ItemProperties;
   pending: boolean;
   permissionParts: { symbolic: string; octal: string } | null;
   copyPathDisabled: boolean;
   onCopyPath: () => Promise<void>;
+  onCopyName?: (() => Promise<void>) | undefined;
+  onQuickLook?: (() => void) | undefined;
+  onEdit?: (() => void) | undefined;
+  isFavorite: boolean;
+  onToggleFavorite?: (() => void) | undefined;
   onNavigateToPath: (path: string) => void;
   onOpen: () => void;
   onOpenInTerminal: () => void;
@@ -362,20 +395,47 @@ function GetInfoPanelContent({
       <section className="get-info-section">
         <h3 className="get-info-section-title">Quick Actions</h3>
         <div className="get-info-actions">
+          {onQuickLook ? (
+            <GetInfoActionButton label="Quick Look" shortcut="Space" onClick={onQuickLook}>
+              <InfoPanelGlyph name="quickLook" />
+            </GetInfoActionButton>
+          ) : null}
+          {onEdit ? (
+            <GetInfoActionButton label="Edit" shortcut="⌘E" onClick={onEdit}>
+              <InfoPanelGlyph name="edit" />
+            </GetInfoActionButton>
+          ) : null}
           <GetInfoActionButton
-            label={copied ? "Copied" : "Copy Path"}
+            label={copied === "path" ? "Copied" : "Copy Path"}
             shortcut="⌥⌘C"
             disabled={copyPathDisabled}
             onClick={() => void onCopyPath()}
           >
-            <InfoPanelGlyph name={copied ? "check" : "copy"} />
+            <InfoPanelGlyph name={copied === "path" ? "check" : "copy"} />
           </GetInfoActionButton>
+          {onCopyName ? (
+            <GetInfoActionButton
+              label={copied === "name" ? "Copied" : "Copy Name"}
+              disabled={copyPathDisabled}
+              onClick={() => void onCopyName()}
+            >
+              <InfoPanelGlyph name={copied === "name" ? "check" : "name"} />
+            </GetInfoActionButton>
+          ) : null}
           <GetInfoActionButton label="Terminal" shortcut="⌘T" onClick={onOpenInTerminal}>
             <InfoPanelGlyph name="terminal" />
           </GetInfoActionButton>
           <GetInfoActionButton label="Show in Finder" onClick={onShowInFinder}>
             <InfoPanelGlyph name="finder" />
           </GetInfoActionButton>
+          {onToggleFavorite ? (
+            <GetInfoActionButton
+              label={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+              onClick={onToggleFavorite}
+            >
+              <InfoPanelGlyph name="favorite" />
+            </GetInfoActionButton>
+          ) : null}
         </div>
       </section>
     </div>
@@ -516,7 +576,18 @@ function FolderSizeCell({
 function InfoPanelGlyph({
   name,
 }: {
-  name: "open" | "terminal" | "finder" | "copy" | "check" | "close" | "refresh";
+  name:
+    | "open"
+    | "terminal"
+    | "finder"
+    | "quickLook"
+    | "edit"
+    | "name"
+    | "favorite"
+    | "copy"
+    | "check"
+    | "close"
+    | "refresh";
 }) {
   // Inline glyphs keep the panel self-contained and visually consistent with its custom chrome.
   if (name === "open") {
@@ -534,6 +605,38 @@ function InfoPanelGlyph({
         <path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" />
         <path d="M7 9l3 3-3 3" />
         <path d="M13 15h4" />
+      </svg>
+    );
+  }
+  if (name === "quickLook") {
+    return (
+      <svg className="get-info-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+    );
+  }
+  if (name === "edit") {
+    return (
+      <svg className="get-info-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 20h9" />
+        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z" />
+      </svg>
+    );
+  }
+  if (name === "name") {
+    return (
+      <svg className="get-info-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 7V5h16v2" />
+        <path d="M12 5v14" />
+        <path d="M9 19h6" />
+      </svg>
+    );
+  }
+  if (name === "favorite") {
+    return (
+      <svg className="get-info-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="m12 17.27-5.18 3.05 1.39-5.88L3 9.97l6.01-.5L12 4l2.99 5.47 6.01.5-5.21 4.47 1.39 5.88Z" />
       </svg>
     );
   }

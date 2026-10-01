@@ -157,6 +157,56 @@ describe("InfoPanel", () => {
     vi.useRealTimers();
   });
 
+  it("offers the optional quick actions only when their handlers are given", async () => {
+    const onQuickLook = vi.fn();
+    const onEdit = vi.fn();
+    const onCopyName = vi.fn().mockResolvedValue(true);
+    const onToggleFavorite = vi.fn();
+    const requiredProps = {
+      loading: false,
+      item: baseItem,
+      onClose: () => undefined,
+      onNavigateToPath: () => undefined,
+      onOpen: () => undefined,
+      onOpenInTerminal: () => undefined,
+      onShowInFinder: () => undefined,
+      onCopyPath: () => true,
+    };
+
+    const { rerender } = render(<InfoPanel {...requiredProps} />);
+
+    for (const name of ["Quick Look", "Edit", "Copy Name", "Add to Favorites"]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
+
+    rerender(
+      <InfoPanel
+        {...requiredProps}
+        onQuickLook={onQuickLook}
+        onEdit={onEdit}
+        onCopyName={onCopyName}
+        onToggleFavorite={onToggleFavorite}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Quick Look" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add to Favorites" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy Name" }));
+    await act(async () => {});
+
+    expect(onQuickLook).toHaveBeenCalledTimes(1);
+    expect(onEdit).toHaveBeenCalledTimes(1);
+    expect(onToggleFavorite).toHaveBeenCalledTimes(1);
+    expect(onCopyName).toHaveBeenCalledTimes(1);
+    // Only the row that was used confirms the copy.
+    expect(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy Path" })).toBeInTheDocument();
+
+    rerender(<InfoPanel {...requiredProps} isFavorite onToggleFavorite={onToggleFavorite} />);
+    expect(screen.getByRole("button", { name: "Remove from Favorites" })).toBeInTheDocument();
+  });
+
   it("shows directory placeholders instead of file-only metadata", () => {
     render(
       <InfoPanel

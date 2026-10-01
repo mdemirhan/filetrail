@@ -64,6 +64,7 @@ import {
   getFavoriteItemPath,
   getFavoritesRootItemId,
   getFileSystemItemPath,
+  getTrashPath,
   isFavoritePath,
   isFavoritesRootItemId,
 } from "./lib/favorites";
@@ -642,6 +643,7 @@ export function App() {
     contextMenuHiddenActionIds,
     contextMenuSubmenuItems,
     copyGetInfoPath,
+    copyGetInfoName,
     dismissActionNotice,
     dismissCopyPasteDialog,
     dismissToast,
@@ -655,6 +657,8 @@ export function App() {
     openPathExternally,
     openPathInTerminal,
     showPathsInFinder,
+    editPathInTextEditor,
+    toggleFavoritePath,
     openPaths,
     openRenameDialog,
     openMoveDialog,
@@ -1382,6 +1386,14 @@ export function App() {
   // The info panel always shows the getInfoItem (which is the selected or inspected item).
   // The info row shows the selected entry, falling back to the current directory.
   const infoPanelItem = infoPanelView?.item ?? null;
+  // Files can be edited; folders can be favorites, except the Trash, which always is one.
+  const infoPanelCanEdit =
+    infoPanelItem !== null &&
+    (infoPanelItem.kind === "file" || infoPanelItem.kind === "symlink_file");
+  const infoPanelCanFavorite =
+    infoPanelItem !== null &&
+    (infoPanelItem.kind === "directory" || infoPanelItem.kind === "symlink_directory") &&
+    infoPanelItem.path !== getTrashPath(homePath);
   const infoPanelFolderSizePath =
     infoPanelItem && isFolderSizeEligibleKind(infoPanelItem.kind) ? infoPanelItem.path : null;
   const infoRowActiveEntry =
@@ -1701,6 +1713,21 @@ export function App() {
                 }
               },
               onCopyPath: () => (infoPanelItem ? copyGetInfoPath(infoPanelItem.path) : false),
+              onCopyName: () => (infoPanelItem ? copyGetInfoName(infoPanelItem.name) : false),
+              onQuickLook: () => {
+                if (infoPanelItem) {
+                  void client
+                    .invoke("system:quickLook", { path: infoPanelItem.path })
+                    .catch(() => undefined);
+                }
+              },
+              onEdit: infoPanelCanEdit
+                ? () => void editPathInTextEditor(infoPanelItem.path)
+                : undefined,
+              isFavorite: infoPanelCanFavorite && isFavoritePath(favorites, infoPanelItem.path),
+              onToggleFavorite: infoPanelCanFavorite
+                ? () => toggleFavoritePath(infoPanelItem.path)
+                : undefined,
               openWithItems: contextMenuSubmenuItems,
               onOpenWith: (action) => {
                 if (infoPanelItem) {

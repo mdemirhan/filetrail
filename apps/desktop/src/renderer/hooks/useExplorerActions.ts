@@ -1902,6 +1902,30 @@ export function useExplorerActions(args: {
     }
   }
 
+  async function copyGetInfoName(name: string): Promise<boolean> {
+    if (isWriteOperationInFlight()) {
+      showWriteOperationBusyToast();
+      return false;
+    }
+    try {
+      await client.invoke("system:copyText", { text: name });
+      return true;
+    } catch (error) {
+      logger.error("Info Panel copy name failed", error);
+      setActionNotice({
+        title: "Copy Name",
+        message: "Unable to copy this name to the clipboard.",
+      });
+      return false;
+    }
+  }
+
+  // The info panel can show an item that is not in the file list (a tree folder's file, a
+  // search result), so this does not look the entry up the way `editPaths` does.
+  async function editPathInTextEditor(path: string) {
+    await openPathsWithApplication([path], defaultTextEditor.appPath, defaultTextEditor.appName);
+  }
+
   async function openPathInTerminal(path: string) {
     try {
       const response = await client.invoke("system:openInTerminal", {
@@ -2883,6 +2907,7 @@ export function useExplorerActions(args: {
     contextMenuHiddenActionIds,
     contextMenuSubmenuItems,
     copyGetInfoPath,
+    copyGetInfoName,
     dismissActionNotice,
     dismissCopyPasteDialog,
     dismissToast,
@@ -2900,6 +2925,8 @@ export function useExplorerActions(args: {
     openPathExternally,
     openPathInTerminal,
     showPathsInFinder,
+    editPathInTextEditor,
+    toggleFavoritePath,
     openPaths,
     openRenameDialog,
     removeOpenWithApplication,
