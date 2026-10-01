@@ -556,10 +556,11 @@ export function sanitizeLeftToolbarItems(value: unknown): LeftToolbarItems {
       utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
     };
   }
+  // The left and bottom rails are shown independently, so each keeps its own list and the
+  // same item may be on both.
   const record = value as { main?: unknown; utility?: unknown };
-  const seen = new Set<ToolbarItemId>();
   return {
-    main: sanitizeToolbarItemList(record.main, "left", "main", seen),
-    utility: sanitizeToolbarItemList(record.utility, "left", "utility", seen),
+    main: sanitizeToolbarItemList(record.main, "left", "main"),
+    utility: sanitizeToolbarItemList(record.utility, "left", "utility"),
   };
 }

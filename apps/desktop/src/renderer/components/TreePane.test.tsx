@@ -3,7 +3,11 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { type ComponentProps, createRef } from "react";
 
-import { DEFAULT_LEFT_TOOLBAR_ITEMS, type LeftToolbarItems } from "../../shared/toolbarItems";
+import {
+  DEFAULT_LEFT_TOOLBAR_ITEMS,
+  type LeftToolbarItems,
+  getToolbarItemsForLeftZone,
+} from "../../shared/toolbarItems";
 import { TreePane } from "./TreePane";
 
 const themeButtonRef = createRef<HTMLButtonElement>();
@@ -66,13 +70,11 @@ function renderTreePane(overrides: Partial<ComponentProps<typeof TreePane>> = {}
         { path: "/Users/demo/Documents", icon: "documents" },
       ]}
       favoritesPlacement="integrated"
-      favoritesPaneHeight={220}
       activeLeftPaneSubview="tree"
       favoritesExpanded
       nodes={baseNodes}
       onFocusChange={() => undefined}
       onLeftPaneSubviewChange={() => undefined}
-      onFavoritesPaneHeightChange={() => undefined}
       onGoHome={() => undefined}
       onRerootHome={() => undefined}
       onOpenLocation={() => undefined}
@@ -358,7 +360,7 @@ describe("TreePane", () => {
     });
 
     const favoritesPane = document.querySelector(".favorites-pane-section");
-    if (!(favoritesPane instanceof HTMLDivElement)) {
+    if (!(favoritesPane instanceof HTMLElement)) {
       throw new Error("Missing favorites pane container.");
     }
 
@@ -367,7 +369,7 @@ describe("TreePane", () => {
     expect(handleClearSelection).toHaveBeenCalledTimes(1);
   });
 
-  it("clears favorites selection when pressing empty space inside the favorites scroll area", () => {
+  it("clears favorites selection when pressing empty space inside the favorites list", () => {
     const handleClearSelection = vi.fn();
     renderTreePane({
       favoritesPlacement: "separate",
@@ -376,12 +378,12 @@ describe("TreePane", () => {
       onClearSelection: handleClearSelection,
     });
 
-    const scrollArea = document.querySelector(".favorites-scroll");
-    if (!(scrollArea instanceof HTMLDivElement)) {
-      throw new Error("Missing favorites scroll area.");
+    const favoritesList = document.querySelector(".favorites-list");
+    if (!(favoritesList instanceof HTMLDivElement)) {
+      throw new Error("Missing favorites list.");
     }
 
-    fireEvent.mouseDown(scrollArea, { clientX: 12, clientY: 12 });
+    fireEvent.mouseDown(favoritesList, { clientX: 12, clientY: 12 });
 
     expect(handleClearSelection).toHaveBeenCalledTimes(1);
   });
@@ -395,8 +397,9 @@ describe("TreePane", () => {
       onClearSelection: handleClearSelection,
     });
 
-    const scrollArea = document.querySelector(".favorites-scroll");
-    if (!(scrollArea instanceof HTMLDivElement)) {
+    const scrollArea = document.querySelector(".sidebar-sections");
+    const favoritesPane = document.querySelector(".favorites-pane-section");
+    if (!(scrollArea instanceof HTMLDivElement) || !(favoritesPane instanceof HTMLElement)) {
       throw new Error("Missing favorites scroll area.");
     }
     Object.defineProperty(scrollArea, "clientWidth", { configurable: true, value: 180 });
@@ -415,7 +418,7 @@ describe("TreePane", () => {
       toJSON: () => ({}),
     } as DOMRect);
 
-    fireEvent.mouseDown(scrollArea, { clientX: 186, clientY: 20 });
+    fireEvent.mouseDown(favoritesPane, { clientX: 186, clientY: 20 });
 
     expect(handleClearSelection).not.toHaveBeenCalled();
   });
@@ -459,13 +462,13 @@ describe("TreePane", () => {
   });
 
   it("renders favorites separately from the filesystem tree when configured", () => {
-    renderTreePane({
+    const { container } = renderTreePane({
       favoritesPlacement: "separate",
       activeLeftPaneSubview: "favorites",
       selectedTreeItemId: "favorite:/Users/demo/Documents",
     });
 
-    expect(screen.queryByRole("button", { name: "Favorites" })).toBeNull();
+    expect(container.querySelector('[data-tree-kind="favorites-root"]')).toBeNull();
     expect(screen.getAllByRole("button", { name: "Documents" })).toHaveLength(2);
     expect(
       screen.getAllByRole("button", { name: "Documents" })[0]?.closest(".favorites-pane-section"),
@@ -475,31 +478,7 @@ describe("TreePane", () => {
     ).not.toBeNull();
   });
 
-  it("persists divider changes for the separate favorites pane", () => {
-    const handleFavoritesPaneHeightChange = vi.fn();
-    renderTreePane({
-      favoritesPlacement: "separate",
-      onFavoritesPaneHeightChange: handleFavoritesPaneHeightChange,
-    });
-
-    const splitPane = document.querySelector(".sidebar-split-pane");
-    if (!(splitPane instanceof HTMLDivElement)) {
-      throw new Error("Missing split pane container.");
-    }
-    Object.defineProperty(splitPane, "clientHeight", {
-      configurable: true,
-      value: 500,
-    });
-
-    const separator = screen.getByRole("separator", { name: /resize favorites pane/i });
-    fireEvent.pointerDown(separator, { clientY: 200 });
-    fireEvent.pointerMove(window, { clientY: 240 });
-    fireEvent.pointerUp(window);
-
-    expect(handleFavoritesPaneHeightChange).toHaveBeenCalledWith(260);
-  });
-
-  it("shows Favorites as a labeled section above the folder tree without the command rail", () => {
+  it("shows Favorites as a labeled section above the folder tree", () => {
     const { container } = renderTreePane({
       showRail: false,
       favoritesPlacement: "separate",
@@ -519,7 +498,7 @@ describe("TreePane", () => {
     expect(container.querySelector('[data-tree-kind="favorites-root"]')).toBeNull();
   });
 
-  it("shows Favorites as a root row of the folder tree when integrated without the rail", () => {
+  it("shows Favorites as a root row of the folder tree when integrated", () => {
     const { container } = renderTreePane({
       showRail: false,
       favoritesPlacement: "integrated",
@@ -531,7 +510,7 @@ describe("TreePane", () => {
     expect(screen.queryByText("Folders")).toBeNull();
     expect(container.querySelector('[data-tree-kind="favorites-root"]')).not.toBeNull();
     expect(container.querySelector('[data-tree-kind="favorite"]')).toHaveTextContent("Documents");
-    expect(container.querySelector(".sidebar-footer")).not.toBeNull();
+    expect(container.querySelector(".sidebar-bottom-rail")).not.toBeNull();
   });
 
   it("collapses the Favorites section from its header", () => {
@@ -553,6 +532,7 @@ describe("TreePane", () => {
 
   it("renders theme options when the rail menu is open", () => {
     renderTreePane({
+      showRail: true,
       theme: "dark",
       themeMenuOpen: true,
       favorites: [],
@@ -590,9 +570,9 @@ describe("TreePane", () => {
     expect(handleOpenHelp).toHaveBeenCalledTimes(1);
   });
 
-  it("renders configured renderer-command items in the left rail", () => {
+  it("renders the configured utility items in the bottom rail", () => {
     const handleRendererCommand = vi.fn();
-    renderTreePane({
+    const { container } = renderTreePane({
       leftToolbarItems: {
         main: ["home"],
         utility: ["leftSeparator", "newFolder", "duplicateSelection", "settings"],
@@ -600,9 +580,116 @@ describe("TreePane", () => {
       onRendererCommand: handleRendererCommand,
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Duplicate" }));
+    const bottomRail = container.querySelector(".sidebar-bottom-rail");
+    if (!(bottomRail instanceof HTMLElement)) {
+      throw new Error("Missing bottom rail.");
+    }
+    expect(
+      within(bottomRail)
+        .getAllByRole("button")
+        .map((button) => button.getAttribute("aria-label")),
+    ).toEqual(["New Folder", "Duplicate", "Open settings"]);
+    expect(bottomRail.querySelector(".sidebar-rail-separator")).not.toBeNull();
+    // The left rail is off, so its "main" items are not on screen.
+    expect(container.querySelector(".sidebar-rail")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Quick access Home" })).toBeNull();
+
+    fireEvent.click(within(bottomRail).getByRole("button", { name: "Duplicate" }));
 
     expect(handleRendererCommand).toHaveBeenCalledWith("duplicateSelection");
+  });
+
+  it("shows either rail, both or neither around the same sidebar", () => {
+    const railCases = [
+      { showRail: false, showBottomRail: false },
+      { showRail: true, showBottomRail: false },
+      { showRail: false, showBottomRail: true },
+      { showRail: true, showBottomRail: true },
+    ];
+    for (const { showRail, showBottomRail } of railCases) {
+      const { container, unmount } = renderTreePane({
+        showRail,
+        showBottomRail,
+        favoritesPlacement: "separate",
+      });
+
+      expect(container.querySelector(".sidebar-rail") !== null).toBe(showRail);
+      expect(container.querySelector(".sidebar-bottom-rail") !== null).toBe(showBottomRail);
+      // The sidebar itself never changes: labeled Favorites section over the folder tree.
+      expect(container.querySelector(".sidebar-main-native")).not.toBeNull();
+      expect(container.querySelector(".sidebar-section-header")).not.toBeNull();
+      expect(screen.getByRole("tree", { name: "Favorites" })).toBeInTheDocument();
+      expect(screen.getByRole("tree", { name: "Folders" })).toBeInTheDocument();
+      // Settings is reachable from whichever rail is showing.
+      expect(screen.queryAllByRole("button", { name: "Open settings" })).toHaveLength(
+        showRail || showBottomRail ? 1 : 0,
+      );
+      unmount();
+    }
+  });
+
+  it("docks the utility items at the foot of the left rail when the bottom rail is off", () => {
+    const { container } = renderTreePane({ showRail: true, showBottomRail: false });
+
+    const leftRail = container.querySelector(".sidebar-rail");
+    if (!(leftRail instanceof HTMLElement)) {
+      throw new Error("Missing left rail.");
+    }
+    expect(within(leftRail).getByRole("button", { name: "Quick access Home" })).toBeInTheDocument();
+    const utilityGroup = leftRail.querySelector(".sidebar-rail-group-utility");
+    if (!(utilityGroup instanceof HTMLElement)) {
+      throw new Error("Missing utility group.");
+    }
+    expect(within(utilityGroup).getByRole("button", { name: "Open help" })).toBeInTheDocument();
+    expect(within(utilityGroup).getByRole("button", { name: "Open settings" })).toBeInTheDocument();
+  });
+
+  it("keeps the main items in the left rail and the utility items in the bottom rail", () => {
+    const { container } = renderTreePane({ showRail: true, showBottomRail: true });
+
+    const leftRail = container.querySelector(".sidebar-rail");
+    const bottomRail = container.querySelector(".sidebar-bottom-rail");
+    if (!(leftRail instanceof HTMLElement) || !(bottomRail instanceof HTMLElement)) {
+      throw new Error("Missing rail.");
+    }
+    expect(within(leftRail).getByRole("button", { name: "Quick access Home" })).toBeInTheDocument();
+    expect(within(leftRail).queryByRole("button", { name: "Open help" })).toBeNull();
+    expect(leftRail.querySelector(".sidebar-rail-group-utility")).toBeNull();
+    expect(within(bottomRail).getByRole("button", { name: "Open help" })).toBeInTheDocument();
+    expect(within(bottomRail).getByRole("button", { name: "Choose theme" })).toBeInTheDocument();
+  });
+
+  it("renders a control for every item that can be added to a rail", () => {
+    for (const zone of ["main", "utility"] as const) {
+      const itemIds = getToolbarItemsForLeftZone(zone)
+        .map((item) => item.id)
+        .filter((itemId) => itemId !== "leftSeparator" && itemId !== "settings");
+      const { container, unmount } = renderTreePane({
+        showRail: true,
+        showBottomRail: true,
+        leftToolbarItems:
+          zone === "main"
+            ? { main: itemIds, utility: ["settings"] }
+            : { main: [], utility: [...itemIds, "settings"] },
+      });
+
+      const rail = container.querySelector(
+        zone === "main" ? ".sidebar-rail" : ".sidebar-bottom-rail",
+      );
+      if (!(rail instanceof HTMLElement)) {
+        throw new Error("Missing rail.");
+      }
+      const expectedCount = zone === "main" ? itemIds.length : itemIds.length + 1;
+      expect(within(rail).getAllByRole("button")).toHaveLength(expectedCount);
+      unmount();
+    }
+  });
+
+  it("leaves the action log button out while the action log is turned off", () => {
+    renderTreePane({ actionLogEnabled: false });
+
+    expect(screen.queryByRole("button", { name: "Open action log" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Open help" })).toBeInTheDocument();
   });
 
   it("does not scroll the selected row into view when it is already fully visible", () => {
@@ -743,13 +830,11 @@ describe("TreePane", () => {
           { path: "/Users/demo/Documents", icon: "documents" },
         ]}
         favoritesPlacement="integrated"
-        favoritesPaneHeight={220}
         activeLeftPaneSubview="tree"
         favoritesExpanded
         nodes={baseNodes}
         onFocusChange={() => undefined}
         onLeftPaneSubviewChange={() => undefined}
-        onFavoritesPaneHeightChange={() => undefined}
         onGoHome={() => undefined}
         onRerootHome={() => undefined}
         onOpenLocation={() => undefined}
@@ -897,13 +982,11 @@ describe("TreePane", () => {
           { path: "/Users/demo/Documents", icon: "documents" },
         ]}
         favoritesPlacement="integrated"
-        favoritesPaneHeight={220}
         activeLeftPaneSubview="tree"
         favoritesExpanded
         nodes={baseNodes}
         onFocusChange={() => undefined}
         onLeftPaneSubviewChange={() => undefined}
-        onFavoritesPaneHeightChange={() => undefined}
         onGoHome={() => undefined}
         onRerootHome={() => undefined}
         onOpenLocation={() => undefined}

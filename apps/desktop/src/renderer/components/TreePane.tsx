@@ -33,12 +33,7 @@ import {
   getFavoriteLabel,
 } from "../lib/favorites";
 import { FavoriteItemIcon, TreeFolderIcon } from "../lib/fileIcons";
-import { EXPLORER_LAYOUT } from "../lib/layoutTokens";
 import { ToolbarIcon } from "./ToolbarIcon";
-
-const FAVORITES_PANE_DEFAULT_HEIGHT = 220;
-const FAVORITES_PANE_MIN_HEIGHT = 116;
-const FILESYSTEM_PANE_MIN_HEIGHT = 140;
 
 function formatToolbarTooltip(label: string, shortcutLabel?: string) {
   return shortcutLabel ? `${label} (${shortcutLabel})` : label;
@@ -71,12 +66,10 @@ export function TreePane({
   selectedTreeItemId,
   favorites,
   favoritesPlacement,
-  favoritesPaneHeight,
   activeLeftPaneSubview,
   favoritesExpanded,
   onFocusChange,
   onLeftPaneSubviewChange,
-  onFavoritesPaneHeightChange,
   onGoHome,
   canGoBack,
   onGoBack,
@@ -122,7 +115,8 @@ export function TreePane({
   typeaheadQuery,
   canRunRendererCommand,
   onRendererCommand,
-  showRail = true,
+  showRail = false,
+  showBottomRail = true,
 }: {
   paneRef?: React.RefObject<HTMLElement | null>;
   isFocused: boolean;
@@ -135,12 +129,10 @@ export function TreePane({
   selectedTreeItemId: TreeItemId | null;
   favorites: FavoritePreference[];
   favoritesPlacement: FavoritesPlacement;
-  favoritesPaneHeight: number | null;
   activeLeftPaneSubview: "favorites" | "tree";
   favoritesExpanded: boolean;
   onFocusChange: (focused: boolean) => void;
   onLeftPaneSubviewChange: (value: "favorites" | "tree") => void;
-  onFavoritesPaneHeightChange: (value: number) => void;
   onGoHome: () => void;
   canGoBack?: boolean;
   onGoBack?: () => void;
@@ -212,8 +204,11 @@ export function TreePane({
   typeaheadQuery?: string;
   canRunRendererCommand: (command: RendererCommandType) => boolean;
   onRendererCommand: (command: RendererCommandType) => void;
-  // The icon rail is opt-in; without it the sidebar shows labeled sections and a footer.
+  // Both rails are optional and independent. The left rail shows the "main" items beside
+  // the sidebar; the bottom rail shows the "utility" items under it. With only the left
+  // rail on, the utility items dock at its foot.
   showRail?: boolean;
+  showBottomRail?: boolean;
 }) {
   const integratedPresentation = useMemo(
     () =>
@@ -268,14 +263,7 @@ export function TreePane({
   const lastRegisteredSelectedRowRef = useRef<HTMLDivElement | null>(null);
   const lastRegisteredSelectedItemIdRef = useRef(selectedTreeItemId);
   const lastCommittedSelectedItemIdRef = useRef(selectedTreeItemId);
-  const splitPaneRef = useRef<HTMLDivElement | null>(null);
-  const splitResizeRef = useRef<{
-    startY: number;
-    startHeight: number;
-  } | null>(null);
-  const splitResizeCleanupRef = useRef<(() => void) | null>(null);
   const [optimisticSelectedItemId, setOptimisticSelectedItemId] = useState<TreeItemId | null>(null);
-  const [splitPaneHeight, setSplitPaneHeight] = useState(0);
   const [selectedRowRegistrationVersion, setSelectedRowRegistrationVersion] = useState(0);
   const [themeMenuViewportPosition, setThemeMenuViewportPosition] = useState<{
     left: number;
@@ -307,15 +295,12 @@ export function TreePane({
 
   useEffect(
     () => () => {
-      splitResizeCleanupRef.current?.();
-      splitResizeCleanupRef.current = null;
       if (clickTimeoutRef.current !== null) {
         window.clearTimeout(clickTimeoutRef.current);
       }
       if (scrollFrameRef.current !== null) {
         window.cancelAnimationFrame(scrollFrameRef.current);
       }
-      document.body.classList.remove("resizing-panels-vertical");
     },
     [],
   );
@@ -327,19 +312,6 @@ export function TreePane({
     lastRegisteredSelectedItemIdRef.current = selectedTreeItemId;
     lastRegisteredSelectedRowRef.current = null;
   }, [selectedTreeItemId]);
-
-  useEffect(() => {
-    const measureSplitPane = () => {
-      setSplitPaneHeight(splitPaneRef.current?.clientHeight ?? 0);
-    };
-    measureSplitPane();
-    const frame = window.requestAnimationFrame(measureSplitPane);
-    window.addEventListener("resize", measureSplitPane);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener("resize", measureSplitPane);
-    };
-  }, []);
 
   useLayoutEffect(() => {
     if (!themeMenuOpen) {
@@ -353,10 +325,19 @@ export function TreePane({
       }
       const rect = button.getBoundingClientRect();
       const menuWidth = 176;
-      setThemeMenuViewportPosition({
-        left: Math.max(12, Math.min(rect.right + 10, window.innerWidth - menuWidth - 12)),
-        bottom: Math.max(window.innerHeight - rect.bottom, 8),
-      });
+      const maxLeft = window.innerWidth - menuWidth - 12;
+      // The menu opens above a bottom rail button, and beside a left rail button.
+      setThemeMenuViewportPosition(
+        button.closest(".sidebar-bottom-rail")
+          ? {
+              left: Math.max(12, Math.min(rect.left, maxLeft)),
+              bottom: Math.max(window.innerHeight - rect.top + 6, 8),
+            }
+          : {
+              left: Math.max(12, Math.min(rect.right + 10, maxLeft)),
+              bottom: Math.max(window.innerHeight - rect.bottom, 8),
+            },
+      );
     };
     updateThemeMenuPosition();
     window.addEventListener("resize", updateThemeMenuPosition);
@@ -377,7 +358,7 @@ export function TreePane({
     if (!currentRow || typeof currentRow.scrollIntoView !== "function") {
       return;
     }
-    const scrollContainer = currentRow.closest<HTMLElement>(".tree-scroll, .favorites-scroll");
+    const scrollContainer = currentRow.closest<HTMLElement>(".tree-scroll, .sidebar-sections");
     scrollFrameRef.current = window.requestAnimationFrame(() => {
       if (!scrollContainer || !isElementFullyVisibleWithinContainer(currentRow, scrollContainer)) {
         currentRow.scrollIntoView({ block: "nearest" });
@@ -400,11 +381,6 @@ export function TreePane({
     setOptimisticSelectedItemId(null);
   }, [selectedTreeItemId]);
 
-  const resolvedFavoritesPaneHeight = clampFavoritesPaneHeight(
-    favoritesPaneHeight ?? FAVORITES_PANE_DEFAULT_HEIGHT,
-    splitPaneHeight,
-  );
-
   const registerTreeRowRef = useCallback(
     (id: string, element: HTMLDivElement | null) => {
       rowRefs.current[id] = element;
@@ -424,10 +400,10 @@ export function TreePane({
     return (event: React.MouseEvent<HTMLDivElement>) => {
       onLeftPaneSubviewChange(subview);
       const target = event.target;
-      if (!(target instanceof Element) || target.closest(".tree-row, .favorites-pane-resizer")) {
+      if (!(target instanceof Element) || target.closest(".tree-row")) {
         return;
       }
-      const scrollContainer = target.closest<HTMLElement>(".tree-scroll, .favorites-scroll");
+      const scrollContainer = target.closest<HTMLElement>(".tree-scroll, .sidebar-sections");
       if (scrollContainer && isScrollbarGutterHit(scrollContainer, event.clientX, event.clientY)) {
         return;
       }
@@ -689,13 +665,16 @@ export function TreePane({
       );
     }
     if (itemId === "actionLog") {
+      // No button while the action log is turned off in Settings.
+      if (!actionLogEnabled) {
+        return null;
+      }
       return (
         <button
           key={itemId}
           type="button"
           className="sidebar-rail-button"
           onClick={onOpenActionLog}
-          disabled={!actionLogEnabled}
           title={getToolbarTooltip(itemId)}
           aria-label="Open action log"
         >
@@ -893,42 +872,6 @@ export function TreePane({
     );
   }
 
-  function renderSidebarFooter() {
-    return (
-      <footer className="sidebar-footer">
-        <button
-          type="button"
-          className="sidebar-footer-button"
-          onClick={onOpenSettings}
-          title={getToolbarTooltip("settings")}
-          aria-label="Open settings"
-        >
-          <ToolbarIcon name="settings" />
-        </button>
-        {actionLogEnabled ? (
-          <button
-            type="button"
-            className="sidebar-footer-button"
-            onClick={onOpenActionLog}
-            title={getToolbarTooltip("actionLog")}
-            aria-label="Open action log"
-          >
-            <ToolbarIcon name="actionLog" />
-          </button>
-        ) : null}
-        <button
-          type="button"
-          className="sidebar-footer-button"
-          onClick={onOpenHelp}
-          title={getToolbarTooltip("help")}
-          aria-label="Open help"
-        >
-          <ToolbarIcon name="help" />
-        </button>
-      </footer>
-    );
-  }
-
   function renderToolbarItems(items: readonly ToolbarItemId[]) {
     const keyCounts = new Map<string, number>();
     return items
@@ -940,6 +883,24 @@ export function TreePane({
       });
   }
 
+  // Settings always closes the utility items, whichever rail shows them. Docked at the foot
+  // of the left rail, they skip buttons that rail already shows.
+  function renderUtilityItems(dockedInLeftRail: boolean) {
+    const items = dockedInLeftRail
+      ? leftToolbarItems.utility.filter(
+          (itemId) =>
+            getToolbarItemDefinition(itemId).allowDuplicates ||
+            !leftToolbarItems.main.includes(itemId),
+        )
+      : leftToolbarItems.utility;
+    return (
+      <>
+        {renderToolbarItems(items)}
+        {renderLeftToolbarItem("settings")}
+      </>
+    );
+  }
+
   return (
     <aside
       ref={paneRef}
@@ -949,9 +910,7 @@ export function TreePane({
         const target = event.target;
         if (
           !(target instanceof Element) ||
-          !target.closest(
-            ".tree-scroll, .tree-row, .favorites-scroll, .favorites-pane-resizer, .sidebar-tree",
-          )
+          !target.closest(".tree-scroll, .tree-row, .sidebar-sections, .sidebar-tree")
         ) {
           return;
         }
@@ -969,299 +928,141 @@ export function TreePane({
       <div className="sidebar-titlebar" aria-hidden="true" />
       <div className={`sidebar-shell${showRail ? "" : " sidebar-shell-no-rail"}`}>
         {showRail ? (
-          <aside className="sidebar-rail">
+          <aside className="sidebar-rail" aria-label="Left rail">
             <div className="sidebar-rail-group sidebar-rail-group-main">
               {renderToolbarItems(leftToolbarItems.main)}
             </div>
-            <div className="sidebar-rail-group sidebar-rail-group-utility">
-              {renderToolbarItems(leftToolbarItems.utility)}
-              {renderLeftToolbarItem("settings")}
-            </div>
+            {showBottomRail ? null : (
+              <div className="sidebar-rail-group sidebar-rail-group-utility">
+                {renderUtilityItems(true)}
+              </div>
+            )}
           </aside>
         ) : null}
-        {showRail ? null : (
-          <div className="sidebar-main sidebar-main-native">
-            {/* Finder layout: a labeled Favorites list above the folder tree, or Favorites as
-                a root row inside the tree. */}
-            {favoritesPlacement === "separate" && favoriteItems.length > 0 ? (
-              <div className="sidebar-sections">
-                <section
-                  className={`sidebar-favorites favorites-pane-section${
-                    activeLeftPaneSubview === "favorites" ? " active" : ""
-                  }`}
-                  aria-label="Favorites"
-                  data-drag-active={dragActive ? "true" : "false"}
-                  data-left-subview="favorites"
-                  onMouseDownCapture={handlePaneMouseDownCapture("favorites")}
-                  onDragEnterCapture={handlePaneDragEnterCapture(favoriteItemsById, "favorites")}
-                  onDragOverCapture={handlePaneDragOverCapture(favoriteItemsById, "favorites")}
-                  onDropCapture={handlePaneDropCapture(favoriteItemsById, "favorites")}
-                >
-                  {renderSectionHeader(
-                    "Favorites",
-                    favoritesExpanded,
-                    () => {
-                      // Keyboard navigation cannot stay in a hidden list.
-                      if (favoritesExpanded && activeLeftPaneSubview === "favorites") {
-                        onLeftPaneSubviewChange("tree");
-                      }
-                      onToggleFavoritesExpanded();
-                    },
-                    "sidebar-favorites-list",
-                  )}
-                  {favoritesExpanded ? (
-                    <div
-                      id="sidebar-favorites-list"
-                      className="tree-list favorites-list"
-                      role="tree"
-                      aria-label="Favorites"
-                    >
-                      {favoriteItems.map((item) => (
-                        <TreeItemRow
-                          key={item.id}
-                          item={item}
-                          isPaneFocused={isFocused}
-                          selectedTreeItemId={selectedTreeItemId}
-                          clickTimeoutRef={clickTimeoutRef}
-                          optimisticSelectedItemId={optimisticSelectedItemId}
-                          setOptimisticSelectedItemId={setOptimisticSelectedItemId}
-                          onToggleExpand={onToggleExpand}
-                          onToggleFavoritesExpanded={onToggleFavoritesExpanded}
-                          singleClickExpandTreeItems={singleClickExpandTreeItems}
-                          onClearSelection={onClearSelection}
-                          onNavigate={onNavigate}
-                          onNavigateFavorite={onNavigateFavorite}
-                          onSelectFavoritesRoot={onSelectFavoritesRoot}
-                          onItemContextMenu={onItemContextMenu}
-                          onItemDragEnter={onItemDragEnter}
-                          onItemDragOver={onItemDragOver}
-                          onItemDrop={onItemDrop}
-                          getItemDropIndicator={getItemDropIndicator}
-                          subview="favorites"
-                          onSubviewFocus={() => onLeftPaneSubviewChange("favorites")}
-                          registerRowRef={registerTreeRowRef}
-                        />
-                      ))}
-                    </div>
-                  ) : null}
-                </section>
-              </div>
-            ) : null}
-            {favoritesPlacement === "separate" ? (
-              <div className={`sidebar-header${isFocused ? " sidebar-header-focused" : ""}`}>
-                <span className="sidebar-title">Folders</span>
-              </div>
-            ) : null}
-            {typeaheadQuery ? (
-              <div className="pane-typeahead pane-typeahead-center" aria-live="polite">
-                <span className="pane-typeahead-label">Jump to</span>
-                <span className="pane-typeahead-value">{typeaheadQuery}</span>
-              </div>
-            ) : null}
-            {favoritesPlacement === "separate" ? (
-              <div
-                className={`sidebar-tree filesystem-tree-section${
-                  activeLeftPaneSubview === "tree" ? " active" : ""
+        <div className="sidebar-main sidebar-main-native">
+          {/* Finder layout: a labeled Favorites list above the folder tree, or Favorites as
+              a root row inside the tree. */}
+          {favoritesPlacement === "separate" && favoriteItems.length > 0 ? (
+            <div className="sidebar-sections">
+              <section
+                className={`sidebar-favorites favorites-pane-section${
+                  activeLeftPaneSubview === "favorites" ? " active" : ""
                 }`}
+                aria-label="Favorites"
                 data-drag-active={dragActive ? "true" : "false"}
-                data-left-subview="tree"
-                onMouseDownCapture={handlePaneMouseDownCapture("tree")}
-                onDragEnterCapture={handlePaneDragEnterCapture(
-                  filesystemPresentation.items,
-                  "tree",
-                )}
-                onDragOverCapture={handlePaneDragOverCapture(filesystemPresentation.items, "tree")}
-                onDropCapture={handlePaneDropCapture(filesystemPresentation.items, "tree")}
+                data-left-subview="favorites"
+                onMouseDownCapture={handlePaneMouseDownCapture("favorites")}
+                onDragEnterCapture={handlePaneDragEnterCapture(favoriteItemsById, "favorites")}
+                onDragOverCapture={handlePaneDragOverCapture(favoriteItemsById, "favorites")}
+                onDropCapture={handlePaneDropCapture(favoriteItemsById, "favorites")}
               >
-                <TreeList
-                  items={filesystemPresentation.items}
-                  visibleItemIds={filesystemPresentation.visibleItemIds}
-                  isPaneFocused={isFocused}
-                  selectedTreeItemId={selectedTreeItemId}
-                  clickTimeoutRef={clickTimeoutRef}
-                  optimisticSelectedItemId={optimisticSelectedItemId}
-                  setOptimisticSelectedItemId={setOptimisticSelectedItemId}
-                  onToggleExpand={onToggleExpand}
-                  onToggleFavoritesExpanded={onToggleFavoritesExpanded}
-                  singleClickExpandTreeItems={singleClickExpandTreeItems}
-                  onClearSelection={onClearSelection}
-                  onNavigate={onNavigate}
-                  onNavigateFavorite={onNavigateFavorite}
-                  onSelectFavoritesRoot={onSelectFavoritesRoot}
-                  onItemContextMenu={onItemContextMenu}
-                  onItemDragEnter={onItemDragEnter}
-                  onItemDragOver={onItemDragOver}
-                  onItemDrop={onItemDrop}
-                  getItemDropIndicator={getItemDropIndicator}
-                  subview="tree"
-                  onSubviewFocus={() => onLeftPaneSubviewChange("tree")}
-                  registerRowRef={registerTreeRowRef}
-                />
-              </div>
-            ) : (
-              renderIntegratedTree()
-            )}
-            {renderSidebarFooter()}
-          </div>
-        )}
-        {showRail ? (
-          <div className="sidebar-main">
+                {renderSectionHeader(
+                  "Favorites",
+                  favoritesExpanded,
+                  () => {
+                    // Keyboard navigation cannot stay in a hidden list.
+                    if (favoritesExpanded && activeLeftPaneSubview === "favorites") {
+                      onLeftPaneSubviewChange("tree");
+                    }
+                    onToggleFavoritesExpanded();
+                  },
+                  "sidebar-favorites-list",
+                )}
+                {favoritesExpanded ? (
+                  <div
+                    id="sidebar-favorites-list"
+                    className="tree-list favorites-list"
+                    role="tree"
+                    aria-label="Favorites"
+                  >
+                    {favoriteItems.map((item) => (
+                      <TreeItemRow
+                        key={item.id}
+                        item={item}
+                        isPaneFocused={isFocused}
+                        selectedTreeItemId={selectedTreeItemId}
+                        clickTimeoutRef={clickTimeoutRef}
+                        optimisticSelectedItemId={optimisticSelectedItemId}
+                        setOptimisticSelectedItemId={setOptimisticSelectedItemId}
+                        onToggleExpand={onToggleExpand}
+                        onToggleFavoritesExpanded={onToggleFavoritesExpanded}
+                        singleClickExpandTreeItems={singleClickExpandTreeItems}
+                        onClearSelection={onClearSelection}
+                        onNavigate={onNavigate}
+                        onNavigateFavorite={onNavigateFavorite}
+                        onSelectFavoritesRoot={onSelectFavoritesRoot}
+                        onItemContextMenu={onItemContextMenu}
+                        onItemDragEnter={onItemDragEnter}
+                        onItemDragOver={onItemDragOver}
+                        onItemDrop={onItemDrop}
+                        getItemDropIndicator={getItemDropIndicator}
+                        subview="favorites"
+                        onSubviewFocus={() => onLeftPaneSubviewChange("favorites")}
+                        registerRowRef={registerTreeRowRef}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+              </section>
+            </div>
+          ) : null}
+          {favoritesPlacement === "separate" ? (
             <div className={`sidebar-header${isFocused ? " sidebar-header-focused" : ""}`}>
               <span className="sidebar-title">Folders</span>
             </div>
-            {typeaheadQuery ? (
-              <div className="pane-typeahead pane-typeahead-center" aria-live="polite">
-                <span className="pane-typeahead-label">Jump to</span>
-                <span className="pane-typeahead-value">{typeaheadQuery}</span>
-              </div>
-            ) : null}
-            {favoritesPlacement === "separate" ? (
-              <div ref={splitPaneRef} className="sidebar-split-pane">
-                <div
-                  className={`favorites-pane-section${activeLeftPaneSubview === "favorites" ? " active" : ""}`}
-                  data-drag-active={dragActive ? "true" : "false"}
-                  data-left-subview="favorites"
-                  style={{ height: `${resolvedFavoritesPaneHeight}px` }}
-                  onMouseDownCapture={handlePaneMouseDownCapture("favorites")}
-                  onDragEnterCapture={handlePaneDragEnterCapture(favoriteItemsById, "favorites")}
-                  onDragOverCapture={handlePaneDragOverCapture(favoriteItemsById, "favorites")}
-                  onDropCapture={handlePaneDropCapture(favoriteItemsById, "favorites")}
-                >
-                  <div className="favorites-scroll">
-                    <div className="tree-list favorites-list" role="tree" aria-label="Favorites">
-                      {favoriteItems.map((item) => (
-                        <TreeItemRow
-                          key={item.id}
-                          item={item}
-                          isPaneFocused={isFocused}
-                          selectedTreeItemId={selectedTreeItemId}
-                          clickTimeoutRef={clickTimeoutRef}
-                          optimisticSelectedItemId={optimisticSelectedItemId}
-                          setOptimisticSelectedItemId={setOptimisticSelectedItemId}
-                          onToggleExpand={onToggleExpand}
-                          onToggleFavoritesExpanded={onToggleFavoritesExpanded}
-                          singleClickExpandTreeItems={singleClickExpandTreeItems}
-                          onClearSelection={onClearSelection}
-                          onNavigate={onNavigate}
-                          onNavigateFavorite={onNavigateFavorite}
-                          onSelectFavoritesRoot={onSelectFavoritesRoot}
-                          onItemContextMenu={onItemContextMenu}
-                          onItemDragEnter={onItemDragEnter}
-                          onItemDragOver={onItemDragOver}
-                          onItemDrop={onItemDrop}
-                          getItemDropIndicator={getItemDropIndicator}
-                          subview="favorites"
-                          onSubviewFocus={() => onLeftPaneSubviewChange("favorites")}
-                          registerRowRef={registerTreeRowRef}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div
-                  className="favorites-pane-resizer"
-                  role="separator"
-                  tabIndex={0}
-                  aria-orientation="horizontal"
-                  aria-label="Resize favorites pane"
-                  onMouseDownCapture={() => onLeftPaneSubviewChange("favorites")}
-                  onPointerDown={(event) => {
-                    event.preventDefault();
-                    splitResizeCleanupRef.current?.();
-                    splitResizeRef.current = {
-                      startY: event.clientY,
-                      startHeight: resolvedFavoritesPaneHeight,
-                    };
-                    const handlePointerMove = (moveEvent: PointerEvent) => {
-                      const activeResize = splitResizeRef.current;
-                      if (!activeResize) {
-                        return;
-                      }
-                      const containerHeight = splitPaneRef.current?.clientHeight ?? splitPaneHeight;
-                      const nextHeight = clampFavoritesPaneHeight(
-                        activeResize.startHeight + (moveEvent.clientY - activeResize.startY),
-                        containerHeight,
-                      );
-                      onFavoritesPaneHeightChange(nextHeight);
-                    };
-                    const handlePointerUp = () => {
-                      splitResizeCleanupRef.current?.();
-                      splitResizeCleanupRef.current = null;
-                    };
-                    splitResizeCleanupRef.current = () => {
-                      window.removeEventListener("pointermove", handlePointerMove);
-                      window.removeEventListener("pointerup", handlePointerUp);
-                      splitResizeRef.current = null;
-                      document.body.classList.remove("resizing-panels-vertical");
-                    };
-                    window.addEventListener("pointermove", handlePointerMove);
-                    window.addEventListener("pointerup", handlePointerUp);
-                    document.body.classList.add("resizing-panels-vertical");
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") {
-                      return;
-                    }
-                    event.preventDefault();
-                    const step = event.shiftKey
-                      ? EXPLORER_LAYOUT.paneResizeStepLarge
-                      : EXPLORER_LAYOUT.paneResizeStep;
-                    const direction = event.key === "ArrowDown" ? 1 : -1;
-                    const nextHeight = clampFavoritesPaneHeight(
-                      resolvedFavoritesPaneHeight + direction * step,
-                      splitPaneHeight,
-                    );
-                    onFavoritesPaneHeightChange(nextHeight);
-                  }}
-                />
-                <div
-                  className={`sidebar-tree filesystem-tree-section${
-                    activeLeftPaneSubview === "tree" ? " active" : ""
-                  }`}
-                  data-drag-active={dragActive ? "true" : "false"}
-                  data-left-subview="tree"
-                  onMouseDownCapture={handlePaneMouseDownCapture("tree")}
-                  onDragEnterCapture={handlePaneDragEnterCapture(
-                    filesystemPresentation.items,
-                    "tree",
-                  )}
-                  onDragOverCapture={handlePaneDragOverCapture(
-                    filesystemPresentation.items,
-                    "tree",
-                  )}
-                  onDropCapture={handlePaneDropCapture(filesystemPresentation.items, "tree")}
-                >
-                  <TreeList
-                    items={filesystemPresentation.items}
-                    visibleItemIds={filesystemPresentation.visibleItemIds}
-                    isPaneFocused={isFocused}
-                    selectedTreeItemId={selectedTreeItemId}
-                    clickTimeoutRef={clickTimeoutRef}
-                    optimisticSelectedItemId={optimisticSelectedItemId}
-                    setOptimisticSelectedItemId={setOptimisticSelectedItemId}
-                    onToggleExpand={onToggleExpand}
-                    onToggleFavoritesExpanded={onToggleFavoritesExpanded}
-                    singleClickExpandTreeItems={singleClickExpandTreeItems}
-                    onClearSelection={onClearSelection}
-                    onNavigate={onNavigate}
-                    onNavigateFavorite={onNavigateFavorite}
-                    onSelectFavoritesRoot={onSelectFavoritesRoot}
-                    onItemContextMenu={onItemContextMenu}
-                    onItemDragEnter={onItemDragEnter}
-                    onItemDragOver={onItemDragOver}
-                    onItemDrop={onItemDrop}
-                    getItemDropIndicator={getItemDropIndicator}
-                    subview="tree"
-                    onSubviewFocus={() => onLeftPaneSubviewChange("tree")}
-                    registerRowRef={registerTreeRowRef}
-                  />
-                </div>
-              </div>
-            ) : (
-              renderIntegratedTree()
-            )}
-          </div>
-        ) : null}
+          ) : null}
+          {typeaheadQuery ? (
+            <div className="pane-typeahead pane-typeahead-center" aria-live="polite">
+              <span className="pane-typeahead-label">Jump to</span>
+              <span className="pane-typeahead-value">{typeaheadQuery}</span>
+            </div>
+          ) : null}
+          {favoritesPlacement === "separate" ? (
+            <div
+              className={`sidebar-tree filesystem-tree-section${
+                activeLeftPaneSubview === "tree" ? " active" : ""
+              }`}
+              data-drag-active={dragActive ? "true" : "false"}
+              data-left-subview="tree"
+              onMouseDownCapture={handlePaneMouseDownCapture("tree")}
+              onDragEnterCapture={handlePaneDragEnterCapture(filesystemPresentation.items, "tree")}
+              onDragOverCapture={handlePaneDragOverCapture(filesystemPresentation.items, "tree")}
+              onDropCapture={handlePaneDropCapture(filesystemPresentation.items, "tree")}
+            >
+              <TreeList
+                items={filesystemPresentation.items}
+                visibleItemIds={filesystemPresentation.visibleItemIds}
+                isPaneFocused={isFocused}
+                selectedTreeItemId={selectedTreeItemId}
+                clickTimeoutRef={clickTimeoutRef}
+                optimisticSelectedItemId={optimisticSelectedItemId}
+                setOptimisticSelectedItemId={setOptimisticSelectedItemId}
+                onToggleExpand={onToggleExpand}
+                onToggleFavoritesExpanded={onToggleFavoritesExpanded}
+                singleClickExpandTreeItems={singleClickExpandTreeItems}
+                onClearSelection={onClearSelection}
+                onNavigate={onNavigate}
+                onNavigateFavorite={onNavigateFavorite}
+                onSelectFavoritesRoot={onSelectFavoritesRoot}
+                onItemContextMenu={onItemContextMenu}
+                onItemDragEnter={onItemDragEnter}
+                onItemDragOver={onItemDragOver}
+                onItemDrop={onItemDrop}
+                getItemDropIndicator={getItemDropIndicator}
+                subview="tree"
+                onSubviewFocus={() => onLeftPaneSubviewChange("tree")}
+                registerRowRef={registerTreeRowRef}
+              />
+            </div>
+          ) : (
+            renderIntegratedTree()
+          )}
+          {showBottomRail ? (
+            <footer className="sidebar-bottom-rail" aria-label="Bottom rail">
+              {renderUtilityItems(false)}
+            </footer>
+          ) : null}
+        </div>
       </div>
     </aside>
   );
@@ -1715,16 +1516,4 @@ function TreeItemRow({
       ) : null}
     </div>
   );
-}
-
-function clampFavoritesPaneHeight(height: number, containerHeight: number): number {
-  const safeContainerHeight =
-    containerHeight > 0
-      ? containerHeight
-      : FAVORITES_PANE_DEFAULT_HEIGHT + FILESYSTEM_PANE_MIN_HEIGHT + EXPLORER_LAYOUT.resizerWidth;
-  const maxFavoritesHeight = Math.max(
-    FAVORITES_PANE_MIN_HEIGHT,
-    safeContainerHeight - FILESYSTEM_PANE_MIN_HEIGHT - EXPLORER_LAYOUT.resizerWidth,
-  );
-  return Math.round(Math.max(FAVORITES_PANE_MIN_HEIGHT, Math.min(maxFavoritesHeight, height)));
 }

@@ -1596,6 +1596,7 @@ function ActionButton({
 
 function ToolbarSurfaceEditor({
   title,
+  note,
   items,
   availableItems,
   lockedItems = [],
@@ -1606,6 +1607,8 @@ function ToolbarSurfaceEditor({
   onReset,
 }: {
   title: string;
+  // Says where the surface is when it is not showing in its usual place.
+  note?: string | undefined;
   items: ToolbarItemId[];
   availableItems: ToolbarItemId[];
   lockedItems?: ToolbarItemId[];
@@ -1823,6 +1826,7 @@ function ToolbarSurfaceEditor({
             }}
           >
             {items.length} items · drag to reorder
+            {note ? ` · ${note}` : ""}
           </div>
         </div>
         {onReset ? <ActionButton label="Reset" theme={theme} onClick={onReset} /> : null}
@@ -2508,6 +2512,8 @@ export function SettingsView({
   onReturnKeyActionChange = () => undefined,
   showSidebarRail = false,
   onShowSidebarRailChange = () => undefined,
+  showSidebarBottomRail = true,
+  onShowSidebarBottomRailChange = () => undefined,
   openItemLimit,
   themeOptions,
   accentOptions,
@@ -2615,6 +2621,8 @@ export function SettingsView({
   onReturnKeyActionChange?: (value: ReturnKeyAction) => void;
   showSidebarRail?: boolean;
   onShowSidebarRailChange?: (value: boolean) => void;
+  showSidebarBottomRail?: boolean;
+  onShowSidebarBottomRailChange?: (value: boolean) => void;
   openItemLimit: number;
   themeOptions: ReadonlyArray<{ value: ThemePreference; label: string; group?: "dark" | "light" }>;
   accentOptions: ReadonlyArray<{
@@ -2696,11 +2704,7 @@ export function SettingsView({
       const definition = getToolbarItemDefinition(itemId);
       return definition.allowDuplicates || !customizableTopToolbarItems.includes(itemId);
     });
-  const leftToolbarConfigured = new Set([
-    ...customizableLeftMainItems,
-    ...customizableLeftUtilityItems,
-    "settings",
-  ]);
+  // Each rail has its own list: an item on one rail can still be added to the other.
   const leftMainAvailableItems = getToolbarItemsForLeftZone("main")
     .map((item) => item.id)
     .filter((itemId) => {
@@ -2708,7 +2712,7 @@ export function SettingsView({
         return false;
       }
       const definition = getToolbarItemDefinition(itemId);
-      return definition.allowDuplicates || !leftToolbarConfigured.has(itemId);
+      return definition.allowDuplicates || !customizableLeftMainItems.includes(itemId);
     });
   const leftUtilityAvailableItems = getToolbarItemsForLeftZone("utility")
     .map((item) => item.id)
@@ -2717,7 +2721,7 @@ export function SettingsView({
         return false;
       }
       const definition = getToolbarItemDefinition(itemId);
-      return definition.allowDuplicates || !leftToolbarConfigured.has(itemId);
+      return definition.allowDuplicates || !customizableLeftUtilityItems.includes(itemId);
     });
   const sortedTopToolbarAvailableItems = sortToolbarAvailableItems(
     topToolbarAvailableItems,
@@ -2822,15 +2826,13 @@ export function SettingsView({
   const handleLeftToolbarAdd = useCallback(
     (zone: "main" | "utility", itemId: ToolbarItemId) => {
       const definition = getToolbarItemDefinition(itemId);
-      if (
-        itemId === "settings" ||
-        (!definition.allowDuplicates && leftToolbarConfigured.has(itemId))
-      ) {
+      const zoneItems = zone === "main" ? customizableLeftMainItems : customizableLeftUtilityItems;
+      if (itemId === "settings" || (!definition.allowDuplicates && zoneItems.includes(itemId))) {
         return;
       }
       updateLeftToolbarZone(zone, (items) => [...items, itemId]);
     },
-    [leftToolbarConfigured, updateLeftToolbarZone],
+    [customizableLeftMainItems, customizableLeftUtilityItems, updateLeftToolbarZone],
   );
 
   return (
@@ -3848,15 +3850,28 @@ export function SettingsView({
             }
           >
             <SettingRow
-              title="Show command rail"
-              desc="Adds a narrow strip of icon buttons beside the sidebar. When off, the sidebar shows labeled sections and the View Options menu holds the view toggles."
+              title="Show left rail"
+              desc="A strip of icon buttons down the left edge of the sidebar. When off, the View Options menu in the toolbar holds the view toggles."
               theme={palette}
               right={
                 <Toggle
                   checked={showSidebarRail}
                   onToggle={() => onShowSidebarRailChange(!showSidebarRail)}
                   theme={palette}
-                  label="Show command rail"
+                  label="Show left rail"
+                />
+              }
+            />
+            <SettingRow
+              title="Show bottom rail"
+              desc="A row of icon buttons under the sidebar. When off, its buttons move to the foot of the left rail."
+              theme={palette}
+              right={
+                <Toggle
+                  checked={showSidebarBottomRail}
+                  onToggle={() => onShowSidebarBottomRailChange(!showSidebarBottomRail)}
+                  theme={palette}
+                  label="Show bottom rail"
                 />
               }
             />
@@ -3875,6 +3890,7 @@ export function SettingsView({
               <div style={{ height: "1px", background: palette.separator }} />
               <ToolbarSurfaceEditor
                 title="Left rail"
+                note={showSidebarRail ? undefined : "Hidden. Turn on Show left rail to see these."}
                 items={customizableLeftMainItems}
                 availableItems={sortedLeftMainAvailableItems}
                 theme={palette}
@@ -3892,7 +3908,14 @@ export function SettingsView({
               />
               <div style={{ height: "1px", background: palette.separator }} />
               <ToolbarSurfaceEditor
-                title="Bottom utility"
+                title="Bottom rail"
+                note={
+                  showSidebarBottomRail
+                    ? undefined
+                    : showSidebarRail
+                      ? "Shown at the foot of the left rail."
+                      : "Hidden. Turn on Show bottom rail to see these."
+                }
                 items={customizableLeftUtilityItems}
                 availableItems={sortedLeftUtilityAvailableItems}
                 theme={palette}

@@ -388,6 +388,10 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
       typeof record.showSidebarRail === "boolean"
         ? record.showSidebarRail
         : currentDefaults.showSidebarRail,
+    showSidebarBottomRail:
+      typeof record.showSidebarBottomRail === "boolean"
+        ? record.showSidebarBottomRail
+        : currentDefaults.showSidebarBottomRail,
     terminalApp: sanitizeTerminalApplicationSelection(record.terminalApp),
     defaultTextEditor: sanitizeApplicationSelection(
       record.defaultTextEditor,

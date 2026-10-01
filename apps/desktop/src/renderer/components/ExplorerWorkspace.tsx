@@ -164,7 +164,8 @@ export function ExplorerWorkspace({
   canRunRendererCommand,
   onRendererCommand,
   onPaneResizeKey,
-  showSidebarRail = true,
+  showSidebarRail = false,
+  showSidebarBottomRail = true,
   toolbarTitle = "",
   toolbarSubtitle = "",
 }: {
@@ -221,6 +222,7 @@ export function ExplorerWorkspace({
   onRendererCommand: (command: RendererCommandType) => void;
   onPaneResizeKey: (pane: "tree" | "inspector", event: ReactKeyboardEvent<HTMLDivElement>) => void;
   showSidebarRail?: boolean;
+  showSidebarBottomRail?: boolean;
   toolbarTitle?: string;
   toolbarSubtitle?: string;
 }) {
@@ -987,7 +989,11 @@ export function ExplorerWorkspace({
           }}
         >
           <div className="workspace-sidebar-cell" style={{ gridColumn: "1", gridRow: "1 / -1" }}>
-            <TreePane {...treePaneProps} showRail={showSidebarRail} />
+            <TreePane
+              {...treePaneProps}
+              showRail={showSidebarRail}
+              showBottomRail={showSidebarBottomRail}
+            />
           </div>
           <div
             className="pane-resizer"

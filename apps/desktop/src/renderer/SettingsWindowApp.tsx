@@ -116,6 +116,7 @@ export function SettingsWindowApp() {
     topToolbarItems: preferences.topToolbarItems,
     leftToolbarItems: preferences.leftToolbarItems,
     showSidebarRail: preferences.showSidebarRail,
+    showSidebarBottomRail: preferences.showSidebarBottomRail,
     restoreLastVisitedFolderOnStartup: preferences.restoreLastVisitedFolderOnStartup,
     favorites: preferences.favorites,
     favoritesPlacement: preferences.favoritesPlacement,
@@ -357,6 +358,8 @@ export function SettingsWindowApp() {
             leftToolbarItems={preferences.leftToolbarItems}
             showSidebarRail={preferences.showSidebarRail}
             onShowSidebarRailChange={preferences.setShowSidebarRail}
+            showSidebarBottomRail={preferences.showSidebarBottomRail}
+            onShowSidebarBottomRailChange={preferences.setShowSidebarBottomRail}
             restoreLastVisitedFolderOnStartup={preferences.restoreLastVisitedFolderOnStartup}
             homePath={homePath}
             terminalApp={preferences.terminalApp}

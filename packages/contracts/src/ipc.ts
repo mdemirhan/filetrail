@@ -674,6 +674,7 @@ export const appPreferencesSchema = z.object({
   topToolbarItems: z.array(toolbarItemIdSchema),
   leftToolbarItems: leftToolbarItemsSchema,
   showSidebarRail: z.boolean(),
+  showSidebarBottomRail: z.boolean(),
   terminalApp: applicationSelectionSchema.nullable(),
   defaultTextEditor: applicationSelectionSchema,
   openWithApplications: z.array(openWithApplicationSchema),

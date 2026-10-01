@@ -113,6 +113,9 @@ export function useAppPreferences() {
     DEFAULT_APP_PREFERENCES.leftToolbarItems,
   );
   const [showSidebarRail, setShowSidebarRail] = useState(DEFAULT_APP_PREFERENCES.showSidebarRail);
+  const [showSidebarBottomRail, setShowSidebarBottomRail] = useState(
+    DEFAULT_APP_PREFERENCES.showSidebarBottomRail,
+  );
   const [restoreLastVisitedFolderOnStartup, setRestoreLastVisitedFolderOnStartup] = useState(
     DEFAULT_APP_PREFERENCES.restoreLastVisitedFolderOnStartup,
   );
@@ -267,6 +270,8 @@ export function useAppPreferences() {
     setLeftToolbarItems,
     showSidebarRail,
     setShowSidebarRail,
+    showSidebarBottomRail,
+    setShowSidebarBottomRail,
     restoreLastVisitedFolderOnStartup,
     setRestoreLastVisitedFolderOnStartup,
     lastGoToFolderPath,
@@ -368,6 +373,7 @@ export function applyPreferencesPatch(store: AppPreferencesStore, patch: Incomin
   set("topToolbarItems", store.setTopToolbarItems);
   set("leftToolbarItems", store.setLeftToolbarItems);
   set("showSidebarRail", store.setShowSidebarRail);
+  set("showSidebarBottomRail", store.setShowSidebarBottomRail);
   set("restoreLastVisitedFolderOnStartup", store.setRestoreLastVisitedFolderOnStartup);
   set("favorites", store.setFavorites);
   set("favoritesPlacement", store.setFavoritesPlacement);

@@ -341,7 +341,7 @@ export function useExplorerNavigationController(args: {
   } | null {
     if (focusedPane === "tree") {
       if (favoritesPlacement === "separate" && leftPaneSubviewRef.current === "favorites") {
-        const element = treePaneRef.current?.querySelector<HTMLElement>(".favorites-scroll");
+        const element = treePaneRef.current?.querySelector<HTMLElement>(".sidebar-sections");
         return element ? { axis: "vertical", element } : null;
       }
       const element = treePaneRef.current?.querySelector<HTMLElement>(".tree-scroll");

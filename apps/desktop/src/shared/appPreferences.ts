@@ -293,6 +293,7 @@ export type AppPreferences = {
   topToolbarItems: ToolbarItemId[];
   leftToolbarItems: LeftToolbarItems;
   showSidebarRail: boolean;
+  showSidebarBottomRail: boolean;
   terminalApp: ApplicationSelection | null;
   defaultTextEditor: ApplicationSelection;
   openWithApplications: OpenWithApplication[];
@@ -363,6 +364,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
     utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
   },
   showSidebarRail: false,
+  showSidebarBottomRail: true,
   terminalApp: null,
   defaultTextEditor: { ...DEFAULT_TEXT_EDITOR },
   openWithApplications: DEFAULT_OPEN_WITH_APPLICATIONS.map((entry) => ({ ...entry })),

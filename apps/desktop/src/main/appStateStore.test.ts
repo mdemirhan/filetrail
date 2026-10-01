@@ -49,6 +49,7 @@ describe("appStateStore", () => {
       autoLightTheme: "macos-light",
       autoDarkTheme: "macos-dark",
       showSidebarRail: false,
+      showSidebarBottomRail: true,
       returnKeyAction: "rename",
       iconTheme: "native",
       accent: "#d4845a",
@@ -273,6 +274,7 @@ describe("appStateStore", () => {
       autoLightTheme: "macos-light",
       autoDarkTheme: "macos-dark",
       showSidebarRail: false,
+      showSidebarBottomRail: true,
       returnKeyAction: "rename",
       iconTheme: "colorblock",
       accent: "#2cb5a0",
@@ -532,7 +534,7 @@ describe("appStateStore", () => {
     expect(reloaded.getPreferences().topToolbarItems).toEqual(["back", "search"]);
     expect(reloaded.getPreferences().leftToolbarItems).toEqual({
       main: ["home", "copyPath"],
-      utility: ["theme"],
+      utility: ["copyPath", "theme"],
     });
     expect(reloaded.getPreferences().treeWidth).toBe(220);
     expect(reloaded.getPreferences().inspectorWidth).toBe(480);

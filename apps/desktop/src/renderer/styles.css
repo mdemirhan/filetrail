@@ -1823,15 +1823,6 @@ body.resizing-panels * {
   cursor: col-resize !important;
 }
 
-body.resizing-panels-vertical {
-  cursor: row-resize;
-  user-select: none;
-}
-
-body.resizing-panels-vertical * {
-  cursor: row-resize !important;
-}
-
 .tree-pane,
 .get-info-panel {
   display: grid;
@@ -2103,12 +2094,14 @@ body.resizing-panels-vertical * {
 
 .sidebar-shell {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr);
+  grid-template-columns: 38px minmax(0, 1fr);
   min-height: 0;
   height: 100%;
   overflow: visible;
 }
 
+/* The left rail sits on the sidebar's own background, with the same buttons as the bottom
+   rail, so the sidebar looks the same with or without it. */
 .sidebar-rail {
   position: relative;
   z-index: 2;
@@ -2118,9 +2111,7 @@ body.resizing-panels-vertical * {
   gap: 2px;
   min-height: 0;
   overflow: hidden;
-  padding: 10px 0;
-  background: color-mix(in srgb, var(--toolbar-bg) 88%, black);
-  border-right: 1px solid var(--border);
+  padding: 2px 0 6px 4px;
 }
 
 .sidebar-rail-group {
@@ -2150,20 +2141,26 @@ body.resizing-panels-vertical * {
 }
 
 .sidebar-rail-button {
-  width: 38px;
-  height: 36px;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 28px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 6px;
   background: transparent;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: var(--sidebar-rail-icon, var(--text-tertiary));
+  cursor: default;
 }
 
-.sidebar-rail-button:hover {
+.sidebar-rail-button:hover:not(:disabled) {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+
+.sidebar-rail-button:disabled {
+  opacity: 0.4;
 }
 
 .sidebar-rail-button.active {
@@ -2172,10 +2169,11 @@ body.resizing-panels-vertical * {
 }
 
 .sidebar-rail-separator {
-  width: 22px;
+  flex: 0 0 auto;
+  width: 18px;
   height: 1px;
   background: var(--border);
-  margin: 6px 0;
+  margin: 5px 0;
 }
 
 .sidebar-rail-menu-anchor {
@@ -2264,13 +2262,6 @@ body.resizing-panels-vertical * {
   overflow: hidden;
 }
 
-.sidebar-split-pane {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  flex-direction: column;
-}
-
 .favorites-pane-section {
   min-height: 0;
   min-width: 0;
@@ -2281,35 +2272,6 @@ body.resizing-panels-vertical * {
 .favorites-pane-section.active,
 .filesystem-tree-section.active {
   background: color-mix(in srgb, var(--sidebar-bg) 94%, var(--bg-hover));
-}
-
-.favorites-pane-resizer {
-  position: relative;
-  height: 8px;
-  flex: 0 0 8px;
-  cursor: row-resize;
-  background: transparent;
-}
-
-.favorites-pane-resizer::before {
-  content: "";
-  position: absolute;
-  inset: 3px 0;
-  background: var(--border);
-  transition: background 0.15s ease;
-}
-
-.favorites-pane-resizer:hover::before {
-  background: var(--accent-blue-border);
-}
-
-.favorites-scroll {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
 }
 
 /* Rows fit the pane and long names end in an ellipsis (full path in the tooltip), like the
@@ -2346,7 +2308,6 @@ body.resizing-panels-vertical * {
 }
 
 .tree-scroll::-webkit-scrollbar,
-.favorites-scroll::-webkit-scrollbar,
 .content-scroll::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -2357,20 +2318,17 @@ body.resizing-panels-vertical * {
 }
 
 .tree-scroll::-webkit-scrollbar-corner,
-.favorites-scroll::-webkit-scrollbar-corner,
 .content-scroll::-webkit-scrollbar-corner {
   background: transparent;
 }
 
 .tree-scroll::-webkit-scrollbar-thumb,
-.favorites-scroll::-webkit-scrollbar-thumb,
 .content-scroll::-webkit-scrollbar-thumb {
   background: var(--scroll-thumb);
   border-radius: 999px;
 }
 
 .tree-scroll:hover::-webkit-scrollbar-thumb,
-.favorites-scroll:hover::-webkit-scrollbar-thumb,
 .content-scroll:hover::-webkit-scrollbar-thumb {
   background: var(--scroll-thumb-hover, var(--scroll-thumb));
 }
@@ -4734,8 +4692,23 @@ body.platform-macos .settings-view[data-layout="compact"] {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.sidebar-shell-no-rail .sidebar-main {
+.sidebar-main-native {
   background: transparent;
+}
+
+/* Beside the left rail the rows and labels give back the gutter the rail already provides. */
+.sidebar-shell:not(.sidebar-shell-no-rail) .sidebar-main-native .tree-row {
+  margin-left: 4px;
+  width: calc(100% - 14px);
+}
+
+.sidebar-shell:not(.sidebar-shell-no-rail) .sidebar-section-header {
+  width: calc(100% - 14px);
+  margin-left: 4px;
+}
+
+.sidebar-shell:not(.sidebar-shell-no-rail) .sidebar-header {
+  padding-left: 14px;
 }
 
 .sidebar-section-title,
@@ -4763,31 +4736,27 @@ body.platform-macos .settings-view[data-layout="compact"] {
   background: transparent;
 }
 
-.sidebar-footer {
+/* The bottom rail: the utility buttons in a row under the tree, wrapping when the sidebar is
+   too narrow for them. */
+.sidebar-bottom-rail {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 2px;
-  flex: 0 0 40px;
-  padding: 0 10px;
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 6px 10px;
   border-top: 1px solid var(--border-light);
 }
 
-.sidebar-footer-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 28px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-tertiary);
-  cursor: default;
+.sidebar-bottom-rail .sidebar-rail-separator {
+  width: 1px;
+  height: 16px;
+  margin: 0 5px;
 }
 
-.sidebar-footer-button:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+.sidebar-bottom-rail .sidebar-rail-menu-anchor {
+  width: auto;
 }
 
 /* ── Toolbar ──────────────────────────────────────────────────────────── */

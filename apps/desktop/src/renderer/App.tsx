@@ -181,6 +181,8 @@ export function App() {
     setLeftToolbarItems,
     showSidebarRail,
     setShowSidebarRail,
+    showSidebarBottomRail,
+    setShowSidebarBottomRail,
     restoreLastVisitedFolderOnStartup,
     setRestoreLastVisitedFolderOnStartup,
     lastGoToFolderPath,
@@ -926,6 +928,7 @@ export function App() {
     topToolbarItems,
     leftToolbarItems,
     showSidebarRail,
+    showSidebarBottomRail,
     propertiesOpen: infoPanelOpen,
     detailRowOpen: infoRowOpen,
     terminalApp,
@@ -1105,6 +1108,7 @@ export function App() {
         setTopToolbarItems(preferences.topToolbarItems);
         setLeftToolbarItems(preferences.leftToolbarItems);
         setShowSidebarRail(preferences.showSidebarRail);
+        setShowSidebarBottomRail(preferences.showSidebarBottomRail);
         setInfoPanelOpen(preferences.propertiesOpen);
         setInfoRowOpen(preferences.detailRowOpen);
         setSortBy(preferences.sortBy);
@@ -1438,13 +1442,11 @@ export function App() {
               nodes: treeNodes,
               favorites,
               favoritesPlacement,
-              favoritesPaneHeight,
               activeLeftPaneSubview: leftPaneSubview,
               favoritesExpanded,
               rootPath: treeRootPath,
               onFocusChange: (focused) => setFocusedPane(focused ? "tree" : null),
               onLeftPaneSubviewChange: setLeftPaneSubview,
-              onFavoritesPaneHeightChange: setFavoritesPaneHeight,
               onGoHome: goHome,
               canGoBack,
               onGoBack: goBack,
@@ -1840,6 +1842,7 @@ export function App() {
             onRendererCommand={runRendererCommand}
             onPaneResizeKey={handlePaneResizeKey}
             showSidebarRail={showSidebarRail}
+            showSidebarBottomRail={showSidebarBottomRail}
             toolbarTitle={
               isSearchMode
                 ? `Searching “${getFolderDisplayName(searchRootPath)}”`

@@ -24,15 +24,15 @@ describe("toolbarItems", () => {
     ]);
   });
 
-  it("sanitizes left toolbar items and prevents duplicates across zones", () => {
+  it("sanitizes each rail's items on its own, so both rails can hold the same item", () => {
     expect(
       sanitizeLeftToolbarItems({
         main: ["home", "search", "copyPath", "copyPath", "leftSeparator", "leftSeparator"],
-        utility: ["settings", "copyPath", "theme", "sort", "leftSeparator"],
+        utility: ["settings", "copyPath", "copyPath", "theme", "sort", "leftSeparator"],
       }),
     ).toEqual({
       main: ["home", "copyPath", "leftSeparator", "leftSeparator"],
-      utility: ["settings", "theme", "leftSeparator"],
+      utility: ["settings", "copyPath", "theme", "leftSeparator"],
     });
   });
 

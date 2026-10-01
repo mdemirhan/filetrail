@@ -19,6 +19,9 @@ export function toPreferencePatch(
   if (value.showSidebarRail !== undefined) {
     patch.showSidebarRail = value.showSidebarRail;
   }
+  if (value.showSidebarBottomRail !== undefined) {
+    patch.showSidebarBottomRail = value.showSidebarBottomRail;
+  }
   if (value.returnKeyAction !== undefined) {
     patch.returnKeyAction = value.returnKeyAction;
   }
