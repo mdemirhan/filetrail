@@ -1,8 +1,10 @@
 import {
   formatDateTime,
+  formatExactDateTime,
   formatFolderSizeDetail,
   formatHintSize,
   formatPermissionMode,
+  formatRelativeDateTime,
   formatRelativeDuration,
   formatShortDateTime,
   formatSize,
@@ -25,13 +27,73 @@ describe("formatting helpers", () => {
     expect(formatDateTime("bad-date")).toBe("Not available");
   });
 
+  describe("formatRelativeDateTime", () => {
+    // A Thursday afternoon. Built from local dates, so the cases hold in any time zone.
+    const NOW = new Date(2026, 9, 1, 14, 45).getTime();
+    const at = (...parts: [number, number, number, number, number]) =>
+      formatRelativeDateTime(new Date(...parts).getTime(), NOW);
+
+    it("counts in minutes within the hour", () => {
+      expect(formatRelativeDateTime(NOW - 20_000, NOW)).toBe("Just now");
+      expect(formatRelativeDateTime(NOW - 60_000, NOW)).toBe("1 min ago");
+      expect(at(2026, 9, 1, 14, 21)).toBe("24 min ago");
+      expect(formatRelativeDateTime(NOW - 59 * 60_000 - 59_000, NOW)).toBe("59 min ago");
+      expect(formatRelativeDateTime(NOW - 60 * 60_000, NOW)).toBe("Today, 1:45 PM");
+    });
+
+    it("keeps counting minutes across midnight", () => {
+      const justAfterMidnight = new Date(2026, 9, 2, 0, 10).getTime();
+      expect(
+        formatRelativeDateTime(new Date(2026, 9, 1, 23, 50).getTime(), justAfterMidnight),
+      ).toBe("20 min ago");
+    });
+
+    it("names today, yesterday and the weekdays before them", () => {
+      expect(at(2026, 9, 1, 9, 12)).toBe("Today, 9:12 AM");
+      expect(at(2026, 9, 1, 0, 0)).toBe("Today, 12:00 AM");
+      expect(at(2026, 8, 30, 18, 3)).toBe("Yesterday, 6:03 PM");
+      expect(at(2026, 8, 28, 16, 5)).toBe("Mon, 4:05 PM");
+      // Six days back is the last with a weekday; a week back would name today's own.
+      expect(at(2026, 8, 25, 0, 0)).toBe("Fri, 12:00 AM");
+      expect(at(2026, 8, 24, 23, 59)).toBe("Sep 24, 11:59 PM");
+    });
+
+    it("drops the year for this year and the time for older ones", () => {
+      expect(at(2026, 5, 12, 8, 30)).toBe("Jun 12, 8:30 AM");
+      expect(at(2025, 11, 31, 22, 0)).toBe("Dec 31, 2025");
+      expect(at(2024, 2, 3, 11, 15)).toBe("Mar 3, 2024");
+    });
+
+    it("counts days on the calendar across daylight saving changes", () => {
+      const afterFallBack = new Date(2026, 10, 2, 10, 0).getTime();
+      expect(formatRelativeDateTime(new Date(2026, 10, 1, 0, 30).getTime(), afterFallBack)).toBe(
+        "Yesterday, 12:30 AM",
+      );
+      expect(formatRelativeDateTime(new Date(2026, 9, 31, 23, 30).getTime(), afterFallBack)).toBe(
+        "Sat, 11:30 PM",
+      );
+    });
+
+    it("shows a date in the future in full, allowing for a clock a little ahead", () => {
+      expect(formatRelativeDateTime(NOW + 30_000, NOW)).toBe("Just now");
+      expect(formatRelativeDateTime(NOW + 2 * 3_600_000, NOW)).toBe("Oct 1, 2026, 4:45 PM");
+    });
+
+    it("gives the whole date for the tooltip", () => {
+      expect(formatExactDateTime(new Date(2026, 9, 1, 14, 44, 7).getTime())).toBe(
+        "Thursday, October 1, 2026 at 2:44:07 PM",
+      );
+    });
+  });
+
   it("formats bytes and deferred states", () => {
     expect(formatSize(2048, "ready")).toBe("2.0 KB");
     expect(formatSize(null, "deferred")).toBe("Not yet available");
   });
 
   it("formats Unix permission modes", () => {
-    expect(formatPermissionMode(0o755)).toBe("rwxr-xr-x (755)");
+    expect(formatPermissionMode(0o755)).toBe("755");
+    expect(formatPermissionMode(0o7)).toBe("007");
     expect(formatPermissionMode(null)).toBe("Unavailable");
   });
 

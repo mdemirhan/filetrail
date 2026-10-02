@@ -2710,6 +2710,11 @@ body.resizing-panels * {
   align-self: stretch;
 }
 
+.details-permissions {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
 .details-size-bar {
   position: absolute;
   top: 3px;

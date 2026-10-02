@@ -1,15 +1,11 @@
 import type { ReactNode } from "react";
 
 import type { FolderSizeEntry } from "../hooks/useFolderSizeCache";
+import { useRelativeDate } from "../hooks/useRelativeDate";
 import { isFolderSizeEligibleKind } from "../lib/explorerAppUtils";
 import type { DirectoryEntry, DirectoryEntryMetadata, ItemProperties } from "../lib/explorerTypes";
 import { FileIcon } from "../lib/fileIcons";
-import {
-  formatDateTime,
-  formatFolderSizeDetail,
-  formatPermissionMode,
-  formatSize,
-} from "../lib/formatting";
+import { formatFolderSizeDetail, formatSize, splitPermissionMode } from "../lib/formatting";
 import { fallbackKindLabel, folderEntryForPath } from "../lib/infoPreview";
 
 export function InfoRow({
@@ -70,8 +66,9 @@ export function InfoRow({
     showFolderSizeForEntry && folderSizeEntry?.status === "ready"
       ? formatFolderSizeText(folderSizeEntry)
       : undefined;
-  const modifiedLabel = known ? formatDateTime(known.modifiedAt) : "—";
-  const permissionsLabel = known ? formatPermissionMode(known.permissionMode) : "—";
+  // The code ("644"); the letters (rw-r--r--) are the tooltip.
+  const permissions = known ? splitPermissionMode(known.permissionMode) : null;
+  const permissionsLabel = known ? (permissions?.octal ?? "Unavailable") : "—";
 
   // Name on the first line, using the full width; the facts on the second, each in a
   // fixed column so switching items only changes the text.
@@ -92,16 +89,30 @@ export function InfoRow({
             <InfoRowFact label="Size" title={sizeTitle}>
               {sizeLabel}
             </InfoRowFact>
-            <InfoRowFact label="Modified" title={modifiedLabel}>
-              {modifiedLabel}
-            </InfoRowFact>
-            <InfoRowFact label="Permissions" title={permissionsLabel}>
+            <InfoRowModified value={known?.modifiedAt} loaded={Boolean(known)} />
+            <InfoRowFact label="Permissions" title={permissions?.symbolic}>
               {permissionsLabel}
             </InfoRowFact>
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+// The date relative to now ("Today, 9:12 AM"), with the whole date as the tooltip.
+function InfoRowModified({
+  value,
+  loaded,
+}: {
+  value: string | null | undefined;
+  loaded: boolean;
+}) {
+  const date = useRelativeDate(value);
+  return (
+    <InfoRowFact label="Modified" title={date?.exact}>
+      {date?.text ?? (loaded ? "Not available" : "—")}
+    </InfoRowFact>
   );
 }
 

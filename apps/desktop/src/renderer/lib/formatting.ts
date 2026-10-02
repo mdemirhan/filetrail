@@ -14,6 +14,70 @@ export function formatDateTime(value: string | null): string {
   }).format(date);
 }
 
+const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
+// A clock a little ahead of this one still reads as now; further ahead gets the full date.
+const FUTURE_TOLERANCE_MS = MINUTE_MS;
+
+const TIME_FORMAT = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
+const WEEKDAY_FORMAT = new Intl.DateTimeFormat(undefined, { weekday: "short" });
+const DAY_FORMAT = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
+const DAY_YEAR_FORMAT = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+});
+const FULL_FORMAT = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
+const EXACT_FORMAT = new Intl.DateTimeFormat(undefined, { dateStyle: "full", timeStyle: "medium" });
+
+// Whether a date reads as minutes ("24 min ago"), and so changes from one minute to the next.
+export function isWithinLastHour(ms: number, now: number): boolean {
+  return ms <= now + FUTURE_TOLERANCE_MS && now - ms < HOUR_MS;
+}
+
+// A date for a list, said the way it would be said aloud: the closer it is, the more
+// relative it reads, and the year or the time is left out where it adds nothing.
+//   "Just now", "24 min ago", "Today, 9:12 AM", "Yesterday, 6:03 PM", "Mon, 4:05 PM",
+//   "Jun 12, 8:30 AM", "Mar 3, 2024"
+// A date in the future (a wrong clock somewhere) is shown in full rather than as "Just now".
+export function formatRelativeDateTime(ms: number, now: number): string {
+  const date = new Date(ms);
+  if (ms > now + FUTURE_TOLERANCE_MS) {
+    return FULL_FORMAT.format(date);
+  }
+  const age = Math.max(0, now - ms);
+  if (age < MINUTE_MS) {
+    return "Just now";
+  }
+  if (age < HOUR_MS) {
+    return `${Math.floor(age / MINUTE_MS)} min ago`;
+  }
+  const today = new Date(now);
+  // Calendar days, not 24-hour steps: days around a daylight saving change are 23 or 25 hours.
+  const startOfDay = (daysAgo: number) =>
+    new Date(today.getFullYear(), today.getMonth(), today.getDate() - daysAgo).getTime();
+  const time = TIME_FORMAT.format(date);
+  if (ms >= startOfDay(0)) {
+    return `Today, ${time}`;
+  }
+  if (ms >= startOfDay(1)) {
+    return `Yesterday, ${time}`;
+  }
+  // The six days before today: a week back would name today's own weekday.
+  if (ms >= startOfDay(6)) {
+    return `${WEEKDAY_FORMAT.format(date)}, ${time}`;
+  }
+  if (date.getFullYear() === today.getFullYear()) {
+    return `${DAY_FORMAT.format(date)}, ${time}`;
+  }
+  return DAY_YEAR_FORMAT.format(date);
+}
+
+// The whole date, to the second, for the tooltip of a relative one.
+export function formatExactDateTime(ms: number): string {
+  return EXACT_FORMAT.format(new Date(ms));
+}
+
 export function formatSize(
   sizeBytes: number | null,
   sizeStatus: "ready" | "deferred" | "unavailable",
@@ -39,12 +103,10 @@ export function formatSize(
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
+// The mode as its code ("755"). The letters (rwxr-xr-x) say the same thing at three times
+// the width, so views show the code and keep the letters for the tooltip.
 export function formatPermissionMode(permissionMode: number | null): string {
-  const parts = splitPermissionMode(permissionMode);
-  if (!parts) {
-    return "Unavailable";
-  }
-  return `${parts.symbolic} (${parts.octal})`;
+  return splitPermissionMode(permissionMode)?.octal ?? "Unavailable";
 }
 
 // Exposes the symbolic/octal split so views can choose whether they want one combined

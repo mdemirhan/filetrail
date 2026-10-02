@@ -225,7 +225,9 @@ describe("InfoRow with list metadata", () => {
 
     expect(screen.getByText("Plain Text Document")).toBeInTheDocument();
     expect(screen.getByText("2.0 KB")).toBeInTheDocument();
-    expect(screen.getByText("rw-r--r-- (644)")).toBeInTheDocument();
+    // The code is shown; the letters are its tooltip.
+    expect(screen.getByText("644")).toBeInTheDocument();
+    expect(screen.getByTitle("rw-r--r--")).toBeInTheDocument();
     expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
 

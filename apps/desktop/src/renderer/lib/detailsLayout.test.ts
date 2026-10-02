@@ -40,16 +40,16 @@ describe("detailsLayout", () => {
     );
 
     expect(getDetailsTableWidth(DEFAULT_DETAIL_COLUMN_WIDTHS, ["name", "modified", "size"])).toBe(
-      320 + 168 + 108 + DETAILS_LAYOUT.columnGap * 2 + DETAILS_LAYOUT.rowPadding,
+      320 + 152 + 108 + DETAILS_LAYOUT.columnGap * 2 + DETAILS_LAYOUT.rowPadding,
     );
   });
 
   describe("fitDetailColumns", () => {
-    // Name 320, Date Modified 168, Size 108, Kind 148.
+    // Name 320, Date Modified 152, Size 108, Kind 148.
     const widths = DEFAULT_DETAIL_COLUMN_WIDTHS;
     const columns = ["name", "modified", "size", "kind"] as const;
     // The four columns, three gaps and the row padding.
-    const fullWidth = 744 + 36 + 24;
+    const fullWidth = 728 + 36 + 24;
 
     it("changes nothing when the table fits or the pane is not measured yet", () => {
       expect(fitDetailColumns({ columns, widths, availableWidth: fullWidth })).toEqual({
@@ -84,13 +84,13 @@ describe("detailsLayout", () => {
       expect(withoutKind.columns).toEqual(["name", "modified", "size"]);
       expect(withoutKind.widths.name).toBe(319);
 
-      // Name at its floor, Date Modified, Size, two gaps and the padding come to 484.
-      expect(fitDetailColumns({ columns, widths, availableWidth: 484 }).columns).toEqual([
+      // Name at its floor, Date Modified, Size, two gaps and the padding come to 468.
+      expect(fitDetailColumns({ columns, widths, availableWidth: 468 }).columns).toEqual([
         "name",
         "modified",
         "size",
       ]);
-      expect(fitDetailColumns({ columns, widths, availableWidth: 483 }).columns).toEqual([
+      expect(fitDetailColumns({ columns, widths, availableWidth: 467 }).columns).toEqual([
         "name",
         "modified",
       ]);
@@ -115,7 +115,7 @@ describe("detailsLayout", () => {
 
     it("leaves the saved widths of the other columns alone", () => {
       const fitted = fitDetailColumns({ columns, widths, availableWidth: 400 });
-      expect(fitted.widths).toMatchObject({ modified: 168, size: 108, kind: 148 });
+      expect(fitted.widths).toMatchObject({ modified: 152, size: 108, kind: 148 });
     });
   });
 });

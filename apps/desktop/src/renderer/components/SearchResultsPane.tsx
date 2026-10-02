@@ -9,12 +9,13 @@ import type {
 } from "../../shared/appPreferences";
 
 import { useElementSize } from "../hooks/useElementSize";
+import { useRelativeDate } from "../hooks/useRelativeDate";
 import { isSelectionNarrowingClick } from "../lib/contentSelection";
 import type { ClipboardSummary } from "../lib/copyPasteClipboard";
 import type { DirectoryEntryMetadata } from "../lib/explorerTypes";
 import { FileIcon } from "../lib/fileIcons";
 import { isKeyboardOwnedFormControl } from "../lib/focusedEditTarget";
-import { formatDateTime, formatSize, splitDisplayName } from "../lib/formatting";
+import { formatSize, splitDisplayName } from "../lib/formatting";
 import { resolveSearchResultsColumnLayout } from "../lib/responsiveLayout";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
 import { getVirtualRange } from "../lib/virtualization";
@@ -553,9 +554,7 @@ export function SearchResultsPane({
                   <span className="search-result-path">
                     {formatResultFolder(result.relativeParentPath, rootPath)}
                   </span>
-                  <span className="search-result-meta">
-                    {formatResultModified(metadataByPath[result.path])}
-                  </span>
+                  <ResultModified value={metadataByPath[result.path]?.modifiedAt} />
                   <span className="search-result-meta search-result-size">
                     {formatResultSize(result, metadataByPath[result.path])}
                   </span>
@@ -611,8 +610,14 @@ function renderHighlighted(
   );
 }
 
-function formatResultModified(metadata: DirectoryEntryMetadata | undefined): string {
-  return metadata?.modifiedAt ? formatDateTime(metadata.modifiedAt) : "";
+// Empty until the row's metadata has loaded.
+function ResultModified({ value }: { value: string | null | undefined }) {
+  const date = useRelativeDate(value);
+  return (
+    <span className="search-result-meta" title={date?.exact}>
+      {date?.text ?? ""}
+    </span>
+  );
 }
 
 function formatResultSize(

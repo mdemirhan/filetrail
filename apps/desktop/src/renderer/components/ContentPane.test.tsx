@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 
 import { ContentPane } from "./ContentPane";
 
@@ -456,8 +456,8 @@ describe("ContentPane", () => {
     const row = screen.getByRole("row", { name: /alpha\.txt/ });
     expect(row).toHaveTextContent("Plain Text Document");
     // Both dates are shown: created in March, modified in April.
-    expect(row).toHaveTextContent(/Mar 2, 2026/);
-    expect(row).toHaveTextContent(/Apr 5, 2026/);
+    expect(row).toHaveTextContent(/Mar 2/);
+    expect(row).toHaveTextContent(/Apr 5/);
 
     fireEvent.click(screen.getByRole("button", { name: "Kind" }));
     expect(handleSortChange).toHaveBeenCalledWith("kind");
@@ -537,6 +537,71 @@ describe("ContentPane", () => {
     },
   );
 
+  it("shows permissions as the code, with the letters as the tooltip", () => {
+    const handleSortChange = vi.fn();
+    render(
+      <ContentPane
+        isFocused
+        currentPath="/Users/demo"
+        entries={[
+          {
+            path: "/Users/demo/alpha.txt",
+            name: "alpha.txt",
+            extension: "txt",
+            kind: "file",
+            isHidden: false,
+            isSymlink: false,
+          },
+        ]}
+        viewMode="details"
+        loading={false}
+        error={null}
+        includeHidden={false}
+        selectedPaths={[]}
+        selectionLeadPath={null}
+        metadataByPath={{
+          "/Users/demo/alpha.txt": {
+            path: "/Users/demo/alpha.txt",
+            kindLabel: "Plain Text Document",
+            createdAt: "2026-03-02T10:30:00.000Z",
+            modifiedAt: "2026-04-05T08:15:00.000Z",
+            sizeBytes: 2048,
+            sizeStatus: "ready",
+            permissionMode: 0o644,
+          },
+        }}
+        detailColumns={{
+          modified: true,
+          size: true,
+          kind: true,
+          created: false,
+          permissions: true,
+        }}
+        sortBy="name"
+        sortDirection="asc"
+        onSelectionGesture={() => undefined}
+        onClearSelection={() => undefined}
+        onActivateEntry={() => undefined}
+        onSortChange={handleSortChange}
+        onLayoutColumnsChange={() => undefined}
+        onVisiblePathsChange={() => undefined}
+        onNavigatePath={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+        onFocusChange={() => undefined}
+      />,
+    );
+
+    const cell = within(screen.getByRole("row", { name: /alpha\.txt/ })).getByText("644");
+    expect(cell).toHaveAttribute("title", "rw-r--r--");
+    // The date reads relative to now and keeps the whole date as its tooltip.
+    expect(
+      within(screen.getByRole("row", { name: /alpha\.txt/ })).getByTitle(/April 5, 2026 at/),
+    ).toHaveTextContent(/Apr 5/);
+  });
   it("forwards typeahead keys from details view through the shared content handler", () => {
     const handleTypeaheadInput = vi.fn();
 

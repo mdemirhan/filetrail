@@ -91,10 +91,10 @@ describe("appPreferences helpers", () => {
       detailColumnWidths: {
         name: 320,
         size: 108,
-        modified: 168,
-        permissions: 148,
+        modified: 152,
+        permissions: 108,
         kind: 148,
-        created: 168,
+        created: 152,
       },
       restoreLastVisitedFolderOnStartup: false,
       notificationsEnabled: true,

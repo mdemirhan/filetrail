@@ -13,6 +13,7 @@ import {
 } from "../../shared/appPreferences";
 import { useElementSize } from "../hooks/useElementSize";
 import { usePathSuggestions } from "../hooks/usePathSuggestions";
+import { useRelativeDate } from "../hooks/useRelativeDate";
 import { isSelectionNarrowingClick } from "../lib/contentSelection";
 import type { ClipboardSummary } from "../lib/copyPasteClipboard";
 import {
@@ -28,12 +29,7 @@ import {
   getFlowListRevealScrollLeft,
 } from "../lib/flowListLayout";
 import { isKeyboardOwnedFormControl } from "../lib/focusedEditTarget";
-import {
-  formatDateTime,
-  formatPermissionMode,
-  formatSize,
-  splitDisplayName,
-} from "../lib/formatting";
+import { formatSize, splitDisplayName, splitPermissionMode } from "../lib/formatting";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
 import { buildColumnMajorRows, computeRowsPerColumn, getVirtualRange } from "../lib/virtualization";
 import { ClipboardIndicator } from "./ClipboardIndicator";
@@ -1798,23 +1794,37 @@ function DetailsCell({
     );
   }
   if (columnKey === "modified") {
-    // biome-ignore lint/a11y/useFocusableInteractive: see note above.
-    // biome-ignore lint/a11y/useSemanticElements: see note above.
-    return <span role="gridcell">{formatDetailDate(metadata?.modifiedAt)}</span>;
+    return <DetailsDateCell value={metadata?.modifiedAt} />;
   }
   if (columnKey === "created") {
-    // biome-ignore lint/a11y/useFocusableInteractive: see note above.
-    // biome-ignore lint/a11y/useSemanticElements: see note above.
-    return <span role="gridcell">{formatDetailDate(metadata?.createdAt)}</span>;
+    return <DetailsDateCell value={metadata?.createdAt} />;
   }
   if (columnKey === "kind") {
     // biome-ignore lint/a11y/useFocusableInteractive: see note above.
     // biome-ignore lint/a11y/useSemanticElements: see note above.
     return <span role="gridcell">{metadata?.kindLabel ?? ""}</span>;
   }
-  // biome-ignore lint/a11y/useFocusableInteractive: see note above.
-  // biome-ignore lint/a11y/useSemanticElements: see note above.
-  return <span role="gridcell">{formatDetailPermissions(metadata)}</span>;
+  const permissions = splitPermissionMode(metadata?.permissionMode ?? null);
+  return (
+    // biome-ignore lint/a11y/useFocusableInteractive: see note above.
+    // biome-ignore lint/a11y/useSemanticElements: see note above.
+    <span role="gridcell" className="details-permissions" title={permissions?.symbolic}>
+      {permissions?.octal ?? ""}
+    </span>
+  );
+}
+
+// A date said relative to now ("24 min ago", "Today, 9:12 AM"); the whole date is the
+// tooltip. Empty while the row's metadata is still loading.
+function DetailsDateCell({ value }: { value: string | null | undefined }) {
+  const date = useRelativeDate(value);
+  return (
+    // biome-ignore lint/a11y/useFocusableInteractive: cells are presentational; the row has the focus.
+    // biome-ignore lint/a11y/useSemanticElements: the grid is built from spans inside the row button.
+    <span role="gridcell" title={date?.exact}>
+      {date?.text ?? ""}
+    </span>
+  );
 }
 
 function SortButton({
@@ -1861,17 +1871,6 @@ function formatDetailSize(
     return "";
   }
   return formatSize(metadata.sizeBytes, metadata.sizeStatus);
-}
-
-function formatDetailDate(value: string | null | undefined): string {
-  return value ? formatDateTime(value) : "";
-}
-
-function formatDetailPermissions(metadata: DirectoryEntryMetadata | undefined): string {
-  if (metadata?.permissionMode === null || metadata?.permissionMode === undefined) {
-    return "";
-  }
-  return formatPermissionMode(metadata.permissionMode);
 }
 
 function ContentState({

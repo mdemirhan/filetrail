@@ -227,13 +227,15 @@ export const LEGACY_DEFAULT_DETAIL_COLUMN_VISIBILITY = {
   permissions: true,
 } as const;
 // Widths are persisted in pixels and are shared by renderer layout and IPC validation.
+// The date columns fit "Yesterday, 12:44 PM"; Permissions fits its header (the cell is a
+// three-digit code).
 export const DEFAULT_DETAIL_COLUMN_WIDTHS: DetailColumnWidths = {
   name: 320,
-  modified: 168,
+  modified: 152,
   size: 108,
   kind: 148,
-  created: 168,
-  permissions: 148,
+  created: 152,
+  permissions: 108,
 };
 export const DETAIL_COLUMN_WIDTH_LIMITS = {
   name: { min: 220, max: 720 },
@@ -241,7 +243,7 @@ export const DETAIL_COLUMN_WIDTH_LIMITS = {
   size: { min: 84, max: 240 },
   kind: { min: 96, max: 320 },
   created: { min: 132, max: 280 },
-  permissions: { min: 132, max: 260 },
+  permissions: { min: 96, max: 260 },
 } as const satisfies Record<DetailColumnKey, { min: number; max: number }>;
 export const DEFAULT_OPEN_WITH_APPLICATIONS: OpenWithApplication[] = [
   {
