@@ -395,6 +395,10 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
       UI_FONT_OPTIONS.some((option) => option.value === record.uiFontFamily)
         ? (record.uiFontFamily as AppPreferences["uiFontFamily"])
         : currentDefaults.uiFontFamily,
+    tabStyle:
+      record.tabStyle === "cards" || record.tabStyle === "accentLine"
+        ? record.tabStyle
+        : currentDefaults.tabStyle,
     viewMode: sanitizeViewMode(record.viewMode),
     sortBy:
       record.sortBy === "modified" ||

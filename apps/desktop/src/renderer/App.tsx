@@ -144,6 +144,8 @@ export function App() {
     setZoomPercent,
     uiFontFamily,
     setUiFontFamily,
+    tabStyle,
+    setTabStyle,
     includeHidden,
     setIncludeHidden,
     viewMode,
@@ -1070,6 +1072,7 @@ export function App() {
     accent,
     zoomPercent,
     uiFontFamily,
+    tabStyle,
     viewMode,
     sortBy,
     sortDirection,
@@ -1227,6 +1230,7 @@ export function App() {
         setAccent(preferences.accent);
         setZoomPercent(preferences.zoomPercent);
         setUiFontFamily(preferences.uiFontFamily);
+        setTabStyle(preferences.tabStyle);
         setIncludeHidden(preferences.includeHidden);
         setSearchPatternMode(preferences.searchPatternMode);
         setSearchMatchScope(preferences.searchMatchScope);
@@ -2105,6 +2109,7 @@ export function App() {
               tabCount > 1 ? (
                 <TabStrip
                   tabs={tabItems}
+                  tabStyle={tabStyle}
                   onSelectTab={activateTab}
                   onCloseTab={closeTab}
                   onCloseOtherTabs={closeOtherTabs}

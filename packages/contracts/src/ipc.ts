@@ -586,6 +586,7 @@ export const appPreferencesSchema = z.object({
   accent: accentModeSchema,
   zoomPercent: z.number().int().min(75).max(150),
   uiFontFamily: uiFontFamilySchema,
+  tabStyle: z.enum(["cards", "accentLine"]),
   viewMode: explorerViewModeSchema,
   sortBy: directorySortBySchema,
   sortDirection: sortDirectionSchema,

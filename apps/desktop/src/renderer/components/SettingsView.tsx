@@ -23,6 +23,7 @@ import type {
   OpenWithApplication,
   ReturnKeyAction,
   SearchPatternModePreference,
+  TabStyle,
   ThemeMode,
   ThemePreference,
   ToolbarItemId,
@@ -1970,6 +1971,8 @@ export function SettingsView({
   fileActivationAction,
   returnKeyAction = "rename",
   onReturnKeyActionChange = () => undefined,
+  tabStyle = "cards",
+  onTabStyleChange = () => undefined,
   shortcutOverrides = DEFAULT_APP_PREFERENCES.shortcutOverrides,
   onShortcutOverridesChange = () => undefined,
   showSidebarRail = false,
@@ -2057,6 +2060,8 @@ export function SettingsView({
   fileActivationAction: FileActivationAction;
   returnKeyAction?: ReturnKeyAction;
   onReturnKeyActionChange?: (value: ReturnKeyAction) => void;
+  tabStyle?: TabStyle;
+  onTabStyleChange?: (value: TabStyle) => void;
   // The keyboard shortcuts that differ from their defaults (the Shortcuts tab).
   shortcutOverrides?: ShortcutOverrides;
   onShortcutOverridesChange?: (value: ShortcutOverrides) => void;
@@ -2457,6 +2462,23 @@ export function SettingsView({
                   formatOption={(value) =>
                     uiFontOptions.find((option) => option.value === value)?.label ?? String(value)
                   }
+                />
+              }
+            />
+
+            <SettingRow
+              title="Tab style"
+              desc="Cards on a band, or flat tabs under a line in the accent color."
+              theme={palette}
+              right={
+                <SelectControl
+                  value={tabStyle}
+                  options={["cards", "accentLine"] satisfies TabStyle[]}
+                  theme={palette}
+                  width="140px"
+                  ariaLabel="Tab style"
+                  onChange={(value) => onTabStyleChange(value as TabStyle)}
+                  formatOption={(value) => (value === "accentLine" ? "Accent line" : "Cards")}
                 />
               }
             />

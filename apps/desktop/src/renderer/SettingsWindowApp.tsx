@@ -92,6 +92,7 @@ export function SettingsWindowApp() {
     accent: preferences.accent,
     zoomPercent: preferences.zoomPercent,
     uiFontFamily: preferences.uiFontFamily,
+    tabStyle: preferences.tabStyle,
     compactListView: preferences.compactListView,
     compactDetailsView: preferences.compactDetailsView,
     compactIconView: preferences.compactIconView,
@@ -329,6 +330,7 @@ export function SettingsWindowApp() {
             accent={preferences.accent}
             zoomPercent={preferences.zoomPercent}
             uiFontFamily={preferences.uiFontFamily}
+            tabStyle={preferences.tabStyle}
             compactListView={preferences.compactListView}
             compactDetailsView={preferences.compactDetailsView}
             compactIconView={preferences.compactIconView}
@@ -367,6 +369,7 @@ export function SettingsWindowApp() {
             onAccentChange={preferences.setAccent}
             onZoomPercentChange={preferences.setZoomPercent}
             onUiFontFamilyChange={preferences.setUiFontFamily}
+            onTabStyleChange={preferences.setTabStyle}
             onResetAppearance={preferences.resetAppearanceSettings}
             onCompactListViewChange={preferences.setCompactListView}
             onCompactDetailsViewChange={preferences.setCompactDetailsView}

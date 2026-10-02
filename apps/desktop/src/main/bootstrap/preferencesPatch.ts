@@ -37,6 +37,9 @@ export function toPreferencePatch(
   if (value.uiFontFamily !== undefined) {
     patch.uiFontFamily = value.uiFontFamily;
   }
+  if (value.tabStyle !== undefined) {
+    patch.tabStyle = value.tabStyle;
+  }
   if (value.viewMode !== undefined) {
     patch.viewMode = value.viewMode;
   }

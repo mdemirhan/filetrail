@@ -4499,6 +4499,50 @@ body.platform-macos .settings-view[data-layout="compact"] {
   color: var(--text-primary);
 }
 
+/* ── Tabs, the other style (Settings → Appearance → Tab style): flat tabs in a row, the
+   one on screen under a line in the accent color. The rules above draw the cards; these
+   take the cards' shape off and keep the rest. ── */
+
+.tab-strip[data-tab-style="accentLine"] {
+  align-items: stretch;
+  height: 33px;
+  padding: 0;
+  /* The band's bottom line, which the tab on screen covers. */
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+
+.tab-strip[data-tab-style="accentLine"] .tab-strip-tabs {
+  height: auto;
+  padding: 0;
+}
+
+.tab-strip[data-tab-style="accentLine"] .tab-strip-tab {
+  width: 180px;
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+}
+
+/* No hairlines, hover pill or curved foot: those belong to the cards. */
+.tab-strip[data-tab-style="accentLine"] .tab-strip-tabs .tab-strip-tab::before,
+.tab-strip[data-tab-style="accentLine"] .tab-strip-tabs .tab-strip-tab::after {
+  content: none;
+}
+
+.tab-strip[data-tab-style="accentLine"] .tab-strip-tab:not(.active):hover {
+  background: color-mix(in srgb, var(--neutral-ink) 6%, transparent);
+}
+
+.tab-strip[data-tab-style="accentLine"] .tab-strip-tab.active {
+  box-shadow: inset 0 2px 0 var(--ft-accent-solid);
+}
+
+.tab-strip[data-tab-style="accentLine"] .tab-strip-new {
+  width: 34px;
+  height: auto;
+  margin: 0;
+  border-radius: 0;
+}
+
 /* Tooltips drawn by the app for icon-only buttons (see lib/titleTooltips.ts). */
 .app-tooltip {
   position: fixed;
@@ -6962,6 +7006,8 @@ body.vibrant-window .explorer-workspace .pane-resizer {
    with the material behind it. The toolbar's row carries the toolbar's bottom line on to
    the hairline. */
 body.vibrant-window .explorer-workspace .pane-resizer-tree {
+  /* Over the tab on screen, which is raised and may start at the hairline. */
+  z-index: 2;
   background: linear-gradient(
     to right,
     color-mix(in srgb, var(--sidebar-bg) 62%, transparent) 50%,

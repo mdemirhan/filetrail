@@ -16,6 +16,7 @@ import {
   type LeftToolbarItems,
   type OpenWithApplication,
   type ReturnKeyAction,
+  type TabStyle,
   type ThemeMode,
   type ThemePreference,
   type UiFontFamily,
@@ -45,6 +46,7 @@ export function useAppPreferences() {
   const [uiFontFamily, setUiFontFamily] = useState<UiFontFamily>(
     DEFAULT_APP_PREFERENCES.uiFontFamily,
   );
+  const [tabStyle, setTabStyle] = useState<TabStyle>(DEFAULT_APP_PREFERENCES.tabStyle);
   const [includeHidden, setIncludeHidden] = useState(DEFAULT_APP_PREFERENCES.includeHidden);
   const [viewMode, setViewMode] = useState<ExplorerViewMode>(DEFAULT_APP_PREFERENCES.viewMode);
   const [foldersFirst, setFoldersFirst] = useState(DEFAULT_APP_PREFERENCES.foldersFirst);
@@ -125,6 +127,7 @@ export function useAppPreferences() {
     setAccent(DEFAULT_APP_PREFERENCES.accent);
     setZoomPercent(DEFAULT_APP_PREFERENCES.zoomPercent);
     setUiFontFamily(DEFAULT_APP_PREFERENCES.uiFontFamily);
+    setTabStyle(DEFAULT_APP_PREFERENCES.tabStyle);
   }
 
   return {
@@ -143,6 +146,8 @@ export function useAppPreferences() {
     setZoomPercent,
     uiFontFamily,
     setUiFontFamily,
+    tabStyle,
+    setTabStyle,
     includeHidden,
     setIncludeHidden,
     viewMode,
@@ -254,6 +259,7 @@ export function applyPreferencesPatch(store: AppPreferencesStore, patch: Incomin
   set("accent", store.setAccent);
   set("zoomPercent", store.setZoomPercent);
   set("uiFontFamily", store.setUiFontFamily);
+  set("tabStyle", store.setTabStyle);
   set("compactListView", store.setCompactListView);
   set("compactDetailsView", store.setCompactDetailsView);
   set("compactIconView", store.setCompactIconView);
