@@ -1,10 +1,5 @@
 import type { ShortcutOverrides } from "./shortcuts";
-import {
-  DEFAULT_LEFT_TOOLBAR_ITEMS,
-  DEFAULT_TOP_TOOLBAR_ITEMS,
-  type LeftToolbarItems,
-  type ToolbarItemId,
-} from "./toolbarItems";
+import { DEFAULT_TOP_TOOLBAR_ITEMS, type ToolbarItemId } from "./toolbarItems";
 
 // The palettes: three light and three dark.
 export type ThemeMode =
@@ -92,8 +87,6 @@ export type FileActivationAction = "open" | "edit";
 // Finder renames with Return; "open" keeps the older behavior of opening the selection.
 export type ReturnKeyAction = "rename" | "open";
 export type {
-  LeftToolbarItems,
-  LeftToolbarZone,
   ToolbarItemDefinition,
   ToolbarItemId,
 } from "./toolbarItems";
@@ -334,9 +327,6 @@ export type AppPreferences = {
   propertiesOpen: boolean;
   detailRowOpen: boolean;
   topToolbarItems: ToolbarItemId[];
-  leftToolbarItems: LeftToolbarItems;
-  showSidebarRail: boolean;
-  showSidebarBottomRail: boolean;
   terminalApp: ApplicationSelection | null;
   defaultTextEditor: ApplicationSelection;
   openWithApplications: OpenWithApplication[];
@@ -398,12 +388,6 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   propertiesOpen: false,
   detailRowOpen: false,
   topToolbarItems: [...DEFAULT_TOP_TOOLBAR_ITEMS],
-  leftToolbarItems: {
-    main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
-    utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
-  },
-  showSidebarRail: false,
-  showSidebarBottomRail: true,
   terminalApp: null,
   defaultTextEditor: { ...DEFAULT_TEXT_EDITOR },
   openWithApplications: DEFAULT_OPEN_WITH_APPLICATIONS.map((entry) => ({ ...entry })),

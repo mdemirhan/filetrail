@@ -12,7 +12,7 @@ import { createPortal } from "react-dom";
 
 import type { IpcRequest } from "@filetrail/contracts";
 
-import type { ExplorerViewMode } from "../../shared/appPreferences";
+import type { ExplorerViewMode, ThemePreference } from "../../shared/appPreferences";
 import type { RendererCommandType } from "../../shared/rendererCommands";
 import type { ShortcutCommandId } from "../../shared/shortcuts";
 import {
@@ -23,6 +23,7 @@ import {
 } from "../../shared/toolbarItems";
 import { useKeepInViewport } from "../hooks/useKeepInViewport";
 import { parentDirectoryPath } from "../lib/explorerNavigation";
+import type { HistoryMenuEntry } from "../lib/historyMenu";
 import { EXPLORER_LAYOUT } from "../lib/layoutTokens";
 import { placeDropdownMenu } from "../lib/menuPlacement";
 import { formatTooltip, getToolbarItemTooltip } from "../lib/tooltips";
@@ -37,6 +38,7 @@ import { InfoPanel } from "./GetInfoPanel";
 import { HistoryButton } from "./HistoryButton";
 import { SearchOptionsMenu } from "./SearchOptionsMenu";
 import { SearchWorkspace } from "./SearchWorkspace";
+import { ThemeMenuButton } from "./ThemeMenuButton";
 import { ToolbarIcon } from "./ToolbarIcon";
 import { TreePane } from "./TreePane";
 
@@ -87,18 +89,29 @@ export function ExplorerWorkspace({
   topToolbarItems,
   canGoBack,
   canGoForward,
+  backHistory = [],
+  forwardHistory = [],
+  onGoToHistoryIndex = () => undefined,
   focusedPane,
   selectedEntryExists,
   goBack,
   goForward,
   navigateToParentFolder,
-  navigateDownAction,
   refreshDirectory,
   viewMode,
   onViewModeChange,
   sortBy,
   sortDirection,
   onSortChange,
+  foldersFirst = false,
+  onToggleFoldersFirst = () => undefined,
+  includeHidden = false,
+  onToggleHidden = () => undefined,
+  onToggleInfoPanel = () => undefined,
+  infoRowOpen = false,
+  onToggleInfoRow = () => undefined,
+  theme = "auto",
+  onSelectTheme = () => undefined,
   searchShellRef,
   searchPopoverOpen,
   onSearchShellBlur,
@@ -126,8 +139,6 @@ export function ExplorerWorkspace({
   onRendererCommand,
   onCustomizeToolbar,
   onPaneResizeKey,
-  showSidebarRail = false,
-  showSidebarBottomRail = true,
   toolbarTitle = "",
   toolbarSubtitle = "",
   tabStrip = null,
@@ -146,12 +157,15 @@ export function ExplorerWorkspace({
   topToolbarItems: ToolbarItemId[];
   canGoBack: boolean;
   canGoForward: boolean;
+  /** The folders Back and Forward lead to, nearest first, for their hold menus. */
+  backHistory?: HistoryMenuEntry[];
+  forwardHistory?: HistoryMenuEntry[];
+  onGoToHistoryIndex?: (historyIndex: number) => void;
   focusedPane: "tree" | "content" | null;
   selectedEntryExists: boolean;
   goBack: () => void;
   goForward: () => void;
   navigateToParentFolder: () => void;
-  navigateDownAction: () => void;
   refreshDirectory: () => Promise<void>;
   /** The row of tabs, while there is more than one. */
   tabStrip?: React.ReactNode;
@@ -162,6 +176,15 @@ export function ExplorerWorkspace({
   sortBy: SortBy;
   sortDirection: "asc" | "desc";
   onSortChange: (value: SortBy) => void;
+  foldersFirst?: boolean;
+  onToggleFoldersFirst?: () => void;
+  includeHidden?: boolean;
+  onToggleHidden?: () => void;
+  onToggleInfoPanel?: () => void;
+  infoRowOpen?: boolean;
+  onToggleInfoRow?: () => void;
+  theme?: ThemePreference;
+  onSelectTheme?: (theme: ThemePreference) => void;
   searchShellRef: React.RefObject<HTMLDivElement | null>;
   searchPopoverOpen: boolean;
   onSearchShellBlur: (event: React.FocusEvent<HTMLDivElement>) => void;
@@ -190,8 +213,6 @@ export function ExplorerWorkspace({
   /** Opens Settings where the toolbar is arranged. */
   onCustomizeToolbar: () => void;
   onPaneResizeKey: (pane: "tree" | "inspector", event: ReactKeyboardEvent<HTMLDivElement>) => void;
-  showSidebarRail?: boolean;
-  showSidebarBottomRail?: boolean;
   toolbarTitle?: string;
   toolbarSubtitle?: string;
 }) {
@@ -200,17 +221,14 @@ export function ExplorerWorkspace({
   const sortMenuButtonRef = useRef<HTMLButtonElement | null>(null);
   const sortMenuRef = useRef<HTMLDivElement | null>(null);
   const clipboardShown = clipboardButton !== null && clipboardButton !== undefined;
-  // The toolbar's items in their saved order. Two of the required ones are not always
-  // there: the clipboard button only while something waits to be pasted, and View Options
-  // only while the left rail, which holds the same toggles, is hidden.
+  // The toolbar's items in their saved order. One of the required ones is not always there:
+  // the clipboard button, which shows only while something waits to be pasted.
   const topToolbarSlots = useMemo(
     () =>
       resolveTopToolbarSlots(sanitizeTopToolbarItems(topToolbarItems)).filter(
-        (slot) =>
-          (slot.id !== "clipboard" || clipboardShown) &&
-          (slot.id !== "viewOptions" || !showSidebarRail),
+        (slot) => slot.id !== "clipboard" || clipboardShown,
       ),
-    [clipboardShown, showSidebarRail, topToolbarItems],
+    [clipboardShown, topToolbarItems],
   );
   const optionalTopToolbarSlots = useMemo(
     () => topToolbarSlots.filter((slot) => !isRequiredTopToolbarItem(slot.id)),
@@ -384,16 +402,16 @@ export function ExplorerWorkspace({
       id: "foldersFirst",
       label: "Folders First",
       command: "toggleFoldersFirst",
-      checked: treePaneProps.foldersFirst,
-      onSelect: treePaneProps.onToggleFoldersFirst,
+      checked: foldersFirst,
+      onSelect: onToggleFoldersFirst,
     },
     {
       kind: "toggle",
       id: "hidden",
       label: "Show Hidden Files",
       command: "toggleHiddenFiles",
-      checked: treePaneProps.includeHidden,
-      onSelect: treePaneProps.onToggleHidden,
+      checked: includeHidden,
+      onSelect: onToggleHidden,
     },
     { kind: "separator", id: "separator-1" },
     {
@@ -402,15 +420,15 @@ export function ExplorerWorkspace({
       label: "Show Info Panel",
       command: "toggleInfoPanel",
       checked: infoPanelOpen,
-      onSelect: treePaneProps.onToggleInfoPanel,
+      onSelect: onToggleInfoPanel,
     },
     {
       kind: "toggle",
       id: "infoRow",
       label: "Show Info Row",
       command: "toggleInfoRow",
-      checked: treePaneProps.infoRowOpen,
-      onSelect: treePaneProps.onToggleInfoRow,
+      checked: infoRowOpen,
+      onSelect: onToggleInfoRow,
     },
     { kind: "separator", id: "separator-2" },
     {
@@ -499,10 +517,10 @@ export function ExplorerWorkspace({
     getToolbarItemTooltip(
       itemId,
       {
-        foldersFirst: treePaneProps.foldersFirst,
-        hiddenFilesShown: treePaneProps.includeHidden,
+        foldersFirst,
+        hiddenFilesShown: includeHidden,
         infoPanelOpen,
-        infoRowOpen: treePaneProps.infoRowOpen,
+        infoRowOpen,
       },
       shortcutDisplay,
     );
@@ -522,10 +540,10 @@ export function ExplorerWorkspace({
           label="Back"
           title={getToolbarTooltip(itemId)}
           disabled={!canGoBack}
-          entries={treePaneProps.backHistory ?? []}
+          entries={backHistory}
           interactive={mode === "interactive"}
           onStep={goBack}
-          onSelectEntry={treePaneProps.onGoToHistoryIndex ?? (() => undefined)}
+          onSelectEntry={onGoToHistoryIndex}
         >
           <ToolbarIcon name="back" />
         </HistoryButton>
@@ -539,10 +557,10 @@ export function ExplorerWorkspace({
           label="Forward"
           title={getToolbarTooltip(itemId)}
           disabled={!canGoForward}
-          entries={treePaneProps.forwardHistory ?? []}
+          entries={forwardHistory}
           interactive={mode === "interactive"}
           onStep={goForward}
-          onSelectEntry={treePaneProps.onGoToHistoryIndex ?? (() => undefined)}
+          onSelectEntry={onGoToHistoryIndex}
         >
           <ToolbarIcon name="forward" />
         </HistoryButton>
@@ -560,21 +578,6 @@ export function ExplorerWorkspace({
           aria-label="Enclosing Folder"
         >
           <ToolbarIcon name="up" />
-        </button>
-      );
-    }
-    if (itemId === "down") {
-      return (
-        <button
-          key={itemId}
-          type="button"
-          className="tb-btn tb-btn-icon"
-          disabled={focusedPane !== "tree" && !selectedEntryExists}
-          onClick={navigateDownAction}
-          title={getToolbarTooltip(itemId)}
-          aria-label="Open Selected Item"
-        >
-          <ToolbarIcon name="down" />
         </button>
       );
     }
@@ -787,62 +790,16 @@ export function ExplorerWorkspace({
       );
     }
 
-    if (itemId === "home") {
-      return (
-        <button
-          key={itemId}
-          type="button"
-          className="tb-btn tb-btn-icon"
-          onClick={treePaneProps.onGoHome}
-          title={getToolbarTooltip(itemId)}
-          aria-label="Home"
-        >
-          <ToolbarIcon name="home" />
-        </button>
-      );
-    }
-    if (itemId === "root" || itemId === "applications" || itemId === "trash") {
-      const location =
-        itemId === "root" ? "root" : itemId === "applications" ? "applications" : "trash";
-      return (
-        <button
-          key={itemId}
-          type="button"
-          className="tb-btn tb-btn-icon"
-          onClick={() => treePaneProps.onQuickAccess(location)}
-          title={getToolbarTooltip(itemId)}
-          aria-label={getToolbarItemDefinition(itemId).label}
-        >
-          <ToolbarIcon name={getToolbarItemDefinition(itemId).icon} />
-        </button>
-      );
-    }
-    if (itemId === "rerootHome") {
-      return (
-        <button
-          key={itemId}
-          type="button"
-          className="tb-btn tb-btn-icon"
-          onClick={treePaneProps.onRerootHome}
-          title={getToolbarTooltip(itemId)}
-          aria-label="Root tree at Home"
-        >
-          <ToolbarIcon name="rerootHome" />
-        </button>
-      );
-    }
     if (itemId === "foldersFirst") {
       return (
         <button
           key={itemId}
           type="button"
-          className={
-            treePaneProps.foldersFirst ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"
-          }
-          onClick={treePaneProps.onToggleFoldersFirst}
+          className={foldersFirst ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
+          onClick={onToggleFoldersFirst}
           title={getToolbarTooltip(itemId)}
           aria-label="Toggle folders first"
-          aria-pressed={treePaneProps.foldersFirst}
+          aria-pressed={foldersFirst}
         >
           <ToolbarIcon name="foldersFirst" />
         </button>
@@ -853,13 +810,11 @@ export function ExplorerWorkspace({
         <button
           key={itemId}
           type="button"
-          className={
-            treePaneProps.includeHidden ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"
-          }
-          onClick={treePaneProps.onToggleHidden}
+          className={includeHidden ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
+          onClick={onToggleHidden}
           title={getToolbarTooltip(itemId)}
           aria-label="Toggle hidden files"
-          aria-pressed={treePaneProps.includeHidden}
+          aria-pressed={includeHidden}
         >
           <ToolbarIcon name="hidden" />
         </button>
@@ -871,7 +826,7 @@ export function ExplorerWorkspace({
           key={itemId}
           type="button"
           className={infoPanelOpen ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
-          onClick={treePaneProps.onToggleInfoPanel}
+          onClick={onToggleInfoPanel}
           title={getToolbarTooltip(itemId)}
           aria-label="Toggle Info Panel"
           aria-pressed={infoPanelOpen}
@@ -885,28 +840,24 @@ export function ExplorerWorkspace({
         <button
           key={itemId}
           type="button"
-          className={treePaneProps.infoRowOpen ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
-          onClick={treePaneProps.onToggleInfoRow}
+          className={infoRowOpen ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
+          onClick={onToggleInfoRow}
           title={getToolbarTooltip(itemId)}
           aria-label="Toggle Info Row"
-          aria-pressed={treePaneProps.infoRowOpen}
+          aria-pressed={infoRowOpen}
         >
           <ToolbarIcon name="infoRow" />
         </button>
       );
     }
-    if (itemId === "help") {
+    if (itemId === "theme") {
       return (
-        <button
+        <ThemeMenuButton
           key={itemId}
-          type="button"
-          className="tb-btn tb-btn-icon"
-          onClick={treePaneProps.onOpenHelp}
-          title={getToolbarTooltip(itemId)}
-          aria-label="Help"
-        >
-          <ToolbarIcon name="help" />
-        </button>
+          theme={theme}
+          onSelectTheme={onSelectTheme}
+          interactive={mode === "interactive"}
+        />
       );
     }
 
@@ -1001,11 +952,7 @@ export function ExplorerWorkspace({
           }}
         >
           <div className="workspace-sidebar-cell" style={{ gridColumn: "1", gridRow: "1 / -1" }}>
-            <TreePane
-              {...treePaneProps}
-              showRail={showSidebarRail}
-              showBottomRail={showSidebarBottomRail}
-            />
+            <TreePane {...treePaneProps} />
           </div>
           <div
             className="pane-resizer pane-resizer-tree"

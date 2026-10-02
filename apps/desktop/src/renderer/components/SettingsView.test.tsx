@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import type { ComponentProps } from "react";
 
 import type { ThemeMode } from "../../shared/appPreferences";
-import { DEFAULT_LEFT_TOOLBAR_ITEMS, DEFAULT_TOP_TOOLBAR_ITEMS } from "../../shared/toolbarItems";
+import { DEFAULT_TOP_TOOLBAR_ITEMS } from "../../shared/toolbarItems";
 import { SettingsView } from "./SettingsView";
 
 function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsView>> = {}) {
@@ -31,10 +31,6 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       notificationsEnabled={true}
       notificationDurationSeconds={4}
       topToolbarItems={[...DEFAULT_TOP_TOOLBAR_ITEMS]}
-      leftToolbarItems={{
-        main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
-        utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
-      }}
       restoreLastVisitedFolderOnStartup={false}
       restoreOpenTabsOnStartup={false}
       homePath="/Users/demo"
@@ -94,10 +90,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       onNotificationsEnabledChange={() => undefined}
       onNotificationDurationSecondsChange={() => undefined}
       onTopToolbarItemsChange={() => undefined}
-      onLeftToolbarItemsChange={() => undefined}
       onResetTopToolbar={() => undefined}
-      onResetLeftToolbar={() => undefined}
-      onResetToolbars={() => undefined}
       onRestoreLastVisitedFolderOnStartupChange={() => undefined}
       onRestoreOpenTabsOnStartupChange={() => undefined}
       onBrowseTerminalApp={() => undefined}
@@ -279,7 +272,7 @@ describe("SettingsView", () => {
     expect(onAccentChange).toHaveBeenCalledWith("#123456");
   });
 
-  it("updates the top toolbar editor and reset action", () => {
+  it("updates the toolbar editor and reset action", () => {
     const onTopToolbarItemsChange = vi.fn();
     const onResetTopToolbar = vi.fn();
     renderSettingsView({
@@ -288,14 +281,12 @@ describe("SettingsView", () => {
       onResetTopToolbar,
     });
 
-    const topToolbarEditor = screen.getByRole("group", { name: "Top toolbar" });
+    const topToolbarEditor = screen.getByRole("group", { name: "Toolbar" });
 
-    fireEvent.click(
-      within(topToolbarEditor).getByRole("button", { name: "Add Copy to Top toolbar" }),
-    );
+    fireEvent.click(within(topToolbarEditor).getByRole("button", { name: "Add Copy to Toolbar" }));
     fireEvent.mouseEnter(within(topToolbarEditor).getByRole("button", { name: "Back" }));
     fireEvent.click(
-      within(topToolbarEditor).getByRole("button", { name: "Remove Back from Top toolbar" }),
+      within(topToolbarEditor).getByRole("button", { name: "Remove Back from Toolbar" }),
     );
     fireEvent.click(within(topToolbarEditor).getByRole("button", { name: "Reset" }));
 
@@ -324,7 +315,7 @@ describe("SettingsView", () => {
       onTopToolbarItemsChange,
     });
 
-    const topToolbarEditor = screen.getByRole("group", { name: "Top toolbar" });
+    const topToolbarEditor = screen.getByRole("group", { name: "Toolbar" });
     const dataTransfer = {
       effectAllowed: "move",
       dropEffect: "move",
@@ -337,11 +328,11 @@ describe("SettingsView", () => {
       // leaves it where it was.
       fireEvent.mouseEnter(tile(name));
       expect(
-        within(topToolbarEditor).queryByRole("button", { name: `Remove ${name} from Top toolbar` }),
+        within(topToolbarEditor).queryByRole("button", { name: `Remove ${name} from Toolbar` }),
       ).toBeNull();
       fireEvent.mouseLeave(tile(name));
       expect(
-        within(topToolbarEditor).queryByRole("button", { name: `Add ${name} to Top toolbar` }),
+        within(topToolbarEditor).queryByRole("button", { name: `Add ${name} to Toolbar` }),
       ).toBeNull();
       expect(tile(name)).toHaveAttribute("draggable", "true");
       fireEvent.dragStart(tile(name), { dataTransfer });
@@ -377,7 +368,7 @@ describe("SettingsView", () => {
     renderSettingsView({ topToolbarItems: ["back", "forward", "sort", "search"] });
 
     const tiles = Array.from(
-      screen.getByRole("group", { name: "Top toolbar" }).querySelectorAll("[data-toolbar-tile]"),
+      screen.getByRole("group", { name: "Toolbar" }).querySelectorAll("[data-toolbar-tile]"),
       (tile) => tile.getAttribute("data-toolbar-tile"),
     );
     expect(tiles).toEqual([
@@ -394,7 +385,7 @@ describe("SettingsView", () => {
   it("names every toolbar tile, in the toolbar and in the list of items to add", () => {
     renderSettingsView({ topToolbarItems: ["back", "forward", "search"] });
 
-    const topToolbarEditor = screen.getByRole("group", { name: "Top toolbar" });
+    const topToolbarEditor = screen.getByRole("group", { name: "Toolbar" });
     // The name under each tile is shown as text, not only as a hover tooltip.
     for (const label of ["Back", "Forward", "Refresh", "Go To", "Open in Terminal"]) {
       expect(within(topToolbarEditor).getByText(label)).toBeVisible();
@@ -403,64 +394,32 @@ describe("SettingsView", () => {
     // The buttons keep their own names for assistive technology.
     expect(within(topToolbarEditor).getByRole("button", { name: "Back" })).toBeInTheDocument();
     expect(
-      within(topToolbarEditor).getByRole("button", { name: "Add Refresh to Top toolbar" }),
+      within(topToolbarEditor).getByRole("button", { name: "Add Refresh to Toolbar" }),
     ).toBeInTheDocument();
   });
 
-  it("shows a rail's editor only while that rail is on", () => {
-    const toolbarEditors = () =>
-      screen
-        .getAllByRole("group")
-        .map((group) => group.getAttribute("aria-label"))
-        .filter((label) => label !== null);
+  it("has one toolbar to arrange, and nothing about rails", () => {
+    renderSettingsView();
 
-    // Both rails off: only the top toolbar can be edited, and the rails stay switchable.
-    const bothOff = renderSettingsView({ showSidebarRail: false, showSidebarBottomRail: false });
-    expect(toolbarEditors()).toEqual(["Top toolbar"]);
-    expect(screen.getByLabelText("Show left rail")).toBeInTheDocument();
-    expect(screen.getByLabelText("Show bottom rail")).toBeInTheDocument();
-    bothOff.unmount();
-
-    renderSettingsView({ showSidebarRail: false, showSidebarBottomRail: true });
-    expect(toolbarEditors()).toEqual(["Top toolbar", "Bottom rail"]);
+    const editors = screen
+      .getAllByRole("group")
+      .map((group) => group.getAttribute("aria-label"))
+      .filter((label) => label !== null);
+    expect(editors).toEqual(["Toolbar"]);
+    expect(screen.queryByLabelText("Show left rail")).toBeNull();
+    expect(screen.queryByLabelText("Show bottom rail")).toBeNull();
   });
 
-  it("keeps the bottom rail's editor while its buttons sit at the foot of the left rail", () => {
-    renderSettingsView({ showSidebarRail: true, showSidebarBottomRail: false });
-
-    expect(screen.getByRole("group", { name: "Left rail" })).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "Bottom rail" })).toHaveTextContent(
-      "Shown at the foot of the left rail.",
-    );
-  });
-
-  it("allows adding repeatable separators and restores grouped defaults on reset", () => {
+  it("allows adding repeatable separators", () => {
     const onTopToolbarItemsChange = vi.fn();
-    const onLeftToolbarItemsChange = vi.fn();
     renderSettingsView({
-      showSidebarRail: true,
       topToolbarItems: ["back", "topSeparator", "title", "clipboard", "viewOptions", "search"],
-      leftToolbarItems: {
-        main: ["home", "leftSeparator"],
-        utility: ["leftSeparator", "settings"],
-      },
       onTopToolbarItemsChange,
-      onLeftToolbarItemsChange,
     });
 
     fireEvent.click(
-      within(screen.getByRole("group", { name: "Top toolbar" })).getByRole("button", {
-        name: "Add Separator to Top toolbar",
-      }),
-    );
-    fireEvent.click(
-      within(screen.getByRole("group", { name: "Left rail" })).getByRole("button", {
-        name: "Add Separator to Left rail",
-      }),
-    );
-    fireEvent.click(
-      within(screen.getByRole("group", { name: "Bottom rail" })).getByRole("button", {
-        name: "Add Separator to Bottom rail",
+      within(screen.getByRole("group", { name: "Toolbar" })).getByRole("button", {
+        name: "Add Separator to Toolbar",
       }),
     );
 
@@ -473,14 +432,6 @@ describe("SettingsView", () => {
       "viewOptions",
       "search",
     ]);
-    expect(onLeftToolbarItemsChange).toHaveBeenNthCalledWith(1, {
-      main: ["home", "leftSeparator", "leftSeparator"],
-      utility: ["leftSeparator", "settings"],
-    });
-    expect(onLeftToolbarItemsChange).toHaveBeenNthCalledWith(2, {
-      main: ["home", "leftSeparator"],
-      utility: ["leftSeparator", "leftSeparator", "settings"],
-    });
   });
 
   it("removes a toolbar item when it is dropped outside the active toolbar strip", () => {
@@ -490,7 +441,7 @@ describe("SettingsView", () => {
       onTopToolbarItemsChange,
     });
 
-    const topToolbarEditor = screen.getByRole("group", { name: "Top toolbar" });
+    const topToolbarEditor = screen.getByRole("group", { name: "Toolbar" });
     const backButton = within(topToolbarEditor).getByRole("button", { name: "Back" });
     const dataTransfer = {
       effectAllowed: "move",
@@ -509,155 +460,88 @@ describe("SettingsView", () => {
     ]);
   });
 
-  it("updates left rail zones and supports toolbar resets", () => {
-    const onLeftToolbarItemsChange = vi.fn();
-    const onResetLeftToolbar = vi.fn();
-    const onResetToolbars = vi.fn();
-    renderSettingsView({
-      showSidebarRail: true,
-      leftToolbarItems: {
-        main: ["home", "help"],
-        utility: ["settings"],
-      },
-      onLeftToolbarItemsChange,
-      onResetLeftToolbar,
-      onResetToolbars,
-    });
-
-    const leftRailEditor = screen.getByRole("group", { name: "Left rail" });
-    const utilityZoneEditor = screen.getByRole("group", { name: "Bottom rail" });
-
-    fireEvent.click(within(leftRailEditor).getByRole("button", { name: "Add Trash to Left rail" }));
-    fireEvent.click(
-      within(utilityZoneEditor).getByRole("button", { name: "Add Trash to Bottom rail" }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Reset All" }));
-    fireEvent.click(within(leftRailEditor).getByRole("button", { name: "Reset" }));
-
-    expect(onLeftToolbarItemsChange).toHaveBeenNthCalledWith(1, {
-      main: ["home", "help", "trash"],
-      utility: ["settings"],
-    });
-    expect(onLeftToolbarItemsChange).toHaveBeenNthCalledWith(2, {
-      main: ["home", "help"],
-      utility: ["trash", "settings"],
-    });
-    expect(onResetToolbars).toHaveBeenCalledTimes(1);
-    expect(onResetLeftToolbar).toHaveBeenCalledTimes(0);
-  });
-
-  it("keeps search and settings out of the customizable lists", () => {
+  it("offers the app's own buttons and the file actions, not the fixed or retired items", () => {
     renderSettingsView();
 
-    expect(screen.queryByRole("button", { name: "Add Search to Top toolbar" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add Title to Top toolbar" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add Settings to Top toolbar" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add Settings to Bottom rail" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add Home to Top toolbar" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add Macintosh HD to Top toolbar" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add Applications to Top toolbar" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add Trash to Top toolbar" })).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Add Root Tree at Home to Top toolbar" }),
-    ).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add Help to Top toolbar" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add Back to Left rail" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add Forward to Left rail" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add Enclosing Folder to Left rail" })).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Add Open Selected Item to Left rail" }),
-    ).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add Back to Bottom rail" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add Forward to Bottom rail" })).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Add Enclosing Folder to Bottom rail" }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Add Open Selected Item to Bottom rail" }),
-    ).toBeNull();
+    for (const name of ["Settings", "Theme", "Help", "New Tab", "Quick Look", "Show in Finder"]) {
+      expect(screen.getByRole("button", { name: `Add ${name} to Toolbar` })).toBeInTheDocument();
+    }
+    // Always in the toolbar already.
+    for (const name of ["Search", "Title", "Clipboard", "View Options"]) {
+      expect(screen.queryByRole("button", { name: `Add ${name} to Toolbar` })).toBeNull();
+    }
+    // Went with the rails (Favorites has the places), or does what a double-click does.
+    for (const name of [
+      "Home",
+      "Macintosh HD",
+      "Applications",
+      "Trash",
+      "Root Tree at Home",
+      "Open Selected Item",
+    ]) {
+      expect(screen.queryByRole("button", { name: `Add ${name} to Toolbar` })).toBeNull();
+    }
   });
 
-  it("shows toolbar actions in a stable grouped order across the add lists", () => {
+  it("adds Settings ahead of the search field, like any other button", () => {
+    const onTopToolbarItemsChange = vi.fn();
+    renderSettingsView({ onTopToolbarItemsChange });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add Settings to Toolbar" }));
+
+    expect(onTopToolbarItemsChange).toHaveBeenCalledWith([
+      "back",
+      "forward",
+      "title",
+      "clipboard",
+      "view",
+      "sort",
+      "settings",
+      "search",
+      "viewOptions",
+      "infoPanel",
+    ]);
+  });
+
+  it("shows the items to add in a stable grouped order", () => {
     renderSettingsView({
-      showSidebarRail: true,
-      topToolbarItems: ["back", "search"],
-      leftToolbarItems: {
-        main: ["home"],
-        utility: ["settings"],
-      },
+      topToolbarItems: ["back", "title", "clipboard", "viewOptions", "search"],
     });
 
-    const topToolbarEditor = screen.getByRole("group", { name: "Top toolbar" });
-    const leftRailEditor = screen.getByRole("group", { name: "Left rail" });
-    const utilityEditor = screen.getByRole("group", { name: "Bottom rail" });
-
-    expect(
-      within(topToolbarEditor).getByRole("button", { name: "Add Copy to Top toolbar" }),
-    ).toBeInTheDocument();
-    expect(
-      within(topToolbarEditor).getByRole("button", { name: "Add Cut to Top toolbar" }),
-    ).toBeInTheDocument();
-    expect(
-      within(topToolbarEditor).getByRole("button", { name: "Add Paste to Top toolbar" }),
-    ).toBeInTheDocument();
-    expect(
-      within(leftRailEditor).getByRole("button", { name: "Add Copy to Left rail" }),
-    ).toBeInTheDocument();
-    expect(
-      within(leftRailEditor).getByRole("button", { name: "Add Cut to Left rail" }),
-    ).toBeInTheDocument();
-    expect(
-      within(leftRailEditor).getByRole("button", { name: "Add Paste to Left rail" }),
-    ).toBeInTheDocument();
-    expect(
-      within(utilityEditor).getByRole("button", { name: "Add Copy to Bottom rail" }),
-    ).toBeInTheDocument();
-    expect(
-      within(utilityEditor).getByRole("button", { name: "Add Cut to Bottom rail" }),
-    ).toBeInTheDocument();
-    expect(
-      within(utilityEditor).getByRole("button", { name: "Add Paste to Bottom rail" }),
-    ).toBeInTheDocument();
-
-    const topToolbarAddButtons = Array.from(
-      topToolbarEditor.querySelectorAll('button[aria-label^="Add "]'),
+    const addButtons = Array.from(
+      screen.getByRole("group", { name: "Toolbar" }).querySelectorAll('button[aria-label^="Add "]'),
+      (button) => button.getAttribute("aria-label")?.replace(/^Add (.*) to Toolbar$/u, "$1"),
     );
-    const leftRailAddButtons = Array.from(
-      leftRailEditor.querySelectorAll('button[aria-label^="Add "]'),
-    );
-    const utilityAddButtons = Array.from(
-      utilityEditor.querySelectorAll('button[aria-label^="Add "]'),
-    );
-
-    expect(
-      topToolbarAddButtons.slice(0, 6).map((button) => button.getAttribute("aria-label")),
-    ).toEqual([
-      "Add Separator to Top toolbar",
-      "Add Forward to Top toolbar",
-      "Add Enclosing Folder to Top toolbar",
-      "Add Open Selected Item to Top toolbar",
-      "Add Go To to Top toolbar",
-      "Add Refresh to Top toolbar",
-    ]);
-    expect(leftRailAddButtons[0]).toHaveAttribute("aria-label", "Add Separator to Left rail");
-    expect(utilityAddButtons[0]).toHaveAttribute("aria-label", "Add Separator to Bottom rail");
-    expect(
-      leftRailAddButtons.slice(0, 6).map((button) => button.getAttribute("aria-label")),
-    ).toEqual([
-      "Add Separator to Left rail",
-      "Add Macintosh HD to Left rail",
-      "Add Applications to Left rail",
-      "Add Trash to Left rail",
-      "Add Root Tree at Home to Left rail",
-      "Add Go To to Left rail",
-    ]);
-    expect(
-      utilityAddButtons.slice(0, 4).map((button) => button.getAttribute("aria-label")),
-    ).toEqual([
-      "Add Separator to Bottom rail",
-      "Add Help to Bottom rail",
-      "Add Theme to Bottom rail",
-      "Add Home to Bottom rail",
+    expect(addButtons).toEqual([
+      "Separator",
+      "Forward",
+      "Enclosing Folder",
+      "Go To",
+      "Refresh",
+      "New Tab",
+      "View Mode",
+      "Sort",
+      "Folders First",
+      "Hidden Files",
+      "Info Panel",
+      "Info Row",
+      "Open",
+      "Quick Look",
+      "Edit",
+      "Copy",
+      "Cut",
+      "Paste",
+      "Rename",
+      "Move To",
+      "Duplicate",
+      "New Folder",
+      "Move to Trash",
+      "Open in Terminal",
+      "Show in Finder",
+      "Copy Path",
+      "Theme",
+      "Settings",
+      "Help",
     ]);
   });
 

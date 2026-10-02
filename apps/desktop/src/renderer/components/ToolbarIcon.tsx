@@ -79,10 +79,31 @@ export function ToolbarIcon({
       </svg>
     );
   }
-  if (name === "separatorHorizontal") {
+  if (name === "newTab") {
+    // A window with its tab bar and a plus: unlike New Folder, which is a folder with one.
     return (
-      <svg className="toolbar-icon" viewBox="0 0 16 16" aria-hidden="true" role="presentation">
-        <line x1="2.5" y1="8" x2="13.5" y2="8" />
+      <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" role="presentation">
+        <rect x="3" y="4.5" width="18" height="15" rx="2.5" />
+        <path d="M3 9h18" />
+        <path d="M12 11.5v5.5M9.25 14.25h5.5" />
+      </svg>
+    );
+  }
+  if (name === "quickLook") {
+    return (
+      <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" role="presentation">
+        <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+    );
+  }
+  if (name === "showInFinder") {
+    // A folder with a magnifier on it, as in the right-click menu.
+    return (
+      <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" role="presentation">
+        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+        <circle cx="11.5" cy="13" r="2.5" />
+        <path d="M13.5 15l2.5 2.5" />
       </svg>
     );
   }
@@ -147,37 +168,6 @@ export function ToolbarIcon({
       </svg>
     );
   }
-  /* --- Modernized: drive — stacked disk rectangles --- */
-  if (name === "drive") {
-    return (
-      <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" role="presentation">
-        <rect x="2" y="5" width="20" height="6" rx="2" />
-        <rect x="2" y="13" width="20" height="6" rx="2" />
-        <circle cx="17" cy="8" r="1" fill="currentColor" />
-        <circle cx="17" cy="16" r="1" fill="currentColor" />
-      </svg>
-    );
-  }
-  /* --- Modernized: applications — rounded 2×2 grid --- */
-  if (name === "applications") {
-    return (
-      <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" role="presentation">
-        <rect x="4" y="4" width="6" height="6" rx="1.5" />
-        <rect x="14" y="4" width="6" height="6" rx="1.5" />
-        <rect x="4" y="14" width="6" height="6" rx="1.5" />
-        <rect x="14" y="14" width="6" height="6" rx="1.5" />
-      </svg>
-    );
-  }
-  /* --- Modernized: rerootHome — simplified arrow + house --- */
-  if (name === "rerootHome") {
-    return (
-      <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" role="presentation">
-        <path d="M3 12h5M6 9l-3 3 3 3" />
-        <path d="M12 9l7-5 7 5v10a1 1 0 0 1-1 1h-4v-5h-4v5h-4a1 1 0 0 1-1-1V9z" />
-      </svg>
-    );
-  }
   /* --- Modernized: drawer — right-biased panel split --- */
   if (name === "drawer") {
     return (
@@ -200,16 +190,13 @@ export function ToolbarIcon({
   const path = (() => {
     if (name === "back") return "M15 18l-6-6 6-6";
     if (name === "forward") return "M9 18l6-6-6-6";
-    if (name === "home") return "M3 9.5l9-7 9 7V20a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9.5zM9 22V12h6v10";
     if (name === "up") return "M18 15l-6-6-6 6";
-    if (name === "down") return "M6 9l6 6 6-6";
     if (name === "location")
       return "M12 20s6-5.2 6-10a6 6 0 1 0-12 0c0 4.8 6 10 6 10m0-8a2 2 0 1 1 0-4a2 2 0 0 1 0 4";
     if (name === "hidden") {
       return "M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M14.12 14.12A3 3 0 0 1 9.88 9.88M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19M1 1l22 22";
     }
     if (name === "refresh") return "M1 4v6h6M3.51 15a9 9 0 1 0 2.13-9.36L1 10";
-    if (name === "sidebar") return "M4 5h16v14H4zM9 5v14";
     /* Converged with context menu */
     if (name === "edit") return "M12 20h9M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z";
     if (name === "theme") {

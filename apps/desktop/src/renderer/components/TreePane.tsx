@@ -1,31 +1,14 @@
 import {
   type Dispatch,
-  Fragment,
   type SetStateAction,
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 
-import {
-  AUTO_THEME_OPTION,
-  type FavoritePreference,
-  type FavoritesPlacement,
-  THEME_GROUPS,
-  type ThemePreference,
-  getThemeLabel,
-} from "../../shared/appPreferences";
-import type { RendererCommandType } from "../../shared/rendererCommands";
-import {
-  type LeftToolbarItems,
-  type ToolbarItemId,
-  getToolbarItemDefinition,
-} from "../../shared/toolbarItems";
-import { useKeepInViewport } from "../hooks/useKeepInViewport";
+import type { FavoritePreference, FavoritesPlacement } from "../../shared/appPreferences";
 import {
   ClipboardMarkIcon,
   clipboardMarkClassName,
@@ -39,10 +22,6 @@ import {
   getFavoriteLabel,
 } from "../lib/favorites";
 import { FavoriteItemIcon, TreeFolderIcon } from "../lib/fileIcons";
-import type { HistoryMenuEntry } from "../lib/historyMenu";
-import { getToolbarItemTooltip } from "../lib/tooltips";
-import { useShortcutDisplay } from "../state/shortcutDisplayContext";
-import { HistoryButton } from "./HistoryButton";
 import { ToolbarIcon } from "./ToolbarIcon";
 
 export type TreeNodeState = {
@@ -76,39 +55,8 @@ export function TreePane({
   favoritesExpanded,
   onFocusChange,
   onLeftPaneSubviewChange,
-  onGoHome,
-  canGoBack,
-  onGoBack,
-  canGoForward,
-  onGoForward,
-  backHistory = [],
-  forwardHistory = [],
-  onGoToHistoryIndex = () => undefined,
-  canNavigateToParent,
-  onNavigateToParent,
-  canNavigateDown,
-  onNavigateDown,
-  onRerootHome,
-  onOpenLocation,
-  onQuickAccess,
-  foldersFirst,
-  onToggleFoldersFirst,
-  onToggleInfoPanel,
-  infoPanelOpen,
-  onToggleInfoRow,
-  infoRowOpen,
-  leftToolbarItems,
-  theme,
-  themeMenuOpen,
-  themeButtonRef,
-  themeMenuRef,
-  onToggleThemeMenu,
-  onSelectTheme,
   onClearSelection,
-  onOpenHelp,
-  onOpenSettings,
   includeHidden,
-  onToggleHidden,
   onToggleExpand,
   onNavigate,
   onNavigateFavorite,
@@ -121,10 +69,6 @@ export function TreePane({
   getItemDropIndicator,
   onToggleFavoritesExpanded,
   typeaheadQuery,
-  canRunRendererCommand,
-  onRendererCommand,
-  showRail = false,
-  showBottomRail = true,
 }: {
   paneRef?: React.RefObject<HTMLElement | null>;
   isFocused: boolean;
@@ -141,40 +85,8 @@ export function TreePane({
   favoritesExpanded: boolean;
   onFocusChange: (focused: boolean) => void;
   onLeftPaneSubviewChange: (value: "favorites" | "tree") => void;
-  onGoHome: () => void;
-  canGoBack?: boolean;
-  onGoBack?: () => void;
-  canGoForward?: boolean;
-  onGoForward?: () => void;
-  /** The folders Back and Forward lead to, nearest first, for their hold menus. */
-  backHistory?: HistoryMenuEntry[];
-  forwardHistory?: HistoryMenuEntry[];
-  onGoToHistoryIndex?: (historyIndex: number) => void;
-  canNavigateToParent?: boolean;
-  onNavigateToParent?: () => void;
-  canNavigateDown?: boolean;
-  onNavigateDown?: () => void;
-  onRerootHome: () => void;
-  onOpenLocation?: () => void;
-  onQuickAccess: (location: "root" | "applications" | "trash") => void;
-  foldersFirst: boolean;
-  onToggleFoldersFirst: () => void;
-  onToggleInfoPanel: () => void;
-  infoPanelOpen: boolean;
-  onToggleInfoRow: () => void;
-  infoRowOpen: boolean;
-  leftToolbarItems: LeftToolbarItems;
-  theme: ThemePreference;
-  themeMenuOpen: boolean;
-  themeButtonRef: React.RefObject<HTMLButtonElement | null>;
-  themeMenuRef: React.RefObject<HTMLDivElement | null>;
-  onToggleThemeMenu: () => void;
-  onSelectTheme: (theme: ThemePreference) => void;
   onClearSelection: () => void;
-  onOpenHelp: () => void;
-  onOpenSettings: () => void;
   includeHidden: boolean;
-  onToggleHidden: () => void;
   onToggleExpand: (path: string) => void;
   onNavigate: (path: string) => Promise<boolean | undefined> | undefined;
   onNavigateFavorite: (path: string) => Promise<boolean | undefined> | undefined;
@@ -214,13 +126,6 @@ export function TreePane({
     | undefined;
   onToggleFavoritesExpanded: () => void;
   typeaheadQuery?: string;
-  canRunRendererCommand: (command: RendererCommandType) => boolean;
-  onRendererCommand: (command: RendererCommandType) => void;
-  // Both rails are optional and independent. The left rail shows the "main" items beside
-  // the sidebar; the bottom rail shows the "utility" items under it. With only the left
-  // rail on, the utility items dock at its foot.
-  showRail?: boolean;
-  showBottomRail?: boolean;
 }) {
   const integratedPresentation = useMemo(
     () =>
@@ -277,10 +182,6 @@ export function TreePane({
   const lastCommittedSelectedItemIdRef = useRef(selectedTreeItemId);
   const [optimisticSelectedItemId, setOptimisticSelectedItemId] = useState<TreeItemId | null>(null);
   const [selectedRowRegistrationVersion, setSelectedRowRegistrationVersion] = useState(0);
-  const [themeMenuViewportPosition, setThemeMenuViewportPosition] = useState<{
-    left: number;
-    bottom: number;
-  } | null>(null);
   const treeVisibilityVersion = useMemo(
     () =>
       [
@@ -300,19 +201,6 @@ export function TreePane({
       integratedPresentation.visibleItemIds,
     ],
   );
-  const shortcutDisplay = useShortcutDisplay();
-  const getToolbarTooltip = (itemId: ToolbarItemId) =>
-    getToolbarItemTooltip(
-      itemId,
-      {
-        foldersFirst,
-        hiddenFilesShown: includeHidden,
-        infoPanelOpen,
-        infoRowOpen,
-      },
-      shortcutDisplay,
-    );
-
   useEffect(
     () => () => {
       if (clickTimeoutRef.current !== null) {
@@ -332,44 +220,6 @@ export function TreePane({
     lastRegisteredSelectedItemIdRef.current = selectedTreeItemId;
     lastRegisteredSelectedRowRef.current = null;
   }, [selectedTreeItemId]);
-
-  useKeepInViewport(themeMenuRef, themeMenuOpen);
-
-  useLayoutEffect(() => {
-    if (!themeMenuOpen) {
-      setThemeMenuViewportPosition(null);
-      return;
-    }
-    const updateThemeMenuPosition = () => {
-      const button = themeButtonRef.current;
-      if (!(button instanceof HTMLButtonElement)) {
-        return;
-      }
-      const rect = button.getBoundingClientRect();
-      // The narrowest a menu gets (`.toolbar-menu`).
-      const menuWidth = 220;
-      const maxLeft = window.innerWidth - menuWidth - 12;
-      // The menu opens above a bottom rail button, and beside a left rail button.
-      setThemeMenuViewportPosition(
-        button.closest(".sidebar-bottom-rail")
-          ? {
-              left: Math.max(12, Math.min(rect.left, maxLeft)),
-              bottom: Math.max(window.innerHeight - rect.top + 6, 8),
-            }
-          : {
-              left: Math.max(12, Math.min(rect.right + 10, maxLeft)),
-              bottom: Math.max(window.innerHeight - rect.bottom, 8),
-            },
-      );
-    };
-    updateThemeMenuPosition();
-    window.addEventListener("resize", updateThemeMenuPosition);
-    window.addEventListener("scroll", updateThemeMenuPosition, true);
-    return () => {
-      window.removeEventListener("resize", updateThemeMenuPosition);
-      window.removeEventListener("scroll", updateThemeMenuPosition, true);
-    };
-  }, [themeButtonRef, themeMenuOpen]);
 
   useEffect(() => {
     void selectedRowRegistrationVersion;
@@ -493,325 +343,6 @@ export function TreePane({
     };
   }
 
-  function renderLeftToolbarItem(itemId: ToolbarItemId) {
-    if (itemId === "leftSeparator") {
-      return <div key={itemId} className="sidebar-rail-separator" aria-hidden="true" />;
-    }
-    if (itemId === "back") {
-      return (
-        <HistoryButton
-          key={itemId}
-          className="sidebar-rail-button"
-          label="Back"
-          title={getToolbarTooltip(itemId)}
-          disabled={!canGoBack || !onGoBack}
-          entries={backHistory}
-          onStep={onGoBack}
-          onSelectEntry={onGoToHistoryIndex}
-        >
-          <ToolbarIcon name="back" />
-        </HistoryButton>
-      );
-    }
-    if (itemId === "forward") {
-      return (
-        <HistoryButton
-          key={itemId}
-          className="sidebar-rail-button"
-          label="Forward"
-          title={getToolbarTooltip(itemId)}
-          disabled={!canGoForward || !onGoForward}
-          entries={forwardHistory}
-          onStep={onGoForward}
-          onSelectEntry={onGoToHistoryIndex}
-        >
-          <ToolbarIcon name="forward" />
-        </HistoryButton>
-      );
-    }
-    if (itemId === "home") {
-      return (
-        <button
-          key={itemId}
-          type="button"
-          className="sidebar-rail-button"
-          onClick={onGoHome}
-          title={getToolbarTooltip(itemId)}
-          aria-label="Quick access Home"
-        >
-          <ToolbarIcon name="home" />
-        </button>
-      );
-    }
-    if (itemId === "up") {
-      return (
-        <button
-          key={itemId}
-          type="button"
-          className="sidebar-rail-button"
-          onClick={onNavigateToParent}
-          disabled={!canNavigateToParent || !onNavigateToParent}
-          title={getToolbarTooltip(itemId)}
-          aria-label="Enclosing Folder"
-        >
-          <ToolbarIcon name="up" />
-        </button>
-      );
-    }
-    if (itemId === "down") {
-      return (
-        <button
-          key={itemId}
-          type="button"
-          className="sidebar-rail-button"
-          onClick={onNavigateDown}
-          disabled={!canNavigateDown || !onNavigateDown}
-          title={getToolbarTooltip(itemId)}
-          aria-label="Open Selected Item"
-        >
-          <ToolbarIcon name="down" />
-        </button>
-      );
-    }
-    if (itemId === "root") {
-      return (
-        <button
-          key={itemId}
-          type="button"
-          className="sidebar-rail-button"
-          onClick={() => onQuickAccess("root")}
-          title={getToolbarTooltip(itemId)}
-          aria-label="Quick access Macintosh HD"
-        >
-          <ToolbarIcon name="drive" />
-        </button>
-      );
-    }
-    if (itemId === "applications") {
-      return (
-        <button
-          key={itemId}
-          type="button"
-          className="sidebar-rail-button"
-          onClick={() => onQuickAccess("applications")}
-          title={getToolbarTooltip(itemId)}
-          aria-label="Quick access Applications"
-        >
-          <ToolbarIcon name="applications" />
-        </button>
-      );
-    }
-    if (itemId === "trash") {
-      return (
-        <button
-          key={itemId}
-          type="button"
-          className="sidebar-rail-button"
-          onClick={() => onQuickAccess("trash")}
-          title={getToolbarTooltip(itemId)}
-          aria-label="Quick access Trash"
-        >
-          <ToolbarIcon name="trash" />
-        </button>
-      );
-    }
-    if (itemId === "rerootHome") {
-      return (
-        <button
-          key={itemId}
-          type="button"
-          className="sidebar-rail-button"
-          onClick={onRerootHome}
-          title={getToolbarTooltip(itemId)}
-          aria-label="Root tree at Home"
-        >
-          <ToolbarIcon name="rerootHome" />
-        </button>
-      );
-    }
-    if (itemId === "foldersFirst") {
-      return (
-        <button
-          key={itemId}
-          type="button"
-          className={`sidebar-rail-button${foldersFirst ? " active" : ""}`}
-          onClick={onToggleFoldersFirst}
-          title={getToolbarTooltip(itemId)}
-          aria-label="Toggle folders first"
-          aria-pressed={foldersFirst}
-        >
-          <ToolbarIcon name="foldersFirst" />
-        </button>
-      );
-    }
-    if (itemId === "hidden") {
-      return (
-        <button
-          key={itemId}
-          type="button"
-          className={`sidebar-rail-button${includeHidden ? " active" : ""}`}
-          onClick={onToggleHidden}
-          title={getToolbarTooltip(itemId)}
-          aria-label="Toggle hidden files"
-          aria-pressed={includeHidden}
-        >
-          <ToolbarIcon name="hidden" />
-        </button>
-      );
-    }
-    if (itemId === "infoPanel") {
-      return (
-        <button
-          key={itemId}
-          type="button"
-          className={`sidebar-rail-button${infoPanelOpen ? " active" : ""}`}
-          onClick={onToggleInfoPanel}
-          title={getToolbarTooltip(itemId)}
-          aria-label="Toggle Info Panel"
-          aria-pressed={infoPanelOpen}
-        >
-          <ToolbarIcon name="drawer" />
-        </button>
-      );
-    }
-    if (itemId === "infoRow") {
-      return (
-        <button
-          key={itemId}
-          type="button"
-          className={`sidebar-rail-button${infoRowOpen ? " active" : ""}`}
-          onClick={onToggleInfoRow}
-          title={getToolbarTooltip(itemId)}
-          aria-label="Toggle Info Row"
-          aria-pressed={infoRowOpen}
-        >
-          <ToolbarIcon name="infoRow" />
-        </button>
-      );
-    }
-    if (itemId === "help") {
-      return (
-        <button
-          key={itemId}
-          type="button"
-          className="sidebar-rail-button"
-          onClick={onOpenHelp}
-          title={getToolbarTooltip(itemId)}
-          aria-label="Open help"
-        >
-          <ToolbarIcon name="help" />
-        </button>
-      );
-    }
-    if (itemId === "theme") {
-      const renderThemeMenuItem = (option: { value: ThemePreference; label: string }) => (
-        <button
-          key={option.value}
-          type="button"
-          className="toolbar-menu-item"
-          role="menuitemradio"
-          aria-checked={theme === option.value}
-          onClick={() => onSelectTheme(option.value)}
-        >
-          <span className="toolbar-menu-check" aria-hidden="true">
-            {theme === option.value ? "✓" : ""}
-          </span>
-          <span className="toolbar-menu-label">{option.label}</span>
-        </button>
-      );
-      const themeMenu =
-        themeMenuOpen && themeMenuViewportPosition
-          ? createPortal(
-              <div
-                ref={themeMenuRef}
-                className="toolbar-menu theme-menu"
-                role="menu"
-                aria-label="Theme"
-                style={{
-                  position: "fixed",
-                  left: `${themeMenuViewportPosition.left}px`,
-                  bottom: `${themeMenuViewportPosition.bottom}px`,
-                }}
-              >
-                {renderThemeMenuItem(AUTO_THEME_OPTION)}
-                {THEME_GROUPS.map((group) => (
-                  <Fragment key={group.value}>
-                    <hr className="toolbar-menu-separator" />
-                    {group.options.map(renderThemeMenuItem)}
-                  </Fragment>
-                ))}
-              </div>,
-              document.body,
-            )
-          : null;
-      return (
-        <div key={itemId} className="sidebar-rail-menu-anchor">
-          <button
-            ref={themeButtonRef}
-            type="button"
-            className={`sidebar-rail-button${themeMenuOpen ? " active" : ""}`}
-            onClick={onToggleThemeMenu}
-            title={`Theme: ${getThemeLabel(theme)}`}
-            aria-label="Choose theme"
-            aria-haspopup="menu"
-            aria-expanded={themeMenuOpen}
-          >
-            <ToolbarIcon name="theme" />
-          </button>
-          {themeMenu}
-        </div>
-      );
-    }
-    if (itemId === "settings") {
-      return (
-        <button
-          key={itemId}
-          type="button"
-          className="sidebar-rail-button"
-          onClick={onOpenSettings}
-          title={getToolbarTooltip(itemId)}
-          aria-label="Open settings"
-        >
-          <ToolbarIcon name="settings" />
-        </button>
-      );
-    }
-    if (itemId === "goToFolder") {
-      return (
-        <button
-          key={itemId}
-          type="button"
-          className="sidebar-rail-button"
-          onClick={onOpenLocation}
-          disabled={!onOpenLocation}
-          title={getToolbarTooltip(itemId)}
-          aria-label="Go To"
-        >
-          <ToolbarIcon name="location" />
-        </button>
-      );
-    }
-
-    const definition = getToolbarItemDefinition(itemId);
-    const commandType = definition.commandType;
-    if (!commandType) {
-      return null;
-    }
-    return (
-      <button
-        key={itemId}
-        type="button"
-        className="sidebar-rail-button"
-        onClick={() => onRendererCommand(commandType)}
-        disabled={!canRunRendererCommand(commandType)}
-        title={getToolbarTooltip(itemId)}
-        aria-label={definition.label}
-      >
-        <ToolbarIcon name={definition.icon} />
-      </button>
-    );
-  }
-
   // Finder-style collapsible section header: the title toggles the section, with a
   // disclosure chevron that appears on hover (and stays visible while collapsed).
   function renderSectionHeader(
@@ -875,35 +406,6 @@ export function TreePane({
     );
   }
 
-  function renderToolbarItems(items: readonly ToolbarItemId[]) {
-    const keyCounts = new Map<string, number>();
-    return items
-      .filter((itemId) => itemId !== "settings")
-      .map((itemId) => {
-        const keyCount = (keyCounts.get(itemId) ?? 0) + 1;
-        keyCounts.set(itemId, keyCount);
-        return <Fragment key={`${itemId}:${keyCount}`}>{renderLeftToolbarItem(itemId)}</Fragment>;
-      });
-  }
-
-  // Settings always closes the utility items, whichever rail shows them. Docked at the foot
-  // of the left rail, they skip buttons that rail already shows.
-  function renderUtilityItems(dockedInLeftRail: boolean) {
-    const items = dockedInLeftRail
-      ? leftToolbarItems.utility.filter(
-          (itemId) =>
-            getToolbarItemDefinition(itemId).allowDuplicates ||
-            !leftToolbarItems.main.includes(itemId),
-        )
-      : leftToolbarItems.utility;
-    return (
-      <>
-        {renderToolbarItems(items)}
-        {renderLeftToolbarItem("settings")}
-      </>
-    );
-  }
-
   return (
     <aside
       ref={paneRef}
@@ -929,19 +431,7 @@ export function TreePane({
     >
       {/* Space for the window's traffic lights; the sidebar runs the full window height. */}
       <div className="sidebar-titlebar" aria-hidden="true" />
-      <div className={`sidebar-shell${showRail ? "" : " sidebar-shell-no-rail"}`}>
-        {showRail ? (
-          <aside className="sidebar-rail" aria-label="Left rail">
-            <div className="sidebar-rail-group sidebar-rail-group-main">
-              {renderToolbarItems(leftToolbarItems.main)}
-            </div>
-            {showBottomRail ? null : (
-              <div className="sidebar-rail-group sidebar-rail-group-utility">
-                {renderUtilityItems(true)}
-              </div>
-            )}
-          </aside>
-        ) : null}
+      <div className="sidebar-shell">
         <div className="sidebar-main sidebar-main-native">
           {/* Finder layout: a labeled Favorites list above the folder tree, or Favorites as
               a root row inside the tree. */}
@@ -1062,11 +552,6 @@ export function TreePane({
           ) : (
             renderIntegratedTree()
           )}
-          {showBottomRail ? (
-            <footer className="sidebar-bottom-rail" aria-label="Bottom rail">
-              {renderUtilityItems(false)}
-            </footer>
-          ) : null}
         </div>
       </div>
     </aside>

@@ -186,12 +186,6 @@ export function App() {
     setNotifyClipboardItems,
     topToolbarItems,
     setTopToolbarItems,
-    leftToolbarItems,
-    setLeftToolbarItems,
-    showSidebarRail,
-    setShowSidebarRail,
-    showSidebarBottomRail,
-    setShowSidebarBottomRail,
     restoreLastVisitedFolderOnStartup,
     setRestoreLastVisitedFolderOnStartup,
     restoreOpenTabsOnStartup,
@@ -274,8 +268,6 @@ export function App() {
     setFocusedPane,
     leftPaneSubview,
     setLeftPaneSubview,
-    themeMenuOpen,
-    setThemeMenuOpen,
     listFilterQuery,
     typeaheadQuery,
     setTypeaheadQuery,
@@ -390,8 +382,6 @@ export function App() {
   const singlePanelRef = useRef<HTMLElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const searchShellRef = useRef<HTMLDivElement | null>(null);
-  const themeMenuRef = useRef<HTMLDivElement | null>(null);
-  const themeButtonRef = useRef<HTMLButtonElement | null>(null);
   const typeaheadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typeaheadQueryRef = useRef("");
   const typeaheadPaneRef = useRef<"tree" | "content" | null>(null);
@@ -680,11 +670,8 @@ export function App() {
     goBack,
     goForward,
     goToHistoryIndex,
-    goHome,
-    rerootTreeAtHome,
     rootTreeAtPath,
     goHomeAndRootTree,
-    goQuickAccess,
     navigateToParentFolder,
     navigateTreeSelectionToParent,
     selectTreeItem,
@@ -1147,9 +1134,6 @@ export function App() {
     highlightClipboardItemsInContent,
     notifyClipboardItems,
     topToolbarItems,
-    leftToolbarItems,
-    showSidebarRail,
-    showSidebarBottomRail,
     propertiesOpen: infoPanelOpen,
     detailRowOpen: infoRowOpen,
     terminalApp,
@@ -1316,9 +1300,6 @@ export function App() {
         setHighlightClipboardItemsInContent(preferences.highlightClipboardItemsInContent);
         setNotifyClipboardItems(preferences.notifyClipboardItems);
         setTopToolbarItems(preferences.topToolbarItems);
-        setLeftToolbarItems(preferences.leftToolbarItems);
-        setShowSidebarRail(preferences.showSidebarRail);
-        setShowSidebarBottomRail(preferences.showSidebarBottomRail);
         setInfoPanelOpen(preferences.propertiesOpen);
         setInfoRowOpen(preferences.detailRowOpen);
         setSortBy(preferences.sortBy);
@@ -1449,33 +1430,6 @@ export function App() {
     }
     setRestoredPaneWidths(null);
   }, [panes.inspectorWidth, panes.treeWidth, restoredPaneWidths, setRestoredPaneWidths]);
-
-  useEffect(() => {
-    if (!themeMenuOpen) {
-      return;
-    }
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) {
-        return;
-      }
-      if (themeMenuRef.current?.contains(target) || themeButtonRef.current?.contains(target)) {
-        return;
-      }
-      setThemeMenuOpen(false);
-    };
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setThemeMenuOpen(false);
-      }
-    };
-    window.addEventListener("mousedown", handlePointerDown);
-    window.addEventListener("keydown", handleEscape);
-    return () => {
-      window.removeEventListener("mousedown", handlePointerDown);
-      window.removeEventListener("keydown", handleEscape);
-    };
-  }, [setThemeMenuOpen, themeMenuOpen]);
 
   useEffect(() => {
     if (!searchPopoverOpen) {
@@ -1640,23 +1594,10 @@ export function App() {
 
   // Settings is a separate window (like any macOS app); main opens or focuses it.
   function openSettingsView(tab?: SettingsTab) {
-    setThemeMenuOpen(false);
     setSearchPopoverOpen(false);
     void client.invoke("app:openSettingsWindow", tab ? { tab } : {}).catch((error) => {
       logger.error("open settings window failed", error);
     });
-  }
-
-  function navigateDownAction() {
-    if (focusedPane === "tree") {
-      void openTreeNode();
-      return;
-    }
-    if (selectedEntry) {
-      const pathsToActivate =
-        selectedPathsInViewOrder.length > 0 ? selectedPathsInViewOrder : [selectedEntry.path];
-      void activateContentPaths(pathsToActivate);
-    }
   }
 
   // Derive folder size paths for the info panel and info row.
@@ -1714,49 +1655,7 @@ export function App() {
               rootPath: treeRootPath,
               onFocusChange: (focused) => setFocusedPane(focused ? "tree" : null),
               onLeftPaneSubviewChange: setLeftPaneSubview,
-              onGoHome: goHome,
-              canGoBack,
-              onGoBack: goBack,
-              canGoForward,
-              onGoForward: goForward,
-              backHistory,
-              forwardHistory,
-              onGoToHistoryIndex: goToHistoryIndex,
-              canNavigateToParent: parentDirectoryPath(currentPath) !== null,
-              onNavigateToParent: navigateToParentFolder,
-              canNavigateDown: focusedPane === "tree" || selectedEntry !== null,
-              onNavigateDown: navigateDownAction,
-              onRerootHome: rerootTreeAtHome,
-              onOpenLocation: openLocationSheet,
-              onQuickAccess: goQuickAccess,
-              foldersFirst,
-              onToggleFoldersFirst: toggleFoldersFirst,
-              infoPanelOpen,
-              onToggleInfoPanel: () => setInfoPanelOpen((value) => !value),
-              infoRowOpen,
-              onToggleInfoRow: () => setInfoRowOpen((value) => !value),
-              leftToolbarItems,
-              theme,
-              themeMenuOpen,
-              themeButtonRef,
-              themeMenuRef,
-              onToggleThemeMenu: () => setThemeMenuOpen((value) => !value),
-              onSelectTheme: (nextTheme) => {
-                // A palette picked here also becomes the palette of its side for Auto.
-                const patch = themeChoicePatch(nextTheme);
-                setTheme(nextTheme);
-                if (patch.autoLightTheme) {
-                  setAutoLightTheme(patch.autoLightTheme);
-                }
-                if (patch.autoDarkTheme) {
-                  setAutoDarkTheme(patch.autoDarkTheme);
-                }
-                setThemeMenuOpen(false);
-              },
-              onOpenHelp: () => openHelp("navigation"),
-              onOpenSettings: () => openSettingsView(),
               includeHidden,
-              onToggleHidden: toggleHiddenFiles,
               onNavigate: async (path) => {
                 await navigateTreeFileSystemPath(path, "push");
                 return undefined;
@@ -1799,8 +1698,6 @@ export function App() {
               onToggleExpand: toggleTreeNode,
               onToggleFavoritesExpanded: () => setFavoritesExpanded((value) => !value),
               typeaheadQuery: focusedPane === "tree" ? typeaheadQuery : "",
-              canRunRendererCommand,
-              onRendererCommand: runRendererCommand,
             }}
             searchWorkspaceProps={{
               isSearchMode,
@@ -2068,18 +1965,39 @@ export function App() {
             topToolbarItems={topToolbarItems}
             canGoBack={canGoBack}
             canGoForward={canGoForward}
+            backHistory={backHistory}
+            forwardHistory={forwardHistory}
+            onGoToHistoryIndex={goToHistoryIndex}
             focusedPane={focusedPane}
             selectedEntryExists={selectedEntry !== null}
             goBack={goBack}
             goForward={goForward}
             navigateToParentFolder={navigateToParentFolder}
-            navigateDownAction={navigateDownAction}
             refreshDirectory={refreshDirectory}
             viewMode={viewMode}
             onViewModeChange={setViewMode}
             sortBy={sortBy}
             sortDirection={sortDirection}
             onSortChange={handleSortChange}
+            foldersFirst={foldersFirst}
+            onToggleFoldersFirst={toggleFoldersFirst}
+            includeHidden={includeHidden}
+            onToggleHidden={toggleHiddenFiles}
+            onToggleInfoPanel={() => setInfoPanelOpen((value) => !value)}
+            infoRowOpen={infoRowOpen}
+            onToggleInfoRow={() => setInfoRowOpen((value) => !value)}
+            theme={theme}
+            onSelectTheme={(nextTheme) => {
+              // A palette picked here also becomes the palette of its side for Auto.
+              const patch = themeChoicePatch(nextTheme);
+              setTheme(nextTheme);
+              if (patch.autoLightTheme) {
+                setAutoLightTheme(patch.autoLightTheme);
+              }
+              if (patch.autoDarkTheme) {
+                setAutoDarkTheme(patch.autoDarkTheme);
+              }
+            }}
             searchShellRef={searchShellRef}
             searchPopoverOpen={searchPopoverOpen}
             onSearchShellBlur={(event) => {
@@ -2158,8 +2076,6 @@ export function App() {
             onRendererCommand={runRendererCommand}
             onCustomizeToolbar={() => openSettingsView("toolbars")}
             onPaneResizeKey={handlePaneResizeKey}
-            showSidebarRail={showSidebarRail}
-            showSidebarBottomRail={showSidebarBottomRail}
             clipboardButton={
               clipboardSummary ? (
                 <ClipboardButton

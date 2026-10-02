@@ -4,9 +4,7 @@ import type { ShortcutCommandId } from "./shortcuts";
 export type ToolbarIconName =
   | "back"
   | "forward"
-  | "home"
   | "up"
-  | "down"
   | "location"
   | "hidden"
   | "refresh"
@@ -14,7 +12,6 @@ export type ToolbarIconName =
   | "list"
   | "details"
   | "drawer"
-  | "sidebar"
   | "edit"
   | "chevron"
   | "open"
@@ -25,10 +22,7 @@ export type ToolbarIconName =
   | "help"
   | "settings"
   | "search"
-  | "applications"
-  | "drive"
   | "trash"
-  | "rerootHome"
   | "infoRow"
   | "foldersFirst"
   | "copy"
@@ -43,21 +37,21 @@ export type ToolbarIconName =
   | "copyPath"
   | "rename"
   | "separatorVertical"
-  | "separatorHorizontal"
   | "more"
   | "sort"
   | "title"
-  | "clipboard";
+  | "clipboard"
+  | "newTab"
+  | "quickLook"
+  | "showInFinder";
 
-export type ToolbarSurface = "top" | "left";
 export type ToolbarItemKind = "button" | "toggle" | "menu" | "composite" | "separator";
-export type LeftToolbarZone = "main" | "utility";
 
+// The items of the toolbar over the file list. The id is what is saved in the toolbar's order.
 export type ToolbarItemId =
   | "back"
   | "forward"
   | "up"
-  | "down"
   | "refresh"
   | "view"
   | "sort"
@@ -65,20 +59,14 @@ export type ToolbarItemId =
   | "clipboard"
   | "viewOptions"
   | "search"
-  | "home"
-  | "root"
-  | "applications"
-  | "trash"
-  | "rerootHome"
   | "goToFolder"
   | "foldersFirst"
   | "hidden"
   | "infoPanel"
   | "infoRow"
-  | "help"
-  | "theme"
-  | "settings"
+  | "newTab"
   | "openSelection"
+  | "quickLook"
   | "editSelection"
   | "moveSelection"
   | "renameSelection"
@@ -89,30 +77,26 @@ export type ToolbarItemId =
   | "cutSelection"
   | "pasteSelection"
   | "openInTerminal"
+  | "showInFinder"
   | "copyPath"
-  | "topSeparator"
-  | "leftSeparator";
-
-export type LeftToolbarItems = {
-  main: ToolbarItemId[];
-  utility: ToolbarItemId[];
-};
+  | "theme"
+  | "settings"
+  | "help"
+  | "topSeparator";
 
 export type ToolbarItemDefinition = {
   id: ToolbarItemId;
   label: string;
   icon: ToolbarIconName;
   kind: ToolbarItemKind;
-  surfaces: readonly ToolbarSurface[];
   commandType?: RendererCommandType;
-  // Always in the top toolbar: it can be moved there, but not taken off.
+  // Always in the toolbar: it can be moved there, but not taken off.
   topRequired?: boolean;
   // The command whose shortcut the tooltip shows.
   shortcutCommand?: ShortcutCommandId;
   // The command's full name, where the label is a shorter one for the Settings tiles.
   tooltipLabel?: string;
   allowDuplicates?: boolean;
-  leftZones?: readonly LeftToolbarZone[];
 };
 
 export const TOOLBAR_ITEM_DEFINITIONS = [
@@ -121,7 +105,6 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     label: "Back",
     icon: "back",
     kind: "button",
-    surfaces: ["top"],
     shortcutCommand: "goBack",
   },
   {
@@ -129,7 +112,6 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     label: "Forward",
     icon: "forward",
     kind: "button",
-    surfaces: ["top"],
     shortcutCommand: "goForward",
   },
   {
@@ -137,23 +119,13 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     label: "Enclosing Folder",
     icon: "up",
     kind: "button",
-    surfaces: ["top"],
     shortcutCommand: "goEnclosingFolder",
-  },
-  {
-    id: "down",
-    label: "Open Selected Item",
-    icon: "down",
-    kind: "button",
-    surfaces: ["top"],
-    shortcutCommand: "openSelectedItem",
   },
   {
     id: "refresh",
     label: "Refresh",
     icon: "refresh",
     kind: "button",
-    surfaces: ["top", "left"],
     commandType: "refreshOrApplySearchSort",
     shortcutCommand: "refreshOrApplySearchSort",
   },
@@ -162,7 +134,6 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     label: "Separator",
     icon: "separatorVertical",
     kind: "separator",
-    surfaces: ["top"],
     allowDuplicates: true,
   },
   {
@@ -170,21 +141,18 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     label: "View Mode",
     icon: "list",
     kind: "composite",
-    surfaces: ["top"],
   },
   {
     id: "sort",
     label: "Sort",
-    icon: "sortAsc",
+    icon: "sort",
     kind: "composite",
-    surfaces: ["top"],
   },
   {
     id: "title",
     label: "Title",
     icon: "title",
     kind: "composite",
-    surfaces: ["top"],
     topRequired: true,
   },
   {
@@ -192,7 +160,6 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     label: "Clipboard",
     icon: "clipboard",
     kind: "menu",
-    surfaces: ["top"],
     topRequired: true,
   },
   {
@@ -200,7 +167,6 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     label: "View Options",
     icon: "more",
     kind: "menu",
-    surfaces: ["top"],
     topRequired: true,
   },
   {
@@ -208,50 +174,13 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     label: "Search",
     icon: "search",
     kind: "composite",
-    surfaces: ["top"],
     topRequired: true,
-  },
-  {
-    id: "home",
-    label: "Home",
-    icon: "home",
-    kind: "button",
-    surfaces: ["left"],
-  },
-  {
-    id: "root",
-    label: "Macintosh HD",
-    icon: "drive",
-    kind: "button",
-    surfaces: ["left"],
-  },
-  {
-    id: "applications",
-    label: "Applications",
-    icon: "applications",
-    kind: "button",
-    surfaces: ["left"],
-  },
-  {
-    id: "trash",
-    label: "Trash",
-    icon: "trash",
-    kind: "button",
-    surfaces: ["left"],
-  },
-  {
-    id: "rerootHome",
-    label: "Root Tree at Home",
-    icon: "rerootHome",
-    kind: "button",
-    surfaces: ["left"],
   },
   {
     id: "goToFolder",
     label: "Go To",
     icon: "location",
     kind: "button",
-    surfaces: ["top", "left"],
     commandType: "openLocationSheet",
     shortcutCommand: "openLocationSheet",
   },
@@ -260,7 +189,6 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     label: "Folders First",
     icon: "foldersFirst",
     kind: "toggle",
-    surfaces: ["top", "left"],
     shortcutCommand: "toggleFoldersFirst",
   },
   {
@@ -268,7 +196,6 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     label: "Hidden Files",
     icon: "hidden",
     kind: "toggle",
-    surfaces: ["top", "left"],
     shortcutCommand: "toggleHiddenFiles",
   },
   {
@@ -276,7 +203,6 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     label: "Info Panel",
     icon: "drawer",
     kind: "toggle",
-    surfaces: ["top", "left"],
     commandType: "toggleInfoPanel",
     shortcutCommand: "toggleInfoPanel",
   },
@@ -285,52 +211,32 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     label: "Info Row",
     icon: "infoRow",
     kind: "toggle",
-    surfaces: ["top", "left"],
     commandType: "toggleInfoRow",
     shortcutCommand: "toggleInfoRow",
   },
   {
-    id: "help",
-    label: "Help",
-    icon: "help",
+    id: "newTab",
+    label: "New Tab",
+    icon: "newTab",
     kind: "button",
-    surfaces: ["left"],
-    shortcutCommand: "openHelp",
-  },
-  {
-    id: "theme",
-    label: "Theme",
-    icon: "theme",
-    kind: "menu",
-    surfaces: ["left"],
-    leftZones: ["utility"],
-  },
-  {
-    id: "settings",
-    label: "Settings",
-    icon: "settings",
-    kind: "button",
-    surfaces: ["left"],
-    commandType: "openSettings",
-    shortcutCommand: "settings",
-    leftZones: ["utility"],
-  },
-  {
-    id: "leftSeparator",
-    label: "Separator",
-    icon: "separatorHorizontal",
-    kind: "separator",
-    surfaces: ["left"],
-    allowDuplicates: true,
+    commandType: "newTab",
+    shortcutCommand: "newTab",
   },
   {
     id: "openSelection",
     label: "Open",
     icon: "open",
     kind: "button",
-    surfaces: ["top", "left"],
     commandType: "openSelection",
     shortcutCommand: "openSelection",
+  },
+  {
+    id: "quickLook",
+    label: "Quick Look",
+    icon: "quickLook",
+    kind: "button",
+    commandType: "quickLookSelection",
+    shortcutCommand: "quickLookSelection",
   },
   {
     id: "editSelection",
@@ -338,7 +244,6 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     tooltipLabel: "Edit in Text Editor",
     icon: "edit",
     kind: "button",
-    surfaces: ["top", "left"],
     commandType: "editSelection",
     shortcutCommand: "editSelection",
   },
@@ -347,7 +252,6 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     label: "Move To",
     icon: "move",
     kind: "button",
-    surfaces: ["top", "left"],
     commandType: "moveSelection",
     shortcutCommand: "moveSelection",
   },
@@ -356,7 +260,6 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     label: "Rename",
     icon: "rename",
     kind: "button",
-    surfaces: ["top", "left"],
     commandType: "renameSelection",
     shortcutCommand: "renameSelection",
   },
@@ -365,7 +268,6 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     label: "Duplicate",
     icon: "duplicate",
     kind: "button",
-    surfaces: ["top", "left"],
     commandType: "duplicateSelection",
     shortcutCommand: "duplicateSelection",
   },
@@ -374,7 +276,6 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     label: "New Folder",
     icon: "newFolder",
     kind: "button",
-    surfaces: ["top", "left"],
     commandType: "newFolder",
     shortcutCommand: "newFolder",
   },
@@ -383,7 +284,6 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     label: "Move to Trash",
     icon: "trash",
     kind: "button",
-    surfaces: ["top", "left"],
     commandType: "trashSelection",
     shortcutCommand: "trashSelection",
   },
@@ -392,7 +292,6 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     label: "Copy",
     icon: "copy",
     kind: "button",
-    surfaces: ["top", "left"],
     commandType: "copySelection",
     shortcutCommand: "copy",
   },
@@ -401,7 +300,6 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     label: "Cut",
     icon: "cut",
     kind: "button",
-    surfaces: ["top", "left"],
     commandType: "cutSelection",
     shortcutCommand: "cut",
   },
@@ -410,7 +308,6 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     label: "Paste",
     icon: "paste",
     kind: "button",
-    surfaces: ["top", "left"],
     commandType: "pasteSelection",
     shortcutCommand: "paste",
   },
@@ -419,18 +316,47 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     label: "Open in Terminal",
     icon: "terminal",
     kind: "button",
-    surfaces: ["top", "left"],
     commandType: "openInTerminal",
     shortcutCommand: "openInTerminal",
+  },
+  {
+    id: "showInFinder",
+    label: "Show in Finder",
+    icon: "showInFinder",
+    kind: "button",
+    commandType: "showInFinder",
+    shortcutCommand: "showInFinder",
   },
   {
     id: "copyPath",
     label: "Copy Path",
     icon: "copyPath",
     kind: "button",
-    surfaces: ["top", "left"],
     commandType: "copyPath",
     shortcutCommand: "copyPath",
+  },
+  {
+    id: "theme",
+    label: "Theme",
+    icon: "theme",
+    kind: "menu",
+  },
+  {
+    id: "settings",
+    label: "Settings",
+    icon: "settings",
+    kind: "button",
+    commandType: "openSettings",
+    shortcutCommand: "settings",
+  },
+  {
+    id: "help",
+    label: "Help",
+    tooltipLabel: "File Trail Help",
+    icon: "help",
+    kind: "button",
+    commandType: "openHelp",
+    shortcutCommand: "openHelp",
   },
 ] as const satisfies ReadonlyArray<ToolbarItemDefinition>;
 
@@ -444,7 +370,7 @@ export const TOOLBAR_ITEM_IDS = TOOLBAR_ITEM_DEFINITIONS.map((item) => item.id) 
 // - View Options is a menu rather than a control of its own, so it sits past the search field.
 // - Info Panel is last, over the panel it opens, and so the first to go in a narrow window
 //   (View Options has the same toggle).
-// Up/Down/Refresh and the rest remain available in toolbar customization.
+// Everything else can be added in Settings.
 export const DEFAULT_TOP_TOOLBAR_ITEMS: ToolbarItemId[] = [
   "back",
   "forward",
@@ -459,7 +385,8 @@ export const DEFAULT_TOP_TOOLBAR_ITEMS: ToolbarItemId[] = [
 
 // The defaults before this one, as they were saved. A toolbar still exactly equal to one of
 // them was never customized, so it is given the new default when preferences load.
-export const PREVIOUS_DEFAULT_TOP_TOOLBARS: ReadonlyArray<readonly ToolbarItemId[]> = [
+// (Plain strings: one of them holds an item that no longer exists.)
+export const PREVIOUS_DEFAULT_TOP_TOOLBARS: ReadonlyArray<readonly string[]> = [
   [
     "back",
     "forward",
@@ -476,24 +403,6 @@ export const PREVIOUS_DEFAULT_TOP_TOOLBARS: ReadonlyArray<readonly ToolbarItemId
   ["back", "forward", "view", "sort", "infoPanel", "search"],
   ["back", "forward", "title", "view", "sort", "infoPanel", "clipboard", "viewOptions", "search"],
 ];
-
-export const DEFAULT_LEFT_TOOLBAR_ITEMS: LeftToolbarItems = {
-  main: [
-    "home",
-    "root",
-    "applications",
-    "trash",
-    "leftSeparator",
-    "rerootHome",
-    "goToFolder",
-    "leftSeparator",
-    "foldersFirst",
-    "hidden",
-    "infoPanel",
-    "infoRow",
-  ],
-  utility: ["help", "leftSeparator", "theme", "settings"],
-};
 
 const TOOLBAR_ITEM_ID_SET = new Set<ToolbarItemId>(TOOLBAR_ITEM_IDS);
 const TOOLBAR_ITEM_BY_ID = new Map<ToolbarItemId, ToolbarItemDefinition>(
@@ -512,62 +421,22 @@ export function getToolbarItemDefinition(id: ToolbarItemId): ToolbarItemDefiniti
   return definition;
 }
 
-export function getToolbarItemsForSurface(surface: ToolbarSurface): ToolbarItemDefinition[] {
-  return TOOLBAR_ITEM_DEFINITIONS.filter((item) =>
-    (item.surfaces as readonly ToolbarSurface[]).includes(surface),
-  );
-}
-
-export function getToolbarItemsForLeftZone(zone: LeftToolbarZone): ToolbarItemDefinition[] {
-  return TOOLBAR_ITEM_DEFINITIONS.filter((item) => {
-    const definition = item as ToolbarItemDefinition;
-    return (
-      definition.surfaces.includes("left") &&
-      (!definition.leftZones || definition.leftZones.includes(zone))
-    );
-  });
-}
-
-export function isToolbarItemAllowedOnSurface(id: ToolbarItemId, surface: ToolbarSurface): boolean {
-  const definition = getToolbarItemDefinition(id);
-  return (definition.surfaces as readonly ToolbarSurface[]).includes(surface);
-}
-
-export function isToolbarItemAllowedInLeftZone(id: ToolbarItemId, zone: LeftToolbarZone): boolean {
-  const definition = getToolbarItemDefinition(id);
-  if (!definition.surfaces.includes("left")) {
-    return false;
-  }
-  return !definition.leftZones || definition.leftZones.includes(zone);
-}
-
-function sanitizeToolbarItemList(
-  value: unknown,
-  surface: ToolbarSurface,
-  leftZone?: LeftToolbarZone,
-  seen: Set<ToolbarItemId> | null = null,
-): ToolbarItemId[] {
+// An unknown or repeated item is dropped; a separator may repeat.
+function sanitizeToolbarItemList(value: unknown): ToolbarItemId[] {
   if (!Array.isArray(value)) {
     return [];
   }
-  const localSeen = seen ?? new Set<ToolbarItemId>();
+  const seen = new Set<ToolbarItemId>();
   const result: ToolbarItemId[] = [];
   for (const candidate of value) {
     if (typeof candidate !== "string" || !isToolbarItemId(candidate)) {
       continue;
     }
-    const definition = getToolbarItemDefinition(candidate);
-    if (!isToolbarItemAllowedOnSurface(candidate, surface)) {
-      continue;
-    }
-    if (surface === "left" && leftZone && !isToolbarItemAllowedInLeftZone(candidate, leftZone)) {
-      continue;
-    }
-    if (!definition.allowDuplicates && localSeen.has(candidate)) {
-      continue;
-    }
-    if (!definition.allowDuplicates) {
-      localSeen.add(candidate);
+    if (!getToolbarItemDefinition(candidate).allowDuplicates) {
+      if (seen.has(candidate)) {
+        continue;
+      }
+      seen.add(candidate);
     }
     result.push(candidate);
   }
@@ -586,7 +455,7 @@ const LEGACY_LEADING_TOP_TOOLBAR_ITEMS = new Set<ToolbarItemId>(["back", "forwar
 // without them is given them where they were drawn while their places were fixed: the title
 // after a leading Back and Forward, search last, and the other two just ahead of search.
 export function sanitizeTopToolbarItems(value: unknown): ToolbarItemId[] {
-  let next = sanitizeToolbarItemList(value, "top");
+  let next = sanitizeToolbarItemList(value);
   if (!next.includes("title")) {
     // Until the title could be moved, search was drawn last wherever the list had it.
     const rest = next.filter((itemId) => itemId !== "search");
@@ -624,20 +493,4 @@ export function addTopToolbarItem(
     insertIndex -= 1;
   }
   return [...items.slice(0, insertIndex), itemId, ...items.slice(insertIndex)];
-}
-
-export function sanitizeLeftToolbarItems(value: unknown): LeftToolbarItems {
-  if (typeof value !== "object" || value === null) {
-    return {
-      main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
-      utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
-    };
-  }
-  // The left and bottom rails are shown independently, so each keeps its own list and the
-  // same item may be on both.
-  const record = value as { main?: unknown; utility?: unknown };
-  return {
-    main: sanitizeToolbarItemList(record.main, "left", "main"),
-    utility: sanitizeToolbarItemList(record.utility, "left", "utility"),
-  };
 }

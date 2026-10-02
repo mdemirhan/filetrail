@@ -165,7 +165,6 @@ vi.mock("./components/TreePane", () => ({
     isFocused,
     onFocusChange,
     onLeftPaneSubviewChange,
-    onRerootHome,
     onNavigate,
     onNavigateFavorite,
     onSelectFavoritesRoot,
@@ -186,7 +185,6 @@ vi.mock("./components/TreePane", () => ({
     isFocused?: boolean;
     onFocusChange: (focused: boolean) => void;
     onLeftPaneSubviewChange: (value: "favorites" | "tree") => void;
-    onRerootHome: () => void;
     onNavigate: (path: string) => Promise<boolean> | undefined;
     onNavigateFavorite: (path: string) => Promise<boolean> | undefined;
     onSelectFavoritesRoot?: () => Promise<boolean> | undefined;
@@ -317,9 +315,6 @@ vi.mock("./components/TreePane", () => ({
         }}
       >
         Favorites
-      </button>
-      <button type="button" data-testid="reroot-home" onClick={() => onRerootHome()}>
-        Reroot Home
       </button>
       <output data-testid="left-pane-subview">{activeLeftPaneSubview}</output>
       <output data-testid="favorites-placement">{favoritesPlacement}</output>
@@ -3749,58 +3744,6 @@ describe("App copy/paste integration", () => {
     });
   });
 
-  it("reroots the tree at home without keeping an out-of-home selection", async () => {
-    const harness = createAppHarness({
-      directorySnapshots: {
-        "/Users/demo": {
-          path: "/Users/demo",
-          parentPath: "/Users",
-          entries: [
-            createDirectoryEntry("/Users/demo/source.txt", "file"),
-            createDirectoryEntry("/Volumes/Shared/Project", "directory"),
-          ],
-        },
-        "/Volumes/Shared/Project": {
-          path: "/Volumes/Shared/Project",
-          parentPath: "/Volumes/Shared",
-          entries: [],
-        },
-      },
-      treeChildrenByPath: {
-        "/": [createTreeChild("/Users", "directory"), createTreeChild("/Volumes", "directory")],
-        "/Volumes": [createTreeChild("/Volumes/Shared", "directory")],
-        "/Volumes/Shared": [createTreeChild("/Volumes/Shared/Project", "directory")],
-        "/Users/demo": [
-          createTreeChild("/Users/demo/Folder", "directory"),
-          createTreeChild("/Users/demo/go", "directory"),
-        ],
-      },
-    });
-
-    render(
-      <FiletrailClientProvider value={harness.client}>
-        <App />
-      </FiletrailClientProvider>,
-    );
-
-    await openDirectory("/Volumes/Shared/Project");
-    await screen.findByTitle("tree:/Volumes/Shared/Project");
-
-    await act(async () => {
-      fireEvent.click(screen.getByTestId("reroot-home"));
-    });
-
-    await vi.waitFor(() => {
-      expect(screen.getByTestId("tree-root")).toHaveTextContent("/Users/demo");
-      expect(screen.getByTestId("tree-selection")).toHaveTextContent("fs:");
-      expect(screen.getByTestId("content-current-path")).toHaveTextContent("");
-      expect(screen.getByTestId("content-entry-count")).toHaveTextContent("0");
-      expect(screen.queryByTitle("tree:/Volumes/Shared/Project")).not.toBeInTheDocument();
-      expect(screen.queryByTitle("/Volumes/Shared/Project")).not.toBeInTheDocument();
-      expect(screen.getByTitle("tree:/Users/demo")).toBeInTheDocument();
-    });
-  });
-
   it("goes Home and roots the tree there with Cmd+Shift+H", async () => {
     const harness = createAppHarness({
       directorySnapshots: {
@@ -3966,47 +3909,6 @@ describe("App copy/paste integration", () => {
       expect(screen.getByTestId("tree-selection")).toHaveTextContent("favorites-root");
       expect(screen.getByTestId("content-current-path")).toHaveTextContent("");
       expect(screen.getByTestId("content-entry-count")).toHaveTextContent("0");
-    });
-  });
-
-  it("does not mark the selected leaf folder expanded after rerooting at home", async () => {
-    const harness = createAppHarness({
-      preferences: {
-        treeRootPath: "/Users/demo",
-        lastVisitedPath: "/Users/demo/go",
-      },
-      directorySnapshots: {
-        "/Users/demo/go": {
-          path: "/Users/demo/go",
-          parentPath: "/Users/demo",
-          entries: [createDirectoryEntry("/Users/demo/go/pkg", "directory")],
-        },
-      },
-      treeChildrenByPath: {
-        "/Users/demo": [
-          createTreeChild("/Users/demo/Folder", "directory"),
-          createTreeChild("/Users/demo/go", "directory"),
-        ],
-        "/Users/demo/go": [createTreeChild("/Users/demo/go/pkg", "directory")],
-      },
-    });
-
-    render(
-      <FiletrailClientProvider value={harness.client}>
-        <App />
-      </FiletrailClientProvider>,
-    );
-
-    const goButton = await screen.findByTitle("tree:/Users/demo/go");
-    expect(goButton).toHaveAttribute("data-expanded", "false");
-
-    await act(async () => {
-      fireEvent.click(screen.getByTestId("reroot-home"));
-    });
-
-    await vi.waitFor(() => {
-      expect(screen.getByTestId("tree-root")).toHaveTextContent("/Users/demo");
-      expect(screen.getByTitle("tree:/Users/demo/go")).toHaveAttribute("data-expanded", "false");
     });
   });
 

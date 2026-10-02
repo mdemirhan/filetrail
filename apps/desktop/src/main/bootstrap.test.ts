@@ -22,13 +22,12 @@ import {
 import { getFileThumbnail, originalFileSystem } from "./originalFileSystem";
 
 describe("toPreferencePatch", () => {
-  it("carries the appearance, sidebar, Return key and shortcut preferences", () => {
+  it("carries the appearance, Return key and shortcut preferences", () => {
     expect(
       toPreferencePatch({
         theme: "auto",
         autoLightTheme: "sand",
         autoDarkTheme: "tomorrow-night",
-        showSidebarRail: true,
         returnKeyAction: "open",
         shortcutOverrides: { newTab: ["Cmd+Option+N"] },
       }),
@@ -36,7 +35,6 @@ describe("toPreferencePatch", () => {
       theme: "auto",
       autoLightTheme: "sand",
       autoDarkTheme: "tomorrow-night",
-      showSidebarRail: true,
       returnKeyAction: "open",
       shortcutOverrides: { newTab: ["Cmd+Option+N"] },
     });
@@ -124,17 +122,9 @@ describe("toPreferencePatch", () => {
     expect(
       toPreferencePatch({
         topToolbarItems: ["back", "search", "copyPath"],
-        leftToolbarItems: {
-          main: ["home", "copyPath"],
-          utility: ["settings", "theme"],
-        },
       }),
     ).toEqual({
       topToolbarItems: ["back", "search", "copyPath"],
-      leftToolbarItems: {
-        main: ["home", "copyPath"],
-        utility: ["settings", "theme"],
-      },
     });
   });
 

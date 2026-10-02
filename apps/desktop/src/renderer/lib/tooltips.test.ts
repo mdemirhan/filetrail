@@ -32,17 +32,11 @@ describe("tooltips", () => {
       back: "Back (⌘[)",
       forward: "Forward (⌘])",
       up: "Enclosing Folder (⌘↑)",
-      down: "Open Selected Item (⌘↓)",
       refresh: "Refresh (⌘R)",
-      home: "Home",
-      root: "Macintosh HD",
-      applications: "Applications",
-      trash: "Trash",
-      rerootHome: "Root Tree at Home",
       goToFolder: "Go To (⌘K)",
-      help: "Help (?)",
-      settings: "Settings (⌘,)",
+      newTab: "New Tab (⌘T)",
       openSelection: "Open (⌘O)",
+      quickLook: "Quick Look (Space)",
       editSelection: "Edit in Text Editor (⌘E)",
       moveSelection: "Move To (⇧⌘M)",
       renameSelection: "Rename (↩)",
@@ -53,7 +47,11 @@ describe("tooltips", () => {
       cutSelection: "Cut (⌘X)",
       pasteSelection: "Paste (⌘V)",
       openInTerminal: "Open in Terminal (⌥⌘T)",
+      // No key until one is chosen in Settings.
+      showInFinder: "Show in Finder",
       copyPath: "Copy Path (⌥⌘C)",
+      settings: "Settings (⌘,)",
+      help: "File Trail Help (?)",
     });
   });
 

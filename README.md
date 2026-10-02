@@ -55,7 +55,7 @@ File Trail has a much deeper customization surface than a typical file explorer.
 - One accent color for the whole app, from the macOS set or a custom color
 - UI font family, font size, font weight, and zoom controls
 - Icon, list and details views with adjustable density, Quick Look previews in icon view, and configurable detail columns
-- Configurable toolbar items across the top bar, left rail and bottom rail
+- A toolbar you arrange yourself: add, remove and reorder its buttons
 - Favorite locations with customizable icons and placement options
 - Search defaults for match mode, match scope, recursion and Git skipping
 - Default text editor, Terminal app, and open-with application shortcuts

@@ -2095,90 +2095,9 @@ body.resizing-panels * {
 
 .sidebar-shell {
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   min-height: 0;
   height: 100%;
-  overflow: visible;
-}
-
-/* The left rail sits on the sidebar's own background, with the same buttons as the bottom
-   rail, so the sidebar looks the same with or without it. */
-.sidebar-rail {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  min-height: 0;
-  overflow: hidden;
-  padding: 2px 0 6px 4px;
-}
-
-.sidebar-rail-group {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  width: 100%;
-}
-
-.sidebar-rail-group-main {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.sidebar-rail-group-main::-webkit-scrollbar {
-  display: none;
-}
-
-.sidebar-rail-group-utility {
-  flex: 0 0 auto;
-  padding-top: 6px;
-}
-
-.sidebar-rail-button {
-  flex: 0 0 auto;
-  width: 30px;
-  height: 28px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-tertiary);
-  cursor: default;
-}
-
-.sidebar-rail-button:hover:not(:disabled) {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.sidebar-rail-button:disabled {
-  opacity: 0.4;
-}
-
-.sidebar-rail-button.active {
-  background: var(--bg-active-inactive);
-  color: var(--text-primary);
-}
-
-.sidebar-rail-separator {
-  flex: 0 0 auto;
-  width: 18px;
-  height: 1px;
-  background: var(--border);
-  margin: 5px 0;
-}
-
-.sidebar-rail-menu-anchor {
-  position: relative;
   overflow: visible;
 }
 
@@ -4169,27 +4088,8 @@ body.platform-macos .settings-view[data-layout="compact"] {
   height: auto;
 }
 
-.sidebar-shell-no-rail {
-  grid-template-columns: minmax(0, 1fr);
-}
-
 .sidebar-main-native {
   background: transparent;
-}
-
-/* Beside the left rail the rows and labels give back the gutter the rail already provides. */
-.sidebar-shell:not(.sidebar-shell-no-rail) .sidebar-main-native .tree-row {
-  margin-left: 4px;
-  width: calc(100% - 14px);
-}
-
-.sidebar-shell:not(.sidebar-shell-no-rail) .sidebar-section-header {
-  width: calc(100% - 14px);
-  margin-left: 4px;
-}
-
-.sidebar-shell:not(.sidebar-shell-no-rail) .sidebar-header {
-  padding-left: 14px;
 }
 
 .sidebar-section-title,
@@ -4215,29 +4115,6 @@ body.platform-macos .settings-view[data-layout="compact"] {
 
 .sidebar-header-focused {
   background: transparent;
-}
-
-/* The bottom rail: the utility buttons in a row under the tree, wrapping when the sidebar is
-   too narrow for them. */
-.sidebar-bottom-rail {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px;
-  flex: 0 0 auto;
-  min-height: 40px;
-  padding: 6px 10px;
-  border-top: 1px solid var(--border-light);
-}
-
-.sidebar-bottom-rail .sidebar-rail-separator {
-  width: 1px;
-  height: 16px;
-  margin: 0 5px;
-}
-
-.sidebar-bottom-rail .sidebar-rail-menu-anchor {
-  width: auto;
 }
 
 /* ── Toolbar ──────────────────────────────────────────────────────────── */

@@ -19,7 +19,6 @@ import type {
   FavoritePreference,
   FavoritesPlacement,
   FileActivationAction,
-  LeftToolbarItems,
   OpenWithApplication,
   ReturnKeyAction,
   SearchPatternModePreference,
@@ -50,11 +49,9 @@ import {
 } from "../../shared/appPreferences";
 import { type ShortcutOverrides, resolveShortcuts } from "../../shared/shortcuts";
 import {
-  DEFAULT_LEFT_TOOLBAR_ITEMS,
+  TOOLBAR_ITEM_IDS,
   addTopToolbarItem,
   getToolbarItemDefinition,
-  getToolbarItemsForLeftZone,
-  getToolbarItemsForSurface,
   isRequiredTopToolbarItem,
   sanitizeTopToolbarItems,
 } from "../../shared/toolbarItems";
@@ -246,25 +243,22 @@ const settingsBaseThemes = {
 
 type ResolvedSettingsTheme = ReturnType<typeof resolveSettingsTheme>;
 
-const NO_TOOLBAR_ITEMS: ReadonlySet<ToolbarItemId> = new Set();
-// View Options is in the toolbar only while the left rail, which has the same options, is not.
-const LEFT_RAIL_HIDDEN_TOP_TOOLBAR_ITEMS: ReadonlySet<ToolbarItemId> = new Set(["viewOptions"]);
-// The four items every top toolbar has (the title, the clipboard button, View Options and
-// search).
+const NO_REQUIRED_TOOLBAR_ITEMS: ReadonlySet<ToolbarItemId> = new Set();
+// The four items every toolbar has (the title, the clipboard button, View Options and search).
 const REQUIRED_TOP_TOOLBAR_ITEMS: ReadonlySet<ToolbarItemId> = new Set(
-  getToolbarItemsForSurface("top")
-    .map((item) => item.id)
-    .filter(isRequiredTopToolbarItem),
+  TOOLBAR_ITEM_IDS.filter(isRequiredTopToolbarItem),
 );
 
+// The order of the items that can be added: moving about, how the list is shown, what can
+// be done with the selection, and the app itself.
 const TOP_TOOLBAR_AVAILABLE_ITEM_ORDER: ToolbarItemId[] = [
   "topSeparator",
   "back",
   "forward",
   "up",
-  "down",
   "goToFolder",
   "refresh",
+  "newTab",
   "view",
   "sort",
   "foldersFirst",
@@ -272,6 +266,7 @@ const TOP_TOOLBAR_AVAILABLE_ITEM_ORDER: ToolbarItemId[] = [
   "infoPanel",
   "infoRow",
   "openSelection",
+  "quickLook",
   "editSelection",
   "copySelection",
   "cutSelection",
@@ -282,65 +277,11 @@ const TOP_TOOLBAR_AVAILABLE_ITEM_ORDER: ToolbarItemId[] = [
   "newFolder",
   "trashSelection",
   "openInTerminal",
+  "showInFinder",
   "copyPath",
-];
-
-const LEFT_MAIN_AVAILABLE_ITEM_ORDER: ToolbarItemId[] = [
-  "leftSeparator",
-  "home",
-  "root",
-  "applications",
-  "trash",
-  "rerootHome",
-  "goToFolder",
-  "refresh",
-  "foldersFirst",
-  "hidden",
-  "infoPanel",
-  "infoRow",
-  "openSelection",
-  "editSelection",
-  "copySelection",
-  "cutSelection",
-  "pasteSelection",
-  "renameSelection",
-  "moveSelection",
-  "duplicateSelection",
-  "newFolder",
-  "trashSelection",
-  "openInTerminal",
-  "copyPath",
-  "help",
   "theme",
-];
-
-const LEFT_UTILITY_AVAILABLE_ITEM_ORDER: ToolbarItemId[] = [
-  "leftSeparator",
+  "settings",
   "help",
-  "theme",
-  "home",
-  "root",
-  "applications",
-  "trash",
-  "rerootHome",
-  "goToFolder",
-  "refresh",
-  "foldersFirst",
-  "hidden",
-  "infoPanel",
-  "infoRow",
-  "openSelection",
-  "editSelection",
-  "copySelection",
-  "cutSelection",
-  "pasteSelection",
-  "renameSelection",
-  "moveSelection",
-  "duplicateSelection",
-  "newFolder",
-  "trashSelection",
-  "openInTerminal",
-  "copyPath",
 ];
 
 // The keys a sentence names, or nothing when none of them is set: " (⌘+, ⌘−, ⌘0)".
@@ -1228,14 +1169,12 @@ function ToolbarTileRequiredBadge({ theme }: { theme: ResolvedSettingsTheme }) {
   );
 }
 
-function ToolbarSurfaceEditor({
+function ToolbarEditor({
   title,
-  note,
   hint,
   items,
   availableItems,
-  requiredItems = NO_TOOLBAR_ITEMS,
-  dimmedItems = NO_TOOLBAR_ITEMS,
+  requiredItems = NO_REQUIRED_TOOLBAR_ITEMS,
   itemNotes = {},
   theme,
   onReorderItem,
@@ -1244,16 +1183,12 @@ function ToolbarSurfaceEditor({
   onReset,
 }: {
   title: string;
-  // Says where the surface is when it is not showing in its usual place.
-  note?: string | undefined;
-  // A line under the strip on how the surface behaves.
+  // A line under the strip on how the toolbar behaves.
   hint?: string | undefined;
   items: ToolbarItemId[];
   availableItems: ToolbarItemId[];
-  // Items that are always on the surface: they can be dragged to a new place, not removed.
+  // Items that are always in the toolbar: they can be dragged to a new place, not removed.
   requiredItems?: ReadonlySet<ToolbarItemId>;
-  // Items that are not showing on the surface at the moment.
-  dimmedItems?: ReadonlySet<ToolbarItemId>;
   // What to say about an item when the pointer rests on its tile.
   itemNotes?: Partial<Record<ToolbarItemId, string>>;
   theme: ResolvedSettingsTheme;
@@ -1263,7 +1198,7 @@ function ToolbarSurfaceEditor({
   onReset?: () => void;
 }) {
   const rootRef = useRef<HTMLFieldSetElement | null>(null);
-  const activeSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const activeStripRef = useRef<HTMLDivElement | null>(null);
   const dragCounterRef = useRef<Record<number, number>>({});
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -1360,9 +1295,9 @@ function ToolbarSurfaceEditor({
         event.preventDefault();
         dragCounterRef.current = {};
         if (
-          activeSurfaceRef.current &&
+          activeStripRef.current &&
           event.target instanceof Node &&
-          activeSurfaceRef.current.contains(event.target)
+          activeStripRef.current.contains(event.target)
         ) {
           return;
         }
@@ -1402,7 +1337,7 @@ function ToolbarSurfaceEditor({
               marginBottom: "2px",
             }}
           >
-            {title}
+            In the toolbar
           </div>
           <div
             style={{
@@ -1412,14 +1347,13 @@ function ToolbarSurfaceEditor({
             }}
           >
             {items.length} items · drag to reorder
-            {note ? ` · ${note}` : ""}
           </div>
         </div>
         {onReset ? <ActionButton label="Reset" theme={theme} onClick={onReset} /> : null}
       </div>
 
       <div
-        ref={activeSurfaceRef}
+        ref={activeStripRef}
         style={{
           padding: "12px 10px 8px",
           background: theme.input.bg,
@@ -1527,7 +1461,7 @@ function ToolbarSurfaceEditor({
                       ...toolbarTileButtonStyle,
                       width: "100%",
                       cursor: "grab",
-                      opacity: isDragged ? 0.22 : dimmedItems.has(itemId) ? 0.45 : 1,
+                      opacity: isDragged ? 0.22 : 1,
                     }}
                   >
                     {shape === "title" ? (
@@ -2064,7 +1998,6 @@ export function SettingsView({
   highlightClipboardItemsInContent = true,
   notifyClipboardItems = true,
   topToolbarItems,
-  leftToolbarItems,
   restoreLastVisitedFolderOnStartup,
   restoreOpenTabsOnStartup,
   homePath,
@@ -2080,10 +2013,6 @@ export function SettingsView({
   onTabStyleChange = () => undefined,
   shortcutOverrides = DEFAULT_APP_PREFERENCES.shortcutOverrides,
   onShortcutOverridesChange = () => undefined,
-  showSidebarRail = false,
-  onShowSidebarRailChange = () => undefined,
-  showSidebarBottomRail = true,
-  onShowSidebarBottomRailChange = () => undefined,
   openItemLimit,
   accentOptions,
   uiFontOptions,
@@ -2106,10 +2035,7 @@ export function SettingsView({
   onNotifyClipboardItemsChange = () => undefined,
   onNotificationDurationSecondsChange,
   onTopToolbarItemsChange,
-  onLeftToolbarItemsChange,
   onResetTopToolbar,
-  onResetLeftToolbar,
-  onResetToolbars,
   onRestoreLastVisitedFolderOnStartupChange,
   onRestoreOpenTabsOnStartupChange,
   onBrowseTerminalApp,
@@ -2159,7 +2085,6 @@ export function SettingsView({
   highlightClipboardItemsInContent?: boolean;
   notifyClipboardItems?: boolean;
   topToolbarItems: ToolbarItemId[];
-  leftToolbarItems: LeftToolbarItems;
   restoreLastVisitedFolderOnStartup: boolean;
   restoreOpenTabsOnStartup: boolean;
   homePath: string;
@@ -2176,10 +2101,6 @@ export function SettingsView({
   // The keyboard shortcuts that differ from their defaults (the Shortcuts tab).
   shortcutOverrides?: ShortcutOverrides;
   onShortcutOverridesChange?: (value: ShortcutOverrides) => void;
-  showSidebarRail?: boolean;
-  onShowSidebarRailChange?: (value: boolean) => void;
-  showSidebarBottomRail?: boolean;
-  onShowSidebarBottomRailChange?: (value: boolean) => void;
   openItemLimit: number;
   accentOptions: ReadonlyArray<{ value: AccentMode; label: string }>;
   uiFontOptions: ReadonlyArray<{ value: UiFontFamily; label: string }>;
@@ -2202,10 +2123,7 @@ export function SettingsView({
   onNotifyClipboardItemsChange?: (value: boolean) => void;
   onNotificationDurationSecondsChange: (value: number) => void;
   onTopToolbarItemsChange: (value: ToolbarItemId[]) => void;
-  onLeftToolbarItemsChange: (value: LeftToolbarItems) => void;
   onResetTopToolbar: () => void;
-  onResetLeftToolbar: () => void;
-  onResetToolbars: () => void;
   onRestoreLastVisitedFolderOnStartupChange: (value: boolean) => void;
   onRestoreOpenTabsOnStartupChange: (value: boolean) => void;
   onBrowseTerminalApp: () => void;
@@ -2243,48 +2161,14 @@ export function SettingsView({
     () => sanitizeTopToolbarItems(topToolbarItems),
     [topToolbarItems],
   );
-  const customizableLeftMainItems = leftToolbarItems.main.filter((itemId) => itemId !== "settings");
-  const customizableLeftUtilityItems = leftToolbarItems.utility.filter(
-    (itemId) => itemId !== "settings",
-  );
-  const topToolbarAvailableItems = getToolbarItemsForSurface("top")
-    .map((item) => item.id)
-    .filter(
+  const sortedTopToolbarAvailableItems = sortToolbarAvailableItems(
+    TOOLBAR_ITEM_IDS.filter(
       (itemId) =>
         !isRequiredTopToolbarItem(itemId) &&
         (getToolbarItemDefinition(itemId).allowDuplicates ||
           !orderedTopToolbarItems.includes(itemId)),
-    );
-  // Each rail has its own list: an item on one rail can still be added to the other.
-  const leftMainAvailableItems = getToolbarItemsForLeftZone("main")
-    .map((item) => item.id)
-    .filter((itemId) => {
-      if (itemId === "settings") {
-        return false;
-      }
-      const definition = getToolbarItemDefinition(itemId);
-      return definition.allowDuplicates || !customizableLeftMainItems.includes(itemId);
-    });
-  const leftUtilityAvailableItems = getToolbarItemsForLeftZone("utility")
-    .map((item) => item.id)
-    .filter((itemId) => {
-      if (itemId === "settings") {
-        return false;
-      }
-      const definition = getToolbarItemDefinition(itemId);
-      return definition.allowDuplicates || !customizableLeftUtilityItems.includes(itemId);
-    });
-  const sortedTopToolbarAvailableItems = sortToolbarAvailableItems(
-    topToolbarAvailableItems,
+    ),
     TOP_TOOLBAR_AVAILABLE_ITEM_ORDER,
-  );
-  const sortedLeftMainAvailableItems = sortToolbarAvailableItems(
-    leftMainAvailableItems,
-    LEFT_MAIN_AVAILABLE_ITEM_ORDER,
-  );
-  const sortedLeftUtilityAvailableItems = sortToolbarAvailableItems(
-    leftUtilityAvailableItems,
-    LEFT_UTILITY_AVAILABLE_ITEM_ORDER,
   );
 
   const reorderToolbarItems = useCallback(
@@ -2331,59 +2215,13 @@ export function SettingsView({
   const handleTopToolbarAdd = useCallback(
     (itemId: ToolbarItemId) => {
       const definition = getToolbarItemDefinition(itemId);
-      if (
-        !definition.surfaces.includes("top") ||
-        (!definition.allowDuplicates && orderedTopToolbarItems.includes(itemId))
-      ) {
+      if (!definition.allowDuplicates && orderedTopToolbarItems.includes(itemId)) {
         return;
       }
       onTopToolbarItemsChange(addTopToolbarItem(orderedTopToolbarItems, itemId));
     },
     [orderedTopToolbarItems, onTopToolbarItemsChange],
   );
-  const updateLeftToolbarZone = useCallback(
-    (zone: "main" | "utility", updater: (items: ToolbarItemId[]) => ToolbarItemId[]) => {
-      const currentItems =
-        zone === "main" ? customizableLeftMainItems : customizableLeftUtilityItems;
-      const nextItems = updater(currentItems);
-      onLeftToolbarItemsChange({
-        ...leftToolbarItems,
-        [zone]: zone === "utility" ? [...nextItems, "settings"] : nextItems,
-      });
-    },
-    [
-      customizableLeftMainItems,
-      customizableLeftUtilityItems,
-      leftToolbarItems,
-      onLeftToolbarItemsChange,
-    ],
-  );
-  const handleLeftToolbarMove = useCallback(
-    (zone: "main" | "utility", sourceIndex: number, targetIndex: number) => {
-      updateLeftToolbarZone(zone, (items) => reorderToolbarItems(items, sourceIndex, targetIndex));
-    },
-    [reorderToolbarItems, updateLeftToolbarZone],
-  );
-  const handleLeftToolbarRemove = useCallback(
-    (zone: "main" | "utility", index: number) => {
-      updateLeftToolbarZone(zone, (items) =>
-        items.filter((_, candidateIndex) => candidateIndex !== index),
-      );
-    },
-    [updateLeftToolbarZone],
-  );
-  const handleLeftToolbarAdd = useCallback(
-    (zone: "main" | "utility", itemId: ToolbarItemId) => {
-      const definition = getToolbarItemDefinition(itemId);
-      const zoneItems = zone === "main" ? customizableLeftMainItems : customizableLeftUtilityItems;
-      if (itemId === "settings" || (!definition.allowDuplicates && zoneItems.includes(itemId))) {
-        return;
-      }
-      updateLeftToolbarZone(zone, (items) => [...items, itemId]);
-    },
-    [customizableLeftMainItems, customizableLeftUtilityItems, updateLeftToolbarZone],
-  );
-
   return (
     <div
       className="settings-view"
@@ -3305,122 +3143,28 @@ export function SettingsView({
         ) : null}
 
         {showSection("toolbars") ? (
-          <SectionCard
-            icon="⌘"
-            title="Toolbars"
-            theme={palette}
-            resetButton={
-              <ActionButton label="Reset All" theme={palette} onClick={onResetToolbars} />
-            }
-          >
-            <SettingRow
-              title="Show left rail"
-              desc="A strip of icon buttons down the left edge of the sidebar. When off, the View Options menu in the toolbar holds the view toggles."
+          <SectionCard icon="⌘" title="Toolbar" theme={palette}>
+            <ToolbarEditor
+              title="Toolbar"
+              hint="Title, Clipboard, View Options and Search can be moved but not removed. The title stretches to fill the room the other items leave. In a window too narrow for every item, the ones nearest the end are hidden first."
+              items={orderedTopToolbarItems}
+              availableItems={sortedTopToolbarAvailableItems}
+              requiredItems={REQUIRED_TOP_TOOLBAR_ITEMS}
+              itemNotes={{
+                title:
+                  "The name of the folder on screen. It stretches to fill the room the other items leave.",
+                clipboard:
+                  "Appears while files or folders are waiting to be pasted, and lists them.",
+                viewOptions:
+                  "A menu of how the list and the panels are shown, and the way back here.",
+                search: "The search field. It is wider while you type in it.",
+              }}
               theme={palette}
-              right={
-                <Toggle
-                  checked={showSidebarRail}
-                  onToggle={() => onShowSidebarRailChange(!showSidebarRail)}
-                  theme={palette}
-                  label="Show left rail"
-                />
-              }
+              onReorderItem={handleTopToolbarMove}
+              onRemoveItem={handleTopToolbarRemove}
+              onAddItem={handleTopToolbarAdd}
+              onReset={onResetTopToolbar}
             />
-            <SettingRow
-              title="Show bottom rail"
-              desc="A row of icon buttons under the sidebar. When off, its buttons move to the foot of the left rail."
-              theme={palette}
-              right={
-                <Toggle
-                  checked={showSidebarBottomRail}
-                  onToggle={() => onShowSidebarBottomRailChange(!showSidebarBottomRail)}
-                  theme={palette}
-                  label="Show bottom rail"
-                />
-              }
-            />
-            <div style={{ display: "grid", gap: "22px", paddingTop: "6px" }}>
-              <ToolbarSurfaceEditor
-                title="Top toolbar"
-                hint="Title, Clipboard, View Options and Search can be moved but not removed. The title stretches to fill the room the other items leave. In a window too narrow for every item, the ones nearest the end are hidden first."
-                items={orderedTopToolbarItems}
-                availableItems={sortedTopToolbarAvailableItems}
-                requiredItems={REQUIRED_TOP_TOOLBAR_ITEMS}
-                dimmedItems={
-                  showSidebarRail ? LEFT_RAIL_HIDDEN_TOP_TOOLBAR_ITEMS : NO_TOOLBAR_ITEMS
-                }
-                itemNotes={{
-                  title:
-                    "The name of the folder on screen. It stretches to fill the room the other items leave.",
-                  clipboard:
-                    "Appears while files or folders are waiting to be pasted, and lists them.",
-                  viewOptions: showSidebarRail
-                    ? "Hidden while the left rail is shown: the rail has the same options."
-                    : "A menu of the view options that the left rail has when it is shown.",
-                  search: "The search field. It is wider while you type in it.",
-                }}
-                theme={palette}
-                onReorderItem={handleTopToolbarMove}
-                onRemoveItem={handleTopToolbarRemove}
-                onAddItem={handleTopToolbarAdd}
-                onReset={onResetTopToolbar}
-              />
-
-              {/* A rail's editor shows only while that rail is on screen. */}
-              {showSidebarRail ? (
-                <>
-                  <div style={{ height: "1px", background: palette.separator }} />
-                  <ToolbarSurfaceEditor
-                    title="Left rail"
-                    items={customizableLeftMainItems}
-                    availableItems={sortedLeftMainAvailableItems}
-                    theme={palette}
-                    onReorderItem={(sourceIndex, targetIndex) =>
-                      handleLeftToolbarMove("main", sourceIndex, targetIndex)
-                    }
-                    onRemoveItem={(index) => handleLeftToolbarRemove("main", index)}
-                    onAddItem={(itemId) => handleLeftToolbarAdd("main", itemId)}
-                    onReset={() =>
-                      onLeftToolbarItemsChange({
-                        ...leftToolbarItems,
-                        main: DEFAULT_LEFT_TOOLBAR_ITEMS.main.filter(
-                          (itemId) => itemId !== "settings",
-                        ),
-                      })
-                    }
-                  />
-                </>
-              ) : null}
-              {/* With only the left rail on, the bottom rail's buttons sit at its foot. */}
-              {showSidebarBottomRail || showSidebarRail ? (
-                <>
-                  <div style={{ height: "1px", background: palette.separator }} />
-                  <ToolbarSurfaceEditor
-                    title="Bottom rail"
-                    note={showSidebarBottomRail ? undefined : "Shown at the foot of the left rail."}
-                    items={customizableLeftUtilityItems}
-                    availableItems={sortedLeftUtilityAvailableItems}
-                    theme={palette}
-                    onReorderItem={(sourceIndex, targetIndex) =>
-                      handleLeftToolbarMove("utility", sourceIndex, targetIndex)
-                    }
-                    onRemoveItem={(index) => handleLeftToolbarRemove("utility", index)}
-                    onAddItem={(itemId) => handleLeftToolbarAdd("utility", itemId)}
-                    onReset={() =>
-                      onLeftToolbarItemsChange({
-                        ...leftToolbarItems,
-                        utility: [
-                          ...DEFAULT_LEFT_TOOLBAR_ITEMS.utility.filter(
-                            (itemId) => itemId !== "settings",
-                          ),
-                          "settings",
-                        ],
-                      })
-                    }
-                  />
-                </>
-              ) : null}
-            </div>
           </SectionCard>
         ) : null}
 

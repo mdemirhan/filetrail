@@ -195,7 +195,6 @@ describe("titleTooltips", () => {
         anchor: { left: 300, top: 10, right: 330, bottom: 38, width: 30 },
         bubble,
         viewport,
-        side: "below",
       }),
     ).toEqual({ left: 275, top: 44 });
     expect(
@@ -203,7 +202,6 @@ describe("titleTooltips", () => {
         anchor: { left: 40, top: 760, right: 70, bottom: 788, width: 30 },
         bubble,
         viewport,
-        side: "below",
       }),
     ).toEqual({ left: 15, top: 734 });
     expect(
@@ -211,19 +209,7 @@ describe("titleTooltips", () => {
         anchor: { left: 980, top: 10, right: 998, bottom: 38, width: 18 },
         bubble,
         viewport,
-        side: "below",
       }).left,
     ).toBe(914);
-  });
-
-  it("places the tooltip beside a left rail control", () => {
-    expect(
-      resolveTooltipPlacement({
-        anchor: { left: 6, top: 144, right: 36, bottom: 172, width: 30 },
-        bubble: { width: 80, height: 20 },
-        viewport: { width: 1000, height: 800 },
-        side: "right",
-      }),
-    ).toEqual({ left: 42, top: 148 });
   });
 });

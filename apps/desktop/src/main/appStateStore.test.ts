@@ -262,8 +262,6 @@ describe("appStateStore", () => {
       theme: "tomorrow-night",
       autoLightTheme: "macos-light",
       autoDarkTheme: "macos-dark",
-      showSidebarRail: false,
-      showSidebarBottomRail: true,
       returnKeyAction: "rename",
       shortcutOverrides: {},
       accent: "#007aff",
@@ -313,23 +311,6 @@ describe("appStateStore", () => {
         "viewOptions",
         "infoPanel",
       ],
-      leftToolbarItems: {
-        main: [
-          "home",
-          "root",
-          "applications",
-          "trash",
-          "leftSeparator",
-          "rerootHome",
-          "goToFolder",
-          "leftSeparator",
-          "foldersFirst",
-          "hidden",
-          "infoPanel",
-          "infoRow",
-        ],
-        utility: ["help", "leftSeparator", "theme", "settings"],
-      },
       terminalApp: null,
       defaultTextEditor: {
         appPath: "/System/Applications/TextEdit.app",
@@ -434,10 +415,6 @@ describe("appStateStore", () => {
       highlightClipboardItemsInContent: true,
       notifyClipboardItems: true,
       topToolbarItems: ["search", "back", "title", "copyPath", "clipboard", "viewOptions"],
-      leftToolbarItems: {
-        main: ["home", "copyPath"],
-        utility: ["settings", "openInTerminal"],
-      },
       terminalApp: {
         appPath: "/Applications/iTerm.app",
         appName: "iTerm",
@@ -515,8 +492,6 @@ describe("appStateStore", () => {
       theme: "macos-dark",
       autoLightTheme: "macos-light",
       autoDarkTheme: "macos-dark",
-      showSidebarRail: false,
-      showSidebarBottomRail: true,
       returnKeyAction: "rename",
       shortcutOverrides: { newTab: ["Cmd+Option+N"], duplicateSelection: [] },
       accent: "#2cb5a0",
@@ -554,10 +529,6 @@ describe("appStateStore", () => {
       highlightClipboardItemsInContent: true,
       notifyClipboardItems: true,
       topToolbarItems: ["search", "back", "title", "copyPath", "clipboard", "viewOptions"],
-      leftToolbarItems: {
-        main: ["home", "copyPath"],
-        utility: ["settings", "openInTerminal"],
-      },
       terminalApp: {
         appPath: "/Applications/iTerm.app",
         appName: "iTerm",
@@ -794,7 +765,10 @@ describe("appStateStore", () => {
       });
 
     // Saved by the Locations sidebar (still has its collapse flag): inserted ahead of Trash.
-    writeFileSync(filePath, withFavorites({ showSidebarRail: false, locationsExpanded: true }));
+    writeFileSync(
+      filePath,
+      withFavorites({ autoLightTheme: "macos-light", locationsExpanded: true }),
+    );
     expect(createAppStateStore(filePath).getPreferences().favorites).toEqual([
       { path: "/Users/demo", icon: "home" },
       { path: "/", icon: "drive" },
@@ -805,8 +779,9 @@ describe("appStateStore", () => {
     writeFileSync(filePath, withFavorites({}));
     expect(createAppStateStore(filePath).getPreferences().favorites).toHaveLength(3);
 
-    // Saved after the change: a removed Macintosh HD stays removed.
-    writeFileSync(filePath, withFavorites({ showSidebarRail: false }));
+    // Saved after the change (Auto's palettes arrived with it): a removed Macintosh HD stays
+    // removed.
+    writeFileSync(filePath, withFavorites({ autoLightTheme: "macos-light" }));
     expect(createAppStateStore(filePath).getPreferences().favorites).toEqual(savedFavorites);
   });
 
@@ -862,11 +837,7 @@ describe("appStateStore", () => {
       zoomPercent: 999,
       sortBy: "oops" as never,
       sortDirection: "sideways" as never,
-      topToolbarItems: ["back", "search", "search", "theme"] as never,
-      leftToolbarItems: {
-        main: ["home", "search", "copyPath"],
-        utility: ["copyPath", "theme", "sort"],
-      } as never,
+      topToolbarItems: ["back", "search", "search", "home"] as never,
       uiFontFamily: "bad-font" as never,
       tabStyle: "bad-style" as never,
       // Settings that no longer exist are dropped when loading.
@@ -931,10 +902,6 @@ describe("appStateStore", () => {
       "viewOptions",
       "search",
     ]);
-    expect(reloaded.getPreferences().leftToolbarItems).toEqual({
-      main: ["home", "copyPath"],
-      utility: ["copyPath", "theme"],
-    });
     expect(reloaded.getPreferences().treeWidth).toBe(220);
     expect(reloaded.getPreferences().inspectorWidth).toBe(480);
     expect(reloaded.getPreferences().accent).toBe("#007aff");

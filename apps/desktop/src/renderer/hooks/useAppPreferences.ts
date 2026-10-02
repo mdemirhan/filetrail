@@ -13,7 +13,6 @@ import {
   type FavoritePreference,
   type FavoritesPlacement,
   type FileActivationAction,
-  type LeftToolbarItems,
   type OpenWithApplication,
   type ReturnKeyAction,
   type TabStyle,
@@ -84,13 +83,6 @@ export function useAppPreferences() {
     DEFAULT_APP_PREFERENCES.notifyClipboardItems,
   );
   const [topToolbarItems, setTopToolbarItems] = useState(DEFAULT_APP_PREFERENCES.topToolbarItems);
-  const [leftToolbarItems, setLeftToolbarItems] = useState<LeftToolbarItems>(
-    DEFAULT_APP_PREFERENCES.leftToolbarItems,
-  );
-  const [showSidebarRail, setShowSidebarRail] = useState(DEFAULT_APP_PREFERENCES.showSidebarRail);
-  const [showSidebarBottomRail, setShowSidebarBottomRail] = useState(
-    DEFAULT_APP_PREFERENCES.showSidebarBottomRail,
-  );
   const [restoreLastVisitedFolderOnStartup, setRestoreLastVisitedFolderOnStartup] = useState(
     DEFAULT_APP_PREFERENCES.restoreLastVisitedFolderOnStartup,
   );
@@ -191,12 +183,6 @@ export function useAppPreferences() {
     setNotifyClipboardItems,
     topToolbarItems,
     setTopToolbarItems,
-    leftToolbarItems,
-    setLeftToolbarItems,
-    showSidebarRail,
-    setShowSidebarRail,
-    showSidebarBottomRail,
-    setShowSidebarBottomRail,
     restoreLastVisitedFolderOnStartup,
     setRestoreLastVisitedFolderOnStartup,
     restoreOpenTabsOnStartup,
@@ -288,9 +274,6 @@ export function applyPreferencesPatch(store: AppPreferencesStore, patch: Incomin
   set("highlightClipboardItemsInContent", store.setHighlightClipboardItemsInContent);
   set("notifyClipboardItems", store.setNotifyClipboardItems);
   set("topToolbarItems", store.setTopToolbarItems);
-  set("leftToolbarItems", store.setLeftToolbarItems);
-  set("showSidebarRail", store.setShowSidebarRail);
-  set("showSidebarBottomRail", store.setShowSidebarBottomRail);
   set("restoreLastVisitedFolderOnStartup", store.setRestoreLastVisitedFolderOnStartup);
   set("restoreOpenTabsOnStartup", store.setRestoreOpenTabsOnStartup);
   set("favorites", store.setFavorites);

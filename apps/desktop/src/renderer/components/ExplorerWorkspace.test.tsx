@@ -97,7 +97,6 @@ function explorerWorkspaceElement(
       goBack={() => undefined}
       goForward={() => undefined}
       navigateToParentFolder={() => undefined}
-      navigateDownAction={() => undefined}
       refreshDirectory={async () => undefined}
       viewMode="list"
       onViewModeChange={() => undefined}
@@ -211,7 +210,7 @@ describe("ExplorerWorkspace", () => {
     expect(view.container.querySelectorAll(".toolbar-row .toolbar-search-input")).toHaveLength(1);
   });
 
-  it("leaves out the clipboard button with nothing on it and View Options beside the left rail", () => {
+  it("leaves out the clipboard button while nothing is on it, and always shows View Options", () => {
     const topToolbarItems = [
       "back",
       "title",
@@ -224,12 +223,80 @@ describe("ExplorerWorkspace", () => {
     expect(toolbarRowItems(empty.container)).toEqual(["back", "title", "viewOptions", "search"]);
     empty.unmount();
 
-    const withRail = renderExplorerWorkspace({
+    const copied = renderExplorerWorkspace({
       topToolbarItems,
-      showSidebarRail: true,
       clipboardButton: <button type="button">Clipboard</button>,
     });
-    expect(toolbarRowItems(withRail.container)).toEqual(["back", "title", "clipboard", "search"]);
+    expect(toolbarRowItems(copied.container)).toEqual([
+      "back",
+      "title",
+      "clipboard",
+      "viewOptions",
+      "search",
+    ]);
+  });
+
+  it("runs the app's own buttons and the file actions as commands", () => {
+    const onRendererCommand = vi.fn();
+    renderExplorerWorkspace({
+      topToolbarItems: [
+        "title",
+        "newTab",
+        "quickLook",
+        "showInFinder",
+        "settings",
+        "help",
+        "clipboard",
+        "viewOptions",
+        "search",
+      ],
+      // Nothing is selected: Quick Look has nothing to show.
+      canRunRendererCommand: (command) => command !== "quickLookSelection",
+      onRendererCommand,
+    });
+
+    expect(screen.getByRole("button", { name: "Quick Look" })).toBeDisabled();
+    for (const name of ["New Tab", "Show in Finder", "Settings", "Help"]) {
+      fireEvent.click(screen.getByRole("button", { name }));
+    }
+    expect(onRendererCommand.mock.calls.map(([command]) => command)).toEqual([
+      "newTab",
+      "showInFinder",
+      "openSettings",
+      "openHelp",
+    ]);
+    // Each says the command and its key.
+    expect(screen.getByRole("button", { name: "Settings" })).toHaveAttribute(
+      "title",
+      "Settings (⌘,)",
+    );
+    expect(screen.getByRole("button", { name: "Help" })).toHaveAttribute(
+      "title",
+      "File Trail Help (?)",
+    );
+  });
+
+  it("chooses a palette from the Theme button's menu", () => {
+    const onSelectTheme = vi.fn();
+    renderExplorerWorkspace({
+      topToolbarItems: ["title", "theme", "clipboard", "viewOptions", "search"],
+      theme: "macos-dark",
+      onSelectTheme,
+    });
+
+    const button = screen.getByRole("button", { name: "Choose theme" });
+    expect(button).toHaveAttribute("title", "Theme: macOS Dark");
+    expect(screen.queryByRole("menu", { name: "Theme" })).toBeNull();
+
+    fireEvent.click(button);
+    expect(screen.getByRole("menuitemradio", { name: "macOS Dark" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Sand" }));
+
+    expect(onSelectTheme).toHaveBeenCalledWith("sand");
+    expect(screen.queryByRole("menu", { name: "Theme" })).toBeNull();
   });
 
   it("hides the removable items nearest the end when the row is too narrow for them all", () => {

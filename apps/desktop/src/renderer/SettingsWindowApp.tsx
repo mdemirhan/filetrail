@@ -11,7 +11,7 @@ import {
   THEME_OPTIONS,
   UI_FONT_OPTIONS,
 } from "../shared/appPreferences";
-import { DEFAULT_LEFT_TOOLBAR_ITEMS, DEFAULT_TOP_TOOLBAR_ITEMS } from "../shared/toolbarItems";
+import { DEFAULT_TOP_TOOLBAR_ITEMS } from "../shared/toolbarItems";
 import { type SearchDefaults, type SettingsTab, SettingsView } from "./components/SettingsView";
 import { applyPreferencesPatch, useAppPreferences } from "./hooks/useAppPreferences";
 import { type PreferencesPatch, usePreferencesSync } from "./hooks/usePreferencesSync";
@@ -46,7 +46,7 @@ const SETTINGS_TABS: ReadonlyArray<{ id: SettingsTab; label: string; icon: strin
   },
   {
     id: "toolbars",
-    label: "Toolbars",
+    label: "Toolbar",
     icon: "M3 5h18M3 12h18M3 19h18M7 3v4M15 10v4M11 17v4",
   },
   {
@@ -106,9 +106,6 @@ export function SettingsWindowApp() {
     highlightClipboardItemsInContent: preferences.highlightClipboardItemsInContent,
     notifyClipboardItems: preferences.notifyClipboardItems,
     topToolbarItems: preferences.topToolbarItems,
-    leftToolbarItems: preferences.leftToolbarItems,
-    showSidebarRail: preferences.showSidebarRail,
-    showSidebarBottomRail: preferences.showSidebarBottomRail,
     restoreLastVisitedFolderOnStartup: preferences.restoreLastVisitedFolderOnStartup,
     restoreOpenTabsOnStartup: preferences.restoreOpenTabsOnStartup,
     favorites: preferences.favorites,
@@ -348,11 +345,6 @@ export function SettingsWindowApp() {
             highlightClipboardItemsInContent={preferences.highlightClipboardItemsInContent}
             notifyClipboardItems={preferences.notifyClipboardItems}
             topToolbarItems={preferences.topToolbarItems}
-            leftToolbarItems={preferences.leftToolbarItems}
-            showSidebarRail={preferences.showSidebarRail}
-            onShowSidebarRailChange={preferences.setShowSidebarRail}
-            showSidebarBottomRail={preferences.showSidebarBottomRail}
-            onShowSidebarBottomRailChange={preferences.setShowSidebarBottomRail}
             restoreLastVisitedFolderOnStartup={preferences.restoreLastVisitedFolderOnStartup}
             restoreOpenTabsOnStartup={preferences.restoreOpenTabsOnStartup}
             onRestoreOpenTabsOnStartupChange={preferences.setRestoreOpenTabsOnStartup}
@@ -392,21 +384,7 @@ export function SettingsWindowApp() {
             }
             onNotifyClipboardItemsChange={preferences.setNotifyClipboardItems}
             onTopToolbarItemsChange={preferences.setTopToolbarItems}
-            onLeftToolbarItemsChange={preferences.setLeftToolbarItems}
             onResetTopToolbar={() => preferences.setTopToolbarItems([...DEFAULT_TOP_TOOLBAR_ITEMS])}
-            onResetLeftToolbar={() =>
-              preferences.setLeftToolbarItems({
-                main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
-                utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
-              })
-            }
-            onResetToolbars={() => {
-              preferences.setTopToolbarItems([...DEFAULT_TOP_TOOLBAR_ITEMS]);
-              preferences.setLeftToolbarItems({
-                main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
-                utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
-              });
-            }}
             onRestoreLastVisitedFolderOnStartupChange={
               preferences.setRestoreLastVisitedFolderOnStartup
             }

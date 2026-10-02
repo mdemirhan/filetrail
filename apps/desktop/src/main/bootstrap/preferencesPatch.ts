@@ -16,12 +16,6 @@ export function toPreferencePatch(
   if (value.autoDarkTheme !== undefined) {
     patch.autoDarkTheme = value.autoDarkTheme;
   }
-  if (value.showSidebarRail !== undefined) {
-    patch.showSidebarRail = value.showSidebarRail;
-  }
-  if (value.showSidebarBottomRail !== undefined) {
-    patch.showSidebarBottomRail = value.showSidebarBottomRail;
-  }
   if (value.returnKeyAction !== undefined) {
     patch.returnKeyAction = value.returnKeyAction;
   }
@@ -96,9 +90,6 @@ export function toPreferencePatch(
   }
   if (value.topToolbarItems !== undefined) {
     patch.topToolbarItems = value.topToolbarItems;
-  }
-  if (value.leftToolbarItems !== undefined) {
-    patch.leftToolbarItems = value.leftToolbarItems;
   }
   if (value.terminalApp !== undefined) {
     patch.terminalApp = value.terminalApp;

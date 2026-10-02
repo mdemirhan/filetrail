@@ -43,7 +43,6 @@ import {
   getFavoriteLabel,
   getFavoritesRootItemId,
   getFileSystemItemPath,
-  getTrashPath,
   isFavoriteItemId,
   isFavoritesRootItemId,
 } from "../lib/favorites";
@@ -692,37 +691,6 @@ export function useExplorerNavigationController(args: {
     void navigateTo(nextPath, "skip");
   }
 
-  function goHome() {
-    if (homePath) {
-      void navigateTo(homePath, "push");
-    }
-  }
-
-  function rerootTreeAtHome() {
-    if (!homePath) {
-      return;
-    }
-    const selectedTreePath = getFileSystemItemPath(selectedTreeItemIdRef.current);
-    const nextSelectionPath =
-      selectedTreePath && isPathWithinRoot(selectedTreePath, homePath) ? selectedTreePath : null;
-
-    if (nextSelectionPath) {
-      reinitializeTree(homePath, nextSelectionPath);
-      setTreeSelection(createFileSystemItemId(nextSelectionPath));
-      setLeftPaneSubview("tree");
-      void syncTreeToPath(nextSelectionPath, includeHidden, {
-        forceReload: true,
-      });
-      return;
-    }
-
-    initializeTree(homePath);
-    applyEmptyDirectorySnapshot();
-    setTreeSelection(createFileSystemItemId(""));
-    setLeftPaneSubview("tree");
-    void loadTreeChildren(homePath, includeHidden, false, currentPathRef.current, true);
-  }
-
   // Opens `path` and makes it the top of the folder tree. The tree keeps that root until a
   // folder outside it is opened, when `syncTreeToPath` falls back to home or `/`.
   function rootTreeAtPath(path: string) {
@@ -742,21 +710,6 @@ export function useExplorerNavigationController(args: {
 
   function goHomeAndRootTree() {
     rootTreeAtPath(homePath);
-  }
-
-  function goQuickAccess(location: "root" | "applications" | "trash") {
-    const targetPath =
-      location === "root"
-        ? "/"
-        : location === "applications"
-          ? "/Applications"
-          : homePath.length > 0
-            ? getTrashPath(homePath)
-            : "";
-    if (targetPath.length === 0) {
-      return;
-    }
-    void navigateTo(targetPath, "push");
   }
 
   function navigateToParentFolder() {
@@ -2052,11 +2005,8 @@ export function useExplorerNavigationController(args: {
     goBack,
     goForward,
     goToHistoryIndex,
-    goHome,
-    rerootTreeAtHome,
     rootTreeAtPath,
     goHomeAndRootTree,
-    goQuickAccess,
     navigateToParentFolder,
     navigateTreeSelectionToParent,
     selectTreeItem,

@@ -3,16 +3,8 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { type ComponentProps, createRef } from "react";
 
-import {
-  DEFAULT_LEFT_TOOLBAR_ITEMS,
-  type LeftToolbarItems,
-  getToolbarItemsForLeftZone,
-} from "../../shared/toolbarItems";
 import { type ClipboardMarks, ClipboardMarksProvider } from "../lib/clipboardMarks";
 import { TreePane } from "./TreePane";
-
-const themeButtonRef = createRef<HTMLButtonElement>();
-const themeMenuRef = createRef<HTMLDivElement>();
 
 const baseNodes: ComponentProps<typeof TreePane>["nodes"] = {
   "/Users/demo": {
@@ -79,40 +71,13 @@ function renderTreePane(
       nodes={baseNodes}
       onFocusChange={() => undefined}
       onLeftPaneSubviewChange={() => undefined}
-      onGoHome={() => undefined}
-      onRerootHome={() => undefined}
-      onOpenLocation={() => undefined}
-      onQuickAccess={() => undefined}
-      foldersFirst
-      onToggleFoldersFirst={() => undefined}
-      infoPanelOpen
-      onToggleInfoPanel={() => undefined}
-      infoRowOpen
-      onToggleInfoRow={() => undefined}
-      leftToolbarItems={
-        {
-          main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
-          utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
-        } satisfies LeftToolbarItems
-      }
-      theme="tomorrow-night"
-      themeMenuOpen={false}
-      themeButtonRef={themeButtonRef}
-      themeMenuRef={themeMenuRef}
-      onToggleThemeMenu={() => undefined}
-      onSelectTheme={() => undefined}
       onClearSelection={() => undefined}
-      onOpenHelp={() => undefined}
-      onOpenSettings={() => undefined}
       includeHidden={false}
-      onToggleHidden={() => undefined}
       onToggleExpand={() => undefined}
       onNavigate={() => undefined}
       onNavigateFavorite={() => undefined}
       onToggleFavoritesExpanded={() => undefined}
       typeaheadQuery=""
-      canRunRendererCommand={() => true}
-      onRendererCommand={() => undefined}
       {...overrides}
     />,
     {
@@ -516,7 +481,6 @@ describe("TreePane", () => {
 
   it("shows Favorites as a labeled section above the folder tree", () => {
     const { container } = renderTreePane({
-      showRail: false,
       favoritesPlacement: "separate",
       favorites: [
         { path: "/Users/demo", icon: "home" },
@@ -530,13 +494,11 @@ describe("TreePane", () => {
     expect(within(favorites).getByText("Macintosh HD")).toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "Locations" })).toBeNull();
     expect(screen.getByText("Folders")).toBeInTheDocument();
-    expect(container.querySelector(".sidebar-rail")).toBeNull();
     expect(container.querySelector('[data-tree-kind="favorites-root"]')).toBeNull();
   });
 
   it("shows Favorites as a root row of the folder tree when integrated", () => {
     const { container } = renderTreePane({
-      showRail: false,
       favoritesPlacement: "integrated",
       favorites: [{ path: "/Users/demo/Documents", icon: "documents" }],
     });
@@ -546,13 +508,15 @@ describe("TreePane", () => {
     expect(screen.queryByText("Folders")).toBeNull();
     expect(container.querySelector('[data-tree-kind="favorites-root"]')).not.toBeNull();
     expect(container.querySelector('[data-tree-kind="favorite"]')).toHaveTextContent("Documents");
-    expect(container.querySelector(".sidebar-bottom-rail")).not.toBeNull();
+    // Nothing but the favorites and the folders: the sidebar has no buttons of its own.
+    expect(
+      container.querySelector(".sidebar-shell")?.querySelectorAll("footer, aside"),
+    ).toHaveLength(0);
   });
 
   it("collapses the Favorites section from its header", () => {
     const onToggleFavoritesExpanded = vi.fn();
     renderTreePane({
-      showRail: false,
       favoritesPlacement: "separate",
       favoritesExpanded: false,
       onToggleFavoritesExpanded,
@@ -566,178 +530,11 @@ describe("TreePane", () => {
     expect(onToggleFavoritesExpanded).toHaveBeenCalledTimes(1);
   });
 
-  it("renders theme options when the rail menu is open", () => {
-    renderTreePane({
-      showRail: true,
-      theme: "macos-dark",
-      themeMenuOpen: true,
-      favorites: [],
-    });
-
-    // The same menu as the toolbar's, drawn over the window rather than inside the rail.
-    const menu = screen.getByRole("menu", { name: "Theme" });
-    expect(menu).toHaveClass("toolbar-menu");
-    expect(menu.parentElement).toBe(document.body);
-    // Auto, then the three light palettes, then the three dark ones.
-    expect(
-      within(menu)
-        .getAllByRole("menuitemradio")
-        .map((item) => item.textContent?.replace("✓", "")),
-    ).toEqual([
-      "Auto (follow macOS)",
-      "macOS Light",
-      "Warm Paper",
-      "Sand",
-      "macOS Dark",
-      "Catppuccin Mocha",
-      "Tomorrow Night",
-    ]);
-    // Only the theme in use is ticked.
-    expect(
-      within(menu)
-        .getAllByRole("menuitemradio")
-        .filter((item) => item.getAttribute("aria-checked") === "true")
-        .map((item) => item.textContent),
-    ).toEqual(["✓macOS Dark"]);
-  });
-
-  it("uses the rail theme button as a menu trigger", () => {
-    const handleToggleThemeMenu = vi.fn();
-    renderTreePane({ onToggleThemeMenu: handleToggleThemeMenu });
-
-    fireEvent.click(screen.getByRole("button", { name: "Choose theme" }));
-
-    expect(handleToggleThemeMenu).toHaveBeenCalledTimes(1);
-  });
-
   it("shows the transient typeahead query", () => {
     renderTreePane({ typeaheadQuery: "doc" });
 
     expect(screen.getByText("Jump to")).toBeInTheDocument();
     expect(screen.getByText("doc")).toBeInTheDocument();
-  });
-
-  it("opens help from the rail button", () => {
-    const handleOpenHelp = vi.fn();
-    renderTreePane({ onOpenHelp: handleOpenHelp });
-
-    fireEvent.click(screen.getByRole("button", { name: /open help/i }));
-    expect(handleOpenHelp).toHaveBeenCalledTimes(1);
-  });
-
-  it("renders the configured utility items in the bottom rail", () => {
-    const handleRendererCommand = vi.fn();
-    const { container } = renderTreePane({
-      leftToolbarItems: {
-        main: ["home"],
-        utility: ["leftSeparator", "newFolder", "duplicateSelection", "settings"],
-      } as never,
-      onRendererCommand: handleRendererCommand,
-    });
-
-    const bottomRail = container.querySelector(".sidebar-bottom-rail");
-    if (!(bottomRail instanceof HTMLElement)) {
-      throw new Error("Missing bottom rail.");
-    }
-    expect(
-      within(bottomRail)
-        .getAllByRole("button")
-        .map((button) => button.getAttribute("aria-label")),
-    ).toEqual(["New Folder", "Duplicate", "Open settings"]);
-    expect(bottomRail.querySelector(".sidebar-rail-separator")).not.toBeNull();
-    // The left rail is off, so its "main" items are not on screen.
-    expect(container.querySelector(".sidebar-rail")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Quick access Home" })).toBeNull();
-
-    fireEvent.click(within(bottomRail).getByRole("button", { name: "Duplicate" }));
-
-    expect(handleRendererCommand).toHaveBeenCalledWith("duplicateSelection");
-  });
-
-  it("shows either rail, both or neither around the same sidebar", () => {
-    const railCases = [
-      { showRail: false, showBottomRail: false },
-      { showRail: true, showBottomRail: false },
-      { showRail: false, showBottomRail: true },
-      { showRail: true, showBottomRail: true },
-    ];
-    for (const { showRail, showBottomRail } of railCases) {
-      const { container, unmount } = renderTreePane({
-        showRail,
-        showBottomRail,
-        favoritesPlacement: "separate",
-      });
-
-      expect(container.querySelector(".sidebar-rail") !== null).toBe(showRail);
-      expect(container.querySelector(".sidebar-bottom-rail") !== null).toBe(showBottomRail);
-      // The sidebar itself never changes: labeled Favorites section over the folder tree.
-      expect(container.querySelector(".sidebar-main-native")).not.toBeNull();
-      expect(container.querySelector(".sidebar-section-header")).not.toBeNull();
-      expect(screen.getByRole("tree", { name: "Favorites" })).toBeInTheDocument();
-      expect(screen.getByRole("tree", { name: "Folders" })).toBeInTheDocument();
-      // Settings is reachable from whichever rail is showing.
-      expect(screen.queryAllByRole("button", { name: "Open settings" })).toHaveLength(
-        showRail || showBottomRail ? 1 : 0,
-      );
-      unmount();
-    }
-  });
-
-  it("docks the utility items at the foot of the left rail when the bottom rail is off", () => {
-    const { container } = renderTreePane({ showRail: true, showBottomRail: false });
-
-    const leftRail = container.querySelector(".sidebar-rail");
-    if (!(leftRail instanceof HTMLElement)) {
-      throw new Error("Missing left rail.");
-    }
-    expect(within(leftRail).getByRole("button", { name: "Quick access Home" })).toBeInTheDocument();
-    const utilityGroup = leftRail.querySelector(".sidebar-rail-group-utility");
-    if (!(utilityGroup instanceof HTMLElement)) {
-      throw new Error("Missing utility group.");
-    }
-    expect(within(utilityGroup).getByRole("button", { name: "Open help" })).toBeInTheDocument();
-    expect(within(utilityGroup).getByRole("button", { name: "Open settings" })).toBeInTheDocument();
-  });
-
-  it("keeps the main items in the left rail and the utility items in the bottom rail", () => {
-    const { container } = renderTreePane({ showRail: true, showBottomRail: true });
-
-    const leftRail = container.querySelector(".sidebar-rail");
-    const bottomRail = container.querySelector(".sidebar-bottom-rail");
-    if (!(leftRail instanceof HTMLElement) || !(bottomRail instanceof HTMLElement)) {
-      throw new Error("Missing rail.");
-    }
-    expect(within(leftRail).getByRole("button", { name: "Quick access Home" })).toBeInTheDocument();
-    expect(within(leftRail).queryByRole("button", { name: "Open help" })).toBeNull();
-    expect(leftRail.querySelector(".sidebar-rail-group-utility")).toBeNull();
-    expect(within(bottomRail).getByRole("button", { name: "Open help" })).toBeInTheDocument();
-    expect(within(bottomRail).getByRole("button", { name: "Choose theme" })).toBeInTheDocument();
-  });
-
-  it("renders a control for every item that can be added to a rail", () => {
-    for (const zone of ["main", "utility"] as const) {
-      const itemIds = getToolbarItemsForLeftZone(zone)
-        .map((item) => item.id)
-        .filter((itemId) => itemId !== "leftSeparator" && itemId !== "settings");
-      const { container, unmount } = renderTreePane({
-        showRail: true,
-        showBottomRail: true,
-        leftToolbarItems:
-          zone === "main"
-            ? { main: itemIds, utility: ["settings"] }
-            : { main: [], utility: [...itemIds, "settings"] },
-      });
-
-      const rail = container.querySelector(
-        zone === "main" ? ".sidebar-rail" : ".sidebar-bottom-rail",
-      );
-      if (!(rail instanceof HTMLElement)) {
-        throw new Error("Missing rail.");
-      }
-      const expectedCount = zone === "main" ? itemIds.length : itemIds.length + 1;
-      expect(within(rail).getAllByRole("button")).toHaveLength(expectedCount);
-      unmount();
-    }
   });
 
   it("does not scroll the selected row into view when it is already fully visible", () => {
@@ -883,38 +680,13 @@ describe("TreePane", () => {
         nodes={baseNodes}
         onFocusChange={() => undefined}
         onLeftPaneSubviewChange={() => undefined}
-        onGoHome={() => undefined}
-        onRerootHome={() => undefined}
-        onOpenLocation={() => undefined}
-        onQuickAccess={() => undefined}
-        foldersFirst
-        onToggleFoldersFirst={() => undefined}
-        infoPanelOpen
-        onToggleInfoPanel={() => undefined}
-        infoRowOpen
-        onToggleInfoRow={() => undefined}
-        leftToolbarItems={{
-          main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
-          utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
-        }}
-        theme="tomorrow-night"
-        themeMenuOpen={false}
-        themeButtonRef={themeButtonRef}
-        themeMenuRef={themeMenuRef}
-        onToggleThemeMenu={() => undefined}
-        onSelectTheme={() => undefined}
         onClearSelection={() => undefined}
-        onOpenHelp={() => undefined}
-        onOpenSettings={() => undefined}
         includeHidden={false}
-        onToggleHidden={() => undefined}
         onToggleExpand={() => undefined}
         onNavigate={() => undefined}
         onNavigateFavorite={() => undefined}
         onToggleFavoritesExpanded={() => undefined}
         typeaheadQuery=""
-        canRunRendererCommand={() => true}
-        onRendererCommand={() => undefined}
       />,
     );
 
@@ -1033,38 +805,13 @@ describe("TreePane", () => {
         nodes={baseNodes}
         onFocusChange={() => undefined}
         onLeftPaneSubviewChange={() => undefined}
-        onGoHome={() => undefined}
-        onRerootHome={() => undefined}
-        onOpenLocation={() => undefined}
-        onQuickAccess={() => undefined}
-        foldersFirst
-        onToggleFoldersFirst={() => undefined}
-        infoPanelOpen
-        onToggleInfoPanel={() => undefined}
-        infoRowOpen
-        onToggleInfoRow={() => undefined}
-        leftToolbarItems={{
-          main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
-          utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
-        }}
-        theme="tomorrow-night"
-        themeMenuOpen={false}
-        themeButtonRef={themeButtonRef}
-        themeMenuRef={themeMenuRef}
-        onToggleThemeMenu={() => undefined}
-        onSelectTheme={() => undefined}
         onClearSelection={() => undefined}
-        onOpenHelp={() => undefined}
-        onOpenSettings={() => undefined}
         includeHidden={false}
-        onToggleHidden={() => undefined}
         onToggleExpand={() => undefined}
         onNavigate={() => undefined}
         onNavigateFavorite={() => undefined}
         onToggleFavoritesExpanded={() => undefined}
         typeaheadQuery=""
-        canRunRendererCommand={() => true}
-        onRendererCommand={() => undefined}
       />,
     );
 

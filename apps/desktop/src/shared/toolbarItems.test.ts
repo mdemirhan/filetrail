@@ -1,8 +1,8 @@
 import {
-  DEFAULT_LEFT_TOOLBAR_ITEMS,
   DEFAULT_TOP_TOOLBAR_ITEMS,
+  TOOLBAR_ITEM_IDS,
   addTopToolbarItem,
-  sanitizeLeftToolbarItems,
+  getToolbarItemDefinition,
   sanitizeTopToolbarItems,
 } from "./toolbarItems";
 
@@ -23,14 +23,14 @@ describe("toolbarItems", () => {
     expect(sanitizeTopToolbarItems(DEFAULT_TOP_TOOLBAR_ITEMS)).toEqual(DEFAULT_TOP_TOOLBAR_ITEMS);
   });
 
-  it("drops items that are unknown, repeated or not for the top toolbar", () => {
+  it("drops items that are unknown or repeated", () => {
     expect(
       sanitizeTopToolbarItems([
         "back",
         "title",
         "title",
         "back",
-        "theme",
+        "leftSeparator",
         "nonsense",
         "search",
         "openSelection",
@@ -137,22 +137,74 @@ describe("toolbarItems", () => {
     ]);
   });
 
-  it("sanitizes each rail's items on its own, so both rails can hold the same item", () => {
+  it("drops the items that went with the rails and the old Open Selected Item button", () => {
     expect(
-      sanitizeLeftToolbarItems({
-        main: ["home", "search", "copyPath", "copyPath", "leftSeparator", "leftSeparator"],
-        utility: ["settings", "copyPath", "copyPath", "theme", "sort", "leftSeparator"],
-      }),
-    ).toEqual({
-      main: ["home", "copyPath", "leftSeparator", "leftSeparator"],
-      utility: ["settings", "copyPath", "theme", "leftSeparator"],
-    });
+      sanitizeTopToolbarItems([
+        "back",
+        "down",
+        "home",
+        "root",
+        "applications",
+        "trash",
+        "rerootHome",
+        "leftSeparator",
+        "title",
+        "clipboard",
+        "viewOptions",
+        "search",
+      ]),
+    ).toEqual(["back", "title", "clipboard", "viewOptions", "search"]);
   });
 
-  it("falls back to the default left rail layout when persisted data is malformed", () => {
-    expect(sanitizeLeftToolbarItems(null)).toEqual({
-      main: [...DEFAULT_LEFT_TOOLBAR_ITEMS.main],
-      utility: [...DEFAULT_LEFT_TOOLBAR_ITEMS.utility],
-    });
+  it("offers the app's own buttons and the new file actions", () => {
+    expect(
+      sanitizeTopToolbarItems([
+        "title",
+        "newTab",
+        "quickLook",
+        "showInFinder",
+        "theme",
+        "settings",
+        "help",
+        "clipboard",
+        "viewOptions",
+        "search",
+      ]),
+    ).toEqual([
+      "title",
+      "newTab",
+      "quickLook",
+      "showInFinder",
+      "theme",
+      "settings",
+      "help",
+      "clipboard",
+      "viewOptions",
+      "search",
+    ]);
+  });
+
+  it("gives every button a command to run, apart from the ones the toolbar draws itself", () => {
+    const drawnByTheToolbar = new Set([
+      "back",
+      "forward",
+      "up",
+      "view",
+      "sort",
+      "title",
+      "clipboard",
+      "viewOptions",
+      "search",
+      "foldersFirst",
+      "hidden",
+      "infoPanel",
+      "infoRow",
+      "theme",
+      "topSeparator",
+    ]);
+    const withoutCommand = TOOLBAR_ITEM_IDS.filter(
+      (itemId) => getToolbarItemDefinition(itemId).commandType === undefined,
+    );
+    expect(withoutCommand.filter((itemId) => !drawnByTheToolbar.has(itemId))).toEqual([]);
   });
 });

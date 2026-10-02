@@ -5,7 +5,7 @@
 // approach and not on the next. Drawing them here makes them appear every time, placed
 // beside the control.
 //
-// Only buttons with no visible label get one (toolbar and rail buttons, and the like): an
+// Only buttons with no visible label get one (toolbar buttons, and the like): an
 // icon needs its name, while a file or folder row already shows its own.
 
 const SHOW_DELAY_MS = 600;
@@ -22,21 +22,12 @@ export function resolveTooltipPlacement(input: {
   anchor: { left: number; top: number; right: number; bottom: number; width: number };
   bubble: { width: number; height: number };
   viewport: { width: number; height: number };
-  side: "below" | "right";
 }): TooltipPlacement {
-  const { anchor, bubble, viewport, side } = input;
+  const { anchor, bubble, viewport } = input;
   const clampLeft = (left: number) =>
     Math.max(EDGE_MARGIN, Math.min(left, viewport.width - bubble.width - EDGE_MARGIN));
   const clampTop = (top: number) =>
     Math.max(EDGE_MARGIN, Math.min(top, viewport.height - bubble.height - EDGE_MARGIN));
-
-  if (side === "right") {
-    const anchorCenterY = (anchor.top + anchor.bottom) / 2;
-    return {
-      left: clampLeft(anchor.right + ANCHOR_GAP),
-      top: clampTop(anchorCenterY - bubble.height / 2),
-    };
-  }
 
   const below = anchor.bottom + ANCHOR_GAP;
   const fitsBelow = below + bubble.height <= viewport.height - EDGE_MARGIN;
@@ -121,7 +112,6 @@ export function installTitleTooltips(doc: Document = document): () => void {
       anchor: anchorRect,
       bubble: { width: bubbleRect.width, height: bubbleRect.height },
       viewport: { width: view.innerWidth, height: view.innerHeight },
-      side: anchor.closest(".sidebar-rail") ? "right" : "below",
     });
     bubble.style.left = `${Math.round(placement.left)}px`;
     bubble.style.top = `${Math.round(placement.top)}px`;

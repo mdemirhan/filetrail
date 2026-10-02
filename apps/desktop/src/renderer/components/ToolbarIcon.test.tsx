@@ -15,16 +15,13 @@ function expectDefined<T>(value: T | null | undefined): NonNullable<T> {
 const ICON_NAMES = [
   "back",
   "forward",
-  "home",
   "up",
-  "down",
   "location",
   "hidden",
   "refresh",
   "list",
   "details",
   "drawer",
-  "sidebar",
   "edit",
   "chevron",
   "open",
@@ -37,10 +34,7 @@ const ICON_NAMES = [
   "help",
   "settings",
   "search",
-  "applications",
-  "drive",
   "trash",
-  "rerootHome",
   "infoRow",
   "foldersFirst",
   "copy",
@@ -56,6 +50,9 @@ const ICON_NAMES = [
   "stop",
   "title",
   "clipboard",
+  "newTab",
+  "quickLook",
+  "showInFinder",
 ] as const;
 
 describe("ToolbarIcon", () => {

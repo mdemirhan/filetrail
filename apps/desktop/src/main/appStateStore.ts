@@ -34,7 +34,6 @@ import { sanitizeShortcutOverrides } from "../shared/shortcuts";
 import {
   DEFAULT_TOP_TOOLBAR_ITEMS,
   PREVIOUS_DEFAULT_TOP_TOOLBARS,
-  sanitizeLeftToolbarItems,
   sanitizeTopToolbarItems,
 } from "../shared/toolbarItems";
 import {
@@ -472,21 +471,6 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
           ? [...DEFAULT_TOP_TOOLBAR_ITEMS]
           : sanitizeTopToolbarItems(record.topToolbarItems)
         : [...currentDefaults.topToolbarItems],
-    leftToolbarItems:
-      record.leftToolbarItems !== undefined
-        ? sanitizeLeftToolbarItems(record.leftToolbarItems)
-        : {
-            main: [...currentDefaults.leftToolbarItems.main],
-            utility: [...currentDefaults.leftToolbarItems.utility],
-          },
-    showSidebarRail:
-      typeof record.showSidebarRail === "boolean"
-        ? record.showSidebarRail
-        : currentDefaults.showSidebarRail,
-    showSidebarBottomRail:
-      typeof record.showSidebarBottomRail === "boolean"
-        ? record.showSidebarBottomRail
-        : currentDefaults.showSidebarBottomRail,
     terminalApp: sanitizeTerminalApplicationSelection(record.terminalApp),
     defaultTextEditor: sanitizeApplicationSelection(
       record.defaultTextEditor,
@@ -854,14 +838,15 @@ function sanitizeWindowState(value: unknown): StoredWindowState {
 }
 
 // Macintosh HD used to be a fixed sidebar location and is now a default favorite. State saved
-// before that change (no `showSidebarRail` yet, or a `locationsExpanded` flag, which is no
-// longer written) gets it once; afterwards the user can remove it like any other favorite.
+// before that change (no `autoLightTheme` yet, which arrived with it, or a `locationsExpanded`
+// flag, which is no longer written) gets it once; afterwards the user can remove it like any
+// other favorite.
 function upgradeFavoritesWithRootVolume(
   record: Record<string, unknown>,
   favorites: FavoritePreference[],
 ): FavoritePreference[] {
   const savedBeforeRootFavorite =
-    record.showSidebarRail === undefined || record.locationsExpanded !== undefined;
+    record.autoLightTheme === undefined || record.locationsExpanded !== undefined;
   if (
     record.favoritesInitialized !== true ||
     !savedBeforeRootFavorite ||
