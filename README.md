@@ -1,127 +1,135 @@
 # File Trail
 
-File Trail is a macOS file explorer built for people who spend real time inside project trees. It combines a native-feeling browser with fast search, on-demand folder size analysis, keyboard-friendly navigation, and a level of visual customization that most file managers never bother to offer.
+A file browser for macOS that finds things quickly, shows where your disk space went, and otherwise behaves the way a Mac app should.
 
-It is built with Electron, React, TypeScript, Bun, and a small native macOS layer where raw filesystem performance matters.
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/folder-sizes-dark.png">
+    <img src="docs/screenshots/folder-sizes-light.png" alt="File Trail showing a project folder in Details view, sorted by size, with the Info panel open" width="900">
+  </picture>
+</p>
 
-<a href="docs/screenshots/screenshotsearch.png">
-  <img src="docs/screenshots/screenshotsearch.png" alt="File Trail search results" width="700" />
-</a>
+File Trail is for the hours spent inside folders: a project tree, a photo archive, a Downloads folder that got out of hand. It looks familiar on purpose. Favorites and a folder tree sit on the left, the files in the middle, details on the right. What it adds are the things that are slow or missing when you browse files all day: search you can rely on, folder sizes when you ask for them, tabs that remember where they were, and a clipboard you can see.
 
-<a href="docs/screenshots/screenshotlight.png">
-  <img src="docs/screenshots/screenshotlight.png" alt="File Trail light theme" width="700" />
-</a>
+## Search that keeps up with your typing
 
-[Browse the full screenshot gallery](docs/screenshots)
+Type in the search field and results appear as you type: files and folders under the folder you are in, each with the folder it lives in, sortable by name, folder, date or size.
 
-## Why File Trail
+<p align="center">
+  <img src="docs/screenshots/search.png" alt="Search results for the word trip, with the matching part of each name highlighted" width="900">
+</p>
 
-Finder is great until you need to move fast through large folder trees, inspect structure, search deeply, compare files, and keep a workspace tuned to your own habits. File Trail is aimed at developers, power users, and anyone who wants a file browser that feels deliberate instead of generic.
+- **Plain text by default.** Switch to glob (`*.test.ts`) or regex when you need a pattern, and match against the name or the full path.
+- **Widen or narrow without starting over.** One click moves the search from this folder to Home or the whole disk. The filter field trims what was already found, by name or by folder, without searching again.
+- **It knows about Git.** Inside a repository, search can leave out `.git` and whatever `.gitignore` excludes, so build output stays out of the results.
+- **Nothing to set up.** Search runs on a bundled copy of [`fd`](https://github.com/sharkdp/fd). There is no index to build and nothing to install.
 
-## Highlights
+Each tab keeps its own search, and a search keeps running while you look at another tab.
 
-- Fast search powered by a bundled `fd` binary, so search is built into the app and does not depend on the user setting up extra tools.
-- Search controls that let you switch between plain text, glob and regex matching, target names or full paths, recurse deeply or stay shallow, and include hidden files when needed.
-- Search as you type, with results you can sort and open without losing your place.
-- On-demand folder size calculation with cached results, so you can inspect heavy directories without paying the cost every time you click around. Sorted by size, the list draws a bar behind each size to show what takes the space.
-- Native folder analysis that tracks logical size, allocated disk usage, and file counts for directory trees.
-- A dual-pane workflow with folder tree navigation, content browsing, favorites, and an inspector-style Get Info panel.
-- File operations for opening, editing, renaming, duplicating, moving, copying, pasting, trashing, and opening locations in Terminal.
+## See what is taking the space
 
-## Efficient Search
+Ask for a folder's size and File Trail measures it, and every folder inside it, in one pass. Sort the Details view by Size and each row gets a bar, so the heavy folders stand out before you read a single number. The first screenshot on this page shows it.
 
-Search is one of the main reasons to use File Trail. The app runs a bundled `fd` binary under the hood, which makes file discovery feel dramatically faster than the slow, blocking search experiences people are used to in general-purpose file browsers.
+The Info panel gives the size, the number of items, and the space taken on disk when that differs. Sizes are worked out when you ask, not while you browse, so opening a large folder stays instant.
 
-If you work inside large codebases, monorepos, media folders, or messy home directories, this matters. You can search by filename or full path, search for plain text or with glob and regex patterns, include hidden files when necessary, and refine the result list after the scan finishes. The result is a search flow that feels made for real work instead of occasional lookup.
+## Tabs, and a clipboard you can see
 
-## Folder Size Calculation
+<p align="center">
+  <img src="docs/screenshots/clipboard.png" alt="Four files copied in one tab, with the toolbar's clipboard list open" width="900">
+</p>
 
-File Trail treats folder size as first-class information instead of an afterthought. Directory sizes are calculated on demand, cached, and exposed directly in the browsing experience so you can understand where space is going without leaving the app.
+Every tab has its own folder, history, folder tree, view, sort order and search. Copy in one tab and paste in another, or drag items onto a tab to move them there.
 
-Under the hood, the app uses a native macOS implementation for recursive folder size analysis. That means it can surface:
+Copying a folder by mistake is easy to do and annoying to discover later, so File Trail makes the clipboard visible. Copied and cut items stay marked until they are pasted. A button in the toolbar counts them, and opens a list where you can jump to an item, take one off, or clear the lot.
 
-- Logical size
-- Allocated disk usage
-- File count
+When a paste would overwrite something, you decide what happens: replace, keep both, merge folders, or skip. Anything replaced goes to the Trash.
 
-This makes the app useful not just for navigation, but also for cleanup, audits, and understanding large project directories.
+## Three views, with real previews
 
-## Customization
+<p align="center">
+  <img src="docs/screenshots/icon-view-tabs.png" alt="A folder of photos in icon view, in a window with three tabs" width="900">
+</p>
 
-File Trail has a much deeper customization surface than a typical file explorer. You can tailor both the look and the workflow:
+Icon view shows Quick Look previews of photos, PDFs and other documents. List view packs a folder into compact columns. Details view adds date, size and kind, and optionally date created and permissions. Space opens Quick Look on whatever is selected.
 
-- Auto, Light and Dark appearance, with three palettes for each side: macOS Light, Warm Paper and Sand; macOS Dark, Catppuccin Mocha and Tomorrow Night
-- The icons macOS itself draws for files, folders, apps and symlinks
-- One accent color for the whole app, from the macOS set or a custom color
-- UI font family, font size, font weight, and zoom controls
-- Icon, list and details views with adjustable density, Quick Look previews in icon view, and configurable detail columns
-- A toolbar you arrange yourself: add, remove and reorder its buttons
-- Favorite locations with customizable icons and placement options
-- Search defaults for match mode, match scope, recursion and Git skipping
-- Default text editor, Terminal app, and open-with application shortcuts
-- Keyboard shortcuts you can change: two keys per command, with a warning before a key is taken from another command
+Dates read the way you would say them ("24 min ago", "Yesterday, 6:03 PM"), and files and folders have the icons macOS itself draws for them.
 
-## Feature Set
+## Get around without hunting
 
-- Quick access to Home, Applications, Trash, and custom favorites
-- Tree browsing and content browsing in one focused workspace
-- Built-in Get Info panel with copy path and open-in-Terminal actions
-- Hidden file toggle
-- Folders-first sorting
-- Go To (⌘K): jump to any folder you have opened before from a few letters of its name, or type a path
-- Tabs (⌘T): each with its own folder, history, folder tree, view and search; copy in one tab and paste in another, or drag items onto a tab. Drawn as flat tabs under a line in the accent color, or as cards on a band (Settings → Appearance)
-- Copy and cut from the folder tree as well as the file list. Copied items flash and stay marked until they are pasted, and a toolbar button lists what is on the clipboard, takes items off it, and clears it
-- Keyboard shortcuts for every command, listed in Help and changed in Settings → Shortcuts
+<p align="center">
+  <img src="docs/screenshots/go-to.png" alt="The Go To box finding two folders from the letters sc" width="900">
+</p>
 
-## Current Platform
+- **Go To (⌘K)** finds any folder you have opened before, or a favorite, from a few letters of its name. The folders you use most come first. Start with `/` or `~` to type a path, and Tab completes it.
+- **Type in the file list** to narrow it to the names containing what you typed.
+- **The path bar** is more than a label: click a folder to jump to it, click a `›` to see the folders at that level and step sideways, or double-click the bar to edit the path as text.
+- **Back and Forward** remember more than one step. Hold either button to pick from the folders it leads to.
+- **Every command has a keyboard shortcut**, shown in the menus and listed in the built-in Help.
 
-File Trail is currently focused on macOS.
+## Make it yours
 
-## Download
+File Trail follows the macOS Light and Dark setting, with three palettes for each side.
 
-If you just want to use File Trail, you do not need to build it from source. Download a packaged release from the GitHub releases page:
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/palette-macos-light.png" alt="macOS Light palette" width="280"><br>macOS Light</td>
+    <td align="center"><img src="docs/screenshots/palette-warm-paper.png" alt="Warm Paper palette" width="280"><br>Warm Paper</td>
+    <td align="center"><img src="docs/screenshots/palette-sand.png" alt="Sand palette" width="280"><br>Sand</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/palette-macos-dark.png" alt="macOS Dark palette" width="280"><br>macOS Dark</td>
+    <td align="center"><img src="docs/screenshots/palette-catppuccin-mocha.png" alt="Catppuccin Mocha palette" width="280"><br>Catppuccin Mocha</td>
+    <td align="center"><img src="docs/screenshots/palette-tomorrow-night.png" alt="Tomorrow Night palette" width="280"><br>Tomorrow Night</td>
+  </tr>
+</table>
 
-[Download from GitHub Releases](https://github.com/mdemirhan/filetrail/releases)
+Beyond colour, you choose the accent, the font and the zoom level, and the parts you touch most are yours to arrange:
 
-Releases include downloadable macOS ZIP builds for the supported Mac architectures:
+<table>
+  <tr>
+    <td align="center" width="50%"><img src="docs/screenshots/settings-toolbar.png" alt="The Toolbar tab of Settings" width="420"><br><b>The toolbar.</b> Add, remove and reorder its buttons.</td>
+    <td align="center" width="50%"><img src="docs/screenshots/settings-shortcuts.png" alt="The Shortcuts tab of Settings" width="420"><br><b>The keyboard.</b> Two keys per command, with a warning before one is taken from another command.</td>
+  </tr>
+</table>
 
-- `x64` for Intel Macs
-- `arm64` for Apple Silicon Macs
+Settings also covers the everyday choices: which app edits text files and which terminal opens, what double-click and Return do, which columns Details shows, what search starts with, and whether your tabs and last folder come back at launch.
 
-If your Mac has an Apple Silicon chip like M1, M2, M3, or newer, choose `arm64`. If your Mac is Intel-based, choose `x64`.
+## Also in the box
 
-### Install steps
+- Favorites in the sidebar, with an icon of your choice for each
+- Open in Terminal and Copy Path on a key, and Open With for the apps you choose
+- Rename, duplicate, move, new folder and Move to Trash
+- Hidden files on a key (⇧⌘.), and folders kept first when you want them
+- A folder tree you can root at any folder while you work inside one project
+- Built-in Help that follows the shortcuts you have set
 
-1. Open the [releases page](https://github.com/mdemirhan/filetrail/releases).
-2. Download the ZIP file that matches your Mac:
-   - choose `arm64` for Apple Silicon
-   - choose `x64` for Intel
-3. Unzip the archive.
-4. Move `File Trail.app` into your `Applications` folder.
-5. Launch the app.
+## Install
 
-## Development
+Download the latest build from the [releases page](https://github.com/mdemirhan/filetrail/releases):
 
-### Requirements
+1. Download `FileTrail-arm64.zip`, the build for Apple Silicon Macs.
+2. Unzip it and move `File Trail.app` into your Applications folder.
+3. Open it.
 
-- macOS
-- [Bun](https://bun.sh/)
+Releases are beta builds and can trail `main`. To run the newest version, or to build for an Intel Mac, build from source; it takes a few minutes.
 
-### Install dependencies
+## Build from source
+
+You need macOS, [Bun](https://bun.sh/), and the Xcode Command Line Tools (`xcode-select --install`) for the native part.
 
 ```bash
 bun install
-```
-
-### Run the desktop app locally
-
-```bash
 bun run desktop:start
 ```
 
-This builds the desktop app, prepares icon assets, and launches Electron.
+That builds the app and its native helpers and launches it. To make an app bundle and a ZIP under `apps/desktop/out`:
 
-### Useful local commands
+```bash
+bun run desktop:make:mac        # this Mac's architecture
+bun run desktop:make:mac:x64    # Intel
+```
+
+While working on the code:
 
 ```bash
 bun run typecheck
@@ -129,17 +137,13 @@ bun run test
 bun run lint
 ```
 
-### Package the macOS app
+## How it is built
 
-```bash
-bun run desktop:make:mac
-```
-
-This creates a macOS app bundle plus distributables under `apps/desktop/out`.
-
-## Project Layout
+File Trail is an Electron app written in TypeScript and React, with a small native layer in C and Objective-C where the filesystem work has to be fast or has to be done the way macOS does it: copying, folder sizes, file icons and Quick Look previews.
 
 ```text
-apps/desktop   Electron main/preload/renderer code and packaging scripts
-packages/*     Shared contracts, explorer logic, search runtime, and native filesystem support
+apps/desktop        The app: Electron main process, preload and the React interface
+packages/contracts  The messages the interface and the main process exchange
+packages/core       Listing, search, and copy, move and paste
+packages/native-fs  The native macOS helpers
 ```
