@@ -34,15 +34,19 @@ export type ShortcutItem = {
 };
 
 export const SHORTCUT_ITEMS: readonly ShortcutItem[] = [
-  { group: "navigation", shortcut: "Cmd+[", description: "Go back" },
-  { group: "navigation", shortcut: "Cmd+]", description: "Go forward" },
-  { group: "navigation", shortcut: "Cmd+Up", description: "Open the parent folder" },
+  { group: "navigation", shortcut: "Cmd+[", description: "Go back (Cmd+Left also works)" },
+  { group: "navigation", shortcut: "Cmd+]", description: "Go forward (Cmd+Right also works)" },
+  { group: "navigation", shortcut: "Cmd+Up", description: "Open the enclosing folder" },
   {
     group: "navigation",
     shortcut: "Cmd+Down",
-    description: "Open the selected item, or expand the folder in the tree",
+    description: "Open the selected item, or expand or collapse the folder in the tree",
   },
-  { group: "navigation", shortcut: "Cmd+K", description: "Go to a folder by name or path" },
+  {
+    group: "navigation",
+    shortcut: "Cmd+K",
+    description: "Go to a folder by name or path (Cmd+Shift+G also works)",
+  },
   {
     group: "navigation",
     shortcut: "Cmd+Shift+H",
@@ -74,6 +78,12 @@ export const SHORTCUT_ITEMS: readonly ShortcutItem[] = [
     shortcut: "Tab",
     description: "Switch between the tree and the list",
   },
+  {
+    group: "navigation",
+    shortcut: "Shift+Down",
+    description: "Extend the selection (Shift+Up, the other way)",
+  },
+  { group: "navigation", shortcut: "Home", description: "Select the first item (End, the last)" },
   { group: "navigation", shortcut: "Ctrl+U", description: "Scroll one page up" },
   { group: "navigation", shortcut: "Ctrl+D", description: "Scroll one page down" },
   { group: "navigation", shortcut: "Cmd+R", description: "Refresh the current folder" },
@@ -92,8 +102,14 @@ export const SHORTCUT_ITEMS: readonly ShortcutItem[] = [
   { group: "files", shortcut: "Cmd+A", description: "Select all" },
   { group: "files", shortcut: "Cmd+Option+C", description: "Copy the path" },
   { group: "files", shortcut: "Cmd+Option+T", description: "Open in Terminal" },
+  { group: "files", shortcut: "Esc", description: "Cancel a dialog (Cmd+. also works)" },
 
   { group: "search", shortcut: "Cmd+F", description: "Find files" },
+  {
+    group: "search",
+    shortcut: "Down",
+    description: "Move from the search field into the results (Return also works)",
+  },
   { group: "search", shortcut: "Cmd+Shift+F", description: "Show the last results again" },
   { group: "search", shortcut: "Cmd+R", description: "Run the search again" },
   { group: "search", shortcut: "Esc", description: "Close the results" },
@@ -105,6 +121,8 @@ export const SHORTCUT_ITEMS: readonly ShortcutItem[] = [
   { group: "views", shortcut: "Cmd+-", description: "Zoom out" },
   { group: "views", shortcut: "Cmd+0", description: "Actual size" },
   { group: "views", shortcut: "Ctrl+Cmd+F", description: "Enter or leave full screen" },
+  { group: "views", shortcut: "Cmd+M", description: "Minimize the window" },
+  { group: "views", shortcut: "Cmd+H", description: "Hide File Trail" },
   { group: "views", shortcut: "Cmd+,", description: "Settings" },
   { group: "views", shortcut: "?", description: "Help" },
   { group: "views", shortcut: "Esc", description: "Return from Help" },
@@ -137,7 +155,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Favorites",
             description:
-              "Right-click a folder and choose Add to Favorites to pin it in the sidebar.",
+              "Right-click a folder and choose Add to Favorites to pin it in the sidebar. File > Add to Favorites does the same for the selected folder, or for the folder you are in when nothing is selected.",
           },
           {
             label: "Tree root",
@@ -157,7 +175,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Open in New Tab",
             description:
-              "Right-click a folder, or ⌘-double-click it. ⌘-click works on a folder in the sidebar or the path bar.",
+              "Right-click a folder, or ⌘-double-click it. ⌘-click works on a folder in the sidebar or the path bar, and File > Open in New Tab on the selected folder.",
           },
           {
             label: "Each tab",
@@ -241,7 +259,10 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
             label: "Open With",
             description: "Right-click a file to pick another app. Settings → Files sets the list.",
           },
-          { label: "Quick Look", description: "Press Space to preview without opening." },
+          {
+            label: "Quick Look",
+            description: "Press Space to preview the selected item without opening it.",
+          },
           {
             label: "Open in Terminal",
             description:
@@ -440,16 +461,27 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "List and Details",
             description:
-              "The two buttons in the toolbar switch between a compact list and columns with date, size and kind. Settings → Explorer chooses the columns.",
+              "The two buttons in the toolbar, or the View menu, switch between a compact list and columns with date, size and kind. Settings → Explorer chooses the columns.",
           },
           {
             label: "Sort",
             description:
-              "The sort button orders by name, kind, date or size. Choosing the same order again reverses it.",
+              "The sort button, View > Sort By, or a click on a column heading in Details orders by name, kind, date or size. Choosing the same order again reverses it.",
           },
           {
             label: "Hidden files",
-            description: "Files whose names start with a dot. Search follows this setting too.",
+            description:
+              "Files whose names start with a dot. ⇧⌘. or View > Show Hidden Files shows them; search follows this setting too.",
+          },
+          {
+            label: "Dates",
+            description:
+              "Recent dates read the way you would say them: “24 min ago”, “Today, 9:12 AM”, “Yesterday, 6:03 PM”, “Mon, 4:05 PM”. Earlier this year the year is left out; before that, the time. Rest the pointer on a date for the full date and time.",
+          },
+          {
+            label: "Permissions",
+            description:
+              "The Permissions column shows the numeric code, such as `644`. Rest the pointer on it for the letters (`rw-r--r--`).",
           },
         ],
       },
@@ -477,7 +509,14 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       {
         title: "Appearance",
         rows: [
-          { label: "Zoom", description: "Makes everything larger or smaller, text included." },
+          {
+            label: "Zoom",
+            description: "⌘+ and ⌘- make everything larger or smaller, text included.",
+          },
+          {
+            label: "Full screen",
+            description: "⌃⌘F, or the green button of the window. The same key leaves it.",
+          },
           {
             label: "Theme, accent, font",
             description: "Settings → Appearance. Help follows them too.",
@@ -489,7 +528,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
   {
     id: "shortcuts",
     title: "Keyboard shortcuts",
-    intro: "Every shortcut, grouped by what it is for.",
+    intro: "Every shortcut, grouped by what it is for. The menus show them beside each command.",
     sections: [],
   },
 ];

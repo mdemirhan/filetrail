@@ -82,7 +82,7 @@ describe("helpContent", () => {
     expect(trash.map((result) => result.topic.id)).toEqual(["files"]);
     expect(trash[0]?.shortcuts.map((item) => item.shortcut)).toEqual(["Cmd+Backspace"]);
     expect(searchHelp("cmd+k")[0]?.shortcuts[0]?.description).toBe(
-      "Go to a folder by name or path",
+      "Go to a folder by name or path (Cmd+Shift+G also works)",
     );
     // A section title brings its rows along ("glob" is in "Glob patterns").
     expect(searchHelp("glob patterns")[0]?.rows.length).toBeGreaterThanOrEqual(6);
