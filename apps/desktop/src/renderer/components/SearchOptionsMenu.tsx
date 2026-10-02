@@ -269,7 +269,7 @@ export function SearchOptionsMenu({
         }
         // The labeled button is named by its text, so it never shares a name with the magnifier.
         aria-label={trigger === "label" ? undefined : "Search options"}
-        title="Search options"
+        title="Search Options"
         aria-haspopup="menu"
         aria-expanded={open}
         tabIndex={interactive ? undefined : -1}

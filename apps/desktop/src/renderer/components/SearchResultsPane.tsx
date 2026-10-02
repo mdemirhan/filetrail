@@ -336,7 +336,7 @@ export function SearchResultsPane({
                 type="button"
                 className="search-results-filter-clear"
                 aria-label="Clear filter"
-                title="Clear filter (Esc)"
+                title="Clear Filter (Esc)"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => onFilterQueryChange("")}
               >
@@ -367,7 +367,7 @@ export function SearchResultsPane({
               className="search-scope-action"
               onClick={onStopSearch}
               aria-label="Stop search"
-              title="Stop current search"
+              title="Stop Search"
             >
               <span className="search-results-spinner" aria-hidden="true" />
               Stop
@@ -378,7 +378,7 @@ export function SearchResultsPane({
             className="search-scope-action"
             onClick={onCloseResults}
             aria-label="Close search results"
-            title="Close search results (Esc)"
+            title="Close Search Results (Esc)"
           >
             Done
           </button>

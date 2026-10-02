@@ -26,7 +26,7 @@ export function ListFilterPill({
         type="button"
         className="list-filter-pill-clear"
         aria-label="Clear filter"
-        title="Clear filter (Esc)"
+        title="Clear Filter (Esc)"
         tabIndex={-1}
         // The list keeps the keyboard, so typing can continue after a click here.
         onMouseDown={(event) => event.preventDefault()}

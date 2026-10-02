@@ -3,7 +3,8 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 
 import { HELP_TOPICS, SHORTCUT_ITEMS } from "../lib/helpContent";
-import { HelpView, shortcutParts } from "./HelpView";
+import { shortcutParts } from "../lib/shortcutLabels";
+import { HelpView } from "./HelpView";
 
 describe("HelpView", () => {
   it("exposes the selected layout mode on the root element", () => {

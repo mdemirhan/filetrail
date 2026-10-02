@@ -823,6 +823,7 @@ function AccentSelector({
             <button
               key={option.value}
               type="button"
+              title={option.label}
               aria-label={`Accent color ${option.label}`}
               aria-pressed={active}
               onClick={() => onChange(option.value)}
@@ -844,6 +845,7 @@ function AccentSelector({
         })}
         <button
           type="button"
+          title="Custom Color"
           aria-label="Accent color Custom"
           aria-pressed={isCustom}
           onClick={() => openColorPicker(customInputRef.current)}
@@ -1004,6 +1006,7 @@ function FavoriteIconPicker({
       <button
         ref={triggerRef}
         type="button"
+        title="Choose Icon"
         aria-label={ariaLabel}
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -1062,6 +1065,7 @@ function FavoriteIconPicker({
                   <button
                     key={option.value}
                     type="button"
+                    title={option.label}
                     aria-label={`${ariaLabel}: ${option.label}`}
                     aria-pressed={active}
                     onClick={() => {
@@ -1486,6 +1490,7 @@ function ToolbarSurfaceEditor({
                   {isHovered && !locked ? (
                     <button
                       type="button"
+                      title="Remove"
                       aria-label={`Remove ${definition.label} from ${title}`}
                       onClick={() => onRemoveItem(index)}
                       style={{

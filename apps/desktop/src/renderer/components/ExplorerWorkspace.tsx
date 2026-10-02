@@ -18,6 +18,7 @@ import { type ToolbarItemId, getToolbarItemDefinition } from "../../shared/toolb
 import { useKeepInViewport } from "../hooks/useKeepInViewport";
 import { parentDirectoryPath } from "../lib/explorerNavigation";
 import { EXPLORER_LAYOUT } from "../lib/layoutTokens";
+import { getToolbarItemTooltip } from "../lib/tooltips";
 import { InfoPanel } from "./GetInfoPanel";
 import { HistoryButton } from "./HistoryButton";
 import { SearchOptionsMenu } from "./SearchOptionsMenu";
@@ -32,10 +33,6 @@ type TreePaneProps = ComponentProps<typeof TreePane>;
 type SearchWorkspaceProps = ComponentProps<typeof SearchWorkspace>;
 type InfoPanelProps = ComponentProps<typeof InfoPanel>;
 const TOP_TOOLBAR_ITEM_GAP_PX = 4;
-
-function formatToolbarTooltip(label: string, shortcutLabel?: string) {
-  return shortcutLabel ? `${label} (${shortcutLabel})` : label;
-}
 
 function getSortByLabel(sortBy: SortBy) {
   if (sortBy === "size") {
@@ -529,10 +526,13 @@ export function ExplorerWorkspace({
       </div>
     );
   }
-  const getToolbarTooltip = (itemId: ToolbarItemId, labelOverride?: string) => {
-    const definition = getToolbarItemDefinition(itemId);
-    return formatToolbarTooltip(labelOverride ?? definition.label, definition.shortcutLabel);
-  };
+  const getToolbarTooltip = (itemId: ToolbarItemId) =>
+    getToolbarItemTooltip(itemId, {
+      foldersFirst: treePaneProps.foldersFirst,
+      hiddenFilesShown: treePaneProps.includeHidden,
+      infoPanelOpen,
+      infoRowOpen: treePaneProps.infoRowOpen,
+    });
 
   function renderTopToolbarItem(
     itemId: ToolbarItemId,
@@ -584,7 +584,7 @@ export function ExplorerWorkspace({
           disabled={!parentDirectoryPath(currentPath)}
           onClick={navigateToParentFolder}
           title={getToolbarTooltip(itemId)}
-          aria-label="Navigate Up"
+          aria-label="Enclosing Folder"
         >
           <ToolbarIcon name="up" />
         </button>
@@ -599,7 +599,7 @@ export function ExplorerWorkspace({
           disabled={focusedPane !== "tree" && !selectedEntryExists}
           onClick={navigateDownAction}
           title={getToolbarTooltip(itemId)}
-          aria-label="Navigate Down"
+          aria-label="Open Selected Item"
         >
           <ToolbarIcon name="down" />
         </button>
@@ -614,7 +614,7 @@ export function ExplorerWorkspace({
               type="button"
               className={viewMode === "list" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
               onClick={() => onViewModeChange("list")}
-              title="List view"
+              title="View as List"
               aria-label="List view"
             >
               <ToolbarIcon name="list" />
@@ -625,7 +625,7 @@ export function ExplorerWorkspace({
                 viewMode === "details" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"
               }
               onClick={() => onViewModeChange("details")}
-              title="Details view"
+              title="View as Details"
               aria-label="Details view"
             >
               <ToolbarIcon name="details" />
@@ -705,9 +705,9 @@ export function ExplorerWorkspace({
             className={`tb-btn tb-btn-icon${sortMenuOpen ? " active" : ""}`}
             onClick={mode === "interactive" ? () => setSortMenuOpen((value) => !value) : undefined}
             tabIndex={mode === "interactive" ? undefined : -1}
-            title={`Sort by ${getSortByLabel(sortBy)} (${
-              sortDirection === "asc" ? "ascending" : "descending"
-            })`}
+            title={`Sort By: ${getSortByLabel(sortBy)}, ${
+              sortDirection === "asc" ? "Ascending" : "Descending"
+            }`}
             aria-label="Sort by"
             aria-haspopup="menu"
             aria-expanded={sortMenuOpen}
@@ -788,6 +788,7 @@ export function ExplorerWorkspace({
                   <button
                     type="button"
                     className="toolbar-search-clear"
+                    title="Clear Search"
                     aria-label="Clear file search"
                     onMouseDown={(event) => {
                       event.preventDefault();
@@ -857,7 +858,7 @@ export function ExplorerWorkspace({
             treePaneProps.foldersFirst ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"
           }
           onClick={treePaneProps.onToggleFoldersFirst}
-          title={treePaneProps.foldersFirst ? "Folders first" : "Mixed file and folder order"}
+          title={getToolbarTooltip(itemId)}
           aria-label="Toggle folders first"
           aria-pressed={treePaneProps.foldersFirst}
         >
@@ -919,7 +920,7 @@ export function ExplorerWorkspace({
           type="button"
           className="tb-btn tb-btn-icon"
           onClick={treePaneProps.onOpenHelp}
-          title="Help"
+          title={getToolbarTooltip(itemId)}
           aria-label="Help"
         >
           <ToolbarIcon name="help" />
@@ -939,7 +940,7 @@ export function ExplorerWorkspace({
         className="tb-btn tb-btn-icon"
         disabled={!canRunRendererCommand(commandType)}
         onClick={() => onRendererCommand(commandType)}
-        title={formatToolbarTooltip(definition.label, definition.shortcutLabel)}
+        title={getToolbarTooltip(itemId)}
         aria-label={definition.label}
       >
         <ToolbarIcon name={definition.icon} />

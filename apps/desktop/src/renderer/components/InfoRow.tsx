@@ -161,6 +161,7 @@ function InfoRowFolderSize({
           type="button"
           className="folder-size-refresh-btn"
           onClick={onRecalculate}
+          title="Calculate Size Again"
           aria-label="Recalculate folder size"
         >
           <svg className="folder-size-refresh-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -179,6 +180,7 @@ function InfoRowFolderSize({
           type="button"
           className="folder-size-cancel-btn"
           onClick={onCancel}
+          title="Stop Calculating"
           aria-label="Cancel folder size calculation"
         >
           ×

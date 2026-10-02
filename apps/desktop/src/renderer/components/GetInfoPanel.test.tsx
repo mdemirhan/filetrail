@@ -147,7 +147,7 @@ describe("InfoPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "filetrail" }));
     expect(onNavigateToPath).toHaveBeenCalledWith("/Users/demo/projects/filetrail");
 
-    fireEvent.click(screen.getByRole("button", { name: "Close Toggle Info Panel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Hide Info Panel" }));
     expect(onClose).toHaveBeenCalledTimes(1);
 
     await act(async () => {

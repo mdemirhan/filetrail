@@ -657,7 +657,9 @@ export function ContentPane({
                     type="button"
                     className="pathbar-segment pathbar-segment-collapsed"
                     onClick={() => setPathbarExpanded(true)}
-                    title={`Show hidden path segments (${item.hiddenCount})`}
+                    title={`Show ${item.hiddenCount} More ${
+                      item.hiddenCount === 1 ? "Folder" : "Folders"
+                    }`}
                   >
                     <span className="pathbar-segment-label">…</span>
                   </button>

@@ -100,7 +100,10 @@ export type ToolbarItemDefinition = {
   commandType?: RendererCommandType;
   topLocked?: boolean;
   topVisibleInMinimal?: boolean;
+  // Written as "Cmd+Shift+M"; tooltips show it as symbols.
   shortcutLabel?: string;
+  // The command's full name, where the label is a shorter one for the Settings tiles.
+  tooltipLabel?: string;
   allowDuplicates?: boolean;
   leftZones?: readonly LeftToolbarZone[];
 };
@@ -112,7 +115,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     icon: "back",
     kind: "button",
     surfaces: ["top"],
-    shortcutLabel: "Cmd+Left",
+    shortcutLabel: "Cmd+[",
     topVisibleInMinimal: true,
   },
   {
@@ -121,12 +124,12 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     icon: "forward",
     kind: "button",
     surfaces: ["top"],
-    shortcutLabel: "Cmd+Right",
+    shortcutLabel: "Cmd+]",
     topVisibleInMinimal: true,
   },
   {
     id: "up",
-    label: "Navigate Up",
+    label: "Enclosing Folder",
     icon: "up",
     kind: "button",
     surfaces: ["top"],
@@ -135,7 +138,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
   },
   {
     id: "down",
-    label: "Navigate Down",
+    label: "Open Selected Item",
     icon: "down",
     kind: "button",
     surfaces: ["top"],
@@ -216,7 +219,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
   },
   {
     id: "rerootHome",
-    label: "Root Tree At Home",
+    label: "Root Tree at Home",
     icon: "rerootHome",
     kind: "button",
     surfaces: ["left"],
@@ -269,6 +272,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     icon: "help",
     kind: "button",
     surfaces: ["left"],
+    shortcutLabel: "?",
   },
   {
     id: "theme",
@@ -308,6 +312,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
   {
     id: "editSelection",
     label: "Edit",
+    tooltipLabel: "Edit in Text Editor",
     icon: "edit",
     kind: "button",
     surfaces: ["top", "left"],
@@ -330,7 +335,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     kind: "button",
     surfaces: ["top", "left"],
     commandType: "renameSelection",
-    shortcutLabel: "↩",
+    shortcutLabel: "Return",
   },
   {
     id: "duplicateSelection",
@@ -352,7 +357,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
   },
   {
     id: "trashSelection",
-    label: "Move To Trash",
+    label: "Move to Trash",
     icon: "trash",
     kind: "button",
     surfaces: ["top", "left"],
@@ -388,7 +393,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
   },
   {
     id: "openInTerminal",
-    label: "Open In Terminal",
+    label: "Open in Terminal",
     icon: "terminal",
     kind: "button",
     surfaces: ["top", "left"],

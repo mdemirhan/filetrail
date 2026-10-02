@@ -307,7 +307,7 @@ describe("SettingsView", () => {
 
     const topToolbarEditor = screen.getByRole("group", { name: "Top toolbar" });
     // The name under each tile is shown as text, not only as a hover tooltip.
-    for (const label of ["Back", "Forward", "Refresh", "Go To", "Open In Terminal"]) {
+    for (const label of ["Back", "Forward", "Refresh", "Go To", "Open in Terminal"]) {
       expect(within(topToolbarEditor).getByText(label)).toBeVisible();
     }
     expect(within(topToolbarEditor).getByText("Available · click to add")).toBeInTheDocument();
@@ -460,17 +460,23 @@ describe("SettingsView", () => {
     expect(screen.queryByRole("button", { name: "Add Applications to Top toolbar" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add Trash to Top toolbar" })).toBeNull();
     expect(
-      screen.queryByRole("button", { name: "Add Root Tree At Home to Top toolbar" }),
+      screen.queryByRole("button", { name: "Add Root Tree at Home to Top toolbar" }),
     ).toBeNull();
     expect(screen.queryByRole("button", { name: "Add Help to Top toolbar" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add Back to Left rail" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add Forward to Left rail" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add Navigate Up to Left rail" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add Navigate Down to Left rail" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add Enclosing Folder to Left rail" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Add Open Selected Item to Left rail" }),
+    ).toBeNull();
     expect(screen.queryByRole("button", { name: "Add Back to Bottom rail" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add Forward to Bottom rail" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add Navigate Up to Bottom rail" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add Navigate Down to Bottom rail" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Add Enclosing Folder to Bottom rail" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Add Open Selected Item to Bottom rail" }),
+    ).toBeNull();
   });
 
   it("shows toolbar actions in a stable grouped order across the add lists", () => {
@@ -530,8 +536,8 @@ describe("SettingsView", () => {
     ).toEqual([
       "Add Separator to Top toolbar",
       "Add Forward to Top toolbar",
-      "Add Navigate Up to Top toolbar",
-      "Add Navigate Down to Top toolbar",
+      "Add Enclosing Folder to Top toolbar",
+      "Add Open Selected Item to Top toolbar",
       "Add Go To to Top toolbar",
       "Add Refresh to Top toolbar",
     ]);
@@ -544,7 +550,7 @@ describe("SettingsView", () => {
       "Add Macintosh HD to Left rail",
       "Add Applications to Left rail",
       "Add Trash to Left rail",
-      "Add Root Tree At Home to Left rail",
+      "Add Root Tree at Home to Left rail",
       "Add Go To to Left rail",
     ]);
     expect(

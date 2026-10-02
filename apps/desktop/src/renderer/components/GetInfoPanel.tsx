@@ -106,7 +106,8 @@ export function InfoPanel({
           type="button"
           className="get-info-close"
           onClick={onClose}
-          aria-label="Close Toggle Info Panel"
+          title="Hide Info Panel (⌘I)"
+          aria-label="Hide Info Panel"
         >
           <InfoPanelGlyph name="close" />
         </button>
@@ -563,6 +564,7 @@ function FolderSizeCell({
           type="button"
           className="folder-size-refresh-btn"
           onClick={onRecalculate}
+          title="Calculate Size Again"
           aria-label="Recalculate folder size"
         >
           <InfoPanelGlyph name="refresh" />
@@ -578,6 +580,7 @@ function FolderSizeCell({
           type="button"
           className="folder-size-cancel-btn"
           onClick={onCancel}
+          title="Stop Calculating"
           aria-label="Cancel folder size calculation"
         >
           ×

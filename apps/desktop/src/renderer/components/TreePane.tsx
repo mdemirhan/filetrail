@@ -35,12 +35,9 @@ import {
 } from "../lib/favorites";
 import { FavoriteItemIcon, TreeFolderIcon } from "../lib/fileIcons";
 import type { HistoryMenuEntry } from "../lib/historyMenu";
+import { getToolbarItemTooltip } from "../lib/tooltips";
 import { HistoryButton } from "./HistoryButton";
 import { ToolbarIcon } from "./ToolbarIcon";
-
-function formatToolbarTooltip(label: string, shortcutLabel?: string) {
-  return shortcutLabel ? `${label} (${shortcutLabel})` : label;
-}
 
 export type TreeNodeState = {
   path: string;
@@ -297,10 +294,13 @@ export function TreePane({
       integratedPresentation.visibleItemIds,
     ],
   );
-  const getToolbarTooltip = (itemId: ToolbarItemId, labelOverride?: string) => {
-    const definition = getToolbarItemDefinition(itemId);
-    return formatToolbarTooltip(labelOverride ?? definition.label, definition.shortcutLabel);
-  };
+  const getToolbarTooltip = (itemId: ToolbarItemId) =>
+    getToolbarItemTooltip(itemId, {
+      foldersFirst,
+      hiddenFilesShown: includeHidden,
+      infoPanelOpen,
+      infoRowOpen,
+    });
 
   useEffect(
     () => () => {
@@ -541,7 +541,7 @@ export function TreePane({
           onClick={onNavigateToParent}
           disabled={!canNavigateToParent || !onNavigateToParent}
           title={getToolbarTooltip(itemId)}
-          aria-label="Navigate Up"
+          aria-label="Enclosing Folder"
         >
           <ToolbarIcon name="up" />
         </button>
@@ -556,7 +556,7 @@ export function TreePane({
           onClick={onNavigateDown}
           disabled={!canNavigateDown || !onNavigateDown}
           title={getToolbarTooltip(itemId)}
-          aria-label="Navigate Down"
+          aria-label="Open Selected Item"
         >
           <ToolbarIcon name="down" />
         </button>
@@ -625,7 +625,7 @@ export function TreePane({
           type="button"
           className={`sidebar-rail-button${foldersFirst ? " active" : ""}`}
           onClick={onToggleFoldersFirst}
-          title={foldersFirst ? "Folders first" : "Mixed file and folder order"}
+          title={getToolbarTooltip(itemId)}
           aria-label="Toggle folders first"
           aria-pressed={foldersFirst}
         >
@@ -793,7 +793,7 @@ export function TreePane({
         className="sidebar-rail-button"
         onClick={() => onRendererCommand(commandType)}
         disabled={!canRunRendererCommand(commandType)}
-        title={formatToolbarTooltip(definition.label, definition.shortcutLabel)}
+        title={getToolbarTooltip(itemId)}
         aria-label={definition.label}
       >
         <ToolbarIcon name={definition.icon} />
@@ -1458,11 +1458,11 @@ function TreeItemRow({
           aria-label={
             isFavoritesRoot
               ? item.expanded
-                ? "Collapse favorites"
-                : "Expand favorites"
+                ? "Collapse Favorites"
+                : "Expand Favorites"
               : item.expanded
-                ? "Collapse folder"
-                : "Expand folder"
+                ? "Collapse Folder"
+                : "Expand Folder"
           }
           title={
             !canExpand
@@ -1471,11 +1471,11 @@ function TreeItemRow({
                 : "No subfolders"
               : isFavoritesRoot
                 ? item.expanded
-                  ? "Collapse favorites"
-                  : "Expand favorites"
+                  ? "Collapse Favorites"
+                  : "Expand Favorites"
                 : item.expanded
-                  ? "Collapse folder"
-                  : "Expand folder"
+                  ? "Collapse Folder"
+                  : "Expand Folder"
           }
         >
           <ToolbarIcon name="chevron" />

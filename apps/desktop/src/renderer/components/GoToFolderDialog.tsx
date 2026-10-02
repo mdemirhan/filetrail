@@ -324,7 +324,13 @@ export function GoToFolderDialog({
           <div className="go-to-folder-header-copy">
             <h2>{title}</h2>
           </div>
-          <button type="button" className="go-to-folder-close" onClick={onClose} aria-label="Close">
+          <button
+            type="button"
+            className="go-to-folder-close"
+            onClick={onClose}
+            title="Close (Esc)"
+            aria-label="Close"
+          >
             <svg viewBox="0 0 14 14" fill="none" aria-hidden="true">
               <path d="M1 1l12 12M13 1L1 13" />
             </svg>
@@ -414,6 +420,7 @@ export function GoToFolderDialog({
               <button
                 type="button"
                 className="go-to-folder-clear"
+                title="Clear"
                 aria-label="Clear"
                 onClick={() => {
                   setValue("", false);
