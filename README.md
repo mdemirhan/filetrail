@@ -12,6 +12,7 @@ A file browser for macOS, built to fix the places where Finder falls short.
 Finder covers the basics. File Trail is for the things it gets wrong or leaves out:
 
 - **Search that works, and is fast.** Results appear as you type, by name or by full path, in plain text, glob or regex.
+- **Type to filter.** Start typing in a folder and the list narrows to the names containing what you typed, where Finder only jumps to one.
 - **A folder tree, not just a sidebar.** You see where you are and what is around it, instead of a flat list of favorites.
 - **Tabs that keep their place.** Each has its own folder, history, view and search.
 - **A clipboard you can see.** What you copied or cut stays marked, and listed in the toolbar, until you paste it.
@@ -71,7 +72,7 @@ Dates read the way you would say them ("24 min ago", "Yesterday, 6:03 PM"), and 
 
 - **The folder tree** shows the folder you are in and the ones around it. Open a folder's arrow to look inside without leaving where you are, or root the tree at one folder while you work inside a project.
 - **Go To (⌘K)** finds any folder you have opened before, or a favorite, from a few letters of its name. The folders you use most come first. Start with `/` or `~` to type a path, and Tab completes it.
-- **Type in the file list** to narrow it to the names containing what you typed.
+- **Type in the file list** to narrow it to the names containing what you typed. There is no field to click first: the first match is selected, Backspace edits what you typed, and Esc brings the rest back. Press ⌘F and the same text becomes a search of the subfolders.
 - **The path bar** is more than a label: click a folder to jump to it, click a `›` to see the folders at that level and step sideways, or double-click the bar to edit the path as text.
 - **Back and Forward** remember more than one step. Hold either button to pick from the folders it leads to.
 - **Every command has a keyboard shortcut**, shown in the menus and listed in the built-in Help.
