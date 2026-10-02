@@ -86,6 +86,13 @@ if [[ -f "${PLIST}" ]]; then
   /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${APP_VERSION}" "${PLIST}" >/dev/null 2>&1 || true
 fi
 
+# Electron takes an app whose executable is still named "Electron" for a development run:
+# `app.isPackaged` is false, and the View menu gets Developer Tools. The executable is
+# named after the app instead. The helper apps keep their names; Electron looks for
+# "Electron Helper" first.
+mv "${APP_BUNDLE}/Contents/MacOS/Electron" "${APP_BUNDLE}/Contents/MacOS/${APP_NAME}"
+/usr/libexec/PlistBuddy -c "Set :CFBundleExecutable ${APP_NAME}" "${PLIST}"
+
 if [[ -f "${ICON_ICNS}" ]]; then
   cp "${ICON_ICNS}" "${APP_BUNDLE}/Contents/Resources/${APP_SLUG}.icns"
   if [[ -f "${PLIST}" ]]; then
