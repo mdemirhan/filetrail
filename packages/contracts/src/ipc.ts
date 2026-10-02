@@ -41,7 +41,7 @@ export const uiFontFamilySchema = z.enum([
   "fira-code",
   "jetbrains-mono",
 ]);
-export const explorerViewModeSchema = z.enum(["list", "details"]);
+export const explorerViewModeSchema = z.enum(["icons", "list", "details"]);
 export const directorySortBySchema = z.enum(["name", "modified", "kind", "size"]);
 export const sortDirectionSchema = z.enum(["asc", "desc"]);
 export const searchPatternModeSchema = z.enum(["text", "glob", "regex"]);
@@ -582,6 +582,7 @@ export const appPreferencesSchema = z.object({
   foldersFirst: z.boolean(),
   compactListView: z.boolean(),
   compactDetailsView: z.boolean(),
+  compactIconView: z.boolean(),
   compactTreeView: z.boolean(),
   singleClickExpandTreeItems: z.boolean(),
   highlightHoveredItems: z.boolean(),
@@ -1092,6 +1093,23 @@ export const ipcContractSchemas = {
     }),
     response: z.object({
       pngBase64: z.string().nullable(),
+    }),
+  },
+  // The picture Quick Look draws of a file's content, shown in icon view. `version` stands
+  // for the file's state (size and modification time): a caller that holds the picture
+  // for a version passes it as `knownVersion` and gets `unchanged` instead of the picture
+  // again. `dataUrl` is null when the file has no preview, or cannot be read.
+  "system:getFileThumbnail": {
+    request: z.object({
+      path: z.string().min(1),
+      // Longest side in pixels.
+      size: z.number().int().min(16).max(1024),
+      knownVersion: z.string().min(1).optional(),
+    }),
+    response: z.object({
+      version: z.string().nullable(),
+      unchanged: z.boolean(),
+      dataUrl: z.string().nullable(),
     }),
   },
 } as const;

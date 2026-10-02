@@ -31,6 +31,24 @@ export function nativeCopyFile(sourcePath: string, destinationPath: string): Pro
 export function nativeGetFileIcon(path: string, size: number): Promise<Buffer | null>;
 
 /**
+ * Returns a picture of the file's content (an image, a PDF page, a video frame, a
+ * document page) from Quick Look's `QLThumbnailGenerator`, fitted into a square of
+ * `size` pixels with its proportions kept.
+ *
+ * Pictures and videos come back as they are; other files are drawn as Finder draws
+ * their icons, a page with its own outline and shadow on a clear background.
+ *
+ * The data is JPEG when the picture has no transparency and PNG otherwise. Quick Look
+ * generates it out of process; nothing blocks while it does.
+ *
+ * @param path - Absolute path to the file.
+ * @param size - Longest side in pixels (16–1024).
+ * @returns A promise that resolves with the image data, or `null` when Quick Look has
+ *   no preview for the file (its icon is not returned instead).
+ */
+export function nativeGetFileThumbnail(path: string, size: number): Promise<Buffer | null>;
+
+/**
  * Recursively calculates the total size of a folder using `getattrlistbulk(2)`.
  *
  * Returns a JSON string:

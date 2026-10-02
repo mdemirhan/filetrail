@@ -83,6 +83,7 @@ export function SettingsWindowApp() {
     uiFontFamily: preferences.uiFontFamily,
     compactListView: preferences.compactListView,
     compactDetailsView: preferences.compactDetailsView,
+    compactIconView: preferences.compactIconView,
     compactTreeView: preferences.compactTreeView,
     singleClickExpandTreeItems: preferences.singleClickExpandTreeItems,
     highlightHoveredItems: preferences.highlightHoveredItems,
@@ -308,6 +309,7 @@ export function SettingsWindowApp() {
             uiFontFamily={preferences.uiFontFamily}
             compactListView={preferences.compactListView}
             compactDetailsView={preferences.compactDetailsView}
+            compactIconView={preferences.compactIconView}
             compactTreeView={preferences.compactTreeView}
             singleClickExpandTreeItems={preferences.singleClickExpandTreeItems}
             highlightHoveredItems={preferences.highlightHoveredItems}
@@ -344,6 +346,7 @@ export function SettingsWindowApp() {
             onResetAppearance={preferences.resetAppearanceSettings}
             onCompactListViewChange={preferences.setCompactListView}
             onCompactDetailsViewChange={preferences.setCompactDetailsView}
+            onCompactIconViewChange={preferences.setCompactIconView}
             onCompactTreeViewChange={preferences.setCompactTreeView}
             onSingleClickExpandTreeItemsChange={preferences.setSingleClickExpandTreeItems}
             onHighlightHoveredItemsChange={preferences.setHighlightHoveredItems}

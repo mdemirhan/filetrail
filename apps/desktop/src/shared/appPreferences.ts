@@ -18,7 +18,7 @@ export type ThemeMode =
 export type ThemePreference = "auto" | ThemeMode;
 export type AccentMode = string;
 // "native" shows the real macOS icons for files and folders (via NSWorkspace).
-export type ExplorerViewMode = "list" | "details";
+export type ExplorerViewMode = "icons" | "list" | "details";
 export type UiFontFamily = "system" | "dm-sans" | "lexend" | "fira-code" | "jetbrains-mono";
 export type SearchPatternModePreference = "text" | "glob" | "regex";
 // How the search text is matched, in the order the menus list the choices.
@@ -314,6 +314,7 @@ export type AppPreferences = {
   foldersFirst: boolean;
   compactListView: boolean;
   compactDetailsView: boolean;
+  compactIconView: boolean;
   compactTreeView: boolean;
   singleClickExpandTreeItems: boolean;
   highlightHoveredItems: boolean;
@@ -371,6 +372,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   foldersFirst: true,
   compactListView: false,
   compactDetailsView: false,
+  compactIconView: false,
   compactTreeView: false,
   singleClickExpandTreeItems: false,
   highlightHoveredItems: false,

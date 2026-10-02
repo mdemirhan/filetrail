@@ -51,6 +51,7 @@ export function useAppPreferences() {
   const [compactDetailsView, setCompactDetailsView] = useState(
     DEFAULT_APP_PREFERENCES.compactDetailsView,
   );
+  const [compactIconView, setCompactIconView] = useState(DEFAULT_APP_PREFERENCES.compactIconView);
   const [compactTreeView, setCompactTreeView] = useState(DEFAULT_APP_PREFERENCES.compactTreeView);
   const [singleClickExpandTreeItems, setSingleClickExpandTreeItems] = useState(
     DEFAULT_APP_PREFERENCES.singleClickExpandTreeItems,
@@ -148,6 +149,8 @@ export function useAppPreferences() {
     setCompactListView,
     compactDetailsView,
     setCompactDetailsView,
+    compactIconView,
+    setCompactIconView,
     compactTreeView,
     setCompactTreeView,
     singleClickExpandTreeItems,
@@ -247,6 +250,7 @@ export function applyPreferencesPatch(store: AppPreferencesStore, patch: Incomin
   set("uiFontFamily", store.setUiFontFamily);
   set("compactListView", store.setCompactListView);
   set("compactDetailsView", store.setCompactDetailsView);
+  set("compactIconView", store.setCompactIconView);
   set("compactTreeView", store.setCompactTreeView);
   set("singleClickExpandTreeItems", store.setSingleClickExpandTreeItems);
   set("highlightHoveredItems", store.setHighlightHoveredItems);

@@ -2,7 +2,13 @@
 
 import { act, render } from "@testing-library/react";
 
-import { FavoriteItemIcon, FileIcon, FolderIcon, TreeFolderIcon } from "./fileIcons";
+import {
+  FavoriteItemIcon,
+  FileIcon,
+  FolderIcon,
+  TreeFolderIcon,
+  preloadGenericIcons,
+} from "./fileIcons";
 import { type FiletrailClient, FiletrailClientProvider } from "./filetrailClient";
 
 function expectDefined<T>(value: T | null | undefined): NonNullable<T> {
@@ -56,6 +62,10 @@ describe("fileIcons", () => {
     expect(container.querySelectorAll(".file-icon.folder")).toHaveLength(1);
     expect(container.querySelectorAll(".file-icon.document")).toHaveLength(1);
     expect(container.querySelector("img")).toBeNull();
+    // The stand-ins are a filled folder and a page with a folded corner, like the icons
+    // they stand in for.
+    expect(container.querySelector(".file-icon.folder .file-icon-folder-front")).not.toBeNull();
+    expect(container.querySelector(".file-icon.document .file-icon-document-fold")).not.toBeNull();
 
     // No icon from macOS: the placeholder stays.
     await act(async () => {
@@ -136,6 +146,57 @@ describe("native icons", () => {
       { path: "/a/one.txt", size: 64 },
     ]);
     expect(container.querySelectorAll("img")).toHaveLength(6);
+  });
+
+  it("has the plain folder and document icons ready before any item asks for them", async () => {
+    // A fresh copy of the module, so icons cached by the tests above play no part.
+    vi.resetModules();
+    const fresh = await import("./fileIcons");
+    const freshClient = await import("./filetrailClient");
+    const invoke = vi.fn(async (_channel: string, payload: { generic?: string; size: number }) => ({
+      pngBase64: `icon-of-${payload.generic}-${payload.size}`,
+    }));
+    const client = { invoke } as unknown as FiletrailClient;
+
+    fresh.preloadGenericIcons(client);
+    fresh.preloadGenericIcons(client);
+    await act(async () => undefined);
+
+    // Each kind once, in the size of rows and in the size of icon view.
+    expect(invoke.mock.calls.map(([, payload]) => payload)).toEqual([
+      { path: "/", size: 64, generic: "folder" },
+      { path: "/", size: 128, generic: "folder" },
+      { path: "/", size: 64, generic: "file" },
+      { path: "/", size: 128, generic: "file" },
+    ]);
+
+    const { container } = render(
+      <freshClient.FiletrailClientProvider value={client}>
+        <fresh.FileIcon entry={createEntry({ path: "/a/folder", kind: "directory" })} />
+        <fresh.FileIcon
+          large
+          entry={{ ...createEntry({ path: "/a/Makefile", extension: "" }), isExecutable: false }}
+        />
+      </freshClient.FiletrailClientProvider>,
+    );
+    // Drawn from the first render, with nothing more asked for.
+    const sources = Array.from(container.querySelectorAll("img")).map((image) => image.src);
+    expect(sources).toEqual([
+      "data:image/png;base64,icon-of-folder-64",
+      "data:image/png;base64,icon-of-file-128",
+    ]);
+    await act(async () => undefined);
+    expect(invoke).toHaveBeenCalledTimes(4);
+  });
+
+  it("does nothing when the icons cannot be asked for", async () => {
+    const client = {
+      invoke: vi.fn(async () => {
+        throw new Error("no bridge");
+      }),
+    } as unknown as FiletrailClient;
+    expect(() => preloadGenericIcons(client)).not.toThrow();
+    await act(async () => undefined);
   });
 
   it("asks for each symlink by path, since macOS draws it as what it points to", async () => {

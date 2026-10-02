@@ -1014,6 +1014,35 @@ describe("App copy/paste integration", () => {
     expect(harness.invocations.some((call) => call.channel === "system:copyText")).toBe(false);
   });
 
+  it("switches to icon view from the View menu and back to the list from the toolbar", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+    await screen.findByRole("button", { name: "source.txt" });
+    expect(screen.getByRole("button", { name: "Icon view" })).not.toHaveClass("active");
+
+    await act(async () => {
+      harness.emitCommand({ type: "viewAsIcons" });
+    });
+    expect(screen.getByRole("button", { name: "Icon view" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "Details view" })).not.toHaveClass("active");
+    await vi.waitFor(() => {
+      expect(harness.menuStates.at(-1)).toMatchObject({ viewMode: "icons" });
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "List view" }));
+    });
+    expect(screen.getByRole("button", { name: "Icon view" })).not.toHaveClass("active");
+    await vi.waitFor(() => {
+      expect(harness.menuStates.at(-1)).toMatchObject({ viewMode: "list" });
+    });
+  });
+
   it("tells the application menu which commands can run and what is shown", async () => {
     const harness = createAppHarness();
 

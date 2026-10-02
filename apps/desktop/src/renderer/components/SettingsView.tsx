@@ -2021,6 +2021,7 @@ export function SettingsView({
   uiFontFamily,
   compactListView,
   compactDetailsView,
+  compactIconView,
   compactTreeView,
   singleClickExpandTreeItems,
   highlightHoveredItems = true,
@@ -2056,6 +2057,7 @@ export function SettingsView({
   onResetAppearance,
   onCompactListViewChange,
   onCompactDetailsViewChange,
+  onCompactIconViewChange,
   onCompactTreeViewChange,
   onSingleClickExpandTreeItemsChange,
   onHighlightHoveredItemsChange = () => undefined,
@@ -2104,6 +2106,7 @@ export function SettingsView({
   uiFontFamily: UiFontFamily;
   compactListView: boolean;
   compactDetailsView: boolean;
+  compactIconView: boolean;
   compactTreeView: boolean;
   singleClickExpandTreeItems: boolean;
   highlightHoveredItems?: boolean;
@@ -2139,6 +2142,7 @@ export function SettingsView({
   onResetAppearance: () => void;
   onCompactListViewChange: (value: boolean) => void;
   onCompactDetailsViewChange: (value: boolean) => void;
+  onCompactIconViewChange: (value: boolean) => void;
   onCompactTreeViewChange: (value: boolean) => void;
   onSingleClickExpandTreeItemsChange: (value: boolean) => void;
   onHighlightHoveredItemsChange?: (value: boolean) => void;
@@ -2555,6 +2559,19 @@ export function SettingsView({
               }
             />
             <SettingRow
+              title="Compact icon view"
+              desc="Use smaller icons and tighter spacing in icon view."
+              theme={palette}
+              right={
+                <Toggle
+                  checked={compactIconView}
+                  onToggle={() => onCompactIconViewChange(!compactIconView)}
+                  theme={palette}
+                  label="Compact icon view"
+                />
+              }
+            />
+            <SettingRow
               title="Single-click expand tree folders"
               desc="Expand or collapse filesystem tree folders when you single-click them in the folders pane."
               theme={palette}
@@ -2569,7 +2586,7 @@ export function SettingsView({
             />
             <SettingRow
               title="Highlight hovered items"
-              desc="Show hover highlighting in list view, detail view, and search results."
+              desc="Show hover highlighting in icon view, list view, detail view, and search results."
               theme={palette}
               right={
                 <Toggle

@@ -1,0 +1,310 @@
+import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+
+import type { IpcResponse } from "@filetrail/contracts";
+
+import { useElementSize } from "../hooks/useElementSize";
+import { isSelectionNarrowingClick } from "../lib/contentSelection";
+import { FileThumbnail } from "../lib/fileThumbnails";
+import {
+  computeIconGridColumns,
+  getIconGridLayout,
+  getIconGridRevealScrollTop,
+} from "../lib/iconGridLayout";
+import { fitIconLabel } from "../lib/iconLabel";
+import { getVirtualRange } from "../lib/virtualization";
+import { InlineRenameField } from "./InlineRenameField";
+
+type DirectoryEntry = IpcResponse<"directory:getSnapshot">["entries"][number];
+type SelectionGestureModifiers = {
+  metaKey: boolean;
+  shiftKey: boolean;
+};
+
+// Icon view: a grid of large icons that reads left to right and scrolls down. Files show
+// the Quick Look preview of their content where there is one. Rows have a fixed height
+// (see `iconGridLayout`), so only the rows on screen are mounted.
+export function IconGridView({
+  entries,
+  isFocused,
+  selectedPaths,
+  selectionLeadPath,
+  viewportWidth,
+  viewportHeight,
+  onSelectionGesture,
+  onClearSelection,
+  onActivateEntry,
+  onLayoutColumnsChange,
+  onVisiblePathsChange,
+  onItemContextMenu = () => undefined,
+  onItemDragStart,
+  onItemDragEnd,
+  onItemDragEnter,
+  onItemDragOver,
+  onItemDragLeave,
+  onItemDrop,
+  getItemDropIndicator,
+  compactIconView = false,
+  highlightHoveredItems = true,
+  inlineRename,
+  onInlineRenameSubmit,
+  onInlineRenameCancel,
+  children,
+}: {
+  entries: DirectoryEntry[];
+  isFocused: boolean;
+  selectedPaths: string[];
+  selectionLeadPath: string | null;
+  viewportWidth: number;
+  viewportHeight: number;
+  onSelectionGesture: (path: string, modifiers: SelectionGestureModifiers) => void;
+  onClearSelection: () => void;
+  onActivateEntry: (entry: DirectoryEntry, inNewTab?: boolean) => void;
+  onLayoutColumnsChange: (columns: number) => void;
+  onVisiblePathsChange: (paths: string[]) => void;
+  onItemContextMenu?: (path: string | null, position: { x: number; y: number }) => void;
+  onItemDragStart?:
+    | ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void)
+    | undefined;
+  onItemDragEnd?: ((event: React.DragEvent<HTMLElement>) => void) | undefined;
+  onItemDragEnter?:
+    | ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void)
+    | undefined;
+  onItemDragOver?:
+    | ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void)
+    | undefined;
+  onItemDragLeave?:
+    | ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void)
+    | undefined;
+  onItemDrop?: ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void) | undefined;
+  getItemDropIndicator?: ((path: string) => "valid" | "invalid" | null) | undefined;
+  compactIconView?: boolean;
+  highlightHoveredItems?: boolean;
+  inlineRename: { path: string; error: string | null } | null;
+  onInlineRenameSubmit: (nextName: string) => void;
+  onInlineRenameCancel: () => void;
+  /** The loading, error or empty-folder message, drawn in place of the grid. */
+  children?: ReactNode;
+}) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const { width: containerWidth, height: containerHeight } = useElementSize(containerRef);
+  // Scroll position lives in a ref so scrolling never re-renders by itself; a rAF
+  // coalesces scroll events into at most one state update per frame, and that state
+  // is the top visible row index, which only changes when the window shifts rows.
+  const scrollTopRef = useRef(0);
+  const scrollFrameRef = useRef<number | null>(null);
+  const [scrollRowIndex, setScrollRowIndex] = useState(0);
+  const selectedPathSet = useMemo(() => new Set(selectedPaths), [selectedPaths]);
+  // Stands for this reading of the folder: previews are checked against their files once
+  // for each new list of items (see `FileThumbnail`).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new token for every new list is the point.
+  const listing = useMemo(() => ({}), [entries]);
+
+  useEffect(
+    () => () => {
+      if (scrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollFrameRef.current);
+      }
+    },
+    [],
+  );
+
+  const layout = getIconGridLayout(compactIconView);
+  // Until the grid itself is measured, the pane's width gives the same answer.
+  const columns = computeIconGridColumns(
+    containerWidth > 0 ? containerWidth : viewportWidth,
+    layout,
+  );
+  const rowCount = Math.ceil(entries.length / columns);
+  const range = getVirtualRange({
+    itemCount: rowCount,
+    itemSize: layout.rowHeight,
+    viewportSize: containerHeight > 0 ? containerHeight : viewportHeight,
+    scrollOffset: scrollRowIndex * layout.rowHeight,
+    overscan: 3,
+  });
+  const visibleEntries = entries.slice(range.startIndex * columns, range.endIndex * columns);
+  // Report by value: the slice is a new array every render, and depending on it would
+  // re-render the parent in an endless loop.
+  const visiblePathsKey = visibleEntries.map((entry) => entry.path).join("\0");
+
+  useEffect(() => {
+    onVisiblePathsChange(visiblePathsKey.length > 0 ? visiblePathsKey.split("\0") : []);
+  }, [onVisiblePathsChange, visiblePathsKey]);
+
+  // Arrow keys and paging move by rows of this many items.
+  useEffect(() => {
+    onLayoutColumnsChange(columns);
+  }, [columns, onLayoutColumnsChange]);
+
+  // Keep the lead selection visible using the same row height contract virtualization uses.
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    // The measured size re-runs this when the pane is resized.
+    const effectiveViewportHeight = container?.clientHeight ?? containerHeight;
+    if (!container || !selectionLeadPath || effectiveViewportHeight <= 0) {
+      return;
+    }
+    const selectedIndex = entries.findIndex((entry) => entry.path === selectionLeadPath);
+    if (selectedIndex < 0) {
+      return;
+    }
+    const nextScrollTop = getIconGridRevealScrollTop({
+      currentScrollTop: container.scrollTop,
+      viewportHeight: effectiveViewportHeight,
+      itemIndex: selectedIndex,
+      itemCount: entries.length,
+      columns,
+      layout,
+    });
+    if (Math.abs(nextScrollTop - container.scrollTop) > 1) {
+      container.scrollTop = nextScrollTop;
+    }
+  }, [columns, containerHeight, entries, layout, selectionLeadPath]);
+
+  return (
+    <div
+      ref={containerRef}
+      className={`content-scroll icon-grid${compactIconView ? " compact" : ""}`}
+      data-hover-highlight-enabled={highlightHoveredItems ? "true" : "false"}
+      tabIndex={-1}
+      onMouseDown={(event) => {
+        const target = event.target;
+        if (target instanceof Element && target.closest("[data-selectable-entry-path]")) {
+          return;
+        }
+        onClearSelection();
+        containerRef.current?.focus();
+      }}
+      onContextMenu={(event) => {
+        const target = event.target;
+        if (target instanceof Element && target.closest("[data-selectable-entry-path]")) {
+          return;
+        }
+        event.preventDefault();
+        onClearSelection();
+        containerRef.current?.focus();
+        onItemContextMenu(null, {
+          x: event.clientX,
+          y: event.clientY,
+        });
+      }}
+      onScroll={(event) => {
+        scrollTopRef.current = event.currentTarget.scrollTop;
+        if (scrollFrameRef.current !== null) {
+          return;
+        }
+        scrollFrameRef.current = window.requestAnimationFrame(() => {
+          scrollFrameRef.current = null;
+          const nextRowIndex = Math.floor(
+            Math.max(0, scrollTopRef.current - layout.paddingTop) / layout.rowHeight,
+          );
+          setScrollRowIndex((prev) => (prev === nextRowIndex ? prev : nextRowIndex));
+        });
+      }}
+    >
+      {children}
+      {/* biome-ignore lint/a11y/useFocusableInteractive: focus is owned by the scroll container; options are buttons and stay keyboard reachable. */}
+      {/* biome-ignore lint/a11y/useSemanticElements: a native select cannot host this virtualized grid of icons. */}
+      <div
+        role="listbox"
+        aria-multiselectable="true"
+        className="icon-grid-items"
+        style={{
+          gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+          // Virtualization pads the unmounted rows above and below the visible slice.
+          paddingTop: `${range.startIndex * layout.rowHeight}px`,
+          paddingBottom: `${Math.max(0, rowCount - range.endIndex) * layout.rowHeight}px`,
+        }}
+      >
+        {visibleEntries.map((entry) => {
+          const canAcceptDrop = entry.kind === "directory" || entry.kind === "symlink_directory";
+          if (inlineRename?.path === entry.path) {
+            // While its name is edited the item is not a button: it would take the
+            // field's clicks and key presses as its own.
+            return (
+              // biome-ignore lint/a11y/useFocusableInteractive: the name field inside holds the focus.
+              // biome-ignore lint/a11y/useSemanticElements: a native option cannot hold a text field.
+              <div
+                role="option"
+                key={entry.path}
+                className="icon-item active inactive renaming"
+                data-selectable-entry-path={entry.path}
+                aria-selected="true"
+              >
+                <span className="icon-item-image">
+                  <FileThumbnail entry={entry} listing={listing} />
+                </span>
+                <InlineRenameField
+                  name={entry.name}
+                  extension={entry.extension}
+                  error={inlineRename.error}
+                  onSubmit={onInlineRenameSubmit}
+                  onCancel={onInlineRenameCancel}
+                />
+              </div>
+            );
+          }
+          const selected = selectedPathSet.has(entry.path);
+          return (
+            // biome-ignore lint/a11y/useSemanticElements: entries stay buttons for activation; role="option" overrides the implicit role on purpose.
+            <button
+              role="option"
+              key={entry.path}
+              type="button"
+              className={`icon-item${selected ? " active" : ""}${
+                selected && !isFocused ? " inactive" : ""
+              }`}
+              data-drop-target-state={
+                canAcceptDrop ? (getItemDropIndicator?.(entry.path) ?? "none") : "none"
+              }
+              data-selectable-entry-path={entry.path}
+              draggable={Boolean(onItemDragStart)}
+              onPointerDown={(event) => {
+                if (event.button !== 0) {
+                  return;
+                }
+                if (event.metaKey || event.shiftKey || !selected) {
+                  onSelectionGesture(entry.path, {
+                    metaKey: event.metaKey,
+                    shiftKey: event.shiftKey,
+                  });
+                }
+                containerRef.current?.focus();
+              }}
+              onClick={(event) => {
+                if (isSelectionNarrowingClick(event, selectedPaths.length, selected)) {
+                  onSelectionGesture(entry.path, { metaKey: false, shiftKey: false });
+                }
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                containerRef.current?.focus();
+                onItemContextMenu(entry.path, {
+                  x: event.clientX,
+                  y: event.clientY,
+                });
+              }}
+              onDragStart={(event) => onItemDragStart?.(entry, event)}
+              onDragEnd={(event) => onItemDragEnd?.(event)}
+              onDragEnter={canAcceptDrop ? (event) => onItemDragEnter?.(entry, event) : undefined}
+              onDragOver={canAcceptDrop ? (event) => onItemDragOver?.(entry, event) : undefined}
+              onDragLeave={canAcceptDrop ? (event) => onItemDragLeave?.(entry, event) : undefined}
+              onDrop={canAcceptDrop ? (event) => onItemDrop?.(entry, event) : undefined}
+              onDoubleClick={(event) => onActivateEntry(entry, event.metaKey)}
+              title={entry.name}
+              aria-label={entry.name}
+              aria-selected={selected}
+            >
+              <span className="icon-item-image">
+                <FileThumbnail entry={entry} listing={listing} />
+              </span>
+              <span className="icon-item-label">
+                {fitIconLabel(entry.name, entry.extension, compactIconView)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

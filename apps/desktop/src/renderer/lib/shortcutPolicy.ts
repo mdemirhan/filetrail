@@ -94,6 +94,7 @@ export const RENDERER_COMMAND_TREE_FOCUS_BUCKETS = {
   toggleFavorite: "globalExplorer",
   showInFinder: "globalExplorer",
   showLastSearchResults: "globalExplorer",
+  viewAsIcons: "globalExplorer",
   viewAsList: "globalExplorer",
   viewAsDetails: "globalExplorer",
   sortByName: "globalExplorer",

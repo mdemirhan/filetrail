@@ -5,7 +5,7 @@ import { RENDERER_COMMAND_TYPES, type RendererCommandType } from "./rendererComm
 // changes; the menu itself lives in the main process.
 export type ApplicationMenuState = {
   disabledCommands: RendererCommandType[];
-  viewMode: "list" | "details";
+  viewMode: "icons" | "list" | "details";
   sortBy: "name" | "modified" | "size" | "kind";
   foldersFirst: boolean;
   hiddenFilesShown: boolean;

@@ -85,13 +85,14 @@ export function getForcedVisibleHiddenChildPath(
 }
 
 // Arrow-key movement differs by view mode: list view uses columns for left/right jumps,
-// while details/search behave as a single vertical sequence regardless of visual columns.
+// icon view uses them for up/down jumps, and details/search behave as a single vertical
+// sequence regardless of visual columns.
 export function getNextSelectionIndex(args: {
   itemCount: number;
   currentIndex: number;
   key: "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight" | "Home" | "End";
   columns: number;
-  viewMode: "list" | "details";
+  viewMode: "icons" | "list" | "details";
 }): number {
   const { itemCount, currentIndex, key, columns, viewMode } = args;
   if (itemCount === 0) {
@@ -117,6 +118,25 @@ export function getNextSelectionIndex(args: {
       return clampIndex(safeIndex - 1, itemCount);
     }
     return clampIndex(safeIndex + 1, itemCount);
+  }
+
+  // Icon view reads left to right, then down: Left and Right move one item, Up and Down
+  // one row. Down from the row above a shorter last row goes to the last item.
+  if (viewMode === "icons") {
+    if (key === "ArrowLeft") {
+      return clampIndex(safeIndex - 1, itemCount);
+    }
+    if (key === "ArrowRight") {
+      return clampIndex(safeIndex + 1, itemCount);
+    }
+    if (key === "ArrowUp") {
+      return safeIndex - step >= 0 ? safeIndex - step : safeIndex;
+    }
+    if (safeIndex + step < itemCount) {
+      return safeIndex + step;
+    }
+    const lastIndex = itemCount - 1;
+    return Math.floor(safeIndex / step) < Math.floor(lastIndex / step) ? lastIndex : safeIndex;
   }
 
   if (key === "ArrowUp") {

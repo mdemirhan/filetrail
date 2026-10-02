@@ -112,6 +112,7 @@ describe("createApplicationMenuTemplate", () => {
       "Show Last Results",
     ]);
     expect(labels(submenuOf(template, "View"))).toEqual([
+      "as Icons",
       "as List",
       "as Details",
       "-",
@@ -193,6 +194,7 @@ describe("createApplicationMenuTemplate", () => {
       ["Edit", "Select All", "CommandOrControl+A", "editSelectAll"],
       ["Edit", "Find Files…", "CommandOrControl+F", "focusFileSearch"],
       ["Edit", "Show Last Results", "Shift+CommandOrControl+F", "showLastSearchResults"],
+      ["View", "as Icons", undefined, "viewAsIcons"],
       ["View", "as List", undefined, "viewAsList"],
       ["View", "as Details", undefined, "viewAsDetails"],
       ["View", "Folders First", undefined, "toggleFoldersFirst"],
@@ -391,6 +393,7 @@ describe("resolveApplicationMenuItemStates", () => {
     );
 
     expect(checked).toEqual({
+      viewAsIcons: false,
       viewAsList: false,
       viewAsDetails: true,
       sortByName: false,

@@ -48,6 +48,7 @@ import {
   isFavoritesRootItemId,
 } from "../lib/favorites";
 import { getFlowListColumnStep } from "../lib/flowListLayout";
+import { getIconGridLayout } from "../lib/iconGridLayout";
 import { EXPLORER_LAYOUT, getTreeRowHeight } from "../lib/layoutTokens";
 import { LIST_FILTER_SPACE_WINDOW_MS, findListFilterSelection } from "../lib/listFilter";
 import { createRendererLogger } from "../lib/logging";
@@ -183,6 +184,7 @@ export function useExplorerNavigationController(args: {
     viewMode,
     compactListView,
     compactDetailsView,
+    compactIconView,
     compactTreeView,
   } = preferences;
   const {
@@ -371,6 +373,10 @@ export function useExplorerNavigationController(args: {
       const element = contentPaneRef.current?.querySelector<HTMLElement>(".details-scroll");
       return element ? { axis: "vertical", element } : null;
     }
+    if (viewMode === "icons") {
+      const element = contentPaneRef.current?.querySelector<HTMLElement>(".icon-grid");
+      return element ? { axis: "vertical", element } : null;
+    }
     const element = contentPaneRef.current?.querySelector<HTMLElement>(".flow-list");
     return element ? { axis: "horizontal", element } : null;
   }
@@ -474,10 +480,17 @@ export function useExplorerNavigationController(args: {
       if (currentIndex < 0) {
         return didScroll;
       }
-      const stepItems = getPageStepItemCount(
-        target.element.clientHeight,
-        isSearchMode ? SEARCH_RESULT_ROW_HEIGHT : getDetailsRowHeight(compactDetailsView),
-      );
+      // Icon view pages by rows, and every row holds a full set of columns.
+      const pagesIconRows = !isSearchMode && viewMode === "icons";
+      const stepItems =
+        getPageStepItemCount(
+          target.element.clientHeight,
+          isSearchMode
+            ? SEARCH_RESULT_ROW_HEIGHT
+            : pagesIconRows
+              ? getIconGridLayout(compactIconView).rowHeight
+              : getDetailsRowHeight(compactDetailsView),
+        ) * (pagesIconRows ? Math.max(1, contentColumns) : 1);
       const nextIndex = getPagedSelectionIndex({
         itemCount: activeContentEntries.length,
         currentIndex,

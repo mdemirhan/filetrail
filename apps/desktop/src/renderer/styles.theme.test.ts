@@ -72,6 +72,10 @@ const ALLOWED_HARD_CODED_COLORS: ReadonlyArray<{ selector: RegExp; reason: strin
   },
   { selector: /^\.search-result-match$/, reason: "yellow find highlight, as in macOS" },
   {
+    selector: /\.file-icon-(?:folder-(?:back|front|edge)|document-(?:page|fold))\b/,
+    reason: "stand-ins for macOS icons, which keep their colors in every theme",
+  },
+  {
     selector: /\.filesystem-tree-section \.tree-scroll$/,
     reason: "alpha mask, not a color: black keeps the rows, transparent fades them out",
   },

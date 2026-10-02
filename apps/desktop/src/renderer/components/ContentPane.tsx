@@ -9,6 +9,7 @@ import {
   type DetailColumnKey,
   type DetailColumnVisibility,
   type DetailColumnWidths,
+  type ExplorerViewMode,
   clampDetailColumnWidth,
 } from "../../shared/appPreferences";
 import { useElementSize } from "../hooks/useElementSize";
@@ -33,6 +34,7 @@ import { formatSize, splitDisplayName, splitPermissionMode } from "../lib/format
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
 import { buildColumnMajorRows, computeRowsPerColumn, getVirtualRange } from "../lib/virtualization";
 import { ClipboardIndicator } from "./ClipboardIndicator";
+import { IconGridView } from "./IconGridView";
 import { InlineRenameField } from "./InlineRenameField";
 import { ListFilterPill } from "./ListFilterPill";
 import { PathSuggestionDropdown } from "./PathSuggestionDropdown";
@@ -77,7 +79,7 @@ type SelectionGestureModifiers = {
 };
 type InlineRenameState = { path: string; error: string | null };
 
-// `ContentPane` is the shared shell for list and details view. It owns path navigation,
+// `ContentPane` is the shared shell for icon, list and details view. It owns path navigation,
 // path suggestions, pane focus, and typeahead forwarding, then delegates actual entry
 // rendering to the active layout implementation.
 export function ContentPane({
@@ -117,6 +119,7 @@ export function ContentPane({
   getItemDropIndicator,
   compactListView = false,
   compactDetailsView = false,
+  compactIconView = false,
   highlightHoveredItems = true,
   detailColumns = DEFAULT_DETAIL_COLUMN_VISIBILITY,
   detailColumnWidths = DEFAULT_DETAIL_COLUMN_WIDTHS,
@@ -137,7 +140,7 @@ export function ContentPane({
   isFocused: boolean;
   currentPath: string;
   entries: DirectoryEntry[];
-  viewMode: "list" | "details";
+  viewMode: ExplorerViewMode;
   loading: boolean;
   error: string | null;
   includeHidden: boolean;
@@ -179,6 +182,7 @@ export function ContentPane({
   getItemDropIndicator?: ((path: string) => "valid" | "invalid" | null) | undefined;
   compactListView?: boolean;
   compactDetailsView?: boolean;
+  compactIconView?: boolean;
   highlightHoveredItems?: boolean;
   detailColumns?: DetailColumnVisibility;
   detailColumnWidths?: DetailColumnWidths;
@@ -421,6 +425,42 @@ export function ContentPane({
               </button>
             ) : null}
           </div>
+        ) : viewMode === "icons" ? (
+          <IconGridView
+            key={currentPath}
+            entries={entries}
+            isFocused={isFocused}
+            selectedPaths={selectedPaths}
+            selectionLeadPath={selectionLeadPath}
+            viewportWidth={viewportWidth}
+            viewportHeight={viewportHeight}
+            onActivateEntry={onActivateEntry}
+            onLayoutColumnsChange={onLayoutColumnsChange}
+            onSelectionGesture={onSelectionGesture}
+            onClearSelection={onClearSelection}
+            onVisiblePathsChange={onVisiblePathsChange}
+            onItemContextMenu={onItemContextMenu}
+            onItemDragStart={onItemDragStart}
+            onItemDragEnd={onItemDragEnd}
+            onItemDragEnter={onItemDragEnter}
+            onItemDragOver={onItemDragOver}
+            onItemDragLeave={onItemDragLeave}
+            onItemDrop={onItemDrop}
+            getItemDropIndicator={getItemDropIndicator}
+            compactIconView={compactIconView}
+            highlightHoveredItems={highlightHoveredItems}
+            inlineRename={inlineRename}
+            onInlineRenameSubmit={onInlineRenameSubmit}
+            onInlineRenameCancel={onInlineRenameCancel}
+          >
+            <ContentState
+              loading={loading}
+              error={error}
+              currentPath={currentPath}
+              entriesLength={entries.length}
+              includeHidden={includeHidden}
+            />
+          </IconGridView>
         ) : viewMode === "list" ? (
           <FlowListView
             key={currentPath}

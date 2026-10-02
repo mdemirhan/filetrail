@@ -59,9 +59,14 @@ async function isCaseSensitiveFallback() {
   return null;
 }
 
+async function getFileThumbnailFallback() {
+  return null;
+}
+
 module.exports = {
   nativeCopyFile: binding.nativeCopyFile,
   nativeGetFileIcon: binding.nativeGetFileIcon,
+  nativeGetFileThumbnail: binding.nativeGetFileThumbnail ?? getFileThumbnailFallback,
   nativeFolderSize,
   nativeFolderSizeCancel: binding.nativeFolderSizeCancel,
   nativeRenameExclusive: binding.nativeRenameExclusive ?? renameExclusiveFallback,

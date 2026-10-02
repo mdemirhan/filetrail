@@ -85,6 +85,29 @@ describe("explorerNavigation", () => {
     ).toBe(7);
   });
 
+  it("moves by items sideways and by rows up and down in icon view", () => {
+    const move = (
+      currentIndex: number,
+      key: "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight",
+    ) => getNextSelectionIndex({ itemCount: 10, currentIndex, key, columns: 4, viewMode: "icons" });
+
+    // Ten items in rows of four: 0-3, 4-7, 8-9.
+    expect(move(5, "ArrowRight")).toBe(6);
+    expect(move(5, "ArrowLeft")).toBe(4);
+    expect(move(5, "ArrowDown")).toBe(9);
+    expect(move(5, "ArrowUp")).toBe(1);
+    // Sideways movement carries on into the next and the previous row.
+    expect(move(3, "ArrowRight")).toBe(4);
+    expect(move(4, "ArrowLeft")).toBe(3);
+    // The edges hold.
+    expect(move(1, "ArrowUp")).toBe(1);
+    expect(move(9, "ArrowRight")).toBe(9);
+    expect(move(8, "ArrowDown")).toBe(8);
+    // Down from above the gap in a shorter last row lands on the last item.
+    expect(move(6, "ArrowDown")).toBe(9);
+    expect(move(7, "ArrowDown")).toBe(9);
+  });
+
   it("starts from the first item when arrow navigation begins with no content selection", () => {
     expect(
       getNextSelectionIndex({

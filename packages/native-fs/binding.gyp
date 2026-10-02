@@ -7,16 +7,31 @@
         "src/native_errors.c",
         "src/native_fileicon.m",
         "src/native_foldersize.c",
-        "src/native_rename.c"
+        "src/native_rename.c",
+        "src/native_thumbnail.m"
       ],
       "cflags": ["-Wall", "-Wextra", "-O2"],
       "xcode_settings": {
         "OTHER_CFLAGS": ["-Wall", "-Wextra", "-O2"],
-        "OTHER_LDFLAGS": ["-framework", "AppKit"]
+        "OTHER_LDFLAGS": [
+          "-framework",
+          "AppKit",
+          "-framework",
+          "ImageIO",
+          "-framework",
+          "QuickLookThumbnailing",
+          "-framework",
+          "UniformTypeIdentifiers"
+        ]
       },
       "defines": ["NAPI_VERSION=8"],
       "link_settings": {
-        "libraries": ["-framework AppKit"]
+        "libraries": [
+          "-framework AppKit",
+          "-framework ImageIO",
+          "-framework QuickLookThumbnailing",
+          "-framework UniformTypeIdentifiers"
+        ]
       }
     }
   ]

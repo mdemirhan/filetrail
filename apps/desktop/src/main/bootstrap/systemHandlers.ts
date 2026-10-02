@@ -15,7 +15,7 @@ import {
 import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
 import { FINDER_APP_PATH } from "../../shared/finder";
 import { toErrorMessage } from "../ipc";
-import { getFileIcon } from "../originalFileSystem";
+import { getFileIcon, getFileThumbnail, originalFileSystem } from "../originalFileSystem";
 
 const execFileAsync = promisify(execFile);
 
@@ -309,5 +309,33 @@ export async function getFileIconHandler(
     };
   } catch {
     return { pngBase64: null };
+  }
+}
+
+// The picture Quick Look draws of a file's content, for icon view. The version is the
+// file's size and modification time: a window that already holds the picture for that
+// version is told so instead of being sent it again.
+export async function getFileThumbnailHandler(
+  payload: IpcRequest<"system:getFileThumbnail">,
+): Promise<IpcResponse<"system:getFileThumbnail">> {
+  try {
+    const stats = await originalFileSystem.stat(payload.path);
+    const version = `${stats.mtimeMs ?? 0}:${stats.size}`;
+    if (payload.knownVersion === version) {
+      return { version, unchanged: true, dataUrl: null };
+    }
+    const buffer = await getFileThumbnail(payload.path, payload.size);
+    if (!buffer) {
+      return { version, unchanged: false, dataUrl: null };
+    }
+    // JPEG data starts with FF D8; everything else the addon returns is PNG.
+    const mime = buffer[0] === 0xff && buffer[1] === 0xd8 ? "image/jpeg" : "image/png";
+    return {
+      version,
+      unchanged: false,
+      dataUrl: `data:${mime};base64,${buffer.toString("base64")}`,
+    };
+  } catch {
+    return { version: null, unchanged: false, dataUrl: null };
   }
 }

@@ -68,7 +68,7 @@ import {
   isFavoritePath,
   isFavoritesRootItemId,
 } from "./lib/favorites";
-import { FileIcon } from "./lib/fileIcons";
+import { FileIcon, preloadGenericIcons } from "./lib/fileIcons";
 import { useFiletrailClient } from "./lib/filetrailClient";
 import { formatDateTime, formatPermissionMode, formatSize } from "./lib/formatting";
 import type { HelpTopicId } from "./lib/helpContent";
@@ -102,6 +102,10 @@ export function App() {
 
   const client = useFiletrailClient();
   const folderSizeCache = useFolderSizeCache(client);
+  // The plain folder and document icons, asked for before the first folder is drawn.
+  useEffect(() => {
+    preloadGenericIcons(client);
+  }, [client]);
   // The folders that have been opened, loaded each time the Go To or Move To box opens.
   const [visitedFolders, setVisitedFolders] = useState<VisitedFolder[]>([]);
   const [volumeAvailableBytes, setVolumeAvailableBytes] = useState<number | null>(null);
@@ -146,6 +150,8 @@ export function App() {
     setCompactListView,
     compactDetailsView,
     setCompactDetailsView,
+    compactIconView,
+    setCompactIconView,
     compactTreeView,
     setCompactTreeView,
     singleClickExpandTreeItems,
@@ -1057,6 +1063,7 @@ export function App() {
     foldersFirst,
     compactListView,
     compactDetailsView,
+    compactIconView,
     compactTreeView,
     singleClickExpandTreeItems,
     highlightHoveredItems,
@@ -1221,6 +1228,7 @@ export function App() {
         setFoldersFirst(preferences.foldersFirst);
         setCompactListView(preferences.compactListView);
         setCompactDetailsView(preferences.compactDetailsView);
+        setCompactIconView(preferences.compactIconView);
         setCompactTreeView(preferences.compactTreeView);
         setSingleClickExpandTreeItems(preferences.singleClickExpandTreeItems);
         setHighlightHoveredItems(preferences.highlightHoveredItems);
@@ -1848,6 +1856,7 @@ export function App() {
                 getItemDropIndicator: getContentItemDropIndicator,
                 compactListView,
                 compactDetailsView,
+                compactIconView,
                 highlightHoveredItems,
                 detailColumns,
                 detailColumnWidths,

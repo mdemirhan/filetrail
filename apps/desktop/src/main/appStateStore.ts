@@ -10,6 +10,7 @@ import {
   DEFAULT_OPEN_WITH_APPLICATIONS,
   DEFAULT_TEXT_EDITOR,
   DETAIL_COLUMN_KEYS,
+  type ExplorerViewMode,
   FAVORITE_ICON_OPTIONS,
   type FavoriteIconId,
   type FavoritePreference,
@@ -323,6 +324,10 @@ function persistState(
   }
 }
 
+function sanitizeViewMode(value: unknown): ExplorerViewMode {
+  return value === "icons" || value === "details" ? value : "list";
+}
+
 // Tabs saved by an older or damaged file are kept as far as they make sense; a tab that
 // does not is dropped rather than failing the whole list.
 function sanitizeOpenTabs(value: unknown): OpenTabPreference[] {
@@ -340,7 +345,7 @@ function sanitizeOpenTabs(value: unknown): OpenTabPreference[] {
       path: nonEmptyString(candidate.path),
       treeRootPath: nonEmptyString(candidate.treeRootPath),
       favoritePath: nonEmptyString(candidate.favoritePath),
-      viewMode: candidate.viewMode === "details" ? "details" : "list",
+      viewMode: sanitizeViewMode(candidate.viewMode),
       sortBy:
         candidate.sortBy === "modified" ||
         candidate.sortBy === "kind" ||
@@ -389,7 +394,7 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
       UI_FONT_OPTIONS.some((option) => option.value === record.uiFontFamily)
         ? (record.uiFontFamily as AppPreferences["uiFontFamily"])
         : currentDefaults.uiFontFamily,
-    viewMode: record.viewMode === "details" ? "details" : "list",
+    viewMode: sanitizeViewMode(record.viewMode),
     sortBy:
       record.sortBy === "modified" ||
       record.sortBy === "kind" ||
@@ -411,6 +416,10 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
       typeof record.compactDetailsView === "boolean"
         ? record.compactDetailsView
         : currentDefaults.compactDetailsView,
+    compactIconView:
+      typeof record.compactIconView === "boolean"
+        ? record.compactIconView
+        : currentDefaults.compactIconView,
     compactTreeView:
       typeof record.compactTreeView === "boolean"
         ? record.compactTreeView

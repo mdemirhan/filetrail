@@ -284,3 +284,33 @@ describe("nativeIsCaseSensitive", () => {
     });
   });
 });
+
+describe("nativeGetFileThumbnail", () => {
+  // A one-pixel PNG.
+  const PNG_BASE64 =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  let root: string;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "native-fs-thumbnail-"));
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("returns a picture of an image file as JPEG or PNG data", async () => {
+    const imagePath = join(root, "pixel.png");
+    writeFileSync(imagePath, Buffer.from(PNG_BASE64, "base64"));
+
+    const data = expectDefined(await wrapper.nativeGetFileThumbnail(imagePath, 128));
+    const isJpeg = data[0] === 0xff && data[1] === 0xd8;
+    const isPng = data[0] === 0x89 && data[1] === 0x50;
+    expect(isJpeg || isPng).toBe(true);
+  });
+
+  it("resolves null for a folder and for a file that does not exist", async () => {
+    expect(await wrapper.nativeGetFileThumbnail(root, 128)).toBeNull();
+    expect(await wrapper.nativeGetFileThumbnail(join(root, "missing.png"), 128)).toBeNull();
+  });
+});

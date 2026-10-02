@@ -52,6 +52,9 @@ export function toPreferencePatch(
   if (value.compactDetailsView !== undefined) {
     patch.compactDetailsView = value.compactDetailsView;
   }
+  if (value.compactIconView !== undefined) {
+    patch.compactIconView = value.compactIconView;
+  }
   if (value.compactTreeView !== undefined) {
     patch.compactTreeView = value.compactTreeView;
   }

@@ -5,10 +5,13 @@ vi.mock("electron", () => ({
 }));
 vi.mock("./originalFileSystem", () => ({
   getFileIcon: vi.fn(),
+  getFileThumbnail: vi.fn(),
+  originalFileSystem: { stat: vi.fn() },
 }));
 
 import { toPreferencePatch } from "./bootstrap/preferencesPatch";
 import {
+  getFileThumbnailHandler,
   isValidApplicationBundlePath,
   openInTerminal,
   openPathsWithApplication,
@@ -16,6 +19,7 @@ import {
   resolveApplicationDisplayName,
   resolveTerminalApplicationName,
 } from "./bootstrap/systemHandlers";
+import { getFileThumbnail, originalFileSystem } from "./originalFileSystem";
 
 describe("toPreferencePatch", () => {
   it("carries the appearance, sidebar, and Return key preferences", () => {
@@ -352,6 +356,83 @@ describe("openPathsWithApplication", () => {
     expect(response.ok).toBe(false);
     expect(response.error).toContain("Invalid application path");
     expect(runOpenCommand).not.toHaveBeenCalled();
+  });
+});
+
+describe("getFileThumbnailHandler", () => {
+  const stat = vi.mocked(originalFileSystem.stat);
+  const thumbnail = vi.mocked(getFileThumbnail);
+  const stats = (mtimeMs: number, size: number) =>
+    ({ mtimeMs, size }) as Awaited<ReturnType<typeof originalFileSystem.stat>>;
+
+  beforeEach(() => {
+    stat.mockReset();
+    thumbnail.mockReset();
+  });
+
+  it("returns the preview as a data URL with the file's version", async () => {
+    stat.mockResolvedValue(stats(1700, 42));
+    thumbnail.mockResolvedValue(Buffer.from([0xff, 0xd8, 0xff, 0xe0]));
+
+    expect(await getFileThumbnailHandler({ path: "/a/photo.jpeg", size: 128 })).toEqual({
+      version: "1700:42",
+      unchanged: false,
+      dataUrl: `data:image/jpeg;base64,${Buffer.from([0xff, 0xd8, 0xff, 0xe0]).toString("base64")}`,
+    });
+    expect(thumbnail).toHaveBeenCalledWith("/a/photo.jpeg", 128);
+  });
+
+  it("labels a preview with transparency as PNG", async () => {
+    stat.mockResolvedValue(stats(1700, 42));
+    thumbnail.mockResolvedValue(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+
+    const response = await getFileThumbnailHandler({ path: "/a/logo.png", size: 128 });
+    expect(response.dataUrl).toMatch(/^data:image\/png;base64,/);
+  });
+
+  it("does not make the preview again for a version the caller already holds", async () => {
+    stat.mockResolvedValue(stats(1700, 42));
+
+    expect(
+      await getFileThumbnailHandler({ path: "/a/photo.jpeg", size: 128, knownVersion: "1700:42" }),
+    ).toEqual({ version: "1700:42", unchanged: true, dataUrl: null });
+    expect(thumbnail).not.toHaveBeenCalled();
+  });
+
+  it("makes a new preview when the file has changed since", async () => {
+    stat.mockResolvedValue(stats(1800, 50));
+    thumbnail.mockResolvedValue(Buffer.from([0xff, 0xd8]));
+
+    const response = await getFileThumbnailHandler({
+      path: "/a/photo.jpeg",
+      size: 128,
+      knownVersion: "1700:42",
+    });
+    expect(response.version).toBe("1800:50");
+    expect(response.unchanged).toBe(false);
+    expect(response.dataUrl).not.toBeNull();
+  });
+
+  it("reports no preview for a file Quick Look cannot draw, keeping its version", async () => {
+    stat.mockResolvedValue(stats(1700, 42));
+    thumbnail.mockResolvedValue(null);
+
+    expect(await getFileThumbnailHandler({ path: "/a/archive.zip", size: 128 })).toEqual({
+      version: "1700:42",
+      unchanged: false,
+      dataUrl: null,
+    });
+  });
+
+  it("reports nothing for a file that cannot be read", async () => {
+    stat.mockRejectedValue(new Error("ENOENT"));
+
+    expect(await getFileThumbnailHandler({ path: "/a/gone.png", size: 128 })).toEqual({
+      version: null,
+      unchanged: false,
+      dataUrl: null,
+    });
+    expect(thumbnail).not.toHaveBeenCalled();
   });
 });
 

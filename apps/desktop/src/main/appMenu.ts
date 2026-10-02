@@ -161,6 +161,7 @@ export function createApplicationMenuTemplate(
     {
       label: "View",
       submenu: [
+        command("viewAsIcons", "as Icons", undefined, { type: "radio" }),
         command("viewAsList", "as List", undefined, { type: "radio" }),
         command("viewAsDetails", "as Details", undefined, { type: "radio" }),
         separator,
@@ -265,6 +266,7 @@ export function resolveApplicationMenuItemStates(
   const isEnabled = (type: RendererCommandType) =>
     window.explorerFocused ? !disabled.has(type) : COMMANDS_FOR_ANY_WINDOW.has(type);
   const checked: Partial<Record<RendererCommandType, boolean>> = {
+    viewAsIcons: state.viewMode === "icons",
     viewAsList: state.viewMode === "list",
     viewAsDetails: state.viewMode === "details",
     sortByName: state.sortBy === "name",

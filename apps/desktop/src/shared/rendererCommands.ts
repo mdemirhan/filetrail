@@ -36,6 +36,7 @@ export const RENDERER_COMMAND_TYPES = [
   "toggleFavorite",
   "showInFinder",
   "showLastSearchResults",
+  "viewAsIcons",
   "viewAsList",
   "viewAsDetails",
   "sortByName",

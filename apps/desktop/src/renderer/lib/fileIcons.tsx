@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import type { IpcResponse } from "@filetrail/contracts";
 import type { FavoriteIconId } from "../../shared/appPreferences";
-import { useFiletrailClient } from "./filetrailClient";
+import { type FiletrailClient, useFiletrailClient } from "./filetrailClient";
 
 type Entry = IpcResponse<"directory:getSnapshot">["entries"][number];
 
@@ -12,6 +12,10 @@ type Entry = IpcResponse<"directory:getSnapshot">["entries"][number];
 // then asked for again.
 const nativeIconCache = new Map<string, string | null>();
 const NATIVE_ICON_CACHE_MAX = 2048;
+// Pixel sizes icons are asked for in: rows draw them at 18 points, icon view at up to 64
+// points, both doubled on a Retina display.
+const ICON_PIXEL_SIZE = 64;
+const LARGE_ICON_PIXEL_SIZE = 128;
 // The info panel's icon changes with the selection. Its request waits this long, so
 // holding an arrow key does not ask for the icon of every item passed on the way.
 const DEFERRED_ICON_LOAD_DELAY_MS = 80;
@@ -45,18 +49,70 @@ function scheduleIconLoad(load: () => void, deferLoad: boolean): () => void {
   return () => window.clearTimeout(timer);
 }
 
+// Asks the main process for an icon and remembers the answer (null when macOS has none).
+// Requests for the same icon that overlap share one call.
+function requestNativeIcon(
+  client: FiletrailClient,
+  args: { cacheKey: string; kindKey: string; path: string; large: boolean },
+): Promise<string | null> {
+  const { cacheKey, kindKey, path, large } = args;
+  let request = pendingNativeIconRequests.get(cacheKey);
+  if (!request) {
+    request = client
+      .invoke("system:getFileIcon", {
+        path,
+        size: large ? LARGE_ICON_PIXEL_SIZE : ICON_PIXEL_SIZE,
+        ...(kindKey in GENERIC_ICON_KINDS
+          ? { generic: GENERIC_ICON_KINDS[kindKey as keyof typeof GENERIC_ICON_KINDS] }
+          : {}),
+      })
+      .then((response) => response.pngBase64)
+      .catch(() => null)
+      .then((base64) => {
+        pendingNativeIconRequests.delete(cacheKey);
+        rememberNativeIcon(cacheKey, base64);
+        return base64;
+      });
+    pendingNativeIconRequests.set(cacheKey, request);
+  }
+  return request;
+}
+
+// The icons nearly every folder shows: a plain folder and a plain document, in the sizes
+// of rows and of icon view. Asked for once when the window opens, so the first folder
+// already draws them instead of the stand-in shapes. Icons that go with an extension or
+// with one item are still asked for when they are first seen.
+const PRELOADED_ICON_KINDS = ["kind:directory", "kind:file"] as const;
+
+export function preloadGenericIcons(client: FiletrailClient): void {
+  for (const kindKey of PRELOADED_ICON_KINDS) {
+    for (const large of [false, true]) {
+      const cacheKey = large ? `${kindKey}@large` : kindKey;
+      if (nativeIconCache.has(cacheKey)) {
+        continue;
+      }
+      // The path is not used for an icon asked for by kind.
+      void requestNativeIcon(client, { cacheKey, kindKey, path: "/", large });
+    }
+  }
+}
+
 // Files and folders are shown with the icons macOS itself draws for them. Until an icon
-// arrives (or if macOS has none), a plain folder or document shape stands in.
+// arrives (or if macOS has none), a folder or document drawn to look like them stands in.
 export function FileIcon({
   entry,
   deferLoad = false,
+  large = false,
 }: {
   entry: Entry;
   /** Wait a moment before asking for an icon that is not known yet (see above). */
   deferLoad?: boolean;
+  /** Ask for the icon in the size icon view draws it in. */
+  large?: boolean;
 }) {
   const client = useFiletrailClient();
-  const cacheKey = nativeIconCacheKey(entry);
+  const kindKey = nativeIconCacheKey(entry);
+  const cacheKey = large ? `${kindKey}@large` : kindKey;
   const [iconSrc, setIconSrc] = useState<string | null>(
     () => nativeIconCache.get(cacheKey) ?? null,
   );
@@ -69,36 +125,19 @@ export function FileIcon({
     }
     let cancelled = false;
     const cancelLoad = scheduleIconLoad(() => {
-      let request = pendingNativeIconRequests.get(cacheKey);
-      if (!request) {
-        request = client
-          .invoke("system:getFileIcon", {
-            path: entry.path,
-            size: 64,
-            ...(cacheKey in GENERIC_ICON_KINDS
-              ? { generic: GENERIC_ICON_KINDS[cacheKey as keyof typeof GENERIC_ICON_KINDS] }
-              : {}),
-          })
-          .then((response) => response.pngBase64)
-          .catch(() => null)
-          .then((base64) => {
-            pendingNativeIconRequests.delete(cacheKey);
-            rememberNativeIcon(cacheKey, base64);
-            return base64;
-          });
-        pendingNativeIconRequests.set(cacheKey, request);
-      }
-      void request.then((base64) => {
-        if (!cancelled) {
-          setIconSrc(base64);
-        }
-      });
+      void requestNativeIcon(client, { cacheKey, kindKey, path: entry.path, large }).then(
+        (base64) => {
+          if (!cancelled) {
+            setIconSrc(base64);
+          }
+        },
+      );
     }, deferLoad);
     return () => {
       cancelled = true;
       cancelLoad();
     };
-  }, [cacheKey, client, deferLoad, entry.path]);
+  }, [cacheKey, client, deferLoad, entry.path, kindKey, large]);
 
   if (iconSrc) {
     return (
@@ -293,40 +332,47 @@ function FolderSvg({
     );
   }
 
+  // The stand-in for a folder whose icon has not arrived: a filled blue folder with a tab,
+  // the shape and color of the one macOS draws, so the swap is barely seen.
   return (
     <svg
       className="file-icon-svg file-icon-folder"
-      viewBox="0 0 24 24"
+      viewBox="0 0 64 64"
       fill="none"
       aria-hidden="true"
       focusable="false"
     >
       <path
-        d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6.93a2 2 0 0 1-1.66-.88l-.82-1.24A2 2 0 0 0 7.93 4H5a2 2 0 0 0-2 2v1z"
-        className="file-icon-folder-fill"
-        strokeLinecap="round"
-        strokeLinejoin="round"
+        d="M3 12a3.5 3.5 0 0 1 3.5-3.5h13.1a3 3 0 0 1 2.2 1l1.9 2.1a3 3 0 0 0 2.2 1h32.6a3.5 3.5 0 0 1 3.5 3.5V22H3z"
+        className="file-icon-folder-back"
       />
+      {/* The front shows a sliver of the lighter shape under it along its top edge. */}
+      <rect x="3" y="17" width="59" height="10" rx="3.2" className="file-icon-folder-edge" />
+      <rect x="3" y="17.8" width="59" height="37.7" rx="3.2" className="file-icon-folder-front" />
     </svg>
   );
 }
 
-// The plain document that stands in for a file whose icon has not arrived.
+// The stand-in for a file whose icon has not arrived: a white page with a folded corner,
+// like the document macOS draws.
 function DocumentSvg() {
   return (
     <svg
       className="file-icon-svg file-icon-document"
-      viewBox="0 0 24 24"
+      viewBox="0 0 64 64"
       fill="none"
       aria-hidden="true"
       focusable="false"
     >
       <path
-        d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"
-        className="file-icon-document-fill"
+        d="M12.5 3.5H37L53.5 20v38.5a2 2 0 0 1-2 2h-39a2 2 0 0 1-2-2v-53a2 2 0 0 1 2-2z"
+        className="file-icon-document-page"
+      />
+      <path
+        d="M37 3.5V17a3 3 0 0 0 3 3h13.5z"
+        className="file-icon-document-fold"
         strokeLinejoin="round"
       />
-      <path d="M14 2v6h6" className="file-icon-document-fold" strokeLinejoin="round" />
     </svg>
   );
 }

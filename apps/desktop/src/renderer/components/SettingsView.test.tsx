@@ -16,6 +16,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       uiFontFamily="lexend"
       compactListView={false}
       compactDetailsView={false}
+      compactIconView={false}
       compactTreeView={false}
       singleClickExpandTreeItems={false}
       highlightHoveredItems={true}
@@ -85,6 +86,7 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       onResetAppearance={() => undefined}
       onCompactListViewChange={() => undefined}
       onCompactDetailsViewChange={() => undefined}
+      onCompactIconViewChange={() => undefined}
       onCompactTreeViewChange={() => undefined}
       onSingleClickExpandTreeItemsChange={() => undefined}
       onHighlightHoveredItemsChange={() => undefined}

@@ -612,6 +612,15 @@ export function ExplorerWorkspace({
             <legend className="sr-only">View mode</legend>
             <button
               type="button"
+              className={viewMode === "icons" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
+              onClick={() => onViewModeChange("icons")}
+              title="View as Icons"
+              aria-label="Icon view"
+            >
+              <ToolbarIcon name="icons" />
+            </button>
+            <button
+              type="button"
               className={viewMode === "list" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
               onClick={() => onViewModeChange("list")}
               title="View as List"

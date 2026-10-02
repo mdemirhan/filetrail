@@ -3056,7 +3056,20 @@ body.resizing-panels * {
   height: 100%;
 }
 
-.file-icon-folder-fill,
+/* The stand-ins for icons that have not arrived keep the colors of the macOS icons they
+   stand in for, in every theme, as those icons do. */
+.file-icon-folder-back {
+  fill: #45aae4;
+}
+
+.file-icon-folder-front {
+  fill: #67c0ef;
+}
+
+.file-icon-folder-edge {
+  fill: #80cff7;
+}
+
 .file-icon-folder-open-fill {
   stroke: var(--accent-gold);
   fill: var(--accent-gold-dim);
@@ -3098,15 +3111,20 @@ body.resizing-panels * {
 }
 
 /* The plain document shown until macOS's icon for an item arrives, or if it has none. */
-.file-icon.document {
-  color: var(--icon-neutral);
+/* The outline stays one pixel wide at every size the page is drawn in. */
+.file-icon-document-page,
+.file-icon-document-fold {
+  stroke: #cfd0d6;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
 }
 
-.file-icon-document-fill,
+.file-icon-document-page {
+  fill: #f3f3f4;
+}
+
 .file-icon-document-fold {
-  stroke: var(--icon-neutral);
-  stroke-width: 1.5;
-  fill: color-mix(in srgb, var(--icon-neutral) 8%, transparent);
+  fill: #ffffff;
 }
 
 .get-info-panel {
@@ -5436,7 +5454,7 @@ body.settings-window-body {
   color: var(--toolbar-toggle-icon-active, var(--text-primary));
 }
 
-/* View switch: a two-part segmented control with the selected segment raised. */
+/* View switch: a segmented control with the selected segment raised. */
 .toolbar-group-view .toolbar-segmented.toolbar-segmented-native {
   gap: 2px;
   padding: 2px;
@@ -6404,6 +6422,193 @@ body.settings-window-body {
   color: var(--danger-text);
   font-size: 11.5px;
   line-height: 1.35;
+}
+
+/* ── Icon view ────────────────────────────────────────────────────────── */
+
+/* Sizes mirror ICON_GRID_LAYOUT and COMPACT_ICON_GRID_LAYOUT in lib/iconGridLayout.ts,
+   which virtualization and keyboard movement read. The right padding and the scrollbar
+   gutter together match the left padding. */
+.icon-grid {
+  --icon-size: 64px;
+  --icon-box: 72px;
+  --icon-cell-width: 104px;
+  --icon-row-height: 116px;
+  --icon-label-width: 102px;
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: 10px 8px 10px 16px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.icon-grid.compact {
+  --icon-size: 48px;
+  --icon-box: 56px;
+  --icon-cell-width: 88px;
+  --icon-row-height: 94px;
+  --icon-label-width: 86px;
+  padding: 8px 8px 8px 16px;
+}
+
+/* Columns share the pane's width; each item keeps its own width in the middle of its
+   column, so the space between items is empty and clicking it clears the selection. */
+.icon-grid-items {
+  display: grid;
+  grid-auto-rows: var(--icon-row-height);
+  justify-items: center;
+}
+
+.icon-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: var(--icon-cell-width);
+  height: calc(var(--icon-row-height) - 2px);
+  box-sizing: border-box;
+  padding: 5px 1px 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: center;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.icon-grid.compact .icon-item {
+  gap: 3px;
+  padding-top: 3px;
+}
+
+.icon-item:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.content-scroll[data-hover-highlight-enabled="true"] .icon-item:hover {
+  background: var(--bg-hover);
+}
+
+.icon-item-image {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--icon-box);
+  height: var(--icon-box);
+  border-radius: 7px;
+}
+
+.icon-grid .icon-item .file-icon {
+  width: var(--icon-size);
+  height: var(--icon-size);
+}
+
+/* A Quick Look preview keeps the proportions of the file it shows. */
+.file-thumbnail-img {
+  max-width: 100%;
+  max-height: 100%;
+  -webkit-user-drag: none;
+}
+
+/* A photo or a video frame fills its rectangle; the hairline keeps a pale one apart from
+   the background. Pages and cut-out images bring their own outline or none. */
+.file-thumbnail-img.framed {
+  border-radius: 2px;
+  box-shadow: 0 0 0 0.5px color-mix(in srgb, var(--text-primary) 26%, transparent), 0 1px 2px
+    rgba(0, 0, 0, 0.16);
+}
+
+/* The name, on up to two lines; longer names arrive already shortened in the middle
+   (lib/iconLabel.ts), and the clamp catches whatever still does not fit. */
+.icon-item-label {
+  display: -webkit-box;
+  max-width: var(--icon-label-width, 102px);
+  box-sizing: border-box;
+  padding: 1px 4px;
+  overflow: hidden;
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 15px;
+  text-align: center;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.icon-grid.compact .icon-item-label,
+.icon-label-measurer.compact {
+  padding: 1px 2px;
+  font-size: 11px;
+  line-height: 14px;
+}
+
+/* Off-screen copy of the label that lib/iconLabel.ts measures names with: the same font,
+   width and wrapping, without the two-line clamp. */
+.icon-label-measurer {
+  position: absolute;
+  top: 0;
+  left: -9999px;
+  display: block;
+  width: 102px;
+  max-width: none;
+  overflow: visible;
+  visibility: hidden;
+  pointer-events: none;
+  -webkit-line-clamp: none;
+}
+
+.icon-label-measurer.compact {
+  width: 86px;
+}
+
+/* Selection as in Finder: a backdrop behind the icon and the name on the accent color;
+   the name turns gray while another pane has the keyboard. */
+.icon-item.active .icon-item-image {
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+
+.icon-item.active:not(.inactive) .icon-item-label {
+  background: var(--ft-accent-selection-bg);
+  color: var(--ft-accent-on-selection);
+}
+
+.icon-item.active.inactive .icon-item-label {
+  background: var(--bg-active-inactive);
+}
+
+.icon-item[data-drop-target-state="valid"] {
+  background: color-mix(in srgb, var(--ft-accent-soft-bg) 96%, var(--bg-elevated) 4%);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--ft-accent-border) 90%, white 10%);
+}
+
+.icon-item[data-drop-target-state="invalid"] {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger) 46%, transparent);
+}
+
+.icon-item.renaming .inline-rename-input {
+  flex: none;
+  width: var(--icon-label-width);
+  height: 19px;
+  margin: 0;
+  font-size: 12px;
+  text-align: center;
+}
+
+.icon-grid.compact .icon-item.renaming .inline-rename-input {
+  height: 18px;
+  font-size: 11px;
 }
 
 /* ── Translucent sidebar ──────────────────────────────────────────────── */

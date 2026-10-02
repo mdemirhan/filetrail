@@ -937,9 +937,9 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
               | "End",
             columns: current.isSearchMode
               ? 1
-              : current.viewMode === "list"
-                ? current.contentColumns
-                : 1,
+              : current.viewMode === "details"
+                ? 1
+                : current.contentColumns,
             viewMode: current.isSearchMode ? "details" : current.viewMode,
           });
           const nextEntry = current.activeContentEntries[nextIndex];
@@ -1312,6 +1312,10 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         if (current.hasCachedSearch) {
           current.showCachedSearchResults({ focusPane: true });
         }
+        return;
+      }
+      if (commandType === "viewAsIcons") {
+        current.setViewMode("icons");
         return;
       }
       if (commandType === "viewAsList" || commandType === "viewAsDetails") {

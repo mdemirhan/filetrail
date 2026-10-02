@@ -18,6 +18,7 @@ import {
 import {
   emptyTrash,
   getFileIconHandler,
+  getFileThumbnailHandler,
   getVolumeInfo,
   openInTerminal,
   openPath,
@@ -214,6 +215,7 @@ export async function bootstrapMainProcess(
       "system:performEditAction": (payload, event) => performEditAction(payload, event.sender),
       "system:emptyTrash": () => emptyTrash(),
       "system:getFileIcon": (payload) => getFileIconHandler(payload),
+      "system:getFileThumbnail": (payload) => getFileThumbnailHandler(payload),
     },
     logger,
   );

@@ -459,9 +459,9 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
         title: "The list",
         rows: [
           {
-            label: "List and Details",
+            label: "Icons, List and Details",
             description:
-              "The two buttons in the toolbar, or the View menu, switch between a compact list and columns with date, size and kind. Settings → Explorer chooses the columns.",
+              "The three buttons in the toolbar, or the View menu, switch between large icons with previews of photos, PDFs and other files, a compact list, and columns with date, size and kind. Settings → Explorer chooses the columns and a compact layout for each view.",
           },
           {
             label: "Sort",
