@@ -21,6 +21,7 @@ import "@fontsource/lexend/700.css";
 import { App } from "./App";
 import { SettingsWindowApp } from "./SettingsWindowApp";
 import { createRendererLogger, installGlobalRendererErrorHandlers } from "./lib/logging";
+import { installScrollbarVisibility } from "./lib/scrollbarVisibility";
 import { installTitleTooltips } from "./lib/titleTooltips";
 import "./styles.css";
 
@@ -36,6 +37,7 @@ if (!rootElement) {
 
 document.body.classList.add("platform-macos");
 installTitleTooltips();
+installScrollbarVisibility();
 logger.info("renderer boot", {
   strictMode: true,
   platform: navigator.platform,

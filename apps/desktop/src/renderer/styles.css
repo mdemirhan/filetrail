@@ -2276,14 +2276,24 @@ body.resizing-panels * {
   background: transparent;
 }
 
+/* A pane's scrollbars show only while they are in use, as on macOS: while the pane
+   scrolls and for a moment after (lib/scrollbarVisibility.ts marks it meanwhile), and
+   while the pointer is on one or drags it. */
 .tree-scroll::-webkit-scrollbar-thumb,
 .content-scroll::-webkit-scrollbar-thumb {
-  background: var(--scroll-thumb);
+  background: transparent;
   border-radius: 999px;
 }
 
-.tree-scroll:hover::-webkit-scrollbar-thumb,
-.content-scroll:hover::-webkit-scrollbar-thumb {
+.tree-scroll[data-scrollbars]::-webkit-scrollbar-thumb,
+.content-scroll[data-scrollbars]::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+}
+
+.tree-scroll::-webkit-scrollbar-thumb:hover,
+.content-scroll::-webkit-scrollbar-thumb:hover,
+.tree-scroll::-webkit-scrollbar-thumb:active,
+.content-scroll::-webkit-scrollbar-thumb:active {
   background: var(--scroll-thumb-hover, var(--scroll-thumb));
 }
 
