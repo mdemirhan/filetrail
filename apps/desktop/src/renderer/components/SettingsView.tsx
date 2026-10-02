@@ -63,7 +63,13 @@ import { createShortcutDisplay } from "../lib/shortcutDisplay";
 import { type ThemeCssBase, getThemeVariant, resolveThemeCssBase } from "../lib/themeVariants";
 import { VIEW_TEXT } from "../lib/viewColors";
 import { uiMonoFontStack as mono, uiSansFontStack as sans } from "../lib/viewFonts";
-import { ActionButton, SectionCard } from "./SettingsControls";
+import {
+  ActionButton,
+  SETTINGS_CONTROL_HEIGHT,
+  SETTINGS_CONTROL_SHADOW,
+  SectionCard,
+  settingsControlBorder,
+} from "./SettingsControls";
 import { ShortcutSettings } from "./ShortcutSettings";
 import { ToolbarIcon } from "./ToolbarIcon";
 
@@ -309,7 +315,6 @@ function resolveSettingsTheme(theme: ThemeMode, accent: AccentMode) {
     label: {
       primary: VIEW_TEXT.secondary,
       secondary: VIEW_TEXT.muted,
-      category: accentTokens.pathCrumbHover,
     },
     input: {
       ...base.input,
@@ -550,16 +555,16 @@ function SelectControl({
           appearance: "none",
           WebkitAppearance: "none",
           width: "100%",
-          height: "26px",
+          height: SETTINGS_CONTROL_HEIGHT,
           padding: "0 28px 0 10px",
           borderRadius: "6px",
           background: theme.select.bg,
-          border: `1px solid ${theme.select.border}`,
+          border: settingsControlBorder(theme.select.border),
           color: disabled ? theme.label.secondary : theme.select.text,
           fontSize: "13px",
           fontFamily: sans,
           fontWeight: 400,
-          boxShadow: "0 0.5px 1.5px rgba(0,0,0,0.12)",
+          boxShadow: SETTINGS_CONTROL_SHADOW,
           cursor: disabled ? "default" : "pointer",
           outline: "none",
           opacity: disabled ? 0.6 : 1,
@@ -964,12 +969,12 @@ function FavoriteIconPicker({
           alignItems: "center",
           justifyContent: "center",
           width: "34px",
-          height: "34px",
+          height: SETTINGS_CONTROL_HEIGHT,
           padding: "0",
-          borderRadius: "8px",
-          border: `1px solid ${theme.input.border}`,
+          borderRadius: "6px",
+          border: settingsControlBorder(theme.input.border),
           background: theme.input.bg,
-          boxShadow: open ? `0 0 0 1px ${theme.accent.focusBorder}` : "none",
+          boxShadow: open ? `0 0 0 1px ${theme.accent.focusBorder}` : SETTINGS_CONTROL_SHADOW,
           outline: "none",
         }}
       >
@@ -1735,15 +1740,15 @@ function ZoomLevelInput({
       }}
       style={{
         width: "92px",
-        height: "32px",
+        height: SETTINGS_CONTROL_HEIGHT,
         padding: "0 10px",
         borderRadius: "6px",
         background: theme.input.bg,
-        border: `1px solid ${theme.input.border}`,
+        border: settingsControlBorder(theme.input.border),
         color: theme.input.text,
-        fontSize: "12px",
+        fontSize: "13px",
         fontFamily: sans,
-        fontWeight: 450,
+        fontWeight: 400,
         outline: "none",
         caretColor: theme.input.caret,
       }}
@@ -1807,15 +1812,15 @@ function OpenItemLimitInput({
       }}
       style={{
         width: "92px",
-        height: "32px",
+        height: SETTINGS_CONTROL_HEIGHT,
         padding: "0 10px",
         borderRadius: "6px",
         background: theme.input.bg,
-        border: `1px solid ${theme.input.border}`,
+        border: settingsControlBorder(theme.input.border),
         color: theme.input.text,
-        fontSize: "12px",
+        fontSize: "13px",
         fontFamily: sans,
-        fontWeight: 450,
+        fontWeight: 400,
         outline: "none",
         caretColor: theme.input.caret,
       }}
@@ -1828,23 +1833,23 @@ function SettingRow({
   desc,
   right,
   theme,
-  isLast = false,
 }: {
   title: string;
   desc?: string | undefined;
   right: ReactNode;
   theme: ResolvedSettingsTheme;
-  isLast?: boolean;
 }) {
+  // The line under the row is `.settings-row`'s: every row has one but the last of its
+  // group, whichever that turns out to be.
   return (
     <div
+      className="settings-row"
       style={{
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
         padding: "10px 0",
         gap: "16px",
-        borderBottom: isLast ? "none" : `1px solid ${theme.separator}`,
       }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -2413,49 +2418,34 @@ export function SettingsView({
               }
             />
 
-            <div
-              style={{
-                borderTop: `1px solid ${palette.separator}`,
-                paddingTop: "8px",
-                marginTop: "4px",
-              }}
-            >
-              <span
+            <div className="settings-row" style={{ padding: "10px 0 8px" }}>
+              <div
                 style={{
-                  fontSize: "10px",
+                  fontSize: "12.5px",
                   fontFamily: sans,
-                  fontWeight: 600,
-                  color: palette.label.category,
-                  letterSpacing: "0.06em",
-                  textTransform: "uppercase",
+                  fontWeight: 500,
+                  color: palette.label.primary,
+                  marginBottom: "8px",
                 }}
               >
-                Detail View Columns
-              </span>
-            </div>
-            <div
-              style={{
-                display: "flex",
-                gap: "4px",
-                paddingTop: "8px",
-                paddingBottom: "4px",
-                flexWrap: "wrap",
-              }}
-            >
-              {OPTIONAL_DETAIL_COLUMN_KEYS.map((key) => (
-                <CheckboxChip
-                  key={key}
-                  checked={detailColumns[key]}
-                  label={DETAIL_COLUMN_LABELS[key]}
-                  theme={palette}
-                  onToggle={() =>
-                    onDetailColumnsChange({
-                      ...detailColumns,
-                      [key]: !detailColumns[key],
-                    })
-                  }
-                />
-              ))}
+                Detail view columns
+              </div>
+              <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+                {OPTIONAL_DETAIL_COLUMN_KEYS.map((key) => (
+                  <CheckboxChip
+                    key={key}
+                    checked={detailColumns[key]}
+                    label={DETAIL_COLUMN_LABELS[key]}
+                    theme={palette}
+                    onToggle={() =>
+                      onDetailColumnsChange({
+                        ...detailColumns,
+                        [key]: !detailColumns[key],
+                      })
+                    }
+                  />
+                ))}
+              </div>
             </div>
           </SectionCard>
         ) : null}
@@ -2478,7 +2468,6 @@ export function SettingsView({
             <SettingRow
               title="Notification duration"
               theme={palette}
-              isLast
               right={
                 <SelectControl
                   value={notificationDurationSeconds}
@@ -2531,7 +2520,6 @@ export function SettingsView({
               title="Notify what was copied"
               desc="Show a notification with the item's name and icon, or how many items were copied or cut."
               theme={palette}
-              isLast
               right={
                 <Toggle
                   checked={notifyClipboardItems}
@@ -2654,7 +2642,6 @@ export function SettingsView({
               title="Skip files ignored by Git"
               desc="Inside a Git repository, leave out whatever its .gitignore excludes, such as build output."
               theme={palette}
-              isLast
               right={
                 <Toggle
                   checked={searchDefaults.searchSkipGitIgnored}

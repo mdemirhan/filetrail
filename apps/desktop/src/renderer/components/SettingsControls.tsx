@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 import { uiSansFontStack as sans } from "../lib/viewFonts";
 
@@ -8,7 +8,20 @@ export type SettingsControlTheme = {
   section: { title: string };
   input: { bg: string; border: string };
   label: { primary: string; secondary: string };
+  separator: string;
 };
+
+// Every control in Settings is this tall, so a row's button, menu and field line up.
+export const SETTINGS_CONTROL_HEIGHT = "28px";
+
+// The outline of a control in Settings: a hairline, as macOS draws its own controls and as
+// the groups here are outlined. A full pixel reads as a heavy frame beside them.
+export function settingsControlBorder(color: string): string {
+  return `0.5px solid ${color}`;
+}
+
+// What lifts a button or a menu off the group it is in, in place of a heavier outline.
+export const SETTINGS_CONTROL_SHADOW = "0 0.5px 1.5px rgba(0,0,0,0.12)";
 
 // The building blocks every Settings tab shares: a titled group of rows and a small button.
 // Every button in Settings is this one, so they all look alike and all answer the pointer:
@@ -35,11 +48,13 @@ export function ActionButton({
       disabled={disabled}
       onClick={onClick}
       style={{
-        height: "28px",
+        height: SETTINGS_CONTROL_HEIGHT,
         padding: "0 10px",
         borderRadius: "6px",
-        border: `1px solid ${theme.input.border}`,
-        background: theme.input.bg,
+        border: settingsControlBorder(theme.input.border),
+        // The colour alone, so that `.settings-button` can lay its tint over it.
+        backgroundColor: theme.input.bg,
+        boxShadow: SETTINGS_CONTROL_SHADOW,
         color: disabled ? theme.label.secondary : theme.label.primary,
         fontSize: "11px",
         fontFamily: sans,
@@ -103,14 +118,19 @@ export function SectionCard({
         {resetButton}
       </div>
       <div
-        style={{
-          background: theme.card.bg,
-          border: `0.5px solid ${theme.card.border}`,
-          borderRadius: "10px",
-          boxShadow: theme.card.shadow,
-          overflow: "hidden",
-          padding: "2px 14px 4px",
-        }}
+        className="settings-card"
+        style={
+          {
+            background: theme.card.bg,
+            border: `0.5px solid ${theme.card.border}`,
+            borderRadius: "10px",
+            boxShadow: theme.card.shadow,
+            overflow: "hidden",
+            padding: "2px 14px 4px",
+            // The line between two rows of the group (see `.settings-row`).
+            "--settings-separator": theme.separator,
+          } as CSSProperties
+        }
       >
         {children}
       </div>

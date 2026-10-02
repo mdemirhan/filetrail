@@ -5583,12 +5583,13 @@ a.page-window-button:focus-visible,
   min-width: 0;
   height: 28px;
   padding: 0 10px;
-  border: 1px solid var(--border);
+  /* A hairline, like every other control in Settings. */
+  border: 0.5px solid var(--border);
   border-radius: 6px;
   background: var(--bg-input);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .shortcut-settings-search:focus,
@@ -5601,21 +5602,42 @@ a.page-window-button:focus-visible,
   color: var(--text-tertiary);
 }
 
+/* A group in Settings (see SectionCard) and its rows. A row draws the line under itself, in
+   the colour the group hands down, and the last row of a group draws none: which row is
+   last is the stylesheet's to know, so no row has to be told. */
+.settings-card {
+  --settings-separator: transparent;
+}
+
+.settings-row {
+  border-bottom: 1px solid var(--settings-separator);
+}
+
+.settings-row:last-child {
+  border-bottom: 0;
+}
+
 /* Every button in Settings (see ActionButton). Its colours come from the Settings palette,
    set on the button itself; these are the pointer's answers, which a style on the element
    can not give: a tint under the pointer and a deeper one, with a small dip, while pressed.
    The tint is taken from the button's own text colour, so it darkens a light button and
    lightens a dark one. */
 .settings-button {
-  transition: box-shadow 0.1s ease, transform 0.1s ease;
+  transition: transform 0.1s ease;
 }
 
 .settings-button:hover:not(:disabled) {
-  box-shadow: inset 0 0 0 100px color-mix(in srgb, currentColor 7%, transparent);
+  background-image: linear-gradient(
+    color-mix(in srgb, currentColor 7%, transparent),
+    color-mix(in srgb, currentColor 7%, transparent)
+  );
 }
 
 .settings-button:active:not(:disabled) {
-  box-shadow: inset 0 0 0 100px color-mix(in srgb, currentColor 18%, transparent);
+  background-image: linear-gradient(
+    color-mix(in srgb, currentColor 18%, transparent),
+    color-mix(in srgb, currentColor 18%, transparent)
+  );
   transform: scale(0.97);
 }
 

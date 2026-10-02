@@ -12,6 +12,7 @@ const THEME: SettingsControlTheme = {
   section: { title: "#000" },
   input: { bg: "#fff", border: "#ddd" },
   label: { primary: "#000", secondary: "#666" },
+  separator: "#eee",
 };
 
 // The settings window keeps the saved keys; this stands in for it.

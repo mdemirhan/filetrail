@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import { readFileSync } from "node:fs";
+
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 
@@ -445,6 +447,44 @@ describe("SettingsView", () => {
     for (const name of ["Reset Appearance", "Reset Toolbar"]) {
       expect(screen.getByRole("button", { name })).toHaveClass("settings-button");
     }
+  });
+
+  it("draws no line under the last row of a group, whichever row that is", () => {
+    const view = renderSettingsView();
+
+    // Rows leave their line to the stylesheet, which knows which one is last.
+    const rows = Array.from(view.container.querySelectorAll<HTMLElement>(".settings-row"));
+    expect(rows.length).toBeGreaterThan(20);
+    expect(rows.filter((row) => row.style.borderBottom !== "")).toEqual([]);
+    const styles = readFileSync("apps/desktop/src/renderer/styles.css", "utf8");
+    expect(styles).toMatch(/\.settings-row:last-child \{\s*border-bottom: 0;/u);
+
+    // Each group ends with a row, and has no line of its own between rows.
+    for (const card of Array.from(view.container.querySelectorAll<HTMLElement>(".settings-card"))) {
+      const title = card.parentElement?.querySelector("h3")?.textContent;
+      if (card.querySelector(".settings-row") === null) {
+        continue;
+      }
+      for (const child of Array.from(card.children)) {
+        expect(`${title}: ${(child as HTMLElement).style.borderTop}`).toBe(`${title}: `);
+      }
+    }
+  });
+
+  it("gives every control one height and a hairline outline", () => {
+    const view = renderSettingsView();
+
+    const controls = Array.from(
+      view.container.querySelectorAll<HTMLElement>(
+        "select, input[type=text], input[type=number], button.settings-button",
+      ),
+      // The Shortcuts search field takes the same size and outline from the stylesheet.
+    ).filter((control) => !control.classList.contains("shortcut-settings-search"));
+    expect(controls.length).toBeGreaterThan(10);
+    expect(new Set(controls.map((control) => control.style.height))).toEqual(new Set(["28px"]));
+    expect(new Set(controls.map((control) => control.style.borderWidth))).toEqual(
+      new Set(["0.5px"]),
+    );
   });
 
   it("has one toolbar to arrange, and nothing about rails", () => {
