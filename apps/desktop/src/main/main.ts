@@ -1,7 +1,15 @@
 import { existsSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { BrowserWindow, Menu, app, nativeImage, nativeTheme, shell } from "electron";
+import {
+  BrowserWindow,
+  type BrowserWindowConstructorOptions,
+  Menu,
+  app,
+  nativeImage,
+  nativeTheme,
+  shell,
+} from "electron";
 
 import type { SettingsTab } from "@filetrail/contracts";
 
@@ -25,6 +33,8 @@ import { resolveStartupFolderPath } from "./launchContext";
 import { removeRetiredActionLogFiles } from "./logRotation";
 let mainWindowRef: BrowserWindow | null = null;
 let settingsWindowRef: BrowserWindow | null = null;
+let aboutWindowRef: BrowserWindow | null = null;
+let acknowledgementsWindowRef: BrowserWindow | null = null;
 let appStateStoreRef: AppStateStore | null = null;
 // Records the explorer window's size and position in the store; set while it is open.
 let recordMainWindowState: (() => void) | null = null;
@@ -44,12 +54,6 @@ if (hasSingleInstanceLock) {
   // Electron installs a menu of its own (Reload, Force Reload, Speech…) unless one has been
   // set by the time the app is ready; ours is built with the window.
   Menu.setApplicationMenu(null);
-  // The standard About panel reads the bundle, which names Electron in a development run.
-  app.setAboutPanelOptions({
-    applicationName: APP_MENU_NAME,
-    applicationVersion: app.getVersion(),
-    version: app.getVersion(),
-  });
   // While Settings has the keyboard the explorer's commands do not apply.
   app.on("browser-window-focus", () => syncApplicationMenuItems());
 
@@ -126,6 +130,10 @@ if (hasSingleInstanceLock) {
             // preferences file; most changes (the folder on screen, say) are not the zoom.
             if (change.patch.zoomPercent !== undefined) {
               applyWindowZoom(window, preferences.zoomPercent);
+              // About can not be resized by hand; it grows and shrinks with its text.
+              if (window === aboutWindowRef) {
+                window.setContentSize(...aboutWindowSize(preferences.zoomPercent));
+              }
             }
             if (window.webContents.id !== change.senderId) {
               window.webContents.send("filetrail:preferencesChanged", change.patch);
@@ -141,6 +149,7 @@ if (hasSingleInstanceLock) {
         },
         {
           openSettingsWindow,
+          openAcknowledgementsWindow,
           setApplicationMenuState: (state, senderId) => {
             if (senderId !== mainWindowRef?.webContents.id) {
               return;
@@ -314,9 +323,12 @@ function createWindow(): BrowserWindow {
     if (recordMainWindowState === persistWindowState) {
       recordMainWindowState = null;
     }
-    // Settings belongs to the explorer window; closing the explorer still quits the app.
-    if (settingsWindowRef && !settingsWindowRef.isDestroyed()) {
-      settingsWindowRef.close();
+    // The other windows belong to the explorer window; closing the explorer still quits
+    // the app.
+    for (const window of [settingsWindowRef, aboutWindowRef, acknowledgementsWindowRef]) {
+      if (window && !window.isDestroyed()) {
+        window.close();
+      }
     }
   });
 
@@ -388,6 +400,96 @@ function openSettingsWindow(tab?: SettingsTab): void {
   void settingsWindow.loadURL(settingsUrl);
 }
 
+const ABOUT_WINDOW_WIDTH = 460;
+const ABOUT_WINDOW_HEIGHT = 356;
+
+// The About window's size at a zoom level: its text scales with the app's zoom.
+function aboutWindowSize(zoomPercent: number): [number, number] {
+  return [
+    Math.round((ABOUT_WINDOW_WIDTH * zoomPercent) / 100),
+    Math.round((ABOUT_WINDOW_HEIGHT * zoomPercent) / 100),
+  ];
+}
+
+// About File Trail: a small fixed window in place of the standard macOS panel, which has
+// room for a name and a version only.
+function openAboutWindow(): void {
+  const appStateStore = appStateStoreRef;
+  if (!appStateStore) {
+    return;
+  }
+  const [width, height] = aboutWindowSize(appStateStore.getPreferences().zoomPercent);
+  aboutWindowRef = showPageWindow(aboutWindowRef, appStateStore, "about", {
+    width,
+    height,
+    useContentSize: true,
+    title: `About ${APP_MENU_NAME}`,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+  });
+}
+
+// The open-source software inside the app and its licenses, opened from About.
+function openAcknowledgementsWindow(): void {
+  const appStateStore = appStateStoreRef;
+  if (!appStateStore) {
+    return;
+  }
+  acknowledgementsWindowRef = showPageWindow(
+    acknowledgementsWindowRef,
+    appStateStore,
+    "acknowledgements",
+    { width: 620, height: 640, minWidth: 460, minHeight: 360, title: "Acknowledgements" },
+  );
+}
+
+// Shows a window that is one page of the renderer (`#about`): the one already open, or a
+// new one.
+function showPageWindow(
+  openWindow: BrowserWindow | null,
+  appStateStore: AppStateStore,
+  page: string,
+  options: BrowserWindowConstructorOptions,
+): BrowserWindow {
+  if (openWindow && !openWindow.isDestroyed()) {
+    openWindow.show();
+    openWindow.focus();
+    return openWindow;
+  }
+  const window = new BrowserWindow({
+    show: false,
+    backgroundColor: windowBackgroundColor(appStateStore.getPreferences().theme),
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 16, y: 18 },
+    fullscreenable: false,
+    webPreferences: {
+      preload: fileURLToPath(new URL("../preload/index.cjs", import.meta.url)),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      zoomFactor: appStateStore.getPreferences().zoomPercent / 100,
+    },
+    ...options,
+  });
+  keepWindowZoom(window, appStateStore);
+  const pageUrl = `${resolveRendererEntryUrl()}#${page}`;
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (isAllowedExternalUrl(url)) {
+      void shell.openExternal(url);
+    }
+    return { action: "deny" };
+  });
+  window.webContents.on("will-navigate", (event, navigationUrl) => {
+    if (navigationUrl !== pageUrl) {
+      event.preventDefault();
+    }
+  });
+  window.once("ready-to-show", () => window.show());
+  void window.loadURL(pageUrl);
+  return window;
+}
+
 function resolveRendererEntryUrl(): string {
   const rendererUrl = process.env.FILETRAIL_RENDERER_URL;
   if (rendererUrl && rendererUrl.length > 0) {
@@ -456,6 +558,7 @@ function buildApplicationMenu(mainWindow: BrowserWindow): void {
   Menu.setApplicationMenu(
     Menu.buildFromTemplate(
       createApplicationMenuTemplate(mainWindow.webContents, {
+        onOpenAbout: () => openAboutWindow(),
         onOpenSettings: () => openSettingsWindow(),
         includeDeveloperTools: !app.isPackaged || process.env.FILETRAIL_OPEN_DEVTOOLS === "1",
         onCommandSent: () => syncApplicationMenuItems(mainWindow),

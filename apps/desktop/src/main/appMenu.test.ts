@@ -166,6 +166,19 @@ describe("createApplicationMenuTemplate", () => {
     expect(itemOf(appMenu, "Quit File Trail").role).toBe("quit");
   });
 
+  it("opens the app's own About window in place of the standard panel", () => {
+    const onOpenAbout = vi.fn();
+    const appMenu = submenuOf(
+      createApplicationMenuTemplate({ send: vi.fn() }, { onOpenAbout }),
+      "File Trail",
+    );
+    const about = itemOf(appMenu, "About File Trail");
+
+    expect(about.role).toBeUndefined();
+    about.click?.({} as never, undefined, {} as never);
+    expect(onOpenAbout).toHaveBeenCalledTimes(1);
+  });
+
   it("sends each item's command to the explorer window, on its shortcut", () => {
     const send = vi.fn();
     const template = createApplicationMenuTemplate({ send });

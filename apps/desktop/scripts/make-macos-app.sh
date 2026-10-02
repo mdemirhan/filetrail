@@ -96,6 +96,15 @@ if [[ -f "${ICON_ICNS}" ]]; then
   rm -f "${APP_BUNDLE}/Contents/Resources/electron.icns"
 fi
 
+# Chromium's license notices ship beside Electron's app, not inside it. The Acknowledgements
+# window opens them from here; the other licenses are in dist/assets/licenses.
+CHROMIUM_NOTICES="${APP_DIR}/node_modules/electron/dist/LICENSES.chromium.html"
+if [[ ! -f "${CHROMIUM_NOTICES}" ]]; then
+  echo "Missing Chromium license notices: ${CHROMIUM_NOTICES}" >&2
+  exit 1
+fi
+cp "${CHROMIUM_NOTICES}" "${APP_BUNDLE}/Contents/Resources/LICENSES.chromium.html"
+
 mkdir -p "${RESOURCES_APP}"
 cp "${APP_DIR}/package.json" "${RESOURCES_APP}/package.json"
 ditto "${APP_DIR}/dist" "${RESOURCES_APP}/dist"

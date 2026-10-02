@@ -665,6 +665,51 @@ export const ipcContractSchemas = {
       ok: z.boolean(),
     }),
   },
+  // What the About window shows, and what its Copy Details button copies.
+  "app:getAboutInfo": {
+    request: emptyRequestSchema,
+    response: z.object({
+      version: z.string().min(1),
+      // The commit the app was built from; null for a build made outside the repository.
+      commit: z.string().min(1).nullable(),
+      macosVersion: z.string().min(1),
+      architecture: z.enum(["Apple silicon", "Intel"]),
+      electronVersion: z.string().min(1),
+      fdVersion: z.string().min(1),
+    }),
+  },
+  "app:openAcknowledgementsWindow": {
+    request: emptyRequestSchema,
+    response: z.object({
+      ok: z.boolean(),
+    }),
+  },
+  // The open-source software shipped inside the app, with each license as shipped.
+  "app:getAcknowledgements": {
+    request: emptyRequestSchema,
+    response: z.object({
+      components: z.array(
+        z.object({
+          id: z.string().min(1),
+          name: z.string().min(1),
+          version: z.string().min(1).nullable(),
+          license: z.string().min(1),
+          url: z.string().url(),
+          // Null when the notices are a file of their own (Chromium's), opened with
+          // `app:openAcknowledgementNotices`.
+          text: z.string().nullable(),
+        }),
+      ),
+    }),
+  },
+  "app:openAcknowledgementNotices": {
+    request: z.object({
+      id: z.string().min(1),
+    }),
+    response: z.object({
+      ok: z.boolean(),
+    }),
+  },
   // The explorer window tells the application menu which commands can run and which of
   // its checkmarks are on. Command names are the app's own; unknown ones are ignored.
   "app:setMenuState": {

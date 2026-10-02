@@ -4,6 +4,13 @@ import type { AppLogEntry, SettingsTab } from "@filetrail/contracts";
 import { ExplorerWorkerClient, createWriteService, getPathSuggestions } from "@filetrail/core";
 import type { AppPreferences } from "../shared/appPreferences";
 import { type ApplicationMenuState, toApplicationMenuState } from "../shared/applicationMenuState";
+import {
+  formatMacosVersion,
+  readAcknowledgements,
+  readBuildCommit,
+  resolveDistDir,
+  resolveNoticesPath,
+} from "./aboutInfo";
 import { type AppLogger, writeStructuredAppLogEntry } from "./appLog";
 import type { AppStateStore } from "./appStateStore";
 import { toPreferencePatch } from "./bootstrap/preferencesPatch";
@@ -31,7 +38,7 @@ import {
   resolveTerminalApplicationName,
 } from "./bootstrap/systemHandlers";
 import { createWriteOperationCoordinator } from "./bootstrap/writeOperations";
-import { resolveBundledFdBinaryPath } from "./fdBinary";
+import { readBundledFdManifest, resolveBundledFdBinaryPath } from "./fdBinary";
 import { registerIpcHandlers } from "./ipc";
 
 let activeWorkerClient: ExplorerWorkerClient | null = null;
@@ -47,6 +54,7 @@ export async function bootstrapMainProcess(
   ) => void,
   windows: {
     openSettingsWindow?: (tab?: SettingsTab) => void;
+    openAcknowledgementsWindow?: () => void;
     // The explorer window reporting what the application menu should show.
     setApplicationMenuState?: (state: ApplicationMenuState, senderId: number | null) => void;
   } = {},
@@ -114,6 +122,26 @@ export async function bootstrapMainProcess(
       "app:openSettingsWindow": (payload) => {
         windows.openSettingsWindow?.(payload.tab);
         return { ok: windows.openSettingsWindow !== undefined };
+      },
+      "app:getAboutInfo": () => ({
+        version: app.getVersion(),
+        commit: readBuildCommit(resolveDistDir()),
+        macosVersion: formatMacosVersion(process.getSystemVersion()),
+        architecture: process.arch === "arm64" ? "Apple silicon" : "Intel",
+        electronVersion: process.versions.electron,
+        fdVersion: readBundledFdManifest().version,
+      }),
+      "app:openAcknowledgementsWindow": () => {
+        windows.openAcknowledgementsWindow?.();
+        return { ok: windows.openAcknowledgementsWindow !== undefined };
+      },
+      "app:getAcknowledgements": () => ({
+        components: readAcknowledgements(resolveDistDir(), { chromium: process.versions.chrome }),
+      }),
+      // The renderer names the component; the file opened is always one the app ships.
+      "app:openAcknowledgementNotices": async (payload) => {
+        const noticesPath = resolveNoticesPath(payload.id);
+        return { ok: noticesPath !== null && (await shell.openPath(noticesPath)).length === 0 };
       },
       "app:setMenuState": (payload, event) => {
         windows.setApplicationMenuState?.(

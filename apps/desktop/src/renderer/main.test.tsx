@@ -67,6 +67,21 @@ describe("renderer main entry", () => {
     }
   });
 
+  it("keeps the About and Acknowledgements windows opaque", async () => {
+    for (const hash of ["#about", "#acknowledgements"]) {
+      vi.resetModules();
+      document.body.className = "";
+      document.body.innerHTML = '<div id="root"></div>';
+      window.location.hash = hash;
+      try {
+        await import("./main");
+        expect(document.body).not.toHaveClass("vibrant-window");
+      } finally {
+        window.location.hash = "";
+      }
+    }
+  });
+
   it("throws when the renderer root element is missing", async () => {
     await expect(import("./main")).rejects.toThrow("Missing root element");
   });

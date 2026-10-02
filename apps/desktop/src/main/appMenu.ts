@@ -47,7 +47,8 @@ const EXIT_FULL_SCREEN_ITEM_ID = "fullScreen:exit";
 export function createApplicationMenuTemplate(
   webContents: Pick<WebContents, "send">,
   options: {
-    // Settings is its own window; main opens it directly when provided.
+    // About and Settings are windows of their own; main opens them when provided.
+    onOpenAbout?: () => void;
     onOpenSettings?: () => void;
     // Developer Tools belong to development builds.
     includeDeveloperTools?: boolean;
@@ -114,7 +115,9 @@ export function createApplicationMenuTemplate(
     {
       label: APP_MENU_NAME,
       submenu: [
-        { role: "about", label: `About ${APP_MENU_NAME}` },
+        options.onOpenAbout
+          ? { label: `About ${APP_MENU_NAME}`, click: options.onOpenAbout }
+          : { role: "about", label: `About ${APP_MENU_NAME}` },
         separator,
         {
           label: "Settings…",

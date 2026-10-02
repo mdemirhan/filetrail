@@ -1,6 +1,9 @@
+import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { writeThirdPartyLicenses } from "./thirdPartyLicenses";
 
 declare const Bun: {
   build: (options: Record<string, unknown>) => Promise<{
@@ -23,6 +26,8 @@ await buildRenderer();
 copyRendererHtml();
 copyRendererAssets();
 copyAppAssets();
+writeThirdPartyLicenses({ appDir, repoDir, outDir });
+writeBuildInfo();
 
 console.log(`Desktop build completed at ${outDir}`);
 
@@ -101,6 +106,22 @@ function copyAppAssets(): void {
     return;
   }
   cpSync(sourceAssetsDir, join(outDir, "assets"), { recursive: true });
+}
+
+// The About window shows which commit the app was built from.
+function writeBuildInfo(): void {
+  let commit: string | null = null;
+  try {
+    commit =
+      execFileSync("git", ["rev-parse", "--short", "HEAD"], {
+        cwd: repoDir,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).trim() || null;
+  } catch {
+    // Built outside the repository, or without git: the version is shown on its own.
+  }
+  writeFileSync(join(outDir, "build-info.json"), `${JSON.stringify({ commit })}\n`);
 }
 
 function ensureBuildSuccess(

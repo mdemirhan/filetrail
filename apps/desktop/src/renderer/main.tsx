@@ -18,6 +18,8 @@ import "@fontsource/lexend/500.css";
 import "@fontsource/lexend/600.css";
 import "@fontsource/lexend/700.css";
 
+import { AboutWindowApp } from "./AboutWindowApp";
+import { AcknowledgementsWindowApp } from "./AcknowledgementsWindowApp";
 import { App } from "./App";
 import { SettingsWindowApp } from "./SettingsWindowApp";
 import { createRendererLogger, installGlobalRendererErrorHandlers } from "./lib/logging";
@@ -43,15 +45,21 @@ logger.info("renderer boot", {
   platform: navigator.platform,
 });
 
-// The same bundle serves the explorer window and the Settings window (`#settings`, or
-// `#settings/shortcuts` to open on a tab).
-const isSettingsWindow = /^#settings(\/|$)/.test(window.location.hash);
+// The same bundle serves every window; the address says which one this is: the explorer
+// (nothing), Settings (`#settings`, or `#settings/shortcuts` to open on a tab), About
+// (`#about`) or Acknowledgements (`#acknowledgements`).
+const hash = window.location.hash;
+const page = /^#settings(\/|$)/.test(hash) ? (
+  <SettingsWindowApp />
+) : hash === "#about" ? (
+  <AboutWindowApp />
+) : hash === "#acknowledgements" ? (
+  <AcknowledgementsWindowApp />
+) : null;
 // The explorer window is created with a translucent macOS material behind it (see
 // `createWindow` in main.ts); this class lets the sidebar show it through.
-if (!isSettingsWindow) {
+if (!page) {
   document.body.classList.add("vibrant-window");
 }
 
-createRoot(rootElement).render(
-  <StrictMode>{isSettingsWindow ? <SettingsWindowApp /> : <App />}</StrictMode>,
-);
+createRoot(rootElement).render(<StrictMode>{page ?? <App />}</StrictMode>);
