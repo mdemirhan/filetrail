@@ -1,7 +1,12 @@
 import type { RendererCommandType } from "../../shared/rendererCommands";
 import type { CopyPasteClipboardState } from "./copyPasteClipboard";
 import { hasClipboardItems } from "./copyPasteClipboard";
-import { isEditableFileEntry, resolveNewFolderTargetPath } from "./explorerAppUtils";
+import {
+  isDirectoryLikeEntry,
+  isEditableFileEntry,
+  resolveNewFolderTargetPath,
+} from "./explorerAppUtils";
+import { parentDirectoryPath } from "./explorerNavigation";
 import type { DirectoryEntry } from "./explorerTypes";
 import type { ShortcutContext } from "./shortcutPolicy";
 import { canHandleRendererCommand } from "./shortcutPolicy";
@@ -29,7 +34,71 @@ export type RendererCommandAvailabilityContext = {
   isSearchMode: boolean;
   openItemLimit: number;
   writeOperationLocked: boolean;
+  // What the menu needs beyond the toolbar. Left out, a command they decide is available.
+  canGoBack?: boolean;
+  canGoForward?: boolean;
+  hasCachedSearch?: boolean;
+  tabCount?: number;
+  /** Trash is a favorite that stays: it is never offered for removal. */
+  trashPath?: string | null;
 };
+
+type CommandTargetContext = Pick<
+  RendererCommandAvailabilityContext,
+  | "currentPath"
+  | "selectedPathsInViewOrder"
+  | "activeContentEntries"
+  | "selectedTreeTargetPath"
+  | "isSearchMode"
+  | "trashPath"
+> & { focusedPane: ShortcutContext["focusedPane"] };
+
+function resolveSingleSelectedFolderPath(context: CommandTargetContext): string | null {
+  if (context.selectedPathsInViewOrder.length !== 1) {
+    return null;
+  }
+  const entry = context.activeContentEntries.find(
+    (candidate) => candidate.path === context.selectedPathsInViewOrder[0],
+  );
+  return isDirectoryLikeEntry(entry ?? null) ? (entry?.path ?? null) : null;
+}
+
+// The folder File > Open in New Tab opens: the tree's folder when the tree has the
+// keyboard, otherwise the one folder selected in the list.
+export function resolveNewTabTargetPath(context: CommandTargetContext): string | null {
+  if (context.focusedPane === "tree") {
+    return context.selectedTreeTargetPath;
+  }
+  return resolveSingleSelectedFolderPath(context);
+}
+
+// The folder File > Add to Favorites acts on: the tree's folder when the tree has the
+// keyboard, otherwise the one folder selected in the list, or the folder on screen when
+// nothing is selected.
+export function resolveFavoriteTargetPath(context: CommandTargetContext): string | null {
+  if (context.isSearchMode) {
+    return null;
+  }
+  const targetPath =
+    context.focusedPane === "tree"
+      ? context.selectedTreeTargetPath
+      : context.selectedPathsInViewOrder.length === 0
+        ? context.currentPath || null
+        : resolveSingleSelectedFolderPath(context);
+  return targetPath !== null && targetPath !== context.trashPath ? targetPath : null;
+}
+
+// What File > Show in Finder reveals: the tree's folder, the selection, or with nothing
+// selected the folder on screen.
+export function resolveShowInFinderPaths(context: CommandTargetContext): string[] {
+  if (context.focusedPane === "tree" && context.selectedTreeTargetPath) {
+    return [context.selectedTreeTargetPath];
+  }
+  if (context.selectedPathsInViewOrder.length > 0) {
+    return context.selectedPathsInViewOrder;
+  }
+  return context.currentPath ? [context.currentPath] : [];
+}
 
 function resolveSelectedEntries(
   selectedPathsInViewOrder: readonly string[],
@@ -102,6 +171,32 @@ export function canRunToolbarRendererCommand(
         return context.selectedTreeTargetPath !== null;
       }
       return selectedCount > 0;
+    case "openSelectionInNewTab":
+      return resolveNewTabTargetPath({ ...context, focusedPane }) !== null;
+    case "quickLookSelection":
+      return context.selectedEntry !== null;
+    case "toggleFavorite":
+      return resolveFavoriteTargetPath({ ...context, focusedPane }) !== null;
+    case "showInFinder":
+      return resolveShowInFinderPaths({ ...context, focusedPane }).length > 0;
+    case "showLastSearchResults":
+      return context.hasCachedSearch !== false && !context.isSearchMode;
+    case "sortByName":
+    case "sortByModified":
+    case "sortBySize":
+    case "sortByKind":
+    case "toggleFoldersFirst":
+      // Search results have their own order, chosen in the results bar.
+      return !context.isSearchMode;
+    case "goBack":
+      return context.canGoBack !== false;
+    case "goForward":
+      return context.canGoForward !== false;
+    case "goEnclosingFolder":
+      return context.currentPath.length > 0 && parentDirectoryPath(context.currentPath) !== null;
+    case "selectNextTab":
+    case "selectPreviousTab":
+      return context.tabCount === undefined || context.tabCount > 1;
     default:
       return true;
   }

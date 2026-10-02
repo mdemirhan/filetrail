@@ -1,323 +1,481 @@
-import { createApplicationMenuTemplate } from "./appMenu";
+import type { MenuItemConstructorOptions } from "electron";
+
+import {
+  type ApplicationMenuState,
+  INITIAL_APPLICATION_MENU_STATE,
+} from "../shared/applicationMenuState";
+import { RENDERER_COMMAND_TYPES } from "../shared/rendererCommands";
+import {
+  applyApplicationMenuItemStates,
+  createApplicationMenuTemplate,
+  resolveApplicationMenuItemStates,
+} from "./appMenu";
+
+type Template = MenuItemConstructorOptions[];
+
+function submenuOf(template: Template, name: string): Template {
+  const menu = template.find((item) => item.label === name || item.role === name);
+  if (!menu || !Array.isArray(menu.submenu)) {
+    throw new Error(`${name} menu missing.`);
+  }
+  return menu.submenu;
+}
+
+function itemOf(items: Template, label: string): MenuItemConstructorOptions {
+  const item = items.find((candidate) => candidate.label === label);
+  if (!item) {
+    throw new Error(`${label} menu item missing.`);
+  }
+  return item;
+}
+
+function choose(item: MenuItemConstructorOptions, focusedWindow?: unknown): void {
+  if (typeof item.click !== "function") {
+    throw new Error(`${item.label} has no action.`);
+  }
+  item.click(undefined as never, focusedWindow as never, undefined as never);
+}
+
+// Every item of every menu, submenus included.
+function flatten(items: Template): Template {
+  return items.flatMap((item) => [
+    item,
+    ...(Array.isArray(item.submenu) ? flatten(item.submenu) : []),
+  ]);
+}
+
+function labels(items: Template): string[] {
+  return items.map((item) => (item.type === "separator" ? "-" : (item.label ?? `(${item.role})`)));
+}
 
 describe("createApplicationMenuTemplate", () => {
-  it("wires Open and Edit to the renderer command channel", () => {
-    const send = vi.fn();
-    const template = createApplicationMenuTemplate({ send } as never);
-    const fileMenu = template.find((item) => item.label === "File");
-    const submenu = Array.isArray(fileMenu?.submenu) ? fileMenu.submenu : [];
-    const openItem = submenu.find((item) => "label" in item && item.label === "Open");
-    const editItem = submenu.find((item) => "label" in item && item.label === "Edit");
+  it("lays the menus out the way a Mac app does", () => {
+    const template = createApplicationMenuTemplate({ send: vi.fn() });
 
-    if (!openItem || !("click" in openItem) || typeof openItem.click !== "function") {
-      throw new Error("Open menu item missing.");
-    }
-    if (!editItem || !("click" in editItem) || typeof editItem.click !== "function") {
-      throw new Error("Edit menu item missing.");
-    }
-
-    openItem.click(undefined as never, undefined as never, undefined as never);
-    editItem.click(undefined as never, undefined as never, undefined as never);
-
-    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "openSelection" });
-    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "editSelection" });
+    expect(template.map((menu) => menu.label ?? `(${menu.role})`)).toEqual([
+      "File Trail",
+      "File",
+      "Edit",
+      "View",
+      "Go",
+      "(windowMenu)",
+      "(help)",
+    ]);
+    expect(labels(submenuOf(template, "File Trail"))).toEqual([
+      "About File Trail",
+      "-",
+      "Settings…",
+      "-",
+      "(services)",
+      "-",
+      "Hide File Trail",
+      "(hideOthers)",
+      "(unhide)",
+      "-",
+      "Quit File Trail",
+    ]);
+    expect(labels(submenuOf(template, "File"))).toEqual([
+      "New Tab",
+      "New Folder",
+      "-",
+      "Open",
+      "Open in New Tab",
+      "Edit in Text Editor",
+      "Quick Look",
+      "-",
+      "Rename",
+      "Duplicate",
+      "Move To…",
+      "Add to Favorites",
+      "Remove from Favorites",
+      "-",
+      "Open in Terminal",
+      "Show in Finder",
+      "-",
+      "Move to Trash",
+      "-",
+      "Reopen Closed Tab",
+      "Close Tab",
+      "Close Window",
+    ]);
+    expect(labels(submenuOf(template, "Edit"))).toEqual([
+      "(undo)",
+      "(redo)",
+      "-",
+      "Cut",
+      "Copy",
+      "Paste",
+      "Copy Path",
+      "Select All",
+      "-",
+      "Find Files…",
+      "Show Last Results",
+    ]);
+    expect(labels(submenuOf(template, "View"))).toEqual([
+      "as List",
+      "as Details",
+      "-",
+      "Sort By",
+      "Folders First",
+      "Show Hidden Files",
+      "-",
+      "Show Info Panel",
+      "Show Info Row",
+      "-",
+      "Refresh",
+      "-",
+      "Zoom In",
+      "Zoom Out",
+      "Actual Size",
+      "-",
+      "Enter Full Screen",
+      "Exit Full Screen",
+    ]);
+    expect(labels(submenuOf(template, "Go"))).toEqual([
+      "Back",
+      "Forward",
+      "Enclosing Folder",
+      "-",
+      "Home",
+      "Go To…",
+      "-",
+      "Root Tree at Selected Folder",
+    ]);
+    expect(labels(submenuOf(template, "windowMenu"))).toEqual([
+      "(minimize)",
+      "(zoom)",
+      "-",
+      "Show Previous Tab",
+      "Show Next Tab",
+      "-",
+      "Focus Folder Tree",
+      "Focus File List",
+      "-",
+      "(front)",
+    ]);
+    expect(labels(submenuOf(template, "help"))).toEqual(["File Trail Help", "Keyboard Shortcuts"]);
   });
 
-  it("wires Open in Terminal to the renderer command channel", () => {
-    const send = vi.fn();
-    const template = createApplicationMenuTemplate({ send } as never);
-    const fileMenu = template.find((item) => item.label === "File");
-    const submenu = Array.isArray(fileMenu?.submenu) ? fileMenu.submenu : [];
-    const openInTerminalItem = submenu.find(
-      (item) => "label" in item && item.label === "Open in Terminal",
-    );
+  it("names the app itself rather than its package", () => {
+    const appMenu = submenuOf(createApplicationMenuTemplate({ send: vi.fn() }), "File Trail");
 
-    expect(openInTerminalItem).toBeTruthy();
-    if (
-      !openInTerminalItem ||
-      !("click" in openInTerminalItem) ||
-      typeof openInTerminalItem.click !== "function"
-    ) {
-      throw new Error("Open in Terminal menu item missing.");
-    }
-    openInTerminalItem.click(undefined as never, undefined as never, undefined as never);
-
-    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "openInTerminal" });
+    expect(itemOf(appMenu, "About File Trail").role).toBe("about");
+    expect(itemOf(appMenu, "Hide File Trail").role).toBe("hide");
+    expect(itemOf(appMenu, "Quit File Trail").role).toBe("quit");
   });
 
-  it("wires Move To, Rename, Duplicate, New Folder, and Move to Trash", () => {
+  it("sends each item's command to the explorer window, on its shortcut", () => {
     const send = vi.fn();
-    const template = createApplicationMenuTemplate({ send } as never);
-    const fileMenu = template.find((item) => item.label === "File");
-    const submenu = Array.isArray(fileMenu?.submenu) ? fileMenu.submenu : [];
-    const labels = [
-      ["Move To…", "moveSelection"],
-      ["Rename", "renameSelection"],
-      ["Duplicate", "duplicateSelection"],
-      ["New Folder", "newFolder"],
-      ["Move to Trash", "trashSelection"],
-    ] as const;
-
-    for (const [label, command] of labels) {
-      const item = submenu.find((entry) => "label" in entry && entry.label === label);
-      expect(item).toBeTruthy();
-      if (!item || !("click" in item) || typeof item.click !== "function") {
-        throw new Error(`${label} menu item missing.`);
-      }
-      item.click(undefined as never, undefined as never, undefined as never);
-      expect(send).toHaveBeenCalledWith("filetrail:command", { type: command });
-    }
-  });
-
-  it("wires Find Files to the renderer command channel", () => {
-    const send = vi.fn();
-    const template = createApplicationMenuTemplate({ send } as never);
-    const editMenu = template.find((item) => item.label === "Edit");
-    const submenu = Array.isArray(editMenu?.submenu) ? editMenu.submenu : [];
-    const findItem = submenu.find((item) => "label" in item && item.label === "Find Files…");
-
-    expect(findItem).toBeTruthy();
-    if (!findItem || !("click" in findItem) || typeof findItem.click !== "function") {
-      throw new Error("Find Files menu item missing.");
-    }
-    findItem.click(undefined as never, undefined as never, undefined as never);
-
-    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "focusFileSearch" });
-  });
-
-  it("wires Copy Path to the renderer command channel", () => {
-    const send = vi.fn();
-    const template = createApplicationMenuTemplate({ send } as never);
-    const editMenu = template.find((item) => item.label === "Edit");
-    const submenu = Array.isArray(editMenu?.submenu) ? editMenu.submenu : [];
-    const copyPathItem = submenu.find((item) => "label" in item && item.label === "Copy Path");
-
-    expect(copyPathItem).toBeTruthy();
-    if (!copyPathItem || !("click" in copyPathItem) || typeof copyPathItem.click !== "function") {
-      throw new Error("Copy Path menu item missing.");
-    }
-    copyPathItem.click(undefined as never, undefined as never, undefined as never);
-
-    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "copyPath" });
-  });
-
-  it("wires Copy, Cut, Paste, and Select All to generic edit commands", () => {
-    const send = vi.fn();
-    const template = createApplicationMenuTemplate({ send } as never);
-    const editMenu = template.find((item) => item.label === "Edit");
-    const submenu = Array.isArray(editMenu?.submenu) ? editMenu.submenu : [];
-    const copyItem = submenu.find((item) => "label" in item && item.label === "Copy");
-    const cutItem = submenu.find((item) => "label" in item && item.label === "Cut");
-    const pasteItem = submenu.find((item) => "label" in item && item.label === "Paste");
-    const selectAllItem = submenu.find((item) => "label" in item && item.label === "Select All");
-
-    if (!copyItem || !("click" in copyItem) || typeof copyItem.click !== "function") {
-      throw new Error("Copy menu item missing.");
-    }
-    if (!cutItem || !("click" in cutItem) || typeof cutItem.click !== "function") {
-      throw new Error("Cut menu item missing.");
-    }
-    if (!pasteItem || !("click" in pasteItem) || typeof pasteItem.click !== "function") {
-      throw new Error("Paste menu item missing.");
-    }
-    if (
-      !selectAllItem ||
-      !("click" in selectAllItem) ||
-      typeof selectAllItem.click !== "function"
-    ) {
-      throw new Error("Select All menu item missing.");
-    }
-
-    copyItem.click(undefined as never, undefined as never, undefined as never);
-    cutItem.click(undefined as never, undefined as never, undefined as never);
-    pasteItem.click(undefined as never, undefined as never, undefined as never);
-    selectAllItem.click(undefined as never, undefined as never, undefined as never);
-
-    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "editCopy" });
-    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "editCut" });
-    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "editPaste" });
-    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "editSelectAll" });
-  });
-
-  it("wires Go To to the renderer command channel, on ⌘K", () => {
-    const send = vi.fn();
-    const template = createApplicationMenuTemplate({ send } as never);
-    const editMenu = template.find((item) => item.label === "Edit");
-    const submenu = Array.isArray(editMenu?.submenu) ? editMenu.submenu : [];
-    const goToFolderItem = submenu.find((item) => "label" in item && item.label === "Go To…");
-
-    expect(goToFolderItem).toBeTruthy();
-    if (
-      !goToFolderItem ||
-      !("click" in goToFolderItem) ||
-      typeof goToFolderItem.click !== "function"
-    ) {
-      throw new Error("Go To menu item missing.");
-    }
-    expect(goToFolderItem.accelerator).toBe("CommandOrControl+K");
-    goToFolderItem.click(undefined as never, undefined as never, undefined as never);
-
-    expect(send).toHaveBeenCalledWith("filetrail:command", { type: "openLocationSheet" });
-  });
-
-  it("wires Refresh to the renderer command channel", () => {
-    const send = vi.fn();
-    const template = createApplicationMenuTemplate({ send } as never);
-    const viewMenu = template.find((item) => item.label === "View");
-    const submenu = Array.isArray(viewMenu?.submenu) ? viewMenu.submenu : [];
-    const refreshItem = submenu.find((item) => "label" in item && item.label === "Refresh");
-
-    expect(refreshItem).toBeTruthy();
-    if (!refreshItem || !("click" in refreshItem) || typeof refreshItem.click !== "function") {
-      throw new Error("Refresh menu item missing.");
-    }
-    refreshItem.click(undefined as never, undefined as never, undefined as never);
-
-    expect(send).toHaveBeenCalledWith("filetrail:command", {
-      type: "refreshOrApplySearchSort",
-    });
-  });
-
-  it("wires Toggle Info Panel to the renderer command channel", () => {
-    const send = vi.fn();
-    const template = createApplicationMenuTemplate({ send } as never);
-    const viewMenu = template.find((item) => item.label === "View");
-    const submenu = Array.isArray(viewMenu?.submenu) ? viewMenu.submenu : [];
-    const getInfoItem = submenu.find(
-      (item) => "label" in item && item.label === "Toggle Info Panel",
-    );
-
-    expect(getInfoItem).toBeTruthy();
-    if (!getInfoItem || !("click" in getInfoItem) || typeof getInfoItem.click !== "function") {
-      throw new Error("Toggle Info Panel menu item missing.");
-    }
-    getInfoItem.click(undefined as never, undefined as never, undefined as never);
-
-    expect(send).toHaveBeenCalledWith("filetrail:command", {
-      type: "toggleInfoPanel",
-    });
-  });
-
-  it("wires Toggle Info Row to the renderer command channel", () => {
-    const send = vi.fn();
-    const template = createApplicationMenuTemplate({ send } as never);
-    const viewMenu = template.find((item) => item.label === "View");
-    const submenu = Array.isArray(viewMenu?.submenu) ? viewMenu.submenu : [];
-    const infoRowItem = submenu.find((item) => "label" in item && item.label === "Toggle Info Row");
-
-    expect(infoRowItem).toBeTruthy();
-    if (!infoRowItem || !("click" in infoRowItem) || typeof infoRowItem.click !== "function") {
-      throw new Error("Toggle Info Row menu item missing.");
-    }
-    infoRowItem.click(undefined as never, undefined as never, undefined as never);
-
-    expect(send).toHaveBeenCalledWith("filetrail:command", {
-      type: "toggleInfoRow",
-    });
-  });
-
-  it("wires the Go menu's Home and Root Tree at Selected Folder to the renderer", () => {
-    const send = vi.fn();
-    const template = createApplicationMenuTemplate({ send } as never);
-    const goMenu = template.find((item) => item.label === "Go");
-    const submenu = Array.isArray(goMenu?.submenu) ? goMenu.submenu : [];
+    const template = createApplicationMenuTemplate({ send });
     const expected = [
-      ["Home", "CommandOrControl+Shift+H", "goHomeRootTree"],
-      ["Root Tree at Selected Folder", "CommandOrControl+Shift+R", "rootTreeAtSelection"],
+      ["File", "New Tab", "CommandOrControl+T", "newTab"],
+      ["File", "New Folder", "CommandOrControl+Shift+N", "newFolder"],
+      ["File", "Open", "CommandOrControl+O", "openSelection"],
+      ["File", "Open in New Tab", undefined, "openSelectionInNewTab"],
+      ["File", "Edit in Text Editor", "CommandOrControl+E", "editSelection"],
+      ["File", "Quick Look", undefined, "quickLookSelection"],
+      // Return renames from the window itself: as a menu shortcut it would be taken from
+      // text fields and dialogs.
+      ["File", "Rename", undefined, "renameSelection"],
+      ["File", "Duplicate", "CommandOrControl+D", "duplicateSelection"],
+      ["File", "Move To…", "CommandOrControl+Shift+M", "moveSelection"],
+      ["File", "Add to Favorites", undefined, "toggleFavorite"],
+      ["File", "Remove from Favorites", undefined, "toggleFavorite"],
+      ["File", "Open in Terminal", "Alt+CommandOrControl+T", "openInTerminal"],
+      ["File", "Show in Finder", undefined, "showInFinder"],
+      ["File", "Move to Trash", "CommandOrControl+Backspace", "trashSelection"],
+      ["File", "Reopen Closed Tab", "Shift+CommandOrControl+T", "reopenClosedTab"],
+      ["File", "Close Tab", "CommandOrControl+W", "closeTab"],
+      ["Edit", "Cut", "CommandOrControl+X", "editCut"],
+      ["Edit", "Copy", "CommandOrControl+C", "editCopy"],
+      ["Edit", "Paste", "CommandOrControl+V", "editPaste"],
+      ["Edit", "Copy Path", "Alt+CommandOrControl+C", "copyPath"],
+      ["Edit", "Select All", "CommandOrControl+A", "editSelectAll"],
+      ["Edit", "Find Files…", "CommandOrControl+F", "focusFileSearch"],
+      ["Edit", "Show Last Results", "Shift+CommandOrControl+F", "showLastSearchResults"],
+      ["View", "as List", undefined, "viewAsList"],
+      ["View", "as Details", undefined, "viewAsDetails"],
+      ["View", "Folders First", undefined, "toggleFoldersFirst"],
+      ["View", "Show Hidden Files", "Shift+CommandOrControl+.", "toggleHiddenFiles"],
+      ["View", "Show Info Panel", "CommandOrControl+I", "toggleInfoPanel"],
+      ["View", "Show Info Row", "CommandOrControl+Shift+I", "toggleInfoRow"],
+      ["View", "Refresh", "CommandOrControl+R", "refreshOrApplySearchSort"],
+      ["View", "Zoom In", "CommandOrControl+Plus", "zoomIn"],
+      ["View", "Zoom Out", "CommandOrControl+-", "zoomOut"],
+      ["View", "Actual Size", "CommandOrControl+0", "resetZoom"],
+      ["Go", "Back", "CommandOrControl+[", "goBack"],
+      ["Go", "Forward", "CommandOrControl+]", "goForward"],
+      ["Go", "Enclosing Folder", "CommandOrControl+Up", "goEnclosingFolder"],
+      ["Go", "Home", "CommandOrControl+Shift+H", "goHomeRootTree"],
+      ["Go", "Go To…", "CommandOrControl+K", "openLocationSheet"],
+      ["Go", "Root Tree at Selected Folder", "CommandOrControl+Shift+R", "rootTreeAtSelection"],
+      ["windowMenu", "Show Previous Tab", "Ctrl+Shift+Tab", "selectPreviousTab"],
+      ["windowMenu", "Show Next Tab", "Ctrl+Tab", "selectNextTab"],
+      ["windowMenu", "Focus Folder Tree", "CommandOrControl+1", "focusTreePane"],
+      ["windowMenu", "Focus File List", "CommandOrControl+2", "focusContentPane"],
+      ["help", "File Trail Help", undefined, "openHelp"],
+      ["help", "Keyboard Shortcuts", undefined, "openKeyboardShortcuts"],
     ] as const;
 
-    for (const [label, accelerator, type] of expected) {
-      const menuItem = submenu.find((item) => "label" in item && item.label === label);
-      if (!menuItem || !("click" in menuItem) || typeof menuItem.click !== "function") {
-        throw new Error(`${label} menu item missing.`);
-      }
-      expect(menuItem.accelerator).toBe(accelerator);
-      menuItem.click(undefined as never, undefined as never, undefined as never);
+    for (const [menu, label, accelerator, type] of expected) {
+      const item = itemOf(submenuOf(template, menu), label);
+      expect(item.accelerator, label).toBe(accelerator);
+      send.mockClear();
+      choose(item);
+      expect(send, label).toHaveBeenCalledWith("filetrail:command", { type });
+    }
+  });
+
+  it("sorts from the Sort By submenu", () => {
+    const send = vi.fn();
+    const sortBy = itemOf(
+      submenuOf(createApplicationMenuTemplate({ send }), "View"),
+      "Sort By",
+    ).submenu;
+    if (!Array.isArray(sortBy)) {
+      throw new Error("Sort By has no submenu.");
+    }
+    const expected = [
+      ["Name", "sortByName"],
+      ["Date Modified", "sortByModified"],
+      ["Size", "sortBySize"],
+      ["Kind", "sortByKind"],
+    ] as const;
+
+    expect(labels(sortBy)).toEqual(expected.map(([label]) => label));
+    for (const [label, type] of expected) {
+      const item = itemOf(sortBy, label);
+      expect(item.type).toBe("radio");
+      choose(item);
       expect(send).toHaveBeenCalledWith("filetrail:command", { type });
     }
   });
 
+  it("gives every item that sends a command an id of its own", () => {
+    const items = flatten(createApplicationMenuTemplate({ send: vi.fn() }));
+    const ids = items.flatMap((item) => (item.id ? [item.id] : []));
+
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const item of items) {
+      if (typeof item.click === "function" && item.label !== "Settings…") {
+        expect(item.id, item.label).toBeTruthy();
+      }
+    }
+  });
+
+  it("keeps Developer Tools out of the menu unless the host asks for them", () => {
+    const viewLabels = (includeDeveloperTools: boolean) =>
+      labels(
+        submenuOf(
+          createApplicationMenuTemplate({ send: vi.fn() }, { includeDeveloperTools }),
+          "View",
+        ),
+      );
+
+    expect(viewLabels(false)).not.toContain("(toggleDevTools)");
+    expect(viewLabels(true).slice(-2)).toEqual(["-", "(toggleDevTools)"]);
+  });
+
   it("applies edit commands natively in another focused window instead of the explorer", () => {
     const send = vi.fn();
-    const template = createApplicationMenuTemplate({ send } as never);
-    const editMenu = template.find((item) => item.label === "Edit");
-    const submenu = Array.isArray(editMenu?.submenu) ? editMenu.submenu : [];
-    const copyItem = submenu.find((item) => item.label === "Copy");
-    if (!copyItem || !("click" in copyItem) || typeof copyItem.click !== "function") {
-      throw new Error("Missing Copy menu item.");
-    }
+    const template = createApplicationMenuTemplate({ send });
     const settingsContents = { cut: vi.fn(), copy: vi.fn(), paste: vi.fn(), selectAll: vi.fn() };
 
-    copyItem.click(
-      undefined as never,
-      { webContents: settingsContents } as never,
-      undefined as never,
-    );
+    choose(itemOf(submenuOf(template, "Edit"), "Copy"), { webContents: settingsContents });
 
     expect(settingsContents.copy).toHaveBeenCalledTimes(1);
     expect(send).not.toHaveBeenCalled();
   });
 
-  it("wires the tab commands, with ⌘T for New Tab and ⌘W for Close Tab", () => {
-    const send = vi.fn();
-    const template = createApplicationMenuTemplate({ send } as never);
-    const items = template.flatMap((menu) => (Array.isArray(menu.submenu) ? menu.submenu : []));
-    const expected = [
-      ["New Tab", "CommandOrControl+T", "newTab"],
-      ["Reopen Closed Tab", "Shift+CommandOrControl+T", "reopenClosedTab"],
-      ["Close Tab", "CommandOrControl+W", "closeTab"],
-      ["Show Next Tab", "Ctrl+Tab", "selectNextTab"],
-      ["Show Previous Tab", "Ctrl+Shift+Tab", "selectPreviousTab"],
-    ] as const;
-
-    for (const [label, accelerator, type] of expected) {
-      const item = items.find((candidate) => "label" in candidate && candidate.label === label);
-      if (!item || !("click" in item) || typeof item.click !== "function") {
-        throw new Error(`${label} menu item missing.`);
-      }
-      expect(item.accelerator).toBe(accelerator);
-      item.click(undefined as never, undefined as never, undefined as never);
-      expect(send).toHaveBeenCalledWith("filetrail:command", { type });
-    }
-    const terminalItem = items.find(
-      (candidate) => "label" in candidate && candidate.label === "Open in Terminal",
-    );
-    expect(terminalItem?.accelerator).toBe("Alt+CommandOrControl+T");
-  });
-
   it("closes another focused window with ⌘W instead of a tab of the explorer", () => {
     const send = vi.fn();
-    const template = createApplicationMenuTemplate({ send } as never);
-    const fileMenu = template.find((item) => item.label === "File");
-    const submenu = Array.isArray(fileMenu?.submenu) ? fileMenu.submenu : [];
-    const closeTabItem = submenu.find((item) => "label" in item && item.label === "Close Tab");
-    if (!closeTabItem || !("click" in closeTabItem) || typeof closeTabItem.click !== "function") {
-      throw new Error("Close Tab menu item missing.");
-    }
-    const settingsWindow = { webContents: { send: vi.fn() }, close: vi.fn() };
+    const template = createApplicationMenuTemplate({ send });
+    const close = vi.fn();
 
-    closeTabItem.click(undefined as never, settingsWindow as never, undefined as never);
+    choose(itemOf(submenuOf(template, "File"), "Close Tab"), { webContents: {}, close });
 
-    expect(settingsWindow.close).toHaveBeenCalledTimes(1);
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("leaves the explorer alone when another window is focused", () => {
+    const send = vi.fn();
+    const template = createApplicationMenuTemplate({ send });
+
+    choose(itemOf(submenuOf(template, "Go"), "Back"), { webContents: {} });
+
     expect(send).not.toHaveBeenCalled();
   });
 
   it("opens the Settings window directly when the host provides it", () => {
     const send = vi.fn();
     const onOpenSettings = vi.fn();
-    const template = createApplicationMenuTemplate({ send } as never, {
-      onOpenSettings,
-    });
-    const editMenu = template.find((item) => item.label === "Edit");
-    const submenu = Array.isArray(editMenu?.submenu) ? editMenu.submenu : [];
-    const settingsItem = submenu.find((item) => item.label === "Settings…");
-    if (!settingsItem || !("click" in settingsItem) || typeof settingsItem.click !== "function") {
-      throw new Error("Missing Settings menu item.");
-    }
+    const settingsItem = itemOf(
+      submenuOf(createApplicationMenuTemplate({ send }, { onOpenSettings }), "File Trail"),
+      "Settings…",
+    );
 
-    settingsItem.click(undefined as never, undefined as never, undefined as never);
+    expect(settingsItem.accelerator).toBe("CommandOrControl+,");
+    choose(settingsItem);
 
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
     expect(send).not.toHaveBeenCalled();
+  });
+
+  it("tells the host after each command, so it can put the checkmarks back", () => {
+    const onCommandSent = vi.fn();
+    const template = createApplicationMenuTemplate({ send: vi.fn() }, { onCommandSent });
+
+    choose(itemOf(submenuOf(template, "View"), "Show Hidden Files"));
+
+    expect(onCommandSent).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("resolveApplicationMenuItemStates", () => {
+  const explorerWindow = { explorerFocused: true, fullScreen: false };
+  const stateOf = (id: string, state: ApplicationMenuState, window = explorerWindow) => {
+    const item = resolveApplicationMenuItemStates(state, window).find(
+      (candidate) => candidate.id === id,
+    );
+    if (!item) {
+      throw new Error(`No state for ${id}.`);
+    }
+    return item;
+  };
+
+  it("has a state for every item of the menu that sends a command", () => {
+    const stateIds = new Set(
+      resolveApplicationMenuItemStates(INITIAL_APPLICATION_MENU_STATE, explorerWindow).map(
+        (item) => item.id,
+      ),
+    );
+    const menuIds = flatten(createApplicationMenuTemplate({ send: vi.fn() })).flatMap((item) =>
+      item.id ? [item.id] : [],
+    );
+
+    expect(menuIds.length).toBeGreaterThan(40);
+    for (const id of menuIds) {
+      expect(stateIds.has(id), id).toBe(true);
+    }
+  });
+
+  it("dims the commands the window says can not run", () => {
+    const state: ApplicationMenuState = {
+      ...INITIAL_APPLICATION_MENU_STATE,
+      disabledCommands: ["renameSelection", "goBack", "toggleFavorite"],
+    };
+
+    expect(stateOf("renameSelection", state).enabled).toBe(false);
+    expect(stateOf("goBack", state).enabled).toBe(false);
+    expect(stateOf("toggleFavorite:add", state).enabled).toBe(false);
+    expect(stateOf("toggleFavorite:remove", state).enabled).toBe(false);
+    expect(stateOf("goForward", state).enabled).toBe(true);
+    expect(stateOf("newTab", state).enabled).toBe(true);
+  });
+
+  it("checks what the window shows", () => {
+    const state: ApplicationMenuState = {
+      ...INITIAL_APPLICATION_MENU_STATE,
+      viewMode: "details",
+      sortBy: "size",
+      foldersFirst: false,
+      hiddenFilesShown: true,
+      infoPanelOpen: true,
+      infoRowOpen: false,
+    };
+    const checked = Object.fromEntries(
+      resolveApplicationMenuItemStates(state, explorerWindow)
+        .filter((item) => item.checked !== undefined)
+        .map((item) => [item.id, item.checked]),
+    );
+
+    expect(checked).toEqual({
+      viewAsList: false,
+      viewAsDetails: true,
+      sortByName: false,
+      sortByModified: false,
+      sortBySize: true,
+      sortByKind: false,
+      toggleFoldersFirst: false,
+      toggleHiddenFiles: true,
+      toggleInfoPanel: true,
+      toggleInfoRow: false,
+    });
+  });
+
+  it("offers to add the folder to the favorites, or to remove it once it is one", () => {
+    const added = { ...INITIAL_APPLICATION_MENU_STATE, favoriteIsSet: true };
+
+    expect(stateOf("toggleFavorite:add", INITIAL_APPLICATION_MENU_STATE).visible).toBe(true);
+    expect(stateOf("toggleFavorite:remove", INITIAL_APPLICATION_MENU_STATE).visible).toBe(false);
+    expect(stateOf("toggleFavorite:add", added).visible).toBe(false);
+    expect(stateOf("toggleFavorite:remove", added).visible).toBe(true);
+  });
+
+  it("names the full screen item for what choosing it does", () => {
+    const fullScreen = { explorerFocused: true, fullScreen: true };
+
+    expect(stateOf("fullScreen:enter", INITIAL_APPLICATION_MENU_STATE).visible).toBe(true);
+    expect(stateOf("fullScreen:exit", INITIAL_APPLICATION_MENU_STATE).visible).toBe(false);
+    expect(stateOf("fullScreen:enter", INITIAL_APPLICATION_MENU_STATE, fullScreen).visible).toBe(
+      false,
+    );
+    expect(stateOf("fullScreen:exit", INITIAL_APPLICATION_MENU_STATE, fullScreen).visible).toBe(
+      true,
+    );
+  });
+
+  it("keeps only the edit commands and ⌘W while another window has the keyboard", () => {
+    const settingsFocused = { explorerFocused: false, fullScreen: false };
+    const enabled = RENDERER_COMMAND_TYPES.filter(
+      (type) =>
+        type !== "toggleFavorite" &&
+        stateOf(type, INITIAL_APPLICATION_MENU_STATE, settingsFocused).enabled,
+    );
+
+    expect(enabled).toEqual(["editCut", "editCopy", "editPaste", "editSelectAll", "closeTab"]);
+    expect(
+      stateOf("toggleFavorite:add", INITIAL_APPLICATION_MENU_STATE, settingsFocused).enabled,
+    ).toBe(false);
+  });
+});
+
+describe("applyApplicationMenuItemStates", () => {
+  function fakeMenu(items: Record<string, { type?: string; [key: string]: unknown }>) {
+    return {
+      getMenuItemById: (id: string) => (items[id] ?? null) as never,
+    };
+  }
+
+  it("sets what changed and skips items the menu does not have", () => {
+    const rename = { enabled: true, visible: true, checked: false };
+    const hidden = { enabled: true, visible: true, checked: false, type: "checkbox" };
+
+    applyApplicationMenuItemStates(
+      fakeMenu({ renameSelection: rename, toggleHiddenFiles: hidden }),
+      [
+        { id: "renameSelection", enabled: false },
+        { id: "toggleHiddenFiles", enabled: true, checked: true },
+        { id: "copySelection", enabled: false },
+      ],
+    );
+
+    expect(rename).toEqual({ enabled: false, visible: true, checked: false });
+    expect(hidden).toMatchObject({ enabled: true, checked: true });
+  });
+
+  it("only ever switches a radio item on", () => {
+    const list = { enabled: true, visible: true, checked: true, type: "radio" };
+    const details = { enabled: true, visible: true, checked: false, type: "radio" };
+
+    applyApplicationMenuItemStates(fakeMenu({ viewAsList: list, viewAsDetails: details }), [
+      { id: "viewAsList", checked: false },
+      { id: "viewAsDetails", checked: true },
+    ]);
+
+    // Electron switches the rest of the group off when one is switched on.
+    expect(list.checked).toBe(true);
+    expect(details.checked).toBe(true);
   });
 });

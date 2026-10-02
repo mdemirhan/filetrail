@@ -3,6 +3,7 @@ import { app, clipboard, ipcMain, shell } from "electron";
 import type { AppLogEntry } from "@filetrail/contracts";
 import { ExplorerWorkerClient, createWriteService, getPathSuggestions } from "@filetrail/core";
 import type { AppPreferences } from "../shared/appPreferences";
+import { type ApplicationMenuState, toApplicationMenuState } from "../shared/applicationMenuState";
 import { type AppLogger, writeStructuredAppLogEntry } from "./appLog";
 import type { AppStateStore } from "./appStateStore";
 import { toPreferencePatch } from "./bootstrap/preferencesPatch";
@@ -43,7 +44,11 @@ export async function bootstrapMainProcess(
     preferences: AppPreferences,
     change: { patch: Partial<AppPreferences>; senderId: number | null },
   ) => void,
-  windows: { openSettingsWindow?: () => void } = {},
+  windows: {
+    openSettingsWindow?: () => void;
+    // The explorer window reporting what the application menu should show.
+    setApplicationMenuState?: (state: ApplicationMenuState, senderId: number | null) => void;
+  } = {},
 ): Promise<void> {
   // Main owns the worker client so the renderer only ever talks through the IPC contract.
   const workerClient = new ExplorerWorkerClient(resolveExplorerWorkerUrl(), {
@@ -108,6 +113,13 @@ export async function bootstrapMainProcess(
       "app:openSettingsWindow": () => {
         windows.openSettingsWindow?.();
         return { ok: windows.openSettingsWindow !== undefined };
+      },
+      "app:setMenuState": (payload, event) => {
+        windows.setApplicationMenuState?.(
+          toApplicationMenuState(payload.state),
+          event?.sender?.id ?? null,
+        );
+        return { ok: true };
       },
       "app:clearCaches": () => {
         clearResponseCaches();

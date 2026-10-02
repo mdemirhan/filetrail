@@ -126,7 +126,13 @@ describe("shortcutPolicy", () => {
           RENDERER_COMMAND_TREE_FOCUS_BUCKETS[command] === "contentOnly" &&
           canHandleRendererCommand(command, treeFolderContext),
       ),
-    ).toEqual(["openSelection", "openInTerminal", "pasteSelection", "copyPath"]);
+    ).toEqual([
+      "openSelection",
+      "openInTerminal",
+      "pasteSelection",
+      "copyPath",
+      "openSelectionInNewTab",
+    ]);
     expect(
       RAW_EXPLORER_SHORTCUT_IDS.filter(
         (shortcutId) =>
@@ -148,7 +154,13 @@ describe("shortcutPolicy", () => {
           RENDERER_COMMAND_TREE_FOCUS_BUCKETS[command] === "contentOnly" &&
           canHandleRendererCommand(command, favoriteContext),
       ),
-    ).toEqual(["openSelection", "openInTerminal", "pasteSelection", "copyPath"]);
+    ).toEqual([
+      "openSelection",
+      "openInTerminal",
+      "pasteSelection",
+      "copyPath",
+      "openSelectionInNewTab",
+    ]);
     expect(
       RAW_EXPLORER_SHORTCUT_IDS.filter(
         (shortcutId) =>

@@ -80,6 +80,10 @@ if [[ -f "${PLIST}" ]]; then
   /usr/libexec/PlistBuddy -c "Set :CFBundleName ${APP_NAME}" "${PLIST}" >/dev/null 2>&1 || true
   /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName ${APP_NAME}" "${PLIST}" >/dev/null 2>&1 || true
   /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.filetrail.desktop" "${PLIST}" >/dev/null 2>&1 || true
+  # The template carries Electron's own version; Finder and the About panel read these.
+  APP_VERSION="$(node -p "require('./package.json').version")"
+  /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${APP_VERSION}" "${PLIST}" >/dev/null 2>&1 || true
+  /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${APP_VERSION}" "${PLIST}" >/dev/null 2>&1 || true
 fi
 
 if [[ -f "${ICON_ICNS}" ]]; then

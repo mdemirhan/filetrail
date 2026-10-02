@@ -683,8 +683,8 @@ vi.mock("./components/GoToFolderDialog", () => ({
   },
 }));
 vi.mock("./components/HelpView", () => ({
-  HelpView: () => (
-    <div data-testid="help-view">
+  HelpView: ({ initialTopic }: { initialTopic?: string }) => (
+    <div data-testid="help-view" data-topic={initialTopic}>
       <label>
         Help notes
         <input aria-label="Help notes" defaultValue="docs" />
@@ -1012,6 +1012,67 @@ describe("App copy/paste integration", () => {
     });
 
     expect(harness.invocations.some((call) => call.channel === "system:copyText")).toBe(false);
+  });
+
+  it("tells the application menu which commands can run and what is shown", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await screen.findByRole("button", { name: "source.txt" });
+    const menuState = () => {
+      const state = harness.menuStates.at(-1);
+      if (!state) {
+        throw new Error("No menu state reported.");
+      }
+      return state;
+    };
+    // Nothing selected, nowhere to go back to.
+    await vi.waitFor(() => {
+      expect(menuState().disabledCommands).toEqual(
+        expect.arrayContaining(["renameSelection", "trashSelection", "goBack", "goForward"]),
+      );
+    });
+    expect(menuState().disabledCommands).not.toContain("newTab");
+    expect(menuState()).toMatchObject({ viewMode: "details", hiddenFilesShown: false });
+
+    await selectItem("/Users/demo/source.txt");
+    await vi.waitFor(() => {
+      expect(menuState().disabledCommands).not.toContain("renameSelection");
+    });
+    // A file is not a folder to open in a tab or keep as a favorite.
+    expect(menuState().disabledCommands).toEqual(
+      expect.arrayContaining(["openSelectionInNewTab", "toggleFavorite"]),
+    );
+
+    await act(async () => {
+      harness.emitCommand({ type: "viewAsList" });
+      harness.emitCommand({ type: "toggleHiddenFiles" });
+      harness.emitCommand({ type: "toggleInfoRow" });
+    });
+    await vi.waitFor(() => {
+      expect(menuState()).toMatchObject({
+        viewMode: "list",
+        hiddenFilesShown: true,
+        infoRowOpen: true,
+      });
+    });
+
+    // Help has no file commands; its own menu still works.
+    await act(async () => {
+      harness.emitCommand({ type: "openKeyboardShortcuts" });
+    });
+    expect(await screen.findByTestId("help-view")).toHaveAttribute("data-topic", "shortcuts");
+    await vi.waitFor(() => {
+      expect(menuState().disabledCommands).toEqual(
+        expect.arrayContaining(["renameSelection", "newTab", "viewAsDetails"]),
+      );
+    });
+    expect(menuState().disabledCommands).not.toContain("openHelp");
   });
 
   it("asks the main process to open the Settings window on Command-comma", async () => {
@@ -8393,6 +8454,7 @@ function createAppHarness(
 ): {
   client: FiletrailClient;
   invocations: Array<{ channel: IpcChannel; payload: unknown }>;
+  menuStates: Array<IpcRequestInput<"app:setMenuState">["state"]>;
   emitCommand: (command: RendererCommand) => void;
   emitProgress: (event: TestProgressEvent) => void;
   setDirectoryEntries: (
@@ -8439,6 +8501,8 @@ function createAppHarness(
     ...args.treeChildrenByPath,
   };
   const invocations: Array<{ channel: IpcChannel; payload: unknown }> = [];
+  // What the window reports to the application menu; kept apart from the calls tests count.
+  const menuStates: Array<IpcRequestInput<"app:setMenuState">["state"]> = [];
   let releaseTreeChildren: () => void = () => undefined;
   const heldTreeChildren = new Promise<void>((resolve) => {
     releaseTreeChildren = resolve;
@@ -8470,6 +8534,10 @@ function createAppHarness(
 
   const client: FiletrailClient = {
     async invoke<C extends IpcChannel>(channel: C, payload: IpcRequestInput<C>) {
+      if (channel === "app:setMenuState") {
+        menuStates.push((payload as IpcRequestInput<"app:setMenuState">).state);
+        return { ok: true } as IpcResponse<C>;
+      }
       const recordedPayload =
         channel === "copyPaste:start" && "analysisId" in (payload as Record<string, unknown>)
           ? {
@@ -8799,6 +8867,7 @@ function createAppHarness(
   return {
     client,
     invocations,
+    menuStates,
     emitCommand(command) {
       commandListener?.(command);
     },

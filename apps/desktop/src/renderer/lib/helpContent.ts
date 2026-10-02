@@ -104,6 +104,7 @@ export const SHORTCUT_ITEMS: readonly ShortcutItem[] = [
   { group: "views", shortcut: "Cmd++", description: "Zoom in" },
   { group: "views", shortcut: "Cmd+-", description: "Zoom out" },
   { group: "views", shortcut: "Cmd+0", description: "Actual size" },
+  { group: "views", shortcut: "Ctrl+Cmd+F", description: "Enter or leave full screen" },
   { group: "views", shortcut: "Cmd+,", description: "Settings" },
   { group: "views", shortcut: "?", description: "Help" },
   { group: "views", shortcut: "Esc", description: "Return from Help" },

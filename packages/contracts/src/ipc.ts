@@ -648,6 +648,25 @@ export const ipcContractSchemas = {
       ok: z.boolean(),
     }),
   },
+  // The explorer window tells the application menu which commands can run and which of
+  // its checkmarks are on. Command names are the app's own; unknown ones are ignored.
+  "app:setMenuState": {
+    request: z.object({
+      state: z.object({
+        disabledCommands: z.array(z.string().min(1)).max(200),
+        viewMode: explorerViewModeSchema,
+        sortBy: directorySortBySchema,
+        foldersFirst: z.boolean(),
+        hiddenFilesShown: z.boolean(),
+        infoPanelOpen: z.boolean(),
+        infoRowOpen: z.boolean(),
+        favoriteIsSet: z.boolean(),
+      }),
+    }),
+    response: z.object({
+      ok: z.boolean(),
+    }),
+  },
   "app:getPreferences": {
     request: emptyRequestSchema,
     response: z.object({

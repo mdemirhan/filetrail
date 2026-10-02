@@ -8,6 +8,12 @@ import { parentDirectoryPath } from "../lib/explorerNavigation";
 import { getNextSelectionIndex } from "../lib/explorerNavigation";
 import type { DirectoryEntry } from "../lib/explorerTypes";
 import { isKeyboardOwnedFormControl, resolveFocusedEditTarget } from "../lib/focusedEditTarget";
+import type { HelpTopicId } from "../lib/helpContent";
+import {
+  resolveFavoriteTargetPath,
+  resolveNewTabTargetPath,
+  resolveShowInFinderPaths,
+} from "../lib/rendererCommandAvailability";
 import {
   type RawExplorerShortcutId,
   type ShortcutContext,
@@ -40,6 +46,13 @@ function isModalCancelKey(event: KeyboardEvent): boolean {
   }
   return event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.key === ".";
 }
+
+const SORT_COMMAND_KEYS = {
+  sortByName: "name",
+  sortByModified: "modified",
+  sortBySize: "size",
+  sortByKind: "kind",
+} as const;
 
 type RawShortcutBinding = {
   id: RawExplorerShortcutId;
@@ -107,6 +120,12 @@ type ExplorerShortcutActions = {
   reopenClosedTab: () => void;
   closeTab: () => void;
   activateAdjacentTab: (direction: "next" | "previous") => void;
+  openFolderInNewTab: (path: string) => Promise<void>;
+  toggleFavoritePath: (path: string) => void;
+  showPathsInFinder: (paths: string[]) => Promise<void>;
+  handleSortChange: (sortBy: "name" | "modified" | "size" | "kind") => void;
+  toggleFoldersFirst: () => void;
+  openHelp: (topic: HelpTopicId) => void;
 };
 
 type UseExplorerShortcutsArgs = {
@@ -125,6 +144,7 @@ type UseExplorerShortcutsArgs = {
     activeContentEntries: DirectoryEntry[];
     isSearchMode: boolean;
     hasCachedSearch: boolean;
+    trashPath: string | null;
   };
   actions: ExplorerShortcutActions;
 };
@@ -155,6 +175,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
     listFilterActive: navigation.listFilterQuery.length > 0,
     returnKeyAction: preferences.returnKeyAction,
     viewMode: preferences.viewMode,
+    setViewMode: preferences.setViewMode,
     setZoomPercent: preferences.setZoomPercent,
     actionNotice: writeOperations.actionNotice,
     contextMenuState: writeOperations.contextMenuState,
@@ -1259,6 +1280,102 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         current.activateAdjacentTab("previous");
         return;
       }
+      if (commandType === "openSelectionInNewTab") {
+        const targetPath = resolveNewTabTargetPath(current);
+        if (targetPath) {
+          void current.openFolderInNewTab(targetPath);
+        }
+        return;
+      }
+      if (commandType === "quickLookSelection") {
+        const path = current.selectionLeadOrSelectedPath();
+        if (path) {
+          current.quickLookPath(path);
+        }
+        return;
+      }
+      if (commandType === "toggleFavorite") {
+        const targetPath = resolveFavoriteTargetPath(current);
+        if (targetPath) {
+          current.toggleFavoritePath(targetPath);
+        }
+        return;
+      }
+      if (commandType === "showInFinder") {
+        const paths = resolveShowInFinderPaths(current);
+        if (paths.length > 0) {
+          void current.showPathsInFinder(paths);
+        }
+        return;
+      }
+      if (commandType === "showLastSearchResults") {
+        if (current.hasCachedSearch) {
+          current.showCachedSearchResults({ focusPane: true });
+        }
+        return;
+      }
+      if (commandType === "viewAsList" || commandType === "viewAsDetails") {
+        current.setViewMode(commandType === "viewAsList" ? "list" : "details");
+        return;
+      }
+      if (
+        commandType === "sortByName" ||
+        commandType === "sortByModified" ||
+        commandType === "sortBySize" ||
+        commandType === "sortByKind"
+      ) {
+        if (!current.isSearchMode) {
+          current.handleSortChange(SORT_COMMAND_KEYS[commandType]);
+        }
+        return;
+      }
+      if (commandType === "toggleFoldersFirst") {
+        if (!current.isSearchMode) {
+          current.toggleFoldersFirst();
+        }
+        return;
+      }
+      if (commandType === "toggleHiddenFiles") {
+        current.toggleHiddenFiles();
+        return;
+      }
+      if (commandType === "goBack") {
+        current.goBack();
+        return;
+      }
+      if (commandType === "goForward") {
+        current.goForward();
+        return;
+      }
+      if (commandType === "goEnclosingFolder") {
+        // ⌘↑ in a text field moves the caret to its start; the field keeps the key.
+        if (resolveFocusedEditTarget(document.activeElement) === "editable-text") {
+          return;
+        }
+        if (current.focusedPane === "tree") {
+          void current.navigateTreeSelectionToParent();
+          return;
+        }
+        const parentPath = current.currentPath ? parentDirectoryPath(current.currentPath) : null;
+        if (parentPath) {
+          void current.navigateTo(parentPath, "push");
+        }
+        return;
+      }
+      if (commandType === "focusTreePane") {
+        focusTreePane();
+        current.setFocusedPane("tree");
+        return;
+      }
+      if (commandType === "focusContentPane") {
+        focusContentPaneRef();
+        current.setFocusedPane("content");
+        return;
+      }
+      if (commandType === "openHelp" || commandType === "openKeyboardShortcuts") {
+        current.openHelp(commandType === "openHelp" ? "navigation" : "shortcuts");
+        return;
+      }
       if (commandType !== "focusFileSearch") {
         return;
       }
@@ -1267,7 +1384,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         latestArgsRef.current.focusFileSearch(true);
       });
     },
-    [runGenericEditCommand],
+    [focusContentPaneRef, focusTreePane, runGenericEditCommand],
   );
 
   useEffect(() => {
@@ -1332,7 +1449,11 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       }
       if (event.key === "?") {
         event.preventDefault();
-        current.setMainView((value) => (value === "help" ? "explorer" : "help"));
+        if (current.mainView === "help") {
+          current.setMainView("explorer");
+        } else {
+          current.openHelp("navigation");
+        }
         return;
       }
       if (

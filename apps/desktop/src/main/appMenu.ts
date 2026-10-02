@@ -1,6 +1,7 @@
-import type { MenuItemConstructorOptions, WebContents } from "electron";
+import type { Menu, MenuItemConstructorOptions, WebContents } from "electron";
 
-import type { RendererCommandType } from "../shared/rendererCommands";
+import type { ApplicationMenuState } from "../shared/applicationMenuState";
+import { RENDERER_COMMAND_TYPES, type RendererCommandType } from "../shared/rendererCommands";
 
 type NativeEditTarget = Pick<WebContents, "cut" | "copy" | "paste" | "selectAll">;
 
@@ -11,13 +12,41 @@ const NATIVE_EDIT_COMMANDS: Partial<Record<RendererCommandType, keyof NativeEdit
   editSelectAll: "selectAll",
 };
 
+// Written out in the menu: the name Electron would use is the package's
+// ("@filetrail/desktop"), which also names the folder the settings are kept in.
+export const APP_MENU_NAME = "File Trail";
+
+// The commands that still do something while a window other than the explorer (Settings)
+// has the keyboard: the edit commands act on its text field, and ⌘W closes it.
+const COMMANDS_FOR_ANY_WINDOW = new Set<RendererCommandType>([
+  "editCut",
+  "editCopy",
+  "editPaste",
+  "editSelectAll",
+  "closeTab",
+]);
+
+// Add to Favorites and Remove from Favorites are two items; one shows at a time.
+const FAVORITE_ADD_ITEM_ID = "toggleFavorite:add";
+const FAVORITE_REMOVE_ITEM_ID = "toggleFavorite:remove";
+const ENTER_FULL_SCREEN_ITEM_ID = "fullScreen:enter";
+const EXIT_FULL_SCREEN_ITEM_ID = "fullScreen:exit";
+
 // The native menu emits high-level renderer commands; the renderer owns the actual UI
 // transitions so shortcuts, toolbar buttons, and menu items stay behaviorally aligned.
+// An item that sends a command carries the command as its id, which is how
+// `resolveApplicationMenuItemStates` finds it.
 export function createApplicationMenuTemplate(
   webContents: Pick<WebContents, "send">,
   options: {
     // Settings is its own window; main opens it directly when provided.
     onOpenSettings?: () => void;
+    // Developer Tools belong to development builds.
+    includeDeveloperTools?: boolean;
+    // Called after an item has sent its command. macOS flips a checkmark or moves a radio
+    // mark on its own when the item is chosen; the host uses this to put back what the
+    // window last reported, so the marks only ever show what is really on.
+    onCommandSent?: () => void;
   } = {},
 ): MenuItemConstructorOptions[] {
   const sendCommand = (type: RendererCommandType, focusedWindow?: unknown) => {
@@ -41,74 +70,75 @@ export function createApplicationMenuTemplate(
     webContents.send("filetrail:command", { type });
   };
 
+  const command = (
+    type: RendererCommandType,
+    label: string,
+    accelerator?: string,
+    extra: Pick<MenuItemConstructorOptions, "id" | "type" | "visible"> = {},
+  ): MenuItemConstructorOptions => ({
+    id: type,
+    label,
+    ...(accelerator ? { accelerator } : {}),
+    ...extra,
+    click: (_item, window) => {
+      sendCommand(type, window);
+      options.onCommandSent?.();
+    },
+  });
+  const separator: MenuItemConstructorOptions = { type: "separator" };
+
   return [
     {
-      label: "File Trail",
-      submenu: [{ role: "about" }, { type: "separator" }, { role: "quit" }],
+      label: APP_MENU_NAME,
+      submenu: [
+        { role: "about", label: `About ${APP_MENU_NAME}` },
+        separator,
+        {
+          label: "Settings…",
+          accelerator: "CommandOrControl+,",
+          click: () =>
+            options.onOpenSettings ? options.onOpenSettings() : sendCommand("openSettings"),
+        },
+        separator,
+        { role: "services" },
+        separator,
+        { role: "hide", label: `Hide ${APP_MENU_NAME}` },
+        { role: "hideOthers" },
+        { role: "unhide" },
+        separator,
+        { role: "quit", label: `Quit ${APP_MENU_NAME}` },
+      ],
     },
     {
       label: "File",
       submenu: [
-        {
-          label: "New Tab",
-          accelerator: "CommandOrControl+T",
-          click: (_item, window) => sendCommand("newTab", window),
-        },
-        {
-          label: "Reopen Closed Tab",
-          accelerator: "Shift+CommandOrControl+T",
-          click: (_item, window) => sendCommand("reopenClosedTab", window),
-        },
-        { type: "separator" },
-        {
-          label: "Open",
-          accelerator: "CommandOrControl+O",
-          click: (_item, window) => sendCommand("openSelection", window),
-        },
-        {
-          label: "Edit",
-          accelerator: "CommandOrControl+E",
-          click: (_item, window) => sendCommand("editSelection", window),
-        },
-        {
-          label: "Move To…",
-          accelerator: "CommandOrControl+Shift+M",
-          click: (_item, window) => sendCommand("moveSelection", window),
-        },
-        {
-          // Return and F2 are handled in the renderer: a menu accelerator for Return would
-          // swallow it in text fields and dialogs.
-          label: "Rename",
-          click: (_item, window) => sendCommand("renameSelection", window),
-        },
-        {
-          label: "Duplicate",
-          accelerator: "CommandOrControl+D",
-          click: (_item, window) => sendCommand("duplicateSelection", window),
-        },
-        {
-          label: "New Folder",
-          accelerator: "CommandOrControl+Shift+N",
-          click: (_item, window) => sendCommand("newFolder", window),
-        },
-        {
-          label: "Move to Trash",
-          accelerator: "CommandOrControl+Backspace",
-          click: (_item, window) => sendCommand("trashSelection", window),
-        },
-        { type: "separator" },
-        {
-          label: "Open in Terminal",
-          accelerator: "Alt+CommandOrControl+T",
-          click: (_item, window) => sendCommand("openInTerminal", window),
-        },
-        { type: "separator" },
-        {
-          // Closes the window when it has a single view.
-          label: "Close Tab",
-          accelerator: "CommandOrControl+W",
-          click: (_item, window) => sendCommand("closeTab", window),
-        },
+        command("newTab", "New Tab", "CommandOrControl+T"),
+        command("newFolder", "New Folder", "CommandOrControl+Shift+N"),
+        separator,
+        command("openSelection", "Open", "CommandOrControl+O"),
+        command("openSelectionInNewTab", "Open in New Tab"),
+        command("editSelection", "Edit in Text Editor", "CommandOrControl+E"),
+        // Space is handled in the renderer, as Return is for Rename: a menu accelerator
+        // for either would swallow the key in text fields and dialogs.
+        command("quickLookSelection", "Quick Look"),
+        separator,
+        command("renameSelection", "Rename"),
+        command("duplicateSelection", "Duplicate", "CommandOrControl+D"),
+        command("moveSelection", "Move To…", "CommandOrControl+Shift+M"),
+        command("toggleFavorite", "Add to Favorites", undefined, { id: FAVORITE_ADD_ITEM_ID }),
+        command("toggleFavorite", "Remove from Favorites", undefined, {
+          id: FAVORITE_REMOVE_ITEM_ID,
+          visible: false,
+        }),
+        separator,
+        command("openInTerminal", "Open in Terminal", "Alt+CommandOrControl+T"),
+        command("showInFinder", "Show in Finder"),
+        separator,
+        command("trashSelection", "Move to Trash", "CommandOrControl+Backspace"),
+        separator,
+        command("reopenClosedTab", "Reopen Closed Tab", "Shift+CommandOrControl+T"),
+        // Closes the window when it has a single view.
+        command("closeTab", "Close Tab", "CommandOrControl+W"),
         { role: "close", label: "Close Window", accelerator: "Shift+CommandOrControl+W" },
       ],
     },
@@ -117,125 +147,182 @@ export function createApplicationMenuTemplate(
       submenu: [
         { role: "undo" },
         { role: "redo" },
-        { type: "separator" },
-        {
-          label: "Cut",
-          accelerator: "CommandOrControl+X",
-          click: (_item, window) => sendCommand("editCut", window),
-        },
-        {
-          label: "Copy",
-          accelerator: "CommandOrControl+C",
-          click: (_item, window) => sendCommand("editCopy", window),
-        },
-        {
-          label: "Paste",
-          accelerator: "CommandOrControl+V",
-          click: (_item, window) => sendCommand("editPaste", window),
-        },
-        {
-          label: "Select All",
-          accelerator: "CommandOrControl+A",
-          click: (_item, window) => sendCommand("editSelectAll", window),
-        },
-        { type: "separator" },
-        {
-          label: "Find Files…",
-          accelerator: "CommandOrControl+F",
-          click: (_item, window) => sendCommand("focusFileSearch", window),
-        },
-        {
-          // ⇧⌘G opens it as well; the window handles that key itself.
-          label: "Go To…",
-          accelerator: "CommandOrControl+K",
-          click: (_item, window) => sendCommand("openLocationSheet", window),
-        },
-        {
-          label: "Settings…",
-          accelerator: "CommandOrControl+,",
-          click: () =>
-            options.onOpenSettings ? options.onOpenSettings() : sendCommand("openSettings"),
-        },
-        {
-          label: "Copy Path",
-          accelerator: "Alt+CommandOrControl+C",
-          click: (_item, window) => sendCommand("copyPath", window),
-        },
+        separator,
+        command("editCut", "Cut", "CommandOrControl+X"),
+        command("editCopy", "Copy", "CommandOrControl+C"),
+        command("editPaste", "Paste", "CommandOrControl+V"),
+        command("copyPath", "Copy Path", "Alt+CommandOrControl+C"),
+        command("editSelectAll", "Select All", "CommandOrControl+A"),
+        separator,
+        command("focusFileSearch", "Find Files…", "CommandOrControl+F"),
+        command("showLastSearchResults", "Show Last Results", "Shift+CommandOrControl+F"),
       ],
     },
     {
       label: "View",
       submenu: [
+        command("viewAsList", "as List", undefined, { type: "radio" }),
+        command("viewAsDetails", "as Details", undefined, { type: "radio" }),
+        separator,
         {
-          label: "Toggle Info Panel",
-          accelerator: "CommandOrControl+I",
-          click: (_item, window) => sendCommand("toggleInfoPanel", window),
+          label: "Sort By",
+          submenu: [
+            command("sortByName", "Name", undefined, { type: "radio" }),
+            command("sortByModified", "Date Modified", undefined, { type: "radio" }),
+            command("sortBySize", "Size", undefined, { type: "radio" }),
+            command("sortByKind", "Kind", undefined, { type: "radio" }),
+          ],
         },
+        command("toggleFoldersFirst", "Folders First", undefined, { type: "checkbox" }),
+        command("toggleHiddenFiles", "Show Hidden Files", "Shift+CommandOrControl+.", {
+          type: "checkbox",
+        }),
+        separator,
+        command("toggleInfoPanel", "Show Info Panel", "CommandOrControl+I", { type: "checkbox" }),
+        command("toggleInfoRow", "Show Info Row", "CommandOrControl+Shift+I", {
+          type: "checkbox",
+        }),
+        separator,
+        command("refreshOrApplySearchSort", "Refresh", "CommandOrControl+R"),
+        separator,
+        command("zoomIn", "Zoom In", "CommandOrControl+Plus"),
+        command("zoomOut", "Zoom Out", "CommandOrControl+-"),
+        command("resetZoom", "Actual Size", "CommandOrControl+0"),
+        separator,
+        // Electron keeps macOS from adding its own full screen item, so the menu has one.
+        // The label can not change once the menu is built: two items, one shown at a time.
+        { id: ENTER_FULL_SCREEN_ITEM_ID, role: "togglefullscreen", label: "Enter Full Screen" },
         {
-          label: "Toggle Info Row",
-          accelerator: "CommandOrControl+Shift+I",
-          click: (_item, window) => sendCommand("toggleInfoRow", window),
+          id: EXIT_FULL_SCREEN_ITEM_ID,
+          role: "togglefullscreen",
+          label: "Exit Full Screen",
+          visible: false,
         },
-        { type: "separator" },
-        {
-          label: "Refresh",
-          accelerator: "CommandOrControl+R",
-          click: (_item, window) => sendCommand("refreshOrApplySearchSort", window),
-        },
-        { type: "separator" },
-        {
-          label: "Zoom In",
-          accelerator: "CommandOrControl+Plus",
-          click: (_item, window) => sendCommand("zoomIn", window),
-        },
-        {
-          label: "Zoom Out",
-          accelerator: "CommandOrControl+-",
-          click: (_item, window) => sendCommand("zoomOut", window),
-        },
-        {
-          label: "Actual Size",
-          accelerator: "CommandOrControl+0",
-          click: (_item, window) => sendCommand("resetZoom", window),
-        },
-        { type: "separator" },
-        { role: "toggleDevTools" },
+        ...(options.includeDeveloperTools
+          ? ([separator, { role: "toggleDevTools" }] satisfies MenuItemConstructorOptions[])
+          : []),
       ],
     },
     {
       label: "Go",
       submenu: [
-        {
-          label: "Home",
-          accelerator: "CommandOrControl+Shift+H",
-          click: (_item, window) => sendCommand("goHomeRootTree", window),
-        },
-        {
-          label: "Root Tree at Selected Folder",
-          accelerator: "CommandOrControl+Shift+R",
-          click: (_item, window) => sendCommand("rootTreeAtSelection", window),
-        },
+        command("goBack", "Back", "CommandOrControl+["),
+        command("goForward", "Forward", "CommandOrControl+]"),
+        command("goEnclosingFolder", "Enclosing Folder", "CommandOrControl+Up"),
+        separator,
+        command("goHomeRootTree", "Home", "CommandOrControl+Shift+H"),
+        // ⇧⌘G opens it as well; the window handles that key itself.
+        command("openLocationSheet", "Go To…", "CommandOrControl+K"),
+        separator,
+        command("rootTreeAtSelection", "Root Tree at Selected Folder", "CommandOrControl+Shift+R"),
       ],
     },
     {
-      label: "Window",
+      // The role makes this the menu macOS adds the open windows (and its own window
+      // arrangement items) to.
+      role: "windowMenu",
       submenu: [
         { role: "minimize" },
         { role: "zoom" },
-        { type: "separator" },
-        {
-          label: "Show Previous Tab",
-          accelerator: "Ctrl+Shift+Tab",
-          click: (_item, window) => sendCommand("selectPreviousTab", window),
-        },
-        {
-          label: "Show Next Tab",
-          accelerator: "Ctrl+Tab",
-          click: (_item, window) => sendCommand("selectNextTab", window),
-        },
-        { type: "separator" },
+        separator,
+        command("selectPreviousTab", "Show Previous Tab", "Ctrl+Shift+Tab"),
+        command("selectNextTab", "Show Next Tab", "Ctrl+Tab"),
+        separator,
+        command("focusTreePane", "Focus Folder Tree", "CommandOrControl+1"),
+        command("focusContentPane", "Focus File List", "CommandOrControl+2"),
+        separator,
         { role: "front" },
       ],
     },
+    {
+      // The role gives the menu macOS's search field, which finds any menu item by name.
+      role: "help",
+      submenu: [
+        command("openHelp", `${APP_MENU_NAME} Help`),
+        command("openKeyboardShortcuts", "Keyboard Shortcuts"),
+      ],
+    },
   ];
+}
+
+export type ApplicationMenuItemState = {
+  id: string;
+  enabled?: boolean;
+  checked?: boolean;
+  visible?: boolean;
+};
+
+// What each menu item should show for the state the explorer window last reported.
+export function resolveApplicationMenuItemStates(
+  state: ApplicationMenuState,
+  window: {
+    // Whether the explorer window is the one the menu acts on (false while Settings is).
+    explorerFocused: boolean;
+    fullScreen: boolean;
+  },
+): ApplicationMenuItemState[] {
+  const disabled = new Set<RendererCommandType>(state.disabledCommands);
+  const isEnabled = (type: RendererCommandType) =>
+    window.explorerFocused ? !disabled.has(type) : COMMANDS_FOR_ANY_WINDOW.has(type);
+  const checked: Partial<Record<RendererCommandType, boolean>> = {
+    viewAsList: state.viewMode === "list",
+    viewAsDetails: state.viewMode === "details",
+    sortByName: state.sortBy === "name",
+    sortByModified: state.sortBy === "modified",
+    sortBySize: state.sortBy === "size",
+    sortByKind: state.sortBy === "kind",
+    toggleFoldersFirst: state.foldersFirst,
+    toggleHiddenFiles: state.hiddenFilesShown,
+    toggleInfoPanel: state.infoPanelOpen,
+    toggleInfoRow: state.infoRowOpen,
+  };
+
+  const items: ApplicationMenuItemState[] = RENDERER_COMMAND_TYPES.filter(
+    (type) => type !== "toggleFavorite",
+  ).map((type) => ({
+    id: type,
+    enabled: isEnabled(type),
+    ...(checked[type] === undefined ? {} : { checked: checked[type] }),
+  }));
+  items.push(
+    {
+      id: FAVORITE_ADD_ITEM_ID,
+      enabled: isEnabled("toggleFavorite"),
+      visible: !state.favoriteIsSet,
+    },
+    {
+      id: FAVORITE_REMOVE_ITEM_ID,
+      enabled: isEnabled("toggleFavorite"),
+      visible: state.favoriteIsSet,
+    },
+    { id: ENTER_FULL_SCREEN_ITEM_ID, visible: !window.fullScreen },
+    { id: EXIT_FULL_SCREEN_ITEM_ID, visible: window.fullScreen },
+  );
+  return items;
+}
+
+export function applyApplicationMenuItemStates(
+  menu: Pick<Menu, "getMenuItemById">,
+  itemStates: readonly ApplicationMenuItemState[],
+): void {
+  for (const itemState of itemStates) {
+    const item = menu.getMenuItemById(itemState.id);
+    if (!item) {
+      continue;
+    }
+    if (itemState.enabled !== undefined && item.enabled !== itemState.enabled) {
+      item.enabled = itemState.enabled;
+    }
+    if (itemState.visible !== undefined && item.visible !== itemState.visible) {
+      item.visible = itemState.visible;
+    }
+    // A radio item is only ever switched on: that switches the others in its group off.
+    if (
+      itemState.checked !== undefined &&
+      item.checked !== itemState.checked &&
+      (item.type !== "radio" || itemState.checked)
+    ) {
+      item.checked = itemState.checked;
+    }
+  }
 }

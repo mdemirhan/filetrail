@@ -4,8 +4,17 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { BrowserWindow, Menu, app, nativeImage, nativeTheme, shell } from "electron";
 
 import { type AppPreferences, isThemeInGroup } from "../shared/appPreferences";
+import {
+  type ApplicationMenuState,
+  INITIAL_APPLICATION_MENU_STATE,
+} from "../shared/applicationMenuState";
 import { createAppLogger, isDebugLoggingEnabled, resolveAppLogFilePath } from "./appLog";
-import { createApplicationMenuTemplate } from "./appMenu";
+import {
+  APP_MENU_NAME,
+  applyApplicationMenuItemStates,
+  createApplicationMenuTemplate,
+  resolveApplicationMenuItemStates,
+} from "./appMenu";
 import { type AppStateStore, createAppStateStore, resolveAppStatePath } from "./appStateStore";
 import { bootstrapMainProcess, getMainProcessStatus, shutdownMainProcess } from "./bootstrap";
 import { resolveBundledFdBinaryPath } from "./fdBinary";
@@ -17,6 +26,8 @@ let appStateStoreRef: AppStateStore | null = null;
 // Records the explorer window's size and position in the store; set while it is open.
 let recordMainWindowState: (() => void) | null = null;
 let appLoggerRef: ReturnType<typeof createAppLogger> | null = null;
+// What the explorer window last said the application menu should show.
+let applicationMenuState: ApplicationMenuState = INITIAL_APPLICATION_MENU_STATE;
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 const WINDOW_STATE_SAVE_DELAY_MS = 160;
 let shutdownInProgress = false;
@@ -27,6 +38,18 @@ if (!hasSingleInstanceLock) {
 }
 
 if (hasSingleInstanceLock) {
+  // Electron installs a menu of its own (Reload, Force Reload, Speech…) unless one has been
+  // set by the time the app is ready; ours is built with the window.
+  Menu.setApplicationMenu(null);
+  // The standard About panel reads the bundle, which names Electron in a development run.
+  app.setAboutPanelOptions({
+    applicationName: APP_MENU_NAME,
+    applicationVersion: app.getVersion(),
+    version: app.getVersion(),
+  });
+  // While Settings has the keyboard the explorer's commands do not apply.
+  app.on("browser-window-focus", () => syncApplicationMenuItems());
+
   app
     .whenReady()
     .then(async () => {
@@ -109,7 +132,16 @@ if (hasSingleInstanceLock) {
             applyNativeAppearance(preferences.theme);
           }
         },
-        { openSettingsWindow },
+        {
+          openSettingsWindow,
+          setApplicationMenuState: (state, senderId) => {
+            if (senderId !== mainWindowRef?.webContents.id) {
+              return;
+            }
+            applicationMenuState = state;
+            syncApplicationMenuItems();
+          },
+        },
       );
       mainWindowRef = createWindow();
 
@@ -193,6 +225,10 @@ function createWindow(): BrowserWindow {
   });
   let saveTimeout: ReturnType<typeof setTimeout> | null = null;
   keepWindowZoom(mainWindow, appStateStore);
+  // Before the page loads, so the menu bar never shows anything but the app's own menu.
+  applyApplicationMenu(mainWindow);
+  mainWindow.on("enter-full-screen", () => syncApplicationMenuItems(mainWindow));
+  mainWindow.on("leave-full-screen", () => syncApplicationMenuItems(mainWindow));
 
   const persistWindowState = () => {
     if (mainWindow.isDestroyed()) {
@@ -252,7 +288,6 @@ function createWindow(): BrowserWindow {
     if (storedWindowState.maximized) {
       mainWindow.maximize();
     }
-    applyApplicationMenu(mainWindow);
     mainWindow.show();
   });
 
@@ -400,12 +435,34 @@ function keepWindowZoom(window: BrowserWindow, appStateStore: AppStateStore): vo
 }
 
 function applyApplicationMenu(mainWindow: BrowserWindow): void {
+  // A new window has not reported yet.
+  applicationMenuState = INITIAL_APPLICATION_MENU_STATE;
   Menu.setApplicationMenu(
     Menu.buildFromTemplate(
       createApplicationMenuTemplate(mainWindow.webContents, {
         onOpenSettings: openSettingsWindow,
+        includeDeveloperTools: !app.isPackaged || process.env.FILETRAIL_OPEN_DEVTOOLS === "1",
+        onCommandSent: () => syncApplicationMenuItems(mainWindow),
       }),
     ),
+  );
+  syncApplicationMenuItems(mainWindow);
+}
+
+// Dims, checks and shows the menu's items for the state the explorer window last reported.
+function syncApplicationMenuItems(mainWindow: BrowserWindow | null = mainWindowRef): void {
+  const menu = Menu.getApplicationMenu();
+  if (!menu || !mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+  const focusedWindow = BrowserWindow.getFocusedWindow();
+  applyApplicationMenuItemStates(
+    menu,
+    resolveApplicationMenuItemStates(applicationMenuState, {
+      // With no window focused (the app is in the background) the explorer's state stays.
+      explorerFocused: focusedWindow === null || focusedWindow === mainWindow,
+      fullScreen: mainWindow.isFullScreen(),
+    }),
   );
 }
 

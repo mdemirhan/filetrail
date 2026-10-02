@@ -34,6 +34,7 @@ import { useFolderSizeCache } from "./hooks/useFolderSizeCache";
 import { usePreferencesSync } from "./hooks/usePreferencesSync";
 import { useSearchSession } from "./hooks/useSearchSession";
 import { useWriteOperations } from "./hooks/useWriteOperations";
+import { buildApplicationMenuState } from "./lib/applicationMenuState";
 import {
   type ContentSelectionState,
   setSingleContentSelection as createSingleContentSelection,
@@ -70,6 +71,7 @@ import {
 import { FileIcon } from "./lib/fileIcons";
 import { useFiletrailClient } from "./lib/filetrailClient";
 import { formatDateTime, formatPermissionMode, formatSize } from "./lib/formatting";
+import type { HelpTopicId } from "./lib/helpContent";
 import { getBackHistoryEntries, getForwardHistoryEntries } from "./lib/historyMenu";
 import { resolveInfoItem } from "./lib/infoPreview";
 import { EXPLORER_LAYOUT } from "./lib/layoutTokens";
@@ -77,7 +79,10 @@ import { filterEntriesByName, formatItemCount } from "./lib/listFilter";
 import { createRendererLogger } from "./lib/logging";
 import { expandHomeShortcut } from "./lib/pathUtils";
 import { buildPlaces } from "./lib/places";
-import { canRunToolbarRendererCommand } from "./lib/rendererCommandAvailability";
+import {
+  canRunToolbarRendererCommand,
+  resolveFavoriteTargetPath,
+} from "./lib/rendererCommandAvailability";
 import { resolveExplorerToolbarLayout, resolveSinglePanelLayout } from "./lib/responsiveLayout";
 import { formatSearchStatus } from "./lib/searchResults";
 import type { canHandleRendererCommand } from "./lib/shortcutPolicy";
@@ -100,6 +105,12 @@ export function App() {
   // The folders that have been opened, loaded each time the Go To or Move To box opens.
   const [visitedFolders, setVisitedFolders] = useState<VisitedFolder[]>([]);
   const [volumeAvailableBytes, setVolumeAvailableBytes] = useState<number | null>(null);
+  // The Help topic asked for last; `id` changes with each request so an open Help page
+  // moves to the topic.
+  const [helpRequest, setHelpRequest] = useState<{ topic: HelpTopicId; id: number }>({
+    topic: "navigation",
+    id: 0,
+  });
   // Modified date and size for search results, fetched for the rows on screen.
   const [searchMetadataByPath, setSearchMetadataByPath] = useState<
     Record<string, DirectoryEntryMetadata>
@@ -835,6 +846,7 @@ export function App() {
     onToggleTreeNode: toggleTreeNode,
     onActivateTab: activateTab,
   });
+  const trashPath = homePath ? getTrashPath(homePath) : null;
   const shortcutContext = useMemo(
     () => ({
       actionNoticeOpen: actionNotice !== null,
@@ -867,6 +879,11 @@ export function App() {
         isSearchMode,
         openItemLimit,
         writeOperationLocked: isWriteOperationLocked,
+        canGoBack: historyIndex > 0,
+        canGoForward: historyIndex >= 0 && historyIndex < historyPaths.length - 1,
+        hasCachedSearch,
+        tabCount,
+        trashPath,
       }),
     [
       shortcutContext,
@@ -880,8 +897,65 @@ export function App() {
       isSearchMode,
       openItemLimit,
       isWriteOperationLocked,
+      historyIndex,
+      historyPaths.length,
+      hasCachedSearch,
+      tabCount,
+      trashPath,
     ],
   );
+  const openHelp = useCallback(
+    (topic: HelpTopicId) => {
+      setHelpRequest((current) => ({ topic, id: current.id + 1 }));
+      setMainView("help");
+    },
+    [setMainView],
+  );
+
+  // The application menu lives in the main process; it is told which commands can run and
+  // which checkmarks are on whenever that changes.
+  const favoriteTargetPath = resolveFavoriteTargetPath({
+    focusedPane,
+    currentPath,
+    selectedPathsInViewOrder,
+    activeContentEntries,
+    selectedTreeTargetPath,
+    isSearchMode,
+    trashPath,
+  });
+  const applicationMenuState = useMemo(
+    () =>
+      buildApplicationMenuState({
+        canRun: canRunRendererCommand,
+        viewMode,
+        sortBy,
+        foldersFirst,
+        hiddenFilesShown: includeHidden,
+        infoPanelOpen,
+        infoRowOpen,
+        favoriteIsSet: favoriteTargetPath !== null && isFavoritePath(favorites, favoriteTargetPath),
+      }),
+    [
+      canRunRendererCommand,
+      viewMode,
+      sortBy,
+      foldersFirst,
+      includeHidden,
+      infoPanelOpen,
+      infoRowOpen,
+      favoriteTargetPath,
+      favorites,
+    ],
+  );
+  const sentApplicationMenuStateRef = useRef("");
+  useEffect(() => {
+    const serialized = JSON.stringify(applicationMenuState);
+    if (serialized === sentApplicationMenuStateRef.current) {
+      return;
+    }
+    sentApplicationMenuStateRef.current = serialized;
+    void client.invoke("app:setMenuState", { state: applicationMenuState }).catch(() => undefined);
+  }, [applicationMenuState, client]);
 
   const { runRendererCommand } = useExplorerShortcuts({
     services,
@@ -899,6 +973,7 @@ export function App() {
       activeContentEntries,
       isSearchMode,
       hasCachedSearch,
+      trashPath,
     },
     actions: {
       dismissActionNotice,
@@ -948,6 +1023,12 @@ export function App() {
       reopenClosedTab,
       closeTab,
       activateAdjacentTab,
+      openFolderInNewTab,
+      toggleFavoritePath,
+      showPathsInFinder,
+      handleSortChange,
+      toggleFoldersFirst,
+      openHelp,
     },
   });
 
@@ -1589,7 +1670,7 @@ export function App() {
                 }
                 setThemeMenuOpen(false);
               },
-              onOpenHelp: () => setMainView("help"),
+              onOpenHelp: () => openHelp("navigation"),
               onOpenSettings: openSettingsView,
               includeHidden,
               onToggleHidden: toggleHiddenFiles,
@@ -2048,7 +2129,13 @@ export function App() {
               <span className="single-panel-title">Help</span>
             </header>
             <section ref={singlePanelRef} className="pane single-panel-pane">
-              {mainView === "help" ? <HelpView layoutMode={singlePanelLayout} /> : null}
+              {mainView === "help" ? (
+                <HelpView
+                  key={helpRequest.id}
+                  layoutMode={singlePanelLayout}
+                  initialTopic={helpRequest.topic}
+                />
+              ) : null}
             </section>
           </section>
         )}

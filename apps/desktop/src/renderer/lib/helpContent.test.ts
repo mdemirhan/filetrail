@@ -1,6 +1,6 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import type { MenuItemConstructorOptions } from "electron";
 
+import { createApplicationMenuTemplate } from "../../main/appMenu";
 import { HELP_SHORTCUT_GROUPS, HELP_TOPICS, SHORTCUT_ITEMS, searchHelp } from "./helpContent";
 
 describe("helpContent", () => {
@@ -39,7 +39,6 @@ describe("helpContent", () => {
   });
 
   it("documents every keyboard shortcut in the application menu", () => {
-    const menuSource = readFileSync(resolve(import.meta.dirname, "../../main/appMenu.ts"), "utf8");
     // The same shortcut is written "CommandOrControl+Plus" in the menu and "Cmd++" in Help.
     const canonical = (shortcut: string) =>
       (shortcut.endsWith("++") ? `${shortcut.slice(0, -2)}+Plus` : shortcut)
@@ -48,10 +47,12 @@ describe("helpContent", () => {
         .split("+")
         .sort()
         .join("+");
-    const accelerators = Array.from(
-      menuSource.matchAll(/accelerator: "([^"]+)"/gu),
-      (match) => match[1] ?? "",
-    );
+    const collect = (items: MenuItemConstructorOptions[]): string[] =>
+      items.flatMap((item) => [
+        ...(typeof item.accelerator === "string" ? [item.accelerator] : []),
+        ...(Array.isArray(item.submenu) ? collect(item.submenu) : []),
+      ]);
+    const accelerators = collect(createApplicationMenuTemplate({ send: () => undefined }));
     const documented = new Set(SHORTCUT_ITEMS.map((item) => canonical(item.shortcut)));
     expect(accelerators.length).toBeGreaterThan(10);
     for (const accelerator of accelerators) {

@@ -27,10 +27,13 @@ const ZOOM_COMMANDS = new Set<RendererCommandType>(["zoomIn", "zoomOut", "resetZ
 // folder on screen, and never acts on a stale content selection the way copy or cut would.
 const TREE_SAFE_RENDERER_COMMANDS = new Set<RendererCommandType>([
   "openSelection",
+  "openSelectionInNewTab",
   "openInTerminal",
   "copyPath",
   "pasteSelection",
 ]);
+// Help opens from anywhere a menu can be used, including the Help page itself.
+const HELP_COMMANDS = new Set<RendererCommandType>(["openHelp", "openKeyboardShortcuts"]);
 const TREE_SAFE_RAW_SHORTCUTS = new Set<RawExplorerShortcutId>([
   "copyPath",
   "openInTerminal",
@@ -86,6 +89,26 @@ export const RENDERER_COMMAND_TREE_FOCUS_BUCKETS = {
   closeTab: "globalExplorer",
   selectNextTab: "globalExplorer",
   selectPreviousTab: "globalExplorer",
+  openSelectionInNewTab: "contentOnly",
+  quickLookSelection: "contentOnly",
+  toggleFavorite: "globalExplorer",
+  showInFinder: "globalExplorer",
+  showLastSearchResults: "globalExplorer",
+  viewAsList: "globalExplorer",
+  viewAsDetails: "globalExplorer",
+  sortByName: "globalExplorer",
+  sortByModified: "globalExplorer",
+  sortBySize: "globalExplorer",
+  sortByKind: "globalExplorer",
+  toggleFoldersFirst: "globalExplorer",
+  toggleHiddenFiles: "globalExplorer",
+  goBack: "globalExplorer",
+  goForward: "globalExplorer",
+  goEnclosingFolder: "globalExplorer",
+  focusTreePane: "globalExplorer",
+  focusContentPane: "globalExplorer",
+  openHelp: "globalExplorer",
+  openKeyboardShortcuts: "globalExplorer",
 } as const satisfies Record<RendererCommandType, TreeFocusShortcutBucket>;
 
 export const RAW_EXPLORER_SHORTCUT_IDS = [
@@ -206,7 +229,7 @@ export function canHandleRendererCommand(
   }
 
   // ⌘W closes the tab, or the window, from the Help page as well.
-  if (command === "closeTab") {
+  if (command === "closeTab" || HELP_COMMANDS.has(command)) {
     return true;
   }
 
