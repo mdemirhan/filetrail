@@ -49,6 +49,7 @@ import {
 } from "../../shared/appPreferences";
 import { type ShortcutOverrides, resolveShortcuts } from "../../shared/shortcuts";
 import {
+  DEFAULT_TOP_TOOLBAR_ITEMS,
   TOOLBAR_ITEM_IDS,
   addTopToolbarItem,
   getToolbarItemDefinition,
@@ -109,11 +110,6 @@ const settingsBaseThemes = {
       text: "#5a5a6a",
     },
     separator: "rgba(0,0,0,0.05)",
-    reset: {
-      text: "#8a8c9a",
-      bg: "transparent",
-      border: "rgba(0,0,0,0.1)",
-    },
     footer: "#a0a2ae",
   },
   dark: {
@@ -150,11 +146,6 @@ const settingsBaseThemes = {
       text: "#a0a4b4",
     },
     separator: "rgba(255,255,255,0.04)",
-    reset: {
-      text: "#7a7d8e",
-      bg: "transparent",
-      border: "rgba(255,255,255,0.07)",
-    },
     footer: "#6a6d78",
   },
   "tomorrow-night": {
@@ -191,11 +182,6 @@ const settingsBaseThemes = {
       text: "#9a9ba4",
     },
     separator: "rgba(255,255,255,0.035)",
-    reset: {
-      text: "#74757c",
-      bg: "transparent",
-      border: "rgba(255,255,255,0.06)",
-    },
     footer: "#62636a",
   },
   "catppuccin-mocha": {
@@ -232,11 +218,6 @@ const settingsBaseThemes = {
       text: "#9a9ac0",
     },
     separator: "rgba(255,255,255,0.03)",
-    reset: {
-      text: "#707090",
-      bg: "transparent",
-      border: "rgba(255,255,255,0.05)",
-    },
     footer: "#585878",
   },
 } as const satisfies Record<ThemeCssBase, unknown>;
@@ -347,13 +328,6 @@ function resolveSettingsTheme(theme: ThemeMode, accent: AccentMode) {
       ...base.checkbox,
       bg: accentTokens.solid,
     },
-    reset: {
-      ...base.reset,
-      text: VIEW_TEXT.muted,
-      textHover: accentTokens.pathCrumbHover,
-      bgHover: accentTokens.softBg,
-      borderHover: accentTokens.border,
-    },
     accent: accentTokens,
   };
 }
@@ -409,11 +383,6 @@ function resolveSettingsBaseTheme(theme: ThemeMode) {
       text: variant.text.tertiary,
     },
     separator: variant.separator,
-    reset: {
-      ...base.reset,
-      text: variant.text.muted,
-      border: variant.controls.inputBorder,
-    },
     footer: variant.text.muted,
   };
 }
@@ -1101,6 +1070,17 @@ const toolbarTileButtonStyle = {
   transition: "opacity 0.12s ease",
 } as const;
 
+// Room around a group's tiles: over them for the remove button and the add mark, which
+// stand a little above a tile, and under them for a name that takes two lines. A tile is
+// wider than the box its icon is in, to leave room for the name: the tiles are pulled out by
+// that difference, so the first box of a row starts where the text of every other group
+// starts.
+const TOOLBAR_TILE_BOX_INSET = 13;
+const toolbarTileAreaStyle = {
+  margin: `0 -${TOOLBAR_TILE_BOX_INSET}px`,
+  padding: "20px 0 10px",
+} as const;
+
 const toolbarTileIconStyle = {
   width: "40px",
   height: "38px",
@@ -1180,6 +1160,7 @@ function ToolbarEditor({
   onRemoveItem,
   onAddItem,
   onReset,
+  resetDisabled = false,
 }: {
   title: string;
   items: ToolbarItemId[];
@@ -1193,6 +1174,8 @@ function ToolbarEditor({
   onRemoveItem: (index: number) => void;
   onAddItem: (itemId: ToolbarItemId) => void;
   onReset?: () => void;
+  // True while the toolbar is the default one, which Reset would leave as it is.
+  resetDisabled?: boolean;
 }) {
   const rootRef = useRef<HTMLFieldSetElement | null>(null);
   const activeStripRef = useRef<HTMLDivElement | null>(null);
@@ -1296,353 +1279,309 @@ function ToolbarEditor({
         setDraggedIndex(null);
         setDragOverIndex(null);
       }}
-      style={{
-        display: "grid",
-        gap: "10px",
-        position: "relative",
-        border: 0,
-        margin: 0,
-        minWidth: 0,
-        padding: 0,
-      }}
+      style={{ border: 0, margin: 0, minWidth: 0, padding: 0 }}
     >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          gap: "10px",
-        }}
+      <SectionCard
+        title="In the Toolbar"
+        note="Drag to reorder"
+        theme={theme}
+        resetButton={
+          onReset ? (
+            <ActionButton
+              label="Reset"
+              ariaLabel={`Reset ${title}`}
+              theme={theme}
+              disabled={resetDisabled}
+              onClick={onReset}
+            />
+          ) : undefined
+        }
       >
-        <div>
-          <div
-            style={{
-              fontSize: "13px",
-              fontFamily: sans,
-              fontWeight: 600,
-              color: theme.section.title,
-              marginBottom: "2px",
-            }}
-          >
-            In the toolbar
-          </div>
-          <div
-            style={{
-              fontSize: "11px",
-              fontFamily: sans,
-              color: theme.label.secondary,
-            }}
-          >
-            {items.length} items · drag to reorder
-          </div>
-        </div>
-        {onReset ? <ActionButton label="Reset" theme={theme} onClick={onReset} /> : null}
-      </div>
-
-      <div
-        ref={activeStripRef}
-        style={{
-          padding: "12px 10px 8px",
-          background: theme.input.bg,
-          borderRadius: "10px",
-          border: `1px solid ${theme.input.border}`,
-        }}
-      >
-        <div style={{ display: "flex", gap: "8px 2px", flexWrap: "wrap", minHeight: "58px" }}>
-          {itemDefinitions.map(({ definition, index }) => {
-            const itemId = definition.id;
-            const required = requiredItems.has(itemId);
-            const shape = getToolbarTileShape(itemId);
-            const isHovered = hoveredActiveIndex === index && draggedIndex === null;
-            const isDragged = draggedIndex === index;
-            const insertSide = getInsertSide(index);
-            const swatchBorder = isHovered ? appearance.hover : theme.separator;
-            const swatchStyle = {
-              ...toolbarTileIconStyle,
-              position: "relative",
-              border: `1px solid ${swatchBorder}`,
-              background: isHovered ? appearance.hover : theme.page.bg,
-              color: appearance.icon,
-            } as const;
-            const wideSwatchStyle = {
-              ...swatchStyle,
-              width: "calc(100% - 8px)",
-              padding: "0 10px",
-              justifyContent: "flex-start",
-            } as const;
-            return (
-              <div
-                key={`${title}-${itemId}-${index}`}
-                data-toolbar-tile={itemId}
-                onMouseEnter={() => setHoveredActiveIndex(index)}
-                onMouseLeave={() =>
-                  setHoveredActiveIndex((current) => (current === index ? null : current))
-                }
-                style={{
-                  position: "relative",
-                  display: "flex",
-                  alignItems: "flex-start",
-                  flex: "0 0 auto",
-                }}
-              >
-                {insertSide === "left" ? (
-                  <div
-                    style={{
-                      width: "3px",
-                      height: "26px",
-                      background: theme.accent.solid,
-                      borderRadius: "999px",
-                      margin: "6px -1px 0",
-                      boxShadow: `0 0 10px ${theme.accent.softBg}`,
-                    }}
-                  />
-                ) : null}
+        <div ref={activeStripRef} style={toolbarTileAreaStyle}>
+          <div style={{ display: "flex", gap: "8px 2px", flexWrap: "wrap", minHeight: "58px" }}>
+            {itemDefinitions.map(({ definition, index }) => {
+              const itemId = definition.id;
+              const required = requiredItems.has(itemId);
+              const shape = getToolbarTileShape(itemId);
+              const isHovered = hoveredActiveIndex === index && draggedIndex === null;
+              const isDragged = draggedIndex === index;
+              const insertSide = getInsertSide(index);
+              const swatchBorder = isHovered ? appearance.hover : theme.separator;
+              const swatchStyle = {
+                ...toolbarTileIconStyle,
+                position: "relative",
+                border: `1px solid ${swatchBorder}`,
+                background: isHovered ? appearance.hover : theme.page.bg,
+                color: appearance.icon,
+              } as const;
+              const wideSwatchStyle = {
+                ...swatchStyle,
+                // As far in from the tile's edges as an icon's box is, so the boxes line up.
+                width: `calc(100% - ${2 * TOOLBAR_TILE_BOX_INSET}px)`,
+                padding: "0 10px",
+                justifyContent: "flex-start",
+              } as const;
+              return (
                 <div
+                  key={`${title}-${itemId}-${index}`}
+                  data-toolbar-tile={itemId}
+                  onMouseEnter={() => setHoveredActiveIndex(index)}
+                  onMouseLeave={() =>
+                    setHoveredActiveIndex((current) => (current === index ? null : current))
+                  }
                   style={{
                     position: "relative",
-                    flexShrink: 0,
-                    width: shape === "icon" ? TOOLBAR_TILE_WIDTH : TOOLBAR_WIDE_TILE_WIDTH,
+                    display: "flex",
+                    alignItems: "flex-start",
+                    flex: "0 0 auto",
                   }}
                 >
-                  <button
-                    type="button"
-                    draggable
-                    aria-label={definition.label}
-                    title={itemNotes[itemId]}
-                    onDragStart={(event) => handleDragStart(event, index)}
-                    onDragOver={(event) => {
-                      event.preventDefault();
-                      event.dataTransfer.dropEffect = "move";
-                      if (draggedIndex !== null && draggedIndex !== index) {
-                        setDragOverIndex(index);
-                      }
-                    }}
-                    onDragEnter={() => {
-                      dragCounterRef.current[index] = (dragCounterRef.current[index] ?? 0) + 1;
-                      if (draggedIndex !== null && draggedIndex !== index) {
-                        setDragOverIndex(index);
-                      }
-                    }}
-                    onDragLeave={() => {
-                      dragCounterRef.current[index] = Math.max(
-                        0,
-                        (dragCounterRef.current[index] ?? 1) - 1,
-                      );
-                      if (dragCounterRef.current[index] === 0 && dragOverIndex === index) {
-                        setDragOverIndex(null);
-                      }
-                    }}
-                    onDrop={(event) => handleDrop(event, index)}
-                    onDragEnd={() => {
-                      setDraggedIndex(null);
-                      setDragOverIndex(null);
-                      dragCounterRef.current = {};
-                      setHoveredActiveIndex(null);
-                    }}
-                    style={{
-                      ...toolbarTileButtonStyle,
-                      width: "100%",
-                      cursor: "grab",
-                      opacity: isDragged ? 0.22 : 1,
-                    }}
-                  >
-                    {shape === "title" ? (
-                      // A stand-in for the folder's name and the line under it.
-                      <span
-                        style={{
-                          ...wideSwatchStyle,
-                          borderStyle: "dashed",
-                          borderColor: isHovered ? theme.accent.border : theme.label.secondary,
-                          flexDirection: "column",
-                          alignItems: "flex-start",
-                          justifyContent: "center",
-                          gap: "1px",
-                          fontFamily: sans,
-                          lineHeight: 1.2,
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        <span
-                          aria-hidden="true"
-                          style={{
-                            fontSize: "11.5px",
-                            fontWeight: 700,
-                            color: theme.section.title,
-                          }}
-                        >
-                          Folder Name
-                        </span>
-                        <span
-                          aria-hidden="true"
-                          style={{ fontSize: "9.5px", color: theme.label.secondary }}
-                        >
-                          12 items
-                        </span>
-                        {required ? <ToolbarTileRequiredBadge theme={theme} /> : null}
-                      </span>
-                    ) : (
-                      <span
-                        style={
-                          shape === "search"
-                            ? { ...wideSwatchStyle, background: theme.input.bg }
-                            : swatchStyle
-                        }
-                      >
-                        <ToolbarIcon name={definition.icon} />
-                        {required ? <ToolbarTileRequiredBadge theme={theme} /> : null}
-                      </span>
-                    )}
-                    <ToolbarTileLabel label={definition.label} theme={theme} />
-                  </button>
-                  {isHovered && !required ? (
-                    <button
-                      type="button"
-                      title="Remove"
-                      aria-label={`Remove ${definition.label} from ${title}`}
-                      onClick={() => onRemoveItem(index)}
-                      style={{
-                        position: "absolute",
-                        top: "-6px",
-                        right: "8px",
-                        width: "18px",
-                        height: "18px",
-                        borderRadius: "999px",
-                        border: "none",
-                        background: "#dc2626",
-                        color: "#fff",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        cursor: "pointer",
-                        boxShadow: "0 2px 8px rgba(0,0,0,0.35)",
-                        fontSize: "10px",
-                        fontWeight: 800,
-                        padding: 0,
-                        zIndex: 2,
-                      }}
-                    >
-                      x
-                    </button>
-                  ) : null}
-                </div>
-                {insertSide === "right" ? (
-                  <div
-                    style={{
-                      width: "3px",
-                      height: "26px",
-                      background: theme.accent.solid,
-                      borderRadius: "999px",
-                      margin: "6px -1px 0",
-                      boxShadow: `0 0 10px ${theme.accent.softBg}`,
-                    }}
-                  />
-                ) : null}
-              </div>
-            );
-          })}
-          {itemDefinitions.length === 0 ? (
-            <div
-              style={{
-                padding: "8px 10px",
-                fontSize: "11px",
-                fontFamily: sans,
-                color: theme.label.secondary,
-                whiteSpace: "nowrap",
-              }}
-            >
-              No items configured.
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      <div
-        style={{
-          fontSize: "11px",
-          fontFamily: sans,
-          color: theme.label.secondary,
-          marginTop: "2px",
-        }}
-      >
-        Available · click to add
-      </div>
-
-      <div style={{ display: "grid", gap: "12px" }}>
-        {availableDefinitions.length === 0 ? (
-          <div
-            style={{
-              padding: "18px 14px",
-              textAlign: "center",
-              color: theme.label.secondary,
-              fontSize: "12px",
-              fontFamily: sans,
-              background: theme.input.bg,
-              borderRadius: "10px",
-              border: `1px solid ${theme.separator}`,
-            }}
-          >
-            All items are already added.
-          </div>
-        ) : (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: `repeat(auto-fill, ${TOOLBAR_TILE_WIDTH})`,
-              gap: "8px 2px",
-              justifyContent: "start",
-            }}
-          >
-            {availableDefinitions.map((definition) => {
-              const isHovered = hoveredAvailableId === definition.id;
-              return (
-                <button
-                  key={`${title}-add-${definition.id}`}
-                  type="button"
-                  aria-label={`Add ${definition.label} to ${title}`}
-                  onClick={() => onAddItem(definition.id)}
-                  onMouseEnter={() => setHoveredAvailableId(definition.id)}
-                  onMouseLeave={() => setHoveredAvailableId(null)}
-                  style={{ ...toolbarTileButtonStyle, position: "relative", cursor: "pointer" }}
-                >
-                  <span
-                    style={{
-                      ...toolbarTileIconStyle,
-                      border: `1px solid ${isHovered ? appearance.hover : theme.separator}`,
-                      background: isHovered ? appearance.hover : theme.input.bg,
-                      color: isHovered ? appearance.icon : theme.label.secondary,
-                    }}
-                  >
-                    <ToolbarIcon name={definition.icon} />
-                  </span>
-                  <ToolbarTileLabel label={definition.label} theme={theme} />
-                  {isHovered ? (
+                  {insertSide === "left" ? (
                     <div
                       style={{
-                        position: "absolute",
-                        top: "-4px",
-                        right: "10px",
-                        width: "14px",
-                        height: "14px",
-                        borderRadius: "999px",
+                        width: "3px",
+                        height: "26px",
                         background: theme.accent.solid,
-                        color: theme.page.bg,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        boxShadow: "0 2px 6px rgba(0,0,0,0.28)",
-                        fontSize: "10px",
-                        fontWeight: 700,
+                        borderRadius: "999px",
+                        margin: "6px -1px 0",
+                        boxShadow: `0 0 10px ${theme.accent.softBg}`,
+                      }}
+                    />
+                  ) : null}
+                  <div
+                    style={{
+                      position: "relative",
+                      flexShrink: 0,
+                      width: shape === "icon" ? TOOLBAR_TILE_WIDTH : TOOLBAR_WIDE_TILE_WIDTH,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      draggable
+                      aria-label={definition.label}
+                      title={itemNotes[itemId]}
+                      onDragStart={(event) => handleDragStart(event, index)}
+                      onDragOver={(event) => {
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = "move";
+                        if (draggedIndex !== null && draggedIndex !== index) {
+                          setDragOverIndex(index);
+                        }
+                      }}
+                      onDragEnter={() => {
+                        dragCounterRef.current[index] = (dragCounterRef.current[index] ?? 0) + 1;
+                        if (draggedIndex !== null && draggedIndex !== index) {
+                          setDragOverIndex(index);
+                        }
+                      }}
+                      onDragLeave={() => {
+                        dragCounterRef.current[index] = Math.max(
+                          0,
+                          (dragCounterRef.current[index] ?? 1) - 1,
+                        );
+                        if (dragCounterRef.current[index] === 0 && dragOverIndex === index) {
+                          setDragOverIndex(null);
+                        }
+                      }}
+                      onDrop={(event) => handleDrop(event, index)}
+                      onDragEnd={() => {
+                        setDraggedIndex(null);
+                        setDragOverIndex(null);
+                        dragCounterRef.current = {};
+                        setHoveredActiveIndex(null);
+                      }}
+                      style={{
+                        ...toolbarTileButtonStyle,
+                        width: "100%",
+                        cursor: "grab",
+                        opacity: isDragged ? 0.22 : 1,
                       }}
                     >
-                      +
-                    </div>
+                      {shape === "title" ? (
+                        // A stand-in for the folder's name and the line under it.
+                        <span
+                          style={{
+                            ...wideSwatchStyle,
+                            borderStyle: "dashed",
+                            borderColor: isHovered ? theme.accent.border : theme.label.secondary,
+                            flexDirection: "column",
+                            alignItems: "flex-start",
+                            justifyContent: "center",
+                            gap: "1px",
+                            fontFamily: sans,
+                            lineHeight: 1.2,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          <span
+                            aria-hidden="true"
+                            style={{
+                              fontSize: "11.5px",
+                              fontWeight: 700,
+                              color: theme.section.title,
+                            }}
+                          >
+                            Folder Name
+                          </span>
+                          <span
+                            aria-hidden="true"
+                            style={{ fontSize: "9.5px", color: theme.label.secondary }}
+                          >
+                            12 items
+                          </span>
+                          {required ? <ToolbarTileRequiredBadge theme={theme} /> : null}
+                        </span>
+                      ) : (
+                        <span
+                          style={
+                            shape === "search"
+                              ? { ...wideSwatchStyle, background: theme.input.bg }
+                              : swatchStyle
+                          }
+                        >
+                          <ToolbarIcon name={definition.icon} />
+                          {required ? <ToolbarTileRequiredBadge theme={theme} /> : null}
+                        </span>
+                      )}
+                      <ToolbarTileLabel label={definition.label} theme={theme} />
+                    </button>
+                    {isHovered && !required ? (
+                      <button
+                        type="button"
+                        title="Remove"
+                        aria-label={`Remove ${definition.label} from ${title}`}
+                        onClick={() => onRemoveItem(index)}
+                        style={{
+                          position: "absolute",
+                          top: "-6px",
+                          right: "8px",
+                          width: "18px",
+                          height: "18px",
+                          borderRadius: "999px",
+                          border: "none",
+                          background: "#dc2626",
+                          color: "#fff",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          cursor: "pointer",
+                          boxShadow: "0 2px 8px rgba(0,0,0,0.35)",
+                          fontSize: "10px",
+                          fontWeight: 800,
+                          padding: 0,
+                          zIndex: 2,
+                        }}
+                      >
+                        x
+                      </button>
+                    ) : null}
+                  </div>
+                  {insertSide === "right" ? (
+                    <div
+                      style={{
+                        width: "3px",
+                        height: "26px",
+                        background: theme.accent.solid,
+                        borderRadius: "999px",
+                        margin: "6px -1px 0",
+                        boxShadow: `0 0 10px ${theme.accent.softBg}`,
+                      }}
+                    />
                   ) : null}
-                </button>
+                </div>
               );
             })}
+            {itemDefinitions.length === 0 ? (
+              <div
+                style={{
+                  padding: "8px 10px",
+                  fontSize: "11px",
+                  fontFamily: sans,
+                  color: theme.label.secondary,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                No items configured.
+              </div>
+            ) : null}
           </div>
-        )}
-      </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Available Items" note="Click to add" theme={theme}>
+        <div style={toolbarTileAreaStyle}>
+          {availableDefinitions.length === 0 ? (
+            <div
+              style={{
+                padding: "8px 0",
+                color: theme.label.secondary,
+                fontSize: "12px",
+                fontFamily: sans,
+              }}
+            >
+              Every item is in the toolbar.
+            </div>
+          ) : (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: `repeat(auto-fill, ${TOOLBAR_TILE_WIDTH})`,
+                gap: "8px 2px",
+                justifyContent: "start",
+              }}
+            >
+              {availableDefinitions.map((definition) => {
+                const isHovered = hoveredAvailableId === definition.id;
+                return (
+                  <button
+                    key={`${title}-add-${definition.id}`}
+                    type="button"
+                    aria-label={`Add ${definition.label} to ${title}`}
+                    onClick={() => onAddItem(definition.id)}
+                    onMouseEnter={() => setHoveredAvailableId(definition.id)}
+                    onMouseLeave={() => setHoveredAvailableId(null)}
+                    style={{ ...toolbarTileButtonStyle, position: "relative", cursor: "pointer" }}
+                  >
+                    <span
+                      style={{
+                        ...toolbarTileIconStyle,
+                        border: `1px solid ${isHovered ? appearance.hover : theme.separator}`,
+                        background: isHovered ? appearance.hover : theme.input.bg,
+                        color: isHovered ? appearance.icon : theme.label.secondary,
+                      }}
+                    >
+                      <ToolbarIcon name={definition.icon} />
+                    </span>
+                    <ToolbarTileLabel label={definition.label} theme={theme} />
+                    {isHovered ? (
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: "-4px",
+                          right: "10px",
+                          width: "14px",
+                          height: "14px",
+                          borderRadius: "999px",
+                          background: theme.accent.solid,
+                          color: theme.page.bg,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          boxShadow: "0 2px 6px rgba(0,0,0,0.28)",
+                          fontSize: "10px",
+                          fontWeight: 700,
+                        }}
+                      >
+                        +
+                      </div>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </SectionCard>
     </fieldset>
   );
 }
@@ -2115,7 +2054,6 @@ export function SettingsView({
   const showSection = (tab: SettingsTab) => activeTab === undefined || activeTab === tab;
   const paintedTheme: ThemeMode = effectiveTheme ?? (theme === "auto" ? autoLightTheme : theme);
   const palette = resolveSettingsTheme(paintedTheme, accent);
-  const [resetHover, setResetHover] = useState(false);
   // Settings names a few keys in its own text; they follow the Shortcuts tab.
   const shortcutDisplay = useMemo(
     () => createShortcutDisplay(resolveShortcuts(shortcutOverrides), { returnKeyAction }),
@@ -2129,6 +2067,9 @@ export function SettingsView({
     () => sanitizeTopToolbarItems(topToolbarItems),
     [topToolbarItems],
   );
+  const isDefaultTopToolbar =
+    orderedTopToolbarItems.length === DEFAULT_TOP_TOOLBAR_ITEMS.length &&
+    orderedTopToolbarItems.every((itemId, index) => itemId === DEFAULT_TOP_TOOLBAR_ITEMS[index]);
   const sortedTopToolbarAvailableItems = sortToolbarAvailableItems(
     TOOLBAR_ITEM_IDS.filter(
       (itemId) =>
@@ -2251,27 +2192,12 @@ export function SettingsView({
             title="Appearance"
             theme={palette}
             resetButton={
-              <button
-                type="button"
+              <ActionButton
+                label="Reset"
+                ariaLabel="Reset Appearance"
+                theme={palette}
                 onClick={onResetAppearance}
-                onMouseEnter={() => setResetHover(true)}
-                onMouseLeave={() => setResetHover(false)}
-                style={{
-                  fontSize: "11px",
-                  fontFamily: sans,
-                  fontWeight: 500,
-                  color: resetHover ? palette.reset.textHover : palette.reset.text,
-                  background: resetHover ? palette.reset.bgHover : palette.reset.bg,
-                  border: `1px solid ${resetHover ? palette.reset.borderHover : palette.reset.border}`,
-                  borderRadius: "5px",
-                  padding: "3px 10px",
-                  cursor: "pointer",
-                  transition: "all 0.12s ease",
-                  outline: "none",
-                }}
-              >
-                Reset
-              </button>
+              />
             }
           >
             <SettingRow
@@ -3111,28 +3037,26 @@ export function SettingsView({
         ) : null}
 
         {showSection("toolbars") ? (
-          <SectionCard icon="⌘" title="Toolbar" theme={palette}>
-            <ToolbarEditor
-              title="Toolbar"
-              items={orderedTopToolbarItems}
-              availableItems={sortedTopToolbarAvailableItems}
-              requiredItems={REQUIRED_TOP_TOOLBAR_ITEMS}
-              itemNotes={{
-                title:
-                  "The name of the folder on screen. It stretches to fill the room the other items leave.",
-                clipboard:
-                  "Appears while files or folders are waiting to be pasted, and lists them.",
-                viewOptions:
-                  "A menu of how the list and the panels are shown, and the way back here.",
-                search: "The search field. It is wider while you type in it.",
-              }}
-              theme={palette}
-              onReorderItem={handleTopToolbarMove}
-              onRemoveItem={handleTopToolbarRemove}
-              onAddItem={handleTopToolbarAdd}
-              onReset={onResetTopToolbar}
-            />
-          </SectionCard>
+          <ToolbarEditor
+            title="Toolbar"
+            items={orderedTopToolbarItems}
+            availableItems={sortedTopToolbarAvailableItems}
+            requiredItems={REQUIRED_TOP_TOOLBAR_ITEMS}
+            itemNotes={{
+              title:
+                "The name of the folder on screen. It stretches to fill the room the other items leave.",
+              clipboard: "Appears while files or folders are waiting to be pasted, and lists them.",
+              viewOptions:
+                "A menu of how the list and the panels are shown, and the way back here.",
+              search: "The search field. It is wider while you type in it.",
+            }}
+            theme={palette}
+            onReorderItem={handleTopToolbarMove}
+            onRemoveItem={handleTopToolbarRemove}
+            onAddItem={handleTopToolbarAdd}
+            onReset={onResetTopToolbar}
+            resetDisabled={isDefaultTopToolbar}
+          />
         ) : null}
 
         {showSection("shortcuts") ? (

@@ -288,7 +288,7 @@ describe("SettingsView", () => {
     fireEvent.click(
       within(topToolbarEditor).getByRole("button", { name: "Remove Back from Toolbar" }),
     );
-    fireEvent.click(within(topToolbarEditor).getByRole("button", { name: "Reset" }));
+    fireEvent.click(within(topToolbarEditor).getByRole("button", { name: "Reset Toolbar" }));
 
     // A new item goes ahead of the fixed items that close the toolbar.
     expect(onTopToolbarItemsChange).toHaveBeenNthCalledWith(1, [
@@ -390,7 +390,7 @@ describe("SettingsView", () => {
     for (const label of ["Back", "Forward", "Refresh", "Go To", "Open in Terminal"]) {
       expect(within(topToolbarEditor).getByText(label)).toBeVisible();
     }
-    expect(within(topToolbarEditor).getByText("Available · click to add")).toBeInTheDocument();
+    expect(within(topToolbarEditor).getByText("Available Items")).toBeInTheDocument();
     // The buttons keep their own names for assistive technology.
     expect(within(topToolbarEditor).getByRole("button", { name: "Back" })).toBeInTheDocument();
     expect(
@@ -426,6 +426,25 @@ describe("SettingsView", () => {
     // It does not grow to fill its row, as it once did when it wrapped onto a row of its own.
     expect(first).toEqual(["0 0 auto", "134px"]);
     expect(widthOf(["back", "clipboard", "viewOptions", "search", "title"])).toEqual(first);
+  });
+
+  it("offers Reset only while the toolbar is not the default one", () => {
+    const untouched = renderSettingsView({ topToolbarItems: [...DEFAULT_TOP_TOOLBAR_ITEMS] });
+    expect(screen.getByRole("button", { name: "Reset Toolbar" })).toBeDisabled();
+    untouched.unmount();
+
+    renderSettingsView({
+      topToolbarItems: ["back", "title", "clipboard", "viewOptions", "search"],
+    });
+    expect(screen.getByRole("button", { name: "Reset Toolbar" })).toBeEnabled();
+  });
+
+  it("uses the one Settings button for every Reset, so each answers the pointer", () => {
+    renderSettingsView();
+
+    for (const name of ["Reset Appearance", "Reset Toolbar"]) {
+      expect(screen.getByRole("button", { name })).toHaveClass("settings-button");
+    }
   });
 
   it("has one toolbar to arrange, and nothing about rails", () => {

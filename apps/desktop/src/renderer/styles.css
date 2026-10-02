@@ -5601,6 +5601,29 @@ a.page-window-button:focus-visible,
   color: var(--text-tertiary);
 }
 
+/* Every button in Settings (see ActionButton). Its colours come from the Settings palette,
+   set on the button itself; these are the pointer's answers, which a style on the element
+   can not give: a tint under the pointer and a deeper one, with a small dip, while pressed.
+   The tint is taken from the button's own text colour, so it darkens a light button and
+   lightens a dark one. */
+.settings-button {
+  transition: box-shadow 0.1s ease, transform 0.1s ease;
+}
+
+.settings-button:hover:not(:disabled) {
+  box-shadow: inset 0 0 0 100px color-mix(in srgb, currentColor 7%, transparent);
+}
+
+.settings-button:active:not(:disabled) {
+  box-shadow: inset 0 0 0 100px color-mix(in srgb, currentColor 18%, transparent);
+  transform: scale(0.97);
+}
+
+.settings-button:focus-visible {
+  outline: 2px solid var(--ft-accent-solid);
+  outline-offset: 1px;
+}
+
 .shortcut-settings-intro,
 .shortcut-settings-empty {
   margin: 0 4px 14px;

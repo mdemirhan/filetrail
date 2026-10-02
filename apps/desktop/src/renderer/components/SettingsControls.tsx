@@ -11,6 +11,9 @@ export type SettingsControlTheme = {
 };
 
 // The building blocks every Settings tab shares: a titled group of rows and a small button.
+// Every button in Settings is this one, so they all look alike and all answer the pointer:
+// the colours come from the Settings palette here, the hover and pressed states from
+// `.settings-button` in styles.css.
 export function ActionButton({
   label,
   ariaLabel,
@@ -27,6 +30,7 @@ export function ActionButton({
   return (
     <button
       type="button"
+      className="settings-button"
       aria-label={ariaLabel ?? label}
       disabled={disabled}
       onClick={onClick}
@@ -51,12 +55,15 @@ export function ActionButton({
 
 export function SectionCard({
   title,
+  note,
   theme,
   resetButton,
   children,
 }: {
   icon?: string;
   title: string;
+  // A few words after the title on how the group is used.
+  note?: string | undefined;
   theme: SettingsControlTheme;
   resetButton?: ReactNode;
   children: ReactNode;
@@ -69,20 +76,30 @@ export function SectionCard({
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
+          gap: "12px",
+          // The same height with and without a button, so every group's title sits alike.
+          minHeight: "28px",
           padding: "0 4px 6px",
         }}
       >
-        <h3
-          style={{
-            margin: 0,
-            fontSize: "13px",
-            fontFamily: sans,
-            fontWeight: 600,
-            color: theme.section.title,
-          }}
-        >
-          {title}
-        </h3>
+        <div style={{ display: "flex", alignItems: "baseline", gap: "8px", minWidth: 0 }}>
+          <h3
+            style={{
+              margin: 0,
+              fontSize: "13px",
+              fontFamily: sans,
+              fontWeight: 600,
+              color: theme.section.title,
+            }}
+          >
+            {title}
+          </h3>
+          {note ? (
+            <span style={{ fontSize: "11px", fontFamily: sans, color: theme.label.secondary }}>
+              {note}
+            </span>
+          ) : null}
+        </div>
         {resetButton}
       </div>
       <div
