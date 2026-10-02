@@ -105,11 +105,10 @@ export function ToastViewport({
     >
       {toasts.map((toast) => {
         const isAssertive = toast.kind === "warning";
-        const hasMessage = typeof toast.message === "string" && toast.message.length > 0;
         return (
           <section
             key={toast.id}
-            className={`toast-card toast-card-${toast.kind}${hasMessage ? "" : " toast-card-compact"}`}
+            className={`toast-card toast-card-${toast.kind}`}
             role={isAssertive ? "alert" : "status"}
             aria-live={isAssertive ? "assertive" : "polite"}
             aria-atomic="true"

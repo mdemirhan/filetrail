@@ -1152,7 +1152,7 @@ input:focus-visible {
   flex-direction: column;
   align-items: flex-end;
   gap: 6px;
-  max-width: min(340px, calc(100vw - 24px));
+  max-width: min(420px, calc(100vw - 24px));
   pointer-events: none;
 }
 
@@ -1169,7 +1169,7 @@ input:focus-visible {
 
 .toast-card-body {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 9px;
   padding: 7px 14px 7px 10px;
 }
@@ -1180,7 +1180,6 @@ input:focus-visible {
   justify-content: center;
   width: 18px;
   height: 18px;
-  margin-top: 1px;
   flex: 0 0 auto;
 }
 
@@ -1198,7 +1197,16 @@ input:focus-visible {
   stroke-linejoin: round;
 }
 
+/* Always one line: the title, then the detail in grey. When they do not fit, the detail
+   is shortened and the title stays whole (a grid, because a flex row trims the title by a
+   fraction of a pixel, which is enough to put "…" on it). */
 .toast-card-copy {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-columns: minmax(0, max-content);
+  grid-auto-columns: minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: 8px;
   min-width: 0;
   flex: 1 1 auto;
 }
@@ -1440,6 +1448,7 @@ input:focus-visible {
 }
 
 .toast-card-title {
+  min-width: 0;
   color: var(--context-menu-text);
   font-size: 13px;
   font-weight: 500;
@@ -1450,21 +1459,13 @@ input:focus-visible {
 }
 
 .toast-card-message {
+  min-width: 0;
   color: var(--text-tertiary);
-  font-size: 11.5px;
+  font-size: 13px;
   line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* One line: the icon sits level with it. */
-.toast-card-compact .toast-card-body {
-  align-items: center;
-}
-
-.toast-card-compact .toast-card-icon-wrap {
-  margin-top: 0;
 }
 
 @keyframes copy-paste-progress-shimmer {
