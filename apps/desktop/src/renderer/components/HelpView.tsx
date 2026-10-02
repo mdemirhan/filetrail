@@ -6,24 +6,32 @@ import {
   type HelpRow,
   type HelpTopic,
   type HelpTopicId,
-  SHORTCUT_ITEMS,
-  type ShortcutItem,
+  type ShownShortcut,
+  fillShortcutMentions,
   getHelpTopic,
+  listShortcuts,
   searchHelp,
 } from "../lib/helpContent";
+import type { ShortcutDisplay } from "../lib/shortcutDisplay";
 import { shortcutParts } from "../lib/shortcutLabels";
+import { useShortcutDisplay } from "../state/shortcutDisplayContext";
 
 // Help is a list of topics beside one readable column, like the sidebar and Settings. Each
-// topic explains an area and ends with its shortcuts; "Keyboard shortcuts" lists them all.
+// topic explains an area and ends with its shortcuts; "Keyboard shortcuts" lists them all,
+// with the keys they have now, and leads to Settings → Shortcuts to change them.
 // Typing in "Search help" replaces the page with matches from every topic. Styling is in
 // styles.css (`.help-*`) on the app's theme tokens, so Help follows theme, accent and font.
 export function HelpView({
   layoutMode = "wide",
   initialTopic = "navigation",
+  onCustomizeShortcuts,
 }: {
   layoutMode?: "wide" | "narrow" | "compact";
   initialTopic?: HelpTopicId;
+  /** Opens Settings → Shortcuts. */
+  onCustomizeShortcuts?: () => void;
 }) {
+  const shortcuts = useShortcutDisplay();
   const [activeTopicId, setActiveTopicId] = useState<HelpTopicId>(initialTopic);
   const [query, setQuery] = useState("");
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -82,11 +90,11 @@ export function HelpView({
       <div ref={contentRef} className="help-content">
         <article className="help-page">
           {searching ? (
-            <SearchResultsPage query={query.trim()} />
+            <SearchResultsPage query={query.trim()} shortcuts={shortcuts} />
           ) : activeTopicId === "shortcuts" ? (
-            <ShortcutsPage />
+            <ShortcutsPage shortcuts={shortcuts} onCustomize={onCustomizeShortcuts} />
           ) : (
-            <TopicPage topic={getHelpTopic(activeTopicId)} />
+            <TopicPage topic={getHelpTopic(activeTopicId)} shortcuts={shortcuts} />
           )}
         </article>
       </div>
@@ -94,44 +102,58 @@ export function HelpView({
   );
 }
 
-function TopicPage({ topic }: { topic: HelpTopic }) {
-  const shortcuts = SHORTCUT_ITEMS.filter((item) => item.group === topic.id);
+function TopicPage({ topic, shortcuts }: { topic: HelpTopic; shortcuts: ShortcutDisplay }) {
+  const topicShortcuts = listShortcuts(shortcuts).filter((item) => item.group === topic.id);
   return (
     <>
       <h1>{topic.title}</h1>
-      <p className="help-intro">{renderInline(topic.intro)}</p>
+      <p className="help-intro">{renderInline(topic.intro, shortcuts)}</p>
       {topic.sections.map((section) => (
         <section key={section.title} className="help-section">
           <h2>{section.title}</h2>
           <div className="help-rows">
             {section.rows.map((row) => (
-              <RowItem key={row.label} row={row} />
+              <RowItem key={row.label} row={row} shortcuts={shortcuts} />
             ))}
           </div>
-          {section.note ? <p className="help-note">{renderInline(section.note)}</p> : null}
+          {section.note ? (
+            <p className="help-note">{renderInline(section.note, shortcuts)}</p>
+          ) : null}
         </section>
       ))}
-      {shortcuts.length > 0 ? (
+      {topicShortcuts.length > 0 ? (
         <section className="help-section">
           <h2>Shortcuts</h2>
-          <ShortcutList items={shortcuts} />
+          <ShortcutList items={topicShortcuts} />
         </section>
       ) : null}
     </>
   );
 }
 
-function ShortcutsPage() {
+function ShortcutsPage({
+  shortcuts,
+  onCustomize,
+}: {
+  shortcuts: ShortcutDisplay;
+  onCustomize: (() => void) | undefined;
+}) {
   const topic = getHelpTopic("shortcuts");
+  const shownShortcuts = listShortcuts(shortcuts);
   return (
     <>
       <h1>{topic.title}</h1>
       <p className="help-intro">{topic.intro}</p>
+      {onCustomize ? (
+        <button type="button" className="help-action" onClick={onCustomize}>
+          Customize…
+        </button>
+      ) : null}
       <div className="help-shortcut-columns">
         {HELP_SHORTCUT_GROUPS.map((group) => (
           <section key={group} className="help-section help-shortcut-group">
             <h2>{getHelpTopic(group).title}</h2>
-            <ShortcutList items={SHORTCUT_ITEMS.filter((item) => item.group === group)} />
+            <ShortcutList items={shownShortcuts.filter((item) => item.group === group)} />
           </section>
         ))}
       </div>
@@ -139,43 +161,43 @@ function ShortcutsPage() {
   );
 }
 
-function SearchResultsPage({ query }: { query: string }) {
-  const results = searchHelp(query);
+function SearchResultsPage({ query, shortcuts }: { query: string; shortcuts: ShortcutDisplay }) {
+  const results = searchHelp(query, shortcuts);
   return (
     <>
       <h1>Results for “{query}”</h1>
       {results.length === 0 ? (
         <p className="help-intro">Nothing in Help matches. Try a shorter or different word.</p>
       ) : null}
-      {results.map(({ topic, rows, shortcuts }) => (
+      {results.map(({ topic, rows, shortcuts: topicShortcuts }) => (
         <section key={topic.id} className="help-section">
           <h2>{topic.title}</h2>
           {rows.length > 0 ? (
             <div className="help-rows">
               {rows.map(({ section, row }) => (
-                <RowItem key={`${section}:${row.label}`} row={row} />
+                <RowItem key={`${section}:${row.label}`} row={row} shortcuts={shortcuts} />
               ))}
             </div>
           ) : null}
-          {shortcuts.length > 0 ? <ShortcutList items={shortcuts} /> : null}
+          {topicShortcuts.length > 0 ? <ShortcutList items={topicShortcuts} /> : null}
         </section>
       ))}
     </>
   );
 }
 
-function RowItem({ row }: { row: HelpRow }) {
+function RowItem({ row, shortcuts }: { row: HelpRow; shortcuts: ShortcutDisplay }) {
   return (
     <div className="help-row">
       <div className="help-row-label">
         {row.code ? <code className="help-code">{row.label}</code> : row.label}
       </div>
-      <div className="help-row-description">{renderInline(row.description)}</div>
+      <div className="help-row-description">{renderInline(row.description, shortcuts)}</div>
     </div>
   );
 }
 
-function ShortcutList({ items }: { items: readonly ShortcutItem[] }) {
+function ShortcutList({ items }: { items: readonly ShownShortcut[] }) {
   return (
     <div className="help-rows">
       {items.map((item) => (
@@ -205,18 +227,21 @@ function Keys({ keys }: { keys: string[] }) {
   );
 }
 
-// `text in backticks` is shown as code; everything else is plain text.
-function renderInline(text: string): ReactNode[] {
-  return text.split("`").map((part, index) =>
-    index % 2 === 1 ? (
-      // biome-ignore lint/suspicious/noArrayIndexKey: the parts of a fixed string never reorder.
-      <code key={index} className="help-code">
-        {part}
-      </code>
-    ) : (
-      part
-    ),
-  );
+// `text in backticks` is shown as code and `{newTab}` as that command's key; everything
+// else is plain text.
+function renderInline(text: string, shortcuts: ShortcutDisplay): ReactNode[] {
+  return fillShortcutMentions(text, shortcuts)
+    .split("`")
+    .map((part, index) =>
+      index % 2 === 1 ? (
+        // biome-ignore lint/suspicious/noArrayIndexKey: the parts of a fixed string never reorder.
+        <code key={index} className="help-code">
+          {part}
+        </code>
+      ) : (
+        part
+      ),
+    );
 }
 
 function TopicIcon({ id }: { id: HelpTopicId }) {

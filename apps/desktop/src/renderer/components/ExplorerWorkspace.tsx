@@ -18,7 +18,8 @@ import { type ToolbarItemId, getToolbarItemDefinition } from "../../shared/toolb
 import { useKeepInViewport } from "../hooks/useKeepInViewport";
 import { parentDirectoryPath } from "../lib/explorerNavigation";
 import { EXPLORER_LAYOUT } from "../lib/layoutTokens";
-import { getToolbarItemTooltip } from "../lib/tooltips";
+import { formatTooltip, getToolbarItemTooltip } from "../lib/tooltips";
+import { useShortcutDisplay } from "../state/shortcutDisplayContext";
 import { InfoPanel } from "./GetInfoPanel";
 import { HistoryButton } from "./HistoryButton";
 import { SearchOptionsMenu } from "./SearchOptionsMenu";
@@ -403,6 +404,8 @@ export function ExplorerWorkspace({
     };
   }, [viewOptionsPosition]);
 
+  const shortcutDisplay = useShortcutDisplay();
+  const goToShortcut = shortcutDisplay.label("openLocationSheet");
   const viewOptionsItems: ViewOptionsMenuItem[] = [
     {
       kind: "toggle",
@@ -440,7 +443,7 @@ export function ExplorerWorkspace({
             kind: "action" as const,
             id: "goToFolder",
             label: "Go To…",
-            shortcut: "⌘K",
+            ...(goToShortcut ? { shortcut: goToShortcut } : {}),
             onSelect: treePaneProps.onOpenLocation,
           },
         ]
@@ -527,12 +530,16 @@ export function ExplorerWorkspace({
     );
   }
   const getToolbarTooltip = (itemId: ToolbarItemId) =>
-    getToolbarItemTooltip(itemId, {
-      foldersFirst: treePaneProps.foldersFirst,
-      hiddenFilesShown: treePaneProps.includeHidden,
-      infoPanelOpen,
-      infoRowOpen: treePaneProps.infoRowOpen,
-    });
+    getToolbarItemTooltip(
+      itemId,
+      {
+        foldersFirst: treePaneProps.foldersFirst,
+        hiddenFilesShown: treePaneProps.includeHidden,
+        infoPanelOpen,
+        infoRowOpen: treePaneProps.infoRowOpen,
+      },
+      shortcutDisplay,
+    );
 
   function renderTopToolbarItem(
     itemId: ToolbarItemId,
@@ -614,7 +621,7 @@ export function ExplorerWorkspace({
               type="button"
               className={viewMode === "icons" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
               onClick={() => onViewModeChange("icons")}
-              title="View as Icons"
+              title={formatTooltip("View as Icons", shortcutDisplay.written("viewAsIcons"))}
               aria-label="Icon view"
             >
               <ToolbarIcon name="icons" />
@@ -623,7 +630,7 @@ export function ExplorerWorkspace({
               type="button"
               className={viewMode === "list" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
               onClick={() => onViewModeChange("list")}
-              title="View as List"
+              title={formatTooltip("View as List", shortcutDisplay.written("viewAsList"))}
               aria-label="List view"
             >
               <ToolbarIcon name="list" />
@@ -634,7 +641,7 @@ export function ExplorerWorkspace({
                 viewMode === "details" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"
               }
               onClick={() => onViewModeChange("details")}
-              title="View as Details"
+              title={formatTooltip("View as Details", shortcutDisplay.written("viewAsDetails"))}
               aria-label="Details view"
             >
               <ToolbarIcon name="details" />

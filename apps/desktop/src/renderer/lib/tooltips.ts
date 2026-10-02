@@ -1,4 +1,5 @@
 import { type ToolbarItemId, getToolbarItemDefinition } from "../../shared/toolbarItems";
+import { DEFAULT_SHORTCUT_DISPLAY, type ShortcutDisplay } from "./shortcutDisplay";
 import { formatShortcut } from "./shortcutLabels";
 
 // How tooltips are worded, everywhere in the app:
@@ -26,9 +27,13 @@ export type ToolbarTooltipState = {
 export function getToolbarItemTooltip(
   itemId: ToolbarItemId,
   state: ToolbarTooltipState = {},
+  shortcuts: ShortcutDisplay = DEFAULT_SHORTCUT_DISPLAY,
 ): string {
   const definition = getToolbarItemDefinition(itemId);
-  return formatTooltip(resolveToolbarItemLabel(itemId, state), definition.shortcutLabel);
+  return formatTooltip(
+    resolveToolbarItemLabel(itemId, state),
+    definition.shortcutCommand ? shortcuts.written(definition.shortcutCommand) : undefined,
+  );
 }
 
 function resolveToolbarItemLabel(itemId: ToolbarItemId, state: ToolbarTooltipState): string {

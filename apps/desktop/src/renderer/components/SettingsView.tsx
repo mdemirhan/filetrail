@@ -3,10 +3,13 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+
+import type { SettingsTab as IpcSettingsTab } from "@filetrail/contracts";
 
 import type {
   AccentMode,
@@ -44,6 +47,7 @@ import {
   isThemeInGroup,
   normalizeAccentColor,
 } from "../../shared/appPreferences";
+import { type ShortcutOverrides, resolveShortcuts } from "../../shared/shortcuts";
 import {
   DEFAULT_LEFT_TOOLBAR_ITEMS,
   getToolbarItemDefinition,
@@ -53,14 +57,17 @@ import {
 import { generateAccentTokens } from "../lib/accent";
 import { getFavoriteLabel, getTrashPath } from "../lib/favorites";
 import { FavoriteItemIcon } from "../lib/fileIcons";
+import { createShortcutDisplay } from "../lib/shortcutDisplay";
 import { type ThemeCssBase, getThemeVariant, resolveThemeCssBase } from "../lib/themeVariants";
 import { VIEW_TEXT } from "../lib/viewColors";
 import { uiMonoFontStack as mono, uiSansFontStack as sans } from "../lib/viewFonts";
+import { ActionButton, SectionCard } from "./SettingsControls";
+import { ShortcutSettings } from "./ShortcutSettings";
 import { ToolbarIcon } from "./ToolbarIcon";
 
 // Settings follows the Font preference; paths and color values are monospaced.
 
-export type SettingsTab = "general" | "appearance" | "explorer" | "search" | "files" | "toolbars";
+export type SettingsTab = IpcSettingsTab;
 
 export type SearchDefaults = {
   searchPatternMode: SearchPatternModePreference;
@@ -320,6 +327,17 @@ const LEFT_UTILITY_AVAILABLE_ITEM_ORDER: ToolbarItemId[] = [
   "openInTerminal",
   "copyPath",
 ];
+
+// The keys a sentence names, or nothing when none of them is set: " (⌘+, ⌘−, ⌘0)".
+function describeKeys(
+  labels: ReadonlyArray<string | null>,
+  before: string,
+  after: string,
+  separator = ", ",
+): string {
+  const keys = labels.filter((label): label is string => label !== null);
+  return keys.length > 0 ? `${before}${keys.join(separator)}${after}` : "";
+}
 
 function sortToolbarAvailableItems(items: ToolbarItemId[], order: readonly ToolbarItemId[]) {
   const orderMap = new Map(order.map((itemId, index) => [itemId, index]));
@@ -1098,44 +1116,6 @@ function FavoriteIconPicker({
           )
         : null}
     </div>
-  );
-}
-
-function ActionButton({
-  label,
-  ariaLabel,
-  theme,
-  onClick,
-  disabled = false,
-}: {
-  label: string;
-  ariaLabel?: string;
-  theme: ResolvedSettingsTheme;
-  onClick: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={ariaLabel ?? label}
-      disabled={disabled}
-      onClick={onClick}
-      style={{
-        height: "28px",
-        padding: "0 10px",
-        borderRadius: "6px",
-        border: `1px solid ${theme.input.border}`,
-        background: theme.input.bg,
-        color: disabled ? theme.label.secondary : theme.label.primary,
-        fontSize: "11px",
-        fontFamily: sans,
-        fontWeight: 500,
-        cursor: disabled ? "default" : "pointer",
-        opacity: disabled ? 0.6 : 1,
-      }}
-    >
-      {label}
-    </button>
   );
 }
 
@@ -1954,58 +1934,6 @@ function SettingRow({
   );
 }
 
-function SectionCard({
-  title,
-  theme,
-  resetButton,
-  children,
-}: {
-  icon?: string;
-  title: string;
-  theme: ResolvedSettingsTheme;
-  resetButton?: ReactNode;
-  children: ReactNode;
-}) {
-  // A System Settings style group: a sentence-case title above a rounded box of rows.
-  return (
-    <section style={{ marginBottom: "18px" }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "0 4px 6px",
-        }}
-      >
-        <h3
-          style={{
-            margin: 0,
-            fontSize: "13px",
-            fontFamily: sans,
-            fontWeight: 600,
-            color: theme.section.title,
-          }}
-        >
-          {title}
-        </h3>
-        {resetButton}
-      </div>
-      <div
-        style={{
-          background: theme.card.bg,
-          border: `0.5px solid ${theme.card.border}`,
-          borderRadius: "10px",
-          boxShadow: theme.card.shadow,
-          overflow: "hidden",
-          padding: "2px 14px 4px",
-        }}
-      >
-        {children}
-      </div>
-    </section>
-  );
-}
-
 export function SettingsView({
   activeTab,
   searchDefaults,
@@ -2042,6 +1970,8 @@ export function SettingsView({
   fileActivationAction,
   returnKeyAction = "rename",
   onReturnKeyActionChange = () => undefined,
+  shortcutOverrides = DEFAULT_APP_PREFERENCES.shortcutOverrides,
+  onShortcutOverridesChange = () => undefined,
   showSidebarRail = false,
   onShowSidebarRailChange = () => undefined,
   showSidebarBottomRail = true,
@@ -2127,6 +2057,9 @@ export function SettingsView({
   fileActivationAction: FileActivationAction;
   returnKeyAction?: ReturnKeyAction;
   onReturnKeyActionChange?: (value: ReturnKeyAction) => void;
+  // The keyboard shortcuts that differ from their defaults (the Shortcuts tab).
+  shortcutOverrides?: ShortcutOverrides;
+  onShortcutOverridesChange?: (value: ShortcutOverrides) => void;
   showSidebarRail?: boolean;
   onShowSidebarRailChange?: (value: boolean) => void;
   showSidebarBottomRail?: boolean;
@@ -2178,6 +2111,11 @@ export function SettingsView({
   const paintedTheme: ThemeMode = effectiveTheme ?? (theme === "auto" ? autoLightTheme : theme);
   const palette = resolveSettingsTheme(paintedTheme, accent);
   const [resetHover, setResetHover] = useState(false);
+  // Settings names a few keys in its own text; they follow the Shortcuts tab.
+  const shortcutDisplay = useMemo(
+    () => createShortcutDisplay(resolveShortcuts(shortcutOverrides), { returnKeyAction }),
+    [shortcutOverrides, returnKeyAction],
+  );
   const isDefaultTextEditorSelection =
     defaultTextEditor.appPath === DEFAULT_TEXT_EDITOR.appPath &&
     defaultTextEditor.appName === DEFAULT_TEXT_EDITOR.appName;
@@ -2486,7 +2424,15 @@ export function SettingsView({
 
             <SettingRow
               title="Zoom level"
-              desc={`Makes everything larger or smaller, text included (⌘+, ⌘−, ⌘0). ${ZOOM_PERCENT_MIN}% to ${ZOOM_PERCENT_MAX}%.`}
+              desc={`Makes everything larger or smaller, text included${describeKeys(
+                [
+                  shortcutDisplay.label("zoomIn"),
+                  shortcutDisplay.label("zoomOut"),
+                  shortcutDisplay.label("resetZoom"),
+                ],
+                " (",
+                ")",
+              )}. ${ZOOM_PERCENT_MIN}% to ${ZOOM_PERCENT_MAX}%.`}
               theme={palette}
               right={
                 <ZoomLevelInput
@@ -2825,7 +2771,12 @@ export function SettingsView({
             />
             <SettingRow
               title="Return key"
-              desc="Rename like Finder, or open the selection. ⌘O and ⌘↓ always open."
+              desc={`Rename like Finder, or open the selection.${describeKeys(
+                [shortcutDisplay.label("openSelection"), shortcutDisplay.label("openSelectedItem")],
+                " ",
+                " always open.",
+                " and ",
+              )}`}
               theme={palette}
               right={
                 <SelectControl
@@ -3269,6 +3220,15 @@ export function SettingsView({
               ) : null}
             </div>
           </SectionCard>
+        ) : null}
+
+        {showSection("shortcuts") ? (
+          <ShortcutSettings
+            overrides={shortcutOverrides}
+            returnKeyAction={returnKeyAction}
+            theme={palette}
+            onChange={onShortcutOverridesChange}
+          />
         ) : null}
 
         <div className="settings-footer-note" style={{ textAlign: "center", padding: "8px 0 4px" }}>

@@ -20,6 +20,7 @@ import {
 } from "../lib/contextMenu";
 import { placeSubmenu } from "../lib/menuPlacement";
 import { type ShortcutContext, getContextMenuShortcutLabel } from "../lib/shortcutPolicy";
+import { useShortcutDisplay } from "../state/shortcutDisplayContext";
 
 export type { ContextMenuActionId, ContextMenuSubmenuAction, ContextMenuSubmenuItem };
 
@@ -48,6 +49,7 @@ export function ItemContextMenu({
   onAction: (actionId: ContextMenuActionId) => void;
   onSubmenuAction: (action: ContextMenuSubmenuAction) => void;
 }) {
+  const shortcutDisplay = useShortcutDisplay();
   const [activeItemId, setActiveItemId] = useState<ContextMenuActionId | null>(null);
   const disabledActionIdSet = useMemo(() => new Set(disabledActionIds), [disabledActionIds]);
   const hiddenActionIdSet = useMemo(() => new Set(hiddenActionIds), [hiddenActionIds]);
@@ -153,7 +155,7 @@ export function ItemContextMenu({
           const isDisabled = disabledActionIdSet.has(item.id);
           const shortcut = isDisabled
             ? null
-            : getContextMenuShortcutLabel(item.id, shortcutContext);
+            : getContextMenuShortcutLabel(item.id, shortcutContext, shortcutDisplay);
           const itemClassName = `context-menu-item${isActive ? " active" : ""}${isDisabled ? " disabled" : ""}${
             item.destructive ? " destructive" : ""
           }`;

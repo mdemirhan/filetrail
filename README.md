@@ -59,6 +59,7 @@ File Trail has a much deeper customization surface than a typical file explorer.
 - Favorite locations with customizable icons and placement options
 - Search defaults for match mode, match scope, recursion and Git skipping
 - Default text editor, Terminal app, and open-with application shortcuts
+- Keyboard shortcuts you can change: two keys per command, with a warning before a key is taken from another command
 
 ## Feature Set
 
@@ -69,7 +70,7 @@ File Trail has a much deeper customization surface than a typical file explorer.
 - Folders-first sorting
 - Go To (⌘K): jump to any folder you have opened before from a few letters of its name, or type a path
 - Tabs (⌘T): each with its own folder, history, folder tree, view and search; copy in one tab and paste in another, or drag items onto a tab
-- Keyboard shortcuts for common navigation and browsing actions
+- Keyboard shortcuts for every command, listed in Help and changed in Settings → Shortcuts
 
 ## Current Platform
 

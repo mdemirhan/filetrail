@@ -22,7 +22,7 @@ import {
 import { getFileThumbnail, originalFileSystem } from "./originalFileSystem";
 
 describe("toPreferencePatch", () => {
-  it("carries the appearance, sidebar, and Return key preferences", () => {
+  it("carries the appearance, sidebar, Return key and shortcut preferences", () => {
     expect(
       toPreferencePatch({
         theme: "auto",
@@ -30,6 +30,7 @@ describe("toPreferencePatch", () => {
         autoDarkTheme: "tomorrow-night",
         showSidebarRail: true,
         returnKeyAction: "open",
+        shortcutOverrides: { newTab: ["Cmd+Option+N"] },
       }),
     ).toEqual({
       theme: "auto",
@@ -37,6 +38,7 @@ describe("toPreferencePatch", () => {
       autoDarkTheme: "tomorrow-night",
       showSidebarRail: true,
       returnKeyAction: "open",
+      shortcutOverrides: { newTab: ["Cmd+Option+N"] },
     });
   });
 

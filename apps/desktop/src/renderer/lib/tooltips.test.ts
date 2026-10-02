@@ -1,5 +1,7 @@
+import { resolveShortcuts } from "../../shared/shortcuts";
 import { TOOLBAR_ITEM_DEFINITIONS, type ToolbarItemId } from "../../shared/toolbarItems";
-import { SHORTCUT_ITEMS } from "./helpContent";
+import { listShortcuts } from "./helpContent";
+import { DEFAULT_SHORTCUT_DISPLAY, createShortcutDisplay } from "./shortcutDisplay";
 import { formatShortcut } from "./shortcutLabels";
 import { formatTooltip, getToolbarItemTooltip } from "./tooltips";
 
@@ -80,15 +82,35 @@ describe("tooltips", () => {
   });
 
   it("promises no shortcut that Help does not list", () => {
-    const documented = new Set(SHORTCUT_ITEMS.map((item) => formatShortcut(item.shortcut)));
+    const documented = new Set(listShortcuts().map((item) => formatShortcut(item.shortcut)));
 
     for (const item of TOOLBAR_ITEM_DEFINITIONS) {
-      if ("shortcutLabel" in item) {
+      if ("shortcutCommand" in item) {
+        const shortcut = DEFAULT_SHORTCUT_DISPLAY.label(item.shortcutCommand);
         expect(
-          documented.has(formatShortcut(item.shortcutLabel)),
-          `${item.label}: ${item.shortcutLabel} is missing from Help`,
+          shortcut === null || documented.has(shortcut),
+          `${item.label}: ${shortcut} is missing from Help`,
         ).toBe(true);
       }
     }
+  });
+
+  it("shows the keys chosen in Settings, and none for a command left without one", () => {
+    const shortcuts = createShortcutDisplay(
+      resolveShortcuts({
+        trashSelection: ["Cmd+Delete"],
+        refreshOrApplySearchSort: [],
+        toggleFoldersFirst: ["Cmd+Option+F"],
+      }),
+      { returnKeyAction: "open" },
+    );
+    const tooltip = (itemId: ToolbarItemId) => getToolbarItemTooltip(itemId, {}, shortcuts);
+
+    expect(tooltip("trashSelection")).toBe("Move to Trash (⌘⌦)");
+    expect(tooltip("refresh")).toBe("Refresh");
+    expect(tooltip("foldersFirst")).toBe("List Folders First (⌥⌘F)");
+    // Return opens, so Rename is left with the key it was given.
+    expect(tooltip("renameSelection")).toBe("Rename (F2)");
+    expect(tooltip("copySelection")).toBe("Copy (⌘C)");
   });
 });

@@ -2,8 +2,11 @@
 
 import { fireEvent, render, screen, within } from "@testing-library/react";
 
-import { HELP_TOPICS, SHORTCUT_ITEMS } from "../lib/helpContent";
+import { resolveShortcuts } from "../../shared/shortcuts";
+import { HELP_TOPICS, listShortcuts } from "../lib/helpContent";
+import { createShortcutDisplay } from "../lib/shortcutDisplay";
 import { shortcutParts } from "../lib/shortcutLabels";
+import { ShortcutDisplayProvider } from "../state/shortcutDisplayContext";
 import { HelpView } from "./HelpView";
 
 describe("HelpView", () => {
@@ -51,9 +54,37 @@ describe("HelpView", () => {
     for (const title of ["Getting around", "Working with files", "Searching", "Views and panels"]) {
       expect(screen.getByRole("heading", { level: 2, name: title })).toBeInTheDocument();
     }
-    for (const item of SHORTCUT_ITEMS) {
+    for (const item of listShortcuts()) {
       expect(screen.getAllByText(item.description).length).toBeGreaterThan(0);
     }
+    // Nothing leads to Settings unless the window offers it.
+    expect(screen.queryByRole("button", { name: "Customize…" })).toBeNull();
+  });
+
+  it("shows the keys chosen in Settings and leads there to change them", () => {
+    const onCustomizeShortcuts = vi.fn();
+    const shortcuts = createShortcutDisplay(
+      resolveShortcuts({ duplicateSelection: ["Cmd+Shift+D"], newTab: [] }),
+    );
+    render(
+      <ShortcutDisplayProvider value={shortcuts}>
+        <HelpView initialTopic="shortcuts" onCustomizeShortcuts={onCustomizeShortcuts} />
+      </ShortcutDisplayProvider>,
+    );
+
+    const keys = Array.from(
+      screen.getByText("Duplicate").closest(".help-shortcut-row")?.querySelectorAll(".help-key") ??
+        [],
+    ).map((key) => key.textContent);
+    expect(keys).toEqual(["⇧", "⌘", "D"]);
+    expect(screen.queryByText("New tab, on the same folder")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Customize…" }));
+    expect(onCustomizeShortcuts).toHaveBeenCalledTimes(1);
+
+    // A sentence that named the key names the menu item instead.
+    fireEvent.click(screen.getByRole("button", { name: "Getting around" }));
+    expect(screen.getByText(/^File > New Tab opens a tab on the folder you are in/)).toBeVisible();
   });
 
   it("renders shortcut keys as separate keycaps and preserves trailing plus keys", () => {

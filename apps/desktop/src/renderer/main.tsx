@@ -41,8 +41,9 @@ logger.info("renderer boot", {
   platform: navigator.platform,
 });
 
-// The same bundle serves the explorer window and the Settings window (`#settings`).
-const isSettingsWindow = window.location.hash === "#settings";
+// The same bundle serves the explorer window and the Settings window (`#settings`, or
+// `#settings/shortcuts` to open on a tab).
+const isSettingsWindow = /^#settings(\/|$)/.test(window.location.hash);
 // The explorer window is created with a translucent macOS material behind it (see
 // `createWindow` in main.ts); this class lets the sidebar show it through.
 if (!isSettingsWindow) {

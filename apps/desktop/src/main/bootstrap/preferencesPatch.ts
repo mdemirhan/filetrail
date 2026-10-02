@@ -25,6 +25,9 @@ export function toPreferencePatch(
   if (value.returnKeyAction !== undefined) {
     patch.returnKeyAction = value.returnKeyAction;
   }
+  if (value.shortcutOverrides !== undefined) {
+    patch.shortcutOverrides = value.shortcutOverrides;
+  }
   if (value.accent !== undefined) {
     patch.accent = value.accent;
   }

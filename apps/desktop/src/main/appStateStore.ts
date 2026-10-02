@@ -30,6 +30,7 @@ import {
   normalizeAccentColor,
   resolveSavedTheme,
 } from "../shared/appPreferences";
+import { sanitizeShortcutOverrides } from "../shared/shortcuts";
 import {
   DEFAULT_TOP_TOOLBAR_ITEMS,
   LEGACY_DEFAULT_TOP_TOOLBAR_ITEMS,
@@ -486,6 +487,7 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
       record.returnKeyAction === "rename" || record.returnKeyAction === "open"
         ? record.returnKeyAction
         : currentDefaults.returnKeyAction,
+    shortcutOverrides: sanitizeShortcutOverrides(record.shortcutOverrides),
     openItemLimit: clampOpenItemLimit(
       typeof record.openItemLimit === "number"
         ? record.openItemLimit

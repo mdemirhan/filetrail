@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 
 import { clampZoomPercent } from "../../shared/appPreferences";
-import type { RendererCommandType } from "../../shared/rendererCommands";
+import { RENDERER_COMMAND_TYPES, type RendererCommandType } from "../../shared/rendererCommands";
+import {
+  type ResolvedShortcuts,
+  type ShortcutCommandId,
+  getMenuShortcut,
+  isShortcutCommandId,
+  isTextEditingShortcut,
+  shortcutFromKeyboardEvent,
+} from "../../shared/shortcuts";
 import type { ContentSelectionState } from "../lib/contentSelection";
 import { isDirectoryLikeEntry, resolveNewFolderTargetPath } from "../lib/explorerAppUtils";
 import { parentDirectoryPath } from "../lib/explorerNavigation";
@@ -47,6 +55,23 @@ function isModalCancelKey(event: KeyboardEvent): boolean {
   return event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.key === ".";
 }
 
+// How long after a key press a menu command still counts as chosen by that key.
+const MENU_SHORTCUT_WINDOW_MS = 500;
+
+const RENDERER_COMMANDS = new Set<string>(RENDERER_COMMAND_TYPES);
+
+function isRendererCommand(
+  command: ShortcutCommandId,
+): command is ShortcutCommandId & RendererCommandType {
+  return RENDERER_COMMANDS.has(command);
+}
+
+function isShortcutCommand(
+  command: RendererCommandType,
+): command is RendererCommandType & ShortcutCommandId {
+  return isShortcutCommandId(command);
+}
+
 const SORT_COMMAND_KEYS = {
   sortByName: "name",
   sortByModified: "modified",
@@ -54,9 +79,14 @@ const SORT_COMMAND_KEYS = {
   sortByKind: "kind",
 } as const;
 
+// A key the window acts on itself. One that belongs to a command is triggered by whatever
+// keys the command has (Settings → Shortcuts); the others are the keyboard's own way of
+// moving around and typing, and look at the key pressed.
 type RawShortcutBinding = {
   id: RawExplorerShortcutId;
-  matches: (event: KeyboardEvent) => boolean;
+  command?: ShortcutCommandId;
+  // What must also hold for the binding to take the key.
+  matches?: (event: KeyboardEvent) => boolean;
   run: (event: KeyboardEvent) => void;
 };
 
@@ -135,6 +165,8 @@ type UseExplorerShortcutsArgs = {
   search: SearchStore;
   writeOperations: WriteOperationsStore;
   derived: {
+    // The keys every command has, as chosen in Settings → Shortcuts.
+    shortcuts: ResolvedShortcuts;
     shortcutContext: ShortcutContext;
     copyPasteModalOpen: boolean;
     locationDialogOpen: boolean;
@@ -288,7 +320,8 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       {
         id: "copySelection",
         matches: (keyboardEvent) =>
-          (keyboardEvent.metaKey || keyboardEvent.ctrlKey) &&
+          keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
           !keyboardEvent.shiftKey &&
           !keyboardEvent.altKey &&
           keyboardEvent.key.toLowerCase() === "c",
@@ -300,7 +333,8 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       {
         id: "cutSelection",
         matches: (keyboardEvent) =>
-          (keyboardEvent.metaKey || keyboardEvent.ctrlKey) &&
+          keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
           !keyboardEvent.shiftKey &&
           !keyboardEvent.altKey &&
           keyboardEvent.key.toLowerCase() === "x",
@@ -312,7 +346,8 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       {
         id: "pasteSelection",
         matches: (keyboardEvent) =>
-          (keyboardEvent.metaKey || keyboardEvent.ctrlKey) &&
+          keyboardEvent.metaKey &&
+          !keyboardEvent.ctrlKey &&
           !keyboardEvent.shiftKey &&
           !keyboardEvent.altKey &&
           keyboardEvent.key.toLowerCase() === "v",
@@ -323,12 +358,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "duplicateSelection",
-        matches: (keyboardEvent) =>
-          keyboardEvent.metaKey &&
-          !keyboardEvent.ctrlKey &&
-          !keyboardEvent.shiftKey &&
-          !keyboardEvent.altKey &&
-          keyboardEvent.key.toLowerCase() === "d",
+        command: "duplicateSelection",
         run: (keyboardEvent) => {
           const current = latestArgsRef.current;
           const paths = current.resolveContentActionPaths();
@@ -341,12 +371,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "trashSelection",
-        matches: (keyboardEvent) =>
-          keyboardEvent.metaKey &&
-          !keyboardEvent.ctrlKey &&
-          !keyboardEvent.shiftKey &&
-          !keyboardEvent.altKey &&
-          keyboardEvent.key === "Backspace",
+        command: "trashSelection",
         run: (keyboardEvent) => {
           const current = latestArgsRef.current;
           const paths = current.resolveContentActionPaths();
@@ -359,11 +384,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "renameSelection",
-        matches: (keyboardEvent) =>
-          !keyboardEvent.metaKey &&
-          !keyboardEvent.ctrlKey &&
-          !keyboardEvent.altKey &&
-          keyboardEvent.key === "F2",
+        command: "renameSelection",
         run: (keyboardEvent) => {
           const current = latestArgsRef.current;
           const paths = current.resolveContentActionPaths();
@@ -390,12 +411,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "focusTreePane",
-        matches: (keyboardEvent) =>
-          keyboardEvent.metaKey &&
-          !keyboardEvent.ctrlKey &&
-          !keyboardEvent.shiftKey &&
-          !keyboardEvent.altKey &&
-          keyboardEvent.key === "1",
+        command: "focusTreePane",
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
           focusTreePane();
@@ -404,12 +420,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "focusContentPane",
-        matches: (keyboardEvent) =>
-          keyboardEvent.metaKey &&
-          !keyboardEvent.ctrlKey &&
-          !keyboardEvent.shiftKey &&
-          !keyboardEvent.altKey &&
-          keyboardEvent.key === "2",
+        command: "focusContentPane",
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
           focusContentPaneRef();
@@ -418,13 +429,8 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "showCachedSearchResults",
-        matches: (keyboardEvent) =>
-          keyboardEvent.metaKey &&
-          !keyboardEvent.ctrlKey &&
-          keyboardEvent.shiftKey &&
-          !keyboardEvent.altKey &&
-          keyboardEvent.key.toLowerCase() === "f" &&
-          latestArgsRef.current.hasCachedSearch,
+        command: "showLastSearchResults",
+        matches: () => latestArgsRef.current.hasCachedSearch,
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
           latestArgsRef.current.showCachedSearchResults({ focusPane: true });
@@ -432,11 +438,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "focusFileSearch",
-        matches: (keyboardEvent) =>
-          (keyboardEvent.metaKey || keyboardEvent.ctrlKey) &&
-          !keyboardEvent.shiftKey &&
-          !keyboardEvent.altKey &&
-          keyboardEvent.key.toLowerCase() === "f",
+        command: "focusFileSearch",
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
           latestArgsRef.current.focusFileSearch(true);
@@ -444,12 +446,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "historyBack",
-        matches: (keyboardEvent) =>
-          keyboardEvent.metaKey &&
-          !keyboardEvent.ctrlKey &&
-          !keyboardEvent.shiftKey &&
-          !keyboardEvent.altKey &&
-          (keyboardEvent.key === "ArrowLeft" || keyboardEvent.key === "["),
+        command: "goBack",
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
           latestArgsRef.current.goBack();
@@ -457,12 +454,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "historyForward",
-        matches: (keyboardEvent) =>
-          keyboardEvent.metaKey &&
-          !keyboardEvent.ctrlKey &&
-          !keyboardEvent.shiftKey &&
-          !keyboardEvent.altKey &&
-          (keyboardEvent.key === "ArrowRight" || keyboardEvent.key === "]"),
+        command: "goForward",
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
           latestArgsRef.current.goForward();
@@ -470,13 +462,8 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "openParentTree",
-        matches: (keyboardEvent) =>
-          keyboardEvent.metaKey &&
-          !keyboardEvent.ctrlKey &&
-          !keyboardEvent.shiftKey &&
-          !keyboardEvent.altKey &&
-          keyboardEvent.key === "ArrowUp" &&
-          latestArgsRef.current.focusedPane === "tree",
+        command: "goEnclosingFolder",
+        matches: () => latestArgsRef.current.focusedPane === "tree",
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
           void latestArgsRef.current.navigateTreeSelectionToParent();
@@ -484,13 +471,8 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "openParentContent",
-        matches: (keyboardEvent) =>
-          keyboardEvent.metaKey &&
-          !keyboardEvent.ctrlKey &&
-          !keyboardEvent.shiftKey &&
-          !keyboardEvent.altKey &&
-          keyboardEvent.key === "ArrowUp" &&
-          latestArgsRef.current.focusedPane === "content",
+        command: "goEnclosingFolder",
+        matches: () => latestArgsRef.current.focusedPane === "content",
         run: (keyboardEvent) => {
           const current = latestArgsRef.current;
           keyboardEvent.preventDefault();
@@ -502,12 +484,8 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "openSelectedContentWithCommand",
-        matches: (keyboardEvent) =>
-          keyboardEvent.metaKey &&
-          !keyboardEvent.ctrlKey &&
-          !keyboardEvent.shiftKey &&
-          !keyboardEvent.altKey &&
-          keyboardEvent.key === "ArrowDown" &&
+        command: "openSelectedItem",
+        matches: () =>
           latestArgsRef.current.focusedPane === "content" &&
           latestArgsRef.current.selectedEntry !== null,
         run: (keyboardEvent) => {
@@ -525,13 +503,8 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "openTreeNodeWithCommand",
-        matches: (keyboardEvent) =>
-          keyboardEvent.metaKey &&
-          !keyboardEvent.ctrlKey &&
-          !keyboardEvent.shiftKey &&
-          !keyboardEvent.altKey &&
-          keyboardEvent.key === "ArrowDown" &&
-          latestArgsRef.current.focusedPane === "tree",
+        command: "openSelectedItem",
+        matches: () => latestArgsRef.current.focusedPane === "tree",
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
           void latestArgsRef.current.openTreeNode();
@@ -539,12 +512,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "toggleHiddenFiles",
-        matches: (keyboardEvent) =>
-          keyboardEvent.metaKey &&
-          !keyboardEvent.ctrlKey &&
-          keyboardEvent.shiftKey &&
-          !keyboardEvent.altKey &&
-          keyboardEvent.key === ".",
+        command: "toggleHiddenFiles",
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
           latestArgsRef.current.toggleHiddenFiles();
@@ -552,12 +520,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "refreshOrApplySearchSort",
-        matches: (keyboardEvent) =>
-          keyboardEvent.metaKey &&
-          !keyboardEvent.ctrlKey &&
-          !keyboardEvent.shiftKey &&
-          !keyboardEvent.altKey &&
-          keyboardEvent.key.toLowerCase() === "r",
+        command: "refreshOrApplySearchSort",
         run: (keyboardEvent) => {
           const current = latestArgsRef.current;
           keyboardEvent.preventDefault();
@@ -570,12 +533,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "copyPath",
-        matches: (keyboardEvent) =>
-          keyboardEvent.metaKey &&
-          keyboardEvent.altKey &&
-          !keyboardEvent.ctrlKey &&
-          !keyboardEvent.shiftKey &&
-          keyboardEvent.code === "KeyC",
+        command: "copyPath",
         run: (keyboardEvent) => {
           const current = latestArgsRef.current;
           const pathsToCopy =
@@ -595,12 +553,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "newTab",
-        matches: (keyboardEvent) =>
-          keyboardEvent.metaKey &&
-          !keyboardEvent.ctrlKey &&
-          !keyboardEvent.shiftKey &&
-          !keyboardEvent.altKey &&
-          keyboardEvent.key.toLowerCase() === "t",
+        command: "newTab",
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
           latestArgsRef.current.openNewTab();
@@ -608,12 +561,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "reopenClosedTab",
-        matches: (keyboardEvent) =>
-          keyboardEvent.metaKey &&
-          !keyboardEvent.ctrlKey &&
-          keyboardEvent.shiftKey &&
-          !keyboardEvent.altKey &&
-          keyboardEvent.key.toLowerCase() === "t",
+        command: "reopenClosedTab",
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
           latestArgsRef.current.reopenClosedTab();
@@ -621,31 +569,15 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "closeTab",
-        matches: (keyboardEvent) =>
-          keyboardEvent.metaKey &&
-          !keyboardEvent.ctrlKey &&
-          !keyboardEvent.shiftKey &&
-          !keyboardEvent.altKey &&
-          keyboardEvent.key.toLowerCase() === "w",
+        command: "closeTab",
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
           latestArgsRef.current.closeTab();
         },
       },
       {
-        // ⌃Tab and ⇧⌘] go to the next tab, as in Finder and Safari.
         id: "selectNextTab",
-        matches: (keyboardEvent) =>
-          (keyboardEvent.ctrlKey &&
-            !keyboardEvent.metaKey &&
-            !keyboardEvent.shiftKey &&
-            !keyboardEvent.altKey &&
-            keyboardEvent.key === "Tab") ||
-          (keyboardEvent.metaKey &&
-            keyboardEvent.shiftKey &&
-            !keyboardEvent.ctrlKey &&
-            !keyboardEvent.altKey &&
-            keyboardEvent.code === "BracketRight"),
+        command: "selectNextTab",
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
           latestArgsRef.current.activateAdjacentTab("next");
@@ -653,31 +585,15 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "selectPreviousTab",
-        matches: (keyboardEvent) =>
-          (keyboardEvent.ctrlKey &&
-            !keyboardEvent.metaKey &&
-            keyboardEvent.shiftKey &&
-            !keyboardEvent.altKey &&
-            keyboardEvent.key === "Tab") ||
-          (keyboardEvent.metaKey &&
-            keyboardEvent.shiftKey &&
-            !keyboardEvent.ctrlKey &&
-            !keyboardEvent.altKey &&
-            keyboardEvent.code === "BracketLeft"),
+        command: "selectPreviousTab",
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
           latestArgsRef.current.activateAdjacentTab("previous");
         },
       },
       {
-        // ⌥⌘T; `code` because Option changes the character the key produces.
         id: "openInTerminal",
-        matches: (keyboardEvent) =>
-          keyboardEvent.metaKey &&
-          !keyboardEvent.ctrlKey &&
-          !keyboardEvent.shiftKey &&
-          keyboardEvent.altKey &&
-          keyboardEvent.code === "KeyT",
+        command: "openInTerminal",
         run: (keyboardEvent) => {
           const current = latestArgsRef.current;
           const pathsToOpen = resolveOpenInTerminalPaths({
@@ -698,12 +614,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "moveSelection",
-        matches: (keyboardEvent) =>
-          keyboardEvent.metaKey &&
-          keyboardEvent.shiftKey &&
-          !keyboardEvent.ctrlKey &&
-          !keyboardEvent.altKey &&
-          keyboardEvent.key.toLowerCase() === "m",
+        command: "moveSelection",
         run: (keyboardEvent) => {
           const current = latestArgsRef.current;
           const paths = current.resolveContentActionPaths();
@@ -716,12 +627,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "newFolder",
-        matches: (keyboardEvent) =>
-          keyboardEvent.metaKey &&
-          keyboardEvent.shiftKey &&
-          !keyboardEvent.ctrlKey &&
-          !keyboardEvent.altKey &&
-          keyboardEvent.key.toLowerCase() === "n",
+        command: "newFolder",
         run: (keyboardEvent) => {
           const current = latestArgsRef.current;
           const targetPath = resolveNewFolderTargetPath({
@@ -738,15 +644,8 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         },
       },
       {
-        // ⌘K opens the Go To box; ⇧⌘G, Finder's Go to Folder, opens it too.
         id: "openLocationSheet",
-        matches: (keyboardEvent) =>
-          keyboardEvent.metaKey &&
-          !keyboardEvent.ctrlKey &&
-          !keyboardEvent.altKey &&
-          (keyboardEvent.shiftKey
-            ? keyboardEvent.key.toLowerCase() === "g"
-            : keyboardEvent.key.toLowerCase() === "k"),
+        command: "openLocationSheet",
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
           latestArgsRef.current.openLocationSheet();
@@ -754,12 +653,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "toggleInfoRow",
-        matches: (keyboardEvent) =>
-          keyboardEvent.metaKey &&
-          keyboardEvent.shiftKey &&
-          !keyboardEvent.ctrlKey &&
-          !keyboardEvent.altKey &&
-          keyboardEvent.key.toLowerCase() === "i",
+        command: "toggleInfoRow",
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
           latestArgsRef.current.setInfoRowOpen((value) => !value);
@@ -767,12 +661,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "toggleInfoPanel",
-        matches: (keyboardEvent) =>
-          keyboardEvent.metaKey &&
-          !keyboardEvent.ctrlKey &&
-          !keyboardEvent.shiftKey &&
-          !keyboardEvent.altKey &&
-          keyboardEvent.key.toLowerCase() === "i",
+        command: "toggleInfoPanel",
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
           latestArgsRef.current.setInfoPanelOpen((value) => !value);
@@ -780,12 +669,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "goHomeRootTree",
-        matches: (keyboardEvent) =>
-          keyboardEvent.metaKey &&
-          keyboardEvent.shiftKey &&
-          !keyboardEvent.ctrlKey &&
-          !keyboardEvent.altKey &&
-          keyboardEvent.key.toLowerCase() === "h",
+        command: "goHomeRootTree",
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
           latestArgsRef.current.goHomeAndRootTree();
@@ -793,12 +677,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "rootTreeAtSelection",
-        matches: (keyboardEvent) =>
-          keyboardEvent.metaKey &&
-          keyboardEvent.shiftKey &&
-          !keyboardEvent.ctrlKey &&
-          !keyboardEvent.altKey &&
-          keyboardEvent.key.toLowerCase() === "r",
+        command: "rootTreeAtSelection",
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
           latestArgsRef.current.rootTreeAtSelection();
@@ -806,11 +685,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "pagedScrollBackward",
-        matches: (keyboardEvent) =>
-          keyboardEvent.ctrlKey &&
-          !keyboardEvent.metaKey &&
-          !keyboardEvent.altKey &&
-          keyboardEvent.key.toLowerCase() === "u",
+        command: "pageUp",
         run: (keyboardEvent) => {
           const didHandle = latestArgsRef.current.handlePagedPaneScroll("backward");
           if (!didHandle) {
@@ -821,11 +696,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "pagedScrollForward",
-        matches: (keyboardEvent) =>
-          keyboardEvent.ctrlKey &&
-          !keyboardEvent.metaKey &&
-          !keyboardEvent.altKey &&
-          keyboardEvent.key.toLowerCase() === "d",
+        command: "pageDown",
         run: (keyboardEvent) => {
           const didHandle = latestArgsRef.current.handlePagedPaneScroll("forward");
           if (!didHandle) {
@@ -964,11 +835,8 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       },
       {
         id: "quickLook",
-        matches: (keyboardEvent) =>
-          keyboardEvent.key === " " &&
-          !keyboardEvent.metaKey &&
-          !keyboardEvent.ctrlKey &&
-          !keyboardEvent.altKey &&
+        command: "quickLookSelection",
+        matches: () =>
           latestArgsRef.current.focusedPane === "content" &&
           latestArgsRef.current.selectedEntry !== null,
         run: (keyboardEvent) => {
@@ -1016,6 +884,15 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       isContentFocusTarget,
       isTreeFocusTarget,
     ],
+  );
+
+  // The last key pressed in the window, to tell a menu command chosen by its key from one
+  // chosen with the pointer.
+  const lastKeyDownRef = useRef<{ shortcut: string; time: number } | null>(null);
+
+  const rawShortcutCommands = useMemo(
+    () => new Set(rawShortcutBindings.flatMap((binding) => binding.command ?? [])),
+    [rawShortcutBindings],
   );
 
   const performNativeEditAction = useCallback(
@@ -1083,7 +960,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
   );
 
   const runRendererCommand = useCallback(
-    (commandType: RendererCommandType) => {
+    (commandType: RendererCommandType, options: { viaShortcut?: boolean } = {}) => {
       const current = latestArgsRef.current;
       if (
         commandType === "editCut" ||
@@ -1095,6 +972,16 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         return;
       }
       if (!canHandleRendererCommand(commandType, current.shortcutContext)) {
+        return;
+      }
+      // A key that moves the caret or deletes (⌘↑, ⌘⌫) stays with a text field that has
+      // the keyboard, even when the menu hears it too.
+      if (
+        options.viaShortcut &&
+        lastKeyDownRef.current &&
+        isTextEditingShortcut(lastKeyDownRef.current.shortcut) &&
+        resolveFocusedEditTarget(document.activeElement) === "editable-text"
+      ) {
         return;
       }
       if (commandType === "openSelection") {
@@ -1352,10 +1239,6 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         return;
       }
       if (commandType === "goEnclosingFolder") {
-        // ⌘↑ in a text field moves the caret to its start; the field keeps the key.
-        if (resolveFocusedEditTarget(document.activeElement) === "editable-text") {
-          return;
-        }
         if (current.focusedPane === "tree") {
           void current.navigateTreeSelectionToParent();
           return;
@@ -1393,7 +1276,17 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
 
   useEffect(() => {
     const unsubscribe = client.onCommand((command) => {
-      runRendererCommand(command.type);
+      // The menu sends the command a moment after the key that chose it, if a key did.
+      const lastKeyDown = lastKeyDownRef.current;
+      const menuShortcut = isShortcutCommand(command.type)
+        ? getMenuShortcut(latestArgsRef.current.shortcuts.bindings[command.type])
+        : undefined;
+      runRendererCommand(command.type, {
+        viaShortcut:
+          lastKeyDown !== null &&
+          lastKeyDown.shortcut === menuShortcut &&
+          performance.now() - lastKeyDown.time < MENU_SHORTCUT_WINDOW_MS,
+      });
     });
     return unsubscribe;
   }, [client, runRendererCommand]);
@@ -1401,6 +1294,10 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const current = latestArgsRef.current;
+      const pressedShortcut = shortcutFromKeyboardEvent(event);
+      lastKeyDownRef.current = pressedShortcut
+        ? { shortcut: pressedShortcut, time: performance.now() }
+        : null;
       if (event.defaultPrevented) {
         return;
       }
@@ -1451,7 +1348,10 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       if (current.locationDialogOpen) {
         return;
       }
-      if (event.key === "?") {
+      const pressedCommand = pressedShortcut
+        ? (current.shortcuts.commandByShortcut.get(pressedShortcut) ?? null)
+        : null;
+      if (pressedCommand === "openHelp") {
         event.preventDefault();
         if (current.mainView === "help") {
           current.setMainView("explorer");
@@ -1478,11 +1378,28 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         event.preventDefault();
         return;
       }
+      // A command the window has no binding of its own for runs as it does from the menu.
+      // The menu only listens for a command's first key, and not for one without ⌘ or ⌃.
+      if (
+        pressedCommand &&
+        isRendererCommand(pressedCommand) &&
+        !rawShortcutCommands.has(pressedCommand)
+      ) {
+        if (canHandleRendererCommand(pressedCommand, current.shortcutContext)) {
+          event.preventDefault();
+          runRendererCommand(pressedCommand);
+        }
+        return;
+      }
       if (!canHandleExplorerKeyboardShortcuts(current.shortcutContext)) {
         return;
       }
       for (const rawShortcutBinding of rawShortcutBindings) {
-        if (!rawShortcutBinding.matches(event)) {
+        if (
+          (rawShortcutBinding.command !== undefined &&
+            rawShortcutBinding.command !== pressedCommand) ||
+          !(rawShortcutBinding.matches?.(event) ?? true)
+        ) {
           continue;
         }
         if (!canHandleRawExplorerShortcut(rawShortcutBinding.id, current.shortcutContext)) {
@@ -1499,7 +1416,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [rawShortcutBindings]);
+  }, [rawShortcutBindings, rawShortcutCommands, runRendererCommand]);
 
   return {
     runRendererCommand,

@@ -558,6 +558,16 @@ export const appLogEntrySchema = z.object({
   context: z.record(z.string(), jsonValueSchema).default({}),
 });
 
+export const settingsTabSchema = z.enum([
+  "general",
+  "appearance",
+  "explorer",
+  "search",
+  "files",
+  "toolbars",
+  "shortcuts",
+]);
+
 export const themePreferenceSchema = z.union([z.literal("auto"), themeModeSchema]);
 
 export const openTabPreferenceSchema = z.object({
@@ -601,6 +611,8 @@ export const appPreferencesSchema = z.object({
   openWithApplications: z.array(openWithApplicationSchema),
   fileActivationAction: z.enum(["open", "edit"]),
   returnKeyAction: z.enum(["rename", "open"]),
+  // Command names and shortcuts are the app's own; unknown ones are dropped when saved.
+  shortcutOverrides: z.record(z.string().min(1).max(64), z.array(z.string().min(1).max(64)).max(2)),
   openItemLimit: z.number().int().min(1).max(50),
   includeHidden: z.boolean(),
   searchPatternMode: searchPatternModeSchema,
@@ -643,8 +655,11 @@ export const ipcContractSchemas = {
       path: z.string().min(1),
     }),
   },
+  // `tab` opens Settings on that tab, or switches an open Settings window to it.
   "app:openSettingsWindow": {
-    request: emptyRequestSchema,
+    request: z.object({
+      tab: settingsTabSchema.optional(),
+    }),
     response: z.object({
       ok: z.boolean(),
     }),
@@ -1129,6 +1144,7 @@ export type CopyPasteRuntimeResolutionAction = z.output<
 export type WriteOperationAction = z.output<typeof writeOperationActionSchema>;
 export type WriteOperationResult = z.output<typeof writeOperationResultSchema>;
 export type WriteOperationProgressEvent = z.output<typeof writeOperationProgressEventSchema>;
+export type SettingsTab = z.output<typeof settingsTabSchema>;
 export type AppLogLevel = z.output<typeof appLogLevelSchema>;
 export type AppLogEntry = z.output<typeof appLogEntrySchema>;
 

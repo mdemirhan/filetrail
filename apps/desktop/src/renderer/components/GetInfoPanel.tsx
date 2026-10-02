@@ -13,6 +13,8 @@ import {
   formatSize,
   splitPermissionMode,
 } from "../lib/formatting";
+import { formatTooltip } from "../lib/tooltips";
+import { useShortcutDisplay } from "../state/shortcutDisplayContext";
 
 type ItemProperties = IpcResponse<"item:getProperties">["item"];
 
@@ -69,6 +71,7 @@ export function InfoPanel({
   openWithItems?: readonly ContextMenuSubmenuItem[];
   onOpenWith?: ((action: ContextMenuSubmenuAction) => void) | undefined;
 }) {
+  const shortcutDisplay = useShortcutDisplay();
   const [copied, setCopied] = useState<"path" | "name" | null>(null);
   const showSpinner = useDelayedFlag(pending || (loading && !item), SPINNER_DELAY_MS);
   const permissionParts = useMemo(() => splitPermissionMode(item?.permissionMode ?? null), [item]);
@@ -106,7 +109,7 @@ export function InfoPanel({
           type="button"
           className="get-info-close"
           onClick={onClose}
-          title="Hide Info Panel (⌘I)"
+          title={formatTooltip("Hide Info Panel", shortcutDisplay.written("toggleInfoPanel"))}
           aria-label="Hide Info Panel"
         >
           <InfoPanelGlyph name="close" />
@@ -191,6 +194,7 @@ function GetInfoPanelContent({
   openWithItems: readonly ContextMenuSubmenuItem[];
   onOpenWith?: ((action: ContextMenuSubmenuAction) => void) | undefined;
 }) {
+  const shortcutDisplay = useShortcutDisplay();
   const [openWithMenuOpen, setOpenWithMenuOpen] = useState(false);
   const openWithRef = useRef<HTMLDivElement | null>(null);
   const openWithMenuRef = useRef<HTMLDivElement | null>(null);
@@ -411,18 +415,26 @@ function GetInfoPanelContent({
         <h3 className="get-info-section-title">Quick Actions</h3>
         <div className="get-info-actions">
           {onQuickLook ? (
-            <GetInfoActionButton label="Quick Look" shortcut="Space" onClick={onQuickLook}>
+            <GetInfoActionButton
+              label="Quick Look"
+              shortcut={shortcutDisplay.label("quickLookSelection")}
+              onClick={onQuickLook}
+            >
               <InfoPanelGlyph name="quickLook" />
             </GetInfoActionButton>
           ) : null}
           {onEdit ? (
-            <GetInfoActionButton label="Edit" shortcut="⌘E" onClick={onEdit}>
+            <GetInfoActionButton
+              label="Edit"
+              shortcut={shortcutDisplay.label("editSelection")}
+              onClick={onEdit}
+            >
               <InfoPanelGlyph name="edit" />
             </GetInfoActionButton>
           ) : null}
           <GetInfoActionButton
             label={copied === "path" ? "Copied" : "Copy Path"}
-            shortcut="⌥⌘C"
+            shortcut={shortcutDisplay.label("copyPath")}
             disabled={copyPathDisabled}
             onClick={() => void onCopyPath()}
           >
@@ -437,22 +449,35 @@ function GetInfoPanelContent({
               <InfoPanelGlyph name={copied === "name" ? "check" : "name"} />
             </GetInfoActionButton>
           ) : null}
-          <GetInfoActionButton label="Terminal" shortcut="⌥⌘T" onClick={onOpenInTerminal}>
+          <GetInfoActionButton
+            label="Terminal"
+            shortcut={shortcutDisplay.label("openInTerminal")}
+            onClick={onOpenInTerminal}
+          >
             <InfoPanelGlyph name="terminal" />
           </GetInfoActionButton>
-          <GetInfoActionButton label="Show in Finder" onClick={onShowInFinder}>
+          <GetInfoActionButton
+            label="Show in Finder"
+            shortcut={shortcutDisplay.label("showInFinder")}
+            onClick={onShowInFinder}
+          >
             <InfoPanelGlyph name="finder" />
           </GetInfoActionButton>
           {onToggleFavorite ? (
             <GetInfoActionButton
               label={isFavorite ? "Remove from Favorites" : "Add to Favorites"}
+              shortcut={shortcutDisplay.label("toggleFavorite")}
               onClick={onToggleFavorite}
             >
               <InfoPanelGlyph name="favorite" />
             </GetInfoActionButton>
           ) : null}
           {onRootTree ? (
-            <GetInfoActionButton label="Root Tree Here" shortcut="⇧⌘R" onClick={onRootTree}>
+            <GetInfoActionButton
+              label="Root Tree Here"
+              shortcut={shortcutDisplay.label("rootTreeAtSelection")}
+              onClick={onRootTree}
+            >
               <InfoPanelGlyph name="rootTree" />
             </GetInfoActionButton>
           ) : null}
@@ -489,7 +514,7 @@ function GetInfoActionButton({
 }: {
   children: ReactNode;
   label: string;
-  shortcut?: string;
+  shortcut?: string | null;
   disabled?: boolean | undefined;
   onClick: () => void;
 }) {

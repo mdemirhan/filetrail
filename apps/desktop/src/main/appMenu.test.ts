@@ -5,6 +5,7 @@ import {
   INITIAL_APPLICATION_MENU_STATE,
 } from "../shared/applicationMenuState";
 import { RENDERER_COMMAND_TYPES } from "../shared/rendererCommands";
+import { resolveShortcuts } from "../shared/shortcuts";
 import {
   applyApplicationMenuItemStates,
   createApplicationMenuTemplate,
@@ -169,52 +170,52 @@ describe("createApplicationMenuTemplate", () => {
     const send = vi.fn();
     const template = createApplicationMenuTemplate({ send });
     const expected = [
-      ["File", "New Tab", "CommandOrControl+T", "newTab"],
-      ["File", "New Folder", "CommandOrControl+Shift+N", "newFolder"],
-      ["File", "Open", "CommandOrControl+O", "openSelection"],
+      ["File", "New Tab", "Command+T", "newTab"],
+      ["File", "New Folder", "Command+Shift+N", "newFolder"],
+      ["File", "Open", "Command+O", "openSelection"],
       ["File", "Open in New Tab", undefined, "openSelectionInNewTab"],
-      ["File", "Edit in Text Editor", "CommandOrControl+E", "editSelection"],
+      ["File", "Edit in Text Editor", "Command+E", "editSelection"],
       ["File", "Quick Look", undefined, "quickLookSelection"],
-      // Return renames from the window itself: as a menu shortcut it would be taken from
-      // text fields and dialogs.
+      // Space and F2 work from the window itself: as menu shortcuts they would be taken
+      // from text fields and dialogs.
       ["File", "Rename", undefined, "renameSelection"],
-      ["File", "Duplicate", "CommandOrControl+D", "duplicateSelection"],
-      ["File", "Move To…", "CommandOrControl+Shift+M", "moveSelection"],
+      ["File", "Duplicate", "Command+D", "duplicateSelection"],
+      ["File", "Move To…", "Command+Shift+M", "moveSelection"],
       ["File", "Add to Favorites", undefined, "toggleFavorite"],
       ["File", "Remove from Favorites", undefined, "toggleFavorite"],
-      ["File", "Open in Terminal", "Alt+CommandOrControl+T", "openInTerminal"],
+      ["File", "Open in Terminal", "Command+Alt+T", "openInTerminal"],
       ["File", "Show in Finder", undefined, "showInFinder"],
-      ["File", "Move to Trash", "CommandOrControl+Backspace", "trashSelection"],
-      ["File", "Reopen Closed Tab", "Shift+CommandOrControl+T", "reopenClosedTab"],
-      ["File", "Close Tab", "CommandOrControl+W", "closeTab"],
-      ["Edit", "Cut", "CommandOrControl+X", "editCut"],
-      ["Edit", "Copy", "CommandOrControl+C", "editCopy"],
-      ["Edit", "Paste", "CommandOrControl+V", "editPaste"],
-      ["Edit", "Copy Path", "Alt+CommandOrControl+C", "copyPath"],
-      ["Edit", "Select All", "CommandOrControl+A", "editSelectAll"],
-      ["Edit", "Find Files…", "CommandOrControl+F", "focusFileSearch"],
-      ["Edit", "Show Last Results", "Shift+CommandOrControl+F", "showLastSearchResults"],
+      ["File", "Move to Trash", "Command+Backspace", "trashSelection"],
+      ["File", "Reopen Closed Tab", "Command+Shift+T", "reopenClosedTab"],
+      ["File", "Close Tab", "Command+W", "closeTab"],
+      ["Edit", "Cut", "Command+X", "editCut"],
+      ["Edit", "Copy", "Command+C", "editCopy"],
+      ["Edit", "Paste", "Command+V", "editPaste"],
+      ["Edit", "Copy Path", "Command+Alt+C", "copyPath"],
+      ["Edit", "Select All", "Command+A", "editSelectAll"],
+      ["Edit", "Find Files…", "Command+F", "focusFileSearch"],
+      ["Edit", "Show Last Results", "Command+Shift+F", "showLastSearchResults"],
       ["View", "as Icons", undefined, "viewAsIcons"],
       ["View", "as List", undefined, "viewAsList"],
       ["View", "as Details", undefined, "viewAsDetails"],
       ["View", "Folders First", undefined, "toggleFoldersFirst"],
-      ["View", "Show Hidden Files", "Shift+CommandOrControl+.", "toggleHiddenFiles"],
-      ["View", "Show Info Panel", "CommandOrControl+I", "toggleInfoPanel"],
-      ["View", "Show Info Row", "CommandOrControl+Shift+I", "toggleInfoRow"],
-      ["View", "Refresh", "CommandOrControl+R", "refreshOrApplySearchSort"],
-      ["View", "Zoom In", "CommandOrControl+Plus", "zoomIn"],
-      ["View", "Zoom Out", "CommandOrControl+-", "zoomOut"],
-      ["View", "Actual Size", "CommandOrControl+0", "resetZoom"],
-      ["Go", "Back", "CommandOrControl+[", "goBack"],
-      ["Go", "Forward", "CommandOrControl+]", "goForward"],
-      ["Go", "Enclosing Folder", "CommandOrControl+Up", "goEnclosingFolder"],
-      ["Go", "Home", "CommandOrControl+Shift+H", "goHomeRootTree"],
-      ["Go", "Go To…", "CommandOrControl+K", "openLocationSheet"],
-      ["Go", "Root Tree at Selected Folder", "CommandOrControl+Shift+R", "rootTreeAtSelection"],
-      ["windowMenu", "Show Previous Tab", "Ctrl+Shift+Tab", "selectPreviousTab"],
-      ["windowMenu", "Show Next Tab", "Ctrl+Tab", "selectNextTab"],
-      ["windowMenu", "Focus Folder Tree", "CommandOrControl+1", "focusTreePane"],
-      ["windowMenu", "Focus File List", "CommandOrControl+2", "focusContentPane"],
+      ["View", "Show Hidden Files", "Command+Shift+.", "toggleHiddenFiles"],
+      ["View", "Show Info Panel", "Command+I", "toggleInfoPanel"],
+      ["View", "Show Info Row", "Command+Shift+I", "toggleInfoRow"],
+      ["View", "Refresh", "Command+R", "refreshOrApplySearchSort"],
+      ["View", "Zoom In", "Command+Plus", "zoomIn"],
+      ["View", "Zoom Out", "Command+-", "zoomOut"],
+      ["View", "Actual Size", "Command+0", "resetZoom"],
+      ["Go", "Back", "Command+[", "goBack"],
+      ["Go", "Forward", "Command+]", "goForward"],
+      ["Go", "Enclosing Folder", "Command+Up", "goEnclosingFolder"],
+      ["Go", "Home", "Command+Shift+H", "goHomeRootTree"],
+      ["Go", "Go To…", "Command+K", "openLocationSheet"],
+      ["Go", "Root Tree at Selected Folder", "Command+Shift+R", "rootTreeAtSelection"],
+      ["windowMenu", "Show Previous Tab", "Control+Shift+Tab", "selectPreviousTab"],
+      ["windowMenu", "Show Next Tab", "Control+Tab", "selectNextTab"],
+      ["windowMenu", "Focus Folder Tree", "Command+1", "focusTreePane"],
+      ["windowMenu", "Focus File List", "Command+2", "focusContentPane"],
       ["help", "File Trail Help", undefined, "openHelp"],
       ["help", "Keyboard Shortcuts", undefined, "openKeyboardShortcuts"],
     ] as const;
@@ -317,11 +318,31 @@ describe("createApplicationMenuTemplate", () => {
       "Settings…",
     );
 
-    expect(settingsItem.accelerator).toBe("CommandOrControl+,");
+    expect(settingsItem.accelerator).toBe("Command+,");
     choose(settingsItem);
 
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
     expect(send).not.toHaveBeenCalled();
+  });
+
+  it("shows the keys chosen in Settings, and leaves a key without ⌘ or ⌃ to the window", () => {
+    const { bindings } = resolveShortcuts({
+      newTab: ["Cmd+Option+N"],
+      duplicateSelection: [],
+      quickLookSelection: ["Space", "Cmd+Y"],
+      showInFinder: ["F5", "Ctrl+Shift+R"],
+    });
+    const template = createApplicationMenuTemplate({ send: vi.fn() }, { shortcuts: bindings });
+    const file = submenuOf(template, "File");
+
+    expect(itemOf(file, "New Tab").accelerator).toBe("Command+Alt+N");
+    expect(itemOf(file, "Duplicate").accelerator).toBeUndefined();
+    // The menu takes the first key it can listen for; Space and F5 stay with the window.
+    expect(itemOf(file, "Quick Look").accelerator).toBe("Command+Y");
+    expect(itemOf(file, "Show in Finder").accelerator).toBe("Control+Shift+R");
+    // Commands that were left alone keep their keys, and Copy is never changed.
+    expect(itemOf(file, "New Folder").accelerator).toBe("Command+Shift+N");
+    expect(itemOf(submenuOf(template, "Edit"), "Copy").accelerator).toBe("Command+C");
   });
 
   it("tells the host after each command, so it can put the checkmarks back", () => {

@@ -16,6 +16,10 @@ const SHORTCUT_GLYPHS: Record<string, string> = {
   Enter: "↩",
   Esc: "esc",
   Tab: "⇥",
+  Home: "↖",
+  End: "↘",
+  PageUp: "⇞",
+  PageDown: "⇟",
   Plus: "+",
 };
 const MODIFIER_ORDER = ["⌃", "⌥", "⇧", "⌘"];

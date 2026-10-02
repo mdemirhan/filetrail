@@ -9909,6 +9909,131 @@ describe("App tabs", () => {
   });
 });
 
+describe("App keyboard shortcuts", () => {
+  async function renderApp(harness: ReturnType<typeof createAppHarness>) {
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+    await screen.findByRole("button", { name: "source.txt" });
+  }
+
+  async function pressKey(init: KeyboardEventInit, target: Window | Element = window) {
+    await act(async () => {
+      fireEvent.keyDown(target, init);
+    });
+  }
+
+  it("runs a command on the key it was given in Settings, and no longer on the old one", async () => {
+    const harness = createAppHarness({
+      preferences: { shortcutOverrides: { newTab: ["Cmd+Option+N"] } },
+    });
+    await renderApp(harness);
+
+    await pressKey({ key: "t", metaKey: true });
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+
+    await pressKey({ key: "˜", code: "KeyN", metaKey: true, altKey: true });
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
+    // The button that does the same names the new key.
+    expect(screen.getByRole("button", { name: "New Tab" })).toHaveAttribute(
+      "title",
+      "New Tab (⌥⌘N)",
+    );
+    expect(screen.getAllByTitle("Close Tab (⌘W)").length).toBe(2);
+  });
+
+  it("runs a command that had no key, and one on its alternate key", async () => {
+    const harness = createAppHarness({
+      preferences: {
+        shortcutOverrides: { viewAsIcons: ["Cmd+3"], viewAsList: ["Cmd+J", "F6"] },
+      },
+    });
+    await renderApp(harness);
+    expect(screen.getByRole("button", { name: "Icon view" })).not.toHaveClass("active");
+
+    await pressKey({ key: "3", metaKey: true });
+    expect(screen.getByRole("button", { name: "Icon view" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "Icon view" })).toHaveAttribute(
+      "title",
+      "View as Icons (⌘3)",
+    );
+
+    await pressKey({ key: "F6" });
+    expect(screen.getByRole("button", { name: "List view" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "Icon view" })).not.toHaveClass("active");
+  });
+
+  it("gives a reassigned key to its new command only", async () => {
+    const harness = createAppHarness({
+      preferences: {
+        shortcutOverrides: { newFolder: ["Cmd+Shift+N", "Cmd+D"], duplicateSelection: [] },
+      },
+    });
+    await renderApp(harness);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "source.txt" }));
+    });
+
+    await pressKey({ key: "d", metaKey: true });
+
+    await screen.findByRole("dialog", { name: "New Folder" });
+    expect(
+      harness.invocations.some(
+        (call) =>
+          call.channel === "copyPaste:plan" &&
+          (call.payload as IpcRequestInput<"copyPaste:plan">).action === "duplicate",
+      ),
+    ).toBe(false);
+  });
+
+  it("opens Help on the key it was given, and no longer on ?", async () => {
+    const harness = createAppHarness({
+      preferences: { shortcutOverrides: { openHelp: ["F1"] } },
+    });
+    await renderApp(harness);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "source.txt" }));
+    });
+
+    await pressKey({ key: "?", shiftKey: true });
+    expect(screen.queryByTestId("help-view")).toBeNull();
+
+    await pressKey({ key: "F1" });
+    expect(screen.getByTestId("help-view")).toBeInTheDocument();
+  });
+
+  it("leaves a caret key to a text field when the menu hears it too", async () => {
+    const harness = createAppHarness();
+    await renderApp(harness);
+    const opened = () =>
+      harness.invocations.filter(
+        (call) =>
+          call.channel === "directory:getSnapshot" &&
+          (call.payload as IpcRequestInput<"directory:getSnapshot">).path === "/Users",
+      ).length;
+    const searchField = screen.getByPlaceholderText("Search");
+    await act(async () => {
+      searchField.focus();
+    });
+
+    // ⌘↑ moves the caret; the menu's Enclosing Folder, sent for the same key press, waits.
+    await pressKey({ key: "ArrowUp", metaKey: true }, searchField);
+    await act(async () => {
+      harness.emitCommand({ type: "goEnclosingFolder" });
+    });
+    expect(opened()).toBe(0);
+
+    // Chosen from the menu with the pointer, it goes up.
+    await pressKey({ key: "Shift", shiftKey: true }, searchField);
+    await act(async () => {
+      harness.emitCommand({ type: "goEnclosingFolder" });
+    });
+    await waitFor(() => expect(opened()).toBeGreaterThan(0));
+  });
+});
+
 describe("App test harness", () => {
   it("routes write and copy-paste progress to their matching listeners only", () => {
     const harness = createAppHarness();

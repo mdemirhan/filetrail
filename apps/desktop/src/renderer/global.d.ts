@@ -3,6 +3,7 @@ import type {
   IpcChannel,
   IpcRequestInput,
   IpcResponse,
+  SettingsTab,
   WriteOperationProgressEvent,
 } from "@filetrail/contracts";
 import type { RendererCommand } from "../shared/rendererCommands";
@@ -21,6 +22,7 @@ declare global {
       onPreferencesChanged?(
         listener: (patch: IpcRequestInput<"app:updatePreferences">["preferences"]) => void,
       ): () => void;
+      onShowSettingsTab?(listener: (tab: SettingsTab) => void): () => void;
     };
   }
 }

@@ -36,6 +36,7 @@ import {
 import { FavoriteItemIcon, TreeFolderIcon } from "../lib/fileIcons";
 import type { HistoryMenuEntry } from "../lib/historyMenu";
 import { getToolbarItemTooltip } from "../lib/tooltips";
+import { useShortcutDisplay } from "../state/shortcutDisplayContext";
 import { HistoryButton } from "./HistoryButton";
 import { ToolbarIcon } from "./ToolbarIcon";
 
@@ -294,13 +295,18 @@ export function TreePane({
       integratedPresentation.visibleItemIds,
     ],
   );
+  const shortcutDisplay = useShortcutDisplay();
   const getToolbarTooltip = (itemId: ToolbarItemId) =>
-    getToolbarItemTooltip(itemId, {
-      foldersFirst,
-      hiddenFilesShown: includeHidden,
-      infoPanelOpen,
-      infoRowOpen,
-    });
+    getToolbarItemTooltip(
+      itemId,
+      {
+        foldersFirst,
+        hiddenFilesShown: includeHidden,
+        infoPanelOpen,
+        infoRowOpen,
+      },
+      shortcutDisplay,
+    );
 
   useEffect(
     () => () => {

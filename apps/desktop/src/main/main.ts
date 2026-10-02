@@ -3,11 +3,14 @@ import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { BrowserWindow, Menu, app, nativeImage, nativeTheme, shell } from "electron";
 
+import type { SettingsTab } from "@filetrail/contracts";
+
 import { type AppPreferences, isThemeInGroup } from "../shared/appPreferences";
 import {
   type ApplicationMenuState,
   INITIAL_APPLICATION_MENU_STATE,
 } from "../shared/applicationMenuState";
+import { resolveShortcuts } from "../shared/shortcuts";
 import { createAppLogger, isDebugLoggingEnabled, resolveAppLogFilePath } from "./appLog";
 import {
   APP_MENU_NAME,
@@ -130,6 +133,10 @@ if (hasSingleInstanceLock) {
           }
           if (change.patch.theme !== undefined) {
             applyNativeAppearance(preferences.theme);
+          }
+          // The menu's keys can not be changed in place: it is built again with the new ones.
+          if (change.patch.shortcutOverrides !== undefined && mainWindowRef) {
+            buildApplicationMenu(mainWindowRef);
           }
         },
         {
@@ -324,12 +331,15 @@ function createWindow(): BrowserWindow {
 
 // Settings lives in its own window (⌘,), like a native macOS app. Preference edits there
 // persist through the same IPC as the explorer window and are broadcast back to it.
-function openSettingsWindow(): void {
+function openSettingsWindow(tab?: SettingsTab): void {
   const appStateStore = appStateStoreRef;
   if (!appStateStore) {
     return;
   }
   if (settingsWindowRef && !settingsWindowRef.isDestroyed()) {
+    if (tab) {
+      settingsWindowRef.webContents.send("filetrail:showSettingsTab", tab);
+    }
     settingsWindowRef.show();
     settingsWindowRef.focus();
     return;
@@ -356,7 +366,8 @@ function openSettingsWindow(): void {
   settingsWindowRef = settingsWindow;
   keepWindowZoom(settingsWindow, appStateStore);
   const rendererEntryUrl = resolveRendererEntryUrl();
-  const settingsUrl = `${rendererEntryUrl}#settings`;
+  // The tab to open on follows "#settings" in the address.
+  const settingsUrl = `${rendererEntryUrl}#settings${tab ? `/${tab}` : ""}`;
   settingsWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (isAllowedExternalUrl(url)) {
       void shell.openExternal(url);
@@ -437,12 +448,18 @@ function keepWindowZoom(window: BrowserWindow, appStateStore: AppStateStore): vo
 function applyApplicationMenu(mainWindow: BrowserWindow): void {
   // A new window has not reported yet.
   applicationMenuState = INITIAL_APPLICATION_MENU_STATE;
+  buildApplicationMenu(mainWindow);
+}
+
+// Builds the menu with the shortcuts chosen in Settings; called again when they change.
+function buildApplicationMenu(mainWindow: BrowserWindow): void {
   Menu.setApplicationMenu(
     Menu.buildFromTemplate(
       createApplicationMenuTemplate(mainWindow.webContents, {
-        onOpenSettings: openSettingsWindow,
+        onOpenSettings: () => openSettingsWindow(),
         includeDeveloperTools: !app.isPackaged || process.env.FILETRAIL_OPEN_DEVTOOLS === "1",
         onCommandSent: () => syncApplicationMenuItems(mainWindow),
+        shortcuts: resolveShortcuts(appStateStoreRef?.getPreferences().shortcutOverrides).bindings,
       }),
     ),
   );

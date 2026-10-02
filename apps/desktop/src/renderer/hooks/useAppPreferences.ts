@@ -21,6 +21,7 @@ import {
   type UiFontFamily,
   resolveEffectiveTheme,
 } from "../../shared/appPreferences";
+import type { ShortcutOverrides } from "../../shared/shortcuts";
 import { applyAppearance } from "../lib/theme";
 
 export function useAppPreferences() {
@@ -113,6 +114,9 @@ export function useAppPreferences() {
   const [returnKeyAction, setReturnKeyAction] = useState<ReturnKeyAction>(
     DEFAULT_APP_PREFERENCES.returnKeyAction,
   );
+  const [shortcutOverrides, setShortcutOverrides] = useState<ShortcutOverrides>(
+    DEFAULT_APP_PREFERENCES.shortcutOverrides,
+  );
   useEffect(() => {
     applyAppearance({ theme: effectiveTheme, accent, uiFontFamily });
   }, [accent, effectiveTheme, uiFontFamily]);
@@ -197,6 +201,8 @@ export function useAppPreferences() {
     setOpenItemLimit,
     returnKeyAction,
     setReturnKeyAction,
+    shortcutOverrides,
+    setShortcutOverrides,
     resetAppearanceSettings,
   };
 }
@@ -270,5 +276,6 @@ export function applyPreferencesPatch(store: AppPreferencesStore, patch: Incomin
   set("openWithApplications", store.setOpenWithApplications);
   set("fileActivationAction", store.setFileActivationAction);
   set("returnKeyAction", store.setReturnKeyAction);
+  set("shortcutOverrides", store.setShortcutOverrides);
   set("openItemLimit", store.setOpenItemLimit);
 }

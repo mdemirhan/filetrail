@@ -1,4 +1,5 @@
 import type { RendererCommandType } from "./rendererCommands";
+import type { ShortcutCommandId } from "./shortcuts";
 
 export type ToolbarIconName =
   | "back"
@@ -101,8 +102,8 @@ export type ToolbarItemDefinition = {
   commandType?: RendererCommandType;
   topLocked?: boolean;
   topVisibleInMinimal?: boolean;
-  // Written as "Cmd+Shift+M"; tooltips show it as symbols.
-  shortcutLabel?: string;
+  // The command whose shortcut the tooltip shows.
+  shortcutCommand?: ShortcutCommandId;
   // The command's full name, where the label is a shorter one for the Settings tiles.
   tooltipLabel?: string;
   allowDuplicates?: boolean;
@@ -116,7 +117,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     icon: "back",
     kind: "button",
     surfaces: ["top"],
-    shortcutLabel: "Cmd+[",
+    shortcutCommand: "goBack",
     topVisibleInMinimal: true,
   },
   {
@@ -125,7 +126,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     icon: "forward",
     kind: "button",
     surfaces: ["top"],
-    shortcutLabel: "Cmd+]",
+    shortcutCommand: "goForward",
     topVisibleInMinimal: true,
   },
   {
@@ -134,7 +135,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     icon: "up",
     kind: "button",
     surfaces: ["top"],
-    shortcutLabel: "Cmd+Up",
+    shortcutCommand: "goEnclosingFolder",
     topVisibleInMinimal: false,
   },
   {
@@ -143,7 +144,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     icon: "down",
     kind: "button",
     surfaces: ["top"],
-    shortcutLabel: "Cmd+Down",
+    shortcutCommand: "openSelectedItem",
     topVisibleInMinimal: false,
   },
   {
@@ -153,7 +154,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     kind: "button",
     surfaces: ["top", "left"],
     commandType: "refreshOrApplySearchSort",
-    shortcutLabel: "Cmd+R",
+    shortcutCommand: "refreshOrApplySearchSort",
     topVisibleInMinimal: false,
   },
   {
@@ -232,7 +233,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     kind: "button",
     surfaces: ["top", "left"],
     commandType: "openLocationSheet",
-    shortcutLabel: "Cmd+K",
+    shortcutCommand: "openLocationSheet",
   },
   {
     id: "foldersFirst",
@@ -240,6 +241,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     icon: "foldersFirst",
     kind: "toggle",
     surfaces: ["top", "left"],
+    shortcutCommand: "toggleFoldersFirst",
   },
   {
     id: "hidden",
@@ -247,7 +249,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     icon: "hidden",
     kind: "toggle",
     surfaces: ["top", "left"],
-    shortcutLabel: "Cmd+Shift+.",
+    shortcutCommand: "toggleHiddenFiles",
   },
   {
     id: "infoPanel",
@@ -256,7 +258,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     kind: "toggle",
     surfaces: ["top", "left"],
     commandType: "toggleInfoPanel",
-    shortcutLabel: "Cmd+I",
+    shortcutCommand: "toggleInfoPanel",
   },
   {
     id: "infoRow",
@@ -265,7 +267,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     kind: "toggle",
     surfaces: ["top", "left"],
     commandType: "toggleInfoRow",
-    shortcutLabel: "Cmd+Shift+I",
+    shortcutCommand: "toggleInfoRow",
   },
   {
     id: "help",
@@ -273,7 +275,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     icon: "help",
     kind: "button",
     surfaces: ["left"],
-    shortcutLabel: "?",
+    shortcutCommand: "openHelp",
   },
   {
     id: "theme",
@@ -290,7 +292,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     kind: "button",
     surfaces: ["left"],
     commandType: "openSettings",
-    shortcutLabel: "Cmd+,",
+    shortcutCommand: "settings",
     leftZones: ["utility"],
   },
   {
@@ -308,7 +310,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     kind: "button",
     surfaces: ["top", "left"],
     commandType: "openSelection",
-    shortcutLabel: "Cmd+O",
+    shortcutCommand: "openSelection",
   },
   {
     id: "editSelection",
@@ -318,7 +320,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     kind: "button",
     surfaces: ["top", "left"],
     commandType: "editSelection",
-    shortcutLabel: "Cmd+E",
+    shortcutCommand: "editSelection",
   },
   {
     id: "moveSelection",
@@ -327,7 +329,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     kind: "button",
     surfaces: ["top", "left"],
     commandType: "moveSelection",
-    shortcutLabel: "Cmd+Shift+M",
+    shortcutCommand: "moveSelection",
   },
   {
     id: "renameSelection",
@@ -336,7 +338,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     kind: "button",
     surfaces: ["top", "left"],
     commandType: "renameSelection",
-    shortcutLabel: "Return",
+    shortcutCommand: "renameSelection",
   },
   {
     id: "duplicateSelection",
@@ -345,7 +347,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     kind: "button",
     surfaces: ["top", "left"],
     commandType: "duplicateSelection",
-    shortcutLabel: "Cmd+D",
+    shortcutCommand: "duplicateSelection",
   },
   {
     id: "newFolder",
@@ -354,7 +356,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     kind: "button",
     surfaces: ["top", "left"],
     commandType: "newFolder",
-    shortcutLabel: "Cmd+Shift+N",
+    shortcutCommand: "newFolder",
   },
   {
     id: "trashSelection",
@@ -363,7 +365,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     kind: "button",
     surfaces: ["top", "left"],
     commandType: "trashSelection",
-    shortcutLabel: "Cmd+Backspace",
+    shortcutCommand: "trashSelection",
   },
   {
     id: "copySelection",
@@ -372,7 +374,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     kind: "button",
     surfaces: ["top", "left"],
     commandType: "copySelection",
-    shortcutLabel: "Cmd+C",
+    shortcutCommand: "copy",
   },
   {
     id: "cutSelection",
@@ -381,7 +383,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     kind: "button",
     surfaces: ["top", "left"],
     commandType: "cutSelection",
-    shortcutLabel: "Cmd+X",
+    shortcutCommand: "cut",
   },
   {
     id: "pasteSelection",
@@ -390,7 +392,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     kind: "button",
     surfaces: ["top", "left"],
     commandType: "pasteSelection",
-    shortcutLabel: "Cmd+V",
+    shortcutCommand: "paste",
   },
   {
     id: "openInTerminal",
@@ -399,7 +401,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     kind: "button",
     surfaces: ["top", "left"],
     commandType: "openInTerminal",
-    shortcutLabel: "Cmd+Option+T",
+    shortcutCommand: "openInTerminal",
   },
   {
     id: "copyPath",
@@ -408,7 +410,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     kind: "button",
     surfaces: ["top", "left"],
     commandType: "copyPath",
-    shortcutLabel: "Cmd+Option+C",
+    shortcutCommand: "copyPath",
   },
 ] as const satisfies ReadonlyArray<ToolbarItemDefinition>;
 

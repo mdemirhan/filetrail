@@ -2,6 +2,14 @@ import type { Menu, MenuItemConstructorOptions, WebContents } from "electron";
 
 import type { ApplicationMenuState } from "../shared/applicationMenuState";
 import { RENDERER_COMMAND_TYPES, type RendererCommandType } from "../shared/rendererCommands";
+import {
+  DEFAULT_SHORTCUT_BINDINGS,
+  type ShortcutBindings,
+  type ShortcutCommandId,
+  getMenuShortcut,
+  isShortcutCommandId,
+  toMenuAccelerator,
+} from "../shared/shortcuts";
 
 type NativeEditTarget = Pick<WebContents, "cut" | "copy" | "paste" | "selectAll">;
 
@@ -47,6 +55,8 @@ export function createApplicationMenuTemplate(
     // mark on its own when the item is chosen; the host uses this to put back what the
     // window last reported, so the marks only ever show what is really on.
     onCommandSent?: () => void;
+    // The keys of every command, as chosen in Settings → Shortcuts.
+    shortcuts?: ShortcutBindings;
   } = {},
 ): MenuItemConstructorOptions[] {
   const sendCommand = (type: RendererCommandType, focusedWindow?: unknown) => {
@@ -70,21 +80,34 @@ export function createApplicationMenuTemplate(
     webContents.send("filetrail:command", { type });
   };
 
+  const shortcuts = options.shortcuts ?? DEFAULT_SHORTCUT_BINDINGS;
+  // The menu shows and listens for a command's first key that has ⌘ or ⌃. A key without
+  // either (Space for Quick Look, F2 for Rename) is handled by the window: as a menu key
+  // it would be taken from text fields and dialogs.
+  const acceleratorOf = (id: ShortcutCommandId): string | undefined => {
+    const shortcut = getMenuShortcut(shortcuts[id]);
+    return shortcut ? toMenuAccelerator(shortcut) : undefined;
+  };
   const command = (
     type: RendererCommandType,
     label: string,
-    accelerator?: string,
-    extra: Pick<MenuItemConstructorOptions, "id" | "type" | "visible"> = {},
-  ): MenuItemConstructorOptions => ({
-    id: type,
-    label,
-    ...(accelerator ? { accelerator } : {}),
-    ...extra,
-    click: (_item, window) => {
-      sendCommand(type, window);
-      options.onCommandSent?.();
-    },
-  });
+    extra: Pick<MenuItemConstructorOptions, "id" | "type" | "visible" | "accelerator"> = {},
+  ): MenuItemConstructorOptions => {
+    const accelerator = isShortcutCommandId(type) ? acceleratorOf(type) : undefined;
+    return {
+      id: type,
+      label,
+      ...(accelerator ? { accelerator } : {}),
+      ...extra,
+      click: (_item, window) => {
+        sendCommand(type, window);
+        options.onCommandSent?.();
+      },
+    };
+  };
+  // A command the app never rebinds: the key is shared with text fields, or is macOS's.
+  const fixedAccelerator = (id: ShortcutCommandId): string =>
+    toMenuAccelerator(DEFAULT_SHORTCUT_BINDINGS[id][0] ?? "") ?? "";
   const separator: MenuItemConstructorOptions = { type: "separator" };
 
   return [
@@ -95,7 +118,7 @@ export function createApplicationMenuTemplate(
         separator,
         {
           label: "Settings…",
-          accelerator: "CommandOrControl+,",
+          accelerator: fixedAccelerator("settings"),
           click: () =>
             options.onOpenSettings ? options.onOpenSettings() : sendCommand("openSettings"),
         },
@@ -112,34 +135,32 @@ export function createApplicationMenuTemplate(
     {
       label: "File",
       submenu: [
-        command("newTab", "New Tab", "CommandOrControl+T"),
-        command("newFolder", "New Folder", "CommandOrControl+Shift+N"),
+        command("newTab", "New Tab"),
+        command("newFolder", "New Folder"),
         separator,
-        command("openSelection", "Open", "CommandOrControl+O"),
+        command("openSelection", "Open"),
         command("openSelectionInNewTab", "Open in New Tab"),
-        command("editSelection", "Edit in Text Editor", "CommandOrControl+E"),
-        // Space is handled in the renderer, as Return is for Rename: a menu accelerator
-        // for either would swallow the key in text fields and dialogs.
+        command("editSelection", "Edit in Text Editor"),
         command("quickLookSelection", "Quick Look"),
         separator,
         command("renameSelection", "Rename"),
-        command("duplicateSelection", "Duplicate", "CommandOrControl+D"),
-        command("moveSelection", "Move To…", "CommandOrControl+Shift+M"),
-        command("toggleFavorite", "Add to Favorites", undefined, { id: FAVORITE_ADD_ITEM_ID }),
-        command("toggleFavorite", "Remove from Favorites", undefined, {
+        command("duplicateSelection", "Duplicate"),
+        command("moveSelection", "Move To…"),
+        command("toggleFavorite", "Add to Favorites", { id: FAVORITE_ADD_ITEM_ID }),
+        command("toggleFavorite", "Remove from Favorites", {
           id: FAVORITE_REMOVE_ITEM_ID,
           visible: false,
         }),
         separator,
-        command("openInTerminal", "Open in Terminal", "Alt+CommandOrControl+T"),
+        command("openInTerminal", "Open in Terminal"),
         command("showInFinder", "Show in Finder"),
         separator,
-        command("trashSelection", "Move to Trash", "CommandOrControl+Backspace"),
+        command("trashSelection", "Move to Trash"),
         separator,
-        command("reopenClosedTab", "Reopen Closed Tab", "Shift+CommandOrControl+T"),
+        command("reopenClosedTab", "Reopen Closed Tab"),
         // Closes the window when it has a single view.
-        command("closeTab", "Close Tab", "CommandOrControl+W"),
-        { role: "close", label: "Close Window", accelerator: "Shift+CommandOrControl+W" },
+        command("closeTab", "Close Tab"),
+        { role: "close", label: "Close Window", accelerator: fixedAccelerator("closeWindow") },
       ],
     },
     {
@@ -148,47 +169,47 @@ export function createApplicationMenuTemplate(
         { role: "undo" },
         { role: "redo" },
         separator,
-        command("editCut", "Cut", "CommandOrControl+X"),
-        command("editCopy", "Copy", "CommandOrControl+C"),
-        command("editPaste", "Paste", "CommandOrControl+V"),
-        command("copyPath", "Copy Path", "Alt+CommandOrControl+C"),
-        command("editSelectAll", "Select All", "CommandOrControl+A"),
+        command("editCut", "Cut", { accelerator: fixedAccelerator("cut") }),
+        command("editCopy", "Copy", { accelerator: fixedAccelerator("copy") }),
+        command("editPaste", "Paste", { accelerator: fixedAccelerator("paste") }),
+        command("copyPath", "Copy Path"),
+        command("editSelectAll", "Select All", { accelerator: fixedAccelerator("selectAll") }),
         separator,
-        command("focusFileSearch", "Find Files…", "CommandOrControl+F"),
-        command("showLastSearchResults", "Show Last Results", "Shift+CommandOrControl+F"),
+        command("focusFileSearch", "Find Files…"),
+        command("showLastSearchResults", "Show Last Results"),
       ],
     },
     {
       label: "View",
       submenu: [
-        command("viewAsIcons", "as Icons", undefined, { type: "radio" }),
-        command("viewAsList", "as List", undefined, { type: "radio" }),
-        command("viewAsDetails", "as Details", undefined, { type: "radio" }),
+        command("viewAsIcons", "as Icons", { type: "radio" }),
+        command("viewAsList", "as List", { type: "radio" }),
+        command("viewAsDetails", "as Details", { type: "radio" }),
         separator,
         {
           label: "Sort By",
           submenu: [
-            command("sortByName", "Name", undefined, { type: "radio" }),
-            command("sortByModified", "Date Modified", undefined, { type: "radio" }),
-            command("sortBySize", "Size", undefined, { type: "radio" }),
-            command("sortByKind", "Kind", undefined, { type: "radio" }),
+            command("sortByName", "Name", { type: "radio" }),
+            command("sortByModified", "Date Modified", { type: "radio" }),
+            command("sortBySize", "Size", { type: "radio" }),
+            command("sortByKind", "Kind", { type: "radio" }),
           ],
         },
-        command("toggleFoldersFirst", "Folders First", undefined, { type: "checkbox" }),
-        command("toggleHiddenFiles", "Show Hidden Files", "Shift+CommandOrControl+.", {
+        command("toggleFoldersFirst", "Folders First", { type: "checkbox" }),
+        command("toggleHiddenFiles", "Show Hidden Files", {
           type: "checkbox",
         }),
         separator,
-        command("toggleInfoPanel", "Show Info Panel", "CommandOrControl+I", { type: "checkbox" }),
-        command("toggleInfoRow", "Show Info Row", "CommandOrControl+Shift+I", {
+        command("toggleInfoPanel", "Show Info Panel", { type: "checkbox" }),
+        command("toggleInfoRow", "Show Info Row", {
           type: "checkbox",
         }),
         separator,
-        command("refreshOrApplySearchSort", "Refresh", "CommandOrControl+R"),
+        command("refreshOrApplySearchSort", "Refresh"),
         separator,
-        command("zoomIn", "Zoom In", "CommandOrControl+Plus"),
-        command("zoomOut", "Zoom Out", "CommandOrControl+-"),
-        command("resetZoom", "Actual Size", "CommandOrControl+0"),
+        command("zoomIn", "Zoom In"),
+        command("zoomOut", "Zoom Out"),
+        command("resetZoom", "Actual Size"),
         separator,
         // Electron keeps macOS from adding its own full screen item, so the menu has one.
         // The label can not change once the menu is built: two items, one shown at a time.
@@ -207,15 +228,14 @@ export function createApplicationMenuTemplate(
     {
       label: "Go",
       submenu: [
-        command("goBack", "Back", "CommandOrControl+["),
-        command("goForward", "Forward", "CommandOrControl+]"),
-        command("goEnclosingFolder", "Enclosing Folder", "CommandOrControl+Up"),
+        command("goBack", "Back"),
+        command("goForward", "Forward"),
+        command("goEnclosingFolder", "Enclosing Folder"),
         separator,
-        command("goHomeRootTree", "Home", "CommandOrControl+Shift+H"),
-        // ⇧⌘G opens it as well; the window handles that key itself.
-        command("openLocationSheet", "Go To…", "CommandOrControl+K"),
+        command("goHomeRootTree", "Home"),
+        command("openLocationSheet", "Go To…"),
         separator,
-        command("rootTreeAtSelection", "Root Tree at Selected Folder", "CommandOrControl+Shift+R"),
+        command("rootTreeAtSelection", "Root Tree at Selected Folder"),
       ],
     },
     {
@@ -226,11 +246,11 @@ export function createApplicationMenuTemplate(
         { role: "minimize" },
         { role: "zoom" },
         separator,
-        command("selectPreviousTab", "Show Previous Tab", "Ctrl+Shift+Tab"),
-        command("selectNextTab", "Show Next Tab", "Ctrl+Tab"),
+        command("selectPreviousTab", "Show Previous Tab"),
+        command("selectNextTab", "Show Next Tab"),
         separator,
-        command("focusTreePane", "Focus Folder Tree", "CommandOrControl+1"),
-        command("focusContentPane", "Focus File List", "CommandOrControl+2"),
+        command("focusTreePane", "Focus Folder Tree"),
+        command("focusContentPane", "Focus File List"),
         separator,
         { role: "front" },
       ],

@@ -49,7 +49,18 @@ const SETTINGS_TABS: ReadonlyArray<{ id: SettingsTab; label: string; icon: strin
     label: "Toolbars",
     icon: "M3 5h18M3 12h18M3 19h18M7 3v4M15 10v4M11 17v4",
   },
+  {
+    id: "shortcuts",
+    label: "Shortcuts",
+    icon: "M5 6.5h14A2.5 2.5 0 0 1 21.5 9v6a2.5 2.5 0 0 1-2.5 2.5H5A2.5 2.5 0 0 1 2.5 15V9A2.5 2.5 0 0 1 5 6.5zM6.5 10.5h.01M10 10.5h.01M13.5 10.5h.01M17 10.5h.01M8 14h8",
+  },
 ];
+
+// The tab named after "#settings/" in the window's address, when it was opened on one.
+function readRequestedTab(): SettingsTab | null {
+  const requested = window.location.hash.replace(/^#settings\/?/, "");
+  return SETTINGS_TABS.find((tab) => tab.id === requested)?.id ?? null;
+}
 
 function createOpenWithApplicationId(): string {
   return `open-with-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -61,7 +72,7 @@ function createOpenWithApplicationId(): string {
 export function SettingsWindowApp() {
   const client = useFiletrailClient();
   const preferences = useAppPreferences();
-  const [activeTab, setActiveTab] = useState<SettingsTab>("general");
+  const [activeTab, setActiveTab] = useState<SettingsTab>(() => readRequestedTab() ?? "general");
   const [homePath, setHomePath] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   // Search defaults live in the explorer's search session; Settings edits the persisted values.
@@ -103,6 +114,7 @@ export function SettingsWindowApp() {
     openWithApplications: preferences.openWithApplications,
     fileActivationAction: preferences.fileActivationAction,
     returnKeyAction: preferences.returnKeyAction,
+    shortcutOverrides: preferences.shortcutOverrides,
     openItemLimit: preferences.openItemLimit,
     ...searchDefaults,
   };
@@ -155,6 +167,16 @@ export function SettingsWindowApp() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
+
+  // Help's Customize… button asks an open Settings window for the Shortcuts tab.
+  useEffect(() => {
+    const unsubscribe = client.onShowSettingsTab?.((tab) => {
+      if (SETTINGS_TABS.some((candidate) => candidate.id === tab)) {
+        setActiveTab(tab);
+      }
+    });
+    return () => unsubscribe?.();
+  }, [client]);
 
   useEffect(() => {
     document.title = "Settings";
@@ -335,6 +357,8 @@ export function SettingsWindowApp() {
             fileActivationAction={preferences.fileActivationAction}
             returnKeyAction={preferences.returnKeyAction}
             onReturnKeyActionChange={preferences.setReturnKeyAction}
+            shortcutOverrides={preferences.shortcutOverrides}
+            onShortcutOverridesChange={preferences.setShortcutOverrides}
             openItemLimit={preferences.openItemLimit}
             accentOptions={ACCENT_OPTIONS}
             uiFontOptions={[...UI_FONT_OPTIONS]}

@@ -1,6 +1,6 @@
 import { app, clipboard, ipcMain, shell } from "electron";
 
-import type { AppLogEntry } from "@filetrail/contracts";
+import type { AppLogEntry, SettingsTab } from "@filetrail/contracts";
 import { ExplorerWorkerClient, createWriteService, getPathSuggestions } from "@filetrail/core";
 import type { AppPreferences } from "../shared/appPreferences";
 import { type ApplicationMenuState, toApplicationMenuState } from "../shared/applicationMenuState";
@@ -46,7 +46,7 @@ export async function bootstrapMainProcess(
     change: { patch: Partial<AppPreferences>; senderId: number | null },
   ) => void,
   windows: {
-    openSettingsWindow?: () => void;
+    openSettingsWindow?: (tab?: SettingsTab) => void;
     // The explorer window reporting what the application menu should show.
     setApplicationMenuState?: (state: ApplicationMenuState, senderId: number | null) => void;
   } = {},
@@ -111,8 +111,8 @@ export async function bootstrapMainProcess(
       "places:forget": (payload) => ({
         folders: appStateStore.forgetVisitedFolder(payload.path),
       }),
-      "app:openSettingsWindow": () => {
-        windows.openSettingsWindow?.();
+      "app:openSettingsWindow": (payload) => {
+        windows.openSettingsWindow?.(payload.tab);
         return { ok: windows.openSettingsWindow !== undefined };
       },
       "app:setMenuState": (payload, event) => {

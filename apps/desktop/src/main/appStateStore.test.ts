@@ -265,6 +265,7 @@ describe("appStateStore", () => {
       showSidebarRail: false,
       showSidebarBottomRail: true,
       returnKeyAction: "rename",
+      shortcutOverrides: {},
       accent: "#007aff",
       zoomPercent: 100,
       uiFontFamily: "system",
@@ -376,6 +377,14 @@ describe("appStateStore", () => {
 
     store.updatePreferences({
       theme: "macos-dark",
+      // As a hand-edited file might have them: any order, a key that can not be given
+      // out, a command that does not exist, and one that only repeats its default.
+      shortcutOverrides: {
+        newTab: ["option+cmd+n", "Cmd+C", "D"],
+        duplicateSelection: [],
+        closeTab: ["Cmd+W"],
+        noSuchCommand: ["Cmd+J"],
+      },
       accent: "#2cb5a0",
       zoomPercent: 115,
       uiFontFamily: "lexend",
@@ -491,6 +500,7 @@ describe("appStateStore", () => {
       showSidebarRail: false,
       showSidebarBottomRail: true,
       returnKeyAction: "rename",
+      shortcutOverrides: { newTab: ["Cmd+Option+N"], duplicateSelection: [] },
       accent: "#2cb5a0",
       zoomPercent: 115,
       uiFontFamily: "lexend",

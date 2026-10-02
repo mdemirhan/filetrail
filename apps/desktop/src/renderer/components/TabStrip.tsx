@@ -3,6 +3,8 @@ import { createPortal } from "react-dom";
 
 import type { ExplorerTabItem } from "../hooks/useExplorerTabs";
 import { useKeepInViewport } from "../hooks/useKeepInViewport";
+import { formatTooltip } from "../lib/tooltips";
+import { useShortcutDisplay } from "../state/shortcutDisplayContext";
 import { ToolbarIcon } from "./ToolbarIcon";
 
 // How far a tab is dragged before it starts moving along the row; less than that is a click.
@@ -38,6 +40,7 @@ export function TabStrip({
   onItemDrop?: (tab: ExplorerTabItem, event: React.DragEvent<HTMLElement>) => void;
   getDropIndicator?: (tabId: string) => "valid" | "invalid" | null;
 }) {
+  const shortcutDisplay = useShortcutDisplay();
   const tabsRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ tabId: string; startX: number; moving: boolean } | null>(null);
   // The click that ends a drag along the row must not also select the tab.
@@ -203,7 +206,7 @@ export function TabStrip({
               type="button"
               className="tab-strip-close"
               aria-label={`Close ${tab.label}`}
-              title="Close Tab (⌘W)"
+              title={formatTooltip("Close Tab", shortcutDisplay.written("closeTab"))}
               tabIndex={-1}
               onMouseDown={(event) => event.preventDefault()}
               onClick={(event) => {
@@ -229,7 +232,7 @@ export function TabStrip({
         type="button"
         className="tab-strip-new"
         aria-label="New Tab"
-        title="New Tab (⌘T)"
+        title={formatTooltip("New Tab", shortcutDisplay.written("newTab"))}
         tabIndex={-1}
         onMouseDown={(event) => event.preventDefault()}
         onClick={onNewTab}

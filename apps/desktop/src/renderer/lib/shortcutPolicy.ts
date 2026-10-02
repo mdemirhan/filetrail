@@ -1,5 +1,7 @@
 import type { RendererCommandType } from "../../shared/rendererCommands";
+import type { ShortcutCommandId } from "../../shared/shortcuts";
 import type { ContextMenuActionId } from "./contextMenu";
+import { DEFAULT_SHORTCUT_DISPLAY, type ShortcutDisplay } from "./shortcutDisplay";
 
 type MainView = "explorer" | "help" | "settings";
 type FocusedPane = "tree" | "content" | null;
@@ -39,22 +41,23 @@ const TREE_SAFE_RAW_SHORTCUTS = new Set<RawExplorerShortcutId>([
   "openInTerminal",
   "pasteSelection",
 ]);
-const CONTEXT_MENU_SHORTCUT_LABELS = {
-  open: "⌘O",
-  showInfo: "⌘I",
-  edit: "⌘E",
-  cut: "⌘X",
-  copy: "⌘C",
-  paste: "⌘V",
-  move: "⇧⌘M",
-  rename: "↩",
-  duplicate: "⌘D",
-  newFolder: "⇧⌘N",
-  terminal: "⌥⌘T",
-  copyPath: "⌥⌘C",
-  rootTreeHere: "⇧⌘R",
-  trash: "⌘⌫",
-} as const satisfies Partial<Record<ContextMenuActionId, string>>;
+// The command whose shortcut a context-menu item shows.
+const CONTEXT_MENU_SHORTCUT_COMMANDS = {
+  open: "openSelection",
+  showInfo: "toggleInfoPanel",
+  edit: "editSelection",
+  cut: "cut",
+  copy: "copy",
+  paste: "paste",
+  move: "moveSelection",
+  rename: "renameSelection",
+  duplicate: "duplicateSelection",
+  newFolder: "newFolder",
+  terminal: "openInTerminal",
+  copyPath: "copyPath",
+  rootTreeHere: "rootTreeAtSelection",
+  trash: "trashSelection",
+} as const satisfies Partial<Record<ContextMenuActionId, ShortcutCommandId>>;
 
 export const RENDERER_COMMAND_TREE_FOCUS_BUCKETS = {
   editCut: "globalExplorer",
@@ -288,64 +291,63 @@ export function canHandleRawExplorerShortcut(
   );
 }
 
+// The shortcut shown beside a context-menu item: only where pressing it now would do what
+// the item does.
 export function getContextMenuShortcutLabel(
   actionId: ContextMenuActionId,
   context: ShortcutContext,
+  shortcuts: ShortcutDisplay = DEFAULT_SHORTCUT_DISPLAY,
 ): string | null {
-  if (actionId === "open" && canHandleRendererCommand("openSelection", context)) {
-    return CONTEXT_MENU_SHORTCUT_LABELS.open ?? null;
+  if (!(actionId in CONTEXT_MENU_SHORTCUT_COMMANDS)) {
+    return null;
   }
-  if (actionId === "showInfo" && canHandleRendererCommand("toggleInfoPanel", context)) {
-    return CONTEXT_MENU_SHORTCUT_LABELS.showInfo ?? null;
-  }
-  if (actionId === "edit" && canHandleRendererCommand("editSelection", context)) {
-    return CONTEXT_MENU_SHORTCUT_LABELS.edit ?? null;
-  }
-  if (actionId === "cut" && canHandleRawExplorerShortcut("cutSelection", context)) {
-    return CONTEXT_MENU_SHORTCUT_LABELS.cut ?? null;
-  }
-  if (actionId === "copy" && canHandleRawExplorerShortcut("copySelection", context)) {
-    return CONTEXT_MENU_SHORTCUT_LABELS.copy ?? null;
-  }
-  // A tree or favorite menu pastes into the right-clicked folder, while Cmd+V from the
-  // tree pastes into the selected one, so the badge would promise the wrong target.
-  if (
-    actionId === "paste" &&
-    context.focusedPane !== "tree" &&
-    canHandleRawExplorerShortcut("pasteSelection", context)
-  ) {
-    return CONTEXT_MENU_SHORTCUT_LABELS.paste ?? null;
-  }
-  if (actionId === "move" && canHandleRawExplorerShortcut("moveSelection", context)) {
-    return CONTEXT_MENU_SHORTCUT_LABELS.move ?? null;
-  }
-  if (actionId === "rename" && canHandleRawExplorerShortcut("renameSelection", context)) {
-    return CONTEXT_MENU_SHORTCUT_LABELS.rename ?? null;
-  }
-  if (actionId === "duplicate" && canHandleRawExplorerShortcut("duplicateSelection", context)) {
-    return CONTEXT_MENU_SHORTCUT_LABELS.duplicate ?? null;
-  }
-  if (actionId === "newFolder" && canHandleRawExplorerShortcut("newFolder", context)) {
-    return CONTEXT_MENU_SHORTCUT_LABELS.newFolder ?? null;
-  }
-  if (actionId === "terminal" && canHandleRendererCommand("openInTerminal", context)) {
-    return CONTEXT_MENU_SHORTCUT_LABELS.terminal ?? null;
-  }
-  if (
-    actionId === "copyPath" &&
-    (canHandleRawExplorerShortcut("copyPath", context) ||
-      canHandleRendererCommand("copyPath", context))
-  ) {
-    return CONTEXT_MENU_SHORTCUT_LABELS.copyPath ?? null;
-  }
-  if (actionId === "rootTreeHere" && canHandleRendererCommand("rootTreeAtSelection", context)) {
-    return CONTEXT_MENU_SHORTCUT_LABELS.rootTreeHere ?? null;
-  }
-  if (actionId === "trash" && canHandleRawExplorerShortcut("trashSelection", context)) {
-    return CONTEXT_MENU_SHORTCUT_LABELS.trash ?? null;
-  }
+  const action = actionId as keyof typeof CONTEXT_MENU_SHORTCUT_COMMANDS;
+  return isContextMenuShortcutLive(action, context)
+    ? shortcuts.label(CONTEXT_MENU_SHORTCUT_COMMANDS[action])
+    : null;
+}
 
-  return null;
+function isContextMenuShortcutLive(
+  action: keyof typeof CONTEXT_MENU_SHORTCUT_COMMANDS,
+  context: ShortcutContext,
+): boolean {
+  switch (action) {
+    case "open":
+      return canHandleRendererCommand("openSelection", context);
+    case "showInfo":
+      return canHandleRendererCommand("toggleInfoPanel", context);
+    case "edit":
+      return canHandleRendererCommand("editSelection", context);
+    case "cut":
+      return canHandleRawExplorerShortcut("cutSelection", context);
+    case "copy":
+      return canHandleRawExplorerShortcut("copySelection", context);
+    case "paste":
+      // A tree or favorite menu pastes into the right-clicked folder, while Cmd+V from the
+      // tree pastes into the selected one, so the badge would promise the wrong target.
+      return (
+        context.focusedPane !== "tree" && canHandleRawExplorerShortcut("pasteSelection", context)
+      );
+    case "move":
+      return canHandleRawExplorerShortcut("moveSelection", context);
+    case "rename":
+      return canHandleRawExplorerShortcut("renameSelection", context);
+    case "duplicate":
+      return canHandleRawExplorerShortcut("duplicateSelection", context);
+    case "newFolder":
+      return canHandleRawExplorerShortcut("newFolder", context);
+    case "terminal":
+      return canHandleRendererCommand("openInTerminal", context);
+    case "copyPath":
+      return (
+        canHandleRawExplorerShortcut("copyPath", context) ||
+        canHandleRendererCommand("copyPath", context)
+      );
+    case "rootTreeHere":
+      return canHandleRendererCommand("rootTreeAtSelection", context);
+    case "trash":
+      return canHandleRawExplorerShortcut("trashSelection", context);
+  }
 }
 
 function isSafeTreeTargetKind(kind: SelectedTreeTargetKind): boolean {

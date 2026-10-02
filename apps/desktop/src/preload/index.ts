@@ -5,6 +5,7 @@ import type {
   IpcChannel,
   IpcRequestInput,
   IpcResponse,
+  SettingsTab,
   WriteOperationProgressEvent,
 } from "@filetrail/contracts";
 import type { RendererCommand } from "../shared/rendererCommands";
@@ -28,6 +29,7 @@ type InvokeApi = {
   onWriteOperationProgress(listener: (event: WriteOperationProgressEvent) => void): () => void;
   onCopyPasteProgress(listener: (event: WriteOperationProgressEvent) => void): () => void;
   onPreferencesChanged(listener: (patch: PreferencesPatch) => void): () => void;
+  onShowSettingsTab(listener: (tab: SettingsTab) => void): () => void;
 };
 
 const api: InvokeApi = {
@@ -67,6 +69,15 @@ const api: InvokeApi = {
     ipcRenderer.on("filetrail:preferencesChanged", handleChange);
     return () => {
       ipcRenderer.removeListener("filetrail:preferencesChanged", handleChange);
+    };
+  },
+  onShowSettingsTab: (listener) => {
+    const handleTab = (_event: unknown, tab: SettingsTab) => {
+      listener(tab);
+    };
+    ipcRenderer.on("filetrail:showSettingsTab", handleTab);
+    return () => {
+      ipcRenderer.removeListener("filetrail:showSettingsTab", handleTab);
     };
   },
 };

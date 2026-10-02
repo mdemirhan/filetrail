@@ -1,3 +1,4 @@
+import type { ShortcutOverrides } from "./shortcuts";
 import {
   DEFAULT_LEFT_TOOLBAR_ITEMS,
   DEFAULT_TOP_TOOLBAR_ITEMS,
@@ -333,6 +334,8 @@ export type AppPreferences = {
   openWithApplications: OpenWithApplication[];
   fileActivationAction: FileActivationAction;
   returnKeyAction: ReturnKeyAction;
+  // The keyboard shortcuts that differ from their defaults, by command.
+  shortcutOverrides: ShortcutOverrides;
   openItemLimit: number;
   includeHidden: boolean;
   searchPatternMode: SearchPatternModePreference;
@@ -394,6 +397,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   openWithApplications: DEFAULT_OPEN_WITH_APPLICATIONS.map((entry) => ({ ...entry })),
   fileActivationAction: "open",
   returnKeyAction: "rename",
+  shortcutOverrides: {},
   openItemLimit: 5,
   includeHidden: false,
   searchPatternMode: "text",

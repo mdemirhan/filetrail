@@ -5,6 +5,7 @@ import type {
   IpcChannel,
   IpcRequestInput,
   IpcResponse,
+  SettingsTab,
   WriteOperationProgressEvent,
 } from "@filetrail/contracts";
 import type { RendererCommand } from "../../shared/rendererCommands";
@@ -19,6 +20,8 @@ export type FiletrailClient = {
   onPreferencesChanged?(
     listener: (patch: IpcRequestInput<"app:updatePreferences">["preferences"]) => void,
   ): () => void;
+  // The Settings window being asked to show one of its tabs.
+  onShowSettingsTab?(listener: (tab: SettingsTab) => void): () => void;
 };
 
 const MISSING_PRELOAD_ERROR =

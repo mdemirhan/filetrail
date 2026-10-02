@@ -1,5 +1,9 @@
+import { type ShortcutCommandId, isShortcutCommandId } from "../../shared/shortcuts";
+import { DEFAULT_SHORTCUT_DISPLAY, type ShortcutDisplay } from "./shortcutDisplay";
+
 // Help content is static data so wording can be tuned without touching the view. Text in
-// `backticks` is shown as code. Every pattern example was checked against the bundled fd.
+// `backticks` is shown as code, and `{newTab}` as the key that command has now. Every
+// pattern example was checked against the bundled fd.
 
 export type HelpTopicId = "navigation" | "files" | "search" | "views" | "shortcuts";
 /** The topics a shortcut can belong to (everything except the shortcut list itself). */
@@ -26,53 +30,68 @@ export type HelpTopic = {
   sections: readonly HelpSection[];
 };
 
+// A row of the shortcut list. One that names a command shows the key the command has now
+// (Settings → Shortcuts) and is left out while the command has none; the others are keys
+// that are always the same.
 export type ShortcutItem = {
   group: HelpShortcutGroup;
-  /** Written as "Cmd+Shift+G"; shown as keycaps. */
+  description: string;
+} & (
+  | {
+      /** Written as "Cmd+Shift+G"; shown as keycaps. */
+      shortcut: string;
+    }
+  | { command: ShortcutCommandId }
+);
+
+/** A row as it is shown: the key, and what it does. */
+export type ShownShortcut = {
+  group: HelpShortcutGroup;
   shortcut: string;
   description: string;
 };
 
 export const SHORTCUT_ITEMS: readonly ShortcutItem[] = [
-  { group: "navigation", shortcut: "Cmd+[", description: "Go back (Cmd+Left also works)" },
-  { group: "navigation", shortcut: "Cmd+]", description: "Go forward (Cmd+Right also works)" },
-  { group: "navigation", shortcut: "Cmd+Up", description: "Open the enclosing folder" },
+  { group: "navigation", command: "goBack", description: "Go back" },
+  { group: "navigation", command: "goForward", description: "Go forward" },
+  { group: "navigation", command: "goEnclosingFolder", description: "Open the enclosing folder" },
   {
     group: "navigation",
-    shortcut: "Cmd+Down",
+    command: "openSelectedItem",
     description: "Open the selected item, or expand or collapse the folder in the tree",
   },
   {
     group: "navigation",
-    shortcut: "Cmd+K",
-    description: "Go to a folder by name or path (Cmd+Shift+G also works)",
+    command: "openLocationSheet",
+    description: "Go to a folder by name or path",
   },
   {
     group: "navigation",
-    shortcut: "Cmd+Shift+H",
+    command: "goHomeRootTree",
     description: "Go Home and root the folder tree there",
   },
   {
     group: "navigation",
-    shortcut: "Cmd+Shift+R",
+    command: "rootTreeAtSelection",
     description: "Root the folder tree at the selected folder",
   },
-  { group: "navigation", shortcut: "Cmd+T", description: "New tab, on the same folder" },
+  { group: "navigation", command: "newTab", description: "New tab, on the same folder" },
   {
     group: "navigation",
-    shortcut: "Cmd+W",
+    command: "openSelectionInNewTab",
+    description: "Open the selected folder in a new tab",
+  },
+  {
+    group: "navigation",
+    command: "closeTab",
     description: "Close the tab (the window, when it has a single view)",
   },
-  { group: "navigation", shortcut: "Ctrl+Tab", description: "Next tab (Cmd+Shift+] also works)" },
-  {
-    group: "navigation",
-    shortcut: "Ctrl+Shift+Tab",
-    description: "Previous tab (Cmd+Shift+[ also works)",
-  },
-  { group: "navigation", shortcut: "Cmd+Shift+T", description: "Reopen the tab closed last" },
-  { group: "navigation", shortcut: "Cmd+Shift+W", description: "Close the window" },
-  { group: "navigation", shortcut: "Cmd+1", description: "Focus the folder tree" },
-  { group: "navigation", shortcut: "Cmd+2", description: "Focus the file list" },
+  { group: "navigation", command: "selectNextTab", description: "Next tab" },
+  { group: "navigation", command: "selectPreviousTab", description: "Previous tab" },
+  { group: "navigation", command: "reopenClosedTab", description: "Reopen the tab closed last" },
+  { group: "navigation", command: "closeWindow", description: "Close the window" },
+  { group: "navigation", command: "focusTreePane", description: "Focus the folder tree" },
+  { group: "navigation", command: "focusContentPane", description: "Focus the file list" },
   {
     group: "navigation",
     shortcut: "Tab",
@@ -84,49 +103,110 @@ export const SHORTCUT_ITEMS: readonly ShortcutItem[] = [
     description: "Extend the selection (Shift+Up, the other way)",
   },
   { group: "navigation", shortcut: "Home", description: "Select the first item (End, the last)" },
-  { group: "navigation", shortcut: "Ctrl+U", description: "Scroll one page up" },
-  { group: "navigation", shortcut: "Ctrl+D", description: "Scroll one page down" },
-  { group: "navigation", shortcut: "Cmd+R", description: "Refresh the current folder" },
+  { group: "navigation", command: "pageUp", description: "Scroll one page up" },
+  { group: "navigation", command: "pageDown", description: "Scroll one page down" },
+  {
+    group: "navigation",
+    command: "refreshOrApplySearchSort",
+    description: "Refresh the current folder",
+  },
 
-  { group: "files", shortcut: "Cmd+O", description: "Open" },
-  { group: "files", shortcut: "Cmd+E", description: "Edit in your text editor" },
-  { group: "files", shortcut: "Space", description: "Quick Look" },
-  { group: "files", shortcut: "Return", description: "Rename (F2 also works)" },
-  { group: "files", shortcut: "Cmd+C", description: "Copy" },
-  { group: "files", shortcut: "Cmd+X", description: "Cut" },
-  { group: "files", shortcut: "Cmd+V", description: "Paste" },
-  { group: "files", shortcut: "Cmd+D", description: "Duplicate" },
-  { group: "files", shortcut: "Cmd+Shift+M", description: "Move to another folder" },
-  { group: "files", shortcut: "Cmd+Shift+N", description: "New folder" },
-  { group: "files", shortcut: "Cmd+Backspace", description: "Move to Trash" },
-  { group: "files", shortcut: "Cmd+A", description: "Select all" },
-  { group: "files", shortcut: "Cmd+Option+C", description: "Copy the path" },
-  { group: "files", shortcut: "Cmd+Option+T", description: "Open in Terminal" },
+  { group: "files", command: "openSelection", description: "Open" },
+  { group: "files", command: "editSelection", description: "Edit in your text editor" },
+  { group: "files", command: "quickLookSelection", description: "Quick Look" },
+  { group: "files", command: "renameSelection", description: "Rename" },
+  { group: "files", command: "copy", description: "Copy" },
+  { group: "files", command: "cut", description: "Cut" },
+  { group: "files", command: "paste", description: "Paste" },
+  { group: "files", command: "duplicateSelection", description: "Duplicate" },
+  { group: "files", command: "moveSelection", description: "Move to another folder" },
+  { group: "files", command: "newFolder", description: "New folder" },
+  { group: "files", command: "trashSelection", description: "Move to Trash" },
+  { group: "files", command: "selectAll", description: "Select all" },
+  { group: "files", command: "copyPath", description: "Copy the path" },
+  { group: "files", command: "openInTerminal", description: "Open in Terminal" },
+  { group: "files", command: "showInFinder", description: "Show in Finder" },
+  { group: "files", command: "toggleFavorite", description: "Add to or remove from Favorites" },
   { group: "files", shortcut: "Esc", description: "Cancel a dialog (Cmd+. also works)" },
 
-  { group: "search", shortcut: "Cmd+F", description: "Find files" },
+  { group: "search", command: "focusFileSearch", description: "Find files" },
   {
     group: "search",
     shortcut: "Down",
     description: "Move from the search field into the results (Return also works)",
   },
-  { group: "search", shortcut: "Cmd+Shift+F", description: "Show the last results again" },
-  { group: "search", shortcut: "Cmd+R", description: "Run the search again" },
+  {
+    group: "search",
+    command: "showLastSearchResults",
+    description: "Show the last results again",
+  },
+  { group: "search", command: "refreshOrApplySearchSort", description: "Run the search again" },
   { group: "search", shortcut: "Esc", description: "Close the results" },
 
-  { group: "views", shortcut: "Cmd+I", description: "Show or hide the Info panel" },
-  { group: "views", shortcut: "Cmd+Shift+I", description: "Show or hide the Info row" },
-  { group: "views", shortcut: "Cmd+Shift+.", description: "Show or hide hidden files" },
-  { group: "views", shortcut: "Cmd++", description: "Zoom in" },
-  { group: "views", shortcut: "Cmd+-", description: "Zoom out" },
-  { group: "views", shortcut: "Cmd+0", description: "Actual size" },
-  { group: "views", shortcut: "Ctrl+Cmd+F", description: "Enter or leave full screen" },
-  { group: "views", shortcut: "Cmd+M", description: "Minimize the window" },
-  { group: "views", shortcut: "Cmd+H", description: "Hide File Trail" },
-  { group: "views", shortcut: "Cmd+,", description: "Settings" },
-  { group: "views", shortcut: "?", description: "Help" },
+  { group: "views", command: "toggleInfoPanel", description: "Show or hide the Info panel" },
+  { group: "views", command: "toggleInfoRow", description: "Show or hide the Info row" },
+  { group: "views", command: "toggleHiddenFiles", description: "Show or hide hidden files" },
+  { group: "views", command: "viewAsIcons", description: "View as icons" },
+  { group: "views", command: "viewAsList", description: "View as a list" },
+  { group: "views", command: "viewAsDetails", description: "View as details" },
+  { group: "views", command: "sortByName", description: "Sort by name" },
+  { group: "views", command: "sortByModified", description: "Sort by date modified" },
+  { group: "views", command: "sortBySize", description: "Sort by size" },
+  { group: "views", command: "sortByKind", description: "Sort by kind" },
+  { group: "views", command: "toggleFoldersFirst", description: "Keep folders first, or not" },
+  { group: "views", command: "zoomIn", description: "Zoom in" },
+  { group: "views", command: "zoomOut", description: "Zoom out" },
+  { group: "views", command: "resetZoom", description: "Actual size" },
+  { group: "views", command: "fullScreen", description: "Enter or leave full screen" },
+  { group: "views", command: "minimize", description: "Minimize the window" },
+  { group: "views", command: "hide", description: "Hide File Trail" },
+  { group: "views", command: "settings", description: "Settings" },
+  { group: "views", command: "openHelp", description: "Help" },
+  { group: "views", command: "openKeyboardShortcuts", description: "Keyboard shortcuts" },
   { group: "views", shortcut: "Esc", description: "Return from Help" },
 ];
+
+// The shortcut list as it is shown: every row with the key it has now. A command's other
+// key is mentioned after what it does ("Go back (Cmd+Left also works)").
+export function listShortcuts(
+  shortcuts: ShortcutDisplay = DEFAULT_SHORTCUT_DISPLAY,
+): ShownShortcut[] {
+  return SHORTCUT_ITEMS.flatMap((item) => {
+    if ("shortcut" in item) {
+      return [item];
+    }
+    const shortcut = shortcuts.written(item.command);
+    if (!shortcut) {
+      return [];
+    }
+    const alternate = shortcuts.alternate(item.command);
+    return [
+      {
+        group: item.group,
+        shortcut,
+        description: alternate
+          ? `${item.description} (${writeForReading(alternate)} also works)`
+          : item.description,
+      },
+    ];
+  });
+}
+
+// "Cmd+Plus" reads as "Cmd++".
+function writeForReading(shortcut: string): string {
+  return shortcut.endsWith("+Plus") ? `${shortcut.slice(0, -4)}+` : shortcut;
+}
+
+// Help's sentences name a command's key as `{newTab}`. It is replaced by the key the
+// command has now, or by where the command is in the menus when it has none.
+export function fillShortcutMentions(
+  text: string,
+  shortcuts: ShortcutDisplay = DEFAULT_SHORTCUT_DISPLAY,
+): string {
+  return text.replace(/\{(\w+)\}/g, (match, id: string) =>
+    isShortcutCommandId(id) ? shortcuts.mention(id) : match,
+  );
+}
 
 export const HELP_TOPICS: readonly HelpTopic[] = [
   {
@@ -150,7 +230,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Go To",
             description:
-              "⌘K (or ⇧⌘G) finds a folder you have opened before, or a favorite, from a few letters of its name; the folders you use most come first. Start with `/` or `~` to type a path instead, and Tab completes it. ⌘⌫ removes the selected folder from the list.",
+              "{openLocationSheet} finds a folder you have opened before, or a favorite, from a few letters of its name; the folders you use most come first. Start with `/` or `~` to type a path instead, and Tab completes it. ⌘⌫ removes the selected folder from the list.",
           },
           {
             label: "Favorites",
@@ -170,7 +250,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "New tab",
             description:
-              "⌘T opens a tab on the folder you are in. The row of tabs appears with the second tab; with a single view the window looks as it always did.",
+              "{newTab} opens a tab on the folder you are in. The row of tabs appears with the second tab; with a single view the window looks as it always did.",
           },
           {
             label: "Open in New Tab",
@@ -185,12 +265,12 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Moving between tabs",
             description:
-              "Click a tab, or press ⌃Tab and ⌃⇧Tab. Drag a tab to move it along the row.",
+              "Click a tab, or use {selectNextTab} and {selectPreviousTab}. Drag a tab to move it along the row.",
           },
           {
             label: "Closing",
             description:
-              "⌘W closes the tab, and the window when a single view is left. ⇧⌘T brings back the tab closed last. Right-click a tab for Close Other Tabs and Duplicate Tab.",
+              "{closeTab} closes the tab, and the window when a single view is left. {reopenClosedTab} brings back the tab closed last. Right-click a tab for Close Other Tabs and Duplicate Tab.",
           },
           {
             label: "Between tabs",
@@ -231,7 +311,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Type in the list",
             description:
-              "Narrows the folder to the names containing what you type and selects the best match. Backspace takes a character back; Esc shows everything again and keeps the selection. ⌘F looks for the same text in the subfolders.",
+              "Narrows the folder to the names containing what you type and selects the best match. Backspace takes a character back; Esc shows everything again and keeps the selection. {focusFileSearch} looks for the same text in the subfolders.",
           },
           {
             label: "Type in the sidebar",
@@ -261,7 +341,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           },
           {
             label: "Quick Look",
-            description: "Press Space to preview the selected item without opening it.",
+            description: "{quickLookSelection} previews the selected item without opening it.",
           },
           {
             label: "Open in Terminal",
@@ -292,7 +372,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Rename",
             description:
-              "Press Return or F2. Settings → Files can make Return open the item instead.",
+              "{renameSelection} renames the selected item. Settings → Files chooses whether Return renames or opens.",
           },
           {
             label: "Move to Trash",
@@ -401,7 +481,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Hidden files",
             description:
-              "Found whenever the file list shows them. Pressing ⇧⌘. with results on screen searches again.",
+              "Found whenever the file list shows them. Showing or hiding them ({toggleHiddenFiles}) with results on screen searches again.",
           },
           {
             label: "Skip .git folders",
@@ -440,7 +520,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Open",
             description:
-              "Opening a folder in the results goes into it and closes the search. ⇧⌘F brings the results back.",
+              "Opening a folder in the results goes into it and closes the search. {showLastSearchResults} brings the results back.",
           },
           {
             label: "Limits",
@@ -471,7 +551,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Hidden files",
             description:
-              "Files whose names start with a dot. ⇧⌘. or View > Show Hidden Files shows them; search follows this setting too.",
+              "Files whose names start with a dot. {toggleHiddenFiles} shows them; search follows this setting too.",
           },
           {
             label: "Dates",
@@ -511,7 +591,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
         rows: [
           {
             label: "Zoom",
-            description: "⌘+ and ⌘- make everything larger or smaller, text included.",
+            description: "{zoomIn} and {zoomOut} make everything larger or smaller, text included.",
           },
           {
             label: "Full screen",
@@ -528,7 +608,8 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
   {
     id: "shortcuts",
     title: "Keyboard shortcuts",
-    intro: "Every shortcut, grouped by what it is for. The menus show them beside each command.",
+    intro:
+      "Every shortcut, grouped by what it is for. The menus show them beside each command, and Settings → Shortcuts changes them.",
     sections: [],
   },
 ];
@@ -553,25 +634,32 @@ export function getHelpTopic(id: HelpTopicId): HelpTopic {
 export type HelpSearchResult = {
   topic: HelpTopic;
   rows: Array<{ section: string; row: HelpRow }>;
-  shortcuts: ShortcutItem[];
+  shortcuts: ShownShortcut[];
 };
 
-export function searchHelp(query: string): HelpSearchResult[] {
+export function searchHelp(
+  query: string,
+  shortcuts: ShortcutDisplay = DEFAULT_SHORTCUT_DISPLAY,
+): HelpSearchResult[] {
   const needle = query.trim().toLowerCase();
   if (needle.length === 0) {
     return [];
   }
   const matches = (...texts: string[]) => texts.some((text) => text.toLowerCase().includes(needle));
+  const shownShortcuts = listShortcuts(shortcuts);
   return HELP_TOPICS.filter((topic) => topic.id !== "shortcuts")
     .map((topic) => ({
       topic,
       rows: topic.sections.flatMap((section) =>
         section.rows
-          .filter((row) => matches(row.label, row.description, section.title))
+          .filter((row) =>
+            matches(row.label, fillShortcutMentions(row.description, shortcuts), section.title),
+          )
           .map((row) => ({ section: section.title, row })),
       ),
-      shortcuts: SHORTCUT_ITEMS.filter(
-        (item) => item.group === topic.id && matches(item.description, item.shortcut),
+      shortcuts: shownShortcuts.filter(
+        (item) =>
+          item.group === topic.id && matches(item.description, writeForReading(item.shortcut)),
       ),
     }))
     .filter((result) => result.rows.length > 0 || result.shortcuts.length > 0);

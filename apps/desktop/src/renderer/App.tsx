@@ -12,12 +12,14 @@ import {
   clampZoomPercent,
   themeChoicePatch,
 } from "../shared/appPreferences";
+import { resolveShortcuts } from "../shared/shortcuts";
 import { DEFAULT_TOP_TOOLBAR_ITEMS } from "../shared/toolbarItems";
 import { type VisitedFolder, forgetVisitedFolder } from "../shared/visitedFolders";
 import { AppDialogs } from "./components/AppDialogs";
 import { ExplorerWorkspace } from "./components/ExplorerWorkspace";
 import { HelpView } from "./components/HelpView";
 import { InfoRow } from "./components/InfoRow";
+import type { SettingsTab } from "./components/SettingsView";
 import { TabStrip } from "./components/TabStrip";
 import { ToolbarIcon } from "./components/ToolbarIcon";
 import { applyPreferencesPatch, useAppPreferences } from "./hooks/useAppPreferences";
@@ -85,12 +87,14 @@ import {
 } from "./lib/rendererCommandAvailability";
 import { resolveExplorerToolbarLayout, resolveSinglePanelLayout } from "./lib/responsiveLayout";
 import { formatSearchStatus } from "./lib/searchResults";
+import { createShortcutDisplay } from "./lib/shortcutDisplay";
 import type { canHandleRendererCommand } from "./lib/shortcutPolicy";
 import { resolveStartupTabs } from "./lib/startupNavigation";
 import { buildContentStatusSummary } from "./lib/statusSummary";
 import { type ToastEntry, type ToastKind, createToastEntry, enqueueToast } from "./lib/toasts";
 import { ExplorerStoreProvider } from "./state/explorerStoreContext";
 import { useExplorerServices, useSelectionActions } from "./state/explorerStores";
+import { ShortcutDisplayProvider } from "./state/shortcutDisplayContext";
 
 const logger = createRendererLogger("filetrail.renderer");
 
@@ -198,7 +202,15 @@ export function App() {
     setOpenItemLimit,
     returnKeyAction,
     setReturnKeyAction,
+    shortcutOverrides,
+    setShortcutOverrides,
   } = preferences;
+  // The keys every command has (Settings → Shortcuts), and how they are shown.
+  const shortcuts = useMemo(() => resolveShortcuts(shortcutOverrides), [shortcutOverrides]);
+  const shortcutDisplay = useMemo(
+    () => createShortcutDisplay(shortcuts, { returnKeyAction }),
+    [shortcuts, returnKeyAction],
+  );
   const {
     mainView,
     setMainView,
@@ -970,6 +982,7 @@ export function App() {
     search,
     writeOperations,
     derived: {
+      shortcuts,
       shortcutContext,
       copyPasteModalOpen,
       locationDialogOpen,
@@ -984,7 +997,7 @@ export function App() {
     actions: {
       dismissActionNotice,
       handleCopyPasteDialogEscape,
-      openSettingsView,
+      openSettingsView: () => openSettingsView(),
       openLocationSheet,
       focusFileSearch,
       clearTypeahead,
@@ -1256,6 +1269,7 @@ export function App() {
         setFileActivationAction(preferences.fileActivationAction);
         setOpenItemLimit(preferences.openItemLimit);
         setReturnKeyAction(preferences.returnKeyAction);
+        setShortcutOverrides(preferences.shortcutOverrides);
         panes.setTreeWidth(preferences.treeWidth);
         panes.setInspectorWidth(preferences.inspectorWidth);
         setRestoredPaneWidths({
@@ -1563,10 +1577,10 @@ export function App() {
   }
 
   // Settings is a separate window (like any macOS app); main opens or focuses it.
-  function openSettingsView() {
+  function openSettingsView(tab?: SettingsTab) {
     setThemeMenuOpen(false);
     setSearchPopoverOpen(false);
-    void client.invoke("app:openSettingsWindow", {}).catch((error) => {
+    void client.invoke("app:openSettingsWindow", tab ? { tab } : {}).catch((error) => {
       logger.error("open settings window failed", error);
     });
   }
@@ -1679,7 +1693,7 @@ export function App() {
                 setThemeMenuOpen(false);
               },
               onOpenHelp: () => openHelp("navigation"),
-              onOpenSettings: openSettingsView,
+              onOpenSettings: () => openSettingsView(),
               includeHidden,
               onToggleHidden: toggleHiddenFiles,
               onNavigate: async (path) => {
@@ -2143,6 +2157,7 @@ export function App() {
                   key={helpRequest.id}
                   layoutMode={singlePanelLayout}
                   initialTopic={helpRequest.topic}
+                  onCustomizeShortcuts={() => openSettingsView("shortcuts")}
                 />
               ) : null}
             </section>
@@ -2203,7 +2218,7 @@ export function App() {
       </main>
     </ExplorerStoreProvider>
   );
-  return workspace;
+  return <ShortcutDisplayProvider value={shortcutDisplay}>{workspace}</ShortcutDisplayProvider>;
 }
 
 // Search scopes: the folder being browsed, Home, and the whole disk (deduplicated).
