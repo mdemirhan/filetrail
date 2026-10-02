@@ -26,6 +26,7 @@ import {
   getToolbarItemDefinition,
 } from "../../shared/toolbarItems";
 import { useKeepInViewport } from "../hooks/useKeepInViewport";
+import { ClipboardMarkTag, clipboardMarkClassName, useClipboardMarks } from "../lib/clipboardMarks";
 import {
   type TreeItemId,
   type TreePresentationItem,
@@ -1291,6 +1292,9 @@ function TreeItemRow({
   const isFileSystem = item.kind === "filesystem";
   const itemPath = item.path;
   const dropIndicator = getItemDropIndicator?.(item, subview) ?? null;
+  // A favorite points at a folder; only the folder's own row in the tree is marked.
+  const clipboardMarks = useClipboardMarks("tree");
+  const clipboardPath = isFileSystem ? itemPath : null;
 
   // ⌘-click on a folder that is not on screen opens it in a new tab; the tab on screen and
   // its selection in the tree stay as they are.
@@ -1390,7 +1394,9 @@ function TreeItemRow({
     <div className="tree-branch" role="presentation">
       <div
         ref={(element) => registerRowRef(item.id, element)}
-        className={`tree-row${isCurrent ? " active" : ""}${isCurrent && !isPaneFocused ? " inactive" : ""}`}
+        className={`tree-row${isCurrent ? " active" : ""}${
+          isCurrent && !isPaneFocused ? " inactive" : ""
+        }${clipboardMarkClassName(clipboardMarks, clipboardPath)}`}
         role="treeitem"
         aria-selected={isCurrent}
         aria-expanded={canExpand ? item.expanded : undefined}
@@ -1514,7 +1520,9 @@ function TreeItemRow({
           <span className="tree-drop-target-badge" aria-hidden="true">
             Drop Here
           </span>
-        ) : null}
+        ) : (
+          <ClipboardMarkTag marks={clipboardMarks} path={clipboardPath} />
+        )}
       </div>
       {item.loading ? (
         <div

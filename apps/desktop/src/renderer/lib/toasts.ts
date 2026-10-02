@@ -1,3 +1,5 @@
+import type { ClipboardIcon } from "./copyPasteClipboard";
+
 export type ToastKind = "success" | "info" | "warning" | "error";
 
 export type ToastEntry = {
@@ -5,6 +7,8 @@ export type ToastEntry = {
   kind: ToastKind;
   title: string;
   message?: string;
+  /** Shown in place of the kind's icon: what was copied or cut. */
+  icon?: ClipboardIcon;
   durationMs: number;
   expiresAt: number;
 };
@@ -22,6 +26,7 @@ export function createToastEntry(
     kind: ToastKind;
     title: string;
     message?: string;
+    icon?: ClipboardIcon;
     durationMs?: number;
   },
   now = Date.now(),
@@ -35,6 +40,7 @@ export function createToastEntry(
     kind: input.kind,
     title: input.title,
     ...(input.message ? { message: input.message } : {}),
+    ...(input.icon ? { icon: input.icon } : {}),
     durationMs,
     expiresAt: now + durationMs,
   };

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 
 import type { ToastEntry, ToastKind } from "../lib/toasts";
+import { ClipboardItemsIcon } from "./ClipboardItemsIcon";
 
 function ToastIcon({ kind }: { kind: ToastKind }) {
   if (kind === "success") {
@@ -148,9 +149,16 @@ export function ToastViewport({
             aria-atomic="true"
           >
             <div className="toast-card-body">
-              <div className="toast-card-icon-wrap" aria-hidden="true">
-                <ToastIcon kind={toast.kind} />
-              </div>
+              {toast.icon ? (
+                // What was copied or cut, drawn as the file list draws it.
+                <div className="toast-card-icon-wrap toast-card-item-icon" aria-hidden="true">
+                  <ClipboardItemsIcon icon={toast.icon} />
+                </div>
+              ) : (
+                <div className="toast-card-icon-wrap" aria-hidden="true">
+                  <ToastIcon kind={toast.kind} />
+                </div>
+              )}
               <div className="toast-card-copy">
                 <div className="toast-card-title">{toast.title}</div>
                 {toast.message ? <div className="toast-card-message">{toast.message}</div> : null}

@@ -102,6 +102,9 @@ export function SettingsWindowApp() {
     detailColumns: preferences.detailColumns,
     notificationsEnabled: preferences.notificationsEnabled,
     notificationDurationSeconds: preferences.notificationDurationSeconds,
+    highlightClipboardItemsInTree: preferences.highlightClipboardItemsInTree,
+    highlightClipboardItemsInContent: preferences.highlightClipboardItemsInContent,
+    notifyClipboardItems: preferences.notifyClipboardItems,
     topToolbarItems: preferences.topToolbarItems,
     leftToolbarItems: preferences.leftToolbarItems,
     showSidebarRail: preferences.showSidebarRail,
@@ -341,6 +344,9 @@ export function SettingsWindowApp() {
             layoutMode="wide"
             notificationsEnabled={preferences.notificationsEnabled}
             notificationDurationSeconds={preferences.notificationDurationSeconds}
+            highlightClipboardItemsInTree={preferences.highlightClipboardItemsInTree}
+            highlightClipboardItemsInContent={preferences.highlightClipboardItemsInContent}
+            notifyClipboardItems={preferences.notifyClipboardItems}
             topToolbarItems={preferences.topToolbarItems}
             leftToolbarItems={preferences.leftToolbarItems}
             showSidebarRail={preferences.showSidebarRail}
@@ -380,6 +386,11 @@ export function SettingsWindowApp() {
             onDetailColumnsChange={preferences.setDetailColumns}
             onNotificationsEnabledChange={preferences.setNotificationsEnabled}
             onNotificationDurationSecondsChange={preferences.setNotificationDurationSeconds}
+            onHighlightClipboardItemsInTreeChange={preferences.setHighlightClipboardItemsInTree}
+            onHighlightClipboardItemsInContentChange={
+              preferences.setHighlightClipboardItemsInContent
+            }
+            onNotifyClipboardItemsChange={preferences.setNotifyClipboardItems}
             onTopToolbarItemsChange={preferences.setTopToolbarItems}
             onLeftToolbarItemsChange={preferences.setLeftToolbarItems}
             onResetTopToolbar={() => preferences.setTopToolbarItems([...DEFAULT_TOP_TOOLBAR_ITEMS])}

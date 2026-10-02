@@ -74,6 +74,15 @@ export function useAppPreferences() {
   const [notificationDurationSeconds, setNotificationDurationSeconds] = useState(
     DEFAULT_APP_PREFERENCES.notificationDurationSeconds,
   );
+  const [highlightClipboardItemsInTree, setHighlightClipboardItemsInTree] = useState(
+    DEFAULT_APP_PREFERENCES.highlightClipboardItemsInTree,
+  );
+  const [highlightClipboardItemsInContent, setHighlightClipboardItemsInContent] = useState(
+    DEFAULT_APP_PREFERENCES.highlightClipboardItemsInContent,
+  );
+  const [notifyClipboardItems, setNotifyClipboardItems] = useState(
+    DEFAULT_APP_PREFERENCES.notifyClipboardItems,
+  );
   const [topToolbarItems, setTopToolbarItems] = useState(DEFAULT_APP_PREFERENCES.topToolbarItems);
   const [leftToolbarItems, setLeftToolbarItems] = useState<LeftToolbarItems>(
     DEFAULT_APP_PREFERENCES.leftToolbarItems,
@@ -174,6 +183,12 @@ export function useAppPreferences() {
     setNotificationsEnabled,
     notificationDurationSeconds,
     setNotificationDurationSeconds,
+    highlightClipboardItemsInTree,
+    setHighlightClipboardItemsInTree,
+    highlightClipboardItemsInContent,
+    setHighlightClipboardItemsInContent,
+    notifyClipboardItems,
+    setNotifyClipboardItems,
     topToolbarItems,
     setTopToolbarItems,
     leftToolbarItems,
@@ -269,6 +284,9 @@ export function applyPreferencesPatch(store: AppPreferencesStore, patch: Incomin
   set("detailColumns", store.setDetailColumns);
   set("notificationsEnabled", store.setNotificationsEnabled);
   set("notificationDurationSeconds", store.setNotificationDurationSeconds);
+  set("highlightClipboardItemsInTree", store.setHighlightClipboardItemsInTree);
+  set("highlightClipboardItemsInContent", store.setHighlightClipboardItemsInContent);
+  set("notifyClipboardItems", store.setNotifyClipboardItems);
   set("topToolbarItems", store.setTopToolbarItems);
   set("leftToolbarItems", store.setLeftToolbarItems);
   set("showSidebarRail", store.setShowSidebarRail);

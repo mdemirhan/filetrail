@@ -722,6 +722,39 @@ describe("SettingsView", () => {
     expect(onNotificationDurationSecondsChange).toHaveBeenCalledWith(6);
   });
 
+  it("forwards the copy and cut preference changes", () => {
+    const onHighlightClipboardItemsInTreeChange = vi.fn();
+    const onHighlightClipboardItemsInContentChange = vi.fn();
+    const onNotifyClipboardItemsChange = vi.fn();
+    renderSettingsView({
+      highlightClipboardItemsInTree: true,
+      highlightClipboardItemsInContent: false,
+      notifyClipboardItems: true,
+      onHighlightClipboardItemsInTreeChange,
+      onHighlightClipboardItemsInContentChange,
+      onNotifyClipboardItemsChange,
+    });
+
+    expect(screen.getByText("Copy and Cut")).toBeInTheDocument();
+    const treeToggle = screen.getByLabelText("Highlight copied items in the folder tree");
+    const contentToggle = screen.getByLabelText("Highlight copied items in the file list");
+    expect(treeToggle).toHaveAttribute("aria-checked", "true");
+    expect(contentToggle).toHaveAttribute("aria-checked", "false");
+
+    fireEvent.click(treeToggle);
+    fireEvent.click(contentToggle);
+    fireEvent.click(screen.getByLabelText("Notify what was copied"));
+
+    expect(onHighlightClipboardItemsInTreeChange).toHaveBeenCalledWith(false);
+    expect(onHighlightClipboardItemsInContentChange).toHaveBeenCalledWith(true);
+    expect(onNotifyClipboardItemsChange).toHaveBeenCalledWith(false);
+  });
+
+  it("has nothing to notify of copies while notifications are off", () => {
+    renderSettingsView({ notificationsEnabled: false });
+    expect(screen.getByLabelText("Notify what was copied")).toBeDisabled();
+  });
+
   it("renders configured Open With applications", () => {
     renderSettingsView();
 

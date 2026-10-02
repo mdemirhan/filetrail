@@ -25,20 +25,28 @@ const EDIT_COMMANDS = new Set<RendererCommandType>([
   "editSelectAll",
 ]);
 const ZOOM_COMMANDS = new Set<RendererCommandType>(["zoomIn", "zoomOut", "resetZoom"]);
-// Paste is safe from the tree: it goes into the tree's selected folder, which is the
-// folder on screen, and never acts on a stale content selection the way copy or cut would.
+// Content commands that also work from the tree, on its selected folder and never on a
+// selection left behind in the file list. Paste goes into that folder; copy and cut take
+// the folder itself.
 const TREE_SAFE_RENDERER_COMMANDS = new Set<RendererCommandType>([
   "openSelection",
   "openSelectionInNewTab",
   "openInTerminal",
   "copyPath",
+  "copySelection",
+  "cutSelection",
   "pasteSelection",
 ]);
+// A favorite is a pointer to a folder, not something to copy or move: these act on folders
+// of the tree only, as the favorite's right-click menu does.
+const TREE_FOLDER_ONLY_COMMANDS = new Set<string>(["copySelection", "cutSelection"]);
 // Help opens from anywhere a menu can be used, including the Help page itself.
 const HELP_COMMANDS = new Set<RendererCommandType>(["openHelp", "openKeyboardShortcuts"]);
 const TREE_SAFE_RAW_SHORTCUTS = new Set<RawExplorerShortcutId>([
   "copyPath",
   "openInTerminal",
+  "copySelection",
+  "cutSelection",
   "pasteSelection",
 ]);
 // The command whose shortcut a context-menu item shows.
@@ -82,6 +90,8 @@ export const RENDERER_COMMAND_TREE_FOCUS_BUCKETS = {
   cutSelection: "contentOnly",
   pasteSelection: "contentOnly",
   copyPath: "contentOnly",
+  showClipboard: "globalExplorer",
+  clearClipboard: "globalExplorer",
   refreshOrApplySearchSort: "globalExplorer",
   toggleInfoPanel: "globalExplorer",
   toggleInfoRow: "globalExplorer",
@@ -250,7 +260,8 @@ export function canHandleRendererCommand(
     if (context.focusedPane === "tree") {
       if (TREE_SAFE_RENDERER_COMMANDS.has(command)) {
         return (
-          isSafeTreeTargetKind(context.selectedTreeTargetKind) && context.mainView === "explorer"
+          isSafeTreeTargetKind(command, context.selectedTreeTargetKind) &&
+          context.mainView === "explorer"
         );
       }
       return false;
@@ -287,7 +298,8 @@ export function canHandleRawExplorerShortcut(
   }
 
   return (
-    TREE_SAFE_RAW_SHORTCUTS.has(shortcutId) && isSafeTreeTargetKind(context.selectedTreeTargetKind)
+    TREE_SAFE_RAW_SHORTCUTS.has(shortcutId) &&
+    isSafeTreeTargetKind(shortcutId, context.selectedTreeTargetKind)
   );
 }
 
@@ -350,6 +362,12 @@ function isContextMenuShortcutLive(
   }
 }
 
-function isSafeTreeTargetKind(kind: SelectedTreeTargetKind): boolean {
+function isSafeTreeTargetKind(
+  command: RendererCommandType | RawExplorerShortcutId,
+  kind: SelectedTreeTargetKind,
+): boolean {
+  if (TREE_FOLDER_ONLY_COMMANDS.has(command)) {
+    return kind === "filesystemFolder";
+  }
   return kind === "filesystemFolder" || kind === "favorite";
 }

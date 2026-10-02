@@ -326,6 +326,11 @@ export type AppPreferences = {
   detailColumnWidths: DetailColumnWidths;
   notificationsEnabled: boolean;
   notificationDurationSeconds: number;
+  // What shows that items were copied or cut: a flash and a marker on them in the folder
+  // tree and in the file list, and a notification that names them.
+  highlightClipboardItemsInTree: boolean;
+  highlightClipboardItemsInContent: boolean;
+  notifyClipboardItems: boolean;
   propertiesOpen: boolean;
   detailRowOpen: boolean;
   topToolbarItems: ToolbarItemId[];
@@ -387,6 +392,9 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   detailColumnWidths: DEFAULT_DETAIL_COLUMN_WIDTHS,
   notificationsEnabled: true,
   notificationDurationSeconds: 4,
+  highlightClipboardItemsInTree: true,
+  highlightClipboardItemsInContent: true,
+  notifyClipboardItems: true,
   propertiesOpen: false,
   detailRowOpen: false,
   topToolbarItems: [...DEFAULT_TOP_TOOLBAR_ITEMS],

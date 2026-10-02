@@ -10,8 +10,8 @@ import type {
 
 import { useElementSize } from "../hooks/useElementSize";
 import { useRelativeDate } from "../hooks/useRelativeDate";
+import { ClipboardMarkTag, clipboardMarkClassName, useClipboardMarks } from "../lib/clipboardMarks";
 import { isSelectionNarrowingClick } from "../lib/contentSelection";
-import type { ClipboardSummary } from "../lib/copyPasteClipboard";
 import type { DirectoryEntryMetadata } from "../lib/explorerTypes";
 import { FileIcon } from "../lib/fileIcons";
 import { isKeyboardOwnedFormControl } from "../lib/focusedEditTarget";
@@ -19,7 +19,6 @@ import { formatSize, splitDisplayName } from "../lib/formatting";
 import { resolveSearchResultsColumnLayout } from "../lib/responsiveLayout";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
 import { getVirtualRange } from "../lib/virtualization";
-import { ClipboardIndicator } from "./ClipboardIndicator";
 import { SearchOptionsMenu } from "./SearchOptionsMenu";
 type SearchResultItem = IpcResponse<"search:getUpdate">["items"][number];
 type SearchStatus = IpcResponse<"search:getUpdate">["status"] | "idle";
@@ -83,7 +82,6 @@ export function SearchResultsPane({
   onFilterQueryChange = () => undefined,
   scrollTop = 0,
   onScrollTopChange = () => undefined,
-  clipboardSummary = null,
 }: {
   paneRef?: React.RefObject<HTMLElement | null>;
   isFocused: boolean;
@@ -142,9 +140,8 @@ export function SearchResultsPane({
   onFilterQueryChange?: (value: string) => void;
   scrollTop?: number;
   onScrollTopChange?: (value: number) => void;
-  /** What is on the clipboard, while it holds files. */
-  clipboardSummary?: ClipboardSummary | null;
 }) {
+  const clipboardMarks = useClipboardMarks("content");
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const { width, height } = useElementSize(scrollRef);
   const columnLayout = resolveSearchResultsColumnLayout(width);
@@ -298,7 +295,6 @@ export function SearchResultsPane({
             </button>
           ))}
           <span className="search-scope-spacer" />
-          {clipboardSummary ? <ClipboardIndicator summary={clipboardSummary} /> : null}
           {/* Narrows what the search found, without searching again. */}
           <div className="search-results-filter">
             <svg viewBox="0 0 24 24" aria-hidden="true" className="search-results-filter-icon">
@@ -495,7 +491,7 @@ export function SearchResultsPane({
                   type="button"
                   className={`search-result-row${selectedPathSet.has(result.path) ? " active" : ""}${
                     selectedPathSet.has(result.path) && !isFocused ? " inactive" : ""
-                  }`}
+                  }${clipboardMarkClassName(clipboardMarks, result.path)}`}
                   data-selectable-entry-path={result.path}
                   draggable={Boolean(onItemDragStart)}
                   onPointerDown={(event) => {
@@ -545,12 +541,24 @@ export function SearchResultsPane({
                       isSymlink: result.isSymlink,
                     }}
                   />
-                  <FileNameLabel
-                    className="search-result-name"
-                    name={result.name}
-                    extension={result.extension}
-                    highlightPattern={highlightPattern}
-                  />
+                  {clipboardMarks?.paths.has(result.path) ? (
+                    <span className="clipboard-mark-name">
+                      <FileNameLabel
+                        className="search-result-name"
+                        name={result.name}
+                        extension={result.extension}
+                        highlightPattern={highlightPattern}
+                      />
+                      <ClipboardMarkTag marks={clipboardMarks} path={result.path} />
+                    </span>
+                  ) : (
+                    <FileNameLabel
+                      className="search-result-name"
+                      name={result.name}
+                      extension={result.extension}
+                      highlightPattern={highlightPattern}
+                    />
+                  )}
                   <span className="search-result-path">
                     {formatResultFolder(result.relativeParentPath, rootPath)}
                   </span>

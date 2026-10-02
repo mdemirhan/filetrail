@@ -21,6 +21,8 @@ export const RENDERER_COMMAND_TYPES = [
   "cutSelection",
   "pasteSelection",
   "copyPath",
+  "showClipboard",
+  "clearClipboard",
   "refreshOrApplySearchSort",
   "toggleInfoPanel",
   "toggleInfoRow",

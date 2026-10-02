@@ -16,6 +16,7 @@ import { resolveShortcuts } from "../shared/shortcuts";
 import { DEFAULT_TOP_TOOLBAR_ITEMS } from "../shared/toolbarItems";
 import { type VisitedFolder, forgetVisitedFolder } from "../shared/visitedFolders";
 import { AppDialogs } from "./components/AppDialogs";
+import { ClipboardButton } from "./components/ClipboardButton";
 import { ExplorerWorkspace } from "./components/ExplorerWorkspace";
 import { HelpView } from "./components/HelpView";
 import { InfoRow } from "./components/InfoRow";
@@ -37,6 +38,11 @@ import { usePreferencesSync } from "./hooks/usePreferencesSync";
 import { useSearchSession } from "./hooks/useSearchSession";
 import { useWriteOperations } from "./hooks/useWriteOperations";
 import { buildApplicationMenuState } from "./lib/applicationMenuState";
+import {
+  CLIPBOARD_FLASH_MS,
+  type ClipboardMarksBySurface,
+  ClipboardMarksProvider,
+} from "./lib/clipboardMarks";
 import {
   type ContentSelectionState,
   setSingleContentSelection as createSingleContentSelection,
@@ -172,6 +178,12 @@ export function App() {
     setNotificationsEnabled,
     notificationDurationSeconds,
     setNotificationDurationSeconds,
+    highlightClipboardItemsInTree,
+    setHighlightClipboardItemsInTree,
+    highlightClipboardItemsInContent,
+    setHighlightClipboardItemsInContent,
+    notifyClipboardItems,
+    setNotifyClipboardItems,
     topToolbarItems,
     setTopToolbarItems,
     leftToolbarItems,
@@ -584,6 +596,46 @@ export function App() {
     () => describeClipboard(copyPasteClipboard),
     [copyPasteClipboard],
   );
+  const [clipboardMenuOpen, setClipboardMenuOpen] = useState(false);
+  const hasClipboardSummary = clipboardSummary !== null;
+  useEffect(() => {
+    if (!hasClipboardSummary) {
+      setClipboardMenuOpen(false);
+    }
+  }, [hasClipboardSummary]);
+  // Items flash once when they are copied or cut. `capturedAt` changes with every copy and
+  // cut, and with nothing else: taking one item off the clipboard keeps it.
+  const clipboardCapturedAt =
+    copyPasteClipboard.type === "ready" ? copyPasteClipboard.capturedAt : null;
+  const [clipboardFlashing, setClipboardFlashing] = useState(false);
+  useEffect(() => {
+    if (clipboardCapturedAt === null) {
+      setClipboardFlashing(false);
+      return;
+    }
+    setClipboardFlashing(true);
+    const timer = window.setTimeout(() => setClipboardFlashing(false), CLIPBOARD_FLASH_MS);
+    return () => window.clearTimeout(timer);
+  }, [clipboardCapturedAt]);
+  const clipboardMarks = useMemo<ClipboardMarksBySurface>(() => {
+    if (copyPasteClipboard.type !== "ready") {
+      return { tree: null, content: null };
+    }
+    const marks = {
+      paths: new Set(copyPasteClipboard.sourcePaths),
+      mode: copyPasteClipboard.mode,
+      flashing: clipboardFlashing,
+    };
+    return {
+      tree: highlightClipboardItemsInTree ? marks : null,
+      content: highlightClipboardItemsInContent ? marks : null,
+    };
+  }, [
+    copyPasteClipboard,
+    clipboardFlashing,
+    highlightClipboardItemsInTree,
+    highlightClipboardItemsInContent,
+  ]);
   const pasteDestinationPath = useMemo(
     () =>
       resolvePasteDestinationPath({
@@ -723,6 +775,9 @@ export function App() {
     runContextMenuAction,
     runContextSubmenuAction,
     runCopyClipboardAction,
+    removeClipboardPath,
+    clearClipboard,
+    revealPathInFolder,
     runCopyPathAction,
     selectAllContentEntries,
     setSingleContentSelection,
@@ -1017,6 +1072,9 @@ export function App() {
       refreshDirectory,
       rerunSearch,
       runCopyClipboardAction,
+      // Nothing to list while the clipboard is empty; the button is not even there.
+      showClipboard: () => setClipboardMenuOpen(copyPasteClipboardRef.current.type === "ready"),
+      clearClipboard,
       startPasteFromClipboard,
       resolveContentActionPaths,
       startDuplicatePaths,
@@ -1087,6 +1145,9 @@ export function App() {
     detailColumnWidths,
     notificationsEnabled,
     notificationDurationSeconds,
+    highlightClipboardItemsInTree,
+    highlightClipboardItemsInContent,
+    notifyClipboardItems,
     topToolbarItems,
     leftToolbarItems,
     showSidebarRail,
@@ -1253,6 +1314,9 @@ export function App() {
         setDetailColumnWidths(preferences.detailColumnWidths);
         setNotificationsEnabled(preferences.notificationsEnabled);
         setNotificationDurationSeconds(preferences.notificationDurationSeconds);
+        setHighlightClipboardItemsInTree(preferences.highlightClipboardItemsInTree);
+        setHighlightClipboardItemsInContent(preferences.highlightClipboardItemsInContent);
+        setNotifyClipboardItems(preferences.notifyClipboardItems);
         setTopToolbarItems(preferences.topToolbarItems);
         setLeftToolbarItems(preferences.leftToolbarItems);
         setShowSidebarRail(preferences.showSidebarRail);
@@ -1816,7 +1880,6 @@ export function App() {
                 onFilterQueryChange: setListFilter,
                 scrollTop: searchResultsScrollTop,
                 onScrollTopChange: setSearchResultsScrollTop,
-                clipboardSummary,
               },
               contentPaneProps: {
                 paneRef: contentPaneRef,
@@ -1908,7 +1971,6 @@ export function App() {
                   },
                   availableBytes: volumeAvailableBytes,
                 }),
-                clipboardSummary,
                 sizeBars,
                 getFolderSizeLabel: (path) => {
                   const entry = folderSizeCache.getEntry(path);
@@ -2105,6 +2167,18 @@ export function App() {
             onPaneResizeKey={handlePaneResizeKey}
             showSidebarRail={showSidebarRail}
             showSidebarBottomRail={showSidebarBottomRail}
+            clipboardButton={
+              clipboardSummary ? (
+                <ClipboardButton
+                  summary={clipboardSummary}
+                  open={clipboardMenuOpen}
+                  onOpenChange={setClipboardMenuOpen}
+                  onRevealItem={(path) => void revealPathInFolder(path)}
+                  onRemoveItem={removeClipboardPath}
+                  onClear={clearClipboard}
+                />
+              ) : null
+            }
             tabStrip={
               tabCount > 1 ? (
                 <TabStrip
@@ -2223,7 +2297,11 @@ export function App() {
       </main>
     </ExplorerStoreProvider>
   );
-  return <ShortcutDisplayProvider value={shortcutDisplay}>{workspace}</ShortcutDisplayProvider>;
+  return (
+    <ShortcutDisplayProvider value={shortcutDisplay}>
+      <ClipboardMarksProvider value={clipboardMarks}>{workspace}</ClipboardMarksProvider>
+    </ShortcutDisplayProvider>
+  );
 }
 
 // Search scopes: the folder being browsed, Home, and the whole disk (deduplicated).

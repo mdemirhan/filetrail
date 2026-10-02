@@ -34,6 +34,46 @@ describe("ToastViewport", () => {
     expect(screen.getByText("Ready to paste 1 item")).toBeInTheDocument();
   });
 
+  it("shows what was copied with the icon the file list gives it", () => {
+    render(
+      <ToastViewport
+        toasts={[
+          createToastEntry("toast-1", {
+            kind: "info",
+            title: "notes.md copied",
+            icon: {
+              type: "item",
+              entry: {
+                path: "/Users/demo/notes.md",
+                name: "notes.md",
+                extension: "md",
+                kind: "file",
+                isHidden: false,
+                isSymlink: false,
+              },
+            },
+          }),
+          createToastEntry("toast-2", {
+            kind: "info",
+            title: "3 items copied",
+            icon: { type: "items", contains: "mixed" },
+          }),
+        ]}
+        onDismiss={() => undefined}
+      />,
+    );
+
+    const one = screen.getByText("notes.md copied").closest(".toast-card");
+    expect(one?.querySelectorAll(".toast-card-item-icon .file-icon")).toHaveLength(1);
+    expect(one?.querySelector(".toast-card-icon-svg")).toBeNull();
+    // Several items: a folder behind a document.
+    const several = screen.getByText("3 items copied").closest(".toast-card");
+    const pair = several?.querySelectorAll(".clipboard-items-icon > .file-icon");
+    expect(pair).toHaveLength(2);
+    expect(pair?.[0]).toHaveClass("folder");
+    expect(pair?.[1]).toHaveClass("document");
+  });
+
   it("auto-dismisses each toast when its timer expires", async () => {
     const onDismiss = vi.fn();
 

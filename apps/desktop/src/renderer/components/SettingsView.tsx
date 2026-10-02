@@ -1958,6 +1958,9 @@ export function SettingsView({
   layoutMode = "wide",
   notificationsEnabled,
   notificationDurationSeconds,
+  highlightClipboardItemsInTree = true,
+  highlightClipboardItemsInContent = true,
+  notifyClipboardItems = true,
   topToolbarItems,
   leftToolbarItems,
   restoreLastVisitedFolderOnStartup,
@@ -1996,6 +1999,9 @@ export function SettingsView({
   onHighlightHoveredItemsChange = () => undefined,
   onDetailColumnsChange,
   onNotificationsEnabledChange,
+  onHighlightClipboardItemsInTreeChange = () => undefined,
+  onHighlightClipboardItemsInContentChange = () => undefined,
+  onNotifyClipboardItemsChange = () => undefined,
   onNotificationDurationSecondsChange,
   onTopToolbarItemsChange,
   onLeftToolbarItemsChange,
@@ -2047,6 +2053,9 @@ export function SettingsView({
   layoutMode?: "wide" | "narrow" | "compact";
   notificationsEnabled: boolean;
   notificationDurationSeconds: number;
+  highlightClipboardItemsInTree?: boolean;
+  highlightClipboardItemsInContent?: boolean;
+  notifyClipboardItems?: boolean;
   topToolbarItems: ToolbarItemId[];
   leftToolbarItems: LeftToolbarItems;
   restoreLastVisitedFolderOnStartup: boolean;
@@ -2086,6 +2095,9 @@ export function SettingsView({
   onHighlightHoveredItemsChange?: (value: boolean) => void;
   onDetailColumnsChange: (value: DetailColumnVisibility) => void;
   onNotificationsEnabledChange: (value: boolean) => void;
+  onHighlightClipboardItemsInTreeChange?: (value: boolean) => void;
+  onHighlightClipboardItemsInContentChange?: (value: boolean) => void;
+  onNotifyClipboardItemsChange?: (value: boolean) => void;
   onNotificationDurationSecondsChange: (value: number) => void;
   onTopToolbarItemsChange: (value: ToolbarItemId[]) => void;
   onLeftToolbarItemsChange: (value: LeftToolbarItems) => void;
@@ -2642,6 +2654,56 @@ export function SettingsView({
                   disabled={!notificationsEnabled}
                   onChange={(value) => onNotificationDurationSecondsChange(Number(value))}
                   formatOption={(value) => `${value} s`}
+                />
+              }
+            />
+          </SectionCard>
+        ) : null}
+
+        {showSection("general") ? (
+          <SectionCard icon="⧉" title="Copy and Cut" theme={palette}>
+            <SettingRow
+              title="Highlight copied items in the folder tree"
+              desc="Flash a folder when it is copied or cut, and mark it while it waits to be pasted."
+              theme={palette}
+              right={
+                <Toggle
+                  checked={highlightClipboardItemsInTree}
+                  onToggle={() =>
+                    onHighlightClipboardItemsInTreeChange(!highlightClipboardItemsInTree)
+                  }
+                  theme={palette}
+                  label="Highlight copied items in the folder tree"
+                />
+              }
+            />
+            <SettingRow
+              title="Highlight copied items in the file list"
+              desc="Flash items when they are copied or cut, and mark them while they wait to be pasted."
+              theme={palette}
+              right={
+                <Toggle
+                  checked={highlightClipboardItemsInContent}
+                  onToggle={() =>
+                    onHighlightClipboardItemsInContentChange(!highlightClipboardItemsInContent)
+                  }
+                  theme={palette}
+                  label="Highlight copied items in the file list"
+                />
+              }
+            />
+            <SettingRow
+              title="Notify what was copied"
+              desc="Show a notification with the item's name and icon, or how many items were copied or cut."
+              theme={palette}
+              isLast
+              right={
+                <Toggle
+                  checked={notifyClipboardItems}
+                  onToggle={() => onNotifyClipboardItemsChange(!notifyClipboardItems)}
+                  theme={palette}
+                  label="Notify what was copied"
+                  disabled={!notificationsEnabled}
                 />
               }
             />

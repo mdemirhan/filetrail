@@ -41,10 +41,14 @@ import {
   getContextMenuItems,
 } from "../lib/contextMenu";
 import {
+  type ClipboardIcon,
+  type ClipboardSourceEntry,
   type CopyPasteClipboardState,
   buildPasteRequest,
   clearCopyPasteClipboard,
+  describeClipboard,
   hasClipboardItems,
+  removeClipboardItem,
   setCopyPasteClipboard,
 } from "../lib/copyPasteClipboard";
 import { type CopyPasteOverrides, SAFE_COPY_PASTE_POLICY } from "../lib/copyPasteReview";
@@ -296,6 +300,7 @@ export function useExplorerActions(args: {
     openItemLimit,
     notificationsEnabled,
     notificationDurationSeconds,
+    notifyClipboardItems,
     fileActivationAction,
     defaultTextEditor,
     setDefaultTextEditor,
@@ -1003,7 +1008,12 @@ export function useExplorerActions(args: {
     setWriteOperationCardState(nextState);
   }
 
-  function pushToast(input: { kind: ToastKind; title: string; message?: string }) {
+  function pushToast(input: {
+    kind: ToastKind;
+    title: string;
+    message?: string;
+    icon?: ClipboardIcon;
+  }) {
     if (!notificationsEnabled) {
       return;
     }
@@ -1304,19 +1314,56 @@ export function useExplorerActions(args: {
     }
   }
 
-  function resolveClipboardSourcePaths(): string[] {
+  // What Copy and Cut take: the right-clicked items; else the tree's folder while the tree
+  // has the keyboard; else the selection in the file list. A folder of the tree is never
+  // taken because of a selection left behind in the list, nor the other way round.
+  function resolveClipboardSource(explicitPaths?: string[]): {
+    paths: string[];
+    fromTree: boolean;
+  } {
+    const contextMenuFromTree =
+      contextMenuState?.surface === "treeFolder" || contextMenuState?.surface === "favorite";
+    if (explicitPaths && explicitPaths.length > 0) {
+      return { paths: explicitPaths, fromTree: contextMenuFromTree };
+    }
     if (contextMenuState && contextMenuState.paths.length > 0) {
-      return contextMenuState.paths;
+      return { paths: contextMenuState.paths, fromTree: contextMenuFromTree };
     }
-    if (selectedPathsInViewOrderRef.current.length > 0) {
-      return selectedPathsInViewOrderRef.current;
+    if (focusedPane === "tree") {
+      const treePath = getFileSystemItemPath(selectedTreeItemIdRef.current);
+      return { paths: treePath ? [treePath] : [], fromTree: true };
     }
-    return [];
+    return { paths: selectedPathsInViewOrderRef.current, fromTree: false };
+  }
+
+  // What is known about the copied items, for their icons and for saying how many are
+  // folders: everything in the tree is a folder, and the file list knows its own entries.
+  function resolveClipboardSourceEntries(
+    paths: string[],
+    fromTree: boolean,
+  ): Record<string, ClipboardSourceEntry> {
+    const sourceEntries: Record<string, ClipboardSourceEntry> = {};
+    if (fromTree) {
+      for (const path of paths) {
+        sourceEntries[path] = { kind: "directory", isSymlink: false };
+      }
+      return sourceEntries;
+    }
+    const pathSet = new Set(paths);
+    for (const entry of activeContentEntries) {
+      if (pathSet.has(entry.path)) {
+        sourceEntries[entry.path] = {
+          kind: entry.kind,
+          isSymlink: entry.isSymlink,
+          ...(entry.isExecutable === undefined ? {} : { isExecutable: entry.isExecutable }),
+        };
+      }
+    }
+    return sourceEntries;
   }
 
   async function runCopyClipboardAction(mode: "copy" | "cut", explicitPaths?: string[]) {
-    const paths =
-      explicitPaths && explicitPaths.length > 0 ? explicitPaths : resolveClipboardSourcePaths();
+    const { paths, fromTree } = resolveClipboardSource(explicitPaths);
     if (paths.length === 0) {
       pushToast({
         kind: "warning",
@@ -1324,13 +1371,26 @@ export function useExplorerActions(args: {
       });
       return;
     }
-    applyCopyPasteClipboardState(setCopyPasteClipboard(mode, paths, new Date().toISOString()));
-    pushToast({
-      kind: "info",
-      title: mode === "copy" ? "Ready to paste" : "Ready to move",
-      message: formatClipboardItemSummary(paths),
-    });
+    const clipboard = setCopyPasteClipboard(
+      mode,
+      paths,
+      new Date().toISOString(),
+      resolveClipboardSourceEntries(paths, fromTree),
+    );
+    applyCopyPasteClipboardState(clipboard);
+    const summary = describeClipboard(clipboard);
+    if (notifyClipboardItems && summary) {
+      pushToast({ kind: "info", title: summary.label, icon: summary.icon });
+    }
     closeContextMenu();
+  }
+
+  function removeClipboardPath(path: string) {
+    applyCopyPasteClipboardState(removeClipboardItem(copyPasteClipboardRef.current, path));
+  }
+
+  function clearClipboard() {
+    applyCopyPasteClipboardState(clearCopyPasteClipboard());
   }
 
   async function executeCopyLikePlan(
@@ -2129,6 +2189,7 @@ export function useExplorerActions(args: {
     setOpenWithApplications((current) => current.filter((entry) => entry.id !== entryId));
   }
 
+  // Goes to the folder an item is in and selects the item there.
   async function revealSearchResultInFolder(path: string) {
     const folderPath = parentDirectoryPath(path);
     if (!folderPath) {
@@ -3022,6 +3083,9 @@ export function useExplorerActions(args: {
     runContextMenuAction,
     runContextSubmenuAction,
     runCopyClipboardAction,
+    removeClipboardPath,
+    clearClipboard,
+    revealPathInFolder: revealSearchResultInFolder,
     runCopyPathAction,
     selectAllContentEntries,
     setSingleContentSelection,

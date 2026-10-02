@@ -47,9 +47,9 @@ describe("shortcut commands", () => {
     }
   });
 
-  it("lets 48 commands be changed and keeps the standard ones fixed", () => {
+  it("lets 50 commands be changed and keeps the standard ones fixed", () => {
     const fixed = SHORTCUT_COMMANDS.filter((command) => "fixed" in command && command.fixed);
-    expect(SHORTCUT_COMMANDS.length - fixed.length).toBe(48);
+    expect(SHORTCUT_COMMANDS.length - fixed.length).toBe(50);
     expect(fixed.map((command) => command.id)).toEqual([
       "undo",
       "redo",

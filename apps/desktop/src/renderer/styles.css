@@ -6880,39 +6880,344 @@ button.shortcut-slot-key.recording:hover {
   grid-template-columns: minmax(0, 1fr);
 }
 
-/* What is on the clipboard, in the path bar row and in the search results bar. */
-.clipboard-indicator {
+/* ── The clipboard ───────────────────────────────────────────────────────
+   The toolbar button that says how many files and folders are waiting to be pasted, and
+   the list it opens. */
+.toolbar-clipboard {
   display: inline-flex;
   flex: 0 0 auto;
-  align-items: center;
+}
+
+.tb-btn.tb-btn-icon.clipboard-button {
+  width: auto;
   gap: 5px;
-  margin-left: 12px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: var(--bg-hover);
-  color: var(--text-secondary);
-  font-size: 11px;
+  padding: 0 8px 0 7px;
+}
+
+.clipboard-button-count {
+  color: var(--ft-accent-solid-button);
+  font-size: 11.5px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+
+.clipboard-menu {
+  width: 330px;
+  max-width: calc(100vw - 16px);
+}
+
+.clipboard-menu-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 10px 3px;
+}
+
+.clipboard-menu-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--context-menu-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.clipboard-indicator-icon {
+.clipboard-menu-hint {
+  flex: none;
+  margin-left: auto;
+  color: var(--context-menu-shortcut);
+  font-size: 11.5px;
+}
+
+.clipboard-menu-breakdown {
+  padding: 0 10px 4px;
+  color: var(--context-menu-shortcut);
+  font-size: 11.5px;
+}
+
+.clipboard-menu-list-shell {
+  position: relative;
+}
+
+.clipboard-menu-list {
+  overflow-y: auto;
+}
+
+/* Every row is CLIPBOARD_MENU_ROW_HEIGHT tall: the rows drawn are worked out from it. */
+.clipboard-menu-row {
+  box-sizing: border-box;
+  height: 24px;
+}
+
+.clipboard-menu-heading {
+  display: flex;
+  align-items: center;
+  padding-top: 0;
+  padding-bottom: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The folder of the items at the top of the list stays there while they scroll under it. */
+.clipboard-menu-pinned-heading {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  background: var(--context-menu-bg);
+  pointer-events: none;
+}
+
+.clipboard-menu-item {
+  gap: 0;
+  padding: 0 4px 0 10px;
+}
+
+.clipboard-menu-item-main {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.clipboard-menu-item-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clipboard-menu-item-remove {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  visibility: hidden;
+  cursor: default;
+}
+
+.clipboard-menu-item.active .clipboard-menu-item-remove,
+.clipboard-menu-item:hover .clipboard-menu-item-remove {
+  visibility: visible;
+}
+
+.clipboard-menu-item-remove:hover {
+  background: color-mix(in srgb, var(--ft-accent-on-solid) 22%, transparent);
+}
+
+.clipboard-menu-item-remove .toolbar-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.clipboard-menu-clear {
+  padding-left: 10px;
+}
+
+/* Several items on the clipboard: two of the file list's icons, one behind the other. */
+.clipboard-items-icon {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  width: 22px;
+  height: 22px;
+}
+
+.clipboard-items-icon > .file-icon {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+}
+
+.clipboard-items-icon > .file-icon:first-child {
+  top: 0;
+  left: 0;
+}
+
+.clipboard-items-icon > .file-icon:last-child {
+  right: 0;
+  bottom: 0;
+}
+
+/* A notification that names what was copied shows its icon as the file list does, with no
+   tinted tile behind it. */
+.toast-card .toast-card-icon-wrap.toast-card-item-icon {
+  background: transparent;
+}
+
+.toast-card-item-icon > .file-icon {
+  width: 22px;
+  height: 22px;
+}
+
+/* ── Items on the clipboard ──────────────────────────────────────────────
+   A "Copied" or "Cut" tag on the rows of the folder tree and the file list, for as long
+   as the item waits to be pasted, and a flash when it is copied. */
+
+/* The tag gives way before the name does: it shrinks first, and when the word no longer
+   fits beside the icon it wraps onto a second line, which the tag's height cuts off. */
+.clipboard-mark-tag {
+  display: inline-flex;
+  flex: 0 1000 auto;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  align-items: center;
+  column-gap: 3px;
+  /* The icon is what is left when the word has gone; the row's own gap keeps the tag
+     clear of the name. */
+  min-width: 11px;
+  height: 14px;
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--ft-accent-solid-button);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 14px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.clipboard-mark-tag .toolbar-icon {
+  flex: none;
+  width: 11px;
+  height: 14px;
+}
+
+.clipboard-mark-badge .toolbar-icon {
   width: 11px;
   height: 11px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
-.search-scope-bar .clipboard-indicator {
-  margin: 0 4px 0 0;
+.active:not(.inactive) > .clipboard-mark-tag,
+.active:not(.inactive) > .details-name > .clipboard-mark-tag,
+.active:not(.inactive) > .clipboard-mark-name > .clipboard-mark-tag {
+  color: var(--ft-accent-on-selection);
 }
 
-/* The focused path bar tints its direct spans; the indicator keeps its own color. */
-.content-pathbar-row.pane-header-focused > .clipboard-indicator {
-  color: var(--text-secondary);
+/* In the details view the tag sits at the end of the Name column. The name used to be the
+   column's last child, which is what gives it its color (`.details-name span:last-child`);
+   with the tag after it, both are given theirs here. */
+.details-name > .details-name-label {
+  color: var(--text-primary);
+}
+
+.details-name > span.clipboard-mark-tag {
+  margin-right: 4px;
+  color: var(--ft-accent-solid-button);
+}
+
+.details-name .clipboard-mark-tag span.clipboard-mark-word {
+  color: inherit;
+}
+
+.details-row.active:not(.inactive) .details-name > span.clipboard-mark-tag {
+  color: var(--ft-accent-on-selection);
+}
+
+.search-result-row.clipboard-flash {
+  position: relative;
+}
+
+/* A search result's name and its tag share the name column. */
+.clipboard-mark-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Icon view has no room for the word: the icon alone, on the corner of the picture. */
+.icon-item-image {
+  position: relative;
+}
+
+.clipboard-mark-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid color-mix(in srgb, var(--ft-accent-solid-button) 70%, transparent);
+  border-radius: 50%;
+  background: var(--bg-base);
+  color: var(--ft-accent-solid-button);
+  pointer-events: none;
+}
+
+/* Cut items look taken out already, as in Finder. */
+.clipboard-cut .tree-label-text,
+.clipboard-cut .flow-item-label,
+.clipboard-cut .details-name-label,
+.clipboard-cut .search-result-name,
+.clipboard-cut .icon-item-label {
+  opacity: 0.55;
+}
+
+.clipboard-cut .icon-item-image > :not(.clipboard-mark-badge) {
+  opacity: 0.45;
+}
+
+.clipboard-flash::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--ft-accent-solid-button);
+  opacity: 0;
+  pointer-events: none;
+  animation: clipboard-flash 700ms ease-out;
+}
+
+/* A selected row is already filled with the accent color: its flash is the color of the
+   text on it. */
+.tree-row.clipboard-flash.active:not(.inactive)::after,
+.flow-item.clipboard-flash.active:not(.inactive)::after,
+.details-row.clipboard-flash.active:not(.inactive)::after,
+.search-result-row.clipboard-flash.active:not(.inactive)::after {
+  background: var(--ft-accent-on-selection);
+}
+
+@keyframes clipboard-flash {
+  0% {
+    opacity: 0.45;
+    box-shadow: 0 0 0 0 var(--ft-accent-solid-button);
+  }
+  60% {
+    opacity: 0.12;
+    box-shadow: 0 0 0 5px transparent;
+  }
+  100% {
+    opacity: 0;
+    box-shadow: 0 0 0 5px transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clipboard-flash::after {
+    animation: none;
+  }
 }
 
 /* In the path bar row the item count gives way before the path does. */

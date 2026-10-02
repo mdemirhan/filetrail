@@ -216,6 +216,20 @@ export const SHORTCUT_COMMANDS = [
     menuPath: "Edit > Copy Path",
   },
   {
+    id: "showClipboard",
+    label: "Show Clipboard",
+    group: "files",
+    defaults: [],
+    menuPath: "Edit > Show Clipboard",
+  },
+  {
+    id: "clearClipboard",
+    label: "Clear Clipboard",
+    group: "files",
+    defaults: [],
+    menuPath: "Edit > Clear Clipboard",
+  },
+  {
     id: "openInTerminal",
     label: "Open in Terminal",
     group: "files",

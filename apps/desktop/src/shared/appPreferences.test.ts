@@ -99,6 +99,9 @@ describe("appPreferences helpers", () => {
       restoreLastVisitedFolderOnStartup: false,
       notificationsEnabled: true,
       notificationDurationSeconds: 4,
+      highlightClipboardItemsInTree: true,
+      highlightClipboardItemsInContent: true,
+      notifyClipboardItems: true,
       propertiesOpen: false,
       topToolbarItems: DEFAULT_TOP_TOOLBAR_ITEMS,
       leftToolbarItems: {

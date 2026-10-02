@@ -120,6 +120,37 @@ describe("canRunToolbarRendererCommand", () => {
     ).toBe(true);
   });
 
+  it("copies and cuts the tree's folder from the tree, whatever the list has selected", () => {
+    const treeContext = (selectedTreeTargetPath: string | null) =>
+      availabilityContext({
+        shortcutContext: shortcutContext({
+          focusedPane: "tree",
+          selectedTreeTargetKind: selectedTreeTargetPath ? "filesystemFolder" : null,
+        }),
+        selectedTreeTargetPath,
+        selectedPathsInViewOrder: [],
+        selectedEntry: null,
+      });
+    for (const command of ["copySelection", "cutSelection"] as const) {
+      expect(canRunToolbarRendererCommand(command, treeContext("/Users/demo"))).toBe(true);
+      expect(canRunToolbarRendererCommand(command, treeContext(null))).toBe(false);
+    }
+  });
+
+  it("shows and clears the clipboard only while it holds something", () => {
+    const filled = availabilityContext({
+      copyPasteClipboard: setCopyPasteClipboard(
+        "copy",
+        ["/Users/demo/file.txt"],
+        "2026-03-12T00:00:00.000Z",
+      ),
+    });
+    for (const command of ["showClipboard", "clearClipboard"] as const) {
+      expect(canRunToolbarRendererCommand(command, availabilityContext())).toBe(false);
+      expect(canRunToolbarRendererCommand(command, filled)).toBe(true);
+    }
+  });
+
   it("requires editable files and respects the open item limit for edit", () => {
     const textFile = file("/Users/demo/file.txt");
     const directoryEntry = directory("/Users/demo/Folder");

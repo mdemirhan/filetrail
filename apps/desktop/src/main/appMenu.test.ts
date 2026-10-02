@@ -109,6 +109,9 @@ describe("createApplicationMenuTemplate", () => {
       "Copy Path",
       "Select All",
       "-",
+      "Show Clipboard",
+      "Clear Clipboard",
+      "-",
       "Find Files…",
       "Show Last Results",
     ]);

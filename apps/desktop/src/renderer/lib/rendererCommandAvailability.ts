@@ -163,9 +163,15 @@ export function canRunToolbarRendererCommand(
       );
     case "copySelection":
     case "cutSelection":
+      if (focusedPane === "tree") {
+        return context.selectedTreeTargetPath !== null;
+      }
       return selectedCount > 0;
     case "pasteSelection":
       return hasClipboardItems(context.copyPasteClipboard) && context.pasteDestinationPath !== null;
+    case "showClipboard":
+    case "clearClipboard":
+      return hasClipboardItems(context.copyPasteClipboard);
     case "copyPath":
       if (focusedPane === "tree") {
         return context.selectedTreeTargetPath !== null;

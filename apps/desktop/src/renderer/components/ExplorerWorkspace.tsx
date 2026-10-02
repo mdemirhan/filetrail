@@ -171,6 +171,7 @@ export function ExplorerWorkspace({
   toolbarTitle = "",
   toolbarSubtitle = "",
   tabStrip = null,
+  clipboardButton = null,
 }: {
   preferencesReady: boolean;
   restoredPaneWidths: { treeWidth: number; inspectorWidth: number } | null;
@@ -196,6 +197,8 @@ export function ExplorerWorkspace({
   refreshDirectory: () => Promise<void>;
   /** The row of tabs, while there is more than one. */
   tabStrip?: React.ReactNode;
+  /** The clipboard button, while files or folders are waiting to be pasted. */
+  clipboardButton?: React.ReactNode;
   viewMode: ExplorerViewMode;
   onViewModeChange: (value: ExplorerViewMode) => void;
   sortBy: SortBy;
@@ -1005,6 +1008,7 @@ export function ExplorerWorkspace({
             renderTopToolbarActionItem(itemId, `${itemId}-${index}`),
           )}
         </div>
+        {clipboardButton ? <div className="toolbar-clipboard">{clipboardButton}</div> : null}
         {showSidebarRail ? null : renderViewOptions()}
         {renderTopToolbarItem("search")}
         <div

@@ -129,6 +129,8 @@ describe("shortcutPolicy", () => {
     ).toEqual([
       "openSelection",
       "openInTerminal",
+      "copySelection",
+      "cutSelection",
       "pasteSelection",
       "copyPath",
       "openSelectionInNewTab",
@@ -139,7 +141,7 @@ describe("shortcutPolicy", () => {
           RAW_EXPLORER_SHORTCUT_TREE_FOCUS_BUCKETS[shortcutId] === "contentOnly" &&
           canHandleRawExplorerShortcut(shortcutId, treeFolderContext),
       ),
-    ).toEqual(["pasteSelection", "copyPath", "openInTerminal"]);
+    ).toEqual(["copySelection", "cutSelection", "pasteSelection", "copyPath", "openInTerminal"]);
   });
 
   it("allows only the safe content-target commands for favorites", () => {
@@ -201,11 +203,25 @@ describe("shortcutPolicy", () => {
     ).toBe(false);
   });
 
+  it("copies and cuts a folder of the tree, but never a favorite", () => {
+    const treeFolderContext = ctx({
+      focusedPane: "tree",
+      selectedTreeTargetKind: "filesystemFolder",
+    });
+    for (const command of ["copySelection", "cutSelection"] as const) {
+      expect(canHandleRendererCommand(command, treeFolderContext)).toBe(true);
+      expect(canHandleRawExplorerShortcut(command, treeFolderContext)).toBe(true);
+      for (const selectedTreeTargetKind of ["favorite", "favoritesRoot", null] as const) {
+        const context = ctx({ focusedPane: "tree", selectedTreeTargetKind });
+        expect(canHandleRendererCommand(command, context)).toBe(false);
+        expect(canHandleRawExplorerShortcut(command, context)).toBe(false);
+      }
+    }
+  });
+
   it("keeps the dangerous renderer-command denylist fully blocked for tree folders and favorites", () => {
     const dangerousRendererCommands = [
       "editSelection",
-      "copySelection",
-      "cutSelection",
       "moveSelection",
       "renameSelection",
       "duplicateSelection",
@@ -232,8 +248,6 @@ describe("shortcutPolicy", () => {
 
   it("keeps the dangerous raw-shortcut denylist fully blocked for tree folders and favorites", () => {
     const dangerousRawShortcutIds = [
-      "copySelection",
-      "cutSelection",
       "moveSelection",
       "renameSelection",
       "duplicateSelection",
@@ -268,8 +282,8 @@ describe("shortcutPolicy", () => {
     expect(getContextMenuShortcutLabel("showInfo", treeFolderContext)).toBe("⌘I");
     expect(getContextMenuShortcutLabel("terminal", treeFolderContext)).toBe("⌥⌘T");
     expect(getContextMenuShortcutLabel("copyPath", treeFolderContext)).toBe("⌥⌘C");
-    expect(getContextMenuShortcutLabel("copy", treeFolderContext)).toBeNull();
-    expect(getContextMenuShortcutLabel("cut", treeFolderContext)).toBeNull();
+    expect(getContextMenuShortcutLabel("copy", treeFolderContext)).toBe("⌘C");
+    expect(getContextMenuShortcutLabel("cut", treeFolderContext)).toBe("⌘X");
     expect(getContextMenuShortcutLabel("paste", treeFolderContext)).toBeNull();
     expect(getContextMenuShortcutLabel("rename", treeFolderContext)).toBeNull();
     expect(getContextMenuShortcutLabel("trash", treeFolderContext)).toBeNull();

@@ -223,10 +223,8 @@ describe("ItemContextMenu", () => {
     expect(screen.getByRole("button", { name: "Show Info⌘I" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open in Terminal⌥⌘T" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy Path⌥⌘C" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Copy⌘C" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Cut" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Cut⌘X" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Copy⌘C" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cut⌘X" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "RenameF2" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Expand" })).toBeNull();
@@ -292,6 +290,9 @@ describe("ItemContextMenu", () => {
           }
           if (label?.startsWith("Copy Path")) {
             return "Copy Path";
+          }
+          if (label === "Copy⌘C" || label === "Cut⌘X") {
+            return label.slice(0, -2);
           }
           if (label?.startsWith("Show Info")) {
             return "Show Info";

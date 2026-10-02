@@ -32,11 +32,9 @@ vi.mock("./components/ContentPane", () => ({
     inlineRename,
     onInlineRenameSubmit,
     onInlineRenameCancel,
-    clipboardSummary,
     isFocused,
   }: {
     isFocused?: boolean;
-    clipboardSummary?: { label: string; tooltip: string } | null;
     currentPath: string;
     entries: Array<{ path: string; name: string; kind: string; isSymlink?: boolean }>;
     inlineRename?: { path: string; error: string | null } | null;
@@ -88,7 +86,6 @@ vi.mock("./components/ContentPane", () => ({
     <div data-testid="content-pane" onPointerDown={() => onFocusChange(true)}>
       <output data-testid="content-current-path">{currentPath}</output>
       <output data-testid="content-entry-count">{entries.length}</output>
-      <output data-testid="clipboard-summary">{clipboardSummary?.label ?? ""}</output>
       <output data-testid="content-focused">{String(isFocused ?? false)}</output>
       <label>
         Current folder path
@@ -759,8 +756,7 @@ describe("App copy/paste integration", () => {
     });
 
     const initialToastViewport = await screen.findByTestId("toast-viewport");
-    expect(within(initialToastViewport).getByText("Ready to paste")).toBeInTheDocument();
-    expect(within(initialToastViewport).getByText("source.txt")).toBeInTheDocument();
+    expect(within(initialToastViewport).getByText("source.txt copied")).toBeInTheDocument();
     expect(document.activeElement).toBe(activeElementBeforeCopy);
   });
 
@@ -950,12 +946,11 @@ describe("App copy/paste integration", () => {
     });
 
     const toastViewport = await screen.findByTestId("toast-viewport");
-    expect(within(toastViewport).getByText("Ready to move")).toBeInTheDocument();
-    expect(within(toastViewport).getByText("source.txt")).toBeInTheDocument();
+    expect(within(toastViewport).getByText("source.txt cut")).toBeInTheDocument();
     expect(document.activeElement).toBe(activeElementBeforeCut);
   });
 
-  it("shows the first selected item name and remaining count for multi-item copy toasts", async () => {
+  it("counts the items in the toast when several are copied", async () => {
     const harness = createAppHarness({
       directorySnapshots: {
         "/Users/demo": {
@@ -988,8 +983,7 @@ describe("App copy/paste integration", () => {
     });
 
     const toastViewport = await screen.findByTestId("toast-viewport");
-    expect(within(toastViewport).getByText("Ready to paste")).toBeInTheDocument();
-    expect(within(toastViewport).getByText("source-a.txt and 1 more")).toBeInTheDocument();
+    expect(within(toastViewport).getByText("2 items copied")).toBeInTheDocument();
   });
 
   it("ignores menu shortcut commands while help is open", async () => {
@@ -1168,8 +1162,8 @@ describe("App copy/paste integration", () => {
 
     expectNativeEditActions(harness, ["copy", "cut", "paste", "selectAll"]);
     expectNoFileClipboardActions(harness);
-    expect(screen.queryByText("Ready to paste")).not.toBeInTheDocument();
-    expect(screen.queryByText("Ready to move")).not.toBeInTheDocument();
+    expect(clipboardButton()).toBeNull();
+    expect(clipboardButton()).toBeNull();
   });
 
   it("does not trigger explorer file actions when keyboard copy, cut, or paste are pressed in a text input", async () => {
@@ -1190,8 +1184,8 @@ describe("App copy/paste integration", () => {
     });
 
     expectNoFileClipboardActions(harness);
-    expect(screen.queryByText("Ready to paste")).not.toBeInTheDocument();
-    expect(screen.queryByText("Ready to move")).not.toBeInTheDocument();
+    expect(clipboardButton()).toBeNull();
+    expect(clipboardButton()).toBeNull();
   });
 
   it("does not treat the current folder as an implicit selection for copy or cut", async () => {
@@ -1213,7 +1207,7 @@ describe("App copy/paste integration", () => {
     expect(
       within(copyToastViewport).getByText("Select at least one item to copy."),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Ready to paste")).not.toBeInTheDocument();
+    expect(clipboardButton()).toBeNull();
     expectNoFileClipboardActions(harness);
 
     await act(async () => {
@@ -1224,7 +1218,7 @@ describe("App copy/paste integration", () => {
     expect(
       within(cutToastViewport).getByText("Select at least one item to cut."),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Ready to move")).not.toBeInTheDocument();
+    expect(clipboardButton()).toBeNull();
     expectNoFileClipboardActions(harness);
   });
 
@@ -1464,8 +1458,7 @@ describe("App copy/paste integration", () => {
     });
 
     const toastViewport = await screen.findByTestId("toast-viewport");
-    expect(within(toastViewport).getByText("Ready to paste")).toBeInTheDocument();
-    expect(within(toastViewport).getByText("source.txt")).toBeInTheDocument();
+    expect(within(toastViewport).getByText("source.txt copied")).toBeInTheDocument();
     expect(screen.getByTitle("/Users/demo/source.txt")).toHaveAttribute("data-selected", "true");
     expect(screen.getByTitle("/Users/demo/Folder")).toHaveAttribute("data-selected", "true");
     expectNativeEditActions(harness, []);
@@ -3442,10 +3435,8 @@ describe("App copy/paste integration", () => {
       expect(screen.getByRole("button", { name: "Copy Path⌥⌘C" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Show Info⌘I" })).toBeInTheDocument();
       if (targetTitle.startsWith("tree:")) {
-        expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
-        expect(screen.queryByRole("button", { name: "Copy⌘C" })).toBeNull();
-        expect(screen.getByRole("button", { name: "Cut" })).toBeInTheDocument();
-        expect(screen.queryByRole("button", { name: "Cut⌘X" })).toBeNull();
+        expect(screen.getByRole("button", { name: "Copy⌘C" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Cut⌘X" })).toBeInTheDocument();
         expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
         expect(screen.queryByRole("button", { name: "RenameF2" })).toBeNull();
       } else {
@@ -4019,7 +4010,7 @@ describe("App copy/paste integration", () => {
     });
   });
 
-  it("blocks Cmd+C in tree focus even when content still has a stale selection", async () => {
+  it("copies the tree's folder with Cmd+C in tree focus, not a stale selection in the list", async () => {
     const harness = createAppHarness();
 
     render(
@@ -4034,10 +4025,14 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "c", metaKey: true });
     });
 
-    expect(screen.queryByText("Ready to paste")).not.toBeInTheDocument();
+    // The folder the tree is on, never the selection left behind in the list.
+    const toastViewport = await screen.findByTestId("toast-viewport");
+    expect(within(toastViewport).getByText("demo copied")).toBeInTheDocument();
+    expect(screen.queryByText("source.txt copied")).not.toBeInTheDocument();
+    expect(clipboardButton()).toHaveAccessibleName("Clipboard: 1 item copied");
   });
 
-  it("blocks Cmd+X in tree focus even when content still has a stale selection", async () => {
+  it("cuts the tree's folder with Cmd+X in tree focus, not a stale selection in the list", async () => {
     const harness = createAppHarness();
 
     render(
@@ -4052,7 +4047,11 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "x", metaKey: true });
     });
 
-    expect(screen.queryByText("Ready to move")).not.toBeInTheDocument();
+    // The folder the tree is on, never the selection left behind in the list.
+    const toastViewport = await screen.findByTestId("toast-viewport");
+    expect(within(toastViewport).getByText("demo cut")).toBeInTheDocument();
+    expect(screen.queryByText("source.txt cut")).not.toBeInTheDocument();
+    expect(clipboardButton()).toHaveAccessibleName("Clipboard: 1 item cut");
   });
 
   it("pastes into the tree's selected folder with Cmd+V in tree focus", async () => {
@@ -4177,7 +4176,7 @@ describe("App copy/paste integration", () => {
     );
   });
 
-  it("blocks the Copy menu command in tree focus", async () => {
+  it("copies the tree's folder from the Copy menu command in tree focus", async () => {
     const harness = createAppHarness();
 
     render(
@@ -4192,10 +4191,14 @@ describe("App copy/paste integration", () => {
       harness.emitCommand({ type: "editCopy" });
     });
 
-    expect(screen.queryByText("Ready to paste")).not.toBeInTheDocument();
+    // The folder the tree is on, never the selection left behind in the list.
+    const toastViewport = await screen.findByTestId("toast-viewport");
+    expect(within(toastViewport).getByText("demo copied")).toBeInTheDocument();
+    expect(screen.queryByText("source.txt copied")).not.toBeInTheDocument();
+    expect(clipboardButton()).toHaveAccessibleName("Clipboard: 1 item copied");
   });
 
-  it("blocks the Cut menu command in tree focus", async () => {
+  it("cuts the tree's folder from the Cut menu command in tree focus", async () => {
     const harness = createAppHarness();
 
     render(
@@ -4210,7 +4213,11 @@ describe("App copy/paste integration", () => {
       harness.emitCommand({ type: "editCut" });
     });
 
-    expect(screen.queryByText("Ready to move")).not.toBeInTheDocument();
+    // The folder the tree is on, never the selection left behind in the list.
+    const toastViewport = await screen.findByTestId("toast-viewport");
+    expect(within(toastViewport).getByText("demo cut")).toBeInTheDocument();
+    expect(screen.queryByText("source.txt cut")).not.toBeInTheDocument();
+    expect(clipboardButton()).toHaveAccessibleName("Clipboard: 1 item cut");
   });
 
   it("pastes into the tree's selected folder from the Paste menu command in tree focus", async () => {
@@ -5349,7 +5356,7 @@ describe("App copy/paste integration", () => {
     await act(async () => {
       fireEvent.keyDown(window, { key: "x", metaKey: true });
     });
-    expect(await screen.findByText("Ready to move")).toBeInTheDocument();
+    expect(await screen.findByText(/ cut$/)).toBeInTheDocument();
     expect(nonProbeInvocations()).toHaveLength(invocationCountBeforeBlockedPaste);
 
     await act(async () => {
@@ -5984,6 +5991,93 @@ describe("App copy/paste integration", () => {
     expect(screen.getByRole("button", { name: "OK" })).toHaveFocus();
   });
 
+  it("fills the clipboard without a notification when copies are not notified of", async () => {
+    const harness = createAppHarness({
+      preferences: {
+        notifyClipboardItems: false,
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+
+    expect(clipboardButton()).toHaveAccessibleName("Clipboard: 1 item copied");
+    expect(document.querySelectorAll(".toast-card")).toHaveLength(0);
+  });
+
+  it("lists the clipboard from the menu command, and takes items off it there", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    // Nothing to show while the clipboard is empty.
+    await screen.findByTestId("content-pane");
+    await act(async () => {
+      harness.emitCommand({ type: "showClipboard" });
+    });
+    expect(screen.queryByRole("menu", { name: "Clipboard" })).toBeNull();
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+    // Copying does not open the list by itself.
+    expect(screen.queryByRole("menu", { name: "Clipboard" })).toBeNull();
+
+    await act(async () => {
+      harness.emitCommand({ type: "showClipboard" });
+    });
+    const menu = screen.getByRole("menu", { name: "Clipboard" });
+    expect(within(menu).getByRole("menuitem", { name: "source.txt" })).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(
+        within(menu).getByRole("button", { name: "Remove source.txt from the clipboard" }),
+      );
+    });
+    expect(clipboardButton()).toBeNull();
+    expect(screen.queryByRole("menu", { name: "Clipboard" })).toBeNull();
+  });
+
+  it("empties the clipboard from the menu command", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "x", metaKey: true });
+    });
+    expect(clipboardButton()).toHaveAccessibleName("Clipboard: 1 item cut");
+
+    await act(async () => {
+      harness.emitCommand({ type: "clearClipboard" });
+    });
+    expect(clipboardButton()).toBeNull();
+
+    // With nothing left to paste, Paste does nothing.
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+    expectNoFileClipboardActions(harness);
+  });
+
   it("suppresses notifications entirely when the preference is disabled", async () => {
     const harness = createAppHarness({
       preferences: {
@@ -6002,7 +6096,7 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "c", metaKey: true });
     });
 
-    expect(screen.queryByText("Ready to paste")).not.toBeInTheDocument();
+    expect(clipboardButton()).toHaveAccessibleName("Clipboard: 1 item copied");
     expect(document.querySelectorAll(".toast-card")).toHaveLength(0);
   });
 
@@ -6619,8 +6713,7 @@ describe("App copy/paste integration", () => {
     });
 
     const toastViewport = await screen.findByTestId("toast-viewport");
-    expect(within(toastViewport).getByText("Ready to paste")).toBeInTheDocument();
-    expect(within(toastViewport).getByText("source.txt")).toBeInTheDocument();
+    expect(within(toastViewport).getByText("source.txt copied")).toBeInTheDocument();
     expect(screen.queryByText("Pasting into Folder")).not.toBeInTheDocument();
     expect(document.querySelectorAll(".toast-card")).toHaveLength(1);
 
@@ -9051,6 +9144,11 @@ function expectNativeEditActions(
   ).toEqual(actions);
 }
 
+// The toolbar's clipboard button is there exactly while files or folders wait to be pasted.
+function clipboardButton(): HTMLElement | null {
+  return screen.queryByRole("button", { name: /^Clipboard: / });
+}
+
 function expectNoFileClipboardActions(harness: ReturnType<typeof createAppHarness>): void {
   expect(harness.invocations.some((call) => call.channel === "copyPaste:plan")).toBe(false);
   expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
@@ -9451,14 +9549,14 @@ describe("App tabs", () => {
   it("pastes into one tab what was copied in another", async () => {
     const harness = createAppHarness();
     await renderApp(harness);
-    expect(screen.getByTestId("clipboard-summary")).toHaveTextContent("");
+    expect(clipboardButton()).toBeNull();
     await selectItem("/Users/demo/source.txt");
     await pressKey({ key: "c", metaKey: true });
 
     await pressKey({ key: "t", metaKey: true });
     await openDirectory("/Users/demo/Folder");
-    // The copied item is in the other tab; the status bar still says it is there to paste.
-    expect(screen.getByTestId("clipboard-summary")).toHaveTextContent("1 item copied");
+    // The copied item is in the other tab; the toolbar still says it is there to paste.
+    expect(clipboardButton()).toHaveAccessibleName("Clipboard: 1 item copied");
     await clearContentSelection();
     await pressKey({ key: "v", metaKey: true });
 

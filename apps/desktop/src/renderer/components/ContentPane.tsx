@@ -15,8 +15,8 @@ import {
 import { useElementSize } from "../hooks/useElementSize";
 import { usePathSuggestions } from "../hooks/usePathSuggestions";
 import { useRelativeDate } from "../hooks/useRelativeDate";
+import { ClipboardMarkTag, clipboardMarkClassName, useClipboardMarks } from "../lib/clipboardMarks";
 import { isSelectionNarrowingClick } from "../lib/contentSelection";
-import type { ClipboardSummary } from "../lib/copyPasteClipboard";
 import {
   fitDetailColumns,
   getDetailsRowHeight,
@@ -33,7 +33,6 @@ import { isKeyboardOwnedFormControl } from "../lib/focusedEditTarget";
 import { formatSize, splitDisplayName, splitPermissionMode } from "../lib/formatting";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
 import { buildColumnMajorRows, computeRowsPerColumn, getVirtualRange } from "../lib/virtualization";
-import { ClipboardIndicator } from "./ClipboardIndicator";
 import { IconGridView } from "./IconGridView";
 import { InlineRenameField } from "./InlineRenameField";
 import { ListFilterPill } from "./ListFilterPill";
@@ -131,7 +130,6 @@ export function ContentPane({
   getFolderSizeLabel,
   sizeBars = null,
   statusSummary,
-  clipboardSummary = null,
   inlineRename = null,
   onInlineRenameSubmit = () => undefined,
   onInlineRenameCancel = () => undefined,
@@ -199,8 +197,6 @@ export function ContentPane({
   sizeBars?: SizeBars | null;
   // Item/selection count and free space, shown at the right end of the path bar.
   statusSummary?: string | undefined;
-  /** What is on the clipboard, while it holds files. */
-  clipboardSummary?: ClipboardSummary | null;
   // The item whose name is being edited in its row, with the reason the last name was refused.
   inlineRename?: InlineRenameState | null;
   onInlineRenameSubmit?: (nextName: string) => void;
@@ -708,9 +704,6 @@ export function ContentPane({
             ))}
           </nav>
         )}
-        {clipboardSummary && !pathEditorOpen ? (
-          <ClipboardIndicator summary={clipboardSummary} />
-        ) : null}
         {statusSummary && !pathEditorOpen ? (
           <span className="content-pathbar-status" aria-live="polite">
             {statusSummary}
@@ -950,6 +943,7 @@ function FlowListView({
   onInlineRenameSubmit: (nextName: string) => void;
   onInlineRenameCancel: () => void;
 }) {
+  const clipboardMarks = useClipboardMarks("content");
   const containerRef = useRef<HTMLDivElement | null>(null);
   const { height: containerHeight } = useElementSize(containerRef);
   // Scroll position lives in a ref so scrolling never re-renders by itself; a rAF
@@ -1153,7 +1147,7 @@ function FlowListView({
                   type="button"
                   className={`flow-item${selectedPathSet.has(entry.path) ? " active" : ""}${
                     selectedPathSet.has(entry.path) && !isFocused ? " inactive" : ""
-                  }`}
+                  }${clipboardMarkClassName(clipboardMarks, entry.path)}`}
                   data-drop-target-state={
                     canAcceptDrop ? (getItemDropIndicator?.(entry.path) ?? "none") : "none"
                   }
@@ -1210,6 +1204,7 @@ function FlowListView({
                     name={entry.name}
                     extension={entry.extension}
                   />
+                  <ClipboardMarkTag marks={clipboardMarks} path={entry.path} />
                 </button>
               );
             })}
@@ -1305,6 +1300,7 @@ function DetailsView({
   onInlineRenameSubmit: (nextName: string) => void;
   onInlineRenameCancel: () => void;
 }) {
+  const clipboardMarks = useClipboardMarks("content");
   const containerRef = useRef<HTMLDivElement | null>(null);
   // The rows scroll below the column header, so what fits on screen is the scroll area's
   // own height, not the whole pane's.
@@ -1623,7 +1619,7 @@ function DetailsView({
                 type="button"
                 className={`details-row${selectedPathSet.has(entry.path) ? " active" : ""}${
                   selectedPathSet.has(entry.path) && !isFocused ? " inactive" : ""
-                }`}
+                }${clipboardMarkClassName(clipboardMarks, entry.path)}`}
                 data-drop-target-state={
                   canAcceptDrop ? (getItemDropIndicator?.(entry.path) ?? "none") : "none"
                 }
@@ -1689,6 +1685,11 @@ function DetailsView({
                     }
                     sizeBarFraction={
                       columnKey === "size" ? getSizeBarFraction(entry, sizeBars) : null
+                    }
+                    nameTag={
+                      columnKey === "name" ? (
+                        <ClipboardMarkTag marks={clipboardMarks} path={entry.path} />
+                      ) : null
                     }
                   />
                 ))}
@@ -1788,6 +1789,7 @@ function DetailsCell({
   folderSizeLabel = null,
   sizeBarFraction = null,
   nameEditor = null,
+  nameTag = null,
 }: {
   columnKey: DetailColumnKey;
   entry: DirectoryEntry;
@@ -1797,6 +1799,8 @@ function DetailsCell({
   sizeBarFraction?: number | null;
   // Shown in place of the name while it is being edited.
   nameEditor?: React.ReactNode;
+  // Shown after the name: the marker of an item that is on the clipboard.
+  nameTag?: React.ReactNode;
 }) {
   // Cells are presentational spans inside the row button; gridcell focus management is
   // intentionally left to the row, so the focusable-interactive rule is suppressed below.
@@ -1813,6 +1817,7 @@ function DetailsCell({
             extension={entry.extension}
           />
         )}
+        {nameTag}
       </span>
     );
   }

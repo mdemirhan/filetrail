@@ -124,6 +124,8 @@ export const SHORTCUT_ITEMS: readonly ShortcutItem[] = [
   { group: "files", command: "trashSelection", description: "Move to Trash" },
   { group: "files", command: "selectAll", description: "Select all" },
   { group: "files", command: "copyPath", description: "Copy the path" },
+  { group: "files", command: "showClipboard", description: "See what is waiting to be pasted" },
+  { group: "files", command: "clearClipboard", description: "Empty the clipboard" },
   { group: "files", command: "openInTerminal", description: "Open in Terminal" },
   { group: "files", command: "showInFinder", description: "Show in Finder" },
   { group: "files", command: "toggleFavorite", description: "Add to or remove from Favorites" },
@@ -275,7 +277,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Between tabs",
             description:
-              "Copy or cut in one tab and paste in another; the path bar shows what is waiting to be pasted. Drag items onto a tab to move them into its folder, or hold them over the tab to bring it to the front.",
+              "Copy or cut in one tab and paste in another; the clipboard button in the toolbar shows what is waiting to be pasted. Drag items onto a tab to move them into its folder, or hold them over the tab to bring it to the front.",
           },
           {
             label: "Next launch",
@@ -357,6 +359,16 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
             label: "Copy, cut, paste",
             description:
               "Paste goes into the folder you are browsing. With exactly one folder selected in the list, it goes into that folder.",
+          },
+          {
+            label: "From the folder tree",
+            description:
+              "With the folder tree active, Copy and Cut take the folder the tree is on, with everything in it, and never what is selected in the list.",
+          },
+          {
+            label: "What was copied",
+            description:
+              "Copied and cut items flash, and stay marked Copied or Cut until they are pasted or the clipboard changes. A button with their count appears in the toolbar: click it to list them, show one in its folder, take one off, or choose Clear Clipboard. Settings → General → Copy and Cut turns the marks and the notification off.",
           },
           { label: "Drag", description: "Drag items onto a folder to move them there." },
           {

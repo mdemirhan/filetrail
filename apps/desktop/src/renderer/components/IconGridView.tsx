@@ -3,6 +3,7 @@ import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState }
 import type { IpcResponse } from "@filetrail/contracts";
 
 import { useElementSize } from "../hooks/useElementSize";
+import { ClipboardMarkTag, clipboardMarkClassName, useClipboardMarks } from "../lib/clipboardMarks";
 import { isSelectionNarrowingClick } from "../lib/contentSelection";
 import { FileThumbnail } from "../lib/fileThumbnails";
 import {
@@ -85,6 +86,7 @@ export function IconGridView({
   /** The loading, error or empty-folder message, drawn in place of the grid. */
   children?: ReactNode;
 }) {
+  const clipboardMarks = useClipboardMarks("content");
   const containerRef = useRef<HTMLDivElement | null>(null);
   const { width: containerWidth, height: containerHeight } = useElementSize(containerRef);
   // Scroll position lives in a ref so scrolling never re-renders by itself; a rAF
@@ -253,7 +255,7 @@ export function IconGridView({
               type="button"
               className={`icon-item${selected ? " active" : ""}${
                 selected && !isFocused ? " inactive" : ""
-              }`}
+              }${clipboardMarkClassName(clipboardMarks, entry.path)}`}
               data-drop-target-state={
                 canAcceptDrop ? (getItemDropIndicator?.(entry.path) ?? "none") : "none"
               }
@@ -297,6 +299,7 @@ export function IconGridView({
             >
               <span className="icon-item-image">
                 <FileThumbnail entry={entry} listing={listing} />
+                <ClipboardMarkTag marks={clipboardMarks} path={entry.path} variant="badge" />
               </span>
               <span className="icon-item-label">
                 {fitIconLabel(entry.name, entry.extension, compactIconView)}

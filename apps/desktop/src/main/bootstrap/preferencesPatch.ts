@@ -79,6 +79,15 @@ export function toPreferencePatch(
   if (value.notificationDurationSeconds !== undefined) {
     patch.notificationDurationSeconds = value.notificationDurationSeconds;
   }
+  if (value.highlightClipboardItemsInTree !== undefined) {
+    patch.highlightClipboardItemsInTree = value.highlightClipboardItemsInTree;
+  }
+  if (value.highlightClipboardItemsInContent !== undefined) {
+    patch.highlightClipboardItemsInContent = value.highlightClipboardItemsInContent;
+  }
+  if (value.notifyClipboardItems !== undefined) {
+    patch.notifyClipboardItems = value.notifyClipboardItems;
+  }
   if (value.propertiesOpen !== undefined) {
     patch.propertiesOpen = value.propertiesOpen;
   }

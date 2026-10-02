@@ -121,6 +121,8 @@ type ExplorerShortcutActions = {
   }) => Promise<void>;
   rerunSearch: () => void;
   runCopyClipboardAction: (mode: "copy" | "cut") => Promise<void>;
+  showClipboard: () => void;
+  clearClipboard: () => void;
   startPasteFromClipboard: () => Promise<void>;
   resolveContentActionPaths: () => string[];
   startDuplicatePaths: (paths: string[]) => Promise<void>;
@@ -1087,6 +1089,14 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       }
       if (commandType === "pasteSelection") {
         void current.startPasteFromClipboard();
+        return;
+      }
+      if (commandType === "showClipboard") {
+        current.showClipboard();
+        return;
+      }
+      if (commandType === "clearClipboard") {
+        current.clearClipboard();
         return;
       }
       if (commandType === "openLocationSheet") {

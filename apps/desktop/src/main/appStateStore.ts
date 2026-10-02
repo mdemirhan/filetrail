@@ -447,6 +447,18 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
         ? record.notificationDurationSeconds
         : currentDefaults.notificationDurationSeconds,
     ),
+    highlightClipboardItemsInTree:
+      typeof record.highlightClipboardItemsInTree === "boolean"
+        ? record.highlightClipboardItemsInTree
+        : currentDefaults.highlightClipboardItemsInTree,
+    highlightClipboardItemsInContent:
+      typeof record.highlightClipboardItemsInContent === "boolean"
+        ? record.highlightClipboardItemsInContent
+        : currentDefaults.highlightClipboardItemsInContent,
+    notifyClipboardItems:
+      typeof record.notifyClipboardItems === "boolean"
+        ? record.notifyClipboardItems
+        : currentDefaults.notifyClipboardItems,
     propertiesOpen:
       typeof record.propertiesOpen === "boolean"
         ? record.propertiesOpen
