@@ -1141,53 +1141,61 @@ input:focus-visible {
   gap: 8px;
 }
 
+/* Notifications: cards on the menus' surface, each as wide as its text, stacked above the
+   path bar at the window's right edge. */
 .toast-viewport {
   position: fixed;
-  right: 16px;
-  bottom: 16px;
+  right: 12px;
+  bottom: 38px;
   z-index: 44;
-  display: grid;
-  gap: 10px;
-  width: min(320px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: min(340px, calc(100vw - 24px));
   pointer-events: none;
 }
 
 .toast-card {
+  max-width: 100%;
   pointer-events: none;
   overflow: hidden;
-  border: none;
-  border-radius: 14px;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--bg-elevated) 95%, var(--bg-base) 5%),
-    color-mix(in srgb, var(--bg-elevated) 98%, black 2%)
-  );
-  box-shadow: var(--shadow-lg);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  border: 0.5px solid var(--context-menu-border);
+  border-radius: 9px;
+  background: var(--context-menu-bg);
+  box-shadow: var(--context-menu-shadow);
   animation: toast-slide-in 160ms ease-out;
 }
 
 .toast-card-body {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 11px 14px;
+  gap: 9px;
+  padding: 7px 14px 7px 10px;
 }
 
 .toast-card-icon-wrap {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
   flex: 0 0 auto;
 }
 
 .toast-card-icon-svg {
-  width: 15px;
-  height: 15px;
+  width: 18px;
+  height: 18px;
+}
+
+/* The check, the "i" and the "!" inside a mark, in the card's color. */
+.toast-card-icon-sign {
+  fill: none;
+  stroke: var(--context-menu-bg);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .toast-card-copy {
@@ -1420,55 +1428,43 @@ input:focus-visible {
 }
 
 .toast-card-success .toast-card-icon-wrap {
-  background: color-mix(in srgb, var(--icon-green) 14%, transparent);
   color: var(--icon-green);
 }
 
 .toast-card-info .toast-card-icon-wrap {
-  background: color-mix(in srgb, var(--icon-blue) 14%, transparent);
   color: var(--icon-blue);
 }
 
 .toast-card-warning .toast-card-icon-wrap {
-  background: color-mix(in srgb, var(--icon-peach) 14%, transparent);
   color: var(--icon-peach);
 }
 
-.toast-card-error .toast-card-icon-wrap {
-  background: color-mix(in srgb, var(--danger) 14%, transparent);
-  color: var(--danger);
-}
-
 .toast-card-title {
-  color: var(--text-primary);
+  color: var(--context-menu-text);
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 500;
   line-height: 1.35;
-  letter-spacing: -0.01em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .toast-card-message {
-  margin-top: 3px;
-  color: var(--text-primary);
-  font-size: 11px;
-  line-height: 1.45;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* One line: the icon sits level with it. */
 .toast-card-compact .toast-card-body {
   align-items: center;
-  padding-top: 8px;
-  padding-bottom: 8px;
 }
 
 .toast-card-compact .toast-card-icon-wrap {
-  width: 28px;
-  height: 28px;
+  margin-top: 0;
 }
 
 @keyframes copy-paste-progress-shimmer {
@@ -6995,15 +6991,16 @@ button.shortcut-slot-key.recording:hover {
   bottom: 0;
 }
 
-/* A notification that names what was copied shows its icon as the file list does, with no
-   tinted tile behind it. */
-.toast-card .toast-card-icon-wrap.toast-card-item-icon {
-  background: transparent;
+/* A notification that names what was copied shows its icon as the file list does. */
+.toast-card-item-icon > .file-icon,
+.toast-card-item-icon > .clipboard-items-icon {
+  width: 18px;
+  height: 18px;
 }
 
-.toast-card-item-icon > .file-icon {
-  width: 22px;
-  height: 22px;
+.toast-card-item-icon > .clipboard-items-icon > .file-icon {
+  width: 13px;
+  height: 13px;
 }
 
 /* ── Items on the clipboard ──────────────────────────────────────────────

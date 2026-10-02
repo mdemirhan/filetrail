@@ -101,7 +101,7 @@ describe("ToastViewport", () => {
         toasts={[
           createToastEntry("toast-2", { kind: "info", title: "Ready to move 1 item" }),
           createToastEntry("toast-3", { kind: "success", title: "Copied path" }),
-          createToastEntry("toast-4", { kind: "error", title: "Unable to start paste" }),
+          createToastEntry("toast-4", { kind: "warning", title: "Clipboard is empty" }),
         ]}
         onDismiss={() => undefined}
       />,
@@ -110,7 +110,7 @@ describe("ToastViewport", () => {
     const toasts = Array.from(container.querySelectorAll(".toast-card"));
     expect(toasts).toHaveLength(3);
     expect(toasts[0]).toHaveTextContent("Ready to move 1 item");
-    expect(toasts[2]).toHaveTextContent("Unable to start paste");
+    expect(toasts[2]).toHaveTextContent("Clipboard is empty");
   });
 
   it("keeps the viewport non-interactive for pointer events", () => {
@@ -134,7 +134,6 @@ describe("ToastViewport", () => {
           createToastEntry("toast-1", { kind: "success", title: "Success" }),
           createToastEntry("toast-2", { kind: "info", title: "Info" }),
           createToastEntry("toast-3", { kind: "warning", title: "Warning" }),
-          createToastEntry("toast-4", { kind: "error", title: "Error" }),
         ]}
         onDismiss={() => undefined}
       />,

@@ -15,6 +15,8 @@
 
 - Expected navigation races use latest-request-wins guards instead of user-visible errors.
 - Filesystem and IPC failures should surface as inline state in the relevant pane.
+- Notifications are for information only: something finished, something was put on the clipboard, or a command did nothing and why ("Clipboard is empty"). They disappear by themselves and can be turned off, so nothing the user must see may depend on one.
+- An action the user started that failed, or only partly worked, is reported in a modal dialog, never in a notification. The notification code has no error kind for this reason; do not add one.
 - Debug and timing logs are opt-in and namespaced; uncaught operational failures should log with context.
 
 ## Testing

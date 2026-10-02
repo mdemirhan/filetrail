@@ -5481,7 +5481,7 @@ describe("App copy/paste integration", () => {
     expect(screen.queryByText("Clipboard is empty")).not.toBeInTheDocument();
   });
 
-  it("shows a toast when analysis finishes with an error before paste starts", async () => {
+  it("shows a dialog when analysis finishes with an error before paste starts", async () => {
     const harness = createAppHarness({
       analysisUpdateResponse: {
         analysisId: "analysis-1",

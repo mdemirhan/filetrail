@@ -1030,7 +1030,7 @@ export function useExplorerActions(args: {
     );
   }
 
-  function surfaceCopyLikePreStartFailureToast(
+  function surfaceCopyLikePreStartFailureNotice(
     action: CopyLikeAction,
     outcome: Extract<CopyLikePreStartOutcome, { status: "blocked" | "error" }>,
   ) {
@@ -1216,50 +1216,14 @@ export function useExplorerActions(args: {
       });
       return;
     }
-    if (event.status === "partial") {
-      if (isExpectedPlannedSkipResult(event)) {
-        const plannedSkipMessage = formatPlannedSkipToastMessage(event);
-        pushToast({
-          kind: "info",
-          title: getPlannedSkipToastTitle(event.action, result.summary.completedItemCount),
-          ...(plannedSkipMessage ? { message: plannedSkipMessage } : {}),
-        });
-        return;
-      }
+    // A write that failed, or finished with real issues, never gets here: it is reported
+    // in the result dialog (shouldRenderCopyPasteResultDialog), not in a notification.
+    if (event.status === "partial" && isExpectedPlannedSkipResult(event)) {
+      const plannedSkipMessage = formatPlannedSkipToastMessage(event);
       pushToast({
-        kind: "warning",
-        title:
-          event.action === "move_to"
-            ? "Move completed with some issues"
-            : event.action === "duplicate"
-              ? "Duplicate completed with some issues"
-              : event.action === "trash"
-                ? "Trash completed with some issues"
-                : "Paste completed with some issues",
-        ...(itemSummary ? { message: itemSummary } : {}),
-      });
-      return;
-    }
-    if (event.status === "failed") {
-      const failureMessage =
-        itemSummary && result.error
-          ? `${itemSummary}: ${result.error}`
-          : (itemSummary ?? result.error ?? null);
-      pushToast({
-        kind: "error",
-        title:
-          event.action === "move_to"
-            ? "Move failed"
-            : event.action === "duplicate"
-              ? "Duplicate failed"
-              : event.action === "trash"
-                ? "Trash failed"
-                : event.action === "rename"
-                  ? "Rename failed"
-                  : event.action === "new_folder"
-                    ? "Create folder failed"
-                    : "Paste failed",
-        ...(failureMessage ? { message: failureMessage } : {}),
+        kind: "info",
+        title: getPlannedSkipToastTitle(event.action, result.summary.completedItemCount),
+        ...(plannedSkipMessage ? { message: plannedSkipMessage } : {}),
       });
     }
   }
@@ -1552,7 +1516,7 @@ export function useExplorerActions(args: {
     try {
       const outcome = await executeCopyLikePlan(report, policy, action, options);
       if (outcome.status === "blocked" || outcome.status === "error") {
-        surfaceCopyLikePreStartFailureToast(action, outcome);
+        surfaceCopyLikePreStartFailureNotice(action, outcome);
       }
       return outcome.status === "queued";
     } catch (error) {
@@ -1761,7 +1725,7 @@ export function useExplorerActions(args: {
       return;
     }
     if (isWriteOperationInFlight()) {
-      surfaceCopyLikePreStartFailureToast(
+      surfaceCopyLikePreStartFailureNotice(
         request.mode === "cut" ? "move_to" : "paste",
         getCopyLikeBusyOutcome(),
       );
@@ -1777,7 +1741,7 @@ export function useExplorerActions(args: {
         },
       );
       if (outcome.status === "blocked" || outcome.status === "error") {
-        surfaceCopyLikePreStartFailureToast("move_to", outcome);
+        surfaceCopyLikePreStartFailureNotice("move_to", outcome);
       }
       return;
     }
@@ -1798,7 +1762,7 @@ export function useExplorerActions(args: {
       initiator: "clipboard",
     });
     if (outcome.status === "blocked" || outcome.status === "error") {
-      surfaceCopyLikePreStartFailureToast("paste", outcome);
+      surfaceCopyLikePreStartFailureNotice("paste", outcome);
     }
   }
 
@@ -1887,7 +1851,7 @@ export function useExplorerActions(args: {
       defaultPolicy: RETRY_COPY_PASTE_POLICY,
     });
     if (outcome.status === "blocked" || outcome.status === "error") {
-      surfaceCopyLikePreStartFailureToast(event.action, outcome);
+      surfaceCopyLikePreStartFailureNotice(event.action, outcome);
     }
   }
 
@@ -2601,7 +2565,7 @@ export function useExplorerActions(args: {
       return;
     }
     if (isWriteOperationInFlight()) {
-      surfaceCopyLikePreStartFailureToast("duplicate", getCopyLikeBusyOutcome());
+      surfaceCopyLikePreStartFailureNotice("duplicate", getCopyLikeBusyOutcome());
       return;
     }
     const pasteAttemptId = beginPendingPasteAttempt({
@@ -2621,7 +2585,7 @@ export function useExplorerActions(args: {
       pendingTreeSelectionPath: options.selectInTreeOnSuccess ? destinationDirectoryPath : null,
     });
     if (outcome.status === "blocked" || outcome.status === "error") {
-      surfaceCopyLikePreStartFailureToast("duplicate", outcome);
+      surfaceCopyLikePreStartFailureNotice("duplicate", outcome);
       return;
     }
     closeContextMenu();
@@ -3061,7 +3025,7 @@ export function useExplorerActions(args: {
     editPaths,
     executeCopyLikePlan,
     requestCopyLikePlanStart,
-    surfaceCopyLikePreStartFailureToast,
+    surfaceCopyLikePreStartFailureNotice,
     handleContentSelectionGesture,
     handleCopyPasteDialogEscape,
     moveOpenWithApplication,

@@ -1,6 +1,11 @@
 import type { ClipboardIcon } from "./copyPasteClipboard";
 
-export type ToastKind = "success" | "info" | "warning" | "error";
+// Notifications carry information only: something finished ("success"), something worth
+// knowing happened ("info"), or a command did nothing and why ("warning"). They go away by
+// themselves and can be turned off, so nothing the user must see may depend on them. An
+// action that failed, or only partly worked, is reported in a modal dialog instead, which
+// is why there is no "error" kind.
+export type ToastKind = "success" | "info" | "warning";
 
 export type ToastEntry = {
   id: string;
@@ -17,7 +22,6 @@ const TOAST_DURATION_MS: Record<ToastKind, number> = {
   success: 3000,
   info: 3000,
   warning: 4500,
-  error: 4500,
 };
 
 export function createToastEntry(

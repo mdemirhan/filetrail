@@ -368,7 +368,7 @@ export function AppDialogs({
       <ToastViewport
         toasts={toasts}
         onDismiss={onDismissToast}
-        offsetBottom={showCopyPasteProgressCard ? 272 : 16}
+        offsetBottom={showCopyPasteProgressCard ? 272 : undefined}
       />
     </>
   );

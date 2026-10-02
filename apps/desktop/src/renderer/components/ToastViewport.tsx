@@ -3,73 +3,39 @@ import { useEffect, useRef } from "react";
 import type { ToastEntry, ToastKind } from "../lib/toasts";
 import { ClipboardItemsIcon } from "./ClipboardItemsIcon";
 
+// Just above the path bar, so the item count under it stays readable.
+const TOAST_REST_OFFSET_BOTTOM = 38;
+
+// Solid marks in the kind's color; the sign inside is cut out in the card's own color.
 function ToastIcon({ kind }: { kind: ToastKind }) {
   if (kind === "success") {
     return (
-      <svg
-        aria-hidden="true"
-        className="toast-card-icon-svg"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M20 6 9 17l-5-5" />
-      </svg>
-    );
-  }
-  if (kind === "error") {
-    return (
-      <svg
-        aria-hidden="true"
-        className="toast-card-icon-svg"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <circle cx="12" cy="12" r="10" />
-        <path d="m15 9-6 6" />
-        <path d="m9 9 6 6" />
+      <svg aria-hidden="true" className="toast-card-icon-svg" viewBox="0 0 16 16">
+        <circle cx="8" cy="8" r="7" fill="currentColor" />
+        <path className="toast-card-icon-sign" d="M5 8.3l2.1 2.1L11.2 6" />
       </svg>
     );
   }
   if (kind === "warning") {
     return (
-      <svg
-        aria-hidden="true"
-        className="toast-card-icon-svg"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M10.29 3.86 1.82 18A2 2 0 0 0 3.53 21h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
-        <path d="M12 9v4" />
-        <path d="M12 17h.01" />
+      <svg aria-hidden="true" className="toast-card-icon-svg" viewBox="0 0 16 16">
+        <path
+          d="M8 2.2 14.4 13.4H1.6Z"
+          fill="currentColor"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+        />
+        <path className="toast-card-icon-sign" d="M8 6v3.4" />
+        <path className="toast-card-icon-sign" d="M8 11.6h.01" />
       </svg>
     );
   }
   return (
-    <svg
-      aria-hidden="true"
-      className="toast-card-icon-svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="12" cy="12" r="10" />
-      <path d="M12 16v-4" />
-      <path d="M12 8h.01" />
+    <svg aria-hidden="true" className="toast-card-icon-svg" viewBox="0 0 16 16">
+      <circle cx="8" cy="8" r="7" fill="currentColor" />
+      <path className="toast-card-icon-sign" d="M8 7.6v3.6" />
+      <path className="toast-card-icon-sign" d="M8 4.9h.01" />
     </svg>
   );
 }
@@ -77,7 +43,7 @@ function ToastIcon({ kind }: { kind: ToastKind }) {
 export function ToastViewport({
   toasts,
   onDismiss,
-  offsetBottom = 16,
+  offsetBottom = TOAST_REST_OFFSET_BOTTOM,
 }: {
   toasts: ToastEntry[];
   onDismiss: (id: string) => void;
@@ -138,7 +104,7 @@ export function ToastViewport({
       style={{ bottom: `${offsetBottom}px` }}
     >
       {toasts.map((toast) => {
-        const isAssertive = toast.kind === "warning" || toast.kind === "error";
+        const isAssertive = toast.kind === "warning";
         const hasMessage = typeof toast.message === "string" && toast.message.length > 0;
         return (
           <section

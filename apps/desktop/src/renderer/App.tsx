@@ -768,7 +768,7 @@ export function App() {
     setSingleContentSelection,
     showCopyPasteProgressCard,
     showCopyPasteResultDialog,
-    surfaceCopyLikePreStartFailureToast,
+    surfaceCopyLikePreStartFailureNotice,
     startDuplicatePaths,
     startMoveToDestination,
     startPasteFromClipboard,
@@ -899,7 +899,7 @@ export function App() {
     onMoveToDestination: async (sourcePaths, destinationDirectoryPath, options) => {
       const outcome = await startMoveToDestination(sourcePaths, destinationDirectoryPath, options);
       if (outcome.status === "blocked" || outcome.status === "error") {
-        surfaceCopyLikePreStartFailureToast("move_to", outcome);
+        surfaceCopyLikePreStartFailureNotice("move_to", outcome);
       }
       return outcome.status === "queued" || outcome.status === "review";
     },
