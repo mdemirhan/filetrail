@@ -269,7 +269,7 @@ describe("appStateStore", () => {
       accent: "#007aff",
       zoomPercent: 100,
       uiFontFamily: "system",
-      tabStyle: "cards",
+      tabStyle: "accentLine",
       viewMode: "list",
       sortBy: "name",
       sortDirection: "asc",
@@ -389,7 +389,7 @@ describe("appStateStore", () => {
       accent: "#2cb5a0",
       zoomPercent: 115,
       uiFontFamily: "lexend",
-      tabStyle: "accentLine",
+      tabStyle: "cards",
       viewMode: "details",
       sortBy: "modified",
       sortDirection: "desc",
@@ -506,7 +506,7 @@ describe("appStateStore", () => {
       accent: "#2cb5a0",
       zoomPercent: 115,
       uiFontFamily: "lexend",
-      tabStyle: "accentLine",
+      tabStyle: "cards",
       viewMode: "details",
       sortBy: "modified",
       sortDirection: "desc",
@@ -889,7 +889,7 @@ describe("appStateStore", () => {
     expect(reloaded.getPreferences().inspectorWidth).toBe(480);
     expect(reloaded.getPreferences().accent).toBe("#007aff");
     expect(reloaded.getPreferences().uiFontFamily).toBe("system");
-    expect(reloaded.getPreferences().tabStyle).toBe("cards");
+    expect(reloaded.getPreferences().tabStyle).toBe("accentLine");
     expect(reloaded.getPreferences()).not.toHaveProperty("uiFontSize");
     expect(reloaded.getPreferences()).not.toHaveProperty("uiFontWeight");
     expect(reloaded.getPreferences()).not.toHaveProperty("favoritesPaneHeight");

@@ -1971,7 +1971,7 @@ export function SettingsView({
   fileActivationAction,
   returnKeyAction = "rename",
   onReturnKeyActionChange = () => undefined,
-  tabStyle = "cards",
+  tabStyle = DEFAULT_APP_PREFERENCES.tabStyle,
   onTabStyleChange = () => undefined,
   shortcutOverrides = DEFAULT_APP_PREFERENCES.shortcutOverrides,
   onShortcutOverridesChange = () => undefined,
@@ -2468,12 +2468,12 @@ export function SettingsView({
 
             <SettingRow
               title="Tab style"
-              desc="Cards on a band, or flat tabs under a line in the accent color."
+              desc="Flat tabs under a line in the accent color, or cards on a band."
               theme={palette}
               right={
                 <SelectControl
                   value={tabStyle}
-                  options={["cards", "accentLine"] satisfies TabStyle[]}
+                  options={["accentLine", "cards"] satisfies TabStyle[]}
                   theme={palette}
                   width="140px"
                   ariaLabel="Tab style"

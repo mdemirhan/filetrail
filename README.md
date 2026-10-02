@@ -69,7 +69,7 @@ File Trail has a much deeper customization surface than a typical file explorer.
 - Hidden file toggle
 - Folders-first sorting
 - Go To (⌘K): jump to any folder you have opened before from a few letters of its name, or type a path
-- Tabs (⌘T): each with its own folder, history, folder tree, view and search; copy in one tab and paste in another, or drag items onto a tab. Drawn as cards, or as flat tabs under a line in the accent color (Settings → Appearance)
+- Tabs (⌘T): each with its own folder, history, folder tree, view and search; copy in one tab and paste in another, or drag items onto a tab. Drawn as flat tabs under a line in the accent color, or as cards on a band (Settings → Appearance)
 - Keyboard shortcuts for every command, listed in Help and changed in Settings → Shortcuts
 
 ## Current Platform

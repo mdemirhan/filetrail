@@ -21,7 +21,7 @@ export type AccentMode = string;
 // "native" shows the real macOS icons for files and folders (via NSWorkspace).
 export type ExplorerViewMode = "icons" | "list" | "details";
 export type UiFontFamily = "system" | "dm-sans" | "lexend" | "fira-code" | "jetbrains-mono";
-// How the tab strip is drawn: cards on a band, or flat tabs under a line in the accent color.
+// How the tab strip is drawn: flat tabs under a line in the accent color, or cards on a band.
 export type TabStyle = "cards" | "accentLine";
 export type SearchPatternModePreference = "text" | "glob" | "regex";
 // How the search text is matched, in the order the menus list the choices.
@@ -372,7 +372,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   accent: DEFAULT_ACCENT,
   zoomPercent: 100,
   uiFontFamily: "system",
-  tabStyle: "cards",
+  tabStyle: "accentLine",
   viewMode: "list",
   sortBy: "name",
   sortDirection: "asc",

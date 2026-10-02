@@ -4306,8 +4306,9 @@ body.platform-macos .settings-view[data-layout="compact"] {
   flex: 0 0 auto;
 }
 
-/* ── Tabs: a band under the toolbar, shown while there is more than one. The tab on
-   screen is a card that runs into the list below it, as in a browser. ── */
+/* ── Tabs: a band under the toolbar, shown while there is more than one. These rules
+   draw the card style, where the tab on screen is a card that runs into the list below
+   it, as in a browser; the accent line style follows them. ── */
 
 .tab-strip {
   display: flex;
@@ -4499,9 +4500,9 @@ body.platform-macos .settings-view[data-layout="compact"] {
   color: var(--text-primary);
 }
 
-/* ── Tabs, the other style (Settings → Appearance → Tab style): flat tabs in a row, the
-   one on screen under a line in the accent color. The rules above draw the cards; these
-   take the cards' shape off and keep the rest. ── */
+/* ── Tabs in the accent line style, which is the default (Settings → Appearance → Tab
+   style): flat tabs in a row, the one on screen under a line in the accent color. The
+   rules above draw the cards; these take the cards' shape off and keep the rest. ── */
 
 .tab-strip[data-tab-style="accentLine"] {
   align-items: stretch;
