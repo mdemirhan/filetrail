@@ -1,6 +1,6 @@
 # File Trail
 
-A file browser for macOS that finds things quickly, shows where your disk space went, and otherwise behaves the way a Mac app should.
+A file browser for macOS, built to fix the places where Finder falls short.
 
 <p align="center">
   <picture>
@@ -9,7 +9,16 @@ A file browser for macOS that finds things quickly, shows where your disk space 
   </picture>
 </p>
 
-File Trail is a file browser for people who work with files all day, whether that is a project tree, a photo archive or a disk that keeps filling up. If you know Finder, you already know your way around: favorites and a folder tree in the sidebar, your files in the middle, and an info panel on the right. Where it differs is in the things you do most: search you can rely on, folder sizes when you ask for them, tabs that each keep their own place, and a clipboard you can see.
+Finder covers the basics. File Trail is for the things it gets wrong or leaves out:
+
+- **Search that works, and is fast.** Results appear as you type, by name or by full path, in plain text, glob or regex.
+- **A folder tree, not just a sidebar.** You see where you are and what is around it, instead of a flat list of favorites.
+- **Tabs that keep their place.** Each has its own folder, history, view and search.
+- **A clipboard you can see.** What you copied or cut stays marked, and listed in the toolbar, until you paste it.
+- **Folder sizes when you ask.** One click measures a folder and everything in it, and shows what takes the space.
+- **Yours to arrange.** The toolbar, the keyboard shortcuts, the palette and the accent color are all up to you.
+
+The rest works the way you expect a Mac app to.
 
 ## Search that keeps up with your typing
 
@@ -60,6 +69,7 @@ Dates read the way you would say them ("24 min ago", "Yesterday, 6:03 PM"), and 
   <img src="docs/screenshots/go-to.png" alt="The Go To box finding two folders from the letters sc" width="900">
 </p>
 
+- **The folder tree** shows the folder you are in and the ones around it. Open a folder's arrow to look inside without leaving where you are, or root the tree at one folder while you work inside a project.
 - **Go To (⌘K)** finds any folder you have opened before, or a favorite, from a few letters of its name. The folders you use most come first. Start with `/` or `~` to type a path, and Tab completes it.
 - **Type in the file list** to narrow it to the names containing what you typed.
 - **The path bar** is more than a label: click a folder to jump to it, click a `›` to see the folders at that level and step sideways, or double-click the bar to edit the path as text.
@@ -100,7 +110,6 @@ Settings also covers the everyday choices: which app edits text files and which 
 - Open in Terminal and Copy Path on a key, and Open With for the apps you choose
 - Rename, duplicate, move, new folder and Move to Trash
 - Hidden files on a key (⇧⌘.), and folders kept first when you want them
-- A folder tree you can root at any folder while you work inside one project
 - Built-in Help that follows the shortcuts you have set
 
 ## Install
