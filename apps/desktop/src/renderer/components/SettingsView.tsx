@@ -1079,8 +1079,8 @@ function FavoriteIconPicker({
 // can be told apart without hovering.
 const TOOLBAR_TILE_WIDTH = "66px";
 // The title and the search field are not buttons, and their tiles say so: each is two tiles
-// wide and drawn as what it is. The title's also takes the spare room of its row, as the
-// title does in the toolbar.
+// wide and drawn as what it is. Like every tile they have one size wherever they are put:
+// the strip shows the order of the items, not how wide the toolbar will draw them.
 const TOOLBAR_WIDE_TILE_WIDTH = "134px";
 
 type ToolbarTileShape = "icon" | "title" | "search";
@@ -1382,7 +1382,7 @@ function ToolbarEditor({
                   position: "relative",
                   display: "flex",
                   alignItems: "flex-start",
-                  flex: shape === "title" ? `1 1 ${TOOLBAR_WIDE_TILE_WIDTH}` : "0 0 auto",
+                  flex: "0 0 auto",
                 }}
               >
                 {insertSide === "left" ? (
@@ -1400,12 +1400,8 @@ function ToolbarEditor({
                 <div
                   style={{
                     position: "relative",
-                    ...(shape === "title"
-                      ? { flex: "1 1 auto", minWidth: 0 }
-                      : {
-                          flexShrink: 0,
-                          width: shape === "search" ? TOOLBAR_WIDE_TILE_WIDTH : TOOLBAR_TILE_WIDTH,
-                        }),
+                    flexShrink: 0,
+                    width: shape === "icon" ? TOOLBAR_TILE_WIDTH : TOOLBAR_WIDE_TILE_WIDTH,
                   }}
                 >
                   <button

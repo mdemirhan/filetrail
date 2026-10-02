@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import type { ComponentProps } from "react";
 
 import type { ThemeMode } from "../../shared/appPreferences";
-import { DEFAULT_TOP_TOOLBAR_ITEMS } from "../../shared/toolbarItems";
+import { DEFAULT_TOP_TOOLBAR_ITEMS, type ToolbarItemId } from "../../shared/toolbarItems";
 import { SettingsView } from "./SettingsView";
 
 function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsView>> = {}) {
@@ -411,6 +411,21 @@ describe("SettingsView", () => {
     );
     expect(new Set(iconColors).size).toBe(1);
     expect(iconColors[0]).not.toBe("");
+  });
+
+  it("keeps the title's tile one size wherever it is put", () => {
+    const widthOf = (order: ToolbarItemId[]) => {
+      const view = renderSettingsView({ topToolbarItems: order });
+      const tile = view.container.querySelector<HTMLElement>('[data-toolbar-tile="title"]');
+      const sizes = [tile?.style.flex, (tile?.children[0] as HTMLElement).style.width];
+      view.unmount();
+      return sizes;
+    };
+
+    const first = widthOf(["title", "back", "clipboard", "viewOptions", "search"]);
+    // It does not grow to fill its row, as it once did when it wrapped onto a row of its own.
+    expect(first).toEqual(["0 0 auto", "134px"]);
+    expect(widthOf(["back", "clipboard", "viewOptions", "search", "title"])).toEqual(first);
   });
 
   it("has one toolbar to arrange, and nothing about rails", () => {
