@@ -92,6 +92,8 @@ if [[ -f "${ICON_ICNS}" ]]; then
     /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile ${APP_SLUG}.icns" "${PLIST}" >/dev/null 2>&1 || \
       /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string ${APP_SLUG}.icns" "${PLIST}" >/dev/null 2>&1 || true
   fi
+  # The template's own icon is no longer referred to.
+  rm -f "${APP_BUNDLE}/Contents/Resources/electron.icns"
 fi
 
 mkdir -p "${RESOURCES_APP}"
@@ -128,6 +130,11 @@ else
   echo "node-gyp-build not found — required to load native-fs addon." >&2
   exit 1
 fi
+
+# The template's files, and so the app itself, are dated 1 January 1980. macOS keeps an
+# app's icon by its path and date, so without a new date a rebuilt app that replaces an
+# older copy can go on showing the older copy's icon.
+touch "${APP_BUNDLE}"
 
 echo "[5/6] Code signing..."
 if [[ -n "${MACOS_SIGN_IDENTITY:-}" ]]; then
