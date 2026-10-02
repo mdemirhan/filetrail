@@ -6933,20 +6933,12 @@ body.vibrant-window .explorer-workspace .tab-strip {
   background: color-mix(in srgb, var(--sidebar-bg) 62%, transparent);
 }
 
-/* Where the tree has the window's color, or nearly, the card would not show on it: the
-   band is the tree's tint under 11%, 25% and 35% of black in these. (Under 11%, the tint
-   is 83% of the sidebar's color at 66%, and so on.) */
+/* Warm Paper and Sand have a tree in the window's own color, where the card would be hard
+   to tell from the band: there the band is the tree's tint under 11% of black (which is
+   83% of the sidebar's color, at 66%). */
 :root[data-theme-variant="warm-paper"] body.vibrant-window .explorer-workspace .tab-strip,
 :root[data-theme-variant="sand"] body.vibrant-window .explorer-workspace .tab-strip {
   background: color-mix(in srgb, color-mix(in srgb, var(--sidebar-bg) 83%, black) 66%, transparent);
-}
-
-:root[data-theme-variant="catppuccin-mocha"] body.vibrant-window .explorer-workspace .tab-strip {
-  background: color-mix(in srgb, color-mix(in srgb, var(--sidebar-bg) 65%, black) 72%, transparent);
-}
-
-:root[data-theme-variant="tomorrow-night"] body.vibrant-window .explorer-workspace .tab-strip {
-  background: color-mix(in srgb, color-mix(in srgb, var(--sidebar-bg) 54%, black) 75%, transparent);
 }
 
 /* The dividers beside the panes belong to the opaque part of the window. */
