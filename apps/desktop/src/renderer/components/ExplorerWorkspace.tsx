@@ -124,6 +124,7 @@ export function ExplorerWorkspace({
   onSearchSkipGitIgnoredChange,
   canRunRendererCommand,
   onRendererCommand,
+  onCustomizeToolbar,
   onPaneResizeKey,
   showSidebarRail = false,
   showSidebarBottomRail = true,
@@ -186,6 +187,8 @@ export function ExplorerWorkspace({
   onSearchSkipGitIgnoredChange: (value: boolean) => void;
   canRunRendererCommand: (command: RendererCommandType) => boolean;
   onRendererCommand: (command: RendererCommandType) => void;
+  /** Opens Settings where the toolbar is arranged. */
+  onCustomizeToolbar: () => void;
   onPaneResizeKey: (pane: "tree" | "inspector", event: ReactKeyboardEvent<HTMLDivElement>) => void;
   showSidebarRail?: boolean;
   showSidebarBottomRail?: boolean;
@@ -373,7 +376,26 @@ export function ExplorerWorkspace({
   }, [viewOptionsMenuStyle]);
 
   const shortcutDisplay = useShortcutDisplay();
+  // How the list and the panels are shown, worded and ordered as in the View menu, and the
+  // way from the toolbar to the place where it is arranged.
   const viewOptionsItems: ViewOptionsMenuItem[] = [
+    {
+      kind: "toggle",
+      id: "foldersFirst",
+      label: "Folders First",
+      command: "toggleFoldersFirst",
+      checked: treePaneProps.foldersFirst,
+      onSelect: treePaneProps.onToggleFoldersFirst,
+    },
+    {
+      kind: "toggle",
+      id: "hidden",
+      label: "Show Hidden Files",
+      command: "toggleHiddenFiles",
+      checked: treePaneProps.includeHidden,
+      onSelect: treePaneProps.onToggleHidden,
+    },
+    { kind: "separator", id: "separator-1" },
     {
       kind: "toggle",
       id: "infoPanel",
@@ -390,40 +412,12 @@ export function ExplorerWorkspace({
       checked: treePaneProps.infoRowOpen,
       onSelect: treePaneProps.onToggleInfoRow,
     },
-    { kind: "separator", id: "separator-1" },
-    {
-      kind: "toggle",
-      id: "foldersFirst",
-      label: "Keep Folders on Top",
-      command: "toggleFoldersFirst",
-      checked: treePaneProps.foldersFirst,
-      onSelect: treePaneProps.onToggleFoldersFirst,
-    },
-    {
-      kind: "toggle",
-      id: "hidden",
-      label: "Show Hidden Files",
-      command: "toggleHiddenFiles",
-      checked: treePaneProps.includeHidden,
-      onSelect: treePaneProps.onToggleHidden,
-    },
     { kind: "separator", id: "separator-2" },
-    ...(treePaneProps.onOpenLocation
-      ? [
-          {
-            kind: "action" as const,
-            id: "goToFolder",
-            label: "Go To…",
-            command: "openLocationSheet" as const,
-            onSelect: treePaneProps.onOpenLocation,
-          },
-        ]
-      : []),
     {
       kind: "action",
-      id: "rerootHome",
-      label: "Show Home in Folder Tree",
-      onSelect: treePaneProps.onRerootHome,
+      id: "customizeToolbar",
+      label: "Customize Toolbar…",
+      onSelect: onCustomizeToolbar,
     },
   ];
 

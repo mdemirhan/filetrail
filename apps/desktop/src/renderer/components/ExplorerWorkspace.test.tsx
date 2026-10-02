@@ -129,6 +129,7 @@ function explorerWorkspaceElement(
       onSearchSkipGitIgnoredChange={() => undefined}
       canRunRendererCommand={() => true}
       onRendererCommand={() => undefined}
+      onCustomizeToolbar={() => undefined}
       onPaneResizeKey={() => undefined}
       {...overrides}
     />
@@ -297,28 +298,28 @@ describe("ExplorerWorkspace", () => {
     expect(screen.getByRole("button", { name: "Copy" })).toBeEnabled();
   });
 
-  it("shows the key of every View Options item that has one", () => {
-    renderExplorerWorkspace({
-      treePaneProps: { onOpenLocation: () => undefined } as never,
-    });
+  it("lists the view options with their keys, and the way to customize the toolbar", () => {
+    const onCustomizeToolbar = vi.fn();
+    renderExplorerWorkspace({ onCustomizeToolbar });
 
     fireEvent.click(screen.getByRole("button", { name: "View options" }));
-    const rows = Array.from(
-      screen.getByRole("menu", { name: "View options" }).querySelectorAll(".toolbar-menu-item"),
-      (row) => [
-        row.querySelector(".toolbar-menu-label")?.textContent,
-        row.querySelector(".toolbar-menu-shortcut")?.textContent ?? null,
-      ],
-    );
+    const menu = screen.getByRole("menu", { name: "View options" });
+    const rows = Array.from(menu.querySelectorAll(".toolbar-menu-item"), (row) => [
+      row.querySelector(".toolbar-menu-label")?.textContent,
+      row.querySelector(".toolbar-menu-shortcut")?.textContent ?? null,
+    ]);
     expect(rows).toEqual([
+      // Folders First has no key until one is chosen in Settings.
+      ["Folders First", null],
+      ["Show Hidden Files", "⇧⌘."],
       ["Show Info Panel", "⌘I"],
       ["Show Info Row", "⇧⌘I"],
-      // Folders First has no key until one is chosen in Settings.
-      ["Keep Folders on Top", null],
-      ["Show Hidden Files", "⇧⌘."],
-      ["Go To…", "⌘K"],
-      ["Show Home in Folder Tree", null],
+      ["Customize Toolbar…", null],
     ]);
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Customize Toolbar…" }));
+    expect(onCustomizeToolbar).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("menu", { name: "View options" })).toBeNull();
   });
 
   it("opens the sort menu and applies a selected sort option", () => {

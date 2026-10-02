@@ -441,7 +441,7 @@ export const TOOLBAR_ITEM_IDS = TOOLBAR_ITEM_DEFINITIONS.map((item) => item.id) 
 // field, and the two that close the toolbar.
 // - The clipboard button comes and goes, so it is the first item after the title: there it
 //   takes its room from the title, and no button moves when something is copied.
-// - View Options is a menu of everything else, so it sits past the search field.
+// - View Options is a menu rather than a control of its own, so it sits past the search field.
 // - Info Panel is last, over the panel it opens, and so the first to go in a narrow window
 //   (View Options has the same toggle).
 // Up/Down/Refresh and the rest remain available in toolbar customization.

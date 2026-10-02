@@ -2156,6 +2156,7 @@ export function App() {
             onSearchSkipGitIgnoredChange={updateSearchSkipGitIgnored}
             canRunRendererCommand={canRunRendererCommand}
             onRendererCommand={runRendererCommand}
+            onCustomizeToolbar={() => openSettingsView("toolbars")}
             onPaneResizeKey={handlePaneResizeKey}
             showSidebarRail={showSidebarRail}
             showSidebarBottomRail={showSidebarBottomRail}
