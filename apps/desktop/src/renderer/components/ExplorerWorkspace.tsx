@@ -14,6 +14,7 @@ import type { IpcRequest } from "@filetrail/contracts";
 
 import type { ExplorerViewMode } from "../../shared/appPreferences";
 import type { RendererCommandType } from "../../shared/rendererCommands";
+import type { ShortcutCommandId } from "../../shared/shortcuts";
 import {
   type ToolbarItemId,
   getToolbarItemDefinition,
@@ -59,9 +60,17 @@ function getSortByLabel(sortBy: SortBy) {
   return "Name";
 }
 
+// `command` is the shortcut command the item stands for; its key is shown beside the label.
 type ViewOptionsMenuItem =
-  | { kind: "toggle"; id: string; label: string; checked: boolean; onSelect: () => void }
-  | { kind: "action"; id: string; label: string; shortcut?: string; onSelect: () => void }
+  | {
+      kind: "toggle";
+      id: string;
+      label: string;
+      command: ShortcutCommandId;
+      checked: boolean;
+      onSelect: () => void;
+    }
+  | { kind: "action"; id: string; label: string; command?: ShortcutCommandId; onSelect: () => void }
   | { kind: "separator"; id: string };
 
 export function ExplorerWorkspace({
@@ -364,12 +373,12 @@ export function ExplorerWorkspace({
   }, [viewOptionsMenuStyle]);
 
   const shortcutDisplay = useShortcutDisplay();
-  const goToShortcut = shortcutDisplay.label("openLocationSheet");
   const viewOptionsItems: ViewOptionsMenuItem[] = [
     {
       kind: "toggle",
       id: "infoPanel",
       label: "Show Info Panel",
+      command: "toggleInfoPanel",
       checked: infoPanelOpen,
       onSelect: treePaneProps.onToggleInfoPanel,
     },
@@ -377,6 +386,7 @@ export function ExplorerWorkspace({
       kind: "toggle",
       id: "infoRow",
       label: "Show Info Row",
+      command: "toggleInfoRow",
       checked: treePaneProps.infoRowOpen,
       onSelect: treePaneProps.onToggleInfoRow,
     },
@@ -385,6 +395,7 @@ export function ExplorerWorkspace({
       kind: "toggle",
       id: "foldersFirst",
       label: "Keep Folders on Top",
+      command: "toggleFoldersFirst",
       checked: treePaneProps.foldersFirst,
       onSelect: treePaneProps.onToggleFoldersFirst,
     },
@@ -392,6 +403,7 @@ export function ExplorerWorkspace({
       kind: "toggle",
       id: "hidden",
       label: "Show Hidden Files",
+      command: "toggleHiddenFiles",
       checked: treePaneProps.includeHidden,
       onSelect: treePaneProps.onToggleHidden,
     },
@@ -402,7 +414,7 @@ export function ExplorerWorkspace({
             kind: "action" as const,
             id: "goToFolder",
             label: "Go To…",
-            ...(goToShortcut ? { shortcut: goToShortcut } : {}),
+            command: "openLocationSheet" as const,
             onSelect: treePaneProps.onOpenLocation,
           },
         ]
@@ -456,10 +468,13 @@ export function ExplorerWorkspace({
                 aria-label="View options"
                 style={viewOptionsMenuStyle}
               >
-                {viewOptionsItems.map((item) =>
-                  item.kind === "separator" ? (
-                    <hr key={item.id} className="toolbar-menu-separator" />
-                  ) : (
+                {viewOptionsItems.map((item) => {
+                  if (item.kind === "separator") {
+                    return <hr key={item.id} className="toolbar-menu-separator" />;
+                  }
+                  // The key the command has now; nothing for a command without one.
+                  const shortcut = item.command ? shortcutDisplay.label(item.command) : null;
+                  return (
                     <button
                       key={item.id}
                       type="button"
@@ -475,12 +490,10 @@ export function ExplorerWorkspace({
                         {item.kind === "toggle" && item.checked ? "✓" : ""}
                       </span>
                       <span className="toolbar-menu-label">{item.label}</span>
-                      {item.kind === "action" && item.shortcut ? (
-                        <span className="toolbar-menu-shortcut">{item.shortcut}</span>
-                      ) : null}
+                      {shortcut ? <span className="toolbar-menu-shortcut">{shortcut}</span> : null}
                     </button>
-                  ),
-                )}
+                  );
+                })}
               </div>,
               document.body,
             )

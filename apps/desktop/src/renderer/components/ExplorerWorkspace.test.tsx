@@ -297,6 +297,30 @@ describe("ExplorerWorkspace", () => {
     expect(screen.getByRole("button", { name: "Copy" })).toBeEnabled();
   });
 
+  it("shows the key of every View Options item that has one", () => {
+    renderExplorerWorkspace({
+      treePaneProps: { onOpenLocation: () => undefined } as never,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "View options" }));
+    const rows = Array.from(
+      screen.getByRole("menu", { name: "View options" }).querySelectorAll(".toolbar-menu-item"),
+      (row) => [
+        row.querySelector(".toolbar-menu-label")?.textContent,
+        row.querySelector(".toolbar-menu-shortcut")?.textContent ?? null,
+      ],
+    );
+    expect(rows).toEqual([
+      ["Show Info Panel", "⌘I"],
+      ["Show Info Row", "⇧⌘I"],
+      // Folders First has no key until one is chosen in Settings.
+      ["Keep Folders on Top", null],
+      ["Show Hidden Files", "⇧⌘."],
+      ["Go To…", "⌘K"],
+      ["Show Home in Folder Tree", null],
+    ]);
+  });
+
   it("opens the sort menu and applies a selected sort option", () => {
     const handleSortChange = vi.fn();
     renderExplorerWorkspace({
