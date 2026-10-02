@@ -26,7 +26,11 @@ import {
   getToolbarItemDefinition,
 } from "../../shared/toolbarItems";
 import { useKeepInViewport } from "../hooks/useKeepInViewport";
-import { ClipboardMarkTag, clipboardMarkClassName, useClipboardMarks } from "../lib/clipboardMarks";
+import {
+  ClipboardMarkIcon,
+  clipboardMarkClassName,
+  useClipboardMarks,
+} from "../lib/clipboardMarks";
 import {
   type TreeItemId,
   type TreePresentationItem,
@@ -1514,15 +1518,14 @@ function TreeItemRow({
             <TreeFolderIcon alias={item.isSymlink} path={itemPath} />
           )}
           <span className="tree-label-text">{item.label}</span>
+          <ClipboardMarkIcon marks={clipboardMarks} path={clipboardPath} />
           {item.isSymlink ? <span className="tree-label-badge">Alias</span> : null}
         </button>
         {dropIndicator === "valid" ? (
           <span className="tree-drop-target-badge" aria-hidden="true">
             Drop Here
           </span>
-        ) : (
-          <ClipboardMarkTag marks={clipboardMarks} path={clipboardPath} />
-        )}
+        ) : null}
       </div>
       {item.loading ? (
         <div

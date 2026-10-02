@@ -7069,37 +7069,21 @@ button.shortcut-slot-key.recording:hover {
 }
 
 /* ── Items on the clipboard ──────────────────────────────────────────────
-   A "Copied" or "Cut" tag on the rows of the folder tree and the file list, for as long
-   as the item waits to be pasted, and a flash when it is copied. */
+   A copy or cut icon right after the name on the rows of the folder tree and the file
+   list, for as long as the item waits to be pasted, and a flash when it is copied. */
 
-/* The tag gives way before the name does: it shrinks first, and when the word no longer
-   fits beside the icon it wraps onto a second line, which the tag's height cuts off. */
-.clipboard-mark-tag {
+/* Always the same size: a name that does not fit is shortened, and the icon follows it. */
+.clipboard-mark-icon {
   display: inline-flex;
-  flex: 0 1000 auto;
-  flex-wrap: wrap;
-  align-content: flex-start;
+  flex: none;
   align-items: center;
-  column-gap: 3px;
-  /* The icon is what is left when the word has gone; the row's own gap keeps the tag
-     clear of the name. */
-  min-width: 11px;
-  height: 14px;
-  margin-left: auto;
-  overflow: hidden;
   color: var(--ft-accent-solid-button);
-  font-family: var(--font-sans);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 14px;
-  white-space: nowrap;
   pointer-events: none;
 }
 
-.clipboard-mark-tag .toolbar-icon {
-  flex: none;
-  width: 11px;
-  height: 14px;
+.clipboard-mark-icon .toolbar-icon {
+  width: 12px;
+  height: 12px;
 }
 
 .clipboard-mark-badge .toolbar-icon {
@@ -7107,29 +7091,24 @@ button.shortcut-slot-key.recording:hover {
   height: 11px;
 }
 
-.active:not(.inactive) > .clipboard-mark-tag,
-.active:not(.inactive) > .details-name > .clipboard-mark-tag,
-.active:not(.inactive) > .clipboard-mark-name > .clipboard-mark-tag {
+.tree-row.active:not(.inactive) .clipboard-mark-icon,
+.flow-item.active:not(.inactive) .clipboard-mark-icon,
+.search-result-row.active:not(.inactive) .clipboard-mark-icon {
   color: var(--ft-accent-on-selection);
 }
 
-/* In the details view the tag sits at the end of the Name column. The name used to be the
-   column's last child, which is what gives it its color (`.details-name span:last-child`);
-   with the tag after it, both are given theirs here. */
+/* In the details view the name used to be the Name column's last child, which is what
+   gives it its color (`.details-name span:last-child`); with the icon after it, both are
+   given theirs here. */
 .details-name > .details-name-label {
   color: var(--text-primary);
 }
 
-.details-name > span.clipboard-mark-tag {
-  margin-right: 4px;
+.details-name > span.clipboard-mark-icon {
   color: var(--ft-accent-solid-button);
 }
 
-.details-name .clipboard-mark-tag span.clipboard-mark-word {
-  color: inherit;
-}
-
-.details-row.active:not(.inactive) .details-name > span.clipboard-mark-tag {
+.details-row.active:not(.inactive) .details-name > span.clipboard-mark-icon {
   color: var(--ft-accent-on-selection);
 }
 
@@ -7137,7 +7116,7 @@ button.shortcut-slot-key.recording:hover {
   position: relative;
 }
 
-/* A search result's name and its tag share the name column. */
+/* A search result's name and its icon share the name column. */
 .clipboard-mark-name {
   display: flex;
   align-items: center;
@@ -7145,7 +7124,7 @@ button.shortcut-slot-key.recording:hover {
   min-width: 0;
 }
 
-/* Icon view has no room for the word: the icon alone, on the corner of the picture. */
+/* In icon view the icon is a badge on the corner of the picture. */
 .icon-item-image {
   position: relative;
 }

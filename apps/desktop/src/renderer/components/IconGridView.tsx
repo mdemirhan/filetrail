@@ -3,7 +3,11 @@ import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState }
 import type { IpcResponse } from "@filetrail/contracts";
 
 import { useElementSize } from "../hooks/useElementSize";
-import { ClipboardMarkTag, clipboardMarkClassName, useClipboardMarks } from "../lib/clipboardMarks";
+import {
+  ClipboardMarkIcon,
+  clipboardMarkClassName,
+  useClipboardMarks,
+} from "../lib/clipboardMarks";
 import { isSelectionNarrowingClick } from "../lib/contentSelection";
 import { FileThumbnail } from "../lib/fileThumbnails";
 import {
@@ -299,7 +303,7 @@ export function IconGridView({
             >
               <span className="icon-item-image">
                 <FileThumbnail entry={entry} listing={listing} />
-                <ClipboardMarkTag marks={clipboardMarks} path={entry.path} variant="badge" />
+                <ClipboardMarkIcon marks={clipboardMarks} path={entry.path} variant="badge" />
               </span>
               <span className="icon-item-label">
                 {fitIconLabel(entry.name, entry.extension, compactIconView)}

@@ -15,7 +15,11 @@ import {
 import { useElementSize } from "../hooks/useElementSize";
 import { usePathSuggestions } from "../hooks/usePathSuggestions";
 import { useRelativeDate } from "../hooks/useRelativeDate";
-import { ClipboardMarkTag, clipboardMarkClassName, useClipboardMarks } from "../lib/clipboardMarks";
+import {
+  ClipboardMarkIcon,
+  clipboardMarkClassName,
+  useClipboardMarks,
+} from "../lib/clipboardMarks";
 import { isSelectionNarrowingClick } from "../lib/contentSelection";
 import {
   fitDetailColumns,
@@ -1204,7 +1208,7 @@ function FlowListView({
                     name={entry.name}
                     extension={entry.extension}
                   />
-                  <ClipboardMarkTag marks={clipboardMarks} path={entry.path} />
+                  <ClipboardMarkIcon marks={clipboardMarks} path={entry.path} />
                 </button>
               );
             })}
@@ -1688,7 +1692,7 @@ function DetailsView({
                     }
                     nameTag={
                       columnKey === "name" ? (
-                        <ClipboardMarkTag marks={clipboardMarks} path={entry.path} />
+                        <ClipboardMarkIcon marks={clipboardMarks} path={entry.path} />
                       ) : null
                     }
                   />
@@ -1799,7 +1803,7 @@ function DetailsCell({
   sizeBarFraction?: number | null;
   // Shown in place of the name while it is being edited.
   nameEditor?: React.ReactNode;
-  // Shown after the name: the marker of an item that is on the clipboard.
+  // Shown after the name: the icon of an item that is on the clipboard.
   nameTag?: React.ReactNode;
 }) {
   // Cells are presentational spans inside the row button; gridcell focus management is

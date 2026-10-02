@@ -126,7 +126,7 @@ function renderTreePane(
 }
 
 describe("TreePane", () => {
-  it("tags the folder that is on the clipboard, and not a favorite that points at it", () => {
+  it("marks the folder that is on the clipboard, and not a favorite that points at it", () => {
     renderTreePane(
       { favorites: [{ path: "/Users/demo/Documents", icon: "documents" }] },
       { paths: new Set(["/Users/demo/Documents"]), mode: "copy", flashing: true },
@@ -138,15 +138,19 @@ describe("TreePane", () => {
     const favoriteRow = rows.find((row) => row.dataset.treeKind === "favorite");
     const folderRow = rows.find((row) => row.dataset.treeKind === "filesystem");
     expect(folderRow).toHaveClass("clipboard-marked", "clipboard-flash");
-    expect(folderRow?.querySelector(".clipboard-mark-tag")).toHaveTextContent("Copied");
+    // The icon follows the name, inside the label.
+    const icon = folderRow?.querySelector(".clipboard-mark-icon");
+    expect(icon).toHaveAttribute("data-clipboard-mode", "copy");
+    expect(icon?.parentElement).toHaveClass("tree-label");
+    expect(icon?.previousElementSibling).toHaveClass("tree-label-text");
     expect(favoriteRow).toBeDefined();
     expect(favoriteRow).not.toHaveClass("clipboard-marked");
-    expect(favoriteRow?.querySelector(".clipboard-mark-tag")).toBeNull();
+    expect(favoriteRow?.querySelector(".clipboard-mark-icon")).toBeNull();
   });
 
   it("marks nothing in the tree when its highlight is switched off", () => {
     renderTreePane();
-    expect(document.querySelector(".clipboard-marked, .clipboard-mark-tag")).toBeNull();
+    expect(document.querySelector(".clipboard-marked, .clipboard-mark-icon")).toBeNull();
   });
 
   it("renders alias folders as non-expandable", () => {

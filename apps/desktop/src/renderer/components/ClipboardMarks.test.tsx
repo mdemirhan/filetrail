@@ -147,31 +147,40 @@ describe("clipboard marks in the file list", () => {
     ["list", () => contentPane("list")],
     ["details", () => contentPane("details")],
     ["search results", searchResults],
-  ])("tags the copied item in %s view and no other", (_view, pane) => {
-    render(withContentMarks(marksOf(), pane()));
+  ])(
+    "puts the copy icon after the copied item's name in %s view, and on no other",
+    (_view, pane) => {
+      render(withContentMarks(marksOf(), pane()));
 
-    expect(rowOf("alpha.txt")).toHaveClass("clipboard-marked");
-    expect(rowOf("alpha.txt")).not.toHaveClass("clipboard-cut", "clipboard-flash");
-    expect(rowOf("alpha.txt").querySelector(".clipboard-mark-tag")).toHaveTextContent("Copied");
-    expect(rowOf("beta.txt")).not.toHaveClass("clipboard-marked");
-    expect(rowOf("beta.txt").querySelector(".clipboard-mark-tag")).toBeNull();
-  });
+      expect(rowOf("alpha.txt")).toHaveClass("clipboard-marked");
+      expect(rowOf("alpha.txt")).not.toHaveClass("clipboard-cut", "clipboard-flash");
+      const icon = rowOf("alpha.txt").querySelector(".clipboard-mark-icon");
+      expect(icon).toHaveAttribute("data-clipboard-mode", "copy");
+      // No word, and the name comes right before it.
+      expect(icon).toHaveTextContent("");
+      expect(icon?.previousElementSibling).toHaveTextContent("alpha.txt");
+      expect(rowOf("beta.txt")).not.toHaveClass("clipboard-marked");
+      expect(rowOf("beta.txt").querySelector(".clipboard-mark-icon")).toBeNull();
+    },
+  );
 
-  it("says Cut on a cut item, and flashes it at the moment it is cut", () => {
+  it("shows the cut icon on a cut item, and flashes it at the moment it is cut", () => {
     render(withContentMarks(marksOf({ mode: "cut", flashing: true }), contentPane("details")));
 
     expect(rowOf("alpha.txt")).toHaveClass("clipboard-marked", "clipboard-cut", "clipboard-flash");
-    expect(rowOf("alpha.txt").querySelector(".clipboard-mark-tag")).toHaveTextContent("Cut");
+    expect(rowOf("alpha.txt").querySelector(".clipboard-mark-icon")).toHaveAttribute(
+      "data-clipboard-mode",
+      "cut",
+    );
   });
 
-  it("puts a badge without the word on the picture in icon view", () => {
+  it("puts the icon on the picture as a badge in icon view", () => {
     render(withContentMarks(marksOf(), iconGrid()));
 
     expect(rowOf("alpha.txt")).toHaveClass("clipboard-marked");
     expect(
       rowOf("alpha.txt").querySelector(".icon-item-image .clipboard-mark-badge"),
     ).not.toBeNull();
-    expect(rowOf("alpha.txt")).not.toHaveTextContent("Copied");
     // The name the item is read by stays its own.
     expect(screen.getByRole("option", { name: "alpha.txt" })).toBe(rowOf("alpha.txt"));
     expect(rowOf("beta.txt").querySelector(".clipboard-mark-badge")).toBeNull();
@@ -186,6 +195,6 @@ describe("clipboard marks in the file list", () => {
     render(withContentMarks(null, pane()));
 
     expect(document.querySelector(".clipboard-marked")).toBeNull();
-    expect(document.querySelector(".clipboard-mark-tag, .clipboard-mark-badge")).toBeNull();
+    expect(document.querySelector(".clipboard-mark-icon, .clipboard-mark-badge")).toBeNull();
   });
 });

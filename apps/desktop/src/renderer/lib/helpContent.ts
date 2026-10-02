@@ -368,7 +368,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "What was copied",
             description:
-              "Copied and cut items flash, and stay marked Copied or Cut until they are pasted or the clipboard changes. A button with their count appears in the toolbar: click it to list them, show one in its folder, take one off, or choose Clear Clipboard. Settings → General → Copy and Cut turns the marks and the notification off.",
+              "Copied and cut items flash, and keep a copy or cut icon after their name until they are pasted or the clipboard changes. A button with their count appears in the toolbar: click it to list them, show one in its folder, take one off, or choose Clear Clipboard. Settings → General → Copy and Cut turns the marks and the notification off.",
           },
           { label: "Drag", description: "Drag items onto a folder to move them there." },
           {

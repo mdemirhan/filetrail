@@ -3,8 +3,8 @@ import { createContext, useContext } from "react";
 import { ToolbarIcon } from "../components/ToolbarIcon";
 import type { ClipboardMode } from "./copyPasteClipboard";
 
-// Which items are on the clipboard, for the rows that show them: a "Copied" or "Cut" tag
-// for as long as they are there, and a flash at the moment they are copied or cut.
+// Which items are on the clipboard, for the rows that show them: a copy or cut icon after
+// the name for as long as they are there, and a flash at the moment they are copied or cut.
 export type ClipboardMarks = {
   paths: ReadonlySet<string>;
   mode: ClipboardMode;
@@ -43,32 +43,28 @@ export function clipboardMarkClassName(marks: ClipboardMarks | null, path: strin
   }`;
 }
 
-// "Copied" or "Cut" on the row of an item that is on the clipboard. Icon view has no room
-// for the word and shows the icon alone, on the corner of the item's picture.
-export function ClipboardMarkTag({
+// The copy or cut icon that follows the name of an item that is on the clipboard. Icon
+// view shows it as a badge on the corner of the item's picture instead.
+export function ClipboardMarkIcon({
   marks,
   path,
-  variant = "tag",
+  variant = "inline",
 }: {
   marks: ClipboardMarks | null;
   path: string | null;
-  variant?: "tag" | "badge";
+  variant?: "inline" | "badge";
 }) {
   if (!marks || path === null || !marks.paths.has(path)) {
     return null;
   }
-  const cut = marks.mode === "cut";
   return (
     <span
-      className={variant === "badge" ? "clipboard-mark-badge" : "clipboard-mark-tag"}
+      className={variant === "badge" ? "clipboard-mark-badge" : "clipboard-mark-icon"}
+      data-clipboard-mode={marks.mode}
       // Decorative for assistive tech: the row's own name is what it reads.
       aria-hidden="true"
     >
-      <ToolbarIcon name={cut ? "cut" : "copy"} />
-      {variant === "badge" ? null : (
-        // Its own element, so the word can drop out when the row is too narrow for it.
-        <span className="clipboard-mark-word">{cut ? "Cut" : "Copied"}</span>
-      )}
+      <ToolbarIcon name={marks.mode === "cut" ? "cut" : "copy"} />
     </span>
   );
 }

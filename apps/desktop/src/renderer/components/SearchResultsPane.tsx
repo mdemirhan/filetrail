@@ -10,7 +10,11 @@ import type {
 
 import { useElementSize } from "../hooks/useElementSize";
 import { useRelativeDate } from "../hooks/useRelativeDate";
-import { ClipboardMarkTag, clipboardMarkClassName, useClipboardMarks } from "../lib/clipboardMarks";
+import {
+  ClipboardMarkIcon,
+  clipboardMarkClassName,
+  useClipboardMarks,
+} from "../lib/clipboardMarks";
 import { isSelectionNarrowingClick } from "../lib/contentSelection";
 import type { DirectoryEntryMetadata } from "../lib/explorerTypes";
 import { FileIcon } from "../lib/fileIcons";
@@ -549,7 +553,7 @@ export function SearchResultsPane({
                         extension={result.extension}
                         highlightPattern={highlightPattern}
                       />
-                      <ClipboardMarkTag marks={clipboardMarks} path={result.path} />
+                      <ClipboardMarkIcon marks={clipboardMarks} path={result.path} />
                     </span>
                   ) : (
                     <FileNameLabel
