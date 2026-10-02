@@ -1171,7 +1171,6 @@ function ToolbarTileRequiredBadge({ theme }: { theme: ResolvedSettingsTheme }) {
 
 function ToolbarEditor({
   title,
-  hint,
   items,
   availableItems,
   requiredItems = NO_REQUIRED_TOOLBAR_ITEMS,
@@ -1183,8 +1182,6 @@ function ToolbarEditor({
   onReset,
 }: {
   title: string;
-  // A line under the strip on how the toolbar behaves.
-  hint?: string | undefined;
   items: ToolbarItemId[];
   availableItems: ToolbarItemId[];
   // Items that are always in the toolbar: they can be dragged to a new place, not removed.
@@ -1211,19 +1208,9 @@ function ToolbarEditor({
   }));
   const availableDefinitions = availableItems.map((itemId) => getToolbarItemDefinition(itemId));
 
-  const getKindAppearance = useCallback(
-    (itemId: ToolbarItemId) => {
-      const definition = getToolbarItemDefinition(itemId);
-      if (definition.kind === "composite" || definition.kind === "menu") {
-        return { icon: theme.accent.border, hover: theme.accent.softBg };
-      }
-      if (definition.kind === "toggle") {
-        return { icon: theme.accent.pathCrumbHover, hover: theme.accent.softBg };
-      }
-      return { icon: theme.accent.solid, hover: theme.accent.softBg };
-    },
-    [theme],
-  );
+  // Every tile is drawn alike, whatever kind of control it stands for: a paler icon would
+  // read as an item that is switched off.
+  const appearance = { icon: theme.accent.solid, hover: theme.accent.softBg };
 
   const getInsertSide = useCallback(
     (index: number) => {
@@ -1369,7 +1356,6 @@ function ToolbarEditor({
             const isHovered = hoveredActiveIndex === index && draggedIndex === null;
             const isDragged = draggedIndex === index;
             const insertSide = getInsertSide(index);
-            const appearance = getKindAppearance(itemId);
             const swatchBorder = isHovered ? appearance.hover : theme.separator;
             const swatchStyle = {
               ...toolbarTileIconStyle,
@@ -1574,19 +1560,6 @@ function ToolbarEditor({
         </div>
       </div>
 
-      {hint ? (
-        <div
-          style={{
-            fontSize: "11px",
-            fontFamily: sans,
-            lineHeight: 1.45,
-            color: theme.label.secondary,
-          }}
-        >
-          {hint}
-        </div>
-      ) : null}
-
       <div
         style={{
           fontSize: "11px",
@@ -1624,7 +1597,6 @@ function ToolbarEditor({
             }}
           >
             {availableDefinitions.map((definition) => {
-              const appearance = getKindAppearance(definition.id);
               const isHovered = hoveredAvailableId === definition.id;
               return (
                 <button
@@ -3146,7 +3118,6 @@ export function SettingsView({
           <SectionCard icon="⌘" title="Toolbar" theme={palette}>
             <ToolbarEditor
               title="Toolbar"
-              hint="Title, Clipboard, View Options and Search can be moved but not removed. The title stretches to fill the room the other items leave. In a window too narrow for every item, the ones nearest the end are hidden first."
               items={orderedTopToolbarItems}
               availableItems={sortedTopToolbarAvailableItems}
               requiredItems={REQUIRED_TOP_TOOLBAR_ITEMS}

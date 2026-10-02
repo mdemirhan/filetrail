@@ -398,6 +398,21 @@ describe("SettingsView", () => {
     ).toBeInTheDocument();
   });
 
+  it("draws every tile in the toolbar alike, whatever kind of control it is", () => {
+    renderSettingsView();
+
+    const editor = screen.getByRole("group", { name: "Toolbar" });
+    // A button, a toggle, a segmented control, two menus and the search field.
+    const iconColors = ["Back", "Info Panel", "View Mode", "Sort", "View Options", "Search"].map(
+      (name) => {
+        const icon = within(editor).getByRole("button", { name }).querySelector("svg.toolbar-icon");
+        return (icon?.parentElement as HTMLElement).style.color;
+      },
+    );
+    expect(new Set(iconColors).size).toBe(1);
+    expect(iconColors[0]).not.toBe("");
+  });
+
   it("has one toolbar to arrange, and nothing about rails", () => {
     renderSettingsView();
 
