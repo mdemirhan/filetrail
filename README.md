@@ -9,7 +9,7 @@ A file browser for macOS that finds things quickly, shows where your disk space 
   </picture>
 </p>
 
-File Trail is for the hours spent inside folders: a project tree, a photo archive, a Downloads folder that got out of hand. It looks familiar on purpose. Favorites and a folder tree sit on the left, the files in the middle, details on the right. What it adds are the things that are slow or missing when you browse files all day: search you can rely on, folder sizes when you ask for them, tabs that remember where they were, and a clipboard you can see.
+File Trail is a file browser for people who work with files all day, whether that is a project tree, a photo archive or a disk that keeps filling up. If you know Finder, you already know your way around: favorites and a folder tree in the sidebar, your files in the middle, and an info panel on the right. Where it differs is in the things you do most: search you can rely on, folder sizes when you ask for them, tabs that each keep their own place, and a clipboard you can see.
 
 ## Search that keeps up with your typing
 
