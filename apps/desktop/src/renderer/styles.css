@@ -6846,10 +6846,36 @@ button.shortcut-slot-key.recording:hover {
 
 .clipboard-menu-list-shell {
   position: relative;
+  --clipboard-scrollbar-width: 10px;
 }
 
 .clipboard-menu-list {
   overflow-y: auto;
+}
+
+/* This list's scrollbar is always there while the list is longer than its window, so it is
+   plain at a glance that there is more, and how much. It has a place of its own beside the
+   rows instead of lying over them. Only here: the panes' scrollbars still come and go. */
+.clipboard-menu-list::-webkit-scrollbar {
+  width: var(--clipboard-scrollbar-width);
+}
+
+.clipboard-menu-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Drawn from the menu's own text colour, so it shows on every palette's menu. */
+.clipboard-menu-list::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--context-menu-text) 30%, transparent);
+  background-clip: content-box;
+}
+
+.clipboard-menu-list::-webkit-scrollbar-thumb:hover,
+.clipboard-menu-list::-webkit-scrollbar-thumb:active {
+  background: color-mix(in srgb, var(--context-menu-text) 48%, transparent);
+  background-clip: content-box;
 }
 
 /* Every row is CLIPBOARD_MENU_ROW_HEIGHT tall: the rows drawn are worked out from it. */
@@ -6882,10 +6908,9 @@ button.shortcut-slot-key.recording:hover {
   padding: 0 4px 0 10px;
 }
 
-/* macOS draws the scrollbar over the right edge of a list that scrolls, which is where a
-   row's remove button is: in such a list the button stands clear of it. */
-.clipboard-menu-list-scrolls .clipboard-menu-item {
-  padding-right: 18px;
+/* Beside a list that scrolls, the pinned folder name stops short of the scrollbar. */
+.clipboard-menu-list-scrolls + .clipboard-menu-pinned-heading {
+  right: var(--clipboard-scrollbar-width);
 }
 
 .clipboard-menu-item-main {

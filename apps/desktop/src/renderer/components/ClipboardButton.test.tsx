@@ -220,7 +220,7 @@ describe("ClipboardButton", () => {
     expect(screen.getByRole("menuitem", { name: "IMG_300.jpg" })).toBeInTheDocument();
   });
 
-  it("keeps the remove buttons clear of the scrollbar in a list long enough to scroll", async () => {
+  it("marks a list long enough to scroll, which is the one that gets a scrollbar", async () => {
     renderButton(["/Users/demo/a.txt", "/Users/demo/b.txt"]);
     await openList();
     expect(document.querySelector(".clipboard-menu-list")).not.toHaveClass(

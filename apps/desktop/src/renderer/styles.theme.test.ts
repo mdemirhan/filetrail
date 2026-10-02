@@ -167,6 +167,32 @@ describe("theme styles", () => {
     }
   });
 
+  it("always shows the clipboard list's scrollbar, and leaves the panes' to come and go", () => {
+    const backgroundOf = (selector: string) =>
+      parseDeclarations(styles)
+        .filter(
+          (declaration) =>
+            declaration.property === "background" &&
+            declaration.selector.split(",").some((part) => part.trim() === selector),
+        )
+        .map((declaration) => declaration.value);
+
+    // A thumb with a colour of its own is drawn whenever the list overflows.
+    const clipboardThumb = backgroundOf(".clipboard-menu-list::-webkit-scrollbar-thumb");
+    expect(clipboardThumb).toHaveLength(1);
+    expect(clipboardThumb[0]).not.toBe("transparent");
+    expect(
+      parseDeclarations(styles).some(
+        (declaration) =>
+          declaration.selector === ".clipboard-menu-list::-webkit-scrollbar" &&
+          declaration.property === "width",
+      ),
+    ).toBe(true);
+    // The folder tree's and the file list's stay hidden until they are in use.
+    expect(backgroundOf(".tree-scroll::-webkit-scrollbar-thumb")).toEqual(["transparent"]);
+    expect(backgroundOf(".content-scroll::-webkit-scrollbar-thumb")).toEqual(["transparent"]);
+  });
+
   it("keeps menus and popovers that hang off the toolbar clickable", () => {
     // The toolbar drags the window, and descendants inherit that unless they opt out.
     // Every menu shares one rule, so the selector may be one of a list.
