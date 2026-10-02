@@ -4304,16 +4304,14 @@ body.platform-macos .settings-view[data-layout="compact"] {
   align-items: flex-end;
   min-width: 0;
   height: 38px;
+  /* Half the divider's width to the left, so the band starts at the tree's hairline. */
+  margin-left: -4px;
   padding: 6px 8px 0 2px;
-  /* Darker than the window in every theme, so the card stands out on it. */
-  background: color-mix(in srgb, var(--bg-base) 89%, black);
+  /* The tree's own color: the band continues the sidebar, and the card stands out on it.
+     In the explorer window it is a tint on the window's material, like the sidebar (see
+     "Translucent sidebar" below). */
+  background: var(--sidebar-bg);
   -webkit-app-region: no-drag;
-}
-
-:root[data-theme="dark"] .tab-strip,
-:root[data-theme="tomorrow-night"] .tab-strip,
-:root[data-theme="catppuccin-mocha"] .tab-strip {
-  background: color-mix(in srgb, var(--bg-base) 60%, black);
 }
 
 .tab-strip-tabs {
@@ -6930,7 +6928,58 @@ body.vibrant-window .explorer-workspace .sidebar {
   background: color-mix(in srgb, var(--sidebar-bg) 62%, transparent);
 }
 
+/* The tab band continues the sidebar: the same tint on the same material. */
+body.vibrant-window .explorer-workspace .tab-strip {
+  background: color-mix(in srgb, var(--sidebar-bg) 62%, transparent);
+}
+
+/* Where the tree has the window's color, or nearly, the card would not show on it: the
+   band is the tree's tint under 11%, 25% and 35% of black in these. (Under 11%, the tint
+   is 83% of the sidebar's color at 66%, and so on.) */
+:root[data-theme-variant="warm-paper"] body.vibrant-window .explorer-workspace .tab-strip,
+:root[data-theme-variant="sand"] body.vibrant-window .explorer-workspace .tab-strip {
+  background: color-mix(in srgb, color-mix(in srgb, var(--sidebar-bg) 83%, black) 66%, transparent);
+}
+
+:root[data-theme-variant="catppuccin-mocha"] body.vibrant-window .explorer-workspace .tab-strip {
+  background: color-mix(in srgb, color-mix(in srgb, var(--sidebar-bg) 65%, black) 72%, transparent);
+}
+
+:root[data-theme-variant="tomorrow-night"] body.vibrant-window .explorer-workspace .tab-strip {
+  background: color-mix(in srgb, color-mix(in srgb, var(--sidebar-bg) 54%, black) 75%, transparent);
+}
+
 /* The dividers beside the panes belong to the opaque part of the window. */
 body.vibrant-window .explorer-workspace .pane-resizer {
   background: var(--bg-base);
+}
+
+/* The divider beside the tree is the sidebar up to its hairline, so the tree ends in the
+   hairline. Past the hairline the rows of the toolbar and of the panes are filled in
+   here, and the row of the tab band is left clear, so the band starts at the hairline
+   with the material behind it. The toolbar's row carries the toolbar's bottom line on to
+   the hairline. */
+body.vibrant-window .explorer-workspace .pane-resizer-tree {
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--sidebar-bg) 62%, transparent) 50%,
+    transparent 50%
+  );
+}
+
+body.vibrant-window .explorer-workspace .workspace-body:not(.workspace-loading)::before,
+body.vibrant-window .explorer-workspace .workspace-body:not(.workspace-loading)::after {
+  content: "";
+  grid-column: 2;
+  margin-left: 4px;
+  background: var(--bg-base);
+}
+
+body.vibrant-window .explorer-workspace .workspace-body:not(.workspace-loading)::before {
+  grid-row: 1;
+  border-bottom: 1px solid var(--border);
+}
+
+body.vibrant-window .explorer-workspace .workspace-body:not(.workspace-loading)::after {
+  grid-row: 3;
 }

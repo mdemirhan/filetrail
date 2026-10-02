@@ -1043,7 +1043,7 @@ export function ExplorerWorkspace({
             />
           </div>
           <div
-            className="pane-resizer"
+            className="pane-resizer pane-resizer-tree"
             style={{ gridColumn: "2", gridRow: "1 / -1" }}
             onPointerDown={beginResize("tree")}
             role="separator"
