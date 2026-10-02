@@ -6875,7 +6875,6 @@ button.shortcut-slot-key.recording:hover {
   right: 0;
   left: 0;
   background: var(--context-menu-bg);
-  pointer-events: none;
 }
 
 .clipboard-menu-item {

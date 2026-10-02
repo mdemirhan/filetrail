@@ -234,4 +234,40 @@ describe("ClipboardButton", () => {
       "clipboard-menu-list-scrolls",
     );
   });
+
+  it("does not scroll the list when the pointer moves over it, only when the keys do", async () => {
+    renderButton(Array.from({ length: 500 }, (_, index) => `/Users/demo/IMG_${index}.jpg`));
+    await openList();
+    const list = document.querySelector(".clipboard-menu-list");
+    if (!(list instanceof HTMLElement)) {
+      throw new Error("Expected the clipboard list");
+    }
+    await act(async () => {
+      list.scrollTop = 24 * 300;
+      fireEvent.scroll(list);
+    });
+
+    // Under the pointer a row becomes the active one, and the list stays where it is.
+    const row = screen.getByRole("menuitem", { name: "IMG_302.jpg" });
+    await act(async () => {
+      fireEvent.mouseMove(row);
+    });
+    expect(row).toHaveAttribute("aria-current", "true");
+    expect(list.scrollTop).toBe(24 * 300);
+
+    // The folder name pinned over the top of the list takes the pointer itself, and hands
+    // the wheel on to the list.
+    const pinned = document.querySelector(".clipboard-menu-pinned-heading");
+    if (!(pinned instanceof HTMLElement)) {
+      throw new Error("Expected the pinned heading");
+    }
+    await act(async () => {
+      fireEvent.wheel(pinned, { deltaY: 48 });
+    });
+    expect(list.scrollTop).toBe(24 * 300 + 48);
+
+    // The arrow keys do bring their row into view.
+    await pressKey("Home");
+    expect(list.scrollTop).toBe(0);
+  });
 });

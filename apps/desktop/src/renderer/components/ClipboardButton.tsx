@@ -93,9 +93,16 @@ export function ClipboardButton({
     };
   }, [open]);
 
-  // Keeps the arrow keys' row in view.
+  // Keeps the arrow keys' row in view. Only the keys move the list: a row the pointer makes
+  // active is in view already, and bringing it "fully" into view would scroll the list from
+  // under the pointer, which then lands on the next row, and so on.
+  const revealActiveRowRef = useRef(false);
   useLayoutEffect(() => {
     const list = listRef.current;
+    if (!revealActiveRowRef.current) {
+      return;
+    }
+    revealActiveRowRef.current = false;
     if (!open || !list || activeIndex < 0 || activeIndex >= clearIndex) {
       return;
     }
@@ -149,10 +156,12 @@ export function ClipboardButton({
       }
       if (event.key === "ArrowDown" || event.key === "ArrowUp") {
         const step = event.key === "ArrowDown" ? 1 : -1;
+        revealActiveRowRef.current = true;
         setActiveIndex(Math.max(0, Math.min(state.clearIndex, state.activeIndex + step)));
         return;
       }
       if (event.key === "Home" || event.key === "End") {
+        revealActiveRowRef.current = true;
         setActiveIndex(event.key === "Home" ? 0 : state.clearIndex);
         return;
       }
@@ -297,10 +306,18 @@ export function ClipboardButton({
                   </div>
                 </div>
                 {pinnedHeading ? (
+                  // It lies over the first row of the list and takes the pointer itself, so
+                  // that row is not made active, or clicked, through it. The wheel is handed
+                  // on to the list under it.
                   <div
                     className="toolbar-menu-heading clipboard-menu-row clipboard-menu-heading clipboard-menu-pinned-heading"
                     title={pinnedHeading.parentPath}
                     aria-hidden="true"
+                    onWheel={(event) => {
+                      if (listRef.current) {
+                        listRef.current.scrollTop += event.deltaY;
+                      }
+                    }}
                   >
                     {pinnedHeading.label}
                   </div>
