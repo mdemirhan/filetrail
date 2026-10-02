@@ -16,6 +16,7 @@ vi.mock("./GetInfoPanel", () => ({
   InfoPanel: () => <div data-testid="info-panel" />,
 }));
 
+import { TOP_TOOLBAR_LAYOUT } from "../lib/topToolbarLayout";
 import { ExplorerWorkspace } from "./ExplorerWorkspace";
 
 const originalClientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
@@ -233,7 +234,12 @@ describe("ExplorerWorkspace", () => {
   it("hides the removable items nearest the end when the row is too narrow for them all", () => {
     // Room for the title and the search field at their narrowest, View Options, and three
     // of the five buttons.
-    toolbarRowWidth = 96 + 110 + 4 * TOOLBAR_ITEM_WIDTH + 5 * 4;
+    toolbarRowWidth =
+      TOP_TOOLBAR_LAYOUT.titleMinWidth +
+      TOP_TOOLBAR_LAYOUT.searchMinWidth +
+      2 * TOP_TOOLBAR_LAYOUT.edgedItemInset +
+      4 * TOOLBAR_ITEM_WIDTH +
+      5 * TOP_TOOLBAR_LAYOUT.itemGap;
     const view = renderExplorerWorkspace({
       topToolbarItems: [
         "back",

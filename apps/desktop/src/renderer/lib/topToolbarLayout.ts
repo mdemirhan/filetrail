@@ -3,11 +3,15 @@ import { type ToolbarItemId, isRequiredTopToolbarItem } from "../../shared/toolb
 // The top toolbar is one row, in the order chosen in Settings. Two of its items have no
 // width of their own: the title takes whatever room the others leave, and the search field
 // has a resting width, a wider one while it is in use, and gives way when the row is tight.
-// Every other item is as wide as its contents. styles.css lays the row out, from the
+// Every other item is as wide as its contents. An item with an edge of its own (the search
+// field, the view switch) keeps `edgedItemInset` clear on each side, which spaces its edge
+// from its neighbours as a button's icon is spaced by the button's padding; the search
+// field's widths here are the field's, without that room. styles.css lays the row out, from the
 // `--toolbar-*` properties of `.window-toolbar`; the code here works out which items there
 // is room for, from the same numbers (a test holds the two in step).
 export const TOP_TOOLBAR_LAYOUT = {
-  itemGap: 4,
+  itemGap: 2,
+  edgedItemInset: 5,
   titleMinWidth: 96,
   searchWidth: 200,
   searchFocusedWidth: 280,
@@ -74,7 +78,7 @@ function getRowMinWidth(
       slot.id === "title"
         ? TOP_TOOLBAR_LAYOUT.titleMinWidth
         : slot.id === "search"
-          ? TOP_TOOLBAR_LAYOUT.searchMinWidth
+          ? TOP_TOOLBAR_LAYOUT.searchMinWidth + 2 * TOP_TOOLBAR_LAYOUT.edgedItemInset
           : (widths.get(slot.key) ?? 0);
   }
   return total;

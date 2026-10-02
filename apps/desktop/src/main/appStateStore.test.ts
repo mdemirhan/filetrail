@@ -306,12 +306,12 @@ describe("appStateStore", () => {
         "back",
         "forward",
         "title",
+        "clipboard",
         "view",
         "sort",
-        "infoPanel",
-        "clipboard",
-        "viewOptions",
         "search",
+        "viewOptions",
+        "infoPanel",
       ],
       leftToolbarItems: {
         main: [
@@ -719,7 +719,7 @@ describe("appStateStore", () => {
     });
   });
 
-  it("upgrades an untouched legacy toolbar to the new default but keeps customized ones", () => {
+  it("upgrades a toolbar still on an earlier default to the new one but keeps customized ones", () => {
     const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
     const filePath = resolveAppStatePath(userDataPath);
     const legacy = [
@@ -734,18 +734,35 @@ describe("appStateStore", () => {
       "sort",
       "search",
     ];
-    writeFileSync(filePath, JSON.stringify({ preferences: { topToolbarItems: legacy } }), "utf8");
-    expect(createAppStateStore(filePath).getPreferences().topToolbarItems).toEqual([
-      "back",
-      "forward",
-      "title",
-      "view",
-      "sort",
-      "infoPanel",
-      "clipboard",
-      "viewOptions",
-      "search",
-    ]);
+    const earlierDefaults = [
+      legacy,
+      ["back", "forward", "view", "sort", "infoPanel", "search"],
+      [
+        "back",
+        "forward",
+        "title",
+        "view",
+        "sort",
+        "infoPanel",
+        "clipboard",
+        "viewOptions",
+        "search",
+      ],
+    ];
+    for (const topToolbarItems of earlierDefaults) {
+      writeFileSync(filePath, JSON.stringify({ preferences: { topToolbarItems } }), "utf8");
+      expect(createAppStateStore(filePath).getPreferences().topToolbarItems).toEqual([
+        "back",
+        "forward",
+        "title",
+        "clipboard",
+        "view",
+        "sort",
+        "search",
+        "viewOptions",
+        "infoPanel",
+      ]);
+    }
 
     writeFileSync(
       filePath,

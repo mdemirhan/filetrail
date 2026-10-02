@@ -20,6 +20,7 @@ function minRowWidth(fixedCount: number) {
     fixedCount * 32 +
     TOP_TOOLBAR_LAYOUT.titleMinWidth +
     TOP_TOOLBAR_LAYOUT.searchMinWidth +
+    2 * TOP_TOOLBAR_LAYOUT.edgedItemInset +
     (fixedCount + 1) * TOP_TOOLBAR_LAYOUT.itemGap
   );
 }
@@ -31,6 +32,7 @@ describe("TOP_TOOLBAR_LAYOUT", () => {
       Number(new RegExp(`${property}: (\\d+)px;`, "u").exec(styles)?.[1]);
     expect({
       itemGap: sizeOf("--toolbar-item-gap"),
+      edgedItemInset: sizeOf("--toolbar-edged-item-inset"),
       titleMinWidth: sizeOf("--toolbar-title-min-width"),
       searchWidth: sizeOf("--toolbar-search-width"),
       searchFocusedWidth: sizeOf("--toolbar-search-focused-width"),

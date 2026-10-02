@@ -33,7 +33,7 @@ import {
 import { sanitizeShortcutOverrides } from "../shared/shortcuts";
 import {
   DEFAULT_TOP_TOOLBAR_ITEMS,
-  LEGACY_DEFAULT_TOP_TOOLBAR_ITEMS,
+  PREVIOUS_DEFAULT_TOP_TOOLBARS,
   sanitizeLeftToolbarItems,
   sanitizeTopToolbarItems,
 } from "../shared/toolbarItems";
@@ -468,7 +468,7 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
         : currentDefaults.detailRowOpen,
     topToolbarItems:
       record.topToolbarItems !== undefined
-        ? isLegacyDefaultTopToolbar(record.topToolbarItems)
+        ? isPreviousDefaultTopToolbar(record.topToolbarItems)
           ? [...DEFAULT_TOP_TOOLBAR_ITEMS]
           : sanitizeTopToolbarItems(record.topToolbarItems)
         : [...currentDefaults.topToolbarItems],
@@ -876,12 +876,14 @@ function upgradeFavoritesWithRootVolume(
     : [...favorites.slice(0, trashIndex), rootFavorite, ...favorites.slice(trashIndex)];
 }
 
-// A saved toolbar identical to the old default was never customized; it gets the new default.
-function isLegacyDefaultTopToolbar(value: unknown): boolean {
+// A saved toolbar identical to an earlier default was never customized; it gets the new one.
+function isPreviousDefaultTopToolbar(value: unknown): boolean {
   return (
     Array.isArray(value) &&
-    value.length === LEGACY_DEFAULT_TOP_TOOLBAR_ITEMS.length &&
-    value.every((item, index) => item === LEGACY_DEFAULT_TOP_TOOLBAR_ITEMS[index])
+    PREVIOUS_DEFAULT_TOP_TOOLBARS.some(
+      (previous) =>
+        value.length === previous.length && value.every((item, index) => item === previous[index]),
+    )
   );
 }
 

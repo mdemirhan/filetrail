@@ -533,7 +533,12 @@ input:focus-visible {
 /* The sizes the toolbar's row is laid out from. lib/topToolbarLayout.ts has the same
    numbers, to work out which items fit. */
 .window-toolbar {
-  --toolbar-item-gap: 4px;
+  --toolbar-item-gap: 2px;
+  /* The room an item with an edge of its own keeps on each side. A button's icon stands
+     clear of its neighbours by the button's padding; the search field and the view switch
+     are drawn to their edges, and without this would sit closer to the icons beside them
+     than two icons sit to each other. */
+  --toolbar-edged-item-inset: 5px;
   --toolbar-title-min-width: 96px;
   --toolbar-search-width: 200px;
   --toolbar-search-focused-width: 280px;
@@ -887,13 +892,14 @@ input:focus-visible {
    it narrows, but only once the title is down to its minimum (see .toolbar-title-block). */
 .toolbar-search-slot {
   display: flex;
-  flex: 0 1 var(--toolbar-search-width);
-  min-width: var(--toolbar-search-min-width);
+  flex: 0 1 calc(var(--toolbar-search-width) + 2 * var(--toolbar-edged-item-inset));
+  min-width: calc(var(--toolbar-search-min-width) + 2 * var(--toolbar-edged-item-inset));
+  padding: 0 var(--toolbar-edged-item-inset);
   transition: flex-basis 0.18s ease;
 }
 
 .toolbar-search-slot:focus-within {
-  flex-basis: var(--toolbar-search-focused-width);
+  flex-basis: calc(var(--toolbar-search-focused-width) + 2 * var(--toolbar-edged-item-inset));
 }
 
 /* ── Menus ───────────────────────────────────────────────────────────────
@@ -5996,8 +6002,8 @@ button.shortcut-slot-key.recording:hover {
 }
 
 .window-toolbar .tb-btn.tb-btn-icon {
-  width: 32px;
-  min-width: 32px;
+  width: 28px;
+  min-width: 28px;
   height: 28px;
   border-radius: 6px;
   color: var(--text-secondary);
@@ -6015,6 +6021,10 @@ button.shortcut-slot-key.recording:hover {
 }
 
 /* View switch: a segmented control with the selected segment raised. */
+.window-toolbar .toolbar-group-view {
+  padding: 0 var(--toolbar-edged-item-inset);
+}
+
 .toolbar-group-view .toolbar-segmented.toolbar-segmented-native {
   gap: 2px;
   padding: 2px;

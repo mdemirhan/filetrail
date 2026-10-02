@@ -436,34 +436,45 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
 
 export const TOOLBAR_ITEM_IDS = TOOLBAR_ITEM_DEFINITIONS.map((item) => item.id) as ToolbarItemId[];
 
-// Finder-like default: back/forward, the folder title, then (pushed to the right by the
-// title, which takes the spare room) view switch, sort menu, Info toggle, the clipboard
-// button, View Options and search. Up/Down/Refresh remain available in toolbar customization.
+// The default: Back and Forward, the folder title, then (pushed to the far end by the
+// title, which takes the spare room) the controls for how the list is shown, the search
+// field, and the two that close the toolbar.
+// - The clipboard button comes and goes, so it is the first item after the title: there it
+//   takes its room from the title, and no button moves when something is copied.
+// - View Options is a menu of everything else, so it sits past the search field.
+// - Info Panel is last, over the panel it opens, and so the first to go in a narrow window
+//   (View Options has the same toggle).
+// Up/Down/Refresh and the rest remain available in toolbar customization.
 export const DEFAULT_TOP_TOOLBAR_ITEMS: ToolbarItemId[] = [
   "back",
   "forward",
   "title",
+  "clipboard",
   "view",
   "sort",
-  "infoPanel",
-  "clipboard",
-  "viewOptions",
   "search",
+  "viewOptions",
+  "infoPanel",
 ];
 
-// The previous default. Toolbars still exactly equal to it were never customized, so they
-// are upgraded to the new default when preferences load.
-export const LEGACY_DEFAULT_TOP_TOOLBAR_ITEMS: readonly ToolbarItemId[] = [
-  "back",
-  "forward",
-  "topSeparator",
-  "up",
-  "down",
-  "refresh",
-  "topSeparator",
-  "view",
-  "sort",
-  "search",
+// The defaults before this one, as they were saved. A toolbar still exactly equal to one of
+// them was never customized, so it is given the new default when preferences load.
+export const PREVIOUS_DEFAULT_TOP_TOOLBARS: ReadonlyArray<readonly ToolbarItemId[]> = [
+  [
+    "back",
+    "forward",
+    "topSeparator",
+    "up",
+    "down",
+    "refresh",
+    "topSeparator",
+    "view",
+    "sort",
+    "search",
+  ],
+  // Saved before the title, the clipboard button and View Options were in the list.
+  ["back", "forward", "view", "sort", "infoPanel", "search"],
+  ["back", "forward", "title", "view", "sort", "infoPanel", "clipboard", "viewOptions", "search"],
 ];
 
 export const DEFAULT_LEFT_TOOLBAR_ITEMS: LeftToolbarItems = {
@@ -596,13 +607,15 @@ export function sanitizeTopToolbarItems(value: unknown): ToolbarItemId[] {
   return next;
 }
 
-// Where an item added in Settings goes: at the end, but ahead of the fixed items that close
-// the toolbar (in the default one, the clipboard button, View Options and search).
+// Where an item added in Settings goes: with the buttons ahead of the search field (in the
+// default toolbar, after Sort), and ahead of a clipboard button or View Options that sits
+// right before the field. In a toolbar that starts with the search field it goes last.
 export function addTopToolbarItem(
   items: readonly ToolbarItemId[],
   itemId: ToolbarItemId,
 ): ToolbarItemId[] {
-  let insertIndex = items.length;
+  const searchIndex = items.indexOf("search");
+  let insertIndex = searchIndex > 0 ? searchIndex : items.length;
   while (insertIndex > 0) {
     const previous = items[insertIndex - 1];
     if (previous === undefined || previous === "title" || !isRequiredTopToolbarItem(previous)) {

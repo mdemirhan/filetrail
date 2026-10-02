@@ -46,7 +46,17 @@ describe("toolbarItems", () => {
     // search closed the toolbar, wherever the list had search.
     expect(
       sanitizeTopToolbarItems(["back", "forward", "view", "sort", "infoPanel", "search"]),
-    ).toEqual(DEFAULT_TOP_TOOLBAR_ITEMS);
+    ).toEqual([
+      "back",
+      "forward",
+      "title",
+      "view",
+      "sort",
+      "infoPanel",
+      "clipboard",
+      "viewOptions",
+      "search",
+    ]);
     expect(sanitizeTopToolbarItems(["back", "search", "openSelection"])).toEqual([
       "back",
       "title",
@@ -96,24 +106,28 @@ describe("toolbarItems", () => {
     ]);
   });
 
-  it("adds an item ahead of the fixed items that close the toolbar", () => {
+  it("adds an item with the buttons ahead of the search field", () => {
     expect(addTopToolbarItem(DEFAULT_TOP_TOOLBAR_ITEMS, "copyPath")).toEqual([
       "back",
       "forward",
       "title",
+      "clipboard",
       "view",
       "sort",
-      "infoPanel",
       "copyPath",
-      "clipboard",
-      "viewOptions",
       "search",
+      "viewOptions",
+      "infoPanel",
     ]);
-    // Straight after the title when only fixed items follow it.
+    // Ahead of a clipboard button and View Options that sit right before the field, and
+    // straight after the title when nothing else is between them.
+    expect(
+      addTopToolbarItem(["back", "title", "view", "clipboard", "viewOptions", "search"], "sort"),
+    ).toEqual(["back", "title", "view", "sort", "clipboard", "viewOptions", "search"]);
     expect(
       addTopToolbarItem(["back", "title", "clipboard", "viewOptions", "search"], "sort"),
     ).toEqual(["back", "title", "sort", "clipboard", "viewOptions", "search"]);
-    // At the very end when a button or the title closes the toolbar.
+    // Last when the search field opens the toolbar.
     expect(addTopToolbarItem(["search", "clipboard", "viewOptions", "title"], "sort")).toEqual([
       "search",
       "clipboard",
