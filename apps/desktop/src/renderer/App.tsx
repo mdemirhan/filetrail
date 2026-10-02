@@ -91,7 +91,7 @@ import {
   canRunToolbarRendererCommand,
   resolveFavoriteTargetPath,
 } from "./lib/rendererCommandAvailability";
-import { resolveExplorerToolbarLayout, resolveSinglePanelLayout } from "./lib/responsiveLayout";
+import { resolveSinglePanelLayout } from "./lib/responsiveLayout";
 import { formatSearchStatus } from "./lib/searchResults";
 import { createShortcutDisplay } from "./lib/shortcutDisplay";
 import type { canHandleRendererCommand } from "./lib/shortcutPolicy";
@@ -387,7 +387,6 @@ export function App() {
   } = writeOperations;
   const treePaneRef = useRef<HTMLElement | null>(null);
   const contentPaneRef = useRef<HTMLElement | null>(null);
-  const toolbarRef = useRef<HTMLElement | null>(null);
   const singlePanelRef = useRef<HTMLElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const searchShellRef = useRef<HTMLDivElement | null>(null);
@@ -402,7 +401,6 @@ export function App() {
     inspectorVisible: infoPanelOpen,
     minContentWidth: EXPLORER_LAYOUT.minContentWidth,
   });
-  const { width: toolbarWidth } = useElementSize(toolbarRef);
   const { width: singlePanelWidth } = useElementSize(singlePanelRef);
   const services = useExplorerServices({
     client,
@@ -1500,10 +1498,6 @@ export function App() {
     };
   }, [searchPopoverOpen, setSearchPopoverOpen]);
 
-  const explorerToolbarLayout = useMemo(
-    () => (toolbarWidth > 0 ? resolveExplorerToolbarLayout(toolbarWidth) : "full"),
-    [toolbarWidth],
-  );
   const singlePanelLayout = useMemo(
     () => (singlePanelWidth > 0 ? resolveSinglePanelLayout(singlePanelWidth) : "wide"),
     [singlePanelWidth],
@@ -1704,7 +1698,6 @@ export function App() {
             inspectorWidth={panes.inspectorWidth}
             beginResize={panes.beginResize}
             infoPanelOpen={infoPanelOpen}
-            toolbarRef={toolbarRef}
             treePaneProps={{
               paneRef: treePaneRef,
               isFocused: focusedPane === "tree",
@@ -2073,7 +2066,6 @@ export function App() {
             }}
             currentPath={currentPath}
             topToolbarItems={topToolbarItems}
-            explorerToolbarLayout={explorerToolbarLayout}
             canGoBack={canGoBack}
             canGoForward={canGoForward}
             focusedPane={focusedPane}

@@ -283,7 +283,7 @@ describe("SettingsView", () => {
     const onTopToolbarItemsChange = vi.fn();
     const onResetTopToolbar = vi.fn();
     renderSettingsView({
-      topToolbarItems: ["back", "search"],
+      topToolbarItems: ["back", "title", "clipboard", "viewOptions", "search"],
       onTopToolbarItemsChange,
       onResetTopToolbar,
     });
@@ -299,9 +299,96 @@ describe("SettingsView", () => {
     );
     fireEvent.click(within(topToolbarEditor).getByRole("button", { name: "Reset" }));
 
-    expect(onTopToolbarItemsChange).toHaveBeenNthCalledWith(1, ["back", "copySelection", "search"]);
-    expect(onTopToolbarItemsChange).toHaveBeenNthCalledWith(2, ["search"]);
+    // A new item goes ahead of the fixed items that close the toolbar.
+    expect(onTopToolbarItemsChange).toHaveBeenNthCalledWith(1, [
+      "back",
+      "title",
+      "copySelection",
+      "clipboard",
+      "viewOptions",
+      "search",
+    ]);
+    expect(onTopToolbarItemsChange).toHaveBeenNthCalledWith(2, [
+      "title",
+      "clipboard",
+      "viewOptions",
+      "search",
+    ]);
     expect(onResetTopToolbar).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets the title, clipboard, view options and search be moved but not removed", () => {
+    const onTopToolbarItemsChange = vi.fn();
+    renderSettingsView({
+      topToolbarItems: ["back", "title", "sort", "clipboard", "viewOptions", "search"],
+      onTopToolbarItemsChange,
+    });
+
+    const topToolbarEditor = screen.getByRole("group", { name: "Top toolbar" });
+    const dataTransfer = {
+      effectAllowed: "move",
+      dropEffect: "move",
+      setDragImage: () => undefined,
+    };
+    const tile = (name: string) => within(topToolbarEditor).getByRole("button", { name });
+
+    for (const name of ["Title", "Clipboard", "View Options", "Search"]) {
+      // No remove button, nothing to add it back with, and dropping it outside the strip
+      // leaves it where it was.
+      fireEvent.mouseEnter(tile(name));
+      expect(
+        within(topToolbarEditor).queryByRole("button", { name: `Remove ${name} from Top toolbar` }),
+      ).toBeNull();
+      fireEvent.mouseLeave(tile(name));
+      expect(
+        within(topToolbarEditor).queryByRole("button", { name: `Add ${name} to Top toolbar` }),
+      ).toBeNull();
+      expect(tile(name)).toHaveAttribute("draggable", "true");
+      fireEvent.dragStart(tile(name), { dataTransfer });
+      fireEvent.drop(topToolbarEditor, { dataTransfer });
+      fireEvent.dragEnd(tile(name), { dataTransfer });
+    }
+    expect(onTopToolbarItemsChange).not.toHaveBeenCalled();
+
+    // Search dragged onto Back takes the first place; the title dragged onto Search goes last.
+    fireEvent.dragStart(tile("Search"), { dataTransfer });
+    fireEvent.drop(tile("Back"), { dataTransfer });
+    expect(onTopToolbarItemsChange).toHaveBeenLastCalledWith([
+      "search",
+      "back",
+      "title",
+      "sort",
+      "clipboard",
+      "viewOptions",
+    ]);
+    fireEvent.dragStart(tile("Title"), { dataTransfer });
+    fireEvent.drop(tile("Search"), { dataTransfer });
+    expect(onTopToolbarItemsChange).toHaveBeenLastCalledWith([
+      "back",
+      "sort",
+      "clipboard",
+      "viewOptions",
+      "search",
+      "title",
+    ]);
+  });
+
+  it("shows a toolbar saved before the title could be moved with the fixed items in place", () => {
+    renderSettingsView({ topToolbarItems: ["back", "forward", "sort", "search"] });
+
+    const tiles = Array.from(
+      screen.getByRole("group", { name: "Top toolbar" }).querySelectorAll("[data-toolbar-tile]"),
+      (tile) => tile.getAttribute("data-toolbar-tile"),
+    );
+    expect(tiles).toEqual([
+      "back",
+      "forward",
+      "title",
+      "sort",
+      "clipboard",
+      "viewOptions",
+      "search",
+    ]);
   });
 
   it("names every toolbar tile, in the toolbar and in the list of items to add", () => {
@@ -352,7 +439,7 @@ describe("SettingsView", () => {
     const onLeftToolbarItemsChange = vi.fn();
     renderSettingsView({
       showSidebarRail: true,
-      topToolbarItems: ["back", "topSeparator", "search"],
+      topToolbarItems: ["back", "topSeparator", "title", "clipboard", "viewOptions", "search"],
       leftToolbarItems: {
         main: ["home", "leftSeparator"],
         utility: ["leftSeparator", "settings"],
@@ -380,7 +467,10 @@ describe("SettingsView", () => {
     expect(onTopToolbarItemsChange).toHaveBeenCalledWith([
       "back",
       "topSeparator",
+      "title",
       "topSeparator",
+      "clipboard",
+      "viewOptions",
       "search",
     ]);
     expect(onLeftToolbarItemsChange).toHaveBeenNthCalledWith(1, {
@@ -396,7 +486,7 @@ describe("SettingsView", () => {
   it("removes a toolbar item when it is dropped outside the active toolbar strip", () => {
     const onTopToolbarItemsChange = vi.fn();
     renderSettingsView({
-      topToolbarItems: ["back", "search"],
+      topToolbarItems: ["back", "title", "clipboard", "viewOptions", "search"],
       onTopToolbarItemsChange,
     });
 
@@ -411,7 +501,12 @@ describe("SettingsView", () => {
     fireEvent.dragStart(backButton, { dataTransfer });
     fireEvent.drop(topToolbarEditor, { dataTransfer });
 
-    expect(onTopToolbarItemsChange).toHaveBeenCalledWith(["search"]);
+    expect(onTopToolbarItemsChange).toHaveBeenCalledWith([
+      "title",
+      "clipboard",
+      "viewOptions",
+      "search",
+    ]);
   });
 
   it("updates left rail zones and supports toolbar resets", () => {
@@ -455,6 +550,7 @@ describe("SettingsView", () => {
     renderSettingsView();
 
     expect(screen.queryByRole("button", { name: "Add Search to Top toolbar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add Title to Top toolbar" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add Settings to Top toolbar" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add Settings to Bottom rail" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add Home to Top toolbar" })).toBeNull();

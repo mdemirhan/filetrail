@@ -8,6 +8,7 @@ import {
   groupClipboardItemsByFolder,
 } from "../lib/copyPasteClipboard";
 import { FileIcon } from "../lib/fileIcons";
+import { placeDropdownMenu } from "../lib/menuPlacement";
 import { useShortcutDisplay } from "../state/shortcutDisplayContext";
 import { ToolbarIcon } from "./ToolbarIcon";
 
@@ -43,14 +44,14 @@ export function ClipboardButton({
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
-  const [position, setPosition] = useState<{ top: number; right: number } | null>(null);
+  const [menuStyle, setMenuStyle] = useState<ReturnType<typeof placeDropdownMenu> | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   // The row the arrow keys are on: an item, or Clear Clipboard after the last of them. The
   // keyboard focus itself stays where it was, so nothing has to be given back on closing.
   const [activeIndex, setActiveIndex] = useState(-1);
   const shortcutDisplay = useShortcutDisplay();
   const pasteShortcut = shortcutDisplay.label("paste");
-  useKeepInViewport(menuRef, open && position !== null);
+  useKeepInViewport(menuRef, open && menuStyle !== null);
 
   const { items } = summary;
   const rows = useMemo(() => {
@@ -74,13 +75,13 @@ export function ClipboardButton({
 
   useLayoutEffect(() => {
     if (!open) {
-      setPosition(null);
+      setMenuStyle(null);
       return;
     }
     const place = () => {
       const rect = buttonRef.current?.getBoundingClientRect();
       if (rect) {
-        setPosition({ top: rect.bottom + 6, right: Math.max(8, window.innerWidth - rect.right) });
+        setMenuStyle(placeDropdownMenu({ anchor: rect, viewportWidth: window.innerWidth }));
       }
     };
     place();
@@ -208,14 +209,14 @@ export function ClipboardButton({
         <ToolbarIcon name={cut ? "cut" : "copy"} />
         <span className="clipboard-button-count">{summary.count.toLocaleString("en-US")}</span>
       </button>
-      {open && position
+      {open && menuStyle
         ? createPortal(
             <div
               ref={menuRef}
               className="toolbar-menu clipboard-menu"
               role="menu"
               aria-label="Clipboard"
-              style={{ position: "fixed", top: `${position.top}px`, right: `${position.right}px` }}
+              style={menuStyle}
             >
               <div className="clipboard-menu-header">
                 <span className="clipboard-menu-title">{summary.countLabel}</span>

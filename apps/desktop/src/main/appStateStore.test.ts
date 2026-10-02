@@ -302,7 +302,17 @@ describe("appStateStore", () => {
       notifyClipboardItems: true,
       propertiesOpen: false,
       detailRowOpen: false,
-      topToolbarItems: ["back", "forward", "view", "sort", "infoPanel", "search"],
+      topToolbarItems: [
+        "back",
+        "forward",
+        "title",
+        "view",
+        "sort",
+        "infoPanel",
+        "clipboard",
+        "viewOptions",
+        "search",
+      ],
       leftToolbarItems: {
         main: [
           "home",
@@ -423,7 +433,7 @@ describe("appStateStore", () => {
       highlightClipboardItemsInTree: true,
       highlightClipboardItemsInContent: true,
       notifyClipboardItems: true,
-      topToolbarItems: ["back", "search", "copyPath"],
+      topToolbarItems: ["search", "back", "title", "copyPath", "clipboard", "viewOptions"],
       leftToolbarItems: {
         main: ["home", "copyPath"],
         utility: ["settings", "openInTerminal"],
@@ -543,7 +553,7 @@ describe("appStateStore", () => {
       highlightClipboardItemsInTree: true,
       highlightClipboardItemsInContent: true,
       notifyClipboardItems: true,
-      topToolbarItems: ["back", "search", "copyPath"],
+      topToolbarItems: ["search", "back", "title", "copyPath", "clipboard", "viewOptions"],
       leftToolbarItems: {
         main: ["home", "copyPath"],
         utility: ["settings", "openInTerminal"],
@@ -728,9 +738,12 @@ describe("appStateStore", () => {
     expect(createAppStateStore(filePath).getPreferences().topToolbarItems).toEqual([
       "back",
       "forward",
+      "title",
       "view",
       "sort",
       "infoPanel",
+      "clipboard",
+      "viewOptions",
       "search",
     ]);
 
@@ -739,9 +752,14 @@ describe("appStateStore", () => {
       JSON.stringify({ preferences: { topToolbarItems: ["back", "refresh", "search"] } }),
       "utf8",
     );
+    // A customized one keeps its buttons, with the title, the clipboard button and View
+    // Options added where they were drawn before they could be moved.
     expect(createAppStateStore(filePath).getPreferences().topToolbarItems).toEqual([
       "back",
+      "title",
       "refresh",
+      "clipboard",
+      "viewOptions",
       "search",
     ]);
   });
@@ -889,7 +907,13 @@ describe("appStateStore", () => {
     expect(reloaded.getPreferences().zoomPercent).toBe(150);
     expect(reloaded.getPreferences().sortBy).toBe("name");
     expect(reloaded.getPreferences().sortDirection).toBe("asc");
-    expect(reloaded.getPreferences().topToolbarItems).toEqual(["back", "search"]);
+    expect(reloaded.getPreferences().topToolbarItems).toEqual([
+      "back",
+      "title",
+      "clipboard",
+      "viewOptions",
+      "search",
+    ]);
     expect(reloaded.getPreferences().leftToolbarItems).toEqual({
       main: ["home", "copyPath"],
       utility: ["copyPath", "theme"],

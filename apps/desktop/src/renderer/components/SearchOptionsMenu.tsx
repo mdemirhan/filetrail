@@ -5,6 +5,7 @@ import type { IpcRequest } from "@filetrail/contracts";
 
 import { SEARCH_PATTERN_MODE_LABELS } from "../../shared/appPreferences";
 import { useKeepInViewport } from "../hooks/useKeepInViewport";
+import { placeDropdownMenu } from "../lib/menuPlacement";
 import { ToolbarIcon } from "./ToolbarIcon";
 
 type SearchPatternMode = IpcRequest<"search:start">["patternMode"];
@@ -58,9 +59,8 @@ export function SearchOptionsMenu({
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
-  // The field sits at the right end of the toolbar, so the menu lines up with its right edge.
-  const [position, setPosition] = useState<{ right: number; top: number } | null>(null);
-  useKeepInViewport(menuRef, open && position !== null);
+  const [menuStyle, setMenuStyle] = useState<ReturnType<typeof placeDropdownMenu> | null>(null);
+  useKeepInViewport(menuRef, open && menuStyle !== null);
   // Opened from the keyboard: the first item takes focus, as in a native menu.
   const focusFirstItemRef = useRef(false);
   const restoreFocus = () => {
@@ -69,7 +69,7 @@ export function SearchOptionsMenu({
 
   useLayoutEffect(() => {
     if (!open) {
-      setPosition(null);
+      setMenuStyle(null);
       return;
     }
     const updatePosition = () => {
@@ -77,11 +77,13 @@ export function SearchOptionsMenu({
       if (!anchor) {
         return;
       }
-      const rect = anchor.getBoundingClientRect();
-      setPosition({
-        right: Math.max(12, window.innerWidth - rect.right),
-        top: rect.bottom + 6,
-      });
+      setMenuStyle(
+        placeDropdownMenu({
+          anchor: anchor.getBoundingClientRect(),
+          viewportWidth: window.innerWidth,
+          margin: 12,
+        }),
+      );
     };
     updatePosition();
     window.addEventListener("resize", updatePosition);
@@ -91,12 +93,12 @@ export function SearchOptionsMenu({
   }, [anchorRef, open]);
 
   useEffect(() => {
-    if (!open || !position || !focusFirstItemRef.current) {
+    if (!open || !menuStyle || !focusFirstItemRef.current) {
       return;
     }
     focusFirstItemRef.current = false;
     menuRef.current?.querySelector<HTMLElement>(MENU_ITEM_SELECTOR)?.focus();
-  }, [open, position]);
+  }, [open, menuStyle]);
 
   useEffect(() => {
     if (!open) {
@@ -218,7 +220,7 @@ export function SearchOptionsMenu({
   );
 
   const menu =
-    interactive && open && position
+    interactive && open && menuStyle
       ? createPortal(
           // Clicks must not take the focus away from the search field.
           <div
@@ -226,7 +228,7 @@ export function SearchOptionsMenu({
             className="toolbar-menu toolbar-search-menu"
             role="menu"
             aria-label="Search options"
-            style={{ position: "fixed", right: `${position.right}px`, top: `${position.top}px` }}
+            style={menuStyle}
             onMouseDown={(event) => event.preventDefault()}
           >
             <div className="toolbar-menu-heading">Match</div>

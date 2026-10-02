@@ -50,3 +50,22 @@ export function placeSubmenu(args: {
     getViewportShift(preferredTop, preferredTop + submenu.height, viewport.height, margin);
   return { left, top };
 }
+
+// A menu that drops from a toolbar item, as a `position: fixed` style. The item can be
+// anywhere in the toolbar, so the menu lines up with the edge of it that leaves the menu
+// the most room: the left edge for an item in the left half of the window, the right edge
+// for one in the right half. `useKeepInViewport` then holds it inside the window.
+export function placeDropdownMenu(args: {
+  anchor: Rect;
+  viewportWidth: number;
+  gap?: number;
+  margin?: number;
+}):
+  | { position: "fixed"; top: string; left: string }
+  | { position: "fixed"; top: string; right: string } {
+  const { anchor, viewportWidth, gap = 6, margin = MENU_VIEWPORT_MARGIN } = args;
+  const top = `${anchor.bottom + gap}px`;
+  return (anchor.left + anchor.right) / 2 < viewportWidth / 2
+    ? { position: "fixed", top, left: `${Math.max(margin, anchor.left)}px` }
+    : { position: "fixed", top, right: `${Math.max(margin, viewportWidth - anchor.right)}px` };
+}

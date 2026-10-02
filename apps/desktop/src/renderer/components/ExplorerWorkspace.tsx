@@ -14,11 +14,23 @@ import type { IpcRequest } from "@filetrail/contracts";
 
 import type { ExplorerViewMode } from "../../shared/appPreferences";
 import type { RendererCommandType } from "../../shared/rendererCommands";
-import { type ToolbarItemId, getToolbarItemDefinition } from "../../shared/toolbarItems";
+import {
+  type ToolbarItemId,
+  getToolbarItemDefinition,
+  isRequiredTopToolbarItem,
+  sanitizeTopToolbarItems,
+} from "../../shared/toolbarItems";
 import { useKeepInViewport } from "../hooks/useKeepInViewport";
 import { parentDirectoryPath } from "../lib/explorerNavigation";
 import { EXPLORER_LAYOUT } from "../lib/layoutTokens";
+import { placeDropdownMenu } from "../lib/menuPlacement";
 import { formatTooltip, getToolbarItemTooltip } from "../lib/tooltips";
+import {
+  type TopToolbarSlot,
+  resolveTopToolbarSlots,
+  resolveVisibleOptionalCount,
+  selectTopToolbarSlots,
+} from "../lib/topToolbarLayout";
 import { useShortcutDisplay } from "../state/shortcutDisplayContext";
 import { InfoPanel } from "./GetInfoPanel";
 import { HistoryButton } from "./HistoryButton";
@@ -33,7 +45,6 @@ type SearchMatchScope = IpcRequest<"search:start">["matchScope"];
 type TreePaneProps = ComponentProps<typeof TreePane>;
 type SearchWorkspaceProps = ComponentProps<typeof SearchWorkspace>;
 type InfoPanelProps = ComponentProps<typeof InfoPanel>;
-const TOP_TOOLBAR_ITEM_GAP_PX = 4;
 
 function getSortByLabel(sortBy: SortBy) {
   if (sortBy === "size") {
@@ -48,65 +59,6 @@ function getSortByLabel(sortBy: SortBy) {
   return "Name";
 }
 
-export function resolveVisibleTopToolbarCount(
-  itemWidths: readonly number[],
-  availableWidth: number,
-  gapPx = TOP_TOOLBAR_ITEM_GAP_PX,
-) {
-  // Nothing has been laid out yet (or there is no layout at all): keep the whole strip.
-  if (itemWidths.some((itemWidth) => itemWidth <= 0)) {
-    return itemWidths.length;
-  }
-  if (availableWidth <= 0) {
-    return 0;
-  }
-  let usedWidth = 0;
-  for (const [index, itemWidth] of itemWidths.entries()) {
-    const nextWidth = usedWidth === 0 ? itemWidth : usedWidth + gapPx + itemWidth;
-    if (nextWidth > availableWidth) {
-      return index;
-    }
-    usedWidth = nextWidth;
-  }
-  return itemWidths.length;
-}
-
-export function normalizeTopToolbarItems(items: readonly ToolbarItemId[]) {
-  const normalized: ToolbarItemId[] = [];
-  for (const itemId of items) {
-    if (itemId !== "topSeparator") {
-      normalized.push(itemId);
-      continue;
-    }
-    if (normalized.length === 0 || normalized.at(-1) === "topSeparator") {
-      continue;
-    }
-    normalized.push(itemId);
-  }
-  if (normalized.at(-1) === "topSeparator") {
-    normalized.pop();
-  }
-  return normalized;
-}
-
-const LEADING_TOOLBAR_ITEM_IDS = new Set<ToolbarItemId>(["back", "forward"]);
-
-// Back/forward sit before the folder title like Finder; everything else is right-aligned.
-export function splitLeadingToolbarItems(items: readonly ToolbarItemId[]) {
-  let leadingCount = 0;
-  while (leadingCount < items.length) {
-    const itemId = items[leadingCount];
-    if (itemId === undefined || !LEADING_TOOLBAR_ITEM_IDS.has(itemId)) {
-      break;
-    }
-    leadingCount += 1;
-  }
-  return {
-    leading: items.slice(0, leadingCount),
-    trailing: normalizeTopToolbarItems(items.slice(leadingCount)),
-  };
-}
-
 type ViewOptionsMenuItem =
   | { kind: "toggle"; id: string; label: string; checked: boolean; onSelect: () => void }
   | { kind: "action"; id: string; label: string; shortcut?: string; onSelect: () => void }
@@ -119,13 +71,11 @@ export function ExplorerWorkspace({
   inspectorWidth,
   beginResize,
   infoPanelOpen,
-  toolbarRef,
   treePaneProps,
   searchWorkspaceProps,
   infoPanelProps,
   currentPath,
   topToolbarItems,
-  explorerToolbarLayout,
   canGoBack,
   canGoForward,
   focusedPane,
@@ -179,13 +129,11 @@ export function ExplorerWorkspace({
   inspectorWidth: number;
   beginResize: (pane: "tree" | "inspector") => (event: React.PointerEvent<HTMLDivElement>) => void;
   infoPanelOpen: boolean;
-  toolbarRef: React.RefObject<HTMLElement | null>;
   treePaneProps: TreePaneProps;
   searchWorkspaceProps: SearchWorkspaceProps;
   infoPanelProps: InfoPanelProps;
   currentPath: string;
   topToolbarItems: ToolbarItemId[];
-  explorerToolbarLayout: string;
   canGoBack: boolean;
   canGoForward: boolean;
   focusedPane: "tree" | "content" | null;
@@ -235,72 +183,76 @@ export function ExplorerWorkspace({
   toolbarTitle?: string;
   toolbarSubtitle?: string;
 }) {
-  const titlebarActionsMainRef = useRef<HTMLDivElement | null>(null);
-  const titlebarActionsMeasureRef = useRef<HTMLDivElement | null>(null);
+  const toolbarRef = useRef<HTMLElement | null>(null);
+  const toolbarRowRef = useRef<HTMLDivElement | null>(null);
   const sortMenuButtonRef = useRef<HTMLButtonElement | null>(null);
   const sortMenuRef = useRef<HTMLDivElement | null>(null);
-  const baseTopToolbarItems = useMemo(
+  const clipboardShown = clipboardButton !== null && clipboardButton !== undefined;
+  // The toolbar's items in their saved order. Two of the required ones are not always
+  // there: the clipboard button only while something waits to be pasted, and View Options
+  // only while the left rail, which holds the same toggles, is hidden.
+  const topToolbarSlots = useMemo(
     () =>
-      topToolbarItems.filter(
-        (itemId) =>
-          itemId !== "search" &&
-          (explorerToolbarLayout !== "minimal" ||
-            getToolbarItemDefinition(itemId).topVisibleInMinimal !== false),
+      resolveTopToolbarSlots(sanitizeTopToolbarItems(topToolbarItems)).filter(
+        (slot) =>
+          (slot.id !== "clipboard" || clipboardShown) &&
+          (slot.id !== "viewOptions" || !showSidebarRail),
       ),
-    [explorerToolbarLayout, topToolbarItems],
+    [clipboardShown, showSidebarRail, topToolbarItems],
   );
-  const { leading: leadingTopToolbarItems, trailing: trailingTopToolbarItems } = useMemo(
-    () => splitLeadingToolbarItems(baseTopToolbarItems),
-    [baseTopToolbarItems],
+  const optionalTopToolbarSlots = useMemo(
+    () => topToolbarSlots.filter((slot) => !isRequiredTopToolbarItem(slot.id)),
+    [topToolbarSlots],
   );
-  const [visibleTopToolbarCount, setVisibleTopToolbarCount] = useState(
-    trailingTopToolbarItems.length,
-  );
+  const [visibleOptionalCount, setVisibleOptionalCount] = useState(optionalTopToolbarSlots.length);
   const viewOptionsButtonRef = useRef<HTMLButtonElement | null>(null);
   const viewOptionsMenuRef = useRef<HTMLDivElement | null>(null);
-  const [viewOptionsPosition, setViewOptionsPosition] = useState<{
-    right: number;
-    top: number;
-  } | null>(null);
+  const [viewOptionsMenuStyle, setViewOptionsMenuStyle] = useState<ReturnType<
+    typeof placeDropdownMenu
+  > | null>(null);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   useKeepInViewport(sortMenuRef, sortMenuOpen);
-  useKeepInViewport(viewOptionsMenuRef, viewOptionsPosition !== null);
+  useKeepInViewport(viewOptionsMenuRef, viewOptionsMenuStyle !== null);
   const [sortMenuViewportPosition, setSortMenuViewportPosition] = useState<{
     left: number;
     top: number;
   } | null>(null);
-  const toolbarMeasurementKey = trailingTopToolbarItems.join(":");
   // The toolbar is not on screen until preferences and pane widths are restored.
   const workspaceReady =
     preferencesReady &&
     (restoredPaneWidths === null ||
       (treeWidth === restoredPaneWidths.treeWidth &&
         inspectorWidth === restoredPaneWidths.inspectorWidth));
-  const sortMenuResetKey = `${explorerToolbarLayout}:${visibleTopToolbarCount}`;
 
+  // Works out how many of the removable items fit, from the width of the row and the
+  // widths of the items: the removable ones are measured in a hidden copy (those that do
+  // not fit are not in the row), the clipboard button and View Options where they are.
   // Measured again once the toolbar appears: a saved toolbar arrives before it does, and
   // would otherwise stay cut to the number of buttons in the default one.
   useLayoutEffect(() => {
-    void toolbarMeasurementKey;
     void workspaceReady;
-    const mainContainer = titlebarActionsMainRef.current;
-    const measureContainer = titlebarActionsMeasureRef.current;
-    if (
-      !(mainContainer instanceof HTMLDivElement) ||
-      !(measureContainer instanceof HTMLDivElement)
-    ) {
+    const toolbar = toolbarRef.current;
+    const row = toolbarRowRef.current;
+    if (!toolbar || !row) {
       return;
     }
+    const measuredItems = Array.from(
+      toolbar.querySelectorAll<HTMLElement>("[data-top-toolbar-measure]"),
+    );
 
     const updateVisibleCount = () => {
-      const itemWidths = Array.from(
-        measureContainer.querySelectorAll<HTMLElement>("[data-top-toolbar-item]"),
-      ).map((item) => Math.ceil(item.getBoundingClientRect().width));
-      const nextVisibleCount = resolveVisibleTopToolbarCount(
-        itemWidths,
-        Math.floor(mainContainer.clientWidth),
+      const widths = new Map(
+        measuredItems.map((item) => [
+          item.dataset.topToolbarMeasure ?? "",
+          Math.ceil(item.getBoundingClientRect().width),
+        ]),
       );
-      setVisibleTopToolbarCount((currentCount) =>
+      const nextVisibleCount = resolveVisibleOptionalCount({
+        slots: topToolbarSlots,
+        widths,
+        availableWidth: Math.floor(row.clientWidth),
+      });
+      setVisibleOptionalCount((currentCount) =>
         currentCount === nextVisibleCount ? currentCount : nextVisibleCount,
       );
     };
@@ -309,12 +261,14 @@ export function ExplorerWorkspace({
     const observer = new ResizeObserver(() => {
       updateVisibleCount();
     });
-    observer.observe(mainContainer);
-    observer.observe(measureContainer);
+    observer.observe(row);
+    for (const item of measuredItems) {
+      observer.observe(item);
+    }
     return () => {
       observer.disconnect();
     };
-  }, [toolbarMeasurementKey, workspaceReady]);
+  }, [topToolbarSlots, workspaceReady]);
 
   useLayoutEffect(() => {
     if (!sortMenuOpen) {
@@ -369,18 +323,20 @@ export function ExplorerWorkspace({
     };
   }, [sortMenuOpen]);
 
+  const visibleTopToolbarSlots = useMemo(
+    () => selectTopToolbarSlots(topToolbarSlots, visibleOptionalCount),
+    [topToolbarSlots, visibleOptionalCount],
+  );
+
+  // When the row changes the sort button may have moved or gone; its menu does not stay behind.
+  const sortMenuResetKey = visibleTopToolbarSlots.map((slot) => slot.key).join(" ");
   useEffect(() => {
     void sortMenuResetKey;
     setSortMenuOpen(false);
   }, [sortMenuResetKey]);
 
-  const visibleTopToolbarItems = useMemo(
-    () => normalizeTopToolbarItems(trailingTopToolbarItems.slice(0, visibleTopToolbarCount)),
-    [trailingTopToolbarItems, visibleTopToolbarCount],
-  );
-
   useEffect(() => {
-    if (!viewOptionsPosition) {
+    if (!viewOptionsMenuStyle) {
       return;
     }
     const handlePointerDown = (event: PointerEvent) => {
@@ -392,11 +348,11 @@ export function ExplorerWorkspace({
       ) {
         return;
       }
-      setViewOptionsPosition(null);
+      setViewOptionsMenuStyle(null);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setViewOptionsPosition(null);
+        setViewOptionsMenuStyle(null);
       }
     };
     window.addEventListener("pointerdown", handlePointerDown, true);
@@ -405,7 +361,7 @@ export function ExplorerWorkspace({
       window.removeEventListener("pointerdown", handlePointerDown, true);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [viewOptionsPosition]);
+  }, [viewOptionsMenuStyle]);
 
   const shortcutDisplay = useShortcutDisplay();
   const goToShortcut = shortcutDisplay.label("openLocationSheet");
@@ -459,46 +415,46 @@ export function ExplorerWorkspace({
     },
   ];
 
-  function renderViewOptions() {
+  function renderViewOptions(slot: TopToolbarSlot) {
     return (
-      <div className="toolbar-view-options">
+      <div
+        key={slot.key}
+        className="toolbar-view-options"
+        data-top-toolbar-item={slot.id}
+        data-top-toolbar-measure={slot.key}
+      >
         <button
           ref={viewOptionsButtonRef}
           type="button"
-          className={`tb-btn tb-btn-icon${viewOptionsPosition ? " active" : ""}`}
+          className={`tb-btn tb-btn-icon${viewOptionsMenuStyle ? " active" : ""}`}
           title="View Options"
           aria-label="View options"
           aria-haspopup="menu"
-          aria-expanded={viewOptionsPosition !== null}
+          aria-expanded={viewOptionsMenuStyle !== null}
           onClick={() => {
-            if (viewOptionsPosition) {
-              setViewOptionsPosition(null);
+            if (viewOptionsMenuStyle) {
+              setViewOptionsMenuStyle(null);
               return;
             }
             const rect = viewOptionsButtonRef.current?.getBoundingClientRect();
             if (!rect) {
               return;
             }
-            setViewOptionsPosition({
-              right: Math.max(8, window.innerWidth - rect.right),
-              top: rect.bottom + 6,
-            });
+            setViewOptionsMenuStyle(
+              placeDropdownMenu({ anchor: rect, viewportWidth: window.innerWidth }),
+            );
           }}
         >
           <ToolbarIcon name="more" />
         </button>
-        {viewOptionsPosition
+        {viewOptionsMenuStyle
           ? createPortal(
               <div
                 ref={viewOptionsMenuRef}
                 className="toolbar-menu"
                 role="menu"
                 aria-label="View options"
-                style={{
-                  position: "fixed",
-                  right: `${viewOptionsPosition.right}px`,
-                  top: `${viewOptionsPosition.top}px`,
-                }}
+                style={viewOptionsMenuStyle}
               >
                 {viewOptionsItems.map((item) =>
                   item.kind === "separator" ? (
@@ -511,7 +467,7 @@ export function ExplorerWorkspace({
                       role={item.kind === "toggle" ? "menuitemcheckbox" : "menuitem"}
                       aria-checked={item.kind === "toggle" ? item.checked : undefined}
                       onClick={() => {
-                        setViewOptionsPosition(null);
+                        setViewOptionsMenuStyle(null);
                         item.onSelect();
                       }}
                     >
@@ -739,7 +695,7 @@ export function ExplorerWorkspace({
     }
     if (itemId === "search") {
       return (
-        <div key={itemId} className="toolbar-search-slot">
+        <div key={itemId} className="toolbar-search-slot" data-top-toolbar-item={itemId}>
           <div
             ref={searchShellRef}
             className={`toolbar-search-shell${searchPopoverOpen ? " active" : ""}`}
@@ -967,18 +923,38 @@ export function ExplorerWorkspace({
     );
   }
 
-  function renderTopToolbarActionItem(itemId: ToolbarItemId, key: string) {
+  function renderTopToolbarSlot(slot: TopToolbarSlot) {
+    if (slot.id === "title") {
+      return (
+        <div key={slot.key} className="toolbar-title-block" data-top-toolbar-item={slot.id}>
+          <span className="toolbar-title" title={currentPath}>
+            {toolbarTitle}
+          </span>
+          {toolbarSubtitle ? <span className="toolbar-subtitle">{toolbarSubtitle}</span> : null}
+        </div>
+      );
+    }
+    if (slot.id === "search") {
+      return renderTopToolbarItem(slot.id);
+    }
+    if (slot.id === "clipboard") {
+      return (
+        <div
+          key={slot.key}
+          className="toolbar-clipboard"
+          data-top-toolbar-item={slot.id}
+          data-top-toolbar-measure={slot.key}
+        >
+          {clipboardButton}
+        </div>
+      );
+    }
+    if (slot.id === "viewOptions") {
+      return renderViewOptions(slot);
+    }
     return (
-      <div key={key} className="titlebar-action-item" data-top-toolbar-item={itemId}>
-        {renderTopToolbarItem(itemId)}
-      </div>
-    );
-  }
-
-  function renderMeasuredTopToolbarActionItem(itemId: ToolbarItemId, key: string) {
-    return (
-      <div key={key} className="titlebar-action-item" data-top-toolbar-item={itemId}>
-        {renderTopToolbarItem(itemId, "measure")}
+      <div key={slot.key} className="toolbar-item" data-top-toolbar-item={slot.id}>
+        {renderTopToolbarItem(slot.id)}
       </div>
     );
   }
@@ -989,37 +965,15 @@ export function ExplorerWorkspace({
       className="window-toolbar"
       style={{ gridColumn: "3 / -1", gridRow: "1" }}
     >
-      {leadingTopToolbarItems.length > 0 ? (
-        <div className="toolbar-leading">
-          {leadingTopToolbarItems.map((itemId, index) =>
-            renderTopToolbarActionItem(itemId, `${itemId}-leading-${index}`),
-          )}
-        </div>
-      ) : null}
-      <div className="toolbar-title-block">
-        <span className="toolbar-title" title={currentPath}>
-          {toolbarTitle}
-        </span>
-        {toolbarSubtitle ? <span className="toolbar-subtitle">{toolbarSubtitle}</span> : null}
+      <div ref={toolbarRowRef} className="toolbar-row">
+        {visibleTopToolbarSlots.map(renderTopToolbarSlot)}
       </div>
-      <div className="titlebar-actions" data-layout={explorerToolbarLayout}>
-        <div ref={titlebarActionsMainRef} className="titlebar-actions-main">
-          {visibleTopToolbarItems.map((itemId, index) =>
-            renderTopToolbarActionItem(itemId, `${itemId}-${index}`),
-          )}
-        </div>
-        {clipboardButton ? <div className="toolbar-clipboard">{clipboardButton}</div> : null}
-        {showSidebarRail ? null : renderViewOptions()}
-        {renderTopToolbarItem("search")}
-        <div
-          ref={titlebarActionsMeasureRef}
-          className="titlebar-actions-measure"
-          aria-hidden="true"
-        >
-          {trailingTopToolbarItems.map((itemId, index) =>
-            renderMeasuredTopToolbarActionItem(itemId, `${itemId}-measure-${index}`),
-          )}
-        </div>
+      <div className="toolbar-row-measure" aria-hidden="true">
+        {optionalTopToolbarSlots.map((slot) => (
+          <div key={slot.key} className="toolbar-item" data-top-toolbar-measure={slot.key}>
+            {renderTopToolbarItem(slot.id, "measure")}
+          </div>
+        ))}
       </div>
     </header>
   );

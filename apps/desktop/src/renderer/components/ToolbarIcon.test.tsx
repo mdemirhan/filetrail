@@ -54,6 +54,8 @@ const ICON_NAMES = [
   "rename",
   "clear",
   "stop",
+  "title",
+  "clipboard",
 ] as const;
 
 describe("ToolbarIcon", () => {

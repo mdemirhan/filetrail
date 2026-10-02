@@ -34,7 +34,6 @@ import { sanitizeShortcutOverrides } from "../shared/shortcuts";
 import {
   DEFAULT_TOP_TOOLBAR_ITEMS,
   LEGACY_DEFAULT_TOP_TOOLBAR_ITEMS,
-  type ToolbarItemId,
   sanitizeLeftToolbarItems,
   sanitizeTopToolbarItems,
 } from "../shared/toolbarItems";
@@ -469,7 +468,9 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
         : currentDefaults.detailRowOpen,
     topToolbarItems:
       record.topToolbarItems !== undefined
-        ? upgradeLegacyDefaultTopToolbar(sanitizeTopToolbarItems(record.topToolbarItems))
+        ? isLegacyDefaultTopToolbar(record.topToolbarItems)
+          ? [...DEFAULT_TOP_TOOLBAR_ITEMS]
+          : sanitizeTopToolbarItems(record.topToolbarItems)
         : [...currentDefaults.topToolbarItems],
     leftToolbarItems:
       record.leftToolbarItems !== undefined
@@ -875,12 +876,13 @@ function upgradeFavoritesWithRootVolume(
     : [...favorites.slice(0, trashIndex), rootFavorite, ...favorites.slice(trashIndex)];
 }
 
-// A toolbar identical to the old default was never customized; give it the new default.
-function upgradeLegacyDefaultTopToolbar(items: ToolbarItemId[]): ToolbarItemId[] {
-  const isLegacyDefault =
-    items.length === LEGACY_DEFAULT_TOP_TOOLBAR_ITEMS.length &&
-    items.every((item, index) => item === LEGACY_DEFAULT_TOP_TOOLBAR_ITEMS[index]);
-  return isLegacyDefault ? [...DEFAULT_TOP_TOOLBAR_ITEMS] : items;
+// A saved toolbar identical to the old default was never customized; it gets the new default.
+function isLegacyDefaultTopToolbar(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.length === LEGACY_DEFAULT_TOP_TOOLBAR_ITEMS.length &&
+    value.every((item, index) => item === LEGACY_DEFAULT_TOP_TOOLBAR_ITEMS[index])
+  );
 }
 
 function withDefaultTheme(

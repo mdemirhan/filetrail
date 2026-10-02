@@ -51,9 +51,12 @@ import {
 import { type ShortcutOverrides, resolveShortcuts } from "../../shared/shortcuts";
 import {
   DEFAULT_LEFT_TOOLBAR_ITEMS,
+  addTopToolbarItem,
   getToolbarItemDefinition,
   getToolbarItemsForLeftZone,
   getToolbarItemsForSurface,
+  isRequiredTopToolbarItem,
+  sanitizeTopToolbarItems,
 } from "../../shared/toolbarItems";
 import { generateAccentTokens } from "../lib/accent";
 import { getFavoriteLabel, getTrashPath } from "../lib/favorites";
@@ -242,6 +245,17 @@ const settingsBaseThemes = {
 } as const satisfies Record<ThemeCssBase, unknown>;
 
 type ResolvedSettingsTheme = ReturnType<typeof resolveSettingsTheme>;
+
+const NO_TOOLBAR_ITEMS: ReadonlySet<ToolbarItemId> = new Set();
+// View Options is in the toolbar only while the left rail, which has the same options, is not.
+const LEFT_RAIL_HIDDEN_TOP_TOOLBAR_ITEMS: ReadonlySet<ToolbarItemId> = new Set(["viewOptions"]);
+// The four items every top toolbar has (the title, the clipboard button, View Options and
+// search).
+const REQUIRED_TOP_TOOLBAR_ITEMS: ReadonlySet<ToolbarItemId> = new Set(
+  getToolbarItemsForSurface("top")
+    .map((item) => item.id)
+    .filter(isRequiredTopToolbarItem),
+);
 
 const TOP_TOOLBAR_AVAILABLE_ITEM_ORDER: ToolbarItemId[] = [
   "topSeparator",
@@ -1123,6 +1137,16 @@ function FavoriteIconPicker({
 // A toolbar item in the Toolbars editor: an icon tile with its name under it, so the item
 // can be told apart without hovering.
 const TOOLBAR_TILE_WIDTH = "66px";
+// The title and the search field are not buttons, and their tiles say so: each is two tiles
+// wide and drawn as what it is. The title's also takes the spare room of its row, as the
+// title does in the toolbar.
+const TOOLBAR_WIDE_TILE_WIDTH = "134px";
+
+type ToolbarTileShape = "icon" | "title" | "search";
+
+function getToolbarTileShape(itemId: ToolbarItemId): ToolbarTileShape {
+  return itemId === "title" || itemId === "search" ? itemId : "icon";
+}
 
 const toolbarTileButtonStyle = {
   width: TOOLBAR_TILE_WIDTH,
@@ -1171,12 +1195,48 @@ function ToolbarTileLabel({ label, theme }: { label: string; theme: ResolvedSett
   );
 }
 
+// The mark on an item that is always in the toolbar.
+function ToolbarTileRequiredBadge({ theme }: { theme: ResolvedSettingsTheme }) {
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        position: "absolute",
+        right: "-5px",
+        bottom: "-5px",
+        width: "15px",
+        height: "15px",
+        borderRadius: "999px",
+        background: theme.label.secondary,
+        color: theme.page.bg,
+        boxShadow: `0 0 0 2px ${theme.page.bg}`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <svg viewBox="0 0 16 16" width="9" height="9" fill="none" aria-hidden="true">
+        <rect x="3.5" y="7.5" width="9" height="6" rx="1.4" fill="currentColor" />
+        <path
+          d="M5.6 7.5V5.4a2.4 2.4 0 0 1 4.8 0v2.1"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinecap="round"
+        />
+      </svg>
+    </span>
+  );
+}
+
 function ToolbarSurfaceEditor({
   title,
   note,
+  hint,
   items,
   availableItems,
-  lockedItems = [],
+  requiredItems = NO_TOOLBAR_ITEMS,
+  dimmedItems = NO_TOOLBAR_ITEMS,
+  itemNotes = {},
   theme,
   onReorderItem,
   onRemoveItem,
@@ -1186,16 +1246,22 @@ function ToolbarSurfaceEditor({
   title: string;
   // Says where the surface is when it is not showing in its usual place.
   note?: string | undefined;
+  // A line under the strip on how the surface behaves.
+  hint?: string | undefined;
   items: ToolbarItemId[];
   availableItems: ToolbarItemId[];
-  lockedItems?: ToolbarItemId[];
+  // Items that are always on the surface: they can be dragged to a new place, not removed.
+  requiredItems?: ReadonlySet<ToolbarItemId>;
+  // Items that are not showing on the surface at the moment.
+  dimmedItems?: ReadonlySet<ToolbarItemId>;
+  // What to say about an item when the pointer rests on its tile.
+  itemNotes?: Partial<Record<ToolbarItemId, string>>;
   theme: ResolvedSettingsTheme;
   onReorderItem: (sourceIndex: number, targetIndex: number) => void;
   onRemoveItem: (index: number) => void;
   onAddItem: (itemId: ToolbarItemId) => void;
   onReset?: () => void;
 }) {
-  const lockedItemSet = new Set(lockedItems);
   const rootRef = useRef<HTMLFieldSetElement | null>(null);
   const activeSurfaceRef = useRef<HTMLDivElement | null>(null);
   const dragCounterRef = useRef<Record<number, number>>({});
@@ -1213,34 +1279,15 @@ function ToolbarSurfaceEditor({
   const getKindAppearance = useCallback(
     (itemId: ToolbarItemId) => {
       const definition = getToolbarItemDefinition(itemId);
-      if (lockedItemSet.has(itemId)) {
-        return {
-          icon: theme.label.secondary,
-          hover: theme.separator,
-          badge: theme.label.secondary,
-        };
-      }
       if (definition.kind === "composite" || definition.kind === "menu") {
-        return {
-          icon: theme.accent.border,
-          hover: theme.accent.softBg,
-          badge: theme.accent.border,
-        };
+        return { icon: theme.accent.border, hover: theme.accent.softBg };
       }
       if (definition.kind === "toggle") {
-        return {
-          icon: theme.accent.pathCrumbHover,
-          hover: theme.accent.softBg,
-          badge: theme.accent.pathCrumbHover,
-        };
+        return { icon: theme.accent.pathCrumbHover, hover: theme.accent.softBg };
       }
-      return {
-        icon: theme.accent.solid,
-        hover: theme.accent.softBg,
-        badge: theme.accent.solid,
-      };
+      return { icon: theme.accent.solid, hover: theme.accent.softBg };
     },
-    [lockedItemSet, theme],
+    [theme],
   );
 
   const getInsertSide = useCallback(
@@ -1255,8 +1302,7 @@ function ToolbarSurfaceEditor({
 
   const handleDragStart = useCallback(
     (event: ReactDragEvent<HTMLButtonElement>, index: number) => {
-      const itemId = items[index];
-      if (!itemId || lockedItemSet.has(itemId)) {
+      if (!items[index]) {
         event.preventDefault();
         return;
       }
@@ -1276,7 +1322,7 @@ function ToolbarSurfaceEditor({
       event.dataTransfer.setDragImage(ghost, 20, 19);
       window.setTimeout(() => ghost.remove(), 0);
     },
-    [items, lockedItemSet, theme.input.bg, theme.input.border],
+    [items, theme.input.bg, theme.input.border],
   );
 
   const handleDrop = useCallback(
@@ -1320,8 +1366,9 @@ function ToolbarSurfaceEditor({
         ) {
           return;
         }
+        // Dropped outside the strip: the item comes off, unless it is one that always stays.
         const itemId = items[draggedIndex];
-        if (itemId && !lockedItemSet.has(itemId)) {
+        if (itemId && !requiredItems.has(itemId)) {
           onRemoveItem(draggedIndex);
         }
         setDraggedIndex(null);
@@ -1383,15 +1430,30 @@ function ToolbarSurfaceEditor({
         <div style={{ display: "flex", gap: "8px 2px", flexWrap: "wrap", minHeight: "58px" }}>
           {itemDefinitions.map(({ definition, index }) => {
             const itemId = definition.id;
-            const locked = lockedItemSet.has(itemId);
+            const required = requiredItems.has(itemId);
+            const shape = getToolbarTileShape(itemId);
             const isHovered = hoveredActiveIndex === index && draggedIndex === null;
             const isDragged = draggedIndex === index;
             const insertSide = getInsertSide(index);
             const appearance = getKindAppearance(itemId);
-            const swatchBorder = isHovered && !locked ? appearance.hover : theme.separator;
+            const swatchBorder = isHovered ? appearance.hover : theme.separator;
+            const swatchStyle = {
+              ...toolbarTileIconStyle,
+              position: "relative",
+              border: `1px solid ${swatchBorder}`,
+              background: isHovered ? appearance.hover : theme.page.bg,
+              color: appearance.icon,
+            } as const;
+            const wideSwatchStyle = {
+              ...swatchStyle,
+              width: "calc(100% - 8px)",
+              padding: "0 10px",
+              justifyContent: "flex-start",
+            } as const;
             return (
               <div
                 key={`${title}-${itemId}-${index}`}
+                data-toolbar-tile={itemId}
                 onMouseEnter={() => setHoveredActiveIndex(index)}
                 onMouseLeave={() =>
                   setHoveredActiveIndex((current) => (current === index ? null : current))
@@ -1400,7 +1462,7 @@ function ToolbarSurfaceEditor({
                   position: "relative",
                   display: "flex",
                   alignItems: "flex-start",
-                  flexShrink: 0,
+                  flex: shape === "title" ? `1 1 ${TOOLBAR_WIDE_TILE_WIDTH}` : "0 0 auto",
                 }}
               >
                 {insertSide === "left" ? (
@@ -1415,11 +1477,22 @@ function ToolbarSurfaceEditor({
                     }}
                   />
                 ) : null}
-                <div style={{ position: "relative", flexShrink: 0, width: TOOLBAR_TILE_WIDTH }}>
+                <div
+                  style={{
+                    position: "relative",
+                    ...(shape === "title"
+                      ? { flex: "1 1 auto", minWidth: 0 }
+                      : {
+                          flexShrink: 0,
+                          width: shape === "search" ? TOOLBAR_WIDE_TILE_WIDTH : TOOLBAR_TILE_WIDTH,
+                        }),
+                  }}
+                >
                   <button
                     type="button"
-                    draggable={!locked}
+                    draggable
                     aria-label={definition.label}
+                    title={itemNotes[itemId]}
                     onDragStart={(event) => handleDragStart(event, index)}
                     onDragOver={(event) => {
                       event.preventDefault();
@@ -1452,23 +1525,60 @@ function ToolbarSurfaceEditor({
                     }}
                     style={{
                       ...toolbarTileButtonStyle,
-                      cursor: locked ? "default" : "grab",
-                      opacity: isDragged ? 0.22 : 1,
+                      width: "100%",
+                      cursor: "grab",
+                      opacity: isDragged ? 0.22 : dimmedItems.has(itemId) ? 0.45 : 1,
                     }}
                   >
-                    <span
-                      style={{
-                        ...toolbarTileIconStyle,
-                        border: `1px solid ${swatchBorder}`,
-                        background: isHovered && !locked ? appearance.hover : theme.page.bg,
-                        color: appearance.icon,
-                      }}
-                    >
-                      <ToolbarIcon name={definition.icon} />
-                    </span>
+                    {shape === "title" ? (
+                      // A stand-in for the folder's name and the line under it.
+                      <span
+                        style={{
+                          ...wideSwatchStyle,
+                          borderStyle: "dashed",
+                          borderColor: isHovered ? theme.accent.border : theme.label.secondary,
+                          flexDirection: "column",
+                          alignItems: "flex-start",
+                          justifyContent: "center",
+                          gap: "1px",
+                          fontFamily: sans,
+                          lineHeight: 1.2,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        <span
+                          aria-hidden="true"
+                          style={{
+                            fontSize: "11.5px",
+                            fontWeight: 700,
+                            color: theme.section.title,
+                          }}
+                        >
+                          Folder Name
+                        </span>
+                        <span
+                          aria-hidden="true"
+                          style={{ fontSize: "9.5px", color: theme.label.secondary }}
+                        >
+                          12 items
+                        </span>
+                        {required ? <ToolbarTileRequiredBadge theme={theme} /> : null}
+                      </span>
+                    ) : (
+                      <span
+                        style={
+                          shape === "search"
+                            ? { ...wideSwatchStyle, background: theme.input.bg }
+                            : swatchStyle
+                        }
+                      >
+                        <ToolbarIcon name={definition.icon} />
+                        {required ? <ToolbarTileRequiredBadge theme={theme} /> : null}
+                      </span>
+                    )}
                     <ToolbarTileLabel label={definition.label} theme={theme} />
                   </button>
-                  {isHovered && !locked ? (
+                  {isHovered && !required ? (
                     <button
                       type="button"
                       title="Remove"
@@ -1497,27 +1607,6 @@ function ToolbarSurfaceEditor({
                     >
                       x
                     </button>
-                  ) : null}
-                  {locked ? (
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: "28px",
-                        right: "11px",
-                        width: "13px",
-                        height: "13px",
-                        borderRadius: "999px",
-                        background: appearance.badge,
-                        color: theme.page.bg,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: "7px",
-                        fontWeight: 700,
-                      }}
-                    >
-                      L
-                    </div>
                   ) : null}
                 </div>
                 {insertSide === "right" ? (
@@ -1550,6 +1639,19 @@ function ToolbarSurfaceEditor({
           ) : null}
         </div>
       </div>
+
+      {hint ? (
+        <div
+          style={{
+            fontSize: "11px",
+            fontFamily: sans,
+            lineHeight: 1.45,
+            color: theme.label.secondary,
+          }}
+        >
+          {hint}
+        </div>
+      ) : null}
 
       <div
         style={{
@@ -2136,20 +2238,23 @@ export function SettingsView({
   const isDefaultTextEditorSelection =
     defaultTextEditor.appPath === DEFAULT_TEXT_EDITOR.appPath &&
     defaultTextEditor.appName === DEFAULT_TEXT_EDITOR.appName;
-  const customizableTopToolbarItems = topToolbarItems.filter((itemId) => itemId !== "search");
+  // The whole toolbar in order, the items that always stay included.
+  const orderedTopToolbarItems = useMemo(
+    () => sanitizeTopToolbarItems(topToolbarItems),
+    [topToolbarItems],
+  );
   const customizableLeftMainItems = leftToolbarItems.main.filter((itemId) => itemId !== "settings");
   const customizableLeftUtilityItems = leftToolbarItems.utility.filter(
     (itemId) => itemId !== "settings",
   );
   const topToolbarAvailableItems = getToolbarItemsForSurface("top")
     .map((item) => item.id)
-    .filter((itemId) => {
-      if (itemId === "search" || itemId === "settings") {
-        return false;
-      }
-      const definition = getToolbarItemDefinition(itemId);
-      return definition.allowDuplicates || !customizableTopToolbarItems.includes(itemId);
-    });
+    .filter(
+      (itemId) =>
+        !isRequiredTopToolbarItem(itemId) &&
+        (getToolbarItemDefinition(itemId).allowDuplicates ||
+          !orderedTopToolbarItems.includes(itemId)),
+    );
   // Each rail has its own list: an item on one rail can still be added to the other.
   const leftMainAvailableItems = getToolbarItemsForLeftZone("main")
     .map((item) => item.id)
@@ -2205,38 +2310,36 @@ export function SettingsView({
   );
   const handleTopToolbarMove = useCallback(
     (sourceIndex: number, targetIndex: number) => {
-      onTopToolbarItemsChange([
-        ...reorderToolbarItems(customizableTopToolbarItems, sourceIndex, targetIndex),
-        "search",
-      ]);
+      onTopToolbarItemsChange(
+        reorderToolbarItems(orderedTopToolbarItems, sourceIndex, targetIndex),
+      );
     },
-    [customizableTopToolbarItems, onTopToolbarItemsChange, reorderToolbarItems],
+    [orderedTopToolbarItems, onTopToolbarItemsChange, reorderToolbarItems],
   );
   const handleTopToolbarRemove = useCallback(
     (index: number) => {
-      if (index < 0 || index >= customizableTopToolbarItems.length) {
+      const itemId = orderedTopToolbarItems[index];
+      if (itemId === undefined || isRequiredTopToolbarItem(itemId)) {
         return;
       }
-      onTopToolbarItemsChange([
-        ...customizableTopToolbarItems.filter((_, candidateIndex) => candidateIndex !== index),
-        "search",
-      ]);
+      onTopToolbarItemsChange(
+        orderedTopToolbarItems.filter((_, candidateIndex) => candidateIndex !== index),
+      );
     },
-    [customizableTopToolbarItems, onTopToolbarItemsChange],
+    [orderedTopToolbarItems, onTopToolbarItemsChange],
   );
   const handleTopToolbarAdd = useCallback(
     (itemId: ToolbarItemId) => {
       const definition = getToolbarItemDefinition(itemId);
       if (
-        itemId === "search" ||
-        itemId === "settings" ||
-        (!definition.allowDuplicates && customizableTopToolbarItems.includes(itemId))
+        !definition.surfaces.includes("top") ||
+        (!definition.allowDuplicates && orderedTopToolbarItems.includes(itemId))
       ) {
         return;
       }
-      onTopToolbarItemsChange([...customizableTopToolbarItems, itemId, "search"]);
+      onTopToolbarItemsChange(addTopToolbarItem(orderedTopToolbarItems, itemId));
     },
-    [customizableTopToolbarItems, onTopToolbarItemsChange],
+    [orderedTopToolbarItems, onTopToolbarItemsChange],
   );
   const updateLeftToolbarZone = useCallback(
     (zone: "main" | "utility", updater: (items: ToolbarItemId[]) => ToolbarItemId[]) => {
@@ -3239,8 +3342,23 @@ export function SettingsView({
             <div style={{ display: "grid", gap: "22px", paddingTop: "6px" }}>
               <ToolbarSurfaceEditor
                 title="Top toolbar"
-                items={customizableTopToolbarItems}
+                hint="Title, Clipboard, View Options and Search can be moved but not removed. The title stretches to fill the room the other items leave. In a window too narrow for every item, the ones nearest the end are hidden first."
+                items={orderedTopToolbarItems}
                 availableItems={sortedTopToolbarAvailableItems}
+                requiredItems={REQUIRED_TOP_TOOLBAR_ITEMS}
+                dimmedItems={
+                  showSidebarRail ? LEFT_RAIL_HIDDEN_TOP_TOOLBAR_ITEMS : NO_TOOLBAR_ITEMS
+                }
+                itemNotes={{
+                  title:
+                    "The name of the folder on screen. It stretches to fill the room the other items leave.",
+                  clipboard:
+                    "Appears while files or folders are waiting to be pasted, and lists them.",
+                  viewOptions: showSidebarRail
+                    ? "Hidden while the left rail is shown: the rail has the same options."
+                    : "A menu of the view options that the left rail has when it is shown.",
+                  search: "The search field. It is wider while you type in it.",
+                }}
                 theme={palette}
                 onReorderItem={handleTopToolbarMove}
                 onRemoveItem={handleTopToolbarRemove}

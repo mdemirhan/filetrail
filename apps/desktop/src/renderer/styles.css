@@ -530,40 +530,39 @@ input:focus-visible {
   min-height: 50px;
 }
 
-.titlebar-actions {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 1;
-  justify-content: flex-start;
-  min-width: 0;
-  overflow: visible;
+/* The sizes the toolbar's row is laid out from. lib/topToolbarLayout.ts has the same
+   numbers, to work out which items fit. */
+.window-toolbar {
+  --toolbar-item-gap: 4px;
+  --toolbar-title-min-width: 96px;
+  --toolbar-search-width: 200px;
+  --toolbar-search-focused-width: 280px;
+  --toolbar-search-min-width: 110px;
 }
 
-.titlebar-actions-main {
+/* The toolbar's items, in the order chosen in Settings. */
+.toolbar-row {
   display: flex;
   align-items: center;
-  gap: 4px;
-  flex: 1 1 auto;
+  gap: var(--toolbar-item-gap);
+  flex: 1 1 0;
   min-width: 0;
-  overflow: hidden;
 }
 
-.titlebar-action-item {
+.toolbar-item {
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
-  min-width: 0;
 }
 
-.titlebar-actions-measure {
+/* A hidden copy of the removable items, to measure the ones the row has no room for. */
+.toolbar-row-measure {
   position: absolute;
   top: 0;
   left: 0;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--toolbar-item-gap);
   width: max-content;
   visibility: hidden;
   pointer-events: none;
@@ -884,23 +883,17 @@ input:focus-visible {
   stroke-width: 2.2;
 }
 
+/* The search field has a width of its own and is wider while it is in use. In a tight row
+   it narrows, but only once the title is down to its minimum (see .toolbar-title-block). */
 .toolbar-search-slot {
   display: flex;
-  min-width: 0;
-  margin-left: auto;
-  flex: 0 1 256px;
+  flex: 0 1 var(--toolbar-search-width);
+  min-width: var(--toolbar-search-min-width);
+  transition: flex-basis 0.18s ease;
 }
 
-.titlebar-actions[data-layout="condensed"] .toolbar-search-slot {
-  flex-basis: 234px;
-}
-
-.titlebar-actions[data-layout="narrow"] .toolbar-search-slot {
-  flex-basis: 200px;
-}
-
-.titlebar-actions[data-layout="minimal"] .toolbar-search-slot {
-  flex-basis: 170px;
+.toolbar-search-slot:focus-within {
+  flex-basis: var(--toolbar-search-focused-width);
 }
 
 /* ── Menus ───────────────────────────────────────────────────────────────
@@ -4122,10 +4115,6 @@ body.platform-macos .settings-view[data-layout="compact"] {
     padding-left: 10px;
     padding-right: 10px;
   }
-
-  .titlebar-actions {
-    gap: 2px;
-  }
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -4256,23 +4245,25 @@ body.platform-macos .settings-view[data-layout="compact"] {
   border-bottom: 1px solid var(--border);
 }
 
-.toolbar-leading {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex: 0 0 auto;
-}
-
+/* The title is the one item that stretches: it takes the room the others leave, so the
+   items after it sit at the far end of the toolbar. It gives room up before the search
+   field does, down to a minimum that still shows the start of the name. */
 .toolbar-title-block {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 40%;
-  padding-left: 4px;
+  flex: 1 1 0;
+  min-width: var(--toolbar-title-min-width);
+  padding: 0 4px 0 8px;
+  overflow: hidden;
   line-height: 1.2;
   -webkit-app-region: drag;
+}
+
+/* While the search field is in use it may take the title's minimum too, so that there is
+   room to type in a toolbar too tight to widen the field any other way. */
+.window-toolbar:has(.toolbar-search-slot:focus-within) .toolbar-title-block {
+  min-width: 0;
 }
 
 .toolbar-title {
@@ -4291,14 +4282,6 @@ body.platform-macos .settings-view[data-layout="compact"] {
   color: var(--text-tertiary);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
-}
-
-.titlebar-actions {
-  justify-content: flex-end;
-}
-
-.titlebar-actions-main {
-  justify-content: flex-end;
 }
 
 .toolbar-view-options {
@@ -6067,17 +6050,6 @@ button.shortcut-slot-key.recording:hover {
   min-width: 200px;
 }
 
-/* Compact search field that widens while in use. */
-.window-toolbar .toolbar-search-slot,
-.titlebar-actions[data-layout] .toolbar-search-slot {
-  flex: 0 0 200px;
-  transition: flex-basis 0.18s ease;
-}
-
-.window-toolbar .toolbar-search-slot:focus-within {
-  flex-basis: 280px;
-}
-
 .window-toolbar .toolbar-search {
   border: 1px solid transparent;
   border-radius: 7px;
@@ -7205,12 +7177,6 @@ button.shortcut-slot-key.recording:hover {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-/* The search field narrows rather than pushing the toolbar buttons over the title. */
-.window-toolbar .toolbar-search-slot {
-  flex-shrink: 1;
-  min-width: 110px;
 }
 
 /* Search results drop the date, then the size, as their pane narrows (SearchResultsPane

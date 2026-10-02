@@ -45,7 +45,9 @@ export type ToolbarIconName =
   | "separatorVertical"
   | "separatorHorizontal"
   | "more"
-  | "sort";
+  | "sort"
+  | "title"
+  | "clipboard";
 
 export type ToolbarSurface = "top" | "left";
 export type ToolbarItemKind = "button" | "toggle" | "menu" | "composite" | "separator";
@@ -59,6 +61,9 @@ export type ToolbarItemId =
   | "refresh"
   | "view"
   | "sort"
+  | "title"
+  | "clipboard"
+  | "viewOptions"
   | "search"
   | "home"
   | "root"
@@ -100,8 +105,8 @@ export type ToolbarItemDefinition = {
   kind: ToolbarItemKind;
   surfaces: readonly ToolbarSurface[];
   commandType?: RendererCommandType;
-  topLocked?: boolean;
-  topVisibleInMinimal?: boolean;
+  // Always in the top toolbar: it can be moved there, but not taken off.
+  topRequired?: boolean;
   // The command whose shortcut the tooltip shows.
   shortcutCommand?: ShortcutCommandId;
   // The command's full name, where the label is a shorter one for the Settings tiles.
@@ -118,7 +123,6 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     kind: "button",
     surfaces: ["top"],
     shortcutCommand: "goBack",
-    topVisibleInMinimal: true,
   },
   {
     id: "forward",
@@ -127,7 +131,6 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     kind: "button",
     surfaces: ["top"],
     shortcutCommand: "goForward",
-    topVisibleInMinimal: true,
   },
   {
     id: "up",
@@ -136,7 +139,6 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     kind: "button",
     surfaces: ["top"],
     shortcutCommand: "goEnclosingFolder",
-    topVisibleInMinimal: false,
   },
   {
     id: "down",
@@ -145,7 +147,6 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     kind: "button",
     surfaces: ["top"],
     shortcutCommand: "openSelectedItem",
-    topVisibleInMinimal: false,
   },
   {
     id: "refresh",
@@ -155,7 +156,6 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     surfaces: ["top", "left"],
     commandType: "refreshOrApplySearchSort",
     shortcutCommand: "refreshOrApplySearchSort",
-    topVisibleInMinimal: false,
   },
   {
     id: "topSeparator",
@@ -164,7 +164,6 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     kind: "separator",
     surfaces: ["top"],
     allowDuplicates: true,
-    topVisibleInMinimal: true,
   },
   {
     id: "view",
@@ -172,7 +171,6 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     icon: "list",
     kind: "composite",
     surfaces: ["top"],
-    topVisibleInMinimal: true,
   },
   {
     id: "sort",
@@ -180,7 +178,30 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     icon: "sortAsc",
     kind: "composite",
     surfaces: ["top"],
-    topVisibleInMinimal: false,
+  },
+  {
+    id: "title",
+    label: "Title",
+    icon: "title",
+    kind: "composite",
+    surfaces: ["top"],
+    topRequired: true,
+  },
+  {
+    id: "clipboard",
+    label: "Clipboard",
+    icon: "clipboard",
+    kind: "menu",
+    surfaces: ["top"],
+    topRequired: true,
+  },
+  {
+    id: "viewOptions",
+    label: "View Options",
+    icon: "more",
+    kind: "menu",
+    surfaces: ["top"],
+    topRequired: true,
   },
   {
     id: "search",
@@ -188,8 +209,7 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     icon: "search",
     kind: "composite",
     surfaces: ["top"],
-    topLocked: true,
-    topVisibleInMinimal: true,
+    topRequired: true,
   },
   {
     id: "home",
@@ -416,14 +436,18 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
 
 export const TOOLBAR_ITEM_IDS = TOOLBAR_ITEM_DEFINITIONS.map((item) => item.id) as ToolbarItemId[];
 
-// Finder-like default: back/forward, then (right-aligned) view switch, sort menu, Info
-// toggle and search. Up/Down/Refresh remain available in toolbar customization.
+// Finder-like default: back/forward, the folder title, then (pushed to the right by the
+// title, which takes the spare room) view switch, sort menu, Info toggle, the clipboard
+// button, View Options and search. Up/Down/Refresh remain available in toolbar customization.
 export const DEFAULT_TOP_TOOLBAR_ITEMS: ToolbarItemId[] = [
   "back",
   "forward",
+  "title",
   "view",
   "sort",
   "infoPanel",
+  "clipboard",
+  "viewOptions",
   "search",
 ];
 
@@ -539,12 +563,54 @@ function sanitizeToolbarItemList(
   return result;
 }
 
+export function isRequiredTopToolbarItem(id: ToolbarItemId): boolean {
+  return getToolbarItemDefinition(id).topRequired === true;
+}
+
+// Where a toolbar saved before the title could be moved drew it: after Back and Forward
+// when they led the toolbar, otherwise first.
+const LEGACY_LEADING_TOP_TOOLBAR_ITEMS = new Set<ToolbarItemId>(["back", "forward"]);
+
+// Every top toolbar holds the title, the clipboard button, View Options and search. A list
+// without them is given them where they were drawn while their places were fixed: the title
+// after a leading Back and Forward, search last, and the other two just ahead of search.
 export function sanitizeTopToolbarItems(value: unknown): ToolbarItemId[] {
-  const next = sanitizeToolbarItemList(value, "top");
+  let next = sanitizeToolbarItemList(value, "top");
+  if (!next.includes("title")) {
+    // Until the title could be moved, search was drawn last wherever the list had it.
+    const rest = next.filter((itemId) => itemId !== "search");
+    const firstOtherIndex = rest.findIndex(
+      (itemId) => !LEGACY_LEADING_TOP_TOOLBAR_ITEMS.has(itemId),
+    );
+    const leadingCount = firstOtherIndex === -1 ? rest.length : firstOtherIndex;
+    next = [...rest.slice(0, leadingCount), "title", ...rest.slice(leadingCount), "search"];
+  }
   if (!next.includes("search")) {
     next.push("search");
   }
+  for (const itemId of ["clipboard", "viewOptions"] as const) {
+    if (!next.includes(itemId)) {
+      next.splice(next.indexOf("search"), 0, itemId);
+    }
+  }
   return next;
+}
+
+// Where an item added in Settings goes: at the end, but ahead of the fixed items that close
+// the toolbar (in the default one, the clipboard button, View Options and search).
+export function addTopToolbarItem(
+  items: readonly ToolbarItemId[],
+  itemId: ToolbarItemId,
+): ToolbarItemId[] {
+  let insertIndex = items.length;
+  while (insertIndex > 0) {
+    const previous = items[insertIndex - 1];
+    if (previous === undefined || previous === "title" || !isRequiredTopToolbarItem(previous)) {
+      break;
+    }
+    insertIndex -= 1;
+  }
+  return [...items.slice(0, insertIndex), itemId, ...items.slice(insertIndex)];
 }
 
 export function sanitizeLeftToolbarItems(value: unknown): LeftToolbarItems {

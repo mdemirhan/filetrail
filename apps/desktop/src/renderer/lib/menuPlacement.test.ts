@@ -1,4 +1,4 @@
-import { getViewportShift, placeSubmenu } from "./menuPlacement";
+import { getViewportShift, placeDropdownMenu, placeSubmenu } from "./menuPlacement";
 
 describe("menuPlacement", () => {
   it("leaves a box alone when it is already inside the viewport", () => {
@@ -43,5 +43,30 @@ describe("menuPlacement", () => {
         viewport: { width: 400, height: 800 },
       }),
     ).toEqual({ left: 8, top: 672 });
+  });
+
+  it("drops a toolbar menu from the edge of its button that leaves it the most room", () => {
+    // In the right half of the window the menu lines up with the button's right edge.
+    expect(
+      placeDropdownMenu({
+        anchor: { left: 900, top: 10, right: 932, bottom: 38 },
+        viewportWidth: 1000,
+      }),
+    ).toEqual({ position: "fixed", top: "44px", right: "68px" });
+    // In the left half, with its left edge.
+    expect(
+      placeDropdownMenu({
+        anchor: { left: 300, top: 10, right: 332, bottom: 38 },
+        viewportWidth: 1000,
+      }),
+    ).toEqual({ position: "fixed", top: "44px", left: "300px" });
+    // Never closer to the edge of the window than the margin.
+    expect(
+      placeDropdownMenu({
+        anchor: { left: 790, top: 10, right: 998, bottom: 38 },
+        viewportWidth: 1000,
+        margin: 12,
+      }),
+    ).toEqual({ position: "fixed", top: "44px", right: "12px" });
   });
 });
