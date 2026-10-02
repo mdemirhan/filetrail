@@ -83,4 +83,22 @@ describe("SettingsWindowApp", () => {
     fireEvent.keyDown(document.body, { key: "Escape" });
     expect(close).toHaveBeenCalledTimes(1);
   });
+
+  it("keeps the tab on screen in the window's address, where the app reads it to reopen there", async () => {
+    window.history.replaceState(null, "", "#settings");
+    renderSettings();
+    await screen.findByText("Restore last visited folder");
+    expect(window.location.hash).toBe("#settings/general");
+
+    fireEvent.click(screen.getByRole("button", { name: "Shortcuts" }));
+    expect(window.location.hash).toBe("#settings/shortcuts");
+  });
+
+  it("opens on the tab named in its address", async () => {
+    window.history.replaceState(null, "", "#settings/toolbars");
+    renderSettings();
+
+    expect(await screen.findByRole("group", { name: "Toolbar" })).toBeInTheDocument();
+    window.history.replaceState(null, "", "#settings");
+  });
 });

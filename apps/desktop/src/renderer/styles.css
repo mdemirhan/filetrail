@@ -5861,9 +5861,13 @@ button.shortcut-slot-key.recording:hover {
   grid-template-rows: minmax(0, 1fr) auto;
 }
 
+/* The path takes the room the status leaves, and shortens itself to fit (ContentPane drops
+   folders from its middle). It is not sized from `.pathbar`'s full width: that left the
+   row always a little short, and the status always cut off. */
 .content-pathbar-row .pathbar {
-  flex: 1 1 auto;
-  min-width: 0;
+  flex: 1 1 0;
+  width: auto;
+  min-width: 45%;
 }
 
 .content-pathbar-status {
@@ -6879,6 +6883,12 @@ button.shortcut-slot-key.recording:hover {
   padding: 0 4px 0 10px;
 }
 
+/* macOS draws the scrollbar over the right edge of a list that scrolls, which is where a
+   row's remove button is: in such a list the button stands clear of it. */
+.clipboard-menu-list-scrolls .clipboard-menu-item {
+  padding-right: 18px;
+}
+
 .clipboard-menu-item-main {
   display: flex;
   flex: 1 1 auto;
@@ -7103,7 +7113,7 @@ button.shortcut-slot-key.recording:hover {
   }
 }
 
-/* In the path bar row the item count gives way before the path does. */
+/* In a row too narrow for both, the status gives way once the path is down to its share. */
 .content-pathbar-status {
   flex: 0 1 auto;
   min-width: 0;

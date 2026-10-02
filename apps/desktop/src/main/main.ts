@@ -31,8 +31,12 @@ import { bootstrapMainProcess, getMainProcessStatus, shutdownMainProcess } from 
 import { resolveBundledFdBinaryPath } from "./fdBinary";
 import { resolveStartupFolderPath } from "./launchContext";
 import { removeRetiredActionLogFiles } from "./logRotation";
+import { readSettingsTabFromUrl } from "./settingsWindowTab";
 let mainWindowRef: BrowserWindow | null = null;
 let settingsWindowRef: BrowserWindow | null = null;
+// The Settings tab that was on screen last, so the window opens where it was left. It is
+// remembered only while the app runs: a fresh launch starts on General.
+let lastSettingsTab: SettingsTab | null = null;
 let aboutWindowRef: BrowserWindow | null = null;
 let acknowledgementsWindowRef: BrowserWindow | null = null;
 let appStateStoreRef: AppStateStore | null = null;
@@ -378,8 +382,13 @@ function openSettingsWindow(tab?: SettingsTab): void {
   settingsWindowRef = settingsWindow;
   keepWindowZoom(settingsWindow, appStateStore);
   const rendererEntryUrl = resolveRendererEntryUrl();
-  // The tab to open on follows "#settings" in the address.
-  const settingsUrl = `${rendererEntryUrl}#settings${tab ? `/${tab}` : ""}`;
+  // The tab to open on follows "#settings" in the address: the one asked for, or the one
+  // Settings was left on.
+  const openOnTab = tab ?? lastSettingsTab;
+  const settingsUrl = `${rendererEntryUrl}#settings${openOnTab ? `/${openOnTab}` : ""}`;
+  const rememberTab = (url: string) => {
+    lastSettingsTab = readSettingsTabFromUrl(url) ?? lastSettingsTab;
+  };
   settingsWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (isAllowedExternalUrl(url)) {
       void shell.openExternal(url);
@@ -391,6 +400,10 @@ function openSettingsWindow(tab?: SettingsTab): void {
       event.preventDefault();
     }
   });
+  // The window puts the tab on screen in its address (a change within the page, which the
+  // guard above lets through).
+  settingsWindow.webContents.on("did-navigate-in-page", (_event, url) => rememberTab(url));
+  settingsWindow.on("close", () => rememberTab(settingsWindow.webContents.getURL()));
   settingsWindow.once("ready-to-show", () => settingsWindow.show());
   settingsWindow.on("closed", () => {
     if (settingsWindowRef === settingsWindow) {

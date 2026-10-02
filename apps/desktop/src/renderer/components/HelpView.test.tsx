@@ -149,4 +149,16 @@ describe("HelpView", () => {
     expect(screen.getByRole("textbox", { name: "Search help" })).toHaveValue("");
     expect(screen.getByRole("heading", { level: 1, name: "Views and panels" })).toBeVisible();
   });
+
+  it("tells which page is on screen, so Help can open on it again", () => {
+    const onTopicChange = vi.fn();
+    render(<HelpView initialTopic="search" onTopicChange={onTopicChange} />);
+
+    expect(screen.getByRole("heading", { level: 1, name: "Searching" })).toBeInTheDocument();
+    expect(onTopicChange).toHaveBeenLastCalledWith("search");
+
+    const topics = within(screen.getByRole("navigation", { name: "Help topics" }));
+    fireEvent.click(topics.getByRole("button", { name: "Working with files" }));
+    expect(onTopicChange).toHaveBeenLastCalledWith("files");
+  });
 });

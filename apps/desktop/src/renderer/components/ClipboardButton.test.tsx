@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 
 import {
@@ -218,5 +218,20 @@ describe("ClipboardButton", () => {
     });
     expect(screen.queryByRole("menuitem", { name: "IMG_0.jpg" })).toBeNull();
     expect(screen.getByRole("menuitem", { name: "IMG_300.jpg" })).toBeInTheDocument();
+  });
+
+  it("keeps the remove buttons clear of the scrollbar in a list long enough to scroll", async () => {
+    renderButton(["/Users/demo/a.txt", "/Users/demo/b.txt"]);
+    await openList();
+    expect(document.querySelector(".clipboard-menu-list")).not.toHaveClass(
+      "clipboard-menu-list-scrolls",
+    );
+    cleanup();
+
+    renderButton(Array.from({ length: 40 }, (_, index) => `/Users/demo/IMG_${index}.jpg`));
+    await openList();
+    expect(document.querySelector(".clipboard-menu-list")).toHaveClass(
+      "clipboard-menu-list-scrolls",
+    );
   });
 });

@@ -157,7 +157,7 @@ type ExplorerShortcutActions = {
   showPathsInFinder: (paths: string[]) => Promise<void>;
   handleSortChange: (sortBy: "name" | "modified" | "size" | "kind") => void;
   toggleFoldersFirst: () => void;
-  openHelp: (topic: HelpTopicId) => void;
+  openHelp: (topic?: HelpTopicId) => void;
 };
 
 type UseExplorerShortcutsArgs = {
@@ -1270,7 +1270,8 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         return;
       }
       if (commandType === "openHelp" || commandType === "openKeyboardShortcuts") {
-        current.openHelp(commandType === "openHelp" ? "navigation" : "shortcuts");
+        // Help opens where it was left; Keyboard Shortcuts always opens that page.
+        current.openHelp(commandType === "openHelp" ? undefined : "shortcuts");
         return;
       }
       if (commandType !== "focusFileSearch") {
@@ -1366,7 +1367,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         if (current.mainView === "help") {
           current.setMainView("explorer");
         } else {
-          current.openHelp("navigation");
+          current.openHelp();
         }
         return;
       }

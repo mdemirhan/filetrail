@@ -83,7 +83,7 @@ import type { HelpTopicId } from "./lib/helpContent";
 import { getBackHistoryEntries, getForwardHistoryEntries } from "./lib/historyMenu";
 import { resolveInfoItem } from "./lib/infoPreview";
 import { EXPLORER_LAYOUT } from "./lib/layoutTokens";
-import { filterEntriesByName, formatItemCount } from "./lib/listFilter";
+import { filterEntriesByName } from "./lib/listFilter";
 import { createRendererLogger } from "./lib/logging";
 import { expandHomeShortcut } from "./lib/pathUtils";
 import { buildPlaces } from "./lib/places";
@@ -964,9 +964,15 @@ export function App() {
       trashPath,
     ],
   );
+  // Help opens on the page asked for, or on the one it was left on. That page is remembered
+  // only while the app runs.
+  const lastHelpTopicRef = useRef<HelpTopicId>("navigation");
   const openHelp = useCallback(
-    (topic: HelpTopicId) => {
-      setHelpRequest((current) => ({ topic, id: current.id + 1 }));
+    (topic?: HelpTopicId) => {
+      setHelpRequest((current) => ({
+        topic: topic ?? lastHelpTopicRef.current,
+        id: current.id + 1,
+      }));
       setMainView("help");
     },
     [setMainView],
@@ -1839,6 +1845,7 @@ export function App() {
                 onInlineRenameCancel: () => setRenameDialogState(null),
                 statusSummary: buildContentStatusSummary({
                   itemCount: currentEntries.length,
+                  shownCount: visibleBrowseEntries.length,
                   selectedPaths: contentSelection.paths,
                   getKnownSizeBytes: (path) => {
                     const entry = currentEntries.find((candidate) => candidate.path === path);
@@ -2111,6 +2118,8 @@ export function App() {
                 ? `Searching “${getFolderDisplayName(searchRootPath)}”`
                 : getFolderDisplayName(currentPath)
             }
+            // Under the name while searching: how the search is going. A folder's item count
+            // is in the status bar, and is not said twice.
             toolbarSubtitle={
               isSearchMode
                 ? formatSearchStatus({
@@ -2120,9 +2129,7 @@ export function App() {
                     elapsedMs: searchElapsedMs,
                     selectedCount: contentSelection.paths.length,
                   })
-                : directoryLoading
-                  ? "Loading…"
-                  : formatItemCount(visibleBrowseEntries.length, currentEntries.length)
+                : ""
             }
           />
         ) : (
@@ -2145,6 +2152,9 @@ export function App() {
                   key={helpRequest.id}
                   layoutMode={singlePanelLayout}
                   initialTopic={helpRequest.topic}
+                  onTopicChange={(topic) => {
+                    lastHelpTopicRef.current = topic;
+                  }}
                   onCustomizeShortcuts={() => openSettingsView("shortcuts")}
                 />
               ) : null}

@@ -40,4 +40,16 @@ describe("buildContentStatusSummary", () => {
       }),
     ).toBe("1 of 1 selected");
   });
+
+  it("says how many items show when typing has narrowed the list", () => {
+    expect(
+      buildContentStatusSummary({
+        itemCount: 240,
+        shownCount: 3,
+        selectedPaths: [],
+        getKnownSizeBytes,
+        availableBytes: 212 * 1024 ** 3,
+      }),
+    ).toBe("3 of 240 items · 212 GB available");
+  });
 });

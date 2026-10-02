@@ -24,10 +24,13 @@ import { useShortcutDisplay } from "../state/shortcutDisplayContext";
 export function HelpView({
   layoutMode = "wide",
   initialTopic = "navigation",
+  onTopicChange,
   onCustomizeShortcuts,
 }: {
   layoutMode?: "wide" | "narrow" | "compact";
   initialTopic?: HelpTopicId;
+  /** Told the page on screen, so that Help can open on it next time. */
+  onTopicChange?: (topic: HelpTopicId) => void;
   /** Opens Settings → Shortcuts. */
   onCustomizeShortcuts?: () => void;
 }) {
@@ -36,6 +39,12 @@ export function HelpView({
   const [query, setQuery] = useState("");
   const contentRef = useRef<HTMLDivElement | null>(null);
   const searching = query.trim().length > 0;
+
+  const onTopicChangeRef = useRef(onTopicChange);
+  onTopicChangeRef.current = onTopicChange;
+  useEffect(() => {
+    onTopicChangeRef.current?.(activeTopicId);
+  }, [activeTopicId]);
 
   // A new page starts at its top.
   // biome-ignore lint/correctness/useExhaustiveDependencies: scrolls when the page shown changes.

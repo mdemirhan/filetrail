@@ -85,6 +85,12 @@ export function SettingsWindowApp() {
   });
   const { preferencesReady, setPreferencesReady, theme, effectiveTheme } = preferences;
 
+  // The tab on screen is kept in the window's address, where the main process reads it to
+  // open Settings on the same tab next time.
+  useEffect(() => {
+    window.history.replaceState(null, "", `#settings/${activeTab}`);
+  }, [activeTab]);
+
   const payload: PreferencesPatch = {
     theme: preferences.theme,
     autoLightTheme: preferences.autoLightTheme,

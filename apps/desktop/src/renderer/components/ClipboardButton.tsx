@@ -231,7 +231,10 @@ export function ClipboardButton({
               <div className="clipboard-menu-list-shell">
                 <div
                   ref={listRef}
-                  className="clipboard-menu-list"
+                  // A list long enough to scroll keeps its remove buttons clear of the scrollbar.
+                  className={`clipboard-menu-list${
+                    rows.length > CLIPBOARD_MENU_VISIBLE_ROWS ? " clipboard-menu-list-scrolls" : ""
+                  }`}
                   style={{
                     maxHeight: `${CLIPBOARD_MENU_VISIBLE_ROWS * CLIPBOARD_MENU_ROW_HEIGHT}px`,
                   }}
