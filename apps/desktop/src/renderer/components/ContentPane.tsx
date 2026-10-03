@@ -718,9 +718,8 @@ export function ContentPane({
                     type="button"
                     className="pathbar-segment pathbar-segment-collapsed"
                     onClick={() => setPathbarExpanded(true)}
-                    title={`Show ${item.hiddenCount} More ${
-                      item.hiddenCount === 1 ? "Folder" : "Folders"
-                    }`}
+                    title={showHiddenFoldersLabel(item.hiddenCount)}
+                    aria-label={showHiddenFoldersLabel(item.hiddenCount)}
                   >
                     <span className="pathbar-segment-label">…</span>
                   </button>
@@ -2092,6 +2091,10 @@ function ContentState({
     return <EmptyState currentPath={currentPath} hiddenItemCount={hiddenItemCount} />;
   }
   return null;
+}
+
+function showHiddenFoldersLabel(hiddenCount: number): string {
+  return `Show ${hiddenCount} More ${hiddenCount === 1 ? "Folder" : "Folders"}`;
 }
 
 function FileNameLabel({

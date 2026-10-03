@@ -36,6 +36,38 @@ describe("ContentPane", () => {
     expect(screen.getByText("Empty folder")).toBeInTheDocument();
   });
 
+  it("names the path bar's … button for what it shows", () => {
+    render(
+      <ContentPane
+        isFocused
+        currentPath="/Users/demo/src/filetrail/apps/desktop"
+        entries={[]}
+        viewMode="list"
+        loading={false}
+        error={null}
+        hiddenItemCount={0}
+        metadataByPath={{}}
+        sortBy="name"
+        sortDirection="asc"
+        onSelectPath={() => undefined}
+        onActivateEntry={() => undefined}
+        onSortChange={() => undefined}
+        onLayoutColumnsChange={() => undefined}
+        onVisiblePathsChange={() => undefined}
+        onNavigatePath={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+        onFocusChange={() => undefined}
+      />,
+    );
+
+    // A row with no room shows only the current folder, after "…".
+    expect(screen.getByRole("button", { name: /^Show \d+ More Folders$/ })).toHaveTextContent("…");
+  });
+
   // ⌘D, ⌘⌫, ⇧⌘N or ⌘O while typing a path must not act on the selected items, so the
   // path field takes the keyboard away from the list, as the search field does.
   it("gives up the keyboard while the path field is being typed in, and takes it back after", async () => {

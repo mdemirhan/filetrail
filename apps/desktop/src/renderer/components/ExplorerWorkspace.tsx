@@ -1043,7 +1043,7 @@ export function ExplorerWorkspace({
           type="button"
           className={`tb-btn tb-btn-icon${viewOptionsMenuStyle ? " active" : ""}`}
           title="View Options"
-          aria-label="View options"
+          aria-label="View Options"
           aria-haspopup="menu"
           aria-expanded={viewOptionsMenuStyle !== null}
           onClick={() => {
@@ -1068,7 +1068,7 @@ export function ExplorerWorkspace({
                 ref={viewOptionsMenuRef}
                 className="toolbar-menu"
                 role="menu"
-                aria-label="View options"
+                aria-label="View Options"
                 style={viewOptionsMenuStyle}
               >
                 {viewOptionsItems.map((item) => {
@@ -1285,7 +1285,7 @@ export function ExplorerWorkspace({
             title={`Sort By: ${getSortByLabel(sortBy)}, ${
               sortDirection === "asc" ? "Ascending" : "Descending"
             }`}
-            aria-label="Sort by"
+            aria-label="Sort By"
             aria-haspopup="menu"
             aria-expanded={sortMenuOpen}
           >

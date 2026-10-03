@@ -445,8 +445,8 @@ describe("ExplorerWorkspace", () => {
     const onCustomizeToolbar = vi.fn();
     renderExplorerWorkspace({ onCustomizeToolbar });
 
-    fireEvent.click(screen.getByRole("button", { name: "View options" }));
-    const menu = screen.getByRole("menu", { name: "View options" });
+    fireEvent.click(screen.getByRole("button", { name: "View Options" }));
+    const menu = screen.getByRole("menu", { name: "View Options" });
     const rows = Array.from(menu.querySelectorAll(".toolbar-menu-item"), (row) => [
       row.querySelector(".toolbar-menu-label")?.textContent,
       row.querySelector(".toolbar-menu-shortcut")?.textContent ?? null,
@@ -462,7 +462,7 @@ describe("ExplorerWorkspace", () => {
 
     fireEvent.click(screen.getByRole("menuitem", { name: "Customize Toolbar…" }));
     expect(onCustomizeToolbar).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("menu", { name: "View options" })).toBeNull();
+    expect(screen.queryByRole("menu", { name: "View Options" })).toBeNull();
   });
 
   it("opens the sort menu and applies a selected sort option", () => {
@@ -472,7 +472,7 @@ describe("ExplorerWorkspace", () => {
       onSortChange: handleSortChange,
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Sort by" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sort By" }));
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Size" }));
 
     expect(handleSortChange).toHaveBeenCalledWith("size");
@@ -590,7 +590,7 @@ describe("ExplorerWorkspace customizing the toolbar", () => {
       onCustomizeToolbar,
     });
 
-    fireEvent.contextMenu(screen.getByRole("button", { name: "Sort by" }));
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Sort By" }));
     expect(screen.queryByRole("menu", { name: "Toolbar" })).toBeNull();
 
     fireEvent.contextMenu(container.querySelector(".toolbar-title") as HTMLElement);
