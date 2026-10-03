@@ -33,11 +33,11 @@ export function createTrashItem(args: {
       const onStartupDisk =
         item?.dev !== undefined && home?.dev !== undefined && item.dev === home.dev;
       if (onStartupDisk || item === null) {
-        throw new Error(reason ?? `“${basename(path)}” couldn't be moved to the Trash.`);
+        throw new Error(reason ?? `“${basename(path)}” couldn’t be moved to the Trash.`);
       }
       throw Object.assign(
         new Error(
-          `“${basename(path)}” couldn't be moved to the Trash. This disk may not have a Trash.`,
+          `“${basename(path)}” couldn’t be moved to the Trash. This disk may not have a Trash.`,
         ),
         { code: NO_TRASH_ERROR_CODE, cause: error },
       );

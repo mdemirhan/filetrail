@@ -76,7 +76,7 @@ describe("createTrashItem", () => {
 
     await expect(trashItem("/Volumes/Share/a.txt")).rejects.toMatchObject({
       code: NO_TRASH_ERROR_CODE,
-      message: "“a.txt” couldn't be moved to the Trash. This disk may not have a Trash.",
+      message: "“a.txt” couldn’t be moved to the Trash. This disk may not have a Trash.",
     });
   });
 

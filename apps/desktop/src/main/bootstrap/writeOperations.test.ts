@@ -132,7 +132,7 @@ describe("createWriteOperationCoordinator", () => {
         status: "partial",
         completedItemCount: 2,
         result: expect.objectContaining({
-          error: "“b.txt” couldn't be moved to the Trash because its disk has no Trash.",
+          error: "“b.txt” couldn’t be moved to the Trash because its disk has no Trash.",
           items: [
             expect.objectContaining({ sourcePath: "/Users/demo/a.txt", status: "completed" }),
             expect.objectContaining({ sourcePath: "/Users/demo/b.txt", status: "failed" }),
@@ -2274,7 +2274,7 @@ describe("the Trash", () => {
         sourcePath: "/Volumes/Share/a.txt",
         status: "failed",
         noTrash: true,
-        error: "“a.txt” couldn't be moved to the Trash because its disk has no Trash.",
+        error: "“a.txt” couldn’t be moved to the Trash because its disk has no Trash.",
       }),
       expect.not.objectContaining({ noTrash: true }),
     ]);
