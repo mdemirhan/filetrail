@@ -3097,8 +3097,43 @@ export function useExplorerActions(args: {
       setCopyPasteDialogState({ type: "confirmDotName", request });
       return;
     }
-    await startRename(request, refuseRenameName);
+    await startRename(request, (message) => {
+      // The person may have left the folder while the name was checked (a click on another
+      // folder ends the field and opens that folder): with no field left to show it under,
+      // the refusal gets a dialog of its own, and nothing waits on a field that is gone.
+      if (dialogState.inline && !renameFieldItemShownRef.current(dialogState.sourcePath)) {
+        setRenameDialogState(null);
+        showModalNotice(getCopyLikePreStartFailureTitle("rename"), message);
+        return;
+      }
+      refuseRenameName(message);
+    });
   }
+
+  // Whether the item a rename field is on is still in the list on screen, read when it is
+  // asked rather than when the name was submitted.
+  const renameFieldItemShownRef = useRef((path: string) =>
+    currentEntries.some((entry) => entry.path === path),
+  );
+  renameFieldItemShownRef.current = (path: string) =>
+    !isSearchModeRef.current && currentEntries.some((entry) => entry.path === path);
+
+  // A rename field whose item has left the list (another folder was opened, the item was
+  // removed) closes: it would otherwise hold the keyboard with nothing on screen to type in.
+  // A refusal it was showing is said in a dialog instead, so it isn't lost.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: showModalNotice reads current state when called; only the list and the field decide this.
+  useEffect(() => {
+    if (
+      !renameDialogState?.inline ||
+      (!isSearchMode && currentEntries.some((entry) => entry.path === renameDialogState.sourcePath))
+    ) {
+      return;
+    }
+    setRenameDialogState(null);
+    if (renameDialogState.error !== null) {
+      showModalNotice(getCopyLikePreStartFailureTitle("rename"), renameDialogState.error);
+    }
+  }, [currentEntries, isSearchMode, renameDialogState, setRenameDialogState]);
 
   // A refused name keeps the field (or dialog) open with the reason under it. The count lets
   // the field know it was refused again even when the reason reads the same as last time.

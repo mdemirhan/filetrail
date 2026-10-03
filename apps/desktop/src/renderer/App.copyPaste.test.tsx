@@ -11542,3 +11542,61 @@ describe("what stays on screen when an operation finishes", () => {
     expect(screen.queryByTitle("/Users/demo/source.txt")).not.toBeInTheDocument();
   });
 });
+
+describe("a rename refused after leaving its folder", () => {
+  // Clicking another folder ends the name field (it is submitted) and opens that folder;
+  // the refusal comes back with no field to show it under.
+  it("says why in a dialog, and leaves the keyboard working", async () => {
+    const harness = createAppHarness({
+      renameErrors: [new Error("An item named “Folder” already exists.")],
+    });
+    renderApp(harness);
+
+    await selectItem("/Users/demo/source.txt");
+    await pressKey({ key: "F2" });
+    const renameInput = await screen.findByLabelText("Rename source.txt");
+    const treeFolder = await screen.findByTitle("tree:/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.change(renameInput, { target: { value: "Folder" } });
+      fireEvent.keyDown(renameInput, { key: "Enter" });
+      fireEvent.click(treeFolder);
+    });
+
+    const dialog = await screen.findByRole("dialog", { name: "Rename couldn't start" });
+    expect(dialog).toHaveTextContent("An item named “Folder” already exists.");
+    expect(screen.queryByLabelText("Rename source.txt")).not.toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "OK" }));
+    });
+
+    const tabsBefore = screen.queryAllByRole("tab").length;
+    await pressKey({ key: "t", metaKey: true });
+    await vi.waitFor(() => {
+      expect(screen.queryAllByRole("tab").length).toBeGreaterThan(tabsBefore);
+    });
+  });
+
+  it("closes the name field when another folder is opened, and the keyboard works there", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+
+    await selectItem("/Users/demo/source.txt");
+    await pressKey({ key: "F2" });
+    await screen.findByLabelText("Rename source.txt");
+    await act(async () => {
+      fireEvent.click(screen.getByTitle("tree:/Users/demo/Folder"));
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.queryByLabelText("Rename source.txt")).not.toBeInTheDocument();
+    });
+    expect(harness.invocations.some((call) => call.channel === "writeOperation:rename")).toBe(
+      false,
+    );
+    const tabsBefore = screen.queryAllByRole("tab").length;
+    await pressKey({ key: "t", metaKey: true });
+    await vi.waitFor(() => {
+      expect(screen.queryAllByRole("tab").length).toBeGreaterThan(tabsBefore);
+    });
+  });
+});
