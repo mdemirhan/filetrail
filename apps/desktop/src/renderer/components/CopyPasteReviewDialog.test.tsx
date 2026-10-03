@@ -9,6 +9,7 @@ import {
   type CopyPastePolicy,
   type CopyPasteReport,
   SAFE_COPY_PASTE_POLICY,
+  policyForAllConflicts,
 } from "../lib/copyPasteReview";
 import { CopyPasteReviewDialog } from "./CopyPasteReviewDialog";
 
@@ -88,13 +89,27 @@ const photos = node({
 });
 const brandNew = node({ id: "item-3", sourcePath: "/src/brand new.txt" });
 
+function chooseForAll(label: string) {
+  fireEvent.click(screen.getByRole("radio", { name: label }));
+}
+
+function checkedForAll(): string | null {
+  const group = screen.getByRole("radiogroup", { name: "For all conflicts:" });
+  const checked = within(group)
+    .getAllByRole("radio")
+    .find((radio) => (radio as HTMLInputElement).checked);
+  return checked ? (checked.closest("label")?.textContent ?? null) : null;
+}
+
 function Harness({
   report,
   onStart = vi.fn(),
   onClose = vi.fn(),
   action = "paste",
+  policy = SAFE_COPY_PASTE_POLICY,
 }: {
   report: CopyPasteReport;
+  policy?: CopyPastePolicy;
   onStart?: () => Promise<boolean>;
   onClose?: () => void;
   action?: "paste" | "move_to" | "duplicate";
@@ -102,7 +117,7 @@ function Harness({
   const [choices, setChoices] = useState<{
     policy: CopyPastePolicy;
     overrides: CopyPasteOverrides;
-  }>({ policy: SAFE_COPY_PASTE_POLICY, overrides: {} });
+  }>({ policy, overrides: {} });
   return (
     <CopyPasteReviewDialog
       action={action}
@@ -117,7 +132,7 @@ function Harness({
 }
 
 describe("CopyPasteReviewDialog", () => {
-  it("lists only the conflicts, with safe choices and a plain start button", () => {
+  it("lists only the conflicts, skipped by default, with a plain start button", () => {
     render(<Harness report={createReport([notes, photos, brandNew])} />);
 
     expect(
@@ -128,12 +143,13 @@ describe("CopyPasteReviewDialog", () => {
         "Nothing is replaced unless you choose Replace. The other item will be added.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Choice for notes.txt")).toHaveValue("keep_both");
-    expect(screen.getByLabelText("Choice for photos")).toHaveValue("merge");
-    expect(screen.getByText("→ notes.txt copy")).toBeInTheDocument();
+    expect(screen.getByLabelText("Choice for notes.txt")).toHaveValue("skip");
+    expect(screen.getByLabelText("Choice for photos")).toHaveValue("skip");
+    expect(checkedForAll()).toBe("Skip");
+    expect(screen.getByText("Existing items stay as they are.")).toBeInTheDocument();
     expect(screen.queryByText("brand new.txt")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Paste" })).toHaveClass("primary");
-    expect(screen.getByText("Adds 1 · Keeps both for 1 · Merges 1 folder")).toBeInTheDocument();
+    expect(screen.getByText("Adds 1 · Skips 2")).toBeInTheDocument();
     expect(screen.getByRole("dialog")).toHaveAccessibleDescription(
       "Nothing is replaced unless you choose Replace. The other item will be added.",
     );
@@ -166,24 +182,56 @@ describe("CopyPasteReviewDialog", () => {
     expect(screen.getByText("1 existing item will be moved to the Trash")).toBeInTheDocument();
     const start = screen.getByRole("button", { name: "Replace 1 and Paste" });
     expect(start).toHaveClass("danger");
-    expect(screen.getByLabelText("For all conflicts:")).toHaveValue("mixed");
+    expect(checkedForAll()).toBeNull();
+    expect(screen.getByText("Set separately for some items below.")).toBeInTheDocument();
 
     fireEvent.click(start);
     fireEvent.click(start);
     expect(onStart).toHaveBeenCalledTimes(1);
   });
 
-  it("applies one choice to every conflict from the 'For all conflicts' menu", () => {
+  it("applies one choice to every conflict from the 'For all conflicts' buttons", () => {
     render(<Harness report={createReport([notes, photos])} />);
 
-    fireEvent.change(screen.getByLabelText("Choice for notes.txt"), { target: { value: "skip" } });
-    fireEvent.change(screen.getByLabelText("For all conflicts:"), {
-      target: { value: "overwrite" },
+    fireEvent.change(screen.getByLabelText("Choice for notes.txt"), {
+      target: { value: "keep_both" },
     });
+    chooseForAll("Replace");
 
+    expect(checkedForAll()).toBe("Replace");
     expect(screen.getByLabelText("Choice for notes.txt")).toHaveValue("overwrite");
     expect(screen.getByLabelText("Choice for photos")).toHaveValue("overwrite");
+    expect(screen.getByText("Existing items go to the Trash.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Replace 2 and Paste" })).toBeInTheDocument();
+
+    chooseForAll("Keep All");
+    expect(screen.getByLabelText("Choice for notes.txt")).toHaveValue("keep_both");
+    expect(screen.getByLabelText("Choice for photos")).toHaveValue("merge");
+    expect(screen.getByText("→ notes.txt copy")).toBeInTheDocument();
+    expect(
+      screen.getByText("Folders merge. Files that exist are added with a “copy” name."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Keeps both for 1 · Merges 1 folder")).toBeInTheDocument();
+
+    chooseForAll("Add Missing");
+    expect(screen.getByLabelText("Choice for notes.txt")).toHaveValue("skip");
+    expect(screen.getByLabelText("Choice for photos")).toHaveValue("merge");
+    expect(
+      screen.getByText("Folders merge. Only files that aren’t there yet are added."),
+    ).toBeInTheDocument();
+  });
+
+  it("leaves Add Missing out of a move, and when no folder already exists", () => {
+    const { unmount } = render(
+      <Harness report={createReport([notes, photos], "cut")} action="move_to" />,
+    );
+    expect(
+      screen.getAllByRole("radio").map((radio) => radio.closest("label")?.textContent),
+    ).toEqual(["Skip", "Keep All", "Replace"]);
+    unmount();
+
+    render(<Harness report={createReport([notes])} />);
+    expect(screen.queryByRole("radio", { name: "Add Missing" })).not.toBeInTheDocument();
   });
 
   it("won't offer Replace for an item that contains what is being pasted", () => {
@@ -218,7 +266,7 @@ describe("CopyPasteReviewDialog", () => {
     expect(
       screen.getByText("This is a large operation (1,200 items in total)."),
     ).toBeInTheDocument();
-    expect(screen.queryByLabelText("For all conflicts:")).not.toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
   });
 
   it("starts with Return on the focused start button", () => {
@@ -315,7 +363,8 @@ describe("CopyPasteReviewDialog", () => {
 
     const { unmount } = render(<Harness report={createReport([notes, brandNew])} />);
     const start = screen.getByRole("button", { name: "Paste" });
-    const firstControl = screen.getByLabelText("For all conflicts:");
+    // The buttons are one stop, on the selected one.
+    const firstControl = screen.getByRole("radio", { name: "Skip" });
     expect(start).toHaveFocus();
 
     fireEvent.keyDown(start, { key: "Tab" });
@@ -337,10 +386,10 @@ describe("CopyPasteReviewDialog", () => {
     render(<Harness report={createReport([notes, photos])} />);
     const notesChoice = screen.getByLabelText("Choice for notes.txt");
 
-    fireEvent.change(notesChoice, { target: { value: "skip" } });
-    expect(screen.getByLabelText("For all conflicts:")).toHaveValue("mixed");
     fireEvent.change(notesChoice, { target: { value: "keep_both" } });
-    expect(screen.getByLabelText("For all conflicts:")).toHaveValue("keep_both");
+    expect(checkedForAll()).toBeNull();
+    fireEvent.change(notesChoice, { target: { value: "skip" } });
+    expect(checkedForAll()).toBe("Skip");
   });
 
   it("doesn't replace rows that can't be replaced when Replace is chosen for all", () => {
@@ -352,9 +401,7 @@ describe("CopyPasteReviewDialog", () => {
     });
     render(<Harness report={createReport([notes, blocked])} />);
 
-    fireEvent.change(screen.getByLabelText("For all conflicts:"), {
-      target: { value: "overwrite" },
-    });
+    chooseForAll("Replace");
 
     expect(screen.getByLabelText("Choice for photos")).toHaveValue("merge");
     expect(
@@ -393,13 +440,11 @@ describe("CopyPasteReviewDialog", () => {
         "Nothing is replaced unless you choose Replace. The other 2 items will be moved.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText("Moves 2 · Keeps both for 1")).toBeInTheDocument();
+    expect(screen.getByText("Moves 2 · Skips 1")).toBeInTheDocument();
     second.unmount();
 
     render(<Harness report={createReport(many)} />);
-    fireEvent.change(screen.getByLabelText("For all conflicts:"), {
-      target: { value: "overwrite" },
-    });
+    chooseForAll("Replace");
     expect(
       screen.getByRole("heading", { name: "1,200 of 1,200 items already exist in “dest”" }),
     ).toBeInTheDocument();
@@ -460,7 +505,7 @@ describe("CopyPasteReviewDialog", () => {
         conflictNodeCount: 2 + index,
       });
     }
-    render(<Harness report={createReport([child])} />);
+    render(<Harness report={createReport([child])} policy={policyForAllConflicts("keep_all")} />);
 
     const deep = screen.getByLabelText("Choice for a/b/c/d/e/f/g/h/IMG.jpg");
     const row = deep.closest("li") as HTMLElement;

@@ -16,11 +16,12 @@ export type CopyPasteAnalysisNode = CopyPasteReport["nodes"][number];
 export type CopyPasteOverrides = Readonly<Record<string, CopyPasteChoice>>;
 export type CopyLikeAction = "paste" | "move_to" | "duplicate";
 
-// Pressing the primary button without changing anything never loses data.
+// Pressing the primary button without changing anything never loses data: whatever is
+// already at the destination is left alone.
 export const SAFE_COPY_PASTE_POLICY: CopyPastePolicy = {
-  file: "keep_both",
-  directory: "merge",
-  mismatch: "keep_both",
+  file: "skip",
+  directory: "skip",
+  mismatch: "skip",
 };
 
 export type ReviewTone = "normal" | "danger" | "muted";
@@ -99,17 +100,60 @@ export function effectiveChoice(
   return choice;
 }
 
-// The "For all conflicts" menu: Keep Both merges folders, the others apply to every kind.
-export function policyForAllConflicts(choice: "keep_both" | "overwrite" | "skip"): CopyPastePolicy {
-  return {
-    file: choice,
-    mismatch: choice,
-    directory: choice === "keep_both" ? "merge" : choice,
-  };
+export type AllConflictsChoice = "skip" | "add_missing" | "keep_all" | "overwrite";
+
+export const ALL_CONFLICTS_LABELS: Record<AllConflictsChoice, string> = {
+  skip: "Skip",
+  add_missing: "Add Missing",
+  keep_all: "Keep All",
+  overwrite: "Replace",
+};
+
+// The "For all conflicts" buttons. Add Missing and Keep All merge folders, so what is inside
+// gets the same treatment; Skip and Replace apply to the folder as a whole.
+export function policyForAllConflicts(choice: AllConflictsChoice): CopyPastePolicy {
+  switch (choice) {
+    case "skip":
+      return { file: "skip", directory: "skip", mismatch: "skip" };
+    case "add_missing":
+      return { file: "skip", directory: "merge", mismatch: "skip" };
+    case "keep_all":
+      return { file: "keep_both", directory: "merge", mismatch: "keep_both" };
+    case "overwrite":
+      return { file: "overwrite", directory: "overwrite", mismatch: "overwrite" };
+  }
 }
 
-type AllConflictsChoice = "keep_both" | "overwrite" | "skip";
-const ALL_CONFLICTS_CHOICES: AllConflictsChoice[] = ["keep_both", "overwrite", "skip"];
+// The buttons offered, in order. Add Missing only differs from Skip when a folder already
+// exists, and a move leaves it out: it would move part of a folder and leave the files that
+// already exist behind, splitting the folder between both places.
+export function allConflictsChoicesFor(report: CopyPasteReport): AllConflictsChoice[] {
+  return report.mode === "cut" || report.summary.directoryConflictCount === 0
+    ? ["skip", "keep_all", "overwrite"]
+    : ["skip", "add_missing", "keep_all", "overwrite"];
+}
+
+// What the selected button does, shown under the buttons.
+export function describeAllConflictsChoice(
+  choice: AllConflictsChoice | null,
+  report: CopyPasteReport,
+): string {
+  const folders = report.summary.directoryConflictCount > 0;
+  switch (choice) {
+    case null:
+      return "Set separately for some items below.";
+    case "skip":
+      return "Existing items stay as they are.";
+    case "add_missing":
+      return "Folders merge. Only files that aren’t there yet are added.";
+    case "keep_all":
+      return folders
+        ? "Folders merge. Files that exist are added with a “copy” name."
+        : "Files that exist are added with a “copy” name.";
+    case "overwrite":
+      return "Existing items go to the Trash.";
+  }
+}
 
 // The "For all conflicts" value, or null when items were set differently. It comes from
 // what every listed conflict will actually do, so setting an item back to the common choice
@@ -119,9 +163,11 @@ export function currentAllConflictsChoice(
   policy: CopyPastePolicy,
   overrides: CopyPasteOverrides,
 ): AllConflictsChoice | null {
-  // The menu's own value comes first when several match (e.g. every item blocks Replace).
-  const candidates = [...ALL_CONFLICTS_CHOICES].sort(
-    (left, right) => Number(right === policy.file) - Number(left === policy.file),
+  // The buttons' own value comes first when several match (e.g. every item blocks Replace).
+  const candidates = allConflictsChoicesFor(report).sort(
+    (left, right) =>
+      Number(samePolicy(policyForAllConflicts(right), policy)) -
+      Number(samePolicy(policyForAllConflicts(left), policy)),
   );
   for (const candidate of candidates) {
     const expected = policyForAllConflicts(candidate);
@@ -130,6 +176,14 @@ export function currentAllConflictsChoice(
     }
   }
   return null;
+}
+
+function samePolicy(left: CopyPastePolicy, right: CopyPastePolicy): boolean {
+  return (
+    left.file === right.file &&
+    left.directory === right.directory &&
+    left.mismatch === right.mismatch
+  );
 }
 
 // Whether the current choices do the same as `expected` with no per-item choices, looking

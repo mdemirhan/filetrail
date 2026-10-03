@@ -3,14 +3,18 @@ import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "
 import type { CopyPasteChoice } from "@filetrail/contracts";
 
 import {
+  ALL_CONFLICTS_LABELS,
+  type AllConflictsChoice,
   CHOICE_LABELS,
   type CopyLikeAction,
   type CopyPasteOverrides,
   type CopyPastePolicy,
   type CopyPasteReport,
   type ReviewRow,
+  allConflictsChoicesFor,
   buildReviewRows,
   currentAllConflictsChoice,
+  describeAllConflictsChoice,
   dirnameOf,
   effectiveChoice,
   formatCount,
@@ -61,6 +65,8 @@ export function CopyPasteReviewDialog({
   const primaryButtonRef = useRef<HTMLButtonElement | null>(null);
   const titleId = useId();
   const messageId = useId();
+  const allConflictsLabelId = useId();
+  const allConflictsHintId = useId();
   const [now] = useState(() => Date.now());
   const verb = getActionVerb(action, report.mode);
   const destinationName = leafName(report.destinationDirectoryPath);
@@ -200,32 +206,18 @@ export function CopyPasteReviewDialog({
 
         {hasConflicts ? (
           <div className="copy-paste-sheet-bar">
-            <label className="copy-paste-sheet-bar-label" htmlFor="copy-paste-all-conflicts">
+            <span className="copy-paste-sheet-bar-label" id={allConflictsLabelId}>
               For all conflicts:
-            </label>
-            <select
-              id="copy-paste-all-conflicts"
-              className="copy-paste-choice"
-              value={allConflictsChoice ?? "mixed"}
-              onChange={(event) => {
-                const value = event.target.value;
-                if (value === "keep_both" || value === "overwrite" || value === "skip") {
-                  onChoicesChange({ policy: policyForAllConflicts(value), overrides: {} });
-                }
-              }}
-            >
-              {allConflictsChoice === null ? (
-                <option value="mixed" disabled>
-                  Mixed
-                </option>
-              ) : null}
-              <option value="keep_both">Keep Both</option>
-              <option value="overwrite">Replace</option>
-              <option value="skip">Skip</option>
-            </select>
-            {allConflictsChoice === "keep_both" && report.summary.directoryConflictCount > 0 ? (
-              <span className="copy-paste-sheet-bar-note">Folders merge</span>
-            ) : null}
+            </span>
+            <AllConflictsButtons
+              labelledBy={allConflictsLabelId}
+              describedBy={allConflictsHintId}
+              choices={allConflictsChoicesFor(report)}
+              value={allConflictsChoice}
+              onChange={(choice) =>
+                onChoicesChange({ policy: policyForAllConflicts(choice), overrides: {} })
+              }
+            />
             <span className="copy-paste-sheet-bar-spacer" />
             {summary.newTopLevelCount > 0 ? (
               <button
@@ -239,6 +231,9 @@ export function CopyPasteReviewDialog({
                   : `Show ${pluralize(summary.newTopLevelCount, "new item")}`}
               </button>
             ) : null}
+            <p id={allConflictsHintId} className="copy-paste-sheet-bar-hint">
+              {describeAllConflictsChoice(allConflictsChoice, report)}
+            </p>
           </div>
         ) : null}
 
@@ -285,6 +280,51 @@ export function CopyPasteReviewDialog({
           </button>
         </footer>
       </dialog>
+    </div>
+  );
+}
+
+// A segmented control: one click picks what happens to every conflict. The segments are
+// radio buttons, so Tab lands on the selected one and the arrow keys move the choice.
+function AllConflictsButtons({
+  labelledBy,
+  describedBy,
+  choices,
+  value,
+  onChange,
+}: {
+  labelledBy: string;
+  describedBy: string;
+  choices: AllConflictsChoice[];
+  value: AllConflictsChoice | null;
+  onChange: (choice: AllConflictsChoice) => void;
+}) {
+  const name = useId();
+  return (
+    <div
+      className="copy-paste-segmented"
+      role="radiogroup"
+      aria-labelledby={labelledBy}
+      aria-describedby={describedBy}
+    >
+      {choices.map((choice) => (
+        <label
+          key={choice}
+          className={`copy-paste-segment${value === choice ? " is-selected" : ""}${
+            choice === "overwrite" ? " is-danger" : ""
+          }`}
+        >
+          <input
+            type="radio"
+            className="sr-only"
+            name={name}
+            value={choice}
+            checked={value === choice}
+            onChange={() => onChange(choice)}
+          />
+          {ALL_CONFLICTS_LABELS[choice]}
+        </label>
+      ))}
     </div>
   );
 }

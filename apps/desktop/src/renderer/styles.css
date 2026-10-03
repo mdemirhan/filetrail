@@ -6453,9 +6453,10 @@ button.shortcut-slot-key.recording:hover {
 
 .copy-paste-sheet-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  padding: 8px 24px;
+  gap: 6px 10px;
+  padding: 10px 24px;
   border-top: 1px solid var(--border-light);
   border-bottom: 1px solid var(--border-light);
   background: color-mix(in srgb, var(--neutral-ink) 2.5%, transparent);
@@ -6465,8 +6466,56 @@ button.shortcut-slot-key.recording:hover {
   font-weight: 500;
 }
 
-.copy-paste-sheet-bar-note {
+/* What the selected button does, on its own line below the buttons. */
+.copy-paste-sheet-bar-hint {
+  flex: 1 0 100%;
+  margin: 0;
   color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* "For all conflicts": a segmented control with the selected segment raised, like the
+   view switch in the toolbar. */
+.copy-paste-segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 7px;
+  background: var(--bg-hover);
+}
+
+.copy-paste-segment {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: default;
+  white-space: nowrap;
+}
+
+.copy-paste-segment:hover {
+  color: var(--text-primary);
+}
+
+.copy-paste-segment.is-selected {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-weight: 500;
+  box-shadow: 0 0.5px 1.5px rgba(0, 0, 0, 0.2);
+}
+
+.copy-paste-segment.is-danger.is-selected {
+  color: var(--danger);
+}
+
+.copy-paste-segment:has(input:focus-visible) {
+  outline: 2px solid var(--ft-accent-solid);
+  outline-offset: 1px;
 }
 
 .copy-paste-sheet-bar-spacer {

@@ -5015,7 +5015,7 @@ describe("App copy/paste integration", () => {
     });
 
     await screen.findByRole("dialog", { name: "“Folder” already exists in “demo”" });
-    // Merging is the safe default; replacing takes an explicit choice and a red button.
+    // Skipping is the safe default; replacing takes an explicit choice and a red button.
     expect(screen.getByRole("button", { name: "Duplicate" })).toBeInTheDocument();
     await act(async () => {
       fireEvent.change(screen.getByLabelText("Choice for Folder"), {
@@ -5034,9 +5034,9 @@ describe("App copy/paste integration", () => {
     ).toMatchObject({
       action: "duplicate",
       policy: {
-        file: "keep_both",
-        directory: "merge",
-        mismatch: "keep_both",
+        file: "skip",
+        directory: "skip",
+        mismatch: "skip",
       },
       overrides: [{ nodeId: expect.any(String), action: "overwrite" }],
     });
@@ -6978,11 +6978,11 @@ describe("App copy/paste integration", () => {
       action: "move_to",
       sourcePaths: ["/Users/demo/test3_1"],
       destinationDirectoryPath: "/Users/demo/test2",
-      // Folders merge by default, so nothing is lost without an explicit Replace.
+      // Existing items are skipped by default, so nothing is lost without an explicit Replace.
       policy: {
-        file: "keep_both",
-        directory: "merge",
-        mismatch: "keep_both",
+        file: "skip",
+        directory: "skip",
+        mismatch: "skip",
       },
     });
   });
@@ -7066,11 +7066,11 @@ describe("App copy/paste integration", () => {
       action: "move_to",
       sourcePaths: ["/Users/demo/test3_1"],
       destinationDirectoryPath: "/Users/demo/test2",
-      // Folders merge by default, so nothing is lost without an explicit Replace.
+      // Existing items are skipped by default, so nothing is lost without an explicit Replace.
       policy: {
-        file: "keep_both",
-        directory: "merge",
-        mismatch: "keep_both",
+        file: "skip",
+        directory: "skip",
+        mismatch: "skip",
       },
     });
   });
@@ -7153,11 +7153,11 @@ describe("App copy/paste integration", () => {
       action: "move_to",
       sourcePaths: ["/Users/demo/test3_1"],
       destinationDirectoryPath: "/Users/demo/test2",
-      // Folders merge by default, so nothing is lost without an explicit Replace.
+      // Existing items are skipped by default, so nothing is lost without an explicit Replace.
       policy: {
-        file: "keep_both",
-        directory: "merge",
-        mismatch: "keep_both",
+        file: "skip",
+        directory: "skip",
+        mismatch: "skip",
       },
     });
   });

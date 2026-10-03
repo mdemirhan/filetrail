@@ -2,8 +2,10 @@ import {
   type CopyPasteAnalysisNode,
   type CopyPasteReport,
   SAFE_COPY_PASTE_POLICY,
+  allConflictsChoicesFor,
   buildReviewRows,
   currentAllConflictsChoice,
+  describeAllConflictsChoice,
   formatReviewDate,
   formatReviewSummary,
   policyForAllConflicts,
@@ -117,12 +119,83 @@ const config = node({
   destinationOnly: { count: 1, samplePaths: ["settings.ini"] },
 });
 const brandNew = node({ id: "item-4", sourcePath: "/src/brand new.txt" });
+const KEEP_ALL = policyForAllConflicts("keep_all");
 
 describe("copy/paste review model", () => {
-  it("keeps both files and merges folders by default, listing only conflicts", () => {
-    const rows = buildReviewRows({
+  it("skips every conflict by default, folders included", () => {
+    const args = {
       report: report([notes, photos, config, brandNew]),
       policy: SAFE_COPY_PASTE_POLICY,
+      overrides: {},
+    };
+    const rows = buildReviewRows({ ...args, showNewItems: false, now: NOW });
+
+    expect(rows.map((row) => [row.name, row.choice, row.detail])).toEqual([
+      ["notes.txt", "skip", "Left as is"],
+      ["photos", "skip", "Left as is"],
+      ["config", "skip", "Left as is"],
+    ]);
+    expect(summarizeReview(args)).toMatchObject({ added: 1, skipped: 3, merged: 0 });
+    expect(currentAllConflictsChoice(args.report, args.policy, {})).toBe("skip");
+  });
+
+  it("merges folders and skips files that exist with Add Missing", () => {
+    const args = {
+      report: report([notes, photos, config, brandNew]),
+      policy: policyForAllConflicts("add_missing"),
+      overrides: {},
+    };
+    const rows = buildReviewRows({ ...args, showNewItems: false, now: NOW });
+
+    expect(rows.map((row) => [row.name, row.choice, row.depth])).toEqual([
+      ["notes.txt", "skip", 0],
+      ["photos", "merge", 0],
+      ["a.jpg", "skip", 1],
+      ["config", "skip", 0],
+    ]);
+    expect(summarizeReview(args)).toMatchObject({ added: 2, skipped: 3, merged: 1 });
+    expect(currentAllConflictsChoice(args.report, args.policy, {})).toBe("add_missing");
+  });
+
+  it("offers Add Missing only for a copy with a folder that already exists", () => {
+    expect(allConflictsChoicesFor(report([notes, photos]))).toEqual([
+      "skip",
+      "add_missing",
+      "keep_all",
+      "overwrite",
+    ]);
+    // Moving only the missing files would split the folder between both places.
+    expect(allConflictsChoicesFor(report([notes, photos], "cut"))).toEqual([
+      "skip",
+      "keep_all",
+      "overwrite",
+    ]);
+    // Without a folder it would do the same as Skip.
+    expect(allConflictsChoicesFor(report([notes, config]))).toEqual([
+      "skip",
+      "keep_all",
+      "overwrite",
+    ]);
+  });
+
+  it("says what the 'For all conflicts' choice does", () => {
+    const withFolder = report([notes, photos]);
+    expect(describeAllConflictsChoice("skip", withFolder)).toBe("Existing items stay as they are.");
+    expect(describeAllConflictsChoice("keep_all", withFolder)).toBe(
+      "Folders merge. Files that exist are added with a “copy” name.",
+    );
+    expect(describeAllConflictsChoice("keep_all", report([notes]))).toBe(
+      "Files that exist are added with a “copy” name.",
+    );
+    expect(describeAllConflictsChoice(null, withFolder)).toBe(
+      "Set separately for some items below.",
+    );
+  });
+
+  it("keeps both files and merges folders with Keep All, listing only conflicts", () => {
+    const rows = buildReviewRows({
+      report: report([notes, photos, config, brandNew]),
+      policy: KEEP_ALL,
       overrides: {},
       showNewItems: false,
       now: NOW,
@@ -188,7 +261,7 @@ describe("copy/paste review model", () => {
     const describe = (destinationOnly: CopyPasteAnalysisNode["destinationOnly"]) =>
       buildReviewRows({
         report: report([{ ...photos, destinationOnly }]),
-        policy: SAFE_COPY_PASTE_POLICY,
+        policy: KEEP_ALL,
         overrides: {},
         showNewItems: false,
         now: NOW,
@@ -235,7 +308,7 @@ describe("copy/paste review model", () => {
   it("names nested rows by their path below the source folder", () => {
     const rows = buildReviewRows({
       report: report([photos]),
-      policy: SAFE_COPY_PASTE_POLICY,
+      policy: KEEP_ALL,
       overrides: {},
       showNewItems: false,
       now: NOW,
@@ -246,7 +319,7 @@ describe("copy/paste review model", () => {
   it("applies per-item choices and says where skipped moves stay", () => {
     const rows = buildReviewRows({
       report: report([notes, photos], "cut"),
-      policy: SAFE_COPY_PASTE_POLICY,
+      policy: KEEP_ALL,
       overrides: { "item-1": "skip", "item-2": "keep_both" },
       showNewItems: false,
       now: NOW,
@@ -261,7 +334,7 @@ describe("copy/paste review model", () => {
   it("says each skipped move stays in its own folder", () => {
     const rows = buildReviewRows({
       report: report([notes, photos], "cut"),
-      policy: SAFE_COPY_PASTE_POLICY,
+      policy: KEEP_ALL,
       overrides: { "item-2/a.jpg": "skip" },
       showNewItems: false,
       now: NOW,
@@ -272,7 +345,7 @@ describe("copy/paste review model", () => {
   it("shows new items on request", () => {
     const rows = buildReviewRows({
       report: report([notes, brandNew]),
-      policy: SAFE_COPY_PASTE_POLICY,
+      policy: KEEP_ALL,
       overrides: {},
       showNewItems: true,
       now: NOW,
@@ -286,7 +359,7 @@ describe("copy/paste review model", () => {
   it("summarizes what the operation will do", () => {
     const summary = summarizeReview({
       report: report([notes, photos, config, brandNew]),
-      policy: SAFE_COPY_PASTE_POLICY,
+      policy: KEEP_ALL,
       overrides: { "item-3": "overwrite" },
     });
     expect(summary).toMatchObject({
@@ -312,26 +385,26 @@ describe("copy/paste review model", () => {
 
   it("reports the 'For all conflicts' choice, or mixed", () => {
     const nodes = report([notes, photos, config]);
-    expect(currentAllConflictsChoice(nodes, SAFE_COPY_PASTE_POLICY, {})).toBe("keep_both");
-    expect(currentAllConflictsChoice(nodes, policyForAllConflicts("skip"), {})).toBe("skip");
-    expect(currentAllConflictsChoice(nodes, SAFE_COPY_PASTE_POLICY, { "item-1": "skip" })).toBe(
-      null,
+    expect(currentAllConflictsChoice(nodes, KEEP_ALL, {})).toBe("keep_all");
+    expect(currentAllConflictsChoice(nodes, SAFE_COPY_PASTE_POLICY, {})).toBe("skip");
+    // Merging a folder and skipping what is inside is Add Missing.
+    expect(currentAllConflictsChoice(nodes, SAFE_COPY_PASTE_POLICY, { "item-2": "merge" })).toBe(
+      "add_missing",
     );
+    expect(currentAllConflictsChoice(nodes, KEEP_ALL, { "item-1": "skip" })).toBe(null);
     // A nested conflict set differently makes it mixed too.
-    expect(
-      currentAllConflictsChoice(nodes, SAFE_COPY_PASTE_POLICY, { "item-2/a.jpg": "skip" }),
-    ).toBeNull();
+    expect(currentAllConflictsChoice(nodes, KEEP_ALL, { "item-2/a.jpg": "skip" })).toBeNull();
   });
 
   it("goes back to a single 'For all conflicts' value when an item is set back", () => {
     const nodes = report([notes, photos]);
     // Choices equal to what "For all conflicts" does are not a difference.
     expect(
-      currentAllConflictsChoice(nodes, SAFE_COPY_PASTE_POLICY, {
+      currentAllConflictsChoice(nodes, KEEP_ALL, {
         "item-1": "keep_both",
         "item-2": "merge",
       }),
-    ).toBe("keep_both");
+    ).toBe("keep_all");
     expect(
       currentAllConflictsChoice(nodes, policyForAllConflicts("overwrite"), {
         "item-1": "overwrite",
