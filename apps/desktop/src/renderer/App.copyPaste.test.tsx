@@ -2752,6 +2752,8 @@ describe("App copy/paste integration", () => {
       "Show Info",
       "Paste",
       "Copy Path",
+      "View As",
+      "Sort By",
       "Open in Terminal",
       "Show in Finder",
     ]);
@@ -2761,6 +2763,21 @@ describe("App copy/paste integration", () => {
         (item) => item.querySelector(".context-menu-item-label")?.textContent,
       ),
     ).toEqual(["Paste"]);
+
+    // View As ticks the view on screen, and switches to another.
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "View As" }));
+    expect(screen.getByRole("menuitemradio", { name: "List" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitemradio", { name: "Icons" }));
+    });
+    expect(document.querySelector(".context-menu")).toBeNull();
+    expect(screen.getByRole("button", { name: "View as Icons" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 
   it("runs background context actions on the current folder", async () => {
@@ -3128,7 +3145,7 @@ describe("App copy/paste integration", () => {
     ]);
   });
 
-  it("disables Edit in the context menu for folders and mixed selections", async () => {
+  it("names the editor in Edit, and leaves Edit out for folders and mixed selections", async () => {
     const harness = createAppHarness();
 
     render(
@@ -3141,21 +3158,50 @@ describe("App copy/paste integration", () => {
     const folderButton = await screen.findByTitle("/Users/demo/Folder");
 
     await act(async () => {
-      fireEvent.click(folderButton);
-      fireEvent.contextMenu(folderButton);
+      fireEvent.click(sourceButton);
+      fireEvent.contextMenu(sourceButton);
     });
-    expect(screen.getByRole("button", { name: "Edit" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("button", { name: /^Edit in TextEdit/ })).toHaveAttribute(
+      "aria-disabled",
+      "false",
+    );
 
     await act(async () => {
       fireEvent.mouseDown(document.body);
     });
+    await act(async () => {
+      fireEvent.click(folderButton);
+      fireEvent.contextMenu(folderButton);
+    });
+    expect(screen.queryByRole("button", { name: /^Edit in/ })).not.toBeInTheDocument();
 
+    await act(async () => {
+      fireEvent.mouseDown(document.body);
+    });
     await act(async () => {
       fireEvent.click(sourceButton);
       fireEvent.click(folderButton, { metaKey: true });
       fireEvent.contextMenu(folderButton);
     });
-    expect(screen.getByRole("button", { name: "Edit" })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.queryByRole("button", { name: /^Edit in/ })).not.toBeInTheDocument();
+  });
+
+  it("quick-looks an item from its menu, which has no Paste for a file", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+
+    const sourceButton = await screen.findByTitle("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.contextMenu(sourceButton);
+    });
+    expect(screen.queryByRole("button", { name: /^Paste/ })).not.toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Quick Look/ }));
+    });
+
+    expect(harness.invocations.findLast((call) => call.channel === "system:quickLook")).toEqual(
+      expect.objectContaining({ payload: { path: "/Users/demo/source.txt" } }),
+    );
   });
 
   it("shows a notice when Open exceeds the configured item limit", async () => {
@@ -3360,7 +3406,7 @@ describe("App copy/paste integration", () => {
       fireEvent.contextMenu(treeFolderButton);
     });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Paste" }));
+      fireEvent.click(screen.getByRole("button", { name: "Paste into Folder" }));
     });
 
     await vi.waitFor(() => {
@@ -3458,7 +3504,7 @@ describe("App copy/paste integration", () => {
         fireEvent.contextMenu(favoriteButton);
       });
       await act(async () => {
-        fireEvent.click(screen.getByRole("button", { name: "Paste" }));
+        fireEvent.click(screen.getByRole("button", { name: "Paste into Folder" }));
       });
 
       await vi.waitFor(() => {
@@ -3531,9 +3577,7 @@ describe("App copy/paste integration", () => {
         fireEvent.contextMenu(targetButton);
       });
 
-      const disabledButton =
-        screen.queryByRole("button", { name: "Paste" }) ??
-        screen.queryByRole("button", { name: "Paste" });
+      const disabledButton = screen.queryByRole("button", { name: "Paste into Folder" });
       expect(disabledButton).not.toBeNull();
       if (!disabledButton) {
         throw new Error("Disabled Paste button missing.");
@@ -3552,8 +3596,8 @@ describe("App copy/paste integration", () => {
         expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
         expect(screen.queryByRole("button", { name: "RenameF2" })).toBeNull();
       } else {
-        expect(screen.getByRole("button", { name: "Paste" })).toBeInTheDocument();
-        expect(screen.queryByRole("button", { name: "Paste⌘V" })).toBeNull();
+        expect(screen.getByRole("button", { name: "Paste into Folder" })).toBeInTheDocument();
+        expect(screen.queryByRole("button", { name: "Paste into Folder⌘V" })).toBeNull();
         expect(screen.getByRole("button", { name: "New Folder" })).toBeInTheDocument();
         expect(screen.queryByRole("button", { name: "New Folder⇧⌘N" })).toBeNull();
       }
@@ -3954,7 +3998,7 @@ describe("App copy/paste integration", () => {
     });
   });
 
-  it("offers Root Tree Here for a folder in the file list, but not for a file", async () => {
+  it("roots the tree from a tree folder's menu, and not from the file list's", async () => {
     const harness = createAppHarness();
 
     render(
@@ -3963,23 +4007,22 @@ describe("App copy/paste integration", () => {
       </FiletrailClientProvider>,
     );
 
-    const sourceButton = await screen.findByTitle("/Users/demo/source.txt");
+    const folderButton = await screen.findByTitle("/Users/demo/Folder");
     await act(async () => {
-      fireEvent.contextMenu(sourceButton);
+      fireEvent.contextMenu(folderButton);
     });
     expect(screen.getByRole("button", { name: /^Copy Path/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^Root Tree Here/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Use as Tree Root/ })).not.toBeInTheDocument();
 
     await act(async () => {
-      fireEvent.contextMenu(screen.getByTitle("/Users/demo/Folder"));
+      fireEvent.contextMenu(screen.getByTitle("tree:/Users/demo/Folder"));
     });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^Root Tree Here/ }));
+      fireEvent.click(screen.getByRole("button", { name: /^Use as Tree Root/ }));
     });
 
     await vi.waitFor(() => {
       expect(screen.getByTestId("tree-root")).toHaveTextContent("/Users/demo/Folder");
-      expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/Folder");
     });
   });
 
@@ -5377,12 +5420,12 @@ describe("App copy/paste integration", () => {
     });
     expect(nonProbeInvocations()).toHaveLength(invocationCountBeforeBlockedPaste);
 
-    const sourceButton = await screen.findByRole("button", { name: "source.txt" });
+    const folderButton = await screen.findByRole("button", { name: "Folder" });
     await act(async () => {
-      fireEvent.contextMenu(sourceButton);
+      fireEvent.contextMenu(folderButton);
     });
 
-    expect(await screen.findByRole("button", { name: "Paste" })).toHaveAttribute(
+    expect(await screen.findByRole("button", { name: /^Paste into Folder/ })).toHaveAttribute(
       "aria-disabled",
       "true",
     );
@@ -12064,7 +12107,7 @@ describe("acting on search results", () => {
       fireEvent.contextMenu(await screen.findByTitle("search:/Users/demo/Folder/deep.txt"));
     });
 
-    for (const name of [/^Move to Trash/, /^Rename/, /^Duplicate/, /^Move To…/]) {
+    for (const name of [/^Move to Trash/, /^Rename/, /^Duplicate/, /^Move to…/]) {
       expect(screen.getByRole("button", { name })).toHaveAttribute("aria-disabled", "false");
     }
     expect(screen.queryByRole("button", { name: /^Delete Immediately/ })).not.toBeInTheDocument();
@@ -12338,7 +12381,7 @@ describe("file commands in the Trash", () => {
     for (const name of [/^Paste/, /^New Folder/, /^Duplicate/, /^Move to Trash/]) {
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
     }
-    expect(screen.getByRole("button", { name: /^Move To/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Move to…/ })).toBeInTheDocument();
   });
 
   it("offers no Paste or New Folder on the Trash favorite", async () => {

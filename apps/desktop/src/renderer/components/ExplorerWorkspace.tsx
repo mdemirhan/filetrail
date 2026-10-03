@@ -18,8 +18,11 @@ import type { IpcRequest } from "@filetrail/contracts";
 
 import {
   type ExplorerViewMode,
+  SORT_BY_ORDER,
   THEME_OPTIONS,
   type ThemePreference,
+  VIEW_MODE_NAMES,
+  VIEW_MODE_ORDER,
 } from "../../shared/appPreferences";
 import type { RendererCommandType } from "../../shared/rendererCommands";
 import type { ShortcutCommandId } from "../../shared/shortcuts";
@@ -1174,6 +1177,7 @@ export function ExplorerWorkspace({
               onClick={() => onViewModeChange("icons")}
               title={formatTooltip("View as Icons", shortcutDisplay.written("viewAsIcons"))}
               aria-label="View as Icons"
+              aria-pressed={viewMode === "icons"}
             >
               <ToolbarIcon name="icons" />
             </button>
@@ -1185,6 +1189,7 @@ export function ExplorerWorkspace({
               onClick={() => onViewModeChange("details")}
               title={formatTooltip("View as List", shortcutDisplay.written("viewAsDetails"))}
               aria-label="View as List"
+              aria-pressed={viewMode === "details"}
             >
               <ToolbarIcon name="details" />
             </button>
@@ -1194,6 +1199,7 @@ export function ExplorerWorkspace({
               onClick={() => onViewModeChange("list")}
               title={formatTooltip("View as Compact List", shortcutDisplay.written("viewAsList"))}
               aria-label="View as Compact List"
+              aria-pressed={viewMode === "list"}
             >
               <ToolbarIcon name="list" />
             </button>
@@ -1479,20 +1485,14 @@ export function ExplorerWorkspace({
           },
         ];
       case "view":
-        return (
-          [
-            ["icons", "as Icons"],
-            ["details", "as List"],
-            ["list", "as Compact List"],
-          ] as const
-        ).map(([mode, label]) => ({
+        return VIEW_MODE_ORDER.map((mode) => ({
           key: `${key}:${mode}`,
-          label,
+          label: `as ${VIEW_MODE_NAMES[mode]}`,
           checked: viewMode === mode,
           onSelect: () => onViewModeChange(mode),
         }));
       case "sort":
-        return (["name", "kind", "modified", "size"] as const).map((value) => ({
+        return SORT_BY_ORDER.map((value) => ({
           key: `${key}:${value}`,
           label: `Sort by ${getSortByLabel(value)}`,
           checked: sortBy === value,

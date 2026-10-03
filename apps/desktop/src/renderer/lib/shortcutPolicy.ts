@@ -52,6 +52,7 @@ const TREE_SAFE_RAW_SHORTCUTS = new Set<RawExplorerShortcutId>([
 // The command whose shortcut a context-menu item shows.
 const CONTEXT_MENU_SHORTCUT_COMMANDS = {
   open: "openSelection",
+  quickLook: "quickLookSelection",
   showInfo: "toggleInfoPanel",
   edit: "editSelection",
   cut: "cut",
@@ -328,6 +329,8 @@ function isContextMenuShortcutLive(
   switch (action) {
     case "open":
       return canHandleRendererCommand("openSelection", context);
+    case "quickLook":
+      return canHandleRendererCommand("quickLookSelection", context);
     case "showInfo":
       return canHandleRendererCommand("toggleInfoPanel", context);
     case "edit":

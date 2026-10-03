@@ -35,6 +35,7 @@ import {
 } from "../lib/contentSelection";
 import {
   type ContextMenuActionId,
+  type ContextMenuOptions,
   type ContextMenuSourceSubview,
   type ContextMenuSubmenuAction,
   type ContextMenuSubmenuItem,
@@ -334,10 +335,6 @@ export function useExplorerActions(args: {
       path: string,
       historyMode: "push" | "replace" | "skip",
     ) => Promise<void>;
-    navigateFavoritePath: (
-      path: string,
-      historyMode: "push" | "replace" | "skip",
-    ) => Promise<boolean>;
     rootTreeAtPath: (path: string) => void;
     toggleTreeNode: (path: string) => void;
     refreshDirectory: (options?: {
@@ -446,7 +443,6 @@ export function useExplorerActions(args: {
     restoreExplorerPaneFocus,
     navigateTo,
     navigateTreeFileSystemPath,
-    navigateFavoritePath,
     rootTreeAtPath,
     toggleTreeNode,
     refreshDirectory,
@@ -506,6 +502,17 @@ export function useExplorerActions(args: {
     return isFavoritePath(favorites, targetPath) ? "Remove from Favorites" : "Add to Favorites";
   }, [contextMenuState, contextMenuTargetEntries, favorites, homePath, isSearchMode]);
 
+  const contextMenuOptions = useMemo<ContextMenuOptions>(
+    () => ({
+      favoriteToggleLabel: contextMenuFavoriteToggleLabel,
+      textEditorName: defaultTextEditor.appName,
+      targetsFolder:
+        contextMenuTargetEntries.length > 0 &&
+        contextMenuTargetEntries.every((entry) => isDirectoryLikeEntry(entry)),
+    }),
+    [contextMenuFavoriteToggleLabel, contextMenuTargetEntries, defaultTextEditor.appName],
+  );
+
   const contextMenuHiddenActionIds = useMemo(() => {
     if (!contextMenuState) {
       return [] as ContextMenuActionId[];
@@ -514,25 +521,29 @@ export function useExplorerActions(args: {
     if (contextMenuFavoriteToggleLabel === null) {
       hidden.add("toggleFavorite");
     }
-    // Folder sizes are calculated one folder at a time.
-    if (
-      contextMenuTargetEntries.length !== 1 ||
-      !isDirectoryLikeEntry(contextMenuTargetEntries[0] ?? null)
-    ) {
-      hidden.add("calculateSize");
-    }
-    // In the file list and search results the tree can be rooted at one selected folder.
     const isTreeSurface =
       contextMenuState.surface === "treeFolder" || contextMenuState.surface === "favorite";
-    if (
-      !isTreeSurface &&
-      (contextMenuState.surface === "trash" ||
-        contextMenuTargetEntries.length !== 1 ||
-        !isDirectoryLikeEntry(contextMenuTargetEntries[0] ?? null))
-    ) {
-      hidden.add("rootTreeHere");
-      // A new tab is opened on a folder, as the tree is rooted at one.
+    const isSingleFolder =
+      contextMenuTargetEntries.length === 1 &&
+      isDirectoryLikeEntry(contextMenuTargetEntries[0] ?? null);
+    // In the file list and search results a new tab opens on one folder.
+    if (!isTreeSurface && (contextMenuState.surface === "trash" || !isSingleFolder)) {
       hidden.add("openInNewTab");
+    }
+    // An item's Paste goes into it, so it is there only for one folder; the folder on
+    // screen has its own, in the menu of the background.
+    const isItemSurface =
+      contextMenuState.surface === "content" || contextMenuState.surface === "search";
+    if (isItemSurface && !isSingleFolder) {
+      hidden.add("paste");
+    }
+    // Edit is for text files: left out, not greyed, for anything else.
+    if (
+      contextMenuTargetEntries.length === 0 ||
+      contextMenuTargetEntries.length !== contextMenuState.paths.length ||
+      !contextMenuTargetEntries.every((entry) => isEditableFileEntry(entry))
+    ) {
+      hidden.add("edit");
     }
     if (contextMenuState.surface === "trash") {
       // "Show Package Contents" is only visible for bundle entries (.app, .framework, etc.)
@@ -567,7 +578,6 @@ export function useExplorerActions(args: {
       return Array.from(hidden);
     }
     if (contextMenuState.surface === "treeFolder") {
-      hidden.delete("calculateSize");
       // Everything goes to the Trash; only what is already in it can be deleted for good.
       const targetPath = contextMenuState.targetPath;
       if (!targetPath || !isPathInsideTrash(targetPath, homePath)) {
@@ -588,12 +598,8 @@ export function useExplorerActions(args: {
       // New Folder goes into the folder on screen, and search results show none.
       hidden.add("newFolder");
     }
-    // An item's New Folder makes the folder inside it, so it is there only for one folder;
-    // the folder on screen has its own, in the menu of the background.
-    if (
-      contextMenuTargetEntries.length !== 1 ||
-      !isDirectoryLikeEntry(contextMenuTargetEntries[0] ?? null)
-    ) {
+    // An item's New Folder makes the folder inside it, as its Paste pastes there.
+    if (!isSingleFolder) {
       hidden.add("newFolder");
     }
     // "Show Package Contents" is only visible for bundle entries (.app, .framework, etc.)
@@ -624,10 +630,6 @@ export function useExplorerActions(args: {
       contextMenuState.surface === "search";
     const isTreeFolderContext = contextMenuState.surface === "treeFolder";
     const isFavoriteContext = contextMenuState.surface === "favorite";
-    const hasOnlyEditableFiles =
-      contextMenuTargetEntries.length > 0 &&
-      contextMenuTargetEntries.length === contextMenuState.paths.length &&
-      contextMenuTargetEntries.every((entry) => isEditableFileEntry(entry));
     const hasSingleContextItem = contextMenuState.paths.length === 1;
     const hasSingleSelectedFolder =
       contextMenuState.paths.length === 1 &&
@@ -649,8 +651,6 @@ export function useExplorerActions(args: {
       return Array.from(disabled);
     }
     if (isTreeFolderContext) {
-      disabled.add("openWith");
-      disabled.add("edit");
       // The Trash itself stays where it is, under its name (the main process refuses too).
       if (contextMenuState.targetPath === getTrashPath(homePath)) {
         disabled.add("cut");
@@ -658,7 +658,6 @@ export function useExplorerActions(args: {
         disabled.add("rename");
       }
       if (!contextMenuState.targetPath) {
-        disabled.add("open");
         disabled.add("openInNewTab");
         disabled.add("showInfo");
         disabled.add("toggleFavorite");
@@ -677,16 +676,7 @@ export function useExplorerActions(args: {
       return Array.from(disabled);
     }
     if (isFavoriteContext) {
-      disabled.add("openWith");
-      disabled.add("edit");
-      disabled.add("copy");
-      disabled.add("cut");
-      disabled.add("move");
-      disabled.add("rename");
-      disabled.add("duplicate");
-      disabled.add("trash");
       if (!contextMenuState.targetPath) {
-        disabled.add("open");
         disabled.add("openInNewTab");
         disabled.add("revealInTree");
         disabled.add("showInfo");
@@ -698,9 +688,6 @@ export function useExplorerActions(args: {
         disabled.add("newFolder");
       }
       return Array.from(disabled);
-    }
-    if (!hasOnlyEditableFiles) {
-      disabled.add("edit");
     }
     if (!isContentContext) {
       disabled.add("move");
@@ -730,10 +717,7 @@ export function useExplorerActions(args: {
     if (contextMenuTargetEntries.length > 0) {
       return Array.from(disabled);
     }
-    const items = getContextMenuItems({
-      surface: contextMenuState.surface,
-      favoriteToggleLabel: contextMenuFavoriteToggleLabel,
-    });
+    const items = getContextMenuItems({ surface: contextMenuState.surface });
     for (const item of items) {
       if (item.type === "separator" || item.id === "newFolder") {
         continue;
@@ -746,14 +730,13 @@ export function useExplorerActions(args: {
   }, [
     args.derived.trashIsEmpty,
     canPasteAtResolvedDestination,
-    contextMenuFavoriteToggleLabel,
     contextMenuState,
     contextMenuTargetEntries,
     homePath,
     isWriteOperationLocked,
   ]);
 
-  const contextMenuSubmenuItems = useMemo(() => {
+  const openWithMenuItems = useMemo(() => {
     const items: ContextMenuSubmenuItem[] = openWithApplications.map((application) => ({
       action: {
         kind: "application",
@@ -2570,14 +2553,6 @@ export function useExplorerActions(args: {
       });
   }
 
-  async function openTreeContextTarget(path: string, surface: ContextMenuState["surface"] | null) {
-    if (surface === "favorite") {
-      await navigateFavoritePath(path, "push");
-      return;
-    }
-    await navigateTreeFileSystemPath(path, "push");
-  }
-
   async function revealFavoriteInTree(path: string) {
     await navigateTreeFileSystemPath(path, currentPathRef.current === path ? "replace" : "push");
   }
@@ -2669,15 +2644,14 @@ export function useExplorerActions(args: {
       return;
     }
     if (actionId === "open") {
-      const firstPath = paths[0];
-      if (!firstPath) {
-        return;
-      }
-      if (contextMenuSurface === "treeFolder" || contextMenuSurface === "favorite") {
-        await openTreeContextTarget(firstPath, contextMenuSurface);
-        return;
-      }
       await openPaths(paths);
+      return;
+    }
+    if (actionId === "quickLook") {
+      const firstPath = paths[0];
+      if (firstPath) {
+        void client.invoke("system:quickLook", { path: firstPath }).catch(() => undefined);
+      }
       return;
     }
     if (actionId === "edit") {
@@ -2877,7 +2851,8 @@ export function useExplorerActions(args: {
 
   async function runContextSubmenuAction(action: ContextMenuSubmenuAction, paths: string[]) {
     closeContextMenu();
-    if (paths.length === 0) {
+    // View As and Sort By set the window's view, which the app does (App.tsx).
+    if (paths.length === 0 || action.kind === "viewMode" || action.kind === "sortBy") {
       return;
     }
     if (action.kind === "other") {
@@ -3793,9 +3768,9 @@ export function useExplorerActions(args: {
     closeConfirmationDialog,
     closeContextMenu,
     contextMenuDisabledActionIds,
-    contextMenuFavoriteToggleLabel,
+    contextMenuOptions,
     contextMenuHiddenActionIds,
-    contextMenuSubmenuItems,
+    openWithMenuItems,
     copyGetInfoPath,
     copyGetInfoName,
     dismissActionNotice,

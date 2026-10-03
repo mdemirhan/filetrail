@@ -52,9 +52,9 @@ describe("ItemContextMenu", () => {
         anchorX={0}
         anchorY={0}
         surface="content"
-        disabledActionIds={["edit"]}
-        hiddenActionIds={["openInNewTab", "showPackageContents", "rootTreeHere"]}
-        submenuItems={submenuItems}
+        disabledActionIds={["quickLook"]}
+        hiddenActionIds={["openInNewTab", "showPackageContents", "edit"]}
+        submenus={{ openWith: submenuItems }}
         shortcutContext={shortcutContext}
         open
         onAction={onAction}
@@ -70,7 +70,7 @@ describe("ItemContextMenu", () => {
     expect(active()).toHaveTextContent("Open");
     press("ArrowDown");
     expect(active()).toHaveTextContent("Open With");
-    // Edit can't be chosen, so ↓ goes past it.
+    // Quick Look can't be chosen, so ↓ goes past it.
     press("ArrowDown");
     expect(active()).toHaveTextContent("Show Info");
     // ↑ from the first item wraps to the last.
@@ -110,7 +110,7 @@ describe("ItemContextMenu", () => {
         anchorX={0}
         anchorY={0}
         surface="content"
-        submenuItems={submenuItems}
+        submenus={{ openWith: submenuItems }}
         shortcutContext={shortcutContext}
         open
         onAction={() => undefined}
@@ -129,7 +129,7 @@ describe("ItemContextMenu", () => {
         surface="background"
         disabledActionIds={["paste"]}
         hiddenActionIds={["emptyTrash"]}
-        submenuItems={submenuItems}
+        submenus={{ openWith: submenuItems }}
         shortcutContext={shortcutContext}
         open
         onAction={() => undefined}
@@ -144,6 +144,8 @@ describe("ItemContextMenu", () => {
       "Show Info",
       "Paste",
       "Copy Path",
+      "View As",
+      "Sort By",
       "Open in Terminal",
       "Show in Finder",
     ]);
@@ -163,7 +165,7 @@ describe("ItemContextMenu", () => {
         anchorY={0}
         surface="content"
         disabledActionIds={["copyPath"]}
-        submenuItems={submenuItems}
+        submenus={{ openWith: submenuItems }}
         shortcutContext={shortcutContext}
         open
         onAction={onAction}
@@ -186,7 +188,7 @@ describe("ItemContextMenu", () => {
         anchorX={0}
         anchorY={0}
         surface="content"
-        submenuItems={submenuItems}
+        submenus={{ openWith: submenuItems }}
         shortcutContext={shortcutContext}
         open
         onAction={() => undefined}
@@ -194,7 +196,7 @@ describe("ItemContextMenu", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Move To…⇧⌘M" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Move to…⇧⌘M" })).toBeInTheDocument();
   });
 
   it("shows a dynamic favorite toggle label when supplied", () => {
@@ -203,8 +205,8 @@ describe("ItemContextMenu", () => {
         anchorX={0}
         anchorY={0}
         surface="content"
-        favoriteToggleLabel="Remove from Favorites"
-        submenuItems={submenuItems}
+        options={{ favoriteToggleLabel: "Remove from Favorites" }}
+        submenus={{ openWith: submenuItems }}
         shortcutContext={shortcutContext}
         open
         onAction={() => undefined}
@@ -221,7 +223,7 @@ describe("ItemContextMenu", () => {
         anchorX={0}
         anchorY={0}
         surface="content"
-        submenuItems={submenuItems}
+        submenus={{ openWith: submenuItems }}
         shortcutContext={shortcutContext}
         open
         onAction={() => undefined}
@@ -267,8 +269,8 @@ describe("ItemContextMenu", () => {
         anchorX={0}
         anchorY={0}
         surface="treeFolder"
-        favoriteToggleLabel="Add to Favorites"
-        submenuItems={submenuItems}
+        options={{ favoriteToggleLabel: "Add to Favorites" }}
+        submenus={{ openWith: submenuItems }}
         shortcutContext={{
           ...shortcutContext,
           focusedPane: "tree",
@@ -280,7 +282,6 @@ describe("ItemContextMenu", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Open⌘O" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Show Info⌘I" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open in Terminal⌥⌘T" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy Path⌥⌘C" })).toBeInTheDocument();
@@ -298,9 +299,9 @@ describe("ItemContextMenu", () => {
         anchorX={0}
         anchorY={0}
         surface="favorite"
-        favoriteToggleLabel="Remove from Favorites"
+        options={{ favoriteToggleLabel: "Remove from Favorites" }}
         hiddenActionIds={["emptyTrash"]}
-        submenuItems={submenuItems}
+        submenus={{ openWith: submenuItems }}
         shortcutContext={{
           ...shortcutContext,
           focusedPane: "tree",
@@ -315,21 +316,21 @@ describe("ItemContextMenu", () => {
     expect(screen.getByRole("button", { name: "Reveal in Tree" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Show Info⌘I" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Open⌘O$/ })).toBeNull();
-    expect(screen.getByRole("button", { name: "Paste" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Paste⌘V" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Paste into Folder" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Paste into Folder⌘V" })).toBeNull();
     expect(screen.getByRole("button", { name: "Open in Terminal⌥⌘T" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy Path⌥⌘C" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Copy$/ })).toBeNull();
   });
 
-  it("orders tree folder actions by group", () => {
+  it("starts a tree folder's menu with New Folder and leaves out what a click does", () => {
     render(
       <ItemContextMenu
         anchorX={0}
         anchorY={0}
         surface="treeFolder"
-        favoriteToggleLabel="Add to Favorites"
-        submenuItems={submenuItems}
+        options={{ favoriteToggleLabel: "Add to Favorites" }}
+        submenus={{ openWith: submenuItems }}
         shortcutContext={{
           ...shortcutContext,
           focusedPane: "tree",
@@ -342,48 +343,19 @@ describe("ItemContextMenu", () => {
     );
 
     expect(
-      screen
-        .getAllByRole("button")
-        .map((button) => button.textContent)
-        .filter((label) => label && !["Zed", "Visual Studio Code", "Other…"].includes(label))
-        .map((label) => {
-          if (label?.startsWith("Open in Terminal")) {
-            return "Open in Terminal";
-          }
-          if (label?.startsWith("Copy Path")) {
-            return "Copy Path";
-          }
-          if (label === "Copy⌘C" || label === "Cut⌘X") {
-            return label.slice(0, -2);
-          }
-          if (label?.startsWith("Show Info")) {
-            return "Show Info";
-          }
-          if (label?.startsWith("Root Tree Here")) {
-            return "Root Tree Here";
-          }
-          if (label?.startsWith("Open in New Tab")) {
-            return "Open in New Tab";
-          }
-          if (label?.startsWith("Open")) {
-            return "Open";
-          }
-          return label;
-        }),
+      screen.getAllByRole("button").map((button) => button.textContent?.replace(/[⌘⇧⌥⌃].*$/u, "")),
     ).toEqual([
-      "Open",
+      "New Folder",
       "Open in New Tab",
-      "Root Tree Here",
+      "Use as Tree Root",
       "Show Info",
-      "Calculate Size",
       "Cut",
       "Copy",
-      "Paste",
+      "Paste into Folder",
       "Copy Path",
       "Rename",
       "Duplicate",
-      "Move To…",
-      "New Folder",
+      "Move to…",
       "Add to Favorites",
       "Open in Terminal",
       "Show in Finder",
@@ -398,9 +370,9 @@ describe("ItemContextMenu", () => {
         anchorX={0}
         anchorY={0}
         surface="favorite"
-        favoriteToggleLabel="Remove from Favorites"
+        options={{ favoriteToggleLabel: "Remove from Favorites" }}
         hiddenActionIds={["emptyTrash"]}
-        submenuItems={submenuItems}
+        submenus={{ openWith: submenuItems }}
         shortcutContext={{
           ...shortcutContext,
           focusedPane: "tree",
@@ -413,19 +385,19 @@ describe("ItemContextMenu", () => {
     );
 
     expect(container.querySelectorAll(".context-menu-separator")).toHaveLength(5);
-    const pasteButton = screen.getByRole("button", { name: "Paste" });
+    const pasteButton = screen.getByRole("button", { name: "Paste into Folder" });
     const copyPathButton = screen.getByRole("button", { name: "Copy Path⌥⌘C" });
     const newFolderButton = screen.getByRole("button", { name: "New Folder" });
     const favoriteButton = screen.getByRole("button", { name: "Remove from Favorites" });
     const terminalButton = screen.getByRole("button", { name: "Open in Terminal⌥⌘T" });
 
+    // New Folder comes first, on its own.
+    expect(screen.getAllByRole("button")[0]).toBe(newFolderButton);
+    expect(newFolderButton.nextElementSibling).toHaveClass("context-menu-separator");
     expect(pasteButton.nextElementSibling).toBe(copyPathButton);
     const separatorAfterCopyPath = copyPathButton.nextElementSibling;
     expect(separatorAfterCopyPath).toHaveClass("context-menu-separator");
-    expect(separatorAfterCopyPath?.nextElementSibling).toBe(newFolderButton);
-    const separatorAfterNewFolder = newFolderButton.nextElementSibling;
-    expect(separatorAfterNewFolder).toHaveClass("context-menu-separator");
-    expect(separatorAfterNewFolder?.nextElementSibling).toBe(favoriteButton);
+    expect(separatorAfterCopyPath?.nextElementSibling).toBe(favoriteButton);
     const separatorAfterFavorite = favoriteButton.nextElementSibling;
     expect(separatorAfterFavorite).toHaveClass("context-menu-separator");
     expect(separatorAfterFavorite?.nextElementSibling).toBe(terminalButton);
@@ -438,7 +410,7 @@ describe("ItemContextMenu", () => {
         anchorY={0}
         surface="favorite"
         hiddenActionIds={["toggleFavorite"]}
-        submenuItems={submenuItems}
+        submenus={{ openWith: submenuItems }}
         shortcutContext={{
           ...shortcutContext,
           focusedPane: "tree",
@@ -461,7 +433,7 @@ describe("ItemContextMenu", () => {
         anchorY={0}
         surface="content"
         hiddenActionIds={["toggleFavorite"]}
-        submenuItems={submenuItems}
+        submenus={{ openWith: submenuItems }}
         shortcutContext={shortcutContext}
         open
         onAction={() => undefined}
@@ -478,9 +450,9 @@ describe("ItemContextMenu", () => {
         anchorX={0}
         anchorY={0}
         surface="favorite"
-        favoriteToggleLabel="Remove from Favorites"
+        options={{ favoriteToggleLabel: "Remove from Favorites" }}
         hiddenActionIds={["toggleFavorite", "rootTreeHere", "paste", "newFolder", "emptyTrash"]}
-        submenuItems={submenuItems}
+        submenus={{ openWith: submenuItems }}
         shortcutContext={{
           ...shortcutContext,
           focusedPane: "tree",
@@ -497,6 +469,42 @@ describe("ItemContextMenu", () => {
     expect(container.querySelectorAll(".context-menu-separator")).toHaveLength(3);
   });
 
+  it("ticks the current view in the background menu's View As, and picks another", () => {
+    const onSubmenuAction = vi.fn();
+    render(
+      <ItemContextMenu
+        anchorX={0}
+        anchorY={0}
+        surface="background"
+        hiddenActionIds={["emptyTrash"]}
+        submenus={{
+          viewAs: [
+            { action: { kind: "viewMode", id: "icons", label: "Icons", checked: false } },
+            { action: { kind: "viewMode", id: "details", label: "List", checked: true } },
+          ],
+        }}
+        shortcutContext={shortcutContext}
+        open
+        onAction={() => undefined}
+        onSubmenuAction={onSubmenuAction}
+      />,
+    );
+
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "View As" }));
+    expect(screen.getByRole("menuitemradio", { name: "List" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Icons" }));
+    expect(onSubmenuAction).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "viewMode", id: "icons" }),
+    );
+
+    // Another item's submenu takes its place; Sort By has none here.
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "Sort By" }));
+    expect(screen.queryByRole("menuitemradio")).toBeNull();
+  });
+
   it("renders submenu items in the supplied order and dispatches the clicked action", () => {
     const onSubmenuAction = vi.fn();
 
@@ -505,7 +513,7 @@ describe("ItemContextMenu", () => {
         anchorX={0}
         anchorY={0}
         surface="content"
-        submenuItems={submenuItems}
+        submenus={{ openWith: submenuItems }}
         shortcutContext={shortcutContext}
         open
         onAction={() => undefined}

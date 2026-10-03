@@ -47,6 +47,7 @@ export function InfoPanel({
   onCopyName,
   onQuickLook,
   onEdit,
+  textEditorName = "Text Editor",
   isFavorite = false,
   onToggleFavorite,
   onRootTree,
@@ -74,6 +75,8 @@ export function InfoPanel({
   onQuickLook?: (() => void) | undefined;
   // Given only for files, which the text editor can open.
   onEdit?: (() => void) | undefined;
+  /** The text editor's name, which Edit says, as the menus do ("Edit in TextEdit"). */
+  textEditorName?: string;
   isFavorite?: boolean;
   // Given only for folders that can be added to or removed from Favorites.
   onToggleFavorite?: (() => void) | undefined;
@@ -144,6 +147,7 @@ export function InfoPanel({
           onCopyName={onCopyName ? handleCopyName : undefined}
           onQuickLook={onQuickLook}
           onEdit={onEdit}
+          textEditorName={textEditorName}
           isFavorite={isFavorite}
           onToggleFavorite={onToggleFavorite}
           onRootTree={onRootTree}
@@ -240,6 +244,7 @@ function GetInfoPanelContent({
   onCopyName,
   onQuickLook,
   onEdit,
+  textEditorName,
   isFavorite,
   onToggleFavorite,
   onRootTree,
@@ -263,6 +268,7 @@ function GetInfoPanelContent({
   onCopyName?: (() => Promise<void>) | undefined;
   onQuickLook?: (() => void) | undefined;
   onEdit?: (() => void) | undefined;
+  textEditorName: string;
   isFavorite: boolean;
   onToggleFavorite?: (() => void) | undefined;
   onRootTree?: (() => void) | undefined;
@@ -508,7 +514,7 @@ function GetInfoPanelContent({
           ) : null}
           {onEdit ? (
             <GetInfoActionButton
-              label="Edit"
+              label={`Edit in ${textEditorName}`}
               shortcut={shortcutDisplay.label("editSelection")}
               onClick={onEdit}
             >
@@ -557,7 +563,7 @@ function GetInfoPanelContent({
           ) : null}
           {onRootTree ? (
             <GetInfoActionButton
-              label="Root Tree Here"
+              label="Use as Tree Root"
               shortcut={shortcutDisplay.label("rootTreeAtSelection")}
               onClick={onRootTree}
             >

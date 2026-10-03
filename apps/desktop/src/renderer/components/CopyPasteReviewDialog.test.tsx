@@ -523,10 +523,12 @@ describe("CopyPasteReviewDialog", () => {
     );
     render(<Harness report={createReport(many)} />);
 
+    // Counted by tag: a role query over hundreds of rows is slow enough in jsdom to time out
+    // when the whole suite runs at once.
     const list = screen.getByRole("list", { name: "Items" });
-    expect(within(list).getAllByRole("combobox")).toHaveLength(300);
+    expect(list.querySelectorAll("select")).toHaveLength(300);
     fireEvent.click(screen.getByRole("button", { name: "Show all 400" }));
-    expect(within(list).getAllByRole("combobox")).toHaveLength(400);
+    expect(list.querySelectorAll("select")).toHaveLength(400);
   });
 
   it("caps the list of a large operation without conflicts", () => {

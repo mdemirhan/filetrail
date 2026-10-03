@@ -227,7 +227,13 @@ describe("InfoPanel", () => {
 
     const { rerender } = render(<InfoPanel {...requiredProps} />);
 
-    for (const name of ["Quick Look", "Edit", "Copy Name", "Add to Favorites", "Root Tree Here"]) {
+    for (const name of [
+      "Quick Look",
+      "Edit in TextEdit",
+      "Copy Name",
+      "Add to Favorites",
+      "Use as Tree Root",
+    ]) {
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
     }
 
@@ -236,15 +242,16 @@ describe("InfoPanel", () => {
         {...requiredProps}
         onQuickLook={onQuickLook}
         onEdit={onEdit}
+        textEditorName="TextEdit"
         onCopyName={onCopyName}
         onToggleFavorite={onToggleFavorite}
         onRootTree={onRootTree}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Root Tree Here" }));
+    fireEvent.click(screen.getByRole("button", { name: "Use as Tree Root" }));
     fireEvent.click(screen.getByRole("button", { name: "Quick Look" }));
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit in TextEdit" }));
     fireEvent.click(screen.getByRole("button", { name: "Add to Favorites" }));
     fireEvent.click(screen.getByRole("button", { name: "Copy Name" }));
     await act(async () => {});

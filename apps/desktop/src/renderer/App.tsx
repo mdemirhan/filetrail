@@ -6,8 +6,12 @@ import {
   type AppPreferences,
   DEFAULT_APP_PREFERENCES,
   DEFAULT_TERMINAL_APPLICATION,
+  DETAIL_COLUMN_LABELS,
   type DetailColumnVisibility,
   type DetailColumnWidths,
+  SORT_BY_ORDER,
+  VIEW_MODE_NAMES,
+  VIEW_MODE_ORDER,
   clampOpenItemLimit,
   clampZoomPercent,
 } from "../shared/appPreferences";
@@ -48,6 +52,7 @@ import {
   type ContentSelectionState,
   setSingleContentSelection as createSingleContentSelection,
 } from "./lib/contentSelection";
+import type { ContextMenuSubmenus } from "./lib/contextMenu";
 import { buildPasteRequest, describeClipboard } from "./lib/copyPasteClipboard";
 import {
   createOpenItemLimitMessage,
@@ -436,8 +441,8 @@ export function App() {
   }, [currentEntries, sortBy, sortDirection, foldersFirst, getFolderSizeEntry, folderSizeVersion]);
   // While the list is sorted by size, the Details view draws a bar behind each size: the
   // item's share of the largest size in the folder. Files have their size from the listing;
-  // a folder gets a bar once its size has been calculated (Calculate Size on the folder it
-  // is in sizes every folder inside).
+  // a folder gets a bar once its size has been calculated (calculating the folder it is in,
+  // in the Info panel, sizes every folder inside).
   // biome-ignore lint/correctness/useExhaustiveDependencies: folderSizeVersion changes whenever a cached folder size does; getEntry reads that cache.
   const sizeBars = useMemo(() => {
     if (sortBy !== "size") {
@@ -751,9 +756,9 @@ export function App() {
     clearContentSelection,
     confirmDotNameDialog,
     contextMenuDisabledActionIds,
-    contextMenuFavoriteToggleLabel,
+    contextMenuOptions,
     contextMenuHiddenActionIds,
-    contextMenuSubmenuItems,
+    openWithMenuItems,
     copyGetInfoPath,
     copyGetInfoName,
     dismissActionNotice,
@@ -828,7 +833,6 @@ export function App() {
       restoreExplorerPaneFocus,
       navigateTo,
       navigateTreeFileSystemPath,
-      navigateFavoritePath,
       rootTreeAtPath,
       toggleTreeNode,
       refreshDirectory,
@@ -845,6 +849,30 @@ export function App() {
       },
     },
   });
+  // The background menu's View As and Sort By tick the current choice; Open With lists the
+  // apps chosen in Settings.
+  const contextMenuSubmenus = useMemo<ContextMenuSubmenus>(
+    () => ({
+      openWith: openWithMenuItems,
+      viewAs: VIEW_MODE_ORDER.map((mode) => ({
+        action: {
+          kind: "viewMode",
+          id: mode,
+          label: VIEW_MODE_NAMES[mode],
+          checked: viewMode === mode,
+        },
+      })),
+      sortBy: SORT_BY_ORDER.map((value) => ({
+        action: {
+          kind: "sortBy",
+          id: value,
+          label: DETAIL_COLUMN_LABELS[value],
+          checked: sortBy === value,
+        },
+      })),
+    }),
+    [openWithMenuItems, sortBy, viewMode],
+  );
   const copyPasteModalOpen =
     (copyPasteDialogState !== null && copyPasteDialogState.type !== "analysis") ||
     showCopyPasteResultDialog ||
@@ -1996,6 +2024,7 @@ export function App() {
               onEdit: infoPanelCanEdit
                 ? () => void editPathInTextEditor(infoPanelItem.path)
                 : undefined,
+              textEditorName: defaultTextEditor.appName,
               isFavorite: infoPanelCanFavorite && isFavoritePath(favorites, infoPanelItem.path),
               onToggleFavorite: infoPanelCanFavorite
                 ? () => toggleFavoritePath(infoPanelItem.path)
@@ -2003,7 +2032,7 @@ export function App() {
               onRootTree: infoPanelCanRootTree
                 ? () => rootTreeAtPath(infoPanelItem.path)
                 : undefined,
-              openWithItems: contextMenuSubmenuItems,
+              openWithItems: openWithMenuItems,
               onOpenWith: (action) => {
                 if (infoPanelItem) {
                   void runContextSubmenuAction(action, [infoPanelItem.path]);
@@ -2189,20 +2218,27 @@ export function App() {
           onBrowseForDirectoryPath={browseForDirectoryPath}
           onSubmitMoveDialog={(path) => void submitMoveDialog(path)}
           contextMenuDisabledActionIds={contextMenuDisabledActionIds}
-          contextMenuFavoriteToggleLabel={contextMenuFavoriteToggleLabel}
+          contextMenuOptions={contextMenuOptions}
           contextMenuHiddenActionIds={contextMenuHiddenActionIds}
-          contextMenuSubmenuItems={contextMenuSubmenuItems}
+          contextMenuSubmenus={contextMenuSubmenus}
           shortcutContext={shortcutContext}
           onRunContextMenuAction={(actionId, paths) => {
-            const [folderPath] = paths;
-            if (actionId === "calculateSize" && folderPath) {
-              closeContextMenu();
-              void folderSizeCache.calculateFolderSize(folderPath);
-              return;
-            }
             void runContextMenuAction(actionId, paths);
           }}
           onRunContextSubmenuAction={(action, paths) => {
+            // View As and Sort By set the view of the folder on screen.
+            if (action.kind === "viewMode") {
+              closeContextMenu();
+              setViewMode(action.id);
+              return;
+            }
+            if (action.kind === "sortBy") {
+              closeContextMenu();
+              if (action.id !== sortBy) {
+                handleSortChange(action.id);
+              }
+              return;
+            }
             void runContextSubmenuAction(action, paths);
           }}
           onDismissActionNotice={dismissActionNotice}

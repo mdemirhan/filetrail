@@ -84,9 +84,9 @@ describe("AppDialogs", () => {
           onBrowseForDirectoryPath={async () => null}
           onSubmitMoveDialog={() => undefined}
           contextMenuDisabledActionIds={[]}
-          contextMenuFavoriteToggleLabel={null}
+          contextMenuOptions={{}}
           contextMenuHiddenActionIds={[]}
-          contextMenuSubmenuItems={[]}
+          contextMenuSubmenus={{}}
           shortcutContext={{
             actionNoticeOpen: false,
             copyPasteModalOpen: false,

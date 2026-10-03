@@ -13,25 +13,36 @@ import { useKeepInViewport } from "../hooks/useKeepInViewport";
 import {
   type ContextMenuActionId,
   type ContextMenuIconName,
+  type ContextMenuOptions,
   type ContextMenuSubmenuAction,
+  type ContextMenuSubmenuId,
   type ContextMenuSubmenuItem,
+  type ContextMenuSubmenus,
   type ContextMenuSurface,
   getContextMenuItems,
 } from "../lib/contextMenu";
 import { placeSubmenu } from "../lib/menuPlacement";
 import { type ShortcutContext, getContextMenuShortcutLabel } from "../lib/shortcutPolicy";
 import { useShortcutDisplay } from "../state/shortcutDisplayContext";
+import { MenuCheck } from "./MenuCheck";
 
-export type { ContextMenuActionId, ContextMenuSubmenuAction, ContextMenuSubmenuItem };
+export type {
+  ContextMenuActionId,
+  ContextMenuSubmenuAction,
+  ContextMenuSubmenuItem,
+  ContextMenuSubmenus,
+};
+
+const NO_OPTIONS: ContextMenuOptions = {};
 
 export function ItemContextMenu({
   anchorX,
   anchorY,
   surface = "content",
   disabledActionIds = [],
-  favoriteToggleLabel = null,
+  options = NO_OPTIONS,
   hiddenActionIds = [],
-  submenuItems,
+  submenus,
   shortcutContext,
   open,
   onAction,
@@ -41,9 +52,10 @@ export function ItemContextMenu({
   anchorY: number;
   surface?: ContextMenuSurface;
   disabledActionIds?: ContextMenuActionId[];
-  favoriteToggleLabel?: string | null;
+  options?: ContextMenuOptions;
   hiddenActionIds?: ContextMenuActionId[];
-  submenuItems: readonly ContextMenuSubmenuItem[];
+  /** What each item with a submenu lists: Open With's apps, View As, Sort By. */
+  submenus: ContextMenuSubmenus;
   shortcutContext: ShortcutContext;
   open: boolean;
   onAction: (actionId: ContextMenuActionId) => void;
@@ -54,10 +66,7 @@ export function ItemContextMenu({
   const disabledActionIdSet = useMemo(() => new Set(disabledActionIds), [disabledActionIds]);
   const hiddenActionIdSet = useMemo(() => new Set(hiddenActionIds), [hiddenActionIds]);
   const items = useMemo(() => {
-    const rawItems = getContextMenuItems({
-      surface,
-      favoriteToggleLabel,
-    });
+    const rawItems = getContextMenuItems({ surface, ...options });
     const visibleItems = rawItems.filter(
       (item) => item.type === "separator" || !hiddenActionIdSet.has(item.id),
     );
@@ -82,7 +91,7 @@ export function ItemContextMenu({
     }
 
     return compactedItems;
-  }, [favoriteToggleLabel, hiddenActionIdSet, surface]);
+  }, [options, hiddenActionIdSet, surface]);
 
   useEffect(() => {
     if (open) {
@@ -91,22 +100,26 @@ export function ItemContextMenu({
     setActiveItemId(null);
   }, [open]);
 
-  const submenuOpen =
-    activeItemId === "openWith" &&
-    !disabledActionIdSet.has("openWith") &&
-    items.some((item) => item.type !== "separator" && item.id === "openWith");
-  // The Open With row the keyboard is on, once → has gone into the submenu.
+  // The submenu of the item under the pointer or the arrow keys, if it has one.
+  const openSubmenuId: ContextMenuSubmenuId | null =
+    activeItemId !== null &&
+    !disabledActionIdSet.has(activeItemId) &&
+    items.some((item) => item.type !== "separator" && item.id === activeItemId && item.hasSubmenu)
+      ? (activeItemId as ContextMenuSubmenuId)
+      : null;
+  const submenuItems = (openSubmenuId && submenus[openSubmenuId]) || null;
+  const submenuOpen = submenuItems !== null;
+  // The submenu row the keyboard is on, once → has gone into the submenu.
   const [submenuActiveIndex, setSubmenuActiveIndex] = useState<number | null>(null);
   const submenuActions = useMemo(
-    () => submenuItems.flatMap((item) => (item.type === "separator" ? [] : [item.action])),
+    () => (submenuItems ?? []).flatMap((item) => (item.type === "separator" ? [] : [item.action])),
     [submenuItems],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the keyboard leaves a submenu when another one opens in its place.
   useEffect(() => {
-    if (!submenuOpen) {
-      setSubmenuActiveIndex(null);
-    }
-  }, [submenuOpen]);
+    setSubmenuActiveIndex(null);
+  }, [openSubmenuId]);
 
   // The keyboard works the menu as it does a macOS menu: ↑ ↓ (and Home, End) move between
   // the items that can be chosen, Return or Space chooses, → goes into Open With and ←
@@ -301,24 +314,30 @@ export function ItemContextMenu({
           return <Fragment key={item.id}>{itemButton}</Fragment>;
         })}
       </div>
-      {submenuOpen ? (
+      {submenuItems ? (
         <div ref={submenuRef} className="context-submenu">
           {submenuItems.map((submenuItem) => {
             if (submenuItem.type === "separator") {
               return <div key={submenuItem.key} className="context-menu-separator" />;
             }
-            const submenuIndex = submenuActions.indexOf(submenuItem.action);
+            const action = submenuItem.action;
+            const submenuIndex = submenuActions.indexOf(action);
+            // View As and Sort By tick the current choice, as a macOS menu does.
+            const checked = "checked" in action ? action.checked : null;
             return (
               <button
-                key={submenuItem.action.id}
+                key={action.id}
                 type="button"
+                role={checked === null ? undefined : "menuitemradio"}
+                aria-checked={checked ?? undefined}
                 className={`context-submenu-item${
                   submenuIndex === submenuActiveIndex ? " active" : ""
                 }`}
                 onMouseEnter={() => setSubmenuActiveIndex(submenuIndex)}
-                onClick={() => onSubmenuAction(submenuItem.action)}
+                onClick={() => onSubmenuAction(action)}
               >
-                {submenuItem.action.label}
+                {checked === null ? null : <MenuCheck checked={checked} />}
+                {action.label}
               </button>
             );
           })}
@@ -356,6 +375,40 @@ function ContextMenuIcon({ name }: { name: ContextMenuIconName }) {
         <path d="M8 11h6" />
         <path d="M17 9l3 2-3 2" />
         <path d="M17 15l3 2-3 2" />
+      </svg>
+    );
+  }
+  if (name === "openFile") {
+    // A page with an arrow out of it: a file opens in its app, not here.
+    return (
+      <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+        <path d="M14 3v5h5M9.5 15.5l5-5M11 10.5h3.5V14" />
+      </svg>
+    );
+  }
+  if (name === "quickLook") {
+    return (
+      <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="4" y="4" width="16" height="16" rx="2" />
+        <path d="M14 7h3v3M10 17H7v-3M17 7l-4 4M7 17l4-4" />
+      </svg>
+    );
+  }
+  if (name === "viewAs") {
+    return (
+      <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="4" y="4" width="6.5" height="6.5" rx="1.5" />
+        <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5" />
+        <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5" />
+        <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5" />
+      </svg>
+    );
+  }
+  if (name === "sortBy") {
+    return (
+      <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M8 4v16M4 16l4 4 4-4M16 20V4M12 8l4-4 4 4" />
       </svg>
     );
   }
@@ -486,13 +539,6 @@ function ContextMenuIcon({ name }: { name: ContextMenuIconName }) {
       <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
         <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
         <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-      </svg>
-    );
-  }
-  if (name === "calculateSize") {
-    return (
-      <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
       </svg>
     );
   }

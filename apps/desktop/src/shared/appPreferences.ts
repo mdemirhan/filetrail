@@ -6,8 +6,16 @@ export type ThemeMode = "light" | "dark";
 // "auto" follows the macOS appearance; "light" or "dark" pins the app to one.
 export type ThemePreference = "auto" | ThemeMode;
 export type AccentMode = string;
-// "native" shows the real macOS icons for files and folders (via NSWorkspace).
+// The file list's views. "details" is the one called List, the table; "list" is Compact
+// List, names in columns.
 export type ExplorerViewMode = "icons" | "list" | "details";
+// The views in the order every menu lists them, by the names the menus give them.
+export const VIEW_MODE_ORDER = ["icons", "details", "list"] as const;
+export const VIEW_MODE_NAMES: Record<ExplorerViewMode, string> = {
+  icons: "Icons",
+  details: "List",
+  list: "Compact List",
+};
 export type SearchPatternModePreference = "text" | "glob" | "regex";
 // How the search text is matched, in the order the menus list the choices.
 export const SEARCH_PATTERN_MODES = ["text", "glob", "regex"] as const;
@@ -151,6 +159,8 @@ export const OPTIONAL_DETAIL_COLUMN_KEYS = [
   "created",
   "permissions",
 ] as const;
+// What the list can be sorted by, in the order every menu lists it (named by its column).
+export const SORT_BY_ORDER = ["name", "kind", "modified", "size"] as const;
 export const DETAIL_COLUMN_LABELS: Record<DetailColumnKey, string> = {
   name: "Name",
   modified: "Date Modified",

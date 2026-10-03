@@ -1190,9 +1190,14 @@ select:focus-visible {
   min-width: 180px;
 }
 
-/* Open With lists apps, with no checkmarks or icons: its labels start near the edge. */
+/* Open With lists apps, with no checkmarks or icons: its labels start near the edge. View
+   As and Sort By keep the checkmark column, as the toolbar's menus do. */
 .context-submenu-item {
   padding: 0 10px;
+}
+
+.context-submenu-item[role="menuitemradio"] {
+  padding: 0 10px 0 8px;
 }
 
 /* ── Alerts, sheets and push buttons ─────────────────────────────────────

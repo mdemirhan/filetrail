@@ -7,6 +7,7 @@ import type {
 
 import { useDelayedFlag } from "../hooks/useDelayedFlag";
 import type { ContextMenuState, WriteOperationCardState } from "../hooks/useWriteOperations";
+import type { ContextMenuOptions } from "../lib/contextMenu";
 import {
   type CopyPasteReport as CopyPasteAnalysisReport,
   type CopyPasteOverrides,
@@ -31,7 +32,7 @@ import { GoToFolderDialog } from "./GoToFolderDialog";
 import {
   type ContextMenuActionId,
   type ContextMenuSubmenuAction,
-  type ContextMenuSubmenuItem,
+  type ContextMenuSubmenus,
   ItemContextMenu,
 } from "./ItemContextMenu";
 import { TextPromptDialog } from "./TextPromptDialog";
@@ -72,9 +73,9 @@ export function AppDialogs({
   onBrowseForDirectoryPath,
   onSubmitMoveDialog,
   contextMenuDisabledActionIds,
-  contextMenuFavoriteToggleLabel,
+  contextMenuOptions,
   contextMenuHiddenActionIds,
-  contextMenuSubmenuItems,
+  contextMenuSubmenus,
   shortcutContext,
   onRunContextMenuAction,
   onRunContextSubmenuAction,
@@ -105,9 +106,9 @@ export function AppDialogs({
   onBrowseForDirectoryPath: (path: string) => Promise<string | null>;
   onSubmitMoveDialog: (path: string) => void;
   contextMenuDisabledActionIds: ContextMenuActionId[];
-  contextMenuFavoriteToggleLabel: string | null;
+  contextMenuOptions: ContextMenuOptions;
   contextMenuHiddenActionIds: ContextMenuActionId[];
-  contextMenuSubmenuItems: ContextMenuSubmenuItem[];
+  contextMenuSubmenus: ContextMenuSubmenus;
   shortcutContext: ShortcutContext;
   onRunContextMenuAction: (actionId: ContextMenuActionId, paths: string[]) => void;
   onRunContextSubmenuAction: (action: ContextMenuSubmenuAction, paths: string[]) => void;
@@ -213,9 +214,9 @@ export function AppDialogs({
           anchorY={contextMenuState.y}
           surface={contextMenuState.surface}
           disabledActionIds={contextMenuDisabledActionIds}
-          favoriteToggleLabel={contextMenuFavoriteToggleLabel}
+          options={contextMenuOptions}
           hiddenActionIds={contextMenuHiddenActionIds}
-          submenuItems={contextMenuSubmenuItems}
+          submenus={contextMenuSubmenus}
           shortcutContext={contextMenuShortcutContext}
           open
           onAction={(actionId) => {
