@@ -16,14 +16,12 @@ const MENU_ITEM_SELECTOR = '[role="menuitemradio"], [role="menuitemcheckbox"]';
 
 // The magnifier inside the toolbar search field doubles as a menu button (as in Mail or
 // Xcode): it opens the search options as an ordinary menu with checkmarks, so the field
-// itself stays a plain field. The bar above the search results opens the same menu from
-// an "Options" button (`trigger="label"`).
+// itself stays a plain field. It is the one place the options are changed while searching.
 // Hidden files are not an option here: search includes them when the file list shows them.
 export function SearchOptionsMenu({
   anchorRef,
   inputRef,
   interactive,
-  trigger = "magnifier",
   patternMode,
   onPatternModeChange,
   matchScope,
@@ -44,8 +42,6 @@ export function SearchOptionsMenu({
   inputRef?: RefObject<HTMLInputElement | null>;
   /** False for the off-screen copy the toolbar measures; it never opens a menu. */
   interactive: boolean;
-  /** The magnifier inside the search field, or a labeled "Options" button. */
-  trigger?: "magnifier" | "label";
   patternMode: SearchPatternMode;
   onPatternModeChange: (value: SearchPatternMode) => void;
   matchScope: SearchMatchScope;
@@ -261,13 +257,8 @@ export function SearchOptionsMenu({
       <button
         ref={interactive ? buttonRef : undefined}
         type="button"
-        className={
-          trigger === "label"
-            ? "search-scope-action search-scope-options-button"
-            : "toolbar-search-icon toolbar-search-options-button"
-        }
-        // The labeled button is named by its text, so it never shares a name with the magnifier.
-        aria-label={trigger === "label" ? undefined : "Search options"}
+        className="toolbar-search-icon toolbar-search-options-button"
+        aria-label="Search options"
         title="Search Options"
         aria-haspopup="menu"
         aria-expanded={open}
@@ -287,7 +278,7 @@ export function SearchOptionsMenu({
             : undefined
         }
       >
-        {trigger === "label" ? "Options" : <ToolbarIcon name="search" />}
+        <ToolbarIcon name="search" />
         <svg className="toolbar-search-options-chevron" viewBox="0 0 8 8" aria-hidden="true">
           <path d="M1.5 3 4 5.5 6.5 3" />
         </svg>

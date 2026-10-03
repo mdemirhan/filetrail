@@ -32,7 +32,6 @@ import {
   isFolderKind,
   renameDraftKey,
 } from "./InlineRenameField";
-import { SearchOptionsMenu } from "./SearchOptionsMenu";
 import { SortIndicator } from "./SortIndicator";
 type SearchResultItem = IpcResponse<"search:getUpdate">["items"][number];
 type SearchStatus = IpcResponse<"search:getUpdate">["status"] | "idle";
@@ -69,15 +68,7 @@ export function SearchResultsPane({
   scopeOptions = [],
   onScopeChange = () => undefined,
   patternMode = "text",
-  onPatternModeChange = () => undefined,
   matchScope = "name",
-  onMatchScopeChange = () => undefined,
-  recursive = true,
-  skipGitFolders = true,
-  onSkipGitFoldersChange = () => undefined,
-  skipGitIgnored = false,
-  onSkipGitIgnoredChange = () => undefined,
-  onRecursiveChange = () => undefined,
   onStopSearch,
   onClearResults,
   onCloseResults,
@@ -121,15 +112,7 @@ export function SearchResultsPane({
   scopeOptions?: SearchScopeOption[];
   onScopeChange?: (rootPath: string) => void;
   patternMode?: SearchPatternModePreference;
-  onPatternModeChange?: (value: SearchPatternModePreference) => void;
   matchScope?: SearchMatchScopePreference;
-  onMatchScopeChange?: (value: SearchMatchScopePreference) => void;
-  recursive?: boolean;
-  skipGitFolders?: boolean;
-  onSkipGitFoldersChange?: (value: boolean) => void;
-  skipGitIgnored?: boolean;
-  onSkipGitIgnoredChange?: (value: boolean) => void;
-  onRecursiveChange?: (value: boolean) => void;
   onStopSearch: () => void;
   onClearResults: () => void;
   onCloseResults: () => void;
@@ -377,21 +360,6 @@ export function SearchResultsPane({
               </button>
             ) : null}
           </div>
-          {/* The same menu as the magnifier in the toolbar search field. */}
-          <SearchOptionsMenu
-            trigger="label"
-            interactive
-            patternMode={patternMode}
-            onPatternModeChange={onPatternModeChange}
-            matchScope={matchScope}
-            onMatchScopeChange={onMatchScopeChange}
-            recursive={recursive}
-            onRecursiveChange={onRecursiveChange}
-            skipGitFolders={skipGitFolders}
-            onSkipGitFoldersChange={onSkipGitFoldersChange}
-            skipGitIgnored={skipGitIgnored}
-            onSkipGitIgnoredChange={onSkipGitIgnoredChange}
-          />
           {showStop ? (
             <button
               type="button"

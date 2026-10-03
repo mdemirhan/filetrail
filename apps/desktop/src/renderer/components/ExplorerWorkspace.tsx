@@ -1162,8 +1162,12 @@ export function ExplorerWorkspace({
     if (itemId === "view") {
       return (
         <div key={itemId} className="toolbar-group toolbar-group-view">
-          <fieldset className="toolbar-segmented toolbar-segmented-native">
-            <legend className="sr-only">View mode</legend>
+          <fieldset
+            className="toolbar-segmented toolbar-segmented-native"
+            // Search results are one table, whatever the folder's view.
+            disabled={!canRunRendererCommand("viewAsIcons")}
+          >
+            <legend className="sr-only">View</legend>
             <button
               type="button"
               className={viewMode === "icons" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
@@ -1262,6 +1266,8 @@ export function ExplorerWorkspace({
             ref={mode === "interactive" ? sortMenuButtonRef : undefined}
             type="button"
             className={`tb-btn tb-btn-icon${sortMenuOpen ? " active" : ""}`}
+            // Search results are sorted in their own headers.
+            disabled={!canRunRendererCommand("sortByName")}
             onClick={mode === "interactive" ? () => setSortMenuOpen((value) => !value) : undefined}
             tabIndex={mode === "interactive" ? undefined : -1}
             title={`Sort By: ${getSortByLabel(sortBy)}, ${

@@ -218,7 +218,10 @@ export function canRunToolbarRendererCommand(
     case "sortBySize":
     case "sortByKind":
     case "toggleFoldersFirst":
-      // Search results have their own order, chosen in the results bar.
+    case "viewAsIcons":
+    case "viewAsList":
+    case "viewAsDetails":
+      // Search results are one table with an order of their own, chosen in its headers.
       return !context.isSearchMode;
     case "goBack":
       return context.canGoBack !== false;

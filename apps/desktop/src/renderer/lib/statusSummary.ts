@@ -36,7 +36,10 @@ export function buildContentStatusSummary({
       }
       totalBytes += size;
     }
-    parts.push(allKnown ? `${count}, ${formatSize(totalBytes, "ready")}` : count);
+    parts.push(count);
+    if (allKnown) {
+      parts.push(formatSize(totalBytes, "ready"));
+    }
   }
   if (availableBytes !== null) {
     parts.push(`${formatSize(availableBytes, "ready")} available`);

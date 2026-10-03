@@ -150,12 +150,12 @@ export const SHORTCUT_ITEMS: readonly ShortcutItem[] = [
   { group: "views", command: "toggleInfoRow", description: "Show or hide the Info row" },
   { group: "views", command: "toggleHiddenFiles", description: "Show or hide hidden files" },
   { group: "views", command: "viewAsIcons", description: "View as icons" },
-  { group: "views", command: "viewAsList", description: "View as a list" },
-  { group: "views", command: "viewAsDetails", description: "View as details" },
+  { group: "views", command: "viewAsDetails", description: "View as a list, with columns" },
+  { group: "views", command: "viewAsList", description: "View as a compact list of names" },
   { group: "views", command: "sortByName", description: "Sort by name" },
+  { group: "views", command: "sortByKind", description: "Sort by kind" },
   { group: "views", command: "sortByModified", description: "Sort by date modified" },
   { group: "views", command: "sortBySize", description: "Sort by size" },
-  { group: "views", command: "sortByKind", description: "Sort by kind" },
   { group: "views", command: "toggleFoldersFirst", description: "Keep folders first, or not" },
   { group: "views", command: "zoomIn", description: "Zoom in" },
   { group: "views", command: "zoomOut", description: "Zoom out" },
@@ -215,13 +215,14 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
   {
     id: "navigation",
     title: "Getting around",
-    intro: "Move between folders with the sidebar, the file list, and the path bar under the list.",
+    intro:
+      "Move between folders with the folder tree, the file list, and the path bar under the list.",
     sections: [
       {
         title: "Folders",
         rows: [
           {
-            label: "Sidebar",
+            label: "Folder tree",
             description:
               "Click a favorite or a folder to open it. The arrow beside a folder shows its subfolders without leaving the folder you are in.",
           },
@@ -231,19 +232,19 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
               "Double-click a folder to open it. Back and Forward retrace your steps; hold either button, or right-click it, to pick from the folders it leads to.",
           },
           {
-            label: "Go To",
+            label: "Go to Folder",
             description:
               "{openLocationSheet} finds a folder you have opened before, or a favorite, from a few letters of its name; the folders you use most come first. Start with `/` or `~` to type a path instead, and Tab completes it. ⌘⌫ removes the selected folder from the list.",
           },
           {
             label: "Favorites",
             description:
-              "Right-click a folder and choose Add to Favorites to pin it in the sidebar. File > Add to Favorites does the same for the selected folder, or for the folder you are in when nothing is selected.",
+              "Right-click a folder and choose Add to Favorites to pin it in the folder tree. File > Add to Favorites does the same for the selected folder, or for the folder you are in when nothing is selected.",
           },
           {
             label: "Tree root",
             description:
-              "Root Tree at Selected Folder makes a folder the top of the folder tree, until you open a folder outside it. Go > Home returns the tree to your home folder.",
+              "Use as Tree Root makes a folder the top of the folder tree, until you open a folder outside it. Go > Home returns the tree to your home folder.",
           },
         ],
       },
@@ -258,7 +259,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Open in New Tab",
             description:
-              "Right-click a folder, or ⌘-double-click it. ⌘-click works on a folder in the sidebar or the path bar, and File > Open in New Tab on the selected folder.",
+              "Right-click a folder, or ⌘-double-click it. ⌘-click works on a folder in the folder tree or the path bar, and File > Open in New Tab on the selected folder.",
           },
           {
             label: "Each tab",
@@ -317,7 +318,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
               "Narrows the folder to the names containing what you type and selects the best match. Backspace takes a character back; Esc shows everything again and keeps the selection. {focusFileSearch} looks for the same text in the subfolders.",
           },
           {
-            label: "Type in the sidebar",
+            label: "Type in the folder tree",
             description: "Jumps to the first folder that starts with what you type.",
           },
         ],
@@ -379,7 +380,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Same name",
             description:
-              "If an item already exists, you choose: Replace, Keep both, Merge (for folders) or Skip. Replaced items go to the Trash.",
+              "If an item already exists, you choose: Skip, Keep Both or Replace, and for a folder being copied, Add Missing, which copies only what the folder there lacks. Replaced items go to the Trash.",
           },
         ],
       },
@@ -556,14 +557,14 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
         title: "The list",
         rows: [
           {
-            label: "Icons, List and Details",
+            label: "Icons, List and Compact List",
             description:
-              "The three buttons in the toolbar, or the View menu, switch between large icons with previews of photos, PDFs and other files, a compact list, and columns with date, size and kind. Settings → Browsing chooses the columns, and the density of every view.",
+              "The three buttons in the toolbar, the View menu, or {viewAsIcons}, {viewAsDetails} and {viewAsList} switch between large icons with previews of photos, PDFs and other files, a list with columns for date, size and kind, and a compact list of names. Settings → Browsing chooses the columns, and the density of every view.",
           },
           {
             label: "Sort",
             description:
-              "The sort button, View > Sort By, or a click on a column heading in Details orders by name, kind, date or size. Choosing the same order again reverses it.",
+              "The sort button, View > Sort By, or a click on a column heading in List view orders by name, kind, date or size. Choosing the same order again reverses it.",
           },
           {
             label: "Hidden files",
@@ -599,7 +600,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "What takes the space",
             description:
-              "Sort the Details view by Size: each size gets a bar showing its share of the largest item, so the big ones stand out. Folders get a bar once their size is known.",
+              "Sort List view by Size: each size gets a bar showing its share of the largest item, so the big ones stand out. Folders get a bar once their size is known.",
           },
         ],
       },

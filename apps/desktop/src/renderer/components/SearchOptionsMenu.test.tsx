@@ -135,38 +135,4 @@ describe("SearchOptionsMenu", () => {
     fireEvent.click(screen.getByRole("button", { name: "Search options" }), { detail: 1 });
     expect(screen.queryByRole("menu")).toBeNull();
   });
-
-  it("opens from a labeled Options button and hands the focus back to it", () => {
-    const onRecursiveChange = vi.fn();
-    render(
-      <SearchOptionsMenu
-        trigger="label"
-        interactive
-        patternMode="regex"
-        onPatternModeChange={() => undefined}
-        matchScope="name"
-        onMatchScopeChange={() => undefined}
-        recursive
-        onRecursiveChange={onRecursiveChange}
-        skipGitFolders
-        onSkipGitFoldersChange={() => undefined}
-        skipGitIgnored={false}
-        onSkipGitIgnoredChange={() => undefined}
-      />,
-    );
-
-    // Named by its text, so it cannot be confused with the magnifier in the search field.
-    expect(screen.queryByRole("button", { name: "Search options" })).toBeNull();
-    const button = screen.getByRole("button", { name: "Options" });
-    fireEvent.click(button, { detail: 1 });
-    expect(screen.getByRole("menuitemradio", { name: "Regex" })).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
-
-    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Search Subfolders" }));
-    expect(onRecursiveChange).toHaveBeenCalledWith(false);
-    expect(screen.queryByRole("menu")).toBeNull();
-    expect(button).toHaveFocus();
-  });
 });

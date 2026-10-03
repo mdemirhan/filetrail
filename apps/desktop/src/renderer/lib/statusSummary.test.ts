@@ -27,7 +27,7 @@ describe("buildContentStatusSummary", () => {
         getKnownSizeBytes,
         availableBytes: null,
       }),
-    ).toBe("2 of 4 selected, 3.0 KB");
+    ).toBe("2 of 4 selected · 3.0 KB");
   });
 
   it("omits the size when a selected folder has not been calculated", () => {

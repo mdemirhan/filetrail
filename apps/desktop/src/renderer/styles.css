@@ -4860,7 +4860,8 @@ body.window-inactive {
   top: calc(100% + 4px);
   left: auto;
   right: 0;
-  z-index: 20;
+  /* Over everything, as the other menus are: a notification never covers it. */
+  z-index: 100;
   min-width: 200px;
 }
 

@@ -313,11 +313,6 @@ describe("SearchResultsPane", () => {
   it("sorts by clicked columns, forwards scope bar changes, and restores scroll position", () => {
     const handleSortColumn = vi.fn();
     const handleScopeChange = vi.fn();
-    const handlePatternModeChange = vi.fn();
-    const handleMatchScopeChange = vi.fn();
-    const handleRecursiveChange = vi.fn();
-    const handleSkipGitFoldersChange = vi.fn();
-    const handleSkipGitIgnoredChange = vi.fn();
     const handleScrollTopChange = vi.fn();
 
     render(
@@ -353,15 +348,7 @@ describe("SearchResultsPane", () => {
         ]}
         onScopeChange={handleScopeChange}
         patternMode="regex"
-        onPatternModeChange={handlePatternModeChange}
         matchScope="name"
-        onMatchScopeChange={handleMatchScopeChange}
-        recursive
-        onRecursiveChange={handleRecursiveChange}
-        skipGitFolders
-        onSkipGitFoldersChange={handleSkipGitFoldersChange}
-        skipGitIgnored={false}
-        onSkipGitIgnoredChange={handleSkipGitIgnoredChange}
         onStopSearch={() => undefined}
         onClearResults={() => undefined}
         onCloseResults={() => undefined}
@@ -392,19 +379,8 @@ describe("SearchResultsPane", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sort by name" }));
     fireEvent.click(screen.getByRole("button", { name: "Home" }));
     fireEvent.click(screen.getByRole("button", { name: "“project”" }));
-    // The search options live behind one Options button, so the bar stays on one line.
-    const chooseOption = (role: "menuitemradio" | "menuitemcheckbox", name: string) => {
-      fireEvent.click(screen.getByRole("button", { name: "Options" }), { detail: 1 });
-      fireEvent.click(screen.getByRole(role, { name }));
-    };
-    chooseOption("menuitemradio", "Glob");
-    chooseOption("menuitemradio", "Full Path");
-    chooseOption("menuitemcheckbox", "Search Subfolders");
-    // Hidden files follow the file list, so the menu has no option for them.
-    fireEvent.click(screen.getByRole("button", { name: "Options" }), { detail: 1 });
-    expect(screen.queryByRole("menuitemcheckbox", { name: /hidden/i })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Options" }), { detail: 1 });
-    expect(screen.queryByRole("menu")).toBeNull();
+    // The search options are changed from the search field's menu only.
+    expect(screen.queryByRole("button", { name: "Options" })).toBeNull();
     if (!scroll) {
       throw new Error("Missing search results scroll container.");
     }
@@ -413,13 +389,6 @@ describe("SearchResultsPane", () => {
     expect(handleSortColumn).toHaveBeenCalledWith("name");
     expect(handleScopeChange).toHaveBeenCalledTimes(1);
     expect(handleScopeChange).toHaveBeenCalledWith("/Users/demo");
-    expect(handlePatternModeChange).toHaveBeenCalledWith("glob");
-    expect(handleMatchScopeChange).toHaveBeenCalledWith("path");
-    expect(handleRecursiveChange).toHaveBeenCalledWith(false);
-    chooseOption("menuitemcheckbox", "Skip .git Folders");
-    chooseOption("menuitemcheckbox", "Skip Files Ignored by Git");
-    expect(handleSkipGitFoldersChange).toHaveBeenCalledWith(false);
-    expect(handleSkipGitIgnoredChange).toHaveBeenCalledWith(true);
     expect(handleScrollTopChange).toHaveBeenCalledWith(96);
   });
 
