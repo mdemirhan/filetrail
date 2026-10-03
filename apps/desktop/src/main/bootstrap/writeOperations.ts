@@ -11,11 +11,12 @@ import {
 } from "@filetrail/contracts";
 import {
   type CopyPasteProgressEvent,
+  NO_TRASH_ERROR_CODE,
   WRITE_OPERATION_BUSY_ERROR,
   type WriteService,
   describeCopyPasteError,
+  findLockedRefusal,
 } from "@filetrail/core";
-import { toErrorMessage } from "../ipc";
 import { clearResponseCaches } from "./responseCache";
 
 type WriteOperationStats = { isDirectory(): boolean; dev?: number; ino?: number };
@@ -36,6 +37,8 @@ type WriteOperationFs = {
   rm: (path: string, options: { recursive: boolean; force: boolean }) => Promise<void>;
   // Moves an item to the Trash (Electron's shell.trashItem in the app).
   trash: (path: string) => Promise<void>;
+  // The item's BSD flags, to tell a locked item from a lack of permission.
+  getFlags?: (path: string) => Promise<number>;
 };
 
 // What kind of change the running operation is making, in the words a person would use.
@@ -63,6 +66,9 @@ const WRITE_OPERATION_PROGRESS_CHANNEL = "filetrail:writeOperationProgress";
 // messages a second. The window only keeps a progress card current, so plain "running"
 // updates are sent at most this often; the newest one always gets through.
 export const PROGRESS_UPDATE_INTERVAL_MS = 100;
+
+// How long quitting waits for a stopped operation to finish cleaning up.
+export const SHUTDOWN_WAIT_LIMIT_MS = 15_000;
 
 // Answer returned to a request that isn't allowed to act on an operation (unknown id, or
 // asked by a window other than the one that started it).
@@ -143,8 +149,9 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
       return;
     }
     try {
+      const progress = toDeliverableProgressEvent(event, action);
       deliverProgress(event.operationId, event.status, event.runtimeConflict != null, () =>
-        sendProgress(sender, toProgressEvent(event, action)),
+        sendProgress(sender, progress),
       );
     } finally {
       if (isTerminalStatus(event.status)) {
@@ -152,6 +159,37 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
       }
     }
   });
+
+  // The window's view of an event, even when part of it can't be sent (it fails the
+  // checks every message to the window goes through). A question the window would never
+  // see is answered "skip", which changes nothing; the end of the operation always goes out.
+  function toDeliverableProgressEvent(
+    event: CopyPasteProgressEvent,
+    action: WriteOperationAction,
+  ): WriteOperationProgressEvent {
+    try {
+      return toProgressEvent(event, action);
+    } catch (error) {
+      console.error("[filetrail] couldn't send an operation update to the window", error);
+      if (event.status === "awaiting_resolution" && event.runtimeConflict) {
+        writeService.resolveRuntimeConflict(
+          event.operationId,
+          event.runtimeConflict.conflictId,
+          "skip",
+          false,
+        );
+      }
+      return toProgressEvent(
+        {
+          ...event,
+          status: event.status === "awaiting_resolution" ? "running" : event.status,
+          runtimeConflict: null,
+          result: null,
+        },
+        action,
+      );
+    }
+  }
 
   function freeWriteSlot(operationId: string): void {
     if (activeWriteOperationId !== operationId) {
@@ -511,6 +549,9 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
       }
     } catch (error) {
       const cancelled = isAbortError(error) || controller.signal.aborted;
+      const locked = cancelled
+        ? null
+        : await findLockedRefusal(fs, error, [sourcePath, dirname(sourcePath)]);
       emitSingleItemResult({
         operationId,
         action: "rename",
@@ -520,10 +561,11 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
         status: cancelled ? "cancelled" : "failed",
         error: cancelled
           ? "Operation cancelled."
-          : describeWriteError(error, {
+          : (locked?.message ??
+            describeWriteError(error, {
               missing: basename(sourcePath),
               existing: basename(destinationPath),
-            }),
+            })),
       });
       return;
     }
@@ -545,6 +587,7 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
   ): Promise<PreparedRenameOperation> {
     const sourcePath = resolve(payload.sourcePath);
     assertNotProtectedPath([sourcePath]);
+    await assertNotSystemLocation([sourcePath], "renamed", fs);
     const sourceName = basename(sourcePath);
     const destinationName = payload.destinationName.trim();
     const destinationPath = join(dirname(sourcePath), destinationName);
@@ -660,16 +703,10 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
     let cancelled = false;
     // One item that can't go to the Trash doesn't keep the others from going; only
     // cancelling stops the rest.
-    for (const path of paths) {
+    for (const [index, path] of paths.entries()) {
       if (controller.signal.aborted) {
         cancelled = true;
-        items.push({
-          sourcePath: path,
-          destinationPath: null,
-          status: "cancelled",
-          error: "Operation cancelled.",
-          skipReason: null,
-        });
+        items.push(...notStartedItems(paths.slice(index)));
         break;
       }
       emitLocalWriteOperationEvent({
@@ -724,12 +761,12 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
       completedItemCount,
       items,
       status,
-      error:
-        status === "cancelled"
-          ? "Operation cancelled."
-          : failedItemCount > 0
-            ? (items.find((item) => item.status === "failed")?.error ?? "Trash failed.")
-            : null,
+      // Stopped part way is said as such, never as a success.
+      error: cancelled
+        ? stoppedMessage(completedItemCount, "moved to the Trash")
+        : failedItemCount > 0
+          ? (items.find((item) => item.status === "failed")?.error ?? "Trash failed.")
+          : null,
     });
     emitLocalWriteOperationEvent({
       operationId,
@@ -755,16 +792,10 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
     const items: WriteOperationResult["items"] = [];
     let completedItemCount = 0;
     let cancelled = false;
-    for (const path of paths) {
+    for (const [index, path] of paths.entries()) {
       if (controller.signal.aborted) {
         cancelled = true;
-        items.push({
-          sourcePath: path,
-          destinationPath: null,
-          status: "cancelled",
-          error: "Operation cancelled.",
-          skipReason: null,
-        });
+        items.push(...notStartedItems(paths.slice(index)));
         break;
       }
       emitLocalWriteOperationEvent({
@@ -790,11 +821,18 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
           skipReason: null,
         });
       } catch (error) {
+        // What couldn't be deleted may be an item inside the folder (Node names it).
+        const failedPath = (error as NodeJS.ErrnoException | null)?.path;
+        const locked = await findLockedRefusal(fs, error, [
+          ...(failedPath ? [failedPath, dirname(failedPath)] : []),
+          path,
+          dirname(path),
+        ]);
         items.push({
           sourcePath: path,
           destinationPath: null,
           status: "failed",
-          error: describeCopyPasteError(error),
+          error: locked?.message ?? describeCopyPasteError(error),
           skipReason: null,
         });
       }
@@ -816,12 +854,11 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
       completedItemCount,
       items,
       status,
-      error:
-        status === "cancelled"
-          ? "Operation cancelled."
-          : failedItemCount > 0
-            ? (items.find((item) => item.status === "failed")?.error ?? "Delete failed.")
-            : null,
+      error: cancelled
+        ? stoppedMessage(completedItemCount, "deleted")
+        : failedItemCount > 0
+          ? (items.find((item) => item.status === "failed")?.error ?? "Delete failed.")
+          : null,
     });
     emitLocalWriteOperationEvent({
       operationId,
@@ -855,10 +892,33 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
     }
   }
 
+  // Emptying the Trash while a paste is replacing items would delete the replaced items
+  // for good as they arrive there, so it waits its turn like any other write.
+  async function emptyTrash(
+    empty: () => Promise<{ ok: boolean; error: string | null }>,
+  ): Promise<{ ok: boolean; error: string | null }> {
+    try {
+      ensureNoWriteOperationInFlight();
+    } catch {
+      return {
+        ok: false,
+        error: closing
+          ? "File Trail is quitting."
+          : "The Trash can't be emptied while another operation is running. Try again when it has finished.",
+      };
+    }
+    try {
+      return await prepareWithReservedSlot(empty);
+    } finally {
+      // The Trash's listing (and anything shown from it) is out of date now.
+      clearResponseCaches();
+    }
+  }
+
   // Stops the running operation, if any, and waits until it has finished: an operation
   // stops after the item it is on and removes any partly copied file, which can take a
   // moment for a large file. No new operation can start afterwards.
-  async function shutdown(): Promise<void> {
+  async function shutdown(maxWaitMs: number = SHUTDOWN_WAIT_LIMIT_MS): Promise<void> {
     closing = true;
     // The operation is being stopped anyway; a window closing now has nothing to add.
     // Its final event is still sent to the window if it is open.
@@ -870,7 +930,23 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
     if (operationId !== null && operationId !== PREPARING_WRITE_OPERATION_ID) {
       cancelWriteOperation(operationId);
     }
-    await whenIdle();
+    // A stopped copy ends within moments; only a disk that stops answering (a network
+    // share gone away) could hold quitting up, and then it goes ahead anyway. Nothing is
+    // lost by that: a move removes an original only once its copy is complete, and a
+    // Replace cut short is finished at the next start.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = await Promise.race([
+      whenIdle().then(() => false),
+      new Promise<boolean>((resolveTimeout) => {
+        timer = setTimeout(() => resolveTimeout(true), maxWaitMs);
+      }),
+    ]);
+    clearTimeout(timer);
+    if (timedOut) {
+      console.error("[filetrail] quitting without waiting longer for an operation to stop", {
+        operationId,
+      });
+    }
     writeServiceUnsubscribe();
     for (const progressOperationId of [...progressThrottles.keys()]) {
       forgetProgress(progressOperationId);
@@ -885,12 +961,14 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
 
   return {
     handlers: {
-      "copyPaste:analyzeStart": (
+      "copyPaste:analyzeStart": async (
         payload: IpcRequest<"copyPaste:analyzeStart">,
         event: { sender: WriteOperationSender },
       ) => {
         if (payload.mode === "cut") {
           assertNotProtectedPath(payload.sourcePaths);
+          // Moving to another disk copies, then deletes the originals: as final as deleting.
+          await assertNotSystemLocation(payload.sourcePaths, "moved", fs);
         }
         ensureNoWriteOperationInFlight();
         const handle = writeService.startCopyPasteAnalysis({
@@ -921,9 +999,10 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
         analysisOwners.get(payload.analysisId) === event.sender
           ? writeService.cancelCopyPasteAnalysis(payload.analysisId)
           : REJECTED_REQUEST,
-      "copyPaste:plan": (payload: IpcRequest<"copyPaste:plan">) => {
+      "copyPaste:plan": async (payload: IpcRequest<"copyPaste:plan">) => {
         if (payload.mode === "cut") {
           assertNotProtectedPath(payload.sourcePaths);
+          await assertNotSystemLocation(payload.sourcePaths, "moved", fs);
         }
         return writeService.planCopyPaste({
           mode: payload.mode,
@@ -932,12 +1011,13 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
           conflictResolution: payload.conflictResolution,
         });
       },
-      "copyPaste:start": (
+      "copyPaste:start": async (
         payload: IpcRequest<"copyPaste:start">,
         event: { sender: WriteOperationSender },
       ) => {
         if ("sourcePaths" in payload && payload.mode === "cut") {
           assertNotProtectedPath(payload.sourcePaths);
+          await assertNotSystemLocation(payload.sourcePaths, "moved", fs);
         }
         ensureNoWriteOperationInFlight();
         if ("analysisId" in payload) {
@@ -971,7 +1051,7 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
           // The window learns the operation id from this reply, so its end is sent just
           // after it, when the window is listening for that id.
           const sender = event.sender;
-          const progress = toProgressEvent(finishedEarly, payload.action);
+          const progress = toDeliverableProgressEvent(finishedEarly, payload.action);
           setTimeout(() => sendProgress(sender, progress), 0);
           return handle;
         }
@@ -1027,13 +1107,14 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
             executeCreateFolderOperation(operation, operationId, controller),
         });
       },
-      "writeOperation:trash": (
+      "writeOperation:trash": async (
         payload: IpcRequest<"writeOperation:trash">,
         event: { sender: WriteOperationSender },
       ) => {
         assertNotProtectedPath(payload.paths);
-        assertNotSystemLocation(payload.paths, "moved to the Trash");
-        ensureNoWriteOperationInFlight();
+        await prepareWithReservedSlot(() =>
+          assertNotSystemLocation(payload.paths, "moved to the Trash", fs),
+        );
         return queueLocalWriteOperation({
           action: "trash",
           sender: event.sender,
@@ -1041,13 +1122,12 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
             executeTrashOperation(payload, operationId, controller),
         });
       },
-      "writeOperation:deleteImmediately": (
+      "writeOperation:deleteImmediately": async (
         payload: IpcRequest<"writeOperation:deleteImmediately">,
         event: { sender: WriteOperationSender },
       ) => {
         assertNotProtectedPath(payload.paths);
-        assertNotSystemLocation(payload.paths, "deleted");
-        ensureNoWriteOperationInFlight();
+        await prepareWithReservedSlot(() => assertNotSystemLocation(payload.paths, "deleted", fs));
         return queueLocalWriteOperation({
           action: "delete_immediately",
           sender: event.sender,
@@ -1064,6 +1144,7 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
           : REJECTED_REQUEST,
     },
     getActiveOperation,
+    emptyTrash,
     whenIdle,
     shutdown,
   };
@@ -1089,25 +1170,84 @@ const SYSTEM_LOCATIONS = new Set(
   ].map((path) => path.toLowerCase()),
 );
 
-function assertNotSystemLocation(paths: readonly string[], verb: string): void {
-  const home = resolve(homedir()).toLowerCase();
+// The home folder's own folders, which Finder won't let go either.
+const HOME_FOLDERS = [
+  "",
+  "Desktop",
+  "Documents",
+  "Downloads",
+  "Library",
+  "Movies",
+  "Music",
+  "Pictures",
+  "Public",
+  ".Trash",
+];
+
+// Refuses to delete, trash, move or rename the startup disk, a folder that holds the system,
+// the apps or everyone's files, the home folder and its own folders, or a whole disk.
+// The same folder can be reached by other paths ("/System/Volumes/Data/Users/me" is the
+// home folder, "/USERS" is "/Users"), so besides the path, what is on disk is compared:
+// the item's identity, and whether it is where a disk is mounted.
+export async function assertNotSystemLocation(
+  paths: readonly string[],
+  verb: string,
+  fs: Pick<WriteOperationFs, "lstat" | "stat">,
+  home: string = homedir(),
+): Promise<void> {
+  const homePath = resolve(home);
+  const protectedPaths = [...SYSTEM_LOCATIONS, ...HOME_FOLDERS.map((name) => join(homePath, name))];
+  const protectedKeys = protectedPaths.map((path) => path.toLowerCase());
+  let protectedIds: Set<string> | null = null;
   for (const path of paths) {
     if (!path.startsWith("/")) {
       throw new Error("Expected an absolute path.");
     }
+    const resolved = resolve(path);
     // The disk ignores case, so "/users" is "/Users".
-    const normalized = resolve(path).toLowerCase();
+    const normalized = resolved.toLowerCase();
     if (normalized === "/") {
       throw new Error(`The startup disk can't be ${verb}.`);
     }
-    if (
-      SYSTEM_LOCATIONS.has(normalized) ||
-      normalized === home ||
-      /^\/volumes\/[^/]+$/.test(normalized)
-    ) {
-      throw new Error(`“${basename(resolve(path))}” can't be ${verb}.`);
+    const refusal = new Error(`“${basename(resolved)}” can't be ${verb}.`);
+    if (protectedKeys.includes(normalized) || /^\/volumes\/[^/]+$/.test(normalized)) {
+      throw refusal;
+    }
+    const stats = await lstatOrNull(resolved, fs.lstat);
+    if (!stats?.isDirectory()) {
+      // Only folders are protected; a file or a link is never one of them.
+      continue;
+    }
+    protectedIds ??= await identitiesOf(protectedPaths, fs.stat);
+    const id = identityOf(stats);
+    if (id !== null && protectedIds.has(id)) {
+      throw refusal;
+    }
+    // A disk is mounted here when the folder is on a different disk than its parent.
+    const parent = await lstatOrNull(dirname(resolved), fs.lstat);
+    if (parent && stats.dev !== undefined && parent.dev !== undefined && parent.dev !== stats.dev) {
+      throw new Error(`“${basename(resolved)}” is a disk, so it can't be ${verb}.`);
     }
   }
+}
+
+async function identitiesOf(
+  paths: readonly string[],
+  statFn: WriteOperationFs["stat"],
+): Promise<Set<string>> {
+  const ids = new Set<string>();
+  for (const path of paths) {
+    const stats = await lstatOrNull(path, statFn);
+    const id = stats ? identityOf(stats) : null;
+    if (id !== null) {
+      ids.add(id);
+    }
+  }
+  return ids;
+}
+
+function identityOf(stats: WriteOperationStats): string | null {
+  return stats.dev === undefined || stats.ino === undefined ? null : `${stats.dev}:${stats.ino}`;
 }
 
 type AnalysisReport = NonNullable<ReturnType<WriteService["getCopyPasteAnalysisUpdate"]>["report"]>;
@@ -1133,6 +1273,25 @@ function trimAnalysisNodeForWindow(node: AnalysisNode): AnalysisNode {
         ? node.children.map(trimAnalysisNodeForWindow)
         : [],
   };
+}
+
+function stoppedMessage(doneCount: number, done: string): string {
+  if (doneCount === 0) {
+    return "Operation cancelled.";
+  }
+  return `Stopped after ${doneCount === 1 ? "1 item was" : `${doneCount} items were`} ${done}.`;
+}
+
+// The items a stopped Trash or delete never reached: each is listed, so the result counts
+// everything that was left alone.
+function notStartedItems(paths: readonly string[]): WriteOperationResult["items"] {
+  return paths.map((path) => ({
+    sourcePath: path,
+    destinationPath: null,
+    status: "cancelled" as const,
+    error: "Not started because the operation was stopped.",
+    skipReason: null,
+  }));
 }
 
 function isSenderDestroyed(sender: WriteOperationSender): boolean {
@@ -1201,14 +1360,14 @@ function describeWriteError(
   return describeCopyPasteError(error);
 }
 
-// The Trash reports most failures in its own words, with no error code. The usual cause is
-// a disk without a Trash (a network share, some USB drives), where only deleting works.
+// The Trash gives its reasons as sentences (see createTrashItem). Only on a disk that may
+// have no Trash is deleting for good suggested.
 function describeTrashError(error: unknown, path: string): string {
-  const described = describeCopyPasteError(error);
-  if (described !== toErrorMessage(error)) {
-    return described;
+  if (errorCode(error) === NO_TRASH_ERROR_CODE) {
+    return `“${basename(path)}” couldn't be moved to the Trash. This disk may not have a Trash; Delete Immediately deletes it for good instead.`;
   }
-  return `Couldn't move “${basename(path)}” to the Trash. This disk may not have a Trash; use Delete Immediately instead.`;
+  const described = describeCopyPasteError(error);
+  return described || `“${basename(path)}” couldn't be moved to the Trash.`;
 }
 
 function toWriteOperationKind(action: WriteOperationAction): WriteOperationKind {

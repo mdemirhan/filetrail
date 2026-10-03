@@ -42,6 +42,7 @@ import {
   STOP_BUTTON_INDEX,
   type StopTrigger,
   describeQuitWhileBusy,
+  shouldOpenWindowOnActivate,
   stopQuestionButtons,
 } from "./quitWhileBusy";
 import { readSettingsTabFromUrl } from "./settingsWindowTab";
@@ -67,6 +68,8 @@ let stopQuestionOpen = false;
 // close that follows isn't asked about again.
 let windowCloseConfirmed = false;
 let processLoggingHandlersInstalled = false;
+// Found while starting, before the window opened; shown once it has.
+const pendingStartupNotices: string[] = [];
 
 if (!hasSingleInstanceLock) {
   app.quit();
@@ -172,6 +175,9 @@ if (hasSingleInstanceLock) {
         {
           openSettingsWindow,
           openAcknowledgementsWindow,
+          showStartupNotices: (notices) => {
+            pendingStartupNotices.push(...notices);
+          },
           setApplicationMenuState: (state, senderId) => {
             if (senderId !== mainWindowRef?.webContents.id) {
               return;
@@ -183,11 +189,18 @@ if (hasSingleInstanceLock) {
       );
       mainWindowRef = createWindow();
 
+      showPendingStartupNotices(mainWindowRef);
+
       app.on("activate", () => {
         appLogger.info("[filetrail] app activate", {
           openWindowCount: BrowserWindow.getAllWindows().length,
         });
-        if (BrowserWindow.getAllWindows().length === 0) {
+        if (
+          shouldOpenWindowOnActivate({
+            shutdownInProgress,
+            openWindowCount: BrowserWindow.getAllWindows().length,
+          })
+        ) {
           mainWindowRef = createWindow();
         }
       });
@@ -732,6 +745,34 @@ async function askToStopOperation(trigger: StopTrigger): Promise<boolean> {
     return false;
   }
   return true;
+}
+
+// Items a crash left half replaced that couldn't be put right: the person is told where
+// they are, once the window is on screen.
+function showPendingStartupNotices(window: BrowserWindow): void {
+  if (pendingStartupNotices.length === 0) {
+    return;
+  }
+  const notices = pendingStartupNotices.splice(0);
+  const show = () => {
+    if (window.isDestroyed()) {
+      return;
+    }
+    void dialog.showMessageBox(window, {
+      type: "warning",
+      message:
+        notices.length === 1
+          ? "An item replaced before File Trail last quit couldn't be put in place"
+          : "Some items replaced before File Trail last quit couldn't be put in place",
+      detail: notices.join("\n\n"),
+      buttons: ["OK"],
+    });
+  };
+  if (window.webContents.isLoading()) {
+    window.webContents.once("did-finish-load", show);
+  } else {
+    show();
+  }
 }
 
 async function finalizeShutdown(): Promise<void> {

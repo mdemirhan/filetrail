@@ -66,6 +66,13 @@ async function getFileThumbnailFallback() {
   return null;
 }
 
+// Without them no item is seen as locked, as before they existed.
+async function getFlagsFallback() {
+  return 0;
+}
+
+async function setFlagsFallback() {}
+
 module.exports = {
   nativeCopyFile: binding.nativeCopyFile,
   nativeCopyMetadata: binding.nativeCopyMetadata ?? copyMetadataFallback,
@@ -75,4 +82,6 @@ module.exports = {
   nativeFolderSizeCancel: binding.nativeFolderSizeCancel,
   nativeRenameExclusive: binding.nativeRenameExclusive ?? renameExclusiveFallback,
   nativeIsCaseSensitive: binding.nativeIsCaseSensitive ?? isCaseSensitiveFallback,
+  nativeGetFlags: binding.nativeGetFlags ?? getFlagsFallback,
+  nativeSetFlags: binding.nativeSetFlags ?? setFlagsFallback,
 };

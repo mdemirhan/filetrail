@@ -205,30 +205,60 @@ describe("copyPaste scenario matrix", () => {
     });
   });
 
-  it("does not re-prompt for folder overwrite when the destination drifts after planning", async () => {
+  const folderGainedItemSeed: Record<string, SeedNode> = {
+    "/source": { kind: "directory" },
+    "/source/Folder": { kind: "directory" },
+    "/source/Folder/a.txt": { kind: "file", size: 7 },
+    "/target": { kind: "directory" },
+    "/target/Folder": { kind: "directory" },
+    "/target/Folder/stale.txt": { kind: "file", size: 1 },
+  };
+  const replaceEverything: CopyPastePolicy = {
+    file: "overwrite",
+    directory: "overwrite",
+    mismatch: "overwrite",
+  };
+
+  // The review said what the Replace would delete; an item added after it would go to the
+  // Trash unseen, so the folder is asked about again.
+  it("asks again before replacing a folder that gained an item after the review", async () => {
     const result = await runScenario({
       mode: "copy",
-      seed: {
-        "/source": { kind: "directory" },
-        "/source/Folder": { kind: "directory" },
-        "/source/Folder/a.txt": { kind: "file", size: 7 },
-        "/target": { kind: "directory" },
-        "/target/Folder": { kind: "directory" },
-        "/target/Folder/stale.txt": { kind: "file", size: 1 },
-      },
+      seed: folderGainedItemSeed,
       sourcePaths: ["/source/Folder"],
       destinationDirectoryPath: "/target",
-      policy: {
-        file: "overwrite",
-        directory: "overwrite",
-        mismatch: "overwrite",
-      },
+      policy: replaceEverything,
+      runtimeResolution: "skip",
       mutateAfterResolve: (fileSystem) => {
         fileSystem.addFile("/target/Folder/late-change.txt", { size: 5 });
       },
     });
 
-    expect(result.runtimeConflicts).toHaveLength(0);
+    expect(result.runtimeConflicts).toHaveLength(1);
+    expect(result.runtimeConflicts[0]).toMatchObject({
+      reason: "destination_changed",
+      destinationPath: "/target/Folder",
+    });
+    expect(snapshotRelevantTree(result.fileSystem)).toMatchObject({
+      "/target/Folder/stale.txt": file(1),
+      "/target/Folder/late-change.txt": file(5),
+    });
+  });
+
+  it("replaces the folder once the person agrees after seeing it changed", async () => {
+    const result = await runScenario({
+      mode: "copy",
+      seed: folderGainedItemSeed,
+      sourcePaths: ["/source/Folder"],
+      destinationDirectoryPath: "/target",
+      policy: replaceEverything,
+      runtimeResolution: "overwrite",
+      mutateAfterResolve: (fileSystem) => {
+        fileSystem.addFile("/target/Folder/late-change.txt", { size: 5 });
+      },
+    });
+
+    expect(result.runtimeConflicts).toHaveLength(1);
     expect(result.result?.status).toBe("completed");
     expect(snapshotRelevantTree(result.fileSystem)).toEqual({
       "/source": dir(),
@@ -238,6 +268,24 @@ describe("copyPaste scenario matrix", () => {
       "/target/Folder": dir(),
       "/target/Folder/a.txt": file(7),
     });
+  });
+
+  // Finder writes .DS_Store into a folder just by showing it: that is no reason to ask.
+  it("doesn't ask again when only Finder's .DS_Store appeared in the folder", async () => {
+    const result = await runScenario({
+      mode: "copy",
+      seed: folderGainedItemSeed,
+      sourcePaths: ["/source/Folder"],
+      destinationDirectoryPath: "/target",
+      policy: replaceEverything,
+      mutateAfterResolve: (fileSystem) => {
+        fileSystem.addFile("/target/Folder/.DS_Store", { size: 5 });
+      },
+    });
+
+    expect(result.runtimeConflicts).toHaveLength(0);
+    expect(result.result?.status).toBe("completed");
+    expect(snapshotRelevantTree(result.fileSystem)["/target/Folder/a.txt"]).toEqual(file(7));
   });
 });
 

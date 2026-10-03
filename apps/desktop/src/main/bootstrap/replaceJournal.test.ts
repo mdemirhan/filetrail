@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ReplaceJournalEntry } from "@filetrail/core";
@@ -79,6 +79,14 @@ describe("openReplaceJournal", () => {
     const corrupt = join(testDir, "corrupt.json");
     await writeFile(corrupt, '[{"id": "a", "stagingPa');
     expect((await openReplaceJournal(corrupt)).entries()).toEqual([]);
+    // What it may still say is kept aside, not written over by the next Replace.
+    const keptAside = (await readdir(testDir)).filter((name) =>
+      name.startsWith("corrupt.json.unreadable-"),
+    );
+    expect(keptAside).toHaveLength(1);
+    expect(await readFile(join(testDir, keptAside[0] ?? ""), "utf8")).toBe(
+      '[{"id": "a", "stagingPa',
+    );
 
     const notAList = join(testDir, "object.json");
     await writeFile(notAList, JSON.stringify({ id: "a" }));
@@ -110,7 +118,7 @@ describe("recoverReplaces", () => {
     }
     const logger = { info: vi.fn(), error: vi.fn() };
 
-    await recoverReplaces(journal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, logger);
+    const notices = await recoverReplaces(journal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, logger);
 
     expect(await readFile(finished.finalPath, "utf8")).toBe("new contents");
     expect(existsSync(finished.stagingPath)).toBe(false);
@@ -118,6 +126,55 @@ describe("recoverReplaces", () => {
     expect((await openReplaceJournal(filePath)).entries()).toEqual([failing]);
     expect(logger.error).toHaveBeenCalledTimes(1);
     expect(logger.info).toHaveBeenCalledTimes(2);
+    // The person is told where the item that couldn't be put right is.
+    expect(notices).toEqual([
+      expect.stringContaining(
+        `“failing.txt” is still under the hidden name “.filetrail-staging-failing” in “${testDir}”.`,
+      ),
+    ]);
+  });
+
+  // Its disk isn't connected now: the item may be the only copy of something, so the entry
+  // stays, quietly, until it can be dealt with.
+  it("keeps an entry whose hidden item can't be reached, without a notice", async () => {
+    const journal = await openReplaceJournal(join(testDir, "replace-journal.json"));
+    const unreachable = createEntry("unreachable", {
+      stagingPath: "/Volumes/FileTrailNotConnected/.moved.filetrail-1",
+      moved: true,
+    });
+    await journal.add(unreachable);
+
+    const notices = await recoverReplaces(journal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, {
+      info: vi.fn(),
+      error: vi.fn(),
+    });
+
+    expect(notices).toEqual([]);
+    expect(journal.entries()).toEqual([unreachable]);
+  });
+
+  // A crash during a Replace that filled the disk must not keep the app from starting.
+  it("never throws when the journal can't be written", async () => {
+    const journal = await openReplaceJournal(join(testDir, "replace-journal.json"));
+    const finished = createEntry("finished");
+    await writeFile(finished.stagingPath, "new contents");
+    await journal.add(finished);
+    const logger = { info: vi.fn(), error: vi.fn() };
+    const failingJournal = {
+      ...journal,
+      remove: vi.fn(async () => {
+        throw Object.assign(new Error("ENOSPC: no space left on device"), { code: "ENOSPC" });
+      }),
+    };
+
+    await expect(
+      recoverReplaces(failingJournal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, logger),
+    ).resolves.toEqual([]);
+    expect(await readFile(finished.finalPath, "utf8")).toBe("new contents");
+    expect(logger.error).toHaveBeenCalledWith(
+      "[filetrail] couldn't update the replace journal",
+      expect.any(Error),
+    );
   });
 
   it("does nothing when there is nothing to recover", async () => {

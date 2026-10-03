@@ -1,4 +1,5 @@
 import { open, readFile, rename } from "node:fs/promises";
+import { basename, dirname } from "node:path";
 
 import {
   type ReplaceJournal,
@@ -43,22 +44,43 @@ export async function openReplaceJournal(filePath: string): Promise<FileReplaceJ
 }
 
 // Finishes or undoes what an earlier run left half done. Entries that couldn't be dealt
-// with stay for the next start.
+// with stay for the next start. Never throws: nothing here may keep the app from starting.
+// Returns what the person needs to be told: items still left under a hidden name.
 export async function recoverReplaces(
   journal: FileReplaceJournal,
   fileSystem: WriteServiceFileSystem,
   logger: Pick<AppLogger, "info" | "error">,
-): Promise<void> {
+): Promise<string[]> {
   const entries = journal.entries();
   if (entries.length === 0) {
-    return;
+    return [];
   }
-  for (const outcome of await recoverInterruptedReplaces(entries, fileSystem)) {
+  const notices: string[] = [];
+  let outcomes: Awaited<ReturnType<typeof recoverInterruptedReplaces>>;
+  try {
+    outcomes = await recoverInterruptedReplaces(entries, fileSystem);
+  } catch (error) {
+    logger.error("[filetrail] couldn't recover interrupted replaces", error);
+    return notices;
+  }
+  for (const outcome of outcomes) {
+    const name = basename(outcome.entry.finalPath);
     if (outcome.outcome === "failed") {
       logger.error("[filetrail] couldn't recover an interrupted replace", {
         stagingPath: outcome.entry.stagingPath,
         error: outcome.error,
       });
+      notices.push(
+        `“${name}” is still under the hidden name “${basename(outcome.entry.stagingPath)}” in “${dirname(outcome.entry.stagingPath)}”. ${outcome.error}`,
+      );
+      continue;
+    }
+    if (outcome.outcome === "unreachable") {
+      logger.info("[filetrail] an interrupted replace can't be reached", {
+        stagingPath: outcome.entry.stagingPath,
+        error: outcome.error,
+      });
+      // Kept quietly: on a disk that isn't connected now, it is finished once it is.
       continue;
     }
     logger.info("[filetrail] recovered an interrupted replace", {
@@ -66,8 +88,14 @@ export async function recoverReplaces(
       stagingPath: outcome.entry.stagingPath,
       path: "path" in outcome ? outcome.path : null,
     });
-    await journal.remove(outcome.entry.id);
+    try {
+      await journal.remove(outcome.entry.id);
+    } catch (error) {
+      // The item was dealt with; the next start finds nothing left for this entry.
+      logger.error("[filetrail] couldn't update the replace journal", error);
+    }
   }
+  return notices;
 }
 
 async function readEntries(filePath: string): Promise<ReplaceJournalEntry[]> {
@@ -79,10 +107,14 @@ async function readEntries(filePath: string): Promise<ReplaceJournalEntry[]> {
   }
   try {
     const parsed: unknown = JSON.parse(text);
-    return Array.isArray(parsed) ? parsed.filter(isEntry) : [];
+    if (Array.isArray(parsed)) {
+      return parsed.filter(isEntry);
+    }
   } catch {
-    return [];
+    // Kept aside below, so the next write doesn't erase what it may still say.
   }
+  await rename(filePath, `${filePath}.unreadable-${Date.now()}`).catch(() => undefined);
+  return [];
 }
 
 function isEntry(value: unknown): value is ReplaceJournalEntry {

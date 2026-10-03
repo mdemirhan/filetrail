@@ -39,6 +39,7 @@ import {
   resolveApplicationDisplayName,
   resolveTerminalApplicationName,
 } from "./bootstrap/systemHandlers";
+import { createTrashItem } from "./bootstrap/trashItem";
 import {
   type WriteOperationKind,
   createWriteOperationCoordinator,
@@ -62,6 +63,9 @@ export async function bootstrapMainProcess(
     openAcknowledgementsWindow?: () => void;
     // The explorer window reporting what the application menu should show.
     setApplicationMenuState?: (state: ApplicationMenuState, senderId: number | null) => void;
+    // Things found at start that the person must be told about (a Replace a crash left
+    // unfinished that couldn't be put right), shown once the window is open.
+    showStartupNotices?: (notices: string[]) => void;
   } = {},
 ): Promise<void> {
   // Main owns the worker client so the renderer only ever talks through the IPC contract.
@@ -81,12 +85,20 @@ export async function bootstrapMainProcess(
     cancelFolderSize,
   } = await import("./originalFileSystem");
   // Items replaced by a paste go to the Trash, so a replace can always be undone.
-  const writeFileSystem = { ...originalFileSystem, trash: (path: string) => shell.trashItem(path) };
+  const trashItem = createTrashItem({
+    trash: (path) => shell.trashItem(path),
+    fs: originalFileSystem,
+    homePath: app.getPath("home"),
+  });
+  const writeFileSystem = { ...originalFileSystem, trash: trashItem };
   // A Replace cut short by a crash is finished or undone before anything else is written.
   const replaceJournal = await openReplaceJournal(
     join(app.getPath("userData"), "replace-journal.json"),
   );
-  await recoverReplaces(replaceJournal, writeFileSystem, logger);
+  const recoveryNotices = await recoverReplaces(replaceJournal, writeFileSystem, logger);
+  if (recoveryNotices.length > 0) {
+    windows.showStartupNotices?.(recoveryNotices);
+  }
   const writeService = createWriteService({ fileSystem: writeFileSystem, replaceJournal });
   const writeCoordinator = createWriteOperationCoordinator(writeService, {
     lstat: originalFileSystem.lstat,
@@ -95,7 +107,8 @@ export async function bootstrapMainProcess(
     rename: originalRename,
     renameExclusive: originalRenameExclusive,
     rm: (path, options) => originalFileSystem.rm(path, options),
-    trash: (path) => shell.trashItem(path),
+    trash: trashItem,
+    ...(originalFileSystem.getFlags ? { getFlags: originalFileSystem.getFlags } : {}),
   });
   const folderSizeHandlers = createFolderSizeHandlers({ getFolderSize, cancelFolderSize });
   activeWorkerClient = workerClient;
@@ -251,7 +264,7 @@ export async function bootstrapMainProcess(
         return { ok: true };
       },
       "system:performEditAction": (payload, event) => performEditAction(payload, event.sender),
-      "system:emptyTrash": () => emptyTrash(),
+      "system:emptyTrash": () => writeCoordinator.emptyTrash(emptyTrash),
       "system:getFileIcon": (payload) => getFileIconHandler(payload),
       "system:getFileThumbnail": (payload) => getFileThumbnailHandler(payload),
     },

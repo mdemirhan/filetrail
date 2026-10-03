@@ -84,8 +84,15 @@ export type WriteServiceFileSystem = {
   isCaseSensitive?: (path: string) => Promise<boolean | null>;
   symlink: (target: string, path: string) => Promise<void>;
   /** Copies a file preserving metadata (mode, flags, timestamps, xattrs). When provided,
-   *  used instead of `copyFileStream`, and the copy's metadata is left as it made it. */
-  copyFile?: (sourcePath: string, destinationPath: string) => Promise<void>;
+   *  used instead of `copyFileStream`, and the copy's metadata is left as it made it.
+   *  `signal` stops it part way through the file (rejecting with an AbortError), leaving
+   *  no partial file. */
+  copyFile?: (sourcePath: string, destinationPath: string, signal?: AbortSignal) => Promise<void>;
+  /** The item's BSD flags (`st_flags`, a symlink not followed); `UF_IMMUTABLE` is
+   *  Finder's "Locked". Without it no item is seen as locked. */
+  getFlags?: (path: string) => Promise<number>;
+  /** Sets the item's BSD flags (a symlink not followed). */
+  setFlags?: (path: string, flags: number) => Promise<void>;
   /** Copies a folder's own metadata (mode, flags, dates, xattrs such as Finder tags, ACLs)
    *  onto an existing folder, without its contents. Applied once the folder's items are
    *  in, since a read-only or locked folder can't be written into afterwards. Without it,

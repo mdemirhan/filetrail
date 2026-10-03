@@ -109,6 +109,120 @@ describe("ipc contracts", () => {
     }
   });
 
+  it("refuses a path with a null character, which macOS would cut short", () => {
+    expect(
+      ipcContractSchemas["writeOperation:trash"].request.safeParse({
+        paths: ["/Users/demo\0/a.txt"],
+      }).success,
+    ).toBe(false);
+  });
+
+  // Selecting everything in a large folder is ordinary; it used to fail past 500 items.
+  it("takes thousands of items in one request and in the reports sent back", () => {
+    const paths = Array.from({ length: 20_000 }, (_, index) => `/Users/demo/f${index}.txt`);
+
+    expect(ipcContractSchemas["writeOperation:trash"].request.safeParse({ paths }).success).toBe(
+      true,
+    );
+    expect(
+      ipcContractSchemas["writeOperation:deleteImmediately"].request.safeParse({ paths }).success,
+    ).toBe(true);
+    expect(
+      ipcContractSchemas["copyPaste:analyzeStart"].request.safeParse({
+        mode: "copy",
+        sourcePaths: paths,
+        destinationDirectoryPath: "/x",
+      }).success,
+    ).toBe(true);
+    expect(
+      ipcContractSchemas["copyPaste:analyzeGetUpdate"].response.safeParse({
+        analysisId: "analysis-1",
+        status: "complete",
+        done: true,
+        error: null,
+        report: {
+          analysisId: "analysis-1",
+          mode: "copy",
+          sourcePaths: paths,
+          destinationDirectoryPath: "/x",
+          nodes: [],
+          issues: [],
+          warnings: [],
+          summary: {
+            topLevelItemCount: 0,
+            totalNodeCount: 0,
+            totalBytes: 0,
+            fileConflictCount: 0,
+            directoryConflictCount: 0,
+            mismatchConflictCount: 0,
+            blockedCount: 0,
+          },
+        },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("takes an item dated before 1970", () => {
+    const fingerprint = {
+      exists: true,
+      kind: "file",
+      size: 1,
+      // 1 January 1950; HFS dates go back to 1904.
+      mtimeMs: -631152000000,
+      mode: 0o644,
+      ino: 1,
+      dev: 1,
+      symlinkTarget: null,
+    };
+    expect(
+      ipcContractSchemas["copyPaste:analyzeGetUpdate"].response.safeParse({
+        analysisId: "analysis-1",
+        status: "complete",
+        done: true,
+        error: null,
+        report: {
+          analysisId: "analysis-1",
+          mode: "copy",
+          sourcePaths: ["/a.txt"],
+          destinationDirectoryPath: "/x",
+          nodes: [
+            {
+              id: "item-1",
+              sourcePath: "/a.txt",
+              destinationPath: "/x/a.txt",
+              sourceKind: "file",
+              destinationKind: "missing",
+              disposition: "new",
+              conflictClass: null,
+              sourceFingerprint: fingerprint,
+              destinationFingerprint: { ...fingerprint, exists: false, kind: "missing" },
+              children: [],
+              issueCode: null,
+              issueMessage: null,
+              totalNodeCount: 1,
+              conflictNodeCount: 0,
+              destinationTotalNodeCount: null,
+              keepBothDestinationPath: null,
+              destinationOnly: null,
+              replaceBlockedReason: null,
+            },
+          ],
+          issues: [],
+          warnings: [],
+          summary: {
+            topLevelItemCount: 1,
+            totalNodeCount: 1,
+            totalBytes: 1,
+            fileConflictCount: 0,
+            directoryConflictCount: 0,
+            mismatchConflictCount: 0,
+            blockedCount: 0,
+          },
+        },
+      }).success,
+    ).toBe(true);
+  });
+
   it("validates the folder size placeholder channels", () => {
     expect(
       ipcContractSchemas["folderSize:start"].response.parse({

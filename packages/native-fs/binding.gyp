@@ -5,6 +5,7 @@
       "sources": [
         "src/native_copyfile.c",
         "src/native_errors.c",
+        "src/native_flags.c",
         "src/native_fileicon.m",
         "src/native_foldersize.c",
         "src/native_rename.c",

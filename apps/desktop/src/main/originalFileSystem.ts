@@ -18,6 +18,7 @@ import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { pipeline } from "node:stream/promises";
 
+import { createStoppableCopyFile } from "@filetrail/core";
 import type { ExplorerFileSystem } from "@filetrail/core";
 import type { WriteServiceFileSystem, WriteServiceStats } from "@filetrail/core";
 
@@ -30,7 +31,9 @@ const originalFs = require("original-fs") as typeof import("node:fs");
 // metadata preservation (timestamps, xattrs, ACLs, flags). The addon is required
 // on macOS — the build step compiles it, so a missing addon means a broken build.
 const addon = require("@filetrail/native-fs") as {
-  nativeCopyFile: (src: string, dst: string) => Promise<void>;
+  nativeCopyFile: (src: string, dst: string, stopFlag?: Int32Array) => Promise<void>;
+  nativeGetFlags: (path: string) => Promise<number>;
+  nativeSetFlags: (path: string, flags: number) => Promise<void>;
   nativeCopyMetadata?: (src: string, dst: string) => Promise<void>;
   nativeGetFileIcon: (path: string, size: number) => Promise<Buffer | null>;
   nativeGetFileThumbnail: (path: string, size: number) => Promise<Buffer | null>;
@@ -48,7 +51,12 @@ const {
   nativeFolderSizeCancel,
   nativeRenameExclusive,
   nativeIsCaseSensitive,
+  nativeGetFlags,
+  nativeSetFlags,
 } = addon;
+
+// Stop takes effect part way through a large file.
+const copyFileStoppable = createStoppableCopyFile(nativeCopyFile);
 
 const {
   promises: {
@@ -98,10 +106,12 @@ export const originalFileSystem: WriteServiceFileSystem = {
   symlink: async (target, path) => {
     await symlink(target, path);
   },
-  copyFile: async (sourcePath, destinationPath) => {
+  copyFile: async (sourcePath, destinationPath, signal) => {
     await mkdir(dirname(destinationPath), { recursive: true });
-    await nativeCopyFile(sourcePath, destinationPath);
+    await copyFileStoppable(sourcePath, destinationPath, signal);
   },
+  getFlags: (path) => nativeGetFlags(path),
+  setFlags: (path, flags) => nativeSetFlags(path, flags),
   // A binary built before it existed leaves folders with their mode and dates only.
   ...(nativeCopyMetadata ? { copyMetadata: nativeCopyMetadata } : {}),
   copyFileStream: async (sourcePath, destinationPath, signal) => {

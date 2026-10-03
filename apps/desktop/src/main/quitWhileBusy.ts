@@ -12,6 +12,15 @@ export function stopQuestionButtons(trigger: StopTrigger): [string, string] {
   return ["Keep Working", trigger === "quit" ? "Stop and Quit" : "Stop and Close"];
 }
 
+// Clicking the Dock icon with no window open opens one, but not while quitting waits for an
+// operation to stop: that window would be closed again moments later.
+export function shouldOpenWindowOnActivate(state: {
+  shutdownInProgress: boolean;
+  openWindowCount: number;
+}): boolean {
+  return !state.shutdownInProgress && state.openWindowCount === 0;
+}
+
 // What to ask before quitting or closing the window stops a running operation. A rename or
 // a new folder is over in a moment, so it is simply waited for: there is nothing to ask.
 export function describeQuitWhileBusy(

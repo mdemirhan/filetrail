@@ -9,11 +9,33 @@
  *
  * @param sourcePath - Absolute path to the source file.
  * @param destinationPath - Absolute path to the destination file. Parent directory must exist.
+ * @param stopFlag - Optional. Setting `stopFlag[0]` to a non-zero value stops the copy part
+ *   way through the file; it then fails with `code: "ECANCELED"` and leaves no partial file.
  * @returns A promise that resolves when the copy completes.
  * @throws An error with a `code` property (the errno name, e.g. `"ENOENT"`, `"ENOTSUP"`)
  *   plus `errno`, `syscall`, `path` and `dest` on failure.
  */
-export function nativeCopyFile(sourcePath: string, destinationPath: string): Promise<void>;
+export function nativeCopyFile(
+  sourcePath: string,
+  destinationPath: string,
+  stopFlag?: Int32Array,
+): Promise<void>;
+
+/**
+ * The item's BSD flags (`st_flags` from `lstat(2)`; a symlink is not followed).
+ * `UF_IMMUTABLE` (0x2) is Finder's "Locked".
+ *
+ * @throws An error with a `code` property (the errno name) on failure.
+ */
+export function nativeGetFlags(path: string): Promise<number>;
+
+/**
+ * Sets the item's BSD flags with `lchflags(2)` (a symlink is not followed). Only the owner
+ * can change the user flags; the system flags need root.
+ *
+ * @throws An error with a `code` property (the errno name) on failure.
+ */
+export function nativeSetFlags(path: string, flags: number): Promise<void>;
 
 /**
  * Copies a folder's own metadata onto a folder that already exists, using `copyfile(3)`

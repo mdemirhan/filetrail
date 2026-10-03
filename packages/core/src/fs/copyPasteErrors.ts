@@ -40,6 +40,60 @@ export function describeCopyPasteError(error: unknown): string {
   return toErrorMessage(error);
 }
 
+// The code on a Trash failure on a disk that may have no Trash (a network share, some USB
+// drives): there, and only there, deleting the item for good may be offered instead.
+export const NO_TRASH_ERROR_CODE = "ENOTRASH";
+
+// BSD flags that stop an item from being renamed, moved, changed or deleted. UF_IMMUTABLE
+// is Finder's "Locked"; the others are rarer but refuse the same things.
+const UF_IMMUTABLE = 0x2;
+const UF_APPEND = 0x4;
+const SF_IMMUTABLE = 0x20000;
+const SF_APPEND = 0x40000;
+export const LOCK_FLAGS = UF_IMMUTABLE | UF_APPEND | SF_IMMUTABLE | SF_APPEND;
+// The ones the item's owner may clear (the SF_ ones need root).
+export const USER_LOCK_FLAGS = UF_IMMUTABLE | UF_APPEND;
+
+/** Whether the item is locked (Finder's "Locked", or a flag that refuses the same
+ *  things). False when it can't be told: the item is then treated as unlocked. */
+export async function isLocked(
+  fileSystem: { getFlags?: (path: string) => Promise<number> },
+  path: string,
+): Promise<boolean> {
+  if (!fileSystem.getFlags) {
+    return false;
+  }
+  try {
+    return ((await fileSystem.getFlags(path)) & LOCK_FLAGS) !== 0;
+  } catch {
+    return false;
+  }
+}
+
+/** A refusal (EPERM/EACCES) explained by one of `paths` being locked: an Error naming the
+ *  locked item, or null when none of them is. */
+export async function findLockedRefusal(
+  fileSystem: { getFlags?: (path: string) => Promise<number> },
+  error: unknown,
+  paths: readonly string[],
+): Promise<Error | null> {
+  const code = errorCode(error);
+  if (code !== "EPERM" && code !== "EACCES") {
+    return null;
+  }
+  for (const path of paths) {
+    if (await isLocked(fileSystem, path)) {
+      return new Error(lockedMessage(path));
+    }
+  }
+  return null;
+}
+
+export function lockedMessage(path: string): string {
+  const name = path.slice(path.lastIndexOf("/") + 1) || path;
+  return `“${name}” is locked. Unlock it in Finder's Get Info and try again.`;
+}
+
 export function errorCode(error: unknown): string | undefined {
   const code = (error as NodeJS.ErrnoException | null)?.code;
   return typeof code === "string" ? code : undefined;

@@ -3,9 +3,30 @@ import { basename, dirname, join } from "node:path";
 
 import { isAbortError } from "@filetrail/contracts";
 
-import { describeCopyPasteError, errorCode } from "./copyPasteErrors";
-import { captureFingerprint, findSourceRelation, fingerprintsEqual } from "./copyPasteFingerprint";
-import { fitName } from "./copyPasteNames";
+import {
+  LOCK_FLAGS,
+  NO_TRASH_ERROR_CODE,
+  USER_LOCK_FLAGS,
+  describeCopyPasteError,
+  errorCode,
+  findLockedRefusal,
+  isLocked,
+  lockedMessage,
+} from "./copyPasteErrors";
+import {
+  captureFingerprint,
+  captureFolderFingerprint,
+  findSourceRelation,
+  fingerprintsEqual,
+  holdsAnyOf,
+  realItemPaths,
+} from "./copyPasteFingerprint";
+import {
+  destinationPathKey,
+  fitName,
+  isFolderViewFile,
+  resolveDuplicateName,
+} from "./copyPasteNames";
 import {
   type ResolvedCopyPasteNode,
   collectDestinationPathKeys,
@@ -53,6 +74,9 @@ type ExecutionContext = {
   // Every destination this paste planned or has written so far (`destinationPathKey`),
   // so a runtime "Keep Both" never takes a name another item will use.
   reservedPaths: Set<string>;
+  // Every destination this paste has written so far (`destinationPathKey`).
+  writtenPaths: Set<string>;
+  pastedItemRealPaths?: Promise<string[]>;
   totalItemCount: number;
   totalBytes: number | null;
   // Shared by every step so progress survives an item that fails half way.
@@ -103,7 +127,7 @@ export async function executeCopyPasteFromAnalysis(args: {
   replaceJournal?: ReplaceJournal;
 }): Promise<void> {
   const startedAt = args.now().toISOString();
-  const destinationFingerprint = await captureFingerprint(
+  const destinationFingerprint = await captureFolderFingerprint(
     args.fileSystem,
     args.report.destinationDirectoryPath,
   );
@@ -122,6 +146,7 @@ export async function executeCopyPasteFromAnalysis(args: {
     destinationDev: destinationFingerprint.dev,
     caseSensitive,
     reservedPaths: collectDestinationPathKeys(args.resolvedNodes, caseSensitive),
+    writtenPaths: new Set(),
     totalItemCount: countExecutableSteps(args.resolvedNodes),
     totalBytes: args.report.summary.totalBytes,
     progress: { completedItemCount: 0, completedByteCount: 0 },
@@ -310,27 +335,55 @@ async function executeResolvedNode(
     context.fileSystem,
   );
   for (let attempt = 1; ; attempt += 1) {
-    if (runtimeConflict) {
+    for (let question = 1; runtimeConflict; question += 1) {
+      if (question > MAX_RUNTIME_ATTEMPTS) {
+        throw new Error(
+          `“${basename(currentNode.node.sourcePath)}” kept changing, so it was left.`,
+        );
+      }
+      assertNotWrittenByThisPaste(context, currentNode, runtimeConflict);
       const resolution = await answerRuntimeConflict(context, currentNode, runtimeConflict);
+      // An answer about the item being pasted changing says nothing about the destination:
+      // if that changed too, it is asked about on its own, never replaced unseen.
+      const aboutSource = isSourceSideConflict(runtimeConflict);
       currentNode = await resolveWithRuntimeAnswer(
         context,
         currentNode,
         runtimeConflict,
         resolution,
+        aboutSource,
       );
       if (currentNode.action === "skip") {
         return skippedOutcome("runtime_conflict_resolution", currentNode.destinationPath);
       }
+      runtimeConflict = aboutSource
+        ? await detectRuntimeConflict(currentNode, context.report.analysisId, context.fileSystem)
+        : null;
     }
     try {
-      return await performNode(context, currentNode);
-    } catch (error) {
-      if (!(error instanceof DestinationTakenError)) {
+      const outcome = await performNode(context, currentNode);
+      if (outcome.itemStatus !== "skipped") {
+        context.writtenPaths.add(
+          destinationPathKey(outcome.destinationPath, context.caseSensitive),
+        );
+      }
+      return outcome;
+    } catch (caught) {
+      if (!(caught instanceof DestinationTakenError)) {
+        // "You don't have permission" is the wrong reason when an item is locked.
+        const error =
+          (await findLockedRefusal(context.fileSystem, caught, [
+            currentNode.node.sourcePath,
+            currentNode.destinationPath,
+            dirname(currentNode.destinationPath),
+            dirname(currentNode.node.sourcePath),
+          ])) ?? caught;
         if (typeof error === "object" && error !== null && !failedDestinations.has(error)) {
           failedDestinations.set(error, currentNode.destinationPath);
         }
         throw error;
       }
+      const error = caught;
       if (attempt >= MAX_RUNTIME_ATTEMPTS) {
         throw error.original;
       }
@@ -366,14 +419,50 @@ async function answerRuntimeConflict(
   return resolution;
 }
 
-// Continues from what is on disk now, which is what the person just decided on.
+// Where the paste's items really are, looked up once per paste.
+function pastedItemRealPaths(context: ExecutionContext): Promise<string[]> {
+  context.pastedItemRealPaths ??= realItemPaths(context.fileSystem, context.report.sourcePaths);
+  return context.pastedItemRealPaths;
+}
+
+function isSourceSideConflict(conflict: CopyPasteRuntimeConflict): boolean {
+  return conflict.reason === "source_changed" || conflict.reason === "source_deleted";
+}
+
+// On a disk that doesn't tell "A.txt" from "a.txt", two items from a disk that does would
+// land on one name: the second is never allowed to replace the first, which this same
+// paste just wrote (its original may already be gone, after a move).
+function assertNotWrittenByThisPaste(
+  context: ExecutionContext,
+  node: ResolvedCopyPasteNode,
+  conflict: CopyPasteRuntimeConflict,
+): void {
+  if (isSourceSideConflict(conflict) || conflict.reason === "trash_unavailable") {
+    return;
+  }
+  if (!context.writtenPaths.has(destinationPathKey(node.destinationPath, context.caseSensitive))) {
+    return;
+  }
+  throw new Error(sameNameMessage(node));
+}
+
+function sameNameMessage(node: ResolvedCopyPasteNode): string {
+  return `“${basename(node.node.sourcePath)}” wasn't pasted because another item of this paste has the same name on this disk, which doesn't tell upper and lower case apart.`;
+}
+
+// Continues from what is on disk now, which is what the person just decided on. After a
+// question about the item being pasted, the destination stays as planned, so a change
+// there is still noticed and asked about.
 async function resolveWithRuntimeAnswer(
   context: ExecutionContext,
   node: ResolvedCopyPasteNode,
   conflict: CopyPasteRuntimeConflict,
   resolution: CopyPasteRuntimeResolutionAction,
+  keepPlannedDestination = false,
 ): Promise<ResolvedCopyPasteNode> {
-  const currentDestination = conflict.currentDestinationFingerprint;
+  const currentDestination = keepPlannedDestination
+    ? node.node.destinationFingerprint
+    : conflict.currentDestinationFingerprint;
   return resolveSingleNodeWithAction({
     node: {
       ...node.node,
@@ -417,6 +506,16 @@ async function performNode(
       return renameResult;
     }
     // EXDEV fallback: rename failed, fall through to copy+delete path
+  }
+
+  // A move copies, then removes the original. A locked original (or one in a locked
+  // folder) can't be removed, so it isn't copied either: that would leave it in both places.
+  if (context.mode === "cut") {
+    for (const path of [currentNode.node.sourcePath, dirname(currentNode.node.sourcePath)]) {
+      if (await isLocked(context.fileSystem, path)) {
+        throw new Error(lockedMessage(path));
+      }
+    }
   }
 
   if (currentNode.node.sourceKind === "directory") {
@@ -597,11 +696,7 @@ async function executeDirectoryNode(
   }
   let dirDeleteError: string | null = null;
   if (context.mode === "cut") {
-    dirDeleteError = await tryRemoveEmptySourceDirectory(
-      currentNode.node.sourcePath,
-      currentNode.node.sourceFingerprint,
-      context.fileSystem,
-    );
+    dirDeleteError = await tryRemoveEmptySourceDirectory(currentNode, context.fileSystem);
   }
   return {
     itemStatus: dirDeleteError !== null || hasChildFailure ? "failed" : "completed",
@@ -652,6 +747,18 @@ async function executeReplace(
   const { fileSystem } = context;
   const finalPath = currentNode.destinationPath;
   await assertDestinationDoesNotContainSource(currentNode, destination, fileSystem);
+  if (
+    destination.kind === "directory" &&
+    (await holdsAnyOf(fileSystem, finalPath, await pastedItemRealPaths(context)))
+  ) {
+    throw new Error(
+      `Can't replace “${basename(finalPath)}” because it contains another item being pasted.`,
+    );
+  }
+  // A locked item can't go to the Trash; found out now, before anything is written.
+  if (await isLocked(fileSystem, finalPath)) {
+    throw new Error(lockedMessage(finalPath));
+  }
 
   if (!fileSystem.rename) {
     // Nothing can be swapped into place without rename: clear the way first instead.
@@ -749,13 +856,55 @@ async function executeReplace(
     }
   }
 
+  let oldItemRemoved = false;
   try {
+    // A copy of a locked item is locked too, and a locked item can't be renamed: it is
+    // unlocked for the swap and locked again after. Done before the old item goes.
+    const stagedFlags = await unlockForMove(fileSystem, temporaryPath);
     if ((await removeReplacedItem(context, currentNode, destination)) === "skipped") {
       await undoStaging();
       return skippedOutcome("runtime_conflict_resolution", finalPath);
     }
-    await moveExclusive(fileSystem, temporaryPath, finalPath);
+    oldItemRemoved = true;
+    try {
+      await moveExclusive(fileSystem, temporaryPath, finalPath);
+    } catch (error) {
+      if (errorCode(error) === "EEXIST") {
+        throw error;
+      }
+      // The old item is in the Trash already: the new one must not be thrown away too.
+      // It is kept under a visible name next to where it was going.
+      const visiblePath = await resolveDuplicateName(
+        basename(finalPath),
+        dirname(finalPath),
+        fileSystem,
+        context.reservedPaths,
+        {
+          isDirectory: currentNode.node.sourceKind === "directory",
+          caseSensitive: context.caseSensitive,
+        },
+      );
+      await moveExclusive(fileSystem, temporaryPath, visiblePath);
+      await journal?.remove(journalEntry.id).catch(() => undefined);
+      return {
+        itemStatus: "failed",
+        skipReason: null,
+        error: `The old “${basename(finalPath)}” was moved to the Trash, but the new one couldn't take its name, so it was saved as “${basename(visiblePath)}”. ${describeCopyPasteError(error)}`,
+        destinationPath: visiblePath,
+        childItems: stagedChildItems,
+      };
+    }
+    if (stagedFlags !== null) {
+      await fileSystem.setFlags?.(finalPath, stagedFlags).catch(() => undefined);
+    }
   } catch (error) {
+    if (oldItemRemoved && journal && errorCode(error) !== "EEXIST") {
+      // Neither name could be used: the journal keeps the new item, and the next start
+      // puts it in place.
+      throw new Error(
+        `The old “${basename(finalPath)}” was moved to the Trash, but the new one couldn't be put in its place. It will be put there the next time File Trail starts. ${describeCopyPasteError(error)}`,
+      );
+    }
     await undoStaging().catch(() => undefined);
     throw errorCode(error) === "EEXIST" ? new DestinationTakenError(error) : error;
   }
@@ -823,11 +972,7 @@ async function removeMovedSources(
         nestedFolderFailures.push(itemResult(child, "failed", childError));
       }
     }
-    return tryRemoveEmptySourceDirectory(
-      current.node.sourcePath,
-      current.node.sourceFingerprint,
-      context.fileSystem,
-    );
+    return tryRemoveEmptySourceDirectory(current, context.fileSystem);
   };
   const error = await removeTree(node);
   return {
@@ -851,8 +996,12 @@ async function removeReplacedItem(
     try {
       await fileSystem.trash(node.destinationPath);
       return "removed";
-    } catch {
-      // For example a network or FAT volume without a Trash: ask below.
+    } catch (error) {
+      // Only a disk that may have no Trash (a network or FAT volume) is asked about below;
+      // any other reason stops this item, and nothing is deleted for good.
+      if (errorCode(error) !== NO_TRASH_ERROR_CODE) {
+        throw error;
+      }
     }
   }
   const conflict: CopyPasteRuntimeConflict = {
@@ -896,6 +1045,27 @@ async function temporarySiblingPath(
   throw new Error(`Couldn't find a free temporary name next to “${basename(finalPath)}”.`);
 }
 
+// Clears the lock (Finder's "Locked") on an item about to be renamed, and returns the
+// flags to put back once it has its new name; null when it wasn't locked. An item locked
+// in a way its owner can't undo is refused here, before anything else changes.
+export async function unlockForMove(
+  fileSystem: WriteServiceFileSystem,
+  path: string,
+): Promise<number | null> {
+  if (!fileSystem.getFlags || !fileSystem.setFlags) {
+    return null;
+  }
+  const flags = await fileSystem.getFlags(path).catch(() => 0);
+  if ((flags & LOCK_FLAGS) === 0) {
+    return null;
+  }
+  if ((flags & LOCK_FLAGS & ~USER_LOCK_FLAGS) !== 0) {
+    throw new Error(lockedMessage(path));
+  }
+  await fileSystem.setFlags(path, flags & ~USER_LOCK_FLAGS);
+  return flags;
+}
+
 // Removes a hidden copy built for a Replace. A read-only folder inside it can't have its
 // items removed, so folders are opened up first when that is what stopped it.
 export async function removeStagedItem(
@@ -907,7 +1077,7 @@ export async function removeStagedItem(
     return;
   } catch (error) {
     const code = errorCode(error);
-    if ((code !== "EACCES" && code !== "EPERM") || !fileSystem.chmod) {
+    if ((code !== "EACCES" && code !== "EPERM") || (!fileSystem.chmod && !fileSystem.setFlags)) {
       throw error;
     }
   }
@@ -915,7 +1085,15 @@ export async function removeStagedItem(
   await fileSystem.rm(path, { recursive: true, force: true });
 }
 
+// Opens up a hidden copy so it can be removed: locked items (a copy of a locked item is
+// locked too) are unlocked and read-only folders made writable.
 async function makeFoldersWritable(fileSystem: WriteServiceFileSystem, path: string) {
+  if (fileSystem.getFlags && fileSystem.setFlags) {
+    const flags = await fileSystem.getFlags(path).catch(() => 0);
+    if ((flags & USER_LOCK_FLAGS) !== 0) {
+      await fileSystem.setFlags(path, flags & ~USER_LOCK_FLAGS).catch(() => undefined);
+    }
+  }
   const fingerprint = await captureFingerprint(fileSystem, path);
   if (fingerprint.kind !== "directory") {
     return;
@@ -986,7 +1164,7 @@ async function copyFileContents(
   try {
     if (context.fileSystem.copyFile) {
       await context.fileSystem.mkdir(dirname(targetPath), { recursive: true });
-      await context.fileSystem.copyFile(sourcePath, targetPath);
+      await context.fileSystem.copyFile(sourcePath, targetPath, context.signal);
     } else {
       await context.fileSystem.copyFileStream(sourcePath, targetPath, context.signal);
     }
@@ -1140,10 +1318,14 @@ async function detectRuntimeConflict(
       }
       const planned = resolvedNode.node.destinationFingerprint;
       // A folder's timestamps change whenever anything inside it does (Finder writes
-      // .DS_Store just by showing it), so for folders only their identity counts.
+      // .DS_Store just by showing it), so for folders their identity counts, and what is
+      // inside them: an item added after the review would go to the Trash unseen.
       const unchanged =
         planned.kind === "directory" && currentDestinationFingerprint.kind === "directory"
-          ? sameItemIdentity(planned, currentDestinationFingerprint)
+          ? sameItemIdentity(planned, currentDestinationFingerprint) &&
+            (resolvedNode.node.destinationTotalNodeCount === null ||
+              (await countItemsInside(fileSystem, resolvedNode.destinationPath)) ===
+                resolvedNode.node.destinationTotalNodeCount)
           : fingerprintsEqual(planned, currentDestinationFingerprint);
       return unchanged
         ? null
@@ -1165,6 +1347,39 @@ async function detectRuntimeConflict(
     default:
       return null;
   }
+}
+
+// How many items a folder holds at every depth, counted as the review counted them
+// (`countDirectoryItems`); null when some of it can't be read.
+async function countItemsInside(
+  fileSystem: WriteServiceFileSystem,
+  path: string,
+): Promise<number | null> {
+  let entries: string[];
+  try {
+    entries = await fileSystem.readdir(path);
+  } catch {
+    return null;
+  }
+  let count = 0;
+  for (const entry of entries) {
+    if (isFolderViewFile(entry)) {
+      continue;
+    }
+    count += 1;
+    const stats = await fileSystem.lstat(join(path, entry)).catch(() => null);
+    if (stats === null) {
+      return null;
+    }
+    if (stats.isDirectory()) {
+      const nested = await countItemsInside(fileSystem, join(path, entry));
+      if (nested === null) {
+        return null;
+      }
+      count += nested;
+    }
+  }
+  return count;
 }
 
 function sameItemIdentity(planned: NodeFingerprint, current: NodeFingerprint): boolean {
@@ -1226,15 +1441,15 @@ async function tryDeleteMovedSource(
 /** Attempts to remove an empty source directory after its children were moved.
  *  Returns null on success or intentional skip, or an error message if removal failed. */
 async function tryRemoveEmptySourceDirectory(
-  sourcePath: string,
-  originalFingerprint: NodeFingerprint,
+  node: ResolvedCopyPasteNode,
   fileSystem: WriteServiceFileSystem,
 ): Promise<string | null> {
+  const sourcePath = node.node.sourcePath;
   const currentFingerprint = await captureFingerprint(fileSystem, sourcePath);
   if (!currentFingerprint.exists) {
     return null;
   }
-  if (!canRemoveMovedSourceDirectory(originalFingerprint, currentFingerprint)) {
+  if (!canRemoveMovedSourceDirectory(node.node.sourceFingerprint, currentFingerprint)) {
     return null;
   }
   try {
@@ -1244,11 +1459,43 @@ async function tryRemoveEmptySourceDirectory(
     return null;
   } catch (error) {
     const code = errorCode(error);
-    if (code === "ENOTEMPTY" || code === "EEXIST" || code === "ENOENT") {
+    if (code === "ENOENT") {
       return null;
+    }
+    if (code === "ENOTEMPTY" || code === "EEXIST") {
+      return describeLeftInMovedFolder(node, fileSystem);
     }
     return `Its items were moved, but the original folder couldn't be removed. ${describeCopyPasteError(error)}`;
   }
+}
+
+// A moved folder that isn't empty afterwards: items this move left on purpose (skipped,
+// failed) are reported on their own; items added to it while it was being moved were
+// never part of the move, and are named here so "moved" doesn't hide them.
+async function describeLeftInMovedFolder(
+  node: ResolvedCopyPasteNode,
+  fileSystem: WriteServiceFileSystem,
+): Promise<string | null> {
+  const plannedNames = new Set(node.children.map((child) => basename(child.node.sourcePath)));
+  const entries = await fileSystem.readdir(node.node.sourcePath).catch(() => [] as string[]);
+  const added = entries.filter((entry) => !plannedNames.has(entry));
+  if (added.length > 0 && added.every(isFolderViewFile)) {
+    // Only what Finder wrote to show the folder: it goes with the folder.
+    for (const entry of added) {
+      await fileSystem
+        .rm(join(node.node.sourcePath, entry), { force: true })
+        .catch(() => undefined);
+    }
+    await fileSystem.rmdir(node.node.sourcePath).catch(() => undefined);
+    return null;
+  }
+  const newItems = added.filter((entry) => !isFolderViewFile(entry));
+  if (newItems.length === 0) {
+    return null;
+  }
+  const folder = basename(node.node.sourcePath);
+  const named = newItems.length === 1 ? `“${newItems[0]}” was` : `${newItems.length} items were`;
+  return `${named} added to “${folder}” while it was being moved, so ${newItems.length === 1 ? "it was" : "they were"} left in the original “${folder}”.`;
 }
 
 function canRemoveMovedSourceDirectory(

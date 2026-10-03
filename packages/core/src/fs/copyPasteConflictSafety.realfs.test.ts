@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
 import { buildCopyPasteAnalysisReport } from "./copyPasteAnalysis";
+import { NO_TRASH_ERROR_CODE } from "./copyPasteErrors";
 import { executeCopyPasteFromAnalysis } from "./copyPasteExecution";
 import { resolveAnalysisWithPolicy } from "./copyPastePolicy";
 import {
@@ -44,6 +45,11 @@ const REPLACE_ALL: CopyPastePolicy = {
   directory: "overwrite",
   mismatch: "overwrite",
 };
+
+// What the app's Trash reports on a disk that may have no Trash (createTrashItem).
+function noTrashHere(): Error {
+  return Object.assign(new Error("no Trash on this volume"), { code: NO_TRASH_ERROR_CODE });
+}
 
 // A Trash that keeps what was moved into it, for checking what a replace removed.
 const fileSystemWithTrash: WriteServiceFileSystem = {
@@ -281,7 +287,7 @@ describe("copy/paste conflict safety (real filesystem)", () => {
         fileSystem: {
           ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
           trash: async () => {
-            throw new Error("no Trash on this volume");
+            throw noTrashHere();
           },
         },
         resolve: () => answer,
@@ -590,6 +596,39 @@ describe("copy/paste conflict safety (real filesystem)", () => {
     }
   });
 
+  // On the startup disk the Trash always exists: a failure there (a busy item, a
+  // permission) is reported, and deleting for good is never offered instead.
+  it("fails the item, without offering to delete for good, when the Trash refuses it", async () => {
+    const source = join(testDir, "source");
+    const target = join(testDir, "target");
+    await mkdir(source);
+    await mkdir(target);
+    await writeFile(join(source, "notes.txt"), "new notes");
+    await writeFile(join(target, "notes.txt"), "old notes");
+
+    const { result, conflicts } = await paste({
+      mode: "copy",
+      sourcePaths: [join(source, "notes.txt")],
+      destinationDirectoryPath: target,
+      policy: REPLACE_ALL,
+      fileSystem: {
+        ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+        trash: async () => {
+          throw new Error("“notes.txt” couldn’t be moved to the trash because it’s in use.");
+        },
+      },
+      resolve: () => "overwrite",
+    });
+
+    expect(conflicts).toEqual([]);
+    expect(result?.items[0]).toMatchObject({
+      status: "failed",
+      error: "“notes.txt” couldn’t be moved to the trash because it’s in use.",
+    });
+    expect(await readFile(join(target, "notes.txt"), "utf8")).toBe("old notes");
+    expect(await readdir(target)).toEqual(["notes.txt"]);
+  });
+
   it("moves a replacing folder back when the Trash is unavailable and the person skips", async () => {
     const source = join(testDir, "source");
     const target = join(testDir, "target");
@@ -607,7 +646,7 @@ describe("copy/paste conflict safety (real filesystem)", () => {
       fileSystem: {
         ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
         trash: async () => {
-          throw new Error("no Trash on this volume");
+          throw noTrashHere();
         },
       },
       resolve: () => "skip",
@@ -629,7 +668,7 @@ describe("copy/paste conflict safety (real filesystem)", () => {
       fileSystem: {
         ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
         trash: async () => {
-          throw new Error("no Trash on this volume");
+          throw noTrashHere();
         },
       },
       resolve: () => "overwrite",

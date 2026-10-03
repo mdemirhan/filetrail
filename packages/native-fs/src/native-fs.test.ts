@@ -15,6 +15,11 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { canMountDiskImages, mountTestDiskImage } from "@filetrail/core/fs/testDiskImage";
+
+// Finder's "Locked".
+const UF_IMMUTABLE = 0x2;
+
 // Load the native addon directly from the build output.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const addon = require("../build/Release/native-fs.node") as typeof import("../index");
@@ -357,5 +362,107 @@ describe("nativeGetFileThumbnail", () => {
   it("resolves null for a folder and for a file that does not exist", async () => {
     expect(await wrapper.nativeGetFileThumbnail(root, 128)).toBeNull();
     expect(await wrapper.nativeGetFileThumbnail(join(root, "missing.png"), 128)).toBeNull();
+  });
+});
+
+describe("nativeCopyFile stop flag", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "native-fs-stop-"));
+    writeFileSync(join(root, "a.txt"), "content");
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("copies normally while the flag is clear", async () => {
+    await addon.nativeCopyFile(join(root, "a.txt"), join(root, "b.txt"), new Int32Array(1));
+    expect(readFileSync(join(root, "b.txt"), "utf8")).toBe("content");
+  });
+
+  it("doesn't start a copy whose flag is already set", async () => {
+    await expect(
+      addon.nativeCopyFile(join(root, "a.txt"), join(root, "b.txt"), new Int32Array([1])),
+    ).rejects.toMatchObject({ code: "ECANCELED" });
+    expect(existsSync(join(root, "b.txt"))).toBe(false);
+  });
+
+  it("refuses a flag that isn't an Int32Array", () => {
+    expect(() =>
+      addon.nativeCopyFile(
+        join(root, "a.txt"),
+        join(root, "b.txt"),
+        new Uint8Array(1) as unknown as Int32Array,
+      ),
+    ).toThrow(/Int32Array/);
+  });
+
+  // Across volumes the copy can't be a clone, so a large file takes long enough to stop.
+  it.runIf(canMountDiskImages)(
+    "stops part way through a large file and leaves no partial file",
+    async () => {
+      const volume = mountTestDiskImage({ sizeMb: 250 });
+      try {
+        const source = join(root, "big.bin");
+        execFileSync("/usr/sbin/mkfile", ["150m", source]);
+        const destination = join(volume.mountPath, "big.bin");
+        const stop = new Int32Array(1);
+        const started = Date.now();
+        const copy = addon.nativeCopyFile(source, destination, stop);
+        setTimeout(() => {
+          stop[0] = 1;
+        }, 20);
+        await expect(copy).rejects.toMatchObject({ code: "ECANCELED" });
+        expect(Date.now() - started).toBeLessThan(2000);
+        expect(existsSync(destination)).toBe(false);
+      } finally {
+        volume.detach();
+      }
+    },
+    30_000,
+  );
+});
+
+describe("nativeGetFlags / nativeSetFlags", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "native-fs-flags-"));
+    writeFileSync(join(root, "a.txt"), "content");
+  });
+
+  afterEach(async () => {
+    await wrapper.nativeSetFlags(join(root, "a.txt"), 0).catch(() => undefined);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("locks and unlocks an item the way Finder's Locked checkbox does", async () => {
+    const path = join(root, "a.txt");
+    expect(await wrapper.nativeGetFlags(path)).toBe(0);
+    await wrapper.nativeSetFlags(path, UF_IMMUTABLE);
+    expect(await wrapper.nativeGetFlags(path)).toBe(UF_IMMUTABLE);
+    expect(() => execFileSync("/bin/mv", [path, join(root, "b.txt")], { stdio: "pipe" })).toThrow();
+    await wrapper.nativeSetFlags(path, 0);
+    expect(await wrapper.nativeGetFlags(path)).toBe(0);
+  });
+
+  it("reads a symlink's own flags, not its target's", async () => {
+    const path = join(root, "a.txt");
+    symlinkSync(path, join(root, "link"));
+    await wrapper.nativeSetFlags(path, UF_IMMUTABLE);
+    expect(await wrapper.nativeGetFlags(join(root, "link"))).toBe(0);
+  });
+
+  it("names the errno for a missing item", async () => {
+    await expect(wrapper.nativeGetFlags(join(root, "missing"))).rejects.toMatchObject({
+      code: "ENOENT",
+      syscall: "lstat",
+    });
+    await expect(wrapper.nativeSetFlags(join(root, "missing"), 0)).rejects.toMatchObject({
+      code: "ENOENT",
+      syscall: "lchflags",
+    });
   });
 });

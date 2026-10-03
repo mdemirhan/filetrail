@@ -22,8 +22,12 @@ const itemNameSchema = z
 const absolutePathSchema = z
   .string()
   .min(1)
-  .refine((path) => path.startsWith("/"), { message: "Expected an absolute path." });
-const absolutePathListSchema = z.array(absolutePathSchema).min(1).max(500);
+  .refine((path) => path.startsWith("/"), { message: "Expected an absolute path." })
+  .refine((path) => !path.includes("\0"), { message: "A path can't contain a null character." });
+// Enough for selecting everything in a large folder; the bound only keeps a runaway
+// payload out.
+export const MAX_PATHS_PER_REQUEST = 100_000;
+const absolutePathListSchema = z.array(absolutePathSchema).min(1).max(MAX_PATHS_PER_REQUEST);
 
 export const explorerEntryKindSchema = z.enum([
   "directory",
@@ -330,7 +334,8 @@ export const nodeFingerprintSchema = z.object({
   exists: z.boolean(),
   kind: copyPasteNodeKindSchema,
   size: z.number().int().nonnegative().nullable(),
-  mtimeMs: z.number().nonnegative().nullable(),
+  // Negative before 1970 (old archives, HFS dates from 1904).
+  mtimeMs: z.number().nullable(),
   mode: z.number().int().nonnegative().nullable(),
   ino: z.number().int().nonnegative().nullable(),
   dev: z.number().int().nonnegative().nullable(),
@@ -416,7 +421,7 @@ export const copyPasteAnalysisSummarySchema = z.object({
 export const copyPasteAnalysisReportSchema = z.object({
   analysisId: z.string().min(1),
   mode: copyPasteModeSchema,
-  sourcePaths: z.array(z.string().min(1)).min(1).max(500),
+  sourcePaths: z.array(z.string().min(1)).min(1).max(MAX_PATHS_PER_REQUEST),
   destinationDirectoryPath: z.string().min(1),
   nodes: z.array(copyPasteAnalysisNodeSchema),
   issues: z.array(copyPastePlanIssueSchema),
@@ -439,7 +444,7 @@ export const copyPasteRuntimeConflictSchema = z.object({
 });
 export const copyPastePlanSchema = z.object({
   mode: copyPasteModeSchema,
-  sourcePaths: z.array(z.string().min(1)).min(1).max(500),
+  sourcePaths: z.array(z.string().min(1)).min(1).max(MAX_PATHS_PER_REQUEST),
   destinationDirectoryPath: z.string().min(1),
   conflictResolution: copyPasteConflictResolutionSchema,
   items: z.array(copyPastePlanItemSchema),

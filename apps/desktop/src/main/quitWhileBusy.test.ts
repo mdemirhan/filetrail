@@ -4,8 +4,27 @@ import {
   KEEP_WORKING_BUTTON_INDEX,
   STOP_BUTTON_INDEX,
   describeQuitWhileBusy,
+  shouldOpenWindowOnActivate,
   stopQuestionButtons,
 } from "./quitWhileBusy";
+
+describe("shouldOpenWindowOnActivate", () => {
+  it("opens a window from the Dock when none is open", () => {
+    expect(shouldOpenWindowOnActivate({ shutdownInProgress: false, openWindowCount: 0 })).toBe(
+      true,
+    );
+    expect(shouldOpenWindowOnActivate({ shutdownInProgress: false, openWindowCount: 1 })).toBe(
+      false,
+    );
+  });
+
+  // After "Stop and Close" the app waits for the operation to stop, then quits.
+  it("doesn't open one while quitting waits for an operation to stop", () => {
+    expect(shouldOpenWindowOnActivate({ shutdownInProgress: true, openWindowCount: 0 })).toBe(
+      false,
+    );
+  });
+});
 
 describe("describeQuitWhileBusy", () => {
   it("asks about a copy, a move, a Trash, and a delete in their own words", () => {

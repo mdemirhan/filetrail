@@ -1,7 +1,7 @@
 import { basename, dirname } from "node:path";
 
-import { describeCopyPasteError } from "./copyPasteErrors";
-import { moveExclusive, removeStagedItem } from "./copyPasteExecution";
+import { describeCopyPasteError, errorCode } from "./copyPasteErrors";
+import { moveExclusive, removeStagedItem, unlockForMove } from "./copyPasteExecution";
 import { captureFingerprint } from "./copyPasteFingerprint";
 import { resolveDuplicateName } from "./copyPasteNames";
 import type { ReplaceJournalEntry, WriteServiceFileSystem } from "./writeServiceTypes";
@@ -17,6 +17,9 @@ export type ReplaceRecoveryOutcome =
   | { entry: ReplaceJournalEntry; outcome: "kept_visible"; path: string }
   // An unfinished copy was removed; the original is untouched.
   | { entry: ReplaceJournalEntry; outcome: "removed_copy" }
+  // The hidden item couldn't be reached (its disk isn't connected, or it can't be read):
+  // it may still be there, so the entry is kept for the next start.
+  | { entry: ReplaceJournalEntry; outcome: "unreachable"; error: string }
   | { entry: ReplaceJournalEntry; outcome: "failed"; error: string };
 
 // Finishes or undoes Replaces that were cut short (a crash, a power cut), so no item stays
@@ -40,19 +43,26 @@ async function recoverEntry(
   entry: ReplaceJournalEntry,
   fileSystem: WriteServiceFileSystem,
 ): Promise<ReplaceRecoveryOutcome> {
-  const staged = await captureFingerprint(fileSystem, entry.stagingPath);
-  if (!staged.exists) {
-    return { entry, outcome: "nothing_left" };
+  // Only an item that is really gone counts as gone. A disk that isn't connected, or a
+  // folder that can't be read, hides an item that may be the only copy of someone's data.
+  try {
+    await fileSystem.lstat(entry.stagingPath);
+  } catch (error) {
+    if (errorCode(error) === "ENOENT" && (await folderIsThere(fileSystem, entry.stagingPath))) {
+      return { entry, outcome: "nothing_left" };
+    }
+    return { entry, outcome: "unreachable", error: describeCopyPasteError(error) };
   }
+  const staged = await captureFingerprint(fileSystem, entry.stagingPath);
   const finalTaken = (await captureFingerprint(fileSystem, entry.finalPath)).exists;
   if (entry.moved) {
     // The staged item is the only copy of what was moved: it is never removed.
     if (!finalTaken) {
-      await moveExclusive(fileSystem, entry.stagingPath, entry.finalPath);
+      await moveUnlocked(fileSystem, entry.stagingPath, entry.finalPath);
       return { entry, outcome: "finished", path: entry.finalPath };
     }
     if (!(await captureFingerprint(fileSystem, entry.sourcePath)).exists) {
-      await moveExclusive(fileSystem, entry.stagingPath, entry.sourcePath);
+      await moveUnlocked(fileSystem, entry.stagingPath, entry.sourcePath);
       return { entry, outcome: "restored", path: entry.sourcePath };
     }
     const visiblePath = await resolveDuplicateName(
@@ -62,15 +72,44 @@ async function recoverEntry(
       undefined,
       { isDirectory: staged.kind === "directory" },
     );
-    await moveExclusive(fileSystem, entry.stagingPath, visiblePath);
+    await moveUnlocked(fileSystem, entry.stagingPath, visiblePath);
     return { entry, outcome: "kept_visible", path: visiblePath };
   }
   // A copy: the original is still in place. Only a complete copy whose old item already
   // went to the Trash is worth keeping.
   if (entry.staged && !finalTaken) {
-    await moveExclusive(fileSystem, entry.stagingPath, entry.finalPath);
+    await moveUnlocked(fileSystem, entry.stagingPath, entry.finalPath);
     return { entry, outcome: "finished", path: entry.finalPath };
   }
   await removeStagedItem(fileSystem, entry.stagingPath);
   return { entry, outcome: "removed_copy" };
+}
+
+async function folderIsThere(fileSystem: WriteServiceFileSystem, path: string): Promise<boolean> {
+  try {
+    return (await fileSystem.lstat(dirname(path))).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+// A copy of a locked item is locked, and a locked item can't be renamed: unlocked for the
+// move and locked again after.
+async function moveUnlocked(
+  fileSystem: WriteServiceFileSystem,
+  from: string,
+  to: string,
+): Promise<void> {
+  const flags = await unlockForMove(fileSystem, from);
+  try {
+    await moveExclusive(fileSystem, from, to);
+  } catch (error) {
+    if (flags !== null) {
+      await fileSystem.setFlags?.(from, flags).catch(() => undefined);
+    }
+    throw error;
+  }
+  if (flags !== null) {
+    await fileSystem.setFlags?.(to, flags).catch(() => undefined);
+  }
 }

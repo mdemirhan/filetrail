@@ -78,6 +78,12 @@ export async function resolveDuplicateName(
   throw new Error(`Couldn't find a free name for “${sourceName}”.`);
 }
 
+// Finder writes ".DS_Store" into a folder just by showing it. It is nobody's item: it isn't
+// counted as one, and its appearing doesn't make a folder "changed".
+export function isFolderViewFile(name: string): boolean {
+  return name === ".DS_Store";
+}
+
 // APFS and HFS+ ignore Unicode normalization, and by default letter case too, so names
 // that differ only that way land on the same entry. Case-sensitive volumes keep case.
 export function destinationPathKey(path: string, caseSensitive = false): string {

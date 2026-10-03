@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { buildCopyPasteAnalysisReport } from "./copyPasteAnalysis";
 import { executeCopyPasteFromAnalysis } from "./copyPasteExecution";
 import { resolveAnalysisWithPolicy } from "./copyPastePolicy";
+import { createStoppableCopyFile } from "./stoppableCopy";
 import {
   type CopyPasteOperationResult,
   DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
@@ -16,13 +17,16 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const native = require("../../../native-fs/index.js") as typeof import("../../../native-fs");
 
+const nativeCopy = createStoppableCopyFile(native.nativeCopyFile);
 const nativeFileSystem: WriteServiceFileSystem = {
   ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
   renameExclusive: native.nativeRenameExclusive,
   isCaseSensitive: native.nativeIsCaseSensitive,
-  copyFile: async (sourcePath, destinationPath) => {
+  getFlags: native.nativeGetFlags,
+  setFlags: native.nativeSetFlags,
+  copyFile: async (sourcePath, destinationPath, signal) => {
     await mkdir(dirname(destinationPath), { recursive: true });
-    await native.nativeCopyFile(sourcePath, destinationPath);
+    await nativeCopy(sourcePath, destinationPath, signal);
   },
   ...(native.nativeCopyMetadata ? { copyMetadata: native.nativeCopyMetadata } : {}),
 };

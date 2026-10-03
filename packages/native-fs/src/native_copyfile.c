@@ -1,8 +1,14 @@
 /**
  * N-API async wrapper around macOS copyfile(3).
  *
- * Exposes nativeCopyFile(src, dst) → Promise<void>, and nativeCopyMetadata(src, dst)
- * → Promise<void>, which copies a folder's own metadata onto an existing folder.
+ * Exposes nativeCopyFile(src, dst, stopFlag?) → Promise<void>, and
+ * nativeCopyMetadata(src, dst) → Promise<void>, which copies a folder's own metadata
+ * onto an existing folder.
+ *
+ * `stopFlag` is an Int32Array whose first element the caller sets to 1 to stop a copy
+ * part way through a file: copyfile's progress callback checks it between chunks and
+ * the copy fails with ECANCELED. Without it a large file can only be stopped once it
+ * has been copied in full.
  *
  * Uses COPYFILE_ALL (preserve stat, xattrs, ACLs) | COPYFILE_CLONE (attempt
  * CoW clone on APFS, fall back to full copy) | COPYFILE_EXCL (never replace an
@@ -13,6 +19,8 @@
 #include <node_api.h>
 #include <copyfile.h>
 #include <errno.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,7 +35,24 @@ typedef struct {
   char *source;
   char *destination;
   int errnum; /* 0 on success, errno on failure */
+  /* The caller's stop flag (an Int32Array's first element), kept alive by stop_ref;
+     NULL when the copy can't be stopped part way. */
+  int32_t *stop;
+  napi_ref stop_ref;
 } copy_work_t;
+
+/* Called by copyfile(3) between chunks of data and between the parts of a file (data,
+   extended attributes, ...): stops the copy once the caller has asked it to. */
+static int copy_status(int what, int stage, copyfile_state_t state, const char *src,
+                       const char *dst, void *ctx) {
+  (void)what;
+  (void)stage;
+  (void)state;
+  (void)src;
+  (void)dst;
+  const int32_t *stop = (const int32_t *)ctx;
+  return __atomic_load_n(stop, __ATOMIC_RELAXED) != 0 ? COPYFILE_QUIT : COPYFILE_CONTINUE;
+}
 
 /* ── Execute on libuv thread pool ────────────────────────────────── */
 
@@ -40,10 +65,36 @@ static void execute_copy(napi_env env, void *data) {
      one is ever passed through.
      EXCL fails with EEXIST instead of writing over an item that appeared at the
      destination: callers always copy to a name they expect to be free. */
-  int rc = copyfile(w->source, w->destination, NULL,
-                    COPYFILE_ALL | COPYFILE_CLONE | COPYFILE_NOFOLLOW_SRC |
-                        COPYFILE_EXCL);
-  w->errnum = (rc == 0) ? 0 : errno;
+  const copyfile_flags_t flags =
+      COPYFILE_ALL | COPYFILE_CLONE | COPYFILE_NOFOLLOW_SRC | COPYFILE_EXCL;
+  if (w->stop == NULL) {
+    int rc = copyfile(w->source, w->destination, NULL, flags);
+    w->errnum = (rc == 0) ? 0 : errno;
+    return;
+  }
+  if (__atomic_load_n(w->stop, __ATOMIC_RELAXED) != 0) {
+    w->errnum = ECANCELED;
+    return;
+  }
+  copyfile_state_t state = copyfile_state_alloc();
+  if (state == NULL) {
+    w->errnum = ENOMEM;
+    return;
+  }
+  copyfile_state_set(state, COPYFILE_STATE_STATUS_CB, (const void *)&copy_status);
+  copyfile_state_set(state, COPYFILE_STATE_STATUS_CTX, (const void *)w->stop);
+  int rc = copyfile(w->source, w->destination, state, flags);
+  int saved = errno;
+  copyfile_state_free(state);
+  if (rc == 0) {
+    w->errnum = 0;
+  } else if (__atomic_load_n(w->stop, __ATOMIC_RELAXED) != 0) {
+    /* A copy told to quit reports ECANCELED, though some versions leave errno as
+       it was: a stop asked for is a stop. */
+    w->errnum = ECANCELED;
+  } else {
+    w->errnum = saved;
+  }
 }
 
 /* Copies only a folder's own metadata (mode, flags, dates, extended attributes such as
@@ -80,6 +131,9 @@ static void complete_copy(napi_env env, napi_status status, void *data) {
   }
 
   napi_delete_async_work(env, w->work);
+  if (w->stop_ref != NULL) {
+    napi_delete_reference(env, w->stop_ref);
+  }
   free(w->source);
   free(w->destination);
   free(w);
@@ -88,20 +142,22 @@ static void complete_copy(napi_env env, napi_status status, void *data) {
 /* ── JS entry points: nativeCopyFile / nativeCopyMetadata(src, dst) → Promise<void> ── */
 
 static napi_value queue_copy_work(napi_env env, napi_callback_info info,
-                                  const char *name, napi_async_execute_callback execute);
+                                  const char *name, napi_async_execute_callback execute,
+                                  int accepts_stop_flag);
 
 static napi_value native_copy_file(napi_env env, napi_callback_info info) {
-  return queue_copy_work(env, info, "nativeCopyFile", execute_copy);
+  return queue_copy_work(env, info, "nativeCopyFile", execute_copy, 1);
 }
 
 static napi_value native_copy_metadata(napi_env env, napi_callback_info info) {
-  return queue_copy_work(env, info, "nativeCopyMetadata", execute_copy_metadata);
+  return queue_copy_work(env, info, "nativeCopyMetadata", execute_copy_metadata, 0);
 }
 
 static napi_value queue_copy_work(napi_env env, napi_callback_info info,
-                                  const char *name, napi_async_execute_callback execute) {
-  size_t argc = 2;
-  napi_value argv[2];
+                                  const char *name, napi_async_execute_callback execute,
+                                  int accepts_stop_flag) {
+  size_t argc = 3;
+  napi_value argv[3];
   napi_get_cb_info(env, info, &argc, argv, NULL, NULL);
 
   if (argc < 2) {
@@ -144,6 +200,32 @@ static napi_value queue_copy_work(napi_env env, napi_callback_info info,
   w->destination = destination;
   w->errnum = 0;
 
+  /* The optional stop flag: an Int32Array, referenced until the copy completes so its
+     memory stays where the copy thread reads it. */
+  if (accepts_stop_flag && argc >= 3) {
+    napi_valuetype type;
+    napi_typeof(env, argv[2], &type);
+    if (type != napi_undefined && type != napi_null) {
+      bool is_typedarray = false;
+      napi_is_typedarray(env, argv[2], &is_typedarray);
+      napi_typedarray_type array_type;
+      size_t length = 0;
+      void *data = NULL;
+      if (is_typedarray) {
+        napi_get_typedarray_info(env, argv[2], &array_type, &length, &data, NULL, NULL);
+      }
+      if (!is_typedarray || array_type != napi_int32_array || length < 1 || data == NULL) {
+        free(source);
+        free(destination);
+        free(w);
+        napi_throw_type_error(env, NULL, "The stop flag must be an Int32Array of length 1 or more");
+        return NULL;
+      }
+      w->stop = (int32_t *)data;
+      napi_create_reference(env, argv[2], 1, &w->stop_ref);
+    }
+  }
+
   /* Create promise. */
   napi_value promise;
   napi_create_promise(env, &w->deferred, &promise);
@@ -172,6 +254,9 @@ extern napi_value register_folder_size(napi_env env, napi_value exports);
 /* Defined in native_rename.c — registers nativeRenameExclusive/nativeIsCaseSensitive. */
 extern napi_value register_rename(napi_env env, napi_value exports);
 
+/* Defined in native_flags.c — registers nativeGetFlags/nativeSetFlags. */
+extern napi_value register_flags(napi_env env, napi_value exports);
+
 static napi_value init(napi_env env, napi_value exports) {
   napi_value fn;
   napi_create_function(env, "nativeCopyFile", NAPI_AUTO_LENGTH,
@@ -185,6 +270,7 @@ static napi_value init(napi_env env, napi_value exports) {
   register_file_thumbnail(env, exports);
   register_folder_size(env, exports);
   register_rename(env, exports);
+  register_flags(env, exports);
 
   return exports;
 }

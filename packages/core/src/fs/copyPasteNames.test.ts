@@ -158,26 +158,16 @@ describe("copyPasteNames", () => {
 
   it("finds out whether a volume is case-sensitive by looking up a swapped name", async () => {
     const sensitive = new MockWriteServiceFileSystem({ "/target/Readme": { kind: "file" } });
-    await expect(detectCaseSensitivity(sensitive, "/target")).resolves.toBe(false);
+    sensitive.caseSensitive = true;
+    await expect(detectCaseSensitivity(sensitive, "/target")).resolves.toBe(true);
 
     // The mock answers from its setting; without an answer, looking decides.
     Object.defineProperty(sensitive, "isCaseSensitive", { value: undefined });
     await expect(detectCaseSensitivity(sensitive, "/target")).resolves.toBe(true);
 
+    // Like APFS: any letter case finds the same item.
     const insensitive = new MockWriteServiceFileSystem({ "/target/Readme": { kind: "file" } });
     Object.defineProperty(insensitive, "isCaseSensitive", { value: async () => null });
-    // Like APFS: any letter case finds the same item.
-    const lookUp: typeof insensitive.lstatImpl = async (path) => {
-      insensitive.lstatImpl = null;
-      try {
-        return await insensitive.lstat(
-          path.toLowerCase() === "/target/readme" ? "/target/Readme" : path,
-        );
-      } finally {
-        insensitive.lstatImpl = lookUp;
-      }
-    };
-    insensitive.lstatImpl = lookUp;
     await expect(detectCaseSensitivity(insensitive, "/target")).resolves.toBe(false);
   });
 });

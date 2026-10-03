@@ -4458,3 +4458,76 @@ describe("copyPasteExecution", () => {
     });
   });
 });
+
+describe("names the destination can't tell apart", () => {
+  it("finds an existing item whatever the letter case, as APFS does", async () => {
+    const fileSystem = new MockWriteServiceFileSystem({
+      "/source/README.txt": { kind: "file", size: 2 },
+      "/target/readme.txt": { kind: "file", size: 1 },
+    });
+
+    const { report } = await createResolvedOperation({
+      fileSystem,
+      sourcePaths: ["/source/README.txt"],
+      destinationDirectoryPath: "/target",
+    });
+
+    expect(report.nodes[0]).toMatchObject({
+      conflictClass: "file_conflict",
+      destinationPath: "/target/README.txt",
+    });
+  });
+
+  // The review stops such a paste; this is the guard behind it. A folder from a disk that
+  // tells "A.txt" from "a.txt" lands on one that doesn't: the second item must never
+  // replace the first, which this same paste just wrote.
+  it("never lets a later item replace one this paste just wrote under the same name", async () => {
+    const fileSystem = new MockWriteServiceFileSystem();
+    fileSystem.caseSensitive = true;
+    fileSystem.addFile("/source/F/A.txt", { size: 5 });
+    fileSystem.addFile("/source/F/a.txt", { size: 6 });
+    fileSystem.addDirectory("/target");
+    fileSystem.enableTrash();
+    const replaceAll = {
+      file: "overwrite",
+      directory: "overwrite",
+      mismatch: "overwrite",
+    } as const;
+    const { report, resolvedNodes } = await createResolvedOperation({
+      fileSystem,
+      mode: "cut",
+      sourcePaths: ["/source/F"],
+      destinationDirectoryPath: "/target",
+      policy: replaceAll,
+    });
+    // The destination turns out not to tell case apart after all.
+    fileSystem.caseSensitive = false;
+    const requestResolution = vi.fn(async () => "overwrite" as const);
+    const events: CopyPasteProgressEvent[] = [];
+
+    await executeCopyPasteFromAnalysis({
+      operationId: "op-case",
+      report: { ...report, destinationCaseSensitive: false },
+      mode: "cut",
+      policy: replaceAll,
+      fileSystem,
+      now: () => new Date("2026-10-03T00:00:00.000Z"),
+      signal: new AbortController().signal,
+      resolvedNodes,
+      emit: (event) => events.push(event),
+      requestResolution,
+    });
+
+    const result = expectDefined(expectLastEvent(events).result);
+    expect(requestResolution).not.toHaveBeenCalled();
+    expect(result.items.find((item) => item.sourcePath === "/source/F/a.txt")).toMatchObject({
+      status: "failed",
+      error:
+        "“a.txt” wasn't pasted because another item of this paste has the same name on this disk, which doesn't tell upper and lower case apart.",
+    });
+    expect(expectNode(fileSystem, "/target/F/A.txt").size).toBe(5);
+    expect(fileSystem.trashed).toEqual([]);
+    // Its original stays where it was.
+    expect(expectNode(fileSystem, "/source/F/a.txt").size).toBe(6);
+  });
+});

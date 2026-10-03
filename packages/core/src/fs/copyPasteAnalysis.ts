@@ -3,11 +3,19 @@ import { basename, dirname, join, resolve } from "node:path";
 import { describeCopyPasteError } from "./copyPasteErrors";
 import {
   captureFingerprint,
+  captureFolderFingerprint,
   detectKind,
   findSourceRelation,
+  holdsAnyOf,
   isSameExistingItem,
+  realItemPaths,
 } from "./copyPasteFingerprint";
-import { destinationPathKey, detectCaseSensitivity, resolveDuplicateName } from "./copyPasteNames";
+import {
+  destinationPathKey,
+  detectCaseSensitivity,
+  isFolderViewFile,
+  resolveDuplicateName,
+} from "./copyPasteNames";
 import type {
   CopyPasteAnalysisIssue,
   CopyPasteAnalysisNode,
@@ -46,7 +54,8 @@ export async function buildCopyPasteAnalysisReport(args: {
   const issues: CopyPasteAnalysisIssue[] = [];
   const warnings: CopyPasteAnalysisWarning[] = [];
   const nodes: CopyPasteAnalysisNode[] = [];
-  const destinationFingerprint = await captureFingerprint(
+  // A symlink to a folder is pasted into as that folder.
+  const destinationFingerprint = await captureFolderFingerprint(
     fileSystem,
     request.destinationDirectoryPath,
   );
@@ -60,10 +69,13 @@ export async function buildCopyPasteAnalysisReport(args: {
     counts: new Map(),
     entries: new Map(),
     pathKey,
+    nameCollisions: [],
   };
   // APFS is case- and normalization-insensitive by default, so "report.pdf"
   // from one folder and "Report.pdf" from another land on the same entry.
   const claimedDestinationNames = new Map<string, string>();
+  // The same, as whole destination paths (`destinationPathKey`), for picking free names.
+  const plannedDestinationKeys = new Set<string>();
 
   if (!destinationFingerprint.exists) {
     issues.push({
@@ -93,7 +105,7 @@ export async function buildCopyPasteAnalysisReport(args: {
       return cached;
     }
     const same = isSameExistingItem(
-      await captureFingerprint(fileSystem, directoryPath),
+      await captureFolderFingerprint(fileSystem, directoryPath),
       destinationFingerprint,
     );
     sameDirectoryCache.set(directoryPath, same);
@@ -107,11 +119,13 @@ export async function buildCopyPasteAnalysisReport(args: {
     const pastingIntoSourceFolder = await isDestinationDirectory(dirname(sourcePath));
 
     if (request.mode === "copy" && pastingIntoSourceFolder) {
+      // Duplicating "a.txt" and "a copy.txt" together gives "a copy 2.txt" and
+      // "a copy 3.txt": a name an earlier item took is skipped, like Finder.
       destinationPath = await resolveDuplicateName(
         basename(sourcePath),
         request.destinationDirectoryPath,
         fileSystem,
-        undefined,
+        plannedDestinationKeys,
         { isDirectory: sourceFingerprint.kind === "directory", caseSensitive },
       );
     }
@@ -183,6 +197,7 @@ export async function buildCopyPasteAnalysisReport(args: {
       continue;
     }
     claimedDestinationNames.set(destinationNameKey, sourcePath);
+    plannedDestinationKeys.add(pathKey(destinationPath));
 
     const node = await analyzeNode({
       id: `item-${index + 1}`,
@@ -192,8 +207,22 @@ export async function buildCopyPasteAnalysisReport(args: {
       destinationScanCache,
       ...(args.signal ? { signal: args.signal } : {}),
     });
-    node.replaceBlockedReason = await findReplaceBlockedReason(node, fileSystem);
     nodes.push(node);
+  }
+
+  for (const collision of destinationScanCache.nameCollisions) {
+    issues.push({
+      code: "duplicate_destination_name",
+      message: `${collision.sourcePath} and ${collision.otherSourcePath} would both be pasted as ${basename(collision.destinationPath)}, because the destination doesn't tell upper and lower case apart.`,
+      sourcePath: collision.sourcePath,
+      destinationPath: collision.destinationPath,
+    });
+  }
+
+  // Replacing an item that holds any item of this paste would destroy that item too.
+  const sourceRealPaths = await realSourcePaths(fileSystem, nodes);
+  for (const node of nodes) {
+    node.replaceBlockedReason = await findReplaceBlockedReason(node, fileSystem, sourceRealPaths);
   }
 
   await annotateKeepBothNames(nodes, fileSystem, caseSensitive, args.signal);
@@ -260,10 +289,24 @@ async function analyzeNode(args: {
       // paste runs; it must not stop everything else from being pasted.
       unreadableReason = describeCopyPasteError(error);
     }
+    // A folder from a disk that tells "A.txt" from "a.txt" may hold both; on a destination
+    // that doesn't, they would land on one name and one would replace the other.
+    const claimedChildNames = new Map<string, string>();
     for (const childName of sourceChildren) {
       args.signal?.throwIfAborted();
       const childSourcePath = join(args.sourcePath, childName);
       const childDestinationPath = join(args.destinationPath, childName);
+      const childKey = args.destinationScanCache.pathKey(childName);
+      const claimedBy = claimedChildNames.get(childKey);
+      if (claimedBy !== undefined) {
+        args.destinationScanCache.nameCollisions.push({
+          sourcePath: childSourcePath,
+          otherSourcePath: join(args.sourcePath, claimedBy),
+          destinationPath: childDestinationPath,
+        });
+      } else {
+        claimedChildNames.set(childKey, childName);
+      }
       const childNode = await analyzeNode({
         id: `${args.id}/${childName}`,
         sourcePath: childSourcePath,
@@ -364,6 +407,9 @@ async function collectDestinationOnly(
   );
   for (const entry of entries) {
     context.signal?.throwIfAborted();
+    if (isFolderViewFile(entry)) {
+      continue;
+    }
     const entryPath = join(destinationPath, entry);
     const counterpart = sourceByName.get(context.cache.pathKey(entry));
     if (counterpart?.sourceKind === "directory" && counterpart.destinationKind === "directory") {
@@ -448,10 +494,12 @@ async function annotateKeepBothNames(
   }
 }
 
-// Replacing an item that is, or contains, the item being pasted would destroy the source.
+// Replacing an item that is, or contains, the item being pasted would destroy the source;
+// so would replacing a folder that holds another item of the same paste.
 async function findReplaceBlockedReason(
   node: CopyPasteAnalysisNode,
   fileSystem: WriteServiceFileSystem,
+  sourceRealPaths: readonly string[],
 ): Promise<string | null> {
   if (node.conflictClass === null) {
     return null;
@@ -462,11 +510,29 @@ async function findReplaceBlockedReason(
     node.destinationPath,
     node.destinationFingerprint,
   );
-  return relation === "same"
-    ? "It is the item being pasted."
-    : relation === "contains"
-      ? "It contains the item being pasted."
-      : null;
+  if (relation === "same") {
+    return "It is the item being pasted.";
+  }
+  if (relation === "contains") {
+    return "It contains the item being pasted.";
+  }
+  if (
+    node.destinationKind === "directory" &&
+    (await holdsAnyOf(fileSystem, node.destinationPath, sourceRealPaths))
+  ) {
+    return "It contains another item being pasted.";
+  }
+  return null;
+}
+
+async function realSourcePaths(
+  fileSystem: WriteServiceFileSystem,
+  nodes: readonly CopyPasteAnalysisNode[],
+): Promise<string[]> {
+  return realItemPaths(
+    fileSystem,
+    nodes.map((node) => node.sourcePath),
+  );
 }
 
 type DestinationScanCache = {
@@ -476,6 +542,8 @@ type DestinationScanCache = {
   entries: Map<string, string[]>;
   // How names are compared on the destination volume (see `destinationPathKey`).
   pathKey: (path: string) => string;
+  // Items inside pasted folders whose names the destination can't tell apart.
+  nameCollisions: Array<{ sourcePath: string; otherSourcePath: string; destinationPath: string }>;
 };
 
 async function readDestinationEntries(
@@ -504,7 +572,9 @@ async function countDirectoryItems(
 
   try {
     signal?.throwIfAborted();
-    const entries = await readDestinationEntries(fileSystem, directoryPath, cache);
+    const entries = (await readDestinationEntries(fileSystem, directoryPath, cache)).filter(
+      (entry) => !isFolderViewFile(entry),
+    );
     let count = entries.length;
     for (const entry of entries) {
       signal?.throwIfAborted();

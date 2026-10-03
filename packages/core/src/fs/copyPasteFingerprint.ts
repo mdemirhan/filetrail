@@ -38,6 +38,37 @@ export async function captureFingerprint(
   }
 }
 
+// A folder that may be given by a symlink to it (a link to Desktop, say): pasting into the
+// link pastes into the folder, so it is that folder's fingerprint, followed through the
+// link. Anything else is fingerprinted as it is.
+export async function captureFolderFingerprint(
+  fileSystem: WriteServiceFileSystem,
+  path: string,
+): Promise<NodeFingerprint> {
+  const fingerprint = await captureFingerprint(fileSystem, path);
+  if (fingerprint.kind !== "symlink") {
+    return fingerprint;
+  }
+  try {
+    const stats = await fileSystem.stat(path);
+    if (!stats.isDirectory()) {
+      return fingerprint;
+    }
+    return {
+      exists: true,
+      kind: "directory",
+      size: null,
+      mtimeMs: typeof stats.mtimeMs === "number" ? stats.mtimeMs : null,
+      mode: typeof stats.mode === "number" ? stats.mode : null,
+      ino: typeof stats.ino === "number" ? stats.ino : null,
+      dev: typeof stats.dev === "number" ? stats.dev : null,
+      symlinkTarget: null,
+    };
+  } catch {
+    return fingerprint;
+  }
+}
+
 export function detectKind(stats: WriteServiceStats): Exclude<CopyPasteNodeKind, "missing"> {
   if (stats.isSymbolicLink()) {
     return "symlink";
@@ -115,6 +146,41 @@ export async function findSourceRelation(
       return null;
     }
   }
+}
+
+// Where the items of a paste really are (see realItemPath), to tell whether replacing a
+// folder would destroy one of them.
+export async function realItemPaths(
+  fileSystem: WriteServiceFileSystem,
+  paths: readonly string[],
+): Promise<string[]> {
+  const real: string[] = [];
+  for (const path of paths) {
+    real.push(await realItemPath(fileSystem, path));
+  }
+  return real;
+}
+
+// Whether the folder at `destinationPath` is or holds any of the items (given by their
+// real paths): replacing it would destroy them along with it.
+export async function holdsAnyOf(
+  fileSystem: WriteServiceFileSystem,
+  destinationPath: string,
+  realPaths: readonly string[],
+): Promise<boolean> {
+  const realDestination = await fileSystem.realpath(destinationPath).catch(() => destinationPath);
+  const prefix = realDestination.endsWith("/") ? realDestination : `${realDestination}/`;
+  const key = (path: string) => path.normalize("NFD").toLowerCase();
+  for (const path of realPaths) {
+    // One already moved out (earlier in the same move) is no longer at risk.
+    if (
+      (key(path) === key(realDestination) || key(path).startsWith(key(prefix))) &&
+      (await captureFingerprint(fileSystem, path)).exists
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // Where an item really is: its folder resolved, but not the item itself (a pasted

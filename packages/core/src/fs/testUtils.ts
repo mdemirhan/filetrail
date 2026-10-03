@@ -1,4 +1,4 @@
-import { dirname } from "node:path";
+import { basename, dirname } from "node:path";
 
 import type { WriteServiceFileSystem, WriteServiceStats } from "./writeServiceTypes";
 
@@ -122,7 +122,8 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
       return this.realpathOverrides.get(path) ?? path;
     }
     this.getNodeOrThrow(path);
-    return path;
+    // As macOS does, with the names as they are stored.
+    return this.existingKey(path);
   }
 
   async readdir(path: string): Promise<string[]> {
@@ -167,26 +168,27 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
     if (this.rmImpl) {
       return this.rmImpl(path, options);
     }
-    if (!this.nodes.has(path)) {
+    const key = this.existingKey(path);
+    if (!this.nodes.has(key)) {
       if (options?.force) {
         return;
       }
       throw createFsError("ENOENT", path);
     }
-    const node = this.getNodeOrThrow(path);
+    const node = this.getNodeOrThrow(key);
     if (node.kind === "directory") {
-      const children = this.listChildren(path);
+      const children = this.listChildren(key);
       if (children.length > 0 && !options?.recursive) {
         throw createFsError("ENOTEMPTY", path);
       }
       for (const candidate of Array.from(this.nodes.keys())) {
-        if (candidate === path || candidate.startsWith(`${path}/`)) {
+        if (candidate === key || candidate.startsWith(`${key}/`)) {
           this.nodes.delete(candidate);
         }
       }
       return;
     }
-    this.nodes.delete(path);
+    this.nodes.delete(key);
   }
 
   async rmdir(path: string): Promise<void> {
@@ -200,7 +202,7 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
     if (this.listChildren(path).length > 0) {
       throw createFsError("ENOTEMPTY", path);
     }
-    this.nodes.delete(normalizePath(path));
+    this.nodes.delete(this.existingKey(path));
   }
 
   async isCaseSensitive(_path: string): Promise<boolean | null> {
@@ -216,12 +218,13 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
         return this.trashImpl(path);
       }
       this.getNodeOrThrow(path);
+      const key = this.existingKey(path);
       for (const candidate of Array.from(this.nodes.keys())) {
-        if (candidate === normalizePath(path) || candidate.startsWith(`${normalizePath(path)}/`)) {
+        if (candidate === key || candidate.startsWith(`${key}/`)) {
           this.nodes.delete(candidate);
         }
       }
-      this.trashed.push(normalizePath(path));
+      this.trashed.push(key);
     };
     Object.defineProperty(this, "trash", {
       value: trashFn,
@@ -236,10 +239,10 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
       return this.symlinkImpl(target, path);
     }
     this.ensureDirectory(dirname(path), true);
-    if (this.nodes.has(normalizePath(path))) {
+    if (this.nodes.has(this.existingKey(path))) {
       throw createFsError("EEXIST", path);
     }
-    this.nodes.set(normalizePath(path), this.createNode({ kind: "symlink", target }));
+    this.nodes.set(this.newKey(path), this.createNode({ kind: "symlink", target }));
   }
 
   /** Enables the `rename` method, opting this mock into same-filesystem rename support. */
@@ -251,8 +254,8 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
       if (this.renameImpl) {
         return this.renameImpl(oldPath, newPath);
       }
-      const normalizedOld = normalizePath(oldPath);
-      const normalizedNew = normalizePath(newPath);
+      const normalizedOld = this.existingKey(oldPath);
+      const normalizedNew = this.newKey(newPath);
       const sourceNode = this.getNodeOrThrow(normalizedOld);
 
       // Check if cross-device (source dev vs destination parent dev)
@@ -273,6 +276,13 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
       // Delete old paths
       for (const [path] of pathsToMove) {
         this.nodes.delete(path);
+      }
+      // rename(2) replaces what was at the new name (stored, perhaps, in another case).
+      const replacedKey = this.existingKey(newPath);
+      for (const path of Array.from(this.nodes.keys())) {
+        if (path === replacedKey || path.startsWith(`${replacedKey}/`)) {
+          this.nodes.delete(path);
+        }
       }
 
       // Insert new paths
@@ -303,11 +313,11 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
         throw createFsError("EISDIR", sourcePath);
       }
       this.ensureDirectory(dirname(destinationPath), true);
-      if (this.nodes.has(normalizePath(destinationPath))) {
+      if (this.nodes.has(this.existingKey(destinationPath))) {
         throw createFsError("EEXIST", destinationPath);
       }
       this.nodes.set(
-        normalizePath(destinationPath),
+        this.newKey(destinationPath),
         this.createNode({
           kind: "file",
           size: source.size,
@@ -330,8 +340,7 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
       if (this.utimesImpl) {
         return this.utimesImpl(path, _atimeMs, mtimeMs);
       }
-      const normalized = normalizePath(path);
-      const node = this.getNodeOrThrow(normalized);
+      const node = this.getNodeOrThrow(path);
       node.mtimeMs = mtimeMs;
     };
     Object.defineProperty(this, "utimes", {
@@ -348,8 +357,7 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
       if (this.lutimesImpl) {
         return this.lutimesImpl(path, _atimeMs, mtimeMs);
       }
-      const normalized = normalizePath(path);
-      const node = this.getNodeOrThrow(normalized);
+      const node = this.getNodeOrThrow(path);
       node.mtimeMs = mtimeMs;
     };
     Object.defineProperty(this, "lutimes", {
@@ -374,11 +382,11 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
       throw new Error(`Cannot stream-copy non-file source: ${sourcePath}`);
     }
     this.ensureDirectory(dirname(destinationPath), true);
-    if (this.nodes.has(normalizePath(destinationPath))) {
+    if (this.nodes.has(this.existingKey(destinationPath))) {
       throw createFsError("EEXIST", destinationPath);
     }
     this.nodes.set(
-      normalizePath(destinationPath),
+      this.newKey(destinationPath),
       this.createNode({
         kind: "file",
         size: source.size,
@@ -396,7 +404,7 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
 
   addFile(path: string, options: Omit<Extract<SeedNode, { kind: "file" }>, "kind"> = {}): void {
     this.ensureDirectory(dirname(path), true);
-    this.nodes.set(normalizePath(path), this.createNode({ kind: "file", ...options }));
+    this.nodes.set(this.newKey(path), this.createNode({ kind: "file", ...options }));
   }
 
   addSymlink(
@@ -405,11 +413,11 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
     options: Omit<Extract<SeedNode, { kind: "symlink" }>, "kind" | "target"> = {},
   ): void {
     this.ensureDirectory(dirname(path), true);
-    this.nodes.set(normalizePath(path), this.createNode({ kind: "symlink", target, ...options }));
+    this.nodes.set(this.newKey(path), this.createNode({ kind: "symlink", target, ...options }));
   }
 
   mutateNode(path: string, updater: (node: MockNode) => MockNode | undefined): void {
-    const normalized = normalizePath(path);
+    const normalized = this.existingKey(path);
     const node = this.getNodeOrThrow(normalized);
     const next = updater({ ...node }) ?? node;
     next.mtimeMs = this.bumpMtime();
@@ -421,11 +429,11 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
   }
 
   exists(path: string): boolean {
-    return this.nodes.has(normalizePath(path));
+    return this.nodes.has(this.existingKey(path));
   }
 
   readNode(path: string): MockNode | null {
-    return this.nodes.get(normalizePath(path)) ?? null;
+    return this.nodes.get(this.existingKey(path)) ?? null;
   }
 
   private ensureDirectory(
@@ -440,14 +448,14 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
       }
       return;
     }
-    const parent = dirname(normalized);
+    const parent = this.existingKey(dirname(normalized));
     if (!this.nodes.has(parent)) {
       if (!recursive) {
         throw createFsError("ENOENT", parent);
       }
       this.ensureDirectory(parent, true);
     }
-    const existing = this.nodes.get(normalized);
+    const existing = this.nodes.get(this.existingKey(normalized));
     if (existing) {
       if (existing.kind !== "directory") {
         throw createFsError(recursive ? "ENOTDIR" : "EEXIST", normalized);
@@ -457,11 +465,11 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
       }
       return;
     }
-    this.nodes.set(normalized, this.createNode({ kind: "directory", ...options }));
+    this.nodes.set(this.newKey(normalized), this.createNode({ kind: "directory", ...options }));
   }
 
   private listChildren(path: string): string[] {
-    const normalized = normalizePath(path);
+    const normalized = this.existingKey(path);
     const prefix = normalized === "/" ? "/" : `${normalized}/`;
     const children = new Set<string>();
     for (const candidate of this.nodes.keys()) {
@@ -498,8 +506,41 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
     };
   }
 
-  private getNodeOrThrow(path: string): MockNode {
+  // The key of the item at `path`, found the way the volume compares names: APFS ignores
+  // how accented letters are encoded, and letter case unless the volume is case-sensitive.
+  // A path to nothing gets the key a new item there would have.
+  private existingKey(path: string): string {
     const normalized = normalizePath(path);
+    if (this.nodes.has(normalized)) {
+      return normalized;
+    }
+    const folded = this.foldName(normalized);
+    for (const candidate of this.nodes.keys()) {
+      if (this.foldName(candidate) === folded) {
+        return candidate;
+      }
+    }
+    return this.newKey(normalized);
+  }
+
+  // A new item's key: its folder as already stored, and its own name as given.
+  private newKey(path: string): string {
+    const normalized = normalizePath(path);
+    if (normalized === "/") {
+      return normalized;
+    }
+    const parent = dirname(normalized);
+    const parentKey = parent === "/" ? "/" : this.existingKey(parent);
+    return `${parentKey === "/" ? "" : parentKey}/${basename(normalized)}`;
+  }
+
+  private foldName(path: string): string {
+    const decomposed = path.normalize("NFD");
+    return this.caseSensitive ? decomposed : decomposed.toLowerCase();
+  }
+
+  private getNodeOrThrow(path: string): MockNode {
+    const normalized = this.existingKey(path);
     const node = this.nodes.get(normalized);
     if (!node) {
       throw createFsError("ENOENT", normalized);
