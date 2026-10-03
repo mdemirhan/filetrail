@@ -8569,6 +8569,8 @@ function createAppHarness(
     searchJobs?: (query: string) => { names: string[]; running?: boolean; truncated?: boolean };
     // Reading this folder's subfolders for the tree waits until `releaseTreeChildren`.
     holdTreeChildrenFor?: string;
+    // Which disk the folders under each path are on (the longest matching path wins).
+    diskIds?: Record<string, number>;
     // Answers about a scripted search wait until `releaseSearchUpdates`.
     holdSearchUpdates?: boolean;
     copyPastePlanError?: Error;
@@ -8985,6 +8987,20 @@ function createAppHarness(
       }
       if (channel === "app:writeLog") {
         return { ok: true } as IpcResponse<C>;
+      }
+      if (channel === "system:getDiskIds") {
+        // Which disk each folder is on: as given, else the disk its path names.
+        const { paths } = payload as IpcRequestInput<"system:getDiskIds">;
+        return {
+          ids: paths.map(
+            (path) =>
+              Object.entries(args.diskIds ?? {})
+                .filter(([root]) => path === root || path.startsWith(`${root}/`))
+                .sort(([left], [right]) => right.length - left.length)[0]?.[1] ??
+              /^\/Volumes\/[^/]+/.exec(path)?.[0].length ??
+              1,
+          ),
+        } as IpcResponse<C>;
       }
       throw new Error(`Unhandled channel in test harness: ${channel}`);
     },
@@ -10496,6 +10512,59 @@ describe("App file operations like Finder", () => {
             action: "move_to",
             sourcePaths: ["/Users/demo/source.txt"],
             destinationDirectoryPath: "/Users/demo/Folder",
+          }),
+        ]);
+      });
+    });
+
+    // Disks can be mounted anywhere: a network share under /net is another disk, and a
+    // plain drag there must copy, not delete the originals once copied.
+    it("copies to a disk mounted outside /Volumes, as the disk says", async () => {
+      const harness = createAppHarness({
+        preferences: {
+          favoritesInitialized: true,
+          favorites: [{ path: "/net/share", icon: "drive" }],
+        },
+        diskIds: { "/Users": 1, "/net/share": 7 },
+      });
+      renderApp(harness);
+
+      const source = await screen.findByTitle("/Users/demo/source.txt");
+      const target = await screen.findByTitle("favorite:/net/share");
+      await dragWithKeys(source, target, [{}]);
+
+      await vi.waitFor(() => {
+        expect(analyzeRequests(harness)).toEqual([
+          expect.objectContaining({
+            mode: "copy",
+            action: "copy_to",
+            destinationDirectoryPath: "/net/share",
+          }),
+        ]);
+      });
+    });
+
+    // The startup disk can also be reached as /Volumes/Macintosh HD: still the same disk.
+    it("moves to the startup disk reached through /Volumes, as the disk says", async () => {
+      const harness = createAppHarness({
+        preferences: {
+          favoritesInitialized: true,
+          favorites: [{ path: "/Volumes/Macintosh HD/Users/demo/Folder", icon: "folder" }],
+        },
+        diskIds: { "/Users": 1, "/Volumes/Macintosh HD": 1 },
+      });
+      renderApp(harness);
+
+      const source = await screen.findByTitle("/Users/demo/source.txt");
+      const target = await screen.findByTitle("favorite:/Volumes/Macintosh HD/Users/demo/Folder");
+      await dragWithKeys(source, target, [{}]);
+
+      await vi.waitFor(() => {
+        expect(analyzeRequests(harness)).toEqual([
+          expect.objectContaining({
+            mode: "cut",
+            action: "move_to",
+            destinationDirectoryPath: "/Volumes/Macintosh HD/Users/demo/Folder",
           }),
         ]);
       });

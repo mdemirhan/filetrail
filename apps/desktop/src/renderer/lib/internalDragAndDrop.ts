@@ -86,6 +86,9 @@ export function resolveInternalDropOperation(args: {
   targetPath: string;
   altKey: boolean;
   metaKey: boolean;
+  // Whether every item is on the target's disk, as the disks themselves say (see
+  // `system:getDiskIds`); undefined until they have answered, when the paths decide.
+  onSameDisk?: boolean | undefined;
 }): InternalDropOperation {
   if (args.altKey) {
     return "copy";
@@ -93,8 +96,46 @@ export function resolveInternalDropOperation(args: {
   if (args.metaKey) {
     return "move";
   }
+  if (args.onSameDisk !== undefined) {
+    return args.onSameDisk ? "move" : "copy";
+  }
   // Search results can come from several disks; they move only if all are on the target's.
   return args.sourcePaths.every((path) => isOnSameVolume(path, args.targetPath)) ? "move" : "copy";
+}
+
+// The folders that hold the dragged items: which disk an item is on is the disk of its
+// folder (a dragged symlink is the link, wherever it points).
+export function getSourceFolderPaths(sourcePaths: readonly string[]): string[] {
+  return [
+    ...new Set(
+      sourcePaths.map((path) => {
+        const index = path.lastIndexOf("/");
+        return index <= 0 ? "/" : path.slice(0, index);
+      }),
+    ),
+  ];
+}
+
+// Whether the items' folders and the target are all on one disk, from the disk ids known so
+// far; undefined while one is unknown or can't be read.
+export function resolveOnSameDisk(
+  sourceFolderPaths: readonly string[],
+  targetPath: string,
+  diskIds: ReadonlyMap<string, number | null>,
+): boolean | undefined {
+  const targetId = diskIds.get(targetPath);
+  if (targetId === undefined || targetId === null) {
+    return undefined;
+  }
+  let same = true;
+  for (const folder of sourceFolderPaths) {
+    const id = diskIds.get(folder);
+    if (id === undefined || id === null) {
+      return undefined;
+    }
+    same &&= id === targetId;
+  }
+  return same;
 }
 
 export function validateInternalDrop(args: {

@@ -1,7 +1,9 @@
 import {
   buildInternalDragSession,
+  getSourceFolderPaths,
   isRealDirectoryEntry,
   resolveInternalDropOperation,
+  resolveOnSameDisk,
   validateInternalDrop,
 } from "./internalDragAndDrop";
 
@@ -238,5 +240,57 @@ describe("internalDragAndDrop", () => {
 
     expect(drop("/Users/demo/Folder")).toEqual({ ok: false, code: "same_path" });
     expect(drop("/Users/demo/Folder/Inner")).toEqual({ ok: false, code: "parent_into_child" });
+  });
+});
+
+describe("which disk decides a drag", () => {
+  it("names the folders that hold the dragged items, once each", () => {
+    expect(
+      getSourceFolderPaths(["/Users/demo/a.txt", "/Users/demo/b.txt", "/Volumes/X/c.txt", "/top"]),
+    ).toEqual(["/Users/demo", "/Volumes/X", "/"]);
+  });
+
+  it("knows the items share the target's disk only once every disk has answered", () => {
+    const ids = new Map<string, number | null>([
+      ["/Users/demo", 1],
+      ["/Volumes/X", 2],
+      ["/net/share", 7],
+      ["/Unreadable", null],
+    ]);
+
+    expect(resolveOnSameDisk(["/Users/demo"], "/Users/demo/Folder", ids)).toBeUndefined();
+    ids.set("/Users/demo/Folder", 1);
+    expect(resolveOnSameDisk(["/Users/demo"], "/Users/demo/Folder", ids)).toBe(true);
+    expect(resolveOnSameDisk(["/Users/demo", "/Volumes/X"], "/Users/demo/Folder", ids)).toBe(false);
+    expect(resolveOnSameDisk(["/Users/demo"], "/net/share", ids)).toBe(false);
+    expect(resolveOnSameDisk(["/Unreadable"], "/Users/demo/Folder", ids)).toBeUndefined();
+  });
+
+  it("goes by the disks once they have answered, and by the paths until then", () => {
+    const drop = (targetPath: string, onSameDisk?: boolean) =>
+      resolveInternalDropOperation({
+        sourcePaths: ["/Users/demo/a.txt"],
+        targetPath,
+        altKey: false,
+        metaKey: false,
+        ...(onSameDisk === undefined ? {} : { onSameDisk }),
+      });
+
+    // A share mounted under /net looks like the startup disk by its path.
+    expect(drop("/net/share")).toBe("move");
+    expect(drop("/net/share", false)).toBe("copy");
+    // The startup disk reached through /Volumes looks like another disk by its path.
+    expect(drop("/Volumes/Macintosh HD/Users/demo")).toBe("copy");
+    expect(drop("/Volumes/Macintosh HD/Users/demo", true)).toBe("move");
+    // Option and Command still decide, whatever the disks.
+    expect(
+      resolveInternalDropOperation({
+        sourcePaths: ["/Users/demo/a.txt"],
+        targetPath: "/net/share",
+        altKey: false,
+        metaKey: true,
+        onSameDisk: false,
+      }),
+    ).toBe("move");
   });
 });

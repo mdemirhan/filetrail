@@ -912,6 +912,7 @@ export function App() {
     },
     onToggleTreeNode: toggleTreeNode,
     onActivateTab: activateTab,
+    getDiskIds: async (paths) => (await client.invoke("system:getDiskIds", { paths })).ids,
   });
   const trashPath = homePath ? getTrashPath(homePath) : null;
   const shortcutContext = useMemo(

@@ -9,8 +9,10 @@ import {
   type InternalDropTargetSurface,
   type InternalMoveSourceSurface,
   buildInternalDragSession,
+  getSourceFolderPaths,
   isRealDirectoryEntry,
   resolveInternalDropOperation,
+  resolveOnSameDisk,
   validateInternalDrop,
 } from "../lib/internalDragAndDrop";
 
@@ -76,6 +78,8 @@ export function useExplorerDragAndDrop(args: {
   onToggleTreeNode: (path: string) => void;
   /** Holding a drag over a tab that is not on screen brings that tab to the front. */
   onActivateTab: (tabId: string) => void;
+  /** Which disk each path is on (`system:getDiskIds`), to tell a move from a copy. */
+  getDiskIds?: (paths: string[]) => Promise<Array<number | null>>;
 }) {
   const {
     activeEntries,
@@ -85,7 +89,12 @@ export function useExplorerDragAndDrop(args: {
     onDropItems,
     onToggleTreeNode,
     onActivateTab,
+    getDiskIds,
   } = args;
+  // Which disk each folder of this drag is on, as far as the disks have answered.
+  const diskIdsRef = useRef(new Map<string, number | null>());
+  // Answers on their way, per folder, so the drop can wait for one already asked for.
+  const diskIdRequestsRef = useRef(new Map<string, Promise<void>>());
   const onActivateTabRef = useRef(onActivateTab);
   onActivateTabRef.current = onActivateTab;
   const tabHoverSwitchRef = useRef<{ tabId: string; timerId: number } | null>(null);
@@ -150,6 +159,8 @@ export function useExplorerDragAndDrop(args: {
     setActiveDropTarget(null);
     setDragActive(false);
     dragSessionRef.current = null;
+    diskIdsRef.current = new Map();
+    diskIdRequestsRef.current = new Map();
     dragPreviewRef.current?.remove();
     dragPreviewRef.current = null;
   }
@@ -239,6 +250,7 @@ export function useExplorerDragAndDrop(args: {
     }
     dragSessionRef.current = session;
     setDragActive(true);
+    void requestDiskIds(getSourceFolderPaths(session.sourceItems.map((item) => item.path)));
     // Showing another tab during the drag takes the dragged row off the page, and a row
     // that is off the page ends its drag without the list hearing of it.
     event.currentTarget.addEventListener("dragend", () => clearDragSession(), { once: true });
@@ -263,6 +275,56 @@ export function useExplorerDragAndDrop(args: {
     clearDragSession();
   }
 
+  // Asks the disks about folders not asked about yet in this drag, and resolves once every
+  // one asked for has an answer (or the asking failed). Until then, the folder's path
+  // decides (see resolveInternalDropOperation).
+  function requestDiskIds(paths: string[]): Promise<void> {
+    if (!getDiskIds) {
+      return Promise.resolve();
+    }
+    const ids = diskIdsRef.current;
+    const requests = diskIdRequestsRef.current;
+    const wanted = paths.filter((path) => !ids.has(path) && !requests.has(path));
+    if (wanted.length > 0) {
+      const request = getDiskIds(wanted)
+        .then((answers) => {
+          wanted.forEach((path, index) => {
+            ids.set(path, answers[index] ?? null);
+          });
+        })
+        .catch(() => {
+          // The paths decide, as before the disks could be asked.
+        })
+        .finally(() => {
+          for (const path of wanted) {
+            requests.delete(path);
+          }
+        });
+      for (const path of wanted) {
+        requests.set(path, request);
+      }
+    }
+    return Promise.all(
+      paths.flatMap((path) => {
+        const pending = requests.get(path);
+        return pending ? [pending] : [];
+      }),
+    ).then(() => undefined);
+  }
+
+  // Whether the dragged items and the target share a disk, once the disks have said.
+  function knownOnSameDisk(
+    session: InternalDragSession,
+    path: string,
+    diskIds: ReadonlyMap<string, number | null> = diskIdsRef.current,
+  ): boolean | undefined {
+    return resolveOnSameDisk(
+      getSourceFolderPaths(session.sourceItems.map((item) => item.path)),
+      path,
+      diskIds,
+    );
+  }
+
   // Read again on every dragover, so the cursor changes as soon as Option or Command is
   // pressed or let go, and on the drop itself, so the drop does what the cursor showed.
   function resolveDropOperation(
@@ -273,11 +335,16 @@ export function useExplorerDragAndDrop(args: {
     if (!session || !path) {
       return "move";
     }
+    const onSameDisk = knownOnSameDisk(session, path);
+    if (onSameDisk === undefined) {
+      void requestDiskIds([path]);
+    }
     return resolveInternalDropOperation({
       sourcePaths: session.sourceItems.map((item) => item.path),
       targetPath: path,
       altKey: modifiers.altKey,
       metaKey: modifiers.metaKey,
+      onSameDisk,
     });
   }
 
@@ -341,7 +408,8 @@ export function useExplorerDragAndDrop(args: {
     },
   ) {
     const session = dragSessionRef.current;
-    const operation = resolveDropOperation(path, event);
+    const modifiers = { altKey: event.altKey, metaKey: event.metaKey };
+    let operation = resolveDropOperation(path, modifiers);
     const validity = resolveDropValidity({
       surface,
       path,
@@ -355,6 +423,20 @@ export function useExplorerDragAndDrop(args: {
     }
     event.preventDefault();
     clearTreeHoverExpand();
+    // The drop does what the disks say, not only what the paths suggested: a network share
+    // or a disk mounted outside /Volumes is another disk, and moving there deletes the
+    // originals once copied.
+    // The drag ends (and forgets its answers) as soon as the drop is in, so this drop keeps
+    // its own hold on them while it waits.
+    const diskIds = diskIdsRef.current;
+    if (!modifiers.altKey && !modifiers.metaKey && knownOnSameDisk(session, path) === undefined) {
+      const sourceFolders = getSourceFolderPaths(session.sourceItems.map((item) => item.path));
+      await requestDiskIds([...sourceFolders, path]);
+      const onSameDisk = knownOnSameDisk(session, path, diskIds);
+      if (onSameDisk !== undefined) {
+        operation = onSameDisk ? "move" : "copy";
+      }
+    }
     clearDragSession();
     await onDropItems(
       session.sourceItems.map((item) => item.path),

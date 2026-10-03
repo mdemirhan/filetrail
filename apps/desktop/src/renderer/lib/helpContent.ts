@@ -370,7 +370,11 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
             description:
               "Copied and cut items flash, and keep a copy or cut icon after their name until they are pasted or the clipboard changes. A button with their count appears in the toolbar: click it to list them, show one in its folder, take one off, or choose Clear Clipboard. Settings → General → Copy and Cut turns the marks and the notification off.",
           },
-          { label: "Drag", description: "Drag items onto a folder to move them there." },
+          {
+            label: "Drag",
+            description:
+              "Drag items onto a folder to move them there. Dragged to another disk (a USB drive, a network share) they are copied instead, as in Finder. Hold Option to copy, or Command to move.",
+          },
           {
             label: "Same name",
             description:
