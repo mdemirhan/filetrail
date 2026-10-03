@@ -39,6 +39,14 @@ export type TreeNodeState = {
   childPaths: string[];
 };
 
+// The row a context menu is open for: it gets a ring, and the selection stays on the folder
+// being shown.
+export type TreeContextMenuTarget = {
+  path: string;
+  subview: "favorites" | "tree";
+  kind: "favorite" | "treeFolder";
+};
+
 export function TreePane({
   paneRef,
   isFocused,
@@ -63,6 +71,7 @@ export function TreePane({
   onOpenInNewTab,
   onSelectFavoritesRoot,
   onItemContextMenu,
+  contextMenuTarget = null,
   onItemDragEnter,
   onItemDragOver,
   onItemDrop,
@@ -100,6 +109,7 @@ export function TreePane({
         position: { x: number; y: number },
       ) => void)
     | undefined;
+  contextMenuTarget?: TreeContextMenuTarget | null;
   onItemDragEnter?:
     | ((
         item: TreePresentationItem,
@@ -397,6 +407,7 @@ export function TreePane({
           onOpenInNewTab={onOpenInNewTab}
           onSelectFavoritesRoot={onSelectFavoritesRoot}
           onItemContextMenu={onItemContextMenu}
+          contextMenuTarget={contextMenuTarget}
           getItemDropIndicator={getItemDropIndicator}
           subview="tree"
           onSubviewFocus={() => onLeftPaneSubviewChange("tree")}
@@ -486,6 +497,7 @@ export function TreePane({
                         onOpenInNewTab={onOpenInNewTab}
                         onSelectFavoritesRoot={onSelectFavoritesRoot}
                         onItemContextMenu={onItemContextMenu}
+                        contextMenuTarget={contextMenuTarget}
                         onItemDragEnter={onItemDragEnter}
                         onItemDragOver={onItemDragOver}
                         onItemDrop={onItemDrop}
@@ -540,6 +552,7 @@ export function TreePane({
                 onOpenInNewTab={onOpenInNewTab}
                 onSelectFavoritesRoot={onSelectFavoritesRoot}
                 onItemContextMenu={onItemContextMenu}
+                contextMenuTarget={contextMenuTarget}
                 onItemDragEnter={onItemDragEnter}
                 onItemDragOver={onItemDragOver}
                 onItemDrop={onItemDrop}
@@ -595,6 +608,7 @@ function TreeList({
   onOpenInNewTab,
   onSelectFavoritesRoot,
   onItemContextMenu,
+  contextMenuTarget = null,
   onItemDragEnter,
   onItemDragOver,
   onItemDrop,
@@ -626,6 +640,7 @@ function TreeList({
         position: { x: number; y: number },
       ) => void)
     | undefined;
+  contextMenuTarget?: TreeContextMenuTarget | null;
   onItemDragEnter?:
     | ((
         item: TreePresentationItem,
@@ -680,6 +695,7 @@ function TreeList({
               onOpenInNewTab={onOpenInNewTab}
               onSelectFavoritesRoot={onSelectFavoritesRoot}
               onItemContextMenu={onItemContextMenu}
+              contextMenuTarget={contextMenuTarget}
               onItemDragEnter={onItemDragEnter}
               onItemDragOver={onItemDragOver}
               onItemDrop={onItemDrop}
@@ -711,6 +727,7 @@ function TreeItemRow({
   onOpenInNewTab,
   onSelectFavoritesRoot,
   onItemContextMenu,
+  contextMenuTarget = null,
   onItemDragEnter,
   onItemDragOver,
   onItemDrop,
@@ -741,6 +758,7 @@ function TreeItemRow({
         position: { x: number; y: number },
       ) => void)
     | undefined;
+  contextMenuTarget?: TreeContextMenuTarget | null;
   onItemDragEnter?:
     | ((
         item: TreePresentationItem,
@@ -770,6 +788,11 @@ function TreeItemRow({
   registerRowRef: (id: string, element: HTMLDivElement | null) => void;
 }) {
   const isCurrent = (optimisticSelectedItemId ?? selectedTreeItemId) === item.id;
+  const isMenuTarget =
+    contextMenuTarget !== null &&
+    contextMenuTarget.path === item.path &&
+    contextMenuTarget.subview === subview &&
+    contextMenuTarget.kind === (item.kind === "favorite" ? "favorite" : "treeFolder");
   const canExpand =
     item.kind === "favorites-root"
       ? item.canExpand
@@ -789,8 +812,9 @@ function TreeItemRow({
   // its selection in the tree stay as they are.
   const opensInNewTab = Boolean(onOpenInNewTab) && !isCurrent && !isFavoritesRoot && itemPath;
 
-  function handleActivatePointerDown(metaKey: boolean, button: number) {
-    if (button !== 0) {
+  function handleActivatePointerDown(metaKey: boolean, button: number, ctrlKey: boolean) {
+    // Control-click opens the context menu, which leaves the selection alone.
+    if (button !== 0 || ctrlKey) {
       return;
     }
     onSubviewFocus();
@@ -868,8 +892,9 @@ function TreeItemRow({
     if (!itemPath || isFavoritesRoot) {
       return;
     }
+    // The menu acts on this row, but the selection stays on the folder being shown: the row
+    // gets a ring while the menu is open instead.
     onSubviewFocus();
-    setOptimisticSelectedItemId(item.id);
     onItemContextMenu?.(item, subview, {
       x: clientX,
       y: clientY,
@@ -885,7 +910,7 @@ function TreeItemRow({
         ref={(element) => registerRowRef(item.id, element)}
         className={`tree-row${isCurrent ? " active" : ""}${
           isCurrent && !isPaneFocused ? " inactive" : ""
-        }${clipboardMarkClassName(clipboardMarks, clipboardPath)}`}
+        }${isMenuTarget ? " menu-target" : ""}${clipboardMarkClassName(clipboardMarks, clipboardPath)}`}
         role="treeitem"
         aria-selected={isCurrent}
         aria-expanded={canExpand ? item.expanded : undefined}
@@ -901,7 +926,7 @@ function TreeItemRow({
           if (target instanceof Element && target.closest(".tree-label, .tree-expand")) {
             return;
           }
-          handleActivatePointerDown(event.metaKey, event.button);
+          handleActivatePointerDown(event.metaKey, event.button, event.ctrlKey);
         }}
         onKeyDown={(event) => {
           const target = event.target;
@@ -986,7 +1011,9 @@ function TreeItemRow({
           className="tree-label"
           data-tree-item-id={item.id}
           onFocus={onSubviewFocus}
-          onPointerDown={(event) => handleActivatePointerDown(event.metaKey, event.button)}
+          onPointerDown={(event) =>
+            handleActivatePointerDown(event.metaKey, event.button, event.ctrlKey)
+          }
           onClick={(event) => handleActivateClick(event.metaKey)}
           onDoubleClick={() => {
             handleActivateDoubleClick();

@@ -49,45 +49,45 @@ function getTreeRow(button: HTMLButtonElement) {
   return row;
 }
 
+function treePaneDefaults(): ComponentProps<typeof TreePane> {
+  return {
+    isFocused: true,
+    rootPath: "/Users/demo",
+    homePath: "/Users/demo",
+    selectedTreeItemId: "fs:/Users/demo",
+    compactTreeView: false,
+    singleClickExpandTreeItems: false,
+    favorites: [
+      { path: "/Users/demo/Desktop", icon: "desktop" },
+      { path: "/Users/demo/Documents", icon: "documents" },
+    ],
+    favoritesPlacement: "integrated",
+    activeLeftPaneSubview: "tree",
+    favoritesExpanded: true,
+    nodes: baseNodes,
+    onFocusChange: () => undefined,
+    onLeftPaneSubviewChange: () => undefined,
+    onClearSelection: () => undefined,
+    includeHidden: false,
+    onToggleExpand: () => undefined,
+    onNavigate: () => undefined,
+    onNavigateFavorite: () => undefined,
+    onToggleFavoritesExpanded: () => undefined,
+    typeaheadQuery: "",
+  };
+}
+
 function renderTreePane(
   overrides: Partial<ComponentProps<typeof TreePane>> = {},
   treeMarks: ClipboardMarks | null = null,
 ) {
-  return render(
-    <TreePane
-      isFocused
-      rootPath="/Users/demo"
-      homePath="/Users/demo"
-      selectedTreeItemId="fs:/Users/demo"
-      compactTreeView={false}
-      singleClickExpandTreeItems={false}
-      favorites={[
-        { path: "/Users/demo/Desktop", icon: "desktop" },
-        { path: "/Users/demo/Documents", icon: "documents" },
-      ]}
-      favoritesPlacement="integrated"
-      activeLeftPaneSubview="tree"
-      favoritesExpanded
-      nodes={baseNodes}
-      onFocusChange={() => undefined}
-      onLeftPaneSubviewChange={() => undefined}
-      onClearSelection={() => undefined}
-      includeHidden={false}
-      onToggleExpand={() => undefined}
-      onNavigate={() => undefined}
-      onNavigateFavorite={() => undefined}
-      onToggleFavoritesExpanded={() => undefined}
-      typeaheadQuery=""
-      {...overrides}
-    />,
-    {
-      wrapper: ({ children }) => (
-        <ClipboardMarksProvider value={{ tree: treeMarks, content: null }}>
-          {children}
-        </ClipboardMarksProvider>
-      ),
-    },
-  );
+  return render(<TreePane {...treePaneDefaults()} {...overrides} />, {
+    wrapper: ({ children }) => (
+      <ClipboardMarksProvider value={{ tree: treeMarks, content: null }}>
+        {children}
+      </ClipboardMarksProvider>
+    ),
+  });
 }
 
 describe("TreePane", () => {
@@ -323,6 +323,58 @@ describe("TreePane", () => {
     fireEvent.mouseDown(scrollArea, { clientX: 186, clientY: 20 });
 
     expect(handleClearSelection).not.toHaveBeenCalled();
+  });
+
+  it("leaves the selection on the folder being shown when a row is right-clicked", () => {
+    const handleContextMenu = vi.fn();
+    renderTreePane({ onItemContextMenu: handleContextMenu });
+    const documents = getNamedButton("Documents", 1);
+
+    fireEvent.pointerDown(documents, { button: 2 });
+    fireEvent.contextMenu(documents, { clientX: 40, clientY: 50 });
+
+    expect(handleContextMenu).toHaveBeenCalledWith(
+      expect.objectContaining({ path: "/Users/demo/Documents" }),
+      "tree",
+      { x: 40, y: 50 },
+    );
+    expect(getTreeRow(documents)).not.toHaveClass("active");
+    expect(getTreeRow(getNamedButton("demo", 0))).toHaveClass("active");
+  });
+
+  it("leaves the selection alone on Control-click, which opens the context menu", () => {
+    renderTreePane();
+    const documents = getNamedButton("Documents", 1);
+
+    fireEvent.pointerDown(documents, { button: 0, ctrlKey: true });
+
+    expect(getTreeRow(documents)).not.toHaveClass("active");
+  });
+
+  it("rings the row whose context menu is open, and only that row", () => {
+    const target = { path: "/Users/demo/Documents", subview: "tree" as const };
+    const { rerender } = renderTreePane({ contextMenuTarget: { ...target, kind: "treeFolder" } });
+    const favoriteRow = () => getTreeRow(getNamedButton("Documents", 0));
+    const folderRow = () => getTreeRow(getNamedButton("Documents", 1));
+
+    expect(folderRow()).toHaveClass("menu-target");
+    expect(favoriteRow()).not.toHaveClass("menu-target");
+
+    rerender(
+      <ClipboardMarksProvider value={{ tree: null, content: null }}>
+        <TreePane {...treePaneDefaults()} contextMenuTarget={{ ...target, kind: "favorite" }} />
+      </ClipboardMarksProvider>,
+    );
+    expect(favoriteRow()).toHaveClass("menu-target");
+    expect(folderRow()).not.toHaveClass("menu-target");
+
+    // The menu closed.
+    rerender(
+      <ClipboardMarksProvider value={{ tree: null, content: null }}>
+        <TreePane {...treePaneDefaults()} contextMenuTarget={null} />
+      </ClipboardMarksProvider>,
+    );
+    expect(document.querySelector(".menu-target")).toBeNull();
   });
 
   it("selects the row when pressing row whitespace outside the tree controls", () => {

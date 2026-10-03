@@ -1679,6 +1679,17 @@ export function App() {
                 await selectTreeItem(getFavoritesRootItemId(), "skip");
                 return undefined;
               },
+              contextMenuTarget:
+                contextMenuState?.targetPath &&
+                contextMenuState.sourceSubview &&
+                (contextMenuState.surface === "treeFolder" ||
+                  contextMenuState.surface === "favorite")
+                  ? {
+                      path: contextMenuState.targetPath,
+                      subview: contextMenuState.sourceSubview,
+                      kind: contextMenuState.surface,
+                    }
+                  : null,
               onItemContextMenu: (item, subview, position) => {
                 if (!item.path || item.kind === "favorites-root") {
                   return;
