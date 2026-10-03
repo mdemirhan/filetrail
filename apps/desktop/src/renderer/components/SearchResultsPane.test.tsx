@@ -354,8 +354,8 @@ describe("SearchResultsPane", () => {
       fireEvent.click(screen.getByRole(role, { name }));
     };
     chooseOption("menuitemradio", "Glob");
-    chooseOption("menuitemradio", "Full path");
-    chooseOption("menuitemcheckbox", "Search subfolders");
+    chooseOption("menuitemradio", "Full Path");
+    chooseOption("menuitemcheckbox", "Search Subfolders");
     // Hidden files follow the file list, so the menu has no option for them.
     fireEvent.click(screen.getByRole("button", { name: "Options" }), { detail: 1 });
     expect(screen.queryByRole("menuitemcheckbox", { name: /hidden/i })).toBeNull();
@@ -372,8 +372,8 @@ describe("SearchResultsPane", () => {
     expect(handlePatternModeChange).toHaveBeenCalledWith("glob");
     expect(handleMatchScopeChange).toHaveBeenCalledWith("path");
     expect(handleRecursiveChange).toHaveBeenCalledWith(false);
-    chooseOption("menuitemcheckbox", "Skip .git folders");
-    chooseOption("menuitemcheckbox", "Skip files ignored by Git");
+    chooseOption("menuitemcheckbox", "Skip .git Folders");
+    chooseOption("menuitemcheckbox", "Skip Files Ignored by Git");
     expect(handleSkipGitFoldersChange).toHaveBeenCalledWith(false);
     expect(handleSkipGitIgnoredChange).toHaveBeenCalledWith(true);
     expect(handleScrollTopChange).toHaveBeenCalledWith(96);

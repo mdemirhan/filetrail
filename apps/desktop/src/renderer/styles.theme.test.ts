@@ -234,10 +234,10 @@ describe("theme styles", () => {
     ).toHaveLength(1);
     expect(
       shared("background", [
-        ".toolbar-menu-item:hover",
+        '.toolbar-menu-item:hover:not(:disabled):not([aria-disabled="true"])',
         ".toolbar-menu-item.active",
         ".context-menu-item.active:not(.disabled)",
-        ".context-submenu-item:hover",
+        ".context-submenu-item.active",
       ]).map((d) => d.value),
     ).toEqual(["var(--ft-accent-solid-button)"]);
   });
@@ -256,6 +256,34 @@ describe("theme styles", () => {
       (d) => d.property === "color" && d.selector === ".push-button.is-destructive",
     );
     expect(destructive?.value).toBe("var(--danger-text)");
+  });
+
+  it("keeps menu shortcuts and disabled items readable in every theme", () => {
+    const all = parseDeclarations(styles);
+    const themes: ThemeMode[] = [
+      "macos-light",
+      "warm-paper",
+      "sand",
+      "macos-dark",
+      "catppuccin-mocha",
+      "tomorrow-night",
+    ];
+    for (const theme of themes) {
+      const base = resolveThemeCssBase(theme);
+      const block = base === "light" ? ":root" : `:root[data-theme="${base}"]`;
+      const token = (name: string) =>
+        getThemeVariantCssOverrides(theme)[name] ??
+        all.find((d) => d.selector === block && d.property === name)?.value ??
+        "";
+      const menu = hexToRgb(token("--context-menu-bg"));
+      const shortcut = hexToRgb(token("--context-menu-shortcut"));
+      const disabled = hexToRgb(token("--context-menu-disabled"));
+      expect(contrast(shortcut, menu), `${theme}: shortcut`).toBeGreaterThanOrEqual(3);
+      expect(contrast(disabled, menu), `${theme}: disabled`).toBeGreaterThanOrEqual(2);
+      expect(contrast(disabled, menu), `${theme}: disabled vs shortcut`).toBeLessThan(
+        contrast(shortcut, menu),
+      );
+    }
   });
 
   it("shows a toolbar toggle that is on, in every theme, apart from off and from hover", () => {

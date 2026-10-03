@@ -49,15 +49,15 @@ describe("SearchOptionsMenu", () => {
       "aria-checked",
       "true",
     );
-    expect(screen.getByRole("menuitemradio", { name: "Full path" })).toHaveAttribute(
+    expect(screen.getByRole("menuitemradio", { name: "Full Path" })).toHaveAttribute(
       "aria-checked",
       "false",
     );
     expect(screen.getByRole("menuitemradio", { name: "Glob" })).toBeChecked();
-    expect(screen.getByRole("menuitemcheckbox", { name: "Search subfolders" })).toBeChecked();
-    expect(screen.getByRole("menuitemcheckbox", { name: "Skip .git folders" })).toBeChecked();
+    expect(screen.getByRole("menuitemcheckbox", { name: "Search Subfolders" })).toBeChecked();
+    expect(screen.getByRole("menuitemcheckbox", { name: "Skip .git Folders" })).toBeChecked();
     expect(
-      screen.getByRole("menuitemcheckbox", { name: "Skip files ignored by Git" }),
+      screen.getByRole("menuitemcheckbox", { name: "Skip Files Ignored by Git" }),
     ).not.toBeChecked();
     // Hidden files follow the file list (⇧⌘.), so the menu has no item for them.
     expect(screen.queryByRole("menuitemcheckbox", { name: "Include hidden files" })).toBeNull();
@@ -67,7 +67,7 @@ describe("SearchOptionsMenu", () => {
     const { handlers, input } = renderMenu();
     fireEvent.click(screen.getByRole("button", { name: "Search options" }), { detail: 1 });
 
-    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Search subfolders" }));
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Search Subfolders" }));
 
     expect(handlers.onRecursiveChange).toHaveBeenCalledWith(false);
     expect(screen.queryByRole("menu")).toBeNull();
@@ -77,7 +77,7 @@ describe("SearchOptionsMenu", () => {
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Regex" }));
     expect(handlers.onPatternModeChange).toHaveBeenCalledWith("regex");
     fireEvent.click(screen.getByRole("button", { name: "Search options" }), { detail: 1 });
-    fireEvent.click(screen.getByRole("menuitemradio", { name: "Full path" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Full Path" }));
     expect(handlers.onMatchScopeChange).toHaveBeenCalledWith("path");
   });
 
@@ -88,12 +88,12 @@ describe("SearchOptionsMenu", () => {
     expect(screen.getByRole("menuitemradio", { name: "Name" })).toHaveFocus();
 
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "ArrowDown" });
-    expect(screen.getByRole("menuitemradio", { name: "Full path" })).toHaveFocus();
+    expect(screen.getByRole("menuitemradio", { name: "Full Path" })).toHaveFocus();
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "ArrowUp" });
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "ArrowUp" });
     // Up from the first item wraps around to the last one.
     expect(
-      screen.getByRole("menuitemcheckbox", { name: "Skip files ignored by Git" }),
+      screen.getByRole("menuitemcheckbox", { name: "Skip Files Ignored by Git" }),
     ).toHaveFocus();
 
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "Enter" });
@@ -164,7 +164,7 @@ describe("SearchOptionsMenu", () => {
       "true",
     );
 
-    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Search subfolders" }));
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Search Subfolders" }));
     expect(onRecursiveChange).toHaveBeenCalledWith(false);
     expect(screen.queryByRole("menu")).toBeNull();
     expect(button).toHaveFocus();

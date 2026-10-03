@@ -122,10 +122,10 @@ describe("createApplicationMenuTemplate", () => {
       "-",
       "Sort By",
       "Folders First",
-      "Show Hidden Files",
+      "Hidden Files",
       "-",
-      "Show Info Panel",
-      "Show Info Row",
+      "Info Panel",
+      "Info Row",
       "-",
       "Refresh",
       "-",
@@ -215,9 +215,9 @@ describe("createApplicationMenuTemplate", () => {
       ["View", "as List", undefined, "viewAsList"],
       ["View", "as Details", undefined, "viewAsDetails"],
       ["View", "Folders First", undefined, "toggleFoldersFirst"],
-      ["View", "Show Hidden Files", "Command+Shift+.", "toggleHiddenFiles"],
-      ["View", "Show Info Panel", "Command+I", "toggleInfoPanel"],
-      ["View", "Show Info Row", "Command+Shift+I", "toggleInfoRow"],
+      ["View", "Hidden Files", "Command+Shift+.", "toggleHiddenFiles"],
+      ["View", "Info Panel", "Command+I", "toggleInfoPanel"],
+      ["View", "Info Row", "Command+Shift+I", "toggleInfoRow"],
       ["View", "Refresh", "Command+R", "refreshOrApplySearchSort"],
       ["View", "Zoom In", "Command+Plus", "zoomIn"],
       ["View", "Zoom Out", "Command+-", "zoomOut"],
@@ -365,7 +365,7 @@ describe("createApplicationMenuTemplate", () => {
     const onCommandSent = vi.fn();
     const template = createApplicationMenuTemplate({ send: vi.fn() }, { onCommandSent });
 
-    choose(itemOf(submenuOf(template, "View"), "Show Hidden Files"));
+    choose(itemOf(submenuOf(template, "View"), "Hidden Files"));
 
     expect(onCommandSent).toHaveBeenCalledTimes(1);
   });

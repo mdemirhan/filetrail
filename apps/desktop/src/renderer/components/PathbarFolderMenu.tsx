@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { useKeepInViewport } from "../hooks/useKeepInViewport";
+import { MenuCheck } from "./MenuCheck";
 
 export type PathbarFolder = { path: string; name: string };
 
@@ -229,9 +230,9 @@ export function PathbarFolderMenu({
               {folders === null ? (
                 <div className="pathbar-folder-menu-note">Loading…</div>
               ) : menu.failed ? (
-                <div className="pathbar-folder-menu-note">This folder could not be read.</div>
+                <div className="pathbar-folder-menu-note">Can’t Read This Folder</div>
               ) : folders.length === 0 ? (
-                <div className="pathbar-folder-menu-note">No folders</div>
+                <div className="pathbar-folder-menu-note">No Folders</div>
               ) : (
                 <>
                   {hiddenBefore > 0 ? (
@@ -256,9 +257,7 @@ export function PathbarFolderMenu({
                         onMouseMove={() => setActiveIndex(index)}
                         onClick={() => chooseRef.current(folder)}
                       >
-                        <span className="toolbar-menu-check" aria-hidden="true">
-                          {checked ? "✓" : ""}
-                        </span>
+                        <MenuCheck checked={checked} />
                         <span className="toolbar-menu-label">{folder.name}</span>
                       </button>
                     );

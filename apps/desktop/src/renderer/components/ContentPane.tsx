@@ -423,7 +423,7 @@ export function ContentPane({
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={onSearchForFilter}
               >
-                Search subfolders
+                Search Subfolders
               </button>
             ) : null}
           </div>

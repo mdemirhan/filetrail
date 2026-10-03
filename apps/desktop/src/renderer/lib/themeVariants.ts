@@ -67,6 +67,10 @@ type ThemeVariantDefinition = {
     itemText: string;
     itemIcon: string;
     destructive: string;
+    /** Shortcuts and submenu arrows: at least 3:1 on `bg`, like a secondary label. */
+    shortcut: string;
+    /** Items that can't be chosen: faint, but still readable (about 2.2:1 on `bg`). */
+    disabled: string;
   };
   inspector: {
     metaLabel: string;
@@ -141,6 +145,8 @@ const THEME_VARIANTS: Partial<Record<ThemeMode, ThemeVariantDefinition>> = {
       itemText: "#1d1d1f",
       itemIcon: "#6e6e73",
       destructive: "#e0383e",
+      shortcut: "#89898d",
+      disabled: "#a7a7ab",
     },
     inspector: {
       metaLabel: "#86868b",
@@ -211,6 +217,8 @@ const THEME_VARIANTS: Partial<Record<ThemeMode, ThemeVariantDefinition>> = {
       itemText: "#f2f2f5",
       itemIcon: "#a1a1a6",
       destructive: "#ff453a",
+      shortcut: "#79797e",
+      disabled: "#606062",
     },
     inspector: {
       metaLabel: "#98989d",
@@ -281,6 +289,8 @@ const THEME_VARIANTS: Partial<Record<ThemeMode, ThemeVariantDefinition>> = {
       itemText: "#1f1a14",
       itemIcon: "#6b6050",
       destructive: "#c03030",
+      shortcut: "#8e8576",
+      disabled: "#aaa399",
     },
     inspector: {
       metaLabel: "#9c9282",
@@ -351,6 +361,8 @@ const THEME_VARIANTS: Partial<Record<ThemeMode, ThemeVariantDefinition>> = {
       itemText: "#1c1508",
       itemIcon: "#655840",
       destructive: "#c03030",
+      shortcut: "#8c816c",
+      disabled: "#a89f91",
     },
     inspector: {
       metaLabel: "#968a74",
@@ -426,10 +438,10 @@ function getThemeVariantCssOverridesFromVariant(
     "--context-menu-border": variant.menu.border,
     "--context-menu-separator": variant.menu.separator,
     "--context-menu-text": variant.menu.itemText,
-    "--context-menu-shortcut": variant.text.muted,
-    "--context-menu-disabled": variant.text.disabled,
+    "--context-menu-shortcut": variant.menu.shortcut,
+    "--context-menu-disabled": variant.menu.disabled,
     "--context-menu-icon": variant.menu.itemIcon,
-    "--context-menu-submenu-arrow": variant.text.muted,
+    "--context-menu-submenu-arrow": variant.menu.shortcut,
     "--dropdown-bg": variant.menu.bg,
     "--fg-bright": variant.text.primary,
     "--fg-muted": variant.text.tertiary,

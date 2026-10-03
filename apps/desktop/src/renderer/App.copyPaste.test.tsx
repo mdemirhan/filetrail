@@ -2757,10 +2757,10 @@ describe("App copy/paste integration", () => {
       (label) => label.textContent,
     );
     expect(labels).toEqual([
+      "New Folder",
       "Show Info",
       "Paste",
       "Copy Path",
-      "New Folder",
       "Open in Terminal",
       "Show in Finder",
     ]);
@@ -4905,7 +4905,7 @@ describe("App copy/paste integration", () => {
       throw new Error("Search options button not found.");
     }
     const subfoldersItem = () =>
-      screen.getByRole("menuitemcheckbox", { name: "Search subfolders" });
+      screen.getByRole("menuitemcheckbox", { name: "Search Subfolders" });
 
     fireEvent.click(optionsButton, { detail: 1 });
     const before = subfoldersItem().getAttribute("aria-checked");

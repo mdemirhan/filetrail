@@ -401,7 +401,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
       "Search looks for files and folders in the folder you are browsing, as you type in the search field. Return or ↓ moves into the results and Esc shows the folder again. The magnifier in the field opens the options.",
     sections: [
       {
-        title: "Plain text",
+        title: "Plain Text",
         rows: [
           { label: "draft", code: true, description: "Names containing “draft”" },
           {
@@ -410,7 +410,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
             description: "Found exactly as typed: brackets, dots and `+` have no special meaning",
           },
         ],
-        note: "Plain text is how a new search matches. Choose Glob or Regex under Match as in the options to search with a pattern instead.",
+        note: "Plain text is how a new search matches. Choose Glob or Regex under Match As in the options to search with a pattern instead.",
       },
       {
         title: "Glob patterns",
@@ -481,13 +481,13 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
             description: "Regex: the same .ts files under “src”",
           },
         ],
-        note: "With Match set to Full path, the pattern is compared with the whole path from the top of the disk, including the folders above the one you search. Start a glob with `**/`. For names alone, use Match: Name.",
+        note: "With Match set to Full Path, the pattern is compared with the whole path from the top of the disk, including the folders above the one you search. Start a glob with `**/`. For names alone, use Match: Name.",
       },
       {
         title: "Options",
         rows: [
           {
-            label: "Search subfolders",
+            label: "Search Subfolders",
             description: "Also look in the folders below the current one.",
           },
           {
@@ -496,11 +496,11 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
               "Found whenever the file list shows them. Showing or hiding them ({toggleHiddenFiles}) with results on screen searches again.",
           },
           {
-            label: "Skip .git folders",
+            label: "Skip .git Folders",
             description: "Keeps Git’s internal files out of the results.",
           },
           {
-            label: "Skip files ignored by Git",
+            label: "Skip Files Ignored by Git",
             description:
               "Inside a Git repository, leaves out what `.gitignore` excludes, such as build output.",
           },

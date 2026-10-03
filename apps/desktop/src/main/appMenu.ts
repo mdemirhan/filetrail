@@ -202,12 +202,12 @@ export function createApplicationMenuTemplate(
           ],
         },
         command("toggleFoldersFirst", "Folders First", { type: "checkbox" }),
-        command("toggleHiddenFiles", "Show Hidden Files", {
+        command("toggleHiddenFiles", "Hidden Files", {
           type: "checkbox",
         }),
         separator,
-        command("toggleInfoPanel", "Show Info Panel", { type: "checkbox" }),
-        command("toggleInfoRow", "Show Info Row", {
+        command("toggleInfoPanel", "Info Panel", { type: "checkbox" }),
+        command("toggleInfoRow", "Info Row", {
           type: "checkbox",
         }),
         separator,

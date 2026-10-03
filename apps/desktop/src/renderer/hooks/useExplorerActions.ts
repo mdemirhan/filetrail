@@ -510,6 +510,14 @@ export function useExplorerActions(args: {
     if (contextMenuState.surface === "search") {
       hidden.add("toggleFavorite");
     }
+    // An item's New Folder makes the folder inside it, so it is there only for one folder;
+    // the folder on screen has its own, in the menu of the background.
+    if (
+      contextMenuTargetEntries.length !== 1 ||
+      !isDirectoryLikeEntry(contextMenuTargetEntries[0] ?? null)
+    ) {
+      hidden.add("newFolder");
+    }
     // "Show Package Contents" is only visible for bundle entries (.app, .framework, etc.)
     const hasBundle = contextMenuTargetEntries.some((entry) => entry.kind === "bundle");
     if (!hasBundle) {

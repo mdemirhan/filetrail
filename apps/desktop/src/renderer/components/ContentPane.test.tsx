@@ -1391,7 +1391,7 @@ describe("ContentPane", () => {
     expect(screen.getByText("No items match “doc”")).toBeInTheDocument();
     expect(screen.queryByText("This folder is empty")).toBeNull();
     expect(screen.getByText("0 of 12")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Search subfolders" }));
+    fireEvent.click(screen.getByRole("button", { name: "Search Subfolders" }));
     expect(handleSearch).toHaveBeenCalledTimes(1);
   });
 

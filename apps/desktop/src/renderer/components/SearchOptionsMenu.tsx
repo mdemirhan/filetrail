@@ -6,6 +6,7 @@ import type { IpcRequest } from "@filetrail/contracts";
 import { SEARCH_PATTERN_MODE_LABELS } from "../../shared/appPreferences";
 import { useKeepInViewport } from "../hooks/useKeepInViewport";
 import { placeDropdownMenu } from "../lib/menuPlacement";
+import { MenuCheck } from "./MenuCheck";
 import { ToolbarIcon } from "./ToolbarIcon";
 
 type SearchPatternMode = IpcRequest<"search:start">["patternMode"];
@@ -197,9 +198,7 @@ export function SearchOptionsMenu({
       tabIndex={-1}
       onClick={() => choose(apply)}
     >
-      <span className="toolbar-menu-check" aria-hidden="true">
-        {checked ? "✓" : ""}
-      </span>
+      <MenuCheck checked={checked} />
       <span className="toolbar-menu-label">{label}</span>
     </button>
   );
@@ -212,9 +211,7 @@ export function SearchOptionsMenu({
       tabIndex={-1}
       onClick={() => choose(apply)}
     >
-      <span className="toolbar-menu-check" aria-hidden="true">
-        {checked ? "✓" : ""}
-      </span>
+      <MenuCheck checked={checked} />
       <span className="toolbar-menu-label">{label}</span>
     </button>
   );
@@ -233,9 +230,9 @@ export function SearchOptionsMenu({
           >
             <div className="toolbar-menu-heading">Match</div>
             {radioItem("Name", matchScope === "name", () => onMatchScopeChange("name"))}
-            {radioItem("Full path", matchScope === "path", () => onMatchScopeChange("path"))}
+            {radioItem("Full Path", matchScope === "path", () => onMatchScopeChange("path"))}
             <hr className="toolbar-menu-separator" />
-            <div className="toolbar-menu-heading">Match as</div>
+            <div className="toolbar-menu-heading">Match As</div>
             {radioItem(SEARCH_PATTERN_MODE_LABELS.text, patternMode === "text", () =>
               onPatternModeChange("text"),
             )}
@@ -246,12 +243,12 @@ export function SearchOptionsMenu({
               onPatternModeChange("regex"),
             )}
             <hr className="toolbar-menu-separator" />
-            {checkboxItem("Search subfolders", recursive, () => onRecursiveChange(!recursive))}
+            {checkboxItem("Search Subfolders", recursive, () => onRecursiveChange(!recursive))}
             <hr className="toolbar-menu-separator" />
-            {checkboxItem("Skip .git folders", skipGitFolders, () =>
+            {checkboxItem("Skip .git Folders", skipGitFolders, () =>
               onSkipGitFoldersChange(!skipGitFolders),
             )}
-            {checkboxItem("Skip files ignored by Git", skipGitIgnored, () =>
+            {checkboxItem("Skip Files Ignored by Git", skipGitIgnored, () =>
               onSkipGitIgnoredChange(!skipGitIgnored),
             )}
           </div>,

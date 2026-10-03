@@ -205,16 +205,16 @@
   --get-info-meta-label: #44454a;
   --get-info-meta-value: #9a9ba0;
   --get-info-meta-value-muted: #44454a;
-  --context-menu-bg: #222326;
+  --context-menu-bg: #2a2c30;
   --context-menu-border: #353638;
   --context-menu-shadow: 0 8px 40px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
   --context-menu-separator: #2e2f32;
   --context-menu-text: #c0c1c8;
-  --context-menu-shortcut: #505158;
-  --context-menu-disabled: #404148;
+  --context-menu-shortcut: #78797e;
+  --context-menu-disabled: #5f5f65;
   --context-menu-destructive: #dc5555;
   --context-menu-icon: #68696e;
-  --context-menu-submenu-arrow: #505158;
+  --context-menu-submenu-arrow: #78797e;
   --dropdown-bg: #2a2c2e;
   --fg-bright: #e0e0e0;
   --fg-muted: #969896;
@@ -415,16 +415,16 @@
   --get-info-meta-label: #3a3a52;
   --get-info-meta-value: #a0a6c4;
   --get-info-meta-value-muted: #3a3a52;
-  --context-menu-bg: #1e1e2e;
+  --context-menu-bg: #313244;
   --context-menu-border: #363650;
   --context-menu-shadow: 0 8px 40px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
   --context-menu-separator: #2a2a40;
   --context-menu-text: #cdd6f5;
-  --context-menu-shortcut: #50506e;
-  --context-menu-disabled: #40405a;
+  --context-menu-shortcut: #7f7f95;
+  --context-menu-disabled: #65657a;
   --context-menu-destructive: #f38ba8;
   --context-menu-icon: #6c7086;
-  --context-menu-submenu-arrow: #50506e;
+  --context-menu-submenu-arrow: #7f7f95;
   --dropdown-bg: #313244;
   --fg-bright: #cdd6f4;
   --fg-muted: #a6adc8;
@@ -942,6 +942,8 @@ select:focus-visible {
   -webkit-app-region: no-drag;
 }
 
+/* Every row has the same leading column (16 points, for a checkmark or an icon), so the
+   labels of all menus start at the same place, 30 points in from the menu's edge. */
 .toolbar-menu-item,
 .context-menu-item,
 .context-submenu-item {
@@ -950,7 +952,7 @@ select:focus-visible {
   gap: 6px;
   width: 100%;
   height: 24px;
-  padding: 0 10px 0 4px;
+  padding: 0 10px 0 8px;
   border: 0;
   border-radius: var(--radius-control);
   background: transparent;
@@ -963,11 +965,11 @@ select:focus-visible {
   cursor: default;
 }
 
-.toolbar-menu-item:hover,
+.toolbar-menu-item:hover:not(:disabled):not([aria-disabled="true"]),
 .toolbar-menu-item:focus-visible,
 .toolbar-menu-item.active,
 .context-menu-item.active:not(.disabled),
-.context-submenu-item:hover,
+.context-submenu-item.active,
 .context-submenu-item:focus-visible {
   background: var(--ft-accent-solid-button);
   color: var(--ft-accent-on-solid);
@@ -975,13 +977,31 @@ select:focus-visible {
   box-shadow: none;
 }
 
-/* The column for the tick of a checked item. */
+/* The column for the checkmark of an item that is on. */
 .toolbar-menu-check {
+  display: inline-flex;
   flex: none;
+  align-items: center;
+  justify-content: center;
   width: 16px;
-  font-size: var(--font-size-callout);
-  font-weight: 600;
-  text-align: center;
+  height: 16px;
+}
+
+.toolbar-menu-check-svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* An item that can't be chosen is grey and never highlights. */
+.toolbar-menu-item:disabled,
+.toolbar-menu-item[aria-disabled="true"] {
+  color: var(--context-menu-disabled);
+  opacity: 1;
 }
 
 .toolbar-menu-label,
@@ -1010,9 +1030,9 @@ select:focus-visible {
   background: var(--context-menu-separator);
 }
 
-/* A small caption above a group of related menu items. */
+/* A small caption above a group of related menu items, over their labels. */
 .toolbar-menu-heading {
-  padding: 3px 10px 2px;
+  padding: 4px 10px 2px 30px;
   color: var(--context-menu-shortcut);
   font-size: var(--font-size-small);
   font-weight: 600;
@@ -1042,17 +1062,12 @@ select:focus-visible {
   position: relative;
 }
 
-.context-menu-item {
-  gap: 8px;
-  padding: 0 10px 0 8px;
-}
-
 .context-menu-item-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   flex: 0 0 auto;
   color: var(--context-menu-icon);
 }
@@ -1072,7 +1087,7 @@ select:focus-visible {
 .context-menu-chevron-svg {
   width: 10px;
   height: 10px;
-  stroke-width: 2.5;
+  stroke-width: 1.8;
 }
 
 .context-menu-submenu-arrow {
@@ -1109,6 +1124,7 @@ select:focus-visible {
   min-width: 180px;
 }
 
+/* Open With lists apps, with no checkmarks or icons: its labels start near the edge. */
 .context-submenu-item {
   padding: 0 10px;
 }
@@ -1933,10 +1949,11 @@ body.resizing-panels * {
   white-space: nowrap;
 }
 
+/* Loading…, No Folders: a grey line where the folders would be, at their labels. */
 .pathbar-folder-menu-note {
-  padding: 5px 10px;
-  color: var(--context-menu-shortcut, var(--text-tertiary));
-  font-size: var(--font-size-callout);
+  padding: 4px 10px 4px 30px;
+  color: var(--context-menu-disabled);
+  font-size: var(--font-size-body);
 }
 
 .pathbar-segment {
@@ -6608,8 +6625,8 @@ button.shortcut-slot-key.recording:hover {
 }
 
 .clipboard-menu {
-  width: 330px;
-  max-width: calc(100vw - 16px);
+  min-width: 260px;
+  max-width: min(420px, calc(100vw - 16px));
 }
 
 .clipboard-menu-header {

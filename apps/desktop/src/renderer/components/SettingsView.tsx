@@ -2603,12 +2603,12 @@ export function SettingsView({
                   onChange={(value) =>
                     onSearchDefaultsChange({ searchMatchScope: value as "name" | "path" })
                   }
-                  formatOption={(value) => (value === "path" ? "Full path" : "Name")}
+                  formatOption={(value) => (value === "path" ? "Full Path" : "Name")}
                 />
               }
             />
             <SettingRow
-              title="Search subfolders"
+              title="Search Subfolders"
               theme={palette}
               right={
                 <Toggle
@@ -2617,12 +2617,12 @@ export function SettingsView({
                     onSearchDefaultsChange({ searchRecursive: !searchDefaults.searchRecursive })
                   }
                   theme={palette}
-                  label="Search subfolders"
+                  label="Search Subfolders"
                 />
               }
             />
             <SettingRow
-              title="Skip .git folders"
+              title="Skip .git Folders"
               desc="Leave Git's internal files out of the results. This matters while hidden files are shown."
               theme={palette}
               right={
@@ -2634,12 +2634,12 @@ export function SettingsView({
                     })
                   }
                   theme={palette}
-                  label="Skip .git folders"
+                  label="Skip .git Folders"
                 />
               }
             />
             <SettingRow
-              title="Skip files ignored by Git"
+              title="Skip Files Ignored by Git"
               desc="Inside a Git repository, leave out whatever its .gitignore excludes, such as build output."
               theme={palette}
               right={
@@ -2651,7 +2651,7 @@ export function SettingsView({
                     })
                   }
                   theme={palette}
-                  label="Skip files ignored by Git"
+                  label="Skip Files Ignored by Git"
                 />
               }
             />

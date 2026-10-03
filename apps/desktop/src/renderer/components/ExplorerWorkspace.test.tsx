@@ -432,9 +432,9 @@ describe("ExplorerWorkspace", () => {
     expect(rows).toEqual([
       // Folders First has no key until one is chosen in Settings.
       ["Folders First", null],
-      ["Show Hidden Files", "⇧⌘."],
-      ["Show Info Panel", "⌘I"],
-      ["Show Info Row", "⇧⌘I"],
+      ["Hidden Files", "⇧⌘."],
+      ["Info Panel", "⌘I"],
+      ["Info Row", "⇧⌘I"],
       ["Customize Toolbar…", null],
     ]);
 

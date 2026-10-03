@@ -37,6 +37,7 @@ import {
 import { useShortcutDisplay } from "../state/shortcutDisplayContext";
 import { InfoPanel } from "./GetInfoPanel";
 import { HistoryButton } from "./HistoryButton";
+import { MenuCheck } from "./MenuCheck";
 import { SearchOptionsMenu } from "./SearchOptionsMenu";
 import { SearchWorkspace } from "./SearchWorkspace";
 import { ThemeMenuButton } from "./ThemeMenuButton";
@@ -437,7 +438,7 @@ export function ExplorerWorkspace({
     {
       kind: "toggle",
       id: "hidden",
-      label: "Show Hidden Files",
+      label: "Hidden Files",
       command: "toggleHiddenFiles",
       checked: includeHidden,
       onSelect: onToggleHidden,
@@ -446,7 +447,7 @@ export function ExplorerWorkspace({
     {
       kind: "toggle",
       id: "infoPanel",
-      label: "Show Info Panel",
+      label: "Info Panel",
       command: "toggleInfoPanel",
       checked: infoPanelOpen,
       onSelect: onToggleInfoPanel,
@@ -454,7 +455,7 @@ export function ExplorerWorkspace({
     {
       kind: "toggle",
       id: "infoRow",
-      label: "Show Info Row",
+      label: "Info Row",
       command: "toggleInfoRow",
       checked: infoRowOpen,
       onSelect: onToggleInfoRow,
@@ -527,9 +528,7 @@ export function ExplorerWorkspace({
                         item.onSelect();
                       }}
                     >
-                      <span className="toolbar-menu-check" aria-hidden="true">
-                        {item.kind === "toggle" && item.checked ? "✓" : ""}
-                      </span>
+                      <MenuCheck checked={item.kind === "toggle" && item.checked} />
                       <span className="toolbar-menu-label">{item.label}</span>
                       {shortcut ? <span className="toolbar-menu-shortcut">{shortcut}</span> : null}
                     </button>
@@ -678,9 +677,7 @@ export function ExplorerWorkspace({
                     role="menuitemradio"
                     aria-checked={sortBy === value}
                   >
-                    <span className="toolbar-menu-check" aria-hidden="true">
-                      {sortBy === value ? "✓" : ""}
-                    </span>
+                    <MenuCheck checked={sortBy === value} />
                     <span className="toolbar-menu-label">{getSortByLabel(value)}</span>
                   </button>
                 ))}
@@ -699,9 +696,7 @@ export function ExplorerWorkspace({
                     role="menuitemradio"
                     aria-checked={sortDirection === direction}
                   >
-                    <span className="toolbar-menu-check" aria-hidden="true">
-                      {sortDirection === direction ? "✓" : ""}
-                    </span>
+                    <MenuCheck checked={sortDirection === direction} />
                     <span className="toolbar-menu-label">
                       {direction === "asc" ? "Ascending" : "Descending"}
                     </span>
