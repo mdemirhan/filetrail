@@ -52,7 +52,6 @@ describe("TOP_TOOLBAR_LAYOUT", () => {
       titleMinWidth: sizeOf("--toolbar-title-min-width"),
       overflowButtonWidth: sizeOf("--toolbar-overflow-button-width"),
       searchWidth: sizeOf("--toolbar-search-width"),
-      searchFocusedWidth: sizeOf("--toolbar-search-focused-width"),
       searchMinWidth: sizeOf("--toolbar-search-min-width"),
     }).toEqual(TOP_TOOLBAR_LAYOUT);
   });
