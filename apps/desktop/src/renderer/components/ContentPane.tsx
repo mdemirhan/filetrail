@@ -22,6 +22,7 @@ import {
 } from "../lib/clipboardMarks";
 import { isSelectionNarrowingClick } from "../lib/contentSelection";
 import {
+  DETAILS_LAYOUT,
   fitDetailColumns,
   getDetailsRowHeight,
   getDetailsTableWidth,
@@ -42,6 +43,7 @@ import { InlineRenameField } from "./InlineRenameField";
 import { ListFilterPill } from "./ListFilterPill";
 import { PathSuggestionDropdown } from "./PathSuggestionDropdown";
 import { type PathbarFolder, PathbarFolderMenu } from "./PathbarFolderMenu";
+import { SortIndicator } from "./SortIndicator";
 
 type DirectoryEntry = IpcResponse<"directory:getSnapshot">["entries"][number];
 type DirectoryEntryMetadata = IpcResponse<"directory:getMetadataBatch">["items"][number];
@@ -1327,7 +1329,10 @@ function DetailsView({
       fitDetailColumns({
         columns: getVisibleDetailColumns(detailColumns),
         widths: detailColumnWidths,
-        availableWidth: Math.max(0, viewportWidth - DETAILS_SCROLLBAR_WIDTH),
+        availableWidth: Math.max(
+          0,
+          viewportWidth - DETAILS_SCROLLBAR_WIDTH - 2 * DETAILS_LAYOUT.rowInset,
+        ),
       }),
     [detailColumnWidths, detailColumns, viewportWidth],
   );
@@ -1556,7 +1561,7 @@ function DetailsView({
           role="rowgroup"
           className="details-table"
           style={{
-            width: `${tableWidth}px`,
+            width: `${tableWidth + 2 * DETAILS_LAYOUT.rowInset}px`,
             minWidth: "100%",
             // Virtualization pads the unmounted rows above and below the visible slice.
             paddingTop: `${range.startIndex * rowHeight}px`,
@@ -1899,9 +1904,7 @@ function SortButton({
       aria-label={label}
     >
       <span>{label}</span>
-      {active ? (
-        <span className="details-sort-indicator">{direction === "asc" ? "↑" : "↓"}</span>
-      ) : null}
+      {active ? <SortIndicator direction={direction} /> : null}
     </button>
   );
 }

@@ -446,13 +446,17 @@ describe("ContentPane", () => {
       />,
     );
 
-    expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
-      "Name↑",
+    const headers = screen.getAllByRole("columnheader");
+    expect(headers.map((header) => header.textContent)).toEqual([
+      "Name",
       "Date Modified",
       "Size",
       "Kind",
       "Date Created",
     ]);
+    // The sorted column shows its direction with a chevron, and only that column does.
+    expect(headers[0]?.querySelector(".sort-indicator")).toHaveAttribute("data-direction", "asc");
+    expect(document.querySelectorAll(".sort-indicator")).toHaveLength(1);
     const row = screen.getByRole("row", { name: /alpha\.txt/ });
     expect(row).toHaveTextContent("Plain Text Document");
     // Both dates are shown: created in March, modified in April.

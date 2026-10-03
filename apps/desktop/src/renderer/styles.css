@@ -1580,6 +1580,12 @@ input:focus-visible {
   background: transparent;
 }
 
+/* The file list has no edge of its own: the divider beside the Info panel draws the only
+   line there, and at the window's right edge there is nothing to divide. */
+.content-pane.pane {
+  border-right: 0;
+}
+
 .pane-focus-target:focus,
 .pane-focus-target:focus-visible {
   outline: none;
@@ -1872,6 +1878,9 @@ body.resizing-panels * {
   white-space: nowrap;
   padding: 0;
   background: transparent;
+  /* Folder names are buttons, not text: a right-click must not select them. */
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .pathbar.pathbar-expanded {
@@ -1890,19 +1899,21 @@ body.resizing-panels * {
   margin: 0;
 }
 
+/* Every separator takes the same room, whether it is a button or, before the "…", plain
+   text, so the gaps on either side of a folder name match. */
 .pathbar-separator {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  padding: 0 3px;
   color: var(--fg-dim, var(--text-dim));
   font-size: var(--ui-font-size-sm);
 }
 
 /* A separator is a button: it lists the folders at that level of the path. */
 .pathbar-separator-button {
-  justify-content: center;
-  min-width: 16px;
   height: 22px;
-  padding: 0 3px;
   border: 0;
   border-radius: 5px;
   background: transparent;
@@ -1960,6 +1971,15 @@ body.resizing-panels * {
   white-space: nowrap;
 }
 
+/* The label, not the button, shortens a long name: text-overflow has no effect on a flex
+   container, so without this a long name was cut mid-letter. */
+.pathbar-segment-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .pathbar-item:hover,
 .pathbar-item:focus-within {
   z-index: auto;
@@ -1977,12 +1997,11 @@ body.resizing-panels * {
   font-weight: 600;
 }
 
+/* The "…" that stands for hidden folders is spaced like any other folder name. */
 .pathbar-segment-collapsed {
   flex: 0 0 auto;
   justify-content: center;
   max-width: none;
-  min-width: 30px;
-  padding: 0 6px;
 }
 
 .pathbar-segment:focus-visible {
@@ -2573,9 +2592,16 @@ body.resizing-panels * {
   white-space: nowrap;
 }
 
-.details-sort-indicator {
-  font-size: 11px;
-  line-height: 1;
+.sort-indicator {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 6px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--text-tertiary);
 }
 
 .details-column-resizer {
@@ -2771,8 +2797,9 @@ body.resizing-panels * {
   animation: search-results-spin 0.7s linear infinite;
 }
 
+/* With the row's 6px margin, rows sit 10px in from the pane's edges, as in Details. */
 .search-results-scroll {
-  padding: 10px 14px 12px;
+  padding: 10px 4px 12px;
 }
 
 .search-results-scroll:focus,
@@ -4799,6 +4826,14 @@ body.platform-macos .settings-view[data-layout="compact"] {
   grid-template-rows: 28px minmax(0, 1fr);
 }
 
+/* Rows sit 10px in from the pane's edges (DETAILS_LAYOUT.rowInset), so stripes and the
+   selection are rounded bars, as in Finder; the header's titles stay over their columns. */
+.details-header-shell,
+.details-table {
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
 .details-row {
   height: 28px;
   min-height: 28px;
@@ -4946,11 +4981,6 @@ body.window-inactive {
 .search-results-column.active {
   color: var(--text-primary);
   font-weight: 600;
-}
-
-.search-results-column-arrow {
-  font-size: 8px;
-  color: var(--text-tertiary);
 }
 
 .search-result-row {
@@ -6007,10 +6037,11 @@ button.shortcut-slot-key.recording:hover {
   background: var(--toolbar-toggle-bg, var(--bg-hover));
 }
 
+/* 24px segments in the 2px track: 28px, the height of every control in the toolbar. */
 .toolbar-group-view .toolbar-segmented.toolbar-segmented-native .tb-btn {
   width: 34px;
   min-width: 34px;
-  height: 22px;
+  height: 24px;
   border-radius: 5px;
   color: var(--text-secondary);
 }
@@ -6046,8 +6077,9 @@ button.shortcut-slot-key.recording:hover {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--ft-accent-solid) 25%, transparent);
 }
 
+/* 26px inside its 1px border: 28px, the height of every control in the toolbar. */
 .window-toolbar .toolbar-search-row {
-  min-height: 28px;
+  min-height: 26px;
   padding: 0 8px;
   gap: 6px;
 }
@@ -6295,8 +6327,16 @@ button.shortcut-slot-key.recording:hover {
   scroll-margin-top: 10px;
 }
 
+/* The header is laid out like a row (the list's 4px padding, the row's 6px margin and
+   10px padding, and the same columns), so each title sits over its column. "Name" spans
+   the icon's column too, and starts where the icons do, as in the Details view. */
 .search-results-columns {
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 170px 76px;
+  grid-template-columns: 18px minmax(0, 1.4fr) minmax(0, 1fr) 170px 76px;
+  padding: 0 20px;
+}
+
+.search-results-columns > .search-results-column:first-child {
+  grid-column: span 2;
 }
 
 .search-results-column-static {
@@ -7254,7 +7294,7 @@ button.shortcut-slot-key.recording:hover {
 /* Search results drop the date, then the size, as their pane narrows (SearchResultsPane
    sets `data-columns` from the measured width). */
 .search-results-pane[data-columns="no-date"] .search-results-columns {
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 76px;
+  grid-template-columns: 18px minmax(0, 1.4fr) minmax(0, 1fr) 76px;
 }
 
 .search-results-pane[data-columns="no-date"] .search-result-row {
@@ -7262,7 +7302,7 @@ button.shortcut-slot-key.recording:hover {
 }
 
 .search-results-pane[data-columns="names"] .search-results-columns {
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  grid-template-columns: 18px minmax(0, 1.4fr) minmax(0, 1fr);
 }
 
 .search-results-pane[data-columns="names"] .search-result-row {

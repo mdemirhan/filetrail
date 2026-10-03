@@ -13,6 +13,9 @@ export const DETAILS_LAYOUT = {
   columnGap: 12,
   // Left plus right padding of a row and of the header (`padding: 0 12px` in styles.css).
   rowPadding: 24,
+  // Space between the pane's edges and the rows, so stripes and the selection are rounded
+  // bars inside the pane, as in Finder (`.details-table` and `.details-header-shell`).
+  rowInset: 10,
   // How far the Name column may shrink to keep the other columns on screen.
   nameFloorWidth: 160,
   // Name is never narrower than this, even when it is the only column left.

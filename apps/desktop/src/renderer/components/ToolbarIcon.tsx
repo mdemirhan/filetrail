@@ -212,7 +212,8 @@ export function ToolbarIcon({
     if (name === "theme") {
       return "M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41M12 16a4 4 0 1 0 0-8a4 4 0 0 0 0 8";
     }
-    if (name === "chevron") return "M6 4l4 4-4 4";
+    // Centered in the box, so it turns in place when a disclosure rotates it.
+    if (name === "chevron") return "M9.5 7l5 5-5 5";
     if (name === "close") return "M6 6l12 12M18 6l-12 12";
     if (name === "sortAsc") return "M12 5v14M5 12l7-7 7 7";
     if (name === "sortDesc") return "M12 19V5M5 12l7 7 7-7";

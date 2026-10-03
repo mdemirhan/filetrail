@@ -34,6 +34,36 @@ describe("ToastViewport", () => {
     expect(screen.getByText("Ready to paste 1 item")).toBeInTheDocument();
   });
 
+  it("rests above the path bar and the Info Row, wherever they end", () => {
+    const bars = document.createElement("div");
+    bars.className = "content-pathbar-row";
+    bars.getClientRects = () => [{}] as unknown as DOMRectList;
+    // The path bar (28px) and the Info Row (30px) under it.
+    bars.getBoundingClientRect = () => ({ top: window.innerHeight - 58 }) as DOMRect;
+    document.body.append(bars);
+    try {
+      render(
+        <ToastViewport
+          toasts={[createToastEntry("toast-1", { kind: "info", title: "Copied" })]}
+          onDismiss={() => undefined}
+        />,
+      );
+      expect(screen.getByTestId("toast-viewport")).toHaveStyle({ bottom: "68px" });
+    } finally {
+      bars.remove();
+    }
+  });
+
+  it("rests near the window's edge when there is no path bar", () => {
+    render(
+      <ToastViewport
+        toasts={[createToastEntry("toast-1", { kind: "info", title: "Copied" })]}
+        onDismiss={() => undefined}
+      />,
+    );
+    expect(screen.getByTestId("toast-viewport")).toHaveStyle({ bottom: "12px" });
+  });
+
   it("shows what was copied with the icon the file list gives it", () => {
     render(
       <ToastViewport

@@ -248,7 +248,11 @@ describe("theme styles", () => {
       d.selector.split(",").some((part) => /\.tb-btn\.primary(?![-\w])/.test(part)),
     );
     expect(primaryRules.some((d) => d.value.includes("--danger"))).toBe(false);
-    for (const dialog of [".copy-paste-sheet", ".copy-paste-conflict-alert", ".action-notice-dialog"]) {
+    for (const dialog of [
+      ".copy-paste-sheet",
+      ".copy-paste-conflict-alert",
+      ".action-notice-dialog",
+    ]) {
       const background = all.find(
         (d) =>
           d.property === "background" &&

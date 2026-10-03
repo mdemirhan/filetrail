@@ -106,6 +106,22 @@ describe("ToolbarIcon", () => {
     expect(copySvg).not.toBe(copyPathSvg);
   });
 
+  it("centers the disclosure chevron in its box, so it turns in place when rotated", () => {
+    const { container } = render(<ToolbarIcon name="chevron" />);
+    const d = container.querySelector("path")?.getAttribute("d") ?? "";
+    // Absolute points of an "M x y l dx dy dx dy" path.
+    const [x = 0, y = 0, ...steps] = (d.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
+    const points = [[x, y]];
+    for (let i = 0; i + 1 < steps.length; i += 2) {
+      const [px = 0, py = 0] = points[points.length - 1] ?? [];
+      points.push([px + (steps[i] ?? 0), py + (steps[i + 1] ?? 0)]);
+    }
+    const xs = points.map(([px]) => px ?? 0);
+    const ys = points.map(([, py]) => py ?? 0);
+    expect((Math.min(...xs) + Math.max(...xs)) / 2).toBe(12);
+    expect((Math.min(...ys) + Math.max(...ys)) / 2).toBe(12);
+  });
+
   it("renders distinct icons for edit vs rename", () => {
     const { container: editContainer } = render(<ToolbarIcon name="edit" />);
     const { container: renameContainer } = render(<ToolbarIcon name="rename" />);

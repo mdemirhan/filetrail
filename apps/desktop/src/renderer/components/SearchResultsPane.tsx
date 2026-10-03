@@ -24,6 +24,7 @@ import { resolveSearchResultsColumnLayout } from "../lib/responsiveLayout";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
 import { getVirtualRange } from "../lib/virtualization";
 import { SearchOptionsMenu } from "./SearchOptionsMenu";
+import { SortIndicator } from "./SortIndicator";
 type SearchResultItem = IpcResponse<"search:getUpdate">["items"][number];
 type SearchStatus = IpcResponse<"search:getUpdate">["status"] | "idle";
 type SelectionGestureModifiers = {
@@ -396,11 +397,7 @@ export function SearchResultsPane({
                 onClick={() => onSortColumn(column)}
               >
                 {column === "name" ? "Name" : "Folder"}
-                {active ? (
-                  <span className="search-results-column-arrow" aria-hidden="true">
-                    {sortDirection === "asc" ? "▲" : "▼"}
-                  </span>
-                ) : null}
+                {active ? <SortIndicator direction={sortDirection} /> : null}
               </button>
             );
           })}
