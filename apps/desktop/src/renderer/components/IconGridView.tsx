@@ -18,7 +18,13 @@ import {
 import { fitIconLabel } from "../lib/iconLabel";
 import { PANE_LAYOUT_CHANGE_MS, usePaneLayoutChange } from "../lib/paneLayoutChange";
 import { getVirtualRange } from "../lib/virtualization";
-import { InlineRenameField } from "./InlineRenameField";
+import {
+  InlineRenameField,
+  type InlineRenameState,
+  OffscreenRenameField,
+  findOffscreenRenameEntry,
+  renameDraftKey,
+} from "./InlineRenameField";
 
 type DirectoryEntry = IpcResponse<"directory:getSnapshot">["entries"][number];
 type SelectionGestureModifiers = {
@@ -85,7 +91,7 @@ export function IconGridView({
   getItemDropIndicator?: ((path: string) => "valid" | "invalid" | null) | undefined;
   compactIconView?: boolean;
   highlightHoveredItems?: boolean;
-  inlineRename: { path: string; error: string | null; refusalCount?: number } | null;
+  inlineRename: InlineRenameState | null;
   onInlineRenameSubmit: (nextName: string) => void;
   onInlineRenameCancel: () => void;
   /** The loading, error or empty-folder message, drawn in place of the grid. */
@@ -145,6 +151,7 @@ export function IconGridView({
   // Report by value: the slice is a new array every render, and depending on it would
   // re-render the parent in an endless loop.
   const visiblePathsKey = visibleEntries.map((entry) => entry.path).join("\0");
+  const offscreenRenameEntry = findOffscreenRenameEntry(entries, visibleEntries, inlineRename);
 
   useEffect(() => {
     onVisiblePathsChange(visiblePathsKey.length > 0 ? visiblePathsKey.split("\0") : []);
@@ -214,14 +221,18 @@ export function IconGridView({
   }, [columns, onLayoutColumnsChange]);
 
   // Keep the lead selection visible using the same row height contract virtualization uses.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a refused name (refusalCount) brings the row back into view, where the reason is shown.
   useLayoutEffect(() => {
     const container = containerRef.current;
     // The measured size re-runs this when the pane is resized.
     const effectiveViewportHeight = container?.clientHeight ?? containerHeight;
-    if (!container || !selectionLeadPath || effectiveViewportHeight <= 0) {
+    // An item whose name is being edited is the one to keep in view (a rename can start
+    // with it scrolled away, and a refused name is shown under it).
+    const revealPath = inlineRename?.path ?? selectionLeadPath;
+    if (!container || !revealPath || effectiveViewportHeight <= 0) {
       return;
     }
-    const selectedIndex = entries.findIndex((entry) => entry.path === selectionLeadPath);
+    const selectedIndex = entries.findIndex((entry) => entry.path === revealPath);
     if (selectedIndex < 0) {
       return;
     }
@@ -236,7 +247,15 @@ export function IconGridView({
     if (Math.abs(nextScrollTop - container.scrollTop) > 1) {
       container.scrollTop = nextScrollTop;
     }
-  }, [columns, containerHeight, entries, layout, selectionLeadPath]);
+  }, [
+    columns,
+    containerHeight,
+    entries,
+    inlineRename?.path,
+    inlineRename?.refusalCount,
+    layout,
+    selectionLeadPath,
+  ]);
 
   return (
     <div
@@ -317,6 +336,7 @@ export function IconGridView({
                   extension={entry.extension}
                   error={inlineRename.error}
                   refusalCount={inlineRename.refusalCount ?? 0}
+                  draftKey={renameDraftKey(inlineRename)}
                   onSubmit={onInlineRenameSubmit}
                   onCancel={onInlineRenameCancel}
                 />
@@ -385,6 +405,14 @@ export function IconGridView({
           );
         })}
       </div>
+      {offscreenRenameEntry && inlineRename ? (
+        <OffscreenRenameField
+          entry={offscreenRenameEntry}
+          inlineRename={inlineRename}
+          onSubmit={onInlineRenameSubmit}
+          onCancel={onInlineRenameCancel}
+        />
+      ) : null}
     </div>
   );
 }

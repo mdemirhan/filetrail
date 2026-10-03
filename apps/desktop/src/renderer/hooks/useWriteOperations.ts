@@ -121,6 +121,8 @@ type RenameDialogState = {
   // Items in the file list are renamed in their row; anything else (a tree folder, a
   // search result) is renamed in a dialog.
   inline: boolean;
+  // Tells this rename from earlier ones of the same item (see InlineRenameField's drafts).
+  sessionId: number;
 } | null;
 
 type NewFolderDialogState = {

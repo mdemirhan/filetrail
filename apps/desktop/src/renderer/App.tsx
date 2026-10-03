@@ -1819,6 +1819,7 @@ export function App() {
                       path: renameDialogState.sourcePath,
                       error: renameDialogState.error,
                       refusalCount: renameDialogState.refusalCount,
+                      sessionId: renameDialogState.sessionId,
                     }
                   : null,
                 onInlineRenameSubmit: (nextName) => void submitRenameDialog(nextName),
@@ -1902,6 +1903,7 @@ export function App() {
                       path: renameDialogState.sourcePath,
                       error: renameDialogState.error,
                       refusalCount: renameDialogState.refusalCount,
+                      sessionId: renameDialogState.sessionId,
                     }
                   : null,
                 onInlineRenameSubmit: (nextName) => void submitRenameDialog(nextName),

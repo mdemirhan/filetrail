@@ -40,7 +40,13 @@ import { formatSize, splitDisplayName, splitPermissionMode } from "../lib/format
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
 import { buildColumnMajorRows, computeRowsPerColumn, getVirtualRange } from "../lib/virtualization";
 import { IconGridView } from "./IconGridView";
-import { InlineRenameField } from "./InlineRenameField";
+import {
+  InlineRenameField,
+  type InlineRenameState,
+  OffscreenRenameField,
+  findOffscreenRenameEntry,
+  renameDraftKey,
+} from "./InlineRenameField";
 import { ListFilterPill } from "./ListFilterPill";
 import { PathSuggestionDropdown } from "./PathSuggestionDropdown";
 import { type PathbarFolder, PathbarFolderMenu } from "./PathbarFolderMenu";
@@ -84,7 +90,6 @@ type SelectionGestureModifiers = {
   metaKey: boolean;
   shiftKey: boolean;
 };
-type InlineRenameState = { path: string; error: string | null; refusalCount?: number };
 
 // `ContentPane` is the shared shell for icon, list and details view. It owns path navigation,
 // path suggestions, pane focus, and typeahead forwarding, then delegates actual entry
@@ -1214,6 +1219,7 @@ function FlowListView({
                       extension={entry.extension}
                       error={inlineRename.error}
                       refusalCount={inlineRename.refusalCount ?? 0}
+                      draftKey={renameDraftKey(inlineRename)}
                       onSubmit={onInlineRenameSubmit}
                       onCancel={onInlineRenameCancel}
                     />
@@ -1433,6 +1439,7 @@ function DetailsView({
   const visibleEntries = entries.slice(range.startIndex, range.endIndex);
   // Report by value (see the list view): the slice is a new array every render.
   const visiblePathsKey = visibleEntries.map((entry) => entry.path).join("\0");
+  const offscreenRenameEntry = findOffscreenRenameEntry(entries, visibleEntries, inlineRename);
 
   useEffect(() => {
     onVisiblePathsChange(visiblePathsKey.length > 0 ? visiblePathsKey.split("\0") : []);
@@ -1455,6 +1462,7 @@ function DetailsView({
   );
 
   // Keep the lead selection visible using the same row height contract virtualization uses.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a refused name (refusalCount) brings the row back into view, where the reason is shown.
   useLayoutEffect(() => {
     const container = containerRef.current;
     const effectiveViewportWidth =
@@ -1462,15 +1470,13 @@ function DetailsView({
     // clientHeight: the visible rows only (no column header, no horizontal scrollbar).
     // The measured size re-runs this when the pane is resized.
     const effectiveViewportHeight = container?.clientHeight ?? rowsViewportHeight;
-    if (
-      !container ||
-      !selectionLeadPath ||
-      effectiveViewportWidth <= 0 ||
-      effectiveViewportHeight <= 0
-    ) {
+    // An item whose name is being edited is the one to keep in view (a rename can start
+    // with its row scrolled away).
+    const revealPath = inlineRename?.path ?? selectionLeadPath;
+    if (!container || !revealPath || effectiveViewportWidth <= 0 || effectiveViewportHeight <= 0) {
       return;
     }
-    const selectedIndex = entries.findIndex((entry) => entry.path === selectionLeadPath);
+    const selectedIndex = entries.findIndex((entry) => entry.path === revealPath);
     if (selectedIndex < 0) {
       return;
     }
@@ -1486,7 +1492,15 @@ function DetailsView({
     if (itemBottom > viewBottom) {
       container.scrollTop = itemBottom - effectiveViewportHeight;
     }
-  }, [entries, rowHeight, rowsViewportHeight, selectionLeadPath, viewportWidth]);
+  }, [
+    entries,
+    inlineRename?.path,
+    inlineRename?.refusalCount,
+    rowHeight,
+    rowsViewportHeight,
+    selectionLeadPath,
+    viewportWidth,
+  ]);
 
   // Resizing uses global pointer listeners so the drag continues even if the pointer
   // leaves the resize handle while the user is dragging quickly.
@@ -1690,6 +1704,7 @@ function DetailsView({
                           extension={entry.extension}
                           error={inlineRename.error}
                           refusalCount={inlineRename.refusalCount ?? 0}
+                          draftKey={renameDraftKey(inlineRename)}
                           onSubmit={onInlineRenameSubmit}
                           onCancel={onInlineRenameCancel}
                         />
@@ -1786,6 +1801,14 @@ function DetailsView({
           })}
         </div>
       </div>
+      {offscreenRenameEntry && inlineRename ? (
+        <OffscreenRenameField
+          entry={offscreenRenameEntry}
+          inlineRename={inlineRename}
+          onSubmit={onInlineRenameSubmit}
+          onCancel={onInlineRenameCancel}
+        />
+      ) : null}
     </div>
   );
 }

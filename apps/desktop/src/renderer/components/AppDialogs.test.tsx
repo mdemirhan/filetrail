@@ -149,6 +149,7 @@ describe("AppDialogs", () => {
           error: null,
           refusalCount: 0,
           inline: false,
+          sessionId: 1,
         },
       },
     );

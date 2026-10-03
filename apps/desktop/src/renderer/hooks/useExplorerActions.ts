@@ -191,6 +191,12 @@ function isConfirmationDialog(state: { type: string } | null): boolean {
   );
 }
 
+let renameSessionCount = 0;
+function nextRenameSessionId(): number {
+  renameSessionCount += 1;
+  return renameSessionCount;
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     window.setTimeout(resolve, ms);
@@ -3272,6 +3278,7 @@ export function useExplorerActions(args: {
       refusalCount: 0,
       // In the list or the search results, the name is edited in its row.
       inline: !options.fromTree && activeContentEntries.some((entry) => entry.path === sourcePath),
+      sessionId: nextRenameSessionId(),
     });
     closeContextMenu();
   }

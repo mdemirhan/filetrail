@@ -8020,6 +8020,14 @@ button.shortcut-slot-key.recording:hover {
   -webkit-user-select: text;
 }
 
+/* A name being edited whose row is scrolled out of view: kept, with the keyboard, off screen. */
+.inline-rename-input.offscreen {
+  position: fixed;
+  top: 0;
+  left: -10000px;
+  width: 200px;
+}
+
 .inline-rename-input.invalid {
   border-color: var(--danger);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 22%, transparent);

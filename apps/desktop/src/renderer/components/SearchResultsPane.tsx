@@ -24,7 +24,13 @@ import { formatSize, splitDisplayName } from "../lib/formatting";
 import { resolveSearchResultsColumnLayout } from "../lib/responsiveLayout";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
 import { getVirtualRange } from "../lib/virtualization";
-import { InlineRenameField } from "./InlineRenameField";
+import {
+  InlineRenameField,
+  type InlineRenameState,
+  OffscreenRenameField,
+  findOffscreenRenameEntry,
+  renameDraftKey,
+} from "./InlineRenameField";
 import { SearchOptionsMenu } from "./SearchOptionsMenu";
 import { SortIndicator } from "./SortIndicator";
 type SearchResultItem = IpcResponse<"search:getUpdate">["items"][number];
@@ -143,7 +149,7 @@ export function SearchResultsPane({
     | undefined;
   onItemDragEnd?: ((event: React.DragEvent<HTMLElement>) => void) | undefined;
   /** The result whose name is being edited in its row, as in the file list. */
-  inlineRename?: { path: string; error: string | null; refusalCount?: number } | null;
+  inlineRename?: InlineRenameState | null;
   onInlineRenameSubmit?: (nextName: string) => void;
   onInlineRenameCancel?: () => void;
   onFocusChange: (focused: boolean) => void;
@@ -180,12 +186,16 @@ export function SearchResultsPane({
 
   // Keep the lead selection visible when keyboard navigation or typeahead changes it.
   // This uses the same fixed row extent as virtualization and paged navigation.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a refused name (refusalCount) brings the row back into view, where the reason is shown.
   useEffect(() => {
     const container = scrollRef.current;
-    if (!container || !selectionLeadPath) {
+    // A result whose name is being edited is the one to keep in view (a rename can start
+    // with it scrolled away, and a refused name is shown under it).
+    const revealPath = inlineRename?.path ?? selectionLeadPath;
+    if (!container || !revealPath) {
       return;
     }
-    const selectedIndex = results.findIndex((result) => result.path === selectionLeadPath);
+    const selectedIndex = results.findIndex((result) => result.path === revealPath);
     if (selectedIndex < 0) {
       return;
     }
@@ -205,7 +215,14 @@ export function SearchResultsPane({
     container.scrollTop = nextScrollTop;
     setInternalScrollTop(nextScrollTop);
     onScrollTopChange(nextScrollTop);
-  }, [height, onScrollTopChange, results, selectionLeadPath]);
+  }, [
+    height,
+    inlineRename?.path,
+    inlineRename?.refusalCount,
+    onScrollTopChange,
+    results,
+    selectionLeadPath,
+  ]);
 
   const range = useMemo(
     () =>
@@ -223,6 +240,7 @@ export function SearchResultsPane({
   // Most searches finish at once; Stop and its spinner come only for one that runs on.
   const showStop = useDelayedFlag(isSearching, SEARCH_STOP_DELAY_MS);
   const visiblePathsKey = visibleResults.map((result) => result.path).join("\0");
+  const offscreenRenameResult = findOffscreenRenameEntry(results, visibleResults, inlineRename);
   const highlightPattern = useMemo(
     () => buildHighlightPattern(query, patternMode, matchScope),
     [matchScope, patternMode, query],
@@ -524,6 +542,7 @@ export function SearchResultsPane({
                       extension={result.extension}
                       error={inlineRename.error}
                       refusalCount={inlineRename.refusalCount ?? 0}
+                      draftKey={renameDraftKey(inlineRename)}
                       onSubmit={onInlineRenameSubmit}
                       onCancel={onInlineRenameCancel}
                     />
@@ -623,6 +642,14 @@ export function SearchResultsPane({
           ) : null}
         </div>
       </div>
+      {offscreenRenameResult && inlineRename ? (
+        <OffscreenRenameField
+          entry={offscreenRenameResult}
+          inlineRename={inlineRename}
+          onSubmit={onInlineRenameSubmit}
+          onCancel={onInlineRenameCancel}
+        />
+      ) : null}
     </section>
   );
 }

@@ -44,6 +44,7 @@ describe("writeOperationsReducer", () => {
         error: null,
         refusalCount: 0,
         inline: false,
+        sessionId: 1,
       },
     };
     expect(
