@@ -417,7 +417,6 @@ export const PREVIOUS_DEFAULT_TOP_TOOLBARS: ReadonlyArray<readonly string[]> = [
   // Saved before the title, the clipboard button and View Options were in the list.
   ["back", "forward", "view", "sort", "infoPanel", "search"],
   ["back", "forward", "title", "view", "sort", "infoPanel", "clipboard", "viewOptions", "search"],
-  ["back", "forward", "title", "clipboard", "view", "sort", "search", "viewOptions", "infoPanel"],
 ];
 
 const TOOLBAR_ITEM_ID_SET = new Set<ToolbarItemId>(TOOLBAR_ITEM_IDS);

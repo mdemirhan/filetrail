@@ -30,7 +30,6 @@ import { sanitizeShortcutOverrides } from "../shared/shortcuts";
 import {
   DEFAULT_TOP_TOOLBAR_ITEMS,
   PREVIOUS_DEFAULT_TOP_TOOLBARS,
-  type ToolbarItemId,
   sanitizeTopToolbarItems,
 } from "../shared/toolbarItems";
 import {
@@ -451,7 +450,7 @@ function sanitizePreferences(value: unknown, currentDefaults: AppPreferences): A
       record.topToolbarItems !== undefined
         ? isPreviousDefaultTopToolbar(record.topToolbarItems)
           ? [...DEFAULT_TOP_TOOLBAR_ITEMS]
-          : addFolderTreeButtonOnce(record, sanitizeTopToolbarItems(record.topToolbarItems))
+          : sanitizeTopToolbarItems(record.topToolbarItems)
         : [...currentDefaults.topToolbarItems],
     terminalApp: sanitizeTerminalApplicationSelection(record.terminalApp),
     defaultTextEditor: sanitizeApplicationSelection(
@@ -745,19 +744,6 @@ function sanitizeOpenWithApplications(
     ];
   });
   return entries.length === value.length ? entries : defaults.map((entry) => ({ ...entry }));
-}
-
-// A customized toolbar saved before the folder tree could be hidden gets the tree's button
-// at its start, once: from then on `folderTreeOpen` is saved with it, and a button taken
-// off stays off.
-function addFolderTreeButtonOnce(
-  record: Record<string, unknown>,
-  items: ToolbarItemId[],
-): ToolbarItemId[] {
-  if (record.folderTreeOpen !== undefined || items.includes("folderTree")) {
-    return items;
-  }
-  return ["folderTree", ...items];
 }
 
 // Copied and cut items used to be marked in the tree and in the file list separately; a
