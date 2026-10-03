@@ -14,7 +14,6 @@ import {
   FAVORITE_ICON_OPTIONS,
   type FavoriteIconId,
   type FavoritePreference,
-  LEGACY_DEFAULT_DETAIL_COLUMN_VISIBILITY,
   OPEN_TABS_LIMIT,
   OPTIONAL_DETAIL_COLUMN_KEYS,
   type OpenTabPreference,
@@ -24,14 +23,9 @@ import {
   clampPaneWidth,
   clampZoomPercent,
   normalizeAccentColor,
-  resolveSavedTheme,
 } from "../shared/appPreferences";
 import { sanitizeShortcutOverrides } from "../shared/shortcuts";
-import {
-  DEFAULT_TOP_TOOLBAR_ITEMS,
-  PREVIOUS_DEFAULT_TOP_TOOLBARS,
-  sanitizeTopToolbarItems,
-} from "../shared/toolbarItems";
+import { sanitizeTopToolbarItems } from "../shared/toolbarItems";
 import {
   type VisitedFolder,
   forgetVisitedFolder,
@@ -275,7 +269,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
-// Loading is best-effort. Corrupt or old state should never block startup.
+// Loading is best-effort. Corrupt state should never block startup.
 function readState(
   filePath: string,
   fileSystem: AppStateStoreFileSystem,
@@ -331,10 +325,8 @@ function sanitizeViewMode(value: unknown): ExplorerViewMode {
     : DEFAULT_APP_PREFERENCES.viewMode;
 }
 
-// Tabs saved by an older or damaged file are kept as far as they make sense; a tab that
-// does not is dropped rather than failing the whole list.
-// A tab saved before tabs kept their own hidden-files and Folders First settings takes the
-// window's, which is what it showed then.
+// Tabs from a damaged file are kept as far as they make sense; a tab that does not is
+// dropped rather than failing the whole list.
 function sanitizeOpenTabs(
   value: unknown,
   fallback: Pick<OpenTabPreference, "includeHidden" | "foldersFirst">,
@@ -377,16 +369,17 @@ function sanitizeOpenTabs(
   return tabs;
 }
 
-// This is the migration boundary for persisted preferences. When keys are renamed or
-// removed, normalize legacy shapes here instead of letting stale values leak outward.
+// Every saved value is checked here; one that is missing or invalid takes its default.
 function sanitizePreferences(value: unknown, currentDefaults: AppPreferences): AppPreferences {
   if (!isPlainObject(value)) {
     return currentDefaults;
   }
   const record = value;
   return {
-    // A palette the app no longer has becomes its side, light or dark (`resolveSavedTheme`).
-    theme: resolveSavedTheme(record.theme) ?? currentDefaults.theme,
+    theme:
+      record.theme === "auto" || record.theme === "light" || record.theme === "dark"
+        ? record.theme
+        : currentDefaults.theme,
     accent:
       typeof record.accent === "string"
         ? (normalizeAccentColor(record.accent) ?? currentDefaults.accent)
@@ -433,7 +426,10 @@ function sanitizePreferences(value: unknown, currentDefaults: AppPreferences): A
       typeof record.notificationsEnabled === "boolean"
         ? record.notificationsEnabled
         : currentDefaults.notificationsEnabled,
-    markClipboardItems: sanitizeMarkClipboardItems(record, currentDefaults.markClipboardItems),
+    markClipboardItems:
+      typeof record.markClipboardItems === "boolean"
+        ? record.markClipboardItems
+        : currentDefaults.markClipboardItems,
     folderTreeOpen:
       typeof record.folderTreeOpen === "boolean"
         ? record.folderTreeOpen
@@ -446,12 +442,9 @@ function sanitizePreferences(value: unknown, currentDefaults: AppPreferences): A
       typeof record.detailRowOpen === "boolean"
         ? record.detailRowOpen
         : currentDefaults.detailRowOpen,
-    topToolbarItems:
-      record.topToolbarItems !== undefined
-        ? isPreviousDefaultTopToolbar(record.topToolbarItems)
-          ? [...DEFAULT_TOP_TOOLBAR_ITEMS]
-          : sanitizeTopToolbarItems(record.topToolbarItems)
-        : [...currentDefaults.topToolbarItems],
+    topToolbarItems: Array.isArray(record.topToolbarItems)
+      ? sanitizeTopToolbarItems(record.topToolbarItems)
+      : [...currentDefaults.topToolbarItems],
     terminalApp: sanitizeTerminalApplicationSelection(record.terminalApp),
     defaultTextEditor: sanitizeApplicationSelection(
       record.defaultTextEditor,
@@ -521,20 +514,11 @@ function sanitizePreferences(value: unknown, currentDefaults: AppPreferences): A
       260,
       480,
     ),
-    restoreSessionOnStartup: sanitizeRestoreSessionOnStartup(
-      record,
-      currentDefaults.restoreSessionOnStartup,
-    ),
-    openTabs: sanitizeOpenTabs(record.openTabs, {
-      includeHidden:
-        typeof record.includeHidden === "boolean"
-          ? record.includeHidden
-          : currentDefaults.includeHidden,
-      foldersFirst:
-        typeof record.foldersFirst === "boolean"
-          ? record.foldersFirst
-          : currentDefaults.foldersFirst,
-    }),
+    restoreSessionOnStartup:
+      typeof record.restoreSessionOnStartup === "boolean"
+        ? record.restoreSessionOnStartup
+        : currentDefaults.restoreSessionOnStartup,
+    openTabs: sanitizeOpenTabs(record.openTabs, currentDefaults),
     activeTabIndex:
       typeof record.activeTabIndex === "number" &&
       Number.isInteger(record.activeTabIndex) &&
@@ -554,10 +538,7 @@ function sanitizePreferences(value: unknown, currentDefaults: AppPreferences): A
       record.lastVisitedFavoritePath.length > 0
         ? record.lastVisitedFavoritePath
         : null,
-    favorites: upgradeFavoritesWithRootVolume(
-      record,
-      sanitizeFavorites(record.favorites, record.favoritePaths, currentDefaults.favorites),
-    ),
+    favorites: sanitizeFavorites(record.favorites, currentDefaults.favorites),
     favoritesPlacement:
       record.favoritesPlacement === "separate" || record.favoritesPlacement === "integrated"
         ? record.favoritesPlacement
@@ -577,27 +558,14 @@ function sanitizePreferences(value: unknown, currentDefaults: AppPreferences): A
   };
 }
 
-function sanitizeFavorites(
-  value: unknown,
-  legacyFavoritePaths: unknown,
-  fallback: FavoritePreference[],
-): FavoritePreference[] {
-  if (Array.isArray(value)) {
-    const favorites = value
-      .map((entry) => sanitizeFavoritePreference(entry))
-      .filter((entry): entry is FavoritePreference => entry !== null);
-    return dedupeFavorites(favorites);
+function sanitizeFavorites(value: unknown, fallback: FavoritePreference[]): FavoritePreference[] {
+  if (!Array.isArray(value)) {
+    return fallback;
   }
-  if (Array.isArray(legacyFavoritePaths)) {
-    const favorites = legacyFavoritePaths
-      .filter((path): path is string => typeof path === "string" && path.trim().length > 0)
-      .map((path) => ({
-        path,
-        icon: inferLegacyFavoriteIcon(path),
-      }));
-    return dedupeFavorites(favorites);
-  }
-  return fallback;
+  const favorites = value
+    .map((entry) => sanitizeFavoritePreference(entry))
+    .filter((entry): entry is FavoritePreference => entry !== null);
+  return dedupeFavorites(favorites);
 }
 
 function sanitizeFavoritePreference(value: unknown): FavoritePreference | null {
@@ -630,56 +598,7 @@ function isFavoriteIconId(value: string): value is FavoriteIconId {
   return FAVORITE_ICON_OPTIONS.some((option) => option.value === value);
 }
 
-function inferLegacyFavoriteIcon(path: string): FavoriteIconId {
-  if (path === "/") {
-    return "drive";
-  }
-  if (path === "/Applications") {
-    return "applications";
-  }
-  const normalizedPath = path.replace(/\/+$/u, "");
-  const leaf = normalizedPath.split("/").filter(Boolean).at(-1) ?? normalizedPath;
-  if (leaf === "Desktop") {
-    return "desktop";
-  }
-  if (leaf === "Documents") {
-    return "documents";
-  }
-  if (leaf === "Downloads") {
-    return "downloads";
-  }
-  if (leaf === "Music") {
-    return "music";
-  }
-  if (leaf === "Pictures" || leaf === "Photos") {
-    return "photos";
-  }
-  if (leaf === "Movies" || leaf === "Videos") {
-    return "videos";
-  }
-  if (leaf === "Projects") {
-    return "projects";
-  }
-  if (leaf === ".Trash") {
-    return "trash";
-  }
-  return "folder";
-}
-
 function sanitizeTerminalApplicationSelection(value: unknown): ApplicationSelection | null {
-  if (value === null || value === undefined) {
-    return null;
-  }
-  if (typeof value === "string") {
-    const normalized = value.trim();
-    if (normalized.length === 0) {
-      return null;
-    }
-    return {
-      appPath: normalized,
-      appName: normalized,
-    };
-  }
   if (!isPlainObject(value)) {
     return null;
   }
@@ -746,35 +665,6 @@ function sanitizeOpenWithApplications(
   return entries.length === value.length ? entries : defaults.map((entry) => ({ ...entry }));
 }
 
-// Copied and cut items used to be marked in the tree and in the file list separately; a
-// profile saved then keeps its marks unless both were off.
-function sanitizeMarkClipboardItems(record: Record<string, unknown>, fallback: boolean): boolean {
-  if (typeof record.markClipboardItems === "boolean") {
-    return record.markClipboardItems;
-  }
-  const tree = record.highlightClipboardItemsInTree;
-  const content = record.highlightClipboardItemsInContent;
-  if (typeof tree === "boolean" || typeof content === "boolean") {
-    return tree !== false || content !== false;
-  }
-  return fallback;
-}
-
-// Reopening the last folder and reopening the tabs used to be two settings; the folder one
-// decided where a session started, so a profile saved then keeps that choice.
-function sanitizeRestoreSessionOnStartup(
-  record: Record<string, unknown>,
-  fallback: boolean,
-): boolean {
-  if (typeof record.restoreSessionOnStartup === "boolean") {
-    return record.restoreSessionOnStartup;
-  }
-  if (typeof record.restoreLastVisitedFolderOnStartup === "boolean") {
-    return record.restoreLastVisitedFolderOnStartup;
-  }
-  return fallback;
-}
-
 function sanitizeDetailColumns(
   value: unknown,
   defaults = DEFAULT_DETAIL_COLUMN_VISIBILITY,
@@ -784,17 +674,6 @@ function sanitizeDetailColumns(
     return defaults;
   }
   const record = value;
-  // State saved before Kind and Date Created existed has neither key. If its three
-  // columns are still the old defaults, nothing was customized: use the new defaults.
-  const predatesKindColumn = record.kind === undefined && record.created === undefined;
-  if (
-    predatesKindColumn &&
-    record.size === LEGACY_DEFAULT_DETAIL_COLUMN_VISIBILITY.size &&
-    record.modified === LEGACY_DEFAULT_DETAIL_COLUMN_VISIBILITY.modified &&
-    record.permissions === LEGACY_DEFAULT_DETAIL_COLUMN_VISIBILITY.permissions
-  ) {
-    return defaults;
-  }
   return Object.fromEntries(
     OPTIONAL_DETAIL_COLUMN_KEYS.map((key) => [
       key,
@@ -839,43 +718,6 @@ function sanitizeWindowState(value: unknown): StoredWindowState {
     ...(typeof record.x === "number" ? { x: record.x } : {}),
     ...(typeof record.y === "number" ? { y: record.y } : {}),
   };
-}
-
-// Macintosh HD used to be a fixed sidebar location and is now a default favorite. State saved
-// before that change gets it once; afterwards the user can remove it like any other favorite.
-// Such state has a `locationsExpanded` flag, which is no longer written, or neither
-// `autoLightTheme` (which arrived with the change and was written until the palettes went)
-// nor `restoreSessionOnStartup` (written since).
-function upgradeFavoritesWithRootVolume(
-  record: Record<string, unknown>,
-  favorites: FavoritePreference[],
-): FavoritePreference[] {
-  const savedBeforeRootFavorite =
-    record.locationsExpanded !== undefined ||
-    (record.autoLightTheme === undefined && record.restoreSessionOnStartup === undefined);
-  if (
-    record.favoritesInitialized !== true ||
-    !savedBeforeRootFavorite ||
-    favorites.some((favorite) => favorite.path === "/")
-  ) {
-    return favorites;
-  }
-  const rootFavorite: FavoritePreference = { path: "/", icon: "drive" };
-  const trashIndex = favorites.findIndex((favorite) => favorite.path.endsWith("/.Trash"));
-  return trashIndex === -1
-    ? [...favorites, rootFavorite]
-    : [...favorites.slice(0, trashIndex), rootFavorite, ...favorites.slice(trashIndex)];
-}
-
-// A saved toolbar identical to an earlier default was never customized; it gets the new one.
-function isPreviousDefaultTopToolbar(value: unknown): boolean {
-  return (
-    Array.isArray(value) &&
-    PREVIOUS_DEFAULT_TOP_TOOLBARS.some(
-      (previous) =>
-        value.length === previous.length && value.every((item, index) => item === previous[index]),
-    )
-  );
 }
 
 function createDefaultPreferences(

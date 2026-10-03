@@ -36,7 +36,6 @@ import {
 } from "./bootstrap";
 import { resolveBundledFdBinaryPath } from "./fdBinary";
 import { resolveStartupFolderPath } from "./launchContext";
-import { removeRetiredActionLogFiles } from "./logRotation";
 import {
   KEEP_WORKING_BUTTON_INDEX,
   STOP_BUTTON_INDEX,
@@ -96,7 +95,6 @@ if (hasSingleInstanceLock) {
       });
       appLoggerRef = appLogger;
       installProcessLoggingHandlers(appLogger);
-      void removeRetiredActionLogFiles(dirname(appLogPath));
       const launchContext = {
         startupFolderPath: resolveStartupFolderPath(process.argv, resolveLaunchWorkingDirectory(), {
           appPath: app.getAppPath(),

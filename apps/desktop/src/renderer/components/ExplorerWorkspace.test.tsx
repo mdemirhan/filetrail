@@ -252,19 +252,21 @@ describe("ExplorerWorkspace", () => {
       topToolbarItems: [
         "back",
         "forward",
+        "title",
         "up",
         "refresh",
         "copySelection",
         "newFolder",
         "copyPath",
+        "clipboard",
         "search",
+        "viewOptions",
       ] satisfies ComponentProps<typeof ExplorerWorkspace>["topToolbarItems"],
     };
     view.rerender(explorerWorkspaceElement({ preferencesReady: false, ...savedToolbar }));
     view.rerender(explorerWorkspaceElement({ preferencesReady: true, ...savedToolbar }));
 
-    // A toolbar saved before the title could be moved has it after Back and Forward, and
-    // View Options and search closing the row.
+    // The clipboard button is drawn only once something is copied.
     expect(toolbarRowItems(view.container)).toEqual([
       "back",
       "forward",
@@ -274,8 +276,8 @@ describe("ExplorerWorkspace", () => {
       "copySelection",
       "newFolder",
       "copyPath",
-      "viewOptions",
       "search",
+      "viewOptions",
     ]);
   });
 
@@ -517,6 +519,7 @@ describe("ExplorerWorkspace", () => {
 describe("ExplorerWorkspace customizing the toolbar", () => {
   const DEFAULT_ITEMS = [
     "folderTree",
+    "topSeparator",
     "back",
     "forward",
     "title",
@@ -583,6 +586,7 @@ describe("ExplorerWorkspace customizing the toolbar", () => {
     fireEvent.keyDown(handle("sort"), { key: "ArrowRight", altKey: true });
     expect(onTopToolbarItemsChange).toHaveBeenLastCalledWith([
       "folderTree",
+      "topSeparator",
       "back",
       "forward",
       "title",

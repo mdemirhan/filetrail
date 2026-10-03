@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { chmod, mkdir, readdir, rmdir, statfs, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readdir, statfs, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, normalize, sep } from "node:path";
 import { promisify } from "node:util";
@@ -348,19 +348,7 @@ async function createIconSamples(): Promise<Record<GenericIconKind, string>> {
   await writeFile(samples.executable, "");
   await chmod(samples.file, 0o644);
   await chmod(samples.executable, 0o755);
-  void removeLegacyIconSampleFolders();
   return samples;
-}
-
-// Earlier versions made a new empty folder for the folder icon on every launch and left it
-// behind. `rmdir` only removes a folder that is empty.
-async function removeLegacyIconSampleFolders(): Promise<void> {
-  const names = await readdir(tmpdir()).catch(() => [] as string[]);
-  await Promise.all(
-    names
-      .filter((name) => name.startsWith("filetrail-folder-icon-"))
-      .map((name) => rmdir(join(tmpdir(), name)).catch(() => undefined)),
-  );
 }
 
 export async function getFileIconHandler(

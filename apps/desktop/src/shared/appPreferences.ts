@@ -99,33 +99,6 @@ export const THEME_OPTIONS = [
   { value: "dark", label: "Dark" },
 ] as const satisfies ReadonlyArray<{ value: ThemePreference; label: string }>;
 
-// The theme a saved value stands for, or null when it is unknown. The app used to offer
-// several palettes for each side; a saved palette becomes the side it was on.
-const SAVED_PALETTE_SIDES: Readonly<Record<string, ThemeMode>> = {
-  "macos-light": "light",
-  "warm-paper": "light",
-  sand: "light",
-  "clean-white": "light",
-  stone: "light",
-  "macos-dark": "dark",
-  "catppuccin-mocha": "dark",
-  "tomorrow-night": "dark",
-  obsidian: "dark",
-  onyx: "dark",
-  graphite: "dark",
-  midnight: "dark",
-};
-
-export function resolveSavedTheme(value: unknown): ThemePreference | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-  if (THEME_OPTIONS.some((option) => option.value === value)) {
-    return value as ThemePreference;
-  }
-  return SAVED_PALETTE_SIDES[value] ?? null;
-}
-
 // The accent colors offered in Settings: macOS's own, in System Settings order, then the
 // copper the app used to default to. Any other saved color shows up as a custom color.
 export const ACCENT_OPTIONS = [
@@ -178,13 +151,6 @@ export const DEFAULT_DETAIL_COLUMN_VISIBILITY: DetailColumnVisibility = {
   created: false,
   permissions: false,
 };
-// The defaults before Kind and Date Created existed. Saved choices still exactly equal to
-// them were never customized, so they are upgraded to the new defaults when state loads.
-export const LEGACY_DEFAULT_DETAIL_COLUMN_VISIBILITY = {
-  size: true,
-  modified: true,
-  permissions: true,
-} as const;
 // Widths are persisted in pixels and are shared by renderer layout and IPC validation.
 // The date columns fit "Yesterday, 12:44 PM"; Permissions fits its header (the cell is a
 // three-digit code).
@@ -257,9 +223,8 @@ export const DEFAULT_TERMINAL_APPLICATION: ApplicationSelection = {
 export const OPEN_ITEM_LIMIT_MIN = 1;
 export const OPEN_ITEM_LIMIT_MAX = 50;
 
-// This is the durable shape written by the main-process state store.
-// Adding or renaming keys here requires corresponding migration handling in the loader,
-// otherwise older saved preferences will either be dropped or fail validation.
+// This is the durable shape written by the main-process state store. A saved value the
+// loader does not recognize falls back to its default.
 export type AppPreferences = {
   theme: ThemePreference;
   accent: AccentMode;

@@ -9,7 +9,6 @@ import {
   clampPaneWidth,
   clampZoomPercent,
   resolveEffectiveTheme,
-  resolveSavedTheme,
 } from "./appPreferences";
 import { DEFAULT_TOP_TOOLBAR_ITEMS } from "./toolbarItems";
 
@@ -31,18 +30,8 @@ describe("appPreferences helpers", () => {
     );
   });
 
-  it("offers Auto, Light and Dark, and reads a saved palette as its side", () => {
+  it("offers Auto, Light and Dark", () => {
     expect(THEME_OPTIONS.map((option) => option.label)).toEqual(["Auto", "Light", "Dark"]);
-    expect(resolveSavedTheme("auto")).toBe("auto");
-    expect(resolveSavedTheme("dark")).toBe("dark");
-    expect(resolveSavedTheme("macos-light")).toBe("light");
-    expect(resolveSavedTheme("warm-paper")).toBe("light");
-    expect(resolveSavedTheme("sand")).toBe("light");
-    expect(resolveSavedTheme("macos-dark")).toBe("dark");
-    expect(resolveSavedTheme("catppuccin-mocha")).toBe("dark");
-    expect(resolveSavedTheme("tomorrow-night")).toBe("dark");
-    expect(resolveSavedTheme("aurora")).toBeNull();
-    expect(resolveSavedTheme(7)).toBeNull();
   });
 
   it("defaults to blue, the first accent offered", () => {

@@ -203,7 +203,7 @@ describe("appStateStore", () => {
       filePath,
       JSON.stringify({
         preferences: {
-          restoreOpenTabsOnStartup: true,
+          restoreSessionOnStartup: true,
           activeTabIndex: -3,
           openTabs: [
             {
@@ -235,7 +235,7 @@ describe("appStateStore", () => {
         includeHidden: true,
         foldersFirst: true,
       },
-      // A tab saved before tabs had their own settings takes the window's.
+      // A tab without settings of its own takes the defaults.
       {
         path: null,
         treeRootPath: null,
@@ -318,6 +318,7 @@ describe("appStateStore", () => {
       detailRowOpen: false,
       topToolbarItems: [
         "folderTree",
+        "topSeparator",
         "back",
         "forward",
         "title",
@@ -599,209 +600,18 @@ describe("appStateStore", () => {
     });
   });
 
-  it("moves a palette the app no longer has to its side, light or dark", () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
-    const filePath = resolveAppStatePath(userDataPath);
-    const load = (preferences: Record<string, string>) => {
-      writeFileSync(filePath, JSON.stringify({ preferences }), "utf8");
-      const loaded = createAppStateStore(filePath, { defaultTheme: "auto" }).getPreferences();
-      return loaded.theme;
+  it("keeps a saved theme and defaults any other value", () => {
+    const filePath = resolveAppStatePath(mkdtempSync(join(tmpdir(), "filetrail-app-state-")));
+    const load = (theme: unknown) => {
+      writeFileSync(filePath, JSON.stringify({ preferences: { theme } }), "utf8");
+      return createAppStateStore(filePath, { defaultTheme: "auto" }).getPreferences().theme;
     };
 
-    expect(load({ theme: "auto", autoLightTheme: "sand", autoDarkTheme: "catppuccin-mocha" })).toBe(
-      "auto",
-    );
-    expect(load({ theme: "macos-light" })).toBe("light");
-    expect(load({ theme: "warm-paper" })).toBe("light");
-    expect(load({ theme: "clean-white" })).toBe("light");
-    expect(load({ theme: "tomorrow-night" })).toBe("dark");
-    expect(load({ theme: "midnight" })).toBe("dark");
-    expect(load({ theme: "dark" })).toBe("dark");
-    // Unknown names fall back to the default theme.
-    expect(load({ theme: "no-such-theme" })).toBe("auto");
-    // The palette for each side of Auto is gone with the palettes.
-    writeFileSync(
-      filePath,
-      JSON.stringify({ preferences: { theme: "auto", autoLightTheme: "sand" } }),
-      "utf8",
-    );
-    expect(createAppStateStore(filePath).getPreferences()).not.toHaveProperty("autoLightTheme");
-  });
-
-  it("keeps what a profile chose before the startup and copy-mark settings were merged", () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
-    const filePath = resolveAppStatePath(userDataPath);
-    const load = (preferences: Record<string, unknown>) => {
-      writeFileSync(filePath, JSON.stringify({ preferences }), "utf8");
-      const loaded = createAppStateStore(filePath).getPreferences();
-      return [loaded.restoreSessionOnStartup, loaded.markClipboardItems];
-    };
-
-    // Reopening the last folder decided where a session started.
-    expect(
-      load({ restoreLastVisitedFolderOnStartup: false, restoreOpenTabsOnStartup: true }),
-    ).toEqual([false, true]);
-    expect(load({ restoreLastVisitedFolderOnStartup: true })).toEqual([true, true]);
-    // Copies stay marked unless both the tree's and the list's marks were off.
-    expect(
-      load({ highlightClipboardItemsInTree: false, highlightClipboardItemsInContent: true }),
-    ).toEqual([true, true]);
-    expect(
-      load({ highlightClipboardItemsInTree: false, highlightClipboardItemsInContent: false }),
-    ).toEqual([true, false]);
-    // The merged settings win over the old ones.
-    expect(
-      load({
-        restoreSessionOnStartup: true,
-        restoreLastVisitedFolderOnStartup: false,
-        markClipboardItems: true,
-        highlightClipboardItemsInTree: false,
-        highlightClipboardItemsInContent: false,
-      }),
-    ).toEqual([true, true]);
-    // A new profile reopens its last session and marks copies.
-    expect(load({})).toEqual([true, true]);
-  });
-
-  it("upgrades untouched legacy detail columns to the new defaults but keeps customized ones", () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
-    const filePath = resolveAppStatePath(userDataPath);
-    const save = (detailColumns: Record<string, boolean>) =>
-      writeFileSync(filePath, JSON.stringify({ preferences: { detailColumns } }), "utf8");
-
-    // Saved before Kind and Date Created existed, still on the old defaults.
-    save({ size: true, modified: true, permissions: true });
-    expect(createAppStateStore(filePath).getPreferences().detailColumns).toEqual({
-      modified: true,
-      size: true,
-      kind: true,
-      created: false,
-      permissions: false,
-    });
-
-    // A changed choice is kept as it was; the new columns take their defaults.
-    save({ size: false, modified: true, permissions: true });
-    expect(createAppStateStore(filePath).getPreferences().detailColumns).toEqual({
-      modified: true,
-      size: false,
-      kind: true,
-      created: false,
-      permissions: true,
-    });
-
-    // State that already knows the new columns is never treated as legacy.
-    save({ size: true, modified: true, permissions: true, kind: false, created: true });
-    expect(createAppStateStore(filePath).getPreferences().detailColumns).toEqual({
-      modified: true,
-      size: true,
-      kind: false,
-      created: true,
-      permissions: true,
-    });
-  });
-
-  it("upgrades a toolbar still on an earlier default to the new one but keeps customized ones", () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
-    const filePath = resolveAppStatePath(userDataPath);
-    const legacy = [
-      "back",
-      "forward",
-      "topSeparator",
-      "up",
-      "down",
-      "refresh",
-      "topSeparator",
-      "view",
-      "sort",
-      "search",
-    ];
-    const earlierDefaults = [
-      legacy,
-      ["back", "forward", "view", "sort", "infoPanel", "search"],
-      [
-        "back",
-        "forward",
-        "title",
-        "view",
-        "sort",
-        "infoPanel",
-        "clipboard",
-        "viewOptions",
-        "search",
-      ],
-    ];
-    for (const topToolbarItems of earlierDefaults) {
-      writeFileSync(filePath, JSON.stringify({ preferences: { topToolbarItems } }), "utf8");
-      expect(createAppStateStore(filePath).getPreferences().topToolbarItems).toEqual([
-        "folderTree",
-        "back",
-        "forward",
-        "title",
-        "clipboard",
-        "view",
-        "sort",
-        "search",
-        "viewOptions",
-        "infoPanel",
-      ]);
-    }
-
-    writeFileSync(
-      filePath,
-      JSON.stringify({ preferences: { topToolbarItems: ["back", "refresh", "search"] } }),
-      "utf8",
-    );
-    // A customized one keeps its buttons, with the title, the clipboard button and View
-    // Options added where they were drawn before they could be moved.
-    expect(createAppStateStore(filePath).getPreferences().topToolbarItems).toEqual([
-      "back",
-      "title",
-      "refresh",
-      "clipboard",
-      "viewOptions",
-      "search",
-    ]);
-  });
-
-  it("adds Macintosh HD to favorites saved before it became a default favorite", () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
-    const filePath = resolveAppStatePath(userDataPath);
-    const savedFavorites = [
-      { path: "/Users/demo", icon: "home" },
-      { path: "/Users/demo/.Trash", icon: "trash" },
-    ];
-    const withFavorites = (extra: Record<string, unknown>) =>
-      JSON.stringify({
-        preferences: { favorites: savedFavorites, favoritesInitialized: true, ...extra },
-      });
-
-    // Saved by the Locations sidebar (still has its collapse flag): inserted ahead of Trash.
-    writeFileSync(
-      filePath,
-      withFavorites({ autoLightTheme: "macos-light", locationsExpanded: true }),
-    );
-    expect(createAppStateStore(filePath).getPreferences().favorites).toEqual([
-      { path: "/Users/demo", icon: "home" },
-      { path: "/", icon: "drive" },
-      { path: "/Users/demo/.Trash", icon: "trash" },
-    ]);
-
-    // Saved before the native sidebar existed.
-    writeFileSync(filePath, withFavorites({}));
-    expect(createAppStateStore(filePath).getPreferences().favorites).toHaveLength(3);
-
-    // Saved after the change (Auto's palettes arrived with it): a removed Macintosh HD stays
-    // removed.
-    writeFileSync(filePath, withFavorites({ autoLightTheme: "macos-light" }));
-    expect(createAppStateStore(filePath).getPreferences().favorites).toEqual(savedFavorites);
-
-    // Saved after the palettes went, by this version: also left alone.
-    writeFileSync(filePath, withFavorites({ restoreSessionOnStartup: true }));
-    expect(createAppStateStore(filePath).getPreferences().favorites).toEqual(savedFavorites);
-    const store = createAppStateStore(filePath);
-    store.updatePreferences({ foldersFirst: false });
-    store.flush();
-    expect(createAppStateStore(filePath).getPreferences().favorites).toEqual(savedFavorites);
+    expect(load("light")).toBe("light");
+    expect(load("dark")).toBe("dark");
+    expect(load("auto")).toBe("auto");
+    expect(load("macos-light")).toBe("auto");
+    expect(load(7)).toBe("auto");
   });
 
   it("keeps a saved search match mode and defaults to plain text", () => {
@@ -811,7 +621,6 @@ describe("appStateStore", () => {
       return createAppStateStore(filePath).getPreferences().searchPatternMode;
     };
 
-    // Regex was the default before plain text existed; a profile that has it keeps it.
     expect(load("regex")).toBe("regex");
     expect(load("glob")).toBe("glob");
     expect(load("text")).toBe("text");
@@ -921,10 +730,10 @@ describe("appStateStore", () => {
     expect(reloaded.getPreferences().sortDirection).toBe("asc");
     expect(reloaded.getPreferences().topToolbarItems).toEqual([
       "back",
+      "search",
       "title",
       "clipboard",
       "viewOptions",
-      "search",
     ]);
     expect(reloaded.getPreferences().treeWidth).toBe(220);
     expect(reloaded.getPreferences().inspectorWidth).toBe(480);
@@ -976,42 +785,6 @@ describe("appStateStore", () => {
     expect(reloaded.getPreferences().openItemLimit).toBe(50);
     expect(reloaded.getPreferences().treeRootPath).toBeNull();
     expect(reloaded.getPreferences().lastVisitedPath).toBeNull();
-    expect(reloaded.getPreferences().lastVisitedFavoritePath).toBeNull();
-  });
-
-  it("migrates legacy favorite path arrays into favorite entries", () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
-    const filePath = resolveAppStatePath(userDataPath);
-    const store = createAppStateStore(filePath, {
-      defaultTheme: "dark",
-    });
-
-    store.updatePreferences({
-      favoritesExpanded: false,
-      favoritesInitialized: true,
-    });
-    store.flush();
-
-    const fileContents = `{
-  "preferences": {
-    "theme": "dark",
-    "favoritePaths": ["/Users/demo/Documents", "/Applications", "/Users/demo/Documents"],
-    "favoritesExpanded": false,
-    "favoritesInitialized": true
-  }
-}\n`;
-    writeFileSync(filePath, fileContents, "utf8");
-
-    const reloaded = createAppStateStore(filePath, {
-      defaultTheme: "dark",
-    });
-
-    // State this old also predates Macintosh HD as a default favorite.
-    expect(reloaded.getPreferences().favorites).toEqual([
-      { path: "/Users/demo/Documents", icon: "documents" },
-      { path: "/Applications", icon: "applications" },
-      { path: "/", icon: "drive" },
-    ]);
     expect(reloaded.getPreferences().lastVisitedFavoritePath).toBeNull();
   });
 

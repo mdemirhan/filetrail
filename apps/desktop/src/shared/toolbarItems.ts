@@ -375,8 +375,8 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
 
 export const TOOLBAR_ITEM_IDS = TOOLBAR_ITEM_DEFINITIONS.map((item) => item.id) as ToolbarItemId[];
 
-// The default: the folder tree's button (where Finder has its sidebar's), Back and Forward,
-// the folder title, then (pushed to the far end by the
+// The default: the folder tree's button (where Finder has its sidebar's), a space to set it
+// apart, Back and Forward, the folder title, then (pushed to the far end by the
 // title, which takes the spare room) the controls for how the list is shown, the search
 // field, and the two that close the toolbar.
 // - The clipboard button comes and goes, so it is the first item after the title: there it
@@ -387,6 +387,7 @@ export const TOOLBAR_ITEM_IDS = TOOLBAR_ITEM_DEFINITIONS.map((item) => item.id) 
 // Everything else can be added with View > Customize Toolbar.
 export const DEFAULT_TOP_TOOLBAR_ITEMS: ToolbarItemId[] = [
   "folderTree",
+  "topSeparator",
   "back",
   "forward",
   "title",
@@ -396,27 +397,6 @@ export const DEFAULT_TOP_TOOLBAR_ITEMS: ToolbarItemId[] = [
   "search",
   "viewOptions",
   "infoPanel",
-];
-
-// The defaults before this one, as they were saved. A toolbar still exactly equal to one of
-// them was never customized, so it is given the new default when preferences load.
-// (Plain strings: one of them holds an item that no longer exists.)
-export const PREVIOUS_DEFAULT_TOP_TOOLBARS: ReadonlyArray<readonly string[]> = [
-  [
-    "back",
-    "forward",
-    "topSeparator",
-    "up",
-    "down",
-    "refresh",
-    "topSeparator",
-    "view",
-    "sort",
-    "search",
-  ],
-  // Saved before the title, the clipboard button and View Options were in the list.
-  ["back", "forward", "view", "sort", "infoPanel", "search"],
-  ["back", "forward", "title", "view", "sort", "infoPanel", "clipboard", "viewOptions", "search"],
 ];
 
 const TOOLBAR_ITEM_ID_SET = new Set<ToolbarItemId>(TOOLBAR_ITEM_IDS);
@@ -462,33 +442,14 @@ export function isRequiredTopToolbarItem(id: ToolbarItemId): boolean {
   return getToolbarItemDefinition(id).topRequired === true;
 }
 
-// Where a toolbar saved before the title could be moved drew it: after Back and Forward
-// when they led the toolbar, otherwise first.
-const LEGACY_LEADING_TOP_TOOLBAR_ITEMS = new Set<ToolbarItemId>(["back", "forward"]);
+// The four items every top toolbar holds, in the default's order.
+const REQUIRED_TOP_TOOLBAR_ITEMS = DEFAULT_TOP_TOOLBAR_ITEMS.filter(isRequiredTopToolbarItem);
 
-// Every top toolbar holds the title, the clipboard button, View Options and search. A list
-// without them is given them where they were drawn while their places were fixed: the title
-// after a leading Back and Forward, search last, and the other two just ahead of search.
+// Every top toolbar holds the title, the clipboard button, search and View Options; a list
+// without one of them gets it at the end.
 export function sanitizeTopToolbarItems(value: unknown): ToolbarItemId[] {
-  let next = sanitizeToolbarItemList(value);
-  if (!next.includes("title")) {
-    // Until the title could be moved, search was drawn last wherever the list had it.
-    const rest = next.filter((itemId) => itemId !== "search");
-    const firstOtherIndex = rest.findIndex(
-      (itemId) => !LEGACY_LEADING_TOP_TOOLBAR_ITEMS.has(itemId),
-    );
-    const leadingCount = firstOtherIndex === -1 ? rest.length : firstOtherIndex;
-    next = [...rest.slice(0, leadingCount), "title", ...rest.slice(leadingCount), "search"];
-  }
-  if (!next.includes("search")) {
-    next.push("search");
-  }
-  for (const itemId of ["clipboard", "viewOptions"] as const) {
-    if (!next.includes(itemId)) {
-      next.splice(next.indexOf("search"), 0, itemId);
-    }
-  }
-  return next;
+  const next = sanitizeToolbarItemList(value);
+  return [...next, ...REQUIRED_TOP_TOOLBAR_ITEMS.filter((itemId) => !next.includes(itemId))];
 }
 
 // The items offered while the toolbar is customized, in this order: moving about, how the
