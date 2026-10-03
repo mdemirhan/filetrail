@@ -6143,10 +6143,20 @@ button.shortcut-slot-key:focus-visible {
   box-shadow: var(--focus-ring);
 }
 
+/* A free slot shows only for the row under the pointer, or when Tab reaches it: a page of
+   dashed boxes would read as forty things to fill in. It keeps its room, so the keys of
+   every row stay in their columns. */
 .shortcut-slot-key.empty {
   border-style: dashed;
   background: transparent;
   color: var(--text-tertiary);
+  opacity: 0;
+}
+
+.shortcut-row:hover .shortcut-slot-key.empty,
+.shortcut-slot-key.empty:focus-visible,
+.shortcut-slot-key.empty.recording {
+  opacity: 1;
 }
 
 .shortcut-slot-key.recording,
