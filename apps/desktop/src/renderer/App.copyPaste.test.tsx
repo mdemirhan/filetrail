@@ -8105,6 +8105,32 @@ describe("App copy/paste dialogs and destinations", () => {
     );
   });
 
+  // Stop pressed while the start request was on its way did nothing, and the paste ran to
+  // the end.
+  it("stops an operation whose Stop came while it was being started", async () => {
+    const { sheet, harness } = await openFolderReviewSheet({ deferCopyPasteStart: true });
+    await act(async () => {
+      fireEvent.click(within(sheet).getByRole("button", { name: "Duplicate" }));
+    });
+    const card = await screen.findByRole("region", { name: /Duplicating/ }, { timeout: 2_000 });
+    await act(async () => {
+      fireEvent.click(within(card).getByRole("button", { name: /Stop|Cancel/ }));
+    });
+    expect(harness.invocations.some((call) => call.channel === "writeOperation:cancel")).toBe(
+      false,
+    );
+
+    await act(async () => {
+      harness.resolveCopyPasteStart();
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.some((call) => call.channel === "writeOperation:cancel")).toBe(
+        true,
+      );
+    });
+  });
+
   it("keeps the review sheet usable when the start fails", async () => {
     const { sheet } = await openFolderReviewSheet({
       copyPasteStartError: new Error("The analysis expired. Paste again to recheck."),

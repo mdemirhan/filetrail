@@ -458,6 +458,8 @@ export function useExplorerActions(args: {
   const newFolderNameRequestRef = useRef(0);
   // A folder made in the folder on screen, to be renamed in its row once it is listed.
   const pendingInlineRenamePathRef = useRef<string | null>(null);
+  // A paste start request on its way, which Stop marks to stop once it has an id.
+  const startRequestRef = useRef<{ cancelled: boolean } | null>(null);
   const reviewStartInFlightRef = useRef<string | null>(null);
   // A cut clipboard to clear when its move finishes having moved something.
   const clipboardClearAfterMoveRef = useRef<{ operationId: string; capturedAt: string } | null>(
@@ -1659,6 +1661,10 @@ export function useExplorerActions(args: {
         phase: "starting",
       };
     }
+    // Stop pressed while the start request is on its way (from the review sheet) is kept
+    // here, and the operation is stopped as soon as its id is known.
+    const startRequest = { cancelled: false };
+    startRequestRef.current = startRequest;
     applyWriteOperationCardState({
       action,
       stage: "starting",
@@ -1698,7 +1704,13 @@ export function useExplorerActions(args: {
         };
       }
       const pendingAttempt = pasteAttemptId === null ? null : pendingPasteAttemptRef.current;
-      if (pendingAttempt && pendingAttempt.id === pasteAttemptId && pendingAttempt.cancelled) {
+      if (startRequestRef.current === startRequest) {
+        startRequestRef.current = null;
+      }
+      if (
+        startRequest.cancelled ||
+        (pendingAttempt && pendingAttempt.id === pasteAttemptId && pendingAttempt.cancelled)
+      ) {
         pendingPasteAttemptRef.current = null;
         rememberPendingTreeSelectionPath(null);
         adoptWriteOperation(response.operationId);
@@ -1750,7 +1762,13 @@ export function useExplorerActions(args: {
     } catch (error) {
       rememberPendingTreeSelectionPath(null);
       const pendingAttempt = pasteAttemptId === null ? null : pendingPasteAttemptRef.current;
-      if (pendingAttempt && pendingAttempt.id === pasteAttemptId && pendingAttempt.cancelled) {
+      if (startRequestRef.current === startRequest) {
+        startRequestRef.current = null;
+      }
+      if (
+        startRequest.cancelled ||
+        (pendingAttempt && pendingAttempt.id === pasteAttemptId && pendingAttempt.cancelled)
+      ) {
         pendingPasteAttemptRef.current = null;
         return { status: "cancelled" };
       }
@@ -2089,6 +2107,11 @@ export function useExplorerActions(args: {
 
   async function cancelWriteOperation() {
     const operationId = activeWriteOperationIdRef.current;
+    if (!operationId && startRequestRef.current) {
+      // The start request is on its way: the operation stops once it has an id.
+      startRequestRef.current.cancelled = true;
+      return;
+    }
     if (!operationId) {
       const activeAnalysisId = activeAnalysisIdRef.current;
       const pendingAttempt = pendingPasteAttemptRef.current;
