@@ -253,8 +253,15 @@ describe("CopyPasteReviewDialog", () => {
     ).toBeDisabled();
     unmount();
 
-    // On its own, in the alert: no Replace button at all.
-    render(<Harness report={createReport([outer])} />);
+    // On its own, in the alert (a file over the folder it is in): no Replace button at all.
+    const fileOverFolder = node({
+      id: "item-10",
+      sourcePath: "/dest/photos/photos",
+      destinationKind: "directory",
+      conflictClass: "type_mismatch",
+      replaceBlockedReason: "It contains the item being pasted.",
+    });
+    render(<Harness report={createReport([fileOverFolder])} />);
     expect(screen.queryByRole("button", { name: "Replace" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Keep Both" })).toBeInTheDocument();
   });
@@ -294,19 +301,14 @@ describe("CopyPasteReviewDialog", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it("offers Add Missing for one folder being copied, not moved", () => {
-    const onStart = vi.fn(() => Promise.resolve(true));
-    const { unmount } = render(<Harness report={createReport([photos])} onStart={onStart} />);
+  it("asks about one folder that already exists in the sheet, to show what is inside", () => {
+    render(<Harness report={createReport([photos])} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Add Missing" }));
-    expect(onStart).toHaveBeenLastCalledWith({
-      policy: SAFE_COPY_PASTE_POLICY,
-      overrides: { "item-2": "merge" },
-    });
-    unmount();
-
-    render(<Harness report={createReport([photos], "cut")} action="move_to" />);
-    expect(screen.queryByRole("button", { name: "Add Missing" })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "“photos” already exists in “dest”" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: "For all conflicts:" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Choice for photos")).toBeInTheDocument();
   });
 
   it("uses move wording for moves", () => {

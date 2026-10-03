@@ -5176,11 +5176,21 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "d", metaKey: true });
     });
 
-    await screen.findByRole("dialog", { name: "“Folder” already exists in “demo”" });
-    // Keep Both is the default; replacing takes a click on the red button.
-    expect(screen.getByRole("button", { name: "Keep Both" })).toHaveFocus();
+    const sheet = await screen.findByRole("dialog", {
+      name: "“Folder” already exists in “demo”",
+    });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Replace" }));
+      fireEvent.change(within(sheet).getByLabelText("Choice for Folder"), {
+        target: { value: "overwrite" },
+      });
+    });
+    // Return does not replace: that takes a click on the red button.
+    await act(async () => {
+      fireEvent.keyDown(sheet, { key: "Enter" });
+    });
+    expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
+    await act(async () => {
+      fireEvent.click(within(sheet).getByRole("button", { name: /^Replace 1 and / }));
     });
 
     await vi.waitFor(() => {
@@ -7113,14 +7123,19 @@ describe("App copy/paste integration", () => {
     const targetFolder = await screen.findByRole("button", { name: "test2" });
     await dragBetween(sourceFolder, targetFolder);
 
-    expect(await screen.findByRole("dialog", { name: /already exists? in/ })).toBeInTheDocument();
+    const sheet = await screen.findByRole("dialog", { name: /already exists? in/ });
     expect(screen.queryByLabelText("Move To")).toBeNull();
     expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
 
-    // One folder that already exists: a plain alert, with no Add Missing for a move.
-    expect(screen.queryByRole("button", { name: "Add Missing" })).toBeNull();
+    // One folder that already exists: the sheet, with no Add Missing for a move.
+    expect(within(sheet).queryByRole("radio", { name: "Add Missing" })).toBeNull();
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Keep Both" }));
+      fireEvent.change(within(sheet).getByLabelText("Choice for test3_1"), {
+        target: { value: "keep_both" },
+      });
+    });
+    await act(async () => {
+      fireEvent.click(within(sheet).getByRole("button", { name: "Move" }));
     });
 
     await vi.waitFor(() => {
@@ -7205,13 +7220,18 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
-    expect(await screen.findByRole("dialog", { name: /already exists? in/ })).toBeInTheDocument();
+    const sheet = await screen.findByRole("dialog", { name: /already exists? in/ });
     expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
 
-    // One folder that already exists: a plain alert, with no Add Missing for a move.
-    expect(screen.queryByRole("button", { name: "Add Missing" })).toBeNull();
+    // One folder that already exists: the sheet, with no Add Missing for a move.
+    expect(within(sheet).queryByRole("radio", { name: "Add Missing" })).toBeNull();
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Keep Both" }));
+      fireEvent.change(within(sheet).getByLabelText("Choice for test3_1"), {
+        target: { value: "keep_both" },
+      });
+    });
+    await act(async () => {
+      fireEvent.click(within(sheet).getByRole("button", { name: "Move" }));
     });
 
     await vi.waitFor(() => {
@@ -7295,13 +7315,18 @@ describe("App copy/paste integration", () => {
       fireEvent.click(screen.getByText("Move"));
     });
 
-    expect(await screen.findByRole("dialog", { name: /already exists? in/ })).toBeInTheDocument();
+    const sheet = await screen.findByRole("dialog", { name: /already exists? in/ });
     expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
 
-    // One folder that already exists: a plain alert, with no Add Missing for a move.
-    expect(screen.queryByRole("button", { name: "Add Missing" })).toBeNull();
+    // One folder that already exists: the sheet, with no Add Missing for a move.
+    expect(within(sheet).queryByRole("radio", { name: "Add Missing" })).toBeNull();
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Keep Both" }));
+      fireEvent.change(within(sheet).getByLabelText("Choice for test3_1"), {
+        target: { value: "keep_both" },
+      });
+    });
+    await act(async () => {
+      fireEvent.click(within(sheet).getByRole("button", { name: "Move" }));
     });
 
     await vi.waitFor(() => {
@@ -8091,13 +8116,13 @@ describe("App copy/paste dialogs and destinations", () => {
     expect(fireEvent.keyDown(window, { key: "ArrowDown" })).toBe(false);
   });
 
-  it("closes the conflict alert with Escape while a button has focus", async () => {
+  it("closes the review sheet with Escape while a button has focus", async () => {
     const { sheet, harness } = await openFolderReviewSheet();
 
-    const keepBoth = within(sheet).getByRole("button", { name: "Keep Both" });
-    keepBoth.focus();
+    const startButton = within(sheet).getByRole("button", { name: "Duplicate" });
+    startButton.focus();
     await act(async () => {
-      fireEvent.keyDown(keepBoth, { key: "Escape" });
+      fireEvent.keyDown(startButton, { key: "Escape" });
     });
 
     expect(screen.queryByRole("dialog", { name: reviewSheetName })).not.toBeInTheDocument();
@@ -8119,7 +8144,7 @@ describe("App copy/paste dialogs and destinations", () => {
   it("starts a reviewed operation once even when the start button is clicked twice", async () => {
     const { sheet, harness } = await openFolderReviewSheet({ deferCopyPasteStart: true });
 
-    const startButton = within(sheet).getByRole("button", { name: "Keep Both" });
+    const startButton = within(sheet).getByRole("button", { name: "Duplicate" });
     await act(async () => {
       fireEvent.click(startButton);
       fireEvent.click(startButton);
@@ -8141,7 +8166,7 @@ describe("App copy/paste dialogs and destinations", () => {
   it("stops an operation whose Stop came while it was being started", async () => {
     const { sheet, harness } = await openFolderReviewSheet({ deferCopyPasteStart: true });
     await act(async () => {
-      fireEvent.click(within(sheet).getByRole("button", { name: "Keep Both" }));
+      fireEvent.click(within(sheet).getByRole("button", { name: "Duplicate" }));
     });
     const card = await screen.findByRole("region", { name: /Duplicating/ }, { timeout: 2_000 });
     await act(async () => {
@@ -8168,13 +8193,13 @@ describe("App copy/paste dialogs and destinations", () => {
     });
 
     await act(async () => {
-      fireEvent.click(within(sheet).getByRole("button", { name: "Keep Both" }));
+      fireEvent.click(within(sheet).getByRole("button", { name: "Duplicate" }));
     });
 
     expect(await screen.findByText("Couldn’t Duplicate")).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: reviewSheetName })).toBeInTheDocument();
     await vi.waitFor(() => {
-      expect(within(sheet).getByRole("button", { name: "Keep Both" })).not.toBeDisabled();
+      expect(within(sheet).getByRole("button", { name: "Duplicate" })).not.toBeDisabled();
     });
   });
 

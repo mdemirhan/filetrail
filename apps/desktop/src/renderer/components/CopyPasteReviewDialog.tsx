@@ -168,10 +168,16 @@ export function CopyPasteReviewDialog({
     : `This is a large operation (${pluralize(report.summary.totalNodeCount, "item")} in total).`;
   const primaryLabel = replacing ? `Replace ${formatCount(summary.replaced)} and ${verb}` : verb;
 
+  // One item that already exists is asked about in a plain alert, as Finder does, unless
+  // it is a folder: the sheet shows what adding to it would replace inside, item by item.
   const singleConflict = summary.topLevelCount === 1 ? report.nodes[0] : undefined;
-  if (hasConflicts && singleConflict && singleConflict.conflictClass !== null) {
+  if (
+    hasConflicts &&
+    singleConflict &&
+    singleConflict.conflictClass !== null &&
+    singleConflict.conflictClass !== "directory_conflict"
+  ) {
     const node = singleConflict;
-    const isFolder = node.conflictClass === "directory_conflict";
     const choose = (choice: CopyPasteChoice) =>
       void start({ policy, overrides: { [node.id]: choice } });
     return (
@@ -179,7 +185,7 @@ export function CopyPasteReviewDialog({
         title={title}
         message={
           node.replaceBlockedReason === null
-            ? `Replace moves the ${isFolder ? "folder" : "item"} there to the Trash.`
+            ? "Replace moves the item there to the Trash."
             : undefined
         }
         initialFocusRef={primaryButtonRef}
@@ -190,11 +196,6 @@ export function CopyPasteReviewDialog({
             <PushButton className="alert-button-aside" disabled={starting} onClick={onClose}>
               Cancel
             </PushButton>
-            {isFolder && report.mode !== "cut" ? (
-              <PushButton disabled={starting} onClick={() => choose("merge")}>
-                Add Missing
-              </PushButton>
-            ) : null}
             {node.replaceBlockedReason === null ? (
               <PushButton
                 variant="destructive"
