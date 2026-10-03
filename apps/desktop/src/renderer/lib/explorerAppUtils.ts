@@ -51,7 +51,7 @@ export function formatMissingClipboardItemsMessage(
 // What to say when Finder did not empty the Trash. The usual reason is that macOS has not
 // let File Trail control Finder (Apple event error -1743), which only the user can allow.
 export function describeEmptyTrashFailure(detail: string): { title: string; message: string } {
-  const title = "The Trash couldn't be emptied.";
+  const title = "Couldn’t Empty the Trash";
   if (/not authori[sz]ed|-1743/iu.test(detail)) {
     return {
       title,
@@ -524,7 +524,8 @@ export function createOpenItemLimitMessage(
   selectedCount: number,
   limit: number,
 ): string {
-  return `${action} is limited to ${limit} item${limit === 1 ? "" : "s"} at a time. You selected ${selectedCount}. Change this in Settings if you want a higher limit.`;
+  const verb = action === "Open" ? "opens" : "edits";
+  return `File Trail ${verb} up to ${limit} item${limit === 1 ? "" : "s"} at a time, and ${selectedCount} are selected. You can change this in Settings.`;
 }
 
 export function toDirectoryEntryFromSearchResult(result: SearchResultItem): DirectoryEntry {

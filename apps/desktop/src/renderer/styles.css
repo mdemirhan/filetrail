@@ -1446,7 +1446,7 @@ select:focus-visible {
   height: 18px;
 }
 
-/* The check, the "i" and the "!" inside a mark, in the card's color. */
+/* The check and the "i" inside a mark, in the card's color. */
 .toast-card-icon-sign {
   fill: none;
   stroke: var(--context-menu-bg);

@@ -1186,22 +1186,17 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "c", metaKey: true });
     });
 
-    const copyToastViewport = await screen.findByTestId("toast-viewport");
-    expect(
-      within(copyToastViewport).getByText("Select at least one item to copy."),
-    ).toBeInTheDocument();
+    // Nothing happens, and nothing is said: the commands are greyed out then.
     expect(clipboardButton()).toBeNull();
+    expect(screen.queryByTestId("toast-viewport")).not.toBeInTheDocument();
     expectNoFileClipboardActions(harness);
 
     await act(async () => {
       harness.emitCommand({ type: "editCut" });
     });
 
-    const cutToastViewport = await screen.findByTestId("toast-viewport");
-    expect(
-      within(cutToastViewport).getByText("Select at least one item to cut."),
-    ).toBeInTheDocument();
     expect(clipboardButton()).toBeNull();
+    expect(screen.queryByTestId("toast-viewport")).not.toBeInTheDocument();
     expectNoFileClipboardActions(harness);
   });
 
@@ -2237,7 +2232,7 @@ describe("App copy/paste integration", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Move To")).toBeInTheDocument();
-    expect(screen.queryByText("Move couldn’t start")).not.toBeInTheDocument();
+    expect(screen.queryByText("Couldn’t Move")).not.toBeInTheDocument();
   });
 
   it("blocks content-pane shortcuts while Move To is open", async () => {
@@ -3231,8 +3226,8 @@ describe("App copy/paste integration", () => {
       harness.emitCommand({ type: "openSelection" });
     });
 
-    expect(await screen.findByRole("dialog", { name: "Open" })).toHaveTextContent(
-      "Open is limited to 1 item at a time.",
+    expect(await screen.findByRole("dialog", { name: "Too Many Items to Open" })).toHaveTextContent(
+      "File Trail opens up to 1 item at a time, and 2 are selected.",
     );
     expect(
       harness.invocations.find(
@@ -3266,7 +3261,7 @@ describe("App copy/paste integration", () => {
     });
 
     expect(
-      await screen.findByRole("dialog", { name: "Open With Visual Studio Code" }),
+      await screen.findByRole("dialog", { name: "Couldn’t Open in Visual Studio Code" }),
     ).toBeInTheDocument();
     expect(screen.getByText(/Application not found/)).toBeInTheDocument();
   });
@@ -4924,12 +4919,12 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
-    expect(await screen.findByText("Paste couldn’t start")).toBeInTheDocument();
+    expect(await screen.findByText("Couldn’t Paste")).toBeInTheDocument();
     expect(screen.getByText("“source.txt” is already in “Folder”.")).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Paste Requires Review" })).not.toBeInTheDocument();
   });
 
-  it("shows a warning toast for empty clipboard without opening a paste dialog", async () => {
+  it("does nothing on Paste with an empty clipboard, as the greyed-out command says", async () => {
     const harness = createAppHarness();
 
     render(
@@ -4947,7 +4942,7 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
-    expect(await screen.findByText("Clipboard is empty")).toBeInTheDocument();
+    expect(screen.queryByTestId("toast-viewport")).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: /Paste/ })).not.toBeInTheDocument();
     expect(document.activeElement).toBe(activeElementBeforePasteWarning);
   });
@@ -5543,7 +5538,7 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
-    expect(await screen.findByText("Paste couldn’t start")).toBeInTheDocument();
+    expect(await screen.findByText("Couldn’t Paste")).toBeInTheDocument();
     expect(screen.getByText("planner unavailable")).toBeInTheDocument();
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "OK" }));
@@ -5613,7 +5608,7 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
-    expect(await screen.findByText("Paste couldn’t start")).toBeInTheDocument();
+    expect(await screen.findByText("Couldn’t Paste")).toBeInTheDocument();
     expect(screen.getByText("The folder “Folder” no longer exists.")).toBeInTheDocument();
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "OK" }));
@@ -5662,7 +5657,7 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
-    expect(await screen.findByText("Paste couldn’t start")).toBeInTheDocument();
+    expect(await screen.findByText("Couldn’t Paste")).toBeInTheDocument();
     expect(screen.getByText("Planner unavailable.")).toBeInTheDocument();
     expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
   });
@@ -5699,7 +5694,7 @@ describe("App copy/paste integration", () => {
         harness.invocations.some((call) => call.channel === "copyPaste:analyzeGetUpdate"),
       ).toBe(true);
     });
-    expect(screen.queryByText("Paste couldn’t start")).not.toBeInTheDocument();
+    expect(screen.queryByText("Couldn’t Paste")).not.toBeInTheDocument();
     expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
   });
 
@@ -5859,7 +5854,7 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
 
-    expect(await screen.findByText("Paste couldn’t start")).toBeInTheDocument();
+    expect(await screen.findByText("Couldn’t Paste")).toBeInTheDocument();
     expect(
       screen.getByText("Another file operation is running. Wait for it to finish, or stop it."),
     ).toBeInTheDocument();
@@ -6042,9 +6037,7 @@ describe("App copy/paste integration", () => {
       fireEvent.keyDown(window, { code: "KeyC", key: "c", metaKey: true, altKey: true });
     });
 
-    const errorDialog = await screen.findByRole("dialog", {
-      name: "Unable to copy the selected path(s)",
-    });
+    const errorDialog = await screen.findByRole("dialog", { name: "Couldn’t Copy the Path" });
     expect(errorDialog).toBeInTheDocument();
     expect(document.activeElement).not.toBe(activeElementBeforeCopyPathError);
     expect(screen.getByRole("button", { name: "OK" })).toHaveFocus();
@@ -6573,7 +6566,7 @@ describe("App copy/paste integration", () => {
         planCallsBeforeRetry.length,
       );
     });
-    expect(await screen.findByText("Clipboard is empty")).toBeInTheDocument();
+    expect(clipboardButton()).toBeNull();
   });
   it("offers retry for failed items from the result dialog", async () => {
     const harness = createAppHarness();
@@ -6931,7 +6924,7 @@ describe("App copy/paste integration", () => {
     const treeTarget = await screen.findByTitle("tree:/Users/demo/Folder");
     await dragBetween(sourceButton, treeTarget);
 
-    expect(await screen.findByText("Move couldn’t start")).toBeInTheDocument();
+    expect(await screen.findByText("Couldn’t Move")).toBeInTheDocument();
     expect(screen.getByText("“source.txt” no longer exists.")).toBeInTheDocument();
     expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
   });
@@ -8146,7 +8139,7 @@ describe("App copy/paste dialogs and destinations", () => {
       fireEvent.click(within(sheet).getByRole("button", { name: "Keep Both" }));
     });
 
-    expect(await screen.findByText("Duplicate couldn’t start")).toBeInTheDocument();
+    expect(await screen.findByText("Couldn’t Duplicate")).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: reviewSheetName })).toBeInTheDocument();
     await vi.waitFor(() => {
       expect(within(sheet).getByRole("button", { name: "Keep Both" })).not.toBeDisabled();
@@ -8316,7 +8309,7 @@ describe("App copy/paste dialogs and destinations", () => {
     await act(async () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
     });
-    expect(await screen.findByText("Clipboard is empty")).toBeInTheDocument();
+    expect(clipboardButton()).toBeNull();
   });
 
   it("pastes into the current folder when several items are selected", async () => {
@@ -8431,7 +8424,7 @@ describe("App copy/paste dialogs and destinations", () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(screen.queryByText("Move couldn’t start")).not.toBeInTheDocument();
+    expect(screen.queryByText("Couldn’t Move")).not.toBeInTheDocument();
     expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
   });
 
@@ -8471,7 +8464,7 @@ describe("App copy/paste dialogs and destinations", () => {
         .filter((call) => call.channel === "copyPaste:plan")
         .map((call) => (call.payload as { sourcePaths: string[] }).sourcePaths),
     ).toEqual([["/Users/demo/source.txt", "/Users/demo/Folder"], ["/Users/demo/Folder"]]);
-    expect(screen.queryByText("Move couldn’t start")).not.toBeInTheDocument();
+    expect(screen.queryByText("Couldn’t Move")).not.toBeInTheDocument();
   });
 });
 
@@ -10884,7 +10877,7 @@ describe("App file operations like Finder", () => {
       ["/Users/demo/Folder/source-inside.txt", "/Users/demo/source.txt"],
       ["/Users/demo/source.txt"],
     ]);
-    expect(screen.queryByText("Move couldn’t start")).not.toBeInTheDocument();
+    expect(screen.queryByText("Couldn’t Move")).not.toBeInTheDocument();
   });
 
   describe("the clipboard follows what the app does to its items", () => {
@@ -11072,7 +11065,7 @@ describe("App file operations like Finder", () => {
 
       await copyThenPaste(["/Users/demo/gone.txt"], "c");
 
-      const notice = await screen.findByRole("dialog", { name: "Paste couldn’t start" });
+      const notice = await screen.findByRole("dialog", { name: "Couldn’t Paste" });
       expect(notice).toHaveTextContent(
         "“gone.txt” couldn’t be pasted because it no longer exists.",
       );
@@ -11160,17 +11153,17 @@ describe("App file operations like Finder", () => {
 
       await selectItem("/Users/demo/source.txt");
       await pressKey({ key: "Backspace", metaKey: true });
-      await expectBusyDialog("Move to Trash couldn’t start");
+      await expectBusyDialog("Couldn’t Move to Trash");
       expect(harness.invocations.some((call) => call.channel === "writeOperation:trash")).toBe(
         false,
       );
 
       await selectItem("/Users/demo/source.txt");
       await pressKey({ key: "d", metaKey: true });
-      await expectBusyDialog("Duplicate couldn’t start");
+      await expectBusyDialog("Couldn’t Duplicate");
 
       await pressKey({ key: "v", metaKey: true });
-      await expectBusyDialog("Paste couldn’t start");
+      await expectBusyDialog("Couldn’t Paste");
       expect(screen.queryByTestId("toast-viewport")?.textContent ?? "").not.toContain(
         "Wait for the current write",
       );
@@ -11183,7 +11176,7 @@ describe("App file operations like Finder", () => {
       await selectItem("/Users/demo/source.txt");
       await renameSelectionTo("source.txt", "renamed.txt");
 
-      await expectBusyDialog("Rename couldn’t start");
+      await expectBusyDialog("Couldn’t Rename");
       // The name field does not stay open waiting.
       expect(screen.queryByLabelText("Rename source.txt")).not.toBeInTheDocument();
       expect(screen.queryByRole("region", { name: "Renaming…" })).not.toBeInTheDocument();
@@ -11196,7 +11189,7 @@ describe("App file operations like Finder", () => {
       await clearContentSelection();
       await pressKey({ key: "n", metaKey: true, shiftKey: true });
 
-      await expectBusyDialog("New Folder couldn’t start");
+      await expectBusyDialog("Couldn’t Make a New Folder");
       expect(screen.queryByRole("dialog", { name: "New Folder" })).not.toBeInTheDocument();
     });
 
@@ -11210,7 +11203,7 @@ describe("App file operations like Finder", () => {
         fireEvent.keyDown(window, { key: "Backspace", metaKey: true });
       });
 
-      await expectBusyDialog("Move to Trash couldn’t start");
+      await expectBusyDialog("Couldn’t Move to Trash");
       expect(
         harness.invocations.filter((call) => call.channel === "writeOperation:trash"),
       ).toHaveLength(1);
@@ -11755,7 +11748,7 @@ describe("a rename refused after leaving its folder", () => {
       fireEvent.click(treeFolder);
     });
 
-    const dialog = await screen.findByRole("dialog", { name: "Rename couldn’t start" });
+    const dialog = await screen.findByRole("dialog", { name: "Couldn’t Rename" });
     expect(dialog).toHaveTextContent("An item named “Folder” already exists.");
     expect(screen.queryByLabelText("Rename source.txt")).not.toBeInTheDocument();
     await act(async () => {
@@ -12244,7 +12237,7 @@ describe("Empty Trash and Delete Immediately while another operation runs", () =
       harness.emitCommand({ type: "emptyTrash" });
     });
 
-    await expectBusyDialog("Empty Trash couldn’t start");
+    await expectBusyDialog("Couldn’t Empty the Trash");
     expect(
       screen.queryByRole("dialog", {
         name: "Are you sure you want to permanently erase the items in the Trash?",
@@ -12338,7 +12331,7 @@ describe("file commands in the Trash", () => {
     );
   }
 
-  it("pastes nothing into the Trash, and says so", async () => {
+  it("pastes nothing into the Trash", async () => {
     const harness = createAppHarness(inTrash);
     renderApp(harness);
     await selectItem("/Users/demo/source.txt");
@@ -12347,10 +12340,7 @@ describe("file commands in the Trash", () => {
 
     await pressKey({ key: "v", metaKey: true });
 
-    const viewport = await screen.findByTestId("toast-viewport");
-    await vi.waitFor(() => {
-      expect(viewport).toHaveTextContent("Nothing can be pasted into the Trash");
-    });
+    expect(screen.queryByTestId("toast-viewport")).not.toBeInTheDocument();
     expect(writeRequests(harness)).toEqual([]);
   });
 
@@ -12611,7 +12601,7 @@ describe("New Folder in the folder on screen", () => {
     await screen.findByRole("region", { name: "Pasting…" });
     await clearContentSelection();
     await pressKey({ key: "n", metaKey: true, shiftKey: true });
-    const busy = await screen.findByRole("dialog", { name: "New Folder couldn’t start" });
+    const busy = await screen.findByRole("dialog", { name: "Couldn’t Make a New Folder" });
     await act(async () => {
       fireEvent.click(within(busy).getByRole("button", { name: "OK" }));
     });
@@ -12648,7 +12638,7 @@ describe("file commands from the keyboard, in more states", () => {
     await vi.waitFor(() => {
       expect(analyzeRequests(harness)).toHaveLength(1);
     });
-    expect(screen.queryByRole("dialog", { name: "Paste couldn’t start" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Couldn’t Paste" })).not.toBeInTheDocument();
   });
 
   it("says at once that Rename and Move To wait for a running operation", async () => {
@@ -12659,7 +12649,7 @@ describe("file commands from the keyboard, in more states", () => {
     await selectItem("/Users/demo/source.txt");
 
     await pressKey({ key: "F2" });
-    let dialog = await screen.findByRole("dialog", { name: "Rename couldn’t start" });
+    let dialog = await screen.findByRole("dialog", { name: "Couldn’t Rename" });
     expect(screen.queryByLabelText("Rename source.txt")).not.toBeInTheDocument();
     await act(async () => {
       fireEvent.click(within(dialog).getByRole("button", { name: "OK" }));
@@ -12667,7 +12657,7 @@ describe("file commands from the keyboard, in more states", () => {
 
     await selectItem("/Users/demo/source.txt");
     await pressKey({ key: "m", metaKey: true, shiftKey: true });
-    dialog = await screen.findByRole("dialog", { name: "Move couldn’t start" });
+    dialog = await screen.findByRole("dialog", { name: "Couldn’t Move" });
     expect(dialog).toBeInTheDocument();
   });
 

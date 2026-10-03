@@ -78,10 +78,10 @@ describe("CopyPasteResultDialog", () => {
       screen.getByRole("heading", { name: "Pasted 2 of 5 items into “dest”" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("dialog")).toHaveAccessibleDescription(
-      "1 item couldn't be copied. 1 item inside “photos” couldn't be copied. 1 item wasn't started because the operation was stopped. 1 item was skipped.",
+      "1 item couldn’t be copied. 1 item inside “photos” couldn’t be copied. 1 item wasn't started because the operation was stopped. 1 item was skipped.",
     );
-    const failed = screen.getByRole("region", { name: "Couldn't copy" });
-    expect(within(failed).getByText("1 item inside couldn't be copied")).toBeInTheDocument();
+    const failed = screen.getByRole("region", { name: "Couldn’t copy" });
+    expect(within(failed).getByText("1 item inside couldn’t be copied")).toBeInTheDocument();
     expect(within(failed).queryByText("Unknown error.")).not.toBeInTheDocument();
     expect(within(failed).getByText("photos/raw/IMG_2041.dng")).toBeInTheDocument();
     expect(
@@ -136,7 +136,7 @@ describe("CopyPasteResultDialog", () => {
     );
 
     expect(screen.getByRole("dialog", { name: "Copied 1 of 2 items into “dest”" })).toBeVisible();
-    expect(screen.getByText(/1 item couldn't be copied\./)).toBeInTheDocument();
+    expect(screen.getByText(/1 item couldn’t be copied\./)).toBeInTheDocument();
   });
 
   it("reminds that unmoved items are still where they were", () => {
@@ -158,7 +158,7 @@ describe("CopyPasteResultDialog", () => {
     expect(
       screen.getByText(/Items that weren't moved are still in their original folder\./),
     ).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Couldn't move" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Couldn’t move" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Retry/ })).not.toBeInTheDocument();
   });
 
@@ -182,11 +182,11 @@ describe("CopyPasteResultDialog", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "2 items inside “photos” couldn't be moved. Items that weren't moved are still in their original folder.",
+        "2 items inside “photos” couldn’t be moved. Items that weren't moved are still in their original folder.",
       ),
     ).toBeInTheDocument();
-    const failed = screen.getByRole("region", { name: "Couldn't move" });
-    expect(within(failed).getByText("2 items inside couldn't be moved")).toBeInTheDocument();
+    const failed = screen.getByRole("region", { name: "Couldn’t move" });
+    expect(within(failed).getByText("2 items inside couldn’t be moved")).toBeInTheDocument();
     expect(within(failed).getByText("photos/raw/c.dng")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Retry 1 Item" })).toBeInTheDocument();
   });
@@ -207,7 +207,7 @@ describe("CopyPasteResultDialog", () => {
     expect(
       screen.getByRole("heading", { name: "Pasted 2 of 2 items into “dest”" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("3 items inside “photos” couldn't be copied.")).toBeInTheDocument();
+    expect(screen.getByText("3 items inside “photos” couldn’t be copied.")).toBeInTheDocument();
   });
 
   it("stays quick with a very large result and lists only the first rows", () => {
@@ -233,8 +233,8 @@ describe("CopyPasteResultDialog", () => {
     expect(
       screen.getByRole("heading", { name: "Pasted 15,001 of 15,001 items into “dest”" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("15,000 items inside “big” couldn't be copied.")).toBeInTheDocument();
-    const failed = screen.getByRole("region", { name: "Couldn't copy" });
+    expect(screen.getByText("15,000 items inside “big” couldn’t be copied.")).toBeInTheDocument();
+    const failed = screen.getByRole("region", { name: "Couldn’t copy" });
     expect(within(failed).getAllByRole("listitem")).toHaveLength(201);
     expect(within(failed).getByText("and 14,801 more")).toBeInTheDocument();
     expect(within(failed).getByText("big/sub 1/file 1.txt")).toBeInTheDocument();

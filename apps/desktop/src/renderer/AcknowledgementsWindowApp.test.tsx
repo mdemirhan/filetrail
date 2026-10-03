@@ -77,6 +77,6 @@ describe("AcknowledgementsWindowApp", () => {
       throw new Error("missing");
     });
 
-    expect(await screen.findByText("Unable to load the licenses.")).toBeInTheDocument();
+    expect(await screen.findByText("Couldn’t load the licenses.")).toBeInTheDocument();
   });
 });

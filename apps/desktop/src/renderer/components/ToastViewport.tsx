@@ -13,21 +13,6 @@ function ToastIcon({ kind }: { kind: ToastKind }) {
       </svg>
     );
   }
-  if (kind === "warning") {
-    return (
-      <svg aria-hidden="true" className="toast-card-icon-svg" viewBox="0 0 16 16">
-        <path
-          d="M8 2.2 14.4 13.4H1.6Z"
-          fill="currentColor"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinejoin="round"
-        />
-        <path className="toast-card-icon-sign" d="M8 6v3.4" />
-        <path className="toast-card-icon-sign" d="M8 11.6h.01" />
-      </svg>
-    );
-  }
   return (
     <svg aria-hidden="true" className="toast-card-icon-svg" viewBox="0 0 16 16">
       <circle cx="8" cy="8" r="7" fill="currentColor" />
@@ -110,13 +95,12 @@ export function ToastViewport({
       style={{ bottom: `${restBottom}px` }}
     >
       {toasts.map((toast) => {
-        const isAssertive = toast.kind === "warning";
         return (
           <section
             key={toast.id}
             className={`toast-card toast-card-${toast.kind}`}
-            role={isAssertive ? "alert" : "status"}
-            aria-live={isAssertive ? "assertive" : "polite"}
+            role="status"
+            aria-live="polite"
             aria-atomic="true"
           >
             <div className="toast-card-body">

@@ -232,23 +232,23 @@ function getCopyLikeActionLabel(action: CopyLikeAction): string {
 function getCopyLikePreStartFailureTitle(action: WriteStartAction): string {
   switch (action) {
     case "move_to":
-      return "Move couldn’t start";
+      return "Couldn’t Move";
     case "copy_to":
-      return "Copy couldn’t start";
+      return "Couldn’t Copy";
     case "duplicate":
-      return "Duplicate couldn’t start";
+      return "Couldn’t Duplicate";
     case "trash":
-      return "Move to Trash couldn’t start";
+      return "Couldn’t Move to Trash";
     case "delete_immediately":
-      return "Delete couldn’t start";
+      return "Couldn’t Delete";
     case "empty_trash":
-      return "Empty Trash couldn’t start";
+      return "Couldn’t Empty the Trash";
     case "rename":
-      return "Rename couldn’t start";
+      return "Couldn’t Rename";
     case "new_folder":
-      return "New Folder couldn’t start";
+      return "Couldn’t Make a New Folder";
     default:
-      return "Paste couldn’t start";
+      return "Couldn’t Paste";
   }
 }
 
@@ -256,11 +256,11 @@ const WRITE_OPERATION_BUSY_MESSAGE =
   "Another file operation is running. Wait for it to finish, or stop it.";
 
 function getCopyLikePreparationFailureMessage(action: CopyLikeAction): string {
-  return `File Trail couldn't prepare the ${getCopyLikeActionLabel(action)} operation. No files were written.`;
+  return `File Trail couldn’t check the items to ${getCopyLikeActionLabel(action)}. Nothing was changed.`;
 }
 
 function getCopyLikeStartFailureMessage(action: CopyLikeAction): string {
-  return `File Trail couldn't start the ${getCopyLikeActionLabel(action)} operation. No files were written.`;
+  return `File Trail couldn’t begin to ${getCopyLikeActionLabel(action)} the items. Nothing was changed.`;
 }
 
 function getCopyLikeBusyOutcome(): Extract<CopyLikePreStartOutcome, { status: "blocked" }> {
@@ -275,7 +275,7 @@ function getCopyLikeBusyOutcome(): Extract<CopyLikePreStartOutcome, { status: "b
 function getCopyLikeIssueMessage(report: CopyPasteAnalysisReport): string {
   const issue = report.issues[0];
   if (!issue) {
-    return "The operation couldn't continue.";
+    return "File Trail couldn’t finish checking the items. Nothing was changed.";
   }
   const sourcePaths = report.issues
     .filter((candidate) => candidate.code === issue.code)
@@ -1187,12 +1187,11 @@ export function useExplorerActions(args: {
     });
   }
 
-  function showNotImplementedNotice(title: string) {
-    showModalNotice(title, `${title} is not implemented yet.`);
-  }
-
   function showOpenItemLimitNotice(action: "Open" | "Edit", selectedCount: number) {
-    showModalNotice(action, createOpenItemLimitMessage(action, selectedCount, openItemLimit));
+    showModalNotice(
+      `Too Many Items to ${action}`,
+      createOpenItemLimitMessage(action, selectedCount, openItemLimit),
+    );
   }
 
   function dismissActionNotice() {
@@ -1521,8 +1520,8 @@ export function useExplorerActions(args: {
     } catch (error) {
       logger.error("copy path failed", error);
       showModalNotice(
-        "Unable to copy the selected path(s)",
-        "File Trail could not copy the selected path text to the clipboard.",
+        paths.length === 1 ? "Couldn’t Copy the Path" : "Couldn’t Copy the Paths",
+        "File Trail couldn’t put them on the clipboard.",
       );
     }
   }
@@ -1577,11 +1576,8 @@ export function useExplorerActions(args: {
 
   async function runCopyClipboardAction(mode: "copy" | "cut", explicitPaths?: string[]) {
     const { paths, fromTree } = resolveClipboardSource(explicitPaths);
+    // Nothing selected: the command is greyed out, and its keys do nothing, as in Finder.
     if (paths.length === 0) {
-      pushToast({
-        kind: "warning",
-        title: `Select at least one item to ${mode}.`,
-      });
       return;
     }
     const clipboard = setCopyPasteClipboard(
@@ -1985,23 +1981,13 @@ export function useExplorerActions(args: {
   }
 
   async function startPasteFromClipboard() {
+    // No folder to paste into, or nothing to paste: Paste is greyed out, and its keys do
+    // nothing, as in Finder.
     if (pasteDestinationPath === null) {
-      pushToast({
-        kind: "warning",
-        title: isSearchMode
-          ? "Open a folder to paste into"
-          : isPathInsideTrash(currentPathRef.current, homePath)
-            ? "Nothing can be pasted into the Trash"
-            : "Select a destination folder to paste into",
-      });
       return;
     }
     const request = buildPasteRequest(copyPasteClipboardRef.current, pasteDestinationPath, "error");
     if (!request) {
-      pushToast({
-        kind: "warning",
-        title: "Clipboard is empty",
-      });
       return;
     }
     const action = request.mode === "cut" ? "move_to" : "paste";
@@ -2115,8 +2101,8 @@ export function useExplorerActions(args: {
     } catch (error) {
       logger.error("copy paste cancel failed", error);
       showModalNotice(
-        "Unable to cancel write operation",
-        "File Trail could not stop the active write operation. Wait for it to finish, then verify the results.",
+        "Couldn’t Stop",
+        "File Trail couldn’t stop what’s running. Wait for it to finish, then check the result.",
       );
     }
   }
@@ -2312,8 +2298,8 @@ export function useExplorerActions(args: {
     } catch (error) {
       logger.error("Info Panel copy path failed", error);
       setActionNotice({
-        title: "Copy Path",
-        message: "Unable to copy this path to the clipboard.",
+        title: "Couldn’t Copy the Path",
+        message: "File Trail couldn’t put it on the clipboard.",
       });
       return false;
     }
@@ -2326,8 +2312,8 @@ export function useExplorerActions(args: {
     } catch (error) {
       logger.error("Info Panel copy name failed", error);
       setActionNotice({
-        title: "Copy Name",
-        message: "Unable to copy this name to the clipboard.",
+        title: "Couldn’t Copy the Name",
+        message: "File Trail couldn’t put it on the clipboard.",
       });
       return false;
     }
@@ -2345,20 +2331,20 @@ export function useExplorerActions(args: {
         path,
       });
       if (!response.ok) {
-        throw new Error(response.error ?? "Unable to open Terminal for the selected path.");
+        throw new Error(response.error ?? "The terminal app didn’t open.");
       }
     } catch (error) {
       logger.error("open in Terminal failed", error);
       setActionNotice({
-        title: "Terminal",
-        message: "Unable to open Terminal for this location.",
+        title: "Couldn’t Open Terminal",
+        message: "File Trail couldn’t open the terminal app in this folder.",
       });
     }
   }
 
+  // `title` says what couldn't be done if the window for choosing an app doesn't open.
   async function pickApplicationForOpenWith(
     title: string,
-    failureMessage: string,
   ): Promise<{ appPath: string; appName: string } | null> {
     try {
       const response = await client.invoke("system:pickApplication", {});
@@ -2373,7 +2359,7 @@ export function useExplorerActions(args: {
       logger.error("open with application picker failed", error);
       setActionNotice({
         title,
-        message: failureMessage,
+        message: "The window for choosing an app didn’t open.",
       });
       return null;
     }
@@ -2390,14 +2376,14 @@ export function useExplorerActions(args: {
         paths,
       });
       if (!response.ok) {
-        throw new Error(response.error ?? `Unable to open with ${applicationName}.`);
+        throw new Error(response.error ?? `${applicationName} didn’t answer.`);
       }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       logger.error("open with application failed", error);
       setActionNotice({
-        title: `Open With ${applicationName}`,
-        message: `Unable to open the selected ${paths.length === 1 ? "item" : "items"} with ${applicationName}. ${detail}`,
+        title: `Couldn’t Open in ${applicationName}`,
+        message: `File Trail couldn’t open ${paths.length === 1 ? "it" : "them"} in ${applicationName}. ${detail}`,
       });
     }
   }
@@ -2410,23 +2396,20 @@ export function useExplorerActions(args: {
         paths,
       });
       if (!response.ok) {
-        throw new Error(response.error ?? "Finder did not respond.");
+        throw new Error(response.error ?? "Finder didn’t answer.");
       }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       logger.error("show in finder failed", error);
       setActionNotice({
-        title: "Show in Finder",
-        message: `Unable to show the selected ${paths.length === 1 ? "item" : "items"} in Finder. ${detail}`,
+        title: "Couldn’t Show in Finder",
+        message: `Finder couldn’t show ${paths.length === 1 ? "it" : "them"}. ${detail}`,
       });
     }
   }
 
   async function addOpenWithApplication() {
-    const selection = await pickApplicationForOpenWith(
-      "Open With Applications",
-      "Unable to choose an application.",
-    );
+    const selection = await pickApplicationForOpenWith("Couldn’t Add an App");
     if (!selection) {
       return;
     }
@@ -2441,10 +2424,7 @@ export function useExplorerActions(args: {
   }
 
   async function browseDefaultTextEditor() {
-    const selection = await pickApplicationForOpenWith(
-      "Default Text Editor",
-      "Unable to choose a default text editor.",
-    );
+    const selection = await pickApplicationForOpenWith("Couldn’t Choose the Text Editor");
     if (!selection) {
       return;
     }
@@ -2452,10 +2432,7 @@ export function useExplorerActions(args: {
   }
 
   async function browseTerminalApplication() {
-    const selection = await pickApplicationForOpenWith(
-      "Terminal App",
-      "Unable to choose a terminal application.",
-    );
+    const selection = await pickApplicationForOpenWith("Couldn’t Choose the Terminal App");
     if (!selection) {
       return;
     }
@@ -2463,10 +2440,7 @@ export function useExplorerActions(args: {
   }
 
   async function browseOpenWithApplication(entryId: string) {
-    const selection = await pickApplicationForOpenWith(
-      "Open With Applications",
-      "Unable to choose an application.",
-    );
+    const selection = await pickApplicationForOpenWith("Couldn’t Change the App");
     if (!selection) {
       return;
     }
@@ -2783,7 +2757,7 @@ export function useExplorerActions(args: {
       return;
     }
     logger.error("unhandled context menu action", { actionId, paths, surface: contextMenuSurface });
-    showModalNotice("Unsupported action", `File Trail could not run the "${actionId}" action.`);
+    showModalNotice("Couldn’t Do That", "This command isn’t available here.");
   }
 
   // Delete Immediately is asked about first: it can't be undone. While another operation
@@ -2856,10 +2830,7 @@ export function useExplorerActions(args: {
       return;
     }
     if (action.kind === "other") {
-      const selection = await pickApplicationForOpenWith(
-        "Open With Other…",
-        "Unable to choose an application.",
-      );
+      const selection = await pickApplicationForOpenWith("Couldn’t Choose an App");
       if (!selection) {
         return;
       }
@@ -2925,7 +2896,7 @@ export function useExplorerActions(args: {
     try {
       const response = await client.invoke("system:openPath", { path });
       if (!response.ok) {
-        throw new Error(response.error ?? "Unable to open the selected item.");
+        throw new Error(response.error ?? "The item didn’t open.");
       }
     } catch (error) {
       logger.error("open in macOS failed", error);
@@ -3063,7 +3034,7 @@ export function useExplorerActions(args: {
       return null;
     } catch (error) {
       logger.error("move destination validation failed", error);
-      return "Unable to verify the destination folder.";
+      return "File Trail couldn’t check the folder.";
     }
   }
 
@@ -3724,12 +3695,12 @@ export function useExplorerActions(args: {
         return;
       }
       showModalNotice(
-        action === "trash" ? "Move to Trash" : "Delete Immediately",
+        action === "trash" ? "Couldn’t Move to Trash" : "Couldn’t Delete",
         error instanceof Error
           ? error.message
           : action === "trash"
-            ? "File Trail could not move the selected items to Trash."
-            : "File Trail could not permanently delete the selected items.",
+            ? "File Trail couldn’t move the items to the Trash."
+            : "File Trail couldn’t delete the items.",
       );
     }
   }

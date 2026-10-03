@@ -69,7 +69,7 @@ describe("ToastViewport", () => {
 
     render(
       <ToastViewport
-        toasts={[createToastEntry("toast-1", { kind: "warning", title: "Clipboard is empty" })]}
+        toasts={[createToastEntry("toast-1", { kind: "info", title: "Pasted 1 item" })]}
         onDismiss={onDismiss}
       />,
     );
@@ -91,7 +91,7 @@ describe("ToastViewport", () => {
         toasts={[
           createToastEntry("toast-2", { kind: "info", title: "Ready to move 1 item" }),
           createToastEntry("toast-3", { kind: "success", title: "Copied path" }),
-          createToastEntry("toast-4", { kind: "warning", title: "Clipboard is empty" }),
+          createToastEntry("toast-4", { kind: "info", title: "Pasted 1 item" }),
         ]}
         onDismiss={() => undefined}
       />,
@@ -100,7 +100,7 @@ describe("ToastViewport", () => {
     const toasts = Array.from(container.querySelectorAll(".toast-card"));
     expect(toasts).toHaveLength(3);
     expect(toasts[0]).toHaveTextContent("Ready to move 1 item");
-    expect(toasts[2]).toHaveTextContent("Clipboard is empty");
+    expect(toasts[2]).toHaveTextContent("Pasted 1 item");
   });
 
   it("keeps the viewport non-interactive for pointer events", () => {
@@ -123,7 +123,6 @@ describe("ToastViewport", () => {
         toasts={[
           createToastEntry("toast-1", { kind: "success", title: "Success" }),
           createToastEntry("toast-2", { kind: "info", title: "Info" }),
-          createToastEntry("toast-3", { kind: "warning", title: "Warning" }),
         ]}
         onDismiss={() => undefined}
       />,
@@ -132,7 +131,6 @@ describe("ToastViewport", () => {
     const toasts = Array.from(container.querySelectorAll(".toast-card"));
     expect(toasts[0]).toHaveClass("toast-card-success");
     expect(toasts[1]).toHaveClass("toast-card-info");
-    expect(toasts[2]).toHaveClass("toast-card-warning");
-    expect(toasts[2]?.querySelector(".toast-card-icon-svg")).not.toBeNull();
+    expect(toasts[1]?.querySelector(".toast-card-icon-svg")).not.toBeNull();
   });
 });

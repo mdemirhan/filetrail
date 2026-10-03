@@ -129,7 +129,7 @@ export function SettingsWindowApp() {
         setPreferencesReady(true);
       })
       .catch(() => {
-        setNotice("Unable to load settings.");
+        setNotice("Couldn’t load the settings.");
       });
     return () => {
       cancelled = true;
@@ -194,7 +194,7 @@ export function SettingsWindowApp() {
       const response = await client.invoke("system:pickDirectory", { defaultPath });
       return response.canceled ? null : response.path;
     } catch {
-      setNotice("Unable to choose a folder.");
+      setNotice("Couldn’t choose a folder.");
       return null;
     }
   }
@@ -243,7 +243,7 @@ export function SettingsWindowApp() {
   }
 
   async function addOpenWithApplication() {
-    const selection = await pickApplication("Unable to choose an application.");
+    const selection = await pickApplication("Couldn’t choose an app.");
     if (!selection) {
       return;
     }
@@ -254,7 +254,7 @@ export function SettingsWindowApp() {
   }
 
   async function browseOpenWithApplication(entryId: string) {
-    const selection = await pickApplication("Unable to choose an application.");
+    const selection = await pickApplication("Couldn’t choose an app.");
     if (!selection) {
       return;
     }
@@ -339,13 +339,13 @@ export function SettingsWindowApp() {
             onMarkClipboardItemsChange={preferences.setMarkClipboardItems}
             onRestoreSessionOnStartupChange={preferences.setRestoreSessionOnStartup}
             onBrowseTerminalApp={() => {
-              void pickApplication("Unable to choose a terminal application.").then(
+              void pickApplication("Couldn’t choose the terminal app.").then(
                 (selection) => selection && preferences.setTerminalApp(selection),
               );
             }}
             onClearTerminalApp={() => preferences.setTerminalApp(null)}
             onBrowseDefaultTextEditor={() => {
-              void pickApplication("Unable to choose a default text editor.").then(
+              void pickApplication("Couldn’t choose the text editor.").then(
                 (selection) => selection && preferences.setDefaultTextEditor(selection),
               );
             }}

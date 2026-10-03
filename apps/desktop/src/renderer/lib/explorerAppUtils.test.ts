@@ -603,14 +603,14 @@ describe("sortEntriesBySize", () => {
         "execution error: Not authorized to send Apple events to Finder. (-1743)",
       ),
     ).toEqual({
-      title: "The Trash couldn't be emptied.",
+      title: "Couldn’t Empty the Trash",
       message:
         "File Trail needs permission to control Finder. Turn it on in System Settings > Privacy & Security > Automation, then try again.",
     });
     expect(
       describeEmptyTrashFailure("Finder got an error: The operation can't be completed."),
     ).toEqual({
-      title: "The Trash couldn't be emptied.",
+      title: "Couldn’t Empty the Trash",
       message: "Finder got an error: The operation can't be completed.",
     });
     // A large Trash takes Finder longer than AppleScript waited before (two minutes).

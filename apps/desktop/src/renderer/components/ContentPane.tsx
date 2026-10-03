@@ -2083,7 +2083,7 @@ function ContentState({
   if (error) {
     return (
       <div className="content-state content-error">
-        <strong>Unable to open this folder</strong>
+        <strong>Couldn’t open this folder</strong>
         <span>{error}</span>
       </div>
     );

@@ -215,7 +215,7 @@ describe("ContentPane", () => {
       />,
     );
 
-    expect(screen.getByText("Unable to open this folder")).toBeInTheDocument();
+    expect(screen.getByText("Couldn’t open this folder")).toBeInTheDocument();
     expect(screen.getByText("Permission denied")).toBeInTheDocument();
   });
 
@@ -252,7 +252,7 @@ describe("ContentPane", () => {
     expect(
       screen.getByText("File Trail needs Full Disk Access to show the Trash"),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Unable to open this folder")).not.toBeInTheDocument();
+    expect(screen.queryByText("Couldn’t open this folder")).not.toBeInTheDocument();
     expect(screen.queryByText(/EPERM/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open Privacy Settings" }));
     expect(handleOpenFullDiskAccess).toHaveBeenCalledTimes(1);

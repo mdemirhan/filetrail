@@ -50,7 +50,7 @@ export function AcknowledgementsWindowApp() {
           {APP_NAME} is built with the open-source software below. Each one is used under its own
           license.
         </p>
-        {failed ? <p className="acknowledgements-intro">Unable to load the licenses.</p> : null}
+        {failed ? <p className="acknowledgements-intro">Couldn’t load the licenses.</p> : null}
         {components?.map((component) => (
           <details key={component.id} className="acknowledgement">
             <summary>

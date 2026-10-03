@@ -78,12 +78,12 @@ export function CopyPasteResultDialog({
   const skippedCount = outcome.skipped.length;
   const sentences = [
     outcome.failedOutside > 0
-      ? `${pluralize(outcome.failedOutside, "item")} couldn't be ${presentVerb}.`
+      ? `${pluralize(outcome.failedOutside, "item")} couldn’t be ${presentVerb}.`
       : null,
     outcome.failedInside > 0
       ? `${pluralize(outcome.failedInside, "item")} inside ${
           onlyPartial?.sourcePath ? `“${leafName(onlyPartial.sourcePath)}”` : "folders"
-        } couldn't be ${presentVerb}.`
+        } couldn’t be ${presentVerb}.`
       : null,
     // A folder stopped part way isn't "not started": some of it is at the destination.
     stoppedCount > 0
@@ -132,12 +132,12 @@ export function CopyPasteResultDialog({
         </header>
         <div className="copy-paste-sheet-list copy-paste-result-list">
           <ResultSection
-            label={`Couldn't ${event.action === "move_to" ? "move" : "copy"}`}
+            label={`Couldn’t ${event.action === "move_to" ? "move" : "copy"}`}
             items={outcome.failed}
             displayPaths={outcome.displayPaths}
             describe={(item) =>
               isFolderWithFailuresInside(item)
-                ? `${pluralize(item.childFailureCount ?? 0, "item")} inside couldn't be ${presentVerb}`
+                ? `${pluralize(item.childFailureCount ?? 0, "item")} inside couldn’t be ${presentVerb}`
                 : (item.error ?? "Unknown error.")
             }
             tone="danger"

@@ -13,7 +13,7 @@ describe("toasts", () => {
   });
 
   it("keeps every notification on screen for four seconds", () => {
-    for (const kind of ["info", "success", "warning"] as const) {
+    for (const kind of ["info", "success"] as const) {
       const toast = createToastEntry("toast-1", { kind, title: "Moved 1 item" }, 1_000);
       expect(toast.durationMs).toBe(4_000);
       expect(toast.expiresAt).toBe(5_000);

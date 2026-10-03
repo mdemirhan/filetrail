@@ -1,9 +1,9 @@
-// Notifications carry information only: something finished ("success"), something worth
-// knowing happened ("info"), or a command did nothing and why ("warning"). They go away by
-// themselves and can be turned off, so nothing the user must see may depend on them. An
-// action that failed, or only partly worked, is reported in a modal dialog instead, which
-// is why there is no "error" kind.
-export type ToastKind = "success" | "info" | "warning";
+// Notifications carry information only: something finished ("success") or something worth
+// knowing happened ("info"). They go away by themselves and can be turned off, so nothing
+// the user must see may depend on them. An action that failed, or only partly worked, is
+// reported in a modal dialog instead, which is why there is no "error" kind; a command
+// with nothing to act on is greyed out, so there is no "warning" kind either.
+export type ToastKind = "success" | "info";
 
 export type ToastEntry = {
   id: string;
