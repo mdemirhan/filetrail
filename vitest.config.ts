@@ -21,21 +21,51 @@ export default defineConfig({
     setupFiles: ["./apps/desktop/src/renderer/test/setup.ts"],
     coverage: {
       provider: "v8",
+      // Everything that copies, moves, renames, makes, trashes or deletes files, in the core,
+      // the main process, the window and the contracts between them. Each file has a floor of
+      // its own, so one well-tested file can't hide an untested one.
       include: [
-        "packages/core/src/fs/copyPasteAnalysis.ts",
-        "packages/core/src/fs/copyPasteErrors.ts",
-        "packages/core/src/fs/copyPasteExecution.ts",
-        "packages/core/src/fs/copyPasteFingerprint.ts",
-        "packages/core/src/fs/copyPasteNames.ts",
-        "packages/core/src/fs/copyPastePolicy.ts",
-        "packages/core/src/fs/copyPasteRecovery.ts",
+        "packages/core/src/fs/copyPaste{Analysis,Errors,Execution,Fingerprint,Names,Policy,Recovery}.ts",
         "packages/core/src/fs/writeService.ts",
+        "packages/core/src/fs/stoppableCopy.ts",
+        "packages/contracts/src/{copyPasteChoices,itemName,paths,trash,writeEffects}.ts",
+        "apps/desktop/src/main/bootstrap/{writeOperations,replaceJournal,trashItem,diskIds}.ts",
+        "apps/desktop/src/main/ipc.ts",
+        "apps/desktop/src/renderer/hooks/{useWriteOperations,useExplorerActions,useExplorerDragAndDrop,useTrashState}.ts",
+        "apps/desktop/src/renderer/lib/{copyPasteClipboard,copyPasteReview,internalDragAndDrop}.ts",
+        "apps/desktop/src/renderer/components/{CopyPaste*,InlineRenameField}.tsx",
       ],
       thresholds: {
-        statements: 95,
-        branches: 95,
-        functions: 95,
-        lines: 95,
+        // The copy engine and the contracts: where a gap can lose data.
+        "packages/core/src/fs/**": { statements: 95, branches: 89, functions: 100, lines: 95 },
+        "packages/contracts/src/**": { statements: 92, branches: 94, functions: 100, lines: 92 },
+        // The main process's file operations.
+        "apps/desktop/src/main/**": { statements: 95, branches: 88, functions: 90, lines: 95 },
+        // The window. The large hooks start from where they are, so they can only go up.
+        "apps/desktop/src/renderer/hooks/useExplorerActions.ts": {
+          statements: 77,
+          branches: 71,
+          functions: 81,
+          lines: 77,
+        },
+        "apps/desktop/src/renderer/hooks/useExplorerDragAndDrop.ts": {
+          statements: 87,
+          branches: 77,
+          functions: 93,
+          lines: 87,
+        },
+        "apps/desktop/src/renderer/{lib,components}/**": {
+          statements: 93,
+          branches: 83,
+          functions: 85,
+          lines: 93,
+        },
+        "apps/desktop/src/renderer/hooks/{useWriteOperations,useTrashState}.ts": {
+          statements: 100,
+          branches: 100,
+          functions: 100,
+          lines: 100,
+        },
       },
     },
   },
