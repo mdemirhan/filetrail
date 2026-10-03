@@ -10,12 +10,6 @@ export function toPreferencePatch(
   if (value.theme !== undefined) {
     patch.theme = value.theme;
   }
-  if (value.autoLightTheme !== undefined) {
-    patch.autoLightTheme = value.autoLightTheme;
-  }
-  if (value.autoDarkTheme !== undefined) {
-    patch.autoDarkTheme = value.autoDarkTheme;
-  }
   if (value.returnKeyAction !== undefined) {
     patch.returnKeyAction = value.returnKeyAction;
   }
@@ -27,12 +21,6 @@ export function toPreferencePatch(
   }
   if (value.zoomPercent !== undefined) {
     patch.zoomPercent = value.zoomPercent;
-  }
-  if (value.uiFontFamily !== undefined) {
-    patch.uiFontFamily = value.uiFontFamily;
-  }
-  if (value.tabStyle !== undefined) {
-    patch.tabStyle = value.tabStyle;
   }
   if (value.viewMode !== undefined) {
     patch.viewMode = value.viewMode;
@@ -58,9 +46,6 @@ export function toPreferencePatch(
   if (value.compactTreeView !== undefined) {
     patch.compactTreeView = value.compactTreeView;
   }
-  if (value.highlightHoveredItems !== undefined) {
-    patch.highlightHoveredItems = value.highlightHoveredItems;
-  }
   if (value.detailColumns !== undefined) {
     patch.detailColumns = value.detailColumns;
   }
@@ -70,17 +55,8 @@ export function toPreferencePatch(
   if (value.notificationsEnabled !== undefined) {
     patch.notificationsEnabled = value.notificationsEnabled;
   }
-  if (value.notificationDurationSeconds !== undefined) {
-    patch.notificationDurationSeconds = value.notificationDurationSeconds;
-  }
-  if (value.highlightClipboardItemsInTree !== undefined) {
-    patch.highlightClipboardItemsInTree = value.highlightClipboardItemsInTree;
-  }
-  if (value.highlightClipboardItemsInContent !== undefined) {
-    patch.highlightClipboardItemsInContent = value.highlightClipboardItemsInContent;
-  }
-  if (value.notifyClipboardItems !== undefined) {
-    patch.notifyClipboardItems = value.notifyClipboardItems;
+  if (value.markClipboardItems !== undefined) {
+    patch.markClipboardItems = value.markClipboardItems;
   }
   if (value.propertiesOpen !== undefined) {
     patch.propertiesOpen = value.propertiesOpen;
@@ -136,11 +112,8 @@ export function toPreferencePatch(
   if (value.inspectorWidth !== undefined) {
     patch.inspectorWidth = value.inspectorWidth;
   }
-  if (value.restoreLastVisitedFolderOnStartup !== undefined) {
-    patch.restoreLastVisitedFolderOnStartup = value.restoreLastVisitedFolderOnStartup;
-  }
-  if (value.restoreOpenTabsOnStartup !== undefined) {
-    patch.restoreOpenTabsOnStartup = value.restoreOpenTabsOnStartup;
+  if (value.restoreSessionOnStartup !== undefined) {
+    patch.restoreSessionOnStartup = value.restoreSessionOnStartup;
   }
   if (value.openTabs !== undefined) {
     patch.openTabs = value.openTabs;

@@ -387,8 +387,6 @@ export function useExplorerActions(args: {
     setFavorites,
     openItemLimit,
     notificationsEnabled,
-    notificationDurationSeconds,
-    notifyClipboardItems,
     fileActivationAction,
     defaultTextEditor,
     setDefaultTextEditor,
@@ -1233,22 +1231,13 @@ export function useExplorerActions(args: {
     kind: ToastKind;
     title: string;
     message?: string;
-    icon?: ClipboardIcon;
   }) {
     if (!notificationsEnabled) {
       return;
     }
     const id = `toast-${nextToastIdRef.current}`;
     nextToastIdRef.current += 1;
-    setToasts((current) =>
-      enqueueToast(
-        current,
-        createToastEntry(id, {
-          ...input,
-          durationMs: notificationDurationSeconds * 1000,
-        }),
-      ),
-    );
+    setToasts((current) => enqueueToast(current, createToastEntry(id, input)));
   }
 
   function surfaceCopyLikePreStartFailureNotice(
@@ -1601,18 +1590,8 @@ export function useExplorerActions(args: {
       new Date().toISOString(),
       resolveClipboardSourceEntries(paths, fromTree),
     );
+    // No notification: the toolbar's clipboard button and the marks on the items show it.
     applyCopyPasteClipboardState(clipboard);
-    const summary = describeClipboard(clipboard);
-    if (notifyClipboardItems && summary) {
-      // Worded like the other notifications: what happened, then what it happened to.
-      pushToast({
-        kind: "info",
-        title: summary.mode === "cut" ? "Cut" : "Copied",
-        message:
-          summary.count === 1 ? (summary.items[0]?.name ?? "") : pluralize(summary.count, "item"),
-        icon: summary.icon,
-      });
-    }
     closeContextMenu();
   }
 

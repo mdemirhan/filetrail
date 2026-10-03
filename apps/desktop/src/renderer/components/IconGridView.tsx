@@ -56,7 +56,6 @@ export function IconGridView({
   onItemDrop,
   getItemDropIndicator,
   compactIconView = false,
-  highlightHoveredItems = true,
   inlineRename,
   onInlineRenameSubmit,
   onInlineRenameCancel,
@@ -90,7 +89,6 @@ export function IconGridView({
   onItemDrop?: ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void) | undefined;
   getItemDropIndicator?: ((path: string) => "valid" | "invalid" | null) | undefined;
   compactIconView?: boolean;
-  highlightHoveredItems?: boolean;
   inlineRename: InlineRenameState | null;
   onInlineRenameSubmit: (nextName: string) => void;
   onInlineRenameCancel: () => void;
@@ -261,7 +259,6 @@ export function IconGridView({
     <div
       ref={containerRef}
       className={`content-scroll icon-grid${compactIconView ? " compact" : ""}`}
-      data-hover-highlight-enabled={highlightHoveredItems ? "true" : "false"}
       tabIndex={-1}
       onMouseDown={(event) => {
         const target = event.target;

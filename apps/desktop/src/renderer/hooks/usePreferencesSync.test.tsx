@@ -23,9 +23,9 @@ describe("usePreferencesSync", () => {
     expect(
       diffPreferencesPatch(
         { theme: "auto", accent: "#d4845a", favorites },
-        { theme: "macos-dark", accent: "#d4845a", favorites },
+        { theme: "dark", accent: "#d4845a", favorites },
       ),
-    ).toEqual({ theme: "macos-dark" });
+    ).toEqual({ theme: "dark" });
   });
 
   it("writes only changed keys after the debounce and does not echo remote changes", async () => {
@@ -51,19 +51,19 @@ describe("usePreferencesSync", () => {
       result.current.markSynced({ theme: "auto", accent: "#d4845a" });
     });
 
-    rerender({ payload: { theme: "macos-dark", accent: "#d4845a" } });
+    rerender({ payload: { theme: "dark", accent: "#d4845a" } });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(300);
     });
     expect(updateHandler).toHaveBeenCalledTimes(1);
-    expect(updateHandler).toHaveBeenLastCalledWith({ preferences: { theme: "macos-dark" } });
+    expect(updateHandler).toHaveBeenLastCalledWith({ preferences: { theme: "dark" } });
 
     // A change made in the Settings window is applied here and not written back.
     act(() => {
       remoteListener?.({ accent: "#4a9eff" });
     });
     expect(onRemotePatch).toHaveBeenCalledWith({ accent: "#4a9eff" });
-    rerender({ payload: { theme: "macos-dark", accent: "#4a9eff" } });
+    rerender({ payload: { theme: "dark", accent: "#4a9eff" } });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(300);
     });
@@ -86,20 +86,20 @@ describe("usePreferencesSync", () => {
       result.current.markSynced({ theme: "auto", accent: "#d4845a" });
     });
 
-    rerender({ payload: { theme: "macos-dark", accent: "#d4845a" } });
+    rerender({ payload: { theme: "dark", accent: "#d4845a" } });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(300);
     });
     expect(updateHandler).toHaveBeenCalledTimes(1);
 
     // The theme was not saved, so it goes out again with the accent that changes next.
-    rerender({ payload: { theme: "macos-dark", accent: "#007aff" } });
+    rerender({ payload: { theme: "dark", accent: "#007aff" } });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(300);
     });
     expect(updateHandler).toHaveBeenCalledTimes(2);
     expect(updateHandler).toHaveBeenLastCalledWith({
-      preferences: { theme: "macos-dark", accent: "#007aff" },
+      preferences: { theme: "dark", accent: "#007aff" },
     });
   });
 });

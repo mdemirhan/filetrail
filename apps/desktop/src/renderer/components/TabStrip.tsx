@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { DEFAULT_APP_PREFERENCES, type TabStyle } from "../../shared/appPreferences";
 import type { ExplorerTabItem } from "../hooks/useExplorerTabs";
 import { useKeepInViewport } from "../hooks/useKeepInViewport";
 import { formatTooltip } from "../lib/tooltips";
@@ -16,7 +15,6 @@ type TabMenuAction = "close" | "closeOthers" | "duplicate";
 // The row of tabs under the toolbar. It is only shown while there is more than one tab.
 export function TabStrip({
   tabs,
-  tabStyle = DEFAULT_APP_PREFERENCES.tabStyle,
   onSelectTab,
   onCloseTab,
   onCloseOtherTabs,
@@ -29,8 +27,6 @@ export function TabStrip({
   getDropIndicator,
 }: {
   tabs: readonly ExplorerTabItem[];
-  /** How the tabs are drawn (Settings → Appearance). */
-  tabStyle?: TabStyle;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
   onCloseOtherTabs: (tabId: string) => void;
@@ -121,11 +117,7 @@ export function TabStrip({
   }
 
   return (
-    <div
-      className="tab-strip"
-      data-tab-style={tabStyle}
-      style={{ gridColumn: "3 / -1", gridRow: "2" }}
-    >
+    <div className="tab-strip" style={{ gridColumn: "3 / -1", gridRow: "2" }}>
       <div ref={tabsRef} className="tab-strip-tabs" role="tablist" aria-label="Tabs">
         {tabs.map((tab) => (
           <div

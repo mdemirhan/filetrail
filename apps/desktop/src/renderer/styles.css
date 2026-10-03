@@ -4,23 +4,20 @@
   /* Sticky column headers sit on the window background in every theme. */
   --bg-panel: var(--bg-base);
   color-scheme: light;
-  --bg-base: #f2f3f8;
-  --bg-surface: rgba(0, 0, 0, 0.012);
-  --bg-elevated: #eff0f5;
+  --bg-base: #ffffff;
+  --bg-surface: #ececf0;
+  --bg-elevated: #ffffff;
   --bg-hover: rgba(0, 0, 0, 0.035);
   --bg-input: rgba(0, 0, 0, 0.03);
   --bg-active: rgba(124, 58, 237, 0.08);
   --bg-active-inactive: rgba(60, 63, 86, 0.08);
-  --border: rgba(0, 0, 0, 0.08);
+  --border: #dcdce1;
   --border-active: rgba(0, 0, 0, 0.12);
-  --border-light: rgba(0, 0, 0, 0.04);
-  --text-primary: #1a1c2e;
-  --text-secondary: #3c3f56;
-  --text-tertiary: #8b8da3;
-  --text-dim: #b5b7c8;
-  --accent-blue: #7c3aed;
-  --accent-blue-dim: rgba(124, 58, 237, 0.08);
-  --accent-blue-border: rgba(124, 58, 237, 0.18);
+  --border-light: rgba(0, 0, 0, 0.07);
+  --text-primary: #1d1d1f;
+  --text-secondary: #4a4a50;
+  --text-tertiary: #86868b;
+  --text-dim: #a1a1a6;
   --ft-accent-solid: #007aff;
   --ft-accent-solid-dark: #0064d1;
   /* Solid (default) buttons: set with the accent so the text is always readable. */
@@ -34,64 +31,47 @@
   --ft-accent-search-pill-border: rgba(0, 122, 255, 0.55);
   --ft-accent-location-ring: rgba(0, 122, 255, 0.16);
   --ft-accent-ring-soft: rgba(0, 122, 255, 0.15);
-  --accent-gold: var(--ft-accent-solid);
-  --accent-gold-dim: var(--ft-accent-location-ring);
-  --icon-neutral: #8b8da3;
-  --icon-blue: #2563eb;
-  --icon-green: #0d9488;
-  --icon-peach: #d97706;
+  --icon-neutral: #6e6e73;
   --danger: #b42318;
-  --sidebar-bg: #e8eaf2;
-  --toolbar-bg: #e5e8ef;
-  --toolbar-border: #d3d6dd;
-  --toolbar-nav-icon: #c2c5ce;
-  --toolbar-nav-icon-active: #8a8c98;
-  --toolbar-toggle-bg: #d5d8df;
-  --toolbar-toggle-active-bg: #c8cbd2;
-  --toolbar-toggle-icon-active: #1c1a2f;
-  --get-info-panel-bg: #edeef4;
-  --get-info-panel-border: #d8d9e0;
-  --get-info-header-text: #838592;
-  --get-info-close-icon: #b0b2be;
-  --get-info-close-icon-hover: #6e7080;
+  --sidebar-bg: #ececf0;
+  --toolbar-bg: #fbfbfd;
+  --toolbar-border: #e3e3e8;
+  --toolbar-nav-icon: #c7c7cc;
+  --toolbar-nav-icon-active: #6e6e73;
+  --toolbar-toggle-bg: #ececf0;
+  --toolbar-toggle-active-bg: #ffffff;
+  --toolbar-toggle-icon-active: #1d1d1f;
+  --get-info-panel-bg: #ffffff;
+  --get-info-panel-border: #dcdce1;
+  --get-info-header-text: #a1a1a6;
+  --get-info-close-icon: #b0b0b5;
+  --get-info-close-icon-hover: #4a4a50;
   --get-info-close-bg-hover: rgba(0, 0, 0, 0.06);
   --get-info-hero-icon-bg: var(--ft-accent-hero-icon-bg);
-  --get-info-hero-name: #2a2a34;
+  --get-info-hero-name: #1d1d1f;
   --get-info-action-bg: rgba(0, 0, 0, 0.03);
   --get-info-action-bg-hover: var(--ft-accent-action-hover-bg);
   --get-info-action-icon: #646775;
   --get-info-action-icon-hover: var(--ft-accent-path-crumb-hover);
   --get-info-action-text: #5e6170;
   --get-info-action-text-hover: var(--ft-accent-path-crumb-hover);
-  --get-info-meta-separator: rgba(0, 0, 0, 0.05);
-  --get-info-meta-label: #a0a2ae;
-  --get-info-meta-value: #4a4a5a;
-  --get-info-meta-value-muted: #a0a2ae;
-  --context-menu-bg: #f0f1f5;
-  --context-menu-border: #c8c9d0;
+  --get-info-meta-separator: rgba(0, 0, 0, 0.07);
+  --get-info-meta-label: #86868b;
+  --get-info-meta-value: #1d1d1f;
+  --get-info-meta-value-muted: #a1a1a6;
+  --context-menu-bg: #f6f6f8;
+  --context-menu-border: rgba(0, 0, 0, 0.16);
   --context-menu-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
-  --context-menu-separator: #d4d5dc;
-  --context-menu-text: #1a1a24;
-  --context-menu-shortcut: #9a9aaa;
-  --context-menu-disabled: #b0b0be;
-  --context-menu-destructive: #d44040;
-  --context-menu-icon: #5a5a6e;
-  --context-menu-submenu-arrow: #9a9aaa;
-  --dropdown-bg: #eff0f5;
-  --fg-bright: #1a1c2e;
-  --fg-muted: #8b8da3;
-  --fg-dim: #b5b7c8;
-  --accent: #7c3aed;
-  --accent-soft: rgba(124, 58, 237, 0.08);
-  --accent-text: #6d28d9;
-  --help-muted: var(--text-tertiary);
-  --help-accent: #2563eb;
-  --tb-primary-bg: rgba(124, 58, 237, 0.1);
-  --tb-primary-fg: #6d28d9;
-  --tb-primary-hover-bg: rgba(124, 58, 237, 0.16);
-  --tb-primary-shadow: none;
-  --tb-primary-hover-shadow: none;
-  /* Fallbacks until the Font preference is applied; they match its "System" default. */
+  --context-menu-separator: rgba(0, 0, 0, 0.1);
+  --context-menu-text: #1d1d1f;
+  --context-menu-shortcut: #89898d;
+  --context-menu-disabled: #a7a7ab;
+  --context-menu-destructive: #e0383e;
+  --context-menu-icon: #6e6e73;
+  --context-menu-submenu-arrow: #89898d;
+  --dropdown-bg: #f6f6f8;
+  --help-muted: #86868b;
+  /* The system font, San Francisco, everywhere; monospace for paths and codes. */
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
   --font-mono: "SF Mono", "SFMono-Regular", ui-monospace, Menlo, monospace;
   /* The design scale. Everything sized in the app takes its value from here, so the
@@ -128,342 +108,110 @@
   --shadow-lg: 0 12px 32px rgba(30, 32, 48, 0.18);
   --crumb-hover-bg: rgba(0, 0, 0, 0.035);
   --crumb-active-bg: rgba(124, 58, 237, 0.08);
-  --scroll-thumb: rgba(60, 63, 86, 0.22);
-  --scroll-thumb-hover: rgba(60, 63, 86, 0.34);
-  --search-surface: #f7f8fa;
-  --search-border: #c8c8d2;
+  --scroll-thumb: rgba(110, 110, 115, 0.22);
+  --scroll-thumb-hover: rgba(110, 110, 115, 0.34);
+  --search-surface: #ececf0;
+  --search-border: transparent;
   --search-border-active: var(--ft-accent-solid);
   --search-shadow: none;
   --search-shadow-active: 0 0 0 1px var(--ft-accent-ring-soft);
-  --search-text: #555566;
-  --search-icon: #babbbf;
+  --search-text: #4a4a50;
+  --search-icon: #86868b;
   --search-icon-active: var(--ft-accent-solid);
-  --search-placeholder: #b0b0be;
+  --search-placeholder: #a1a1a6;
   --search-caret: var(--ft-accent-solid);
   --search-pill-bg: transparent;
-  --search-pill-border: #d0d0da;
-  --search-pill-fg: #7e808f;
+  --search-pill-border: rgba(0, 0, 0, 0.12);
+  --search-pill-fg: #6e6e73;
   --search-pill-hover-bg: rgba(0, 0, 0, 0.015);
-  --search-pill-hover-border: #c1c4ce;
-  --search-pill-hover-fg: #555566;
+  --search-pill-hover-border: transparent;
+  --search-pill-hover-fg: #4a4a50;
   --search-pill-active-border: var(--ft-accent-search-pill-border);
-  --srbar-canvas: #f2f3f8;
-  --srbar-separator: rgba(0, 0, 0, 0.08);
-  --srbar-spinner: var(--ft-accent-solid);
-}
-
-:root[data-theme="tomorrow-night"] {
-  --neutral-ink: #ffffff;
-  color-scheme: dark;
-  --bg-base: #1d1f21;
-  --bg-surface: #222426;
-  --bg-elevated: #222426;
-  --bg-hover: rgba(197, 200, 198, 0.05);
-  --bg-input: rgba(197, 200, 198, 0.05);
-  --bg-active: rgba(178, 148, 187, 0.1);
-  --bg-active-inactive: #282a2e;
-  --border: rgba(197, 200, 198, 0.08);
-  --border-active: rgba(197, 200, 198, 0.12);
-  --border-light: rgba(197, 200, 198, 0.05);
-  --text-primary: #e0e0e0;
-  --text-secondary: #c5c8c6;
-  --text-tertiary: #969896;
-  --text-dim: #4b4e50;
-  --accent-blue: #b294bb;
-  --accent-blue-dim: rgba(178, 148, 187, 0.12);
-  --accent-blue-border: rgba(178, 148, 187, 0.25);
-  --accent-gold: var(--ft-accent-solid);
-  --accent-gold-dim: var(--ft-accent-location-ring);
-  --icon-neutral: #969896;
-  --icon-blue: #81a2be;
-  --icon-green: #b5bd68;
-  --icon-peach: #de935f;
-  --danger: #cc6666;
-  --sidebar-bg: #1b1d1f;
-  --toolbar-bg: #18191b;
-  --toolbar-border: #252628;
-  --toolbar-nav-icon: #38393b;
-  --toolbar-nav-icon-active: #656668;
-  --toolbar-toggle-bg: #222324;
-  --toolbar-toggle-active-bg: #2d2e30;
-  --toolbar-toggle-icon-active: #e0dfe4;
-  --get-info-panel-bg: #1c1d1f;
-  --get-info-panel-border: #252628;
-  --get-info-header-text: #505158;
-  --get-info-close-icon: #44454a;
-  --get-info-close-icon-hover: #84858a;
-  --get-info-close-bg-hover: rgba(255, 255, 255, 0.05);
-  --get-info-hero-icon-bg: var(--ft-accent-hero-icon-bg);
-  --get-info-hero-name: #c0c1c8;
-  --get-info-action-bg: rgba(255, 255, 255, 0.025);
-  --get-info-action-bg-hover: var(--ft-accent-action-hover-bg);
-  --get-info-action-icon: #8a8b90;
-  --get-info-action-icon-hover: var(--ft-accent-path-crumb-hover);
-  --get-info-action-text: #a7a8ad;
-  --get-info-action-text-hover: var(--ft-accent-path-crumb-hover);
-  --get-info-meta-separator: rgba(255, 255, 255, 0.035);
-  --get-info-meta-label: #44454a;
-  --get-info-meta-value: #9a9ba0;
-  --get-info-meta-value-muted: #44454a;
-  --context-menu-bg: #2a2c30;
-  --context-menu-border: #353638;
-  --context-menu-shadow: 0 8px 40px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
-  --context-menu-separator: #2e2f32;
-  --context-menu-text: #c0c1c8;
-  --context-menu-shortcut: #78797e;
-  --context-menu-disabled: #5f5f65;
-  --context-menu-destructive: #dc5555;
-  --context-menu-icon: #68696e;
-  --context-menu-submenu-arrow: #78797e;
-  --dropdown-bg: #2a2c2e;
-  --fg-bright: #e0e0e0;
-  --fg-muted: #969896;
-  --fg-dim: #4b4e50;
-  --accent: #b294bb;
-  --accent-soft: rgba(178, 148, 187, 0.12);
-  --accent-text: #c9b1d1;
-  --help-muted: var(--text-tertiary);
-  --help-accent: var(--accent-blue);
-  --tb-primary-bg: rgba(178, 148, 187, 0.14);
-  --tb-primary-fg: #c9b1d1;
-  --tb-primary-hover-bg: rgba(178, 148, 187, 0.22);
-  --tb-primary-shadow: none;
-  --tb-primary-hover-shadow: none;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
-  --shadow-lg: 0 18px 44px rgba(0, 0, 0, 0.34);
-  --crumb-hover-bg: rgba(197, 200, 198, 0.05);
-  --crumb-active-bg: rgba(178, 148, 187, 0.12);
-  --scroll-thumb: rgba(197, 200, 198, 0.1);
-  --scroll-thumb-hover: rgba(197, 200, 198, 0.2);
-  --search-surface: #222126;
-  --search-border: #595a5e;
-  --search-border-active: var(--ft-accent-solid);
-  --search-shadow: none;
-  --search-shadow-active: 0 0 0 1px var(--ft-accent-ring-soft);
-  --search-text: #b8b8c2;
-  --search-icon: #4d4e52;
-  --search-icon-active: var(--ft-accent-solid);
-  --search-placeholder: #505058;
-  --search-caret: var(--ft-accent-solid);
-  --search-pill-bg: transparent;
-  --search-pill-border: #444448;
-  --search-pill-fg: #808187;
-  --search-pill-hover-bg: rgba(255, 255, 255, 0.02);
-  --search-pill-hover-border: #55565a;
-  --search-pill-hover-fg: #b8b8c2;
-  --search-pill-active-border: var(--ft-accent-search-pill-border);
-  --srbar-canvas: #18191b;
-  --srbar-separator: rgba(255, 255, 255, 0.05);
+  --srbar-separator: rgba(0, 0, 0, 0.07);
   --srbar-spinner: var(--ft-accent-solid);
 }
 
 :root[data-theme="dark"] {
   --neutral-ink: #ffffff;
   color-scheme: dark;
-  --bg-base: #1e2028;
-  --bg-surface: #252830;
-  --bg-elevated: #2c2f3a;
+  --bg-base: #1e1e20;
+  --bg-surface: #29292c;
+  --bg-elevated: #2a2a2d;
   --bg-hover: #33363f;
   --bg-input: #33363f;
   --bg-active: #3a3e4a;
   --bg-active-inactive: #2a2d36;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-active: rgba(255, 255, 255, 0.14);
-  --border-light: rgba(255, 255, 255, 0.05);
-  --text-primary: #dcdee4;
-  --text-secondary: #9da1b3;
-  --text-tertiary: #6e7283;
-  --text-dim: #555b6d;
-  --accent-blue: #6da0f7;
-  --accent-blue-dim: rgba(109, 160, 247, 0.14);
-  --accent-blue-border: rgba(109, 160, 247, 0.22);
-  --accent-gold: var(--ft-accent-solid);
-  --accent-gold-dim: var(--ft-accent-location-ring);
-  --icon-neutral: #a8b0c0;
-  --icon-blue: #6da0f7;
-  --icon-green: #5dd8a8;
-  --icon-peach: #f0b050;
+  --border: #38383b;
+  --border-active: rgba(255, 255, 255, 0.1);
+  --border-light: rgba(255, 255, 255, 0.07);
+  --text-primary: #f2f2f5;
+  --text-secondary: #c7c7cc;
+  --text-tertiary: #98989d;
+  --text-dim: #6e6e73;
+  --icon-neutral: #a1a1a6;
   --danger: #f08080;
-  --sidebar-bg: #20232b;
-  --toolbar-bg: #1c1f26;
-  --toolbar-border: #2d3037;
-  --toolbar-nav-icon: #3d4047;
-  --toolbar-nav-icon-active: #6a6d74;
-  --toolbar-toggle-bg: #282b32;
-  --toolbar-toggle-active-bg: #33363f;
-  --toolbar-toggle-icon-active: #d7e0e5;
-  --get-info-panel-bg: #1f222a;
-  --get-info-panel-border: #2d3037;
-  --get-info-header-text: #555868;
-  --get-info-close-icon: #484b54;
-  --get-info-close-icon-hover: #8a8d9a;
+  --sidebar-bg: #29292c;
+  --toolbar-bg: #252528;
+  --toolbar-border: #38383b;
+  --toolbar-nav-icon: #5f5f64;
+  --toolbar-nav-icon-active: #a1a1a6;
+  --toolbar-toggle-bg: #323235;
+  --toolbar-toggle-active-bg: #5a5a5e;
+  --toolbar-toggle-icon-active: #f2f2f5;
+  --get-info-panel-bg: #1e1e20;
+  --get-info-panel-border: #38383b;
+  --get-info-header-text: #6e6e73;
+  --get-info-close-icon: #5f5f64;
+  --get-info-close-icon-hover: #c7c7cc;
   --get-info-close-bg-hover: rgba(255, 255, 255, 0.06);
   --get-info-hero-icon-bg: var(--ft-accent-hero-icon-bg);
-  --get-info-hero-name: #c8cad4;
+  --get-info-hero-name: #f2f2f5;
   --get-info-action-bg: rgba(255, 255, 255, 0.03);
   --get-info-action-bg-hover: var(--ft-accent-action-hover-bg);
   --get-info-action-icon: #8f94a3;
   --get-info-action-icon-hover: var(--ft-accent-path-crumb-hover);
   --get-info-action-text: #b4b9c7;
   --get-info-action-text-hover: var(--ft-accent-path-crumb-hover);
-  --get-info-meta-separator: rgba(255, 255, 255, 0.04);
-  --get-info-meta-label: #484b54;
-  --get-info-meta-value: #a0a4b0;
-  --get-info-meta-value-muted: #484b54;
-  --context-menu-bg: #252830;
-  --context-menu-border: #3a3d46;
+  --get-info-meta-separator: rgba(255, 255, 255, 0.07);
+  --get-info-meta-label: #98989d;
+  --get-info-meta-value: #f2f2f5;
+  --get-info-meta-value-muted: #6e6e73;
+  --context-menu-bg: #2c2c30;
+  --context-menu-border: rgba(255, 255, 255, 0.12);
   --context-menu-shadow: 0 8px 40px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.25);
-  --context-menu-separator: #33363f;
-  --context-menu-text: #c8cad4;
-  --context-menu-shortcut: #555868;
-  --context-menu-disabled: #44464e;
-  --context-menu-destructive: #e05555;
-  --context-menu-icon: #6e7080;
-  --context-menu-submenu-arrow: #555868;
-  --dropdown-bg: #2c2f3a;
-  --fg-bright: #dcdee4;
-  --fg-muted: #6e7283;
-  --fg-dim: #555b6d;
-  --accent: #6da0f7;
-  --accent-soft: rgba(109, 160, 247, 0.14);
-  --accent-text: #a9c6ff;
-  --help-muted: var(--text-tertiary);
-  --help-accent: var(--accent-blue);
-  --tb-primary-bg: var(--accent-blue-dim);
-  --tb-primary-fg: var(--accent-blue);
-  --tb-primary-hover-bg: rgba(109, 160, 247, 0.22);
-  --tb-primary-shadow: none;
-  --tb-primary-hover-shadow: none;
+  --context-menu-separator: rgba(255, 255, 255, 0.1);
+  --context-menu-text: #f2f2f5;
+  --context-menu-shortcut: #79797e;
+  --context-menu-disabled: #606062;
+  --context-menu-destructive: #ff453a;
+  --context-menu-icon: #a1a1a6;
+  --context-menu-submenu-arrow: #79797e;
+  --dropdown-bg: #2c2c30;
+  --help-muted: #98989d;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
   --shadow-lg: 0 18px 44px rgba(0, 0, 0, 0.34);
   --crumb-hover-bg: var(--bg-hover);
   --crumb-active-bg: rgba(109, 160, 247, 0.14);
-  --scroll-thumb: rgba(255, 255, 255, 0.1);
-  --scroll-thumb-hover: rgba(255, 255, 255, 0.2);
-  --search-surface: #27272f;
-  --search-border: #5e5e66;
+  --scroll-thumb: rgba(161, 161, 166, 0.3);
+  --scroll-thumb-hover: rgba(161, 161, 166, 0.42);
+  --search-surface: #323235;
+  --search-border: transparent;
   --search-border-active: var(--ft-accent-solid);
   --search-shadow: none;
   --search-shadow-active: 0 0 0 1px var(--ft-accent-ring-soft);
-  --search-text: #c0c2cc;
-  --search-icon: #54545c;
+  --search-text: #c7c7cc;
+  --search-icon: #98989d;
   --search-icon-active: var(--ft-accent-solid);
-  --search-placeholder: #55555f;
+  --search-placeholder: #6e6e73;
   --search-caret: var(--ft-accent-solid);
   --search-pill-bg: transparent;
-  --search-pill-border: #484850;
-  --search-pill-fg: #81838d;
+  --search-pill-border: rgba(255, 255, 255, 0.1);
+  --search-pill-fg: #a1a1a6;
   --search-pill-hover-bg: rgba(255, 255, 255, 0.025);
-  --search-pill-hover-border: #585a62;
-  --search-pill-hover-fg: #c0c2cc;
+  --search-pill-hover-border: transparent;
+  --search-pill-hover-fg: #c7c7cc;
   --search-pill-active-border: var(--ft-accent-search-pill-border);
-  --srbar-canvas: #1c1f26;
-  --srbar-separator: rgba(255, 255, 255, 0.06);
-  --srbar-spinner: var(--ft-accent-solid);
-}
-
-:root[data-theme="catppuccin-mocha"] {
-  --neutral-ink: #ffffff;
-  color-scheme: dark;
-  --bg-base: #1e1e2e;
-  --bg-surface: #1e1e2e;
-  --bg-elevated: #181825;
-  --bg-hover: rgba(205, 214, 244, 0.05);
-  --bg-input: rgba(205, 214, 244, 0.05);
-  --bg-active: rgba(203, 166, 247, 0.1);
-  --bg-active-inactive: rgba(49, 50, 68, 0.9);
-  --border: rgba(205, 214, 244, 0.08);
-  --border-active: rgba(205, 214, 244, 0.12);
-  --border-light: rgba(205, 214, 244, 0.04);
-  --text-primary: #cdd6f4;
-  --text-secondary: #bac2de;
-  --text-tertiary: #a6adc8;
-  --text-dim: #6c7086;
-  --accent-blue: #cba6f7;
-  --accent-blue-dim: rgba(203, 166, 247, 0.12);
-  --accent-blue-border: rgba(203, 166, 247, 0.26);
-  --accent-gold: var(--ft-accent-solid);
-  --accent-gold-dim: var(--ft-accent-location-ring);
-  --icon-neutral: #a6adc8;
-  --icon-blue: #89b4fa;
-  --icon-green: #a6e3a1;
-  --icon-peach: #fab387;
-  --danger: #f38ba8;
-  --sidebar-bg: #181825;
-  --toolbar-bg: #11111b;
-  --toolbar-border: #21202e;
-  --toolbar-nav-icon: #2e2e3e;
-  --toolbar-nav-icon-active: #555561;
-  --toolbar-toggle-bg: #1a1a28;
-  --toolbar-toggle-active-bg: #252538;
-  --toolbar-toggle-icon-active: #cdd6f5;
-  --get-info-panel-bg: #141420;
-  --get-info-panel-border: #21202e;
-  --get-info-header-text: #50506e;
-  --get-info-close-icon: #40405a;
-  --get-info-close-icon-hover: #8888aa;
-  --get-info-close-bg-hover: rgba(255, 255, 255, 0.05);
-  --get-info-hero-icon-bg: var(--ft-accent-hero-icon-bg);
-  --get-info-hero-name: #cdd6f5;
-  --get-info-action-bg: rgba(255, 255, 255, 0.02);
-  --get-info-action-bg-hover: var(--ft-accent-action-hover-bg);
-  --get-info-action-icon: #8f93b5;
-  --get-info-action-icon-hover: var(--ft-accent-path-crumb-hover);
-  --get-info-action-text: #b9c0de;
-  --get-info-action-text-hover: var(--ft-accent-path-crumb-hover);
-  --get-info-meta-separator: rgba(255, 255, 255, 0.035);
-  --get-info-meta-label: #3a3a52;
-  --get-info-meta-value: #a0a6c4;
-  --get-info-meta-value-muted: #3a3a52;
-  --context-menu-bg: #313244;
-  --context-menu-border: #363650;
-  --context-menu-shadow: 0 8px 40px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
-  --context-menu-separator: #2a2a40;
-  --context-menu-text: #cdd6f5;
-  --context-menu-shortcut: #7f7f95;
-  --context-menu-disabled: #65657a;
-  --context-menu-destructive: #f38ba8;
-  --context-menu-icon: #6c7086;
-  --context-menu-submenu-arrow: #7f7f95;
-  --dropdown-bg: #313244;
-  --fg-bright: #cdd6f4;
-  --fg-muted: #a6adc8;
-  --fg-dim: #6c7086;
-  --accent: #cba6f7;
-  --accent-soft: rgba(203, 166, 247, 0.12);
-  --accent-text: #cba6f7;
-  --help-muted: var(--text-tertiary);
-  --help-accent: var(--accent-blue);
-  --tb-primary-bg: rgba(203, 166, 247, 0.14);
-  --tb-primary-fg: #cba6f7;
-  --tb-primary-hover-bg: rgba(203, 166, 247, 0.22);
-  --tb-primary-shadow: none;
-  --tb-primary-hover-shadow: none;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
-  --shadow-lg: 0 18px 44px rgba(0, 0, 0, 0.34);
-  --crumb-hover-bg: rgba(205, 214, 244, 0.05);
-  --crumb-active-bg: rgba(203, 166, 247, 0.12);
-  --scroll-thumb: #45475a;
-  --scroll-thumb-hover: #585b70;
-  --search-surface: #212332;
-  --search-border: #58596b;
-  --search-border-active: var(--ft-accent-solid);
-  --search-shadow: none;
-  --search-shadow-active: 0 0 0 1px var(--ft-accent-ring-soft);
-  --search-text: #b0b4cc;
-  --search-icon: #4b4e5f;
-  --search-icon-active: var(--ft-accent-solid);
-  --search-placeholder: #454560;
-  --search-caret: var(--ft-accent-solid);
-  --search-pill-bg: transparent;
-  --search-pill-border: #404058;
-  --search-pill-fg: #7c8098;
-  --search-pill-hover-bg: rgba(255, 255, 255, 0.025);
-  --search-pill-hover-border: #525264;
-  --search-pill-hover-fg: #b0b4cc;
-  --search-pill-active-border: var(--ft-accent-search-pill-border);
-  --srbar-canvas: #11111b;
-  --srbar-separator: rgba(255, 255, 255, 0.05);
+  --srbar-separator: rgba(255, 255, 255, 0.07);
   --srbar-spinner: var(--ft-accent-solid);
 }
 
@@ -958,28 +706,8 @@ select:focus-visible {
 
 .tb-btn:hover:not(:disabled),
 .tb-btn.active {
-  background: var(--accent-soft);
+  background: var(--ft-accent-pill-bg);
   color: var(--text-primary);
-}
-
-.tb-btn.primary {
-  background: var(--tb-primary-bg);
-  color: var(--tb-primary-fg);
-  box-shadow: var(--tb-primary-shadow);
-}
-
-.tb-btn.primary:hover:not(:disabled) {
-  background: var(--tb-primary-hover-bg);
-  box-shadow: var(--tb-primary-hover-shadow);
-}
-
-.tb-btn.danger {
-  background: color-mix(in srgb, var(--danger) 18%, transparent);
-  color: var(--danger);
-}
-
-.tb-btn.danger:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--danger) 28%, transparent);
 }
 
 .tb-btn.tb-btn-icon {
@@ -1484,9 +1212,7 @@ select:focus-visible {
   --push-button-pressed: brightness(0.94);
 }
 
-:root[data-theme="dark"],
-:root[data-theme="tomorrow-night"],
-:root[data-theme="catppuccin-mocha"] {
+:root[data-theme="dark"] {
   --scrim: rgba(0, 0, 0, 0.32);
   --dialog-edge: rgba(255, 255, 255, 0.14);
   --elevation-dialog: 0 0 0 0.5px var(--dialog-edge), 0 20px 50px rgba(0, 0, 0, 0.5);
@@ -1952,7 +1678,7 @@ select:focus-visible {
   width: fit-content;
   max-width: calc(100% - 24px);
   padding: 6px 10px;
-  border: 1px solid var(--accent-blue-border);
+  border: 1px solid var(--ft-accent-border);
   border-radius: var(--radius-capsule);
   background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
   box-shadow: var(--shadow-sm);
@@ -1982,7 +1708,7 @@ select:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--accent-text);
+  color: var(--ft-accent-pill-text);
   font-family: var(--font-sans);
   font-size: var(--font-size-callout);
   font-weight: 400;
@@ -2106,7 +1832,7 @@ select:focus-visible {
 }
 
 .pane-resizer:hover::before {
-  background: var(--accent-blue-border);
+  background: var(--ft-accent-border);
 }
 
 body.resizing-panels {
@@ -2239,7 +1965,7 @@ body.resizing-panels * {
   justify-content: center;
   min-width: 16px;
   padding: 0 3px;
-  color: var(--fg-dim, var(--text-dim));
+  color: var(--text-dim);
   font-size: var(--font-size-callout);
 }
 
@@ -2320,13 +2046,13 @@ body.resizing-panels * {
 
 .pathbar-segment:hover {
   background: var(--crumb-hover-bg);
-  color: var(--accent-text, color-mix(in srgb, var(--accent-blue) 42%, var(--text-primary)));
+  color: var(--accent-text, color-mix(in srgb, var(--ft-accent-solid) 42%, var(--text-primary)));
 }
 
 .pathbar-segment.active {
   max-width: 320px;
   background: var(--crumb-active-bg);
-  color: var(--fg-bright, var(--text-primary));
+  color: var(--text-primary);
   font-weight: 600;
 }
 
@@ -2359,10 +2085,6 @@ body.resizing-panels * {
   outline: none;
   border-color: var(--ft-accent-solid);
   box-shadow: var(--focus-ring);
-}
-
-:root[data-theme="tomorrow-night"] .pathbar-input {
-  background: color-mix(in srgb, var(--bg-base) 72%, var(--bg-surface));
 }
 
 .pathbar-suggestions {
@@ -2735,11 +2457,6 @@ body.resizing-panels * {
   padding: 0 8px;
 }
 
-.content-scroll[data-hover-highlight-enabled="true"] .flow-item:hover,
-.content-scroll[data-hover-highlight-enabled="true"] .details-row:hover {
-  background: var(--bg-hover);
-}
-
 .flow-item:active,
 .details-row:active,
 .flow-item.active,
@@ -3033,7 +2750,7 @@ body.resizing-panels * {
   margin: 0;
   padding: 16px 18px;
   background: transparent;
-  color: var(--fg-muted);
+  color: var(--text-tertiary);
 }
 
 .flow-list,
@@ -3124,9 +2841,9 @@ body.resizing-panels * {
 .search-results-banner {
   margin: 0 6px 12px;
   padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--accent-blue) 22%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--ft-accent-solid) 22%, var(--border));
   border-radius: var(--radius-menu);
-  background: color-mix(in srgb, var(--accent-blue) 6%, transparent);
+  background: color-mix(in srgb, var(--ft-accent-solid) 6%, transparent);
   color: var(--text-secondary);
   font-size: var(--font-size-callout);
 }
@@ -3138,10 +2855,6 @@ body.resizing-panels * {
   text-align: left;
   user-select: none;
   -webkit-user-select: none;
-}
-
-.search-results-scroll[data-hover-highlight-enabled="true"] .search-result-row:hover {
-  background: var(--bg-hover);
 }
 
 .search-result-row:active,
@@ -3320,19 +3033,19 @@ body.resizing-panels * {
 }
 
 .file-icon-folder-open-fill {
-  stroke: var(--accent-gold);
-  fill: var(--accent-gold-dim);
+  stroke: var(--ft-accent-solid);
+  fill: var(--ft-accent-folder-tint);
   stroke-width: 1.5;
 }
 
 .file-icon-folder-outline {
-  stroke: var(--accent-gold);
+  stroke: var(--ft-accent-solid);
   fill: none;
   stroke-width: 1.5;
 }
 
 .file-icon-folder-stroke {
-  stroke: var(--accent-gold);
+  stroke: var(--ft-accent-solid);
   stroke-width: 1.5;
 }
 
@@ -3593,7 +3306,7 @@ body.resizing-panels * {
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--accent);
+  color: var(--ft-accent-solid);
   font-family: var(--font-sans);
   font-size: inherit;
   font-weight: 600;
@@ -3619,7 +3332,7 @@ body.resizing-panels * {
   width: 12px;
   height: 12px;
   border: 2px solid var(--text-dim);
-  border-top-color: var(--accent);
+  border-top-color: var(--ft-accent-solid);
   border-radius: var(--radius-capsule);
   animation: folder-size-spin 0.6s linear infinite;
 }
@@ -3671,7 +3384,7 @@ body.resizing-panels * {
 }
 
 .folder-size-refresh-btn:hover {
-  color: var(--accent);
+  color: var(--ft-accent-solid);
 }
 
 .folder-size-detail {
@@ -3988,7 +3701,7 @@ body.resizing-panels * {
 .settings-view {
   min-height: 0;
   height: 100%;
-  background: var(--bg-base);
+  background: var(--settings-page-bg);
   overflow-x: hidden;
   overflow-y: auto;
   padding: 26px 16px 28px;
@@ -4024,7 +3737,7 @@ body.platform-macos .settings-view {
   font-family: var(--font-sans);
   font-size: var(--font-size-mini);
   font-weight: 400;
-  color: var(--help-accent);
+  color: var(--ft-accent-solid);
   font-variant-numeric: tabular-nums;
 }
 
@@ -4072,7 +3785,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
 
 .empty-state {
   font-size: var(--font-size-callout);
-  color: var(--fg-muted);
+  color: var(--text-tertiary);
 }
 
 @media (max-width: 1100px) {
@@ -4113,8 +3826,8 @@ body.platform-macos .settings-view[data-layout="compact"] {
 
 /* ══════════════════════════════════════════════════════════════════════
    Native macOS layer
-   Finder-like window chrome built on the existing theme tokens, so every
-   palette (light and dark) inherits it: a full-height sidebar that holds the
+   Finder-like window chrome built on the theme tokens, so light and dark both
+   inherit it: a full-height sidebar that holds the
    traffic lights, a toolbar over the content with the folder title, a bottom
    path bar, and sentence-case section labels instead of letter-spaced caps.
    ══════════════════════════════════════════════════════════════════════ */
@@ -4279,22 +3992,21 @@ body.platform-macos .settings-view[data-layout="compact"] {
   flex: 0 0 auto;
 }
 
-/* ── Tabs: a band under the toolbar, shown while there is more than one. These rules
-   draw the card style, where the tab on screen is a card that runs into the list below
-   it, as in a browser; the accent line style follows them. ── */
+/* ── Tabs: a band under the toolbar, shown while there is more than one. Flat tabs in a
+   row, the one on screen under a line in the accent color. ── */
 
 .tab-strip {
   display: flex;
-  align-items: flex-end;
+  align-items: stretch;
   min-width: 0;
-  height: 38px;
+  height: 33px;
   /* Half the divider's width to the left, so the band starts at the tree's hairline. */
   margin-left: -4px;
-  padding: 6px 8px 0 2px;
-  /* The tree's own color: the band continues the sidebar, and the card stands out on it.
-     In the explorer window it is a tint on the window's material, like the sidebar (see
-     "Translucent sidebar" below). */
+  /* The tree's own color: the band continues the sidebar. In the explorer window it is a
+     tint on the window's material, like the sidebar (see "Translucent sidebar" below). */
   background: var(--sidebar-bg);
+  /* The band's bottom line, which the tab on screen covers. */
+  box-shadow: inset 0 -1px 0 var(--border);
   -webkit-app-region: no-drag;
 }
 
@@ -4302,9 +4014,6 @@ body.platform-macos .settings-view[data-layout="compact"] {
   display: flex;
   flex: 0 1 auto;
   min-width: 0;
-  height: 32px;
-  /* Room for the corners of the first and the last tab, which reach past the tab. */
-  padding: 0 8px;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -4315,73 +4024,29 @@ body.platform-macos .settings-view[data-layout="compact"] {
 
 .tab-strip-tab {
   position: relative;
-  z-index: 0;
   display: flex;
   flex: 0 1 auto;
   align-items: center;
   gap: 6px;
-  width: 200px;
+  width: 180px;
   min-width: 96px;
   padding: 0 28px 0 12px;
-  border-radius: var(--radius-control) var(--radius-control) 0 0;
+  border-right: 1px solid var(--border);
   color: var(--text-secondary);
   font-size: var(--font-size-callout);
   cursor: default;
   user-select: none;
 }
 
-/* A hairline between two tabs that are both in the background. */
-.tab-strip-tab:not(.active) + .tab-strip-tab:not(.active)::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 9px;
-  bottom: 9px;
-  width: 1px;
-  background: color-mix(in srgb, var(--neutral-ink) 18%, transparent);
-}
-
-.tab-strip-tab:not(.active):hover::after {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  inset: 3px 3px 4px;
-  border-radius: var(--radius-control);
-  background: color-mix(in srgb, var(--neutral-ink) 8%, transparent);
-}
-
-.tab-strip-tab:not(.active):hover::before,
-.tab-strip-tab:hover + .tab-strip-tab:not(.active)::before,
-.tab-strip-tab:not(.active)[data-drop-target-state="valid"]::before,
-.tab-strip-tab[data-drop-target-state="valid"] + .tab-strip-tab:not(.active)::before {
-  display: none;
+.tab-strip-tab:not(.active):hover {
+  background: color-mix(in srgb, var(--neutral-ink) 6%, transparent);
 }
 
 .tab-strip-tab.active {
-  z-index: 1;
   background: var(--bg-base);
+  box-shadow: inset 0 2px 0 var(--ft-accent-solid);
   color: var(--text-primary);
   font-weight: 600;
-}
-
-/* The card's foot curves out into the band on both sides. */
-.tab-strip-tab.active::before,
-.tab-strip-tab.active::after {
-  content: "";
-  position: absolute;
-  bottom: 0;
-  width: 8px;
-  height: 8px;
-}
-
-.tab-strip-tab.active::before {
-  left: -8px;
-  background: radial-gradient(circle at 0 0, transparent 7.5px, var(--bg-base) 8px);
-}
-
-.tab-strip-tab.active::after {
-  right: -8px;
-  background: radial-gradient(circle at 100% 0, transparent 7.5px, var(--bg-base) 8px);
 }
 
 .tab-strip-label {
@@ -4453,12 +4118,9 @@ body.platform-macos .settings-view[data-layout="compact"] {
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  margin: 0 0 3px 2px;
+  width: 34px;
   padding: 0;
   border: 0;
-  border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-secondary);
 }
@@ -4469,52 +4131,8 @@ body.platform-macos .settings-view[data-layout="compact"] {
 }
 
 .tab-strip-new:hover {
-  background: color-mix(in srgb, var(--neutral-ink) 8%, transparent);
-  color: var(--text-primary);
-}
-
-/* ── Tabs in the accent line style, which is the default (Settings → Appearance → Tab
-   style): flat tabs in a row, the one on screen under a line in the accent color. The
-   rules above draw the cards; these take the cards' shape off and keep the rest. ── */
-
-.tab-strip[data-tab-style="accentLine"] {
-  align-items: stretch;
-  height: 33px;
-  padding: 0;
-  /* The band's bottom line, which the tab on screen covers. */
-  box-shadow: inset 0 -1px 0 var(--border);
-}
-
-.tab-strip[data-tab-style="accentLine"] .tab-strip-tabs {
-  height: auto;
-  padding: 0;
-}
-
-.tab-strip[data-tab-style="accentLine"] .tab-strip-tab {
-  width: 180px;
-  border-right: 1px solid var(--border);
-  border-radius: 0;
-}
-
-/* No hairlines, hover pill or curved foot: those belong to the cards. */
-.tab-strip[data-tab-style="accentLine"] .tab-strip-tabs .tab-strip-tab::before,
-.tab-strip[data-tab-style="accentLine"] .tab-strip-tabs .tab-strip-tab::after {
-  content: none;
-}
-
-.tab-strip[data-tab-style="accentLine"] .tab-strip-tab:not(.active):hover {
   background: color-mix(in srgb, var(--neutral-ink) 6%, transparent);
-}
-
-.tab-strip[data-tab-style="accentLine"] .tab-strip-tab.active {
-  box-shadow: inset 0 2px 0 var(--ft-accent-solid);
-}
-
-.tab-strip[data-tab-style="accentLine"] .tab-strip-new {
-  width: 34px;
-  height: auto;
-  margin: 0;
-  border-radius: 0;
+  color: var(--text-primary);
 }
 
 /* Tooltips drawn by the app for icon-only buttons (see lib/titleTooltips.ts). */
@@ -5155,9 +4773,7 @@ body.window-inactive {
   --get-info-button-bg: #ffffff;
 }
 
-:root[data-theme="dark"],
-:root[data-theme="tomorrow-night"],
-:root[data-theme="catppuccin-mocha"] {
+:root[data-theme="dark"] {
   --get-info-button-bg: rgba(255, 255, 255, 0.1);
 }
 
@@ -5380,7 +4996,7 @@ body.settings-window-body {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   height: 100vh;
-  background: var(--bg-base);
+  background: var(--settings-page-bg);
 }
 
 .settings-window-toolbar {
@@ -5460,10 +5076,6 @@ body.settings-window-body {
 .settings-window-body-scroll {
   min-height: 0;
   overflow-y: auto;
-}
-
-.settings-window .settings-view {
-  background: transparent !important;
 }
 
 /* ── About and Acknowledgements windows ───────────────────────────────── */
@@ -5716,21 +5328,33 @@ a.page-window-button:focus-visible,
 }
 
 /* ── Settings ─────────────────────────────────────────────────────────────
-   Every control in Settings is drawn here, in the colours of the Settings palette, which
-   the view hands down as custom properties (`--settings-*`, see SettingsView). */
-/* The palette's colours, which the view sets on itself; these stand in until it does. */
-.settings-view {
-  --settings-page-bg: var(--bg-base);
-  --settings-card-bg: var(--bg-surface);
-  --settings-card-border: var(--border);
-  --settings-card-shadow: var(--shadow-sm);
-  --settings-separator: var(--border-light);
-  --settings-control-bg: var(--bg-input);
-  --settings-control-border: var(--border-active);
+   Every control in Settings is drawn here. As in System Settings, the groups are cards on
+   a page a shade darker than them in the light appearance. */
+:root {
+  --settings-page-bg: #f2f2f4;
+  --settings-card-bg: #ffffff;
+  --settings-card-border: rgba(0, 0, 0, 0.08);
+  --settings-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --settings-separator: rgba(0, 0, 0, 0.07);
+  --settings-control-bg: #ffffff;
+  --settings-control-border: rgba(0, 0, 0, 0.12);
   --settings-label-secondary: var(--text-tertiary);
-  --settings-switch-off: var(--bg-active-inactive);
-  --settings-check-off: var(--bg-input);
-  --settings-check-border: var(--border-active);
+  --settings-switch-off: #e3e3e8;
+  --settings-check-off: #ffffff;
+  --settings-check-border: rgba(0, 0, 0, 0.18);
+}
+
+:root[data-theme="dark"] {
+  --settings-page-bg: #1e1e20;
+  --settings-card-bg: #2a2a2d;
+  --settings-card-border: rgba(255, 255, 255, 0.08);
+  --settings-card-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  --settings-separator: rgba(255, 255, 255, 0.07);
+  --settings-control-bg: rgba(255, 255, 255, 0.06);
+  --settings-control-border: rgba(255, 255, 255, 0.1);
+  --settings-switch-off: #3a3a3d;
+  --settings-check-off: rgba(255, 255, 255, 0.06);
+  --settings-check-border: rgba(255, 255, 255, 0.16);
 }
 
 /* In the Settings window the toolbar is above the page, so no room is kept for the window's
@@ -5758,14 +5382,8 @@ body .settings-window .settings-view[data-layout] {
   padding: 0 2px 6px;
 }
 
-.settings-section-heading {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-}
-
 .settings-section-title {
+  min-width: 0;
   margin: 0;
   color: var(--text-primary);
   font-family: var(--font-sans);
@@ -5773,9 +5391,12 @@ body .settings-window .settings-view[data-layout] {
   font-weight: 600;
 }
 
+/* A line under a group on how it is used, as System Settings writes it. */
 .settings-section-note {
+  margin: 6px 2px 0;
   color: var(--settings-label-secondary);
   font-size: var(--font-size-small);
+  line-height: 1.4;
 }
 
 .settings-section-footer {
@@ -5784,9 +5405,9 @@ body .settings-window .settings-view[data-layout] {
   margin-top: 8px;
 }
 
-/* A group in Settings and its rows. A row draws the line under itself, in the colour the
-   palette hands down, and the last row of a group draws none: which row is last is the
-   stylesheet's to know, so no row has to be told. */
+/* A group in Settings and its rows. A row draws the line under itself, and the last row
+   of a group draws none: which row is last is the stylesheet's to know, so no row has to
+   be told. */
 .settings-card {
   padding: 0 12px;
   border: 0.5px solid var(--settings-card-border);
@@ -6727,13 +6348,13 @@ button.shortcut-slot-key.recording:hover {
 
 /* ── macOS Light / macOS Dark: base tokens outside the variant set ─────── */
 
-:root[data-theme-variant="macos-light"] {
+:root[data-theme="light"] {
   --bg-hover: rgba(0, 0, 0, 0.045);
   --bg-input: rgba(0, 0, 0, 0.04);
   --bg-active-inactive: #dcdce1;
 }
 
-:root[data-theme-variant="macos-dark"] {
+:root[data-theme="dark"] {
   --bg-hover: rgba(255, 255, 255, 0.06);
   --bg-input: rgba(255, 255, 255, 0.06);
   --bg-active-inactive: #3a3a3e;
@@ -7203,19 +6824,12 @@ button.shortcut-slot-key.recording:hover {
   --warning-glyph-mark: #1d1d1f;
 }
 
-:root[data-theme="dark"],
-:root[data-theme="tomorrow-night"],
-:root[data-theme="catppuccin-mocha"] {
+:root[data-theme="dark"] {
   --border-strong: rgba(255, 255, 255, 0.16);
   --danger-text: var(--danger);
   --warning-glyph-fill: #ffd60a;
   --warning-glyph-stroke: #b38f00;
   --warning-glyph-mark: #1d1d1f;
-}
-
-/* Tomorrow Night's --danger is a little dark for text on its sheets. */
-:root[data-theme="tomorrow-night"] {
-  --danger-text: #e08080;
 }
 
 /* The review and result sheets drop in below the toolbar (.modal-scrim.is-sheet), with
@@ -7420,8 +7034,8 @@ button.shortcut-slot-key.recording:hover {
 
 /* Tinted like the folders in the file list. */
 .copy-paste-glyph-folder {
-  fill: var(--accent-gold-dim);
-  stroke: var(--accent-gold);
+  fill: var(--ft-accent-folder-tint);
+  stroke: var(--ft-accent-solid);
 }
 
 .copy-paste-glyph-file {
@@ -7686,7 +7300,7 @@ button.shortcut-slot-key.recording:hover {
   background: transparent;
 }
 
-/* Drawn from the menu's own text colour, so it shows on every palette's menu. */
+/* Drawn from the menu's own text colour, so it shows on light and dark menus alike. */
 .clipboard-menu-list::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: var(--radius-capsule);
@@ -7815,18 +7429,6 @@ button.shortcut-slot-key.recording:hover {
 .clipboard-items-icon > .file-icon:last-child {
   right: 0;
   bottom: 0;
-}
-
-/* A notification that names what was copied shows its icon as the file list does. */
-.toast-card-item-icon > .file-icon,
-.toast-card-item-icon > .clipboard-items-icon {
-  width: 18px;
-  height: 18px;
-}
-
-.toast-card-item-icon > .clipboard-items-icon > .file-icon {
-  width: 13px;
-  height: 13px;
 }
 
 /* ── Items on the clipboard ──────────────────────────────────────────────
@@ -8117,10 +7719,6 @@ button.shortcut-slot-key.recording:hover {
   box-shadow: none;
 }
 
-.content-scroll[data-hover-highlight-enabled="true"] .icon-item:hover {
-  background: var(--bg-hover);
-}
-
 .icon-item-image {
   display: flex;
   flex: none;
@@ -8252,14 +7850,6 @@ body.vibrant-window .explorer-workspace .sidebar {
 /* The tab band continues the sidebar: the same tint on the same material. */
 body.vibrant-window .explorer-workspace .tab-strip {
   background: color-mix(in srgb, var(--sidebar-bg) 62%, transparent);
-}
-
-/* Warm Paper and Sand have a tree in the window's own color, where the card would be hard
-   to tell from the band: there the band is the tree's tint under 11% of black (which is
-   83% of the sidebar's color, at 66%). */
-:root[data-theme-variant="warm-paper"] body.vibrant-window .explorer-workspace .tab-strip,
-:root[data-theme-variant="sand"] body.vibrant-window .explorer-workspace .tab-strip {
-  background: color-mix(in srgb, color-mix(in srgb, var(--sidebar-bg) 83%, black) 66%, transparent);
 }
 
 /* The dividers beside the panes belong to the opaque part of the window. */

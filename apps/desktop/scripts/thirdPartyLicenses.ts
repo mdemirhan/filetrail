@@ -51,14 +51,6 @@ export function writeThirdPartyLicenses({
   };
   const electronDir = findPackageDir("electron", appDir);
 
-  // A font package's version is the package's, not the font's, so it is not shown.
-  const font = (id: string, name: string, url: string): Component => ({
-    id,
-    name,
-    license: "SIL Open Font License 1.1",
-    url,
-    package: { name: `@fontsource/${id}`, from: "app", showVersion: false },
-  });
   const components: Component[] = [
     {
       id: "fd",
@@ -106,10 +98,6 @@ export function writeThirdPartyLicenses({
       url: "https://github.com/prebuild/node-gyp-build",
       package: { name: "node-gyp-build", from: "native-fs", showVersion: true },
     },
-    font("dm-sans", "DM Sans", "https://github.com/googlefonts/dm-fonts"),
-    font("fira-code", "Fira Code", "https://github.com/tonsky/FiraCode"),
-    font("jetbrains-mono", "JetBrains Mono", "https://www.jetbrains.com/lp/mono/"),
-    font("lexend", "Lexend", "https://www.lexend.com"),
   ];
 
   const licensesDir = join(outDir, "assets", "licenses");

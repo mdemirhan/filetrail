@@ -58,7 +58,6 @@ export function SearchResultsPane({
   results,
   selectedPaths = [],
   selectionLeadPath = null,
-  highlightHoveredItems = true,
   error,
   truncated,
   errorIsQuiet = false,
@@ -109,7 +108,6 @@ export function SearchResultsPane({
   results: SearchResultItem[];
   selectedPaths?: string[];
   selectionLeadPath?: string | null;
-  highlightHoveredItems?: boolean;
   error: string | null;
   truncated: boolean;
   /** The search was started by typing: a pattern that does not parse yet is not a failure. */
@@ -442,7 +440,6 @@ export function SearchResultsPane({
         <div
           ref={scrollRef}
           className="content-scroll search-results-scroll"
-          data-hover-highlight-enabled={highlightHoveredItems ? "true" : "false"}
           tabIndex={-1}
           onMouseDown={(event) => {
             const target = event.target;

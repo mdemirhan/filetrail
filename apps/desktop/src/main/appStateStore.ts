@@ -18,15 +18,11 @@ import {
   OPEN_TABS_LIMIT,
   OPTIONAL_DETAIL_COLUMN_KEYS,
   type OpenTabPreference,
-  type ThemeMode,
   type ThemePreference,
-  UI_FONT_OPTIONS,
   clampDetailColumnWidth,
-  clampNotificationDurationSeconds,
   clampOpenItemLimit,
   clampPaneWidth,
   clampZoomPercent,
-  isThemeInGroup,
   normalizeAccentColor,
   resolveSavedTheme,
 } from "../shared/appPreferences";
@@ -124,7 +120,9 @@ const NAVIGATION_PREFERENCE_KEYS: ReadonlySet<string> = new Set<keyof AppPrefere
 // caches, and other ephemeral runtime state should stay out of this file.
 export class AppStateStore {
   private readonly filePath: string;
-  private readonly defaultTheme: ThemePreference;
+  // What a new install starts with: the platform's first-launch theme, and only the
+  // Open With applications that are installed on this Mac.
+  private readonly defaults: AppPreferences;
   private readonly fileSystem: AppStateStoreFileSystem;
   private readonly timer: AppStateStoreTimer;
   private readonly onReadError: (error: unknown) => void;
@@ -135,8 +133,11 @@ export class AppStateStore {
 
   constructor(filePath: string, dependencies: AppStateStoreDependencies = {}) {
     this.filePath = filePath;
-    this.defaultTheme = dependencies.defaultTheme ?? DEFAULT_APP_PREFERENCES.theme;
     this.fileSystem = dependencies.fs ?? DEFAULT_FILE_SYSTEM;
+    this.defaults = createDefaultPreferences(
+      dependencies.defaultTheme ?? DEFAULT_APP_PREFERENCES.theme,
+      this.fileSystem,
+    );
     this.timer = dependencies.timer ?? DEFAULT_TIMER;
     this.onReadError =
       dependencies.onReadError ??
@@ -148,7 +149,7 @@ export class AppStateStore {
       ((error) => {
         console.error("[filetrail] failed persisting app state", error);
       });
-    this.state = readState(filePath, this.fileSystem, this.defaultTheme, this.onReadError);
+    this.state = readState(filePath, this.fileSystem, this.defaults, this.onReadError);
   }
 
   getFilePath(): string {
@@ -156,7 +157,7 @@ export class AppStateStore {
   }
 
   getPreferences(): AppPreferences {
-    return this.state.preferences ?? withDefaultTheme(DEFAULT_APP_PREFERENCES, this.defaultTheme);
+    return this.state.preferences ?? this.defaults;
   }
 
   updatePreferences(value: Partial<AppPreferences>): AppPreferences {
@@ -166,7 +167,7 @@ export class AppStateStore {
         ...current,
         ...value,
       },
-      this.defaultTheme,
+      this.defaults,
     );
     const changedKeys = (Object.keys(next) as Array<keyof AppPreferences>).filter(
       (key) => JSON.stringify(next[key]) !== JSON.stringify(current[key]),
@@ -278,7 +279,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 function readState(
   filePath: string,
   fileSystem: AppStateStoreFileSystem,
-  defaultTheme: ThemePreference,
+  defaults: AppPreferences,
   onReadError: (error: unknown) => void,
 ): AppState {
   if (!fileSystem.existsSync(filePath)) {
@@ -291,7 +292,7 @@ function readState(
       return {};
     }
     const record = parsed;
-    const preferences = sanitizePreferences(record.preferences, defaultTheme);
+    const preferences = sanitizePreferences(record.preferences, defaults);
     const window = sanitizeWindowState(record.window);
     return {
       preferences,
@@ -323,8 +324,11 @@ function persistState(
   }
 }
 
+// A saved view mode, or the default one (List, Finder's table) for anything else.
 function sanitizeViewMode(value: unknown): ExplorerViewMode {
-  return value === "icons" || value === "details" ? value : "list";
+  return value === "icons" || value === "list" || value === "details"
+    ? value
+    : DEFAULT_APP_PREFERENCES.viewMode;
 }
 
 // Tabs saved by an older or damaged file are kept as far as they make sense; a tab that
@@ -375,25 +379,14 @@ function sanitizeOpenTabs(
 
 // This is the migration boundary for persisted preferences. When keys are renamed or
 // removed, normalize legacy shapes here instead of letting stale values leak outward.
-function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): AppPreferences {
-  const currentDefaults = withDefaultTheme(DEFAULT_APP_PREFERENCES, defaultTheme);
+function sanitizePreferences(value: unknown, currentDefaults: AppPreferences): AppPreferences {
   if (!isPlainObject(value)) {
     return currentDefaults;
   }
   const record = value;
   return {
-    // A removed palette is replaced by the closest remaining one (`resolveSavedTheme`).
-    theme: record.theme === "auto" ? "auto" : (resolveSavedTheme(record.theme) ?? defaultTheme),
-    autoLightTheme: resolveSavedThemeInGroup(
-      record.autoLightTheme,
-      "light",
-      currentDefaults.autoLightTheme,
-    ),
-    autoDarkTheme: resolveSavedThemeInGroup(
-      record.autoDarkTheme,
-      "dark",
-      currentDefaults.autoDarkTheme,
-    ),
+    // A palette the app no longer has becomes its side, light or dark (`resolveSavedTheme`).
+    theme: resolveSavedTheme(record.theme) ?? currentDefaults.theme,
     accent:
       typeof record.accent === "string"
         ? (normalizeAccentColor(record.accent) ?? currentDefaults.accent)
@@ -401,15 +394,6 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
     zoomPercent: clampZoomPercent(
       typeof record.zoomPercent === "number" ? record.zoomPercent : currentDefaults.zoomPercent,
     ),
-    uiFontFamily:
-      typeof record.uiFontFamily === "string" &&
-      UI_FONT_OPTIONS.some((option) => option.value === record.uiFontFamily)
-        ? (record.uiFontFamily as AppPreferences["uiFontFamily"])
-        : currentDefaults.uiFontFamily,
-    tabStyle:
-      record.tabStyle === "cards" || record.tabStyle === "accentLine"
-        ? record.tabStyle
-        : currentDefaults.tabStyle,
     viewMode: sanitizeViewMode(record.viewMode),
     sortBy:
       record.sortBy === "modified" ||
@@ -440,10 +424,6 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
       typeof record.compactTreeView === "boolean"
         ? record.compactTreeView
         : currentDefaults.compactTreeView,
-    highlightHoveredItems:
-      typeof record.highlightHoveredItems === "boolean"
-        ? record.highlightHoveredItems
-        : currentDefaults.highlightHoveredItems,
     detailColumns: sanitizeDetailColumns(record.detailColumns, currentDefaults.detailColumns),
     detailColumnWidths: sanitizeDetailColumnWidths(
       record.detailColumnWidths,
@@ -453,23 +433,7 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
       typeof record.notificationsEnabled === "boolean"
         ? record.notificationsEnabled
         : currentDefaults.notificationsEnabled,
-    notificationDurationSeconds: clampNotificationDurationSeconds(
-      typeof record.notificationDurationSeconds === "number"
-        ? record.notificationDurationSeconds
-        : currentDefaults.notificationDurationSeconds,
-    ),
-    highlightClipboardItemsInTree:
-      typeof record.highlightClipboardItemsInTree === "boolean"
-        ? record.highlightClipboardItemsInTree
-        : currentDefaults.highlightClipboardItemsInTree,
-    highlightClipboardItemsInContent:
-      typeof record.highlightClipboardItemsInContent === "boolean"
-        ? record.highlightClipboardItemsInContent
-        : currentDefaults.highlightClipboardItemsInContent,
-    notifyClipboardItems:
-      typeof record.notifyClipboardItems === "boolean"
-        ? record.notifyClipboardItems
-        : currentDefaults.notifyClipboardItems,
+    markClipboardItems: sanitizeMarkClipboardItems(record, currentDefaults.markClipboardItems),
     propertiesOpen:
       typeof record.propertiesOpen === "boolean"
         ? record.propertiesOpen
@@ -553,14 +517,10 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
       260,
       480,
     ),
-    restoreLastVisitedFolderOnStartup:
-      typeof record.restoreLastVisitedFolderOnStartup === "boolean"
-        ? record.restoreLastVisitedFolderOnStartup
-        : currentDefaults.restoreLastVisitedFolderOnStartup,
-    restoreOpenTabsOnStartup:
-      typeof record.restoreOpenTabsOnStartup === "boolean"
-        ? record.restoreOpenTabsOnStartup
-        : currentDefaults.restoreOpenTabsOnStartup,
+    restoreSessionOnStartup: sanitizeRestoreSessionOnStartup(
+      record,
+      currentDefaults.restoreSessionOnStartup,
+    ),
     openTabs: sanitizeOpenTabs(record.openTabs, {
       includeHidden:
         typeof record.includeHidden === "boolean"
@@ -782,15 +742,33 @@ function sanitizeOpenWithApplications(
   return entries.length === value.length ? entries : defaults.map((entry) => ({ ...entry }));
 }
 
-// A saved palette for one side of Auto: kept when it still exists on that side, replaced
-// when it was removed, and otherwise the default for that side.
-function resolveSavedThemeInGroup(
-  value: unknown,
-  group: "light" | "dark",
-  fallback: ThemeMode,
-): ThemeMode {
-  const theme = resolveSavedTheme(value);
-  return theme && isThemeInGroup(theme, group) ? theme : fallback;
+// Copied and cut items used to be marked in the tree and in the file list separately; a
+// profile saved then keeps its marks unless both were off.
+function sanitizeMarkClipboardItems(record: Record<string, unknown>, fallback: boolean): boolean {
+  if (typeof record.markClipboardItems === "boolean") {
+    return record.markClipboardItems;
+  }
+  const tree = record.highlightClipboardItemsInTree;
+  const content = record.highlightClipboardItemsInContent;
+  if (typeof tree === "boolean" || typeof content === "boolean") {
+    return tree !== false || content !== false;
+  }
+  return fallback;
+}
+
+// Reopening the last folder and reopening the tabs used to be two settings; the folder one
+// decided where a session started, so a profile saved then keeps that choice.
+function sanitizeRestoreSessionOnStartup(
+  record: Record<string, unknown>,
+  fallback: boolean,
+): boolean {
+  if (typeof record.restoreSessionOnStartup === "boolean") {
+    return record.restoreSessionOnStartup;
+  }
+  if (typeof record.restoreLastVisitedFolderOnStartup === "boolean") {
+    return record.restoreLastVisitedFolderOnStartup;
+  }
+  return fallback;
 }
 
 function sanitizeDetailColumns(
@@ -860,15 +838,17 @@ function sanitizeWindowState(value: unknown): StoredWindowState {
 }
 
 // Macintosh HD used to be a fixed sidebar location and is now a default favorite. State saved
-// before that change (no `autoLightTheme` yet, which arrived with it, or a `locationsExpanded`
-// flag, which is no longer written) gets it once; afterwards the user can remove it like any
-// other favorite.
+// before that change gets it once; afterwards the user can remove it like any other favorite.
+// Such state has a `locationsExpanded` flag, which is no longer written, or neither
+// `autoLightTheme` (which arrived with the change and was written until the palettes went)
+// nor `restoreSessionOnStartup` (written since).
 function upgradeFavoritesWithRootVolume(
   record: Record<string, unknown>,
   favorites: FavoritePreference[],
 ): FavoritePreference[] {
   const savedBeforeRootFavorite =
-    record.autoLightTheme === undefined || record.locationsExpanded !== undefined;
+    record.locationsExpanded !== undefined ||
+    (record.autoLightTheme === undefined && record.restoreSessionOnStartup === undefined);
   if (
     record.favoritesInitialized !== true ||
     !savedBeforeRootFavorite ||
@@ -894,14 +874,15 @@ function isPreviousDefaultTopToolbar(value: unknown): boolean {
   );
 }
 
-function withDefaultTheme(
-  preferences: AppPreferences,
+function createDefaultPreferences(
   defaultTheme: ThemePreference,
+  fileSystem: AppStateStoreFileSystem,
 ): AppPreferences {
-  // The first-launch theme can be injected by the platform, but persisted preferences should
-  // otherwise carry the entire state.
   return {
-    ...preferences,
+    ...DEFAULT_APP_PREFERENCES,
     theme: defaultTheme,
+    openWithApplications: DEFAULT_OPEN_WITH_APPLICATIONS.filter((entry) =>
+      fileSystem.existsSync(entry.appPath),
+    ).map((entry) => ({ ...entry })),
   };
 }

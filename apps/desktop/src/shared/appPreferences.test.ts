@@ -3,14 +3,13 @@ import {
   DEFAULT_ACCENT,
   DEFAULT_APP_PREFERENCES,
   DETAIL_COLUMN_WIDTH_LIMITS,
+  THEME_OPTIONS,
   clampDetailColumnWidth,
-  clampNotificationDurationSeconds,
   clampOpenItemLimit,
   clampPaneWidth,
   clampZoomPercent,
-  getThemeLabel,
-  getUiFontLabel,
   resolveEffectiveTheme,
+  resolveSavedTheme,
 } from "./appPreferences";
 import { DEFAULT_TOP_TOOLBAR_ITEMS } from "./toolbarItems";
 
@@ -18,8 +17,6 @@ describe("appPreferences helpers", () => {
   it("clamps numeric preferences and rounds to whole pixels", () => {
     expect(clampPaneWidth(279.6, 200, 320)).toBe(280);
     expect(clampPaneWidth(99.2, 200, 320)).toBe(200);
-    expect(clampNotificationDurationSeconds(1.2)).toBe(2);
-    expect(clampNotificationDurationSeconds(10.8)).toBe(10);
     expect(clampOpenItemLimit(0.3)).toBe(1);
     expect(clampOpenItemLimit(51.2)).toBe(50);
     expect(clampZoomPercent(106.8)).toBe(107);
@@ -34,12 +31,18 @@ describe("appPreferences helpers", () => {
     );
   });
 
-  it("resolves known labels and falls back to the raw stored value", () => {
-    expect(getThemeLabel("tomorrow-night")).toBe("Tomorrow Night");
-    expect(getThemeLabel("warm-paper")).toBe("Warm Paper");
-    expect(getUiFontLabel("jetbrains-mono")).toBe("JetBrains Mono");
-    expect(getThemeLabel("aurora" as never)).toBe("aurora");
-    expect(getUiFontLabel("mono" as never)).toBe("mono");
+  it("offers Auto, Light and Dark, and reads a saved palette as its side", () => {
+    expect(THEME_OPTIONS.map((option) => option.label)).toEqual(["Auto", "Light", "Dark"]);
+    expect(resolveSavedTheme("auto")).toBe("auto");
+    expect(resolveSavedTheme("dark")).toBe("dark");
+    expect(resolveSavedTheme("macos-light")).toBe("light");
+    expect(resolveSavedTheme("warm-paper")).toBe("light");
+    expect(resolveSavedTheme("sand")).toBe("light");
+    expect(resolveSavedTheme("macos-dark")).toBe("dark");
+    expect(resolveSavedTheme("catppuccin-mocha")).toBe("dark");
+    expect(resolveSavedTheme("tomorrow-night")).toBe("dark");
+    expect(resolveSavedTheme("aurora")).toBeNull();
+    expect(resolveSavedTheme(7)).toBeNull();
   });
 
   it("defaults to blue, the first accent offered", () => {
@@ -52,17 +55,13 @@ describe("appPreferences helpers", () => {
   it("ships expected defaults for the persisted preference shape", () => {
     expect(DEFAULT_APP_PREFERENCES).toMatchObject({
       theme: "auto",
-      autoLightTheme: "macos-light",
-      autoDarkTheme: "macos-dark",
       accent: "#007aff",
       zoomPercent: 100,
-      uiFontFamily: "system",
-      viewMode: "list",
+      viewMode: "details",
       sortBy: "name",
       sortDirection: "asc",
       foldersFirst: true,
       singleClickExpandTreeItems: false,
-      highlightHoveredItems: false,
       terminalApp: null,
       openWithApplications: [
         {
@@ -96,12 +95,9 @@ describe("appPreferences helpers", () => {
         kind: 148,
         created: 152,
       },
-      restoreLastVisitedFolderOnStartup: false,
+      restoreSessionOnStartup: true,
       notificationsEnabled: true,
-      notificationDurationSeconds: 4,
-      highlightClipboardItemsInTree: true,
-      highlightClipboardItemsInContent: true,
-      notifyClipboardItems: true,
+      markClipboardItems: true,
       propertiesOpen: false,
       topToolbarItems: DEFAULT_TOP_TOOLBAR_ITEMS,
       defaultTextEditor: {
@@ -117,12 +113,10 @@ describe("appPreferences helpers", () => {
     });
   });
 
-  it("resolves auto to the light or dark palette from the macOS appearance", () => {
-    expect(resolveEffectiveTheme("auto", false, "sand", "tomorrow-night")).toBe("sand");
-    expect(resolveEffectiveTheme("auto", true, "sand", "tomorrow-night")).toBe("tomorrow-night");
-    expect(resolveEffectiveTheme("catppuccin-mocha", false, "sand", "tomorrow-night")).toBe(
-      "catppuccin-mocha",
-    );
-    expect(getThemeLabel("auto")).toBe("Auto (follow macOS)");
+  it("resolves auto to light or dark from the macOS appearance", () => {
+    expect(resolveEffectiveTheme("auto", false)).toBe("light");
+    expect(resolveEffectiveTheme("auto", true)).toBe("dark");
+    expect(resolveEffectiveTheme("dark", false)).toBe("dark");
+    expect(resolveEffectiveTheme("light", true)).toBe("light");
   });
 });

@@ -5,11 +5,6 @@ import { describe, expect, it } from "vitest";
 
 import type { ThemeMode } from "../shared/appPreferences";
 import { accentTokensToCssVariables, generateAccentTokens } from "./lib/accent";
-import {
-  THEME_VARIANT_OVERRIDE_KEYS,
-  getThemeVariantCssOverrides,
-  resolveThemeCssBase,
-} from "./lib/themeVariants";
 
 const styles = readFileSync(resolve(import.meta.dirname, "./styles.css"), "utf8");
 
@@ -131,9 +126,9 @@ describe("theme styles", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("gives every dark palette a value for each color token the light palette defines", () => {
+  it("gives the dark palette a value for each color token the light palette defines", () => {
     const runtimeTokens = new Set([
-      ...Object.keys(accentTokensToCssVariables(generateAccentTokens("#daa520", "macos-dark"))),
+      ...Object.keys(accentTokensToCssVariables(generateAccentTokens("#daa520", "dark"))),
     ]);
     const lightTokens = customPropertiesDefinedBy(styles, ":root");
     const lightColorTokens = [...lightTokens].filter((name) => {
@@ -142,19 +137,23 @@ describe("theme styles", () => {
         match?.[1] !== undefined && HARD_CODED_COLOR.test(match[1]) && !runtimeTokens.has(name)
       );
     });
-    for (const theme of ["dark", "tomorrow-night", "catppuccin-mocha"]) {
-      const darkTokens = customPropertiesDefinedBy(styles, `:root[data-theme="${theme}"]`);
-      const missing = lightColorTokens.filter((name) => !darkTokens.has(name));
-      expect({ theme, missing }).toEqual({ theme, missing: [] });
-    }
+    const darkTokens = customPropertiesDefinedBy(styles, ':root[data-theme="dark"]');
+    expect(lightColorTokens.filter((name) => !darkTokens.has(name))).toEqual([]);
+  });
+
+  it("has two palettes, light and dark, and nothing for the ones that were removed", () => {
+    const themeSelectors = new Set(
+      [...styles.matchAll(/data-theme(?:-variant)?="([^"]+)"/g)].map((match) => match[1]),
+    );
+    expect([...themeSelectors].sort()).toEqual(["dark", "light"]);
+    expect(styles).not.toMatch(/data-theme-variant|data-tab-style|data-hover-highlight/u);
   });
 
   it("only reads custom properties that are defined, set at runtime, or given a fallback", () => {
-    const tokens = generateAccentTokens("#daa520", "macos-dark");
+    const tokens = generateAccentTokens("#daa520", "dark");
     const known = new Set<string>([
       ...[...styles.matchAll(/(--[a-z0-9-]+)\s*:/gi)].map((match) => match[1] ?? ""),
       ...Object.keys(accentTokensToCssVariables(tokens)),
-      ...THEME_VARIANT_OVERRIDE_KEYS,
     ]);
     const undefinedReads = [...styles.matchAll(/var\((--[a-z0-9-]+)\s*\)/gi)]
       .map((match) => match[1] ?? "")
@@ -162,12 +161,12 @@ describe("theme styles", () => {
     expect([...new Set(undefinedReads)]).toEqual([]);
   });
 
-  it("takes every font from the Font preference (icon artwork aside)", () => {
-    // The stylesheet only uses the font tokens that `applyAppearance` sets.
+  it("takes every font from the two font tokens (icon artwork aside)", () => {
+    // The stylesheet only uses the system font and the monospaced one.
     for (const { selector, value } of declarations.filter((d) => d.property === "font-family")) {
       expect(`${selector}: ${value}`).toMatch(/: (var\(--font-(sans|mono)\)|inherit)$/u);
     }
-    // Components that style inline go through `viewFonts` instead of naming fonts.
+    // Components never name a font of their own.
     const componentsDir = resolve(import.meta.dirname, "./components");
     for (const file of readdirSync(componentsDir).filter((name) => name.endsWith(".tsx"))) {
       if (file.endsWith(".test.tsx")) {
@@ -268,21 +267,11 @@ describe("theme styles", () => {
 
   it("keeps menu shortcuts and disabled items readable in every theme", () => {
     const all = parseDeclarations(styles);
-    const themes: ThemeMode[] = [
-      "macos-light",
-      "warm-paper",
-      "sand",
-      "macos-dark",
-      "catppuccin-mocha",
-      "tomorrow-night",
-    ];
+    const themes: ThemeMode[] = ["light", "dark"];
     for (const theme of themes) {
-      const base = resolveThemeCssBase(theme);
-      const block = base === "light" ? ":root" : `:root[data-theme="${base}"]`;
+      const block = theme === "light" ? ":root" : `:root[data-theme="${theme}"]`;
       const token = (name: string) =>
-        getThemeVariantCssOverrides(theme)[name] ??
-        all.find((d) => d.selector === block && d.property === name)?.value ??
-        "";
+        all.find((d) => d.selector === block && d.property === name)?.value ?? "";
       const menu = hexToRgb(token("--context-menu-bg"));
       const shortcut = hexToRgb(token("--context-menu-shortcut"));
       const disabled = hexToRgb(token("--context-menu-disabled"));
@@ -307,21 +296,11 @@ describe("theme styles", () => {
     const hover = percentOf("--toolbar-button-hover-bg");
     const on = percentOf("--toolbar-toggle-on-bg");
     const onHover = percentOf("--toolbar-toggle-on-hover-bg");
-    const themes: ThemeMode[] = [
-      "macos-light",
-      "warm-paper",
-      "sand",
-      "macos-dark",
-      "catppuccin-mocha",
-      "tomorrow-night",
-    ];
+    const themes: ThemeMode[] = ["light", "dark"];
     for (const theme of themes) {
-      const base = resolveThemeCssBase(theme);
-      const block = base === "light" ? ":root" : `:root[data-theme="${base}"]`;
+      const block = theme === "light" ? ":root" : `:root[data-theme="${theme}"]`;
       const token = (name: string) =>
-        getThemeVariantCssOverrides(theme)[name] ??
-        all.find((d) => d.selector === block && d.property === name)?.value ??
-        "";
+        all.find((d) => d.selector === block && d.property === name)?.value ?? "";
       const toolbar = hexToRgb(token("--toolbar-bg"));
       const text = hexToRgb(token("--text-primary"));
       const fill = (amount: number) =>

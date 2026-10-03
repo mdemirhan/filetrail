@@ -14,7 +14,7 @@ import {
 
 import { type HelpTopic, type SettingsTab, helpTopicSchema } from "@filetrail/contracts";
 
-import { type AppPreferences, isThemeInGroup } from "../shared/appPreferences";
+import type { AppPreferences } from "../shared/appPreferences";
 import {
   type ApplicationMenuState,
   INITIAL_APPLICATION_MENU_STATE,
@@ -649,11 +649,10 @@ function isAllowedExternalUrl(rawUrl: string): boolean {
 }
 
 // Native parts of the window (title bar, scroll bars, pickers, the empty window before the
-// page paints) follow the app's theme rather than the macOS appearance: an explicit
-// theme pins them to its light or dark side, "auto" follows the system as the page does.
+// page paints) follow the app's theme rather than the macOS appearance: Light or Dark pins
+// them, "auto" follows the system as the page does.
 function applyNativeAppearance(theme: AppPreferences["theme"]): void {
-  nativeTheme.themeSource =
-    theme === "auto" ? "system" : isThemeInGroup(theme, "dark") ? "dark" : "light";
+  nativeTheme.themeSource = theme === "auto" ? "system" : theme;
   const color = windowBackgroundColor(theme);
   for (const window of BrowserWindow.getAllWindows()) {
     // The explorer window stays transparent: a color would cover its sidebar material.
@@ -667,7 +666,7 @@ const TRANSPARENT_WINDOW_BACKGROUND = "#00000000";
 
 // Shown only before the page paints (opening, resizing), so light or dark is enough.
 function windowBackgroundColor(theme: AppPreferences["theme"]): string {
-  const dark = theme === "auto" ? nativeTheme.shouldUseDarkColors : isThemeInGroup(theme, "dark");
+  const dark = theme === "auto" ? nativeTheme.shouldUseDarkColors : theme === "dark";
   return dark ? "#161618" : "#f4f5f8";
 }
 

@@ -1,6 +1,5 @@
 import type { AccentMode, ThemeMode } from "../../shared/appPreferences";
 import { darkenHex, hexToRgb, withAlpha } from "./colorUtils";
-import { type ThemeCssBase, resolveThemeCssBase } from "./themeVariants";
 
 type AccentThemeProfile = {
   isLight: boolean;
@@ -42,7 +41,7 @@ export type AccentTokens = {
   ringSoft: string;
 };
 
-const ACCENT_THEME_PROFILES: Record<ThemeCssBase, AccentThemeProfile> = {
+const ACCENT_THEME_PROFILES: Record<ThemeMode, AccentThemeProfile> = {
   light: {
     isLight: true,
     hoverBgAlpha: 0.14,
@@ -67,30 +66,6 @@ const ACCENT_THEME_PROFILES: Record<ThemeCssBase, AccentThemeProfile> = {
     locationRingAlpha: 0.14,
     folderTintAlpha: 0.14,
   },
-  "tomorrow-night": {
-    isLight: false,
-    hoverBgAlpha: 0.11,
-    activeBgAlpha: 0.1,
-    pillBgAlpha: 0.11,
-    focusBorderAlpha: 0.4,
-    heroIconBgAlpha: 0.07,
-    actionHoverBgAlpha: 0.09,
-    searchPillBorderAlpha: 0.5,
-    locationRingAlpha: 0.18,
-    folderTintAlpha: 0.18,
-  },
-  "catppuccin-mocha": {
-    isLight: false,
-    hoverBgAlpha: 0.11,
-    activeBgAlpha: 0.1,
-    pillBgAlpha: 0.1,
-    focusBorderAlpha: 0.35,
-    heroIconBgAlpha: 0.07,
-    actionHoverBgAlpha: 0.08,
-    searchPillBorderAlpha: 0.5,
-    locationRingAlpha: 0.18,
-    folderTintAlpha: 0.18,
-  },
 };
 
 // How much darker the accent's deep shade is: link-like text on light palettes, where the
@@ -99,7 +74,7 @@ const ACCENT_DARK_SHADE = 0.18;
 
 export function generateAccentTokens(accent: AccentMode, theme: ThemeMode): AccentTokens {
   const dark = darkenHex(accent, ACCENT_DARK_SHADE);
-  const profile = ACCENT_THEME_PROFILES[resolveThemeCssBase(theme)];
+  const profile = ACCENT_THEME_PROFILES[theme];
   const button = solidButtonColors(accent);
   const selection = selectionColors(accent);
 
@@ -131,15 +106,6 @@ export function accentTokensToCssVariables(tokens: AccentTokens): Record<string,
   return {
     "--bg-active": tokens.activeBg,
     "--crumb-active-bg": tokens.activeBg,
-    "--accent": tokens.solid,
-    "--accent-blue": tokens.solid,
-    "--accent-blue-dim": tokens.hoverBg,
-    "--accent-blue-border": tokens.border,
-    "--accent-gold": tokens.solid,
-    "--accent-gold-dim": tokens.folderTint,
-    "--accent-soft": tokens.pillBg,
-    "--accent-text": tokens.pillText,
-    "--help-accent": tokens.solid,
     "--ft-accent-solid": tokens.solid,
     "--ft-accent-solid-dark": tokens.solidDark,
     "--ft-accent-solid-button": tokens.solidButton,
@@ -148,6 +114,10 @@ export function accentTokensToCssVariables(tokens: AccentTokens): Record<string,
     "--ft-accent-on-selection": tokens.onSelection,
     "--ft-accent-on-selection-soft": withAlpha(tokens.onSelection, 0.85),
     "--ft-accent-border": tokens.border,
+    "--ft-accent-hover-bg": tokens.hoverBg,
+    "--ft-accent-pill-bg": tokens.pillBg,
+    "--ft-accent-pill-text": tokens.pillText,
+    "--ft-accent-folder-tint": tokens.folderTint,
     "--ft-accent-soft-bg": tokens.softBg,
     "--ft-accent-hero-icon-bg": tokens.heroIconBg,
     "--ft-accent-path-crumb-hover": tokens.pathCrumbHover,

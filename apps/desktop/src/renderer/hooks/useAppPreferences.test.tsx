@@ -10,39 +10,36 @@ describe("useAppPreferences", () => {
     const { result } = renderHook(() => useAppPreferences());
 
     act(() => {
-      result.current.setTheme("tomorrow-night");
-      result.current.setAutoLightTheme("sand");
-      result.current.setAutoDarkTheme("catppuccin-mocha");
+      result.current.setTheme("dark");
       result.current.setAccent("#d84a4a");
       result.current.setZoomPercent(125);
-      result.current.setUiFontFamily("lexend");
-      result.current.setTabStyle(
-        DEFAULT_APP_PREFERENCES.tabStyle === "cards" ? "accentLine" : "cards",
-      );
     });
     act(() => {
       result.current.resetAppearanceSettings();
     });
 
-    const { theme, autoLightTheme, autoDarkTheme, accent, zoomPercent, uiFontFamily, tabStyle } =
-      result.current;
-    expect({
-      theme,
-      autoLightTheme,
-      autoDarkTheme,
-      accent,
-      zoomPercent,
-      uiFontFamily,
-      tabStyle,
-    }).toEqual({
+    const { theme, accent, zoomPercent } = result.current;
+    expect({ theme, accent, zoomPercent }).toEqual({
       theme: DEFAULT_APP_PREFERENCES.theme,
-      autoLightTheme: DEFAULT_APP_PREFERENCES.autoLightTheme,
-      autoDarkTheme: DEFAULT_APP_PREFERENCES.autoDarkTheme,
       accent: DEFAULT_APP_PREFERENCES.accent,
       zoomPercent: DEFAULT_APP_PREFERENCES.zoomPercent,
-      uiFontFamily: DEFAULT_APP_PREFERENCES.uiFontFamily,
-      tabStyle: DEFAULT_APP_PREFERENCES.tabStyle,
     });
+  });
+
+  it("paints Light or Dark as chosen, and follows macOS on Auto", () => {
+    const { result } = renderHook(() => useAppPreferences());
+
+    act(() => result.current.setTheme("dark"));
+    expect(result.current.effectiveTheme).toBe("dark");
+    expect(document.documentElement.dataset.theme).toBe("dark");
+
+    act(() => result.current.setTheme("light"));
+    expect(result.current.effectiveTheme).toBe("light");
+
+    // jsdom has no dark appearance, so Auto is light here.
+    act(() => result.current.setTheme("auto"));
+    expect(result.current.effectiveTheme).toBe("light");
+    expect(document.documentElement.dataset.theme).toBe("light");
   });
 
   it("shows favorites in the folder tree unless told otherwise", () => {

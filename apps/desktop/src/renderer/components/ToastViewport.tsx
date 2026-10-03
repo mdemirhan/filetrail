@@ -2,7 +2,6 @@ import { useEffect, useRef } from "react";
 
 import { offsetAboveBarsAndCard, useBottomOffset } from "../lib/bottomStack";
 import type { ToastEntry, ToastKind } from "../lib/toasts";
-import { ClipboardItemsIcon } from "./ClipboardItemsIcon";
 
 // Solid marks in the kind's color; the sign inside is cut out in the card's own color.
 function ToastIcon({ kind }: { kind: ToastKind }) {
@@ -121,16 +120,9 @@ export function ToastViewport({
             aria-atomic="true"
           >
             <div className="toast-card-body">
-              {toast.icon ? (
-                // What was copied or cut, drawn as the file list draws it.
-                <div className="toast-card-icon-wrap toast-card-item-icon" aria-hidden="true">
-                  <ClipboardItemsIcon icon={toast.icon} />
-                </div>
-              ) : (
-                <div className="toast-card-icon-wrap" aria-hidden="true">
-                  <ToastIcon kind={toast.kind} />
-                </div>
-              )}
+              <div className="toast-card-icon-wrap" aria-hidden="true">
+                <ToastIcon kind={toast.kind} />
+              </div>
               <div className="toast-card-copy">
                 <div className="toast-card-title">{toast.title}</div>
                 {toast.message ? <div className="toast-card-message">{toast.message}</div> : null}

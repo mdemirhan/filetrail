@@ -17,7 +17,7 @@ Finder covers the basics. File Trail is for the things it gets wrong or leaves o
 - **Tabs that keep their place.** Each has its own folder, history, view and search.
 - **A clipboard you can see.** What you copied or cut stays marked, and listed in the toolbar, until you paste it.
 - **Folder sizes when you ask.** One click measures a folder and everything in it, and shows what takes the space.
-- **Yours to arrange.** The toolbar, the keyboard shortcuts, the palette and the accent color are all up to you.
+- **Yours to arrange.** The toolbar, the keyboard shortcuts and the accent color are all up to you.
 
 The rest works the way you expect a Mac app to.
 
@@ -79,22 +79,16 @@ Dates read the way you would say them ("24 min ago", "Yesterday, 6:03 PM"), and 
 
 ## Make it yours
 
-File Trail follows the macOS Light and Dark setting, with three palettes for each side.
+File Trail follows the macOS Light and Dark setting, or stays in the one you pick.
 
 <table>
   <tr>
-    <td align="center"><img src="docs/screenshots/palette-macos-light.png" alt="macOS Light palette" width="280"><br>macOS Light</td>
-    <td align="center"><img src="docs/screenshots/palette-warm-paper.png" alt="Warm Paper palette" width="280"><br>Warm Paper</td>
-    <td align="center"><img src="docs/screenshots/palette-sand.png" alt="Sand palette" width="280"><br>Sand</td>
-  </tr>
-  <tr>
-    <td align="center"><img src="docs/screenshots/palette-macos-dark.png" alt="macOS Dark palette" width="280"><br>macOS Dark</td>
-    <td align="center"><img src="docs/screenshots/palette-catppuccin-mocha.png" alt="Catppuccin Mocha palette" width="280"><br>Catppuccin Mocha</td>
-    <td align="center"><img src="docs/screenshots/palette-tomorrow-night.png" alt="Tomorrow Night palette" width="280"><br>Tomorrow Night</td>
+    <td align="center"><img src="docs/screenshots/palette-macos-light.png" alt="File Trail in Light" width="420"><br>Light</td>
+    <td align="center"><img src="docs/screenshots/palette-macos-dark.png" alt="File Trail in Dark" width="420"><br>Dark</td>
   </tr>
 </table>
 
-Beyond colour, you choose the accent, the font and the zoom level, and the parts you touch most are yours to arrange:
+Beyond that, you choose the accent color and the zoom level, and the parts you touch most are yours to arrange:
 
 <table>
   <tr>

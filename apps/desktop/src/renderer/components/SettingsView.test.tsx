@@ -5,22 +5,19 @@ import { readFileSync } from "node:fs";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 
-import type { ThemeMode } from "../../shared/appPreferences";
 import { SettingsView } from "./SettingsView";
 
 function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsView>> = {}) {
   return render(
     <SettingsView
-      theme="macos-dark"
+      theme="dark"
       accent="#daa520"
       zoomPercent={100}
-      uiFontFamily="lexend"
       compactListView={false}
       compactDetailsView={false}
       compactIconView={false}
       compactTreeView={false}
       singleClickExpandTreeItems={false}
-      highlightHoveredItems={true}
       detailColumns={{
         size: true,
         modified: true,
@@ -30,9 +27,8 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
       }}
       layoutMode="wide"
       notificationsEnabled={true}
-      notificationDurationSeconds={4}
-      restoreLastVisitedFolderOnStartup={false}
-      restoreOpenTabsOnStartup={false}
+      markClipboardItems={true}
+      restoreSessionOnStartup={true}
       homePath="/Users/demo"
       terminalApp={null}
       defaultTextEditor={{
@@ -73,24 +69,19 @@ function renderSettingsView(overrides: Partial<ComponentProps<typeof SettingsVie
         { value: "#23c7d9", label: "Aqua" },
         { value: "#2cb5a0", label: "Teal" },
       ]}
-      uiFontOptions={[{ value: "lexend", label: "Lexend" }]}
-      notificationDurationSecondsOptions={[4, 6]}
       onThemeChange={() => undefined}
       onAccentChange={() => undefined}
       onZoomPercentChange={() => undefined}
-      onUiFontFamilyChange={() => undefined}
       onResetAppearance={() => undefined}
       onCompactListViewChange={() => undefined}
       onCompactDetailsViewChange={() => undefined}
       onCompactIconViewChange={() => undefined}
       onCompactTreeViewChange={() => undefined}
       onSingleClickExpandTreeItemsChange={() => undefined}
-      onHighlightHoveredItemsChange={() => undefined}
       onDetailColumnsChange={() => undefined}
       onNotificationsEnabledChange={() => undefined}
-      onNotificationDurationSecondsChange={() => undefined}
-      onRestoreLastVisitedFolderOnStartupChange={() => undefined}
-      onRestoreOpenTabsOnStartupChange={() => undefined}
+      onMarkClipboardItemsChange={() => undefined}
+      onRestoreSessionOnStartupChange={() => undefined}
       onBrowseTerminalApp={() => undefined}
       onClearTerminalApp={() => undefined}
       onBrowseDefaultTextEditor={() => undefined}
@@ -129,109 +120,26 @@ describe("SettingsView", () => {
     expect(screen.queryByText("Application preferences and configuration")).not.toBeInTheDocument();
   });
 
-  it.each([
-    ["macos-light", "#ffffff"],
-    ["warm-paper", "#f0ede7"],
-    ["sand", "#ece7dc"],
-    ["macos-dark", "#1e1e20"],
-    ["tomorrow-night", "#151617"],
-    ["catppuccin-mocha", "#0e0e18"],
-  ] satisfies Array<[ThemeMode, string]>)(
-    "applies the supplied %s theme palette to the page background",
-    (theme, expectedBackground) => {
-      renderSettingsView({ theme });
-
-      expect(
-        screen.getByRole("heading", { name: "Settings" }).closest(".settings-view"),
-      ).toHaveStyle({
-        background: expectedBackground,
-      });
-    },
-  );
-
-  it("offers one palette per side instead of a single list of themes", () => {
-    renderSettingsView({ theme: "auto", autoLightTheme: "sand", autoDarkTheme: "tomorrow-night" });
-
-    expect(screen.queryByRole("combobox", { name: "Theme" })).toBeNull();
-    const lightPalette = screen.getByLabelText("Light palette");
-    const darkPalette = screen.getByLabelText("Dark palette");
-    expect(lightPalette).toHaveValue("sand");
-    expect(darkPalette).toHaveValue("tomorrow-night");
-    expect(
-      within(lightPalette)
-        .getAllByRole("option")
-        .map((option) => option.textContent),
-    ).toEqual(["macOS Light", "Warm Paper", "Sand"]);
-    expect(
-      within(darkPalette)
-        .getAllByRole("option")
-        .map((option) => option.textContent),
-    ).toEqual(["macOS Dark", "Catppuccin Mocha", "Tomorrow Night"]);
-  });
-
-  it("changes only the palette of a side while Auto is on", () => {
+  it("offers Auto, Light and Dark, and no palettes, fonts or tab styles", () => {
     const onThemeChange = vi.fn();
-    const onAutoLightThemeChange = vi.fn();
-    const onAutoDarkThemeChange = vi.fn();
-    renderSettingsView({
-      theme: "auto",
-      autoLightTheme: "macos-light",
-      autoDarkTheme: "macos-dark",
-      onThemeChange,
-      onAutoLightThemeChange,
-      onAutoDarkThemeChange,
-    });
-
-    fireEvent.change(screen.getByLabelText("Light palette"), { target: { value: "warm-paper" } });
-    fireEvent.change(screen.getByLabelText("Dark palette"), {
-      target: { value: "catppuccin-mocha" },
-    });
-
-    expect(onAutoLightThemeChange).toHaveBeenCalledWith("warm-paper");
-    expect(onAutoDarkThemeChange).toHaveBeenCalledWith("catppuccin-mocha");
-    expect(onThemeChange).not.toHaveBeenCalled();
-  });
-
-  it("applies a palette at once when it is the side on screen", () => {
-    const onThemeChange = vi.fn();
-    const onAutoLightThemeChange = vi.fn();
-    const onAutoDarkThemeChange = vi.fn();
-    renderSettingsView({
-      theme: "macos-dark",
-      autoLightTheme: "macos-light",
-      autoDarkTheme: "macos-dark",
-      onThemeChange,
-      onAutoLightThemeChange,
-      onAutoDarkThemeChange,
-    });
-
-    // Dark mode is showing: its palette changes the theme too.
-    fireEvent.change(screen.getByLabelText("Dark palette"), {
-      target: { value: "tomorrow-night" },
-    });
-    expect(onAutoDarkThemeChange).toHaveBeenCalledWith("tomorrow-night");
-    expect(onThemeChange).toHaveBeenCalledWith("tomorrow-night");
-
-    // The light palette is only stored for later.
-    fireEvent.change(screen.getByLabelText("Light palette"), { target: { value: "sand" } });
-    expect(onAutoLightThemeChange).toHaveBeenCalledWith("sand");
-    expect(onThemeChange).toHaveBeenCalledTimes(1);
-  });
-
-  it("switches between Auto, Light and Dark with the palette of each side", () => {
-    const onThemeChange = vi.fn();
-    renderSettingsView({
-      theme: "auto",
-      autoLightTheme: "sand",
-      autoDarkTheme: "catppuccin-mocha",
-      onThemeChange,
-    });
+    renderSettingsView({ theme: "auto", onThemeChange });
 
     expect(screen.getByRole("button", { name: "Auto" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(screen.getByRole("button", { name: "Light" }));
     fireEvent.click(screen.getByRole("button", { name: "Dark" }));
+    expect(onThemeChange.mock.calls).toEqual([["light"], ["dark"]]);
 
-    expect(onThemeChange.mock.calls).toEqual([["sand"], ["catppuccin-mocha"]]);
+    expect(screen.queryByLabelText("Light palette")).toBeNull();
+    expect(screen.queryByLabelText("Dark palette")).toBeNull();
+    expect(screen.queryByText("Font")).toBeNull();
+    expect(screen.queryByText("Tab style")).toBeNull();
+  });
+
+  it("takes its colors from the stylesheet, not from inline styles", () => {
+    renderSettingsView();
+
+    const view = screen.getByRole("heading", { name: "Settings" }).closest(".settings-view");
+    expect(view?.getAttribute("style")).toBeNull();
   });
 
   it("has one accent color and no separate toolbar, favorite or text colors", () => {
@@ -273,7 +181,9 @@ describe("SettingsView", () => {
   it("uses the one Settings button for every Reset, so each answers the pointer", () => {
     renderSettingsView();
 
-    expect(screen.getByRole("button", { name: "Reset Appearance" })).toHaveClass("settings-button");
+    expect(screen.getByRole("button", { name: "Restore the default appearance" })).toHaveClass(
+      "settings-button",
+    );
   });
 
   it("draws no line under the last row of a group, whichever row that is", () => {
@@ -281,7 +191,7 @@ describe("SettingsView", () => {
 
     // Rows leave their line to the stylesheet, which knows which one is last.
     const rows = Array.from(view.container.querySelectorAll<HTMLElement>(".settings-row"));
-    expect(rows.length).toBeGreaterThan(20);
+    expect(rows.length).toBeGreaterThan(15);
     expect(rows.filter((row) => row.style.borderBottom !== "")).toEqual([]);
     const styles = readFileSync("apps/desktop/src/renderer/styles.css", "utf8");
     expect(styles).toMatch(/\.settings-row:last-child \{\s*border-bottom: 0;/u);
@@ -350,21 +260,15 @@ describe("SettingsView", () => {
       onSingleClickExpandTreeItemsChange,
     });
 
-    fireEvent.click(screen.getByLabelText("Single-click expand tree folders"));
+    fireEvent.click(screen.getByLabelText("Expand folders with a single click"));
 
     expect(onSingleClickExpandTreeItemsChange).toHaveBeenCalledWith(true);
   });
 
-  it("forwards hovered item highlight toggle changes", () => {
-    const onHighlightHoveredItemsChange = vi.fn();
-    renderSettingsView({
-      highlightHoveredItems: true,
-      onHighlightHoveredItemsChange,
-    });
+  it("does not offer to highlight items under the pointer", () => {
+    renderSettingsView();
 
-    fireEvent.click(screen.getByLabelText("Highlight hovered items"));
-
-    expect(onHighlightHoveredItemsChange).toHaveBeenCalledWith(false);
+    expect(screen.queryByText("Highlight items under the pointer")).toBeNull();
   });
 
   it("takes any zoom typed in, such as 105%, and keeps it in range", () => {
@@ -420,7 +324,7 @@ describe("SettingsView", () => {
     renderSettingsView();
 
     expect(
-      within(screen.getByLabelText("Favorites placement"))
+      within(screen.getByLabelText("Show favorites"))
         .getAllByRole("option")
         .map((option) => option.textContent),
     ).toEqual(["In the folder tree", "In their own section"]);
@@ -428,28 +332,31 @@ describe("SettingsView", () => {
 
   it("keeps the Terminal app with the other app choices on the Files tab", () => {
     renderSettingsView({ activeTab: "files" });
-    const fileOpening = screen.getByText("File Opening").closest("section");
-    if (!(fileOpening instanceof HTMLElement)) {
-      throw new Error("Missing File Opening section.");
+    const opening = screen.getByText("Opening Files").closest("section");
+    if (!(opening instanceof HTMLElement)) {
+      throw new Error("Missing Opening Files section.");
     }
-    expect(within(fileOpening).getByRole("button", { name: "Default text editor" })).toBeVisible();
-    expect(within(fileOpening).getByRole("button", { name: "Terminal app" })).toBeVisible();
+    expect(within(opening).getByRole("button", { name: "Text editor" })).toBeVisible();
+    expect(within(opening).getByRole("button", { name: "Terminal" })).toBeVisible();
     cleanup();
 
-    // General keeps the startup choices only.
-    renderSettingsView({ activeTab: "general" });
-    expect(screen.getByText("Reopen the last folder")).toBeInTheDocument();
-    expect(screen.getByText("Reopen tabs")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Terminal app" })).toBeNull();
+    // General has the appearance first, then the startup choice.
+    const view = renderSettingsView({ activeTab: "general" });
+    expect(
+      Array.from(view.container.querySelectorAll("h3")).map((heading) => heading.textContent),
+    ).toEqual(["Appearance", "Startup", "Notifications", "Copy and Cut"]);
+    expect(screen.getByText("Reopen the last folder and tabs")).toBeInTheDocument();
+    expect(screen.queryByText("Reopen tabs")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Terminal" })).toBeNull();
   });
 
-  it("switches Restore open tabs on its own, next to Restore last visited folder", () => {
-    const onRestoreOpenTabsOnStartupChange = vi.fn();
-    renderSettingsView({ activeTab: "general", onRestoreOpenTabsOnStartupChange });
+  it("reopens the last folder and tabs with one switch", () => {
+    const onRestoreSessionOnStartupChange = vi.fn();
+    renderSettingsView({ activeTab: "general", onRestoreSessionOnStartupChange });
 
-    fireEvent.click(screen.getByRole("switch", { name: "Restore open tabs" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Reopen the last folder and tabs" }));
 
-    expect(onRestoreOpenTabsOnStartupChange).toHaveBeenCalledWith(true);
+    expect(onRestoreSessionOnStartupChange).toHaveBeenCalledWith(false);
   });
 
   it("chooses the Terminal app from its pop-up, or goes back to the default", () => {
@@ -464,11 +371,11 @@ describe("SettingsView", () => {
       onClearTerminalApp,
     });
 
-    const popup = screen.getByRole("button", { name: "Terminal app" });
+    const popup = screen.getByRole("button", { name: "Terminal" });
     expect(popup).toHaveTextContent("iTerm");
 
     fireEvent.click(popup);
-    const menu = screen.getByRole("menu", { name: "Terminal app" });
+    const menu = screen.getByRole("menu", { name: "Terminal" });
     expect(within(menu).getByRole("menuitemradio", { name: "iTerm" })).toHaveAttribute(
       "aria-checked",
       "true",
@@ -499,10 +406,10 @@ describe("SettingsView", () => {
       onOpenItemLimitChange,
     });
 
-    const editor = screen.getByRole("button", { name: "Default text editor" });
+    const editor = screen.getByRole("button", { name: "Text editor" });
     expect(editor).toHaveTextContent("Zed");
 
-    fireEvent.change(screen.getByLabelText("File activation"), {
+    fireEvent.change(screen.getByLabelText("Double-click a file to"), {
       target: { value: "edit" },
     });
     fireEvent.change(screen.getByLabelText("Open and Edit item limit"), {
@@ -520,57 +427,27 @@ describe("SettingsView", () => {
     expect(onClearDefaultTextEditor).toHaveBeenCalled();
   });
 
-  it("forwards notification preference changes", () => {
+  it("forwards notification preference changes, and has no duration to set", () => {
     const onNotificationsEnabledChange = vi.fn();
-    const onNotificationDurationSecondsChange = vi.fn();
-    renderSettingsView({
-      notificationsEnabled: true,
-      notificationDurationSeconds: 4,
-      notificationDurationSecondsOptions: [4, 6],
-      onNotificationsEnabledChange,
-      onNotificationDurationSecondsChange,
-    });
+    renderSettingsView({ notificationsEnabled: true, onNotificationsEnabledChange });
 
     fireEvent.click(screen.getByLabelText("Show notifications"));
-    fireEvent.change(screen.getByLabelText("Notification duration"), {
-      target: { value: "6" },
-    });
 
     expect(onNotificationsEnabledChange).toHaveBeenCalledWith(false);
-    expect(onNotificationDurationSecondsChange).toHaveBeenCalledWith(6);
+    expect(screen.queryByText("Show for")).toBeNull();
   });
 
-  it("forwards the copy and cut preference changes", () => {
-    const onHighlightClipboardItemsInTreeChange = vi.fn();
-    const onHighlightClipboardItemsInContentChange = vi.fn();
-    const onNotifyClipboardItemsChange = vi.fn();
-    renderSettingsView({
-      highlightClipboardItemsInTree: true,
-      highlightClipboardItemsInContent: false,
-      notifyClipboardItems: true,
-      onHighlightClipboardItemsInTreeChange,
-      onHighlightClipboardItemsInContentChange,
-      onNotifyClipboardItemsChange,
-    });
+  it("marks copied and cut items with one switch", () => {
+    const onMarkClipboardItemsChange = vi.fn();
+    renderSettingsView({ markClipboardItems: true, onMarkClipboardItemsChange });
 
     expect(screen.getByText("Copy and Cut")).toBeInTheDocument();
-    const treeToggle = screen.getByLabelText("Highlight copied items in the folder tree");
-    const contentToggle = screen.getByLabelText("Highlight copied items in the file list");
-    expect(treeToggle).toHaveAttribute("aria-checked", "true");
-    expect(contentToggle).toHaveAttribute("aria-checked", "false");
+    const toggle = screen.getByRole("switch", { name: "Mark copied and cut items" });
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(toggle);
 
-    fireEvent.click(treeToggle);
-    fireEvent.click(contentToggle);
-    fireEvent.click(screen.getByLabelText("Notify what was copied"));
-
-    expect(onHighlightClipboardItemsInTreeChange).toHaveBeenCalledWith(false);
-    expect(onHighlightClipboardItemsInContentChange).toHaveBeenCalledWith(true);
-    expect(onNotifyClipboardItemsChange).toHaveBeenCalledWith(false);
-  });
-
-  it("has nothing to notify of copies while notifications are off", () => {
-    renderSettingsView({ notificationsEnabled: false });
-    expect(screen.getByLabelText("Notify what was copied")).toBeDisabled();
+    expect(onMarkClipboardItemsChange).toHaveBeenCalledWith(false);
+    expect(screen.queryByText("Notify what was copied")).toBeNull();
   });
 
   it("renders configured Open With applications", () => {
@@ -602,7 +479,7 @@ describe("SettingsView", () => {
       onFavoritesPlacementChange,
     });
 
-    fireEvent.change(screen.getByLabelText("Favorites placement"), {
+    fireEvent.change(screen.getByLabelText("Show favorites"), {
       target: { value: "separate" },
     });
 

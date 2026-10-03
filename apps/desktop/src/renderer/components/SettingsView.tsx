@@ -1,5 +1,4 @@
 import {
-  type CSSProperties,
   type ReactNode,
   type RefObject,
   useCallback,
@@ -23,42 +22,31 @@ import type {
   OpenWithApplication,
   ReturnKeyAction,
   SearchPatternModePreference,
-  TabStyle,
-  ThemeMode,
   ThemePreference,
-  UiFontFamily,
 } from "../../shared/appPreferences";
 import {
-  DARK_THEME_OPTIONS,
   DEFAULT_APP_PREFERENCES,
   DEFAULT_TERMINAL_APPLICATION,
   DEFAULT_TEXT_EDITOR,
   DETAIL_COLUMN_LABELS,
   FAVORITE_ICON_OPTIONS,
-  LIGHT_THEME_OPTIONS,
   OPTIONAL_DETAIL_COLUMN_KEYS,
   SEARCH_PATTERN_MODES,
   SEARCH_PATTERN_MODE_LABELS,
+  THEME_OPTIONS,
   ZOOM_PERCENT_MAX,
   ZOOM_PERCENT_MIN,
   clampOpenItemLimit,
   clampZoomPercent,
-  getThemeLabel,
-  isThemeInGroup,
   normalizeAccentColor,
 } from "../../shared/appPreferences";
 import { type ShortcutOverrides, resolveShortcuts } from "../../shared/shortcuts";
-import { generateAccentTokens } from "../lib/accent";
 import { getFavoriteLabel, getTrashPath } from "../lib/favorites";
 import { AppIcon, FavoriteItemIcon } from "../lib/fileIcons";
 import { createShortcutDisplay } from "../lib/shortcutDisplay";
-import { type ThemeCssBase, getThemeVariant, resolveThemeCssBase } from "../lib/themeVariants";
-import { VIEW_TEXT } from "../lib/viewColors";
 import { MenuCheck } from "./MenuCheck";
 import { ActionButton, SectionCard } from "./SettingsControls";
 import { ShortcutSettings } from "./ShortcutSettings";
-
-// Settings follows the Font preference.
 
 export type SettingsTab = IpcSettingsTab;
 
@@ -70,151 +58,6 @@ export type SearchDefaults = {
   searchSkipGitIgnored: boolean;
 };
 
-const settingsBaseThemes = {
-  light: {
-    page: { bg: "#edeef4" },
-    header: { title: "#2a2a34", desc: "#a0a2ae" },
-    card: { bg: "#f7f8fb", border: "rgba(0,0,0,0.06)", shadow: "0 1px 3px rgba(0,0,0,0.04)" },
-    section: { title: "#2a2a34" },
-    label: { primary: "#3a3a4a", secondary: "#8a8c9a" },
-    input: {
-      bg: "#fff",
-      border: "rgba(0,0,0,0.1)",
-      text: "#2a2a34",
-    },
-    select: {
-      bg: "#fff",
-      border: "rgba(0,0,0,0.1)",
-      text: "#3a3a4a",
-      arrow: "#a0a2ae",
-    },
-    toggle: { trackOff: "#d0d2da", knob: "#fff" },
-    checkbox: {
-      border: "rgba(0,0,0,0.15)",
-      check: "#fff",
-      uncheckedBg: "#fff",
-    },
-    color: {
-      swatchBorder: "rgba(0,0,0,0.1)",
-      inputBg: "#fff",
-      inputBorder: "rgba(0,0,0,0.08)",
-      text: "#5a5a6a",
-    },
-    separator: "rgba(0,0,0,0.05)",
-    footer: "#a0a2ae",
-  },
-  dark: {
-    page: { bg: "#181b22" },
-    header: { title: "#dcdee8", desc: "#6a6d78" },
-    card: {
-      bg: "#1f222a",
-      border: "rgba(255,255,255,0.05)",
-      shadow: "0 1px 4px rgba(0,0,0,0.2)",
-    },
-    section: { title: "#dcdee8" },
-    label: { primary: "#c0c4d0", secondary: "#7a7d8e" },
-    input: {
-      bg: "rgba(255,255,255,0.04)",
-      border: "rgba(255,255,255,0.07)",
-      text: "#d4d6e0",
-    },
-    select: {
-      bg: "rgba(255,255,255,0.04)",
-      border: "rgba(255,255,255,0.07)",
-      text: "#c0c4d0",
-      arrow: "#6a6d78",
-    },
-    toggle: { trackOff: "#333640", knob: "#1c1f26" },
-    checkbox: {
-      border: "rgba(255,255,255,0.08)",
-      check: "#1c1f26",
-      uncheckedBg: "rgba(255,255,255,0.04)",
-    },
-    color: {
-      swatchBorder: "rgba(255,255,255,0.08)",
-      inputBg: "rgba(255,255,255,0.04)",
-      inputBorder: "rgba(255,255,255,0.06)",
-      text: "#a0a4b4",
-    },
-    separator: "rgba(255,255,255,0.04)",
-    footer: "#6a6d78",
-  },
-  "tomorrow-night": {
-    page: { bg: "#151617" },
-    header: { title: "#d8d9e0", desc: "#62636a" },
-    card: {
-      bg: "#1c1d1f",
-      border: "rgba(255,255,255,0.04)",
-      shadow: "0 1px 4px rgba(0,0,0,0.25)",
-    },
-    section: { title: "#d8d9e0" },
-    label: { primary: "#b8b9c2", secondary: "#74757c" },
-    input: {
-      bg: "rgba(255,255,255,0.03)",
-      border: "rgba(255,255,255,0.06)",
-      text: "#d0d1d8",
-    },
-    select: {
-      bg: "rgba(255,255,255,0.03)",
-      border: "rgba(255,255,255,0.06)",
-      text: "#b8b9c2",
-      arrow: "#6a6b72",
-    },
-    toggle: { trackOff: "#2e2f32", knob: "#18191b" },
-    checkbox: {
-      border: "rgba(255,255,255,0.06)",
-      check: "#18191b",
-      uncheckedBg: "rgba(255,255,255,0.03)",
-    },
-    color: {
-      swatchBorder: "rgba(255,255,255,0.06)",
-      inputBg: "rgba(255,255,255,0.03)",
-      inputBorder: "rgba(255,255,255,0.05)",
-      text: "#9a9ba4",
-    },
-    separator: "rgba(255,255,255,0.035)",
-    footer: "#62636a",
-  },
-  "catppuccin-mocha": {
-    page: { bg: "#0e0e18" },
-    header: { title: "#dde4ff", desc: "#585878" },
-    card: {
-      bg: "#141420",
-      border: "rgba(255,255,255,0.04)",
-      shadow: "0 1px 4px rgba(0,0,0,0.3)",
-    },
-    section: { title: "#dde4ff" },
-    label: { primary: "#b8bee0", secondary: "#707090" },
-    input: {
-      bg: "rgba(255,255,255,0.025)",
-      border: "rgba(255,255,255,0.05)",
-      text: "#dde4ff",
-    },
-    select: {
-      bg: "rgba(255,255,255,0.025)",
-      border: "rgba(255,255,255,0.05)",
-      text: "#b8bee0",
-      arrow: "#686888",
-    },
-    toggle: { trackOff: "#2a2a40", knob: "#11111b" },
-    checkbox: {
-      border: "rgba(255,255,255,0.05)",
-      check: "#11111b",
-      uncheckedBg: "rgba(255,255,255,0.025)",
-    },
-    color: {
-      swatchBorder: "rgba(255,255,255,0.06)",
-      inputBg: "rgba(255,255,255,0.025)",
-      inputBorder: "rgba(255,255,255,0.04)",
-      text: "#9a9ac0",
-    },
-    separator: "rgba(255,255,255,0.03)",
-    footer: "#585878",
-  },
-} as const satisfies Record<ThemeCssBase, unknown>;
-
-type ResolvedSettingsTheme = ReturnType<typeof resolveSettingsTheme>;
-
 // The keys a sentence names, or nothing when none of them is set: " (⌘+, ⌘−, ⌘0)".
 function describeKeys(
   labels: ReadonlyArray<string | null>,
@@ -224,121 +67,6 @@ function describeKeys(
 ): string {
   const keys = labels.filter((label): label is string => label !== null);
   return keys.length > 0 ? `${before}${keys.join(separator)}${after}` : "";
-}
-
-function resolveSettingsTheme(theme: ThemeMode, accent: AccentMode) {
-  const base = resolveSettingsBaseTheme(theme);
-  const accentTokens = generateAccentTokens(accent, theme);
-
-  // Text uses the root tokens, so it follows the palette like the rest of the app.
-  return {
-    ...base,
-    header: {
-      title: VIEW_TEXT.primary,
-      desc: VIEW_TEXT.muted,
-      subtitle: accentTokens.solid,
-    },
-    section: {
-      title: VIEW_TEXT.primary,
-      iconBg: accentTokens.heroIconBg,
-    },
-    label: {
-      primary: VIEW_TEXT.secondary,
-      secondary: VIEW_TEXT.muted,
-    },
-    input: {
-      ...base.input,
-      text: VIEW_TEXT.primary,
-      borderFocus: accentTokens.focusBorder,
-      caret: accentTokens.solid,
-    },
-    select: { ...base.select, text: VIEW_TEXT.primary },
-    color: { ...base.color, text: VIEW_TEXT.muted },
-    footer: VIEW_TEXT.muted,
-    toggle: {
-      ...base.toggle,
-      trackOn: accentTokens.solid,
-    },
-    checkbox: {
-      ...base.checkbox,
-      bg: accentTokens.solid,
-    },
-    accent: accentTokens,
-  };
-}
-
-function resolveSettingsBaseTheme(theme: ThemeMode) {
-  const cssBase = resolveThemeCssBase(theme);
-  const base = settingsBaseThemes[cssBase];
-  const variant = getThemeVariant(theme);
-  if (!variant) {
-    return base;
-  }
-  return {
-    ...base,
-    page: { bg: variant.surfaces.page },
-    header: {
-      title: variant.text.primary,
-      desc: variant.text.muted,
-    },
-    card: {
-      ...base.card,
-      bg: variant.surfaces.card,
-      border: variant.surfaces.cardBorder,
-    },
-    section: { title: variant.text.primary },
-    label: {
-      primary: variant.text.secondary,
-      secondary: variant.text.muted,
-    },
-    input: {
-      bg: variant.controls.inputBg,
-      border: variant.controls.inputBorder,
-      text: variant.text.primary,
-    },
-    select: {
-      bg: variant.controls.selectBg,
-      border: variant.controls.selectBorder,
-      text: variant.controls.selectText,
-      arrow: variant.controls.selectArrow,
-    },
-    toggle: {
-      trackOff: variant.controls.toggleOff,
-      knob: base.toggle.knob,
-    },
-    checkbox: {
-      border: variant.controls.checkBorder,
-      check: base.checkbox.check,
-      uncheckedBg: variant.controls.checkOff,
-    },
-    color: {
-      swatchBorder: variant.controls.inputBorder,
-      inputBg: variant.controls.inputBg,
-      inputBorder: variant.controls.inputBorder,
-      text: variant.text.tertiary,
-    },
-    separator: variant.separator,
-    footer: variant.text.muted,
-  };
-}
-
-// The Settings palette, handed down to every control as custom properties: the controls are
-// drawn by `.settings-*` rules in styles.css, so none of them carries colours of its own.
-function settingsPaletteStyle(palette: ResolvedSettingsTheme): CSSProperties {
-  return {
-    "--settings-page-bg": palette.page.bg,
-    "--settings-card-bg": palette.card.bg,
-    "--settings-card-border": palette.card.border,
-    "--settings-card-shadow": palette.card.shadow,
-    "--settings-separator": palette.separator,
-    "--settings-control-bg": palette.input.bg,
-    "--settings-control-border": palette.input.border,
-    "--settings-label-secondary": palette.label.secondary,
-    "--settings-switch-off": palette.toggle.trackOff,
-    "--settings-check-border": palette.checkbox.border,
-    "--settings-check-off": palette.checkbox.uncheckedBg,
-    background: palette.page.bg,
-  } as CSSProperties;
 }
 
 function Toggle({
@@ -453,48 +181,28 @@ function AppearanceThumbnail({ mode }: { mode: "auto" | "light" | "dark" }) {
   );
 }
 
-// Auto / Light / Dark, like System Settings. Light and Dark use the palette chosen for that
-// appearance, so switching back to Auto restores the same colors.
+// Auto / Light / Dark, like System Settings.
 function AppearanceModePicker({
   theme,
-  autoLightTheme,
-  autoDarkTheme,
   onChange,
 }: {
   theme: ThemePreference;
-  autoLightTheme: ThemeMode;
-  autoDarkTheme: ThemeMode;
   onChange: (value: ThemePreference) => void;
 }) {
-  const current: "auto" | "light" | "dark" =
-    theme === "auto"
-      ? "auto"
-      : LIGHT_THEME_OPTIONS.some((option) => option.value === theme)
-        ? "light"
-        : "dark";
-  const modes: ReadonlyArray<{
-    id: "auto" | "light" | "dark";
-    label: string;
-    value: ThemePreference;
-  }> = [
-    { id: "auto", label: "Auto", value: "auto" },
-    { id: "light", label: "Light", value: autoLightTheme },
-    { id: "dark", label: "Dark", value: autoDarkTheme },
-  ];
   return (
     <div className="settings-appearance-picker">
-      {modes.map((mode) => (
+      {THEME_OPTIONS.map((option) => (
         <button
-          key={mode.id}
+          key={option.value}
           type="button"
           className="settings-appearance-option"
-          aria-pressed={current === mode.id}
-          onClick={() => onChange(mode.value)}
+          aria-pressed={theme === option.value}
+          onClick={() => onChange(option.value)}
         >
           <span className="settings-appearance-ring">
-            <AppearanceThumbnail mode={mode.id} />
+            <AppearanceThumbnail mode={option.value} />
           </span>
-          {mode.label}
+          {option.label}
         </button>
       ))}
     </div>
@@ -1304,29 +1012,18 @@ export function SettingsView({
   searchDefaults,
   onSearchDefaultsChange = () => undefined,
   theme,
-  effectiveTheme,
-  autoLightTheme = DEFAULT_APP_PREFERENCES.autoLightTheme,
-  autoDarkTheme = DEFAULT_APP_PREFERENCES.autoDarkTheme,
-  onAutoLightThemeChange = () => undefined,
-  onAutoDarkThemeChange = () => undefined,
   accent,
   zoomPercent,
-  uiFontFamily,
   compactListView,
   compactDetailsView,
   compactIconView,
   compactTreeView,
   singleClickExpandTreeItems,
-  highlightHoveredItems = true,
   detailColumns,
   layoutMode = "wide",
   notificationsEnabled,
-  notificationDurationSeconds,
-  highlightClipboardItemsInTree = true,
-  highlightClipboardItemsInContent = true,
-  notifyClipboardItems = true,
-  restoreLastVisitedFolderOnStartup,
-  restoreOpenTabsOnStartup,
+  markClipboardItems,
+  restoreSessionOnStartup,
   homePath,
   terminalApp,
   defaultTextEditor,
@@ -1336,33 +1033,23 @@ export function SettingsView({
   fileActivationAction,
   returnKeyAction = "rename",
   onReturnKeyActionChange = () => undefined,
-  tabStyle = DEFAULT_APP_PREFERENCES.tabStyle,
-  onTabStyleChange = () => undefined,
   shortcutOverrides = DEFAULT_APP_PREFERENCES.shortcutOverrides,
   onShortcutOverridesChange = () => undefined,
   openItemLimit,
   accentOptions,
-  uiFontOptions,
-  notificationDurationSecondsOptions,
   onThemeChange,
   onAccentChange,
   onZoomPercentChange,
-  onUiFontFamilyChange,
   onResetAppearance,
   onCompactListViewChange,
   onCompactDetailsViewChange,
   onCompactIconViewChange,
   onCompactTreeViewChange,
   onSingleClickExpandTreeItemsChange,
-  onHighlightHoveredItemsChange = () => undefined,
   onDetailColumnsChange,
   onNotificationsEnabledChange,
-  onHighlightClipboardItemsInTreeChange = () => undefined,
-  onHighlightClipboardItemsInContentChange = () => undefined,
-  onNotifyClipboardItemsChange = () => undefined,
-  onNotificationDurationSecondsChange,
-  onRestoreLastVisitedFolderOnStartupChange,
-  onRestoreOpenTabsOnStartupChange,
+  onMarkClipboardItemsChange,
+  onRestoreSessionOnStartupChange,
   onBrowseTerminalApp,
   onClearTerminalApp,
   onBrowseDefaultTextEditor,
@@ -1388,29 +1075,18 @@ export function SettingsView({
   searchDefaults?: SearchDefaults | undefined;
   onSearchDefaultsChange?: (patch: Partial<SearchDefaults>) => void;
   theme: ThemePreference;
-  effectiveTheme?: ThemeMode;
-  autoLightTheme?: ThemeMode;
-  autoDarkTheme?: ThemeMode;
-  onAutoLightThemeChange?: (value: ThemeMode) => void;
-  onAutoDarkThemeChange?: (value: ThemeMode) => void;
   accent: AccentMode;
   zoomPercent: number;
-  uiFontFamily: UiFontFamily;
   compactListView: boolean;
   compactDetailsView: boolean;
   compactIconView: boolean;
   compactTreeView: boolean;
   singleClickExpandTreeItems: boolean;
-  highlightHoveredItems?: boolean;
   detailColumns: DetailColumnVisibility;
   layoutMode?: "wide" | "narrow" | "compact";
   notificationsEnabled: boolean;
-  notificationDurationSeconds: number;
-  highlightClipboardItemsInTree?: boolean;
-  highlightClipboardItemsInContent?: boolean;
-  notifyClipboardItems?: boolean;
-  restoreLastVisitedFolderOnStartup: boolean;
-  restoreOpenTabsOnStartup: boolean;
+  markClipboardItems: boolean;
+  restoreSessionOnStartup: boolean;
   homePath: string;
   terminalApp: ApplicationSelection | null;
   defaultTextEditor: ApplicationSelection;
@@ -1420,34 +1096,24 @@ export function SettingsView({
   fileActivationAction: FileActivationAction;
   returnKeyAction?: ReturnKeyAction;
   onReturnKeyActionChange?: (value: ReturnKeyAction) => void;
-  tabStyle?: TabStyle;
-  onTabStyleChange?: (value: TabStyle) => void;
   // The keyboard shortcuts that differ from their defaults (the Shortcuts tab).
   shortcutOverrides?: ShortcutOverrides;
   onShortcutOverridesChange?: (value: ShortcutOverrides) => void;
   openItemLimit: number;
   accentOptions: ReadonlyArray<{ value: AccentMode; label: string }>;
-  uiFontOptions: ReadonlyArray<{ value: UiFontFamily; label: string }>;
-  notificationDurationSecondsOptions: ReadonlyArray<number>;
   onThemeChange: (value: ThemePreference) => void;
   onAccentChange: (value: AccentMode) => void;
   onZoomPercentChange: (value: number) => void;
-  onUiFontFamilyChange: (value: UiFontFamily) => void;
   onResetAppearance: () => void;
   onCompactListViewChange: (value: boolean) => void;
   onCompactDetailsViewChange: (value: boolean) => void;
   onCompactIconViewChange: (value: boolean) => void;
   onCompactTreeViewChange: (value: boolean) => void;
   onSingleClickExpandTreeItemsChange: (value: boolean) => void;
-  onHighlightHoveredItemsChange?: (value: boolean) => void;
   onDetailColumnsChange: (value: DetailColumnVisibility) => void;
   onNotificationsEnabledChange: (value: boolean) => void;
-  onHighlightClipboardItemsInTreeChange?: (value: boolean) => void;
-  onHighlightClipboardItemsInContentChange?: (value: boolean) => void;
-  onNotifyClipboardItemsChange?: (value: boolean) => void;
-  onNotificationDurationSecondsChange: (value: number) => void;
-  onRestoreLastVisitedFolderOnStartupChange: (value: boolean) => void;
-  onRestoreOpenTabsOnStartupChange: (value: boolean) => void;
+  onMarkClipboardItemsChange: (value: boolean) => void;
+  onRestoreSessionOnStartupChange: (value: boolean) => void;
   onBrowseTerminalApp: () => void;
   onClearTerminalApp: () => void;
   onBrowseDefaultTextEditor: () => void;
@@ -1467,8 +1133,6 @@ export function SettingsView({
   onOpenItemLimitChange: (value: number) => void;
 }) {
   const showSection = (tab: SettingsTab) => activeTab === undefined || activeTab === tab;
-  const paintedTheme: ThemeMode = effectiveTheme ?? (theme === "auto" ? autoLightTheme : theme);
-  const palette = resolveSettingsTheme(paintedTheme, accent);
   // Settings names a few keys in its own text; they follow the Shortcuts tab.
   const shortcutDisplay = useMemo(
     () => createShortcutDisplay(resolveShortcuts(shortcutOverrides), { returnKeyAction }),
@@ -1494,7 +1158,7 @@ export function SettingsView({
   };
   const trashPath = getTrashPath(homePath);
   return (
-    <div className="settings-view" data-layout={layoutMode} style={settingsPaletteStyle(palette)}>
+    <div className="settings-view" data-layout={layoutMode}>
       <div className="settings-page">
         {activeTab ? null : (
           <header className="settings-page-header">
@@ -1505,65 +1169,20 @@ export function SettingsView({
           </header>
         )}
 
-        {showSection("appearance") ? (
+        {showSection("general") ? (
           <SectionCard
-            // The window's title already names the tab; the group needs no title of its own.
-            title={activeTab ? undefined : "Appearance"}
+            title="Appearance"
             resetButton={
               <ActionButton
                 label="Restore Defaults"
-                ariaLabel="Reset Appearance"
+                ariaLabel="Restore the default appearance"
                 onClick={onResetAppearance}
               />
             }
-            resetBelow
           >
             <SettingRow
               title="Appearance"
-              right={
-                <AppearanceModePicker
-                  theme={theme}
-                  autoLightTheme={autoLightTheme}
-                  autoDarkTheme={autoDarkTheme}
-                  onChange={onThemeChange}
-                />
-              }
-            />
-            {/* One palette per side. Auto uses both; Light or Dark uses its own. */}
-            <SettingRow
-              title="Light palette"
-              right={
-                <SelectControl
-                  value={autoLightTheme}
-                  options={LIGHT_THEME_OPTIONS.map((option) => option.value)}
-                  ariaLabel="Light palette"
-                  onChange={(value) => {
-                    onAutoLightThemeChange(value as ThemeMode);
-                    // In Light mode the palette on screen is this one.
-                    if (theme !== "auto" && isThemeInGroup(theme, "light")) {
-                      onThemeChange(value as ThemeMode);
-                    }
-                  }}
-                  formatOption={(value) => getThemeLabel(value as ThemeMode)}
-                />
-              }
-            />
-            <SettingRow
-              title="Dark palette"
-              right={
-                <SelectControl
-                  value={autoDarkTheme}
-                  options={DARK_THEME_OPTIONS.map((option) => option.value)}
-                  ariaLabel="Dark palette"
-                  onChange={(value) => {
-                    onAutoDarkThemeChange(value as ThemeMode);
-                    if (theme !== "auto" && isThemeInGroup(theme, "dark")) {
-                      onThemeChange(value as ThemeMode);
-                    }
-                  }}
-                  formatOption={(value) => getThemeLabel(value as ThemeMode)}
-                />
-              }
+              right={<AppearanceModePicker theme={theme} onChange={onThemeChange} />}
             />
             <SettingRow
               title="Accent color"
@@ -1588,37 +1207,59 @@ export function SettingsView({
               )}
               right={<ZoomComboBox value={zoomPercent} onChange={onZoomPercentChange} />}
             />
+          </SectionCard>
+        ) : null}
+
+        {showSection("general") ? (
+          <SectionCard title="Startup">
             <SettingRow
-              title="Font"
+              title="Reopen the last folder and tabs"
+              desc="Otherwise File Trail opens one tab in your home folder."
               right={
-                <SelectControl
-                  value={uiFontFamily}
-                  options={uiFontOptions.map((option) => option.value)}
-                  ariaLabel="Font"
-                  onChange={(value) => onUiFontFamilyChange(value as UiFontFamily)}
-                  formatOption={(value) =>
-                    uiFontOptions.find((option) => option.value === value)?.label ?? String(value)
-                  }
-                />
-              }
-            />
-            <SettingRow
-              title="Tab style"
-              right={
-                <SelectControl
-                  value={tabStyle}
-                  options={["accentLine", "cards"] satisfies TabStyle[]}
-                  ariaLabel="Tab style"
-                  onChange={(value) => onTabStyleChange(value as TabStyle)}
-                  formatOption={(value) => (value === "accentLine" ? "Accent line" : "Cards")}
+                <Toggle
+                  checked={restoreSessionOnStartup}
+                  onToggle={() => onRestoreSessionOnStartupChange(!restoreSessionOnStartup)}
+                  label="Reopen the last folder and tabs"
                 />
               }
             />
           </SectionCard>
         ) : null}
 
-        {showSection("explorer") ? (
-          <SectionCard title={activeTab ? undefined : "Explorer"}>
+        {showSection("general") ? (
+          <SectionCard title="Notifications">
+            <SettingRow
+              title="Show notifications"
+              desc="A card at the bottom right when a copy, a move or the Trash is done."
+              right={
+                <Toggle
+                  checked={notificationsEnabled}
+                  onToggle={() => onNotificationsEnabledChange(!notificationsEnabled)}
+                  label="Show notifications"
+                />
+              }
+            />
+          </SectionCard>
+        ) : null}
+
+        {showSection("general") ? (
+          <SectionCard title="Copy and Cut">
+            <SettingRow
+              title="Mark copied and cut items"
+              desc="They flash, and keep a mark in the folder tree and the file list until they are pasted."
+              right={
+                <Toggle
+                  checked={markClipboardItems}
+                  onToggle={() => onMarkClipboardItemsChange(!markClipboardItems)}
+                  label="Mark copied and cut items"
+                />
+              }
+            />
+          </SectionCard>
+        ) : null}
+
+        {showSection("browsing") ? (
+          <SectionCard title="Views">
             <SettingRow
               title="Density"
               desc="Compact fits more rows and icons in every view and in the folder tree."
@@ -1646,22 +1287,12 @@ export function SettingsView({
                 <Toggle
                   checked={singleClickExpandTreeItems}
                   onToggle={() => onSingleClickExpandTreeItemsChange(!singleClickExpandTreeItems)}
-                  label="Single-click expand tree folders"
-                />
-              }
-            />
-            <SettingRow
-              title="Highlight items under the pointer"
-              right={
-                <Toggle
-                  checked={highlightHoveredItems}
-                  onToggle={() => onHighlightHoveredItemsChange(!highlightHoveredItems)}
-                  label="Highlight hovered items"
+                  label="Expand folders with a single click"
                 />
               }
             />
             <div className="settings-row settings-row-stacked">
-              <div className="settings-row-title">Columns in Details view</div>
+              <div className="settings-row-title">Columns in List view</div>
               <div className="settings-checkboxes">
                 {OPTIONAL_DETAIL_COLUMN_KEYS.map((key) => (
                   <Checkbox
@@ -1681,255 +1312,7 @@ export function SettingsView({
           </SectionCard>
         ) : null}
 
-        {showSection("general") ? (
-          <SectionCard title="Notifications">
-            <SettingRow
-              title="Show notifications"
-              desc="A card at the bottom right when items are copied, moved or put in the Trash."
-              right={
-                <Toggle
-                  checked={notificationsEnabled}
-                  onToggle={() => onNotificationsEnabledChange(!notificationsEnabled)}
-                  label="Show notifications"
-                />
-              }
-            />
-            <SettingRow
-              title="Show for"
-              right={
-                <SelectControl
-                  value={notificationDurationSeconds}
-                  options={notificationDurationSecondsOptions}
-                  ariaLabel="Notification duration"
-                  disabled={!notificationsEnabled}
-                  onChange={(value) => onNotificationDurationSecondsChange(Number(value))}
-                  formatOption={(value) => `${value} seconds`}
-                />
-              }
-            />
-          </SectionCard>
-        ) : null}
-
-        {showSection("general") ? (
-          <SectionCard title="Copy and Cut">
-            <SettingRow
-              title="Mark copied folders in the folder tree"
-              right={
-                <Toggle
-                  checked={highlightClipboardItemsInTree}
-                  onToggle={() =>
-                    onHighlightClipboardItemsInTreeChange(!highlightClipboardItemsInTree)
-                  }
-                  label="Highlight copied items in the folder tree"
-                />
-              }
-            />
-            <SettingRow
-              title="Mark copied items in the file list"
-              right={
-                <Toggle
-                  checked={highlightClipboardItemsInContent}
-                  onToggle={() =>
-                    onHighlightClipboardItemsInContentChange(!highlightClipboardItemsInContent)
-                  }
-                  label="Highlight copied items in the file list"
-                />
-              }
-            />
-            <SettingRow
-              title="Notify what was copied"
-              right={
-                <Toggle
-                  checked={notifyClipboardItems}
-                  onToggle={() => onNotifyClipboardItemsChange(!notifyClipboardItems)}
-                  label="Notify what was copied"
-                  disabled={!notificationsEnabled}
-                />
-              }
-            />
-          </SectionCard>
-        ) : null}
-
-        {showSection("general") ? (
-          <SectionCard title="Startup">
-            <SettingRow
-              title="Reopen the last folder"
-              desc="Otherwise File Trail starts in your home folder."
-              right={
-                <Toggle
-                  checked={restoreLastVisitedFolderOnStartup}
-                  onToggle={() =>
-                    onRestoreLastVisitedFolderOnStartupChange(!restoreLastVisitedFolderOnStartup)
-                  }
-                  label="Restore last visited folder"
-                />
-              }
-            />
-            <SettingRow
-              title="Reopen tabs"
-              desc="Each tab returns to its folder when the last folder is reopened, and to home when it is not."
-              right={
-                <Toggle
-                  checked={restoreOpenTabsOnStartup}
-                  onToggle={() => onRestoreOpenTabsOnStartupChange(!restoreOpenTabsOnStartup)}
-                  label="Restore open tabs"
-                />
-              }
-            />
-          </SectionCard>
-        ) : null}
-
-        {searchDefaults && showSection("search") ? (
-          <SectionCard title={activeTab ? undefined : "Search"}>
-            <SettingRow
-              title="Match as"
-              desc="Text finds the words anywhere in a name; Glob and Regex read them as a pattern."
-              right={
-                <SelectControl
-                  value={searchDefaults.searchPatternMode}
-                  options={SEARCH_PATTERN_MODES}
-                  ariaLabel="Default match mode"
-                  onChange={(value) =>
-                    onSearchDefaultsChange({
-                      searchPatternMode: value as SearchPatternModePreference,
-                    })
-                  }
-                  formatOption={(value) =>
-                    SEARCH_PATTERN_MODE_LABELS[value as SearchPatternModePreference]
-                  }
-                />
-              }
-            />
-            <SettingRow
-              title="Match"
-              right={
-                <SelectControl
-                  value={searchDefaults.searchMatchScope}
-                  options={["name", "path"]}
-                  ariaLabel="Default match scope"
-                  onChange={(value) =>
-                    onSearchDefaultsChange({ searchMatchScope: value as "name" | "path" })
-                  }
-                  formatOption={(value) => (value === "path" ? "Full Path" : "Name")}
-                />
-              }
-            />
-            <SettingRow
-              title="Search subfolders"
-              right={
-                <Toggle
-                  checked={searchDefaults.searchRecursive}
-                  onToggle={() =>
-                    onSearchDefaultsChange({ searchRecursive: !searchDefaults.searchRecursive })
-                  }
-                  label="Search Subfolders"
-                />
-              }
-            />
-            <SettingRow
-              title="Skip .git folders"
-              desc="Matters only while hidden files are shown."
-              right={
-                <Toggle
-                  checked={searchDefaults.searchSkipGitFolders}
-                  onToggle={() =>
-                    onSearchDefaultsChange({
-                      searchSkipGitFolders: !searchDefaults.searchSkipGitFolders,
-                    })
-                  }
-                  label="Skip .git Folders"
-                />
-              }
-            />
-            <SettingRow
-              title="Skip files ignored by Git"
-              desc="Inside a repository, leave out what its .gitignore excludes."
-              right={
-                <Toggle
-                  checked={searchDefaults.searchSkipGitIgnored}
-                  onToggle={() =>
-                    onSearchDefaultsChange({
-                      searchSkipGitIgnored: !searchDefaults.searchSkipGitIgnored,
-                    })
-                  }
-                  label="Skip Files Ignored by Git"
-                />
-              }
-            />
-          </SectionCard>
-        ) : null}
-
-        {showSection("files") ? (
-          <SectionCard title="File Opening">
-            <SettingRow
-              title="Double-click a file to"
-              desc="Folders always open."
-              right={
-                <SelectControl
-                  value={fileActivationAction}
-                  options={["open", "edit"] satisfies FileActivationAction[]}
-                  ariaLabel="File activation"
-                  onChange={(value) => onFileActivationActionChange(value as FileActivationAction)}
-                  formatOption={(value) => (value === "edit" ? "Edit" : "Open")}
-                />
-              }
-            />
-            <SettingRow
-              title="Return key"
-              desc={describeKeys(
-                [shortcutDisplay.label("openSelection"), shortcutDisplay.label("openSelectedItem")],
-                "",
-                " always open.",
-                " and ",
-              )}
-              right={
-                <SelectControl
-                  value={returnKeyAction}
-                  options={["rename", "open"] satisfies ReturnKeyAction[]}
-                  ariaLabel="Return key"
-                  onChange={(value) => onReturnKeyActionChange(value as ReturnKeyAction)}
-                  formatOption={(value) => (value === "open" ? "Opens" : "Renames")}
-                />
-              }
-            />
-            <SettingRow
-              title="Open at most"
-              desc="Asks first before opening or editing more items at once."
-              right={
-                <span className="settings-field-with-unit">
-                  <OpenItemLimitInput value={openItemLimit} onChange={onOpenItemLimitChange} />
-                  items
-                </span>
-              }
-            />
-            <SettingRow
-              title="Text editor"
-              right={
-                <ApplicationPopup
-                  ariaLabel="Default text editor"
-                  application={defaultTextEditor}
-                  defaultApplication={DEFAULT_TEXT_EDITOR}
-                  onChoose={onBrowseDefaultTextEditor}
-                  onUseDefault={onClearDefaultTextEditor}
-                />
-              }
-            />
-            <SettingRow
-              title="Terminal"
-              right={
-                <ApplicationPopup
-                  ariaLabel="Terminal app"
-                  application={terminalApp ?? DEFAULT_TERMINAL_APPLICATION}
-                  defaultApplication={DEFAULT_TERMINAL_APPLICATION}
-                  onChoose={onBrowseTerminalApp}
-                  onUseDefault={onClearTerminalApp}
-                />
-              }
-            />
-          </SectionCard>
-        ) : null}
-
-        {showSection("explorer") ? (
+        {showSection("browsing") ? (
           <SectionCard title="Favorites">
             <SettingRow
               title="Show favorites"
@@ -1937,7 +1320,7 @@ export function SettingsView({
                 <SelectControl
                   value={favoritesPlacement}
                   options={["integrated", "separate"] satisfies FavoritesPlacement[]}
-                  ariaLabel="Favorites placement"
+                  ariaLabel="Show favorites"
                   onChange={(value) => onFavoritesPlacementChange(value as FavoritesPlacement)}
                   formatOption={(value) =>
                     value === "integrated" ? "In the folder tree" : "In their own section"
@@ -1975,7 +1358,7 @@ export function SettingsView({
                   <button
                     type="button"
                     className="settings-list-bar-text-button"
-                    aria-label="Restore default favorites"
+                    aria-label="Restore the default favorites"
                     onClick={onRestoreDefaultFavorites}
                   >
                     Restore Defaults
@@ -1986,8 +1369,161 @@ export function SettingsView({
           </SectionCard>
         ) : null}
 
+        {searchDefaults && showSection("search") ? (
+          <SectionCard
+            title={activeTab ? undefined : "Search"}
+            note="Every new search starts with these. The search field's menu changes them for the search you are making."
+          >
+            <SettingRow
+              title="Search in"
+              right={
+                <SelectControl
+                  value={searchDefaults.searchMatchScope}
+                  options={["name", "path"]}
+                  ariaLabel="Search in"
+                  onChange={(value) =>
+                    onSearchDefaultsChange({ searchMatchScope: value as "name" | "path" })
+                  }
+                  formatOption={(value) => (value === "path" ? "Full Paths" : "Names")}
+                />
+              }
+            />
+            <SettingRow
+              title="Match as"
+              desc="Plain Text finds the words anywhere; Glob and Regex read them as a pattern."
+              right={
+                <SelectControl
+                  value={searchDefaults.searchPatternMode}
+                  options={SEARCH_PATTERN_MODES}
+                  ariaLabel="Match as"
+                  onChange={(value) =>
+                    onSearchDefaultsChange({
+                      searchPatternMode: value as SearchPatternModePreference,
+                    })
+                  }
+                  formatOption={(value) =>
+                    SEARCH_PATTERN_MODE_LABELS[value as SearchPatternModePreference]
+                  }
+                />
+              }
+            />
+            <SettingRow
+              title="Search subfolders"
+              right={
+                <Toggle
+                  checked={searchDefaults.searchRecursive}
+                  onToggle={() =>
+                    onSearchDefaultsChange({ searchRecursive: !searchDefaults.searchRecursive })
+                  }
+                  label="Search subfolders"
+                />
+              }
+            />
+            <SettingRow
+              title="Skip .git folders"
+              desc="Matters only while hidden files are shown."
+              right={
+                <Toggle
+                  checked={searchDefaults.searchSkipGitFolders}
+                  onToggle={() =>
+                    onSearchDefaultsChange({
+                      searchSkipGitFolders: !searchDefaults.searchSkipGitFolders,
+                    })
+                  }
+                  label="Skip .git folders"
+                />
+              }
+            />
+            <SettingRow
+              title="Skip files ignored by Git"
+              desc="Inside a repository, leave out what its .gitignore excludes."
+              right={
+                <Toggle
+                  checked={searchDefaults.searchSkipGitIgnored}
+                  onToggle={() =>
+                    onSearchDefaultsChange({
+                      searchSkipGitIgnored: !searchDefaults.searchSkipGitIgnored,
+                    })
+                  }
+                  label="Skip files ignored by Git"
+                />
+              }
+            />
+          </SectionCard>
+        ) : null}
+
         {showSection("files") ? (
-          <SectionCard title="Open With" note="Listed first in the Open With menu">
+          <SectionCard title="Opening Files">
+            <SettingRow
+              title="Double-click a file to"
+              desc="Folders always open."
+              right={
+                <SelectControl
+                  value={fileActivationAction}
+                  options={["open", "edit"] satisfies FileActivationAction[]}
+                  ariaLabel="Double-click a file to"
+                  onChange={(value) => onFileActivationActionChange(value as FileActivationAction)}
+                  formatOption={(value) => (value === "edit" ? "Edit" : "Open")}
+                />
+              }
+            />
+            <SettingRow
+              title="Return key"
+              desc={describeKeys(
+                [shortcutDisplay.label("openSelection"), shortcutDisplay.label("openSelectedItem")],
+                "",
+                " always open.",
+                " and ",
+              )}
+              right={
+                <SelectControl
+                  value={returnKeyAction}
+                  options={["rename", "open"] satisfies ReturnKeyAction[]}
+                  ariaLabel="Return key"
+                  onChange={(value) => onReturnKeyActionChange(value as ReturnKeyAction)}
+                  formatOption={(value) => (value === "open" ? "Opens" : "Renames")}
+                />
+              }
+            />
+            <SettingRow
+              title="Ask before opening more than"
+              desc="Opening or editing more items at once asks first."
+              right={
+                <span className="settings-field-with-unit">
+                  <OpenItemLimitInput value={openItemLimit} onChange={onOpenItemLimitChange} />
+                  items
+                </span>
+              }
+            />
+            <SettingRow
+              title="Text editor"
+              right={
+                <ApplicationPopup
+                  ariaLabel="Text editor"
+                  application={defaultTextEditor}
+                  defaultApplication={DEFAULT_TEXT_EDITOR}
+                  onChoose={onBrowseDefaultTextEditor}
+                  onUseDefault={onClearDefaultTextEditor}
+                />
+              }
+            />
+            <SettingRow
+              title="Terminal"
+              right={
+                <ApplicationPopup
+                  ariaLabel="Terminal"
+                  application={terminalApp ?? DEFAULT_TERMINAL_APPLICATION}
+                  defaultApplication={DEFAULT_TERMINAL_APPLICATION}
+                  onChoose={onBrowseTerminalApp}
+                  onUseDefault={onClearTerminalApp}
+                />
+              }
+            />
+          </SectionCard>
+        ) : null}
+
+        {showSection("files") ? (
+          <SectionCard title="Open With" note="These apps come first in the Open With menu.">
             <div className="settings-row settings-row-list">
               <SettingsList
                 label="Open With applications"

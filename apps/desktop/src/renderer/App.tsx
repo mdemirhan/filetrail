@@ -10,7 +10,6 @@ import {
   type DetailColumnWidths,
   clampOpenItemLimit,
   clampZoomPercent,
-  themeChoicePatch,
 } from "../shared/appPreferences";
 import { resolveShortcuts } from "../shared/shortcuts";
 import { DEFAULT_TOP_TOOLBAR_ITEMS } from "../shared/toolbarItems";
@@ -132,19 +131,11 @@ export function App() {
     setPreferencesReady,
     theme,
     setTheme,
-    autoLightTheme,
-    setAutoLightTheme,
-    autoDarkTheme,
-    setAutoDarkTheme,
     effectiveTheme,
     accent,
     setAccent,
     zoomPercent,
     setZoomPercent,
-    uiFontFamily,
-    setUiFontFamily,
-    tabStyle,
-    setTabStyle,
     includeHidden,
     setIncludeHidden,
     viewMode,
@@ -161,28 +152,18 @@ export function App() {
     setCompactTreeView,
     singleClickExpandTreeItems,
     setSingleClickExpandTreeItems,
-    highlightHoveredItems,
-    setHighlightHoveredItems,
     detailColumns,
     setDetailColumns,
     detailColumnWidths,
     setDetailColumnWidths,
     notificationsEnabled,
     setNotificationsEnabled,
-    notificationDurationSeconds,
-    setNotificationDurationSeconds,
-    highlightClipboardItemsInTree,
-    setHighlightClipboardItemsInTree,
-    highlightClipboardItemsInContent,
-    setHighlightClipboardItemsInContent,
-    notifyClipboardItems,
-    setNotifyClipboardItems,
+    markClipboardItems,
+    setMarkClipboardItems,
     topToolbarItems,
     setTopToolbarItems,
-    restoreLastVisitedFolderOnStartup,
-    setRestoreLastVisitedFolderOnStartup,
-    restoreOpenTabsOnStartup,
-    setRestoreOpenTabsOnStartup,
+    restoreSessionOnStartup,
+    setRestoreSessionOnStartup,
     favorites,
     setFavorites,
     favoritesPlacement,
@@ -625,16 +606,8 @@ export function App() {
       mode: copyPasteClipboard.mode,
       flashing: clipboardFlashing,
     };
-    return {
-      tree: highlightClipboardItemsInTree ? marks : null,
-      content: highlightClipboardItemsInContent ? marks : null,
-    };
-  }, [
-    copyPasteClipboard,
-    clipboardFlashing,
-    highlightClipboardItemsInTree,
-    highlightClipboardItemsInContent,
-  ]);
+    return markClipboardItems ? { tree: marks, content: marks } : { tree: null, content: null };
+  }, [copyPasteClipboard, clipboardFlashing, markClipboardItems]);
   const pasteDestinationPath = useMemo(
     () =>
       resolvePasteDestinationPath({
@@ -1151,12 +1124,8 @@ export function App() {
   // individual field.
   const preferencesPersistPayload: PreferencesPersistPayload = {
     theme,
-    autoLightTheme,
-    autoDarkTheme,
     accent,
     zoomPercent,
-    uiFontFamily,
-    tabStyle,
     viewMode,
     sortBy,
     sortDirection,
@@ -1166,14 +1135,10 @@ export function App() {
     compactIconView,
     compactTreeView,
     singleClickExpandTreeItems,
-    highlightHoveredItems,
     detailColumns,
     detailColumnWidths,
     notificationsEnabled,
-    notificationDurationSeconds,
-    highlightClipboardItemsInTree,
-    highlightClipboardItemsInContent,
-    notifyClipboardItems,
+    markClipboardItems,
     topToolbarItems,
     propertiesOpen: infoPanelOpen,
     detailRowOpen: infoRowOpen,
@@ -1191,8 +1156,7 @@ export function App() {
     searchResultsSortDirection,
     treeWidth: panes.treeWidth,
     inspectorWidth: panes.inspectorWidth,
-    restoreLastVisitedFolderOnStartup,
-    restoreOpenTabsOnStartup,
+    restoreSessionOnStartup,
     openTabs,
     activeTabIndex,
     treeRootPath: treeRootPath || null,
@@ -1309,12 +1273,8 @@ export function App() {
         const preferences = preferencesResponse.preferences;
         markSynced(preferences);
         setTheme(preferences.theme);
-        setAutoLightTheme(preferences.autoLightTheme);
-        setAutoDarkTheme(preferences.autoDarkTheme);
         setAccent(preferences.accent);
         setZoomPercent(preferences.zoomPercent);
-        setUiFontFamily(preferences.uiFontFamily);
-        setTabStyle(preferences.tabStyle);
         setIncludeHidden(preferences.includeHidden);
         setSearchPatternMode(preferences.searchPatternMode);
         setSearchMatchScope(preferences.searchMatchScope);
@@ -1332,21 +1292,16 @@ export function App() {
         setCompactIconView(preferences.compactIconView);
         setCompactTreeView(preferences.compactTreeView);
         setSingleClickExpandTreeItems(preferences.singleClickExpandTreeItems);
-        setHighlightHoveredItems(preferences.highlightHoveredItems);
         setDetailColumns(preferences.detailColumns);
         setDetailColumnWidths(preferences.detailColumnWidths);
         setNotificationsEnabled(preferences.notificationsEnabled);
-        setNotificationDurationSeconds(preferences.notificationDurationSeconds);
-        setHighlightClipboardItemsInTree(preferences.highlightClipboardItemsInTree);
-        setHighlightClipboardItemsInContent(preferences.highlightClipboardItemsInContent);
-        setNotifyClipboardItems(preferences.notifyClipboardItems);
+        setMarkClipboardItems(preferences.markClipboardItems);
         setTopToolbarItems(preferences.topToolbarItems);
         setInfoPanelOpen(preferences.propertiesOpen);
         setInfoRowOpen(preferences.detailRowOpen);
         setSortBy(preferences.sortBy);
         setSortDirection(preferences.sortDirection);
-        setRestoreLastVisitedFolderOnStartup(preferences.restoreLastVisitedFolderOnStartup);
-        setRestoreOpenTabsOnStartup(preferences.restoreOpenTabsOnStartup);
+        setRestoreSessionOnStartup(preferences.restoreSessionOnStartup);
         setFavorites(preferences.favorites);
         setFavoritesPlacement(preferences.favoritesPlacement);
         setFavoritesExpanded(preferences.favoritesExpanded);
@@ -1763,7 +1718,6 @@ export function App() {
                 results: filteredSearchResults,
                 selectedPaths: contentSelection.paths,
                 selectionLeadPath: contentSelection.leadPath,
-                highlightHoveredItems,
                 error: searchError,
                 // A pattern that does not parse while it is being typed is not a failure yet.
                 errorIsQuiet: searchStartedLive && searchPatternMode !== "text",
@@ -1894,7 +1848,6 @@ export function App() {
                 compactListView,
                 compactDetailsView,
                 compactIconView,
-                highlightHoveredItems,
                 detailColumns,
                 detailColumnWidths,
                 onDetailColumnWidthsChange: setDetailColumnWidths,
@@ -2061,17 +2014,7 @@ export function App() {
             infoRowOpen={infoRowOpen}
             onToggleInfoRow={() => setInfoRowOpen((value) => !value)}
             theme={theme}
-            onSelectTheme={(nextTheme) => {
-              // A palette picked here also becomes the palette of its side for Auto.
-              const patch = themeChoicePatch(nextTheme);
-              setTheme(nextTheme);
-              if (patch.autoLightTheme) {
-                setAutoLightTheme(patch.autoLightTheme);
-              }
-              if (patch.autoDarkTheme) {
-                setAutoDarkTheme(patch.autoDarkTheme);
-              }
-            }}
+            onSelectTheme={setTheme}
             searchShellRef={searchShellRef}
             searchPopoverOpen={searchPopoverOpen}
             onSearchShellBlur={(event) => {
@@ -2169,7 +2112,6 @@ export function App() {
               tabCount > 1 ? (
                 <TabStrip
                   tabs={tabItems}
-                  tabStyle={tabStyle}
                   onSelectTab={activateTab}
                   onCloseTab={closeTab}
                   onCloseOtherTabs={closeOtherTabs}

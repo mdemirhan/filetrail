@@ -5,7 +5,7 @@ describe("startup navigation", () => {
     expect(
       resolveStartupNavigation(
         {
-          restoreLastVisitedFolderOnStartup: true,
+          restoreSessionOnStartup: true,
           lastVisitedPath: "/Users/demo/projects/filetrail",
           lastVisitedFavoritePath: null,
           treeRootPath: "/Users/demo/projects",
@@ -23,7 +23,7 @@ describe("startup navigation", () => {
     expect(
       resolveStartupNavigation(
         {
-          restoreLastVisitedFolderOnStartup: true,
+          restoreSessionOnStartup: true,
           lastVisitedPath: "/Applications",
           lastVisitedFavoritePath: null,
           treeRootPath: "/Applications",
@@ -41,7 +41,7 @@ describe("startup navigation", () => {
     expect(
       resolveStartupNavigation(
         {
-          restoreLastVisitedFolderOnStartup: true,
+          restoreSessionOnStartup: true,
           lastVisitedPath: "/Users/demo/Documents",
           lastVisitedFavoritePath: null,
           treeRootPath: "/Users/demo/projects",
@@ -59,7 +59,7 @@ describe("startup navigation", () => {
     expect(
       resolveStartupNavigation(
         {
-          restoreLastVisitedFolderOnStartup: true,
+          restoreSessionOnStartup: true,
           lastVisitedPath: "/Applications",
           lastVisitedFavoritePath: null,
           treeRootPath: "/Users/demo/projects",
@@ -77,7 +77,7 @@ describe("startup navigation", () => {
     expect(
       resolveStartupNavigation(
         {
-          restoreLastVisitedFolderOnStartup: true,
+          restoreSessionOnStartup: true,
           lastVisitedPath: "/Users/demo/Documents",
           lastVisitedFavoritePath: "/Users/demo/Documents",
           treeRootPath: "/",
@@ -95,7 +95,7 @@ describe("startup navigation", () => {
     expect(
       resolveStartupNavigation(
         {
-          restoreLastVisitedFolderOnStartup: true,
+          restoreSessionOnStartup: true,
           lastVisitedPath: "/Users/demo/projects/filetrail",
           lastVisitedFavoritePath: "/Users/demo/projects/filetrail",
           treeRootPath: "/Users/demo/projects",
@@ -114,7 +114,7 @@ describe("startup navigation", () => {
     expect(
       resolveStartupNavigation(
         {
-          restoreLastVisitedFolderOnStartup: false,
+          restoreSessionOnStartup: false,
           lastVisitedPath: null,
           lastVisitedFavoritePath: null,
           treeRootPath: "/Users/demo/projects",
@@ -129,11 +129,11 @@ describe("startup navigation", () => {
     });
   });
 
-  it("starts at home when restore last visited is disabled", () => {
+  it("starts at home when the last session is not reopened", () => {
     expect(
       resolveStartupNavigation(
         {
-          restoreLastVisitedFolderOnStartup: false,
+          restoreSessionOnStartup: false,
           lastVisitedPath: "/Users/demo/projects/filetrail",
           lastVisitedFavoritePath: "/Users/demo/projects/filetrail",
           treeRootPath: "/Users/demo/projects",
@@ -151,7 +151,7 @@ describe("startup navigation", () => {
     expect(
       resolveStartupNavigation(
         {
-          restoreLastVisitedFolderOnStartup: true,
+          restoreSessionOnStartup: true,
           lastVisitedPath: "/Users/demo/Documents",
           lastVisitedFavoritePath: "/Users/demo/Documents",
           treeRootPath: "/Users/demo",
@@ -178,8 +178,7 @@ describe("startup navigation", () => {
       ...overrides,
     });
     const preferences = {
-      restoreLastVisitedFolderOnStartup: true,
-      restoreOpenTabsOnStartup: true,
+      restoreSessionOnStartup: true,
       openTabs: [
         tab("/Users/demo/work", {
           viewMode: "details",
@@ -240,43 +239,9 @@ describe("startup navigation", () => {
       });
     });
 
-    it("opens the same number of tabs at home when folders are not restored", () => {
-      const { tabs, activeIndex } = resolveStartupTabs(
-        { ...preferences, restoreLastVisitedFolderOnStartup: false },
-        "/Users/demo",
-      );
-      expect(activeIndex).toBe(1);
-      expect(tabs.map((startupTab) => startupTab.path)).toEqual([
-        "/Users/demo",
-        "/Users/demo",
-        "/Users/demo",
-      ]);
-      expect(tabs.every((startupTab) => startupTab.rootPath === "/Users/demo")).toBe(true);
-      // Each tab still shows its folder the way it did.
-      expect(tabs[0]).toMatchObject({
-        viewMode: "details",
-        sortBy: "size",
-        includeHidden: true,
-        foldersFirst: false,
-      });
-    });
-
-    it("opens a single view when tabs are not restored, at the last folder or at home", () => {
+    it("opens a single view at home when the last session is not reopened", () => {
       expect(
-        resolveStartupTabs({ ...preferences, restoreOpenTabsOnStartup: false }, "/Users/demo"),
-      ).toMatchObject({
-        activeIndex: 0,
-        tabs: [{ path: "/Users/demo/Documents", favoritePath: "/Users/demo/Documents" }],
-      });
-      expect(
-        resolveStartupTabs(
-          {
-            ...preferences,
-            restoreOpenTabsOnStartup: false,
-            restoreLastVisitedFolderOnStartup: false,
-          },
-          "/Users/demo",
-        ).tabs,
+        resolveStartupTabs({ ...preferences, restoreSessionOnStartup: false }, "/Users/demo").tabs,
       ).toEqual([
         {
           path: "/Users/demo",
@@ -289,10 +254,11 @@ describe("startup navigation", () => {
           foldersFirst: true,
         },
       ]);
-      // No tabs were saved yet (the first launch with tabs).
-      expect(resolveStartupTabs({ ...preferences, openTabs: [] }, "/Users/demo").tabs).toHaveLength(
-        1,
-      );
+      // No tabs were saved yet (the first launch with tabs): the last folder, in one view.
+      expect(resolveStartupTabs({ ...preferences, openTabs: [] }, "/Users/demo")).toMatchObject({
+        activeIndex: 0,
+        tabs: [{ path: "/Users/demo/Documents", favoritePath: "/Users/demo/Documents" }],
+      });
     });
 
     it("shows a folder the app was launched with in a restored tab, or in a new one", () => {

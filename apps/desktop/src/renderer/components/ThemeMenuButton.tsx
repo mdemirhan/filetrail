@@ -1,19 +1,14 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import {
-  AUTO_THEME_OPTION,
-  THEME_GROUPS,
-  type ThemePreference,
-  getThemeLabel,
-} from "../../shared/appPreferences";
+import { THEME_OPTIONS, type ThemePreference } from "../../shared/appPreferences";
 import { useKeepInViewport } from "../hooks/useKeepInViewport";
 import { placeDropdownMenu } from "../lib/menuPlacement";
 import { MenuCheck } from "./MenuCheck";
 import { ToolbarIcon } from "./ToolbarIcon";
 
-// The toolbar's Theme button: a menu of the palettes, Auto first, with the one in use
-// checked. It is the one-click way to change the palette; Settings → Appearance has the rest.
+// The toolbar's Theme button: Auto, Light and Dark, with the one in use checked. It is the
+// one-click way to change the look; Settings → General has the rest.
 export function ThemeMenuButton({
   theme,
   onSelectTheme,
@@ -64,6 +59,7 @@ export function ThemeMenuButton({
     };
   }, [open]);
 
+  const themeLabel = THEME_OPTIONS.find((option) => option.value === theme)?.label ?? theme;
   const renderOption = (option: { value: ThemePreference; label: string }) => (
     <button
       key={option.value}
@@ -88,7 +84,7 @@ export function ThemeMenuButton({
         type="button"
         className={`tb-btn tb-btn-icon${open ? " active" : ""}`}
         tabIndex={interactive ? undefined : -1}
-        title={`Theme: ${getThemeLabel(theme)}`}
+        title={`Theme: ${themeLabel}`}
         aria-label="Choose theme"
         aria-haspopup="menu"
         aria-expanded={open}
@@ -116,13 +112,7 @@ export function ThemeMenuButton({
               aria-label="Theme"
               style={menuStyle}
             >
-              {renderOption(AUTO_THEME_OPTION)}
-              {THEME_GROUPS.map((group) => (
-                <Fragment key={group.value}>
-                  <hr className="toolbar-menu-separator" />
-                  {group.options.map(renderOption)}
-                </Fragment>
-              ))}
+              {THEME_OPTIONS.map(renderOption)}
             </div>,
             document.body,
           )

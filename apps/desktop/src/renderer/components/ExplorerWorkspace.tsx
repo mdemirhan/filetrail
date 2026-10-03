@@ -1635,7 +1635,7 @@ export function ExplorerWorkspace({
         <section className="workspace-body workspace-loading" />
       ) : (
         <section
-          className="workspace-body tomorrow-night-layout"
+          className="workspace-body"
           style={{
             gridTemplateColumns: `${treeWidth}px ${EXPLORER_LAYOUT.resizerWidth}px minmax(0, 1fr)${
               infoPanelOpen ? ` ${EXPLORER_LAYOUT.resizerWidth}px ${inspectorWidth}px` : ""

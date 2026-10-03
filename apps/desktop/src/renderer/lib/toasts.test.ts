@@ -12,14 +12,11 @@ describe("toasts", () => {
     expect(queued.map((toast) => toast.id)).toEqual(["toast-2", "toast-3", "toast-4"]);
   });
 
-  it("uses an explicit duration override when provided", () => {
-    const toast = createToastEntry(
-      "toast-1",
-      { kind: "info", title: "Ready to paste 1 item", durationMs: 6_000 },
-      1_000,
-    );
-
-    expect(toast.durationMs).toBe(6_000);
-    expect(toast.expiresAt).toBe(7_000);
+  it("keeps every notification on screen for four seconds", () => {
+    for (const kind of ["info", "success", "warning"] as const) {
+      const toast = createToastEntry("toast-1", { kind, title: "Moved 1 item" }, 1_000);
+      expect(toast.durationMs).toBe(4_000);
+      expect(toast.expiresAt).toBe(5_000);
+    }
   });
 });

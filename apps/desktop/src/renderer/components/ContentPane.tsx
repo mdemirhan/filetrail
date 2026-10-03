@@ -133,7 +133,6 @@ export function ContentPane({
   compactListView = false,
   compactDetailsView = false,
   compactIconView = false,
-  highlightHoveredItems = true,
   detailColumns = DEFAULT_DETAIL_COLUMN_VISIBILITY,
   detailColumnWidths = DEFAULT_DETAIL_COLUMN_WIDTHS,
   onDetailColumnWidthsChange = () => undefined,
@@ -201,7 +200,6 @@ export function ContentPane({
   compactListView?: boolean;
   compactDetailsView?: boolean;
   compactIconView?: boolean;
-  highlightHoveredItems?: boolean;
   detailColumns?: DetailColumnVisibility;
   detailColumnWidths?: DetailColumnWidths;
   onDetailColumnWidthsChange?: (value: DetailColumnWidths) => void;
@@ -464,7 +462,6 @@ export function ContentPane({
             onItemDrop={onItemDrop}
             getItemDropIndicator={getItemDropIndicator}
             compactIconView={compactIconView}
-            highlightHoveredItems={highlightHoveredItems}
             inlineRename={inlineRename}
             onInlineRenameSubmit={onInlineRenameSubmit}
             onInlineRenameCancel={onInlineRenameCancel}
@@ -506,7 +503,6 @@ export function ContentPane({
             onItemDrop={onItemDrop}
             getItemDropIndicator={getItemDropIndicator}
             compactListView={compactListView}
-            highlightHoveredItems={highlightHoveredItems}
             inlineRename={inlineRename}
             onInlineRenameSubmit={onInlineRenameSubmit}
             onInlineRenameCancel={onInlineRenameCancel}
@@ -543,7 +539,6 @@ export function ContentPane({
             onItemDrop={onItemDrop}
             getItemDropIndicator={getItemDropIndicator}
             compactDetailsView={compactDetailsView}
-            highlightHoveredItems={highlightHoveredItems}
             detailColumns={detailColumns}
             detailColumnWidths={detailColumnWidths}
             onDetailColumnWidthsChange={onDetailColumnWidthsChange}
@@ -984,7 +979,6 @@ function FlowListView({
   onItemDrop,
   getItemDropIndicator,
   compactListView = false,
-  highlightHoveredItems = true,
   inlineRename,
   onInlineRenameSubmit,
   onInlineRenameCancel,
@@ -1022,7 +1016,6 @@ function FlowListView({
   onItemDrop?: ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void) | undefined;
   getItemDropIndicator?: ((path: string) => "valid" | "invalid" | null) | undefined;
   compactListView?: boolean;
-  highlightHoveredItems?: boolean;
   inlineRename: InlineRenameState | null;
   onInlineRenameSubmit: (nextName: string) => void;
   onInlineRenameCancel: () => void;
@@ -1114,7 +1107,6 @@ function FlowListView({
     <div
       ref={containerRef}
       className={`content-scroll flow-list${compactListView ? " compact" : ""}`}
-      data-hover-highlight-enabled={highlightHoveredItems ? "true" : "false"}
       tabIndex={-1}
       onMouseDown={(event) => {
         const target = event.target;
@@ -1332,7 +1324,6 @@ function DetailsView({
   onItemDrop,
   getItemDropIndicator,
   compactDetailsView = false,
-  highlightHoveredItems = true,
   detailColumns = DEFAULT_DETAIL_COLUMN_VISIBILITY,
   detailColumnWidths = DEFAULT_DETAIL_COLUMN_WIDTHS,
   onDetailColumnWidthsChange = () => undefined,
@@ -1379,7 +1370,6 @@ function DetailsView({
   onItemDrop?: ((entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) => void) | undefined;
   getItemDropIndicator?: ((path: string) => "valid" | "invalid" | null) | undefined;
   compactDetailsView?: boolean;
-  highlightHoveredItems?: boolean;
   detailColumns?: DetailColumnVisibility;
   detailColumnWidths?: DetailColumnWidths;
   onDetailColumnWidthsChange?: (value: DetailColumnWidths) => void;
@@ -1598,7 +1588,6 @@ function DetailsView({
       <div
         ref={containerRef}
         className={`content-scroll details-scroll${compactDetailsView ? " compact" : ""}`}
-        data-hover-highlight-enabled={highlightHoveredItems ? "true" : "false"}
         tabIndex={-1}
         onMouseDown={(event) => {
           const target = event.target;

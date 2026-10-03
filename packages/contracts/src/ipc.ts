@@ -38,22 +38,8 @@ export const explorerEntryKindSchema = z.enum([
   "other",
 ]);
 
-export const themeModeSchema = z.enum([
-  "macos-light",
-  "warm-paper",
-  "sand",
-  "macos-dark",
-  "catppuccin-mocha",
-  "tomorrow-night",
-]);
+export const themeModeSchema = z.enum(["light", "dark"]);
 export const accentModeSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/);
-export const uiFontFamilySchema = z.enum([
-  "system",
-  "dm-sans",
-  "lexend",
-  "fira-code",
-  "jetbrains-mono",
-]);
 export const explorerViewModeSchema = z.enum(["icons", "list", "details"]);
 export const directorySortBySchema = z.enum(["name", "modified", "kind", "size"]);
 export const sortDirectionSchema = z.enum(["asc", "desc"]);
@@ -577,14 +563,7 @@ export const appLogEntrySchema = z.object({
 export const helpTopicSchema = z.enum(["navigation", "files", "search", "views", "shortcuts"]);
 export type HelpTopic = z.infer<typeof helpTopicSchema>;
 
-export const settingsTabSchema = z.enum([
-  "general",
-  "appearance",
-  "explorer",
-  "search",
-  "files",
-  "shortcuts",
-]);
+export const settingsTabSchema = z.enum(["general", "browsing", "search", "files", "shortcuts"]);
 
 export const themePreferenceSchema = z.union([z.literal("auto"), themeModeSchema]);
 
@@ -601,12 +580,8 @@ export const openTabPreferenceSchema = z.object({
 
 export const appPreferencesSchema = z.object({
   theme: themePreferenceSchema,
-  autoLightTheme: themeModeSchema,
-  autoDarkTheme: themeModeSchema,
   accent: accentModeSchema,
   zoomPercent: z.number().int().min(75).max(150),
-  uiFontFamily: uiFontFamilySchema,
-  tabStyle: z.enum(["cards", "accentLine"]),
   viewMode: explorerViewModeSchema,
   sortBy: directorySortBySchema,
   sortDirection: sortDirectionSchema,
@@ -616,14 +591,10 @@ export const appPreferencesSchema = z.object({
   compactIconView: z.boolean(),
   compactTreeView: z.boolean(),
   singleClickExpandTreeItems: z.boolean(),
-  highlightHoveredItems: z.boolean(),
   detailColumns: detailColumnVisibilitySchema,
   detailColumnWidths: detailColumnWidthsSchema,
   notificationsEnabled: z.boolean(),
-  notificationDurationSeconds: z.number().int().min(2).max(10),
-  highlightClipboardItemsInTree: z.boolean(),
-  highlightClipboardItemsInContent: z.boolean(),
-  notifyClipboardItems: z.boolean(),
+  markClipboardItems: z.boolean(),
   propertiesOpen: z.boolean(),
   detailRowOpen: z.boolean(),
   topToolbarItems: z.array(toolbarItemIdSchema),
@@ -645,8 +616,7 @@ export const appPreferencesSchema = z.object({
   searchResultsSortDirection: sortDirectionSchema,
   treeWidth: z.number().int().min(220).max(520),
   inspectorWidth: z.number().int().min(260).max(480),
-  restoreLastVisitedFolderOnStartup: z.boolean(),
-  restoreOpenTabsOnStartup: z.boolean(),
+  restoreSessionOnStartup: z.boolean(),
   openTabs: z.array(openTabPreferenceSchema).max(100),
   activeTabIndex: z.number().int().min(0),
   treeRootPath: z.string().min(1).nullable(),

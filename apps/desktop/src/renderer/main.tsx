@@ -1,23 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
-import "@fontsource/dm-sans/400.css";
-import "@fontsource/dm-sans/500.css";
-import "@fontsource/dm-sans/600.css";
-import "@fontsource/dm-sans/700.css";
-import "@fontsource/fira-code/400.css";
-import "@fontsource/fira-code/500.css";
-import "@fontsource/fira-code/600.css";
-import "@fontsource/fira-code/700.css";
-import "@fontsource/jetbrains-mono/400.css";
-import "@fontsource/jetbrains-mono/500.css";
-import "@fontsource/jetbrains-mono/600.css";
-import "@fontsource/jetbrains-mono/700.css";
-import "@fontsource/lexend/400.css";
-import "@fontsource/lexend/500.css";
-import "@fontsource/lexend/600.css";
-import "@fontsource/lexend/700.css";
-
 import { AboutWindowApp } from "./AboutWindowApp";
 import { AcknowledgementsWindowApp } from "./AcknowledgementsWindowApp";
 import { App } from "./App";

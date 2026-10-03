@@ -45,7 +45,7 @@ describe("SettingsWindowApp", () => {
 
   it("closes with Escape", async () => {
     renderSettings();
-    await screen.findByText("Reopen the last folder");
+    await screen.findByText("Reopen the last folder and tabs");
 
     fireEvent.keyDown(window, { key: "Escape" });
     expect(close).toHaveBeenCalledTimes(1);
@@ -60,8 +60,8 @@ describe("SettingsWindowApp", () => {
 
   it("lets Escape close an open pop-up before it closes the window", async () => {
     renderSettings();
-    await screen.findByText("Reopen the last folder");
-    fireEvent.click(screen.getByRole("button", { name: "Explorer" }));
+    await screen.findByText("Reopen the last folder and tabs");
+    fireEvent.click(screen.getByRole("button", { name: "Browsing" }));
 
     const trigger = screen
       .getAllByRole("button")
@@ -71,7 +71,7 @@ describe("SettingsWindowApp", () => {
           !(button as HTMLButtonElement).disabled,
       );
     if (!trigger) {
-      throw new Error("No pop-up trigger found on the Explorer tab.");
+      throw new Error("No pop-up trigger found on the Browsing tab.");
     }
     fireEvent.click(trigger);
     expect(trigger).toHaveAttribute("aria-expanded", "true");
@@ -87,7 +87,7 @@ describe("SettingsWindowApp", () => {
   it("keeps the tab on screen in the window's address, where the app reads it to reopen there", async () => {
     window.history.replaceState(null, "", "#settings");
     renderSettings();
-    await screen.findByText("Reopen the last folder");
+    await screen.findByText("Reopen the last folder and tabs");
     expect(window.location.hash).toBe("#settings/general");
 
     fireEvent.click(screen.getByRole("button", { name: "Shortcuts" }));

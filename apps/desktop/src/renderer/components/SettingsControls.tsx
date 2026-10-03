@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
 
 // The building blocks every Settings tab shares: a titled group of rows and a small button.
-// They are drawn by `.settings-*` rules in styles.css, in the colours the Settings view
-// hands down as custom properties (see `settingsPaletteStyle` in SettingsView).
+// They are drawn by `.settings-*` rules in styles.css.
 
 // Every button in Settings is this one, so they all look alike and all answer the pointer.
 export function ActionButton({
@@ -39,7 +38,7 @@ export function SectionCard({
   children,
 }: {
   title?: string | undefined;
-  // A few words after the title on how the group is used.
+  // A line under the group on how it is used.
   note?: string | undefined;
   resetButton?: ReactNode;
   // The button goes under the group, at its right, as Restore Defaults does on the Mac.
@@ -51,14 +50,12 @@ export function SectionCard({
     <section className="settings-section">
       {title || headerButton ? (
         <div className="settings-section-header">
-          <div className="settings-section-heading">
-            {title ? <h3 className="settings-section-title">{title}</h3> : null}
-            {note ? <span className="settings-section-note">{note}</span> : null}
-          </div>
+          {title ? <h3 className="settings-section-title">{title}</h3> : <span />}
           {headerButton}
         </div>
       ) : null}
       <div className="settings-card">{children}</div>
+      {note ? <p className="settings-section-note">{note}</p> : null}
       {resetBelow && resetButton ? (
         <div className="settings-section-footer">{resetButton}</div>
       ) : null}

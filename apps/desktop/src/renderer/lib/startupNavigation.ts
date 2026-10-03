@@ -21,10 +21,7 @@ function resolvePersistedStartupRoot(
 export function resolveStartupNavigation(
   preferences: Pick<
     AppPreferences,
-    | "restoreLastVisitedFolderOnStartup"
-    | "lastVisitedPath"
-    | "lastVisitedFavoritePath"
-    | "treeRootPath"
+    "restoreSessionOnStartup" | "lastVisitedPath" | "lastVisitedFavoritePath" | "treeRootPath"
   >,
   homePath: string,
   startupFolderPath: string | null = null,
@@ -39,13 +36,13 @@ export function resolveStartupNavigation(
   }
 
   const startupPath =
-    preferences.restoreLastVisitedFolderOnStartup && preferences.lastVisitedPath
+    preferences.restoreSessionOnStartup && preferences.lastVisitedPath
       ? preferences.lastVisitedPath
       : homePath;
 
-  if (!preferences.restoreLastVisitedFolderOnStartup || !preferences.lastVisitedPath) {
-    // When restore-last-visited is off, startup ignores persisted navigation state and
-    // returns to home with a home-rooted tree.
+  if (!preferences.restoreSessionOnStartup || !preferences.lastVisitedPath) {
+    // Without the last session, startup ignores persisted navigation state and returns to
+    // home with a home-rooted tree.
     return {
       startupPath,
       startupRootPath: homePath,
@@ -75,15 +72,14 @@ export type StartupTab = {
   foldersFirst: boolean;
 };
 
-// The tabs the window opens with and the one that is on screen. "Restore open tabs" brings
-// back the tabs that were open; "Restore last visited folder" decides whether they return
-// to their own folders or start at home. A folder the app was launched with is shown in a
-// tab of its own, unless one of the restored tabs already has it.
+// The tabs the window opens with and the one that is on screen. "Reopen the last folder and
+// tabs" brings back the tabs that were open, each in its own folder; without it the window
+// opens one tab at home. A folder the app was launched with is shown in a tab of its own,
+// unless one of the restored tabs already has it.
 export function resolveStartupTabs(
   preferences: Pick<
     AppPreferences,
-    | "restoreLastVisitedFolderOnStartup"
-    | "restoreOpenTabsOnStartup"
+    | "restoreSessionOnStartup"
     | "openTabs"
     | "activeTabIndex"
     | "lastVisitedPath"
@@ -105,7 +101,7 @@ export function resolveStartupTabs(
     includeHidden: preferences.includeHidden,
     foldersFirst: preferences.foldersFirst,
   };
-  if (!preferences.restoreOpenTabsOnStartup || preferences.openTabs.length === 0) {
+  if (!preferences.restoreSessionOnStartup || preferences.openTabs.length === 0) {
     const { startupPath, startupRootPath, startupFavoritePath } = resolveStartupNavigation(
       preferences,
       homePath,
@@ -132,7 +128,7 @@ export function resolveStartupTabs(
       includeHidden: tab.includeHidden,
       foldersFirst: tab.foldersFirst,
     };
-    if (!preferences.restoreLastVisitedFolderOnStartup || !tab.path) {
+    if (!tab.path) {
       return { path: homePath, rootPath: homePath, favoritePath: null, ...tabView };
     }
     return {

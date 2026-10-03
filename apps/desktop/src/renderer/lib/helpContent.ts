@@ -283,7 +283,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Next launch",
             description:
-              "Settings → General → Restore open tabs reopens the tabs you had. They return to their own folders when Restore last visited folder is on.",
+              "File Trail reopens the tabs you had, each in its own folder. Settings → General → Reopen the last folder and tabs turns that off: it then opens one tab in your home folder.",
           },
         ],
         note: "Only one copy, move or delete runs at a time, whichever tab it was started from. While it runs, the other tabs can browse, search, copy and cut.",
@@ -369,7 +369,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "What was copied",
             description:
-              "Copied and cut items flash, and keep a copy or cut icon after their name until they are pasted or the clipboard changes. A button with their count appears in the toolbar: click it to list them, show one in its folder, take one off, or choose Clear Clipboard. Settings → General → Copy and Cut turns the marks and the notification off.",
+              "Copied and cut items flash, and keep a copy or cut icon after their name until they are pasted or the clipboard changes. A button with their count appears in the toolbar: click it to list them, show one in its folder, take one off, or choose Clear Clipboard. Settings → General → Copy and Cut turns the marks off.",
           },
           {
             label: "Drag",
@@ -558,7 +558,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Icons, List and Details",
             description:
-              "The three buttons in the toolbar, or the View menu, switch between large icons with previews of photos, PDFs and other files, a compact list, and columns with date, size and kind. Settings → Explorer chooses the columns and a compact layout for each view.",
+              "The three buttons in the toolbar, or the View menu, switch between large icons with previews of photos, PDFs and other files, a compact list, and columns with date, size and kind. Settings → Browsing chooses the columns, and the density of every view.",
           },
           {
             label: "Sort",
@@ -615,8 +615,9 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
             description: "⌃⌘F, or the green button of the window. The same key leaves it.",
           },
           {
-            label: "Theme, accent, font",
-            description: "Settings → Appearance. Help follows them too.",
+            label: "Light, Dark, accent",
+            description:
+              "Settings → General → Appearance. Auto follows macOS. Help follows them too.",
           },
           {
             label: "Toolbar",

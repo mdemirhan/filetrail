@@ -9,9 +9,9 @@ import {
 import { darkenHex } from "./colorUtils";
 
 describe("accent helpers", () => {
-  it("generates light and dark accent tokens from the selected theme base", () => {
-    const lightTokens = generateAccentTokens("#2cb5a0", "macos-light");
-    const variantTokens = generateAccentTokens("#2cb5a0", "macos-dark");
+  it("generates light and dark accent tokens from the selected theme", () => {
+    const lightTokens = generateAccentTokens("#2cb5a0", "light");
+    const darkTokens = generateAccentTokens("#2cb5a0", "dark");
 
     expect(lightTokens).toMatchObject({
       solid: "#2cb5a0",
@@ -21,7 +21,7 @@ describe("accent helpers", () => {
       pathCrumbHover: "#249483",
       locationRing: "rgba(44, 181, 160, 0.16)",
     });
-    expect(variantTokens).toMatchObject({
+    expect(darkTokens).toMatchObject({
       pillText: "#2cb5a0",
       pathCrumbHover: "#2cb5a0",
       locationRing: "rgba(44, 181, 160, 0.14)",
@@ -29,11 +29,10 @@ describe("accent helpers", () => {
   });
 
   it("maps accent tokens into the CSS variables the stylesheet reads", () => {
-    const tokens = generateAccentTokens("#e8729a", "tomorrow-night");
+    const tokens = generateAccentTokens("#e8729a", "dark");
 
     expect(accentTokensToCssVariables(tokens)).toMatchObject({
-      "--accent": "#e8729a",
-      "--accent-text": "#e8729a",
+      "--ft-accent-pill-text": "#e8729a",
       "--ft-accent-solid": "#e8729a",
       "--ft-accent-ring-soft": "rgba(232, 114, 154, 0.15)",
     });
@@ -56,10 +55,8 @@ describe("accent helpers", () => {
     for (const option of ACCENT_OPTIONS) {
       check(option.value);
     }
-    expect(generateAccentTokens("#daa520", "macos-dark").onSolid).toBe("#000000");
-    expect(
-      accentTokensToCssVariables(generateAccentTokens("#4f46e5", "macos-light")),
-    ).toMatchObject({
+    expect(generateAccentTokens("#daa520", "dark").onSolid).toBe("#000000");
+    expect(accentTokensToCssVariables(generateAccentTokens("#4f46e5", "light"))).toMatchObject({
       "--ft-accent-solid-button": "#4f46e5",
       "--ft-accent-on-solid": "#ffffff",
     });
@@ -89,11 +86,9 @@ describe("accent helpers", () => {
           colors.background === darkenHex(option.value, 0.34),
       ).toBe(true);
     }
-    expect(accentTokensToCssVariables(generateAccentTokens("#ffc600", "macos-dark"))).toMatchObject(
-      {
-        "--ft-accent-on-selection": "#ffffff",
-        "--ft-accent-on-selection-soft": "rgba(255, 255, 255, 0.85)",
-      },
-    );
+    expect(accentTokensToCssVariables(generateAccentTokens("#ffc600", "dark"))).toMatchObject({
+      "--ft-accent-on-selection": "#ffffff",
+      "--ft-accent-on-selection-soft": "rgba(255, 255, 255, 0.85)",
+    });
   });
 });

@@ -330,26 +330,31 @@ describe("ExplorerWorkspace", () => {
     );
   });
 
-  it("chooses a palette from the Theme button's menu", () => {
+  it("chooses Auto, Light or Dark from the Theme button's menu", () => {
     const onSelectTheme = vi.fn();
     renderExplorerWorkspace({
       topToolbarItems: ["title", "theme", "clipboard", "viewOptions", "search"],
-      theme: "macos-dark",
+      theme: "dark",
       onSelectTheme,
     });
 
     const button = screen.getByRole("button", { name: "Choose theme" });
-    expect(button).toHaveAttribute("title", "Theme: macOS Dark");
+    expect(button).toHaveAttribute("title", "Theme: Dark");
     expect(screen.queryByRole("menu", { name: "Theme" })).toBeNull();
 
     fireEvent.click(button);
-    expect(screen.getByRole("menuitemradio", { name: "macOS Dark" })).toHaveAttribute(
+    expect(screen.getAllByRole("menuitemradio").map((item) => item.textContent?.trim())).toEqual([
+      "Auto",
+      "Light",
+      "Dark",
+    ]);
+    expect(screen.getByRole("menuitemradio", { name: "Dark" })).toHaveAttribute(
       "aria-checked",
       "true",
     );
-    fireEvent.click(screen.getByRole("menuitemradio", { name: "Sand" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Light" }));
 
-    expect(onSelectTheme).toHaveBeenCalledWith("sand");
+    expect(onSelectTheme).toHaveBeenCalledWith("light");
     expect(screen.queryByRole("menu", { name: "Theme" })).toBeNull();
   });
 

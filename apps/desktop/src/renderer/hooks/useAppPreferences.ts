@@ -15,10 +15,7 @@ import {
   type FileActivationAction,
   type OpenWithApplication,
   type ReturnKeyAction,
-  type TabStyle,
-  type ThemeMode,
   type ThemePreference,
-  type UiFontFamily,
   resolveEffectiveTheme,
 } from "../../shared/appPreferences";
 import type { ShortcutOverrides } from "../../shared/shortcuts";
@@ -27,25 +24,10 @@ import { applyAppearance } from "../lib/theme";
 export function useAppPreferences() {
   const [preferencesReady, setPreferencesReady] = useState(false);
   const [theme, setTheme] = useState<ThemePreference>(DEFAULT_APP_PREFERENCES.theme);
-  const [autoLightTheme, setAutoLightTheme] = useState<ThemeMode>(
-    DEFAULT_APP_PREFERENCES.autoLightTheme,
-  );
-  const [autoDarkTheme, setAutoDarkTheme] = useState<ThemeMode>(
-    DEFAULT_APP_PREFERENCES.autoDarkTheme,
-  );
   const systemPrefersDark = useSystemPrefersDark();
-  const effectiveTheme = resolveEffectiveTheme(
-    theme,
-    systemPrefersDark,
-    autoLightTheme,
-    autoDarkTheme,
-  );
+  const effectiveTheme = resolveEffectiveTheme(theme, systemPrefersDark);
   const [accent, setAccent] = useState<AccentMode>(DEFAULT_APP_PREFERENCES.accent);
   const [zoomPercent, setZoomPercent] = useState(DEFAULT_APP_PREFERENCES.zoomPercent);
-  const [uiFontFamily, setUiFontFamily] = useState<UiFontFamily>(
-    DEFAULT_APP_PREFERENCES.uiFontFamily,
-  );
-  const [tabStyle, setTabStyle] = useState<TabStyle>(DEFAULT_APP_PREFERENCES.tabStyle);
   const [includeHidden, setIncludeHidden] = useState(DEFAULT_APP_PREFERENCES.includeHidden);
   const [viewMode, setViewMode] = useState<ExplorerViewMode>(DEFAULT_APP_PREFERENCES.viewMode);
   const [foldersFirst, setFoldersFirst] = useState(DEFAULT_APP_PREFERENCES.foldersFirst);
@@ -58,9 +40,6 @@ export function useAppPreferences() {
   const [singleClickExpandTreeItems, setSingleClickExpandTreeItems] = useState(
     DEFAULT_APP_PREFERENCES.singleClickExpandTreeItems,
   );
-  const [highlightHoveredItems, setHighlightHoveredItems] = useState(
-    DEFAULT_APP_PREFERENCES.highlightHoveredItems,
-  );
   const [detailColumns, setDetailColumns] = useState<DetailColumnVisibility>(
     DEFAULT_DETAIL_COLUMN_VISIBILITY,
   );
@@ -70,24 +49,12 @@ export function useAppPreferences() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(
     DEFAULT_APP_PREFERENCES.notificationsEnabled,
   );
-  const [notificationDurationSeconds, setNotificationDurationSeconds] = useState(
-    DEFAULT_APP_PREFERENCES.notificationDurationSeconds,
-  );
-  const [highlightClipboardItemsInTree, setHighlightClipboardItemsInTree] = useState(
-    DEFAULT_APP_PREFERENCES.highlightClipboardItemsInTree,
-  );
-  const [highlightClipboardItemsInContent, setHighlightClipboardItemsInContent] = useState(
-    DEFAULT_APP_PREFERENCES.highlightClipboardItemsInContent,
-  );
-  const [notifyClipboardItems, setNotifyClipboardItems] = useState(
-    DEFAULT_APP_PREFERENCES.notifyClipboardItems,
+  const [markClipboardItems, setMarkClipboardItems] = useState(
+    DEFAULT_APP_PREFERENCES.markClipboardItems,
   );
   const [topToolbarItems, setTopToolbarItems] = useState(DEFAULT_APP_PREFERENCES.topToolbarItems);
-  const [restoreLastVisitedFolderOnStartup, setRestoreLastVisitedFolderOnStartup] = useState(
-    DEFAULT_APP_PREFERENCES.restoreLastVisitedFolderOnStartup,
-  );
-  const [restoreOpenTabsOnStartup, setRestoreOpenTabsOnStartup] = useState(
-    DEFAULT_APP_PREFERENCES.restoreOpenTabsOnStartup,
+  const [restoreSessionOnStartup, setRestoreSessionOnStartup] = useState(
+    DEFAULT_APP_PREFERENCES.restoreSessionOnStartup,
   );
   const [favorites, setFavorites] = useState<FavoritePreference[]>(
     DEFAULT_APP_PREFERENCES.favorites,
@@ -121,18 +88,14 @@ export function useAppPreferences() {
     DEFAULT_APP_PREFERENCES.shortcutOverrides,
   );
   useEffect(() => {
-    applyAppearance({ theme: effectiveTheme, accent, uiFontFamily });
-  }, [accent, effectiveTheme, uiFontFamily]);
+    applyAppearance({ theme: effectiveTheme, accent });
+  }, [accent, effectiveTheme]);
 
-  // Everything on the Appearance tab, back as a new install has it.
+  // Everything in the Appearance group of Settings, back as a new install has it.
   function resetAppearanceSettings() {
     setTheme(DEFAULT_APP_PREFERENCES.theme);
-    setAutoLightTheme(DEFAULT_APP_PREFERENCES.autoLightTheme);
-    setAutoDarkTheme(DEFAULT_APP_PREFERENCES.autoDarkTheme);
     setAccent(DEFAULT_APP_PREFERENCES.accent);
     setZoomPercent(DEFAULT_APP_PREFERENCES.zoomPercent);
-    setUiFontFamily(DEFAULT_APP_PREFERENCES.uiFontFamily);
-    setTabStyle(DEFAULT_APP_PREFERENCES.tabStyle);
   }
 
   return {
@@ -140,19 +103,11 @@ export function useAppPreferences() {
     setPreferencesReady,
     theme,
     setTheme,
-    autoLightTheme,
-    setAutoLightTheme,
-    autoDarkTheme,
-    setAutoDarkTheme,
     effectiveTheme,
     accent,
     setAccent,
     zoomPercent,
     setZoomPercent,
-    uiFontFamily,
-    setUiFontFamily,
-    tabStyle,
-    setTabStyle,
     includeHidden,
     setIncludeHidden,
     viewMode,
@@ -169,28 +124,18 @@ export function useAppPreferences() {
     setCompactTreeView,
     singleClickExpandTreeItems,
     setSingleClickExpandTreeItems,
-    highlightHoveredItems,
-    setHighlightHoveredItems,
     detailColumns,
     setDetailColumns,
     detailColumnWidths,
     setDetailColumnWidths,
     notificationsEnabled,
     setNotificationsEnabled,
-    notificationDurationSeconds,
-    setNotificationDurationSeconds,
-    highlightClipboardItemsInTree,
-    setHighlightClipboardItemsInTree,
-    highlightClipboardItemsInContent,
-    setHighlightClipboardItemsInContent,
-    notifyClipboardItems,
-    setNotifyClipboardItems,
+    markClipboardItems,
+    setMarkClipboardItems,
     topToolbarItems,
     setTopToolbarItems,
-    restoreLastVisitedFolderOnStartup,
-    setRestoreLastVisitedFolderOnStartup,
-    restoreOpenTabsOnStartup,
-    setRestoreOpenTabsOnStartup,
+    restoreSessionOnStartup,
+    setRestoreSessionOnStartup,
     favorites,
     setFavorites,
     favoritesPlacement,
@@ -259,27 +204,18 @@ export function applyPreferencesPatch(store: AppPreferencesStore, patch: Incomin
     }
   };
   set("theme", store.setTheme);
-  set("autoLightTheme", store.setAutoLightTheme);
-  set("autoDarkTheme", store.setAutoDarkTheme);
   set("accent", store.setAccent);
   set("zoomPercent", store.setZoomPercent);
-  set("uiFontFamily", store.setUiFontFamily);
-  set("tabStyle", store.setTabStyle);
   set("compactListView", store.setCompactListView);
   set("compactDetailsView", store.setCompactDetailsView);
   set("compactIconView", store.setCompactIconView);
   set("compactTreeView", store.setCompactTreeView);
   set("singleClickExpandTreeItems", store.setSingleClickExpandTreeItems);
-  set("highlightHoveredItems", store.setHighlightHoveredItems);
   set("detailColumns", store.setDetailColumns);
   set("notificationsEnabled", store.setNotificationsEnabled);
-  set("notificationDurationSeconds", store.setNotificationDurationSeconds);
-  set("highlightClipboardItemsInTree", store.setHighlightClipboardItemsInTree);
-  set("highlightClipboardItemsInContent", store.setHighlightClipboardItemsInContent);
-  set("notifyClipboardItems", store.setNotifyClipboardItems);
+  set("markClipboardItems", store.setMarkClipboardItems);
   set("topToolbarItems", store.setTopToolbarItems);
-  set("restoreLastVisitedFolderOnStartup", store.setRestoreLastVisitedFolderOnStartup);
-  set("restoreOpenTabsOnStartup", store.setRestoreOpenTabsOnStartup);
+  set("restoreSessionOnStartup", store.setRestoreSessionOnStartup);
   set("favorites", store.setFavorites);
   set("favoritesPlacement", store.setFavoritesPlacement);
   set("terminalApp", store.setTerminalApp);

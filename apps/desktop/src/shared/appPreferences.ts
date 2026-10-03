@@ -1,23 +1,13 @@
 import type { ShortcutOverrides } from "./shortcuts";
 import { DEFAULT_TOP_TOOLBAR_ITEMS, type ToolbarItemId } from "./toolbarItems";
 
-// The palettes: three light and three dark.
-export type ThemeMode =
-  | "macos-light"
-  | "warm-paper"
-  | "sand"
-  | "macos-dark"
-  | "catppuccin-mocha"
-  | "tomorrow-night";
-// "auto" follows the macOS appearance, using autoLightTheme / autoDarkTheme as palettes. An
-// explicit palette pins the app to that palette's light or dark side.
+// The app's two looks, macOS light and macOS dark.
+export type ThemeMode = "light" | "dark";
+// "auto" follows the macOS appearance; "light" or "dark" pins the app to one.
 export type ThemePreference = "auto" | ThemeMode;
 export type AccentMode = string;
 // "native" shows the real macOS icons for files and folders (via NSWorkspace).
 export type ExplorerViewMode = "icons" | "list" | "details";
-export type UiFontFamily = "system" | "dm-sans" | "lexend" | "fira-code" | "jetbrains-mono";
-// How the tab strip is drawn: flat tabs under a line in the accent color, or cards on a band.
-export type TabStyle = "cards" | "accentLine";
 export type SearchPatternModePreference = "text" | "glob" | "regex";
 // How the search text is matched, in the order the menus list the choices.
 export const SEARCH_PATTERN_MODES = ["text", "glob", "regex"] as const;
@@ -94,70 +84,40 @@ export type {
   ToolbarItemId,
 } from "./toolbarItems";
 
-// These option lists are used for both UI rendering and validation-like lookups.
-// Keep them stable unless the corresponding persisted preference values are migrated.
+// Auto, Light and Dark, in the order Settings shows them.
 export const THEME_OPTIONS = [
-  { value: "macos-light", label: "macOS Light", group: "light" },
-  { value: "warm-paper", label: "Warm Paper", group: "light" },
-  { value: "sand", label: "Sand", group: "light" },
-  { value: "macos-dark", label: "macOS Dark", group: "dark" },
-  { value: "catppuccin-mocha", label: "Catppuccin Mocha", group: "dark" },
-  { value: "tomorrow-night", label: "Tomorrow Night", group: "dark" },
-] as const;
+  { value: "auto", label: "Auto" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+] as const satisfies ReadonlyArray<{ value: ThemePreference; label: string }>;
 
-// Palettes that were removed, with the remaining palette closest to each. Saved state that
-// still names one is moved to its replacement when it loads.
-export const REMOVED_THEME_REPLACEMENTS: Readonly<Record<string, ThemeMode>> = {
-  light: "macos-light",
-  "clean-white": "macos-light",
-  stone: "macos-light",
-  dark: "macos-dark",
-  obsidian: "macos-dark",
-  onyx: "macos-dark",
-  graphite: "tomorrow-night",
-  midnight: "catppuccin-mocha",
+// The theme a saved value stands for, or null when it is unknown. The app used to offer
+// several palettes for each side; a saved palette becomes the side it was on.
+const SAVED_PALETTE_SIDES: Readonly<Record<string, ThemeMode>> = {
+  "macos-light": "light",
+  "warm-paper": "light",
+  sand: "light",
+  "clean-white": "light",
+  stone: "light",
+  "macos-dark": "dark",
+  "catppuccin-mocha": "dark",
+  "tomorrow-night": "dark",
+  obsidian: "dark",
+  onyx: "dark",
+  graphite: "dark",
+  midnight: "dark",
 };
 
-// The palette a saved theme name stands for today, or null when the name is unknown.
-export function resolveSavedTheme(value: unknown): ThemeMode | null {
+export function resolveSavedTheme(value: unknown): ThemePreference | null {
   if (typeof value !== "string") {
     return null;
   }
   if (THEME_OPTIONS.some((option) => option.value === value)) {
-    return value as ThemeMode;
+    return value as ThemePreference;
   }
-  return REMOVED_THEME_REPLACEMENTS[value] ?? null;
+  return SAVED_PALETTE_SIDES[value] ?? null;
 }
 
-export const AUTO_THEME_OPTION = { value: "auto", label: "Auto (follow macOS)" } as const;
-export const LIGHT_THEME_OPTIONS = THEME_OPTIONS.filter((option) => option.group === "light");
-export const DARK_THEME_OPTIONS = THEME_OPTIONS.filter((option) => option.group === "dark");
-
-export const THEME_GROUPS = [
-  {
-    value: "light",
-    label: "Light",
-    options: THEME_OPTIONS.filter((option) => option.group === "light"),
-  },
-  {
-    value: "dark",
-    label: "Dark",
-    options: THEME_OPTIONS.filter((option) => option.group === "dark"),
-  },
-] as const;
-
-// Choosing a palette (or Auto) from a single list: the palette becomes the theme and also
-// the palette of its side, so going back to Auto keeps it.
-export function themeChoicePatch(
-  choice: ThemePreference,
-): Partial<Pick<AppPreferences, "theme" | "autoLightTheme" | "autoDarkTheme">> {
-  if (choice === "auto") {
-    return { theme: "auto" };
-  }
-  return isThemeInGroup(choice, "light")
-    ? { theme: choice, autoLightTheme: choice }
-    : { theme: choice, autoDarkTheme: choice };
-}
 // The accent colors offered in Settings: macOS's own, in System Settings order, then the
 // copper the app used to default to. Any other saved color shows up as a custom color.
 export const ACCENT_OPTIONS = [
@@ -173,18 +133,8 @@ export const ACCENT_OPTIONS = [
 ] as const;
 export const DEFAULT_ACCENT: AccentMode = ACCENT_OPTIONS[0].value;
 
-export const UI_FONT_OPTIONS = [
-  { value: "system", label: "System (SF Pro)" },
-  { value: "dm-sans", label: "DM Sans" },
-  { value: "lexend", label: "Lexend" },
-  { value: "fira-code", label: "Fira Code" },
-  { value: "jetbrains-mono", label: "JetBrains Mono" },
-] as const;
 export const ZOOM_PERCENT_MIN = 75;
 export const ZOOM_PERCENT_MAX = 150;
-export const NOTIFICATION_DURATION_SECONDS_OPTIONS = [2, 3, 4, 5, 6, 8, 10] as const;
-export const NOTIFICATION_DURATION_SECONDS_MIN = 2;
-export const NOTIFICATION_DURATION_SECONDS_MAX = 10;
 // In display order, which is Finder's: Name, Date Modified, Size, Kind, then the extras.
 export const DETAIL_COLUMN_KEYS = [
   "name",
@@ -302,12 +252,8 @@ export const OPEN_ITEM_LIMIT_MAX = 50;
 // otherwise older saved preferences will either be dropped or fail validation.
 export type AppPreferences = {
   theme: ThemePreference;
-  autoLightTheme: ThemeMode;
-  autoDarkTheme: ThemeMode;
   accent: AccentMode;
   zoomPercent: number;
-  uiFontFamily: UiFontFamily;
-  tabStyle: TabStyle;
   viewMode: ExplorerViewMode;
   sortBy: "name" | "modified" | "kind" | "size";
   sortDirection: "asc" | "desc";
@@ -317,16 +263,11 @@ export type AppPreferences = {
   compactIconView: boolean;
   compactTreeView: boolean;
   singleClickExpandTreeItems: boolean;
-  highlightHoveredItems: boolean;
   detailColumns: DetailColumnVisibility;
   detailColumnWidths: DetailColumnWidths;
   notificationsEnabled: boolean;
-  notificationDurationSeconds: number;
-  // What shows that items were copied or cut: a flash and a marker on them in the folder
-  // tree and in the file list, and a notification that names them.
-  highlightClipboardItemsInTree: boolean;
-  highlightClipboardItemsInContent: boolean;
-  notifyClipboardItems: boolean;
+  // Items that were copied or cut flash and keep a mark, in the folder tree and the file list.
+  markClipboardItems: boolean;
   propertiesOpen: boolean;
   detailRowOpen: boolean;
   topToolbarItems: ToolbarItemId[];
@@ -348,8 +289,8 @@ export type AppPreferences = {
   searchResultsSortDirection: SearchResultsSortDirectionPreference;
   treeWidth: number;
   inspectorWidth: number;
-  restoreLastVisitedFolderOnStartup: boolean;
-  restoreOpenTabsOnStartup: boolean;
+  // Start where the last session ended: its folder, and its tabs.
+  restoreSessionOnStartup: boolean;
   // The tabs that were open, in order, and which one was on screen. Like the last visited
   // folder, they follow where the user is and are written when the app quits.
   openTabs: OpenTabPreference[];
@@ -365,13 +306,9 @@ export type AppPreferences = {
 
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   theme: "auto",
-  autoLightTheme: "macos-light",
-  autoDarkTheme: "macos-dark",
   accent: DEFAULT_ACCENT,
   zoomPercent: 100,
-  uiFontFamily: "system",
-  tabStyle: "accentLine",
-  viewMode: "list",
+  viewMode: "details",
   sortBy: "name",
   sortDirection: "asc",
   foldersFirst: true,
@@ -380,14 +317,10 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   compactIconView: false,
   compactTreeView: false,
   singleClickExpandTreeItems: false,
-  highlightHoveredItems: false,
   detailColumns: DEFAULT_DETAIL_COLUMN_VISIBILITY,
   detailColumnWidths: DEFAULT_DETAIL_COLUMN_WIDTHS,
   notificationsEnabled: true,
-  notificationDurationSeconds: 4,
-  highlightClipboardItemsInTree: true,
-  highlightClipboardItemsInContent: true,
-  notifyClipboardItems: true,
+  markClipboardItems: true,
   propertiesOpen: false,
   detailRowOpen: false,
   topToolbarItems: [...DEFAULT_TOP_TOOLBAR_ITEMS],
@@ -408,8 +341,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   searchResultsSortDirection: "asc",
   treeWidth: 280,
   inspectorWidth: 320,
-  restoreLastVisitedFolderOnStartup: false,
-  restoreOpenTabsOnStartup: false,
+  restoreSessionOnStartup: true,
   openTabs: [],
   activeTabIndex: 0,
   treeRootPath: null,
@@ -431,12 +363,6 @@ export function clampZoomPercent(value: number): number {
   return Math.round(Math.max(ZOOM_PERCENT_MIN, Math.min(ZOOM_PERCENT_MAX, value)));
 }
 
-export function clampNotificationDurationSeconds(value: number): number {
-  return Math.round(
-    Math.max(NOTIFICATION_DURATION_SECONDS_MIN, Math.min(NOTIFICATION_DURATION_SECONDS_MAX, value)),
-  );
-}
-
 export function clampOpenItemLimit(value: number): number {
   return Math.round(Math.max(OPEN_ITEM_LIMIT_MIN, Math.min(OPEN_ITEM_LIMIT_MAX, value)));
 }
@@ -446,29 +372,15 @@ export function clampDetailColumnWidth(key: DetailColumnKey, value: number): num
   return Math.round(Math.max(limits.min, Math.min(limits.max, value)));
 }
 
-export function getThemeLabel(theme: ThemePreference): string {
-  if (theme === "auto") {
-    return AUTO_THEME_OPTION.label;
-  }
-  return THEME_OPTIONS.find((option) => option.value === theme)?.label ?? theme;
-}
-
-export function isThemeInGroup(theme: string, group: "light" | "dark"): theme is ThemeMode {
-  return THEME_OPTIONS.some((option) => option.value === theme && option.group === group);
-}
-
-// Resolves the palette actually painted: "auto" picks the light or dark palette from the
-// current macOS appearance; an explicit theme is used as is.
+// The look actually painted: "auto" follows the current macOS appearance.
 export function resolveEffectiveTheme(
   theme: ThemePreference,
   systemPrefersDark: boolean,
-  autoLightTheme: ThemeMode,
-  autoDarkTheme: ThemeMode,
 ): ThemeMode {
   if (theme !== "auto") {
     return theme;
   }
-  return systemPrefersDark ? autoDarkTheme : autoLightTheme;
+  return systemPrefersDark ? "dark" : "light";
 }
 
 export function normalizeAccentColor(value: string): string | null {
@@ -477,10 +389,6 @@ export function normalizeAccentColor(value: string): string | null {
     return null;
   }
   return trimmed.toLowerCase();
-}
-
-export function getUiFontLabel(font: UiFontFamily): string {
-  return UI_FONT_OPTIONS.find((option) => option.value === font)?.label ?? font;
 }
 
 export function getFavoriteIconLabel(icon: FavoriteIconId): string {

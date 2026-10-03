@@ -4,11 +4,24 @@ import { join } from "node:path";
 
 import { type StoredWindowState, createAppStateStore, resolveAppStatePath } from "./appStateStore";
 
+// The real file system, except that only the named applications are installed.
+function fileSystemWithApplications(installed: string[]) {
+  return {
+    existsSync: (path: string) =>
+      path.endsWith(".app") ? installed.includes(path) : existsSync(path),
+    mkdirSync: () => undefined,
+    readFileSync: (path: string, encoding: "utf8") => readFileSync(path, encoding),
+    writeFileSync: (path: string, data: string, encoding: "utf8") =>
+      writeFileSync(path, data, encoding),
+    renameSync: (from: string, to: string) => renameSync(from, to),
+  };
+}
+
 describe("appStateStore", () => {
   it("persists through a temp file so a failed write keeps the previous state", () => {
     const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
     const filePath = resolveAppStatePath(userDataPath);
-    const store = createAppStateStore(filePath, { defaultTheme: "macos-dark" });
+    const store = createAppStateStore(filePath, { defaultTheme: "dark" });
     store.updatePreferences({ favoritesExpanded: false });
     store.flush();
     const persisted = readFileSync(filePath, "utf8");
@@ -17,7 +30,7 @@ describe("appStateStore", () => {
 
     const onPersistError = vi.fn();
     const failingStore = createAppStateStore(filePath, {
-      defaultTheme: "macos-dark",
+      defaultTheme: "dark",
       onPersistError,
       fs: {
         existsSync,
@@ -46,7 +59,7 @@ describe("appStateStore", () => {
     let nextTimerId = 1;
     let writes = 0;
     const store = createAppStateStore(filePath, {
-      defaultTheme: "macos-dark",
+      defaultTheme: "dark",
       timer: {
         setTimeout: (callback, delayMs) => {
           timers.set(nextTimerId, { callback, delayMs });
@@ -177,7 +190,7 @@ describe("appStateStore", () => {
     store.flush();
     expect(writes()).toBe(1);
 
-    store.updatePreferences({ restoreOpenTabsOnStartup: true });
+    store.updatePreferences({ restoreSessionOnStartup: false });
     expect(pendingDelays()).toEqual([150]);
     runTimers();
     expect(writes()).toBe(2);
@@ -209,7 +222,7 @@ describe("appStateStore", () => {
 
     const preferences = createAppStateStore(filePath).getPreferences();
 
-    expect(preferences.restoreOpenTabsOnStartup).toBe(true);
+    expect(preferences.restoreSessionOnStartup).toBe(true);
     expect(preferences.activeTabIndex).toBe(0);
     expect(preferences.openTabs).toEqual([
       {
@@ -227,7 +240,7 @@ describe("appStateStore", () => {
         path: null,
         treeRootPath: null,
         favoritePath: null,
-        viewMode: "list",
+        viewMode: "details",
         sortBy: "name",
         sortDirection: "asc",
         includeHidden: false,
@@ -263,20 +276,18 @@ describe("appStateStore", () => {
   it("returns defaults when no state file exists", () => {
     const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
     const store = createAppStateStore(resolveAppStatePath(userDataPath), {
-      defaultTheme: "tomorrow-night",
+      defaultTheme: "dark",
+      // Open With starts with the suggested applications that are installed.
+      fs: fileSystemWithApplications(["/Applications/Zed.app"]),
     });
 
     expect(store.getPreferences()).toEqual({
-      theme: "tomorrow-night",
-      autoLightTheme: "macos-light",
-      autoDarkTheme: "macos-dark",
+      theme: "dark",
       returnKeyAction: "rename",
       shortcutOverrides: {},
       accent: "#007aff",
       zoomPercent: 100,
-      uiFontFamily: "system",
-      tabStyle: "accentLine",
-      viewMode: "list",
+      viewMode: "details",
       sortBy: "name",
       sortDirection: "asc",
       foldersFirst: true,
@@ -285,7 +296,6 @@ describe("appStateStore", () => {
       compactIconView: false,
       compactTreeView: false,
       singleClickExpandTreeItems: false,
-      highlightHoveredItems: false,
       detailColumns: {
         modified: true,
         size: true,
@@ -302,10 +312,7 @@ describe("appStateStore", () => {
         created: 152,
       },
       notificationsEnabled: true,
-      notificationDurationSeconds: 4,
-      highlightClipboardItemsInTree: true,
-      highlightClipboardItemsInContent: true,
-      notifyClipboardItems: true,
+      markClipboardItems: true,
       propertiesOpen: false,
       detailRowOpen: false,
       topToolbarItems: [
@@ -326,16 +333,6 @@ describe("appStateStore", () => {
       },
       openWithApplications: [
         {
-          id: "visual-studio-code",
-          appPath: "/Applications/Visual Studio Code.app",
-          appName: "Visual Studio Code",
-        },
-        {
-          id: "sublime-text",
-          appPath: "/Applications/Sublime Text.app",
-          appName: "Sublime Text",
-        },
-        {
           id: "zed",
           appPath: "/Applications/Zed.app",
           appName: "Zed",
@@ -353,8 +350,7 @@ describe("appStateStore", () => {
       searchResultsSortDirection: "asc",
       treeWidth: 280,
       inspectorWidth: 320,
-      restoreLastVisitedFolderOnStartup: false,
-      restoreOpenTabsOnStartup: false,
+      restoreSessionOnStartup: true,
       openTabs: [],
       activeTabIndex: 0,
       treeRootPath: null,
@@ -375,11 +371,11 @@ describe("appStateStore", () => {
   it("persists preferences and window state in one file", () => {
     const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
     const store = createAppStateStore(resolveAppStatePath(userDataPath), {
-      defaultTheme: "macos-dark",
+      defaultTheme: "dark",
     });
 
     store.updatePreferences({
-      theme: "macos-dark",
+      theme: "dark",
       // As a hand-edited file might have them: any order, a key that can not be given
       // out, a command that does not exist, and one that only repeats its default.
       shortcutOverrides: {
@@ -390,8 +386,6 @@ describe("appStateStore", () => {
       },
       accent: "#2cb5a0",
       zoomPercent: 115,
-      uiFontFamily: "lexend",
-      tabStyle: "cards",
       viewMode: "details",
       sortBy: "modified",
       sortDirection: "desc",
@@ -401,7 +395,6 @@ describe("appStateStore", () => {
       compactIconView: true,
       compactTreeView: true,
       singleClickExpandTreeItems: true,
-      highlightHoveredItems: false,
       detailColumns: {
         size: true,
         modified: false,
@@ -418,10 +411,7 @@ describe("appStateStore", () => {
         created: 168,
       },
       notificationsEnabled: true,
-      notificationDurationSeconds: 4,
-      highlightClipboardItemsInTree: true,
-      highlightClipboardItemsInContent: true,
-      notifyClipboardItems: true,
+      markClipboardItems: false,
       topToolbarItems: ["search", "back", "title", "copyPath", "clipboard", "viewOptions"],
       terminalApp: {
         appPath: "/Applications/iTerm.app",
@@ -452,8 +442,7 @@ describe("appStateStore", () => {
       detailRowOpen: true,
       treeWidth: 312,
       inspectorWidth: 388,
-      restoreLastVisitedFolderOnStartup: true,
-      restoreOpenTabsOnStartup: true,
+      restoreSessionOnStartup: false,
       openTabs: [
         {
           path: "/Users/demo/src",
@@ -498,18 +487,14 @@ describe("appStateStore", () => {
     store.flush();
 
     const reloaded = createAppStateStore(resolveAppStatePath(userDataPath), {
-      defaultTheme: "macos-dark",
+      defaultTheme: "dark",
     });
     expect(reloaded.getPreferences()).toEqual({
-      theme: "macos-dark",
-      autoLightTheme: "macos-light",
-      autoDarkTheme: "macos-dark",
+      theme: "dark",
       returnKeyAction: "rename",
       shortcutOverrides: { newTab: ["Cmd+Option+N"], duplicateSelection: [] },
       accent: "#2cb5a0",
       zoomPercent: 115,
-      uiFontFamily: "lexend",
-      tabStyle: "cards",
       viewMode: "details",
       sortBy: "modified",
       sortDirection: "desc",
@@ -519,7 +504,6 @@ describe("appStateStore", () => {
       compactIconView: true,
       compactTreeView: true,
       singleClickExpandTreeItems: true,
-      highlightHoveredItems: false,
       detailColumns: {
         size: true,
         modified: false,
@@ -536,10 +520,7 @@ describe("appStateStore", () => {
         created: 168,
       },
       notificationsEnabled: true,
-      notificationDurationSeconds: 4,
-      highlightClipboardItemsInTree: true,
-      highlightClipboardItemsInContent: true,
-      notifyClipboardItems: true,
+      markClipboardItems: false,
       topToolbarItems: ["search", "back", "title", "copyPath", "clipboard", "viewOptions"],
       terminalApp: {
         appPath: "/Applications/iTerm.app",
@@ -570,8 +551,7 @@ describe("appStateStore", () => {
       detailRowOpen: true,
       treeWidth: 312,
       inspectorWidth: 388,
-      restoreLastVisitedFolderOnStartup: true,
-      restoreOpenTabsOnStartup: true,
+      restoreSessionOnStartup: false,
       openTabs: [
         {
           path: "/Users/demo/src",
@@ -615,58 +595,68 @@ describe("appStateStore", () => {
     });
   });
 
-  it("keeps auto themes and rejects auto palettes from the wrong appearance", () => {
-    const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
-    const filePath = resolveAppStatePath(userDataPath);
-    writeFileSync(
-      filePath,
-      JSON.stringify({
-        preferences: {
-          theme: "auto",
-          autoLightTheme: "tomorrow-night",
-          autoDarkTheme: "catppuccin-mocha",
-        },
-      }),
-      "utf8",
-    );
-
-    const preferences = createAppStateStore(filePath, { defaultTheme: "auto" }).getPreferences();
-
-    expect(preferences.theme).toBe("auto");
-    expect(preferences.autoLightTheme).toBe("macos-light");
-    expect(preferences.autoDarkTheme).toBe("catppuccin-mocha");
-  });
-
-  it("moves removed palettes to the closest remaining one", () => {
+  it("moves a palette the app no longer has to its side, light or dark", () => {
     const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
     const filePath = resolveAppStatePath(userDataPath);
     const load = (preferences: Record<string, string>) => {
       writeFileSync(filePath, JSON.stringify({ preferences }), "utf8");
       const loaded = createAppStateStore(filePath, { defaultTheme: "auto" }).getPreferences();
-      return [loaded.theme, loaded.autoLightTheme, loaded.autoDarkTheme];
+      return loaded.theme;
     };
 
-    expect(load({ theme: "light", autoLightTheme: "clean-white", autoDarkTheme: "dark" })).toEqual([
-      "macos-light",
-      "macos-light",
-      "macos-dark",
-    ]);
-    expect(load({ theme: "midnight", autoLightTheme: "stone", autoDarkTheme: "graphite" })).toEqual(
-      ["catppuccin-mocha", "macos-light", "tomorrow-night"],
-    );
-    expect(load({ theme: "obsidian", autoLightTheme: "sand", autoDarkTheme: "onyx" })).toEqual([
-      "macos-dark",
-      "sand",
-      "macos-dark",
-    ]);
-    // A removed dark palette saved for the light side is not a light palette: the default wins.
-    expect(load({ theme: "auto", autoLightTheme: "obsidian", autoDarkTheme: "onyx" })).toEqual([
+    expect(load({ theme: "auto", autoLightTheme: "sand", autoDarkTheme: "catppuccin-mocha" })).toBe(
       "auto",
-      "macos-light",
-      "macos-dark",
-    ]);
+    );
+    expect(load({ theme: "macos-light" })).toBe("light");
+    expect(load({ theme: "warm-paper" })).toBe("light");
+    expect(load({ theme: "clean-white" })).toBe("light");
+    expect(load({ theme: "tomorrow-night" })).toBe("dark");
+    expect(load({ theme: "midnight" })).toBe("dark");
+    expect(load({ theme: "dark" })).toBe("dark");
     // Unknown names fall back to the default theme.
-    expect(load({ theme: "no-such-theme" })[0]).toBe("auto");
+    expect(load({ theme: "no-such-theme" })).toBe("auto");
+    // The palette for each side of Auto is gone with the palettes.
+    writeFileSync(
+      filePath,
+      JSON.stringify({ preferences: { theme: "auto", autoLightTheme: "sand" } }),
+      "utf8",
+    );
+    expect(createAppStateStore(filePath).getPreferences()).not.toHaveProperty("autoLightTheme");
+  });
+
+  it("keeps what a profile chose before the startup and copy-mark settings were merged", () => {
+    const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
+    const filePath = resolveAppStatePath(userDataPath);
+    const load = (preferences: Record<string, unknown>) => {
+      writeFileSync(filePath, JSON.stringify({ preferences }), "utf8");
+      const loaded = createAppStateStore(filePath).getPreferences();
+      return [loaded.restoreSessionOnStartup, loaded.markClipboardItems];
+    };
+
+    // Reopening the last folder decided where a session started.
+    expect(
+      load({ restoreLastVisitedFolderOnStartup: false, restoreOpenTabsOnStartup: true }),
+    ).toEqual([false, true]);
+    expect(load({ restoreLastVisitedFolderOnStartup: true })).toEqual([true, true]);
+    // Copies stay marked unless both the tree's and the list's marks were off.
+    expect(
+      load({ highlightClipboardItemsInTree: false, highlightClipboardItemsInContent: true }),
+    ).toEqual([true, true]);
+    expect(
+      load({ highlightClipboardItemsInTree: false, highlightClipboardItemsInContent: false }),
+    ).toEqual([true, false]);
+    // The merged settings win over the old ones.
+    expect(
+      load({
+        restoreSessionOnStartup: true,
+        restoreLastVisitedFolderOnStartup: false,
+        markClipboardItems: true,
+        highlightClipboardItemsInTree: false,
+        highlightClipboardItemsInContent: false,
+      }),
+    ).toEqual([true, true]);
+    // A new profile reopens its last session and marks copies.
+    expect(load({})).toEqual([true, true]);
   });
 
   it("upgrades untouched legacy detail columns to the new defaults but keeps customized ones", () => {
@@ -799,6 +789,14 @@ describe("appStateStore", () => {
     // removed.
     writeFileSync(filePath, withFavorites({ autoLightTheme: "macos-light" }));
     expect(createAppStateStore(filePath).getPreferences().favorites).toEqual(savedFavorites);
+
+    // Saved after the palettes went, by this version: also left alone.
+    writeFileSync(filePath, withFavorites({ restoreSessionOnStartup: true }));
+    expect(createAppStateStore(filePath).getPreferences().favorites).toEqual(savedFavorites);
+    const store = createAppStateStore(filePath);
+    store.updatePreferences({ foldersFirst: false });
+    store.flush();
+    expect(createAppStateStore(filePath).getPreferences().favorites).toEqual(savedFavorites);
   });
 
   it("keeps a saved search match mode and defaults to plain text", () => {
@@ -846,7 +844,8 @@ describe("appStateStore", () => {
     const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
     const filePath = resolveAppStatePath(userDataPath);
     const store = createAppStateStore(filePath, {
-      defaultTheme: "macos-dark",
+      defaultTheme: "dark",
+      fs: fileSystemWithApplications(["/Applications/Visual Studio Code.app"]),
     });
     store.updatePreferences({
       accent: "bad-accent" as never,
@@ -854,10 +853,13 @@ describe("appStateStore", () => {
       sortBy: "oops" as never,
       sortDirection: "sideways" as never,
       topToolbarItems: ["back", "search", "search", "home"] as never,
-      uiFontFamily: "bad-font" as never,
-      tabStyle: "bad-style" as never,
       // Settings that no longer exist are dropped when loading.
       ...({
+        uiFontFamily: "lexend",
+        tabStyle: "cards",
+        highlightHoveredItems: true,
+        notificationDurationSeconds: 8,
+        notifyClipboardItems: false,
         uiFontSize: 15,
         uiFontWeight: 600,
         favoritesPaneHeight: 224,
@@ -905,7 +907,8 @@ describe("appStateStore", () => {
     store.flush();
 
     const reloaded = createAppStateStore(filePath, {
-      defaultTheme: "macos-dark",
+      defaultTheme: "dark",
+      fs: fileSystemWithApplications(["/Applications/Visual Studio Code.app"]),
     });
     expect(reloaded.getPreferences().accent).toBe("#007aff");
     expect(reloaded.getPreferences().zoomPercent).toBe(150);
@@ -921,8 +924,15 @@ describe("appStateStore", () => {
     expect(reloaded.getPreferences().treeWidth).toBe(220);
     expect(reloaded.getPreferences().inspectorWidth).toBe(480);
     expect(reloaded.getPreferences().accent).toBe("#007aff");
-    expect(reloaded.getPreferences().uiFontFamily).toBe("system");
-    expect(reloaded.getPreferences().tabStyle).toBe("accentLine");
+    for (const removed of [
+      "uiFontFamily",
+      "tabStyle",
+      "highlightHoveredItems",
+      "notificationDurationSeconds",
+      "notifyClipboardItems",
+    ]) {
+      expect(reloaded.getPreferences()).not.toHaveProperty(removed);
+    }
     expect(reloaded.getPreferences()).not.toHaveProperty("uiFontSize");
     expect(reloaded.getPreferences()).not.toHaveProperty("uiFontWeight");
     expect(reloaded.getPreferences()).not.toHaveProperty("favoritesPaneHeight");
@@ -939,16 +949,6 @@ describe("appStateStore", () => {
         id: "visual-studio-code",
         appPath: "/Applications/Visual Studio Code.app",
         appName: "Visual Studio Code",
-      },
-      {
-        id: "sublime-text",
-        appPath: "/Applications/Sublime Text.app",
-        appName: "Sublime Text",
-      },
-      {
-        id: "zed",
-        appPath: "/Applications/Zed.app",
-        appName: "Zed",
       },
     ]);
     expect(reloaded.getPreferences().compactDetailsView).toBe(false);
@@ -978,7 +978,7 @@ describe("appStateStore", () => {
     const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
     const filePath = resolveAppStatePath(userDataPath);
     const store = createAppStateStore(filePath, {
-      defaultTheme: "macos-dark",
+      defaultTheme: "dark",
     });
 
     store.updatePreferences({
@@ -989,7 +989,7 @@ describe("appStateStore", () => {
 
     const fileContents = `{
   "preferences": {
-    "theme": "macos-dark",
+    "theme": "dark",
     "favoritePaths": ["/Users/demo/Documents", "/Applications", "/Users/demo/Documents"],
     "favoritesExpanded": false,
     "favoritesInitialized": true
@@ -998,7 +998,7 @@ describe("appStateStore", () => {
     writeFileSync(filePath, fileContents, "utf8");
 
     const reloaded = createAppStateStore(filePath, {
-      defaultTheme: "macos-dark",
+      defaultTheme: "dark",
     });
 
     // State this old also predates Macintosh HD as a default favorite.
@@ -1014,7 +1014,7 @@ describe("appStateStore", () => {
     const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
     const filePath = resolveAppStatePath(userDataPath);
     const store = createAppStateStore(filePath, {
-      defaultTheme: "macos-dark",
+      defaultTheme: "dark",
     });
 
     store.updatePreferences({
@@ -1023,7 +1023,7 @@ describe("appStateStore", () => {
     store.flush();
 
     const reloaded = createAppStateStore(filePath, {
-      defaultTheme: "macos-dark",
+      defaultTheme: "dark",
     });
 
     expect(reloaded.getPreferences().openWithApplications).toEqual([]);

@@ -5,7 +5,7 @@ import type { FiletrailClient } from "../lib/filetrailClient";
 import { applyPreferencesPatch, useAppPreferences } from "./useAppPreferences";
 
 // For a window that has no settings of its own (About, Acknowledgements): it takes the
-// palette, accent and font chosen in Settings, and follows them while it is open.
+// appearance and accent chosen in Settings, and follows them while it is open.
 export function useWindowAppearance(client: FiletrailClient): ReturnType<typeof useAppPreferences> {
   const preferences = useAppPreferences();
 

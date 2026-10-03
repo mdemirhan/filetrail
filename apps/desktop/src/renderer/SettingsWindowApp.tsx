@@ -2,14 +2,10 @@ import { useEffect, useState } from "react";
 
 import {
   ACCENT_OPTIONS,
-  AUTO_THEME_OPTION,
   type AppPreferences,
   DEFAULT_APP_PREFERENCES,
   DEFAULT_TEXT_EDITOR,
   type FavoritePreference,
-  NOTIFICATION_DURATION_SECONDS_OPTIONS,
-  THEME_OPTIONS,
-  UI_FONT_OPTIONS,
 } from "../shared/appPreferences";
 import { type SearchDefaults, type SettingsTab, SettingsView } from "./components/SettingsView";
 import { applyPreferencesPatch, useAppPreferences } from "./hooks/useAppPreferences";
@@ -24,13 +20,8 @@ const SETTINGS_TABS: ReadonlyArray<{ id: SettingsTab; label: string; icon: strin
     icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z",
   },
   {
-    id: "appearance",
-    label: "Appearance",
-    icon: "M12 3a9 9 0 1 0 0 18c1 0 1.5-.8 1.5-1.5 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.8.7-1.5 1.5-1.5H16a5 5 0 0 0 5-5c0-4.4-4-7.8-9-7.8zM7.5 11h.01M9.5 7.5h.01M14 7h.01M17 10h.01",
-  },
-  {
-    id: "explorer",
-    label: "Explorer",
+    id: "browsing",
+    label: "Browsing",
     icon: "M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM9 3v18",
   },
   {
@@ -77,7 +68,7 @@ export function SettingsWindowApp() {
     searchSkipGitFolders: DEFAULT_APP_PREFERENCES.searchSkipGitFolders,
     searchSkipGitIgnored: DEFAULT_APP_PREFERENCES.searchSkipGitIgnored,
   });
-  const { preferencesReady, setPreferencesReady, theme, effectiveTheme } = preferences;
+  const { preferencesReady, setPreferencesReady, theme } = preferences;
 
   // The tab on screen is kept in the window's address, where the main process reads it to
   // open Settings on the same tab next time.
@@ -87,26 +78,17 @@ export function SettingsWindowApp() {
 
   const payload: PreferencesPatch = {
     theme: preferences.theme,
-    autoLightTheme: preferences.autoLightTheme,
-    autoDarkTheme: preferences.autoDarkTheme,
     accent: preferences.accent,
     zoomPercent: preferences.zoomPercent,
-    uiFontFamily: preferences.uiFontFamily,
-    tabStyle: preferences.tabStyle,
     compactListView: preferences.compactListView,
     compactDetailsView: preferences.compactDetailsView,
     compactIconView: preferences.compactIconView,
     compactTreeView: preferences.compactTreeView,
     singleClickExpandTreeItems: preferences.singleClickExpandTreeItems,
-    highlightHoveredItems: preferences.highlightHoveredItems,
     detailColumns: preferences.detailColumns,
     notificationsEnabled: preferences.notificationsEnabled,
-    notificationDurationSeconds: preferences.notificationDurationSeconds,
-    highlightClipboardItemsInTree: preferences.highlightClipboardItemsInTree,
-    highlightClipboardItemsInContent: preferences.highlightClipboardItemsInContent,
-    notifyClipboardItems: preferences.notifyClipboardItems,
-    restoreLastVisitedFolderOnStartup: preferences.restoreLastVisitedFolderOnStartup,
-    restoreOpenTabsOnStartup: preferences.restoreOpenTabsOnStartup,
+    markClipboardItems: preferences.markClipboardItems,
+    restoreSessionOnStartup: preferences.restoreSessionOnStartup,
     favorites: preferences.favorites,
     favoritesPlacement: preferences.favoritesPlacement,
     terminalApp: preferences.terminalApp,
@@ -321,31 +303,18 @@ export function SettingsWindowApp() {
               setSearchDefaults((current) => ({ ...current, ...patch }))
             }
             theme={theme}
-            effectiveTheme={effectiveTheme}
-            autoLightTheme={preferences.autoLightTheme}
-            autoDarkTheme={preferences.autoDarkTheme}
-            onAutoLightThemeChange={preferences.setAutoLightTheme}
-            onAutoDarkThemeChange={preferences.setAutoDarkTheme}
             accent={preferences.accent}
             zoomPercent={preferences.zoomPercent}
-            uiFontFamily={preferences.uiFontFamily}
-            tabStyle={preferences.tabStyle}
             compactListView={preferences.compactListView}
             compactDetailsView={preferences.compactDetailsView}
             compactIconView={preferences.compactIconView}
             compactTreeView={preferences.compactTreeView}
             singleClickExpandTreeItems={preferences.singleClickExpandTreeItems}
-            highlightHoveredItems={preferences.highlightHoveredItems}
             detailColumns={preferences.detailColumns}
             layoutMode="wide"
             notificationsEnabled={preferences.notificationsEnabled}
-            notificationDurationSeconds={preferences.notificationDurationSeconds}
-            highlightClipboardItemsInTree={preferences.highlightClipboardItemsInTree}
-            highlightClipboardItemsInContent={preferences.highlightClipboardItemsInContent}
-            notifyClipboardItems={preferences.notifyClipboardItems}
-            restoreLastVisitedFolderOnStartup={preferences.restoreLastVisitedFolderOnStartup}
-            restoreOpenTabsOnStartup={preferences.restoreOpenTabsOnStartup}
-            onRestoreOpenTabsOnStartupChange={preferences.setRestoreOpenTabsOnStartup}
+            markClipboardItems={preferences.markClipboardItems}
+            restoreSessionOnStartup={preferences.restoreSessionOnStartup}
             homePath={homePath}
             terminalApp={preferences.terminalApp}
             defaultTextEditor={preferences.defaultTextEditor}
@@ -359,31 +328,19 @@ export function SettingsWindowApp() {
             onShortcutOverridesChange={preferences.setShortcutOverrides}
             openItemLimit={preferences.openItemLimit}
             accentOptions={ACCENT_OPTIONS}
-            uiFontOptions={[...UI_FONT_OPTIONS]}
-            notificationDurationSecondsOptions={[...NOTIFICATION_DURATION_SECONDS_OPTIONS]}
             onThemeChange={preferences.setTheme}
             onAccentChange={preferences.setAccent}
             onZoomPercentChange={preferences.setZoomPercent}
-            onUiFontFamilyChange={preferences.setUiFontFamily}
-            onTabStyleChange={preferences.setTabStyle}
             onResetAppearance={preferences.resetAppearanceSettings}
             onCompactListViewChange={preferences.setCompactListView}
             onCompactDetailsViewChange={preferences.setCompactDetailsView}
             onCompactIconViewChange={preferences.setCompactIconView}
             onCompactTreeViewChange={preferences.setCompactTreeView}
             onSingleClickExpandTreeItemsChange={preferences.setSingleClickExpandTreeItems}
-            onHighlightHoveredItemsChange={preferences.setHighlightHoveredItems}
             onDetailColumnsChange={preferences.setDetailColumns}
             onNotificationsEnabledChange={preferences.setNotificationsEnabled}
-            onNotificationDurationSecondsChange={preferences.setNotificationDurationSeconds}
-            onHighlightClipboardItemsInTreeChange={preferences.setHighlightClipboardItemsInTree}
-            onHighlightClipboardItemsInContentChange={
-              preferences.setHighlightClipboardItemsInContent
-            }
-            onNotifyClipboardItemsChange={preferences.setNotifyClipboardItems}
-            onRestoreLastVisitedFolderOnStartupChange={
-              preferences.setRestoreLastVisitedFolderOnStartup
-            }
+            onMarkClipboardItemsChange={preferences.setMarkClipboardItems}
+            onRestoreSessionOnStartupChange={preferences.setRestoreSessionOnStartup}
             onBrowseTerminalApp={() => {
               void pickApplication("Unable to choose a terminal application.").then(
                 (selection) => selection && preferences.setTerminalApp(selection),
