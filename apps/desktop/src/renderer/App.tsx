@@ -523,6 +523,26 @@ export function App() {
         .map((entry) => entry.path),
     [activeContentEntries, selectedPathSet],
   );
+  // The Info Row's total for several selected items: known only when each is a file whose
+  // size the list already has.
+  const selectionTotalBytes = useMemo(() => {
+    let total = 0;
+    for (const entry of activeContentEntries) {
+      if (!selectedPathSet.has(entry.path)) {
+        continue;
+      }
+      const metadata = metadataByPath[entry.path];
+      if (
+        entry.kind !== "file" ||
+        metadata?.sizeStatus !== "ready" ||
+        metadata.sizeBytes === null
+      ) {
+        return null;
+      }
+      total += metadata.sizeBytes;
+    }
+    return total;
+  }, [activeContentEntries, metadataByPath, selectedPathSet]);
   const selectedEntry = useMemo(
     () =>
       activeContentEntries.find((entry) => entry.path === contentSelection.leadPath) ??
@@ -1894,6 +1914,8 @@ export function App() {
                   currentPath={currentPath}
                   selectedEntry={selectedEntry}
                   metadata={selectedEntry ? (metadataByPath[selectedEntry.path] ?? null) : null}
+                  selectionCount={selectedPathSet.size}
+                  selectionTotalBytes={selectionTotalBytes}
                   item={getInfoItem}
                   folderSizeEntry={
                     infoRowFolderSizePath

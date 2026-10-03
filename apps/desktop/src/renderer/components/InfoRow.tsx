@@ -5,15 +5,20 @@ import { useRelativeDate } from "../hooks/useRelativeDate";
 import { isFolderSizeEligibleKind } from "../lib/explorerAppUtils";
 import type { DirectoryEntry, DirectoryEntryMetadata, ItemProperties } from "../lib/explorerTypes";
 import { FileIcon } from "../lib/fileIcons";
-import { formatFolderSizeDetail, formatSize, splitPermissionMode } from "../lib/formatting";
+import { formatFolderSizeDetail, formatSize } from "../lib/formatting";
 import { fallbackKindLabel, folderEntryForPath } from "../lib/infoPreview";
 
+// One quiet line under the path bar: the item's icon and name, then what it is, its size and
+// when it changed, separated by dots and without labels. Facts not known yet are left out
+// rather than drawn as dashes; permissions are in the Info panel.
 export function InfoRow({
   open,
   currentPath,
   selectedEntry,
   metadata = null,
   item,
+  selectionCount = selectedEntry ? 1 : 0,
+  selectionTotalBytes = null,
   folderSizeEntry,
   onCalculateFolderSize,
   onRecalculateFolderSize,
@@ -26,6 +31,10 @@ export function InfoRow({
   // updates in the same frame as the selection.
   metadata?: DirectoryEntryMetadata | null | undefined;
   item: ItemProperties | null;
+  // With several items selected the row sums them up instead of describing one.
+  selectionCount?: number;
+  // Their total size, when every one of them is a file whose size is known.
+  selectionTotalBytes?: number | null;
   folderSizeEntry?: FolderSizeEntry | undefined;
   onCalculateFolderSize?: (() => void) | undefined;
   onRecalculateFolderSize?: (() => void) | undefined;
@@ -37,6 +46,24 @@ export function InfoRow({
     return <div className={`info-row${open ? " open" : ""}`} />;
   }
 
+  if (selectionCount > 1) {
+    return (
+      <div className={`info-row${open ? " open" : ""}`}>
+        <div className="info-row-line">
+          <span className="info-row-icon">
+            <FileIcon entry={activeEntry} deferLoad />
+          </span>
+          <span className="info-row-name">{`${selectionCount.toLocaleString()} items`}</span>
+          <span className="info-row-facts">
+            {selectionTotalBytes !== null ? (
+              <InfoRowFact>{formatSize(selectionTotalBytes, "ready")}</InfoRowFact>
+            ) : null}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   // Listing metadata first (instant), then the item's own properties once they arrive.
   const activeItem = item?.path === activeEntry.path ? item : null;
   const activeMetadata = metadata?.path === activeEntry.path ? metadata : null;
@@ -46,9 +73,9 @@ export function InfoRow({
   const showFolderSizeInteraction =
     showFolderSizeForEntry && folderSizeEntry && onCalculateFolderSize && onCancelFolderSize;
 
-  let sizeLabel: ReactNode;
+  let size: ReactNode = null;
   if (showFolderSizeInteraction) {
-    sizeLabel = (
+    size = (
       <InfoRowFolderSize
         entry={folderSizeEntry}
         onCalculate={onCalculateFolderSize}
@@ -56,80 +83,53 @@ export function InfoRow({
         onCancel={onCancelFolderSize}
       />
     );
-  } else if (showFolderSizeForEntry) {
-    sizeLabel = "—";
-  } else {
-    sizeLabel = known ? formatSize(known.sizeBytes, known.sizeStatus) : "—";
+  } else if (!showFolderSizeForEntry && known && known.sizeStatus === "ready") {
+    size = formatSize(known.sizeBytes, known.sizeStatus);
   }
-  // The size column is narrow; the full folder size text stays available on hover.
   const sizeTitle =
     showFolderSizeForEntry && folderSizeEntry?.status === "ready"
       ? formatFolderSizeText(folderSizeEntry)
       : undefined;
-  // The code ("644"); the letters (rw-r--r--) are the tooltip.
-  const permissions = known ? splitPermissionMode(known.permissionMode) : null;
-  const permissionsLabel = known ? (permissions?.octal ?? "Unavailable") : "—";
 
-  // Name on the first line, using the full width; the facts on the second, each in a
-  // fixed column so switching items only changes the text.
   return (
     <div className={`info-row${open ? " open" : ""}`}>
-      <div className="detail-inner">
-        <div className="dt-icon">
+      <div className="info-row-line">
+        <span className="info-row-icon">
           <FileIcon entry={activeEntry} deferLoad />
-        </div>
-        <div className="dt-body">
-          <div className="dt-name" title={activeEntry.name}>
-            {activeEntry.name}
-          </div>
-          <div className="dt-meta">
-            <InfoRowFact label="Kind" title={kindLabel}>
-              {kindLabel}
-            </InfoRowFact>
-            <InfoRowFact label="Size" title={sizeTitle}>
-              {sizeLabel}
-            </InfoRowFact>
-            <InfoRowModified value={known?.modifiedAt} loaded={Boolean(known)} />
-            <InfoRowFact label="Permissions" title={permissions?.symbolic}>
-              {permissionsLabel}
-            </InfoRowFact>
-          </div>
-        </div>
+        </span>
+        <span className="info-row-name" title={activeEntry.name}>
+          {activeEntry.name}
+        </span>
+        <span className="info-row-facts">
+          <InfoRowFact title={kindLabel}>{kindLabel}</InfoRowFact>
+          {size !== null ? <InfoRowFact title={sizeTitle}>{size}</InfoRowFact> : null}
+          <InfoRowModified value={known?.modifiedAt} />
+        </span>
       </div>
     </div>
   );
 }
 
-// The date relative to now ("Today, 9:12 AM"), with the whole date as the tooltip.
-function InfoRowModified({
-  value,
-  loaded,
-}: {
-  value: string | null | undefined;
-  loaded: boolean;
-}) {
+// "Modified today, 9:12 AM", with the whole date as the tooltip; left out until it is known.
+function InfoRowModified({ value }: { value: string | null | undefined }) {
   const date = useRelativeDate(value);
-  return (
-    <InfoRowFact label="Modified" title={date?.exact}>
-      {date?.text ?? (loaded ? "Not available" : "—")}
-    </InfoRowFact>
-  );
+  if (!date) {
+    return null;
+  }
+  return <InfoRowFact title={date.exact}>{`Modified ${date.text}`}</InfoRowFact>;
 }
 
 function InfoRowFact({
-  label,
   title,
   children,
 }: {
-  label: string;
   title?: string | undefined;
   children: ReactNode;
 }) {
   return (
-    <div className="dt-pair" title={title}>
-      <span className="dt-lbl">{label}</span>
-      <span className="dt-val">{children}</span>
-    </div>
+    <span className="info-row-fact" title={title}>
+      {children}
+    </span>
   );
 }
 
@@ -190,7 +190,7 @@ function InfoRowFolderSize({
   }
   return (
     <button type="button" className="folder-size-calculate-btn" onClick={onCalculate}>
-      Calculate
+      Calculate size
     </button>
   );
 }

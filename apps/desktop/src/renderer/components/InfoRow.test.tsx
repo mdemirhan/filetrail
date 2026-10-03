@@ -90,7 +90,7 @@ describe("InfoRow", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Calculate" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Calculate size" })).toBeInTheDocument();
   });
 
   it("shows spinner when folder size is calculating", () => {
@@ -140,7 +140,7 @@ describe("InfoRow", () => {
     render(<InfoRow open currentPath="/Users/demo" selectedEntry={fileEntry} item={fileItem} />);
 
     expect(screen.getByText("2.0 KB")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Calculate" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Calculate size" })).not.toBeInTheDocument();
   });
 
   it("shows Calculate for bundle entries", () => {
@@ -156,7 +156,7 @@ describe("InfoRow", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Calculate" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Calculate size" })).toBeInTheDocument();
     expect(screen.queryByText("Not yet available")).not.toBeInTheDocument();
   });
 
@@ -197,7 +197,7 @@ describe("InfoRow", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Calculate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Calculate size" }));
     expect(onCalculate).toHaveBeenCalledTimes(1);
   });
 });
@@ -225,9 +225,7 @@ describe("InfoRow with list metadata", () => {
 
     expect(screen.getByText("Plain Text Document")).toBeInTheDocument();
     expect(screen.getByText("2.0 KB")).toBeInTheDocument();
-    // The code is shown; the letters are its tooltip.
-    expect(screen.getByText("644")).toBeInTheDocument();
-    expect(screen.getByTitle("rw-r--r--")).toBeInTheDocument();
+    expect(screen.getByText(/^Modified /)).toBeInTheDocument();
     expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
 
@@ -241,6 +239,66 @@ describe("InfoRow with list metadata", () => {
         item={null}
       />,
     );
-    expect(screen.getByTitle(longName)).toHaveClass("dt-name");
+    expect(screen.getByTitle(longName)).toHaveClass("info-row-name");
+  });
+});
+
+describe("InfoRow as one line", () => {
+  it("lists the facts without labels, and leaves out permissions and unknowns", () => {
+    const { container } = render(
+      <InfoRow open currentPath="/Users/demo" selectedEntry={fileEntry} item={fileItem} />,
+    );
+
+    const facts = Array.from(container.querySelectorAll(".info-row-fact")).map(
+      (fact) => fact.textContent,
+    );
+    expect(facts).toEqual(["TXT File", "2.0 KB", expect.stringMatching(/^Modified /)]);
+    expect(container.querySelector(".info-row-name")).toHaveTextContent("file.txt");
+    for (const label of ["Kind", "Size", "Permissions", "644"]) {
+      expect(screen.queryByText(label)).not.toBeInTheDocument();
+    }
+  });
+
+  it("leaves out a size that isn't known yet instead of a dash", () => {
+    const { container } = render(
+      <InfoRow
+        open
+        currentPath="/Users/demo"
+        selectedEntry={fileEntry}
+        item={{ ...fileItem, sizeBytes: null, sizeStatus: "deferred" }}
+      />,
+    );
+
+    expect(
+      Array.from(container.querySelectorAll(".info-row-fact")).map((fact) => fact.textContent),
+    ).toEqual(["TXT File", expect.stringMatching(/^Modified /)]);
+  });
+
+  it("sums up several selected items", () => {
+    const { container, rerender } = render(
+      <InfoRow
+        open
+        currentPath="/Users/demo"
+        selectedEntry={fileEntry}
+        item={fileItem}
+        selectionCount={3}
+        selectionTotalBytes={3 * 1024 * 1024}
+      />,
+    );
+    expect(container.querySelector(".info-row-name")).toHaveTextContent("3 items");
+    expect(screen.getByText("3.0 MB")).toBeInTheDocument();
+
+    // A folder among them: no total.
+    rerender(
+      <InfoRow
+        open
+        currentPath="/Users/demo"
+        selectedEntry={fileEntry}
+        item={fileItem}
+        selectionCount={3}
+        selectionTotalBytes={null}
+      />,
+    );
+    expect(container.querySelectorAll(".info-row-fact")).toHaveLength(0);
   });
 });
