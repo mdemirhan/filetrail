@@ -2289,14 +2289,8 @@ describe("App copy/paste integration", () => {
       </FiletrailClientProvider>,
     );
 
-    // A folder made inside the selected folder asks for its name first.
-    const folderButton = await screen.findByTitle("/Users/demo/Folder");
-    await act(async () => {
-      fireEvent.click(folderButton);
-    });
-    await act(async () => {
-      fireEvent.keyDown(window, { key: "n", metaKey: true, shiftKey: true });
-    });
+    // A folder made inside another folder (from that folder's menu) asks for its name first.
+    await openNewFolderFromFolderMenu("/Users/demo/Folder");
 
     await screen.findByRole("dialog", { name: "New Folder" });
     await act(async () => {
@@ -2608,7 +2602,9 @@ describe("App copy/paste integration", () => {
     });
   });
 
-  it("creates a new folder inside the selected folder with Cmd+Shift+N", async () => {
+  // Like Finder: a selected folder isn't where ⇧⌘N goes, so two New Folders in a row
+  // don't nest the second inside the first (which is selected once made).
+  it("makes a new folder in the folder on screen with Cmd+Shift+N, even with a folder selected", async () => {
     const harness = createAppHarness();
 
     render(
@@ -2617,13 +2613,29 @@ describe("App copy/paste integration", () => {
       </FiletrailClientProvider>,
     );
 
-    const folderButton = await screen.findByTitle("/Users/demo/Folder");
-    await act(async () => {
-      fireEvent.click(folderButton);
-    });
+    await selectItem("/Users/demo/Folder");
     await act(async () => {
       fireEvent.keyDown(window, { key: "n", metaKey: true, shiftKey: true });
     });
+
+    expect(screen.queryByRole("dialog", { name: "New Folder" })).not.toBeInTheDocument();
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.find((call) => call.channel === "writeOperation:createFolder")?.payload,
+      ).toEqual({ parentDirectoryPath: "/Users/demo", folderName: "New Folder" });
+    });
+  });
+
+  it("makes a new folder inside a folder from that folder's menu", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await openNewFolderFromFolderMenu("/Users/demo/Folder");
 
     expect(await screen.findByRole("dialog", { name: "New Folder" })).toHaveTextContent(
       "In “Folder”",
@@ -3191,7 +3203,9 @@ describe("App copy/paste integration", () => {
     });
   });
 
-  it("uses the selected folder in the content pane as the keyboard paste target", async () => {
+  // Like Finder: ⌘V goes into the folder on screen, never out of sight into a selected
+  // folder (often the one just pasted). A folder's own menu pastes into it.
+  it("pastes into the folder on screen with Cmd+V, even with a folder selected", async () => {
     const harness = createAppHarness();
 
     render(
@@ -3207,6 +3221,34 @@ describe("App copy/paste integration", () => {
     await selectItem("/Users/demo/Folder");
     await act(async () => {
       fireEvent.keyDown(window, { key: "v", metaKey: true });
+    });
+
+    await vi.waitFor(() => {
+      const planCall = harness.invocations.find((call) => call.channel === "copyPaste:plan");
+      expect(planCall?.payload).toMatchObject({
+        destinationDirectoryPath: "/Users/demo",
+      });
+    });
+  });
+
+  it("pastes into a folder from that folder's menu", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "c", metaKey: true });
+    });
+    await act(async () => {
+      fireEvent.contextMenu(screen.getByTitle("/Users/demo/Folder"));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Paste/ }));
     });
 
     await vi.waitFor(() => {
@@ -9047,6 +9089,18 @@ async function selectItem(path: string): Promise<void> {
   });
 }
 
+// New Folder inside another folder: from that folder's own menu (⇧⌘N makes it in the
+// folder on screen).
+async function openNewFolderFromFolderMenu(path: string): Promise<void> {
+  const button = await screen.findByTitle(path);
+  await act(async () => {
+    fireEvent.contextMenu(button);
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: /^New Folder/ }));
+  });
+}
+
 function createMockDataTransfer(): DataTransfer {
   const store = new Map<string, string>();
   return {
@@ -10825,7 +10879,7 @@ describe("App file operations like Finder", () => {
   });
 
   describe("New Folder suggests a free name", () => {
-    it("in a selected subfolder, not only the folder on screen", async () => {
+    it("in another folder, not only the folder on screen", async () => {
       const harness = createAppHarness({
         directorySnapshots: {
           "/Users/demo/Folder": {
@@ -10837,8 +10891,7 @@ describe("App file operations like Finder", () => {
       });
       renderApp(harness);
 
-      await selectItem("/Users/demo/Folder");
-      await pressKey({ key: "n", metaKey: true, shiftKey: true });
+      await openNewFolderFromFolderMenu("/Users/demo/Folder");
 
       expect(await screen.findByRole("dialog", { name: "New Folder" })).toHaveTextContent(
         "In “Folder”",
@@ -11052,9 +11105,8 @@ describe("App file operations like Finder", () => {
       const harness = createAppHarness();
       renderApp(harness);
 
-      // Inside the selected folder, where the name is asked for before the folder is made.
-      await selectItem("/Users/demo/Folder");
-      await pressKey({ key: "n", metaKey: true, shiftKey: true });
+      // Inside another folder, where the name is asked for before the folder is made.
+      await openNewFolderFromFolderMenu("/Users/demo/Folder");
       await screen.findByRole("dialog", { name: "New Folder" });
       await act(async () => {
         fireEvent.change(screen.getByLabelText("Folder name"), { target: { value: ".config" } });

@@ -358,7 +358,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Copy, cut, paste",
             description:
-              "Paste goes into the folder you are browsing. With exactly one folder selected in the list, it goes into that folder.",
+              "Paste and New Folder go into the folder you are browsing, whatever is selected. To paste into another folder, or make a folder inside it, right-click that folder.",
           },
           {
             label: "From the folder tree",

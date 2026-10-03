@@ -153,20 +153,14 @@ export function resolvePasteDestinationPath(args: {
   contextMenuTargetEntry: DirectoryEntry | null;
   clipboardSourcePaths: string[];
   currentPath: string;
-  focusedPane: "tree" | "content" | null;
   isSearchMode: boolean;
-  selectedEntry: DirectoryEntry | null;
-  selectedPathCount: number;
 }): string | null {
   const {
     contextMenuState,
     contextMenuTargetEntry,
     clipboardSourcePaths,
     currentPath,
-    focusedPane,
     isSearchMode,
-    selectedEntry,
-    selectedPathCount,
   } = args;
   const currentFolder = currentPath.length > 0 ? currentPath : null;
   if (isSearchMode) {
@@ -190,22 +184,10 @@ export function resolvePasteDestinationPath(args: {
     }
     return currentFolder;
   }
-  // The tree's selected folder is the folder on screen, so paste goes there.
-  if (focusedPane === "tree") {
-    return currentFolder;
-  }
-  // With several items selected there is no single folder to paste into, so the paste
-  // goes into the folder on screen, like Finder.
-  if (
-    focusedPane === "content" &&
-    selectedPathCount === 1 &&
-    isPasteTargetFolderEntry(selectedEntry)
-  ) {
-    if (clipboardSourcePaths.includes(selectedEntry.path)) {
-      return currentFolder ?? selectedEntry.path;
-    }
-    return selectedEntry.path;
-  }
+  // From the keyboard or the menu bar the paste goes into the folder on screen, like
+  // Finder, whatever is selected: a selected folder (often the one just pasted or made)
+  // isn't a target, or a second ⌘V would land out of sight inside it. A folder's own
+  // right-click menu pastes into it (above).
   return currentFolder;
 }
 
@@ -216,10 +198,10 @@ function isPasteTargetFolderEntry(entry: DirectoryEntry | null): entry is Direct
   return entry?.kind === "directory" && !entry.isSymlink;
 }
 
-// Where New Folder makes its folder. One selected folder takes it inside; otherwise it goes
-// into the folder on screen, as in Finder, whatever else is selected. The exception is the
-// menu opened on the selection itself (`contextScope: "selection"`): on a file or on several
-// items it has no New Folder, since the menu is about those items, not the folder.
+// Where New Folder makes its folder. From the keyboard, the menu bar or the background's
+// menu it goes into the folder on screen, as in Finder, whatever is selected. The menu
+// opened on one folder (`contextScope: "selection"`) makes it inside that folder; on a file
+// or on several items that menu has no New Folder, since it is about those items.
 export function resolveNewFolderTargetPath(args: {
   currentPath: string;
   selectedEntry: DirectoryEntry | null;
@@ -231,13 +213,12 @@ export function resolveNewFolderTargetPath(args: {
     return null;
   }
   const folderOnScreen = args.currentPath.length > 0 ? args.currentPath : null;
-  if (args.contextScope === "background" || args.selectedPaths.length === 0) {
+  if (args.contextScope !== "selection" || args.selectedPaths.length === 0) {
     return folderOnScreen;
   }
-  if (args.selectedPaths.length === 1 && isDirectoryLikeEntry(args.selectedEntry)) {
-    return args.selectedEntry.path;
-  }
-  return args.contextScope === "selection" ? null : folderOnScreen;
+  return args.selectedPaths.length === 1 && isDirectoryLikeEntry(args.selectedEntry)
+    ? args.selectedEntry.path
+    : null;
 }
 
 // The name New Folder suggests: "New Folder", else the first free "New Folder 2", "New

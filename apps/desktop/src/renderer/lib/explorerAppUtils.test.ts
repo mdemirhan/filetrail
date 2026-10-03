@@ -81,28 +81,6 @@ describe("explorerAppUtils", () => {
     expect(isFolderSizeEligibleKind("bundle")).toBe(true);
   });
 
-  it("pastes a copied folder back into the current directory instead of into itself", () => {
-    expect(
-      resolvePasteDestinationPath({
-        contextMenuState: null,
-        contextMenuTargetEntry: null,
-        clipboardSourcePaths: ["/Users/demo/Folder"],
-        currentPath: "/Users/demo",
-        focusedPane: "content",
-        isSearchMode: false,
-        selectedEntry: {
-          path: "/Users/demo/Folder",
-          name: "Folder",
-          kind: "directory",
-          extension: "",
-          isHidden: false,
-          isSymlink: false,
-        },
-        selectedPathCount: 1,
-      }),
-    ).toBe("/Users/demo");
-  });
-
   describe("resolvePasteDestinationPath", () => {
     const folder: DirectoryEntry = {
       path: "/Users/demo/Folder",
@@ -125,10 +103,7 @@ describe("explorerAppUtils", () => {
       contextMenuTargetEntry: null,
       clipboardSourcePaths: ["/Users/demo/source.txt"],
       currentPath: "/Users/demo",
-      focusedPane: "content" as const,
       isSearchMode: false,
-      selectedEntry: folder,
-      selectedPathCount: 1,
     };
     const contentMenu = (paths: string[], targetPath: string) => ({
       x: 0,
@@ -142,12 +117,14 @@ describe("explorerAppUtils", () => {
       folderExpansionLabel: null,
     });
 
-    it("pastes into the one selected folder", () => {
-      expect(resolvePasteDestinationPath(base)).toBe("/Users/demo/Folder");
+    // Like Finder: a selected folder (often the one just pasted) isn't a target, so a
+    // second ⌘V doesn't land out of sight inside it.
+    it("pastes into the folder on screen from the keyboard or menu bar, whatever is selected", () => {
+      expect(resolvePasteDestinationPath(base)).toBe("/Users/demo");
+      expect(resolvePasteDestinationPath({ ...base, currentPath: "" })).toBeNull();
     });
 
-    it("pastes into the current folder when several items are selected", () => {
-      expect(resolvePasteDestinationPath({ ...base, selectedPathCount: 2 })).toBe("/Users/demo");
+    it("pastes into the current folder from the menu of several items", () => {
       expect(
         resolvePasteDestinationPath({
           ...base,
@@ -167,13 +144,11 @@ describe("explorerAppUtils", () => {
       ).toBe("/Users/demo/Folder");
     });
 
-    it("pastes into the folder on screen when the folder picked is itself on the clipboard", () => {
-      const onClipboard = { ...base, clipboardSourcePaths: [folder.path] };
-      // The keyboard and the item's own menu agree.
-      expect(resolvePasteDestinationPath(onClipboard)).toBe("/Users/demo");
+    it("pastes into the folder on screen when the folder right-clicked is itself on the clipboard", () => {
       expect(
         resolvePasteDestinationPath({
-          ...onClipboard,
+          ...base,
+          clipboardSourcePaths: [folder.path],
           contextMenuState: contentMenu([folder.path], folder.path),
           contextMenuTargetEntry: folder,
         }),
@@ -181,9 +156,6 @@ describe("explorerAppUtils", () => {
     });
 
     it("never pastes through a symlinked folder", () => {
-      expect(resolvePasteDestinationPath({ ...base, selectedEntry: linkedFolder })).toBe(
-        "/Users/demo",
-      );
       expect(
         resolvePasteDestinationPath({
           ...base,
@@ -191,14 +163,6 @@ describe("explorerAppUtils", () => {
           contextMenuTargetEntry: linkedFolder,
         }),
       ).toBe("/Users/demo");
-    });
-
-    it("pastes into the folder on screen from the tree or with no focused pane", () => {
-      expect(resolvePasteDestinationPath({ ...base, focusedPane: "tree" })).toBe("/Users/demo");
-      expect(resolvePasteDestinationPath({ ...base, focusedPane: null })).toBe("/Users/demo");
-      expect(
-        resolvePasteDestinationPath({ ...base, focusedPane: "tree", currentPath: "" }),
-      ).toBeNull();
     });
 
     it("has no destination in search results", () => {
@@ -354,16 +318,17 @@ describe("resolveNewFolderTargetPath", () => {
       ...(options.contextScope ? { contextScope: options.contextScope } : {}),
     });
 
-  it("makes the folder inside the one selected folder, otherwise in the folder on screen", () => {
+  // As in Finder: ⇧⌘N makes it in the folder on screen whatever is selected, so two in a
+  // row don't nest the second inside the first (which is selected once made).
+  it("makes the folder in the folder on screen from the keyboard, whatever is selected", () => {
     expect(target([])).toBe("/Users/demo");
-    expect(target([folder])).toBe("/Users/demo/Folder");
-    // A file cannot hold it, and several items do not say where: next to them, as in Finder.
+    expect(target([folder])).toBe("/Users/demo");
     expect(target([file])).toBe("/Users/demo");
     expect(target([folder, file])).toBe("/Users/demo");
     expect(target([file, entry("more.txt", "file")])).toBe("/Users/demo");
   });
 
-  it("offers nothing in the menu opened on a file or on several items", () => {
+  it("makes it inside a folder from that folder's own menu, and offers nothing for a file or several items", () => {
     expect(target([folder], { contextScope: "selection" })).toBe("/Users/demo/Folder");
     expect(target([file], { contextScope: "selection" })).toBeNull();
     expect(target([folder, file], { contextScope: "selection" })).toBeNull();

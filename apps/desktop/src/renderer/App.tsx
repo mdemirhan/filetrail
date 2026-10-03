@@ -641,21 +641,9 @@ export function App() {
         contextMenuTargetEntry,
         clipboardSourcePaths,
         currentPath,
-        focusedPane,
         isSearchMode,
-        selectedEntry,
-        selectedPathCount: selectedPathsInViewOrder.length,
       }),
-    [
-      contextMenuState,
-      contextMenuTargetEntry,
-      clipboardSourcePaths,
-      currentPath,
-      focusedPane,
-      isSearchMode,
-      selectedEntry,
-      selectedPathsInViewOrder.length,
-    ],
+    [contextMenuState, contextMenuTargetEntry, clipboardSourcePaths, currentPath, isSearchMode],
   );
   const isWriteOperationLocked = writeOperationCardState !== null;
   const locationDialogOpen = locationSheetOpen || moveDialogState !== null;
