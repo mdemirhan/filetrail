@@ -1032,13 +1032,16 @@ export function useExplorerActions(args: {
     selection: ContentSelectionState,
     entries: DirectoryEntry[] = activeContentEntries,
   ) {
+    // A set, not a list: a paste of a large folder selects many thousands of items, and
+    // looking each entry up in a list of them froze the window.
+    const picked = new Set(selection.paths);
     const selectedPaths = entries
-      .filter((entry) => selection.paths.includes(entry.path))
+      .filter((entry) => picked.has(entry.path))
       .map((entry) => entry.path);
     selectedPathsInViewOrderRef.current = selectedPaths;
     selectedEntryRef.current =
       entries.find((entry) => entry.path === selection.leadPath) ??
-      entries.find((entry) => selectedPaths.includes(entry.path)) ??
+      entries.find((entry) => picked.has(entry.path)) ??
       null;
   }
 

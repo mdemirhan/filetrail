@@ -837,11 +837,11 @@ export function useExplorerNavigationController(args: {
     if (pendingPasteSelection) {
       pendingPasteSelectionRef.current = null;
     }
-    const selectedPastePaths = pendingPasteSelection
-      ? entries
-          .filter((entry) => pendingPasteSelection.selectedPaths.includes(entry.path))
-          .map((entry) => entry.path)
-      : [];
+    // A set: what a paste made can be many thousands of paths (see syncContentSelectionRefs).
+    const pastedPaths = new Set(pendingPasteSelection?.selectedPaths ?? []);
+    const selectedPastePaths = entries
+      .filter((entry) => pastedPaths.has(entry.path))
+      .map((entry) => entry.path);
     // A folder read again in place keeps its selection; whatever of it is gone from the
     // new listing is dropped when the list updates.
     if (selectedPastePaths.length > 0 || !options.keepSelection) {

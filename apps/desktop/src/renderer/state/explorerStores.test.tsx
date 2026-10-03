@@ -76,3 +76,32 @@ describe("focusContentPane", () => {
     }
   });
 });
+
+describe("applyContentSelection", () => {
+  // A paste of a large folder selects what it made: many thousands of items. Looking each
+  // entry up in a list of them took long enough to freeze the window.
+  it("selects tens of thousands of items at once without stalling", () => {
+    const { actions, tearDown } = setUp();
+    try {
+      const entries = Array.from({ length: 60_000 }, (_, index) => ({
+        path: `/Users/demo/big/file-${index}.txt`,
+        name: `file-${index}.txt`,
+        extension: "txt",
+        kind: "file" as const,
+        isHidden: false,
+        isSymlink: false,
+      }));
+      const paths = entries.slice(0, 50_000).map((entry) => entry.path);
+
+      const startedAt = performance.now();
+      actions.applyContentSelection(
+        { paths, leadPath: paths[0] ?? null, anchorPath: paths[0] ?? null },
+        entries,
+      );
+
+      expect(performance.now() - startedAt).toBeLessThan(1_000);
+    } finally {
+      tearDown();
+    }
+  });
+});

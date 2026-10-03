@@ -111,12 +111,13 @@ export function useSelectionActions(args: {
 
   const applyContentSelection = useCallback(
     (selection: ContentSelectionState, entries: DirectoryEntry[]) => {
+      const picked = new Set(selection.paths);
       selectedPathsInViewOrderRef.current = entries
-        .filter((entry) => selection.paths.includes(entry.path))
+        .filter((entry) => picked.has(entry.path))
         .map((entry) => entry.path);
       selectedEntryRef.current =
         entries.find((entry) => entry.path === selection.leadPath) ??
-        entries.find((entry) => selection.paths.includes(entry.path)) ??
+        entries.find((entry) => picked.has(entry.path)) ??
         null;
       setContentSelection(selection);
     },
