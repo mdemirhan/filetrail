@@ -16,11 +16,12 @@ usage() {
   cat <<EOF
 Usage: make-macos-app.sh [--notarize | --adhoc]
 
-Builds File Trail for Apple Silicon and signs it with the Developer ID Application
+Builds File Trail.app for Apple Silicon and signs it with the Developer ID Application
 certificate.
 
-  --notarize  Also have Apple notarize the app and the disk image, and staple the tickets.
-              Other Macs open a downloaded app only once it is notarized.
+  --notarize  Also have Apple notarize the app, and make a ZIP and a disk image of it to
+              share; the disk image is notarized too, and the tickets are stapled. Other
+              Macs open a downloaded app only once it is notarized.
   --adhoc     Sign ad hoc instead, for a build that only runs on this Mac.
 
 The output of the tools each step runs goes to out/make-macos-app.log; the end of it is
@@ -129,7 +130,7 @@ fi
 # log instead, and a failure shows the end of the log.
 mkdir -p "${APP_DIR}/out"
 LOG_FILE="${APP_DIR}/out/make-macos-app.log"
-STEP_COUNT=6
+STEP_COUNT=5
 if [[ "${NOTARIZE}" == 1 ]]; then
   STEP_COUNT=8
 fi
@@ -319,20 +320,17 @@ if [[ "${NOTARIZE}" == 1 ]]; then
   rm -f "${NOTARIZE_ZIP}"
   run spctl --assess --type execute "${APP_BUNDLE}"
   step_done "accepted and stapled"
-fi
 
-step "Building the ZIP and the disk image"
-ZIP_PATH="${OUT_DIR}/${APP_SLUG}-${ARCH}.zip"
-DMG_PATH="${OUT_DIR}/${APP_SLUG}-${ARCH}.dmg"
-run ditto -c -k --sequesterRsrc --keepParent "${APP_BUNDLE}" "${ZIP_PATH}"
-run hdiutil create -volname "${APP_NAME}" -srcfolder "${APP_BUNDLE}" -ov -format UDZO "${DMG_PATH}"
-if [[ "${SIGN_IDENTITY}" != "-" ]]; then
+  # Only a notarized build is shared, so only it gets a ZIP and a disk image.
+  step "Building the ZIP and the disk image"
+  ZIP_PATH="${OUT_DIR}/${APP_SLUG}-${ARCH}.zip"
+  DMG_PATH="${OUT_DIR}/${APP_SLUG}-${ARCH}.dmg"
+  run ditto -c -k --sequesterRsrc --keepParent "${APP_BUNDLE}" "${ZIP_PATH}"
+  run hdiutil create -volname "${APP_NAME}" -srcfolder "${APP_BUNDLE}" -ov -format UDZO "${DMG_PATH}"
   # Gatekeeper checks a downloaded disk image before it looks at the app inside.
   run codesign --force --timestamp --sign "${SIGN_IDENTITY}" "${DMG_PATH}"
-fi
-step_done
+  step_done
 
-if [[ "${NOTARIZE}" == 1 ]]; then
   step "Notarizing the disk image (a few minutes)"
   notarize "${DMG_PATH}"
   run spctl --assess --type open --context context:primary-signature "${DMG_PATH}"
@@ -349,5 +347,7 @@ else
   echo "Built and signed ad hoc: for this Mac only."
 fi
 echo "  ${APP_BUNDLE}"
-echo "  ${ZIP_PATH}"
-echo "  ${DMG_PATH}"
+if [[ "${NOTARIZE}" == 1 ]]; then
+  echo "  ${ZIP_PATH}"
+  echo "  ${DMG_PATH}"
+fi

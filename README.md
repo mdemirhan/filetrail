@@ -132,10 +132,10 @@ bun install
 bun run desktop:start
 ```
 
-That builds the app and its native helpers and launches it. To make an app bundle, a ZIP and a disk image under `apps/desktop/out`:
+That builds the app and its native helpers and launches it. To make an app bundle under `apps/desktop/out`:
 
 ```bash
-bun run desktop:make:mac:notarized   # signed and notarized, to share with other Macs
+bun run desktop:make:mac:notarized   # signed and notarized, plus a ZIP and a disk image to share
 bun run desktop:make:mac             # signed with your Developer ID, not notarized
 bun run desktop:make:mac:adhoc       # signed ad hoc, for this Mac only
 ```
