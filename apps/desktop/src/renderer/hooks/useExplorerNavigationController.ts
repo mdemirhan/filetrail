@@ -47,6 +47,7 @@ import {
   isFavoritesRootItemId,
 } from "../lib/favorites";
 import { getFlowListColumnStep } from "../lib/flowListLayout";
+import { resolveFocusedEditTarget } from "../lib/focusedEditTarget";
 import { getIconGridLayout } from "../lib/iconGridLayout";
 import { EXPLORER_LAYOUT, getTreeRowHeight } from "../lib/layoutTokens";
 import { LIST_FILTER_SPACE_WINDOW_MS, findListFilterSelection } from "../lib/listFilter";
@@ -1834,9 +1835,13 @@ export function useExplorerNavigationController(args: {
       return;
     }
     const activeElement = document.activeElement;
+    // A text field that has focus keeps it: the search results' filter and the path bar's
+    // field leave no pane focused, and taking it back would leave them without a caret.
     if (
       searchPointerIntentRef.current ||
-      (activeElement instanceof Node && (searchShellRef.current?.contains(activeElement) ?? false))
+      (activeElement instanceof Node &&
+        (searchShellRef.current?.contains(activeElement) ?? false)) ||
+      resolveFocusedEditTarget(activeElement) === "editable-text"
     ) {
       return;
     }

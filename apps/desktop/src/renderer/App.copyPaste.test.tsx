@@ -467,6 +467,7 @@ vi.mock("./components/TreePane", () => ({
 vi.mock("./components/SearchResultsPane", () => ({
   SEARCH_RESULT_ROW_HEIGHT: 32,
   SearchResultsPane: ({
+    paneRef,
     results,
     selectedPaths,
     onFocusChange,
@@ -482,6 +483,7 @@ vi.mock("./components/SearchResultsPane", () => ({
     inlineRename?: { path: string; error: string | null; refusalCount?: number } | null;
     onInlineRenameSubmit?: (nextName: string) => void;
     onInlineRenameCancel?: () => void;
+    paneRef?: React.RefObject<HTMLElement | null>;
     results: Array<{
       path: string;
       name: string;
@@ -516,7 +518,13 @@ vi.mock("./components/SearchResultsPane", () => ({
     ) => void;
     onItemDragEnd?: (event: React.DragEvent<HTMLElement>) => void;
   }) => (
-    <div data-testid="search-results-pane">
+    <div
+      ref={paneRef as React.RefObject<HTMLDivElement | null>}
+      data-testid="search-results-pane"
+      tabIndex={-1}
+    >
+      {/* Stands in for the filter: a text field takes the keyboard from the pane. */}
+      <input aria-label="Filter results" onFocus={() => onFocusChange(false)} />
       {/* Stands in for the name field a result row shows while its item is renamed. */}
       {inlineRename ? (
         <input
@@ -7802,6 +7810,30 @@ describe("App copy/paste integration", () => {
     });
     expect(searchInput.value).toBe("");
     expect(document.activeElement).not.toBe(searchInput);
+  });
+
+  it("keeps the caret in the results' filter after a search sent with Return", async () => {
+    const harness = createAppHarness();
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    await openSearchResults();
+    // Return gives the results the keyboard.
+    const resultsPane = screen.getByTestId("search-results-pane");
+    await vi.waitFor(() => {
+      expect(document.activeElement).toBe(resultsPane);
+    });
+
+    const filterInput = screen.getByRole("textbox", { name: "Filter results" });
+    await act(async () => {
+      filterInput.focus();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+    expect(document.activeElement).toBe(filterInput);
   });
 
   it("rejects dropping a search selection onto search results", async () => {
