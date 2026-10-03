@@ -70,7 +70,15 @@ const ALLOWED_HARD_CODED_COLORS: ReadonlyArray<{ selector: RegExp; reason: strin
     selector: /^\.copy-paste-progress-card-track-shimmer$/,
     reason: "white sheen over the accent-colored progress fill",
   },
-  { selector: /^\.settings-toggle-track::after$/, reason: "white switch knob, as in macOS" },
+  { selector: /^\.settings-switch::after$/, reason: "white switch knob, as in macOS" },
+  {
+    selector: /^\.settings-checkbox input:checked$/,
+    reason: "white checkmark on the accent, as in macOS",
+  },
+  {
+    selector: /^\.settings-accent-swatch\.is-custom$/,
+    reason: "the color wheel that stands for a custom accent color, as in macOS",
+  },
   {
     selector: /\.active:not\(\.inactive\)/,
     reason: "focused selection is white text on the accent, as in Finder",

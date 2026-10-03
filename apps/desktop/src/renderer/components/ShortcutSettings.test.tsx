@@ -4,16 +4,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 
 import type { ShortcutOverrides } from "../../shared/shortcuts";
-import type { SettingsControlTheme } from "./SettingsControls";
 import { ShortcutSettings } from "./ShortcutSettings";
-
-const THEME: SettingsControlTheme = {
-  card: { bg: "#fff", border: "#ddd", shadow: "none" },
-  section: { title: "#000" },
-  input: { bg: "#fff", border: "#ddd" },
-  label: { primary: "#000", secondary: "#666" },
-  separator: "#eee",
-};
 
 // The settings window keeps the saved keys; this stands in for it.
 function renderSettings(initial: ShortcutOverrides = {}) {
@@ -24,7 +15,6 @@ function renderSettings(initial: ShortcutOverrides = {}) {
       <ShortcutSettings
         overrides={overrides}
         returnKeyAction="rename"
-        theme={THEME}
         onChange={(next) => {
           saved.push(next);
           setOverrides(next);

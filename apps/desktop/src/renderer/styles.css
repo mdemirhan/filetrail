@@ -3779,13 +3779,6 @@ body.platform-macos .settings-view[data-layout="compact"] {
   font-size: var(--font-size-title1);
 }
 
-.settings-footer-note {
-  text-align: center;
-  padding: 6px 0 0;
-  font-size: var(--font-size-small);
-  color: var(--text-dim);
-}
-
 .empty-state {
   font-size: var(--font-size-callout);
   color: var(--fg-muted);
@@ -5431,31 +5424,165 @@ a.page-window-button:focus-visible,
   color: var(--text-tertiary);
 }
 
-/* A group in Settings (see SectionCard) and its rows. A row draws the line under itself, in
-   the colour the group hands down, and the last row of a group draws none: which row is
-   last is the stylesheet's to know, so no row has to be told. */
+/* ── Settings ─────────────────────────────────────────────────────────────
+   Every control in Settings is drawn here, in the colours of the Settings palette, which
+   the view hands down as custom properties (`--settings-*`, see SettingsView). */
+/* The palette's colours, which the view sets on itself; these stand in until it does. */
+.settings-view {
+  --settings-page-bg: var(--bg-base);
+  --settings-card-bg: var(--bg-surface);
+  --settings-card-border: var(--border);
+  --settings-card-shadow: var(--shadow-sm);
+  --settings-separator: var(--border-light);
+  --settings-control-bg: var(--bg-input);
+  --settings-control-border: var(--border-active);
+  --settings-label-secondary: var(--text-tertiary);
+  --settings-switch-off: var(--bg-active-inactive);
+  --settings-check-off: var(--bg-input);
+  --settings-check-border: var(--border-active);
+}
+
+/* In the Settings window the toolbar is above the page, so no room is kept for the window's
+   own buttons. */
+body .settings-window .settings-view,
+body .settings-window .settings-view[data-layout] {
+  padding: 22px 28px 28px;
+}
+
+.settings-window .settings-page {
+  width: min(680px, 100%);
+}
+
+.settings-section {
+  margin-bottom: 22px;
+}
+
+.settings-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  /* The same height with and without a button, so every group's title sits alike. */
+  min-height: 24px;
+  padding: 0 2px 6px;
+}
+
+.settings-section-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.settings-section-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-body);
+  font-weight: 600;
+}
+
+.settings-section-note {
+  color: var(--settings-label-secondary);
+  font-size: var(--font-size-small);
+}
+
+.settings-section-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+/* A group in Settings and its rows. A row draws the line under itself, in the colour the
+   palette hands down, and the last row of a group draws none: which row is last is the
+   stylesheet's to know, so no row has to be told. */
 .settings-card {
-  --settings-separator: transparent;
+  padding: 0 12px;
+  border: 0.5px solid var(--settings-card-border);
+  border-radius: var(--radius-menu);
+  background: var(--settings-card-bg);
+  box-shadow: var(--settings-card-shadow);
 }
 
 .settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 40px;
+  padding: 8px 0;
   border-bottom: 1px solid var(--settings-separator);
+  font-family: var(--font-sans);
 }
 
 .settings-row:last-child {
   border-bottom: 0;
 }
 
-/* Every button in Settings (see ActionButton). Its colours come from the Settings palette,
-   set on the button itself; these are the pointer's answers, which a style on the element
-   can not give: a tint under the pointer and a deeper one, with a small dip, while pressed.
-   The tint is taken from the button's own text colour, so it darkens a light button and
-   lightens a dark one. */
+.settings-row-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-row-title {
+  color: var(--text-primary);
+  font-size: var(--font-size-body);
+}
+
+.settings-row-desc {
+  margin-top: 2px;
+  color: var(--settings-label-secondary);
+  font-size: var(--font-size-small);
+  line-height: 1.35;
+}
+
+.settings-row-control {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.settings-row-stacked {
+  display: block;
+  padding: 10px 0;
+}
+
+/* A list fills its group from edge to edge, its + and − bar along the group's bottom, as
+   System Settings draws one. */
+.settings-row-list {
+  display: block;
+  margin: 0 -12px;
+  padding: 0;
+}
+
+/* Buttons, pop-ups and fields: one height, a hairline edge and a faint lift, as macOS draws
+   its controls. */
+.settings-button,
+.settings-popup select,
+.settings-app-popup,
+.settings-field {
+  box-sizing: border-box;
+  height: var(--control-height);
+  border: 0;
+  border-radius: var(--radius-control);
+  background-color: var(--settings-control-bg);
+  box-shadow: inset 0 0 0 0.5px var(--settings-control-border), 0 0.5px 1.5px rgba(0, 0, 0, 0.12);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-body);
+  outline: none;
+}
+
 .settings-button {
+  padding: 0 12px;
   transition: transform var(--duration-fast) ease;
 }
 
-.settings-button:hover:not(:disabled) {
+/* The pointer's answers: a tint under the pointer and a deeper one, with a small dip, while
+   pressed. The tint is taken from the button's own text colour, so it darkens a light
+   button and lightens a dark one. */
+.settings-button:hover:not(:disabled),
+.settings-app-popup:hover {
   background-image: linear-gradient(
     color-mix(in srgb, currentColor 7%, transparent),
     color-mix(in srgb, currentColor 7%, transparent)
@@ -5470,9 +5597,824 @@ a.page-window-button:focus-visible,
   transform: scale(0.97);
 }
 
-.settings-button:focus-visible {
+.settings-button:disabled {
+  color: var(--text-tertiary);
+}
+
+.settings-button:focus-visible,
+.settings-popup select:focus-visible,
+.settings-app-popup:focus-visible,
+.settings-field:focus,
+.settings-switch:focus-visible {
+  box-shadow: inset 0 0 0 0.5px var(--settings-control-border), var(--focus-ring);
+}
+
+/* Every pop-up is one width, so a column of them lines up. */
+.settings-popup {
+  position: relative;
+  display: inline-flex;
+  width: 180px;
+}
+
+.settings-popup select {
+  width: 100%;
+  padding: 0 26px 0 9px;
+  appearance: none;
+  cursor: default;
+}
+
+.settings-popup select:disabled {
+  color: var(--text-tertiary);
+}
+
+.settings-popup-chevron {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  width: 11px;
+  height: 11px;
+  transform: translateY(-50%);
+  fill: none;
+  stroke: var(--settings-label-secondary);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.settings-field {
+  padding: 0 8px;
+  caret-color: var(--ft-accent-solid);
+}
+
+.settings-number-field {
+  width: 56px;
+  text-align: right;
+}
+
+.settings-field-with-unit {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--settings-label-secondary);
+  font-size: var(--font-size-body);
+}
+
+/* A switch, at the size System Settings draws one. */
+.settings-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 32px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-capsule);
+  background: var(--settings-switch-off);
+  transition: background var(--duration-base) var(--ease-standard);
+}
+
+.settings-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform var(--duration-base) var(--ease-standard);
+}
+
+.settings-switch[aria-checked="true"] {
+  background: var(--ft-accent-solid);
+}
+
+.settings-switch[aria-checked="true"]::after {
+  transform: translateX(14px);
+}
+
+.settings-switch:disabled {
+  opacity: 0.5;
+}
+
+.settings-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: 8px;
+}
+
+.settings-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-primary);
+  font-size: var(--font-size-body);
+}
+
+.settings-checkbox input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  border-radius: var(--radius-xs);
+  background: var(--settings-check-off);
+  box-shadow: inset 0 0 0 0.5px var(--settings-check-border), 0 0.5px 1px rgba(0, 0, 0, 0.1);
+  appearance: none;
+}
+
+.settings-checkbox input:checked {
+  background: var(--ft-accent-solid)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M3.5 7.2l2.3 2.3 4.7-5' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / 14px no-repeat;
+  box-shadow: none;
+}
+
+.settings-checkbox input:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
+}
+
+/* Auto / Light / Dark, each a little picture of a window. */
+.settings-appearance-picker {
+  display: flex;
+  gap: 12px;
+}
+
+.settings-appearance-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--settings-label-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-small);
+}
+
+.settings-appearance-option[aria-pressed="true"] {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.settings-appearance-ring {
+  display: flex;
+  padding: 2px;
+  border-radius: 8px;
+}
+
+.settings-appearance-option[aria-pressed="true"] .settings-appearance-ring {
+  box-shadow: 0 0 0 2px var(--ft-accent-solid);
+}
+
+.settings-appearance-option:focus-visible {
+  outline: none;
+}
+
+.settings-appearance-option:focus-visible .settings-appearance-ring {
+  box-shadow: var(--focus-ring);
+}
+
+.settings-appearance-thumb {
+  position: relative;
+  display: block;
+  width: 64px;
+  height: 42px;
+  overflow: hidden;
+  border-radius: 6px;
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.25);
+}
+
+.settings-appearance-half {
+  --thumb-side: #e4e4e9;
+  --thumb-main: #fff;
+  --thumb-bar: #d4d4da;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  background: var(--thumb-main);
+}
+
+.settings-appearance-half[data-tone="dark"] {
+  --thumb-side: #2c2c30;
+  --thumb-main: #1e1e20;
+  --thumb-bar: #3c3c41;
+}
+
+.settings-appearance-half[data-clipped] {
+  clip-path: polygon(50% 0, 100% 0, 100% 100%, 50% 100%);
+}
+
+.settings-appearance-thumb-side {
+  width: 17px;
+  background: var(--thumb-side);
+}
+
+.settings-appearance-thumb-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  padding: 7px 5px;
+}
+
+.settings-appearance-thumb-main span {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--thumb-bar);
+}
+
+.settings-appearance-thumb-main span:first-child {
+  width: 70%;
+}
+
+.settings-appearance-thumb-main span:last-child {
+  width: 55%;
+}
+
+.settings-appearance-thumb-main .is-accent {
+  width: 90%;
+  background: var(--ft-accent-solid);
+}
+
+/* The accent colours: a row of swatches, the chosen one ringed, and its name under them. */
+.settings-accent {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+}
+
+.settings-accent-swatches {
+  display: flex;
+  gap: 8px;
+}
+
+.settings-accent-swatch {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.2);
+}
+
+.settings-accent-swatch[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px var(--settings-card-bg), 0 0 0 3.5px var(--ft-accent-solid);
+}
+
+.settings-accent-swatch:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.settings-accent-swatch.is-custom {
+  background: conic-gradient(from 210deg, #d84a4a, #f0b236, #23c7d9, #9580ff, #e8729a, #d84a4a);
+}
+
+.settings-accent-custom-fill {
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+}
+
+.settings-accent-swatch input[type="color"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.settings-accent-name {
+  color: var(--settings-label-secondary);
+  font-size: var(--font-size-small);
+}
+
+/* A list in Settings: rows over a bar of + and − buttons. */
+.settings-list-rows {
+  padding: 4px 6px;
+}
+
+.settings-list-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 6px;
+  border-radius: var(--radius-xs);
+  outline: none;
+  cursor: default;
+}
+
+.settings-list-row .file-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.settings-list-row[aria-selected="true"] {
+  background: var(--bg-active-inactive);
+}
+
+.settings-list-rows:focus-within .settings-list-row[aria-selected="true"] {
+  background: var(--ft-accent-solid);
+  color: var(--ft-accent-on-solid);
+}
+
+.settings-list-rows:focus-within .settings-list-row[aria-selected="true"] .settings-list-name,
+.settings-list-rows:focus-within .settings-list-row[aria-selected="true"] .settings-list-path {
+  color: inherit;
+}
+
+.settings-list-rows:focus-within .settings-list-row[aria-selected="true"] .file-icon-favorite {
+  color: inherit;
+}
+
+.settings-list-row[data-dragging] {
+  opacity: 0.4;
+}
+
+.settings-list-row[data-drop="before"] {
+  box-shadow: inset 0 2px 0 var(--ft-accent-solid);
+}
+
+.settings-list-row[data-drop="after"] {
+  box-shadow: inset 0 -2px 0 var(--ft-accent-solid);
+}
+
+.settings-list-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.settings-list-name {
+  color: var(--text-primary);
+  font-size: var(--font-size-body);
+}
+
+.settings-list-path {
+  overflow: hidden;
+  color: var(--settings-label-secondary);
+  font-size: var(--font-size-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-list-bar {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 6px;
+  border-top: 1px solid var(--settings-separator);
+}
+
+.settings-list-bar-button,
+.settings-list-bar-text-button {
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-small);
+}
+
+.settings-list-bar-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+}
+
+.settings-list-bar-button svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+.settings-list-bar-text-button {
+  padding: 0 8px;
+}
+
+.settings-list-bar-button:hover:not(:disabled),
+.settings-list-bar-text-button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.settings-list-bar-button:disabled,
+.settings-list-bar-text-button:disabled {
+  color: var(--text-dim);
+}
+
+.settings-list-bar-button:focus-visible,
+.settings-list-bar-text-button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.settings-list-bar-divider {
+  width: 1px;
+  height: 14px;
+  margin: 0 4px;
+  background: var(--settings-separator);
+}
+
+.settings-list-bar-spacer {
+  flex: 1;
+}
+
+/* A favorite's icon, which is also the button that picks another. */
+.settings-favorite-icon {
+  display: inline-flex;
+}
+
+.settings-favorite-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: inherit;
+}
+
+.settings-favorite-icon-button:hover,
+.settings-favorite-icon-button[aria-expanded="true"] {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.settings-favorite-icon-button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.settings-icon-grid {
+  position: fixed;
+  z-index: 1000;
+  display: grid;
+  grid-auto-rows: 30px;
+  gap: 4px;
+  margin: 0;
+  padding: 6px;
+  border: 0.5px solid var(--context-menu-border);
+  border-radius: var(--radius-menu);
+  background: var(--context-menu-bg);
+  box-shadow: var(--context-menu-shadow);
+  color: var(--context-menu-text);
+}
+
+.settings-icon-grid-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: inherit;
+}
+
+.settings-icon-grid-item:hover {
+  background: var(--bg-hover);
+}
+
+.settings-icon-grid-item[aria-pressed="true"] {
+  background: var(--ft-accent-solid);
+  color: var(--ft-accent-on-solid);
+}
+
+.settings-icon-grid-item[aria-pressed="true"] .file-icon-favorite {
+  color: inherit;
+}
+
+/* An app pop-up: the app's icon and name, and the system's pop-up chevron. */
+.settings-app-popup {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 180px;
+  padding: 0 26px 0 6px;
+  cursor: default;
+}
+
+.settings-app-popup .file-icon,
+.settings-menu .file-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.settings-app-popup-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-menu {
+  position: fixed;
+}
+
+.settings-menu .toolbar-menu-item {
+  gap: 6px;
+}
+
+/* A combo box: a field with a menu button at its end, the two drawn as one control. */
+.settings-combo {
+  position: relative;
+  display: inline-flex;
+  width: 180px;
+}
+
+.settings-combo-field {
+  width: 100%;
+  padding-right: 26px;
+}
+
+.settings-combo-button {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  bottom: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--settings-label-secondary);
+}
+
+.settings-combo-button:hover,
+.settings-combo-button[aria-expanded="true"] {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.settings-combo-button svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Settings → Toolbar: the items in the toolbar, in order, and the ones that can be added.
+   A tile is wider than the box its icon is in, to leave room for the name: the tiles are
+   pulled out by that difference, so the first box of a row starts where the text of every
+   other group starts. */
+.settings-toolbar-editor {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.settings-toolbar-area {
+  margin: 0 -13px;
+  padding: 20px 0 10px;
+}
+
+.settings-toolbar-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 2px;
+  min-height: 58px;
+}
+
+.settings-toolbar-available {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 66px);
+  justify-content: start;
+  gap: 8px 2px;
+}
+
+.settings-toolbar-tile {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+}
+
+.settings-toolbar-tile-slot {
+  position: relative;
+  flex-shrink: 0;
+  width: 66px;
+}
+
+.settings-toolbar-tile[data-shape="title"] .settings-toolbar-tile-slot,
+.settings-toolbar-tile[data-shape="search"] .settings-toolbar-tile-slot {
+  width: 134px;
+}
+
+.settings-toolbar-tile-button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: grab;
+  transition: opacity var(--duration-fast) ease;
+}
+
+.settings-toolbar-tile-button.is-available {
+  width: 66px;
+  cursor: default;
+}
+
+.settings-toolbar-tile-button[data-dragged] {
+  opacity: 0.22;
+}
+
+.settings-toolbar-swatch {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 38px;
+  border: 1px solid var(--settings-separator);
+  border-radius: 8px;
+  background: var(--settings-page-bg);
+  color: var(--ft-accent-solid);
+  transition: background var(--duration-fast) ease, border-color var(--duration-fast) ease;
+}
+
+.settings-toolbar-swatch[data-available] {
+  background: var(--settings-control-bg);
+  color: var(--settings-label-secondary);
+}
+
+.settings-toolbar-swatch[data-hovered] {
+  border-color: var(--ft-accent-soft-bg);
+  background: var(--ft-accent-soft-bg);
+  color: var(--ft-accent-solid);
+}
+
+/* As far in from the tile's edges as an icon's box is, so the boxes line up. */
+.settings-toolbar-swatch[data-shape="title"],
+.settings-toolbar-swatch[data-shape="search"] {
+  justify-content: flex-start;
+  width: calc(100% - 26px);
+  padding: 0 10px;
+}
+
+.settings-toolbar-swatch[data-shape="search"] {
+  background: var(--settings-control-bg);
+}
+
+.settings-toolbar-swatch[data-shape="title"] {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1px;
+  border-style: dashed;
+  border-color: var(--settings-label-secondary);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.settings-toolbar-swatch[data-shape="title"][data-hovered] {
+  border-color: var(--ft-accent-border);
+}
+
+.settings-toolbar-title-name {
+  color: var(--text-primary);
+  font-size: var(--font-size-small);
+  font-weight: 700;
+}
+
+.settings-toolbar-title-count {
+  color: var(--settings-label-secondary);
+  font-size: var(--font-size-mini);
+}
+
+.settings-toolbar-tile-label {
+  display: -webkit-box;
+  max-width: 100%;
+  min-height: 24px;
+  overflow: hidden;
+  color: var(--settings-label-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-mini);
+  line-height: 1.2;
+  text-align: center;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* The mark on an item that is always in the toolbar: a small lock, in the corner. */
+.settings-toolbar-lock {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--settings-card-bg);
+  box-shadow: 0 0 0 0.5px var(--settings-control-border);
+  color: var(--text-tertiary);
+}
+
+.settings-toolbar-lock svg {
+  width: 8px;
+  height: 8px;
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+.settings-toolbar-lock svg path {
+  fill: none;
+}
+
+.settings-toolbar-remove,
+.settings-toolbar-add-mark {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.settings-toolbar-remove {
+  top: -6px;
+  right: 8px;
+  background: var(--text-secondary);
+  color: var(--settings-card-bg);
+}
+
+.settings-toolbar-add-mark {
+  top: -5px;
+  right: 10px;
+  background: var(--ft-accent-solid);
+  color: var(--ft-accent-on-solid);
+}
+
+.settings-toolbar-remove svg,
+.settings-toolbar-add-mark svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.settings-toolbar-insert {
+  width: 3px;
+  height: 26px;
+  margin: 6px -1px 0;
+  border-radius: var(--radius-capsule);
+  background: var(--ft-accent-solid);
+}
+
+.settings-toolbar-empty {
+  padding: 8px 13px;
+  color: var(--settings-label-secondary);
+  font-size: var(--font-size-small);
+}
+
+.settings-toolbar-drag-ghost {
+  position: absolute;
+  top: -1000px;
+  width: 40px;
+  height: 38px;
+  border: 1px solid var(--settings-control-border);
+  border-radius: 8px;
+  background: var(--settings-control-bg);
 }
 
 .shortcut-settings-intro,

@@ -353,7 +353,7 @@ describe("appStateStore", () => {
       lastVisitedPath: null,
       lastVisitedFavoritePath: null,
       favorites: [],
-      favoritesPlacement: "separate",
+      favoritesPlacement: "integrated",
       favoritesExpanded: true,
       favoritesInitialized: false,
     });

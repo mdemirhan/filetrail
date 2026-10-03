@@ -253,8 +253,8 @@ export function SettingsWindowApp() {
     );
   }
 
-  function moveItem<T>(items: T[], index: number, direction: "up" | "down"): T[] {
-    const targetIndex = direction === "up" ? index - 1 : index + 1;
+  // Moves an item of a list to another place in it, as a dragged row in Settings does.
+  function moveItem<T>(items: T[], index: number, targetIndex: number): T[] {
     if (index < 0 || index >= items.length || targetIndex < 0 || targetIndex >= items.length) {
       return items;
     }
@@ -412,8 +412,8 @@ export function SettingsWindowApp() {
             onBrowseFavorite={(index) => {
               void browseFavorite(index);
             }}
-            onMoveFavorite={(index, direction) =>
-              preferences.setFavorites((current) => moveItem(current, index, direction))
+            onMoveFavorite={(index, targetIndex) =>
+              preferences.setFavorites((current) => moveItem(current, index, targetIndex))
             }
             onRemoveFavorite={(index) =>
               preferences.setFavorites((current) =>
@@ -437,12 +437,12 @@ export function SettingsWindowApp() {
             onBrowseOpenWithApplication={(entryId) => {
               void browseOpenWithApplication(entryId);
             }}
-            onMoveOpenWithApplication={(entryId, direction) =>
+            onMoveOpenWithApplication={(entryId, targetIndex) =>
               preferences.setOpenWithApplications((current) =>
                 moveItem(
                   current,
                   current.findIndex((entry) => entry.id === entryId),
-                  direction,
+                  targetIndex,
                 ),
               )
             }

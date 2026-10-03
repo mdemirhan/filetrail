@@ -45,7 +45,7 @@ describe("SettingsWindowApp", () => {
 
   it("closes with Escape", async () => {
     renderSettings();
-    await screen.findByText("Restore last visited folder");
+    await screen.findByText("Reopen the last folder");
 
     fireEvent.keyDown(window, { key: "Escape" });
     expect(close).toHaveBeenCalledTimes(1);
@@ -60,7 +60,7 @@ describe("SettingsWindowApp", () => {
 
   it("lets Escape close an open pop-up before it closes the window", async () => {
     renderSettings();
-    await screen.findByText("Restore last visited folder");
+    await screen.findByText("Reopen the last folder");
     fireEvent.click(screen.getByRole("button", { name: "Explorer" }));
 
     const trigger = screen
@@ -87,7 +87,7 @@ describe("SettingsWindowApp", () => {
   it("keeps the tab on screen in the window's address, where the app reads it to reopen there", async () => {
     window.history.replaceState(null, "", "#settings");
     renderSettings();
-    await screen.findByText("Restore last visited folder");
+    await screen.findByText("Reopen the last folder");
     expect(window.location.hash).toBe("#settings/general");
 
     fireEvent.click(screen.getByRole("button", { name: "Shortcuts" }));
