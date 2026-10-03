@@ -18,7 +18,11 @@ export default defineConfig({
     ],
     environment: "node",
     globals: true,
-    setupFiles: ["./apps/desktop/src/renderer/test/setup.ts"],
+    setupFiles: [
+      // First, so every temporary folder of the file lands in one that is removed after it.
+      "./packages/core/src/testing/tmpdirPerTestFile.ts",
+      "./apps/desktop/src/renderer/test/setup.ts",
+    ],
     coverage: {
       provider: "v8",
       // Everything that copies, moves, renames, makes, trashes or deletes files, in the core,
