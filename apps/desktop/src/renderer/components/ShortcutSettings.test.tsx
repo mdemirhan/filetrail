@@ -68,7 +68,7 @@ describe("ShortcutSettings", () => {
     expect(within(rowOf("Copy")).queryByRole("button")).toBeNull();
     expect(within(rowOf("Rename")).getByText(/Return renames too/)).toBeInTheDocument();
     // Nothing was changed, so there is nothing to reset.
-    expect(screen.getByRole("button", { name: "Reset All Shortcuts" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Restore Default Shortcuts" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: /^Reset (?!All)/ })).toBeNull();
   });
 
@@ -84,7 +84,7 @@ describe("ShortcutSettings", () => {
 
     expect(lastSaved()).toEqual({ showInFinder: ["Cmd+Shift+J"] });
     expect(keysOf("Show in Finder")).toEqual(["⇧⌘J", "+"]);
-    expect(screen.getByRole("button", { name: "Reset All Shortcuts" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Restore Default Shortcuts" })).toBeEnabled();
 
     // The second place takes an alternate; the main key stays.
     record("Show in Finder", "Add an alternate shortcut for Show in Finder", { key: "F5" });
@@ -205,16 +205,16 @@ describe("ShortcutSettings", () => {
       showInFinder: ["F5"],
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Reset Duplicate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restore Default for Duplicate" }));
 
     expect(lastSaved()).toEqual({ showInFinder: ["F5"] });
     expect(within(rowOf("Duplicate")).getByRole("status")).toHaveTextContent(
       "Taken back from New Folder.",
     );
-    expect(screen.queryByRole("button", { name: "Reset Duplicate" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Reset New Folder" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Restore Default for Duplicate" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Restore Default for New Folder" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Reset All Shortcuts" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restore Default Shortcuts" }));
     expect(lastSaved()).toEqual({});
     expect(keysOf("Show in Finder")).toEqual(["+"]);
   });

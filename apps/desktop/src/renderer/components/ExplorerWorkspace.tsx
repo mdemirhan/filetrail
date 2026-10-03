@@ -44,7 +44,12 @@ import type { HistoryMenuEntry } from "../lib/historyMenu";
 import { EXPLORER_LAYOUT } from "../lib/layoutTokens";
 import { placeDropdownMenu } from "../lib/menuPlacement";
 import { PANE_LAYOUT_CHANGE_MS, PaneLayoutChangeContext } from "../lib/paneLayoutChange";
-import { formatTooltip, getToolbarItemTooltip } from "../lib/tooltips";
+import {
+  type ToolbarTooltipState,
+  formatTooltip,
+  getToolbarItemLabel,
+  getToolbarItemTooltip,
+} from "../lib/tooltips";
 import {
   type TopToolbarSlot,
   resolveToolbarCapsules,
@@ -151,6 +156,7 @@ export function ExplorerWorkspace({
   foldersFirst = false,
   onToggleFoldersFirst = () => undefined,
   includeHidden = false,
+  textEditorName,
   onToggleHidden = () => undefined,
   onToggleInfoPanel = () => undefined,
   infoRowOpen = false,
@@ -227,6 +233,8 @@ export function ExplorerWorkspace({
   foldersFirst?: boolean;
   onToggleFoldersFirst?: () => void;
   includeHidden?: boolean;
+  /** The text editor Edit opens files in, which the Edit item names. */
+  textEditorName?: string;
   onToggleHidden?: () => void;
   onToggleInfoPanel?: () => void;
   infoRowOpen?: boolean;
@@ -1094,17 +1102,15 @@ export function ExplorerWorkspace({
       </div>
     );
   }
+  const toolbarTooltipState: ToolbarTooltipState = {
+    foldersFirst,
+    hiddenFilesShown: includeHidden,
+    infoPanelOpen,
+    infoRowOpen,
+    ...(textEditorName ? { textEditorName } : {}),
+  };
   const getToolbarTooltip = (itemId: ToolbarItemId) =>
-    getToolbarItemTooltip(
-      itemId,
-      {
-        foldersFirst,
-        hiddenFilesShown: includeHidden,
-        infoPanelOpen,
-        infoRowOpen,
-      },
-      shortcutDisplay,
-    );
+    getToolbarItemTooltip(itemId, toolbarTooltipState, shortcutDisplay);
 
   function renderTopToolbarItem(
     itemId: ToolbarItemId,
@@ -1528,7 +1534,7 @@ export function ExplorerWorkspace({
         return [
           {
             key,
-            label: definition.tooltipLabel ?? definition.label,
+            label: getToolbarItemLabel(slot.id, toolbarTooltipState),
             disabled: !canRunRendererCommand(commandType),
             onSelect: () => onRendererCommand(commandType),
           },

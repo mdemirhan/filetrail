@@ -3,7 +3,7 @@ import { TOOLBAR_ITEM_DEFINITIONS, type ToolbarItemId } from "../../shared/toolb
 import { listShortcuts } from "./helpContent";
 import { DEFAULT_SHORTCUT_DISPLAY, createShortcutDisplay } from "./shortcutDisplay";
 import { formatShortcut } from "./shortcutLabels";
-import { formatTooltip, getToolbarItemTooltip } from "./tooltips";
+import { formatTooltip, getToolbarItemLabel, getToolbarItemTooltip } from "./tooltips";
 
 describe("tooltips", () => {
   it("writes a command's name and then its shortcut as symbols", () => {
@@ -77,6 +77,11 @@ describe("tooltips", () => {
     expect(both("infoPanel")).toEqual(["Show Info Panel (⌘I)", "Hide Info Panel (⌘I)"]);
     expect(both("infoRow")).toEqual(["Show Info Row (⇧⌘I)", "Hide Info Row (⇧⌘I)"]);
     expect(both("foldersFirst")).toEqual(["List Folders First", "Mix Files and Folders"]);
+  });
+
+  it("names the text editor in Edit, as the menus do", () => {
+    expect(getToolbarItemLabel("editSelection", { textEditorName: "Zed" })).toBe("Edit in Zed");
+    expect(getToolbarItemLabel("editSelection", {})).toBe("Edit in Text Editor");
   });
 
   it("promises no shortcut that Help does not list", () => {

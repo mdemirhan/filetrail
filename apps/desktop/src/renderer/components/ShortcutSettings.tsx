@@ -187,8 +187,8 @@ export function ShortcutSettings({
           />
         </label>
         <ActionButton
-          label="Reset All"
-          ariaLabel="Reset All Shortcuts"
+          label="Restore Defaults"
+          ariaLabel="Restore Default Shortcuts"
           disabled={!anyCustomized}
           onClick={() => {
             onChange({});
@@ -303,10 +303,10 @@ function ShortcutRow({
             <button
               type="button"
               className="shortcut-row-reset"
-              aria-label={`Reset ${label}`}
+              aria-label={`Restore Default for ${label}`}
               onClick={onReset}
             >
-              Reset
+              Restore Default
             </button>
           ) : null}
           {Array.from({ length: slotCount }, (_, index) => {

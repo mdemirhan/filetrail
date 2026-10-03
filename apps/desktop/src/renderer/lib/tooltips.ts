@@ -16,12 +16,14 @@ export function formatTooltip(label: string, shortcut?: string): string {
   return shortcut ? `${label} (${formatShortcut(shortcut)})` : label;
 }
 
-// What the toolbar's on/off buttons need to know to say what a click will do.
+// What the toolbar's on/off buttons need to know to say what a click will do, and the text
+// editor Edit names, as the menus do ("Edit in TextEdit").
 export type ToolbarTooltipState = {
   foldersFirst?: boolean;
   hiddenFilesShown?: boolean;
   infoPanelOpen?: boolean;
   infoRowOpen?: boolean;
+  textEditorName?: string;
 };
 
 export function getToolbarItemTooltip(
@@ -31,12 +33,13 @@ export function getToolbarItemTooltip(
 ): string {
   const definition = getToolbarItemDefinition(itemId);
   return formatTooltip(
-    resolveToolbarItemLabel(itemId, state),
+    getToolbarItemLabel(itemId, state),
     definition.shortcutCommand ? shortcuts.written(definition.shortcutCommand) : undefined,
   );
 }
 
-function resolveToolbarItemLabel(itemId: ToolbarItemId, state: ToolbarTooltipState): string {
+// The item's name where it is listed or pointed at: its tooltip, and the » menu.
+export function getToolbarItemLabel(itemId: ToolbarItemId, state: ToolbarTooltipState): string {
   if (itemId === "foldersFirst") {
     return state.foldersFirst ? "Mix Files and Folders" : "List Folders First";
   }
@@ -48,6 +51,9 @@ function resolveToolbarItemLabel(itemId: ToolbarItemId, state: ToolbarTooltipSta
   }
   if (itemId === "infoRow") {
     return state.infoRowOpen ? "Hide Info Row" : "Show Info Row";
+  }
+  if (itemId === "editSelection" && state.textEditorName) {
+    return `Edit in ${state.textEditorName}`;
   }
   const definition = getToolbarItemDefinition(itemId);
   return definition.tooltipLabel ?? definition.label;

@@ -2072,6 +2072,7 @@ export function App() {
             foldersFirst={foldersFirst}
             onToggleFoldersFirst={toggleFoldersFirst}
             includeHidden={includeHidden}
+            textEditorName={defaultTextEditor.appName}
             onToggleHidden={toggleHiddenFiles}
             onToggleInfoPanel={() => setInfoPanelOpen((value) => !value)}
             infoRowOpen={infoRowOpen}
