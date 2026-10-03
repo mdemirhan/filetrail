@@ -62,7 +62,9 @@ const {
 const copyFileStoppable = createStoppableCopyFile(nativeCopyFile);
 
 const {
+  constants: fsConstants,
   promises: {
+    access,
     chmod,
     lstat,
     lutimes,
@@ -132,6 +134,9 @@ export const originalFileSystem: WriteServiceFileSystem = {
   },
   lutimes: async (path, atimeMs, mtimeMs) => {
     await lutimes(path, atimeMs / 1000, mtimeMs / 1000);
+  },
+  canModifyFolder: async (path) => {
+    await access(path, fsConstants.W_OK);
   },
 };
 

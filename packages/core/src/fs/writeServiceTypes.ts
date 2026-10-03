@@ -1,5 +1,6 @@
-import { createReadStream, createWriteStream } from "node:fs";
+import { constants, createReadStream, createWriteStream } from "node:fs";
 import {
+  access,
   chmod,
   lstat,
   lutimes,
@@ -116,6 +117,10 @@ export type WriteServiceFileSystem = {
    *  undone. Without it (or when it fails), the person is asked before anything is
    *  deleted permanently (a "trash_unavailable" runtime conflict). */
   trash?: (path: string) => Promise<void>;
+  /** Whether items can be added to or removed from a folder (access(2) with W_OK; rejects
+   *  when not). A move to another disk asks before copying anything, so it never copies
+   *  what it then can't remove. Without it, that is found out when removing. */
+  canModifyFolder?: (path: string) => Promise<void>;
 };
 
 export type CopyPasteRequest = {
@@ -479,6 +484,9 @@ export const DEFAULT_WRITE_SERVICE_FILE_SYSTEM: WriteServiceFileSystem = {
   },
   lutimes: async (path, atimeMs, mtimeMs) => {
     await lutimes(path, atimeMs / 1000, mtimeMs / 1000);
+  },
+  canModifyFolder: async (path) => {
+    await access(path, constants.W_OK);
   },
 };
 

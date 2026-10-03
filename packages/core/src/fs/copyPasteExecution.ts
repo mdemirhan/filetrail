@@ -591,14 +591,10 @@ async function performNode(
     // EXDEV fallback: rename failed, fall through to copy+delete path
   }
 
-  // A move copies, then removes the original. A locked original (or one in a locked
-  // folder) can't be removed, so it isn't copied either: that would leave it in both places.
+  // A move copies, then removes the original. An original that can't be removed isn't
+  // copied either: that would leave it in both places.
   if (context.mode === "cut") {
-    for (const path of [currentNode.node.sourcePath, dirname(currentNode.node.sourcePath)]) {
-      if (await isLocked(context.fileSystem, path)) {
-        throw new Error(lockedMessage(path));
-      }
-    }
+    await assertRemovableAfterCopy(context, currentNode, { deep: false });
   }
 
   if (currentNode.node.sourceKind === "directory") {
@@ -609,6 +605,64 @@ async function performNode(
     return executeDirectoryNode(context, currentNode);
   }
   return executeLeafNode(context, currentNode);
+}
+
+// What a move to another disk will have to remove after copying: the item, and for a
+// folder what is inside it. Refused before anything is copied when it can't be: an item
+// that is locked or in a locked folder, or a folder that doesn't let items be removed
+// from it. `deep` checks everything inside a folder now (a Replace stages the whole folder
+// before removing anything); otherwise each item is checked when its turn comes.
+async function assertRemovableAfterCopy(
+  context: ExecutionContext,
+  node: ResolvedCopyPasteNode,
+  options: { deep: boolean },
+): Promise<void> {
+  const { fileSystem } = context;
+  const sourcePath = node.node.sourcePath;
+  const parentPath = dirname(sourcePath);
+  for (const path of [sourcePath, parentPath]) {
+    if (await isLocked(fileSystem, path)) {
+      throw new Error(lockedMessage(path));
+    }
+  }
+  await assertCanRemoveFrom(fileSystem, parentPath, sourcePath);
+  if (node.node.sourceKind !== "directory") {
+    return;
+  }
+  await assertCanRemoveFrom(fileSystem, sourcePath, sourcePath);
+  if (options.deep) {
+    for (const child of node.children) {
+      if (child.action !== "skip") {
+        await assertRemovableAfterCopy(context, child, options);
+      }
+    }
+  }
+}
+
+async function assertCanRemoveFrom(
+  fileSystem: WriteServiceFileSystem,
+  folderPath: string,
+  itemPath: string,
+): Promise<void> {
+  if (!fileSystem.canModifyFolder) {
+    return;
+  }
+  try {
+    await fileSystem.canModifyFolder(folderPath);
+  } catch (error) {
+    const code = errorCode(error);
+    if (code === "EROFS") {
+      throw new Error(`“${basename(itemPath)}” wasn't moved, because its disk is read-only.`);
+    }
+    if (code === "EACCES" || code === "EPERM") {
+      const what =
+        folderPath === itemPath ? "what is inside it" : `it from “${basename(folderPath)}”`;
+      throw new Error(
+        `“${basename(itemPath)}” wasn't moved, because you don't have permission to remove ${what}.`,
+      );
+    }
+    // Anything else (the folder just went away) is left for the move itself to report.
+  }
 }
 
 function unreadableFolderMessage(mode: CopyPasteMode, reason: string | null): string {
@@ -851,6 +905,13 @@ async function executeReplace(
       return skippedOutcome("runtime_conflict_resolution", finalPath);
     }
     return performNode(context, { ...currentNode, action: "create" });
+  }
+
+  // A move that copies (to another disk) removes the originals only after the swap, and
+  // the copy is staged as a plain copy: everything it will have to remove is checked now,
+  // or the old item would go to the Trash for a move that leaves the original in place.
+  if (context.mode === "cut" && !canRenameForCut(context, currentNode)) {
+    await assertRemovableAfterCopy(context, currentNode, { deep: true });
   }
 
   const temporaryPath = await temporarySiblingPath(fileSystem, finalPath);

@@ -409,12 +409,22 @@ describe("nativeCopyFile stop flag", () => {
         const source = join(root, "big.bin");
         execFileSync("/usr/sbin/mkfile", ["150m", source]);
         const destination = join(volume.mountPath, "big.bin");
-        const stop = new Int32Array(1);
-        const copy = addon.nativeCopyFile(source, destination, stop);
         // Stop once the copy has begun writing, not after a fixed time a fast disk can beat.
-        await waitFor(() => existsSync(destination));
-        stop[0] = 1;
-        await expect(copy).rejects.toMatchObject({ code: "ECANCELED" });
+        // On a busy machine the copy may still finish before the stop is seen; that run
+        // proves nothing, so it is tried again.
+        let outcome: unknown = "completed";
+        for (let attempt = 0; attempt < 3 && outcome === "completed"; attempt += 1) {
+          rmSync(destination, { force: true });
+          const stop = new Int32Array(1);
+          const copy = addon.nativeCopyFile(source, destination, stop);
+          await waitFor(() => existsSync(destination));
+          stop[0] = 1;
+          outcome = await copy.then(
+            () => "completed",
+            (error: unknown) => error,
+          );
+        }
+        expect(outcome).toMatchObject({ code: "ECANCELED" });
         expect(existsSync(destination)).toBe(false);
       } finally {
         volume.detach();

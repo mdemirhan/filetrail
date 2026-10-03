@@ -170,6 +170,143 @@ describe("moving locked items", () => {
   );
 });
 
+describe("moving to another disk with Replace", () => {
+  // The Replace stages a plain copy and removes the originals only after the swap: a
+  // locked original used to be found out then, after the old item had gone to the Trash.
+  it.runIf(canMountDiskImages)(
+    "refuses a locked file before anything is replaced",
+    async () => {
+      const volume = mountTestDiskImage();
+      const otherTrash = join(volume.mountPath, ".test-trash");
+      try {
+        await mkdir(otherTrash);
+        await writeFile(join(src, "f.txt"), "new");
+        lock(join(src, "f.txt"));
+        await writeFile(join(volume.mountPath, "f.txt"), "old");
+
+        const { result } = await runPaste({
+          mode: "cut",
+          sourcePaths: [join(src, "f.txt")],
+          destinationDirectoryPath: volume.mountPath,
+          policy: REPLACE_ALL,
+          fileSystem: nativeFileSystemWithTrash(otherTrash),
+        });
+
+        expect(result?.items[0]).toMatchObject({
+          status: "failed",
+          error: "“f.txt” is locked. Unlock it in Finder's Get Info and try again.",
+        });
+        expect(await readFile(join(volume.mountPath, "f.txt"), "utf8")).toBe("old");
+        expect(await readdir(otherTrash)).toEqual([]);
+        expect(await readdir(src)).toEqual(["f.txt"]);
+      } finally {
+        volume.detach();
+      }
+    },
+    30_000,
+  );
+
+  it.runIf(canMountDiskImages)(
+    "refuses a folder holding a locked item before anything is replaced",
+    async () => {
+      const volume = mountTestDiskImage();
+      const otherTrash = join(volume.mountPath, ".test-trash");
+      try {
+        await mkdir(otherTrash);
+        await mkdir(join(src, "Docs"));
+        await writeFile(join(src, "Docs", "keep.txt"), "keep");
+        lock(join(src, "Docs", "keep.txt"));
+        await mkdir(join(volume.mountPath, "Docs"));
+        await writeFile(join(volume.mountPath, "Docs", "old.txt"), "old");
+
+        const { result } = await runPaste({
+          mode: "cut",
+          sourcePaths: [join(src, "Docs")],
+          destinationDirectoryPath: volume.mountPath,
+          policy: REPLACE_ALL,
+          fileSystem: nativeFileSystemWithTrash(otherTrash),
+        });
+
+        expect(result?.items[0]).toMatchObject({
+          status: "failed",
+          error: "“keep.txt” is locked. Unlock it in Finder's Get Info and try again.",
+        });
+        expect(await readdir(join(volume.mountPath, "Docs"))).toEqual(["old.txt"]);
+        expect(await readdir(otherTrash)).toEqual([]);
+      } finally {
+        volume.detach();
+      }
+    },
+    30_000,
+  );
+});
+
+describe("moving to another disk out of a folder that can't be changed", () => {
+  // Every file used to be copied, then each reported "copied, but the original couldn't
+  // be removed": everything in both places after copying all of it.
+  it.runIf(canMountDiskImages)(
+    "copies nothing out of a read-only folder, and says why",
+    async () => {
+      const volume = mountTestDiskImage();
+      try {
+        await mkdir(join(src, "Docs"));
+        await writeFile(join(src, "Docs", "a.txt"), "a");
+        await writeFile(join(src, "Docs", "b.txt"), "b");
+        await chmod(join(src, "Docs"), 0o555);
+
+        const { result } = await runPaste({
+          mode: "cut",
+          sourcePaths: [join(src, "Docs")],
+          destinationDirectoryPath: volume.mountPath,
+        });
+
+        expect(result?.items[0]).toMatchObject({
+          status: "failed",
+          error:
+            "“Docs” wasn't moved, because you don't have permission to remove what is inside it.",
+        });
+        expect((await readdir(volume.mountPath)).filter((name) => !name.startsWith("."))).toEqual(
+          [],
+        );
+        expect((await readdir(join(src, "Docs"))).sort()).toEqual(["a.txt", "b.txt"]);
+      } finally {
+        await chmod(join(src, "Docs"), 0o755);
+        volume.detach();
+      }
+    },
+    30_000,
+  );
+
+  it.runIf(canMountDiskImages)(
+    "doesn't move a file out of a folder that can't be changed",
+    async () => {
+      const volume = mountTestDiskImage();
+      try {
+        await mkdir(join(src, "Docs"));
+        await writeFile(join(src, "Docs", "a.txt"), "a");
+        await chmod(join(src, "Docs"), 0o555);
+
+        const { result } = await runPaste({
+          mode: "cut",
+          sourcePaths: [join(src, "Docs", "a.txt")],
+          destinationDirectoryPath: volume.mountPath,
+        });
+
+        expect(result?.items[0]?.error).toBe(
+          "“a.txt” wasn't moved, because you don't have permission to remove it from “Docs”.",
+        );
+        expect((await readdir(volume.mountPath)).filter((name) => !name.startsWith("."))).toEqual(
+          [],
+        );
+      } finally {
+        await chmod(join(src, "Docs"), 0o755);
+        volume.detach();
+      }
+    },
+    30_000,
+  );
+});
+
 describe("stopping part way through a file", () => {
   // Across disks a copy can't be a clone, so a large file takes long enough to stop.
   it.runIf(canMountDiskImages)(
@@ -178,29 +315,35 @@ describe("stopping part way through a file", () => {
       const volume = mountTestDiskImage({ sizeMb: 250 });
       try {
         execFileSync("/usr/sbin/mkfile", ["150m", join(src, "big.bin")]);
-        const controller = new AbortController();
         const destination = join(volume.mountPath, "big.bin");
+        // On a busy machine the copy may finish before the stop is seen; that run proves
+        // nothing, so it is tried again.
+        let status: string | undefined = "completed";
+        for (let attempt = 0; attempt < 3 && status === "completed"; attempt += 1) {
+          await rm(destination, { force: true });
+          const controller = new AbortController();
+          const { result } = await runPaste({
+            mode: "copy",
+            sourcePaths: [join(src, "big.bin")],
+            destinationDirectoryPath: volume.mountPath,
+            signal: controller.signal,
+            // Stop once the file has begun to be written, not after a fixed time that a
+            // fast disk can beat.
+            beforeExecute: async () => {
+              const stopOnceWriting = () => {
+                if (existsSync(destination)) {
+                  controller.abort();
+                } else {
+                  setTimeout(stopOnceWriting, 1);
+                }
+              };
+              stopOnceWriting();
+            },
+          });
+          status = result?.status;
+        }
 
-        const { result } = await runPaste({
-          mode: "copy",
-          sourcePaths: [join(src, "big.bin")],
-          destinationDirectoryPath: volume.mountPath,
-          signal: controller.signal,
-          // Stop once the file has begun to be written, not after a fixed time that a fast
-          // disk can beat.
-          beforeExecute: async () => {
-            const stopOnceWriting = () => {
-              if (existsSync(destination)) {
-                controller.abort();
-              } else {
-                setTimeout(stopOnceWriting, 1);
-              }
-            };
-            stopOnceWriting();
-          },
-        });
-
-        expect(result?.status).toBe("cancelled");
+        expect(status).toBe("cancelled");
         expect((await readdir(volume.mountPath)).filter((name) => !name.startsWith("."))).toEqual(
           [],
         );
