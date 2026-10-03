@@ -7520,3 +7520,21 @@ body.vibrant-window .explorer-workspace .workspace-body:not(.workspace-loading):
 body.vibrant-window .explorer-workspace .workspace-body:not(.workspace-loading)::after {
   grid-row: 3;
 }
+
+/* Likewise the lines over the path bar and the Info Row reach the hairline: both bars start
+   in the divider's half past it (4 px, as the toolbar's row above), over the fill there,
+   and keep their contents where they were. */
+body.vibrant-window .explorer-workspace .content-pathbar-row,
+body.vibrant-window .explorer-workspace .info-row {
+  position: relative;
+  z-index: 1;
+  margin-left: -4px;
+}
+
+body.vibrant-window .explorer-workspace .content-pathbar-row {
+  padding-left: 14px;
+}
+
+body.vibrant-window .explorer-workspace .info-row {
+  padding-left: 4px;
+}
