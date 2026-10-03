@@ -1,4 +1,9 @@
-import { buildTreePresentation, createFavorite, getDefaultFavorites } from "./favorites";
+import {
+  buildTreePresentation,
+  createFavorite,
+  getDefaultFavorites,
+  isTrashListingRefused,
+} from "./favorites";
 
 describe("favorites", () => {
   it("builds default favorites in the requested order", () => {
@@ -11,6 +16,17 @@ describe("favorites", () => {
       { path: "/", icon: "drive" },
       { path: "/Users/demo/.Trash", icon: "trash" },
     ]);
+  });
+
+  it("recognizes macOS refusing to list the Trash", () => {
+    const refusal = "EPERM: operation not permitted, scandir '/Users/demo/.Trash'";
+    expect(isTrashListingRefused("/Users/demo/.Trash", refusal, "/Users/demo")).toBe(true);
+    expect(isTrashListingRefused("/Users/demo/Private", refusal, "/Users/demo")).toBe(false);
+    expect(isTrashListingRefused("/Users/demo/.Trash", "ENOENT: no such file", "/Users/demo")).toBe(
+      false,
+    );
+    expect(isTrashListingRefused("/Users/demo/.Trash", null, "/Users/demo")).toBe(false);
+    expect(isTrashListingRefused("", refusal, "")).toBe(false);
   });
 
   it("infers curated icons for common added folders", () => {

@@ -29,6 +29,22 @@ export async function openPath(
   };
 }
 
+const FULL_DISK_ACCESS_SETTINGS_URL =
+  "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
+
+// macOS lets an app list the Trash only with Full Disk Access, which no signature or
+// entitlement grants and macOS never asks for: the person turns it on in System Settings.
+export async function openFullDiskAccessSettings(): Promise<
+  IpcResponse<"system:openFullDiskAccessSettings">
+> {
+  try {
+    await shell.openExternal(FULL_DISK_ACCESS_SETTINGS_URL);
+    return { ok: true };
+  } catch {
+    return { ok: false };
+  }
+}
+
 // Free space on the volume holding `path`, shown next to the path bar like Finder's status bar.
 export async function getVolumeInfo(
   payload: IpcRequest<"system:getVolumeInfo">,

@@ -44,6 +44,7 @@ import { InlineRenameField } from "./InlineRenameField";
 import { ListFilterPill } from "./ListFilterPill";
 import { PathSuggestionDropdown } from "./PathSuggestionDropdown";
 import { type PathbarFolder, PathbarFolderMenu } from "./PathbarFolderMenu";
+import { PushButton } from "./PushButton";
 import { SortIndicator } from "./SortIndicator";
 
 type DirectoryEntry = IpcResponse<"directory:getSnapshot">["entries"][number];
@@ -96,6 +97,7 @@ export function ContentPane({
   viewMode,
   loading,
   error,
+  onOpenFullDiskAccess = null,
   includeHidden,
   selectedPaths = [],
   selectionLeadPath = null,
@@ -151,6 +153,9 @@ export function ContentPane({
   viewMode: ExplorerViewMode;
   loading: boolean;
   error: string | null;
+  /** Set when the folder is the Trash and macOS refused to list it: the error then explains
+   *  Full Disk Access and offers to open its settings. */
+  onOpenFullDiskAccess?: (() => void) | null;
   includeHidden: boolean;
   selectedPaths?: string[];
   selectionLeadPath?: string | null;
@@ -462,6 +467,7 @@ export function ContentPane({
             <ContentState
               loading={loading}
               error={error}
+              onOpenFullDiskAccess={onOpenFullDiskAccess}
               currentPath={currentPath}
               entriesLength={entries.length}
               includeHidden={includeHidden}
@@ -475,6 +481,7 @@ export function ContentPane({
             isFocused={isFocused}
             loading={loading}
             error={error}
+            onOpenFullDiskAccess={onOpenFullDiskAccess}
             includeHidden={includeHidden}
             selectedPaths={selectedPaths}
             selectionLeadPath={selectionLeadPath}
@@ -507,6 +514,7 @@ export function ContentPane({
             isFocused={isFocused}
             loading={loading}
             error={error}
+            onOpenFullDiskAccess={onOpenFullDiskAccess}
             includeHidden={includeHidden}
             metadataByPath={metadataByPath}
             selectedPaths={selectedPaths}
@@ -951,6 +959,7 @@ function FlowListView({
   isFocused,
   loading,
   error,
+  onOpenFullDiskAccess,
   includeHidden,
   selectedPaths,
   selectionLeadPath,
@@ -980,6 +989,7 @@ function FlowListView({
   isFocused: boolean;
   loading: boolean;
   error: string | null;
+  onOpenFullDiskAccess: (() => void) | null;
   includeHidden: boolean;
   selectedPaths: string[];
   selectionLeadPath: string | null;
@@ -1149,6 +1159,7 @@ function FlowListView({
       <ContentState
         loading={loading}
         error={error}
+        onOpenFullDiskAccess={onOpenFullDiskAccess}
         currentPath={currentPath}
         entriesLength={entries.length}
         includeHidden={includeHidden}
@@ -1291,6 +1302,7 @@ function DetailsView({
   isFocused,
   loading,
   error,
+  onOpenFullDiskAccess,
   includeHidden,
   metadataByPath,
   selectedPaths,
@@ -1329,6 +1341,7 @@ function DetailsView({
   isFocused: boolean;
   loading: boolean;
   error: string | null;
+  onOpenFullDiskAccess: (() => void) | null;
   includeHidden: boolean;
   metadataByPath: Record<string, DirectoryEntryMetadata>;
   selectedPaths: string[];
@@ -1615,6 +1628,7 @@ function DetailsView({
         <ContentState
           loading={loading}
           error={error}
+          onOpenFullDiskAccess={onOpenFullDiskAccess}
           currentPath={currentPath}
           entriesLength={entries.length}
           includeHidden={includeHidden}
@@ -2009,12 +2023,14 @@ const FOLDER_LOADING_DELAY_MS = 400;
 function ContentState({
   loading,
   error,
+  onOpenFullDiskAccess,
   currentPath,
   entriesLength,
   includeHidden,
 }: {
   loading: boolean;
   error: string | null;
+  onOpenFullDiskAccess: (() => void) | null;
   currentPath: string;
   entriesLength: number;
   includeHidden: boolean;
@@ -2027,6 +2043,25 @@ function ContentState({
         <strong>Loading…</strong>
       </div>
     ) : null;
+  }
+  if (error && onOpenFullDiskAccess) {
+    // No signature or entitlement lets an app list the Trash, and macOS never asks: the
+    // person has to turn on Full Disk Access themselves, so say how instead of "EPERM".
+    return (
+      <div className="content-state content-error">
+        <strong>File Trail needs Full Disk Access to show the Trash</strong>
+        <span>
+          macOS lets only apps with Full Disk Access see what is in the Trash. Turn on File Trail in
+          Privacy &amp; Security › Full Disk Access (add it with + if it is not in the list), then
+          quit and reopen File Trail.
+        </span>
+        <div className="content-error-actions">
+          <PushButton variant="default" onClick={onOpenFullDiskAccess}>
+            Open Privacy Settings
+          </PushButton>
+        </div>
+      </div>
+    );
   }
   if (error) {
     return (

@@ -255,6 +255,45 @@ describe("ContentPane", () => {
     expect(screen.getByText("Permission denied")).toBeInTheDocument();
   });
 
+  it("explains Full Disk Access when macOS refuses to list the Trash", () => {
+    const handleOpenFullDiskAccess = vi.fn();
+    render(
+      <ContentPane
+        isFocused
+        currentPath="/Users/demo/.Trash"
+        entries={[]}
+        viewMode="list"
+        loading={false}
+        error="EPERM: operation not permitted, scandir '/Users/demo/.Trash'"
+        onOpenFullDiskAccess={handleOpenFullDiskAccess}
+        includeHidden={false}
+        metadataByPath={{}}
+        sortBy="name"
+        sortDirection="asc"
+        onSelectPath={() => undefined}
+        onActivateEntry={() => undefined}
+        onSortChange={() => undefined}
+        onLayoutColumnsChange={() => undefined}
+        onVisiblePathsChange={() => undefined}
+        onNavigatePath={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+        onFocusChange={() => undefined}
+      />,
+    );
+
+    expect(
+      screen.getByText("File Trail needs Full Disk Access to show the Trash"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Unable to open this folder")).not.toBeInTheDocument();
+    expect(screen.queryByText(/EPERM/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open Privacy Settings" }));
+    expect(handleOpenFullDiskAccess).toHaveBeenCalledTimes(1);
+  });
+
   it("calls sort handlers in details mode", () => {
     const handleSortChange = vi.fn();
     render(

@@ -74,6 +74,7 @@ import {
   getTrashPath,
   isFavoritePath,
   isFavoritesRootItemId,
+  isTrashListingRefused,
 } from "./lib/favorites";
 import { FileIcon, preloadGenericIcons } from "./lib/fileIcons";
 import { useFiletrailClient } from "./lib/filetrailClient";
@@ -978,6 +979,12 @@ export function App() {
       trashPath,
     ],
   );
+  const openFullDiskAccessSettings = useCallback(() => {
+    void client.invoke("system:openFullDiskAccessSettings", {}).catch((error) => {
+      logger.error("open Full Disk Access settings failed", error);
+    });
+  }, [client]);
+
   // Help is a window of its own, beside the files. It opens on the page asked for, or on
   // the one it was left on (the main process remembers it while the app runs).
   const openHelp = useCallback(
@@ -1825,6 +1832,9 @@ export function App() {
                 onSearchForFilter: searchFromListFilter,
                 loading: directoryLoading,
                 error: directoryError,
+                onOpenFullDiskAccess: isTrashListingRefused(currentPath, directoryError, homePath)
+                  ? openFullDiskAccessSettings
+                  : null,
                 includeHidden,
                 metadataByPath,
                 selectedPaths: contentSelection.paths,

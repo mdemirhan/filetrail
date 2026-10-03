@@ -27,6 +27,19 @@ export function getTrashPath(homePath: string): string {
   return homePath.length > 0 ? `${homePath}/.Trash` : "";
 }
 
+// macOS refuses to list the Trash ("EPERM: operation not permitted, scandir …") to an app
+// without Full Disk Access, even though everything inside it can still be read.
+export function isTrashListingRefused(
+  path: string,
+  error: string | null,
+  homePath: string,
+): boolean {
+  if (error === null || path !== getTrashPath(homePath) || path.length === 0) {
+    return false;
+  }
+  return error.includes("EPERM") || error.toLowerCase().includes("operation not permitted");
+}
+
 // Finder's sidebar places, all ordinary favorites the user can remove or reorder.
 export function getDefaultFavorites(homePath: string): FavoritePreference[] {
   if (homePath.length === 0) {

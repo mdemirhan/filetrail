@@ -1181,6 +1181,14 @@ export const ipcContractSchemas = {
       error: z.string().nullable(),
     }),
   },
+  // Opens Privacy & Security at Full Disk Access, which macOS requires before an app can
+  // list the Trash.
+  "system:openFullDiskAccessSettings": {
+    request: emptyRequestSchema,
+    response: z.object({
+      ok: z.boolean(),
+    }),
+  },
   "system:getFileIcon": {
     request: z.object({
       path: z.string().min(1),

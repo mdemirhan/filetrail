@@ -341,8 +341,10 @@ if [[ "${SIGN_IDENTITY}" != "-" ]]; then
   run codesign --verify --deep --strict "${APP_BUNDLE}"
   step_done "signed and verified"
 else
-  # Ad-hoc signing gives the app a valid code signature so macOS does not block
-  # filesystem access to protected paths (e.g. ~/.Trash) for unsigned apps.
+  # Ad-hoc signing gives the app a valid code signature, which Apple Silicon needs to run
+  # it. It grants no privacy access: listing ~/.Trash needs Full Disk Access with any
+  # signature, and an ad-hoc grant is lost on the next build because it names this exact
+  # build, where a Developer ID grant names the signing identity and survives updates.
   step "Signing ad hoc"
   run codesign --force --deep --sign - "${APP_BUNDLE}"
   step_done

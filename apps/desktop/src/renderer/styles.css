@@ -3068,6 +3068,11 @@ body.resizing-panels * {
   border-color: color-mix(in srgb, var(--danger) 18%, transparent);
 }
 
+.content-error-actions {
+  display: flex;
+  margin-top: 4px;
+}
+
 .content-empty {
   justify-items: center;
   align-content: center;
