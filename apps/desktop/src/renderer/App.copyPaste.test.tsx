@@ -3,12 +3,13 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { type RefObject, useEffect, useState } from "react";
 
-import type {
-  CopyPasteProgressEvent,
-  IpcChannel,
-  IpcRequestInput,
-  IpcResponse,
-  WriteOperationProgressEvent,
+import {
+  type CopyPasteProgressEvent,
+  type IpcChannel,
+  type IpcRequestInput,
+  type IpcResponse,
+  type WriteOperationProgressEvent,
+  ipcContractSchemas,
 } from "@filetrail/contracts";
 
 import { DEFAULT_APP_PREFERENCES } from "../shared/appPreferences";
@@ -749,6 +750,14 @@ type TestProgressEvent =
       action?: CopyPasteProgressEvent["action"];
     })
   | WriteOperationProgressEvent;
+
+// Requests the window sent that the main process's checks would refuse (see the harness).
+const refusedRequests: string[] = [];
+
+afterEach(() => {
+  const refused = refusedRequests.splice(0);
+  expect(refused, "requests the main process would refuse").toEqual([]);
+});
 
 describe("App copy/paste integration", () => {
   afterEach(() => {
@@ -8697,6 +8706,14 @@ function createAppHarness(
 
   const client: FiletrailClient = {
     async invoke<C extends IpcChannel>(channel: C, payload: IpcRequestInput<C>) {
+      // What the main process accepts, checked as it checks it: a request it would refuse
+      // fails the test instead of passing here.
+      const checked = ipcContractSchemas[channel].request.safeParse(payload);
+      if (!checked.success) {
+        // The window catches failed requests itself, so the test hears of it afterwards.
+        refusedRequests.push(`${channel}: ${checked.error.message}`);
+        throw new Error(`The main process would refuse this ${channel} request.`);
+      }
       if (channel === "app:setMenuState") {
         menuStates.push((payload as IpcRequestInput<"app:setMenuState">).state);
         return { ok: true } as IpcResponse<C>;
