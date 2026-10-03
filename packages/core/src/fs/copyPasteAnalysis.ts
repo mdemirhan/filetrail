@@ -256,6 +256,41 @@ export async function buildCopyPasteAnalysisReport(args: {
   };
 }
 
+// Reads one item again from disk, as the review would read it now: used when the item
+// changed after the review (a file saved as a package, a package saved anew) and the
+// person chose to go on, so what is pasted is what is there, not what was there.
+// Throws when the item now holds two names the destination can't tell apart.
+export async function analyzeItemAgain(args: {
+  id: string;
+  sourcePath: string;
+  destinationPath: string;
+  fileSystem: WriteServiceFileSystem;
+  caseSensitive: boolean;
+  signal?: AbortSignal;
+}): Promise<CopyPasteAnalysisNode> {
+  const destinationScanCache: DestinationScanCache = {
+    counts: new Map(),
+    entries: new Map(),
+    pathKey: (path) => destinationPathKey(path, args.caseSensitive),
+    nameCollisions: [],
+  };
+  const node = await analyzeNode({
+    id: args.id,
+    sourcePath: args.sourcePath,
+    destinationPath: args.destinationPath,
+    fileSystem: args.fileSystem,
+    destinationScanCache,
+    ...(args.signal ? { signal: args.signal } : {}),
+  });
+  const collision = destinationScanCache.nameCollisions[0];
+  if (collision) {
+    throw new Error(
+      `“${basename(collision.sourcePath)}” and “${basename(collision.otherSourcePath)}” would both be pasted as one item, because the destination doesn't tell upper and lower case apart.`,
+    );
+  }
+  return node;
+}
+
 async function analyzeNode(args: {
   id: string;
   sourcePath: string;

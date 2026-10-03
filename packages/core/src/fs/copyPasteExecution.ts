@@ -3,6 +3,7 @@ import { basename, dirname, join } from "node:path";
 
 import { isAbortError } from "@filetrail/contracts";
 
+import { analyzeItemAgain } from "./copyPasteAnalysis";
 import {
   LOCK_FLAGS,
   NO_TRASH_ERROR_CODE,
@@ -33,6 +34,7 @@ import {
   resolveSingleNodeWithAction,
 } from "./copyPastePolicy";
 import type {
+  CopyPasteAnalysisNode,
   CopyPasteAnalysisReport,
   CopyPasteConflictClass,
   CopyPasteItemResult,
@@ -463,18 +465,30 @@ async function resolveWithRuntimeAnswer(
   const currentDestination = keepPlannedDestination
     ? node.node.destinationFingerprint
     : conflict.currentDestinationFingerprint;
+  const source =
+    resolution !== "skip" && keepPlannedDestination && conflict.currentSourceFingerprint.exists
+      ? await readChangedSourceAgain(context, node, conflict.currentSourceFingerprint)
+      : {
+          ...node.node,
+          sourceFingerprint: conflict.currentSourceFingerprint.exists
+            ? conflict.currentSourceFingerprint
+            : node.node.sourceFingerprint,
+        };
+  const conflictClass = currentDestination.exists
+    ? conflictClassFor(source.sourceKind, currentDestination.kind)
+    : null;
+  if (resolution === "merge" && conflictClass !== "directory_conflict") {
+    throw new Error(
+      `“${basename(node.node.sourcePath)}” is no longer a folder, so it can't be merged and was left.`,
+    );
+  }
   return resolveSingleNodeWithAction({
     node: {
-      ...node.node,
+      ...source,
       destinationPath: node.destinationPath,
-      sourceFingerprint: conflict.currentSourceFingerprint.exists
-        ? conflict.currentSourceFingerprint
-        : node.node.sourceFingerprint,
       destinationFingerprint: currentDestination,
       destinationKind: currentDestination.kind,
-      conflictClass: currentDestination.exists
-        ? conflictClassFor(node.node.sourceKind, currentDestination.kind)
-        : null,
+      conflictClass,
     },
     action: resolution,
     policy: context.policy,
@@ -483,6 +497,62 @@ async function resolveWithRuntimeAnswer(
     caseSensitive: context.caseSensitive,
     reservedPaths: context.reservedPaths,
   });
+}
+
+// The item being pasted changed after the review. A file whose contents changed is still
+// the same file; anything else (a file saved as a package, a package saved anew under a
+// new identity, a folder turned into a file) is read again, or the paste would write what
+// the review saw: an empty folder for a new package, or a package missing its new files.
+async function readChangedSourceAgain(
+  context: ExecutionContext,
+  node: ResolvedCopyPasteNode,
+  current: NodeFingerprint,
+): Promise<CopyPasteAnalysisNode> {
+  const planned = node.node;
+  if (current.kind === planned.sourceKind && current.kind !== "directory") {
+    return { ...planned, sourceFingerprint: current };
+  }
+  const fresh = await analyzeItemAgain({
+    id: planned.id,
+    sourcePath: planned.sourcePath,
+    destinationPath: node.destinationPath,
+    fileSystem: context.fileSystem,
+    caseSensitive: context.caseSensitive,
+    signal: context.signal,
+  });
+  const withPlannedDestinations = keepPlannedDestinations(fresh, planned);
+  context.totalItemCount += Math.max(0, fresh.totalNodeCount - planned.totalNodeCount);
+  return {
+    ...withPlannedDestinations,
+    keepBothDestinationPath: planned.keepBothDestinationPath,
+    replaceBlockedReason: planned.replaceBlockedReason,
+  };
+}
+
+// Items inside a re-read folder that the review also saw keep the destination it saw:
+// one that changed there since is then still asked about, never replaced unseen.
+function keepPlannedDestinations(
+  fresh: CopyPasteAnalysisNode,
+  planned: CopyPasteAnalysisNode,
+): CopyPasteAnalysisNode {
+  const plannedChildren = new Map(
+    planned.children.map((child) => [basename(child.sourcePath), child]),
+  );
+  return {
+    ...fresh,
+    destinationFingerprint: planned.destinationFingerprint,
+    destinationKind: planned.destinationKind,
+    destinationTotalNodeCount: planned.destinationTotalNodeCount,
+    destinationOnly: planned.destinationOnly,
+    conflictClass: planned.destinationFingerprint.exists
+      ? conflictClassFor(fresh.sourceKind, planned.destinationKind)
+      : null,
+    disposition: planned.destinationFingerprint.exists ? "conflict" : "new",
+    children: fresh.children.map((child) => {
+      const plannedChild = plannedChildren.get(basename(child.sourcePath));
+      return plannedChild ? keepPlannedDestinations(child, plannedChild) : child;
+    }),
+  };
 }
 
 async function performNode(
@@ -697,6 +767,8 @@ async function executeDirectoryNode(
   let dirDeleteError: string | null = null;
   if (context.mode === "cut") {
     dirDeleteError = await tryRemoveEmptySourceDirectory(currentNode, context.fileSystem);
+  } else {
+    dirDeleteError = await describeAddedDuringCopy(currentNode, context.fileSystem);
   }
   return {
     itemStatus: dirDeleteError !== null || hasChildFailure ? "failed" : "completed",
@@ -1496,6 +1568,34 @@ async function describeLeftInMovedFolder(
   const folder = basename(node.node.sourcePath);
   const named = newItems.length === 1 ? `“${newItems[0]}” was` : `${newItems.length} items were`;
   return `${named} added to “${folder}” while it was being moved, so ${newItems.length === 1 ? "it was" : "they were"} left in the original “${folder}”.`;
+}
+
+// Items put into a folder after the review were never part of the copy: they are named,
+// as for a move, so "copied" doesn't claim a folder whose copy lacks them.
+async function describeAddedDuringCopy(
+  node: ResolvedCopyPasteNode,
+  fileSystem: WriteServiceFileSystem,
+): Promise<string | null> {
+  const newItems = await findItemsAddedSinceReview(node, fileSystem);
+  if (newItems.length === 0) {
+    return null;
+  }
+  const folder = basename(node.node.sourcePath);
+  const named = newItems.length === 1 ? `“${newItems[0]}” was` : `${newItems.length} items were`;
+  return `${named} added to “${folder}” after the copy began, so ${newItems.length === 1 ? "it wasn't" : "they weren't"} copied.`;
+}
+
+async function findItemsAddedSinceReview(
+  node: ResolvedCopyPasteNode,
+  fileSystem: WriteServiceFileSystem,
+): Promise<string[]> {
+  // A folder the review couldn't read has no plan to compare with.
+  if (node.node.issueCode === "source_unreadable") {
+    return [];
+  }
+  const plannedNames = new Set(node.children.map((child) => basename(child.node.sourcePath)));
+  const entries = await fileSystem.readdir(node.node.sourcePath).catch(() => [] as string[]);
+  return entries.filter((entry) => !plannedNames.has(entry) && !isFolderViewFile(entry));
 }
 
 function canRemoveMovedSourceDirectory(
