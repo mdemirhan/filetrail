@@ -9009,6 +9009,9 @@ function createAppHarness(
       if (channel === "app:writeLog") {
         return { ok: true } as IpcResponse<C>;
       }
+      if (channel === "system:emptyTrash") {
+        return { ok: true, error: null } as IpcResponse<C>;
+      }
       if (channel === "system:getDiskIds") {
         // Which disk each folder is on: as given, else the disk its path names.
         const { paths } = payload as IpcRequestInput<"system:getDiskIds">;
@@ -12008,5 +12011,129 @@ describe("acting on search results", () => {
       expect(screen.getByRole("button", { name })).toHaveAttribute("aria-disabled", "false");
     }
     expect(screen.queryByRole("button", { name: /^Delete Immediately/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("Delete Immediately and Empty Trash", () => {
+  const deleteQuestion = "Are you sure you want to delete “source.txt”?";
+  const emptyQuestion = "Are you sure you want to permanently erase the items in the Trash?";
+
+  it("deletes the selection in the list with Option-Command-Delete, after asking", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+    await selectItem("/Users/demo/source.txt");
+
+    await pressKey({ key: "Backspace", metaKey: true, altKey: true });
+    const dialog = await screen.findByRole("dialog", { name: deleteQuestion });
+    expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    });
+
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.find((call) => call.channel === "writeOperation:deleteImmediately")
+          ?.payload,
+      ).toEqual({ paths: ["/Users/demo/source.txt"] });
+    });
+  });
+
+  // Like the tree's other keys that change a folder: only its own menu does it.
+  it("does nothing on Option-Command-Delete in the folder tree", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+    await focusTreePane();
+
+    await pressKey({ key: "Backspace", metaKey: true, altKey: true });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("offers Delete Immediately in a tree folder's own menu", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+    const menuTarget = await screen.findByTitle("tree:/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.contextMenu(menuTarget);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Delete Immediately/ }));
+    });
+
+    expect(
+      await screen.findByRole("dialog", { name: "Are you sure you want to delete “Folder”?" }),
+    ).toBeInTheDocument();
+  });
+
+  // Move to Trash covers search results.
+  it("does nothing on Option-Command-Delete in search results", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+    await openSearchResults();
+    await act(async () => {
+      fireEvent.click(await screen.findByTitle("search:/Users/demo/source.txt"));
+    });
+
+    await pressKey({ key: "Backspace", metaKey: true, altKey: true });
+
+    expect(screen.queryByRole("dialog", { name: deleteQuestion })).not.toBeInTheDocument();
+  });
+
+  it("empties the Trash from the menu bar, after asking, and not on Cancel", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+    await screen.findByTitle("/Users/demo/source.txt");
+
+    await act(async () => {
+      harness.emitCommand({ type: "emptyTrash" });
+    });
+    let dialog = await screen.findByRole("dialog", { name: emptyQuestion });
+    expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    });
+    expect(harness.invocations.some((call) => call.channel === "system:emptyTrash")).toBe(false);
+
+    await pressKey({ key: "Backspace", metaKey: true, shiftKey: true });
+    dialog = await screen.findByRole("dialog", { name: emptyQuestion });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Empty Trash" }));
+    });
+    await vi.waitFor(() => {
+      expect(harness.invocations.some((call) => call.channel === "system:emptyTrash")).toBe(true);
+    });
+  });
+
+  it("empties the Trash from the Trash favorite's menu", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+    const menuTarget = await screen.findByTitle("favorite:/Users/demo/.Trash");
+    await act(async () => {
+      fireEvent.contextMenu(menuTarget);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Empty Trash/ }));
+    });
+
+    expect(await screen.findByRole("dialog", { name: emptyQuestion })).toBeInTheDocument();
+  });
+
+  it("doesn't offer Empty Trash on other favorites", async () => {
+    const harness = createAppHarness({
+      preferences: {
+        favoritesInitialized: true,
+        favorites: [
+          { path: "/Users/demo/Folder", icon: "folder" },
+          { path: "/Users/demo/.Trash", icon: "trash" },
+        ],
+      },
+    });
+    renderApp(harness);
+    const menuTarget = await screen.findByTitle("favorite:/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.contextMenu(menuTarget);
+    });
+
+    expect(screen.queryByRole("button", { name: /^Empty Trash/ })).not.toBeInTheDocument();
   });
 });

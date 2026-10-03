@@ -497,13 +497,18 @@ export function useExplorerActions(args: {
       return Array.from(hidden);
     }
     if (contextMenuState.surface === "favorite") {
+      if (contextMenuState.targetPath !== getTrashPath(homePath)) {
+        hidden.add("emptyTrash");
+      }
       return Array.from(hidden);
     }
     if (contextMenuState.surface === "background") {
-      // Nothing is pasted into or created in the Trash.
+      // Nothing is pasted into or created in the Trash; it can be emptied from there.
       if (isPathInsideTrash(currentPath, homePath)) {
         hidden.add("paste");
         hidden.add("newFolder");
+      } else {
+        hidden.add("emptyTrash");
       }
       return Array.from(hidden);
     }
@@ -2670,17 +2675,11 @@ export function useExplorerActions(args: {
       return;
     }
     if (actionId === "deleteImmediately") {
-      if (paths.length > 0) {
-        setCopyPasteDialogState({
-          type: "confirmDeleteImmediately",
-          paths,
-          itemLabel: formatItemSummaryFromPathCount(paths[0] ?? "item", paths.length),
-        });
-      }
+      requestDeleteImmediately(paths);
       return;
     }
     if (actionId === "emptyTrash") {
-      await emptyTrash();
+      requestEmptyTrash();
       return;
     }
     if (actionId === "terminal") {
@@ -2700,9 +2699,36 @@ export function useExplorerActions(args: {
     showModalNotice("Unsupported action", `File Trail could not run the "${actionId}" action.`);
   }
 
+  // Delete Immediately is asked about first: it can't be undone.
+  function requestDeleteImmediately(paths: string[]) {
+    if (paths.length === 0) {
+      return;
+    }
+    setCopyPasteDialogState({
+      type: "confirmDeleteImmediately",
+      paths,
+      itemLabel: formatItemSummaryFromPathCount(paths[0] ?? "item", paths.length),
+    });
+  }
+
+  // So is emptying the Trash, with Finder's question.
+  function requestEmptyTrash() {
+    setCopyPasteDialogState({ type: "confirmEmptyTrash" });
+  }
+
+  async function confirmEmptyTrash() {
+    setCopyPasteDialogState(null);
+    if (await emptyTrash()) {
+      // The Trash, or a folder in it, may be on screen: it is read again.
+      if (isPathInsideTrash(currentPathRef.current, homePath)) {
+        void refreshDirectory({});
+      }
+    }
+  }
+
   // Finder empties the Trash (the main process asks it to). A failure is told in a dialog;
   // the usual one is that macOS has not let File Trail control Finder.
-  async function emptyTrash() {
+  async function emptyTrash(): Promise<boolean> {
     let failure: string | null = null;
     try {
       const response = await client.invoke("system:emptyTrash", {});
@@ -2713,11 +2739,12 @@ export function useExplorerActions(args: {
       failure = error instanceof Error ? error.message : String(error);
     }
     if (failure === null) {
-      return;
+      return true;
     }
     logger.error("empty trash failed", failure);
     const notice = describeEmptyTrashFailure(failure);
     showModalNotice(notice.title, notice.message);
+    return false;
   }
 
   async function runContextSubmenuAction(action: ContextMenuSubmenuAction, paths: string[]) {
@@ -3597,6 +3624,9 @@ export function useExplorerActions(args: {
     dismissToast,
     noticeDragRefusedWhileBusy,
     startDuplicateOfSelection,
+    requestDeleteImmediately,
+    requestEmptyTrash,
+    confirmEmptyTrash,
     editPaths,
     executeCopyLikePlan,
     requestCopyLikePlanStart,

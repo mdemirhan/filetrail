@@ -105,6 +105,7 @@ describe("AppDialogs", () => {
           onCloseCopyPasteDialog={() => undefined}
           onConfirmTrashDialog={() => undefined}
           onConfirmDeleteImmediatelyDialog={() => undefined}
+          onConfirmEmptyTrashDialog={() => undefined}
           onConfirmDotNameDialog={() => undefined}
           showCopyPasteProgressCard={false}
           onCancelWriteOperation={() => undefined}

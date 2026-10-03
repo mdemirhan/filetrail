@@ -133,6 +133,8 @@ export function createApplicationMenuTemplate(
             options.onOpenSettings ? options.onOpenSettings() : sendCommand("openSettings"),
         },
         separator,
+        command("emptyTrash", "Empty Trash…"),
+        separator,
         { role: "services" },
         separator,
         { role: "hide", label: `Hide ${APP_MENU_NAME}` },
@@ -166,6 +168,7 @@ export function createApplicationMenuTemplate(
         command("showInFinder", "Show in Finder"),
         separator,
         command("trashSelection", "Move to Trash"),
+        command("deleteImmediately", "Delete Immediately…"),
         separator,
         command("reopenClosedTab", "Reopen Closed Tab"),
         // Closes the window when it has a single view.

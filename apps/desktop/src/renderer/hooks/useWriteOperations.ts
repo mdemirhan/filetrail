@@ -70,6 +70,9 @@ type CopyPasteDialogState =
       itemLabel: string;
     }
   | {
+      type: "confirmEmptyTrash";
+    }
+  | {
       // Asked before a rename or new folder whose name begins with a dot would hide it.
       type: "confirmDotName";
       request: DotNameRequest;

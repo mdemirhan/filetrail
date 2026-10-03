@@ -178,6 +178,9 @@ export function getContextMenuItems(input: {
       { type: "separator", key: "separator-background-clipboard" },
       { id: "terminal", label: "Open in Terminal", icon: "terminal" },
       { id: "showInFinder", label: "Show in Finder", icon: "showInFinder" },
+      // Only in the Trash (the others are hidden by the caller).
+      { type: "separator", key: "separator-background-trash" },
+      { id: "emptyTrash", label: "Empty Trash…", icon: "emptyTrash", destructive: true },
     ];
   }
 
@@ -198,6 +201,9 @@ export function getContextMenuItems(input: {
       { type: "separator", key: "separator-favorite-toggle" },
       { id: "terminal", label: "Open in Terminal", icon: "terminal" },
       { id: "showInFinder", label: "Show in Finder", icon: "showInFinder" },
+      // Only for the Trash favorite (hidden by the caller for the others).
+      { type: "separator", key: "separator-favorite-trash" },
+      { id: "emptyTrash", label: "Empty Trash…", icon: "emptyTrash", destructive: true },
     ];
   }
 

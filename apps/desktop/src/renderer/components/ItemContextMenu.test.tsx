@@ -128,6 +128,7 @@ describe("ItemContextMenu", () => {
         anchorY={0}
         surface="background"
         disabledActionIds={["paste"]}
+        hiddenActionIds={["emptyTrash"]}
         submenuItems={submenuItems}
         shortcutContext={shortcutContext}
         open
@@ -298,6 +299,7 @@ describe("ItemContextMenu", () => {
         anchorY={0}
         surface="favorite"
         favoriteToggleLabel="Remove from Favorites"
+        hiddenActionIds={["emptyTrash"]}
         submenuItems={submenuItems}
         shortcutContext={{
           ...shortcutContext,
@@ -397,6 +399,7 @@ describe("ItemContextMenu", () => {
         anchorY={0}
         surface="favorite"
         favoriteToggleLabel="Remove from Favorites"
+        hiddenActionIds={["emptyTrash"]}
         submenuItems={submenuItems}
         shortcutContext={{
           ...shortcutContext,
@@ -428,6 +431,29 @@ describe("ItemContextMenu", () => {
     expect(separatorAfterFavorite?.nextElementSibling).toBe(terminalButton);
   });
 
+  it("offers Empty Trash at the end of the Trash favorite's menu", () => {
+    render(
+      <ItemContextMenu
+        anchorX={0}
+        anchorY={0}
+        surface="favorite"
+        hiddenActionIds={["toggleFavorite"]}
+        submenuItems={submenuItems}
+        shortcutContext={{
+          ...shortcutContext,
+          focusedPane: "tree",
+          selectedTreeTargetKind: "favorite",
+        }}
+        open
+        onAction={() => undefined}
+        onSubmenuAction={() => undefined}
+      />,
+    );
+
+    const buttons = screen.getAllByRole("button");
+    expect(buttons.at(-1)?.textContent).toMatch(/^Empty Trash…/);
+  });
+
   it("hides the favorite toggle item when requested", () => {
     render(
       <ItemContextMenu
@@ -453,7 +479,7 @@ describe("ItemContextMenu", () => {
         anchorY={0}
         surface="favorite"
         favoriteToggleLabel="Remove from Favorites"
-        hiddenActionIds={["toggleFavorite", "rootTreeHere", "paste", "newFolder"]}
+        hiddenActionIds={["toggleFavorite", "rootTreeHere", "paste", "newFolder", "emptyTrash"]}
         submenuItems={submenuItems}
         shortcutContext={{
           ...shortcutContext,

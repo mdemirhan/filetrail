@@ -772,6 +772,9 @@ export function App() {
     startCopyToDestination,
     startDuplicatePaths,
     startDuplicateOfSelection,
+    requestDeleteImmediately,
+    requestEmptyTrash,
+    confirmEmptyTrash,
     startMoveToDestination,
     startPasteFromClipboard,
     startTrashPaths,
@@ -1085,6 +1088,8 @@ export function App() {
       resolveContentActionPaths,
       startDuplicateOfSelection,
       startTrashPaths,
+      requestDeleteImmediately,
+      requestEmptyTrash,
       openMoveDialog,
       openRenameDialog,
       openNewFolderDialog,
@@ -2204,6 +2209,9 @@ export function App() {
           }}
           onConfirmDeleteImmediatelyDialog={(paths) => {
             void startDeleteImmediatelyPaths(paths);
+          }}
+          onConfirmEmptyTrashDialog={() => {
+            void confirmEmptyTrash();
           }}
           onConfirmDotNameDialog={() => {
             void confirmDotNameDialog();

@@ -20,6 +20,8 @@ const WRITE_LOCKED_RENDERER_COMMANDS = new Set<RendererCommandType>([
   "duplicateSelection",
   "newFolder",
   "trashSelection",
+  "deleteImmediately",
+  "emptyTrash",
 ]);
 
 export type RendererCommandAvailabilityContext = {
@@ -160,6 +162,11 @@ export function canRunToolbarRendererCommand(
       );
     case "renameSelection":
       return selectedCount === 1;
+    case "deleteImmediately":
+      // Move to Trash covers search results.
+      return !context.isSearchMode && selectedCount > 0;
+    case "emptyTrash":
+      return true;
     case "newFolder":
       return (
         resolveNewFolderTargetPath({

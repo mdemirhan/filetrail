@@ -122,6 +122,12 @@ export const SHORTCUT_ITEMS: readonly ShortcutItem[] = [
   { group: "files", command: "moveSelection", description: "Move to another folder" },
   { group: "files", command: "newFolder", description: "New folder" },
   { group: "files", command: "trashSelection", description: "Move to Trash" },
+  {
+    group: "files",
+    command: "deleteImmediately",
+    description: "Delete immediately, without the Trash (asks first; not in the folder tree)",
+  },
+  { group: "files", command: "emptyTrash", description: "Empty the Trash (asks first)" },
   { group: "files", command: "selectAll", description: "Select all" },
   { group: "files", command: "copyPath", description: "Copy the path" },
   { group: "files", command: "showClipboard", description: "See what is waiting to be pasted" },
