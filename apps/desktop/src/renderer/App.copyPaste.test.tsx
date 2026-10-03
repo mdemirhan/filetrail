@@ -9482,29 +9482,79 @@ describe("App tabs", () => {
     expect(await screen.findByTitle("/Users/demo/arrived.txt")).toBeInTheDocument();
   });
 
-  it("reads a tab's tree with the hidden-files setting of the moment when the tab comes back", async () => {
+  it("keeps hidden files and Folders First for each tab", async () => {
     const harness = createAppHarness();
     await renderApp(harness);
     await pressKey({ key: "t", metaKey: true });
     await openDirectory("/Users/demo/Folder");
-    const treeRequests = () =>
+    const folderReads = () =>
+      harness.invocations
+        .filter((call) => call.channel === "directory:getSnapshot")
+        .map((call) => call.payload as IpcRequestInput<"directory:getSnapshot">);
+    const treeReads = () =>
       harness.invocations
         .filter((call) => call.channel === "tree:getChildren")
         .map((call) => call.payload as IpcRequestInput<"tree:getChildren">);
 
-    // Hidden files are shown from the second tab; the first tab's tree was read without them.
+    // The second tab shows hidden files; the first tab never did.
     await pressKey({ key: ".", metaKey: true, shiftKey: true });
-    await waitFor(() => expect(treeRequests().some((request) => request.includeHidden)).toBe(true));
-    const requestsBefore = treeRequests().length;
-    await pressKey({ key: "Tab", ctrlKey: true });
-
     await waitFor(() =>
-      expect(treeRequests().slice(requestsBefore)).toContainEqual({
-        path: "/Users/demo",
+      expect(folderReads().at(-1)).toMatchObject({
+        path: "/Users/demo/Folder",
         includeHidden: true,
       }),
     );
+    const foldersBefore = folderReads().length;
+    const treesBefore = treeReads().length;
+    await pressKey({ key: "Tab", ctrlKey: true });
+
+    await waitFor(() =>
+      expect(folderReads().slice(foldersBefore)).toContainEqual(
+        expect.objectContaining({ path: "/Users/demo", includeHidden: false }),
+      ),
+    );
     expect(screen.getByTestId("content-current-path")).toHaveTextContent(/^\/Users\/demo$/);
+    // Its tree was read without hidden files, and is not read again with them.
+    expect(
+      treeReads()
+        .slice(treesBefore)
+        .some((request) => request.includeHidden),
+    ).toBe(false);
+
+    // Back in the second tab, hidden files show again.
+    const foldersAfter = folderReads().length;
+    await pressKey({ key: "Tab", ctrlKey: true });
+    await waitFor(() =>
+      expect(folderReads().slice(foldersAfter)).toContainEqual(
+        expect.objectContaining({ path: "/Users/demo/Folder", includeHidden: true }),
+      ),
+    );
+  });
+
+  it("starts a new tab with the hidden files and Folders First of the tab it came from", async () => {
+    const harness = createAppHarness();
+    await renderApp(harness);
+    await pressKey({ key: ".", metaKey: true, shiftKey: true });
+    await waitFor(() =>
+      expect(
+        harness.invocations.some(
+          (call) =>
+            call.channel === "directory:getSnapshot" &&
+            (call.payload as IpcRequestInput<"directory:getSnapshot">).includeHidden,
+        ),
+      ).toBe(true),
+    );
+
+    await pressKey({ key: "t", metaKey: true });
+    const reads = harness.invocations.length;
+    await openDirectory("/Users/demo/Folder");
+
+    expect(
+      harness.invocations
+        .slice(reads)
+        .filter((call) => call.channel === "directory:getSnapshot")
+        .at(-1)?.payload,
+    ).toMatchObject({ path: "/Users/demo/Folder", includeHidden: true, foldersFirst: true });
   });
 
   it("opens the nearest folder that still exists when a tab's folder is gone", async () => {
@@ -9738,6 +9788,8 @@ describe("App tabs", () => {
     viewMode: "details" as const,
     sortBy: "name" as const,
     sortDirection: "asc" as const,
+    includeHidden: false,
+    foldersFirst: true,
   });
 
   it("reopens the tabs that were open, reading each folder when its tab is shown", async () => {

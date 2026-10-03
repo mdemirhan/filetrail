@@ -813,7 +813,10 @@ export function useExplorerSearchController(args: {
 
   // Puts a tab's search on screen. Resolves to whether the search has to run again: it was
   // cut off before it got going, or hidden files were switched since it ran.
-  function attachSearchSession(session: TabSearchSession): boolean {
+  function attachSearchSession(
+    session: TabSearchSession,
+    tabIncludeHidden: boolean = includeHidden,
+  ): boolean {
     cancelLiveSearch();
     clearSearchPolling();
     const sessionId = searchSessionRef.current + 1;
@@ -874,7 +877,7 @@ export function useExplorerSearchController(args: {
     return (
       hasQuery &&
       session.resultsVisible &&
-      (cutOff || session.interrupted || stoppedShort || session.searchedHidden !== includeHidden)
+      (cutOff || session.interrupted || stoppedShort || session.searchedHidden !== tabIncludeHidden)
     );
   }
 

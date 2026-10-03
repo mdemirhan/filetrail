@@ -262,7 +262,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Each tab",
             description:
-              "Keeps its own folder, history, folder tree, selection, view, sort order and search. A search keeps running while its tab is in the background.",
+              "Keeps its own folder, history, folder tree, selection, view, sort order, hidden files, Folders First and search. A new tab starts with these from the tab it was opened from. A search keeps running while its tab is in the background.",
           },
           {
             label: "Moving between tabs",
@@ -563,7 +563,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
           {
             label: "Hidden files",
             description:
-              "Files whose names start with a dot. {toggleHiddenFiles} shows them; search follows this setting too.",
+              "Files whose names start with a dot. {toggleHiddenFiles} shows them in the tab on screen; search follows this setting too.",
           },
           {
             label: "Dates",

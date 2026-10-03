@@ -588,6 +588,8 @@ export const openTabPreferenceSchema = z.object({
   viewMode: explorerViewModeSchema,
   sortBy: directorySortBySchema,
   sortDirection: sortDirectionSchema,
+  includeHidden: z.boolean(),
+  foldersFirst: z.boolean(),
 });
 
 export const appPreferencesSchema = z.object({

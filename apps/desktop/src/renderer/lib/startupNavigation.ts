@@ -71,6 +71,8 @@ export type StartupTab = {
   viewMode: AppPreferences["viewMode"];
   sortBy: AppPreferences["sortBy"];
   sortDirection: AppPreferences["sortDirection"];
+  includeHidden: boolean;
+  foldersFirst: boolean;
 };
 
 // The tabs the window opens with and the one that is on screen. "Restore open tabs" brings
@@ -90,6 +92,8 @@ export function resolveStartupTabs(
     | "viewMode"
     | "sortBy"
     | "sortDirection"
+    | "includeHidden"
+    | "foldersFirst"
   >,
   homePath: string,
   startupFolderPath: string | null = null,
@@ -98,6 +102,8 @@ export function resolveStartupTabs(
     viewMode: preferences.viewMode,
     sortBy: preferences.sortBy,
     sortDirection: preferences.sortDirection,
+    includeHidden: preferences.includeHidden,
+    foldersFirst: preferences.foldersFirst,
   };
   if (!preferences.restoreOpenTabsOnStartup || preferences.openTabs.length === 0) {
     const { startupPath, startupRootPath, startupFavoritePath } = resolveStartupNavigation(
@@ -123,6 +129,8 @@ export function resolveStartupTabs(
       viewMode: tab.viewMode,
       sortBy: tab.sortBy,
       sortDirection: tab.sortDirection,
+      includeHidden: tab.includeHidden,
+      foldersFirst: tab.foldersFirst,
     };
     if (!preferences.restoreLastVisitedFolderOnStartup || !tab.path) {
       return { path: homePath, rootPath: homePath, favoritePath: null, ...tabView };

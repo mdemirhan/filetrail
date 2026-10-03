@@ -79,6 +79,9 @@ export type OpenTabPreference = {
   viewMode: ExplorerViewMode;
   sortBy: "name" | "modified" | "kind" | "size";
   sortDirection: "asc" | "desc";
+  // Each tab shows hidden files, and folders before files, or not, on its own.
+  includeHidden: boolean;
+  foldersFirst: boolean;
 };
 export const OPEN_TABS_LIMIT = 100;
 

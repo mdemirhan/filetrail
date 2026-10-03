@@ -1374,6 +1374,8 @@ export function App() {
         const startupRootPath = startupTab.rootPath;
         const restoredFavoritePath = startupTab.favoritePath;
         setViewMode(startupTab.viewMode);
+        setIncludeHidden(startupTab.includeHidden);
+        setFoldersFirst(startupTab.foldersFirst);
         setSortBy(startupTab.sortBy);
         setSortDirection(startupTab.sortDirection);
         initializeTree(startupRootPath);
@@ -1388,20 +1390,15 @@ export function App() {
             : "tree",
         );
         if (restoredFavoritePath) {
-          await loadTreeChildren(
-            startupRootPath,
-            preferences.includeHidden,
-            false,
-            startupRootPath,
-          );
+          await loadTreeChildren(startupRootPath, startupTab.includeHidden, false, startupRootPath);
         }
         void navigateTo(
           startupPath,
           "replace",
-          preferences.includeHidden,
+          startupTab.includeHidden,
           startupTab.sortBy,
           startupTab.sortDirection,
-          preferences.foldersFirst,
+          startupTab.foldersFirst,
           restoredFavoritePath
             ? {
                 syncTree: false,
@@ -1419,10 +1416,10 @@ export function App() {
           void navigateTo(
             homeResponse.path,
             "replace",
-            preferences.includeHidden,
+            startupTab.includeHidden,
             startupTab.sortBy,
             startupTab.sortDirection,
-            preferences.foldersFirst,
+            startupTab.foldersFirst,
           ).finally(() => {
             if (!cancelled) {
               setPreferencesReady(true);
