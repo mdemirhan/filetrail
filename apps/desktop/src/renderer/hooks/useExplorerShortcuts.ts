@@ -171,6 +171,7 @@ type UseExplorerShortcutsArgs = {
     shortcuts: ResolvedShortcuts;
     shortcutContext: ShortcutContext;
     copyPasteModalOpen: boolean;
+    preparingSheetOpen: boolean;
     locationDialogOpen: boolean;
     selectedTreeTargetPath: string | null;
     selectedPathsInViewOrder: string[];
@@ -1345,7 +1346,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       }
       // Escape (or Cmd+.) cancels the open dialog even from one of its menus or fields,
       // which would otherwise keep the key to themselves below.
-      if (current.copyPasteModalOpen && isModalCancelKey(event)) {
+      if ((current.copyPasteModalOpen || current.preparingSheetOpen) && isModalCancelKey(event)) {
         event.preventDefault();
         current.handleCopyPasteDialogEscape();
         return;

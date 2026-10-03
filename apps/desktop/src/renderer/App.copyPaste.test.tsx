@@ -11729,3 +11729,45 @@ describe("what finished operations are called", () => {
     expect(dialog).not.toHaveTextContent("Done.");
   });
 });
+
+describe("the Preparing to Paste sheet", () => {
+  async function startPasteThatIsBeingPrepared(harness: ReturnType<typeof createAppHarness>) {
+    await selectItem("/Users/demo/source.txt");
+    await pressKey({ key: "c", metaKey: true });
+    await selectItem("/Users/demo/Folder");
+    await pressKey({ key: "v", metaKey: true });
+    return screen.findByRole("dialog", { name: "Preparing to Paste…" });
+  }
+
+  it("starts with Cancel focused", async () => {
+    const harness = createAppHarness({ deferCopyPastePlan: true });
+    renderApp(harness);
+
+    const sheet = await startPasteThatIsBeingPrepared(harness);
+
+    expect(within(sheet).getByRole("button", { name: "Cancel" })).toHaveFocus();
+    await act(async () => {
+      harness.resolveCopyPastePlan();
+    });
+  });
+
+  // Escape is the sheet's Cancel: the paste stops, and nothing behind it hears the key.
+  it("cancels the paste on Escape, and the list behind doesn't take the key", async () => {
+    const harness = createAppHarness({ deferCopyPastePlan: true });
+    renderApp(harness);
+    await startPasteThatIsBeingPrepared(harness);
+
+    await act(async () => {
+      fireEvent.keyDown(document.body, { key: "Escape" });
+    });
+    await act(async () => {
+      harness.resolveCopyPastePlan();
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Preparing to Paste…" })).not.toBeInTheDocument();
+    });
+    expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
+    expect(screen.getByTitle("/Users/demo/Folder")).toHaveAttribute("data-selected", "true");
+  });
+});

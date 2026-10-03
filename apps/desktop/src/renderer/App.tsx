@@ -1037,6 +1037,9 @@ export function App() {
       shortcuts,
       shortcutContext,
       copyPasteModalOpen,
+      // "Preparing to Paste…" leaves the window working (Copy, Cut, menus), but Escape is
+      // its Cancel, never a key for the list behind it.
+      preparingSheetOpen: copyPasteDialogState?.type === "analysis",
       locationDialogOpen,
       selectedTreeTargetPath,
       selectedPathsInViewOrder,

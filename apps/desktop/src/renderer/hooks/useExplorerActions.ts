@@ -2125,6 +2125,12 @@ export function useExplorerActions(args: {
       dismissCopyPasteDialog();
       return;
     }
+    // Escape on "Preparing to Paste…" does what its Cancel does: the analysis stops, so
+    // the paste can't start once the sheet is gone.
+    if (copyPasteDialogState?.type === "analysis") {
+      void cancelWriteOperation();
+      return;
+    }
     if (copyPasteDialogState) {
       setCopyPasteDialogState(null);
     }
