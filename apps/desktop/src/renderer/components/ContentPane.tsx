@@ -35,7 +35,7 @@ import {
   FLOW_LIST_LAYOUT,
   getFlowListRevealScrollLeft,
 } from "../lib/flowListLayout";
-import { isKeyboardOwnedFormControl } from "../lib/focusedEditTarget";
+import { focusGivesPaneTheKeyboard, isKeyboardOwnedFormControl } from "../lib/focusedEditTarget";
 import { formatSize, splitDisplayName, splitPermissionMode } from "../lib/formatting";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
 import { buildColumnMajorRows, computeRowsPerColumn, getVirtualRange } from "../lib/virtualization";
@@ -366,7 +366,7 @@ export function ContentPane({
         }
         (paneRef?.current ?? event.currentTarget).focus({ preventScroll: true });
       }}
-      onFocusCapture={() => onFocusChange(true)}
+      onFocusCapture={(event) => onFocusChange(focusGivesPaneTheKeyboard(event.target))}
       onBlurCapture={(event) => {
         const nextTarget = event.relatedTarget;
         if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) {

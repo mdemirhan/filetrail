@@ -2,7 +2,11 @@
 
 import { describe, expect, it } from "vitest";
 
-import { isKeyboardOwnedFormControl, resolveFocusedEditTarget } from "./focusedEditTarget";
+import {
+  focusGivesPaneTheKeyboard,
+  isKeyboardOwnedFormControl,
+  resolveFocusedEditTarget,
+} from "./focusedEditTarget";
 
 describe("focusedEditTarget", () => {
   it("detects editable text inputs", () => {
@@ -90,5 +94,27 @@ describe("focusedEditTarget", () => {
     wrapper.append(child);
 
     expect(resolveFocusedEditTarget(child)).toBe("readonly-text");
+  });
+});
+
+describe("focusGivesPaneTheKeyboard", () => {
+  it("gives a pane the keyboard for its list, but not for a text field inside it", () => {
+    const list = document.createElement("div");
+    const pathField = document.createElement("input");
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+
+    expect(focusGivesPaneTheKeyboard(list)).toBe(true);
+    expect(focusGivesPaneTheKeyboard(checkbox)).toBe(true);
+    expect(focusGivesPaneTheKeyboard(pathField)).toBe(false);
+    expect(focusGivesPaneTheKeyboard(null)).toBe(true);
+  });
+
+  // The rename field stands in for the item it renames and keeps its own keys.
+  it("keeps the pane's keyboard for the inline rename field", () => {
+    const renameField = document.createElement("input");
+    renameField.className = "inline-rename-input";
+
+    expect(focusGivesPaneTheKeyboard(renameField)).toBe(true);
   });
 });

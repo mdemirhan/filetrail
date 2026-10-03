@@ -19,7 +19,7 @@ import {
 import { isSelectionNarrowingClick } from "../lib/contentSelection";
 import type { DirectoryEntryMetadata } from "../lib/explorerTypes";
 import { FileIcon } from "../lib/fileIcons";
-import { isKeyboardOwnedFormControl } from "../lib/focusedEditTarget";
+import { focusGivesPaneTheKeyboard, isKeyboardOwnedFormControl } from "../lib/focusedEditTarget";
 import { formatSize, splitDisplayName } from "../lib/formatting";
 import { resolveSearchResultsColumnLayout } from "../lib/responsiveLayout";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
@@ -234,7 +234,7 @@ export function SearchResultsPane({
       data-columns={columnLayout}
       data-searching={isSearching ? "true" : "false"}
       tabIndex={-1}
-      onFocusCapture={() => onFocusChange(true)}
+      onFocusCapture={(event) => onFocusChange(focusGivesPaneTheKeyboard(event.target))}
       onBlurCapture={(event) => {
         const nextTarget = event.relatedTarget;
         if (!(nextTarget instanceof Node) || !event.currentTarget.contains(nextTarget)) {

@@ -19,6 +19,21 @@ const NON_TEXT_INPUT_TYPES = new Set([
   "week",
 ]);
 
+// Whether focus landing on `target` gives a pane the keyboard. A text field inside the
+// pane (the path bar's field, the search results' filter) takes it away instead, as the
+// search field does: commands for the selected items (⌘D, ⌘⌫, ⇧⌘N, ⌘O…) must not act on
+// files while someone is typing. The inline rename field is the exception: it stands in
+// for the item it renames, and keeps its own keys.
+export function focusGivesPaneTheKeyboard(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) {
+    return true;
+  }
+  if (target.closest(".inline-rename-input")) {
+    return true;
+  }
+  return resolveFocusedEditTarget(target) !== "editable-text";
+}
+
 export function resolveFocusedEditTarget(element: Element | null): FocusedEditTarget {
   if (!element) {
     return "non-text";
