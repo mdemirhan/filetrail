@@ -267,4 +267,29 @@ describe("CopyPasteResultDialog", () => {
     expect(opener).toHaveFocus();
     opener.remove();
   });
+
+  // Stopped part way through a folder: some of it is at the destination already, so the
+  // folder isn't one that "wasn't started".
+  it("tells a folder stopped part way from one that wasn't started", () => {
+    render(
+      <CopyPasteResultDialog
+        event={event("paste", [
+          item("/src/photos", "cancelled", "Operation cancelled."),
+          item("/src/photos/1.jpg", "completed"),
+          item("/src/photos/2.jpg", "cancelled", "Operation cancelled."),
+          item("/src/notes.txt", "cancelled", "Not started because the operation was stopped."),
+        ])}
+        canRetry
+        onRetry={() => undefined}
+        onClose={() => undefined}
+      />,
+    );
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent(
+      "“photos” was stopped part way: some of what is inside was copied into “dest”, the rest wasn't.",
+    );
+    expect(within(dialog).getByText("Stopped part way")).toBeInTheDocument();
+    expect(dialog).toHaveTextContent("2 items weren't started because the operation was stopped.");
+  });
 });
