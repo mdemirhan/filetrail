@@ -4,7 +4,10 @@
 import { mkdir, rename } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
-import { buildCopyPasteAnalysisReport } from "./copyPasteAnalysis";
+import {
+  buildCopyPasteAnalysisReport,
+  normalizeCopyPasteAnalysisRequest,
+} from "./copyPasteAnalysis";
 import { executeCopyPasteFromAnalysis } from "./copyPasteExecution";
 import { resolveAnalysisWithPolicy } from "./copyPastePolicy";
 import { createStoppableCopyFile } from "./stoppableCopy";
@@ -34,7 +37,6 @@ export const nativeFileSystem: WriteServiceFileSystem = {
   getFlags: native.nativeGetFlags,
   setFlags: native.nativeSetFlags,
   copyFile: async (sourcePath, destinationPath, signal) => {
-    await mkdir(dirname(destinationPath), { recursive: true });
     await nativeCopy(sourcePath, destinationPath, signal);
   },
   ...(native.nativeCopyMetadata ? { copyMetadata: native.nativeCopyMetadata } : {}),
@@ -89,11 +91,12 @@ export async function runPaste(args: {
   const policy = args.policy ?? KEEP_EXISTING;
   const report = await buildCopyPasteAnalysisReport({
     analysisId: "analysis-test",
-    request: {
+    // As the write service asks for it.
+    request: normalizeCopyPasteAnalysisRequest({
       mode: args.mode,
       sourcePaths: args.sourcePaths,
       destinationDirectoryPath: args.destinationDirectoryPath,
-    },
+    }),
     fileSystem,
     thresholds: { largeBatchItemThreshold: 100_000, largeBatchByteThreshold: 1e12 },
   });

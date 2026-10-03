@@ -719,11 +719,12 @@ async function writeLeaf(
 ): Promise<void> {
   if (node.node.sourceKind === "symlink") {
     const linkTarget = await context.fileSystem.readlink(node.node.sourcePath);
-    await context.fileSystem.mkdir(dirname(targetPath), { recursive: true });
     try {
       await context.fileSystem.symlink(linkTarget, targetPath);
     } catch (error) {
-      throw errorCode(error) === "EEXIST" ? new DestinationTakenError(error) : error;
+      throw errorCode(error) === "EEXIST"
+        ? new DestinationTakenError(error)
+        : await explainMissingFolder(context.fileSystem, targetPath, error);
     }
     await preserveSymlinkTimestampsIfSupported(
       context.fileSystem,
@@ -737,12 +738,17 @@ async function writeLeaf(
     await restoreDroppedFileMetadata(context.fileSystem, targetPath, node.node.sourceFingerprint);
     return;
   }
-  await preserveModeIfSupported(context.fileSystem, targetPath, node.node.sourceFingerprint.mode);
+  // A copy that worked isn't reported as failed over its mode or dates.
+  await preserveModeIfSupported(
+    context.fileSystem,
+    targetPath,
+    node.node.sourceFingerprint.mode,
+  ).catch(() => undefined);
   await preserveTimestampsIfSupported(
     context.fileSystem,
     targetPath,
     node.node.sourceFingerprint.mtimeMs,
-  );
+  ).catch(() => undefined);
 }
 
 // Native copyFile (copyfile(3) COPYFILE_ALL) carries the mode, flags and dates, but some
@@ -774,13 +780,14 @@ async function executeDirectoryNode(
     currentNode.action === "keep_both" ||
     currentNode.action === "overwrite";
   if (createsDirectory) {
-    await context.fileSystem.mkdir(dirname(currentNode.destinationPath), { recursive: true });
     try {
       // Not recursive: a folder that appeared in the meantime must not be merged into
-      // without asking.
+      // without asking, and one that was deleted (the folder pasted into) isn't made again.
       await context.fileSystem.mkdir(currentNode.destinationPath);
     } catch (error) {
-      throw errorCode(error) === "EEXIST" ? new DestinationTakenError(error) : error;
+      throw errorCode(error) === "EEXIST"
+        ? new DestinationTakenError(error)
+        : await explainMissingFolder(context.fileSystem, currentNode.destinationPath, error);
     }
     // The folder's own mode and flags come last (see below): a read-only or locked folder
     // couldn't be filled in otherwise.
@@ -827,9 +834,11 @@ async function executeDirectoryNode(
     bubbledChildItems.push(...childResult.childItems);
   }
   // The folder's metadata goes on once its items are in: writing them changes its dates,
-  // and a read-only or locked folder can't take new items.
+  // and a read-only or locked folder can't take new items. As for a file, a folder whose
+  // items were written isn't reported as failed over its dates or permissions (some
+  // network volumes refuse them), and what was done inside it is never dropped.
   if (createsDirectory) {
-    await applyDirectoryMetadata(context, currentNode);
+    await applyDirectoryMetadata(context, currentNode).catch(() => undefined);
   }
   let dirDeleteError: string | null = null;
   if (context.mode === "cut") {
@@ -1313,7 +1322,6 @@ async function copyFileContents(
   const before = await captureFingerprint(context.fileSystem, targetPath);
   try {
     if (context.fileSystem.copyFile) {
-      await context.fileSystem.mkdir(dirname(targetPath), { recursive: true });
       await context.fileSystem.copyFile(sourcePath, targetPath, context.signal);
     } else {
       await context.fileSystem.copyFileStream(sourcePath, targetPath, context.signal);
@@ -1321,6 +1329,9 @@ async function copyFileContents(
   } catch (error) {
     if (errorCode(error) === "EEXIST") {
       throw new DestinationTakenError(error);
+    }
+    if (errorCode(error) === "ENOENT") {
+      throw await explainMissingFolder(context.fileSystem, targetPath, error);
     }
     // Leave no half-written file behind, but only one this copy created: an item that
     // was already there, or something other than a file, belongs to someone else.
@@ -1341,7 +1352,6 @@ async function tryRenameForCut(
   currentNode: ResolvedCopyPasteNode,
 ): Promise<ExecuteNodeResult | null> {
   try {
-    await context.fileSystem.mkdir(dirname(currentNode.destinationPath), { recursive: true });
     // Exclusive: an item that appeared at the destination is asked about, never replaced.
     await moveExclusive(
       context.fileSystem,
@@ -1353,7 +1363,9 @@ async function tryRenameForCut(
     if (code === "EXDEV") {
       return null; // Fall through to copy+delete path
     }
-    throw code === "EEXIST" ? new DestinationTakenError(error) : error;
+    throw code === "EEXIST"
+      ? new DestinationTakenError(error)
+      : await explainMissingFolder(context.fileSystem, currentNode.destinationPath, error);
   }
   // Rename succeeded — count all items in the subtree as completed
   context.progress.completedItemCount += countExecutableSteps([currentNode]);
@@ -1366,6 +1378,23 @@ async function tryRenameForCut(
     destinationPath: currentNode.destinationPath,
     childItems: [],
   };
+}
+
+// ENOENT while writing an item can mean the item being pasted is gone, or the folder it
+// was going into is (deleted while the paste ran; it is never made again). The second is
+// said as such, naming the folder.
+async function explainMissingFolder(
+  fileSystem: WriteServiceFileSystem,
+  targetPath: string,
+  error: unknown,
+): Promise<unknown> {
+  if (errorCode(error) !== "ENOENT") {
+    return error;
+  }
+  const folder = await captureFingerprint(fileSystem, dirname(targetPath));
+  return folder.exists
+    ? error
+    : new Error(`The folder “${basename(dirname(targetPath))}” no longer exists.`);
 }
 
 // rename(2) that never replaces anything at `to`: fails with EEXIST instead.
@@ -1752,6 +1781,10 @@ function createOperationResult(args: {
   const failedItemCount = args.items.filter((item) => item.status === "failed").length;
   const skippedItemCount = args.items.filter((item) => item.status === "skipped").length;
   const cancelledItemCount = args.items.filter((item) => item.status === "cancelled").length;
+  // The items picked, not what is inside the folders among them ("Photos", not "Photos and
+  // 3 more" for one folder holding three files).
+  const pickedPaths = new Set(args.report.nodes.map((node) => node.sourcePath));
+  const topLevelItemCount = args.items.filter((item) => pickedPaths.has(item.sourcePath)).length;
   return {
     operationId: args.operationId,
     mode: args.mode,
@@ -1760,7 +1793,7 @@ function createOperationResult(args: {
     startedAt: args.startedAt,
     finishedAt: args.finishedAt,
     summary: {
-      topLevelItemCount: args.items.length,
+      topLevelItemCount,
       totalItemCount: completedItemCount + failedItemCount + skippedItemCount + cancelledItemCount,
       completedItemCount,
       failedItemCount,

@@ -37,9 +37,30 @@ export function normalizeCopyPasteAnalysisRequest(
 ): RequiredCopyPasteAnalysisRequest {
   return {
     mode: request.mode,
-    sourcePaths: Array.from(new Set(request.sourcePaths.map((path) => resolve(path)))),
+    sourcePaths: withoutNestedPaths(
+      Array.from(new Set(request.sourcePaths.map((path) => resolve(path)))),
+    ),
     destinationDirectoryPath: resolve(request.destinationDirectoryPath),
   };
+}
+
+// A folder and an item inside it picked together (Select All in search results, say): the
+// item goes with its folder. Pasted on its own as well, it would be copied twice, or moved
+// out of the folder before (or after) the folder itself.
+function withoutNestedPaths(paths: string[]): string[] {
+  const picked = new Set(paths);
+  return paths.filter((path) => {
+    let child = path;
+    let parent = dirname(child);
+    while (parent !== child) {
+      if (picked.has(parent)) {
+        return false;
+      }
+      child = parent;
+      parent = dirname(child);
+    }
+    return true;
+  });
 }
 
 export async function buildCopyPasteAnalysisReport(args: {
@@ -164,9 +185,11 @@ export async function buildCopyPasteAnalysisReport(args: {
       try {
         const sourceRealPath = await fileSystem.realpath(sourcePath);
         const destinationRealPath = await fileSystem.realpath(request.destinationDirectoryPath);
+        // "/" holds everything: its own path already ends with the separator.
+        const sourcePrefix = sourceRealPath.endsWith("/") ? sourceRealPath : `${sourceRealPath}/`;
         if (
           destinationRealPath === sourceRealPath ||
-          destinationRealPath.startsWith(`${sourceRealPath}/`)
+          destinationRealPath.startsWith(sourcePrefix)
         ) {
           issues.push({
             code: "parent_into_child",

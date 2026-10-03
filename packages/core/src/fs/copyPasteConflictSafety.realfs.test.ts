@@ -18,6 +18,7 @@ import { buildCopyPasteAnalysisReport } from "./copyPasteAnalysis";
 import { NO_TRASH_ERROR_CODE } from "./copyPasteErrors";
 import { executeCopyPasteFromAnalysis } from "./copyPasteExecution";
 import { resolveAnalysisWithPolicy } from "./copyPastePolicy";
+import { native } from "./testNativePaste";
 import {
   type CopyPastePolicy,
   type CopyPasteProgressEvent,
@@ -754,11 +755,11 @@ describe("copy/paste conflict safety (real filesystem)", () => {
       fileSystem: {
         ...fileSystemWithTrash,
         // Someone saves "x.txt" right before the move.
-        mkdir: async (path, options) => {
-          await DEFAULT_WRITE_SERVICE_FILE_SYSTEM.mkdir(path, options);
-          if (path === target && !(await exists(join(target, "x.txt")))) {
-            await writeFile(join(target, "x.txt"), "someone else's");
+        renameExclusive: async (from, to) => {
+          if (to === join(target, "x.txt") && !(await exists(to))) {
+            await writeFile(to, "someone else's");
           }
+          await native.nativeRenameExclusive(from, to);
         },
       },
       resolve: () => "skip",

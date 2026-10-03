@@ -1284,12 +1284,12 @@ describe("copyPasteExecution", () => {
       emit: (event) => chmodFailureEvents.push(event),
       requestResolution: async () => null,
     });
+    // The file was copied; a volume that refuses its mode doesn't make the copy a failure.
     expect(chmodFailureEvents.at(-1)).toMatchObject({
-      status: "failed",
-      result: {
-        error: "You don't have permission to access this item.",
-      },
+      status: "completed",
+      result: { error: null },
     });
+    expect(chmodFailureFileSystem.exists("/target/file.txt")).toBe(true);
   });
 
   it("removes source directories after successful cut copies and supports filesystems without chmod", async () => {
@@ -3737,7 +3737,7 @@ describe("copyPasteExecution", () => {
       expect(expectNode(fileSystem, "/target/link").kind).toBe("symlink");
     });
 
-    it("utimes other errors propagate", async () => {
+    it("doesn't fail a folder whose date can't be set", async () => {
       const fileSystem = new MockWriteServiceFileSystem({
         "/source": { kind: "directory" },
         "/source/dir": { kind: "directory", mtimeMs: 5555 },
@@ -3768,9 +3768,12 @@ describe("copyPasteExecution", () => {
         requestResolution: async () => null,
       });
 
+      // The folder and its items were written; only the folder's date couldn't be set,
+      // which, as for a file, isn't a failure (some network volumes refuse it).
       const finalEvent = expectLastEvent(events);
-      expect(finalEvent.result?.status).toBe("failed");
-      expect(finalEvent.result?.error).toBe("You don't have permission to access this item.");
+      expect(finalEvent.result?.status).toBe("completed");
+      expect(finalEvent.result?.error).toBeNull();
+      expect(fileSystem.exists("/target/dir/a.txt")).toBe(true);
     });
 
     it("copyFile + cut: inline source deletion still works", async () => {

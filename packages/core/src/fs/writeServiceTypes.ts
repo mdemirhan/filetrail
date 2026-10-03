@@ -471,7 +471,6 @@ export const DEFAULT_WRITE_SERVICE_FILE_SYSTEM: WriteServiceFileSystem = {
     await symlink(target, path);
   },
   copyFileStream: async (sourcePath, destinationPath, signal) => {
-    await mkdir(dirname(destinationPath), { recursive: true });
     // "wx": never truncate an item that appeared at the destination in the meantime.
     await pipeline(
       createReadStream(sourcePath),

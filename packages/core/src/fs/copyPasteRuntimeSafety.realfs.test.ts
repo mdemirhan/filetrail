@@ -471,3 +471,86 @@ describe("items added to a folder after the review", () => {
     expect(result?.status).toBe("completed");
   });
 });
+
+describe("what is picked to paste", () => {
+  // "/" holds everything, so wherever it is pasted is inside it.
+  it("refuses to paste the startup disk into one of its own folders", async () => {
+    const { report, result } = await runPaste({
+      mode: "copy",
+      sourcePaths: ["/"],
+      destinationDirectoryPath: dst,
+    });
+
+    expect(report.issues).toEqual([expect.objectContaining({ code: "parent_into_child" })]);
+    expect(result).toBeNull();
+  });
+
+  // Select All in search results picks a folder and items inside it.
+  it("copies an item picked with its folder once, inside the folder", async () => {
+    await mkdir(join(src, "A"));
+    await writeFile(join(src, "A", "b.txt"), "b");
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "A", "b.txt"), join(src, "A")],
+      destinationDirectoryPath: dst,
+    });
+
+    expect(result?.status).toBe("completed");
+    expect(await readdir(dst)).toEqual(["A"]);
+    expect(await readdir(join(dst, "A"))).toEqual(["b.txt"]);
+  });
+
+  it("moves an item picked with its folder along with the folder, without asking", async () => {
+    await mkdir(join(src, "A"));
+    await writeFile(join(src, "A", "b.txt"), "b");
+
+    const { conflicts, result } = await runPaste({
+      mode: "cut",
+      sourcePaths: [join(src, "A"), join(src, "A", "b.txt")],
+      destinationDirectoryPath: dst,
+    });
+
+    expect(conflicts).toEqual([]);
+    expect(result?.status).toBe("completed");
+    expect(await readdir(join(dst, "A"))).toEqual(["b.txt"]);
+    expect(await readdir(src)).toEqual([]);
+  });
+
+  it("counts a folder as one item picked, not the items inside it", async () => {
+    await mkdir(join(src, "Photos"));
+    for (const name of ["1.jpg", "2.jpg", "3.jpg"]) {
+      await writeFile(join(src, "Photos", name), name);
+    }
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "Photos")],
+      destinationDirectoryPath: dst,
+    });
+
+    expect(result?.summary.topLevelItemCount).toBe(1);
+  });
+});
+
+describe("the folder pasted into goes away during the paste", () => {
+  it("doesn't make it again, and says it is gone", async () => {
+    await writeFile(join(src, "a.txt"), "a");
+    await mkdir(join(src, "F"));
+    await writeFile(join(src, "F", "b.txt"), "b");
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "a.txt"), join(src, "F")],
+      destinationDirectoryPath: dst,
+      beforeExecute: () => rm(dst, { recursive: true }),
+    });
+
+    expect(result?.status).toBe("failed");
+    expect(result?.items.map((item) => item.error)).toEqual([
+      "The folder “dst” no longer exists.",
+      "The folder “dst” no longer exists.",
+    ]);
+    expect(await readdir(testDir)).not.toContain("dst");
+  });
+});

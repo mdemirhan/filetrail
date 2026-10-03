@@ -113,7 +113,6 @@ export const originalFileSystem: WriteServiceFileSystem = {
     await symlink(target, path);
   },
   copyFile: async (sourcePath, destinationPath, signal) => {
-    await mkdir(dirname(destinationPath), { recursive: true });
     await copyFileStoppable(sourcePath, destinationPath, signal);
   },
   getFlags: (path) => nativeGetFlags(path),
@@ -121,7 +120,6 @@ export const originalFileSystem: WriteServiceFileSystem = {
   // A binary built before it existed leaves folders with their mode and dates only.
   ...(nativeCopyMetadata ? { copyMetadata: nativeCopyMetadata } : {}),
   copyFileStream: async (sourcePath, destinationPath, signal) => {
-    await mkdir(dirname(destinationPath), { recursive: true });
     // "wx": never truncate an item that appeared at the destination in the meantime.
     await pipeline(
       createReadStream(sourcePath),
