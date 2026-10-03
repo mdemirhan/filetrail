@@ -138,9 +138,12 @@ describe("createApplicationMenuTemplate", () => {
       "Zoom Out",
       "Actual Size",
       "-",
-      "Enter Full Screen",
-      "Exit Full Screen",
+      "(togglefullscreen)",
     ]);
+    // macOS shows its own full screen item; this one only keeps ⌃⌘F.
+    expect(
+      submenuOf(template, "View").find((item) => item.role === "togglefullscreen"),
+    ).toMatchObject({ visible: false, acceleratorWorksWhenHidden: true });
     expect(labels(submenuOf(template, "Go"))).toEqual([
       "Back",
       "Forward",
@@ -395,7 +398,7 @@ describe("createApplicationMenuTemplate", () => {
 });
 
 describe("resolveApplicationMenuItemStates", () => {
-  const explorerWindow = { explorerFocused: true, fullScreen: false };
+  const explorerWindow = { explorerFocused: true };
   const stateOf = (id: string, state: ApplicationMenuState, window = explorerWindow) => {
     const item = resolveApplicationMenuItemStates(state, window).find(
       (candidate) => candidate.id === id,
@@ -485,21 +488,8 @@ describe("resolveApplicationMenuItemStates", () => {
     expect(stateOf("toggleFolderTree:show", hidden).visible).toBe(true);
   });
 
-  it("names the full screen item for what choosing it does", () => {
-    const fullScreen = { explorerFocused: true, fullScreen: true };
-
-    expect(stateOf("fullScreen:enter", INITIAL_APPLICATION_MENU_STATE).visible).toBe(true);
-    expect(stateOf("fullScreen:exit", INITIAL_APPLICATION_MENU_STATE).visible).toBe(false);
-    expect(stateOf("fullScreen:enter", INITIAL_APPLICATION_MENU_STATE, fullScreen).visible).toBe(
-      false,
-    );
-    expect(stateOf("fullScreen:exit", INITIAL_APPLICATION_MENU_STATE, fullScreen).visible).toBe(
-      true,
-    );
-  });
-
   it("keeps only the edit commands and ⌘W while another window has the keyboard", () => {
-    const settingsFocused = { explorerFocused: false, fullScreen: false };
+    const settingsFocused = { explorerFocused: false };
     const enabled = RENDERER_COMMAND_TYPES.filter(
       (type) =>
         type !== "toggleFavorite" &&

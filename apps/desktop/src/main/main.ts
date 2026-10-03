@@ -300,8 +300,6 @@ function createWindow(): BrowserWindow {
   keepWindowZoom(mainWindow, appStateStore);
   // Before the page loads, so the menu bar never shows anything but the app's own menu.
   applyApplicationMenu(mainWindow);
-  mainWindow.on("enter-full-screen", () => syncApplicationMenuItems(mainWindow));
-  mainWindow.on("leave-full-screen", () => syncApplicationMenuItems(mainWindow));
 
   const persistWindowState = () => {
     if (mainWindow.isDestroyed()) {
@@ -741,7 +739,6 @@ function syncApplicationMenuItems(mainWindow: BrowserWindow | null = mainWindowR
     resolveApplicationMenuItemStates(applicationMenuState, {
       // With no window focused (the app is in the background) the explorer's state stays.
       explorerFocused: focusedWindow === null || focusedWindow === mainWindow,
-      fullScreen: mainWindow.isFullScreen(),
     }),
   );
 }

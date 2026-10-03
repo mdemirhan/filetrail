@@ -40,8 +40,6 @@ const FAVORITE_REMOVE_ITEM_ID = "toggleFavorite:remove";
 // Hide Folder Tree and Show Folder Tree too.
 const FOLDER_TREE_HIDE_ITEM_ID = "toggleFolderTree:hide";
 const FOLDER_TREE_SHOW_ITEM_ID = "toggleFolderTree:show";
-const ENTER_FULL_SCREEN_ITEM_ID = "fullScreen:enter";
-const EXIT_FULL_SCREEN_ITEM_ID = "fullScreen:exit";
 
 // The native menu emits high-level renderer commands; the renderer owns the actual UI
 // transitions so shortcuts, toolbar buttons, and menu items stay behaviorally aligned.
@@ -237,15 +235,9 @@ export function createApplicationMenuTemplate(
         command("zoomOut", "Zoom Out"),
         command("resetZoom", "Actual Size"),
         separator,
-        // Electron keeps macOS from adding its own full screen item, so the menu has one.
-        // The label can not change once the menu is built: two items, one shown at a time.
-        { id: ENTER_FULL_SCREEN_ITEM_ID, role: "togglefullscreen", label: "Enter Full Screen" },
-        {
-          id: EXIT_FULL_SCREEN_ITEM_ID,
-          role: "togglefullscreen",
-          label: "Exit Full Screen",
-          visible: false,
-        },
+        // macOS adds its own Enter Full Screen item here (🌐F), which names what it does.
+        // This hidden one keeps ⌃⌘F, which a hidden item's key still runs on macOS.
+        { role: "togglefullscreen", visible: false, acceleratorWorksWhenHidden: true },
         ...(options.includeDeveloperTools
           ? ([separator, { role: "toggleDevTools" }] satisfies MenuItemConstructorOptions[])
           : []),
@@ -302,7 +294,6 @@ export function resolveApplicationMenuItemStates(
   window: {
     // Whether the explorer window is the one the menu acts on (false while Settings is).
     explorerFocused: boolean;
-    fullScreen: boolean;
   },
 ): ApplicationMenuItemState[] {
   const disabled = new Set<RendererCommandType>(state.disabledCommands);
@@ -350,8 +341,6 @@ export function resolveApplicationMenuItemStates(
       enabled: isEnabled("toggleFolderTree"),
       visible: !state.folderTreeOpen,
     },
-    { id: ENTER_FULL_SCREEN_ITEM_ID, visible: !window.fullScreen },
-    { id: EXIT_FULL_SCREEN_ITEM_ID, visible: window.fullScreen },
   );
   return items;
 }
