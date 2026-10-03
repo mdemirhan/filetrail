@@ -62,6 +62,7 @@ import {
 import {
   collectRetrySourcePaths,
   createOpenItemLimitMessage,
+  describeDragRefusedWhileBusy,
   describeEmptyTrashFailure,
   formatMissingClipboardItemsMessage,
   formatPathForShell,
@@ -1120,6 +1121,19 @@ export function useExplorerActions(args: {
     }
     writeOperationLockedRef.current = nextState !== null;
     setWriteOperationCardState(nextState);
+  }
+
+  // A drag doesn't start while an operation runs; the notification says why, so the rows
+  // don't just seem not to move.
+  function noticeDragRefusedWhileBusy() {
+    const card = writeOperationCardStateRef.current;
+    if (!card) {
+      return;
+    }
+    pushToast({
+      kind: "info",
+      title: describeDragRefusedWhileBusy(card.action, card.currentSourcePath),
+    });
   }
 
   function pushToast(input: {
@@ -3544,6 +3558,7 @@ export function useExplorerActions(args: {
     dismissActionNotice,
     dismissCopyPasteDialog,
     dismissToast,
+    noticeDragRefusedWhileBusy,
     editPaths,
     executeCopyLikePlan,
     requestCopyLikePlanStart,

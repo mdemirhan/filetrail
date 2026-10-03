@@ -737,6 +737,7 @@ export function App() {
     dismissActionNotice,
     dismissCopyPasteDialog,
     dismissToast,
+    noticeDragRefusedWhileBusy,
     editPaths,
     extendContentSelectionToPath,
     handleContentSelectionGesture,
@@ -913,6 +914,11 @@ export function App() {
     onToggleTreeNode: toggleTreeNode,
     onActivateTab: activateTab,
     getDiskIds: async (paths) => (await client.invoke("system:getDiskIds", { paths })).ids,
+    onDragRefused: () => {
+      if (isWriteOperationLocked) {
+        noticeDragRefusedWhileBusy();
+      }
+    },
   });
   const trashPath = homePath ? getTrashPath(homePath) : null;
   const shortcutContext = useMemo(

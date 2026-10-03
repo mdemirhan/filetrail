@@ -1,4 +1,4 @@
-import type { WriteOperationProgressEvent } from "@filetrail/contracts";
+import type { WriteOperationAction, WriteOperationProgressEvent } from "@filetrail/contracts";
 
 import type { ContextMenuState } from "../hooks/useWriteOperations";
 import { parentDirectoryPath } from "./explorerNavigation";
@@ -224,6 +224,29 @@ export function resolveNewFolderTargetPath(args: {
 // The name New Folder suggests: "New Folder", else the first free "New Folder 2", "New
 // Folder 3"… The disk (APFS by default) treats names that differ only in case as the same,
 // so the names are compared that way.
+// Why a drag doesn't start while an operation runs, said in one line: one operation runs at
+// a time, and a drag would start another.
+export function describeDragRefusedWhileBusy(
+  action: WriteOperationAction,
+  currentSourcePath: string | null,
+): string {
+  const subject = currentSourcePath ? `“${getPathLeafName(currentSourcePath)}” is` : "items are";
+  switch (action) {
+    case "move_to":
+      return `Can't drag while ${subject} being moved`;
+    case "trash":
+      return `Can't drag while ${subject} being moved to the Trash`;
+    case "delete_immediately":
+      return `Can't drag while ${subject} being deleted`;
+    case "rename":
+      return `Can't drag while ${subject} being renamed`;
+    case "new_folder":
+      return "Can't drag while a folder is being made";
+    default:
+      return `Can't drag while ${subject} being copied`;
+  }
+}
+
 export function resolveFreeNewFolderName(existingNames: Iterable<string>): string {
   const takenNames = new Set(Array.from(existingNames, (name) => name.toLocaleLowerCase()));
   const baseName = "New Folder";

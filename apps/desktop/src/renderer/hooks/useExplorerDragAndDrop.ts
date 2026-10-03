@@ -80,6 +80,8 @@ export function useExplorerDragAndDrop(args: {
   onActivateTab: (tabId: string) => void;
   /** Which disk each path is on (`system:getDiskIds`), to tell a move from a copy. */
   getDiskIds?: (paths: string[]) => Promise<Array<number | null>>;
+  /** A drag that couldn't start because something else holds the window. */
+  onDragRefused?: () => void;
 }) {
   const {
     activeEntries,
@@ -90,6 +92,7 @@ export function useExplorerDragAndDrop(args: {
     onToggleTreeNode,
     onActivateTab,
     getDiskIds,
+    onDragRefused,
   } = args;
   // Which disk each folder of this drag is on, as far as the disks have answered.
   const diskIdsRef = useRef(new Map<string, number | null>());
@@ -246,6 +249,9 @@ export function useExplorerDragAndDrop(args: {
     if (blocked || !session) {
       event.preventDefault();
       clearDragSession();
+      if (blocked && session) {
+        onDragRefused?.();
+      }
       return;
     }
     dragSessionRef.current = session;

@@ -11840,3 +11840,28 @@ describe("the Preparing to Paste sheet", () => {
     expect(screen.getByTitle("/Users/demo/Folder")).toHaveAttribute("data-selected", "true");
   });
 });
+
+describe("dragging while an operation runs", () => {
+  // One operation runs at a time, and a drag would start another: it doesn't start, and
+  // a notification says why, so the rows don't just seem stuck.
+  it("doesn't start the drag, and says why", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+    await selectItem("/Users/demo/source.txt");
+    await pressKey({ key: "c", metaKey: true });
+    await pressKey({ key: "v", metaKey: true });
+    await screen.findByRole("region", { name: "Pasting…" });
+
+    const dataTransfer = await dragBetween(
+      screen.getByTitle("/Users/demo/source.txt"),
+      await screen.findByTitle("tree:/Users/demo/Folder"),
+    );
+
+    expect(dataTransfer.getData("text/plain")).toBe("");
+    const viewport = await screen.findByTestId("toast-viewport");
+    await vi.waitFor(() => {
+      expect(viewport).toHaveTextContent(/Can't drag while .* being copied/);
+    });
+    expect(analyzeRequests(harness)).toHaveLength(1);
+  });
+});

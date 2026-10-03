@@ -2,6 +2,7 @@ import type { WriteOperationProgressEvent } from "@filetrail/contracts";
 
 import {
   collectRetrySourcePaths,
+  describeDragRefusedWhileBusy,
   describeEmptyTrashFailure,
   formatMissingClipboardItemsMessage,
   formatQuotedNames,
@@ -556,6 +557,29 @@ describe("sortEntriesBySize", () => {
     });
     expect(describeEmptyTrashFailure("  ").message).toBe(
       "Finder didn't empty the Trash. Try again, or empty it in Finder.",
+    );
+  });
+});
+
+describe("describeDragRefusedWhileBusy", () => {
+  it("names what is running and the item it is on", () => {
+    expect(describeDragRefusedWhileBusy("paste", "/Users/demo/Photos")).toBe(
+      "Can't drag while “Photos” is being copied",
+    );
+    expect(describeDragRefusedWhileBusy("move_to", null)).toBe(
+      "Can't drag while items are being moved",
+    );
+    expect(describeDragRefusedWhileBusy("trash", "/Users/demo/a.txt")).toBe(
+      "Can't drag while “a.txt” is being moved to the Trash",
+    );
+    expect(describeDragRefusedWhileBusy("delete_immediately", null)).toBe(
+      "Can't drag while items are being deleted",
+    );
+    expect(describeDragRefusedWhileBusy("rename", "/Users/demo/a.txt")).toBe(
+      "Can't drag while “a.txt” is being renamed",
+    );
+    expect(describeDragRefusedWhileBusy("new_folder", null)).toBe(
+      "Can't drag while a folder is being made",
     );
   });
 });
