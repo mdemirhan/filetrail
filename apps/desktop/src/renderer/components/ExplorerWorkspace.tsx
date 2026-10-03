@@ -75,6 +75,9 @@ type ViewOptionsMenuItem =
   | { kind: "action"; id: string; label: string; command?: ShortcutCommandId; onSelect: () => void }
   | { kind: "separator"; id: string };
 
+// How long the Info panel takes to slide in or out.
+const INFO_PANEL_SLIDE_MS = 220;
+
 export function ExplorerWorkspace({
   preferencesReady,
   restoredPaneWidths,
@@ -253,6 +256,31 @@ export function ExplorerWorkspace({
     (restoredPaneWidths === null ||
       (treeWidth === restoredPaneWidths.treeWidth &&
         inspectorWidth === restoredPaneWidths.inspectorWidth));
+
+  // The Info panel slides in and out: its columns keep their place in the grid (0 px while
+  // it is closed) and their widths are animated, so the content pane narrows and widens
+  // smoothly instead of jumping. The animation runs only while the panel opens or closes,
+  // so dragging a divider stays immediate; a closing panel stays mounted until it is out
+  // of sight.
+  const [infoPanelSlide, setInfoPanelSlide] = useState({
+    open: infoPanelOpen,
+    sliding: false,
+    mounted: infoPanelOpen,
+  });
+  if (infoPanelSlide.open !== infoPanelOpen) {
+    setInfoPanelSlide({ open: infoPanelOpen, sliding: workspaceReady, mounted: true });
+  }
+  useEffect(() => {
+    if (!infoPanelSlide.sliding && infoPanelSlide.mounted === infoPanelSlide.open) {
+      return;
+    }
+    const timer = window.setTimeout(
+      () => setInfoPanelSlide((current) => ({ ...current, sliding: false, mounted: current.open })),
+      infoPanelSlide.sliding ? INFO_PANEL_SLIDE_MS : 0,
+    );
+    return () => window.clearTimeout(timer);
+  }, [infoPanelSlide]);
+  const infoPanelShown = infoPanelOpen || infoPanelSlide.mounted;
 
   // Works out how many of the removable items fit, from the width of the row and the
   // widths of the items: the removable ones are measured in a hidden copy (those that do
@@ -942,11 +970,14 @@ export function ExplorerWorkspace({
         <section className="workspace-body workspace-loading" />
       ) : (
         <section
-          className="workspace-body tomorrow-night-layout"
+          className={`workspace-body tomorrow-night-layout${
+            infoPanelSlide.sliding ? " is-info-panel-sliding" : ""
+          }`}
           style={{
-            gridTemplateColumns: `${treeWidth}px ${EXPLORER_LAYOUT.resizerWidth}px minmax(0, 1fr)${
-              infoPanelOpen ? ` ${EXPLORER_LAYOUT.resizerWidth}px ${inspectorWidth}px` : ""
-            }`,
+            gridTemplateColumns: `${treeWidth}px ${EXPLORER_LAYOUT.resizerWidth}px minmax(0, 1fr) ${
+              infoPanelOpen ? EXPLORER_LAYOUT.resizerWidth : 0
+            }px ${infoPanelOpen ? inspectorWidth : 0}px`,
+            ["--info-panel-slide-ms" as string]: `${INFO_PANEL_SLIDE_MS}ms`,
             // Toolbar, tab strip (no height while there is a single view), panes.
             gridTemplateRows: "auto auto minmax(0, 1fr)",
           }}
@@ -969,10 +1000,10 @@ export function ExplorerWorkspace({
           <div className="workspace-main-cell" style={{ gridColumn: "3", gridRow: "3" }}>
             <SearchWorkspace {...searchWorkspaceProps} />
           </div>
-          {infoPanelOpen ? (
+          {infoPanelShown ? (
             <>
               <div
-                className="pane-resizer"
+                className={`pane-resizer${infoPanelOpen ? "" : " is-closing"}`}
                 style={{ gridColumn: "4", gridRow: "3" }}
                 onPointerDown={beginResize("inspector")}
                 role="separator"
@@ -981,7 +1012,15 @@ export function ExplorerWorkspace({
                 aria-label="Resize Info Panel pane"
                 onKeyDown={(event) => onPaneResizeKey("inspector", event)}
               />
-              <div className="workspace-inspector-cell" style={{ gridColumn: "5", gridRow: "3" }}>
+              <div
+                className={`workspace-inspector-cell${infoPanelOpen ? "" : " is-closing"}`}
+                style={{
+                  gridColumn: "5",
+                  gridRow: "3",
+                  ["--info-panel-width" as string]: `${inspectorWidth}px`,
+                }}
+                inert={!infoPanelOpen}
+              >
                 <InfoPanel {...infoPanelProps} />
               </div>
             </>

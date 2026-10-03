@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { type ComponentProps, createRef } from "react";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -153,6 +153,42 @@ afterEach(() => {
 });
 
 describe("ExplorerWorkspace", () => {
+  it("slides the Info panel in and out instead of jumping", () => {
+    vi.useFakeTimers();
+    const view = renderExplorerWorkspace();
+    const body = () => view.container.querySelector(".workspace-body") as HTMLElement;
+    // Its columns are always there, at 0 px while it is closed, so their width can animate.
+    expect(body().style.gridTemplateColumns).toBe("280px 8px minmax(0, 1fr) 0px 0px");
+    expect(screen.queryByTestId("info-panel")).not.toBeInTheDocument();
+
+    view.rerender(explorerWorkspaceElement({ infoPanelOpen: true }));
+    expect(body()).toHaveClass("is-info-panel-sliding");
+    expect(body().style.gridTemplateColumns).toBe("280px 8px minmax(0, 1fr) 8px 320px");
+    expect(screen.getByTestId("info-panel")).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(300));
+    expect(body()).not.toHaveClass("is-info-panel-sliding");
+
+    // Closing keeps it on screen, out of reach, until it has slid away.
+    view.rerender(explorerWorkspaceElement({ infoPanelOpen: false }));
+    expect(body()).toHaveClass("is-info-panel-sliding");
+    expect(body().style.gridTemplateColumns).toBe("280px 8px minmax(0, 1fr) 0px 0px");
+    const cell = view.container.querySelector(".workspace-inspector-cell");
+    expect(cell).toHaveClass("is-closing");
+    expect(cell).toHaveAttribute("inert");
+    act(() => vi.advanceTimersByTime(300));
+    expect(screen.queryByTestId("info-panel")).not.toBeInTheDocument();
+    expect(body()).not.toHaveClass("is-info-panel-sliding");
+    vi.useRealTimers();
+  });
+
+  it("doesn't animate a divider being dragged", () => {
+    const view = renderExplorerWorkspace({ infoPanelOpen: true });
+    view.rerender(explorerWorkspaceElement({ infoPanelOpen: true, inspectorWidth: 360 }));
+    expect(view.container.querySelector(".workspace-body")).not.toHaveClass(
+      "is-info-panel-sliding",
+    );
+  });
+
   it("shows every button of a saved toolbar that loads before the toolbar appears", () => {
     // Before preferences are ready the toolbar is not on screen and holds the default items.
     const view = renderExplorerWorkspace({
