@@ -741,6 +741,7 @@ export function App() {
     copyGetInfoName,
     dismissActionNotice,
     dismissCopyPasteDialog,
+    closeConfirmationDialog,
     dismissToast,
     noticeDragRefusedWhileBusy,
     editPaths,
@@ -2221,6 +2222,7 @@ export function App() {
           onRequestCopyLikePlanStart={requestCopyLikePlanStart}
           onUpdateCopyPasteChoices={updateCopyPasteChoices}
           onCloseCopyPasteDialog={dismissCopyPasteDialog}
+          onCloseConfirmationDialog={closeConfirmationDialog}
           onConfirmTrashDialog={(paths) => {
             void startTrashPaths(paths);
           }}

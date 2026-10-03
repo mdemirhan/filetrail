@@ -82,6 +82,7 @@ export function AppDialogs({
   onRequestCopyLikePlanStart,
   onUpdateCopyPasteChoices,
   onCloseCopyPasteDialog,
+  onCloseConfirmationDialog,
   onConfirmTrashDialog,
   onConfirmDeleteImmediatelyDialog,
   onConfirmEmptyTrashDialog,
@@ -127,6 +128,8 @@ export function AppDialogs({
     overrides: CopyPasteOverrides;
   }) => void;
   onCloseCopyPasteDialog: () => void;
+  // Cancel on a question asked before an operation starts; one running behind it goes on.
+  onCloseConfirmationDialog: () => void;
   onConfirmTrashDialog: (paths: string[]) => void;
   onConfirmDeleteImmediatelyDialog: (paths: string[]) => void;
   onConfirmEmptyTrashDialog: () => void;
@@ -311,7 +314,7 @@ export function AppDialogs({
           }}
           secondaryAction={{
             label: "Cancel",
-            onClick: onCloseCopyPasteDialog,
+            onClick: onCloseConfirmationDialog,
           }}
         />
       ) : null}
@@ -336,7 +339,7 @@ export function AppDialogs({
           }}
           secondaryAction={{
             label: "Cancel",
-            onClick: onCloseCopyPasteDialog,
+            onClick: onCloseConfirmationDialog,
           }}
         />
       ) : null}
@@ -353,7 +356,7 @@ export function AppDialogs({
           }}
           secondaryAction={{
             label: "Cancel",
-            onClick: onCloseCopyPasteDialog,
+            onClick: onCloseConfirmationDialog,
           }}
         />
       ) : null}
@@ -370,7 +373,7 @@ export function AppDialogs({
           }}
           secondaryAction={{
             label: "Cancel",
-            onClick: onCloseCopyPasteDialog,
+            onClick: onCloseConfirmationDialog,
           }}
         />
       ) : null}

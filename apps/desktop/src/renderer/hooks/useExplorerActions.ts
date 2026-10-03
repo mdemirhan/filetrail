@@ -131,6 +131,8 @@ const WRITE_LOCKED_CONTEXT_ACTION_IDS: ContextMenuActionId[] = [
   "duplicate",
   "newFolder",
   "trash",
+  "deleteImmediately",
+  "emptyTrash",
 ];
 // Background-menu actions that act on the folder on screen rather than on a selection.
 const BACKGROUND_FOLDER_ACTION_IDS: ContextMenuActionId[] = [
@@ -148,13 +150,29 @@ type CopyPasteAnalysisReport = NonNullable<IpcResponse<"copyPaste:analyzeGetUpda
 type CopyPastePolicy = Extract<IpcRequest<"copyPaste:start">, { analysisId: string }>["policy"];
 type CopyLikeAction = "paste" | "copy_to" | "move_to" | "duplicate";
 // Every write the app starts; each says the same thing when another one is still running.
-type WriteStartAction = CopyLikeAction | "trash" | "delete_immediately" | "rename" | "new_folder";
+type WriteStartAction =
+  | CopyLikeAction
+  | "trash"
+  | "delete_immediately"
+  | "empty_trash"
+  | "rename"
+  | "new_folder";
 type CopyLikePreStartOutcome =
   | { status: "queued" }
   | { status: "review" }
   | { status: "blocked"; message: string }
   | { status: "cancelled" }
   | { status: "error"; message: string };
+
+// The questions asked before an operation starts, as opposed to the sheets of a paste.
+function isConfirmationDialog(state: { type: string } | null): boolean {
+  return (
+    state?.type === "confirmTrash" ||
+    state?.type === "confirmDeleteImmediately" ||
+    state?.type === "confirmEmptyTrash" ||
+    state?.type === "confirmDotName"
+  );
+}
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -199,6 +217,8 @@ function getCopyLikePreStartFailureTitle(action: WriteStartAction): string {
       return "Move to Trash couldn't start";
     case "delete_immediately":
       return "Delete couldn't start";
+    case "empty_trash":
+      return "Empty Trash couldn't start";
     case "rename":
       return "Rename couldn't start";
     case "new_folder":
@@ -2095,6 +2115,13 @@ export function useExplorerActions(args: {
     activeAnalysisIdRef.current = null;
   }
 
+  // Cancel on a question asked before anything starts (Move to Trash?, Delete?, Empty
+  // Trash?, a name with a dot): only the question goes. An operation running behind it
+  // keeps running and keeps its progress.
+  function closeConfirmationDialog() {
+    setCopyPasteDialogState((current) => (isConfirmationDialog(current) ? null : current));
+  }
+
   function updateCopyPasteChoices(choices: {
     policy: CopyPastePolicy;
     overrides: CopyPasteOverrides;
@@ -2139,6 +2166,11 @@ export function useExplorerActions(args: {
     }
     if (newFolderDialogState) {
       setNewFolderDialogState(null);
+      return;
+    }
+    // A question on top of a running operation is what Escape answers, not the operation.
+    if (isConfirmationDialog(copyPasteDialogState)) {
+      setCopyPasteDialogState(null);
       return;
     }
     if (writeOperationProgressEvent) {
@@ -2698,9 +2730,15 @@ export function useExplorerActions(args: {
     showModalNotice("Unsupported action", `File Trail could not run the "${actionId}" action.`);
   }
 
-  // Delete Immediately is asked about first: it can't be undone.
+  // Delete Immediately is asked about first: it can't be undone. While another operation
+  // runs it can't start, so it isn't asked about either.
   function requestDeleteImmediately(paths: string[]) {
     if (paths.length === 0) {
+      return;
+    }
+    if (isWriteOperationInFlight()) {
+      closeContextMenu();
+      showWriteOperationBusyNotice("delete_immediately");
       return;
     }
     setCopyPasteDialogState({
@@ -2712,11 +2750,20 @@ export function useExplorerActions(args: {
 
   // So is emptying the Trash, with Finder's question.
   function requestEmptyTrash() {
+    if (isWriteOperationInFlight()) {
+      closeContextMenu();
+      showWriteOperationBusyNotice("empty_trash");
+      return;
+    }
     setCopyPasteDialogState({ type: "confirmEmptyTrash" });
   }
 
   async function confirmEmptyTrash() {
     setCopyPasteDialogState(null);
+    if (isWriteOperationInFlight()) {
+      showWriteOperationBusyNotice("empty_trash");
+      return;
+    }
     if (await emptyTrash()) {
       // The Trash, or a folder in it, may be on screen: it is read again.
       if (isPathInsideTrash(currentPathRef.current, homePath)) {
@@ -3611,6 +3658,7 @@ export function useExplorerActions(args: {
     browseTerminalApplication,
     canRunContentSelectionAction,
     clearContentSelection,
+    closeConfirmationDialog,
     closeContextMenu,
     contextMenuDisabledActionIds,
     contextMenuFavoriteToggleLabel,

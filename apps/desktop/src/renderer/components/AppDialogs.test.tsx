@@ -103,6 +103,7 @@ describe("AppDialogs", () => {
           onRequestCopyLikePlanStart={() => Promise.resolve(true)}
           onUpdateCopyPasteChoices={() => undefined}
           onCloseCopyPasteDialog={() => undefined}
+          onCloseConfirmationDialog={() => undefined}
           onConfirmTrashDialog={() => undefined}
           onConfirmDeleteImmediatelyDialog={() => undefined}
           onConfirmEmptyTrashDialog={() => undefined}
@@ -199,9 +200,9 @@ describe("AppDialogs", () => {
   });
   it("asks before a name that begins with a dot, with Cancel as the default", async () => {
     const onConfirmDotNameDialog = vi.fn();
-    const onCloseCopyPasteDialog = vi.fn();
+    const onCloseConfirmationDialog = vi.fn();
     renderAppDialogs(
-      { onConfirmDotNameDialog, onCloseCopyPasteDialog },
+      { onConfirmDotNameDialog, onCloseConfirmationDialog },
       {
         copyPasteDialogState: {
           type: "confirmDotName",
@@ -221,11 +222,11 @@ describe("AppDialogs", () => {
     // Return on the dialog itself presses Cancel, the default, and does not take the dot name.
     fireEvent.keyDown(dialog, { key: "Enter" });
     expect(onConfirmDotNameDialog).not.toHaveBeenCalled();
-    expect(onCloseCopyPasteDialog).toHaveBeenCalledTimes(1);
+    expect(onCloseConfirmationDialog).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole("button", { name: "Use “.”" }));
     expect(onConfirmDotNameDialog).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(onCloseCopyPasteDialog).toHaveBeenCalledTimes(2);
+    expect(onCloseConfirmationDialog).toHaveBeenCalledTimes(2);
   });
 });

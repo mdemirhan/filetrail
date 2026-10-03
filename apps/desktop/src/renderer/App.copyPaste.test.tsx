@@ -12101,3 +12101,97 @@ describe("Delete Immediately and Empty Trash", () => {
     expect(screen.queryByRole("button", { name: /^Empty Trash/ })).not.toBeInTheDocument();
   });
 });
+
+// Empty Trash and Delete Immediately are operations too: while another runs they can't
+// start, so they aren't asked about, and nothing about them touches the running one.
+describe("Empty Trash and Delete Immediately while another operation runs", () => {
+  const withTrash = {
+    directorySnapshots: {
+      "/Users/demo": {
+        path: "/Users/demo",
+        parentPath: "/Users",
+        entries: [
+          createDirectoryEntry("/Users/demo/source.txt", "file"),
+          createDirectoryEntry("/Users/demo/Folder", "directory"),
+          createDirectoryEntry("/Users/demo/.Trash", "directory"),
+        ],
+      },
+      "/Users/demo/.Trash": {
+        path: "/Users/demo/.Trash",
+        parentPath: "/Users/demo",
+        entries: [createDirectoryEntry("/Users/demo/.Trash/old.txt", "file")],
+      },
+    },
+  };
+
+  async function expectBusyDialog(title: string): Promise<void> {
+    const dialog = await screen.findByRole("dialog", { name: title });
+    expect(dialog).toHaveTextContent("Wait for the current write to finish.");
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "OK" }));
+    });
+  }
+
+  it("refuses Empty Trash from the menu bar without asking, and the paste goes on", async () => {
+    const harness = createAppHarness(withTrash);
+    renderApp(harness);
+    await pasteSourceIntoFolder(harness, "c");
+    await screen.findByRole("region", { name: "Pasting…" });
+
+    await act(async () => {
+      harness.emitCommand({ type: "emptyTrash" });
+    });
+
+    await expectBusyDialog("Empty Trash couldn't start");
+    expect(
+      screen.queryByRole("dialog", {
+        name: "Are you sure you want to permanently erase the items in the Trash?",
+      }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Pasting…" })).toBeInTheDocument();
+    expect(harness.invocations.some((call) => call.channel === "system:emptyTrash")).toBe(false);
+    expect(harness.invocations.some((call) => call.channel === "writeOperation:cancel")).toBe(
+      false,
+    );
+  });
+
+  it("greys out Empty Trash and Delete Immediately in the menus", async () => {
+    const harness = createAppHarness(withTrash);
+    renderApp(harness);
+    await openDirectory("/Users/demo/.Trash");
+    // A Delete Immediately that keeps running.
+    await act(async () => {
+      fireEvent.contextMenu(await screen.findByTitle("/Users/demo/.Trash/old.txt"));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Delete Immediately/ }));
+    });
+    const question = await screen.findByRole("dialog", {
+      name: "Are you sure you want to delete “old.txt”?",
+    });
+    await act(async () => {
+      fireEvent.click(within(question).getByRole("button", { name: "Delete" }));
+    });
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.some((call) => call.channel === "writeOperation:deleteImmediately"),
+      ).toBe(true);
+    });
+
+    await act(async () => {
+      fireEvent.contextMenu(await screen.findByTitle("/Users/demo/.Trash/old.txt"));
+    });
+    expect(screen.getByRole("button", { name: /^Delete Immediately/ })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    await pressKey({ key: "Escape" });
+    await act(async () => {
+      fireEvent.contextMenu(await screen.findByTitle("favorite:/Users/demo/.Trash"));
+    });
+    expect(screen.getByRole("button", { name: /^Empty Trash/ })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+  });
+});
