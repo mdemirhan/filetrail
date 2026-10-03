@@ -73,6 +73,12 @@ type CopyPasteDialogState =
       type: "confirmEmptyTrash";
     }
   | {
+      // Asked after Move to Trash found items on a disk with no Trash, as Finder asks.
+      type: "confirmDeleteWithoutTrash";
+      paths: string[];
+      itemLabel: string;
+    }
+  | {
       // Asked before a rename or new folder whose name begins with a dot would hide it.
       type: "confirmDotName";
       request: DotNameRequest;

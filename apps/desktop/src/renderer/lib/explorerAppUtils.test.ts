@@ -105,6 +105,7 @@ describe("explorerAppUtils", () => {
       clipboardSourcePaths: ["/Users/demo/source.txt"],
       currentPath: "/Users/demo",
       isSearchMode: false,
+      homePath: "/Users/demo",
     };
     const contentMenu = (paths: string[], targetPath: string) => ({
       x: 0,
@@ -168,6 +169,34 @@ describe("explorerAppUtils", () => {
 
     it("has no destination in search results", () => {
       expect(resolvePasteDestinationPath({ ...base, isSearchMode: true })).toBeNull();
+    });
+
+    // Finder's Trash has no Paste: Move to Trash puts items there.
+    it("never pastes into the Trash or a folder in it", () => {
+      expect(
+        resolvePasteDestinationPath({ ...base, currentPath: "/Users/demo/.Trash" }),
+      ).toBeNull();
+      const trashedFolder = { ...folder, path: "/Users/demo/.Trash/Old" };
+      expect(
+        resolvePasteDestinationPath({
+          ...base,
+          contextMenuState: contentMenu([trashedFolder.path], trashedFolder.path),
+          contextMenuTargetEntry: trashedFolder,
+        }),
+      ).toBeNull();
+      expect(
+        resolvePasteDestinationPath({
+          ...base,
+          contextMenuState: {
+            ...contentMenu([], "/Users/demo/.Trash"),
+            surface: "favorite",
+            targetKind: "favorite",
+          },
+        }),
+      ).toBeNull();
+      expect(
+        resolvePasteDestinationPath({ ...base, currentPath: "/Volumes/USB/.Trashes/501" }),
+      ).toBeNull();
     });
   });
 
@@ -316,6 +345,7 @@ describe("resolveNewFolderTargetPath", () => {
       selectedEntry: selection[0] ?? null,
       selectedPaths: selection.map((item) => item.path),
       isSearchMode: options.isSearchMode ?? false,
+      homePath: "/Users/demo",
       ...(options.contextScope ? { contextScope: options.contextScope } : {}),
     });
 
@@ -338,6 +368,29 @@ describe("resolveNewFolderTargetPath", () => {
     expect(target([file], { contextScope: "background" })).toBe("/Users/demo");
   });
 
+  it("makes nothing in the Trash", () => {
+    expect(
+      resolveNewFolderTargetPath({
+        currentPath: "/Users/demo/.Trash",
+        selectedEntry: null,
+        selectedPaths: [],
+        isSearchMode: false,
+        homePath: "/Users/demo",
+      }),
+    ).toBeNull();
+    const trashed = { ...folder, path: "/Users/demo/.Trash/Old" };
+    expect(
+      resolveNewFolderTargetPath({
+        currentPath: "/Users/demo",
+        selectedEntry: trashed,
+        selectedPaths: [trashed.path],
+        isSearchMode: false,
+        homePath: "/Users/demo",
+        contextScope: "selection",
+      }),
+    ).toBeNull();
+  });
+
   it("has no target in search results or without a folder on screen", () => {
     expect(target([], { isSearchMode: true })).toBeNull();
     expect(target([file], { isSearchMode: true })).toBeNull();
@@ -347,6 +400,7 @@ describe("resolveNewFolderTargetPath", () => {
         selectedEntry: file,
         selectedPaths: [file.path],
         isSearchMode: false,
+        homePath: "/Users/demo",
       }),
     ).toBeNull();
   });

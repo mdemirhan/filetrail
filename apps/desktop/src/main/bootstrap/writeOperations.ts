@@ -7,6 +7,7 @@ import {
   type WriteOperationProgressEvent,
   type WriteOperationResult,
   isAbortError,
+  isInsideTrash,
   writeOperationProgressEventSchema,
 } from "@filetrail/contracts";
 import {
@@ -32,6 +33,9 @@ export type WriteOperationFs = {
   // A folder's entry names as stored, to tell one item found under two spellings of a name
   // from two items whose names differ only in case.
   readdir?: (path: string) => Promise<string[]>;
+  // Where a folder really is, symlinks followed: Delete Immediately checks that what it
+  // deletes is really in the Trash.
+  realpath?: (path: string) => Promise<string>;
   // Fails with EEXIST rather than replace an item already at the new path (renamex_np
   // with RENAME_EXCL). Every rename goes through this one...
   renameExclusive: (oldPath: string, newPath: string) => Promise<void>;
@@ -93,7 +97,12 @@ type PreparedCreateFolderOperation = {
   destinationPath: string;
 };
 
-export function createWriteOperationCoordinator(writeService: WriteService, fs: WriteOperationFs) {
+export function createWriteOperationCoordinator(
+  writeService: WriteService,
+  fs: WriteOperationFs,
+  // Where the home folder and its Trash are (tests use their own).
+  options: { homePath?: string } = {},
+) {
   const writeOperationSenders = new Map<string, WriteOperationSender>();
   const senderDetachers = new Map<string, () => void>();
   const copyPasteRequests = new Map<string, IpcRequest<"copyPaste:start">>();
@@ -124,11 +133,60 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
   // ~/.Trash is a protected system directory — it must never be deleted, renamed,
   // moved, or trashed.  Items *inside* Trash are fine; this only guards the
   // top-level Trash folder itself. The comparison ignores case, as the disk does.
-  const trashPath = resolve(homedir(), ".Trash").toLowerCase();
+  const homePath = options.homePath ?? homedir();
+  const trashPath = resolve(homePath, ".Trash").toLowerCase();
   function assertNotProtectedPath(paths: readonly string[]): void {
     for (const path of paths) {
       if (resolve(path).toLowerCase() === trashPath) {
         throw new Error("The Trash folder is a protected system directory and cannot be modified.");
+      }
+    }
+  }
+
+  // Nothing is pasted, dropped, duplicated or made in the Trash: Move to Trash puts items
+  // there, where they can be put back from. The window offers none of it; this holds
+  // whatever it asks.
+  function assertNotIntoTrash(destinationDirectoryPath: string, verb: string): void {
+    if (isInsideTrash(resolve(destinationDirectoryPath), homePath)) {
+      throw new Error(`Nothing can be ${verb} the Trash.`);
+    }
+  }
+
+  function assertNotAlreadyInTrash(paths: readonly string[]): void {
+    for (const path of paths) {
+      if (isInsideTrash(resolve(path), homePath)) {
+        throw new Error(`“${basename(path)}” is already in the Trash.`);
+      }
+    }
+  }
+
+  // Items that just couldn't go to the Trash because their disk has none. After asking,
+  // the window may delete exactly these immediately (as Finder does on such a disk).
+  const itemsWithoutTrash = new Set<string>();
+
+  // Delete Immediately deletes only what is in a Trash, or what was just found to have no
+  // Trash to go to. The folder an item is in is looked up through any symlinks, so a link
+  // inside the Trash can't lead the deletion out of it.
+  async function assertDeletableImmediately(paths: readonly string[]): Promise<void> {
+    // The home folder as it really is, to compare real paths with.
+    const realHomePath = fs.realpath ? await fs.realpath(homePath).catch(() => homePath) : homePath;
+    for (const path of paths) {
+      const resolved = resolve(path);
+      if (itemsWithoutTrash.has(resolved)) {
+        continue;
+      }
+      const folder = fs.realpath
+        ? await fs.realpath(dirname(resolved)).catch(() => null)
+        : dirname(resolved);
+      const realPath = folder === null ? null : join(folder, basename(resolved));
+      if (
+        realPath === null ||
+        !isInsideTrash(resolved, homePath) ||
+        !isInsideTrash(realPath, realHomePath)
+      ) {
+        throw new Error(
+          `“${basename(resolved)}” isn't in the Trash, so it can't be deleted immediately.`,
+        );
       }
     }
   }
@@ -692,6 +750,7 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
     payload: IpcRequest<"writeOperation:createFolder">,
   ): Promise<PreparedCreateFolderOperation> {
     const parentDirectoryPath = resolve(payload.parentDirectoryPath);
+    assertNotIntoTrash(parentDirectoryPath, "made in");
     const folderName = payload.folderName.trim();
     const destinationPath = join(parentDirectoryPath, folderName);
     let parentStats: WriteOperationStats;
@@ -719,6 +778,8 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
     const items: WriteOperationResult["items"] = [];
     let completedItemCount = 0;
     let cancelled = false;
+    // Only what this Trash finds without a Trash may be deleted next.
+    itemsWithoutTrash.clear();
     // One item that can't go to the Trash doesn't keep the others from going; only
     // cancelling stops the rest.
     for (const [index, path] of paths.entries()) {
@@ -754,12 +815,17 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
           skipReason: null,
         });
       } catch (error) {
+        const noTrash = errorCode(error) === NO_TRASH_ERROR_CODE;
+        if (noTrash) {
+          itemsWithoutTrash.add(path);
+        }
         items.push({
           sourcePath: path,
           destinationPath: null,
           status: "failed",
           error: describeTrashError(error, path),
           skipReason: null,
+          ...(noTrash ? { noTrash: true as const } : {}),
         });
       }
     }
@@ -983,6 +1049,7 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
         payload: IpcRequest<"copyPaste:analyzeStart">,
         event: { sender: WriteOperationSender },
       ) => {
+        assertNotIntoTrash(payload.destinationDirectoryPath, "pasted into");
         if (payload.mode === "cut") {
           assertNotProtectedPath(payload.sourcePaths);
           // Moving to another disk copies, then deletes the originals: as final as deleting.
@@ -1018,6 +1085,7 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
           ? writeService.cancelCopyPasteAnalysis(payload.analysisId)
           : REJECTED_REQUEST,
       "copyPaste:plan": async (payload: IpcRequest<"copyPaste:plan">) => {
+        assertNotIntoTrash(payload.destinationDirectoryPath, "pasted into");
         if (payload.mode === "cut") {
           assertNotProtectedPath(payload.sourcePaths);
           await assertNotSystemLocation(payload.sourcePaths, "moved", fs);
@@ -1033,9 +1101,12 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
         payload: IpcRequest<"copyPaste:start">,
         event: { sender: WriteOperationSender },
       ) => {
-        if ("sourcePaths" in payload && payload.mode === "cut") {
-          assertNotProtectedPath(payload.sourcePaths);
-          await assertNotSystemLocation(payload.sourcePaths, "moved", fs);
+        if ("sourcePaths" in payload) {
+          assertNotIntoTrash(payload.destinationDirectoryPath, "pasted into");
+          if (payload.mode === "cut") {
+            assertNotProtectedPath(payload.sourcePaths);
+            await assertNotSystemLocation(payload.sourcePaths, "moved", fs);
+          }
         }
         ensureNoWriteOperationInFlight();
         if ("analysisId" in payload) {
@@ -1130,6 +1201,7 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
         event: { sender: WriteOperationSender },
       ) => {
         assertNotProtectedPath(payload.paths);
+        assertNotAlreadyInTrash(payload.paths);
         await prepareWithReservedSlot(() =>
           assertNotSystemLocation(payload.paths, "moved to the Trash", fs),
         );
@@ -1145,7 +1217,10 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
         event: { sender: WriteOperationSender },
       ) => {
         assertNotProtectedPath(payload.paths);
-        await prepareWithReservedSlot(() => assertNotSystemLocation(payload.paths, "deleted", fs));
+        await prepareWithReservedSlot(async () => {
+          await assertNotSystemLocation(payload.paths, "deleted", fs);
+          await assertDeletableImmediately(payload.paths);
+        });
         return queueLocalWriteOperation({
           action: "delete_immediately",
           sender: event.sender,
@@ -1383,11 +1458,11 @@ function describeWriteError(
   return describeCopyPasteError(error);
 }
 
-// The Trash gives its reasons as sentences (see createTrashItem). Only on a disk that may
-// have no Trash is deleting for good suggested.
+// The Trash gives its reasons as sentences (see createTrashItem). On a disk with no Trash
+// the window then offers to delete the item immediately, as Finder does.
 function describeTrashError(error: unknown, path: string): string {
   if (errorCode(error) === NO_TRASH_ERROR_CODE) {
-    return `“${basename(path)}” couldn't be moved to the Trash. This disk may not have a Trash; Delete Immediately deletes it for good instead.`;
+    return `“${basename(path)}” couldn't be moved to the Trash because its disk has no Trash.`;
   }
   const described = describeCopyPasteError(error);
   return described || `“${basename(path)}” couldn't be moved to the Trash.`;

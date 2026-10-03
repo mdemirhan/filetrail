@@ -182,6 +182,7 @@ type UseExplorerShortcutsArgs = {
     isSearchMode: boolean;
     hasCachedSearch: boolean;
     trashPath: string | null;
+    homePath: string;
   };
   actions: ExplorerShortcutActions;
 };
@@ -640,6 +641,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
             selectedEntry: current.selectedEntry,
             selectedPaths: current.selectedPathsInViewOrder,
             isSearchMode: current.isSearchMode,
+            homePath: current.homePath,
           });
           if (!targetPath) {
             return;
@@ -1069,6 +1071,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
           selectedEntry: current.selectedEntry,
           selectedPaths: current.selectedPathsInViewOrder,
           isSearchMode: current.isSearchMode,
+          homePath: current.homePath,
         });
         if (targetPath) {
           current.openNewFolderDialog(targetPath);

@@ -643,8 +643,16 @@ export function App() {
         clipboardSourcePaths,
         currentPath,
         isSearchMode,
+        homePath,
       }),
-    [contextMenuState, contextMenuTargetEntry, clipboardSourcePaths, currentPath, isSearchMode],
+    [
+      contextMenuState,
+      contextMenuTargetEntry,
+      clipboardSourcePaths,
+      currentPath,
+      isSearchMode,
+      homePath,
+    ],
   );
   const isWriteOperationLocked = writeOperationCardState !== null;
   const locationDialogOpen = locationSheetOpen || moveDialogState !== null;
@@ -960,6 +968,7 @@ export function App() {
         hasCachedSearch,
         tabCount,
         trashPath,
+        homePath,
       }),
     [
       shortcutContext,
@@ -978,6 +987,7 @@ export function App() {
       hasCachedSearch,
       tabCount,
       trashPath,
+      homePath,
     ],
   );
   const openFullDiskAccessSettings = useCallback(() => {
@@ -1063,6 +1073,7 @@ export function App() {
       isSearchMode,
       hasCachedSearch,
       trashPath,
+      homePath,
     },
     actions: {
       dismissActionNotice,

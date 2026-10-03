@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { DirectoryEntry } from "../lib/explorerTypes";
 import type { TreePresentationItem } from "../lib/favorites";
-import { getTrashPath } from "../lib/favorites";
+import { getTrashPath, isPathInsideTrash } from "../lib/favorites";
 import {
   type InternalDragSession,
   type InternalDropOperation,
@@ -366,7 +366,9 @@ export function useExplorerDragAndDrop(args: {
       blocked,
       targetSurface: args.surface,
       targetPath: args.path,
-      targetSupportsMove: args.targetSupportsMove,
+      // Nothing is dropped into the Trash or a folder in it, as nothing is pasted there.
+      targetSupportsMove:
+        args.targetSupportsMove && !(args.path !== null && isPathInsideTrash(args.path, homePath)),
       targetIsSelected: args.targetIsSelected,
       operation: args.operation,
     });

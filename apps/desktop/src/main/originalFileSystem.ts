@@ -163,6 +163,7 @@ export function createOriginalWriteOperationFs(
     stat: originalFileSystem.stat,
     mkdir: (path) => originalFileSystem.mkdir(path),
     readdir: originalFileSystem.readdir,
+    realpath: originalFileSystem.realpath,
     rename: originalRename,
     renameExclusive: originalRenameExclusive,
     rm: (path, options) => originalFileSystem.rm(path, options),

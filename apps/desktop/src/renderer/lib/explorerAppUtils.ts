@@ -1,4 +1,8 @@
-import type { WriteOperationAction, WriteOperationProgressEvent } from "@filetrail/contracts";
+import {
+  type WriteOperationAction,
+  type WriteOperationProgressEvent,
+  isInsideTrash,
+} from "@filetrail/contracts";
 
 import type { ContextMenuState } from "../hooks/useWriteOperations";
 import { parentDirectoryPath } from "./explorerNavigation";
@@ -154,6 +158,20 @@ export function resolvePasteDestinationPath(args: {
   clipboardSourcePaths: string[];
   currentPath: string;
   isSearchMode: boolean;
+  homePath: string;
+}): string | null {
+  const destination = resolvePasteDestinationIgnoringTrash(args);
+  // Nothing is pasted into the Trash: Move to Trash puts items there, where they can be
+  // put back from (Finder's Trash has no Paste either).
+  return destination !== null && isInsideTrash(destination, args.homePath) ? null : destination;
+}
+
+function resolvePasteDestinationIgnoringTrash(args: {
+  contextMenuState: ContextMenuState | null;
+  contextMenuTargetEntry: DirectoryEntry | null;
+  clipboardSourcePaths: string[];
+  currentPath: string;
+  isSearchMode: boolean;
 }): string | null {
   const {
     contextMenuState,
@@ -207,18 +225,21 @@ export function resolveNewFolderTargetPath(args: {
   selectedEntry: DirectoryEntry | null;
   selectedPaths: string[];
   isSearchMode: boolean;
+  homePath: string;
   contextScope?: "selection" | "background";
 }): string | null {
   if (args.isSearchMode) {
     return null;
   }
   const folderOnScreen = args.currentPath.length > 0 ? args.currentPath : null;
-  if (args.contextScope !== "selection" || args.selectedPaths.length === 0) {
-    return folderOnScreen;
-  }
-  return args.selectedPaths.length === 1 && isDirectoryLikeEntry(args.selectedEntry)
-    ? args.selectedEntry.path
-    : null;
+  const target =
+    args.contextScope !== "selection" || args.selectedPaths.length === 0
+      ? folderOnScreen
+      : args.selectedPaths.length === 1 && isDirectoryLikeEntry(args.selectedEntry)
+        ? args.selectedEntry.path
+        : null;
+  // Nothing is made in the Trash.
+  return target !== null && isInsideTrash(target, args.homePath) ? null : target;
 }
 
 // The name New Folder suggests: "New Folder", else the first free "New Folder 2", "New

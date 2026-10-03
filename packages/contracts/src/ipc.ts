@@ -520,6 +520,9 @@ export const writeOperationItemResultSchema = z.object({
     .enum(["planned_conflict_policy", "runtime_conflict_resolution"])
     .nullable()
     .optional(),
+  // An item that couldn't go to the Trash because its disk has none: it can only be
+  // deleted immediately (the window asks first).
+  noTrash: z.literal(true).optional(),
   // For a folder: how many items inside it failed. A folder whose only problem is failures
   // inside it has status "failed" and a null error.
   childFailureCount: z.number().int().nonnegative().optional(),

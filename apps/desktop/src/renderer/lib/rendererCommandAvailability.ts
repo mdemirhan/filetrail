@@ -1,3 +1,5 @@
+import { isInsideTrash } from "@filetrail/contracts";
+
 import type { RendererCommandType } from "../../shared/rendererCommands";
 import type { CopyPasteClipboardState } from "./copyPasteClipboard";
 import { hasClipboardItems } from "./copyPasteClipboard";
@@ -42,6 +44,8 @@ export type RendererCommandAvailabilityContext = {
   tabCount?: number;
   /** Trash is a favorite that stays: it is never offered for removal. */
   trashPath?: string | null;
+  /** Where the home folder is, to tell what is in the Trash. */
+  homePath?: string;
 };
 
 type CommandTargetContext = Pick<
@@ -101,6 +105,11 @@ export function resolveShowInFinderPaths(context: CommandTargetContext): string[
   return context.currentPath ? [context.currentPath] : [];
 }
 
+function selectionIsInTrash(context: RendererCommandAvailabilityContext): boolean {
+  const homePath = context.homePath ?? "";
+  return context.selectedPathsInViewOrder.some((path) => isInsideTrash(path, homePath));
+}
+
 function resolveSelectedEntries(
   selectedPathsInViewOrder: readonly string[],
   activeContentEntries: readonly DirectoryEntry[],
@@ -148,13 +157,16 @@ export function canRunToolbarRendererCommand(
       }
       return selectedCount > 0 || context.currentPath.length > 0;
     case "moveSelection":
-    case "trashSelection":
       return selectedCount > 0;
+    case "trashSelection":
+      // What is in the Trash is already there; it can only be deleted for good, from its menu.
+      return selectedCount > 0 && !selectionIsInTrash(context);
     case "duplicateSelection":
       // A duplicate goes next to its original: search results from several folders have
-      // no one folder for theirs.
+      // no one folder for theirs. Nothing is made in the Trash.
       return (
         selectedCount > 0 &&
+        !selectionIsInTrash(context) &&
         (!context.isSearchMode ||
           new Set(context.selectedPathsInViewOrder.map((path) => parentDirectoryPath(path)))
             .size === 1)
@@ -170,6 +182,7 @@ export function canRunToolbarRendererCommand(
           selectedEntry: context.selectedEntry,
           selectedPaths: context.selectedPathsInViewOrder,
           isSearchMode: context.isSearchMode,
+          homePath: context.homePath ?? "",
         }) !== null
       );
     case "copySelection":

@@ -1,3 +1,5 @@
+import { isInsideTrash } from "@filetrail/contracts";
+
 import type { FavoriteIconId, FavoritePreference } from "../../shared/appPreferences";
 import type { TreeNodeState } from "../components/TreePane";
 
@@ -161,9 +163,9 @@ export function isFavoritePath(favorites: FavoritePreference[], path: string): b
   return favorites.some((favorite) => favorite.path === path);
 }
 
+// The home folder's Trash, another disk's, or anything in one (see isInsideTrash).
 export function isPathInsideTrash(path: string, homePath: string): boolean {
-  const trashPath = getTrashPath(homePath);
-  return trashPath.length > 0 && (path === trashPath || path.startsWith(`${trashPath}/`));
+  return isInsideTrash(path, homePath);
 }
 
 export function buildTreePresentation(args: {

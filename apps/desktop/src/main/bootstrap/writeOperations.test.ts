@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { execFileSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { existsSync } from "node:fs";
-import { link, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { link, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -132,8 +132,7 @@ describe("createWriteOperationCoordinator", () => {
         status: "partial",
         completedItemCount: 2,
         result: expect.objectContaining({
-          error:
-            "“b.txt” couldn't be moved to the Trash. This disk may not have a Trash; Delete Immediately deletes it for good instead.",
+          error: "“b.txt” couldn't be moved to the Trash because its disk has no Trash.",
           items: [
             expect.objectContaining({ sourcePath: "/Users/demo/a.txt", status: "completed" }),
             expect.objectContaining({ sourcePath: "/Users/demo/b.txt", status: "failed" }),
@@ -155,12 +154,18 @@ describe("createWriteOperationCoordinator", () => {
         }
       }),
     });
-    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs);
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs, {
+      homePath: "/Users/demo",
+    });
 
     await expect(
       coordinator.handlers["writeOperation:deleteImmediately"](
         {
-          paths: ["/Users/demo/a.txt", "/Users/demo/b.txt", "/Users/demo/c.txt"],
+          paths: [
+            "/Users/demo/.Trash/a.txt",
+            "/Users/demo/.Trash/b.txt",
+            "/Users/demo/.Trash/c.txt",
+          ],
         },
         { sender },
       ),
@@ -456,11 +461,13 @@ describe("createWriteOperationCoordinator", () => {
         }
       }),
     });
-    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs);
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs, {
+      homePath: "/Users/demo",
+    });
     const sender = createLifecycleSender();
 
     coordinator.handlers["writeOperation:deleteImmediately"](
-      { paths: ["/Users/demo/a.txt", "/Users/demo/b.txt"] },
+      { paths: ["/Users/demo/.Trash/a.txt", "/Users/demo/.Trash/b.txt"] },
       { sender },
     );
     await waitFor(() => (finishFirstDelete ? true : null));
@@ -1264,7 +1271,9 @@ describe("moving to the Trash and deleting", () => {
 
   it("refuses to delete or trash the disk, the system folders, a volume, or the home folder", async () => {
     const fs = createWriteOperationFs();
-    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs);
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs, {
+      homePath: "/Users/demo",
+    });
     const refused = [
       "/",
       "/Users",
@@ -1286,7 +1295,7 @@ describe("moving to the Trash and deleting", () => {
     for (const path of refused) {
       await expect(
         coordinator.handlers["writeOperation:deleteImmediately"](
-          { paths: ["/Users/demo/fine.txt", path] },
+          { paths: ["/Users/demo/.Trash/fine.txt", path] },
           { sender: createSender() },
         ),
         path,
@@ -1305,10 +1314,10 @@ describe("moving to the Trash and deleting", () => {
     expect(fs.rm).not.toHaveBeenCalled();
     expect(fs.trash).not.toHaveBeenCalled();
 
-    // What is inside them is fine.
+    // What is in that disk's Trash is fine.
     await expect(
       coordinator.handlers["writeOperation:deleteImmediately"](
-        { paths: ["/Volumes/Backup/old.txt"] },
+        { paths: ["/Volumes/Backup/.Trashes/501/old.txt"] },
         { sender: createSender() },
       ),
     ).resolves.toEqual({ operationId: "write-op-1", status: "queued" });
@@ -1425,11 +1434,13 @@ describe("moving to the Trash and deleting", () => {
         });
       }),
     });
-    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs);
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs, {
+      homePath: "/Users/demo",
+    });
     const sender = createSender();
 
     coordinator.handlers["writeOperation:deleteImmediately"](
-      { paths: ["/Users/demo/a"] },
+      { paths: ["/Users/demo/.Trash/a"] },
       { sender },
     );
     const terminal = await waitForTerminalEvent(sender, "write-op-1");
@@ -1455,10 +1466,13 @@ describe("folder listings after a write", () => {
     const coordinator = createWriteOperationCoordinator(
       createWriteServiceStub(),
       createWriteOperationFs(),
+      {
+        homePath: "/Users/demo",
+      },
     );
 
     coordinator.handlers["writeOperation:deleteImmediately"](
-      { paths: ["/Users/demo/a.txt"] },
+      { paths: ["/Users/demo/.Trash/a.txt"] },
       { sender },
     );
     await waitForTerminalEvent(sender, "write-op-1");
@@ -1502,11 +1516,13 @@ describe("quitting during an operation", () => {
         }
       }),
     });
-    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs);
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs, {
+      homePath: "/Users/demo",
+    });
     const sender = createSender();
 
     coordinator.handlers["writeOperation:deleteImmediately"](
-      { paths: ["/Users/demo/a.txt", "/Users/demo/b.txt"] },
+      { paths: ["/Users/demo/.Trash/a.txt", "/Users/demo/.Trash/b.txt"] },
       { sender },
     );
     await waitFor(() => (finishFirstDelete ? true : null));
@@ -1574,10 +1590,12 @@ describe("quitting during an operation", () => {
     const fs = createWriteOperationFs({
       rm: vi.fn(() => new Promise<void>(() => undefined)),
     });
-    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs);
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs, {
+      homePath: "/Users/demo",
+    });
     const sender = createSender();
     await coordinator.handlers["writeOperation:deleteImmediately"](
-      { paths: ["/Users/demo/a.txt"] },
+      { paths: ["/Users/demo/.Trash/a.txt"] },
       { sender },
     );
     await waitFor(() => (vi.mocked(fs.rm).mock.calls.length > 0 ? true : null));
@@ -1751,17 +1769,19 @@ describe("locked items", () => {
   });
 
   it("names the locked item inside a folder that couldn't be deleted", async () => {
-    await mkdir(join(root, "Folder"));
-    await writeFile(join(root, "Folder", "keep.txt"), "keep");
-    execFileSync("chflags", ["uchg", join(root, "Folder", "keep.txt")]);
+    const trash = join(root, ".Trash");
+    await mkdir(join(trash, "Folder"), { recursive: true });
+    await writeFile(join(trash, "Folder", "keep.txt"), "keep");
+    execFileSync("chflags", ["uchg", join(trash, "Folder", "keep.txt")]);
     const coordinator = createWriteOperationCoordinator(
       createWriteServiceStub(),
       createRealWriteOperationFs(),
+      { homePath: root },
     );
     const sender = createSender();
 
     await coordinator.handlers["writeOperation:deleteImmediately"](
-      { paths: [join(root, "Folder")] },
+      { paths: [join(trash, "Folder")] },
       { sender },
     );
     const terminal = await waitForTerminalEvent(sender, "write-op-1");
@@ -1769,7 +1789,7 @@ describe("locked items", () => {
     expect(terminal.result?.items[0]?.error).toBe(
       "“keep.txt” is locked. Unlock it in Finder's Get Info and try again.",
     );
-    expect(await readFile(join(root, "Folder", "keep.txt"), "utf8")).toBe("keep");
+    expect(await readFile(join(trash, "Folder", "keep.txt"), "utf8")).toBe("keep");
     coordinator.shutdown();
   });
 });
@@ -1787,11 +1807,13 @@ describe("emptying the Trash", () => {
           }),
       ),
     });
-    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs);
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs, {
+      homePath: "/Users/demo",
+    });
     const sender = createSender();
     const empty = vi.fn(async () => ({ ok: true, error: null }));
     await coordinator.handlers["writeOperation:deleteImmediately"](
-      { paths: ["/Users/demo/a.txt"] },
+      { paths: ["/Users/demo/.Trash/a.txt"] },
       { sender },
     );
     await waitFor(() => (finishDelete ? true : null));
@@ -2139,3 +2161,167 @@ async function waitFor<T>(read: () => T | null): Promise<T> {
     await new Promise((resolveWait) => setTimeout(resolveWait, 0));
   }
 }
+
+// Nothing is pasted, made or put back into the Trash, and only what is in a Trash (or was
+// just found to have none) is deleted for good, whatever the window asks.
+describe("the Trash", () => {
+  const home = "/Users/demo";
+
+  it("refuses to paste, move or make anything in it", async () => {
+    const writeService = createWriteServiceStub();
+    const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs(), {
+      homePath: home,
+    });
+    const into = (destinationDirectoryPath: string) => ({
+      mode: "cut" as const,
+      sourcePaths: ["/Users/demo/a.txt"],
+      destinationDirectoryPath,
+      action: "paste" as const,
+    });
+
+    for (const destination of [
+      "/Users/demo/.Trash",
+      "/Users/demo/.Trash/Old",
+      "/Volumes/USB/.Trashes/501",
+    ]) {
+      await expect(
+        coordinator.handlers["copyPaste:analyzeStart"](into(destination), {
+          sender: createSender(),
+        }),
+      ).rejects.toThrow("Nothing can be pasted into the Trash.");
+      await expect(
+        coordinator.handlers["copyPaste:start"](
+          { ...into(destination), conflictResolution: "error" },
+          { sender: createSender() },
+        ),
+      ).rejects.toThrow("Nothing can be pasted into the Trash.");
+      await expect(
+        coordinator.handlers["copyPaste:plan"]({
+          ...into(destination),
+          conflictResolution: "error",
+        }),
+      ).rejects.toThrow("Nothing can be pasted into the Trash.");
+      await expect(
+        coordinator.handlers["writeOperation:createFolder"](
+          { parentDirectoryPath: destination, folderName: "New Folder" },
+          { sender: createSender() },
+        ),
+      ).rejects.toThrow("Nothing can be made in the Trash.");
+    }
+    expect(writeService.startCopyPasteAnalysis).not.toHaveBeenCalled();
+    coordinator.shutdown();
+  });
+
+  it("doesn't move what is already in it to the Trash again", async () => {
+    const fs = createWriteOperationFs();
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs, {
+      homePath: home,
+    });
+
+    await expect(
+      coordinator.handlers["writeOperation:trash"](
+        { paths: ["/Users/demo/.Trash/old.txt"] },
+        { sender: createSender() },
+      ),
+    ).rejects.toThrow("“old.txt” is already in the Trash.");
+    expect(fs.trash).not.toHaveBeenCalled();
+    coordinator.shutdown();
+  });
+
+  it("deletes for good only what is in a Trash", async () => {
+    const fs = createWriteOperationFs();
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs, {
+      homePath: home,
+    });
+
+    for (const path of [
+      "/Users/demo/Work/report.txt",
+      "/Users/demo/.Trash/../Work/report.txt",
+      "/Users/demo/.Trash2/report.txt",
+      "/Volumes/USB/report.txt",
+    ]) {
+      await expect(
+        coordinator.handlers["writeOperation:deleteImmediately"](
+          { paths: ["/Users/demo/.Trash/old.txt", path] },
+          { sender: createSender() },
+        ),
+        path,
+      ).rejects.toThrow("isn't in the Trash, so it can't be deleted immediately.");
+    }
+    expect(fs.rm).not.toHaveBeenCalled();
+    coordinator.shutdown();
+  });
+
+  it("deletes for good what just couldn't go to the Trash because its disk has none", async () => {
+    const trash = vi.fn(async (path: string) => {
+      if (path.startsWith("/Volumes/Share/")) {
+        throw Object.assign(new Error("no Trash"), { code: NO_TRASH_ERROR_CODE });
+      }
+    });
+    const fs = createWriteOperationFs({ trash });
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs, {
+      homePath: home,
+    });
+    const sender = createSender();
+
+    await coordinator.handlers["writeOperation:trash"](
+      { paths: ["/Volumes/Share/a.txt", "/Users/demo/b.txt"] },
+      { sender },
+    );
+    const terminal = await waitForTerminalEvent(sender, "write-op-1");
+    expect(terminal.result?.items).toEqual([
+      expect.objectContaining({
+        sourcePath: "/Volumes/Share/a.txt",
+        status: "failed",
+        noTrash: true,
+        error: "“a.txt” couldn't be moved to the Trash because its disk has no Trash.",
+      }),
+      expect.not.objectContaining({ noTrash: true }),
+    ]);
+
+    // Another item on that disk wasn't asked about, so it can't be deleted this way.
+    await expect(
+      coordinator.handlers["writeOperation:deleteImmediately"](
+        { paths: ["/Volumes/Share/other.txt"] },
+        { sender: createSender() },
+      ),
+    ).rejects.toThrow("isn't in the Trash");
+    await expect(
+      coordinator.handlers["writeOperation:deleteImmediately"](
+        { paths: ["/Volumes/Share/a.txt"] },
+        { sender },
+      ),
+    ).resolves.toEqual({ operationId: "write-op-2", status: "queued" });
+    await waitForTerminalEvent(sender, "write-op-2");
+    expect(fs.rm).toHaveBeenCalledWith("/Volumes/Share/a.txt", { recursive: true, force: true });
+    coordinator.shutdown();
+  });
+
+  // A symlink inside the Trash to a folder elsewhere: what is "in" it through the link is
+  // really outside the Trash.
+  it("doesn't delete through a link in the Trash that leads out of it", async () => {
+    const root = await mkdtemp(join(tmpdir(), "filetrail-trash-link-"));
+    try {
+      await mkdir(join(root, ".Trash"));
+      await mkdir(join(root, "Work"));
+      await writeFile(join(root, "Work", "report.txt"), "keep");
+      await symlink(join(root, "Work"), join(root, ".Trash", "link"));
+      const coordinator = createWriteOperationCoordinator(
+        createWriteServiceStub(),
+        createRealWriteOperationFs(),
+        { homePath: root },
+      );
+
+      await expect(
+        coordinator.handlers["writeOperation:deleteImmediately"](
+          { paths: [join(root, ".Trash", "link", "report.txt")] },
+          { sender: createSender() },
+        ),
+      ).rejects.toThrow("isn't in the Trash");
+      expect(await readFile(join(root, "Work", "report.txt"), "utf8")).toBe("keep");
+      coordinator.shutdown();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});

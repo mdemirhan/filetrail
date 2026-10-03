@@ -12195,3 +12195,245 @@ describe("Empty Trash and Delete Immediately while another operation runs", () =
     );
   });
 });
+
+// In the Trash things are only taken out or deleted for good, as in Finder: nothing is
+// pasted, dropped, made or duplicated there, and Move to Trash does nothing there.
+describe("file commands in the Trash", () => {
+  const inTrash = {
+    directorySnapshots: {
+      "/Users/demo": {
+        path: "/Users/demo",
+        parentPath: "/Users",
+        entries: [
+          createDirectoryEntry("/Users/demo/source.txt", "file"),
+          createDirectoryEntry("/Users/demo/Folder", "directory"),
+          createDirectoryEntry("/Users/demo/.Trash", "directory"),
+        ],
+      },
+      "/Users/demo/.Trash": {
+        path: "/Users/demo/.Trash",
+        parentPath: "/Users/demo",
+        entries: [
+          createDirectoryEntry("/Users/demo/.Trash/old.txt", "file"),
+          createDirectoryEntry("/Users/demo/.Trash/Old Folder", "directory"),
+        ],
+      },
+      "/Users/demo/.Trash/Old Folder": {
+        path: "/Users/demo/.Trash/Old Folder",
+        parentPath: "/Users/demo/.Trash",
+        entries: [],
+      },
+    },
+  };
+
+  function writeRequests(harness: ReturnType<typeof createAppHarness>) {
+    return harness.invocations.filter(
+      (call) =>
+        call.channel === "copyPaste:analyzeStart" ||
+        call.channel === "copyPaste:start" ||
+        call.channel === "writeOperation:trash" ||
+        call.channel === "writeOperation:createFolder",
+    );
+  }
+
+  it("pastes nothing into the Trash, and says so", async () => {
+    const harness = createAppHarness(inTrash);
+    renderApp(harness);
+    await selectItem("/Users/demo/source.txt");
+    await pressKey({ key: "c", metaKey: true });
+    await openDirectory("/Users/demo/.Trash");
+
+    await pressKey({ key: "v", metaKey: true });
+
+    const viewport = await screen.findByTestId("toast-viewport");
+    await vi.waitFor(() => {
+      expect(viewport).toHaveTextContent("Nothing can be pasted into the Trash");
+    });
+    expect(writeRequests(harness)).toEqual([]);
+  });
+
+  it("makes, duplicates and trashes nothing there from the keyboard", async () => {
+    const harness = createAppHarness(inTrash);
+    renderApp(harness);
+    await openDirectory("/Users/demo/.Trash");
+    await selectItem("/Users/demo/.Trash/old.txt");
+
+    await pressKey({ key: "Backspace", metaKey: true });
+    await pressKey({ key: "d", metaKey: true });
+    await pressKey({ key: "n", metaKey: true, shiftKey: true });
+
+    expect(writeRequests(harness)).toEqual([]);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("offers only taking items out or deleting them for good in an item's menu", async () => {
+    const harness = createAppHarness(inTrash);
+    renderApp(harness);
+    await openDirectory("/Users/demo/.Trash");
+
+    await act(async () => {
+      fireEvent.contextMenu(await screen.findByTitle("/Users/demo/.Trash/Old Folder"));
+    });
+
+    expect(screen.getByRole("button", { name: /^Delete Immediately/ })).toBeInTheDocument();
+    for (const name of [/^Paste/, /^New Folder/, /^Duplicate/, /^Move to Trash/]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
+    expect(screen.getByRole("button", { name: /^Move To/ })).toBeInTheDocument();
+  });
+
+  it("offers no Paste or New Folder on the Trash favorite", async () => {
+    const harness = createAppHarness(inTrash);
+    renderApp(harness);
+    await selectItem("/Users/demo/source.txt");
+    await pressKey({ key: "c", metaKey: true });
+
+    await act(async () => {
+      fireEvent.contextMenu(await screen.findByTitle("favorite:/Users/demo/.Trash"));
+    });
+
+    expect(screen.getByRole("button", { name: /^Empty Trash/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Paste/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^New Folder/ })).not.toBeInTheDocument();
+  });
+
+  it("refuses a drop on a folder in the Trash", async () => {
+    const harness = createAppHarness(inTrash);
+    renderApp(harness);
+    await openDirectory("/Users/demo/.Trash");
+
+    await dragBetween(
+      await screen.findByTitle("/Users/demo/.Trash/old.txt"),
+      await screen.findByTitle("/Users/demo/.Trash/Old Folder"),
+    );
+
+    expect(writeRequests(harness)).toEqual([]);
+  });
+});
+
+// On a disk with no Trash (a network share, some USB drives) items can't be moved to the
+// Trash; as Finder does, the window offers to delete them immediately instead.
+describe("moving to the Trash on a disk without a Trash", () => {
+  function trashResult(items: Array<{ path: string; noTrash?: true; error?: string }>) {
+    const failed = items.filter((item) => item.noTrash || item.error);
+    return {
+      operationId: "write-op-trash",
+      action: "trash" as const,
+      status: "failed" as const,
+      completedItemCount: items.length - failed.length,
+      totalItemCount: items.length,
+      completedByteCount: 0,
+      totalBytes: null,
+      currentSourcePath: null,
+      currentDestinationPath: null,
+      result: {
+        operationId: "write-op-trash",
+        action: "trash" as const,
+        status: "failed" as const,
+        targetPath: null,
+        startedAt: "2026-10-03T10:00:00.000Z",
+        finishedAt: "2026-10-03T10:00:01.000Z",
+        summary: {
+          topLevelItemCount: items.length,
+          totalItemCount: items.length,
+          completedItemCount: items.length - failed.length,
+          failedItemCount: failed.length,
+          skippedItemCount: 0,
+          cancelledItemCount: 0,
+          completedByteCount: 0,
+          totalBytes: null,
+        },
+        items: items.map((item) => ({
+          sourcePath: item.path,
+          destinationPath: null,
+          status: item.noTrash || item.error ? ("failed" as const) : ("completed" as const),
+          error: item.noTrash
+            ? `“${item.path.split("/").at(-1)}” couldn't be moved to the Trash because its disk has no Trash.`
+            : (item.error ?? null),
+          ...(item.noTrash ? { noTrash: true as const } : {}),
+        })),
+        error: "failed",
+      },
+    };
+  }
+
+  async function trashSource(harness: ReturnType<typeof createAppHarness>) {
+    await selectItem("/Users/demo/source.txt");
+    await pressKey({ key: "Backspace", metaKey: true });
+    await vi.waitFor(() => {
+      expect(harness.invocations.some((call) => call.channel === "writeOperation:trash")).toBe(
+        true,
+      );
+    });
+  }
+
+  it("asks, with Cancel as the default, and deletes immediately on Delete", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+    await trashSource(harness);
+
+    await act(async () => {
+      harness.emitProgress(trashResult([{ path: "/Users/demo/source.txt", noTrash: true }]));
+    });
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Are you sure you want to delete “source.txt”?",
+    });
+    expect(dialog).toHaveTextContent(
+      "Its disk has no Trash, so it will be deleted immediately. You can’t undo this action.",
+    );
+    expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    });
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.find((call) => call.channel === "writeOperation:deleteImmediately")
+          ?.payload,
+      ).toEqual({ paths: ["/Users/demo/source.txt"] });
+    });
+  });
+
+  it("deletes nothing on Cancel", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+    await trashSource(harness);
+    await act(async () => {
+      harness.emitProgress(trashResult([{ path: "/Users/demo/source.txt", noTrash: true }]));
+    });
+    const dialog = await screen.findByRole("dialog", {
+      name: "Are you sure you want to delete “source.txt”?",
+    });
+
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      harness.invocations.some((call) => call.channel === "writeOperation:deleteImmediately"),
+    ).toBe(false);
+  });
+
+  it("reports other failures as failures, without asking", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+    await trashSource(harness);
+
+    await act(async () => {
+      harness.emitProgress(
+        trashResult([
+          { path: "/Users/demo/source.txt", noTrash: true },
+          { path: "/Users/demo/Folder", error: "You don't have permission to access this item." },
+        ]),
+      );
+    });
+
+    expect(
+      screen.queryByRole("dialog", { name: /Are you sure you want to delete/ }),
+    ).not.toBeInTheDocument();
+    expect(await screen.findByRole("dialog")).toHaveTextContent(
+      "You don't have permission to access this item.",
+    );
+  });
+});

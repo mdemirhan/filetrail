@@ -134,6 +134,9 @@ const WRITE_LOCKED_CONTEXT_ACTION_IDS: ContextMenuActionId[] = [
   "deleteImmediately",
   "emptyTrash",
 ];
+// What the menus leave out in the Trash: nothing is pasted, made or duplicated there, and
+// what is in it is in the Trash already (Delete Immediately is offered instead).
+const TRASH_HIDDEN_ACTION_IDS: ContextMenuActionId[] = ["paste", "newFolder", "duplicate", "trash"];
 // Background-menu actions that act on the folder on screen rather than on a selection.
 const BACKGROUND_FOLDER_ACTION_IDS: ContextMenuActionId[] = [
   "showInfo",
@@ -164,12 +167,26 @@ type CopyLikePreStartOutcome =
   | { status: "cancelled" }
   | { status: "error"; message: string };
 
+// The items a Move to Trash couldn't move because their disk has no Trash, when that is the
+// only thing that went wrong (anything else is reported first, as any failure is).
+function itemsWithoutTrash(event: WriteOperationProgressEvent): string[] {
+  if (event.action !== "trash" || !event.result) {
+    return [];
+  }
+  const failed = event.result.items.filter((item) => item.status === "failed");
+  if (failed.length === 0 || failed.some((item) => item.noTrash !== true)) {
+    return [];
+  }
+  return failed.flatMap((item) => (item.sourcePath ? [item.sourcePath] : []));
+}
+
 // The questions asked before an operation starts, as opposed to the sheets of a paste.
 function isConfirmationDialog(state: { type: string } | null): boolean {
   return (
     state?.type === "confirmTrash" ||
     state?.type === "confirmDeleteImmediately" ||
     state?.type === "confirmEmptyTrash" ||
+    state?.type === "confirmDeleteWithoutTrash" ||
     state?.type === "confirmDotName"
   );
 }
@@ -514,11 +531,19 @@ export function useExplorerActions(args: {
       if (!hasBundle) {
         hidden.add("showPackageContents");
       }
+      // In the Trash things are only taken out or deleted for good: nothing is pasted,
+      // made or duplicated there, and what is there is in the Trash already.
+      for (const actionId of TRASH_HIDDEN_ACTION_IDS) {
+        hidden.add(actionId);
+      }
       return Array.from(hidden);
     }
     if (contextMenuState.surface === "favorite") {
       if (contextMenuState.targetPath !== getTrashPath(homePath)) {
         hidden.add("emptyTrash");
+      } else {
+        hidden.add("paste");
+        hidden.add("newFolder");
       }
       return Array.from(hidden);
     }
@@ -538,6 +563,14 @@ export function useExplorerActions(args: {
       const targetPath = contextMenuState.targetPath;
       if (!targetPath || !isPathInsideTrash(targetPath, homePath)) {
         hidden.add("deleteImmediately");
+      } else {
+        for (const actionId of TRASH_HIDDEN_ACTION_IDS) {
+          hidden.add(actionId);
+        }
+        // The Trash itself is the home folder's: it isn't deleted, only emptied.
+        if (targetPath === getTrashPath(homePath)) {
+          hidden.add("deleteImmediately");
+        }
       }
       return Array.from(hidden);
     }
@@ -603,6 +636,12 @@ export function useExplorerActions(args: {
     if (isTreeFolderContext) {
       disabled.add("openWith");
       disabled.add("edit");
+      // The Trash itself stays where it is, under its name (the main process refuses too).
+      if (contextMenuState.targetPath === getTrashPath(homePath)) {
+        disabled.add("cut");
+        disabled.add("move");
+        disabled.add("rename");
+      }
       if (!contextMenuState.targetPath) {
         disabled.add("open");
         disabled.add("openInNewTab");
@@ -694,6 +733,7 @@ export function useExplorerActions(args: {
     contextMenuFavoriteToggleLabel,
     contextMenuState,
     contextMenuTargetEntries,
+    homePath,
     isWriteOperationLocked,
   ]);
 
@@ -917,7 +957,20 @@ export function useExplorerActions(args: {
         } else {
           pendingPasteSelectionRef.current = null;
         }
-        if (shouldRenderCopyPasteResultDialog(event)) {
+        const withoutTrash = itemsWithoutTrash(event);
+        if (withoutTrash.length > 0 && startedInTabOnScreen) {
+          // Their disk has no Trash: as Finder does, offer to delete them immediately
+          // instead of reporting a failure that leaves no way to delete them.
+          setWriteOperationProgressEvent(null);
+          setCopyPasteDialogState({
+            type: "confirmDeleteWithoutTrash",
+            paths: withoutTrash,
+            itemLabel: formatItemSummaryFromPathCount(
+              withoutTrash[0] ?? "item",
+              withoutTrash.length,
+            ),
+          });
+        } else if (shouldRenderCopyPasteResultDialog(event)) {
           setWriteOperationProgressEvent(event);
         } else {
           setWriteOperationProgressEvent(null);
@@ -1934,7 +1987,11 @@ export function useExplorerActions(args: {
     if (pasteDestinationPath === null) {
       pushToast({
         kind: "warning",
-        title: "Select a destination folder to paste into",
+        title: isSearchMode
+          ? "Open a folder to paste into"
+          : isPathInsideTrash(currentPathRef.current, homePath)
+            ? "Nothing can be pasted into the Trash"
+            : "Select a destination folder to paste into",
       });
       return;
     }
@@ -2677,6 +2734,7 @@ export function useExplorerActions(args: {
               selectedPaths: paths,
               isSearchMode,
               contextScope: contextMenuScope,
+              homePath,
             });
       if (targetPath) {
         openNewFolderDialog(targetPath, {
@@ -2957,6 +3015,13 @@ export function useExplorerActions(args: {
     options: { selectInTreeOnSuccess?: boolean } = {},
   ) {
     if (paths.length === 0 || destinationDirectoryPath.length === 0) {
+      return;
+    }
+    // Nothing is made in the Trash (the menus offer no Duplicate there).
+    if (
+      isPathInsideTrash(destinationDirectoryPath, homePath) ||
+      paths.some((path) => isPathInsideTrash(path, homePath))
+    ) {
       return;
     }
     if (isWriteOperationInFlight()) {
@@ -3578,6 +3643,12 @@ export function useExplorerActions(args: {
 
   async function startRemovePaths(paths: string[], action: "trash" | "delete_immediately") {
     if (paths.length === 0) {
+      return;
+    }
+    // What is already in the Trash isn't moved there again: Move to Trash does nothing
+    // there, and Delete Immediately is in its menu.
+    if (action === "trash" && paths.some((path) => isPathInsideTrash(path, homePath))) {
+      closeDeleteConfirmation();
       return;
     }
     if (isWriteOperationInFlight()) {

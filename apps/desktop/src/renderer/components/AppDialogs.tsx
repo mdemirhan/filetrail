@@ -343,6 +343,31 @@ export function AppDialogs({
           }}
         />
       ) : null}
+      {copyPasteDialogState?.type === "confirmDeleteWithoutTrash" ? (
+        <CopyPasteDialog
+          // Finder's question for an item on a disk without a Trash.
+          title={
+            copyPasteDialogState.paths.length === 1
+              ? `Are you sure you want to delete ${quoteItems(copyPasteDialogState.itemLabel, 1)}?`
+              : `Are you sure you want to delete these ${copyPasteDialogState.paths.length.toLocaleString()} items?`
+          }
+          message={
+            copyPasteDialogState.paths.length === 1
+              ? "Its disk has no Trash, so it will be deleted immediately. You can’t undo this action."
+              : "Their disk has no Trash, so they will be deleted immediately. You can’t undo this action."
+          }
+          primaryAction={{
+            label: "Delete",
+            onClick: () => onConfirmDeleteImmediatelyDialog(copyPasteDialogState.paths),
+            destructive: true,
+            irreversible: true,
+          }}
+          secondaryAction={{
+            label: "Cancel",
+            onClick: onCloseConfirmationDialog,
+          }}
+        />
+      ) : null}
       {copyPasteDialogState?.type === "confirmEmptyTrash" ? (
         <CopyPasteDialog
           // Finder's question, word for word; Cancel is the default.
