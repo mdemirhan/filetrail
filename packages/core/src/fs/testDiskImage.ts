@@ -27,7 +27,11 @@ export function mountTestDiskImage(
     format?: TestDiskFormat;
   } = {},
 ): TestDiskImage {
-  const root = mkdtempSync(join(tmpdir(), "filetrail-volume-"));
+  // In the system's temporary folder, not the test file's (see tmpdirPerTestFile): a disk
+  // that is still busy is detached in the background, after that folder is gone.
+  const root = mkdtempSync(
+    join(process.env.FILETRAIL_SYSTEM_TMPDIR ?? tmpdir(), "filetrail-volume-"),
+  );
   const imagePath = join(root, "volume.dmg");
   const mountPath = join(root, "mnt");
   runHdiutil([
