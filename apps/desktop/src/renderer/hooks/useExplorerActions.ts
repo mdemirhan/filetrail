@@ -514,9 +514,9 @@ export function useExplorerActions(args: {
     }
     if (contextMenuState.surface === "treeFolder") {
       hidden.delete("calculateSize");
-      // Delete Immediately is offered for any folder of the tree, but only here: the tree
-      // takes no ⌥⌘⌫, as it takes no other key that changes a folder.
-      if (!contextMenuState.targetPath) {
+      // Everything goes to the Trash; only what is already in it can be deleted for good.
+      const targetPath = contextMenuState.targetPath;
+      if (!targetPath || !isPathInsideTrash(targetPath, homePath)) {
         hidden.add("deleteImmediately");
       }
       return Array.from(hidden);
@@ -674,7 +674,6 @@ export function useExplorerActions(args: {
     contextMenuFavoriteToggleLabel,
     contextMenuState,
     contextMenuTargetEntries,
-    isSearchMode,
     isWriteOperationLocked,
   ]);
 
@@ -3624,7 +3623,6 @@ export function useExplorerActions(args: {
     dismissToast,
     noticeDragRefusedWhileBusy,
     startDuplicateOfSelection,
-    requestDeleteImmediately,
     requestEmptyTrash,
     confirmEmptyTrash,
     editPaths,

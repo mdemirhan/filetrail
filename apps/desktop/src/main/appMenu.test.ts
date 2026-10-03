@@ -96,7 +96,6 @@ describe("createApplicationMenuTemplate", () => {
       "Show in Finder",
       "-",
       "Move to Trash",
-      "Delete Immediately…",
       "-",
       "Reopen Closed Tab",
       "Close Tab",

@@ -86,9 +86,6 @@ export const RENDERER_COMMAND_TREE_FOCUS_BUCKETS = {
   duplicateSelection: "contentOnly",
   newFolder: "contentOnly",
   trashSelection: "contentOnly",
-  // Like the other keys that change items, never the tree's: there it is only in the
-  // folder's own menu.
-  deleteImmediately: "contentOnly",
   emptyTrash: "globalExplorer",
   copySelection: "contentOnly",
   cutSelection: "contentOnly",

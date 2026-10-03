@@ -147,7 +147,6 @@ describe("helpContent", () => {
     expect(trash.map((result) => result.topic.id)).toEqual(["files"]);
     expect(trash[0]?.shortcuts.map((item) => item.shortcut)).toEqual([
       "Cmd+Backspace",
-      "Cmd+Option+Backspace",
       "Cmd+Shift+Backspace",
     ]);
     expect(searchHelp("cmd+k")[0]?.shortcuts[0]?.description).toBe(

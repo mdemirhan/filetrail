@@ -168,7 +168,6 @@ export function createApplicationMenuTemplate(
         command("showInFinder", "Show in Finder"),
         separator,
         command("trashSelection", "Move to Trash"),
-        command("deleteImmediately", "Delete Immediately…"),
         separator,
         command("reopenClosedTab", "Reopen Closed Tab"),
         // Closes the window when it has a single view.

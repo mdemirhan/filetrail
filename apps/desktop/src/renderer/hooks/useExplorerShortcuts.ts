@@ -127,7 +127,6 @@ type ExplorerShortcutActions = {
   resolveContentActionPaths: () => string[];
   startDuplicateOfSelection: (paths: string[]) => void;
   startTrashPaths: (paths: string[]) => Promise<void>;
-  requestDeleteImmediately: (paths: string[]) => void;
   requestEmptyTrash: () => void;
   openMoveDialog: (paths: string[]) => void;
   openRenameDialog: (paths: string[]) => void;
@@ -1079,14 +1078,6 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         const paths = current.resolveContentActionPaths();
         if (paths.length > 0) {
           void current.startTrashPaths(paths);
-        }
-        return;
-      }
-      if (commandType === "deleteImmediately") {
-        // Move to Trash covers search results; Delete Immediately is for the list.
-        const paths = current.isSearchMode ? [] : current.resolveContentActionPaths();
-        if (paths.length > 0) {
-          current.requestDeleteImmediately(paths);
         }
         return;
       }

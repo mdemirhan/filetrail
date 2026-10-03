@@ -209,13 +209,6 @@ export const SHORTCUT_COMMANDS = [
     menuPath: "File > Move to Trash",
   },
   {
-    id: "deleteImmediately",
-    label: "Delete Immediately…",
-    group: "files",
-    defaults: ["Cmd+Option+Backspace"],
-    menuPath: "File > Delete Immediately…",
-  },
-  {
     id: "emptyTrash",
     label: "Empty Trash…",
     group: "files",

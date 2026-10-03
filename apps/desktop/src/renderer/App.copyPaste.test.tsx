@@ -12015,68 +12015,32 @@ describe("acting on search results", () => {
 });
 
 describe("Delete Immediately and Empty Trash", () => {
-  const deleteQuestion = "Are you sure you want to delete “source.txt”?";
   const emptyQuestion = "Are you sure you want to permanently erase the items in the Trash?";
 
-  it("deletes the selection in the list with Option-Command-Delete, after asking", async () => {
+  // Everything goes to the Trash; only what is already in it is deleted for good.
+  it("has no Option-Command-Delete in the list", async () => {
     const harness = createAppHarness();
     renderApp(harness);
     await selectItem("/Users/demo/source.txt");
 
     await pressKey({ key: "Backspace", metaKey: true, altKey: true });
-    const dialog = await screen.findByRole("dialog", { name: deleteQuestion });
-    expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
-    await act(async () => {
-      fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
-    });
-
-    await vi.waitFor(() => {
-      expect(
-        harness.invocations.find((call) => call.channel === "writeOperation:deleteImmediately")
-          ?.payload,
-      ).toEqual({ paths: ["/Users/demo/source.txt"] });
-    });
-  });
-
-  // Like the tree's other keys that change a folder: only its own menu does it.
-  it("does nothing on Option-Command-Delete in the folder tree", async () => {
-    const harness = createAppHarness();
-    renderApp(harness);
-    await focusTreePane();
-
-    await pressKey({ key: "Backspace", metaKey: true, altKey: true });
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      harness.invocations.some((call) => call.channel === "writeOperation:deleteImmediately"),
+    ).toBe(false);
   });
 
-  it("offers Delete Immediately in a tree folder's own menu", async () => {
+  it("offers Delete Immediately in a tree folder's menu only inside the Trash", async () => {
     const harness = createAppHarness();
     renderApp(harness);
     const menuTarget = await screen.findByTitle("tree:/Users/demo/Folder");
     await act(async () => {
       fireEvent.contextMenu(menuTarget);
     });
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /^Delete Immediately/ }));
-    });
 
-    expect(
-      await screen.findByRole("dialog", { name: "Are you sure you want to delete “Folder”?" }),
-    ).toBeInTheDocument();
-  });
-
-  // Move to Trash covers search results.
-  it("does nothing on Option-Command-Delete in search results", async () => {
-    const harness = createAppHarness();
-    renderApp(harness);
-    await openSearchResults();
-    await act(async () => {
-      fireEvent.click(await screen.findByTitle("search:/Users/demo/source.txt"));
-    });
-
-    await pressKey({ key: "Backspace", metaKey: true, altKey: true });
-
-    expect(screen.queryByRole("dialog", { name: deleteQuestion })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Delete Immediately/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Move to Trash/ })).toBeInTheDocument();
   });
 
   it("empties the Trash from the menu bar, after asking, and not on Cancel", async () => {
