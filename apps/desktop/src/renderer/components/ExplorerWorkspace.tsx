@@ -26,6 +26,7 @@ import { parentDirectoryPath } from "../lib/explorerNavigation";
 import type { HistoryMenuEntry } from "../lib/historyMenu";
 import { EXPLORER_LAYOUT } from "../lib/layoutTokens";
 import { placeDropdownMenu } from "../lib/menuPlacement";
+import { PANE_LAYOUT_CHANGE_MS, PaneLayoutChangeContext } from "../lib/paneLayoutChange";
 import { formatTooltip, getToolbarItemTooltip } from "../lib/tooltips";
 import {
   type TopToolbarSlot,
@@ -253,6 +254,34 @@ export function ExplorerWorkspace({
     (restoredPaneWidths === null ||
       (treeWidth === restoredPaneWidths.treeWidth &&
         inspectorWidth === restoredPaneWidths.inspectorWidth));
+
+  // Opening or closing the Info panel changes the content pane's width in one step; the panel
+  // slides in over the space it takes, or out over the content, and icon view moves its
+  // items to their new places (see PaneLayoutChangeContext). A closing panel stays on screen,
+  // out of reach, until it has slid away.
+  const [infoPanelChange, setInfoPanelChange] = useState({
+    open: infoPanelOpen,
+    count: 0,
+    slide: null as "in" | "out" | null,
+  });
+  if (infoPanelChange.open !== infoPanelOpen) {
+    setInfoPanelChange({
+      open: infoPanelOpen,
+      count: infoPanelChange.count + 1,
+      slide: workspaceReady ? (infoPanelOpen ? "in" : "out") : null,
+    });
+  }
+  useEffect(() => {
+    if (infoPanelChange.slide === null) {
+      return;
+    }
+    const timer = window.setTimeout(
+      () => setInfoPanelChange((current) => ({ ...current, slide: null })),
+      PANE_LAYOUT_CHANGE_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [infoPanelChange]);
+  const infoPanelClosing = !infoPanelOpen && infoPanelChange.slide === "out";
 
   // Works out how many of the removable items fit, from the width of the row and the
   // widths of the items: the removable ones are measured in a hidden copy (those that do
@@ -967,7 +996,9 @@ export function ExplorerWorkspace({
           {toolbar}
           {tabStrip}
           <div className="workspace-main-cell" style={{ gridColumn: "3", gridRow: "3" }}>
-            <SearchWorkspace {...searchWorkspaceProps} />
+            <PaneLayoutChangeContext.Provider value={infoPanelChange.count}>
+              <SearchWorkspace {...searchWorkspaceProps} />
+            </PaneLayoutChangeContext.Provider>
           </div>
           {infoPanelOpen ? (
             <>
@@ -981,10 +1012,24 @@ export function ExplorerWorkspace({
                 aria-label="Resize Info Panel pane"
                 onKeyDown={(event) => onPaneResizeKey("inspector", event)}
               />
-              <div className="workspace-inspector-cell" style={{ gridColumn: "5", gridRow: "3" }}>
+              <div
+                className={`workspace-inspector-cell${
+                  infoPanelChange.slide === "in" ? " is-sliding-in" : ""
+                }`}
+                style={{ gridColumn: "5", gridRow: "3" }}
+              >
                 <InfoPanel {...infoPanelProps} />
               </div>
             </>
+          ) : infoPanelClosing ? (
+            // Over the right edge of the content, which already has the whole width.
+            <div
+              className="workspace-inspector-cell is-sliding-out"
+              style={{ gridColumn: "3", gridRow: "3", justifySelf: "end", width: inspectorWidth }}
+              inert
+            >
+              <InfoPanel {...infoPanelProps} />
+            </div>
           ) : null}
         </section>
       )}

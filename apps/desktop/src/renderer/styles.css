@@ -4061,6 +4061,44 @@ body.platform-macos .settings-view[data-layout="compact"] {
   min-height: 0;
 }
 
+/* The Info panel slides in over the space it takes, and out over the content (see
+   ExplorerWorkspace). 220 ms, as PANE_LAYOUT_CHANGE_MS. */
+.workspace-inspector-cell.is-sliding-in,
+.workspace-inspector-cell.is-sliding-out {
+  overflow: hidden;
+}
+
+.workspace-inspector-cell.is-sliding-in > * {
+  animation: info-panel-slide-in 220ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.workspace-inspector-cell.is-sliding-out > * {
+  animation: info-panel-slide-out 220ms cubic-bezier(0.2, 0, 0, 1) forwards;
+}
+
+@keyframes info-panel-slide-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes info-panel-slide-out {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-inspector-cell.is-sliding-in > *,
+  .workspace-inspector-cell.is-sliding-out > * {
+    animation: none;
+  }
+
+  .workspace-inspector-cell.is-sliding-out {
+    display: none;
+  }
+}
+
 /* ── Sidebar ──────────────────────────────────────────────────────────── */
 
 .tree-pane {

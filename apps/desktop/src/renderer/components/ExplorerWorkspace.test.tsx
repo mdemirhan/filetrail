@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { type ComponentProps, createRef } from "react";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -8,14 +8,21 @@ vi.mock("./TreePane", () => ({
   TreePane: () => <div data-testid="tree-pane" />,
 }));
 
-vi.mock("./SearchWorkspace", () => ({
-  SearchWorkspace: () => <div data-testid="search-workspace" />,
-}));
+vi.mock("./SearchWorkspace", async () => {
+  const { usePaneLayoutChange } = await import("../lib/paneLayoutChange");
+  return {
+    // Shows how many times the Info panel opened or closed, as the views below see it.
+    SearchWorkspace: () => (
+      <div data-testid="search-workspace" data-layout-change={usePaneLayoutChange()} />
+    ),
+  };
+});
 
 vi.mock("./GetInfoPanel", () => ({
   InfoPanel: () => <div data-testid="info-panel" />,
 }));
 
+import { PANE_LAYOUT_CHANGE_MS } from "../lib/paneLayoutChange";
 import { TOP_TOOLBAR_LAYOUT } from "../lib/topToolbarLayout";
 import { ExplorerWorkspace } from "./ExplorerWorkspace";
 
@@ -153,6 +160,53 @@ afterEach(() => {
 });
 
 describe("ExplorerWorkspace", () => {
+  it("slides the Info panel in, and tells the views its width changed", () => {
+    vi.useFakeTimers();
+    const view = renderExplorerWorkspace();
+    expect(screen.getByTestId("search-workspace")).toHaveAttribute("data-layout-change", "0");
+
+    view.rerender(explorerWorkspaceElement({ infoPanelOpen: true }));
+    const cell = () => view.container.querySelector(".workspace-inspector-cell");
+    expect(screen.getByTestId("info-panel")).toBeInTheDocument();
+    expect(cell()).toHaveClass("is-sliding-in");
+    expect(screen.getByTestId("search-workspace")).toHaveAttribute("data-layout-change", "1");
+
+    act(() => vi.advanceTimersByTime(PANE_LAYOUT_CHANGE_MS));
+    expect(cell()).not.toHaveClass("is-sliding-in");
+    vi.useRealTimers();
+  });
+
+  it("slides a closing Info panel out over the content, out of reach, then removes it", () => {
+    vi.useFakeTimers();
+    const view = renderExplorerWorkspace({ infoPanelOpen: true });
+    view.rerender(explorerWorkspaceElement({ infoPanelOpen: false }));
+
+    // The content has the whole width at once; the panel lies over its right edge.
+    const body = view.container.querySelector(".workspace-body") as HTMLElement;
+    expect(body.style.gridTemplateColumns).not.toContain("320px");
+    const cell = view.container.querySelector(".workspace-inspector-cell") as HTMLElement;
+    expect(cell).toHaveClass("is-sliding-out");
+    expect(cell).toHaveAttribute("inert");
+    expect(cell.style.gridColumn).toBe("3");
+    expect(screen.queryByRole("separator", { name: "Resize Info Panel pane" })).toBeNull();
+    expect(screen.getByTestId("search-workspace")).toHaveAttribute("data-layout-change", "1");
+
+    act(() => vi.advanceTimersByTime(PANE_LAYOUT_CHANGE_MS));
+    expect(screen.queryByTestId("info-panel")).not.toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it("doesn't slide a panel that is open when the window is restored", () => {
+    const view = renderExplorerWorkspace({ preferencesReady: false });
+    view.rerender(explorerWorkspaceElement({ preferencesReady: false, infoPanelOpen: true }));
+    view.rerender(explorerWorkspaceElement({ preferencesReady: true, infoPanelOpen: true }));
+
+    expect(screen.getByTestId("info-panel")).toBeInTheDocument();
+    expect(view.container.querySelector(".workspace-inspector-cell")).not.toHaveClass(
+      "is-sliding-in",
+    );
+  });
+
   it("shows every button of a saved toolbar that loads before the toolbar appears", () => {
     // Before preferences are ready the toolbar is not on screen and holds the default items.
     const view = renderExplorerWorkspace({

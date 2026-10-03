@@ -16,6 +16,7 @@ import {
   getIconGridRevealScrollTop,
 } from "../lib/iconGridLayout";
 import { fitIconLabel } from "../lib/iconLabel";
+import { PANE_LAYOUT_CHANGE_MS, usePaneLayoutChange } from "../lib/paneLayoutChange";
 import { getVirtualRange } from "../lib/virtualization";
 import { InlineRenameField } from "./InlineRenameField";
 
@@ -115,11 +116,23 @@ export function IconGridView({
   );
 
   const layout = getIconGridLayout(compactIconView);
+  // When the Info panel opens or closes, the grid's width is measured right away rather than
+  // on the next frame, so the items land in their new columns before anything is painted;
+  // the measured size takes over again once it has caught up.
+  const layoutChange = usePaneLayoutChange();
+  const handledLayoutChangeRef = useRef(layoutChange);
+  const [immediateWidth, setImmediateWidth] = useState<{
+    width: number;
+    measuredBefore: number;
+  } | null>(null);
+  // The immediate width asked for and not rendered yet: the items move once it is.
+  const pendingImmediateWidthRef = useRef<typeof immediateWidth>(null);
+  const gridWidth =
+    immediateWidth && containerWidth === immediateWidth.measuredBefore
+      ? immediateWidth.width
+      : containerWidth;
   // Until the grid itself is measured, the pane's width gives the same answer.
-  const columns = computeIconGridColumns(
-    containerWidth > 0 ? containerWidth : viewportWidth,
-    layout,
-  );
+  const columns = computeIconGridColumns(gridWidth > 0 ? gridWidth : viewportWidth, layout);
   const rowCount = Math.ceil(entries.length / columns);
   const range = getVirtualRange({
     itemCount: rowCount,
@@ -136,6 +149,64 @@ export function IconGridView({
   useEffect(() => {
     onVisiblePathsChange(visiblePathsKey.length > 0 ? visiblePathsKey.split("\0") : []);
   }, [onVisiblePathsChange, visiblePathsKey]);
+
+  useLayoutEffect(() => {
+    if (handledLayoutChangeRef.current === layoutChange) {
+      return;
+    }
+    handledLayoutChangeRef.current = layoutChange;
+    const container = containerRef.current;
+    if (!container) {
+      return;
+    }
+    const next = {
+      width: Math.round(container.getBoundingClientRect().width),
+      measuredBefore: containerWidth,
+    };
+    pendingImmediateWidthRef.current = next;
+    setImmediateWidth(next);
+  }, [layoutChange, containerWidth]);
+
+  // Where each item on screen was laid out, to move it from there when the Info panel opens
+  // or closes. Kept after every render except the one in which the grid's width has just
+  // changed and its columns have not been worked out again yet.
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const itemPlacesRef = useRef(new Map<string, { left: number; top: number }>());
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    const pending = pendingImmediateWidthRef.current;
+    if (!list || (pending !== null && pending !== immediateWidth)) {
+      return;
+    }
+    const animate = pending !== null;
+    pendingImmediateWidthRef.current = null;
+    const previous = itemPlacesRef.current;
+    const next = new Map<string, { left: number; top: number }>();
+    for (const item of Array.from(
+      list.querySelectorAll<HTMLElement>("[data-selectable-entry-path]"),
+    )) {
+      const path = item.dataset.selectableEntryPath ?? "";
+      const place = { left: item.offsetLeft, top: item.offsetTop };
+      next.set(path, place);
+      const before = previous.get(path);
+      if (!animate || !before || typeof item.animate !== "function") {
+        continue;
+      }
+      const dx = before.left - place.left;
+      const dy = before.top - place.top;
+      if (dx === 0 && dy === 0) {
+        continue;
+      }
+      for (const running of item.getAnimations()) {
+        running.cancel();
+      }
+      item.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }], {
+        duration: prefersReducedMotion() ? 0 : PANE_LAYOUT_CHANGE_MS,
+        easing: "cubic-bezier(0.2, 0, 0, 1)",
+      });
+    }
+    itemPlacesRef.current = next;
+  });
 
   // Arrow keys and paging move by rows of this many items.
   useEffect(() => {
@@ -213,6 +284,7 @@ export function IconGridView({
       {/* biome-ignore lint/a11y/useSemanticElements: a native select cannot host this virtualized grid of icons. */}
       <div
         role="listbox"
+        ref={listRef}
         aria-multiselectable="true"
         className="icon-grid-items"
         style={{
@@ -314,4 +386,8 @@ export function IconGridView({
       </div>
     </div>
   );
+}
+
+function prefersReducedMotion(): boolean {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 }

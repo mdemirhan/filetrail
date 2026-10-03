@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
 
 import { ICON_GRID_LAYOUT } from "../lib/iconGridLayout";
+import { PaneLayoutChangeContext } from "../lib/paneLayoutChange";
 import { IconGridView } from "./IconGridView";
 
 type Entry = ComponentProps<typeof IconGridView>["entries"][number];
@@ -204,5 +205,118 @@ describe("IconGridView", () => {
 
     expect(screen.getByText("This folder is empty")).toBeInTheDocument();
     expect(screen.queryAllByRole("option")).toHaveLength(0);
+  });
+
+  describe("when the Info panel opens or closes", () => {
+    // jsdom lays nothing out: the grid's width is what this says, and each item sits at its
+    // column times 100 px and its row times the row height, by its place among the items.
+    let gridWidth = 500;
+    const descriptors = {
+      rect: Object.getOwnPropertyDescriptor(HTMLElement.prototype, "getBoundingClientRect"),
+      left: Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetLeft"),
+      top: Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetTop"),
+    };
+    const animate = vi.fn();
+    const columnsOf = (item: HTMLElement) =>
+      Number(item.parentElement?.style.gridTemplateColumns.match(/repeat\((\d+)/)?.[1] ?? 1);
+    const indexOf = (item: HTMLElement) =>
+      Array.prototype.indexOf.call(item.parentElement?.children ?? [], item);
+
+    beforeEach(() => {
+      gridWidth = 500;
+      animate.mockReset();
+      Object.defineProperty(HTMLElement.prototype, "getBoundingClientRect", {
+        configurable: true,
+        value(this: HTMLElement) {
+          const width = this.classList.contains("icon-grid") ? gridWidth : 0;
+          return { left: 0, top: 0, right: width, bottom: 400, width, height: 400, x: 0, y: 0 };
+        },
+      });
+      Object.defineProperty(HTMLElement.prototype, "offsetLeft", {
+        configurable: true,
+        get(this: HTMLElement) {
+          return (indexOf(this) % columnsOf(this)) * 100;
+        },
+      });
+      Object.defineProperty(HTMLElement.prototype, "offsetTop", {
+        configurable: true,
+        get(this: HTMLElement) {
+          return Math.floor(indexOf(this) / columnsOf(this)) * ICON_GRID_LAYOUT.rowHeight;
+        },
+      });
+      Object.assign(HTMLElement.prototype, { animate, getAnimations: () => [] });
+    });
+
+    afterEach(() => {
+      for (const [name, descriptor] of [
+        ["getBoundingClientRect", descriptors.rect],
+        ["offsetLeft", descriptors.left],
+        ["offsetTop", descriptors.top],
+      ] as const) {
+        if (descriptor) {
+          Object.defineProperty(HTMLElement.prototype, name, descriptor);
+        }
+      }
+      Reflect.deleteProperty(HTMLElement.prototype, "animate");
+      Reflect.deleteProperty(HTMLElement.prototype, "getAnimations");
+    });
+
+    function gridAt(layoutChange: number) {
+      return (
+        <PaneLayoutChangeContext.Provider value={layoutChange}>
+          <IconGridView
+            entries={["a", "b", "c", "d", "e", "f"].map((name) => file(`${name}.txt`))}
+            isFocused
+            selectedPaths={[]}
+            selectionLeadPath={null}
+            viewportWidth={500}
+            viewportHeight={400}
+            onSelectionGesture={() => undefined}
+            onClearSelection={() => undefined}
+            onActivateEntry={() => undefined}
+            onLayoutColumnsChange={() => undefined}
+            onVisiblePathsChange={() => undefined}
+            inlineRename={null}
+            onInlineRenameSubmit={() => undefined}
+            onInlineRenameCancel={() => undefined}
+          />
+        </PaneLayoutChangeContext.Provider>
+      );
+    }
+
+    it("puts the items in their new columns at once and moves each from where it was", () => {
+      const view = render(gridAt(0));
+      expect(screen.getByRole("listbox").style.gridTemplateColumns).toMatch(/^repeat\(4,/);
+
+      // The panel opened: the grid is narrower before it has been measured again.
+      gridWidth = 300;
+      act(() => view.rerender(gridAt(1)));
+
+      expect(screen.getByRole("listbox").style.gridTemplateColumns).toMatch(/^repeat\(2,/);
+      const moves = new Map(
+        animate.mock.instances.map((item, call) => [
+          (item as HTMLElement).dataset.selectableEntryPath?.split("/").at(-1),
+          (animate.mock.calls[call]?.[0] as Keyframe[])[0]?.transform,
+        ]),
+      );
+      // From four columns to two: a.txt and b.txt stay; c.txt and d.txt come from the right
+      // end of the first row, e.txt and f.txt from the row above.
+      const row = ICON_GRID_LAYOUT.rowHeight;
+      expect(moves).toEqual(
+        new Map([
+          ["c.txt", `translate(200px, -${row}px)`],
+          ["d.txt", `translate(200px, -${row}px)`],
+          ["e.txt", `translate(0px, -${row}px)`],
+          ["f.txt", `translate(0px, -${row}px)`],
+        ]),
+      );
+    });
+
+    it("doesn't animate items that move for any other reason", () => {
+      const view = render(gridAt(0));
+      gridWidth = 300;
+      act(() => view.rerender(gridAt(0)));
+      expect(animate).not.toHaveBeenCalled();
+    });
   });
 });
