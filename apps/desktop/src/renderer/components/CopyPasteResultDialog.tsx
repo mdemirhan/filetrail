@@ -16,6 +16,13 @@ const PAST_TENSE: Record<string, string> = {
   duplicate: "Duplicated",
 };
 
+const FAILED_TITLE: Record<string, string> = {
+  paste: "Paste failed",
+  copy_to: "Copy failed",
+  move_to: "Move failed",
+  duplicate: "Duplicate failed",
+};
+
 // Rows listed per section; a result with tens of thousands of problems lists the first
 // ones and says how many more there are.
 const SECTION_ROW_LIMIT = 200;
@@ -58,7 +65,7 @@ export function CopyPasteResultDialog({
   const copiedTopLevel = outcome.completedTopLevel + outcome.partialTopLevel.length;
   const title =
     outcome.topLevelCount === 0
-      ? `${pastTense.replace(/d$/u, "")} failed`
+      ? (FAILED_TITLE[event.action] ?? "Failed")
       : `${pastTense} ${formatCount(copiedTopLevel)} of ${pluralize(outcome.topLevelCount, "item")}${
           destinationName ? ` into “${destinationName}”` : ""
         }`;

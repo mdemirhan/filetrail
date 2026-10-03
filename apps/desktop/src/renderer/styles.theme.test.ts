@@ -242,6 +242,22 @@ describe("theme styles", () => {
     ).toEqual(["var(--ft-accent-solid-button)"]);
   });
 
+  it("fills the default button of every dialog with the accent, never the destructive red", () => {
+    const all = parseDeclarations(styles);
+    const primaryRules = all.filter((d) =>
+      d.selector.split(",").some((part) => /\.tb-btn\.primary(?![-\w])/.test(part)),
+    );
+    expect(primaryRules.some((d) => d.value.includes("--danger"))).toBe(false);
+    for (const dialog of [".copy-paste-sheet", ".copy-paste-conflict-alert", ".action-notice-dialog"]) {
+      const background = all.find(
+        (d) =>
+          d.property === "background" &&
+          d.selector.split(",").some((part) => part.trim() === `${dialog} .tb-btn.primary`),
+      );
+      expect(background?.value, dialog).toBe("var(--ft-accent-solid-button)");
+    }
+  });
+
   it("shows a toolbar toggle that is on, in every theme, apart from off and from hover", () => {
     const all = parseDeclarations(styles);
     const percentOf = (property: string) => {

@@ -6843,14 +6843,21 @@ button.shortcut-slot-key.recording:hover {
    in every theme. */
 .copy-paste-sheet .tb-btn.primary,
 .copy-paste-conflict-alert .tb-btn.primary,
-.action-notice-dialog .tb-btn.primary,
+.action-notice-dialog .tb-btn.primary {
+  border-color: transparent;
+  background: var(--ft-accent-solid-button);
+  color: var(--ft-accent-on-solid);
+}
+
 .copy-paste-sheet .tb-btn.primary:hover:not(:disabled),
 .copy-paste-conflict-alert .tb-btn.primary:hover:not(:disabled),
-.action-notice-dialog .tb-btn.primary:hover:not(:disabled),
+.action-notice-dialog .tb-btn.primary:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
 /* Destructive buttons are red text on a neutral button, as in macOS alerts, so they never
    look like the default button, whatever the accent color (red included). */
-  .copy-paste-sheet
-  .tb-btn.danger,
+.copy-paste-sheet .tb-btn.danger,
 .copy-paste-conflict-alert .tb-btn.danger-text {
   border-color: transparent;
   background: var(--bg-hover);

@@ -103,6 +103,25 @@ describe("CopyPasteResultDialog", () => {
     expect(screen.getByRole("button", { name: "Done" })).toHaveFocus();
   });
 
+  it("names the operation that failed when nothing could be done", () => {
+    for (const [action, title] of [
+      ["paste", "Paste failed"],
+      ["copy_to", "Copy failed"],
+      ["move_to", "Move failed"],
+    ] as const) {
+      const { unmount } = render(
+        <CopyPasteResultDialog
+          event={event(action, [])}
+          canRetry={false}
+          onRetry={() => {}}
+          onClose={() => {}}
+        />,
+      );
+      expect(screen.getByRole("heading", { name: title })).toBeInTheDocument();
+      unmount();
+    }
+  });
+
   it("says a copy made by dragging was copied, not pasted", () => {
     render(
       <CopyPasteResultDialog
