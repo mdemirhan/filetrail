@@ -5,6 +5,7 @@ import {
   lstat,
   lutimes,
   mkdir,
+  open,
   readdir,
   readlink,
   realpath,
@@ -121,6 +122,10 @@ export type WriteServiceFileSystem = {
    *  when not). A move to another disk asks before copying anything, so it never copies
    *  what it then can't remove. Without it, that is found out when removing. */
   canModifyFolder?: (path: string) => Promise<void>;
+  /** Whether a "._name" file is AppleDouble metadata (it starts with the AppleDouble magic
+   *  number): what FAT, exFAT and SMB disks keep beside "name" for its extended attributes,
+   *  which macOS reads as the item's own. Such files aren't copied as items of their own. */
+  isAppleDouble?: (path: string) => Promise<boolean>;
 };
 
 export type CopyPasteRequest = {
@@ -487,7 +492,31 @@ export const DEFAULT_WRITE_SERVICE_FILE_SYSTEM: WriteServiceFileSystem = {
   canModifyFolder: async (path) => {
     await access(path, constants.W_OK);
   },
+  isAppleDouble: (path) => startsWithAppleDoubleMagic(open, path),
 };
+
+// AppleDouble files begin with 0x00051607.
+const APPLE_DOUBLE_MAGIC = [0x00, 0x05, 0x16, 0x07];
+
+export async function startsWithAppleDoubleMagic(
+  openFile: typeof open,
+  path: string,
+): Promise<boolean> {
+  let handle: Awaited<ReturnType<typeof open>> | null = null;
+  try {
+    handle = await openFile(path, "r");
+    const header = Buffer.alloc(APPLE_DOUBLE_MAGIC.length);
+    const { bytesRead } = await handle.read(header, 0, header.length, 0);
+    return (
+      bytesRead === header.length &&
+      APPLE_DOUBLE_MAGIC.every((byte, index) => header[index] === byte)
+    );
+  } catch {
+    return false;
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
+}
 
 /**
  * A Replace in progress: the new item is built under `stagingPath`, a hidden name next to

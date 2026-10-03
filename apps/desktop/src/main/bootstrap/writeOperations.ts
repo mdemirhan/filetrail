@@ -8,6 +8,8 @@ import {
   type WriteOperationResult,
   isAbortError,
   isInsideTrash,
+  pathsChangedByWrite,
+  withoutNestedPaths,
   writeOperationProgressEventSchema,
 } from "@filetrail/contracts";
 import {
@@ -199,7 +201,7 @@ export function createWriteOperationCoordinator(
       copyPasteRequests.delete(event.operationId);
       copyPasteModes.delete(event.operationId);
       // Folder listings read before the operation finished may show the old contents.
-      clearResponseCaches();
+      clearResponseCaches(event.result ? pathsChangedByWrite(event.result) : []);
       if (earlyTerminalEvents && !writeOperationSenders.has(event.operationId)) {
         earlyTerminalEvents.set(event.operationId, event);
       }
@@ -475,7 +477,7 @@ export function createWriteOperationCoordinator(
     // write slot held and a renderer reacting to the final event can start the next write.
     if (isTerminalStatus(event.status)) {
       // Folder listings read before the operation finished may show the old contents.
-      clearResponseCaches();
+      clearResponseCaches(event.result ? pathsChangedByWrite(event.result) : []);
       releaseLocalWriteOperation(event.operationId);
     }
     if (sender) {
@@ -763,9 +765,26 @@ export function createWriteOperationCoordinator(
       throw new Error("Folder destination must be an existing directory.");
     }
     if ((await lstatOrNull(destinationPath, fs.lstat)) !== null) {
+      if (payload.nextFreeName) {
+        return { destinationPath: await nextFreeFolderPath(parentDirectoryPath, folderName) };
+      }
       throw new Error(`An item named “${folderName}” already exists.`);
     }
     return { destinationPath };
+  }
+
+  // "New Folder" taken: "New Folder 2", "New Folder 3"… (from "New Folder 3", the next).
+  async function nextFreeFolderPath(parentDirectoryPath: string, name: string): Promise<string> {
+    const match = /^(.*?) (\d+)$/u.exec(name);
+    const base = match?.[1] ?? name;
+    const first = match?.[2] ? Number(match[2]) + 1 : 2;
+    for (let number = first; number < first + 10_000; number += 1) {
+      const candidate = join(parentDirectoryPath, `${base} ${number}`);
+      if ((await lstatOrNull(candidate, fs.lstat)) === null) {
+        return candidate;
+      }
+    }
+    throw new Error(`An item named “${name}” already exists.`);
   }
 
   async function executeTrashOperation(
@@ -773,7 +792,8 @@ export function createWriteOperationCoordinator(
     operationId: string,
     controller: AbortController,
   ): Promise<void> {
-    const paths = payload.paths.map((path) => resolve(path));
+    // A folder and an item inside it are one item to remove (the folder takes the item).
+    const paths = withoutNestedPaths(payload.paths.map((path) => resolve(path)));
     const startedAt = new Date().toISOString();
     const items: WriteOperationResult["items"] = [];
     let completedItemCount = 0;
@@ -871,7 +891,8 @@ export function createWriteOperationCoordinator(
     operationId: string,
     controller: AbortController,
   ): Promise<void> {
-    const paths = payload.paths.map((path) => resolve(path));
+    // A folder and an item inside it are one item to remove (the folder takes the item).
+    const paths = withoutNestedPaths(payload.paths.map((path) => resolve(path)));
     const startedAt = new Date().toISOString();
     const items: WriteOperationResult["items"] = [];
     let completedItemCount = 0;
@@ -995,7 +1016,7 @@ export function createWriteOperationCoordinator(
       return await prepareWithReservedSlot(empty);
     } finally {
       // The Trash's listing (and anything shown from it) is out of date now.
-      clearResponseCaches();
+      clearResponseCaches([resolve(homePath, ".Trash")]);
     }
   }
 
@@ -1015,9 +1036,11 @@ export function createWriteOperationCoordinator(
       cancelWriteOperation(operationId);
     }
     // A stopped copy ends within moments; only a disk that stops answering (a network
-    // share gone away) could hold quitting up, and then it goes ahead anyway. Nothing is
-    // lost by that: a move removes an original only once its copy is complete, and a
-    // Replace cut short is finished at the next start.
+    // share gone away) could hold quitting up, and then it goes ahead anyway. No original
+    // is lost by that: a move removes one only once its copy is complete, a file being
+    // copied is written under a hidden name until it is whole, and a Replace cut short is
+    // finished at the next start. A Delete Immediately (inside the Trash, and asked for)
+    // may be left part done.
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timedOut = await Promise.race([
       whenIdle().then(() => false),

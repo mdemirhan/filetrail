@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { isAffectedByChange, pathsChangedByWrite } from "@filetrail/contracts";
+
 import type { FiletrailClient } from "../lib/filetrailClient";
+
+function isTerminalWriteStatus(status: string): boolean {
+  return (
+    status === "completed" || status === "failed" || status === "cancelled" || status === "partial"
+  );
+}
 
 export type FolderSizeEntry =
   | { status: "idle" }
@@ -212,6 +220,31 @@ export function useFolderSizeCache(client: FiletrailClient) {
     // Repaint so folders on screen without a size ask again now.
     bumpVersion();
   };
+
+  // A finished file operation may have changed the sizes of the folders it touched: they
+  // are forgotten (the main process forgets them too) and asked about again when shown.
+  useEffect(
+    () =>
+      client.onWriteOperationProgress((event) => {
+        if (!event.result || !isTerminalWriteStatus(event.status)) {
+          return;
+        }
+        const changedPaths = pathsChangedByWrite(event.result);
+        let forgotten = false;
+        for (const [path, entry] of [...cacheRef.current]) {
+          if (entry.status !== "calculating" && isAffectedByChange(path, changedPaths)) {
+            cacheRef.current.delete(path);
+            probedPaths.current.delete(path);
+            probeMissedAt.current.delete(path);
+            forgotten = true;
+          }
+        }
+        if (forgotten) {
+          bumpVersion();
+        }
+      }),
+    [bumpVersion, client],
+  );
 
   const getEntry = useCallback(
     (path: string): FolderSizeEntry => {

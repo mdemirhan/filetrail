@@ -702,7 +702,10 @@ describe("copy/paste conflict safety (real filesystem)", () => {
           if (from.startsWith(`${source}/`)) {
             throw Object.assign(new Error("EXDEV"), { code: "EXDEV" });
           }
-          sourceSeenAtSwap.push(...(await readdir(join(source, "docs"))));
+          // The swap itself; each copied file is also renamed into place on the way.
+          if (to === join(target, "docs")) {
+            sourceSeenAtSwap.push(...(await readdir(join(source, "docs"))));
+          }
           await rename(from, to);
         },
       },

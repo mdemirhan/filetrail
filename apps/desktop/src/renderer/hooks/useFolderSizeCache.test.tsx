@@ -411,4 +411,43 @@ describe("useFolderSizeCache", () => {
       expect.objectContaining({ path: "/dir/0", probeOnly: true }),
     );
   });
+
+  it("forgets a size once a file operation changed something in that folder", async () => {
+    const { getStatusHandler, cancelHandler } = createHandlers();
+    const startHandler = vi.fn(async () => ({ jobId: "job-1", status: "ready" as const }));
+    let emit: ((event: never) => void) | null = null;
+    const client = {
+      ...createMockFiletrailClient({
+        "folderSize:start": startHandler,
+        "folderSize:getStatus": getStatusHandler,
+        "folderSize:cancel": cancelHandler,
+      }),
+      onWriteOperationProgress: (listener: (event: never) => void) => {
+        emit = listener;
+        return () => undefined;
+      },
+    };
+
+    const { result } = renderHook(() => useFolderSizeCache(client as never));
+    await act(async () => {
+      await result.current.calculateFolderSize("/Users/demo/Project");
+      await result.current.calculateFolderSize("/Users/demo/Music");
+    });
+    expect(result.current.getEntry("/Users/demo/Project").status).toBe("ready");
+
+    await act(async () => {
+      (emit as ((event: unknown) => void) | null)?.({
+        operationId: "op-1",
+        action: "trash",
+        status: "completed",
+        result: {
+          targetPath: null,
+          items: [{ sourcePath: "/Users/demo/Project/big.bin", destinationPath: null }],
+        },
+      });
+    });
+
+    expect(result.current.getEntry("/Users/demo/Project").status).toBe("idle");
+    expect(result.current.getEntry("/Users/demo/Music").status).toBe("ready");
+  });
 });

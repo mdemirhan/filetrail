@@ -75,7 +75,8 @@ export function TextPromptDialog({
       return;
     }
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) {
+      // Escape while text is being composed cancels the composition, not the dialog.
+      if (event.defaultPrevented || event.isComposing || event.keyCode === 229) {
         return;
       }
       if (event.key === "Escape") {

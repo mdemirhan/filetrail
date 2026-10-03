@@ -254,6 +254,19 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
       if (this.renameImpl) {
         return this.renameImpl(oldPath, newPath);
       }
+      return this.renameDirectly(oldPath, newPath);
+    };
+    Object.defineProperty(this, "rename", {
+      value: renameFn,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  }
+
+  /** rename(2) as the mock does it, for a `renameImpl` that changes only some renames. */
+  async renameDirectly(oldPath: string, newPath: string): Promise<void> {
+    {
       const normalizedOld = this.existingKey(oldPath);
       const normalizedNew = this.newKey(newPath);
       const sourceNode = this.getNodeOrThrow(normalizedOld);
@@ -293,13 +306,7 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
             : `${normalizedNew}${path.slice(normalizedOld.length)}`;
         this.nodes.set(newNodePath, node);
       }
-    };
-    Object.defineProperty(this, "rename", {
-      value: renameFn,
-      writable: true,
-      enumerable: true,
-      configurable: true,
-    });
+    }
   }
 
   /** Enables the `copyFile` method, opting this mock into native file copy support. */

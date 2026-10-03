@@ -111,6 +111,13 @@ export async function isPackageFolder(
   return answer ?? isPackageName(basename(path));
 }
 
+// "._name" beside "name": AppleDouble metadata that disks without extended attributes (FAT,
+// exFAT, SMB) keep for "name". macOS reads it as "name"'s own attributes, so it goes with
+// "name" and is never an item of its own.
+export function isAppleDoubleCompanionName(name: string, siblings: ReadonlySet<string>): boolean {
+  return name.startsWith("._") && name.length > 2 && siblings.has(name.slice(2));
+}
+
 // Finder writes ".DS_Store" into a folder just by showing it. It is nobody's item: it isn't
 // counted as one, and its appearing doesn't make a folder "changed".
 export function isFolderViewFile(name: string): boolean {

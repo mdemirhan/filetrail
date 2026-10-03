@@ -34,15 +34,18 @@ export function formatQuotedNames(paths: readonly string[], maxShown = 3): strin
 }
 
 // Why items on the clipboard were left out of a paste: they were moved, renamed or deleted
-// outside the app since they were copied.
-export function formatMissingClipboardItemsMessage(paths: readonly string[]): string {
+// outside the app since they were copied. A cut is "moved", as everything else about it.
+export function formatMissingClipboardItemsMessage(
+  paths: readonly string[],
+  verb: "pasted" | "moved" = "pasted",
+): string {
   if (paths.length === 1) {
-    return `${formatQuotedNames(paths)} couldn't be pasted because it no longer exists.`;
+    return `${formatQuotedNames(paths)} couldn’t be ${verb} because it no longer exists.`;
   }
   if (paths.length <= 3) {
-    return `${formatQuotedNames(paths)} couldn't be pasted because they no longer exist.`;
+    return `${formatQuotedNames(paths)} couldn’t be ${verb} because they no longer exist.`;
   }
-  return `${paths.length} items couldn't be pasted because they no longer exist: ${formatQuotedNames(paths)}.`;
+  return `${paths.length} items couldn’t be ${verb} because they no longer exist: ${formatQuotedNames(paths)}.`;
 }
 
 // What to say when Finder did not empty the Trash. The usual reason is that macOS has not
@@ -56,12 +59,26 @@ export function describeEmptyTrashFailure(detail: string): { title: string; mess
         "File Trail needs permission to control Finder. Turn it on in System Settings > Privacy & Security > Automation, then try again.",
     };
   }
-  const trimmedDetail = detail.trim();
+  if (/-1712\b|timed out/iu.test(detail)) {
+    return {
+      title,
+      message: "Finder took too long to answer. It may still be emptying the Trash.",
+    };
+  }
+  if (/-128\b|user canceled/iu.test(detail)) {
+    return { title, message: "Emptying the Trash was stopped in Finder." };
+  }
+  // osascript's reason, without its command line or error number.
+  const reason = detail
+    .replace(/^[\s\S]*execution error:\s*/u, "")
+    .replace(/^Command failed:[^\n]*\n?/u, "")
+    .replace(/\s*\(-?\d+\)\s*$/u, "")
+    .trim();
   return {
     title,
     message:
-      trimmedDetail.length > 0
-        ? trimmedDetail
+      reason.length > 0
+        ? reason
         : "Finder didn't empty the Trash. Try again, or empty it in Finder.",
   };
 }

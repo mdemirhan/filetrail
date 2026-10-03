@@ -1,5 +1,7 @@
 import { basename, dirname, join, resolve } from "node:path";
 
+import { withoutNestedPaths } from "@filetrail/contracts";
+
 import { describeCopyPasteError } from "./copyPasteErrors";
 import {
   captureFingerprint,
@@ -13,6 +15,7 @@ import {
 import {
   destinationPathKey,
   detectCaseSensitivity,
+  isAppleDoubleCompanionName,
   isFolderViewFile,
   isPackageFolder,
   resolveDuplicateName,
@@ -42,25 +45,6 @@ export function normalizeCopyPasteAnalysisRequest(
     ),
     destinationDirectoryPath: resolve(request.destinationDirectoryPath),
   };
-}
-
-// A folder and an item inside it picked together (Select All in search results, say): the
-// item goes with its folder. Pasted on its own as well, it would be copied twice, or moved
-// out of the folder before (or after) the folder itself.
-function withoutNestedPaths(paths: string[]): string[] {
-  const picked = new Set(paths);
-  return paths.filter((path) => {
-    let child = path;
-    let parent = dirname(child);
-    while (parent !== child) {
-      if (picked.has(parent)) {
-        return false;
-      }
-      child = parent;
-      parent = dirname(child);
-    }
-    return true;
-  });
 }
 
 export async function buildCopyPasteAnalysisReport(args: {
@@ -134,6 +118,18 @@ export async function buildCopyPasteAnalysisReport(args: {
     sameDirectoryCache.set(directoryPath, same);
     return same;
   };
+
+  // Items that keep their own name claim it first, so a " copy" name picked for an item
+  // copied into its own folder never takes it, whatever order the items come in.
+  if (request.mode === "copy") {
+    for (const sourcePath of request.sourcePaths) {
+      if (!(await isDestinationDirectory(dirname(sourcePath)))) {
+        plannedDestinationKeys.add(
+          pathKey(join(request.destinationDirectoryPath, basename(sourcePath))),
+        );
+      }
+    }
+  }
 
   for (const [index, sourcePath] of request.sourcePaths.entries()) {
     args.signal?.throwIfAborted();
@@ -244,10 +240,20 @@ export async function buildCopyPasteAnalysisReport(args: {
     });
   }
 
-  // Replacing an item that holds any item of this paste would destroy that item too.
+  // Replacing an item that is, or holds, any item of this paste would destroy that item
+  // too. Items inside merged folders are checked as well: a Replace offered there would
+  // only be refused when the paste reaches it.
   const sourceRealPaths = await realSourcePaths(fileSystem, nodes);
-  for (const node of nodes) {
+  const annotate = async (node: CopyPasteAnalysisNode): Promise<void> => {
     node.replaceBlockedReason = await findReplaceBlockedReason(node, fileSystem, sourceRealPaths);
+    if (node.conflictClass === "directory_conflict") {
+      for (const child of node.children) {
+        await annotate(child);
+      }
+    }
+  };
+  for (const node of nodes) {
+    await annotate(node);
   }
 
   await annotateKeepBothNames(nodes, fileSystem, caseSensitive, args.signal);
@@ -354,7 +360,11 @@ async function analyzeNode(args: {
   if (sourceKind === "directory") {
     let sourceChildren: string[] = [];
     try {
-      sourceChildren = (await args.fileSystem.readdir(args.sourcePath)).sort();
+      sourceChildren = await withoutAppleDoubleFiles(
+        args.fileSystem,
+        args.sourcePath,
+        (await args.fileSystem.readdir(args.sourcePath)).sort(),
+      );
     } catch (error) {
       if (isAbortError(error)) {
         throw error;
@@ -439,6 +449,31 @@ async function analyzeNode(args: {
     destinationOnly,
     replaceBlockedReason: null,
   };
+}
+
+// A folder's items without the AppleDouble files kept beside them on FAT, exFAT and SMB
+// disks: the copy of "name" carries its attributes, and "._name" copied as a file of its
+// own would only be clutter (and counted as an item).
+async function withoutAppleDoubleFiles(
+  fileSystem: WriteServiceFileSystem,
+  folderPath: string,
+  names: string[],
+): Promise<string[]> {
+  if (!fileSystem.isAppleDouble) {
+    return names;
+  }
+  const siblings = new Set(names);
+  const kept: string[] = [];
+  for (const name of names) {
+    if (
+      isAppleDoubleCompanionName(name, siblings) &&
+      (await fileSystem.isAppleDouble(join(folderPath, name)))
+    ) {
+      continue;
+    }
+    kept.push(name);
+  }
+  return kept;
 }
 
 const DESTINATION_ONLY_SAMPLE_LIMIT = 5;
@@ -600,6 +635,11 @@ async function findReplaceBlockedReason(
     (await holdsAnyOf(fileSystem, node.destinationPath, sourceRealPaths))
   ) {
     return "It contains another item being pasted.";
+  }
+  // Pasting "/x/a.txt" over "/d/a.txt" while "/d/a.txt" is pasted too (search results).
+  const destinationRealPath = await fileSystem.realpath(node.destinationPath).catch(() => null);
+  if (destinationRealPath !== null && sourceRealPaths.includes(destinationRealPath)) {
+    return "It is another item being pasted.";
   }
   return null;
 }

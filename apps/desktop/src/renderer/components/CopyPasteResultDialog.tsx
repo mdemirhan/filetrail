@@ -73,6 +73,8 @@ export function CopyPasteResultDialog({
   const onlyPartial = outcome.partialTopLevel.length === 1 ? outcome.partialTopLevel[0] : null;
   const failedCount = outcome.failedOutside + outcome.failedInside;
   const notStartedCount = outcome.notStarted.length;
+  const stoppedCount = outcome.stoppedPartWay.length;
+  const onlyStopped = stoppedCount === 1 ? outcome.stoppedPartWay[0] : null;
   const skippedCount = outcome.skipped.length;
   const sentences = [
     outcome.failedOutside > 0
@@ -83,13 +85,23 @@ export function CopyPasteResultDialog({
           onlyPartial?.sourcePath ? `“${leafName(onlyPartial.sourcePath)}”` : "folders"
         } couldn't be ${presentVerb}.`
       : null,
+    // A folder stopped part way isn't "not started": some of it is at the destination.
+    stoppedCount > 0
+      ? `${
+          onlyStopped?.sourcePath
+            ? `“${leafName(onlyStopped.sourcePath)}” was`
+            : `${pluralize(stoppedCount, "folder")} were`
+        } stopped part way: some of what is inside was ${presentVerb}${
+          destinationName ? ` into “${destinationName}”` : ""
+        }, the rest wasn't.`
+      : null,
     notStartedCount > 0
       ? `${pluralize(notStartedCount, "item")} ${notStartedCount === 1 ? "wasn't" : "weren't"} started because the operation was stopped.`
       : null,
     skippedCount > 0
       ? `${pluralize(skippedCount, "item")} ${skippedCount === 1 ? "was" : "were"} skipped.`
       : null,
-    event.action === "move_to" && failedCount + notStartedCount > 0
+    event.action === "move_to" && failedCount + notStartedCount + stoppedCount > 0
       ? "Items that weren't moved are still in their original folder."
       : null,
   ].filter(Boolean);
@@ -129,6 +141,13 @@ export function CopyPasteResultDialog({
                 : (item.error ?? "Unknown error.")
             }
             tone="danger"
+          />
+          <ResultSection
+            label="Stopped part way"
+            items={outcome.stoppedPartWay}
+            displayPaths={outcome.displayPaths}
+            describe={() => `Some of what is inside was ${presentVerb} before the stop.`}
+            tone="muted"
           />
           <ResultSection
             label="Not started"
@@ -217,6 +236,8 @@ type ResultOutcome = {
   failedOutside: number;
   failedInside: number;
   failed: ResultItem[];
+  /** Top-level folders stopped with some of what is inside already done. */
+  stoppedPartWay: ResultItem[];
   notStarted: ResultItem[];
   skipped: ResultItem[];
   retryCount: number;
@@ -248,16 +269,35 @@ function summarizeResultItems(items: ResultItem[]): ResultOutcome {
     failedOutside: 0,
     failedInside: 0,
     failed: [],
+    stoppedPartWay: [],
     notStarted: [],
     skipped: [],
     retryCount: collectRetrySourcePaths(items).length,
     displayPaths: new Map(),
   };
+  // Top-level folders with something done inside them (by the items listed from inside).
+  const startedFolders = new Set<string>();
+  for (const item of items) {
+    if (item.status === "completed" && typeof item.sourcePath === "string") {
+      const folder = findAncestor(item.sourcePath, topLevelPaths);
+      if (folder !== null) {
+        startedFolders.add(folder);
+      }
+    }
+  }
+  const stoppedPartWay = new Set<ResultItem>();
   for (const item of topLevel) {
     if (item.status === "completed") {
       outcome.completedTopLevel += 1;
     } else if (isFolderWithFailuresInside(item)) {
       outcome.partialTopLevel.push(item);
+    } else if (
+      item.status === "cancelled" &&
+      typeof item.sourcePath === "string" &&
+      startedFolders.has(item.sourcePath)
+    ) {
+      stoppedPartWay.add(item);
+      outcome.stoppedPartWay.push(item);
     }
   }
   for (const item of items) {
@@ -272,7 +312,7 @@ function summarizeResultItems(items: ResultItem[]): ResultOutcome {
           outcome.failedOutside += 1;
         }
       }
-    } else if (item.status === "cancelled") {
+    } else if (item.status === "cancelled" && !stoppedPartWay.has(item)) {
       outcome.notStarted.push(item);
     } else if (item.status === "skipped") {
       outcome.skipped.push(item);

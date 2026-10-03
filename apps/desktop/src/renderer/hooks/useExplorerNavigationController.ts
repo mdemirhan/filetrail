@@ -211,42 +211,54 @@ export function useExplorerNavigationController(args: {
   // are re-exported from this controller's return value for its consumers.
   const { clearTypeahead, focusContentPane } = selection;
 
-  const focusTreePane = useCallback(() => {
-    setFocusedPane("tree");
-    clearTypeahead();
-    window.requestAnimationFrame(() => {
-      // A collapsed Favorites section renders no rows; fall back to the folder tree then.
-      const favoritesRowsVisible =
-        treePaneRef.current?.querySelector(".favorites-pane-section .tree-label") != null;
-      const targetSubview =
-        favoritesPlacement === "separate" && favoritesRowsVisible
-          ? lastLeftPaneSubviewRef.current
-          : "tree";
-      const selectedSelector =
-        targetSubview === "favorites"
-          ? ".favorites-pane-section .tree-row.active .tree-label"
-          : ".sidebar-tree .tree-row.active .tree-label";
-      const fallbackSelector =
-        targetSubview === "favorites"
-          ? ".favorites-pane-section .tree-label"
-          : ".sidebar-tree .tree-label";
-      const focusTarget =
-        treePaneRef.current?.querySelector<HTMLElement>(selectedSelector) ??
-        treePaneRef.current?.querySelector<HTMLElement>(fallbackSelector);
-      if (focusTarget) {
-        focusTarget.focus({ preventScroll: true });
-      } else {
-        treePaneRef.current?.focus({ preventScroll: true });
-      }
+  // `unlessFocusMoves`: see focusContentPane.
+  const focusTreePane = useCallback(
+    (options: { unlessFocusMoves?: boolean } = {}) => {
+      const focusedAtStart = document.activeElement;
+      setFocusedPane("tree");
+      clearTypeahead();
       window.requestAnimationFrame(() => {
+        if (options.unlessFocusMoves && document.activeElement !== focusedAtStart) {
+          return;
+        }
+        // A collapsed Favorites section renders no rows; fall back to the folder tree then.
+        const favoritesRowsVisible =
+          treePaneRef.current?.querySelector(".favorites-pane-section .tree-label") != null;
+        const targetSubview =
+          favoritesPlacement === "separate" && favoritesRowsVisible
+            ? lastLeftPaneSubviewRef.current
+            : "tree";
+        const selectedSelector =
+          targetSubview === "favorites"
+            ? ".favorites-pane-section .tree-row.active .tree-label"
+            : ".sidebar-tree .tree-row.active .tree-label";
+        const fallbackSelector =
+          targetSubview === "favorites"
+            ? ".favorites-pane-section .tree-label"
+            : ".sidebar-tree .tree-label";
+        const focusTarget =
+          treePaneRef.current?.querySelector<HTMLElement>(selectedSelector) ??
+          treePaneRef.current?.querySelector<HTMLElement>(fallbackSelector);
         if (focusTarget) {
           focusTarget.focus({ preventScroll: true });
         } else {
           treePaneRef.current?.focus({ preventScroll: true });
         }
+        const focusedNow = document.activeElement;
+        window.requestAnimationFrame(() => {
+          if (options.unlessFocusMoves && document.activeElement !== focusedNow) {
+            return;
+          }
+          if (focusTarget) {
+            focusTarget.focus({ preventScroll: true });
+          } else {
+            treePaneRef.current?.focus({ preventScroll: true });
+          }
+        });
       });
-    });
-  }, [clearTypeahead, favoritesPlacement, lastLeftPaneSubviewRef, treePaneRef, setFocusedPane]);
+    },
+    [clearTypeahead, favoritesPlacement, lastLeftPaneSubviewRef, treePaneRef, setFocusedPane],
+  );
 
   function getTreePresentationState() {
     return buildTreePresentation({
@@ -339,11 +351,11 @@ export function useExplorerNavigationController(args: {
         hasContentPane: contentPaneRef.current !== null,
       });
       if (targetPane === "tree") {
-        focusTreePane();
+        focusTreePane({ unlessFocusMoves: true });
         return;
       }
       if (targetPane === "content") {
-        focusContentPane();
+        focusContentPane({ unlessFocusMoves: true });
       }
     },
     [contentPaneRef, focusContentPane, focusTreePane, lastExplorerFocusPaneRef, treePaneRef],
@@ -825,11 +837,11 @@ export function useExplorerNavigationController(args: {
     if (pendingPasteSelection) {
       pendingPasteSelectionRef.current = null;
     }
-    const selectedPastePaths = pendingPasteSelection
-      ? entries
-          .filter((entry) => pendingPasteSelection.selectedPaths.includes(entry.path))
-          .map((entry) => entry.path)
-      : [];
+    // A set: what a paste made can be many thousands of paths (see syncContentSelectionRefs).
+    const pastedPaths = new Set(pendingPasteSelection?.selectedPaths ?? []);
+    const selectedPastePaths = entries
+      .filter((entry) => pastedPaths.has(entry.path))
+      .map((entry) => entry.path);
     // A folder read again in place keeps its selection; whatever of it is gone from the
     // new listing is dropped when the list updates.
     if (selectedPastePaths.length > 0 || !options.keepSelection) {

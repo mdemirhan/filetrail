@@ -329,3 +329,58 @@ describe.each(["MS-DOS FAT32", "ExFAT"] as const)("empty files on %s", (format) 
     expect(result?.status).toBe("completed");
   });
 });
+
+// FAT, exFAT and SMB keep an item's extended attributes in a "._name" file beside it.
+describe("AppleDouble files on a FAT32 disk", () => {
+  let stick: TestDiskImage;
+
+  beforeAll(() => {
+    if (canMountDiskImages) {
+      stick = mountTestDiskImage({ sizeMb: 64, format: "MS-DOS FAT32", name: "FTDOUBLE" });
+    }
+  });
+
+  afterAll(() => {
+    stick?.detach();
+  });
+
+  beforeEach(async () => {
+    testDir = await mkdtemp(join(tmpdir(), "filetrail-appledouble-"));
+  });
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true });
+    if (!canMountDiskImages) {
+      return;
+    }
+    for (const name of await visible(stick.mountPath)) {
+      await rm(join(stick.mountPath, name), { recursive: true, force: true });
+    }
+  });
+
+  it.runIf(canMountDiskImages)(
+    "copies an item with its attributes, and not its AppleDouble file as an item",
+    async () => {
+      const folder = join(stick.mountPath, "pkg");
+      await mkdir(folder);
+      await writeFile(join(folder, "a.py"), "print()");
+      execFileSync("/usr/bin/xattr", ["-w", "com.filetrail.test", "kept", join(folder, "a.py")]);
+      expect(await readdir(folder)).toContain("._a.py");
+
+      const { report, result } = await runPaste({
+        mode: "copy",
+        sourcePaths: [folder],
+        destinationDirectoryPath: testDir,
+      });
+
+      expect(report.summary.totalNodeCount).toBe(2);
+      expect(result?.status).toBe("completed");
+      expect(await readdir(join(testDir, "pkg"))).toEqual(["a.py"]);
+      expect(
+        execFileSync("/usr/bin/xattr", ["-p", "com.filetrail.test", join(testDir, "pkg", "a.py")])
+          .toString()
+          .trim(),
+      ).toBe("kept");
+    },
+  );
+});

@@ -29,6 +29,7 @@ import {
   type InlineRenameState,
   OffscreenRenameField,
   findOffscreenRenameEntry,
+  isFolderKind,
   renameDraftKey,
 } from "./InlineRenameField";
 import { SearchOptionsMenu } from "./SearchOptionsMenu";
@@ -537,6 +538,7 @@ export function SearchResultsPane({
                     <InlineRenameField
                       name={result.name}
                       extension={result.extension}
+                      isFolder={isFolderKind(result.kind)}
                       error={inlineRename.error}
                       refusalCount={inlineRename.refusalCount ?? 0}
                       draftKey={renameDraftKey(inlineRename)}

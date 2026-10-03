@@ -2416,8 +2416,12 @@ describe("copyPasteExecution", () => {
         "/target": { kind: "directory" },
       });
       fileSystem.enableRename();
-      fileSystem.renameImpl = async () => {
-        throw Object.assign(new Error("EXDEV"), { code: "EXDEV", path: "/source/a.txt" });
+      // Another disk: renames out of /source fail; a file put in place at /target doesn't.
+      fileSystem.renameImpl = async (from, to) => {
+        if (from.startsWith("/source/")) {
+          throw Object.assign(new Error("EXDEV"), { code: "EXDEV", path: "/source/a.txt" });
+        }
+        await fileSystem.renameDirectly(from, to);
       };
       let copyFileStreamCalled = false;
       fileSystem.copyFileStreamImpl = async (sourcePath, destinationPath, signal) => {
@@ -2763,8 +2767,12 @@ describe("copyPasteExecution", () => {
         "/target": { kind: "directory" },
       });
       fileSystem.enableRename();
-      fileSystem.renameImpl = async () => {
-        throw Object.assign(new Error("EXDEV"), { code: "EXDEV", path: "/source/a.txt" });
+      // Another disk: renames out of /source fail; a file put in place at /target doesn't.
+      fileSystem.renameImpl = async (from, to) => {
+        if (from.startsWith("/source/")) {
+          throw Object.assign(new Error("EXDEV"), { code: "EXDEV", path: "/source/a.txt" });
+        }
+        await fileSystem.renameDirectly(from, to);
       };
       const { report, resolvedNodes } = await createResolvedOperation({
         fileSystem,
@@ -4006,8 +4014,12 @@ describe("copyPasteExecution", () => {
       fileSystem.enableRename();
 
       // Force EXDEV on rename despite same dev
-      fileSystem.renameImpl = async () => {
-        throw Object.assign(new Error("EXDEV"), { code: "EXDEV" });
+      // Another disk: renames out of /source fail; a file put in place at /target doesn't.
+      fileSystem.renameImpl = async (from, to) => {
+        if (from.startsWith("/source/")) {
+          throw Object.assign(new Error("EXDEV"), { code: "EXDEV" });
+        }
+        await fileSystem.renameDirectly(from, to);
       };
 
       const { report, resolvedNodes } = await createResolvedOperation({
@@ -4335,7 +4347,12 @@ describe("copyPasteExecution", () => {
       const result = await run({ fileSystem, mode: "cut", sourcePaths: ["/source/dir"] });
 
       expect(result.status).toBe("completed");
-      expect(order).toEqual(["file /target/dir/a.txt", "metadata /source/dir -> /target/dir"]);
+      // The file is written under a hidden name in the folder, then given its own name.
+      expect(order).toEqual([
+        expect.stringMatching(/^file \/target\/dir\/\.a\.txt\.filetrail-[0-9a-f]+$/u),
+        "metadata /source/dir -> /target/dir",
+      ]);
+      expect(expectNode(fileSystem, "/target/dir/a.txt").size).toBe(1);
       expect(expectNode(fileSystem, "/target/dir").mtimeMs).toBe(1234);
     });
 

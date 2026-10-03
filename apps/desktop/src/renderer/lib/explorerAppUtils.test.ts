@@ -578,13 +578,13 @@ describe("sortEntriesBySize", () => {
 
   it("says which clipboard items could not be pasted because they are gone", () => {
     expect(formatMissingClipboardItemsMessage(["/Users/demo/report.pdf"])).toBe(
-      "“report.pdf” couldn't be pasted because it no longer exists.",
+      "“report.pdf” couldn’t be pasted because it no longer exists.",
     );
     expect(formatMissingClipboardItemsMessage(["/a/one", "/a/two"])).toBe(
-      "“one” and “two” couldn't be pasted because they no longer exist.",
+      "“one” and “two” couldn’t be pasted because they no longer exist.",
     );
     expect(formatMissingClipboardItemsMessage(["/a/1", "/a/2", "/a/3", "/a/4"])).toBe(
-      "4 items couldn't be pasted because they no longer exist: “1”, “2”, “3” and 1 more.",
+      "4 items couldn’t be pasted because they no longer exist: “1”, “2”, “3” and 1 more.",
     );
   });
   it("suggests a free New Folder name, ignoring case like the disk does", () => {
@@ -609,6 +609,21 @@ describe("sortEntriesBySize", () => {
       title: "The Trash couldn't be emptied.",
       message: "Finder got an error: The operation can't be completed.",
     });
+    // A large Trash takes Finder longer than AppleScript waited before (two minutes).
+    expect(
+      describeEmptyTrashFailure(
+        "execution error: Finder got an error: AppleEvent timed out. (-1712)",
+      ).message,
+    ).toBe("Finder took too long to answer. It may still be emptying the Trash.");
+    expect(describeEmptyTrashFailure("execution error: User canceled. (-128)").message).toBe(
+      "Emptying the Trash was stopped in Finder.",
+    );
+    // Only the reason: never the command that ran or the error number.
+    expect(
+      describeEmptyTrashFailure(
+        "0:46: execution error: Finder got an error: The operation can’t be completed. (-8003)",
+      ).message,
+    ).toBe("Finder got an error: The operation can’t be completed.");
     expect(describeEmptyTrashFailure("  ").message).toBe(
       "Finder didn't empty the Trash. Try again, or empty it in Finder.",
     );

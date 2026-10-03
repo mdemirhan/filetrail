@@ -18,7 +18,7 @@ import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { pipeline } from "node:stream/promises";
 
-import { createStoppableCopyFile } from "@filetrail/core";
+import { createStoppableCopyFile, startsWithAppleDoubleMagic } from "@filetrail/core";
 import type { ExplorerFileSystem } from "@filetrail/core";
 import type { WriteServiceFileSystem, WriteServiceStats } from "@filetrail/core";
 import type { WriteOperationFs } from "./bootstrap/writeOperations";
@@ -66,6 +66,7 @@ const {
   promises: {
     access,
     chmod,
+    open,
     lstat,
     lutimes,
     mkdir,
@@ -136,6 +137,7 @@ export const originalFileSystem: WriteServiceFileSystem = {
   canModifyFolder: async (path) => {
     await access(path, fsConstants.W_OK);
   },
+  isAppleDouble: (path) => startsWithAppleDoubleMagic(open, path),
 };
 
 /** ExplorerFileSystem backed by original-fs for directory listings. */

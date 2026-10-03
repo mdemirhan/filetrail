@@ -1,7 +1,9 @@
 // What a paste does when the items it is about relate to each other, or change between the
 // review and the paste, on the real disk.
 
+import { execFileSync } from "node:child_process";
 import {
+  chmod,
   mkdir,
   mkdtemp,
   readFile,
@@ -15,6 +17,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { NO_TRASH_ERROR_CODE } from "./copyPasteErrors";
 import {
   KEEP_EXISTING,
   REPLACE_ALL,
@@ -22,7 +25,13 @@ import {
   nativeFileSystemWithTrash,
   runPaste,
 } from "./testNativePaste";
-import type { ReplaceJournalEntry } from "./writeServiceTypes";
+import type { ReplaceJournalEntry, WriteServiceFileSystem } from "./writeServiceTypes";
+
+// As on a move to another disk: no rename, so items are copied and the originals removed.
+function withoutRenameAtAll(): WriteServiceFileSystem {
+  const { rename: _rename, ...rest } = nativeFileSystem;
+  return rest;
+}
 
 let testDir: string;
 let src: string;
@@ -552,5 +561,257 @@ describe("the folder pasted into goes away during the paste", () => {
       "The folder “dst” no longer exists.",
     ]);
     expect(await readdir(testDir)).not.toContain("dst");
+  });
+});
+
+describe("files that look like AppleDouble files", () => {
+  // On APFS a "._name" file is an ordinary file unless it really is AppleDouble data.
+  it("copies a ._ file that isn't AppleDouble data, and one without its item", async () => {
+    await mkdir(join(src, "F"));
+    await writeFile(join(src, "F", "a.txt"), "a");
+    await writeFile(join(src, "F", "._a.txt"), "just a file");
+    await writeFile(join(src, "F", "._alone"), Buffer.from([0x00, 0x05, 0x16, 0x07, 0x00]));
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "F")],
+      destinationDirectoryPath: dst,
+    });
+
+    expect(result?.status).toBe("completed");
+    expect((await readdir(join(dst, "F"))).sort()).toEqual(["._a.txt", "._alone", "a.txt"]);
+  });
+});
+
+describe("a moved folder that stays because something in it stayed", () => {
+  it("keeps Finder's view settings in it", async () => {
+    await mkdir(join(src, "F"));
+    await writeFile(join(src, "F", "a.txt"), "new");
+    await mkdir(join(dst, "F"));
+    await writeFile(join(dst, "F", "a.txt"), "old");
+
+    await runPaste({
+      mode: "cut",
+      sourcePaths: [join(src, "F")],
+      destinationDirectoryPath: dst,
+      fileSystem: withoutRenameAtAll(),
+      policy: { file: "skip", directory: "merge", mismatch: "skip" },
+      // Finder writes it while the folder is on screen.
+      beforeExecute: () => writeFile(join(src, "F", ".DS_Store"), "view"),
+    });
+
+    expect((await readdir(join(src, "F"))).sort()).toEqual([".DS_Store", "a.txt"]);
+  });
+});
+
+describe("smaller cases a Replace and a copy get right", () => {
+  it("says a pipe can't be copied, instead of blaming the disk", async () => {
+    execFileSync("/usr/bin/mkfifo", [join(src, "pipe")]);
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "pipe")],
+      destinationDirectoryPath: dst,
+    });
+
+    expect(result?.items[0]?.error).toBe(
+      "“pipe” is a special file (such as a pipe or a socket), which can't be copied.",
+    );
+  });
+
+  it("names copies the same way whatever order the items come in", async () => {
+    await writeFile(join(dst, "a.txt"), "a");
+    await mkdir(join(src, "x"));
+    await writeFile(join(src, "x", "a copy.txt"), "other");
+
+    const { report, result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(dst, "a.txt"), join(src, "x", "a copy.txt")],
+      destinationDirectoryPath: dst,
+    });
+
+    expect(report.issues).toEqual([]);
+    expect(result?.status).toBe("completed");
+    expect((await readdir(dst)).sort()).toEqual(["a copy 2.txt", "a copy.txt", "a.txt"]);
+    expect(await readFile(join(dst, "a copy.txt"), "utf8")).toBe("other");
+  });
+
+  it("doesn't offer to replace an item that is itself being pasted", async () => {
+    await writeFile(join(dst, "a.txt"), "dst a");
+    await mkdir(join(src, "x"));
+    await writeFile(join(src, "x", "a.txt"), "x a");
+
+    // "/d/a.txt" is copied too (it becomes "a copy.txt"), so it isn't there to be replaced.
+    const { report } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "x", "a.txt"), join(dst, "a.txt")],
+      destinationDirectoryPath: dst,
+    });
+    const node = report.nodes.find((item) => item.sourcePath === join(src, "x", "a.txt"));
+    expect(node?.replaceBlockedReason).toBe("It is another item being pasted.");
+  });
+
+  it("checks Replace inside a merged folder too", async () => {
+    await mkdir(join(src, "F", "inner"), { recursive: true });
+    await writeFile(join(src, "F", "inner", "n.txt"), "n");
+    await mkdir(join(dst, "F", "inner"), { recursive: true });
+    await writeFile(join(dst, "F", "inner", "keep.txt"), "keep");
+
+    const { report } = await runPaste({
+      mode: "cut",
+      sourcePaths: [join(src, "F"), join(dst, "F", "inner", "keep.txt")],
+      destinationDirectoryPath: dst,
+      policy: { file: "skip", directory: "merge", mismatch: "skip" },
+    });
+
+    const inner = report.nodes[0]?.children.find((child) => child.sourcePath.endsWith("inner"));
+    expect(inner?.replaceBlockedReason).toBe("It contains another item being pasted.");
+  });
+
+  it("keeps the old folder when an item in the new one changed and was skipped", async () => {
+    await mkdir(join(src, "F"));
+    await writeFile(join(src, "F", "a.txt"), "new a");
+    await writeFile(join(src, "F", "b.txt"), "new b");
+    await mkdir(join(dst, "F"));
+    await writeFile(join(dst, "F", "b.txt"), "old b");
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "F")],
+      destinationDirectoryPath: dst,
+      policy: REPLACE_ALL,
+      fileSystem: nativeFileSystemWithTrash(trash),
+      beforeExecute: () => writeFile(join(src, "F", "b.txt"), "newer b"),
+      resolve: () => "skip",
+    });
+
+    expect(result?.items[0]?.error).toBe(
+      "“F” wasn't replaced because “b.txt” in it changed and was skipped.",
+    );
+    expect(await readFile(join(dst, "F", "b.txt"), "utf8")).toBe("old b");
+    expect(await readdir(trash)).toEqual([]);
+    expect((await readdir(dst)).sort()).toEqual(["F"]);
+  });
+
+  it("removes the hidden copy when the Replace can't be written down", async () => {
+    await writeFile(join(src, "a.txt"), "new");
+    await writeFile(join(dst, "a.txt"), "old");
+    const replaceJournal = {
+      add: async (entry: ReplaceJournalEntry) => {
+        if (entry.staged) {
+          throw new Error("The disk is full.");
+        }
+      },
+      remove: async () => undefined,
+    };
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "a.txt")],
+      destinationDirectoryPath: dst,
+      policy: REPLACE_ALL,
+      fileSystem: nativeFileSystemWithTrash(trash),
+      replaceJournal,
+    });
+
+    expect(result?.status).toBe("failed");
+    expect(await readdir(dst)).toEqual(["a.txt"]);
+    expect(await readFile(join(dst, "a.txt"), "utf8")).toBe("old");
+  });
+
+  it("says a moved folder was kept when it changed during the move", async () => {
+    await mkdir(join(src, "F"));
+    await writeFile(join(src, "F", "a.txt"), "a");
+    const { rename: _rename, ...withoutRename } = nativeFileSystem;
+
+    const { result } = await runPaste({
+      mode: "cut",
+      sourcePaths: [join(src, "F")],
+      destinationDirectoryPath: dst,
+      fileSystem: withoutRename,
+      beforeExecute: () => chmod(join(src, "F"), 0o700),
+    });
+
+    expect(result?.items[0]?.error).toBe(
+      "Its items were moved, but the original “F” changed during the move, so it was kept.",
+    );
+    expect(await readdir(join(dst, "F"))).toEqual(["a.txt"]);
+  });
+
+  it("deletes nothing of a folder that holds a locked item, on a disk without a Trash", async () => {
+    const { rename: _rename, ...withoutRename } = nativeFileSystem;
+    await writeFile(join(src, "F"), "a file now");
+    await mkdir(join(dst, "F"));
+    await writeFile(join(dst, "F", "keep.txt"), "keep");
+    await writeFile(join(dst, "F", "other.txt"), "other");
+    execFileSync("chflags", ["uchg", join(dst, "F", "keep.txt")]);
+    try {
+      const { result } = await runPaste({
+        mode: "copy",
+        sourcePaths: [join(src, "F")],
+        destinationDirectoryPath: dst,
+        policy: REPLACE_ALL,
+        fileSystem: {
+          ...withoutRename,
+          trash: async () => {
+            throw Object.assign(new Error("no Trash"), { code: NO_TRASH_ERROR_CODE });
+          },
+        },
+        resolve: () => "overwrite",
+      });
+
+      expect(result?.items[0]?.error).toBe(
+        "“keep.txt” is locked. Unlock it in Finder's Get Info and try again.",
+      );
+      expect((await readdir(join(dst, "F"))).sort()).toEqual(["keep.txt", "other.txt"]);
+    } finally {
+      execFileSync("chflags", ["nouchg", join(dst, "F", "keep.txt")]);
+    }
+  });
+});
+
+describe("a file being copied", () => {
+  // Quitting or a crash part way must never leave a cut-short file under the real name.
+  it("is written under a hidden name and takes its own only once complete", async () => {
+    await writeFile(join(src, "report.pdf"), "contents");
+    const writtenAs: string[] = [];
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "report.pdf")],
+      destinationDirectoryPath: dst,
+      fileSystem: {
+        ...nativeFileSystem,
+        copyFile: async (from, to, signal) => {
+          writtenAs.push(to);
+          expect(await readdir(dst)).not.toContain("report.pdf");
+          await nativeFileSystem.copyFile?.(from, to, signal);
+        },
+      },
+    });
+
+    expect(result?.status).toBe("completed");
+    expect(writtenAs).toEqual([
+      expect.stringMatching(/\/dst\/\.report\.pdf\.filetrail-[0-9a-f]+$/u),
+    ]);
+    expect(await readdir(dst)).toEqual(["report.pdf"]);
+    expect(await readFile(join(dst, "report.pdf"), "utf8")).toBe("contents");
+  });
+
+  it("keeps a locked file's lock once it has its name", async () => {
+    await writeFile(join(src, "locked.txt"), "keep");
+    execFileSync("chflags", ["uchg", join(src, "locked.txt")]);
+    try {
+      const { result } = await runPaste({
+        mode: "copy",
+        sourcePaths: [join(src, "locked.txt")],
+        destinationDirectoryPath: dst,
+      });
+
+      expect(result?.status).toBe("completed");
+      expect(execFileSync("ls", ["-lO", join(dst, "locked.txt")]).toString()).toContain("uchg");
+    } finally {
+      execFileSync("chflags", ["-R", "nouchg", src, dst]);
+    }
   });
 });

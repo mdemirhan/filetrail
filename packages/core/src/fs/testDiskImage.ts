@@ -2,7 +2,7 @@
 // another disk, a case-sensitive disk, a copy that isn't a clone (so it takes a while).
 // macOS only; `hdiutil` needs no special rights for images in a temporary folder.
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -57,9 +57,24 @@ export function mountTestDiskImage(
       detached = true;
       try {
         runHdiutil(["detach", "-quiet", "-force", mountPath]);
-      } finally {
-        rmSync(root, { recursive: true, force: true });
+      } catch {
+        // Still busy (Spotlight or another test's hdiutil): it is tried again in the
+        // background, so a test that passed doesn't fail over its cleanup. The folder is
+        // removed only once the disk is gone, never through the mounted volume.
+        spawn(
+          "/bin/sh",
+          [
+            "-c",
+            'sleep 5; /usr/bin/hdiutil detach -quiet -force "$1" && rm -rf "$2"',
+            "detach",
+            mountPath,
+            root,
+          ],
+          { detached: true, stdio: "ignore" },
+        ).unref();
+        return;
       }
+      rmSync(root, { recursive: true, force: true });
     },
   };
 }

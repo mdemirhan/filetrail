@@ -231,27 +231,28 @@ function getCopyLikeActionLabel(action: CopyLikeAction): string {
 function getCopyLikePreStartFailureTitle(action: WriteStartAction): string {
   switch (action) {
     case "move_to":
-      return "Move couldn't start";
+      return "Move couldn’t start";
     case "copy_to":
-      return "Copy couldn't start";
+      return "Copy couldn’t start";
     case "duplicate":
-      return "Duplicate couldn't start";
+      return "Duplicate couldn’t start";
     case "trash":
-      return "Move to Trash couldn't start";
+      return "Move to Trash couldn’t start";
     case "delete_immediately":
-      return "Delete couldn't start";
+      return "Delete couldn’t start";
     case "empty_trash":
-      return "Empty Trash couldn't start";
+      return "Empty Trash couldn’t start";
     case "rename":
-      return "Rename couldn't start";
+      return "Rename couldn’t start";
     case "new_folder":
-      return "New Folder couldn't start";
+      return "New Folder couldn’t start";
     default:
-      return "Paste couldn't start";
+      return "Paste couldn’t start";
   }
 }
 
-const WRITE_OPERATION_BUSY_MESSAGE = "Wait for the current write to finish.";
+const WRITE_OPERATION_BUSY_MESSAGE =
+  "Another file operation is running. Wait for it to finish, or stop it.";
 
 function getCopyLikePreparationFailureMessage(action: CopyLikeAction): string {
   return `File Trail couldn't prepare the ${getCopyLikeActionLabel(action)} operation. No files were written.`;
@@ -323,6 +324,8 @@ export function useExplorerActions(args: {
     contextMenuTargetEntry: DirectoryEntry | null;
     pasteDestinationPath: string | null;
     isSearchMode: boolean;
+    // The Trash has nothing to empty (null: it can't be told).
+    trashIsEmpty?: boolean | null;
   };
   navActions: {
     restoreExplorerPaneFocus: (preferredPane?: "tree" | "content" | null) => void;
@@ -455,6 +458,8 @@ export function useExplorerActions(args: {
   const newFolderNameRequestRef = useRef(0);
   // A folder made in the folder on screen, to be renamed in its row once it is listed.
   const pendingInlineRenamePathRef = useRef<string | null>(null);
+  // A paste start request on its way, which Stop marks to stop once it has an id.
+  const startRequestRef = useRef<{ cancelled: boolean } | null>(null);
   const reviewStartInFlightRef = useRef<string | null>(null);
   // A cut clipboard to clear when its move finishes having moved something.
   const clipboardClearAfterMoveRef = useRef<{ operationId: string; capturedAt: string } | null>(
@@ -580,6 +585,8 @@ export function useExplorerActions(args: {
     }
     if (contextMenuState.surface === "search") {
       hidden.add("toggleFavorite");
+      // New Folder goes into the folder on screen, and search results show none.
+      hidden.add("newFolder");
     }
     // An item's New Folder makes the folder inside it, so it is there only for one folder;
     // the folder on screen has its own, in the menu of the background.
@@ -627,6 +634,10 @@ export function useExplorerActions(args: {
       isDirectoryLikeEntry(contextMenuTargetEntries[0] ?? null);
     if (!canPasteAtResolvedDestination) {
       disabled.add("paste");
+    }
+    // As in Finder: nothing to empty, nothing to ask about.
+    if (args.derived.trashIsEmpty === true) {
+      disabled.add("emptyTrash");
     }
     if (isWriteOperationLocked) {
       for (const actionId of WRITE_LOCKED_CONTEXT_ACTION_IDS) {
@@ -733,6 +744,7 @@ export function useExplorerActions(args: {
     }
     return Array.from(disabled);
   }, [
+    args.derived.trashIsEmpty,
     canPasteAtResolvedDestination,
     contextMenuFavoriteToggleLabel,
     contextMenuState,
@@ -953,6 +965,12 @@ export function useExplorerActions(args: {
             applyCopyPasteClipboardState(followedClipboard);
           }
         }
+        // The folder made in its row may have been given the next free name.
+        if (event.action === "new_folder" && pendingInlineRenamePathRef.current !== null) {
+          const madePath = event.result?.items[0]?.destinationPath ?? null;
+          pendingInlineRenamePathRef.current =
+            event.status === "completed" && madePath ? madePath : null;
+        }
         activeWriteOperationIdRef.current = null;
         pendingPasteAttemptRef.current = null;
         applyWriteOperationCardState(null);
@@ -1019,13 +1037,16 @@ export function useExplorerActions(args: {
     selection: ContentSelectionState,
     entries: DirectoryEntry[] = activeContentEntries,
   ) {
+    // A set, not a list: a paste of a large folder selects many thousands of items, and
+    // looking each entry up in a list of them froze the window.
+    const picked = new Set(selection.paths);
     const selectedPaths = entries
-      .filter((entry) => selection.paths.includes(entry.path))
+      .filter((entry) => picked.has(entry.path))
       .map((entry) => entry.path);
     selectedPathsInViewOrderRef.current = selectedPaths;
     selectedEntryRef.current =
       entries.find((entry) => entry.path === selection.leadPath) ??
-      entries.find((entry) => selectedPaths.includes(entry.path)) ??
+      entries.find((entry) => picked.has(entry.path)) ??
       null;
   }
 
@@ -1629,6 +1650,10 @@ export function useExplorerActions(args: {
         phase: "starting",
       };
     }
+    // Stop pressed while the start request is on its way (from the review sheet) is kept
+    // here, and the operation is stopped as soon as its id is known.
+    const startRequest = { cancelled: false };
+    startRequestRef.current = startRequest;
     applyWriteOperationCardState({
       action,
       stage: "starting",
@@ -1668,7 +1693,13 @@ export function useExplorerActions(args: {
         };
       }
       const pendingAttempt = pasteAttemptId === null ? null : pendingPasteAttemptRef.current;
-      if (pendingAttempt && pendingAttempt.id === pasteAttemptId && pendingAttempt.cancelled) {
+      if (startRequestRef.current === startRequest) {
+        startRequestRef.current = null;
+      }
+      if (
+        startRequest.cancelled ||
+        (pendingAttempt && pendingAttempt.id === pasteAttemptId && pendingAttempt.cancelled)
+      ) {
         pendingPasteAttemptRef.current = null;
         rememberPendingTreeSelectionPath(null);
         adoptWriteOperation(response.operationId);
@@ -1720,7 +1751,13 @@ export function useExplorerActions(args: {
     } catch (error) {
       rememberPendingTreeSelectionPath(null);
       const pendingAttempt = pasteAttemptId === null ? null : pendingPasteAttemptRef.current;
-      if (pendingAttempt && pendingAttempt.id === pasteAttemptId && pendingAttempt.cancelled) {
+      if (startRequestRef.current === startRequest) {
+        startRequestRef.current = null;
+      }
+      if (
+        startRequest.cancelled ||
+        (pendingAttempt && pendingAttempt.id === pasteAttemptId && pendingAttempt.cancelled)
+      ) {
         pendingPasteAttemptRef.current = null;
         return { status: "cancelled" };
       }
@@ -2036,7 +2073,8 @@ export function useExplorerActions(args: {
       }
       return;
     }
-    const missingMessage = formatMissingClipboardItemsMessage(missingSourcePaths);
+    const verb = action === "move_to" ? "moved" : "pasted";
+    const missingMessage = formatMissingClipboardItemsMessage(missingSourcePaths, verb);
     if (outcome.status === "blocked" || outcome.status === "error") {
       surfaceCopyLikePreStartFailureNotice(action, {
         ...outcome,
@@ -2050,14 +2088,19 @@ export function useExplorerActions(args: {
       nothingPasted
         ? getCopyLikePreStartFailureTitle(action)
         : missingSourcePaths.length === 1
-          ? "An item couldn't be pasted"
-          : "Some items couldn't be pasted",
+          ? `An item couldn’t be ${verb}`
+          : `Some items couldn’t be ${verb}`,
       missingMessage,
     );
   }
 
   async function cancelWriteOperation() {
     const operationId = activeWriteOperationIdRef.current;
+    if (!operationId && startRequestRef.current) {
+      // The start request is on its way: the operation stops once it has an id.
+      startRequestRef.current.cancelled = true;
+      return;
+    }
     if (!operationId) {
       const activeAnalysisId = activeAnalysisIdRef.current;
       const pendingAttempt = pendingPasteAttemptRef.current;
@@ -3168,6 +3211,12 @@ export function useExplorerActions(args: {
     if (paths.length === 0) {
       return;
     }
+    // Nothing could be moved until the running operation ends: said now, not after a
+    // destination was picked.
+    if (isWriteOperationInFlight()) {
+      showWriteOperationBusyNotice("move_to");
+      return;
+    }
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
@@ -3245,6 +3294,12 @@ export function useExplorerActions(args: {
     if (!sourcePath) {
       return;
     }
+    // Said now, before a name is typed that couldn't be used until the operation ends.
+    if (isWriteOperationInFlight()) {
+      closeContextMenu();
+      showWriteOperationBusyNotice("rename");
+      return;
+    }
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
@@ -3255,16 +3310,27 @@ export function useExplorerActions(args: {
       currentName: getPathLeafName(sourcePath),
       error: null,
       refusalCount: 0,
-      // In the list or the search results, the name is edited in its row.
-      inline: !options.fromTree && activeContentEntries.some((entry) => entry.path === sourcePath),
+      // In the list or the search results, the name is edited in its row. An item the list
+      // filter hides counts too: the filter is cleared to show a folder just made.
+      inline:
+        !options.fromTree &&
+        (activeContentEntries.some((entry) => entry.path === sourcePath) ||
+          (!isSearchModeRef.current && currentEntries.some((entry) => entry.path === sourcePath))),
       sessionId: nextRenameSessionId(),
     });
     closeContextMenu();
   }
 
-  async function submitRenameDialog(nextName: string) {
+  async function submitRenameDialog(typedName: string) {
     const dialogState = renameDialogState;
     if (!dialogState) {
+      return;
+    }
+    // Spaces around a name are dropped (the main process drops them too), before anything
+    // is decided from it: " .env" would hide the item as ".env" does.
+    const nextName = typedName.trim();
+    if (nextName === dialogState.currentName) {
+      setRenameDialogState(null);
       return;
     }
     const nameError = getItemNameError(nextName);
@@ -3288,7 +3354,10 @@ export function useExplorerActions(args: {
       // the refusal gets a dialog of its own, and nothing waits on a field that is gone.
       if (dialogState.inline && !renameFieldItemShownRef.current(dialogState.sourcePath)) {
         setRenameDialogState(null);
-        showModalNotice(getCopyLikePreStartFailureTitle("rename"), message);
+        showModalNotice(
+          `“${getPathLeafName(dialogState.sourcePath)}” couldn’t be renamed`,
+          message,
+        );
         return;
       }
       refuseRenameName(message);
@@ -3336,6 +3405,8 @@ export function useExplorerActions(args: {
       showWriteOperationBusyNotice("rename");
       return;
     }
+    // The folder won't be made, so nothing is waiting to be renamed in its row.
+    pendingInlineRenamePathRef.current = null;
     setNewFolderDialogState(null);
     showWriteOperationBusyNotice("new_folder");
   }
@@ -3506,10 +3577,17 @@ export function useExplorerActions(args: {
       const name = resolveFreeNewFolderName(currentEntries.map((entry) => entry.name));
       pendingInlineRenamePathRef.current = buildChildPath(parentDirectoryPath, name);
       void startCreateFolder(
-        { kind: "newFolder", parentDirectoryPath, name, selectInTreeOnSuccess: false },
+        {
+          kind: "newFolder",
+          parentDirectoryPath,
+          name,
+          selectInTreeOnSuccess: false,
+          // The listing may not know of a "New Folder" made elsewhere meanwhile.
+          nextFreeName: true,
+        },
         (message) => {
           pendingInlineRenamePathRef.current = null;
-          setActionNotice({ title: "Couldn’t Make the Folder", message });
+          setActionNotice({ title: "The folder couldn’t be made", message });
         },
       );
       return;
@@ -3581,6 +3659,7 @@ export function useExplorerActions(args: {
       const response = await client.invoke("writeOperation:createFolder", {
         parentDirectoryPath: request.parentDirectoryPath,
         folderName: request.name,
+        ...(request.nextFreeName ? { nextFreeName: true } : {}),
       });
       rememberPendingTreeSelectionPath(
         request.selectInTreeOnSuccess

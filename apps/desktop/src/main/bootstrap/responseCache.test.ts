@@ -107,6 +107,24 @@ describe("createFolderSizeHandlers", () => {
     expect(result.status).toBe("ready");
   });
 
+  // A trashed 5 GB folder replaced by an empty one of the same name showed 5 GB.
+  it("forgets the sizes of the folders a write touched, and keeps the others", async () => {
+    const native = createMockNative();
+    const handlers = createFolderSizeHandlers(native);
+    for (const path of ["/Users/demo/Project", "/Users/demo/Music"]) {
+      handlers.start({ path });
+      native.resolveActive(sampleJson);
+      await new Promise((r) => setTimeout(r, 0));
+    }
+
+    clearResponseCaches(["/Users/demo/Project/src/old.txt"]);
+
+    expect(handlers.start({ path: "/Users/demo/Project", probeOnly: true }).status).not.toBe(
+      "ready",
+    );
+    expect(handlers.start({ path: "/Users/demo/Music", probeOnly: true }).status).toBe("ready");
+  });
+
   it("start with recalculate clears cache", async () => {
     const native = createMockNative();
     const handlers = createFolderSizeHandlers(native);

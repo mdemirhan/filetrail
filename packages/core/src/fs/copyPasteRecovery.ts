@@ -27,16 +27,47 @@ export type ReplaceRecoveryOutcome =
 export async function recoverInterruptedReplaces(
   entries: ReplaceJournalEntry[],
   fileSystem: WriteServiceFileSystem,
+  // A network disk that doesn't answer mustn't hold up the start: after this long its
+  // entry is left for later, as for a disk that isn't connected.
+  options: { answerWithinMs?: number } = {},
 ): Promise<ReplaceRecoveryOutcome[]> {
   const outcomes: ReplaceRecoveryOutcome[] = [];
   for (const entry of entries) {
     try {
+      if (
+        options.answerWithinMs !== undefined &&
+        !(await answersWithin(fileSystem, dirname(entry.stagingPath), options.answerWithinMs))
+      ) {
+        outcomes.push({ entry, outcome: "unreachable", error: "The disk didn't answer." });
+        continue;
+      }
       outcomes.push(await recoverEntry(entry, fileSystem));
     } catch (error) {
       outcomes.push({ entry, outcome: "failed", error: describeCopyPasteError(error) });
     }
   }
   return outcomes;
+}
+
+// Whether looking up `path` comes back (found or not) within `ms`.
+async function answersWithin(
+  fileSystem: WriteServiceFileSystem,
+  path: string,
+  ms: number,
+): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<false>((resolve) => {
+    timer = setTimeout(() => resolve(false), ms);
+  });
+  const answered = fileSystem.lstat(path).then(
+    () => true as const,
+    () => true as const,
+  );
+  try {
+    return await Promise.race([answered, timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function recoverEntry(

@@ -7,7 +7,7 @@ import { join } from "node:path";
 import type { ReplaceJournalEntry } from "@filetrail/core";
 import { DEFAULT_WRITE_SERVICE_FILE_SYSTEM } from "@filetrail/core/fs/writeServiceTypes";
 
-import { openReplaceJournal, recoverReplaces } from "./replaceJournal";
+import { openReplaceJournal, recoverReplaces, retryReplaceRecovery } from "./replaceJournal";
 
 let testDir: string;
 
@@ -118,7 +118,7 @@ describe("recoverReplaces", () => {
     }
     const logger = { info: vi.fn(), error: vi.fn() };
 
-    const notices = await recoverReplaces(journal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, logger);
+    const { notices } = await recoverReplaces(journal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, logger);
 
     expect(await readFile(finished.finalPath, "utf8")).toBe("new contents");
     expect(existsSync(finished.stagingPath)).toBe(false);
@@ -135,22 +135,105 @@ describe("recoverReplaces", () => {
   });
 
   // Its disk isn't connected now: the item may be the only copy of something, so the entry
-  // stays, quietly, until it can be dealt with.
-  it("keeps an entry whose hidden item can't be reached, without a notice", async () => {
+  // stays until it can be dealt with, and the person is told where the item waits.
+  it("keeps an entry whose hidden item can't be reached, and says where it waits", async () => {
     const journal = await openReplaceJournal(join(testDir, "replace-journal.json"));
     const unreachable = createEntry("unreachable", {
       stagingPath: "/Volumes/FileTrailNotConnected/.moved.filetrail-1",
+      finalPath: "/Volumes/FileTrailNotConnected/report.txt",
       moved: true,
     });
+    const unfinishedCopy = createEntry("copy", {
+      stagingPath: "/Volumes/FileTrailNotConnected/.copy.filetrail-2",
+    });
     await journal.add(unreachable);
+    await journal.add(unfinishedCopy);
 
-    const notices = await recoverReplaces(journal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, {
+    const { notices } = await recoverReplaces(journal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, {
       info: vi.fn(),
       error: vi.fn(),
     });
 
-    expect(notices).toEqual([]);
-    expect(journal.entries()).toEqual([unreachable]);
+    // Only the moved item: an unfinished copy's original is in place.
+    expect(notices).toEqual([
+      "“report.txt” was being moved onto “FileTrailNotConnected”, which isn't connected. Connect it and File Trail puts “report.txt” in place; until then it is under the hidden name “.moved.filetrail-1” there.",
+    ]);
+    expect(journal.entries()).toEqual([unreachable, unfinishedCopy]);
+  });
+
+  // A network share that doesn't answer mustn't hold up the window.
+  it("leaves for later an entry whose disk doesn't answer in time", async () => {
+    const journal = await openReplaceJournal(join(testDir, "replace-journal.json"));
+    const hanging = createEntry("hanging", { moved: true });
+    await journal.add(hanging);
+    const fileSystem = {
+      ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+      lstat: () => new Promise<never>(() => undefined),
+    };
+
+    const startedAt = Date.now();
+    const { notices } = await recoverReplaces(
+      journal,
+      fileSystem,
+      { info: vi.fn(), error: vi.fn() },
+      {
+        answerWithinMs: 50,
+      },
+    );
+
+    expect(Date.now() - startedAt).toBeLessThan(2_000);
+    expect(notices).toHaveLength(1);
+    expect(journal.entries()).toEqual([hanging]);
+  });
+
+  // Once the disk is back the item is put in place, and the person told.
+  it("finishes a waiting entry on a retry, and says so", async () => {
+    const journal = await openReplaceJournal(join(testDir, "replace-journal.json"));
+    const waiting = createEntry("waiting", { moved: true });
+    await writeFile(waiting.stagingPath, "moved contents");
+    await journal.add(waiting);
+
+    const report = await recoverReplaces(
+      journal,
+      DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
+      { info: vi.fn(), error: vi.fn() },
+      { entryIds: new Set([waiting.id]), retry: true },
+    );
+
+    expect(report.finished).toEqual([`“waiting.txt” is in place now, in “${testDir}”.`]);
+    expect(await readFile(waiting.finalPath, "utf8")).toBe("moved contents");
+    expect(journal.entries()).toEqual([]);
+  });
+
+  it("retries every so often while nothing runs, until nothing is left", async () => {
+    vi.useFakeTimers();
+    try {
+      let left = new Set(["a"]);
+      const recover = vi.fn(async () => {
+        left = new Set();
+        return { notices: [], finished: ["“a.txt” is in place now, in “/x”."] };
+      });
+      const onFinished = vi.fn();
+      let busy = true;
+      retryReplaceRecovery({
+        leftoverIds: new Set(["a"]),
+        recover,
+        remainingIds: () => left,
+        isBusy: () => busy,
+        onFinished,
+        intervalMs: 1_000,
+      });
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(recover).not.toHaveBeenCalled();
+      busy = false;
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(onFinished).toHaveBeenCalledWith(["“a.txt” is in place now, in “/x”."]);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(recover).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   // A crash during a Replace that filled the disk must not keep the app from starting.
@@ -169,7 +252,7 @@ describe("recoverReplaces", () => {
 
     await expect(
       recoverReplaces(failingJournal, DEFAULT_WRITE_SERVICE_FILE_SYSTEM, logger),
-    ).resolves.toEqual([]);
+    ).resolves.toEqual({ notices: [], finished: [] });
     expect(await readFile(finished.finalPath, "utf8")).toBe("new contents");
     expect(logger.error).toHaveBeenCalledWith(
       "[filetrail] couldn't update the replace journal",

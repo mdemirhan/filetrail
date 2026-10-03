@@ -25,6 +25,7 @@ import {
 import {
   destinationPathKey,
   fitName,
+  isAppleDoubleCompanionName,
   isFolderViewFile,
   resolveDuplicateName,
 } from "./copyPasteNames";
@@ -994,9 +995,29 @@ async function executeReplace(
       throw error instanceof DestinationTakenError ? error.original : error;
     }
     stagedChildItems = rebaseItemResults(stagedOutcome.childItems, temporaryPath, finalPath);
+    // An item inside that changed and was skipped would be in neither the new folder nor,
+    // once the old one is in the Trash, where it was: the old folder is kept instead.
+    const skippedInside = stagedChildItems.find(
+      (item) => item.skipReason === "runtime_conflict_resolution",
+    );
+    if (stagedOutcome.itemStatus !== "failed" && skippedInside) {
+      await undoStaging().catch(() => undefined);
+      return {
+        itemStatus: "failed",
+        skipReason: null,
+        error: `“${basename(finalPath)}” wasn't replaced because “${basename(skippedInside.sourcePath)}” in it changed and was skipped.`,
+        destinationPath: finalPath,
+        childItems: [],
+      };
+    }
     if (stagedOutcome.itemStatus !== "failed") {
       // Complete now: once the old item is in the Trash, this copy is the one to keep.
-      await journal?.add({ ...journalEntry, staged: true });
+      try {
+        await journal?.add({ ...journalEntry, staged: true });
+      } catch (error) {
+        await undoStaging().catch(() => undefined);
+        throw error;
+      }
     }
     if (stagedOutcome.itemStatus === "failed") {
       await undoStaging().catch(() => undefined);
@@ -1181,11 +1202,44 @@ async function removeReplacedItem(
   if (resolution !== "overwrite") {
     return "skipped";
   }
+  // Deleting a folder for good stops at the first locked item inside, leaving it half
+  // deleted: one is looked for first, and then nothing is deleted.
+  if (destination.kind === "directory") {
+    const locked = await findLockedInside(fileSystem, node.destinationPath);
+    if (locked !== null) {
+      throw new Error(lockedMessage(locked));
+    }
+  }
   await fileSystem.rm(node.destinationPath, {
     recursive: destination.kind === "directory",
     force: true,
   });
   return "removed";
+}
+
+// The first locked item inside a folder, at any depth, or null.
+async function findLockedInside(
+  fileSystem: WriteServiceFileSystem,
+  folderPath: string,
+): Promise<string | null> {
+  if (!fileSystem.getFlags) {
+    return null;
+  }
+  const names = await fileSystem.readdir(folderPath).catch(() => [] as string[]);
+  for (const name of names) {
+    const path = join(folderPath, name);
+    if (await isLocked(fileSystem, path)) {
+      return path;
+    }
+    const stats = await fileSystem.lstat(path).catch(() => null);
+    if (stats?.isDirectory()) {
+      const inside = await findLockedInside(fileSystem, path);
+      if (inside !== null) {
+        return inside;
+      }
+    }
+  }
+  return null;
 }
 
 // A hidden name next to `finalPath` for building the replacement, within the volume's
@@ -1314,7 +1368,42 @@ const MISSING_FINGERPRINT: NodeFingerprint = {
   symlinkTarget: null,
 };
 
+// A file is written under a hidden name next to its place, and takes its name only once it
+// is complete: quitting, a crash or a disk that stops answering part way never leaves a
+// cut-short file under the real name, where it would pass for the whole one.
 async function copyFileContents(
+  context: ExecutionContext,
+  sourcePath: string,
+  targetPath: string,
+): Promise<void> {
+  const { fileSystem } = context;
+  if (!fileSystem.renameExclusive && !fileSystem.rename) {
+    await writeFileContents(context, sourcePath, targetPath);
+    return;
+  }
+  if ((await captureFingerprint(fileSystem, targetPath)).exists) {
+    throw new DestinationTakenError(
+      Object.assign(new Error(`EEXIST: ${targetPath}`), { code: "EEXIST", path: targetPath }),
+    );
+  }
+  const partialPath = await temporarySiblingPath(fileSystem, targetPath);
+  await writeFileContents(context, sourcePath, partialPath);
+  try {
+    // A copy of a locked file is locked too, and a locked file can't be renamed.
+    const flags = await unlockForMove(fileSystem, partialPath);
+    await moveExclusive(fileSystem, partialPath, targetPath);
+    if (flags !== null) {
+      await fileSystem.setFlags?.(targetPath, flags).catch(() => undefined);
+    }
+  } catch (error) {
+    await removeStagedItem(fileSystem, partialPath).catch(() => undefined);
+    throw errorCode(error) === "EEXIST"
+      ? new DestinationTakenError(error)
+      : await explainMissingFolder(fileSystem, targetPath, error);
+  }
+}
+
+async function writeFileContents(
   context: ExecutionContext,
   sourcePath: string,
   targetPath: string,
@@ -1332,6 +1421,14 @@ async function copyFileContents(
     }
     if (errorCode(error) === "ENOENT") {
       throw await explainMissingFolder(context.fileSystem, targetPath, error);
+    }
+    if (errorCode(error) === "ENOTSUP" || errorCode(error) === "EOPNOTSUPP") {
+      const source = await context.fileSystem.lstat(sourcePath).catch(() => null);
+      if (source && !source.isFile() && !source.isDirectory() && !source.isSymbolicLink()) {
+        throw new Error(
+          `“${basename(sourcePath)}” is a special file (such as a pipe or a socket), which can't be copied.`,
+        );
+      }
     }
     // Leave no half-written file behind, but only one this copy created: an item that
     // was already there, or something other than a file, belongs to someone else.
@@ -1634,7 +1731,9 @@ async function tryRemoveEmptySourceDirectory(
     return null;
   }
   if (!canRemoveMovedSourceDirectory(node.node.sourceFingerprint, currentFingerprint)) {
-    return null;
+    // Its permissions changed, or it was swapped for another folder: it isn't removed, and
+    // "moved" mustn't hide that it is still there.
+    return `Its items were moved, but the original “${basename(sourcePath)}” changed during the move, so it was kept.`;
   }
   try {
     // rmdir only removes an empty folder, so anything left inside (skipped items, or
@@ -1662,10 +1761,14 @@ async function describeLeftInMovedFolder(
 ): Promise<string | null> {
   const plannedNames = new Set(node.children.map((child) => basename(child.node.sourcePath)));
   const entries = await fileSystem.readdir(node.node.sourcePath).catch(() => [] as string[]);
-  const added = entries.filter((entry) => !plannedNames.has(entry));
-  if (added.length > 0 && added.every(isFolderViewFile)) {
-    // Only what Finder wrote to show the folder: it goes with the folder.
-    for (const entry of added) {
+  // Nobody's items: what Finder wrote to show the folder, and the AppleDouble files of
+  // items that were moved (FAT, exFAT, SMB).
+  const isLeftover = (entry: string) =>
+    isFolderViewFile(entry) || isAppleDoubleCompanionName(entry, plannedNames);
+  if (entries.length > 0 && entries.every(isLeftover)) {
+    // They go with the folder. Only when nothing else keeps it: a folder that stays
+    // (skipped or failed items in it) keeps its view settings too.
+    for (const entry of entries) {
       await fileSystem
         .rm(join(node.node.sourcePath, entry), { force: true })
         .catch(() => undefined);
@@ -1673,7 +1776,7 @@ async function describeLeftInMovedFolder(
     await fileSystem.rmdir(node.node.sourcePath).catch(() => undefined);
     return null;
   }
-  const newItems = added.filter((entry) => !isFolderViewFile(entry));
+  const newItems = entries.filter((entry) => !plannedNames.has(entry) && !isLeftover(entry));
   if (newItems.length === 0) {
     return null;
   }
@@ -1707,7 +1810,12 @@ async function findItemsAddedSinceReview(
   }
   const plannedNames = new Set(node.children.map((child) => basename(child.node.sourcePath)));
   const entries = await fileSystem.readdir(node.node.sourcePath).catch(() => [] as string[]);
-  return entries.filter((entry) => !plannedNames.has(entry) && !isFolderViewFile(entry));
+  return entries.filter(
+    (entry) =>
+      !plannedNames.has(entry) &&
+      !isFolderViewFile(entry) &&
+      !isAppleDoubleCompanionName(entry, plannedNames),
+  );
 }
 
 function canRemoveMovedSourceDirectory(

@@ -996,6 +996,9 @@ export const ipcContractSchemas = {
     request: z.object({
       parentDirectoryPath: absolutePathSchema,
       folderName: itemNameSchema,
+      // The name is only a suggestion ("New Folder"): when it is taken (by something the
+      // window hasn't listed yet), the next free one ("New Folder 2") is used.
+      nextFreeName: z.boolean().optional(),
     }),
     response: z.object({
       operationId: z.string().min(1),
@@ -1152,6 +1155,14 @@ export const ipcContractSchemas = {
     response: z.object({
       ok: z.boolean(),
       error: z.string().nullable(),
+    }),
+  },
+  // Whether there is anything to empty: the home folder's Trash and other disks' Trashes.
+  // null when that can't be told (macOS keeps the Trash from apps without Full Disk Access).
+  "system:getTrashState": {
+    request: emptyRequestSchema,
+    response: z.object({
+      empty: z.boolean().nullable(),
     }),
   },
   // Opens Privacy & Security at Full Disk Access, which macOS requires before an app can

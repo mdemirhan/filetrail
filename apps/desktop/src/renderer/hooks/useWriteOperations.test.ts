@@ -11,11 +11,14 @@ describe("writeOperationsReducer", () => {
   it("patches a single field with a direct value", () => {
     const next = writeOperationsReducer(INITIAL_WRITE_OPERATIONS_STATE, {
       key: "actionNotice",
-      value: { title: "Blocked", message: "Wait for the current write to finish." },
+      value: {
+        title: "Blocked",
+        message: "Another file operation is running. Wait for it to finish, or stop it.",
+      },
     });
     expect(next.actionNotice).toEqual({
       title: "Blocked",
-      message: "Wait for the current write to finish.",
+      message: "Another file operation is running. Wait for it to finish, or stop it.",
     });
     expect(next.toasts).toBe(INITIAL_WRITE_OPERATIONS_STATE.toasts);
     expect(INITIAL_WRITE_OPERATIONS_STATE.actionNotice).toBeNull();

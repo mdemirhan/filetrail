@@ -300,3 +300,46 @@ export function disambiguateTabLabels<T extends { label: string; kind: string; p
       : item;
   });
 }
+
+// A background tab shows a folder that was renamed or moved (by this window): it follows
+// the folder, as a Finder window does, instead of finding it gone and falling back to the
+// folder above. `moves` maps each item's old path to its new one. The tab's listing is
+// read again, at the new place, when it is shown.
+export function followMovedItems(
+  snapshot: TabSnapshot,
+  moves: ReadonlyArray<{ from: string; to: string }>,
+): TabSnapshot {
+  const follow = (path: string): string => {
+    for (const move of moves) {
+      if (path === move.from) {
+        return move.to;
+      }
+      if (path.startsWith(`${move.from}/`)) {
+        return `${move.to}${path.slice(move.from.length)}`;
+      }
+    }
+    return path;
+  };
+  const currentPath = follow(snapshot.currentPath);
+  const historyPaths = snapshot.historyPaths.map(follow);
+  const treeRootPath = follow(snapshot.treeRootPath);
+  const selectedTreeItemId =
+    snapshot.selectedTreeItemId?.startsWith("fs:") === true
+      ? (`fs:${follow(snapshot.selectedTreeItemId.slice(3))}` as TreeItemId)
+      : snapshot.selectedTreeItemId;
+  const moved =
+    currentPath !== snapshot.currentPath ||
+    treeRootPath !== snapshot.treeRootPath ||
+    historyPaths.some((path, index) => path !== snapshot.historyPaths[index]);
+  if (!moved && selectedTreeItemId === snapshot.selectedTreeItemId) {
+    return snapshot;
+  }
+  return {
+    ...snapshot,
+    currentPath,
+    historyPaths,
+    treeRootPath,
+    selectedTreeItemId,
+    view: currentPath === snapshot.currentPath ? snapshot.view : null,
+  };
+}

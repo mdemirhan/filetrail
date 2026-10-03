@@ -570,7 +570,7 @@ export function useExplorerDragAndDrop(args: {
   // screen shows that tab, so the items can be dropped on a folder inside it.
 
   function handleTabDragOver(
-    tab: { id: string; path: string; active: boolean },
+    tab: { id: string; path: string; active: boolean; kind?: string },
     event: React.DragEvent<HTMLElement>,
   ) {
     if (!dragSessionRef.current) {
@@ -579,7 +579,7 @@ export function useExplorerDragAndDrop(args: {
     const validity = evaluateDropTarget(event, {
       surface: "tab",
       path: tab.path.length > 0 ? tab.path : null,
-      targetSupportsMove: tab.path.length > 0 && tab.path !== trashPath,
+      targetSupportsMove: tabTakesDrops(tab),
     });
     setDropIndicator("tab", tab.id, validity);
     if (tab.active) {
@@ -610,13 +610,19 @@ export function useExplorerDragAndDrop(args: {
   }
 
   async function handleTabDrop(
-    tab: { id: string; path: string },
+    tab: { id: string; path: string; kind?: string },
     event: React.DragEvent<HTMLElement>,
   ) {
     await handleDrop("tab", tab.path.length > 0 ? tab.path : null, event, {
-      targetSupportsMove: tab.path.length > 0 && tab.path !== trashPath,
+      targetSupportsMove: tabTakesDrops(tab),
       validateWithItemProperties: true,
     });
+  }
+
+  // A tab takes a drop for the folder it shows. One showing search results shows no
+  // folder (the folder behind them isn't on screen), so, as Paste there, it takes none.
+  function tabTakesDrops(tab: { path: string; kind?: string }): boolean {
+    return tab.path.length > 0 && tab.path !== trashPath && tab.kind !== "search";
   }
 
   function getTabDropIndicator(tabId: string): DropIndicatorState {
