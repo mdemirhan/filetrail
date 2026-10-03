@@ -136,6 +136,18 @@ export async function buildCopyPasteAnalysisReport(args: {
     return same;
   };
 
+  // Items that keep their own name claim it first, so a " copy" name picked for an item
+  // copied into its own folder never takes it, whatever order the items come in.
+  if (request.mode === "copy") {
+    for (const sourcePath of request.sourcePaths) {
+      if (!(await isDestinationDirectory(dirname(sourcePath)))) {
+        plannedDestinationKeys.add(
+          pathKey(join(request.destinationDirectoryPath, basename(sourcePath))),
+        );
+      }
+    }
+  }
+
   for (const [index, sourcePath] of request.sourcePaths.entries()) {
     args.signal?.throwIfAborted();
     const sourceFingerprint = await captureFingerprint(fileSystem, sourcePath);
@@ -245,10 +257,20 @@ export async function buildCopyPasteAnalysisReport(args: {
     });
   }
 
-  // Replacing an item that holds any item of this paste would destroy that item too.
+  // Replacing an item that is, or holds, any item of this paste would destroy that item
+  // too. Items inside merged folders are checked as well: a Replace offered there would
+  // only be refused when the paste reaches it.
   const sourceRealPaths = await realSourcePaths(fileSystem, nodes);
-  for (const node of nodes) {
+  const annotate = async (node: CopyPasteAnalysisNode): Promise<void> => {
     node.replaceBlockedReason = await findReplaceBlockedReason(node, fileSystem, sourceRealPaths);
+    if (node.conflictClass === "directory_conflict") {
+      for (const child of node.children) {
+        await annotate(child);
+      }
+    }
+  };
+  for (const node of nodes) {
+    await annotate(node);
   }
 
   await annotateKeepBothNames(nodes, fileSystem, caseSensitive, args.signal);
@@ -630,6 +652,11 @@ async function findReplaceBlockedReason(
     (await holdsAnyOf(fileSystem, node.destinationPath, sourceRealPaths))
   ) {
     return "It contains another item being pasted.";
+  }
+  // Pasting "/x/a.txt" over "/d/a.txt" while "/d/a.txt" is pasted too (search results).
+  const destinationRealPath = await fileSystem.realpath(node.destinationPath).catch(() => null);
+  if (destinationRealPath !== null && sourceRealPaths.includes(destinationRealPath)) {
+    return "It is another item being pasted.";
   }
   return null;
 }

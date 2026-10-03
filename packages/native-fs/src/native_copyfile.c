@@ -179,7 +179,14 @@ static napi_value queue_copy_work(napi_env env, napi_callback_info info,
 
   /* Extract source string. */
   size_t src_len;
-  napi_get_value_string_utf8(env, argv[0], NULL, 0, &src_len);
+  size_t dst_len;
+  if (napi_get_value_string_utf8(env, argv[0], NULL, 0, &src_len) != napi_ok ||
+      napi_get_value_string_utf8(env, argv[1], NULL, 0, &dst_len) != napi_ok) {
+    char message[96];
+    snprintf(message, sizeof(message), "%s: source and destination must be strings", name);
+    napi_throw_type_error(env, NULL, message);
+    return NULL;
+  }
   char *source = (char *)malloc(src_len + 1);
   if (!source) {
     napi_throw_error(env, NULL, "Out of memory");
@@ -188,8 +195,6 @@ static napi_value queue_copy_work(napi_env env, napi_callback_info info,
   napi_get_value_string_utf8(env, argv[0], source, src_len + 1, NULL);
 
   /* Extract destination string. */
-  size_t dst_len;
-  napi_get_value_string_utf8(env, argv[1], NULL, 0, &dst_len);
   char *destination = (char *)malloc(dst_len + 1);
   if (!destination) {
     free(source);
