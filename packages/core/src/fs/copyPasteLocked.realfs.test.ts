@@ -2,6 +2,7 @@
 // file, and putting right a Replace a crash cut short, on the real disk with the native copy.
 
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -178,13 +179,25 @@ describe("stopping part way through a file", () => {
       try {
         execFileSync("/usr/sbin/mkfile", ["150m", join(src, "big.bin")]);
         const controller = new AbortController();
-        setTimeout(() => controller.abort(), 30);
+        const destination = join(volume.mountPath, "big.bin");
 
         const { result } = await runPaste({
           mode: "copy",
           sourcePaths: [join(src, "big.bin")],
           destinationDirectoryPath: volume.mountPath,
           signal: controller.signal,
+          // Stop once the file has begun to be written, not after a fixed time that a fast
+          // disk can beat.
+          beforeExecute: async () => {
+            const stopOnceWriting = () => {
+              if (existsSync(destination)) {
+                controller.abort();
+              } else {
+                setTimeout(stopOnceWriting, 1);
+              }
+            };
+            stopOnceWriting();
+          },
         });
 
         expect(result?.status).toBe("cancelled");

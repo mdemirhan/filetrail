@@ -9,6 +9,7 @@ import {
   rmSync,
   statSync,
   symlinkSync,
+  truncateSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
@@ -410,9 +411,9 @@ describe("nativeCopyFile stop flag", () => {
         const destination = join(volume.mountPath, "big.bin");
         const stop = new Int32Array(1);
         const copy = addon.nativeCopyFile(source, destination, stop);
-        setTimeout(() => {
-          stop[0] = 1;
-        }, 20);
+        // Stop once the copy has begun writing, not after a fixed time a fast disk can beat.
+        await waitFor(() => existsSync(destination));
+        stop[0] = 1;
         await expect(copy).rejects.toMatchObject({ code: "ECANCELED" });
         expect(existsSync(destination)).toBe(false);
       } finally {
@@ -421,7 +422,59 @@ describe("nativeCopyFile stop flag", () => {
     },
     30_000,
   );
+
+  // copyfile asks the progress callback what to do when a write fails; answering
+  // "continue" there retried the write forever, so a full disk hung the copy.
+  it.runIf(canMountDiskImages)(
+    "fails with ENOSPC on a full disk instead of retrying the write forever",
+    async () => {
+      const volume = mountTestDiskImage({ sizeMb: 32 });
+      try {
+        const source = join(root, "big.bin");
+        execFileSync("/usr/sbin/mkfile", ["80m", source]);
+        const destination = join(volume.mountPath, "big.bin");
+        const startedAt = Date.now();
+        await expect(
+          addon.nativeCopyFile(source, destination, new Int32Array(1)),
+        ).rejects.toMatchObject({ code: "ENOSPC" });
+        expect(Date.now() - startedAt).toBeLessThan(10_000);
+        expect(existsSync(destination)).toBe(false);
+      } finally {
+        volume.detach();
+      }
+    },
+    30_000,
+  );
+
+  it.runIf(canMountDiskImages)(
+    "keeps a sparse file sparse, so it fits on a disk smaller than its length",
+    async () => {
+      const volume = mountTestDiskImage({ sizeMb: 32 });
+      try {
+        const source = join(root, "sparse.img");
+        writeFileSync(source, "start");
+        truncateSync(source, 1024 * 1024 * 1024);
+        const destination = join(volume.mountPath, "sparse.img");
+        await addon.nativeCopyFile(source, destination, new Int32Array(1));
+        expect(statSync(destination).size).toBe(1024 * 1024 * 1024);
+        expect(readFileSync(destination).subarray(0, 5).toString()).toBe("start");
+      } finally {
+        volume.detach();
+      }
+    },
+    30_000,
+  );
 });
+
+async function waitFor(condition: () => boolean, timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() > deadline) {
+      throw new Error("Timed out waiting for the condition.");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+}
 
 describe("nativeGetFlags / nativeSetFlags", () => {
   let root: string;

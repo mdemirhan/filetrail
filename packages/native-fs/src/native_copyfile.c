@@ -12,7 +12,7 @@
  *
  * Uses COPYFILE_ALL (preserve stat, xattrs, ACLs) | COPYFILE_CLONE (attempt
  * CoW clone on APFS, fall back to full copy) | COPYFILE_EXCL (never replace an
- * existing destination). The copy runs on a libuv thread pool thread so the
+ * existing destination) | COPYFILE_DATA_SPARSE (keep the holes of sparse files). The copy runs on a libuv thread pool thread so the
  * main thread is never blocked.
  */
 
@@ -42,16 +42,24 @@ typedef struct {
 } copy_work_t;
 
 /* Called by copyfile(3) between chunks of data and between the parts of a file (data,
-   extended attributes, ...): stops the copy once the caller has asked it to. */
+   extended attributes, ...): stops the copy once the caller has asked it to.
+   copyfile also calls it when a step fails (stage COPYFILE_ERR), and there CONTINUE means
+   "try that again": a write that keeps failing (the disk is full, or was unplugged) would
+   be retried forever. A failed data write ends the copy with its error instead; a failed
+   extended attribute is skipped, as copyfile does when no callback is set. */
 static int copy_status(int what, int stage, copyfile_state_t state, const char *src,
                        const char *dst, void *ctx) {
-  (void)what;
-  (void)stage;
   (void)state;
   (void)src;
   (void)dst;
   const int32_t *stop = (const int32_t *)ctx;
-  return __atomic_load_n(stop, __ATOMIC_RELAXED) != 0 ? COPYFILE_QUIT : COPYFILE_CONTINUE;
+  if (__atomic_load_n(stop, __ATOMIC_RELAXED) != 0) {
+    return COPYFILE_QUIT;
+  }
+  if (stage == COPYFILE_ERR) {
+    return what == COPYFILE_COPY_XATTR ? COPYFILE_SKIP : COPYFILE_QUIT;
+  }
+  return COPYFILE_CONTINUE;
 }
 
 /* ── Execute on libuv thread pool ────────────────────────────────── */
@@ -64,9 +72,11 @@ static void execute_copy(napi_env env, void *data) {
      Callers recreate symlinks themselves today; this keeps the addon safe if
      one is ever passed through.
      EXCL fails with EEXIST instead of writing over an item that appeared at the
-     destination: callers always copy to a name they expect to be free. */
-  const copyfile_flags_t flags =
-      COPYFILE_ALL | COPYFILE_CLONE | COPYFILE_NOFOLLOW_SRC | COPYFILE_EXCL;
+     destination: callers always copy to a name they expect to be free.
+     DATA_SPARSE keeps the holes of a sparse file (disk images, VM disks) instead of
+     writing them out as zeros, which can fill the destination disk. */
+  const copyfile_flags_t flags = COPYFILE_ALL | COPYFILE_CLONE | COPYFILE_NOFOLLOW_SRC |
+                                 COPYFILE_EXCL | COPYFILE_DATA_SPARSE;
   if (w->stop == NULL) {
     int rc = copyfile(w->source, w->destination, NULL, flags);
     w->errnum = (rc == 0) ? 0 : errno;

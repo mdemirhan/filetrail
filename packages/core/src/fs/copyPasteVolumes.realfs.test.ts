@@ -1,6 +1,7 @@
 // Pastes between two real disks: a small disk image is mounted as the other disk, so a
 // move there copies and then removes the originals, as it does to a USB drive.
 
+import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -202,4 +203,43 @@ describe.runIf(canMountDiskImages)("from a disk that tells upper and lower case 
     expect(result?.status).toBe("completed");
     expect(await visible(join(testDir, "F"))).toEqual(["A.txt", "b.txt"]);
   });
+});
+
+describe.runIf(canMountDiskImages)("pasting onto a disk that fills up", () => {
+  let small: TestDiskImage;
+
+  beforeAll(() => {
+    small = mountTestDiskImage({ sizeMb: 32, name: "FileTrailFull" });
+  });
+
+  afterAll(() => {
+    small.detach();
+  });
+
+  beforeEach(async () => {
+    testDir = await mkdtemp(join(tmpdir(), "filetrail-full-"));
+    src = join(testDir, "src");
+    await mkdir(src);
+  });
+
+  afterEach(async () => {
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  // The copy used to retry the failed write forever, so the paste never ended.
+  it("fails a move with the reason, keeps the original and leaves no partial file", async () => {
+    const source = join(src, "big.bin");
+    execFileSync("/usr/sbin/mkfile", ["80m", source]);
+
+    const { result } = await runPaste({
+      mode: "cut",
+      sourcePaths: [source],
+      destinationDirectoryPath: small.mountPath,
+    });
+
+    expect(result?.status).toBe("failed");
+    expect(result?.items[0]?.error).toBe("There isn't enough free space on the destination disk.");
+    expect(await visible(src)).toEqual(["big.bin"]);
+    expect(await visible(small.mountPath)).toEqual([]);
+  }, 30_000);
 });
