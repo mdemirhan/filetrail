@@ -111,11 +111,12 @@ export function nativeIsPackage(path: string): Promise<boolean | null>;
  * Recursively calculates the total size of a folder using `getattrlistbulk(2)`.
  *
  * Returns a JSON string:
- * `{"total":N,"diskTotal":N,"fileCount":N,"dirs":{"path":[sizeBytes,diskBytes,fileCount],...}}`
+ * `{"total":N,"diskTotal":N,"fileCount":N,"folderCount":N,"dirs":{"path":[sizeBytes,diskBytes,fileCount,folderCount],...}}`
  * where `total` is the root folder logical size in bytes, `diskTotal` is the
  * allocated disk space, `fileCount` is the total number of regular files and
- * symlinks, and `dirs` maps each sub-directory path to an array of
- * `[sizeBytes, diskBytes, fileCount]`.
+ * symlinks, `folderCount` the total number of folders below the root (package
+ * contents included), and `dirs` maps each sub-directory path to an array of
+ * `[sizeBytes, diskBytes, fileCount, folderCount]`.
  *
  * Runs on a libuv thread pool thread — non-blocking. At most one calculation
  * runs at a time; concurrent calls are queued and start after the active one

@@ -2,8 +2,8 @@ import { buildContentStatusSummary } from "./statusSummary";
 
 describe("buildContentStatusSummary", () => {
   const sizes: Record<string, number | null> = {
-    "/a.txt": 1024,
-    "/b.txt": 2048,
+    "/a.txt": 1000,
+    "/b.txt": 2000,
     "/folder": null,
   };
   const getKnownSizeBytes = (path: string) => sizes[path] ?? null;
@@ -14,7 +14,7 @@ describe("buildContentStatusSummary", () => {
         itemCount: 4,
         selectedPaths: [],
         getKnownSizeBytes,
-        availableBytes: 212 * 1024 ** 3,
+        availableBytes: 212 * 1000 ** 3,
       }),
     ).toBe("4 items · 212 GB available");
   });
@@ -48,7 +48,7 @@ describe("buildContentStatusSummary", () => {
         shownCount: 3,
         selectedPaths: [],
         getKnownSizeBytes,
-        availableBytes: 212 * 1024 ** 3,
+        availableBytes: 212 * 1000 ** 3,
       }),
     ).toBe("3 of 240 items · 212 GB available");
   });

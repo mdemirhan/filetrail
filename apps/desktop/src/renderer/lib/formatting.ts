@@ -90,17 +90,20 @@ export function formatSize(
   if (sizeStatus === "unavailable" || sizeBytes === null) {
     return "Unavailable";
   }
-  if (sizeBytes < 1024) {
+  // Steps of 1,000, as Finder and the rest of macOS count: 1 KB is 1,000 bytes, so a size
+  // reads the same here as in Finder's Get Info.
+  if (sizeBytes < 1000) {
     return `${sizeBytes} B`;
   }
-  const units = ["KB", "MB", "GB", "TB"];
-  let value = sizeBytes / 1024;
+  const units = ["KB", "MB", "GB", "TB", "PB"];
+  let value = sizeBytes / 1000;
   let unitIndex = 0;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
+  // Steps up once the shown number would reach 1000 ("999.7 KB" rounds to "1000 KB").
+  while (Math.round(value) >= 1000 && unitIndex < units.length - 1) {
+    value /= 1000;
     unitIndex += 1;
   }
-  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unitIndex]}`;
+  return `${value.toFixed(value >= 9.95 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
 // The mode as its code ("755"). The letters (rwxr-xr-x) say the same thing at three times
@@ -229,14 +232,26 @@ export function formatFolderSizeDetail(
   sizeBytes: number,
   diskBytes: number,
   fileCount: number,
+  folderCount: number,
 ): { size: string; disk: string | null; items: string } {
   const size = formatSize(sizeBytes, "ready");
   const disk = formatSize(diskBytes, "ready");
   return {
     size,
     disk: disk !== size ? `${disk} on disk` : null,
-    items: `${fileCount.toLocaleString()} items`,
+    items: describeFolderContents(fileCount, folderCount),
   };
+}
+
+// "48,611 files, 2,765 folders", "153 files", "Empty": what a folder holds at any depth.
+function describeFolderContents(fileCount: number, folderCount: number): string {
+  const count = (value: number, one: string, many: string) =>
+    `${value.toLocaleString()} ${value === 1 ? one : many}`;
+  const parts = [
+    fileCount > 0 ? count(fileCount, "file", "files") : null,
+    folderCount > 0 ? count(folderCount, "folder", "folders") : null,
+  ].filter((part): part is string => part !== null);
+  return parts.length > 0 ? parts.join(", ") : "Empty";
 }
 
 export function formatHintSize(sizeBytes: number | null): string | null {

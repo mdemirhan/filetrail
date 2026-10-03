@@ -65,18 +65,20 @@ describe("nativeFolderSize", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it("returns total logical size, disk total, file count, and sub-dir stats", async () => {
+  it("returns total logical size, disk total, file and folder counts, and sub-dir stats", async () => {
     const json = await addon.nativeFolderSize(root);
     const result = JSON.parse(json) as {
       total: number;
       diskTotal: number;
       fileCount: number;
-      dirs: Record<string, [number, number, number]>;
+      folderCount: number;
+      dirs: Record<string, [number, number, number, number]>;
     };
 
     // Logical sizes: a.txt(10) + b.txt(20) + c.txt(5) + d.txt(100) + link(symlink, size of target path string)
     // Symlink logical size varies, so we check file count and sub-dir structure instead.
     expect(result.fileCount).toBe(5); // a.txt, b.txt, c.txt, d.txt, link
+    expect(result.folderCount).toBe(3); // sub, sub/deep, empty
     expect(result.total).toBeGreaterThanOrEqual(135); // at least 10+20+5+100
     expect(result.diskTotal).toBeGreaterThanOrEqual(result.total); // disk >= logical
 
@@ -91,16 +93,32 @@ describe("nativeFolderSize", () => {
     const deep = expectDefined(result.dirs[join(root, "sub", "deep")]);
     expect(deep[0]).toBe(100); // logical
     expect(deep[2]).toBe(1); // file count
+    expect(deep[3]).toBe(0); // folder count
 
     // sub has c.txt(5) + deep(100) = 105 total, 2 files
     const sub = expectDefined(result.dirs[join(root, "sub")]);
     expect(sub[0]).toBe(105); // recursive logical
     expect(sub[2]).toBe(2); // recursive file count (c.txt + d.txt)
+    expect(sub[3]).toBe(1); // recursive folder count (deep)
 
     // empty has 0 bytes, 0 files
     const empty = expectDefined(result.dirs[join(root, "empty")]);
     expect(empty[0]).toBe(0);
     expect(empty[2]).toBe(0);
+    expect(empty[3]).toBe(0);
+  });
+
+  it("counts a package's contents one by one, like any folder", async () => {
+    mkdirSync(join(root, "Tool.app", "Contents", "MacOS"), { recursive: true });
+    writeFileSync(join(root, "Tool.app", "Contents", "Info.plist"), "x");
+    writeFileSync(join(root, "Tool.app", "Contents", "MacOS", "Tool"), "x");
+    const result = JSON.parse(await addon.nativeFolderSize(root)) as {
+      fileCount: number;
+      folderCount: number;
+    };
+
+    expect(result.fileCount).toBe(7); // the 5 above + Info.plist, Tool
+    expect(result.folderCount).toBe(6); // the 3 above + Tool.app, Contents, MacOS
   });
 
   it("can be cancelled", async () => {
@@ -123,12 +141,14 @@ describe("nativeFolderSize", () => {
         total: number;
         diskTotal: number;
         fileCount: number;
-        dirs: Record<string, [number, number, number]>;
+        folderCount: number;
+        dirs: Record<string, [number, number, number, number]>;
       };
 
       expect(result.total).toBe(0);
       expect(result.diskTotal).toBe(0);
       expect(result.fileCount).toBe(0);
+      expect(result.folderCount).toBe(0);
       expect(Object.keys(result.dirs)).toHaveLength(0);
     } finally {
       rmSync(emptyDir, { recursive: true, force: true });
@@ -141,7 +161,8 @@ describe("nativeFolderSize wrapper (single-flight)", () => {
     total: number;
     diskTotal: number;
     fileCount: number;
-    dirs: Record<string, [number, number, number]>;
+    folderCount: number;
+    dirs: Record<string, [number, number, number, number]>;
   }
 
   function makeTree(prefix: string, fileCount: number, fileSize: number): string {

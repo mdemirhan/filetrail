@@ -67,7 +67,7 @@ describe("InfoPanel", () => {
     rerender(
       <InfoPanel
         {...props}
-        selection={{ count: 2, folderCount: 0, fileCount: 2, totalBytes: 4096, parentPath: null }}
+        selection={{ count: 2, folderCount: 0, fileCount: 2, totalBytes: 4000, parentPath: null }}
       />,
     );
     expect(screen.getByText("2 files · 4.0 KB")).toBeInTheDocument();
@@ -419,6 +419,7 @@ describe("InfoPanel", () => {
           sizeBytes: 1048576,
           diskBytes: 1572864,
           fileCount: 43016,
+          folderCount: 3,
         }}
         onCalculateFolderSize={() => undefined}
         onRecalculateFolderSize={() => undefined}
@@ -429,9 +430,8 @@ describe("InfoPanel", () => {
     // Size text should include the logical size and disk size
     expect(screen.getAllByText(/1\.0 MB/).length).toBeGreaterThan(0);
     expect(screen.getByText(/on disk/)).toBeInTheDocument();
-    // Item count
-    const itemsText = screen.getByText(/items/);
-    expect(itemsText).toBeInTheDocument();
+    // What it holds, files then folders
+    expect(screen.getByText(/^43,016 files, 3 folders$/)).toBeInTheDocument();
     // Recalculate button present
     expect(screen.getByRole("button", { name: "Recalculate folder size" })).toBeInTheDocument();
   });
@@ -452,6 +452,7 @@ describe("InfoPanel", () => {
           sizeBytes: 1048576,
           diskBytes: 1572864,
           fileCount: 43016,
+          folderCount: 3,
         }}
         onCalculateFolderSize={() => undefined}
         onRecalculateFolderSize={() => undefined}
@@ -585,4 +586,5 @@ describe("InfoPanel", () => {
     expect(onOpenWith).toHaveBeenCalledWith(expect.objectContaining({ id: "zed" }));
     expect(screen.queryByRole("menu")).toBeNull();
   });
+
 });

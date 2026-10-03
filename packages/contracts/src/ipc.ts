@@ -1055,6 +1055,7 @@ export const ipcContractSchemas = {
       sizeBytes: z.number().int().nonnegative().nullable(),
       diskBytes: z.number().int().nonnegative().nullable(),
       fileCount: z.number().int().nonnegative().nullable(),
+      folderCount: z.number().int().nonnegative().nullable(),
       error: z.string().nullable(),
     }),
   },

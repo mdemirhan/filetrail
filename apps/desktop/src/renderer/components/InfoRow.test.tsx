@@ -123,6 +123,7 @@ describe("InfoRow", () => {
           sizeBytes: 1048576,
           diskBytes: 1572864,
           fileCount: 500,
+          folderCount: 3,
         }}
         onCalculateFolderSize={() => undefined}
         onRecalculateFolderSize={() => undefined}
@@ -132,7 +133,7 @@ describe("InfoRow", () => {
 
     expect(screen.getByText(/1\.0 MB/)).toBeInTheDocument();
     expect(screen.getByText(/on disk/)).toBeInTheDocument();
-    expect(screen.getByText(/items/)).toBeInTheDocument();
+    expect(screen.getByText(/500 files, 3 folders/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Recalculate folder size" })).toBeInTheDocument();
   });
 
@@ -172,6 +173,7 @@ describe("InfoRow", () => {
           sizeBytes: 1048576,
           diskBytes: 1572864,
           fileCount: 500,
+          folderCount: 3,
         }}
         onCalculateFolderSize={() => undefined}
         onRecalculateFolderSize={() => undefined}
@@ -282,7 +284,7 @@ describe("InfoRow as one line", () => {
         selectedEntry={fileEntry}
         item={fileItem}
         selectionCount={3}
-        selectionTotalBytes={3 * 1024 * 1024}
+        selectionTotalBytes={3_000_000}
       />,
     );
     expect(container.querySelector(".info-row-name")).toHaveTextContent("3 items");

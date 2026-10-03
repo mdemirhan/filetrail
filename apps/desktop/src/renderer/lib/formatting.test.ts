@@ -91,6 +91,21 @@ describe("formatting helpers", () => {
     expect(formatSize(null, "deferred")).toBe("Not yet available");
   });
 
+  it("counts sizes in steps of 1,000, as Finder does", () => {
+    expect(formatSize(999, "ready")).toBe("999 B");
+    expect(formatSize(1000, "ready")).toBe("1.0 KB");
+    expect(formatSize(1_500_000, "ready")).toBe("1.5 MB");
+    // The folders Finder showed as 99.43 GB and 226.59 GB.
+    expect(formatSize(99_433_647_655, "ready")).toBe("99 GB");
+    expect(formatSize(226_587_120_929, "ready")).toBe("227 GB");
+    expect(formatSize(2_000_000_000_000, "ready")).toBe("2.0 TB");
+  });
+
+  it("steps up a unit instead of showing 1000 of one", () => {
+    expect(formatSize(999_700, "ready")).toBe("1.0 MB");
+    expect(formatSize(9_960, "ready")).toBe("10 KB");
+  });
+
   it("formats Unix permission modes", () => {
     expect(formatPermissionMode(0o755)).toBe("755");
     expect(formatPermissionMode(0o7)).toBe("007");
@@ -187,12 +202,12 @@ describe("formatting helpers", () => {
       expect(formatHintSize(512)).toBe("512 B");
     });
 
-    it("returns 1.0 KB for 1024", () => {
-      expect(formatHintSize(1024)).toBe("1.0 KB");
+    it("returns 1.0 KB for 1000", () => {
+      expect(formatHintSize(1000)).toBe("1.0 KB");
     });
 
-    it("returns 1.0 MB for 1048576", () => {
-      expect(formatHintSize(1048576)).toBe("1.0 MB");
+    it("returns 1.0 MB for 1000000", () => {
+      expect(formatHintSize(1_000_000)).toBe("1.0 MB");
     });
   });
 
@@ -210,12 +225,12 @@ describe("formatting helpers", () => {
     });
 
     it("returns delta null when formatted sizes differ", () => {
-      const result = formatSizeComparison(1023, 1024);
-      expect(result).toEqual({ src: "1023 B", dest: "1.0 KB", delta: null });
+      const result = formatSizeComparison(999, 1000);
+      expect(result).toEqual({ src: "999 B", dest: "1.0 KB", delta: null });
     });
 
     it("returns delta null when bytes are equal", () => {
-      const result = formatSizeComparison(1024, 1024);
+      const result = formatSizeComparison(1000, 1000);
       expect(result).toEqual({ src: "1.0 KB", dest: "1.0 KB", delta: null });
     });
 
@@ -225,8 +240,8 @@ describe("formatting helpers", () => {
     });
 
     it("returns delta when same formatted size but different bytes (src larger)", () => {
-      // 1100000 and 1101000 both format to "1.0 MB"
-      const result = formatSizeComparison(1101000, 1100000);
+      // 1010000 and 1011000 both format to "1.0 MB"
+      const result = formatSizeComparison(1011000, 1010000);
       const value = expectDefined(result);
       expect(value.src).toBe("1.0 MB");
       expect(value.dest).toBe("1.0 MB");
@@ -235,7 +250,7 @@ describe("formatting helpers", () => {
     });
 
     it("returns delta when same formatted size but different bytes (dest larger)", () => {
-      const result = formatSizeComparison(1100000, 1101000);
+      const result = formatSizeComparison(1010000, 1011000);
       const value = expectDefined(result);
       expect(value.src).toBe("1.0 MB");
       expect(value.dest).toBe("1.0 MB");
@@ -244,49 +259,46 @@ describe("formatting helpers", () => {
     });
 
     it("computes correct delta for ambiguous 1.0 MB values", () => {
-      // 1100000 and 1101000 both → "1.0 MB", diff = 1000 → 1000 B
-      const result = formatSizeComparison(1101000, 1100000);
-      expect(expectDefined(result).delta).toBe("+1000 B");
+      // 1010000 and 1011000 both → "1.0 MB", diff = 1000 → 1.0 KB
+      const result = formatSizeComparison(1011000, 1010000);
+      expect(expectDefined(result).delta).toBe("+1.0 KB");
     });
   });
 
   describe("formatFolderSizeDetail", () => {
     it("returns disk info when logical and disk sizes differ", () => {
-      const result = formatFolderSizeDetail(1048576, 1572864, 500);
+      const result = formatFolderSizeDetail(1_000_000, 1_500_000, 500, 20);
       expect(result.size).toBe("1.0 MB");
       expect(result.disk).toBe("1.5 MB on disk");
-      expect(result.items).toMatch(/500/);
-      expect(result.items).toMatch(/items$/);
     });
 
     it("returns null disk when logical and disk sizes format the same", () => {
-      const result = formatFolderSizeDetail(1048576, 1048576, 100);
+      const result = formatFolderSizeDetail(1_000_000, 1_000_000, 100, 0);
       expect(result.size).toBe("1.0 MB");
       expect(result.disk).toBeNull();
-      expect(result.items).toMatch(/100/);
-      expect(result.items).toMatch(/items$/);
     });
 
-    it("formats file count with thousands separator", () => {
-      const result = formatFolderSizeDetail(1048576, 2097152, 43016);
-      expect(result.items).toMatch(/items$/);
-      // The exact separator is locale-dependent; just verify the number is present
-      expect(result.items).toMatch(/43/);
+    it("names files, then folders, with thousands separators", () => {
+      const result = formatFolderSizeDetail(1, 1, 48611, 2765);
+      expect(result.items).toBe(
+        `${(48611).toLocaleString()} files, ${(2765).toLocaleString()} folders`,
+      );
     });
 
-    it("returns disk info when sizes differ in their formatted representation", () => {
-      // 1 GB vs 1.24 GB
-      const result = formatFolderSizeDetail(1073741824, 1331691110, 43016);
-      expect(result.size).toBe("1.0 GB");
-      expect(result.disk).toBe("1.2 GB on disk");
+    it("leaves out a kind the folder doesn't hold", () => {
+      expect(formatFolderSizeDetail(1, 1, 153, 0).items).toBe("153 files");
+      expect(formatFolderSizeDetail(0, 0, 0, 4).items).toBe("4 folders");
     });
 
-    it("handles zero values", () => {
-      const result = formatFolderSizeDetail(0, 0, 0);
+    it("says one file and one folder in the singular", () => {
+      expect(formatFolderSizeDetail(1, 1, 1, 1).items).toBe("1 file, 1 folder");
+    });
+
+    it("says Empty for a folder with nothing in it", () => {
+      const result = formatFolderSizeDetail(0, 0, 0, 0);
       expect(result.size).toBe("0 B");
       expect(result.disk).toBeNull();
-      expect(result.items).toMatch(/0/);
-      expect(result.items).toMatch(/items$/);
+      expect(result.items).toBe("Empty");
     });
   });
 });

@@ -213,7 +213,7 @@ describe("copy/paste review model", () => {
     );
     expect(rows[1]?.detail).toBe("Folder · 1 conflict inside · 1 item added · keeps “d.jpg”");
     // Half a second apart is the same time for people.
-    expect(rows[2]?.detail).toBe("Same size and date · 88 KB, today, 1:59 PM");
+    expect(rows[2]?.detail).toBe("Same size and date · 90 KB, today, 1:59 PM");
     expect(rows[3]?.detail).toBe("Yours is a file · the existing “config” is a folder with 1 item");
   });
 

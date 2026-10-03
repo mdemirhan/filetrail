@@ -55,7 +55,7 @@ describe("CopyPasteRuntimeConflictDialog", () => {
       screen.getByRole("heading", { name: "“a.jpg” appeared in “photos” while pasting" }),
     ).toBeInTheDocument();
     expect(screen.getByText("In “photos” now")).toBeInTheDocument();
-    expect(screen.getByText("91 KB")).toBeInTheDocument();
+    expect(screen.getByText("93 KB")).toBeInTheDocument();
     expect(screen.getByText("Being pasted")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Keep Both" })).toHaveFocus();
     expect(screen.getByRole("button", { name: "Replace" })).toHaveClass("is-destructive");

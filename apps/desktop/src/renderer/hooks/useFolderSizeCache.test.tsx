@@ -17,6 +17,7 @@ function createHandlers(overrides: Record<string, unknown> = {}) {
     sizeBytes: 1000,
     diskBytes: 1200,
     fileCount: 42,
+    folderCount: 3,
     error: null,
   }));
   const cancelHandler = vi.fn(async () => ({ ok: true }));
@@ -78,6 +79,7 @@ describe("useFolderSizeCache", () => {
       expect(entry.sizeBytes).toBe(1000);
       expect(entry.diskBytes).toBe(1200);
       expect(entry.fileCount).toBe(42);
+      expect(entry.folderCount).toBe(3);
     }
   });
 
@@ -106,6 +108,7 @@ describe("useFolderSizeCache", () => {
       expect(entry.sizeBytes).toBe(1000);
       expect(entry.diskBytes).toBe(1200);
       expect(entry.fileCount).toBe(42);
+      expect(entry.folderCount).toBe(3);
     }
   });
 
@@ -118,6 +121,7 @@ describe("useFolderSizeCache", () => {
       sizeBytes: null,
       diskBytes: null,
       fileCount: null,
+      folderCount: null,
       error: null,
     }));
     const client = createMockFiletrailClient({
@@ -175,6 +179,7 @@ describe("useFolderSizeCache", () => {
       sizeBytes: null,
       diskBytes: null,
       fileCount: null,
+      folderCount: null,
       error: null,
     }));
     const cancelHandler = vi.fn(async () => ({ ok: true }));
@@ -214,6 +219,7 @@ describe("useFolderSizeCache", () => {
       sizeBytes: 5000,
       diskBytes: 6000,
       fileCount: 10,
+      folderCount: 3,
       error: null,
     }));
     const cancelHandler = vi.fn(async () => ({ ok: true }));
@@ -278,6 +284,7 @@ describe("useFolderSizeCache", () => {
       sizeBytes: jobId.endsWith("/out") ? 1000 : 400,
       diskBytes: 0,
       fileCount: 1,
+      folderCount: 3,
       error: null,
     }));
     const client = createMockFiletrailClient({
@@ -326,6 +333,7 @@ describe("useFolderSizeCache", () => {
           sizeBytes: null,
           diskBytes: null,
           fileCount: null,
+          folderCount: null,
           error: "Disk error",
         };
       }
@@ -335,6 +343,7 @@ describe("useFolderSizeCache", () => {
         sizeBytes: null,
         diskBytes: null,
         fileCount: null,
+        folderCount: null,
         error: null,
       };
     });

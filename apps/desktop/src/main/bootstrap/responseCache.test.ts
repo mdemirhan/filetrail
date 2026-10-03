@@ -41,8 +41,9 @@ const sampleJson = JSON.stringify({
   total: 1000,
   diskTotal: 1200,
   fileCount: 42,
+  folderCount: 7,
   dirs: {
-    "/test/sub": [500, 600, 20],
+    "/test/sub": [500, 600, 20, 3],
   },
 });
 
@@ -63,6 +64,7 @@ describe("createFolderSizeHandlers", () => {
     expect(status.sizeBytes).toBe(1000);
     expect(status.diskBytes).toBe(1200);
     expect(status.fileCount).toBe(42);
+    expect(status.folderCount).toBe(7);
     expect(status.error).toBeNull();
   });
 
@@ -83,6 +85,7 @@ describe("createFolderSizeHandlers", () => {
     expect(status.sizeBytes).toBe(1000);
     expect(status.diskBytes).toBe(1200);
     expect(status.fileCount).toBe(42);
+    expect(status.folderCount).toBe(7);
   });
 
   it("start with probeOnly returns deferred when not cached", () => {
@@ -161,6 +164,7 @@ describe("createFolderSizeHandlers", () => {
     expect(status.sizeBytes).toBeNull();
     expect(status.diskBytes).toBeNull();
     expect(status.fileCount).toBeNull();
+    expect(status.folderCount).toBeNull();
     expect(status.error).toBe("Unknown folder size job.");
   });
 
@@ -190,6 +194,13 @@ describe("createFolderSizeHandlers", () => {
 
     // Sub-folder should be cached from the walk
     expect(handlers.getCachedSize("/test/sub")).toBe(500);
+
+    // Its counts come along: asking for it afterwards is a cache hit.
+    const sub = handlers.start({ path: "/test/sub" });
+    expect(sub.status).toBe("ready");
+    const status = handlers.getStatus({ jobId: sub.jobId });
+    expect(status.fileCount).toBe(20);
+    expect(status.folderCount).toBe(3);
   });
 
   it("queued job starts after active finishes", async () => {
@@ -211,7 +222,7 @@ describe("createFolderSizeHandlers", () => {
     expect(native.getFolderSize).toHaveBeenLastCalledWith("/test/b");
   });
 
-  it("error job has null diskBytes and fileCount", async () => {
+  it("error job has null diskBytes and counts", async () => {
     const native = createMockNative();
     const handlers = createFolderSizeHandlers(native);
 
@@ -224,6 +235,7 @@ describe("createFolderSizeHandlers", () => {
     expect(status.sizeBytes).toBeNull();
     expect(status.diskBytes).toBeNull();
     expect(status.fileCount).toBeNull();
+    expect(status.folderCount).toBeNull();
     expect(status.error).toBe("ENOENT: not found");
   });
 

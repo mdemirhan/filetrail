@@ -6,10 +6,12 @@
  * in one syscall (avoiding per-file stat), and parallelism lets us walk
  * independent subtrees concurrently.
  *
- * Tracks three metrics per directory:
+ * Tracks four metrics per directory:
  *   - logical size (ATTR_FILE_DATALENGTH)
  *   - allocated disk bytes (ATTR_FILE_ALLOCSIZE)
  *   - file count (regular files + symlinks)
+ *   - folder count (subfolders at any depth, packages included; a package's
+ *     contents count too, as they are walked like any folder)
  *
  * Exposes two functions:
  *   nativeFolderSize(path) -> Promise<string>  -- JSON with totals + per-dir stats
@@ -39,12 +41,13 @@
 #define BULK_BUF_SIZE (256 * 1024)
 #define NUM_THREADS 4
 
-/* ── Per-directory stats (3 values) ──────────────────────────────── */
+/* ── Per-directory stats (4 values) ──────────────────────────────── */
 
 typedef struct {
   int64_t size_bytes;
   int64_t disk_bytes;
   int64_t file_count;
+  int64_t folder_count;
 } dir_stats_t;
 
 /* ── Output linked list (for JSON building) ──────────────────────── */
@@ -62,6 +65,7 @@ typedef struct {
   int64_t direct_bytes;      /* logical bytes of files directly in this directory */
   int64_t direct_disk_bytes; /* allocated bytes of files directly in this directory */
   int64_t direct_file_count; /* number of files directly in this directory */
+  int64_t direct_folder_count; /* number of folders directly in this directory */
 } dir_record_t;
 
 typedef struct {
@@ -78,7 +82,8 @@ static void drl_init(dir_record_list_t *l) {
 
 /* Returns 1 on success, 0 on allocation failure (list left unchanged). */
 static int drl_push(dir_record_list_t *l, const char *path,
-                    int64_t bytes, int64_t disk_bytes, int64_t file_count) {
+                    int64_t bytes, int64_t disk_bytes, int64_t file_count,
+                    int64_t folder_count) {
   if (l->count == l->capacity) {
     int new_capacity = l->capacity ? l->capacity * 2 : 256;
     dir_record_t *new_items =
@@ -93,6 +98,7 @@ static int drl_push(dir_record_list_t *l, const char *path,
   l->items[l->count].direct_bytes = bytes;
   l->items[l->count].direct_disk_bytes = disk_bytes;
   l->items[l->count].direct_file_count = file_count;
+  l->items[l->count].direct_folder_count = folder_count;
   l->count++;
   return 1;
 }
@@ -141,6 +147,7 @@ static dir_stats_t *hm_get_or_insert(hash_map_t *hm, const char *key) {
   n->value.size_bytes = 0;
   n->value.disk_bytes = 0;
   n->value.file_count = 0;
+  n->value.folder_count = 0;
   n->next = hm->buckets[idx];
   hm->buckets[idx] = n;
   return &n->value;
@@ -296,6 +303,7 @@ typedef struct {
   int64_t direct_bytes;
   int64_t direct_disk_bytes;
   int64_t direct_file_count;
+  int64_t direct_folder_count;
 } process_dir_result_t;
 
 static process_dir_result_t process_dir(int dirfd, const char *dir_path,
@@ -304,6 +312,7 @@ static process_dir_result_t process_dir(int dirfd, const char *dir_path,
   int64_t direct_bytes = 0;
   int64_t direct_disk_bytes = 0;
   int64_t direct_file_count = 0;
+  int64_t direct_folder_count = 0;
 
   for (;;) {
     if (atomic_load(wq->cancelled) || atomic_load(&wq->failed)) break;
@@ -363,6 +372,8 @@ static process_dir_result_t process_dir(int dirfd, const char *dir_path,
         direct_disk_bytes += alloc_size;
         direct_file_count++;
       } else if (obj_type == VDIR && name) {
+        /* Counted even when it isn't walked (another volume, no access). */
+        direct_folder_count++;
         int subfd = openat(dirfd, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
         if (subfd >= 0) {
           struct stat sub_stat;
@@ -395,7 +406,8 @@ static process_dir_result_t process_dir(int dirfd, const char *dir_path,
   }
 
   close(dirfd);
-  if (!drl_push(local_dirs, dir_path, direct_bytes, direct_disk_bytes, direct_file_count)) {
+  if (!drl_push(local_dirs, dir_path, direct_bytes, direct_disk_bytes, direct_file_count,
+                direct_folder_count)) {
     wq_fail(wq);
   }
 
@@ -403,6 +415,7 @@ static process_dir_result_t process_dir(int dirfd, const char *dir_path,
   result.direct_bytes = direct_bytes;
   result.direct_disk_bytes = direct_disk_bytes;
   result.direct_file_count = direct_file_count;
+  result.direct_folder_count = direct_folder_count;
   return result;
 }
 
@@ -413,6 +426,7 @@ typedef struct {
   int64_t total_bytes;
   int64_t total_disk_bytes;
   int64_t total_file_count;
+  int64_t total_folder_count;
   dir_record_list_t dirs;
 } thread_arg_t;
 
@@ -434,6 +448,7 @@ static void *worker_fn(void *arg) {
     ta->total_bytes += r.direct_bytes;
     ta->total_disk_bytes += r.direct_disk_bytes;
     ta->total_file_count += r.direct_file_count;
+    ta->total_folder_count += r.direct_folder_count;
     free(path);
     wq_done(ta->wq);
   }
@@ -476,6 +491,7 @@ static void aggregate_dir_sizes(thread_arg_t *args, int num_threads,
       all[idx].direct_bytes = args[i].dirs.items[j].direct_bytes;
       all[idx].direct_disk_bytes = args[i].dirs.items[j].direct_disk_bytes;
       all[idx].direct_file_count = args[i].dirs.items[j].direct_file_count;
+      all[idx].direct_folder_count = args[i].dirs.items[j].direct_folder_count;
       idx++;
     }
   }
@@ -494,6 +510,7 @@ static void aggregate_dir_sizes(thread_arg_t *args, int num_threads,
     s->size_bytes = all[i].direct_bytes;
     s->disk_bytes = all[i].direct_disk_bytes;
     s->file_count = all[i].direct_file_count;
+    s->folder_count = all[i].direct_folder_count;
   }
 
   /* Propagate: for each directory (deepest first), add its recursive
@@ -530,6 +547,7 @@ static void aggregate_dir_sizes(thread_arg_t *args, int num_threads,
       parent_val->size_bytes += self_val->size_bytes;
       parent_val->disk_bytes += self_val->disk_bytes;
       parent_val->file_count += self_val->file_count;
+      parent_val->folder_count += self_val->folder_count;
     }
   }
 
@@ -572,6 +590,7 @@ typedef struct {
   int64_t total_bytes;
   int64_t disk_total;
   int64_t total_file_count;
+  int64_t total_folder_count;
   dir_entry_t *dirs;
   int dir_count;
 } folder_size_work_t;
@@ -616,6 +635,7 @@ static void execute_folder_size(napi_env env, void *data) {
     args[i].total_bytes = 0;
     args[i].total_disk_bytes = 0;
     args[i].total_file_count = 0;
+    args[i].total_folder_count = 0;
     drl_init(&args[i].dirs);
     pthread_create(&threads[i], NULL, worker_fn, &args[i]);
   }
@@ -629,10 +649,12 @@ static void execute_folder_size(napi_env env, void *data) {
   w->total_bytes = 0;
   w->disk_total = 0;
   w->total_file_count = 0;
+  w->total_folder_count = 0;
   for (int i = 0; i < NUM_THREADS; i++) {
     w->total_bytes += args[i].total_bytes;
     w->disk_total += args[i].total_disk_bytes;
     w->total_file_count += args[i].total_file_count;
+    w->total_folder_count += args[i].total_folder_count;
   }
 
   /* Aggregate per-directory recursive sizes and build output list. */
@@ -657,18 +679,19 @@ static char *build_json_result(folder_size_work_t *w) {
   if (!buf) return NULL;
 
   int written = snprintf(buf, buf_cap,
-    "{\"total\":%lld,\"diskTotal\":%lld,\"fileCount\":%lld,\"dirs\":{",
+    "{\"total\":%lld,\"diskTotal\":%lld,\"fileCount\":%lld,\"folderCount\":%lld,\"dirs\":{",
     (long long)w->total_bytes,
     (long long)w->disk_total,
-    (long long)w->total_file_count);
+    (long long)w->total_file_count,
+    (long long)w->total_folder_count);
   size_t pos = (size_t)written;
 
   int first = 1;
   dir_entry_t *entry = w->dirs;
   while (entry) {
     size_t path_len = strlen(entry->path);
-    /* Each dir entry: "path":[N,N,N] -- need space for path escaping + 3 numbers */
-    size_t needed = pos + path_len * 2 + 100;
+    /* Each dir entry: "path":[N,N,N,N] -- need space for path escaping + 4 numbers */
+    size_t needed = pos + path_len * 2 + 120;
     if (needed >= buf_cap) {
       buf_cap = needed * 2;
       char *new_buf = (char *)realloc(buf, buf_cap);
@@ -688,10 +711,11 @@ static char *build_json_result(folder_size_work_t *w) {
     buf[pos++] = '"';
     buf[pos++] = ':';
 
-    int num_written = snprintf(buf + pos, buf_cap - pos, "[%lld,%lld,%lld]",
+    int num_written = snprintf(buf + pos, buf_cap - pos, "[%lld,%lld,%lld,%lld]",
       (long long)entry->stats.size_bytes,
       (long long)entry->stats.disk_bytes,
-      (long long)entry->stats.file_count);
+      (long long)entry->stats.file_count,
+      (long long)entry->stats.folder_count);
     pos += (size_t)num_written;
 
     entry = entry->next;

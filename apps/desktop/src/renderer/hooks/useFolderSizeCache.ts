@@ -13,7 +13,13 @@ function isTerminalWriteStatus(status: string): boolean {
 export type FolderSizeEntry =
   | { status: "idle" }
   | { status: "calculating"; jobId: string }
-  | { status: "ready"; sizeBytes: number; diskBytes: number; fileCount: number }
+  | {
+      status: "ready";
+      sizeBytes: number;
+      diskBytes: number;
+      fileCount: number;
+      folderCount: number;
+    }
   | { status: "error"; message: string };
 
 const POLL_INTERVAL_MS = 200;
@@ -90,6 +96,7 @@ export function useFolderSizeCache(client: FiletrailClient) {
               sizeBytes: result.sizeBytes,
               diskBytes: result.diskBytes ?? result.sizeBytes,
               fileCount: result.fileCount ?? 0,
+              folderCount: result.folderCount ?? 0,
             });
             refreshInsideRef.current(path);
           } else if (result.status === "error") {
@@ -122,6 +129,7 @@ export function useFolderSizeCache(client: FiletrailClient) {
               sizeBytes: status.sizeBytes,
               diskBytes: status.diskBytes ?? status.sizeBytes,
               fileCount: status.fileCount ?? 0,
+              folderCount: status.folderCount ?? 0,
             });
             refreshInsideRef.current(path);
           } else {
@@ -189,6 +197,7 @@ export function useFolderSizeCache(client: FiletrailClient) {
                 sizeBytes: status.sizeBytes,
                 diskBytes: status.diskBytes ?? status.sizeBytes,
                 fileCount: status.fileCount ?? 0,
+                folderCount: status.folderCount ?? 0,
               });
             }
           }

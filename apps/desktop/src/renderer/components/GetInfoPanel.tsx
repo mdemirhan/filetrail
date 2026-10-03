@@ -658,7 +658,12 @@ function FolderSizeCell({
   // A small folder is measured in a moment: the spinner shows only for one that takes longer.
   const showCalculating = useDelayedFlag(entry.status === "calculating", CALCULATING_DELAY_MS);
   if (entry.status === "ready") {
-    const detail = formatFolderSizeDetail(entry.sizeBytes, entry.diskBytes, entry.fileCount);
+    const detail = formatFolderSizeDetail(
+      entry.sizeBytes,
+      entry.diskBytes,
+      entry.fileCount,
+      entry.folderCount,
+    );
     return (
       <span className="folder-size-value">
         <span className="folder-size-detail">

@@ -32,6 +32,7 @@ type FolderSizeJob = {
   sizeBytes: number | null;
   diskBytes: number | null;
   fileCount: number | null;
+  folderCount: number | null;
   error: string | null;
 };
 const folderSizeJobs = new Map<string, FolderSizeJob>();
@@ -133,7 +134,7 @@ export function createFolderSizeHandlers(native: {
 }) {
   const folderSizeCache = new Map<
     string,
-    { sizeBytes: number; diskBytes: number; fileCount: number }
+    { sizeBytes: number; diskBytes: number; fileCount: number; folderCount: number }
   >();
   folderSizeForgetters.add((changedPaths) => {
     for (const path of [...folderSizeCache.keys()]) {
@@ -168,6 +169,7 @@ export function createFolderSizeHandlers(native: {
       sizeBytes: null,
       diskBytes: null,
       fileCount: null,
+      folderCount: null,
       error: null,
     });
 
@@ -178,18 +180,21 @@ export function createFolderSizeHandlers(native: {
           total: number;
           diskTotal: number;
           fileCount: number;
-          dirs: Record<string, [number, number, number]>;
+          folderCount: number;
+          dirs: Record<string, [number, number, number, number]>;
         };
         folderSizeCache.set(path, {
           sizeBytes: result.total,
           diskBytes: result.diskTotal,
           fileCount: result.fileCount,
+          folderCount: result.folderCount,
         });
         for (const [dirPath, dirStats] of Object.entries(result.dirs)) {
           folderSizeCache.set(dirPath, {
             sizeBytes: dirStats[0],
             diskBytes: dirStats[1],
             fileCount: dirStats[2],
+            folderCount: dirStats[3],
           });
         }
         setFolderSizeJob(jobId, {
@@ -199,6 +204,7 @@ export function createFolderSizeHandlers(native: {
           sizeBytes: result.total,
           diskBytes: result.diskTotal,
           fileCount: result.fileCount,
+          folderCount: result.folderCount,
           error: null,
         });
       })
@@ -215,6 +221,7 @@ export function createFolderSizeHandlers(native: {
             sizeBytes: null,
             diskBytes: null,
             fileCount: null,
+            folderCount: null,
             error: message,
           });
         }
@@ -244,6 +251,7 @@ export function createFolderSizeHandlers(native: {
           sizeBytes: cached.sizeBytes,
           diskBytes: cached.diskBytes,
           fileCount: cached.fileCount,
+          folderCount: cached.folderCount,
           error: null,
         });
         pruneFinishedFolderSizeJobs();
@@ -261,6 +269,7 @@ export function createFolderSizeHandlers(native: {
           sizeBytes: null,
           diskBytes: null,
           fileCount: null,
+          folderCount: null,
           error: null,
         });
         pruneFinishedFolderSizeJobs();
@@ -294,6 +303,7 @@ export function createFolderSizeHandlers(native: {
           sizeBytes: null,
           diskBytes: null,
           fileCount: null,
+          folderCount: null,
           error: null,
         });
         return { jobId, status: "queued" };
@@ -311,6 +321,7 @@ export function createFolderSizeHandlers(native: {
         sizeBytes: job?.sizeBytes ?? null,
         diskBytes: job?.diskBytes ?? null,
         fileCount: job?.fileCount ?? null,
+        folderCount: job?.folderCount ?? null,
         error: job ? job.error : "Unknown folder size job.",
       };
     },
