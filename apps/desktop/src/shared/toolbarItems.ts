@@ -507,6 +507,7 @@ const TOP_TOOLBAR_PALETTE_ORDER: readonly ToolbarItemId[] = [
   "sort",
   "foldersFirst",
   "hidden",
+  "folderTree",
   "infoPanel",
   "infoRow",
   "openSelection",

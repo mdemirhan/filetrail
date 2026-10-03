@@ -145,6 +145,16 @@ describe("toolbarItems", () => {
     expect(removeTopToolbarItem(items, items.indexOf("search"))).toEqual(items);
   });
 
+  it("offers every item that can be taken off, so each can be put back", () => {
+    const palette = getTopToolbarPaletteItems([]);
+    const alwaysThere = new Set(["title", "clipboard", "search", "viewOptions"]);
+    for (const itemId of TOOLBAR_ITEM_IDS) {
+      if (!alwaysThere.has(itemId)) {
+        expect(palette, itemId).toContain(itemId);
+      }
+    }
+  });
+
   it("offers every item the toolbar does not hold, and the space always", () => {
     const palette = getTopToolbarPaletteItems(DEFAULT_TOP_TOOLBAR_ITEMS);
     expect(palette[0]).toBe("topSeparator");

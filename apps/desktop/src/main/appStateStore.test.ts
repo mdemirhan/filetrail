@@ -763,8 +763,10 @@ describe("appStateStore", () => {
       "utf8",
     );
     // A customized one keeps its buttons, with the title, the clipboard button and View
-    // Options added where they were drawn before they could be moved.
+    // Options added where they were drawn before they could be moved, and the folder tree's
+    // button at the start.
     expect(createAppStateStore(filePath).getPreferences().topToolbarItems).toEqual([
+      "folderTree",
       "back",
       "title",
       "refresh",
@@ -772,6 +774,25 @@ describe("appStateStore", () => {
       "viewOptions",
       "search",
     ]);
+  });
+
+  it("adds the folder tree's button to a customized toolbar once, and not after it is taken off", () => {
+    const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
+    const filePath = resolveAppStatePath(userDataPath);
+    const customized = ["back", "title", "search", "clipboard", "viewOptions", "infoPanel"];
+
+    // Saved before the tree could be hidden: the button is added.
+    writeFileSync(filePath, JSON.stringify({ preferences: { topToolbarItems: customized } }));
+    expect(createAppStateStore(filePath).getPreferences().topToolbarItems[0]).toBe("folderTree");
+
+    // Saved since, without it: it was taken off, and stays off.
+    writeFileSync(
+      filePath,
+      JSON.stringify({ preferences: { topToolbarItems: customized, folderTreeOpen: true } }),
+    );
+    expect(createAppStateStore(filePath).getPreferences().topToolbarItems).not.toContain(
+      "folderTree",
+    );
   });
 
   it("adds Macintosh HD to favorites saved before it became a default favorite", () => {
