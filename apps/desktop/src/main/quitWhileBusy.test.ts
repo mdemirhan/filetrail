@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   KEEP_WORKING_BUTTON_INDEX,
-  QUIT_WHILE_BUSY_BUTTONS,
-  STOP_AND_QUIT_BUTTON_INDEX,
+  STOP_BUTTON_INDEX,
   describeQuitWhileBusy,
+  stopQuestionButtons,
 } from "./quitWhileBusy";
 
 describe("describeQuitWhileBusy", () => {
@@ -27,7 +27,17 @@ describe("describeQuitWhileBusy", () => {
   });
 
   it("makes Keep Working the default and Stop and Quit the second button", () => {
-    expect(QUIT_WHILE_BUSY_BUTTONS[KEEP_WORKING_BUTTON_INDEX]).toBe("Keep Working");
-    expect(QUIT_WHILE_BUSY_BUTTONS[STOP_AND_QUIT_BUTTON_INDEX]).toBe("Stop and Quit");
+    expect(stopQuestionButtons("quit")[KEEP_WORKING_BUTTON_INDEX]).toBe("Keep Working");
+    expect(stopQuestionButtons("quit")[STOP_BUTTON_INDEX]).toBe("Stop and Quit");
+  });
+
+  it("asks in its own words when the window is being closed", () => {
+    expect(stopQuestionButtons("close")).toEqual(["Keep Working", "Stop and Close"]);
+    expect(describeQuitWhileBusy("copy", "close")).toEqual({
+      message: "A copy is still in progress.",
+      detail:
+        "If you close the window now, it stops after the current item and File Trail quits. Items already copied stay where they are.",
+    });
+    expect(describeQuitWhileBusy("rename", "close")).toBeNull();
   });
 });

@@ -39,9 +39,10 @@ import { resolveStartupFolderPath } from "./launchContext";
 import { removeRetiredActionLogFiles } from "./logRotation";
 import {
   KEEP_WORKING_BUTTON_INDEX,
-  QUIT_WHILE_BUSY_BUTTONS,
-  STOP_AND_QUIT_BUTTON_INDEX,
+  STOP_BUTTON_INDEX,
+  type StopTrigger,
   describeQuitWhileBusy,
+  stopQuestionButtons,
 } from "./quitWhileBusy";
 import { readSettingsTabFromUrl } from "./settingsWindowTab";
 let mainWindowRef: BrowserWindow | null = null;
@@ -61,7 +62,10 @@ const hasSingleInstanceLock = app.requestSingleInstanceLock();
 const WINDOW_STATE_SAVE_DELAY_MS = 160;
 let shutdownInProgress = false;
 // True while the "a copy is still in progress" question is on screen.
-let quitQuestionOpen = false;
+let stopQuestionOpen = false;
+// Set once the person agreed to close the explorer window during an operation, so the
+// close that follows isn't asked about again.
+let windowCloseConfirmed = false;
 let processLoggingHandlersInstalled = false;
 
 if (!hasSingleInstanceLock) {
@@ -198,7 +202,7 @@ if (hasSingleInstanceLock) {
   // A second quit while it waits for an operation to stop must not cut that wait short.
   app.on("before-quit", (event) => {
     event.preventDefault();
-    if (shutdownInProgress || quitQuestionOpen) {
+    if (shutdownInProgress || stopQuestionOpen) {
       return;
     }
     void confirmQuit();
@@ -339,6 +343,7 @@ function createWindow(): BrowserWindow {
     if (mainWindowRef === mainWindow) {
       mainWindowRef = null;
     }
+    windowCloseConfirmed = false;
     if (recordMainWindowState === persistWindowState) {
       recordMainWindowState = null;
     }
@@ -356,6 +361,28 @@ function createWindow(): BrowserWindow {
   mainWindow.on("maximize", scheduleWindowStateSave);
   mainWindow.on("unmaximize", scheduleWindowStateSave);
   mainWindow.on("close", persistWindowState);
+  // Closing the explorer window quits the app and stops a running copy, so it asks first,
+  // as quitting does.
+  mainWindow.on("close", (event) => {
+    if (shutdownInProgress || windowCloseConfirmed) {
+      return;
+    }
+    if (stopQuestionOpen) {
+      event.preventDefault();
+      return;
+    }
+    const operation = getActiveWriteOperation();
+    if (!operation || !describeQuitWhileBusy(operation.kind, "close")) {
+      return;
+    }
+    event.preventDefault();
+    void askToStopOperation("close").then((stop) => {
+      if (stop && !mainWindow.isDestroyed()) {
+        windowCloseConfirmed = true;
+        mainWindow.close();
+      }
+    });
+  });
 
   return mainWindow;
 }
@@ -661,39 +688,50 @@ function installProcessLoggingHandlers(logger: ReturnType<typeof createAppLogger
 // is open the person is asked first, and may keep working instead. With every window
 // closed the operation was already told to stop; quitting waits for it either way.
 async function confirmQuit(): Promise<void> {
-  const operation = getActiveWriteOperation();
-  const question = operation ? describeQuitWhileBusy(operation.kind) : null;
-  if (question && BrowserWindow.getAllWindows().length > 0) {
-    quitQuestionOpen = true;
-    let response: number;
-    try {
-      const options = {
-        type: "warning" as const,
-        message: question.message,
-        detail: question.detail,
-        buttons: [...QUIT_WHILE_BUSY_BUTTONS],
-        defaultId: KEEP_WORKING_BUTTON_INDEX,
-        cancelId: KEEP_WORKING_BUTTON_INDEX,
-      };
-      const window = mainWindowRef && !mainWindowRef.isDestroyed() ? mainWindowRef : null;
-      ({ response } = window
-        ? await dialog.showMessageBox(window, options)
-        : await dialog.showMessageBox(options));
-    } finally {
-      quitQuestionOpen = false;
-    }
-    if (response !== STOP_AND_QUIT_BUTTON_INDEX) {
-      appLoggerRef?.info("[filetrail] quit cancelled to keep an operation running", {
-        kind: operation?.kind ?? null,
-      });
-      return;
-    }
+  if (BrowserWindow.getAllWindows().length > 0 && !(await askToStopOperation("quit"))) {
+    return;
   }
   if (shutdownInProgress) {
     return;
   }
   shutdownInProgress = true;
   await finalizeShutdown();
+}
+
+// Asks whether to stop the running operation, when there is one worth asking about.
+// Resolves true when it may be stopped (or nothing needs asking), false to keep working.
+async function askToStopOperation(trigger: StopTrigger): Promise<boolean> {
+  const operation = getActiveWriteOperation();
+  const question = operation ? describeQuitWhileBusy(operation.kind, trigger) : null;
+  if (!question) {
+    return true;
+  }
+  stopQuestionOpen = true;
+  let response: number;
+  try {
+    const options = {
+      type: "warning" as const,
+      message: question.message,
+      detail: question.detail,
+      buttons: stopQuestionButtons(trigger),
+      defaultId: KEEP_WORKING_BUTTON_INDEX,
+      cancelId: KEEP_WORKING_BUTTON_INDEX,
+    };
+    const window = mainWindowRef && !mainWindowRef.isDestroyed() ? mainWindowRef : null;
+    ({ response } = window
+      ? await dialog.showMessageBox(window, options)
+      : await dialog.showMessageBox(options));
+  } finally {
+    stopQuestionOpen = false;
+  }
+  if (response !== STOP_BUTTON_INDEX) {
+    appLoggerRef?.info("[filetrail] kept an operation running instead of stopping it", {
+      trigger,
+      kind: operation?.kind ?? null,
+    });
+    return false;
+  }
+  return true;
 }
 
 async function finalizeShutdown(): Promise<void> {

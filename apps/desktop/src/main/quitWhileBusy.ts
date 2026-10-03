@@ -1,17 +1,27 @@
 import type { WriteOperationKind } from "./bootstrap/writeOperations";
 
-// The buttons of the question asked when quitting during a copy, in order: the first is
-// the default and what Escape picks.
-export const QUIT_WHILE_BUSY_BUTTONS = ["Keep Working", "Stop and Quit"] as const;
-export const KEEP_WORKING_BUTTON_INDEX = 0;
-export const STOP_AND_QUIT_BUTTON_INDEX = 1;
+// What stops a running operation: quitting, or closing the explorer window (which quits
+// the app too).
+export type StopTrigger = "quit" | "close";
 
-// What to ask before quitting stops a running operation. A rename or a new folder is over
-// in a moment, so quitting simply waits for it: there is nothing to ask.
+// The buttons of the question, in order: the first is the default and what Escape picks.
+export const KEEP_WORKING_BUTTON_INDEX = 0;
+export const STOP_BUTTON_INDEX = 1;
+
+export function stopQuestionButtons(trigger: StopTrigger): [string, string] {
+  return ["Keep Working", trigger === "quit" ? "Stop and Quit" : "Stop and Close"];
+}
+
+// What to ask before quitting or closing the window stops a running operation. A rename or
+// a new folder is over in a moment, so it is simply waited for: there is nothing to ask.
 export function describeQuitWhileBusy(
   kind: WriteOperationKind,
+  trigger: StopTrigger = "quit",
 ): { message: string; detail: string } | null {
-  const stops = "If you quit now, it stops after the current item.";
+  const stops =
+    trigger === "quit"
+      ? "If you quit now, it stops after the current item."
+      : "If you close the window now, it stops after the current item and File Trail quits.";
   switch (kind) {
     case "copy":
       return {
