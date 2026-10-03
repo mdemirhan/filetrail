@@ -12,17 +12,21 @@ describe("ActionNoticeDialog", () => {
     expect(screen.getByRole("button", { name: "OK" })).toHaveFocus();
   });
 
-  it("closes from the backdrop and action button, but not from dialog clicks", () => {
+  it("closes from its button, not from a click outside it, as a macOS alert does", () => {
     const onClose = vi.fn();
-    render(<ActionNoticeDialog title="Notice" message="Saved" onClose={onClose} />);
+    const { container } = render(
+      <ActionNoticeDialog title="Notice" message="Saved" onClose={onClose} />,
+    );
 
     fireEvent.mouseDown(screen.getByRole("dialog", { name: "Notice" }));
+    const scrim = container.querySelector(".modal-scrim");
+    if (!scrim) {
+      throw new Error("Expected the alert's scrim");
+    }
+    fireEvent.mouseDown(scrim);
     expect(onClose).not.toHaveBeenCalled();
 
-    fireEvent.mouseDown(screen.getByRole("presentation"));
-    expect(onClose).toHaveBeenCalledTimes(1);
-
     fireEvent.click(screen.getByRole("button", { name: "OK" }));
-    expect(onClose).toHaveBeenCalledTimes(2);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

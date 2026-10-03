@@ -185,7 +185,7 @@ export function AppDialogs({
         title="Move To"
         inputAriaLabel="Destination folder"
         submitLabel="Move"
-        browseLabel="Browse"
+        browseLabel="Choose…"
         onBrowse={onBrowseForDirectoryPath}
         onRequestPathSuggestions={onRequestPathSuggestions}
         onClose={() => setMoveDialogState(null)}
@@ -220,8 +220,7 @@ export function AppDialogs({
       <TextPromptDialog
         // List items are renamed in their row (see ContentPane); the dialog is for the rest.
         open={renameDialogState !== null && !renameDialogState.inline}
-        title="Rename"
-        {...(renameDialogState ? { message: `Rename ${renameDialogState.currentName}` } : {})}
+        title={renameDialogState ? `Rename “${renameDialogState.currentName}”` : "Rename"}
         label="New name"
         value={renameDialogState?.currentName ?? ""}
         submitLabel="Rename"
@@ -233,7 +232,7 @@ export function AppDialogs({
         open={newFolderDialogState !== null}
         title="New Folder"
         {...(newFolderDialogState
-          ? { message: `Create in ${newFolderDialogState.parentDirectoryPath}` }
+          ? { message: `In “${leafName(newFolderDialogState.parentDirectoryPath)}”` }
           : {})}
         label="Folder name"
         value={newFolderDialogState?.initialName ?? "New Folder"}
@@ -247,16 +246,16 @@ export function AppDialogs({
         <CopyPasteDialog
           title={
             copyPasteDialogState.action === "move_to"
-              ? "Analyzing Move"
+              ? "Preparing to Move…"
               : copyPasteDialogState.action === "copy_to"
-                ? "Analyzing Copy"
+                ? "Preparing to Copy…"
                 : copyPasteDialogState.action === "duplicate"
-                  ? "Analyzing Duplicate"
-                  : "Analyzing Paste"
+                  ? "Preparing to Duplicate…"
+                  : "Preparing to Paste…"
           }
-          message="Scanning the destination and building a recursive conflict report."
+          message="Checking the destination for items with the same names."
           secondaryAction={{
-            label: "Cancel Analysis",
+            label: "Cancel",
             // Stops the analysis itself; only hiding the dialog would let the paste start.
             onClick: onCancelWriteOperation,
           }}
@@ -288,8 +287,12 @@ export function AppDialogs({
       ) : null}
       {copyPasteDialogState?.type === "confirmTrash" ? (
         <CopyPasteDialog
-          title="Move to Trash?"
-          message={`Move ${copyPasteDialogState.itemLabel} to Trash?`}
+          title={`Move ${quoteItems(copyPasteDialogState.itemLabel, copyPasteDialogState.paths.length)} to the Trash?`}
+          message={
+            copyPasteDialogState.paths.length === 1
+              ? "You can put it back from the Trash."
+              : "You can put them back from the Trash."
+          }
           primaryAction={{
             label: "Move to Trash",
             onClick: () => onConfirmTrashDialog(copyPasteDialogState.paths),
@@ -303,8 +306,17 @@ export function AppDialogs({
       ) : null}
       {copyPasteDialogState?.type === "confirmDeleteImmediately" ? (
         <CopyPasteDialog
-          title="Delete Immediately?"
-          message={`Permanently delete ${copyPasteDialogState.itemLabel}? This action cannot be undone.`}
+          // Finder's question, word for word.
+          title={
+            copyPasteDialogState.paths.length === 1
+              ? `Are you sure you want to delete ${quoteItems(copyPasteDialogState.itemLabel, 1)}?`
+              : `Are you sure you want to delete these ${copyPasteDialogState.paths.length.toLocaleString()} items?`
+          }
+          message={
+            copyPasteDialogState.paths.length === 1
+              ? "This item will be deleted immediately. You can’t undo this action."
+              : "These items will be deleted immediately. You can’t undo this action."
+          }
           primaryAction={{
             label: "Delete",
             onClick: () => onConfirmDeleteImmediatelyDialog(copyPasteDialogState.paths),
@@ -380,7 +392,7 @@ export function AppDialogs({
             message={buildCopyPasteResultMessage(writeOperationProgressEvent)}
             detailLines={buildCopyPasteResultDetailLines(writeOperationProgressEvent)}
             primaryAction={{
-              label: "Close",
+              label: "OK",
               onClick: onCloseCopyPasteDialog,
             }}
           />
@@ -389,7 +401,7 @@ export function AppDialogs({
       <ToastViewport
         toasts={toasts}
         onDismiss={onDismissToast}
-        offsetBottom={showCopyPasteProgressCard ? 272 : undefined}
+        progressCardShown={showCopyPasteProgressCard && writeOperationCardState !== null}
       />
     </>
   );
@@ -398,19 +410,19 @@ export function AppDialogs({
 function buildCopyPasteResultMessage(event: WriteOperationProgressEvent): string {
   const result = event.result;
   if (!result) {
-    return "The write operation has finished.";
+    return "Finished.";
   }
   if (result.error) {
     return result.error;
   }
   const { completedItemCount, failedItemCount, skippedItemCount } = result.summary;
   if (skippedItemCount > 0 && completedItemCount === 0 && failedItemCount === 0) {
-    return "All items were skipped by conflict policy.";
+    return "Nothing was changed: every item was skipped.";
   }
   if (failedItemCount > 0) {
-    return "The operation completed with some failures.";
+    return "Some items couldn’t be changed.";
   }
-  return "The operation completed successfully.";
+  return "Done.";
 }
 
 function buildCopyPasteResultDetailLines(event: WriteOperationProgressEvent): string[] {
@@ -456,43 +468,43 @@ function formatWriteOperationByteLabel(state: WriteOperationCardState): string {
   if (state.totalBytes !== null) {
     return `${formatSize(state.completedByteCount, "ready")} of ${formatSize(state.totalBytes, "ready")}`;
   }
-  return state.stage === "starting"
-    ? "Preparing write plan"
-    : state.stage === "analyzing"
-      ? "Preparing write plan"
-      : state.stage === "queued"
-        ? "Waiting to begin"
-        : state.stage === "awaiting_resolution"
-          ? "Waiting for conflict resolution"
-          : "Tracking progress";
+  return state.stage === "starting" || state.stage === "analyzing"
+    ? "Preparing…"
+    : state.stage === "queued"
+      ? "Waiting to start"
+      : state.stage === "awaiting_resolution"
+        ? "Waiting for your answer"
+        : "Working…";
 }
 
+// While it runs, an operation is named by what it does ("Moving to Trash…"); afterwards by
+// what it was ("Move to Trash").
 function getWriteOperationTitle(
   action: WriteOperationAction,
   phase: "progress" | "result",
 ): string {
-  if (action === "move_to") {
-    return phase === "progress" ? "Move In Progress" : "Move Result";
-  }
-  if (action === "copy_to") {
-    return phase === "progress" ? "Copy In Progress" : "Copy Result";
-  }
-  if (action === "duplicate") {
-    return phase === "progress" ? "Duplicate In Progress" : "Duplicate Result";
-  }
-  if (action === "trash") {
-    return phase === "progress" ? "Move to Trash In Progress" : "Trash Result";
-  }
-  if (action === "delete_immediately") {
-    return phase === "progress" ? "Delete In Progress" : "Delete Result";
-  }
-  if (action === "rename") {
-    return phase === "progress" ? "Rename In Progress" : "Rename Result";
-  }
-  if (action === "new_folder") {
-    return phase === "progress" ? "Create Folder In Progress" : "Create Folder Result";
-  }
-  return phase === "progress" ? "Paste In Progress" : "Paste Result";
+  const [progress, result] =
+    action === "move_to"
+      ? ["Moving…", "Move"]
+      : action === "copy_to"
+        ? ["Copying…", "Copy"]
+        : action === "duplicate"
+          ? ["Duplicating…", "Duplicate"]
+          : action === "trash"
+            ? ["Moving to Trash…", "Move to Trash"]
+            : action === "delete_immediately"
+              ? ["Deleting…", "Delete Immediately"]
+              : action === "rename"
+                ? ["Renaming…", "Rename"]
+                : action === "new_folder"
+                  ? ["Creating Folder…", "New Folder"]
+                  : ["Pasting…", "Paste"];
+  return phase === "progress" ? progress : result;
+}
+
+// “name” for one item, or the summary as it is ("a.txt and 2 more") for several.
+function quoteItems(itemLabel: string, count: number): string {
+  return count === 1 ? `“${itemLabel}”` : itemLabel;
 }
 
 function isCopyLikeAction(action: WriteOperationAction): boolean {

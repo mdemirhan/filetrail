@@ -151,7 +151,7 @@ describe("AppDialogs", () => {
       },
     );
 
-    expect(screen.getByTestId("text-prompt-dialog-Rename")).toHaveAttribute(
+    expect(screen.getByTestId("text-prompt-dialog-Rename “demo.txt”")).toHaveAttribute(
       "data-select-all-on-open",
       "false",
     );
@@ -172,9 +172,12 @@ describe("AppDialogs", () => {
 
     await act(async () => {});
     expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
-    fireEvent.keyDown(screen.getByRole("dialog", { name: "Delete Immediately?" }), {
-      key: "Enter",
-    });
+    fireEvent.keyDown(
+      screen.getByRole("dialog", { name: "Are you sure you want to delete “demo.txt”?" }),
+      {
+        key: "Enter",
+      },
+    );
     expect(onConfirmDeleteImmediatelyDialog).not.toHaveBeenCalled();
   });
 
@@ -214,13 +217,14 @@ describe("AppDialogs", () => {
       "These names are reserved for the system. If you continue, the item will be hidden.",
     );
     expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
-    // Return on the dialog itself does not take the dot name.
+    // Return on the dialog itself presses Cancel, the default, and does not take the dot name.
     fireEvent.keyDown(dialog, { key: "Enter" });
     expect(onConfirmDotNameDialog).not.toHaveBeenCalled();
+    expect(onCloseCopyPasteDialog).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole("button", { name: "Use “.”" }));
     expect(onConfirmDotNameDialog).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(onCloseCopyPasteDialog).toHaveBeenCalledTimes(1);
+    expect(onCloseCopyPasteDialog).toHaveBeenCalledTimes(2);
   });
 });

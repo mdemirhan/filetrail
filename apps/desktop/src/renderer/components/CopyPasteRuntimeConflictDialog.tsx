@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import {
   type CopyPasteChoice,
@@ -8,7 +8,8 @@ import {
 
 import { CHOICE_LABELS, dirnameOf, formatReviewDate, leafName } from "../lib/copyPasteReview";
 import { formatSize } from "../lib/formatting";
-import { useDialogFocus } from "./useDialogFocus";
+import { Alert } from "./Alert";
+import { PushButton } from "./PushButton";
 
 type RuntimeConflict = NonNullable<WriteOperationProgressEvent["runtimeConflict"]>;
 type Fingerprint = RuntimeConflict["currentSourceFingerprint"];
@@ -19,6 +20,14 @@ const VERBING: Record<Verb, string> = {
   Copy: "copying",
   Move: "moving",
   Duplicate: "duplicating",
+};
+
+// What the card of the item on its way is called.
+const BEING: Record<Verb, string> = {
+  Paste: "Being pasted",
+  Copy: "Being copied",
+  Move: "Being moved",
+  Duplicate: "Being duplicated",
 };
 
 // Shown when something changed on disk after the paste was reviewed, or when Replace
@@ -40,17 +49,12 @@ export function CopyPasteRuntimeConflictDialog({
   const [answered, setAnswered] = useState(false);
   const answeredRef = useRef(false);
   const [now] = useState(() => Date.now());
-  const dialogRef = useRef<HTMLDialogElement | null>(null);
   const primaryButtonRef = useRef<HTMLButtonElement | null>(null);
-  const titleId = useId();
-  const messageId = useId();
   const name = leafName(conflict.destinationPath);
   const folder = leafName(dirnameOf(conflict.destinationPath));
   const destinationExists = conflict.currentDestinationFingerprint.exists;
   const trashUnavailable = conflict.reason === "trash_unavailable";
   const verbing = VERBING[verb];
-
-  useDialogFocus(dialogRef, primaryButtonRef);
 
   const choices = getRuntimeConflictChoices({
     reason: conflict.reason,
@@ -91,84 +95,68 @@ export function CopyPasteRuntimeConflictDialog({
   }
 
   return (
-    <div className="action-notice-backdrop" role="presentation">
-      <dialog
-        ref={dialogRef}
-        className="copy-paste-conflict-alert"
-        aria-labelledby={titleId}
-        aria-describedby={messageId}
-        aria-modal="true"
-        open
-        tabIndex={-1}
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <div className="copy-paste-conflict-alert-heading">
-          <h2 id={titleId} className="copy-paste-sheet-title">
-            {title}
-          </h2>
-          <p id={messageId} className="copy-paste-sheet-message">
-            {message}
-          </p>
-        </div>
-        <div className="copy-paste-conflict-alert-cards">
-          <FingerprintCard
-            label={`In “${folder}” now`}
-            name={name}
-            fingerprint={conflict.currentDestinationFingerprint}
-            now={now}
-          />
-          <FingerprintCard
-            label="Your copy"
-            name={leafName(conflict.sourcePath)}
-            fingerprint={conflict.currentSourceFingerprint}
-            now={now}
-          />
-        </div>
-        <label className="copy-paste-conflict-alert-apply">
-          <input
-            type="checkbox"
-            checked={applyToRemaining}
-            disabled={answered}
-            onChange={(event) => setApplyToRemaining(event.target.checked)}
-          />
-          {trashUnavailable
-            ? `Do the same for other items that can't be moved to the Trash while ${verbing}`
-            : `Do the same for similar changes while ${verbing}`}
-        </label>
-        <div className="copy-paste-conflict-alert-actions">
-          <button
-            type="button"
-            className="tb-btn"
+    <Alert
+      wide
+      title={title}
+      message={message}
+      initialFocusRef={primaryButtonRef}
+      buttons={
+        <>
+          <PushButton
+            className="alert-button-aside"
             disabled={answered}
             onClick={() => answer(onStop)}
           >
             Stop {verbing[0]?.toUpperCase()}
             {verbing.slice(1)}
-          </button>
-          <span className="copy-paste-sheet-bar-spacer" />
+          </PushButton>
           {secondary.map((choice) => (
-            <button
+            <PushButton
               key={choice}
-              type="button"
-              className={`tb-btn${isDestructive(choice) ? " danger-text" : ""}`}
+              variant={isDestructive(choice) ? "destructive" : "plain"}
               disabled={answered}
               onClick={() => answer(() => onResolve(choice, applyToRemaining))}
             >
               {labelFor(choice)}
-            </button>
+            </PushButton>
           ))}
-          <button
+          <PushButton
             ref={primaryButtonRef}
-            type="button"
-            className="tb-btn primary"
+            variant="default"
             disabled={answered}
             onClick={() => answer(() => onResolve(primary, applyToRemaining))}
           >
             {labelFor(primary)}
-          </button>
-        </div>
-      </dialog>
-    </div>
+          </PushButton>
+        </>
+      }
+    >
+      <div className="copy-paste-conflict-alert-cards">
+        <FingerprintCard
+          label={`In “${folder}” now`}
+          name={name}
+          fingerprint={conflict.currentDestinationFingerprint}
+          now={now}
+        />
+        <FingerprintCard
+          label={BEING[verb]}
+          name={leafName(conflict.sourcePath)}
+          fingerprint={conflict.currentSourceFingerprint}
+          now={now}
+        />
+      </div>
+      <label className="copy-paste-conflict-alert-apply">
+        <input
+          type="checkbox"
+          checked={applyToRemaining}
+          disabled={answered}
+          onChange={(event) => setApplyToRemaining(event.target.checked)}
+        />
+        {trashUnavailable
+          ? `Do the same for other items that can’t be moved to the Trash while ${verbing}`
+          : `Do the same for similar changes while ${verbing}`}
+      </label>
+    </Alert>
   );
 }
 
@@ -185,24 +173,23 @@ function describeConflict(
       return {
         title: `“${name}” appeared in “${folder}” while ${verbing}`,
         message:
-          "Another app created it after you reviewed this. Choose what to do with your copy.",
+          "Another app created it after you reviewed this. Choose what to do with your item.",
       };
     case "destination_changed":
       return {
         title: `“${name}” in “${folder}” changed while ${verbing}`,
-        message: "It's different from when you reviewed this, so it's not replaced without asking.",
+        message: "It’s different from when you reviewed this, so it’s not replaced without asking.",
       };
     case "destination_deleted":
       return {
         title: `“${name}” is no longer in “${folder}”`,
         message:
-          "It was removed after you reviewed this, so there's nothing to replace or merge with. Choose whether to continue with your copy.",
+          "It was removed after you reviewed this, so there’s nothing to replace or merge with. Choose whether to go on with your item.",
       };
     case "source_changed":
       return {
         title: `“${sourceName}” changed while ${verbing}`,
-        message:
-          "Your copy is different from when you reviewed this. Choose whether to use it now.",
+        message: "It’s different from when you reviewed this. Choose whether to use it now.",
       };
     case "source_deleted":
       return {
@@ -211,10 +198,10 @@ function describeConflict(
       };
     case "trash_unavailable":
       return {
-        title: `Couldn't move “${name}” to the Trash`,
+        title: `Couldn’t move “${name}” to the Trash`,
         message: `“${folder}” is on a volume without a Trash, so replacing the existing ${
           isFolder ? "folder" : "item"
-        } means deleting it permanently. This can't be undone.`,
+        } means deleting it permanently. This can’t be undone.`,
       };
   }
 }

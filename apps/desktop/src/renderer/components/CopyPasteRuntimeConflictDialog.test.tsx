@@ -56,9 +56,9 @@ describe("CopyPasteRuntimeConflictDialog", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("In “photos” now")).toBeInTheDocument();
     expect(screen.getByText("91 KB")).toBeInTheDocument();
-    expect(screen.getByText("Your copy")).toBeInTheDocument();
+    expect(screen.getByText("Being pasted")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Keep Both" })).toHaveFocus();
-    expect(screen.getByRole("button", { name: "Replace" })).toHaveClass("danger-text");
+    expect(screen.getByRole("button", { name: "Replace" })).toHaveClass("is-destructive");
 
     expect(screen.getByRole("dialog")).toHaveAccessibleName(
       "“a.jpg” appeared in “photos” while pasting",
@@ -123,7 +123,7 @@ describe("CopyPasteRuntimeConflictDialog", () => {
     expect(screen.queryByRole("button", { name: "Replace" })).not.toBeInTheDocument();
     const moveAnyway = screen.getByRole("button", { name: "Move Anyway" });
     expect(moveAnyway).toHaveFocus();
-    expect(moveAnyway).not.toHaveClass("danger-text");
+    expect(moveAnyway).not.toHaveClass("is-destructive");
     expect(screen.getByRole("button", { name: "Skip" })).toBeInTheDocument();
 
     fireEvent.click(moveAnyway);
@@ -142,23 +142,23 @@ describe("CopyPasteRuntimeConflictDialog", () => {
     );
 
     expect(
-      screen.getByRole("heading", { name: "Couldn't move “a.jpg” to the Trash" }),
+      screen.getByRole("heading", { name: "Couldn’t move “a.jpg” to the Trash" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("dialog")).toHaveAccessibleDescription(
-      "“photos” is on a volume without a Trash, so replacing the existing item means deleting it permanently. This can't be undone.",
+      "“photos” is on a volume without a Trash, so replacing the existing item means deleting it permanently. This can’t be undone.",
     );
     const skip = screen.getByRole("button", { name: "Skip" });
     expect(skip).toHaveFocus();
-    expect(skip).toHaveClass("primary");
+    expect(skip).toHaveClass("is-default");
     const deleteButton = screen.getByRole("button", { name: "Delete Permanently" });
-    expect(deleteButton).toHaveClass("danger-text");
-    expect(deleteButton).not.toHaveClass("primary");
+    expect(deleteButton).toHaveClass("is-destructive");
+    expect(deleteButton).not.toHaveClass("is-default");
     expect(screen.queryByRole("button", { name: "Keep Both" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Stop Pasting" })).toBeInTheDocument();
 
     fireEvent.click(
       screen.getByLabelText(
-        "Do the same for other items that can't be moved to the Trash while pasting",
+        "Do the same for other items that can’t be moved to the Trash while pasting",
       ),
     );
     fireEvent.click(deleteButton);

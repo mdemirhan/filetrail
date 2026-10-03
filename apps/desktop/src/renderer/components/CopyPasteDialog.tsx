@@ -1,6 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 
-import { getFocusableElements } from "../lib/focusUtils";
+import { Alert } from "./Alert";
+import { PushButton } from "./PushButton";
 
 export function CopyPasteDialog({
   title,
@@ -31,103 +32,62 @@ export function CopyPasteDialog({
       }
     | undefined;
 }) {
-  const dialogRef = useRef<HTMLDialogElement | null>(null);
   const secondaryButtonRef = useRef<HTMLButtonElement | null>(null);
   const primaryButtonRef = useRef<HTMLButtonElement | null>(null);
 
   // Confirmations that cannot be undone (e.g. delete immediately), and questions whose
-  // default is no, start on the safe action so a stray Enter or Space cannot confirm them.
+  // default is no, make the other button the default, so a stray Return or Space cannot
+  // confirm them. The default button is the one drawn in the accent, and the one Return
+  // presses, as in a macOS alert.
   const primaryIsDefault =
-    primaryAction?.irreversible !== true && primaryAction?.isDefault !== false;
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: initial focus only runs on mount.
-  useEffect(() => {
-    const target = !primaryIsDefault
-      ? (secondaryButtonRef.current ?? dialogRef.current)
-      : (primaryButtonRef.current ?? secondaryButtonRef.current ?? dialogRef.current);
-    target?.focus();
-  }, []);
+    primaryAction !== undefined &&
+    primaryAction.irreversible !== true &&
+    primaryAction.isDefault !== false;
+  const defaultAction = primaryIsDefault ? primaryAction : secondaryAction;
 
   return (
-    <div className="action-notice-backdrop" role="presentation">
-      <dialog
-        ref={dialogRef}
-        className="action-notice-dialog copy-paste-dialog"
-        aria-label={title}
-        aria-modal="true"
-        open
-        tabIndex={-1}
-        onMouseDown={(event) => event.stopPropagation()}
-        onKeyDown={(event) => {
-          if (event.defaultPrevented) {
-            return;
-          }
-          if (event.key === "Enter" && primaryAction && primaryIsDefault) {
-            const target = event.target;
-            if (!(target instanceof HTMLElement) || target === dialogRef.current) {
-              event.preventDefault();
-              primaryAction.onClick();
-            }
-            return;
-          }
-          if (event.key !== "Tab") {
-            return;
-          }
-          const dialog = dialogRef.current;
-          if (!dialog) {
-            return;
-          }
-          const focusableElements = getFocusableElements(dialog, { includeLinks: true });
-          if (focusableElements.length === 0) {
-            return;
-          }
-          const activeElement = document.activeElement;
-          const currentIndex =
-            activeElement instanceof HTMLElement ? focusableElements.indexOf(activeElement) : -1;
-          const nextIndex = event.shiftKey
-            ? currentIndex <= 0
-              ? focusableElements.length - 1
-              : currentIndex - 1
-            : currentIndex < 0 || currentIndex >= focusableElements.length - 1
-              ? 0
-              : currentIndex + 1;
-          event.preventDefault();
-          focusableElements[nextIndex]?.focus();
-        }}
-      >
-        <div className="action-notice-title">{title}</div>
-        <p className="action-notice-message">{message}</p>
-        {progressLabel ? <p className="copy-paste-progress">{progressLabel}</p> : null}
-        {detailLines.length > 0 ? (
-          <ul className="copy-paste-detail-list">
-            {detailLines.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-        ) : null}
-        <div className="action-notice-actions">
+    <Alert
+      title={title}
+      message={message}
+      initialFocusRef={primaryIsDefault ? primaryButtonRef : secondaryButtonRef}
+      onReturn={defaultAction ? () => defaultAction.onClick() : undefined}
+      buttons={
+        <>
           {secondaryAction ? (
-            <button
+            <PushButton
               ref={secondaryButtonRef}
-              type="button"
-              className="tb-btn"
+              variant={primaryIsDefault ? "plain" : "default"}
               onClick={secondaryAction.onClick}
             >
               {secondaryAction.label}
-            </button>
+            </PushButton>
           ) : null}
           {primaryAction ? (
-            <button
+            <PushButton
               ref={primaryButtonRef}
-              type="button"
-              className={`tb-btn${primaryAction.destructive ? " danger" : " primary"}`}
+              variant={
+                primaryIsDefault ? "default" : primaryAction.destructive ? "destructive" : "plain"
+              }
               onClick={primaryAction.onClick}
             >
               {primaryAction.label}
-            </button>
+            </PushButton>
           ) : null}
-        </div>
-      </dialog>
-    </div>
+        </>
+      }
+    >
+      {progressLabel || detailLines.length > 0 ? (
+        <>
+          {progressLabel ? <p className="copy-paste-progress">{progressLabel}</p> : null}
+          {detailLines.length > 0 ? (
+            <ul className="copy-paste-detail-list">
+              {detailLines.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          ) : null}
+        </>
+      ) : null}
+    </Alert>
   );
 }

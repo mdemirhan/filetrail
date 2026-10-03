@@ -25,6 +25,7 @@ import {
   policyForAllConflicts,
   summarizeReview,
 } from "../lib/copyPasteReview";
+import { PushButton } from "./PushButton";
 import { useDialogFocus } from "./useDialogFocus";
 
 // Rows rendered before "Show all": enough to review by eye, few enough to stay fast when
@@ -160,7 +161,7 @@ export function CopyPasteReviewDialog({
   const primaryLabel = replacing ? `Replace ${formatCount(summary.replaced)} and ${verb}` : verb;
 
   return (
-    <div className="action-notice-backdrop copy-paste-sheet-backdrop" role="presentation">
+    <div className="modal-scrim is-sheet" role="presentation">
       <dialog
         ref={dialogRef}
         className="copy-paste-sheet"
@@ -265,19 +266,16 @@ export function CopyPasteReviewDialog({
           ) : (
             <p className="copy-paste-sheet-footer-note">{formatReviewSummary(summary, verb)}</p>
           )}
-          <button type="button" className="tb-btn" onClick={onClose}>
-            Cancel
-          </button>
-          <button
+          <PushButton onClick={onClose}>Cancel</PushButton>
+          <PushButton
             ref={primaryButtonRef}
-            type="button"
-            className={`tb-btn ${replacing ? "danger" : "primary"}`}
+            variant={replacing ? "destructive" : "default"}
             disabled={starting}
             aria-busy={starting}
             onClick={() => void start()}
           >
             {primaryLabel}
-          </button>
+          </PushButton>
         </footer>
       </dialog>
     </div>

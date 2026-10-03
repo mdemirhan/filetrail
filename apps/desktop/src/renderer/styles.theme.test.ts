@@ -242,24 +242,20 @@ describe("theme styles", () => {
     ).toEqual(["var(--ft-accent-solid-button)"]);
   });
 
-  it("fills the default button of every dialog with the accent, never the destructive red", () => {
+  it("fills the default button with the accent, and never draws it in the destructive red", () => {
     const all = parseDeclarations(styles);
-    const primaryRules = all.filter((d) =>
-      d.selector.split(",").some((part) => /\.tb-btn\.primary(?![-\w])/.test(part)),
+    const defaultRules = all.filter((d) =>
+      d.selector.split(",").some((part) => /\.push-button\.is-default(?![-\w])/.test(part)),
     );
-    expect(primaryRules.some((d) => d.value.includes("--danger"))).toBe(false);
-    for (const dialog of [
-      ".copy-paste-sheet",
-      ".copy-paste-conflict-alert",
-      ".action-notice-dialog",
-    ]) {
-      const background = all.find(
-        (d) =>
-          d.property === "background" &&
-          d.selector.split(",").some((part) => part.trim() === `${dialog} .tb-btn.primary`),
-      );
-      expect(background?.value, dialog).toBe("var(--ft-accent-solid-button)");
-    }
+    expect(defaultRules.some((d) => d.value.includes("--danger"))).toBe(false);
+    const background = all.find(
+      (d) => d.property === "background" && d.selector === ".push-button.is-default",
+    );
+    expect(background?.value).toBe("var(--ft-accent-solid-button)");
+    const destructive = all.find(
+      (d) => d.property === "color" && d.selector === ".push-button.is-destructive",
+    );
+    expect(destructive?.value).toBe("var(--danger-text)");
   });
 
   it("shows a toolbar toggle that is on, in every theme, apart from off and from hover", () => {

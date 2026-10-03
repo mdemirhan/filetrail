@@ -91,7 +91,7 @@ describe("TextPromptDialog", () => {
     expect(screen.getByLabelText("New name")).toHaveValue("second.txt");
   });
 
-  it("traps Tab inside the dialog", async () => {
+  it("keeps Tab inside the dialog, wrapping at either end", async () => {
     render(
       <TextPromptDialog
         open
@@ -108,20 +108,16 @@ describe("TextPromptDialog", () => {
     await act(async () => {});
 
     const input = screen.getByLabelText("New name");
-    const cancelButton = screen.getByRole("button", { name: "Cancel" });
     const renameButton = screen.getByRole("button", { name: "Rename" });
-    act(() => {
-      input.focus();
-    });
+    expect(input).toHaveFocus();
 
+    // Shift+Tab from the field, the first stop, goes round to the last button.
     act(() => {
-      fireEvent.keyDown(input, { key: "Tab" });
+      fireEvent.keyDown(input, { key: "Tab", shiftKey: true });
     });
-    expect(cancelButton).toHaveFocus();
+    expect(renameButton).toHaveFocus();
 
-    act(() => {
-      renameButton.focus();
-    });
+    // Tab from the last button comes back to the field.
     act(() => {
       fireEvent.keyDown(renameButton, { key: "Tab" });
     });

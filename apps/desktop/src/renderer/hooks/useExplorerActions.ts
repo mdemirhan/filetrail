@@ -53,7 +53,7 @@ import {
   removeClipboardItem,
   setCopyPasteClipboard,
 } from "../lib/copyPasteClipboard";
-import { type CopyPasteOverrides, SAFE_COPY_PASTE_POLICY } from "../lib/copyPasteReview";
+import { type CopyPasteOverrides, SAFE_COPY_PASTE_POLICY, dirnameOf } from "../lib/copyPasteReview";
 import {
   collectRetrySourcePaths,
   createOpenItemLimitMessage,
@@ -403,6 +403,8 @@ export function useExplorerActions(args: {
   // Bumped by every New Folder, so a folder listing that comes back late is not used for a
   // newer one.
   const newFolderNameRequestRef = useRef(0);
+  // A folder made in the folder on screen, to be renamed in its row once it is listed.
+  const pendingInlineRenamePathRef = useRef<string | null>(null);
   const reviewStartInFlightRef = useRef<string | null>(null);
   // A cut clipboard to clear when its move finishes having moved something.
   const clipboardClearAfterMoveRef = useRef<{ operationId: string; capturedAt: string } | null>(
@@ -3189,6 +3191,25 @@ export function useExplorerActions(args: {
     );
   }
 
+  // The folder just made in the folder on screen is renamed in its row once it is listed
+  // (and selected, see queueWriteOperationSelection). Leaving the folder forgets it.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the listing changes.
+  useEffect(() => {
+    const path = pendingInlineRenamePathRef.current;
+    if (!path) {
+      return;
+    }
+    if (dirnameOf(path) !== currentPathRef.current) {
+      pendingInlineRenamePathRef.current = null;
+      return;
+    }
+    if (!currentEntries.some((entry) => entry.path === path)) {
+      return;
+    }
+    pendingInlineRenamePathRef.current = null;
+    openRenameDialog([path]);
+  }, [currentEntries]);
+
   function openNewFolderDialog(
     parentDirectoryPath: string,
     options: { selectInTreeOnSuccess?: boolean } = {},
@@ -3201,6 +3222,25 @@ export function useExplorerActions(args: {
     closeContextMenu();
     const requestId = newFolderNameRequestRef.current + 1;
     newFolderNameRequestRef.current = requestId;
+    // As in Finder: in the folder on screen, the folder is made at once with a free name
+    // and its name is then edited in its row. Elsewhere (a selected folder, the tree) the
+    // name is asked for first, since the new folder is not in the list.
+    if (
+      parentDirectoryPath === currentPathRef.current &&
+      !isSearchModeRef.current &&
+      !options.selectInTreeOnSuccess
+    ) {
+      const name = resolveFreeNewFolderName(currentEntries.map((entry) => entry.name));
+      pendingInlineRenamePathRef.current = buildChildPath(parentDirectoryPath, name);
+      void startCreateFolder(
+        { kind: "newFolder", parentDirectoryPath, name, selectInTreeOnSuccess: false },
+        (message) => {
+          pendingInlineRenamePathRef.current = null;
+          setActionNotice({ title: "Couldn’t Make the Folder", message });
+        },
+      );
+      return;
+    }
     const showDialog = (initialName: string) => {
       if (newFolderNameRequestRef.current !== requestId) {
         return;

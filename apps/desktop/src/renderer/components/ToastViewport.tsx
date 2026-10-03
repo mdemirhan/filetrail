@@ -1,27 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
+import { offsetAboveBarsAndCard, useBottomOffset } from "../lib/bottomStack";
 import type { ToastEntry, ToastKind } from "../lib/toasts";
 import { ClipboardItemsIcon } from "./ClipboardItemsIcon";
-
-// Notifications rest just above the path bar, and the Info Row when it is open, so the
-// item count and the selection's details under them stay readable.
-const TOAST_GAP_ABOVE_BARS = 10;
-// Where nothing is at the bottom of the window (search results, Help).
-const TOAST_EDGE_OFFSET_BOTTOM = 12;
-
-function restOffsetBottom(): number {
-  const bars = Array.from(document.querySelectorAll<HTMLElement>(".content-pathbar-row")).find(
-    (element) => element.getClientRects().length > 0,
-  );
-  if (!bars) {
-    return TOAST_EDGE_OFFSET_BOTTOM;
-  }
-  const top = bars.getBoundingClientRect().top;
-  return Math.max(
-    TOAST_EDGE_OFFSET_BOTTOM,
-    Math.round(window.innerHeight - top + TOAST_GAP_ABOVE_BARS),
-  );
-}
 
 // Solid marks in the kind's color; the sign inside is cut out in the card's own color.
 function ToastIcon({ kind }: { kind: ToastKind }) {
@@ -60,27 +41,22 @@ function ToastIcon({ kind }: { kind: ToastKind }) {
 export function ToastViewport({
   toasts,
   onDismiss,
-  offsetBottom,
+  progressCardShown = false,
 }: {
   toasts: ToastEntry[];
   onDismiss: (id: string) => void;
-  offsetBottom?: number | undefined;
+  /** A running operation's card comes and goes under the notifications. */
+  progressCardShown?: boolean;
 }) {
   const timersRef = useRef<Record<string, { expiresAt: number; timer: number }>>({});
-  const [restBottom, setRestBottom] = useState(TOAST_EDGE_OFFSET_BOTTOM);
-  const newestToastId = toasts[toasts.length - 1]?.id;
-
-  // Measured as each notification arrives, and while they are on screen: the bars under
-  // the list come and go (the Info Row, search results), and the window can be resized.
-  useLayoutEffect(() => {
-    if (newestToastId === undefined || offsetBottom !== undefined) {
-      return;
-    }
-    const measure = () => setRestBottom(restOffsetBottom());
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, [newestToastId, offsetBottom]);
+  const newestToastId = toasts[toasts.length - 1]?.id ?? null;
+  // Notifications rest above the path bar, the Info Row and a running operation's card, so
+  // the item count, the selection's details and the progress stay readable. Measured again
+  // when a notification arrives and when the card appears or goes.
+  const restBottom = useBottomOffset(
+    offsetAboveBarsAndCard,
+    newestToastId === null ? null : `${newestToastId}:${progressCardShown}`,
+  );
 
   useEffect(() => {
     const activeTimers = timersRef.current;
@@ -132,7 +108,7 @@ export function ToastViewport({
     <div
       className="toast-viewport"
       data-testid="toast-viewport"
-      style={{ bottom: `${offsetBottom ?? restBottom}px` }}
+      style={{ bottom: `${restBottom}px` }}
     >
       {toasts.map((toast) => {
         const isAssertive = toast.kind === "warning";
