@@ -1485,10 +1485,10 @@ function describeWriteError(
 // the window then offers to delete the item immediately, as Finder does.
 function describeTrashError(error: unknown, path: string): string {
   if (errorCode(error) === NO_TRASH_ERROR_CODE) {
-    return `“${basename(path)}” couldn't be moved to the Trash because its disk has no Trash.`;
+    return `“${basename(path)}” couldn’t be moved to the Trash because its disk has no Trash.`;
   }
   const described = describeCopyPasteError(error);
-  return described || `“${basename(path)}” couldn't be moved to the Trash.`;
+  return described || `“${basename(path)}” couldn’t be moved to the Trash.`;
 }
 
 function toWriteOperationKind(action: WriteOperationAction): WriteOperationKind {

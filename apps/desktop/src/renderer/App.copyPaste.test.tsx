@@ -12397,7 +12397,7 @@ describe("moving to the Trash on a disk without a Trash", () => {
           destinationPath: null,
           status: item.noTrash || item.error ? ("failed" as const) : ("completed" as const),
           error: item.noTrash
-            ? `“${item.path.split("/").at(-1)}” couldn't be moved to the Trash because its disk has no Trash.`
+            ? `“${item.path.split("/").at(-1)}” couldn’t be moved to the Trash because its disk has no Trash.`
             : (item.error ?? null),
           ...(item.noTrash ? { noTrash: true as const } : {}),
         })),
