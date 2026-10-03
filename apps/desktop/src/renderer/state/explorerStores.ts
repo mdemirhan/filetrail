@@ -87,7 +87,7 @@ export type SelectionActions = {
   applyContentSelection: (selection: ContentSelectionState, entries: DirectoryEntry[]) => void;
   setSingleContentSelection: (path: string) => void;
   clearTypeahead: () => void;
-  focusContentPane: () => void;
+  focusContentPane: (options?: { unlessFocusMoves?: boolean }) => void;
 };
 
 // Selection and focus actions shared by every controller. These were formerly
@@ -147,16 +147,31 @@ export function useSelectionActions(args: {
     typeaheadTimeoutRef,
   ]);
 
-  const focusContentPane = useCallback(() => {
-    setFocusedPane("content");
-    clearTypeahead();
-    window.requestAnimationFrame(() => {
-      contentPaneRef.current?.focus({ preventScroll: true });
+  // `unlessFocusMoves`: a focus put back by itself (after a dialog, at start) gives way to
+  // one the person gives meanwhile, such as clicking an item, which it must not take over.
+  const focusContentPane = useCallback(
+    (options: { unlessFocusMoves?: boolean } = {}) => {
+      const focusedAtStart = document.activeElement;
+      const stillWanted = () =>
+        !options.unlessFocusMoves || document.activeElement === focusedAtStart;
+      setFocusedPane("content");
+      clearTypeahead();
       window.requestAnimationFrame(() => {
+        if (!stillWanted()) {
+          return;
+        }
         contentPaneRef.current?.focus({ preventScroll: true });
+        const focusedNow = document.activeElement;
+        window.requestAnimationFrame(() => {
+          if (options.unlessFocusMoves && document.activeElement !== focusedNow) {
+            return;
+          }
+          contentPaneRef.current?.focus({ preventScroll: true });
+        });
       });
-    });
-  }, [clearTypeahead, contentPaneRef, setFocusedPane]);
+    },
+    [clearTypeahead, contentPaneRef, setFocusedPane],
+  );
 
   return useMemo(
     () => ({
