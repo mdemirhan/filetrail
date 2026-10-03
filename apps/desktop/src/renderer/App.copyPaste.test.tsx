@@ -12757,3 +12757,66 @@ describe("file commands from the keyboard, in more states", () => {
     expect(harness.invocations.map((call) => call.channel)).not.toContain("copyPaste:analyzeStart");
   });
 });
+
+describe("tabs on a folder that was renamed", () => {
+  it("follow it to its new name, as a Finder window does", async () => {
+    const harness = createAppHarness({
+      directorySnapshots: {
+        "/Users/demo/Work": { path: "/Users/demo/Work", parentPath: "/Users/demo", entries: [] },
+      },
+    });
+    renderApp(harness);
+    await screen.findByTitle("/Users/demo/source.txt");
+    await pressKey({ key: "t", metaKey: true });
+    await openDirectory("/Users/demo/Folder");
+    const [firstTab] = screen.getAllByRole("tab") as [HTMLElement, HTMLElement];
+    await act(async () => {
+      fireEvent.click(firstTab);
+    });
+
+    await act(async () => {
+      harness.emitProgress({
+        operationId: "write-op-rename",
+        action: "rename",
+        status: "completed",
+        completedItemCount: 1,
+        totalItemCount: 1,
+        completedByteCount: 0,
+        totalBytes: null,
+        currentSourcePath: null,
+        currentDestinationPath: null,
+        result: {
+          operationId: "write-op-rename",
+          action: "rename",
+          status: "completed",
+          targetPath: null,
+          startedAt: "2026-10-03T10:00:00.000Z",
+          finishedAt: "2026-10-03T10:00:01.000Z",
+          summary: {
+            topLevelItemCount: 1,
+            totalItemCount: 1,
+            completedItemCount: 1,
+            failedItemCount: 0,
+            skippedItemCount: 0,
+            cancelledItemCount: 0,
+            completedByteCount: 0,
+            totalBytes: null,
+          },
+          items: [
+            {
+              sourcePath: "/Users/demo/Folder",
+              destinationPath: "/Users/demo/Work",
+              status: "completed",
+              error: null,
+            },
+          ],
+          error: null,
+        },
+      });
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getAllByRole("tab")[1]).toHaveTextContent("Work");
+    });
+  });
+});

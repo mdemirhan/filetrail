@@ -14,6 +14,7 @@ import {
   describeTab,
   describeTabSnapshot,
   disambiguateTabLabels,
+  followMovedItems,
   moveTabInList,
   resolveAdjacentTab,
   resolveTabAfterClose,
@@ -708,6 +709,50 @@ export function useExplorerTabs(args: {
     const timer = window.setInterval(() => pollBackgroundSearches(), BACKGROUND_SEARCH_POLL_MS);
     return () => window.clearInterval(timer);
   }, [hasBackgroundSearch]);
+
+  // A folder renamed or moved by this window takes the background tabs showing it (or a
+  // folder inside it) along to its new place.
+  useEffect(
+    () =>
+      client.onWriteOperationProgress((event) => {
+        if (
+          event.status === "queued" ||
+          event.status === "running" ||
+          event.status === "awaiting_resolution" ||
+          (event.action !== "rename" && event.action !== "move_to") ||
+          !event.result
+        ) {
+          return;
+        }
+        const moves = event.result.items.flatMap((item) =>
+          item.status === "completed" && item.sourcePath && item.destinationPath
+            ? [{ from: item.sourcePath, to: item.destinationPath }]
+            : [],
+        );
+        if (moves.length === 0) {
+          return;
+        }
+        const current = stateRef.current;
+        let changed = false;
+        const tabs = current.tabs.map((tab) => {
+          if (tab.id === current.activeTabId || !tab.snapshot) {
+            return tab;
+          }
+          const snapshot = followMovedItems(tab.snapshot, moves);
+          if (snapshot === tab.snapshot) {
+            return tab;
+          }
+          changed = true;
+          return { ...tab, snapshot };
+        });
+        if (changed) {
+          const next = { ...current, tabs };
+          stateRef.current = next;
+          setState(next);
+        }
+      }),
+    [client],
+  );
 
   // A file operation that ends may have changed folders that background tabs show. Their
   // folder is read again when they are shown anyway; this makes that read cover the tree.

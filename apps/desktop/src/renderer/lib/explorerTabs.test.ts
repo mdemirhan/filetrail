@@ -5,6 +5,7 @@ import {
   applyBackgroundSearchUpdate,
   describeTab,
   disambiguateTabLabels,
+  followMovedItems,
   getPathAndAncestors,
   moveTabInList,
   resolveAdjacentTab,
@@ -214,5 +215,38 @@ describe("explorerTabs", () => {
       "/",
     ]);
     expect(getPathAndAncestors("")).toEqual([]);
+  });
+});
+
+describe("followMovedItems", () => {
+  const snapshot = (currentPath: string) =>
+    ({
+      currentPath,
+      historyPaths: ["/Users/demo", currentPath],
+      historyIndex: 1,
+      treeRootPath: "/Users/demo",
+      selectedTreeItemId: `fs:${currentPath}`,
+      view: { entries: [] },
+    }) as unknown as Parameters<typeof followMovedItems>[0];
+
+  // A tab on a folder renamed in another tab finds it under its new name, as a Finder
+  // window does, instead of falling back to the folder above.
+  it("follows a renamed or moved folder, and folders inside it", () => {
+    const moves = [{ from: "/Users/demo/Projects", to: "/Users/demo/Work" }];
+
+    const followed = followMovedItems(snapshot("/Users/demo/Projects/app"), moves);
+
+    expect(followed.currentPath).toBe("/Users/demo/Work/app");
+    expect(followed.historyPaths).toEqual(["/Users/demo", "/Users/demo/Work/app"]);
+    expect(followed.selectedTreeItemId).toBe("fs:/Users/demo/Work/app");
+    // Its listing is read again at the new place.
+    expect(followed.view).toBeNull();
+  });
+
+  it("leaves a tab on another folder as it is", () => {
+    const tab = snapshot("/Users/demo/Projects2");
+    expect(followMovedItems(tab, [{ from: "/Users/demo/Projects", to: "/Users/demo/Work" }])).toBe(
+      tab,
+    );
   });
 });
