@@ -12,6 +12,7 @@ import {
 } from "../lib/contentSelection";
 import type { DirectoryEntry } from "../lib/explorerTypes";
 import type { useFiletrailClient } from "../lib/filetrailClient";
+import { resolveFocusedEditTarget } from "../lib/focusedEditTarget";
 
 // Domain store shapes. Each store is the bag returned by its state hook; the
 // controller hooks subscribe to whole stores instead of receiving every field
@@ -164,7 +165,15 @@ export function useSelectionActions(args: {
         contentPaneRef.current?.focus({ preventScroll: true });
         const focusedNow = document.activeElement;
         window.requestAnimationFrame(() => {
-          if (options.unlessFocusMoves && document.activeElement !== focusedNow) {
+          const moved = document.activeElement !== focusedNow;
+          // The second frame catches a pane rendered meanwhile (the search results take the
+          // list's place), but a text field given focus in between, such as the results'
+          // filter, keeps it: taking it back would leave the field without a caret.
+          if (
+            moved &&
+            (options.unlessFocusMoves ||
+              resolveFocusedEditTarget(document.activeElement) === "editable-text")
+          ) {
             return;
           }
           contentPaneRef.current?.focus({ preventScroll: true });

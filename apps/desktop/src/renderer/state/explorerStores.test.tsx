@@ -39,12 +39,18 @@ function setUp() {
       frames.shift()?.(performance.now());
     }
   };
+  const runOneFrame = () => {
+    const pending = frames.splice(0);
+    for (const callback of pending) {
+      callback(performance.now());
+    }
+  };
   const tearDown = () => {
     requestFrame.mockRestore();
     contentPane.remove();
     row.remove();
   };
-  return { actions: result.current, contentPane, row, runFrames, tearDown };
+  return { actions: result.current, contentPane, row, runFrames, runOneFrame, tearDown };
 }
 
 describe("focusContentPane", () => {
@@ -72,6 +78,27 @@ describe("focusContentPane", () => {
 
       expect(contentPane).toHaveFocus();
     } finally {
+      tearDown();
+    }
+  });
+
+  // The pane is focused on one frame and again on the next. A text field focused in
+  // between, such as the search results' filter, keeps its caret.
+  it("leaves a text field focused between its two frames with the keyboard", () => {
+    const { actions, contentPane, runOneFrame, runFrames, tearDown } = setUp();
+    const field = document.createElement("input");
+    document.body.append(field);
+    try {
+      actions.focusContentPane();
+      runOneFrame();
+      expect(contentPane).toHaveFocus();
+
+      field.focus();
+      runFrames();
+
+      expect(field).toHaveFocus();
+    } finally {
+      field.remove();
       tearDown();
     }
   });
