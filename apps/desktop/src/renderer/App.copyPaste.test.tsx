@@ -11600,3 +11600,132 @@ describe("a rename refused after leaving its folder", () => {
     });
   });
 });
+
+describe("what finished operations are called", () => {
+  const withTrashFolder = {
+    directorySnapshots: {
+      "/Users/demo": {
+        path: "/Users/demo",
+        parentPath: "/Users",
+        entries: [
+          createDirectoryEntry("/Users/demo/source.txt", "file"),
+          createDirectoryEntry("/Users/demo/b.txt", "file"),
+          createDirectoryEntry("/Users/demo/.Trash", "directory"),
+        ],
+      },
+      "/Users/demo/.Trash": {
+        path: "/Users/demo/.Trash",
+        parentPath: "/Users/demo",
+        entries: [createDirectoryEntry("/Users/demo/.Trash/old.txt", "file")],
+      },
+    },
+  };
+
+  it("calls a finished Delete Immediately “Deleted”, never “Pasted”", async () => {
+    const harness = createAppHarness(withTrashFolder);
+    renderApp(harness);
+    await openDirectory("/Users/demo/.Trash");
+    await act(async () => {
+      fireEvent.contextMenu(await screen.findByTitle("/Users/demo/.Trash/old.txt"));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Delete Immediately/ }));
+    });
+    const dialog = await screen.findByRole("dialog", {
+      name: "Are you sure you want to delete “old.txt”?",
+    });
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    });
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.some((call) => call.channel === "writeOperation:deleteImmediately"),
+      ).toBe(true);
+    });
+
+    await act(async () => {
+      harness.emitProgress(
+        finishedWriteEvent({
+          operationId: "write-op-delete",
+          action: "delete_immediately",
+          targetPath: null,
+          items: [{ sourcePath: "/Users/demo/.Trash/old.txt", destinationPath: null }],
+        }),
+      );
+    });
+
+    const viewport = await screen.findByTestId("toast-viewport");
+    await vi.waitFor(() => {
+      expect(viewport).toHaveTextContent("Deleted");
+    });
+    expect(viewport).not.toHaveTextContent("Pasted");
+  });
+
+  it("never says a stopped Trash was done", async () => {
+    const harness = createAppHarness(withTrashFolder);
+    renderApp(harness);
+    await selectItem("/Users/demo/source.txt");
+    await act(async () => {
+      fireEvent.click(screen.getByTitle("/Users/demo/b.txt"), { metaKey: true });
+    });
+    await pressKey({ key: "Backspace", metaKey: true });
+    await vi.waitFor(() => {
+      expect(harness.invocations.some((call) => call.channel === "writeOperation:trash")).toBe(
+        true,
+      );
+    });
+    await act(async () => {
+      harness.emitProgress({
+        operationId: "write-op-trash",
+        action: "trash",
+        status: "partial",
+        completedItemCount: 1,
+        totalItemCount: 2,
+        completedByteCount: 0,
+        totalBytes: null,
+        currentSourcePath: null,
+        currentDestinationPath: null,
+        runtimeConflict: null,
+        result: {
+          operationId: "write-op-trash",
+          action: "trash",
+          status: "partial",
+          targetPath: null,
+          startedAt: "2026-10-03T10:00:00.000Z",
+          finishedAt: "2026-10-03T10:00:01.000Z",
+          summary: {
+            topLevelItemCount: 2,
+            totalItemCount: 2,
+            completedItemCount: 1,
+            failedItemCount: 0,
+            skippedItemCount: 0,
+            cancelledItemCount: 1,
+            completedByteCount: 0,
+            totalBytes: null,
+          },
+          items: [
+            {
+              sourcePath: "/Users/demo/source.txt",
+              destinationPath: null,
+              status: "completed",
+              error: null,
+              skipReason: null,
+            },
+            {
+              sourcePath: "/Users/demo/b.txt",
+              destinationPath: null,
+              status: "cancelled",
+              error: "Not started because the operation was stopped.",
+              skipReason: null,
+            },
+          ],
+          error: null,
+        },
+      } as WriteOperationProgressEvent);
+    });
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Stopped before every item was done.");
+    expect(dialog).not.toHaveTextContent("Done.");
+  });
+});

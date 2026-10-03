@@ -424,7 +424,12 @@ function buildCopyPasteResultMessage(event: WriteOperationProgressEvent): string
   if (result.error) {
     return result.error;
   }
-  const { completedItemCount, failedItemCount, skippedItemCount } = result.summary;
+  const { cancelledItemCount, completedItemCount, failedItemCount, skippedItemCount } =
+    result.summary;
+  // Stopped part way is never told as done.
+  if (cancelledItemCount > 0) {
+    return "Stopped before every item was done.";
+  }
   if (skippedItemCount > 0 && completedItemCount === 0 && failedItemCount === 0) {
     return "Nothing was changed: every item was skipped.";
   }

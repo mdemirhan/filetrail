@@ -1329,13 +1329,15 @@ export function useExplorerActions(args: {
               : "Duplicated"
             : event.action === "trash"
               ? "Moved to Trash"
-              : event.action === "rename"
-                ? "Renamed"
-                : event.action === "new_folder"
-                  ? "Created folder"
-                  : result.targetPath
-                    ? `Pasted into ${getPathLeafName(result.targetPath)}`
-                    : "Pasted";
+              : event.action === "delete_immediately"
+                ? "Deleted"
+                : event.action === "rename"
+                  ? "Renamed"
+                  : event.action === "new_folder"
+                    ? "Created folder"
+                    : result.targetPath
+                      ? `Pasted into ${getPathLeafName(result.targetPath)}`
+                      : "Pasted";
     if (event.status === "completed") {
       pushToast({
         kind: "success",
@@ -1356,11 +1358,13 @@ export function useExplorerActions(args: {
                 ? "Duplicate cancelled"
                 : event.action === "trash"
                   ? "Trash cancelled"
-                  : event.action === "rename"
-                    ? "Rename cancelled"
-                    : event.action === "new_folder"
-                      ? "Create folder cancelled"
-                      : "Paste cancelled",
+                  : event.action === "delete_immediately"
+                    ? "Delete cancelled"
+                    : event.action === "rename"
+                      ? "Rename cancelled"
+                      : event.action === "new_folder"
+                        ? "Create folder cancelled"
+                        : "Paste cancelled",
         ...(itemSummary ? { message: itemSummary } : {}),
       });
       return;
