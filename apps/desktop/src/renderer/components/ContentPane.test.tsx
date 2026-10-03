@@ -14,7 +14,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error={null}
-        includeHidden={false}
+        hiddenItemCount={0}
         metadataByPath={{}}
         sortBy="name"
         sortDirection="asc"
@@ -33,7 +33,7 @@ describe("ContentPane", () => {
       />,
     );
 
-    expect(screen.getByText("This folder is empty")).toBeInTheDocument();
+    expect(screen.getByText("Empty folder")).toBeInTheDocument();
   });
 
   // ⌘D, ⌘⌫, ⇧⌘N or ⌘O while typing a path must not act on the selected items, so the
@@ -48,7 +48,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error={null}
-        includeHidden={false}
+        hiddenItemCount={0}
         metadataByPath={{}}
         sortBy="name"
         sortDirection="asc"
@@ -91,7 +91,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error={null}
-        includeHidden={false}
+        hiddenItemCount={0}
         metadataByPath={{}}
         sortBy="name"
         sortDirection="asc"
@@ -124,7 +124,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error={null}
-        includeHidden={false}
+        hiddenItemCount={0}
         metadataByPath={{}}
         sortBy="name"
         sortDirection="asc"
@@ -143,48 +143,12 @@ describe("ContentPane", () => {
       />,
     );
 
-    expect(
-      screen.getByText("Select a folder or favorite to view its contents."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Select a folder to see what’s in it.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "No folder selected" })).toHaveAttribute(
       "aria-disabled",
       "true",
     );
     expect(screen.getByRole("navigation", { name: "Folder path" })).toBeInTheDocument();
-    expect(container.querySelector(".file-icon-folder-outline")).not.toBeNull();
-    expect(container.querySelector(".file-icon-folder-cue")).not.toBeNull();
-  });
-
-  it("uses the open-folder empty-state icon when a selected folder has no items", () => {
-    const { container } = render(
-      <ContentPane
-        isFocused
-        currentPath="/Users/demo"
-        entries={[]}
-        viewMode="list"
-        loading={false}
-        error={null}
-        includeHidden={false}
-        metadataByPath={{}}
-        sortBy="name"
-        sortDirection="asc"
-        onSelectPath={() => undefined}
-        onActivateEntry={() => undefined}
-        onSortChange={() => undefined}
-        onLayoutColumnsChange={() => undefined}
-        onVisiblePathsChange={() => undefined}
-        onNavigatePath={() => undefined}
-        onRequestPathSuggestions={async () => ({
-          inputPath: "",
-          basePath: null,
-          suggestions: [],
-        })}
-        onFocusChange={() => undefined}
-      />,
-    );
-
-    expect(container.querySelector(".file-icon-folder-open-fill")).not.toBeNull();
-    expect(container.querySelector(".file-icon-folder-cue")).toBeNull();
   });
 
   it("opens the path editor when the no-folder-selected breadcrumb is double-clicked", async () => {
@@ -196,7 +160,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error={null}
-        includeHidden={false}
+        hiddenItemCount={0}
         metadataByPath={{}}
         sortBy="name"
         sortDirection="asc"
@@ -232,7 +196,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error="Permission denied"
-        includeHidden={false}
+        hiddenItemCount={0}
         metadataByPath={{}}
         sortBy="name"
         sortDirection="asc"
@@ -266,7 +230,7 @@ describe("ContentPane", () => {
         loading={false}
         error="EPERM: operation not permitted, scandir '/Users/demo/.Trash'"
         onOpenFullDiskAccess={handleOpenFullDiskAccess}
-        includeHidden={false}
+        hiddenItemCount={0}
         metadataByPath={{}}
         sortBy="name"
         sortDirection="asc"
@@ -313,7 +277,7 @@ describe("ContentPane", () => {
         viewMode="details"
         loading={false}
         error={null}
-        includeHidden={false}
+        hiddenItemCount={0}
         metadataByPath={{}}
         sortBy="name"
         sortDirection="asc"
@@ -366,7 +330,7 @@ describe("ContentPane", () => {
         viewMode="details"
         loading={false}
         error={null}
-        includeHidden={false}
+        hiddenItemCount={0}
         selectedPaths={[]}
         selectionLeadPath={null}
         metadataByPath={{}}
@@ -428,7 +392,7 @@ describe("ContentPane", () => {
         viewMode="details"
         loading={false}
         error={null}
-        includeHidden={false}
+        hiddenItemCount={0}
         selectedPaths={[]}
         selectionLeadPath={null}
         metadataByPath={{
@@ -492,7 +456,7 @@ describe("ContentPane", () => {
         viewMode="details"
         loading={false}
         error={null}
-        includeHidden={false}
+        hiddenItemCount={0}
         selectedPaths={[]}
         selectionLeadPath={null}
         metadataByPath={{
@@ -580,7 +544,7 @@ describe("ContentPane", () => {
           viewMode={viewMode}
           loading={false}
           error={null}
-          includeHidden={false}
+          hiddenItemCount={0}
           selectedPaths={["/Users/demo/alpha.txt"]}
           selectionLeadPath="/Users/demo/alpha.txt"
           metadataByPath={{}}
@@ -645,7 +609,7 @@ describe("ContentPane", () => {
         viewMode="details"
         loading={false}
         error={null}
-        includeHidden={false}
+        hiddenItemCount={0}
         selectedPaths={[]}
         selectionLeadPath={null}
         metadataByPath={{
@@ -711,7 +675,7 @@ describe("ContentPane", () => {
         viewMode="details"
         loading={false}
         error={null}
-        includeHidden={false}
+        hiddenItemCount={0}
         selectedPaths={[]}
         selectionLeadPath={null}
         metadataByPath={{}}
@@ -749,7 +713,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error={null}
-        includeHidden={false}
+        hiddenItemCount={0}
         metadataByPath={{}}
         sortBy="name"
         sortDirection="asc"
@@ -790,7 +754,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error={null}
-        includeHidden={false}
+        hiddenItemCount={0}
         metadataByPath={{}}
         sortBy="name"
         sortDirection="asc"
@@ -835,7 +799,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error={null}
-        includeHidden={false}
+        hiddenItemCount={0}
         metadataByPath={{}}
         sortBy="name"
         sortDirection="asc"
@@ -874,7 +838,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error={null}
-        includeHidden={false}
+        hiddenItemCount={0}
         metadataByPath={{}}
         sortBy="name"
         sortDirection="asc"
@@ -919,7 +883,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error={null}
-        includeHidden={false}
+        hiddenItemCount={0}
         metadataByPath={{}}
         sortBy="name"
         sortDirection="asc"
@@ -971,7 +935,7 @@ describe("ContentPane", () => {
           viewMode="list"
           loading={false}
           error={null}
-          includeHidden={false}
+          hiddenItemCount={0}
           metadataByPath={{}}
           sortBy="name"
           sortDirection="asc"
@@ -1018,7 +982,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error={null}
-        includeHidden={false}
+        hiddenItemCount={0}
         metadataByPath={{}}
         sortBy="name"
         sortDirection="asc"
@@ -1059,7 +1023,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error={null}
-        includeHidden={false}
+        hiddenItemCount={0}
         metadataByPath={{}}
         sortBy="name"
         sortDirection="asc"
@@ -1111,7 +1075,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error={null}
-        includeHidden={false}
+        hiddenItemCount={0}
         metadataByPath={{}}
         sortBy="name"
         sortDirection="asc"
@@ -1168,7 +1132,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error={null}
-        includeHidden={false}
+        hiddenItemCount={0}
         metadataByPath={{}}
         sortBy="name"
         sortDirection="asc"
@@ -1217,7 +1181,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error={null}
-        includeHidden={false}
+        hiddenItemCount={0}
         metadataByPath={{}}
         sortBy="name"
         sortDirection="asc"
@@ -1262,7 +1226,7 @@ describe("ContentPane", () => {
     expect(document.querySelector(".pathbar-suggestion.active")).toBeNull();
   });
 
-  it("shows the shorter empty-state copy when hidden files are visible", () => {
+  it("says an empty folder has hidden items only when it has some", () => {
     render(
       <ContentPane
         isFocused
@@ -1271,7 +1235,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error={null}
-        includeHidden
+        hiddenItemCount={3}
         metadataByPath={{}}
         sortBy="name"
         sortDirection="asc"
@@ -1290,7 +1254,7 @@ describe("ContentPane", () => {
       />,
     );
 
-    expect(screen.getByText("This directory is empty.")).toBeInTheDocument();
+    expect(screen.getByText("Empty folder · 3 hidden items")).toBeInTheDocument();
   });
 
   it("lists the folders at a level of the path from the separator before it", async () => {
@@ -1307,7 +1271,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error={null}
-        includeHidden={false}
+        hiddenItemCount={0}
         metadataByPath={{}}
         sortBy="name"
         sortDirection="asc"
@@ -1371,7 +1335,7 @@ describe("ContentPane", () => {
           viewMode="details"
           loading={false}
           error={null}
-          includeHidden={false}
+          hiddenItemCount={0}
           metadataByPath={{}}
           sortBy="size"
           sortDirection="desc"
@@ -1439,7 +1403,7 @@ describe("ContentPane", () => {
           viewMode="list"
           loading={false}
           error={null}
-          includeHidden={false}
+          hiddenItemCount={0}
           metadataByPath={{}}
           sortBy="name"
           sortDirection="asc"
@@ -1474,7 +1438,7 @@ describe("ContentPane", () => {
     const handleSearch = vi.fn();
     renderPane([], handleSearch);
     expect(screen.getByText("No items match “doc”")).toBeInTheDocument();
-    expect(screen.queryByText("This folder is empty")).toBeNull();
+    expect(screen.queryByText("Empty folder")).toBeNull();
     expect(screen.getByText("0 of 12")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Search Subfolders" }));
     expect(handleSearch).toHaveBeenCalledTimes(1);
@@ -1510,7 +1474,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error={null}
-        includeHidden={false}
+        hiddenItemCount={0}
         selectedPaths={[]}
         selectionLeadPath={null}
         metadataByPath={{}}
@@ -1574,7 +1538,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error={null}
-        includeHidden={false}
+        hiddenItemCount={0}
         selectedPaths={[]}
         selectionLeadPath={null}
         metadataByPath={{}}
@@ -1616,7 +1580,7 @@ describe("ContentPane", () => {
         viewMode="list"
         loading={false}
         error={null}
-        includeHidden={false}
+        hiddenItemCount={0}
         selectedPaths={["/Users/demo/item-3.txt"]}
         selectionLeadPath="/Users/demo/item-3.txt"
         metadataByPath={{}}
@@ -1662,7 +1626,7 @@ describe("ContentPane", () => {
           viewMode={viewMode}
           loading={false}
           error={null}
-          includeHidden={false}
+          hiddenItemCount={0}
           selectedPaths={["/Users/demo/alpha.txt", "/Users/demo/beta.txt"]}
           selectionLeadPath="/Users/demo/beta.txt"
           metadataByPath={{}}

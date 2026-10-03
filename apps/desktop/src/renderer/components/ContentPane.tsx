@@ -29,7 +29,7 @@ import {
   getDetailsTableWidth,
   getVisibleDetailColumns,
 } from "../lib/detailsLayout";
-import { FileIcon, FolderIcon } from "../lib/fileIcons";
+import { FileIcon } from "../lib/fileIcons";
 import {
   COMPACT_FLOW_LIST_LAYOUT,
   FLOW_LIST_LAYOUT,
@@ -104,7 +104,7 @@ export function ContentPane({
   loading,
   error,
   onOpenFullDiskAccess = null,
-  includeHidden,
+  hiddenItemCount,
   selectedPaths = [],
   selectionLeadPath = null,
   metadataByPath,
@@ -161,7 +161,9 @@ export function ContentPane({
   /** Set when the folder is the Trash and macOS refused to list it: the error then explains
    *  Full Disk Access and offers to open its settings. */
   onOpenFullDiskAccess?: (() => void) | null;
-  includeHidden: boolean;
+  /** Hidden items in a folder that lists nothing, while hidden files are left out: its
+   *  empty state says they are there. */
+  hiddenItemCount: number;
   selectedPaths?: string[];
   selectionLeadPath?: string | null;
   metadataByPath: Record<string, DirectoryEntryMetadata>;
@@ -473,7 +475,7 @@ export function ContentPane({
               onOpenFullDiskAccess={onOpenFullDiskAccess}
               currentPath={currentPath}
               entriesLength={entries.length}
-              includeHidden={includeHidden}
+              hiddenItemCount={hiddenItemCount}
             />
           </IconGridView>
         ) : viewMode === "list" ? (
@@ -485,7 +487,7 @@ export function ContentPane({
             loading={loading}
             error={error}
             onOpenFullDiskAccess={onOpenFullDiskAccess}
-            includeHidden={includeHidden}
+            hiddenItemCount={hiddenItemCount}
             selectedPaths={selectedPaths}
             selectionLeadPath={selectionLeadPath}
             viewportWidth={viewportWidth}
@@ -517,7 +519,7 @@ export function ContentPane({
             loading={loading}
             error={error}
             onOpenFullDiskAccess={onOpenFullDiskAccess}
-            includeHidden={includeHidden}
+            hiddenItemCount={hiddenItemCount}
             metadataByPath={metadataByPath}
             selectedPaths={selectedPaths}
             selectionLeadPath={selectionLeadPath}
@@ -961,7 +963,7 @@ function FlowListView({
   loading,
   error,
   onOpenFullDiskAccess,
-  includeHidden,
+  hiddenItemCount,
   selectedPaths,
   selectionLeadPath,
   viewportWidth,
@@ -990,7 +992,7 @@ function FlowListView({
   loading: boolean;
   error: string | null;
   onOpenFullDiskAccess: (() => void) | null;
-  includeHidden: boolean;
+  hiddenItemCount: number;
   selectedPaths: string[];
   selectionLeadPath: string | null;
   viewportWidth: number;
@@ -1160,7 +1162,7 @@ function FlowListView({
         onOpenFullDiskAccess={onOpenFullDiskAccess}
         currentPath={currentPath}
         entriesLength={entries.length}
-        includeHidden={includeHidden}
+        hiddenItemCount={hiddenItemCount}
       />
       {/* biome-ignore lint/a11y/useFocusableInteractive: focus is owned by the scroll container; options are buttons and stay keyboard reachable. */}
       {/* biome-ignore lint/a11y/useSemanticElements: a native select cannot host this virtualized column-major file grid. */}
@@ -1303,7 +1305,7 @@ function DetailsView({
   loading,
   error,
   onOpenFullDiskAccess,
-  includeHidden,
+  hiddenItemCount,
   metadataByPath,
   selectedPaths,
   selectionLeadPath,
@@ -1341,7 +1343,7 @@ function DetailsView({
   loading: boolean;
   error: string | null;
   onOpenFullDiskAccess: (() => void) | null;
-  includeHidden: boolean;
+  hiddenItemCount: number;
   metadataByPath: Record<string, DirectoryEntryMetadata>;
   selectedPaths: string[];
   selectionLeadPath: string | null;
@@ -1636,7 +1638,7 @@ function DetailsView({
           onOpenFullDiskAccess={onOpenFullDiskAccess}
           currentPath={currentPath}
           entriesLength={entries.length}
-          includeHidden={includeHidden}
+          hiddenItemCount={hiddenItemCount}
         />
         {/* biome-ignore lint/a11y/useSemanticElements: see grid note above; body markup mirrors the styled-div table. */}
         <div
@@ -2041,14 +2043,14 @@ function ContentState({
   onOpenFullDiskAccess,
   currentPath,
   entriesLength,
-  includeHidden,
+  hiddenItemCount,
 }: {
   loading: boolean;
   error: string | null;
   onOpenFullDiskAccess: (() => void) | null;
   currentPath: string;
   entriesLength: number;
-  includeHidden: boolean;
+  hiddenItemCount: number;
 }) {
   const showLoading = useDelayedFlag(loading && entriesLength === 0, FOLDER_LOADING_DELAY_MS);
   if (loading && entriesLength === 0) {
@@ -2087,7 +2089,7 @@ function ContentState({
     );
   }
   if (entriesLength === 0) {
-    return <EmptyState currentPath={currentPath} includeHidden={includeHidden} />;
+    return <EmptyState currentPath={currentPath} hiddenItemCount={hiddenItemCount} />;
   }
   return null;
 }
@@ -2110,33 +2112,22 @@ function FileNameLabel({
   );
 }
 
+// One quiet line, as an empty Finder window says next to nothing.
 function EmptyState({
   currentPath,
-  includeHidden,
+  hiddenItemCount,
 }: {
   currentPath: string;
-  includeHidden: boolean;
+  hiddenItemCount: number;
 }) {
-  const hasDirectoryPath = currentPath.trim().length > 0;
   return (
     <div className="content-state content-empty">
-      <div className="empty-state-icon" aria-hidden="true">
-        <FolderIcon
-          className="empty-state-folder-icon"
-          open={hasDirectoryPath}
-          variant={hasDirectoryPath ? "filled" : "outline"}
-          showCue={!hasDirectoryPath}
-        />
-      </div>
-      <strong className="empty-state-title">
-        {hasDirectoryPath ? "This folder is empty" : "No folder selected"}
-      </strong>
       <span className="empty-state-message">
-        {hasDirectoryPath
-          ? includeHidden
-            ? "This directory is empty."
-            : "This directory is empty, or hidden files are currently filtered out."
-          : "Select a folder or favorite to view its contents."}
+        {currentPath.trim().length === 0
+          ? "Select a folder to see what’s in it."
+          : hiddenItemCount > 0
+            ? `Empty folder · ${hiddenItemCount} hidden ${hiddenItemCount === 1 ? "item" : "items"}`
+            : "Empty folder"}
       </span>
     </div>
   );

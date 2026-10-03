@@ -54,7 +54,7 @@ function contentPane(viewMode: "list" | "details") {
       viewMode={viewMode}
       loading={false}
       error={null}
-      includeHidden={false}
+      hiddenItemCount={0}
       selectedPaths={[]}
       selectionLeadPath={null}
       metadataByPath={{}}

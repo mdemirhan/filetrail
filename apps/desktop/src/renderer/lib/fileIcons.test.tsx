@@ -2,13 +2,7 @@
 
 import { act, render } from "@testing-library/react";
 
-import {
-  FavoriteItemIcon,
-  FileIcon,
-  FolderIcon,
-  TreeFolderIcon,
-  preloadGenericIcons,
-} from "./fileIcons";
+import { FavoriteItemIcon, FileIcon, TreeFolderIcon, preloadGenericIcons } from "./fileIcons";
 import { type FiletrailClient, FiletrailClientProvider } from "./filetrailClient";
 
 function expectDefined<T>(value: T | null | undefined): NonNullable<T> {
@@ -80,14 +74,8 @@ describe("fileIcons", () => {
     expect(container.querySelector("img")).toBeNull();
   });
 
-  it("renders the empty-list folder and a tree folder without a path as drawn folders", () => {
-    const { container, rerender } = render(<FolderIcon className="custom" />);
-    expect(container.querySelector(".file-icon.folder.custom")).not.toBeNull();
-
-    rerender(<FolderIcon open />);
-    expect(container.querySelector(".file-icon.folder .file-icon-folder-open-fill")).not.toBeNull();
-
-    rerender(<TreeFolderIcon />);
+  it("draws a tree folder without a path", () => {
+    const { container } = render(<TreeFolderIcon />);
     expect(container.querySelector(".file-icon.folder")).not.toBeNull();
   });
 });

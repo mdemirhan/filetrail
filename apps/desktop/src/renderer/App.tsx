@@ -33,6 +33,7 @@ import { useExplorerSearchController } from "./hooks/useExplorerSearchController
 import { useExplorerShortcuts } from "./hooks/useExplorerShortcuts";
 import { useExplorerTabs } from "./hooks/useExplorerTabs";
 import { useFolderSizeCache } from "./hooks/useFolderSizeCache";
+import { useHiddenItemCount } from "./hooks/useHiddenItemCount";
 import { usePreferencesSync } from "./hooks/usePreferencesSync";
 import { useSearchSession } from "./hooks/useSearchSession";
 import { useTrashState } from "./hooks/useTrashState";
@@ -455,6 +456,11 @@ export function App() {
     }
     return maxBytes > 0 ? { maxBytes, getSizeBytes } : null;
   }, [currentEntries, sortBy, getFolderSizeEntry, folderSizeVersion]);
+  const hiddenItemCount = useHiddenItemCount(
+    client,
+    currentPath,
+    !includeHidden && currentEntries.length === 0 && !directoryLoading && !directoryError,
+  );
   // The info panel shows the selected item, or the folder on screen when nothing is
   // selected, updating in place from what the list knows until its details arrive.
   const infoPanelTargetPath = currentPath
@@ -1829,7 +1835,7 @@ export function App() {
                 onOpenFullDiskAccess: isTrashListingRefused(currentPath, directoryError, homePath)
                   ? openFullDiskAccessSettings
                   : null,
-                includeHidden,
+                hiddenItemCount,
                 metadataByPath,
                 selectedPaths: contentSelection.paths,
                 selectionLeadPath: contentSelection.leadPath,

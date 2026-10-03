@@ -40,7 +40,7 @@ function renderPane(
       viewMode={viewMode}
       loading={false}
       error={null}
-      includeHidden={false}
+      hiddenItemCount={0}
       selectedPaths={["/Users/demo/file250.txt"]}
       selectionLeadPath="/Users/demo/file250.txt"
       metadataByPath={{}}

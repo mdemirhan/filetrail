@@ -221,26 +221,6 @@ function nativeIconCacheKey(entry: Entry): string {
   return `path:${entry.path}`;
 }
 
-// The folder drawn in an empty file list.
-export function FolderIcon({
-  className = "",
-  open = false,
-  variant = "filled",
-  showCue = false,
-}: {
-  className?: string;
-  open?: boolean;
-  variant?: "filled" | "outline";
-  showCue?: boolean;
-}) {
-  const iconClassName = className.length > 0 ? `file-icon folder ${className}` : "file-icon folder";
-  return (
-    <span className={iconClassName} aria-hidden>
-      <FolderSvg open={open} variant={variant} showCue={showCue} />
-    </span>
-  );
-}
-
 // A folder in the tree: the same icon the file list shows for it.
 export function TreeFolderIcon({ alias = false, path }: { alias?: boolean; path?: string | null }) {
   if (!path) {
@@ -280,58 +260,7 @@ export function FavoriteItemIcon({ icon }: { icon: FavoriteIconId }) {
   );
 }
 
-function FolderSvg({
-  open = false,
-  variant = "filled",
-  showCue = false,
-}: {
-  open?: boolean;
-  variant?: "filled" | "outline";
-  showCue?: boolean;
-}) {
-  if (open) {
-    return (
-      <svg
-        className="file-icon-svg file-icon-folder"
-        viewBox="0 0 24 24"
-        fill="none"
-        aria-hidden="true"
-        focusable="false"
-      >
-        <path
-          d="M4 8V6a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.88l.82 1.24A2 2 0 0 0 14.07 7H20a2 2 0 0 1 2 2v1"
-          className="file-icon-folder-stroke"
-          strokeLinecap="round"
-        />
-        <path
-          d="M3.5 20h15.13a2 2 0 0 0 1.95-1.57l1.42-6.5A1 1 0 0 0 21.03 10H5.47a2 2 0 0 0-1.95 1.57L2 19"
-          className="file-icon-folder-open-fill"
-          strokeLinecap="round"
-        />
-      </svg>
-    );
-  }
-
-  if (variant === "outline") {
-    return (
-      <svg
-        className="file-icon-svg file-icon-folder"
-        viewBox="0 0 24 24"
-        fill="none"
-        aria-hidden="true"
-        focusable="false"
-      >
-        <path
-          d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6.93a2 2 0 0 1-1.66-.88l-.82-1.24A2 2 0 0 0 7.93 4H5a2 2 0 0 0-2 2v1z"
-          className="file-icon-folder-outline"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        {showCue ? <circle cx="17.5" cy="16.5" r="2.25" className="file-icon-folder-cue" /> : null}
-      </svg>
-    );
-  }
-
+function FolderSvg() {
   // The stand-in for a folder whose icon has not arrived: a filled blue folder with a tab,
   // the shape and color of the one macOS draws, so the swap is barely seen.
   return (
