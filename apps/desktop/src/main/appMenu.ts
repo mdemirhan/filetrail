@@ -50,6 +50,9 @@ export function createApplicationMenuTemplate(
     // About and Settings are windows of their own; main opens them when provided.
     onOpenAbout?: () => void;
     onOpenSettings?: () => void;
+    // Help is a window too, opened from whichever window has the focus; the Keyboard
+    // Shortcuts item opens it on that page.
+    onOpenHelp?: (topic?: "shortcuts") => void;
     // Developer Tools belong to development builds.
     includeDeveloperTools?: boolean;
     // Called after an item has sent its command. macOS flips a checkmark or moves a radio
@@ -61,6 +64,10 @@ export function createApplicationMenuTemplate(
   } = {},
 ): MenuItemConstructorOptions[] {
   const sendCommand = (type: RendererCommandType, focusedWindow?: unknown) => {
+    if ((type === "openHelp" || type === "openKeyboardShortcuts") && options.onOpenHelp) {
+      options.onOpenHelp(type === "openKeyboardShortcuts" ? "shortcuts" : undefined);
+      return;
+    }
     // The menu is shared by every window. When another window (Settings) is focused, edit
     // commands act on its focused text field natively and explorer commands do not apply.
     const focused = focusedWindow as
@@ -202,12 +209,12 @@ export function createApplicationMenuTemplate(
           ],
         },
         command("toggleFoldersFirst", "Folders First", { type: "checkbox" }),
-        command("toggleHiddenFiles", "Show Hidden Files", {
+        command("toggleHiddenFiles", "Hidden Files", {
           type: "checkbox",
         }),
         separator,
-        command("toggleInfoPanel", "Show Info Panel", { type: "checkbox" }),
-        command("toggleInfoRow", "Show Info Row", {
+        command("toggleInfoPanel", "Info Panel", { type: "checkbox" }),
+        command("toggleInfoRow", "Info Row", {
           type: "checkbox",
         }),
         separator,

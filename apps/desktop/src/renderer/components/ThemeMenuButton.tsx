@@ -9,6 +9,7 @@ import {
 } from "../../shared/appPreferences";
 import { useKeepInViewport } from "../hooks/useKeepInViewport";
 import { placeDropdownMenu } from "../lib/menuPlacement";
+import { MenuCheck } from "./MenuCheck";
 import { ToolbarIcon } from "./ToolbarIcon";
 
 // The toolbar's Theme button: a menu of the palettes, Auto first, with the one in use
@@ -75,9 +76,7 @@ export function ThemeMenuButton({
         onSelectTheme(option.value);
       }}
     >
-      <span className="toolbar-menu-check" aria-hidden="true">
-        {theme === option.value ? "✓" : ""}
-      </span>
+      <MenuCheck checked={theme === option.value} />
       <span className="toolbar-menu-label">{option.label}</span>
     </button>
   );

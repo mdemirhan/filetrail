@@ -93,7 +93,7 @@ describe("InfoRow", () => {
     expect(screen.getByRole("button", { name: "Calculate size" })).toBeInTheDocument();
   });
 
-  it("shows spinner when folder size is calculating", () => {
+  it("shows spinner when folder size is calculating, once it takes a moment", async () => {
     render(
       <InfoRow
         open
@@ -107,7 +107,7 @@ describe("InfoRow", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "Cancel folder size calculation" }),
+      await screen.findByRole("button", { name: "Cancel folder size calculation" }),
     ).toBeInTheDocument();
   });
 

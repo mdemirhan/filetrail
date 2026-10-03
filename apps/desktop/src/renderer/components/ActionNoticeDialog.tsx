@@ -1,5 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 
+import { Alert } from "./Alert";
+import { PushButton } from "./PushButton";
+
+// Something the user should know about before going on, with a single OK. Return and
+// Escape dismiss it (see useExplorerShortcuts).
 export function ActionNoticeDialog({
   title,
   message,
@@ -11,26 +16,16 @@ export function ActionNoticeDialog({
 }) {
   const buttonRef = useRef<HTMLButtonElement | null>(null);
 
-  useEffect(() => {
-    buttonRef.current?.focus();
-  }, []);
-
   return (
-    <div className="action-notice-backdrop" role="presentation" onMouseDown={onClose}>
-      <dialog
-        className="action-notice-dialog"
-        aria-label={title}
-        open
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <div className="action-notice-title">{title}</div>
-        <p className="action-notice-message">{message}</p>
-        <div className="action-notice-actions">
-          <button ref={buttonRef} type="button" className="tb-btn primary" onClick={onClose}>
-            OK
-          </button>
-        </div>
-      </dialog>
-    </div>
+    <Alert
+      title={title}
+      message={message}
+      initialFocusRef={buttonRef}
+      buttons={
+        <PushButton ref={buttonRef} variant="default" onClick={onClose}>
+          OK
+        </PushButton>
+      }
+    />
   );
 }

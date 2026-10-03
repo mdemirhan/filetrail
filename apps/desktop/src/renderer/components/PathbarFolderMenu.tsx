@@ -1,7 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { useDelayedFlag } from "../hooks/useDelayedFlag";
 import { useKeepInViewport } from "../hooks/useKeepInViewport";
+import { MenuCheck } from "./MenuCheck";
 
 export type PathbarFolder = { path: string; name: string };
 
@@ -12,6 +14,8 @@ export const PATHBAR_FOLDER_MENU_LIMIT = 300;
 
 // A separator of the path bar. Clicking it lists the folders inside the folder to its left,
 // with the one the path goes through ticked, so a neighbouring folder is one click away.
+const MENU_LOADING_DELAY_MS = 300;
+
 export function PathbarFolderMenu({
   parentPath,
   parentLabel,
@@ -41,7 +45,12 @@ export function PathbarFolderMenu({
   const [activeIndex, setActiveIndex] = useState(-1);
   const open = menu !== null;
   const folders = menu?.folders ?? null;
-  useKeepInViewport(menuRef, open);
+  // The folders usually arrive at once: the menu then opens with them, rather than as a
+  // "Loading…" line that is replaced a moment later. A slow folder shows the line.
+  const waiting = open && folders === null && !menu?.failed;
+  const showLoading = useDelayedFlag(waiting, MENU_LOADING_DELAY_MS);
+  const menuShown = open && (!waiting || showLoading);
+  useKeepInViewport(menuRef, menuShown);
 
   function close() {
     requestRef.current += 1;
@@ -211,7 +220,7 @@ export function PathbarFolderMenu({
       >
         ›
       </button>
-      {menu
+      {menu && menuShown
         ? createPortal(
             <div
               ref={menuRef}
@@ -229,9 +238,9 @@ export function PathbarFolderMenu({
               {folders === null ? (
                 <div className="pathbar-folder-menu-note">Loading…</div>
               ) : menu.failed ? (
-                <div className="pathbar-folder-menu-note">This folder could not be read.</div>
+                <div className="pathbar-folder-menu-note">Can’t Read This Folder</div>
               ) : folders.length === 0 ? (
-                <div className="pathbar-folder-menu-note">No folders</div>
+                <div className="pathbar-folder-menu-note">No Folders</div>
               ) : (
                 <>
                   {hiddenBefore > 0 ? (
@@ -256,9 +265,7 @@ export function PathbarFolderMenu({
                         onMouseMove={() => setActiveIndex(index)}
                         onClick={() => chooseRef.current(folder)}
                       >
-                        <span className="toolbar-menu-check" aria-hidden="true">
-                          {checked ? "✓" : ""}
-                        </span>
+                        <MenuCheck checked={checked} />
                         <span className="toolbar-menu-label">{folder.name}</span>
                       </button>
                     );

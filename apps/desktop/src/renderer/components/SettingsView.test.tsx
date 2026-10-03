@@ -405,29 +405,35 @@ describe("SettingsView", () => {
 
     const editor = screen.getByRole("group", { name: "Toolbar" });
     // A button, a toggle, a segmented control, two menus and the search field.
-    const iconColors = ["Back", "Info Panel", "View Mode", "Sort", "View Options", "Search"].map(
-      (name) => {
-        const icon = within(editor).getByRole("button", { name }).querySelector("svg.toolbar-icon");
-        return (icon?.parentElement as HTMLElement).style.color;
-      },
+    const swatches = ["Back", "Info Panel", "View Mode", "Sort", "View Options", "Search"].map(
+      (name) =>
+        within(editor).getByRole("button", { name }).querySelector("svg.toolbar-icon")
+          ?.parentElement,
     );
-    expect(new Set(iconColors).size).toBe(1);
-    expect(iconColors[0]).not.toBe("");
+    for (const swatch of swatches) {
+      expect(swatch).toHaveClass("settings-toolbar-swatch");
+      expect(swatch).not.toHaveAttribute("data-available");
+    }
   });
 
   it("keeps the title's tile one size wherever it is put", () => {
-    const widthOf = (order: ToolbarItemId[]) => {
+    const shapeOf = (order: ToolbarItemId[]) => {
       const view = renderSettingsView({ topToolbarItems: order });
-      const tile = view.container.querySelector<HTMLElement>('[data-toolbar-tile="title"]');
-      const sizes = [tile?.style.flex, (tile?.children[0] as HTMLElement).style.width];
+      const shape = view.container
+        .querySelector<HTMLElement>('[data-toolbar-tile="title"]')
+        ?.getAttribute("data-shape");
       view.unmount();
-      return sizes;
+      return shape;
     };
 
-    const first = widthOf(["title", "back", "clipboard", "viewOptions", "search"]);
-    // It does not grow to fill its row, as it once did when it wrapped onto a row of its own.
-    expect(first).toEqual(["0 0 auto", "134px"]);
-    expect(widthOf(["back", "clipboard", "viewOptions", "search", "title"])).toEqual(first);
+    expect(shapeOf(["title", "back", "clipboard", "viewOptions", "search"])).toBe("title");
+    expect(shapeOf(["back", "clipboard", "viewOptions", "search", "title"])).toBe("title");
+    // Two tiles wide, and it does not grow to fill its row.
+    const styles = readFileSync("apps/desktop/src/renderer/styles.css", "utf8");
+    expect(styles).toMatch(
+      /\.settings-toolbar-tile\[data-shape="title"\] \.settings-toolbar-tile-slot,[^{]*\{\s*width: 134px;/u,
+    );
+    expect(styles).toMatch(/\.settings-toolbar-tile \{[^}]*flex: 0 0 auto;/u);
   });
 
   it("offers Reset only while the toolbar is not the default one", () => {
@@ -474,17 +480,37 @@ describe("SettingsView", () => {
   it("gives every control one height and a hairline outline", () => {
     const view = renderSettingsView();
 
-    const controls = Array.from(
-      view.container.querySelectorAll<HTMLElement>(
-        "select, input[type=text], input[type=number], button.settings-button",
-      ),
-      // The Shortcuts search field takes the same size and outline from the stylesheet.
-    ).filter((control) => !control.classList.contains("shortcut-settings-search"));
-    expect(controls.length).toBeGreaterThan(10);
-    expect(new Set(controls.map((control) => control.style.height))).toEqual(new Set(["28px"]));
-    expect(new Set(controls.map((control) => control.style.borderWidth))).toEqual(
-      new Set(["0.5px"]),
+    // Every pop-up, field and button is drawn by the one rule for Settings controls.
+    for (const select of Array.from(view.container.querySelectorAll("select"))) {
+      expect(select.parentElement).toHaveClass("settings-popup");
+    }
+    for (const field of Array.from(view.container.querySelectorAll("input[type=number]"))) {
+      expect(field).toHaveClass("settings-field");
+    }
+    const styles = readFileSync("apps/desktop/src/renderer/styles.css", "utf8");
+    expect(styles).toMatch(
+      /\.settings-button,\s*\.settings-popup select,\s*\.settings-app-popup,\s*\.settings-field \{[^}]*height: var\(--control-height\);[^}]*inset 0 0 0 0\.5px/u,
     );
+  });
+
+  it("sets every view's density at once, and shows a mix as Custom", () => {
+    const changes = {
+      onCompactListViewChange: vi.fn(),
+      onCompactDetailsViewChange: vi.fn(),
+      onCompactIconViewChange: vi.fn(),
+      onCompactTreeViewChange: vi.fn(),
+    };
+    renderSettingsView({ compactListView: true, ...changes });
+
+    const density = screen.getByLabelText("Density");
+    expect(density).toHaveValue("custom");
+    expect(within(density).getByRole("option", { name: "Custom" })).toBeDisabled();
+    expect(screen.queryByLabelText("Compact list view")).toBeNull();
+
+    fireEvent.change(density, { target: { value: "compact" } });
+    for (const change of Object.values(changes)) {
+      expect(change).toHaveBeenCalledWith(true);
+    }
   });
 
   it("has one toolbar to arrange, and nothing about rails", () => {
@@ -658,28 +684,63 @@ describe("SettingsView", () => {
     expect(onHighlightHoveredItemsChange).toHaveBeenCalledWith(false);
   });
 
-  it("accepts typed zoom percentages and normalizes them on blur", () => {
+  it("takes any zoom typed in, such as 105%, and keeps it in range", () => {
     const onZoomPercentChange = vi.fn();
-    renderSettingsView({ onZoomPercentChange });
+    renderSettingsView({ zoomPercent: 100, onZoomPercentChange });
 
-    const input = screen.getByLabelText("Zoom level");
-    fireEvent.change(input, { target: { value: "%107" } });
-    fireEvent.blur(input);
+    const field = screen.getByLabelText("Zoom level");
+    fireEvent.change(field, { target: { value: "105%" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(onZoomPercentChange).toHaveBeenLastCalledWith(105);
+    expect(field).toHaveValue("105%");
 
-    expect(onZoomPercentChange).toHaveBeenCalledWith(107);
-    expect(input).toHaveValue("107%");
+    fireEvent.change(field, { target: { value: "400" } });
+    fireEvent.blur(field);
+    expect(onZoomPercentChange).toHaveBeenLastCalledWith(150);
+    expect(field).toHaveValue("150%");
   });
 
-  it("reverts invalid zoom input to the current persisted value", () => {
+  it("puts back the zoom there was when what is typed is not a size", () => {
     const onZoomPercentChange = vi.fn();
     renderSettingsView({ zoomPercent: 125, onZoomPercentChange });
 
-    const input = screen.getByLabelText("Zoom level");
-    fireEvent.change(input, { target: { value: "oops" } });
-    fireEvent.blur(input);
+    const field = screen.getByLabelText("Zoom level");
+    fireEvent.change(field, { target: { value: "oops" } });
+    fireEvent.blur(field);
 
-    expect(onZoomPercentChange).toHaveBeenCalledWith(100);
-    expect(input).toHaveValue("100%");
+    expect(onZoomPercentChange).not.toHaveBeenCalled();
+    expect(field).toHaveValue("125%");
+  });
+
+  it("offers the zoom steps in a menu beside the field", () => {
+    const onZoomPercentChange = vi.fn();
+    renderSettingsView({ zoomPercent: 100, onZoomPercentChange });
+
+    fireEvent.click(screen.getByRole("button", { name: "Zoom levels" }));
+    const menu = screen.getByRole("menu", { name: "Zoom levels" });
+    expect(
+      within(menu)
+        .getAllByRole("menuitemradio")
+        .map((item) => item.textContent),
+    ).toEqual(["75%", "80%", "90%", "100%", "110%", "120%", "130%", "140%", "150%"]);
+    expect(within(menu).getByRole("menuitemradio", { name: "100%" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+
+    fireEvent.click(within(menu).getByRole("menuitemradio", { name: "120%" }));
+    expect(onZoomPercentChange).toHaveBeenCalledWith(120);
+    expect(screen.queryByRole("menu", { name: "Zoom levels" })).toBeNull();
+  });
+
+  it("lists favorites in the folder tree first", () => {
+    renderSettingsView();
+
+    expect(
+      within(screen.getByLabelText("Favorites placement"))
+        .getAllByRole("option")
+        .map((option) => option.textContent),
+    ).toEqual(["In the folder tree", "In their own section"]);
   });
 
   it("keeps the Terminal app with the other app choices on the Files tab", () => {
@@ -688,18 +749,15 @@ describe("SettingsView", () => {
     if (!(fileOpening instanceof HTMLElement)) {
       throw new Error("Missing File Opening section.");
     }
-    expect(within(fileOpening).getAllByText("Default text editor").length).toBeGreaterThan(0);
-    expect(within(fileOpening).getAllByText("Terminal app").length).toBeGreaterThan(0);
-    expect(
-      within(fileOpening).getByRole("button", { name: "Browse terminal app" }),
-    ).toBeInTheDocument();
+    expect(within(fileOpening).getByRole("button", { name: "Default text editor" })).toBeVisible();
+    expect(within(fileOpening).getByRole("button", { name: "Terminal app" })).toBeVisible();
     cleanup();
 
     // General keeps the startup choices only.
     renderSettingsView({ activeTab: "general" });
-    expect(screen.getByText("Restore last visited folder")).toBeInTheDocument();
-    expect(screen.getByText("Restore open tabs")).toBeInTheDocument();
-    expect(screen.queryAllByText("Terminal app")).toHaveLength(0);
+    expect(screen.getByText("Reopen the last folder")).toBeInTheDocument();
+    expect(screen.getByText("Reopen tabs")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Terminal app" })).toBeNull();
   });
 
   it("switches Restore open tabs on its own, next to Restore last visited folder", () => {
@@ -711,7 +769,7 @@ describe("SettingsView", () => {
     expect(onRestoreOpenTabsOnStartupChange).toHaveBeenCalledWith(true);
   });
 
-  it("forwards terminal browse and reset actions", () => {
+  it("chooses the Terminal app from its pop-up, or goes back to the default", () => {
     const onBrowseTerminalApp = vi.fn();
     const onClearTerminalApp = vi.fn();
     renderSettingsView({
@@ -723,13 +781,20 @@ describe("SettingsView", () => {
       onClearTerminalApp,
     });
 
-    expect(screen.getByText("iTerm")).toBeInTheDocument();
-    expect(screen.getByText("/Applications/iTerm.app")).toBeInTheDocument();
+    const popup = screen.getByRole("button", { name: "Terminal app" });
+    expect(popup).toHaveTextContent("iTerm");
 
-    fireEvent.click(screen.getByRole("button", { name: "Browse terminal app" }));
-    fireEvent.click(screen.getByRole("button", { name: "Use default terminal app" }));
-
+    fireEvent.click(popup);
+    const menu = screen.getByRole("menu", { name: "Terminal app" });
+    expect(within(menu).getByRole("menuitemradio", { name: "iTerm" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Choose…" }));
     expect(onBrowseTerminalApp).toHaveBeenCalled();
+
+    fireEvent.click(popup);
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Terminal" }));
     expect(onClearTerminalApp).toHaveBeenCalled();
   });
 
@@ -751,9 +816,8 @@ describe("SettingsView", () => {
       onOpenItemLimitChange,
     });
 
-    const editorGroup = screen.getByRole("group", { name: "Default text editor" });
-    expect(within(editorGroup).getByText("Zed")).toBeInTheDocument();
-    expect(within(editorGroup).getByText("/Applications/Zed.app")).toBeInTheDocument();
+    const editor = screen.getByRole("button", { name: "Default text editor" });
+    expect(editor).toHaveTextContent("Zed");
 
     fireEvent.change(screen.getByLabelText("File activation"), {
       target: { value: "edit" },
@@ -762,8 +826,10 @@ describe("SettingsView", () => {
       target: { value: "9" },
     });
     fireEvent.blur(screen.getByLabelText("Open and Edit item limit"));
-    fireEvent.click(screen.getByRole("button", { name: "Browse default text editor" }));
-    fireEvent.click(screen.getByRole("button", { name: "Use default text editor" }));
+    fireEvent.click(editor);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Choose…" }));
+    fireEvent.click(editor);
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "TextEdit" }));
 
     expect(onFileActivationActionChange).toHaveBeenCalledWith("edit");
     expect(onOpenItemLimitChange).toHaveBeenCalledWith(9);
@@ -832,27 +898,18 @@ describe("SettingsView", () => {
     expect(screen.getByText("Zed")).toBeInTheDocument();
   });
 
-  it("renders configured favorites with compact icon pickers", () => {
+  it("renders configured favorites with their icons as pickers", () => {
     renderSettingsView();
 
-    expect(screen.getByLabelText("Favorite icon for Home")).toHaveAttribute(
+    const favorites = screen.getByRole("listbox", { name: "Favorites" });
+    const home = within(favorites).getByRole("option", { name: "Home" });
+    expect(within(home).getByLabelText("Favorite icon for Home")).toHaveAttribute(
       "aria-expanded",
       "false",
     );
-    expect(screen.getByText("/Users/demo")).toBeInTheDocument();
-    expect(screen.getByLabelText("Favorite icon for Applications")).toHaveAttribute(
-      "aria-expanded",
-      "false",
-    );
-    expect(screen.getByText("/Applications")).toBeInTheDocument();
+    expect(within(home).getByText("/Users/demo")).toBeInTheDocument();
+    expect(within(favorites).getByText("/Applications")).toBeInTheDocument();
     expect(screen.queryByText("Icon")).toBeNull();
-
-    const homeControls = screen.getByRole("button", { name: "Browse Home" }).parentElement;
-    expect(homeControls).not.toBeNull();
-    if (!homeControls) {
-      throw new Error("Home controls wrapper missing.");
-    }
-    expect(within(homeControls).getByLabelText("Favorite icon for Home")).toBeInTheDocument();
   });
 
   it("forwards favorites placement changes", () => {
@@ -869,7 +926,7 @@ describe("SettingsView", () => {
     expect(onFavoritesPlacementChange).toHaveBeenCalledWith("separate");
   });
 
-  it("forwards favorite add, browse, move, icon, and remove actions", () => {
+  it("forwards favorite add, change, move, icon, and remove actions", () => {
     const onAddFavorite = vi.fn();
     const onBrowseFavorite = vi.fn();
     const onMoveFavorite = vi.fn();
@@ -887,15 +944,42 @@ describe("SettingsView", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add Favorite" }));
     fireEvent.click(screen.getByLabelText("Favorite icon for Home"));
     fireEvent.click(screen.getByLabelText("Favorite icon for Home: Star"));
-    fireEvent.click(screen.getByRole("button", { name: "Browse Home" }));
-    fireEvent.click(screen.getByRole("button", { name: "Move Applications up" }));
+
+    // Nothing is selected yet, so there is nothing to change or remove.
+    expect(screen.getByRole("button", { name: "Remove" })).toBeDisabled();
+    const home = screen.getByRole("option", { name: "Home" });
+    fireEvent.mouseDown(home);
+    fireEvent.click(screen.getByRole("button", { name: "Change Home" }));
+    fireEvent.doubleClick(home);
+
+    const applications = screen.getByRole("option", { name: "Applications" });
+    fireEvent.mouseDown(applications);
     fireEvent.click(screen.getByRole("button", { name: "Remove Applications" }));
+    fireEvent.keyDown(applications, { key: "ArrowUp", altKey: true });
 
     expect(onAddFavorite).toHaveBeenCalledTimes(1);
     expect(onFavoriteIconChange).toHaveBeenCalledWith(0, "star");
-    expect(onBrowseFavorite).toHaveBeenCalledWith(0);
-    expect(onMoveFavorite).toHaveBeenCalledWith(1, "up");
+    expect(onBrowseFavorite).toHaveBeenNthCalledWith(1, 0);
+    expect(onBrowseFavorite).toHaveBeenNthCalledWith(2, 0);
+    expect(onMoveFavorite).toHaveBeenCalledWith(1, 0);
     expect(onRemoveFavorite).toHaveBeenCalledWith(1);
+  });
+
+  it("keeps the Trash in the favorites", () => {
+    const onRemoveFavorite = vi.fn();
+    renderSettingsView({
+      favorites: [
+        { path: "/Users/demo", icon: "home" },
+        { path: "/Users/demo/.Trash", icon: "trash" },
+      ],
+      onRemoveFavorite,
+    });
+
+    const trash = screen.getByRole("option", { name: "Trash" });
+    fireEvent.mouseDown(trash);
+    expect(screen.getByRole("button", { name: "Remove Trash" })).toBeDisabled();
+    fireEvent.keyDown(trash, { key: "Backspace" });
+    expect(onRemoveFavorite).not.toHaveBeenCalled();
   });
 
   it("renders favorite icon picker popovers in a body portal", () => {
@@ -905,13 +989,11 @@ describe("SettingsView", () => {
 
     const iconDialog = screen.getByRole("dialog", { name: "Favorite icon for Home options" });
     expect(iconDialog.parentElement).toBe(document.body);
-    expect(iconDialog).toHaveStyle({
-      position: "fixed",
-      gridTemplateColumns: "repeat(6, 34px)",
-    });
+    expect(iconDialog).toHaveClass("settings-icon-grid");
+    expect(iconDialog).toHaveStyle({ gridTemplateColumns: "repeat(6, 30px)" });
   });
 
-  it("forwards Open With add, browse, move, and remove actions", () => {
+  it("forwards Open With add, change, move, and remove actions", () => {
     const onAddOpenWithApplication = vi.fn();
     const onBrowseOpenWithApplication = vi.fn();
     const onMoveOpenWithApplication = vi.fn();
@@ -925,13 +1007,16 @@ describe("SettingsView", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Add Open With application" }));
-    fireEvent.click(screen.getByRole("button", { name: "Browse Visual Studio Code" }));
-    fireEvent.click(screen.getByRole("button", { name: "Move Zed up" }));
+    fireEvent.mouseDown(screen.getByRole("option", { name: "Visual Studio Code" }));
+    fireEvent.click(screen.getByRole("button", { name: "Change Visual Studio Code" }));
+    const zed = screen.getByRole("option", { name: "Zed" });
+    fireEvent.mouseDown(zed);
     fireEvent.click(screen.getByRole("button", { name: "Remove Zed" }));
+    fireEvent.keyDown(zed, { key: "ArrowUp", metaKey: true });
 
     expect(onAddOpenWithApplication).toHaveBeenCalledTimes(1);
     expect(onBrowseOpenWithApplication).toHaveBeenCalledWith("vscode");
-    expect(onMoveOpenWithApplication).toHaveBeenCalledWith("zed", "up");
+    expect(onMoveOpenWithApplication).toHaveBeenCalledWith("zed", 0);
     expect(onRemoveOpenWithApplication).toHaveBeenCalledWith("zed");
   });
 });

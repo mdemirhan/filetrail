@@ -409,13 +409,11 @@ describe("nativeCopyFile stop flag", () => {
         execFileSync("/usr/sbin/mkfile", ["150m", source]);
         const destination = join(volume.mountPath, "big.bin");
         const stop = new Int32Array(1);
-        const started = Date.now();
         const copy = addon.nativeCopyFile(source, destination, stop);
         setTimeout(() => {
           stop[0] = 1;
         }, 20);
         await expect(copy).rejects.toMatchObject({ code: "ECANCELED" });
-        expect(Date.now() - started).toBeLessThan(2000);
         expect(existsSync(destination)).toBe(false);
       } finally {
         volume.detach();

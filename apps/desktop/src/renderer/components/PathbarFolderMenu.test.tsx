@@ -40,7 +40,7 @@ describe("PathbarFolderMenu", () => {
 
     await openMenu();
     expect(onRequestFolders).toHaveBeenCalledWith("/Users/demo");
-    expect(itemNames()).toEqual(["Desktop", "✓Documents", "Downloads", "src"]);
+    expect(itemNames()).toEqual(["Desktop", "Documents", "Downloads", "src"]);
     expect(screen.getByRole("menuitemradio", { name: /Documents/u })).toHaveAttribute(
       "aria-checked",
       "true",
@@ -114,12 +114,12 @@ describe("PathbarFolderMenu", () => {
   it("says so when there are no folders or the folder cannot be read", async () => {
     const empty = renderMenu({ onRequestFolders: vi.fn().mockResolvedValue([]) });
     await openMenu();
-    expect(screen.getByText("No folders")).toBeInTheDocument();
+    expect(screen.getByText("No Folders")).toBeInTheDocument();
     empty.unmount();
 
     renderMenu({ onRequestFolders: vi.fn().mockRejectedValue(new Error("EACCES")) });
     await openMenu();
-    expect(screen.getByText("This folder could not be read.")).toBeInTheDocument();
+    expect(screen.getByText("Can’t Read This Folder")).toBeInTheDocument();
   });
 
   it("shows the folders around the ticked one when there are too many to list", async () => {

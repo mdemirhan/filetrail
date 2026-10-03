@@ -446,3 +446,47 @@ function resolveFavoriteIconPath(icon: FavoriteIconId): string {
   }
   return "M12 4a8 8 0 1 0 0 16a8 8 0 0 0 0-16M4.5 12h15M12 4.5a12.8 12.8 0 0 1 0 15M12 4.5a12.8 12.8 0 0 0 0 15";
 }
+
+// An application's own icon, as Finder draws it, for the app pop-ups and lists in Settings.
+// Until it arrives a plain document stands in.
+export function AppIcon({ path }: { path: string }) {
+  const client = useFiletrailClient();
+  const cacheKey = `app:${path}`;
+  const [iconSrc, setIconSrc] = useState<string | null>(
+    () => nativeIconCache.get(cacheKey) ?? null,
+  );
+
+  useEffect(() => {
+    const cached = readNativeIcon(cacheKey);
+    if (cached !== undefined) {
+      setIconSrc(cached);
+      return;
+    }
+    let cancelled = false;
+    void requestNativeIcon(client, { cacheKey, kindKey: cacheKey, path, large: false }).then(
+      (base64) => {
+        if (!cancelled) {
+          setIconSrc(base64);
+        }
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [cacheKey, client, path]);
+
+  return iconSrc ? (
+    <span className="file-icon native-file-icon" aria-hidden>
+      <img
+        src={`data:image/png;base64,${iconSrc}`}
+        alt=""
+        className="file-icon-native-img"
+        draggable={false}
+      />
+    </span>
+  ) : (
+    <span className="file-icon document" aria-hidden>
+      <DocumentSvg />
+    </span>
+  );
+}

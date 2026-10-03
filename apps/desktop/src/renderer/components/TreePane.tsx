@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import type { FavoritePreference, FavoritesPlacement } from "../../shared/appPreferences";
+import { useDelayedFlag } from "../hooks/useDelayedFlag";
 import {
   ClipboardMarkIcon,
   clipboardMarkClassName,
@@ -711,6 +712,9 @@ function TreeList({
   );
 }
 
+// How long a folder in the tree loads before it says so.
+const TREE_LOADING_DELAY_MS = 400;
+
 function TreeItemRow({
   item,
   isPaneFocused,
@@ -787,6 +791,9 @@ function TreeItemRow({
   onSubviewFocus: () => void;
   registerRowRef: (id: string, element: HTMLDivElement | null) => void;
 }) {
+  // Most folders list in a few milliseconds: their "Loading folder…" line would only flash
+  // under the row (and vanish again for a folder without subfolders), so it waits.
+  const showLoading = useDelayedFlag(item.loading === true, TREE_LOADING_DELAY_MS);
   const isCurrent = (optimisticSelectedItemId ?? selectedTreeItemId) === item.id;
   const isMenuTarget =
     contextMenuTarget !== null &&
@@ -1039,7 +1046,7 @@ function TreeItemRow({
           </span>
         ) : null}
       </div>
-      {item.loading ? (
+      {item.loading && showLoading ? (
         <div
           className="tree-loading"
           style={{ paddingLeft: `calc(38px + ${item.depth} * var(--tree-indent))` }}

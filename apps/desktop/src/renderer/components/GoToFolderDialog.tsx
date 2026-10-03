@@ -5,6 +5,7 @@ import type { IpcResponse } from "@filetrail/contracts";
 import { usePathSuggestions } from "../hooks/usePathSuggestions";
 import { getFocusableElements } from "../lib/focusUtils";
 import { type Place, isPathQuery, rankPlaces } from "../lib/places";
+import { PushButton } from "./PushButton";
 
 type PathSuggestion = IpcResponse<"path:getSuggestions">["suggestions"][number];
 
@@ -32,7 +33,7 @@ export function GoToFolderDialog({
   title = "Go To",
   inputAriaLabel = "Folder name or path",
   submitLabel = "Open",
-  browseLabel = "Browse",
+  browseLabel = "Choose…",
   onBrowse = null,
   onClose,
   onSubmit,
@@ -61,6 +62,8 @@ export function GoToFolderDialog({
   onRequestPathSuggestions: (inputPath: string) => Promise<IpcResponse<"path:getSuggestions">>;
 }) {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
+  // Go To needs no title over its field; Move To says what it is for.
+  const showTitle = title !== "Go To";
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
   const openRef = useRef(open);
@@ -320,22 +323,7 @@ export function GoToFolderDialog({
           }
         }}
       >
-        <div className="go-to-folder-header">
-          <div className="go-to-folder-header-copy">
-            <h2>{title}</h2>
-          </div>
-          <button
-            type="button"
-            className="go-to-folder-close"
-            onClick={onClose}
-            title="Close (Esc)"
-            aria-label="Close"
-          >
-            <svg viewBox="0 0 14 14" fill="none" aria-hidden="true">
-              <path d="M1 1l12 12M13 1L1 13" />
-            </svg>
-          </button>
-        </div>
+        {showTitle ? <h2 className="go-to-folder-title">{title}</h2> : null}
         <form
           id="go-to-folder-form"
           onSubmit={(event) => {
@@ -446,6 +434,14 @@ export function GoToFolderDialog({
                     ? `${rows.length} match${rows.length === 1 ? "" : "es"}`
                     : "Folders you use"}
                 </span>
+                {/* The keys that are easy to miss: Tab completes a path, ⌘⌫ forgets a folder. */}
+                <span className="go-to-folder-hint" aria-hidden="true">
+                  {pathMode
+                    ? "⇥ Completes"
+                    : onForgetPlace && selectedRow?.canForget
+                      ? "⌘⌫ Removes from List"
+                      : null}
+                </span>
               </div>
               <ul
                 ref={listRef}
@@ -497,7 +493,10 @@ export function GoToFolderDialog({
                         <span className="go-to-folder-suggestion-name">
                           {renderHighlightedName(row.name, row.nameRanges)}
                         </span>
-                        <span className="go-to-folder-suggestion-path">{row.detail}</span>
+                        {/* A long path is shortened at its start: its end says where it is. */}
+                        <span className="go-to-folder-suggestion-path" dir="rtl">
+                          <bdi dir="ltr">{row.detail}</bdi>
+                        </span>
                       </button>
                     </li>
                   );
@@ -518,49 +517,29 @@ export function GoToFolderDialog({
         </div>
 
         <div className="go-to-folder-footer">
-          <div className="go-to-folder-footer-hints" aria-hidden="true">
-            <kbd>↑↓</kbd>
-            <span>choose</span>
-            {pathMode ? (
-              <>
-                <kbd>⇥</kbd>
-                <span>complete</span>
-              </>
-            ) : onForgetPlace ? (
-              <>
-                <kbd>⌘⌫</kbd>
-                <span>forget</span>
-              </>
-            ) : null}
-          </div>
-          <div className="go-to-folder-footer-actions">
-            <button
-              type="button"
-              className="go-to-folder-cancel"
-              onClick={onClose}
-              disabled={submitting}
+          {onBrowse ? (
+            <PushButton
+              className="go-to-folder-browse"
+              onClick={() => void handleBrowse()}
+              disabled={submitting || browseInProgress}
             >
-              Cancel
-            </button>
-            {onBrowse ? (
-              <button
-                type="button"
-                className="go-to-folder-browse"
-                onClick={() => void handleBrowse()}
-                disabled={submitting || browseInProgress}
-              >
-                {browseInProgress ? `${browseLabel}...` : browseLabel}
-              </button>
-            ) : null}
-            <button
-              type="submit"
-              form="go-to-folder-form"
-              className="go-to-folder-submit"
-              disabled={!canSubmit}
-            >
-              {submitting ? `${submitLabel}...` : submitLabel}
-            </button>
-          </div>
+              {browseLabel}
+            </PushButton>
+          ) : null}
+          <span className="go-to-folder-footer-spacer" />
+          <PushButton className="go-to-folder-cancel" onClick={onClose} disabled={submitting}>
+            Cancel
+          </PushButton>
+          <PushButton
+            type="submit"
+            form="go-to-folder-form"
+            variant="default"
+            className="go-to-folder-submit"
+            disabled={!canSubmit}
+            aria-busy={submitting}
+          >
+            {submitLabel}
+          </PushButton>
         </div>
       </dialog>
     </div>

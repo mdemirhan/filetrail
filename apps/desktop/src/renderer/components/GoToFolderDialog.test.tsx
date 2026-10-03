@@ -276,9 +276,9 @@ describe("GoToFolderDialog", () => {
     fireEvent.submit(form);
     expect(handleSubmit).toHaveBeenCalledWith("/Users/demo/Downloads");
 
-    // Browse puts the picked folder into the field as a path.
+    // Choose… puts the picked folder into the field as a path.
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Browse" }));
+      fireEvent.click(screen.getByRole("button", { name: "Choose…" }));
     });
     expect(handleBrowse).toHaveBeenCalledWith("/Users/demo");
     expect(field.value).toBe("/Users/demo/Picked");

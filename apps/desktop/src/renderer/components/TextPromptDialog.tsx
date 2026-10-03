@@ -1,6 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
-import { getFocusableElements } from "../lib/focusUtils";
+import { Alert } from "./Alert";
+import { PushButton } from "./PushButton";
+
+// Asks for a name (Rename, New Folder) in an alert with a field. Return submits it, Escape
+// cancels, and the name is selected (or the caret put at its end) when it opens.
 
 export function TextPromptDialog({
   open,
@@ -28,7 +32,7 @@ export function TextPromptDialog({
   onSubmit: (value: string) => void;
 }) {
   const [draftValue, setDraftValue] = useState(value);
-  const dialogRef = useRef<HTMLDialogElement | null>(null);
+  const formId = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const wasOpenRef = useRef(open);
   const focusedOpenRef = useRef(open);
@@ -87,106 +91,64 @@ export function TextPromptDialog({
     return null;
   }
 
+  const trimmed = draftValue.trim();
   return (
-    <div className="action-notice-backdrop" role="presentation">
-      <dialog
-        ref={dialogRef}
-        open
-        className="action-notice-dialog copy-paste-dialog"
-        aria-label={title}
-        aria-modal="true"
-        onCancel={(event) => {
+    <Alert
+      title={title}
+      message={message}
+      initialFocusRef={inputRef}
+      buttons={
+        <>
+          <PushButton onClick={onClose}>Cancel</PushButton>
+          <PushButton type="submit" form={formId} variant="default" disabled={trimmed.length === 0}>
+            {submitLabel}
+          </PushButton>
+        </>
+      }
+    >
+      <form
+        id={formId}
+        onSubmit={(event) => {
           event.preventDefault();
-          onCloseRef.current();
+          if (trimmed.length === 0) {
+            return;
+          }
+          onSubmit(trimmed);
         }}
-        onMouseDown={(event) => event.stopPropagation()}
-        onKeyDown={(event) => {
-          if (event.defaultPrevented || event.key !== "Tab") {
-            return;
-          }
-          const dialog = dialogRef.current;
-          if (!dialog) {
-            return;
-          }
-          const focusableElements = getFocusableElements(dialog);
-          if (focusableElements.length === 0) {
-            return;
-          }
-          const activeElement = document.activeElement;
-          const currentIndex =
-            activeElement instanceof HTMLElement ? focusableElements.indexOf(activeElement) : -1;
-          const nextIndex = event.shiftKey
-            ? currentIndex <= 0
-              ? focusableElements.length - 1
-              : currentIndex - 1
-            : currentIndex < 0 || currentIndex >= focusableElements.length - 1
-              ? 0
-              : currentIndex + 1;
-          event.preventDefault();
-          focusableElements[nextIndex]?.focus();
-        }}
+        className="text-prompt-form"
       >
-        <div className="action-notice-title">{title}</div>
-        {message ? <p className="action-notice-message">{message}</p> : null}
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            const nextValue = draftValue.trim();
-            if (nextValue.length === 0) {
+        <input
+          ref={inputRef}
+          className="text-prompt-input"
+          aria-label={label}
+          value={draftValue}
+          placeholder={placeholder}
+          onFocus={(event) => {
+            const selectionMode = initialSelectionModeRef.current;
+            if (!selectionMode) {
               return;
             }
-            onSubmit(nextValue);
-          }}
-          className="text-prompt-form"
-        >
-          <label htmlFor="text-prompt-dialog-input" className="text-prompt-label">
-            {label}
-          </label>
-          <input
-            ref={inputRef}
-            id="text-prompt-dialog-input"
-            className="text-prompt-input"
-            value={draftValue}
-            placeholder={placeholder}
-            onFocus={(event) => {
-              const selectionMode = initialSelectionModeRef.current;
-              if (!selectionMode) {
+            initialSelectionModeRef.current = null;
+            const input = event.currentTarget;
+            window.setTimeout(() => {
+              if (inputRef.current !== input || document.activeElement !== input) {
                 return;
               }
-              initialSelectionModeRef.current = null;
-              const input = event.currentTarget;
-              window.setTimeout(() => {
-                if (inputRef.current !== input || document.activeElement !== input) {
-                  return;
-                }
-                if (selectionMode === "all") {
-                  input.select();
-                  input.setSelectionRange(0, input.value.length);
-                  return;
-                }
-                const caretIndex = input.value.length;
-                input.setSelectionRange(caretIndex, caretIndex);
-              }, 0);
-            }}
-            onChange={(event) => setDraftValue(event.currentTarget.value)}
-            spellCheck={false}
-            autoComplete="off"
-          />
-          {error ? <div className="text-prompt-error">{error}</div> : null}
-          <div className="action-notice-actions">
-            <button type="button" className="tb-btn" onClick={onClose}>
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="tb-btn primary"
-              disabled={draftValue.trim().length === 0}
-            >
-              {submitLabel}
-            </button>
-          </div>
-        </form>
-      </dialog>
-    </div>
+              if (selectionMode === "all") {
+                input.select();
+                input.setSelectionRange(0, input.value.length);
+                return;
+              }
+              const caretIndex = input.value.length;
+              input.setSelectionRange(caretIndex, caretIndex);
+            }, 0);
+          }}
+          onChange={(event) => setDraftValue(event.currentTarget.value)}
+          spellCheck={false}
+          autoComplete="off"
+        />
+        {error ? <div className="text-prompt-error">{error}</div> : null}
+      </form>
+    </Alert>
   );
 }

@@ -140,6 +140,8 @@ describe("appStateStore", () => {
       viewMode: "details" as const,
       sortBy: "name" as const,
       sortDirection: "asc" as const,
+      includeHidden: false,
+      foldersFirst: true,
     };
 
     // Opening, switching and closing tabs is where the user is, not a setting.
@@ -196,6 +198,7 @@ describe("appStateStore", () => {
               viewMode: "details",
               sortBy: "size",
               sortDirection: "desc",
+              includeHidden: true,
             },
             "not a tab",
             { path: "", treeRootPath: 7, viewMode: "gallery", sortBy: "colour" },
@@ -216,7 +219,10 @@ describe("appStateStore", () => {
         viewMode: "details",
         sortBy: "size",
         sortDirection: "desc",
+        includeHidden: true,
+        foldersFirst: true,
       },
+      // A tab saved before tabs had their own settings takes the window's.
       {
         path: null,
         treeRootPath: null,
@@ -224,6 +230,8 @@ describe("appStateStore", () => {
         viewMode: "list",
         sortBy: "name",
         sortDirection: "asc",
+        includeHidden: false,
+        foldersFirst: true,
       },
     ]);
   });
@@ -353,7 +361,7 @@ describe("appStateStore", () => {
       lastVisitedPath: null,
       lastVisitedFavoritePath: null,
       favorites: [],
-      favoritesPlacement: "separate",
+      favoritesPlacement: "integrated",
       favoritesExpanded: true,
       favoritesInitialized: false,
     });
@@ -454,6 +462,8 @@ describe("appStateStore", () => {
           viewMode: "details",
           sortBy: "size",
           sortDirection: "desc",
+          includeHidden: true,
+          foldersFirst: false,
         },
         {
           path: "/Users/demo/Documents",
@@ -462,6 +472,8 @@ describe("appStateStore", () => {
           viewMode: "list",
           sortBy: "name",
           sortDirection: "asc",
+          includeHidden: false,
+          foldersFirst: true,
         },
       ],
       activeTabIndex: 1,
@@ -568,6 +580,8 @@ describe("appStateStore", () => {
           viewMode: "details",
           sortBy: "size",
           sortDirection: "desc",
+          includeHidden: true,
+          foldersFirst: false,
         },
         {
           path: "/Users/demo/Documents",
@@ -576,6 +590,8 @@ describe("appStateStore", () => {
           viewMode: "list",
           sortBy: "name",
           sortDirection: "asc",
+          includeHidden: false,
+          foldersFirst: true,
         },
       ],
       activeTabIndex: 1,

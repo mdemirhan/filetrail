@@ -84,6 +84,18 @@ export function nativeGetFileIcon(path: string, size: number): Promise<Buffer | 
 export function nativeGetFileThumbnail(path: string, size: number): Promise<Buffer | null>;
 
 /**
+ * What Finder shows in its Kind column for the file ("Markdown Document", "PNG image",
+ * "Plain Text Document"): the localized description of its type
+ * (`NSURLLocalizedTypeDescriptionKey`), which the apps that open it can name.
+ *
+ * Synchronous and fast; callers cache it per extension. `null` when there is none, and
+ * when the loaded binary predates this function.
+ *
+ * @param path - Absolute path to the file.
+ */
+export function nativeKindForPath(path: string): string | null;
+
+/**
  * Recursively calculates the total size of a folder using `getattrlistbulk(2)`.
  *
  * Returns a JSON string:

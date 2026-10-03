@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#import <CoreServices/CoreServices.h>
 #import <Foundation/Foundation.h>
 #import <ImageIO/ImageIO.h>
 #import <QuickLookThumbnailing/QuickLookThumbnailing.h>
@@ -243,11 +244,83 @@ static napi_value js_get_file_thumbnail(napi_env env, napi_callback_info info) {
   return promise;
 }
 
+/* nativeKindForPath(path) → string | null
+   What Finder shows in its Kind column for this file ("Markdown Document", "PNG image",
+   "Plain Text Document"). null when there is none. Fast and synchronous: callers cache it per
+   extension, since files with the same extension share it. */
+static napi_value js_kind_for_path(napi_env env, napi_callback_info info) {
+  size_t argc = 1;
+  napi_value argv[1];
+  napi_value result;
+  napi_get_null(env, &result);
+  if (napi_get_cb_info(env, info, &argc, argv, NULL, NULL) != napi_ok || argc < 1) {
+    return result;
+  }
+  char path[4096];
+  size_t length = 0;
+  if (napi_get_value_string_utf8(env, argv[0], path, sizeof(path), &length) != napi_ok ||
+      length == 0) {
+    return result;
+  }
+  @autoreleasepool {
+    NSString *string = [NSString stringWithUTF8String:path];
+    NSURL *url = string ? [NSURL fileURLWithPath:string] : nil;
+    /* Spotlight's kind (kMDItemKind) is the one Finder's Kind column shows: "Markdown
+       Document", "Plain Text Document", where the type's own description is "Markdown"
+       or "text". It is worked out from the file when asked, indexed or not. */
+    MDItemRef item = MDItemCreate(kCFAllocatorDefault, (CFStringRef)string);
+    if (item) {
+      CFTypeRef value = MDItemCopyAttribute(item, kMDItemKind);
+      CFRelease(item);
+      if (value) {
+        BOOL found = CFGetTypeID(value) == CFStringGetTypeID() &&
+                     CFStringGetLength((CFStringRef)value) > 0;
+        if (found) {
+          napi_create_string_utf8(env, [(NSString *)value UTF8String], NAPI_AUTO_LENGTH, &result);
+        }
+        CFRelease(value);
+        if (found) {
+          return result;
+        }
+      }
+    }
+    /* Then Launch Services' kind string, deprecated but without a replacement in the same
+       words, then the type's own description. */
+    CFStringRef kind = NULL;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    if (url && LSCopyKindStringForURL((CFURLRef)url, &kind) == noErr && kind) {
+#pragma clang diagnostic pop
+      NSString *string = (NSString *)kind;
+      BOOL found = string.length > 0;
+      if (found) {
+        napi_create_string_utf8(env, string.UTF8String, NAPI_AUTO_LENGTH, &result);
+      }
+      CFRelease(kind);
+      if (found) {
+        return result;
+      }
+    }
+    NSString *description = nil;
+    if (url && [url getResourceValue:&description
+                              forKey:NSURLLocalizedTypeDescriptionKey
+                               error:NULL] &&
+        description.length > 0) {
+      napi_create_string_utf8(env, description.UTF8String, NAPI_AUTO_LENGTH, &result);
+    }
+  }
+  return result;
+}
+
 /* Called from the main module init in native_copyfile.c. */
 napi_value register_file_thumbnail(napi_env env, napi_value exports) {
   napi_value fn;
   napi_create_function(env, "nativeGetFileThumbnail", NAPI_AUTO_LENGTH, js_get_file_thumbnail,
                        NULL, &fn);
   napi_set_named_property(env, exports, "nativeGetFileThumbnail", fn);
+  napi_value kind_fn;
+  napi_create_function(env, "nativeKindForPath", NAPI_AUTO_LENGTH, js_kind_for_path, NULL,
+                       &kind_fn);
+  napi_set_named_property(env, exports, "nativeKindForPath", kind_fn);
   return exports;
 }

@@ -9,6 +9,7 @@ import {
   listDirectorySnapshot,
   listTreeChildren,
   resolvePathTarget,
+  setKindDescriber,
 } from "./explorerService";
 
 describe("explorerService", () => {
@@ -90,6 +91,27 @@ describe("explorerService", () => {
     expect(response.item.sizeBytes).toBe(11);
     expect(response.item.kindLabel).toBe("TXT File");
     expect(response.item.permissionMode).not.toBeNull();
+  });
+
+  it("names kinds as the system does, asking once per extension", async () => {
+    const root = await mkdtemp(join(tmpdir(), "filetrail-core-"));
+    await writeFile(join(root, "a.md"), "# a", "utf8");
+    await writeFile(join(root, "b.md"), "# b", "utf8");
+    await writeFile(join(root, "c.xyz"), "?", "utf8");
+    const describer = vi.fn((path: string) => (path.endsWith(".md") ? "Markdown Document" : null));
+    setKindDescriber(describer);
+    try {
+      const kinds = await Promise.all(
+        ["a.md", "b.md", "c.xyz"].map(
+          async (name) => (await getItemProperties(join(root, name))).item.kindLabel,
+        ),
+      );
+      // A kind the system doesn't know keeps the short form.
+      expect(kinds).toEqual(["Markdown Document", "Markdown Document", "XYZ File"]);
+      expect(describer).toHaveBeenCalledTimes(2);
+    } finally {
+      setKindDescriber(null);
+    }
   });
 
   it("sorts files by modified time when requested", async () => {

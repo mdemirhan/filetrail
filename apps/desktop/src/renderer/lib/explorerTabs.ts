@@ -84,9 +84,10 @@ export type TabSnapshot = {
   leftPaneSubview: "favorites" | "tree";
   // The pane that had the keyboard, which gets it back when the tab is shown again.
   focusedPane: "tree" | "content";
-  // Whether hidden files were showing when the tab was left. If that has changed since,
-  // the tree it had on screen lists the wrong folders and is built again.
+  // Whether the tab shows hidden files, and folders before files: each tab has its own, and
+  // a new tab starts with the one it was opened from.
   includeHidden: boolean;
+  foldersFirst: boolean;
   // null for a tab that has not been shown yet (one restored at launch): its folder and
   // tree are read when it is first opened.
   view: TabViewState | null;

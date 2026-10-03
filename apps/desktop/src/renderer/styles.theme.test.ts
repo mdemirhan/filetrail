@@ -70,7 +70,15 @@ const ALLOWED_HARD_CODED_COLORS: ReadonlyArray<{ selector: RegExp; reason: strin
     selector: /^\.copy-paste-progress-card-track-shimmer$/,
     reason: "white sheen over the accent-colored progress fill",
   },
-  { selector: /^\.settings-toggle-track::after$/, reason: "white switch knob, as in macOS" },
+  { selector: /^\.settings-switch::after$/, reason: "white switch knob, as in macOS" },
+  {
+    selector: /^\.settings-checkbox input:checked$/,
+    reason: "white checkmark on the accent, as in macOS",
+  },
+  {
+    selector: /^\.settings-accent-swatch\.is-custom$/,
+    reason: "the color wheel that stands for a custom accent color, as in macOS",
+  },
   {
     selector: /\.active:not\(\.inactive\)/,
     reason: "focused selection is white text on the accent, as in Finder",
@@ -234,27 +242,55 @@ describe("theme styles", () => {
     ).toHaveLength(1);
     expect(
       shared("background", [
-        ".toolbar-menu-item:hover",
+        '.toolbar-menu-item:hover:not(:disabled):not([aria-disabled="true"])',
         ".toolbar-menu-item.active",
         ".context-menu-item.active:not(.disabled)",
-        ".context-submenu-item:hover",
+        ".context-submenu-item.active",
       ]).map((d) => d.value),
     ).toEqual(["var(--ft-accent-solid-button)"]);
   });
 
-  it("fills the default button of every dialog with the accent, never the destructive red", () => {
+  it("fills the default button with the accent, and never draws it in the destructive red", () => {
     const all = parseDeclarations(styles);
-    const primaryRules = all.filter((d) =>
-      d.selector.split(",").some((part) => /\.tb-btn\.primary(?![-\w])/.test(part)),
+    const defaultRules = all.filter((d) =>
+      d.selector.split(",").some((part) => /\.push-button\.is-default(?![-\w])/.test(part)),
     );
-    expect(primaryRules.some((d) => d.value.includes("--danger"))).toBe(false);
-    for (const dialog of [".copy-paste-sheet", ".copy-paste-conflict-alert", ".action-notice-dialog"]) {
-      const background = all.find(
-        (d) =>
-          d.property === "background" &&
-          d.selector.split(",").some((part) => part.trim() === `${dialog} .tb-btn.primary`),
+    expect(defaultRules.some((d) => d.value.includes("--danger"))).toBe(false);
+    const background = all.find(
+      (d) => d.property === "background" && d.selector === ".push-button.is-default",
+    );
+    expect(background?.value).toBe("var(--ft-accent-solid-button)");
+    const destructive = all.find(
+      (d) => d.property === "color" && d.selector === ".push-button.is-destructive",
+    );
+    expect(destructive?.value).toBe("var(--danger-text)");
+  });
+
+  it("keeps menu shortcuts and disabled items readable in every theme", () => {
+    const all = parseDeclarations(styles);
+    const themes: ThemeMode[] = [
+      "macos-light",
+      "warm-paper",
+      "sand",
+      "macos-dark",
+      "catppuccin-mocha",
+      "tomorrow-night",
+    ];
+    for (const theme of themes) {
+      const base = resolveThemeCssBase(theme);
+      const block = base === "light" ? ":root" : `:root[data-theme="${base}"]`;
+      const token = (name: string) =>
+        getThemeVariantCssOverrides(theme)[name] ??
+        all.find((d) => d.selector === block && d.property === name)?.value ??
+        "";
+      const menu = hexToRgb(token("--context-menu-bg"));
+      const shortcut = hexToRgb(token("--context-menu-shortcut"));
+      const disabled = hexToRgb(token("--context-menu-disabled"));
+      expect(contrast(shortcut, menu), `${theme}: shortcut`).toBeGreaterThanOrEqual(3);
+      expect(contrast(disabled, menu), `${theme}: disabled`).toBeGreaterThanOrEqual(2);
+      expect(contrast(disabled, menu), `${theme}: disabled vs shortcut`).toBeLessThan(
+        contrast(shortcut, menu),
       );
-      expect(background?.value, dialog).toBe("var(--ft-accent-solid-button)");
     }
   });
 

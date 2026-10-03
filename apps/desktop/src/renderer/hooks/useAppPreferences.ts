@@ -124,7 +124,11 @@ export function useAppPreferences() {
     applyAppearance({ theme: effectiveTheme, accent, uiFontFamily });
   }, [accent, effectiveTheme, uiFontFamily]);
 
+  // Everything on the Appearance tab, back as a new install has it.
   function resetAppearanceSettings() {
+    setTheme(DEFAULT_APP_PREFERENCES.theme);
+    setAutoLightTheme(DEFAULT_APP_PREFERENCES.autoLightTheme);
+    setAutoDarkTheme(DEFAULT_APP_PREFERENCES.autoDarkTheme);
     setAccent(DEFAULT_APP_PREFERENCES.accent);
     setZoomPercent(DEFAULT_APP_PREFERENCES.zoomPercent);
     setUiFontFamily(DEFAULT_APP_PREFERENCES.uiFontFamily);

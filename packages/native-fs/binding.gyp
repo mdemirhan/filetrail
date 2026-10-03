@@ -18,6 +18,8 @@
           "-framework",
           "AppKit",
           "-framework",
+          "CoreServices",
+          "-framework",
           "ImageIO",
           "-framework",
           "QuickLookThumbnailing",
@@ -29,6 +31,7 @@
       "link_settings": {
         "libraries": [
           "-framework AppKit",
+          "-framework CoreServices",
           "-framework ImageIO",
           "-framework QuickLookThumbnailing",
           "-framework UniformTypeIdentifiers"

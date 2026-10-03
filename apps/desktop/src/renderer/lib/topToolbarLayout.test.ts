@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 
 import {
   TOP_TOOLBAR_LAYOUT,
+  resolveToolbarCapsules,
   resolveTopToolbarSlots,
   resolveVisibleOptionalCount,
   selectTopToolbarSlots,
@@ -14,14 +15,21 @@ function widthsOf(slots: ReturnType<typeof resolveTopToolbarSlots>, width = 32) 
   return new Map(slots.map((slot) => [slot.key, width]));
 }
 
-// The narrowest a row of `fixedCount` 32-wide items, the title and the search field can be.
-function minRowWidth(fixedCount: number) {
+// The narrowest a row of 32-wide items, the title and the search field can be: each capsule
+// of buttons also reaches past its first and last button.
+function minRowWidth(row: ReturnType<typeof resolveTopToolbarSlots>) {
+  const fixedCount = row.filter((slot) => slot.id !== "title" && slot.id !== "search").length;
+  const capsuleEnds = Array.from(resolveToolbarCapsules(row).values()).reduce(
+    (count, edges) => count + (edges.start ? 1 : 0) + (edges.end ? 1 : 0),
+    0,
+  );
   return (
     fixedCount * 32 +
     TOP_TOOLBAR_LAYOUT.titleMinWidth +
     TOP_TOOLBAR_LAYOUT.searchMinWidth +
     2 * TOP_TOOLBAR_LAYOUT.edgedItemInset +
-    (fixedCount + 1) * TOP_TOOLBAR_LAYOUT.itemGap
+    capsuleEnds * (TOP_TOOLBAR_LAYOUT.capsulePadding + TOP_TOOLBAR_LAYOUT.edgedItemInset) +
+    (row.length - 1) * TOP_TOOLBAR_LAYOUT.itemGap
   );
 }
 
@@ -33,6 +41,7 @@ describe("TOP_TOOLBAR_LAYOUT", () => {
     expect({
       itemGap: sizeOf("--toolbar-item-gap"),
       edgedItemInset: sizeOf("--toolbar-edged-item-inset"),
+      capsulePadding: sizeOf("--toolbar-capsule-padding"),
       titleMinWidth: sizeOf("--toolbar-title-min-width"),
       searchWidth: sizeOf("--toolbar-search-width"),
       searchFocusedWidth: sizeOf("--toolbar-search-focused-width"),
@@ -117,14 +126,30 @@ describe("resolveVisibleOptionalCount", () => {
   it("keeps every item while the title and search field can still give room", () => {
     // Six fixed items: four removable, plus the clipboard button and View Options.
     expect(resolveVisibleOptionalCount({ slots, widths, availableWidth: 1200 })).toBe(4);
-    expect(resolveVisibleOptionalCount({ slots, widths, availableWidth: minRowWidth(6) })).toBe(4);
+    expect(
+      resolveVisibleOptionalCount({
+        slots,
+        widths,
+        availableWidth: minRowWidth(selectTopToolbarSlots(slots, 4)),
+      }),
+    ).toBe(4);
   });
 
   it("hides the removable items nearest the end first, and never a required one", () => {
-    expect(resolveVisibleOptionalCount({ slots, widths, availableWidth: minRowWidth(6) - 1 })).toBe(
-      3,
-    );
-    expect(resolveVisibleOptionalCount({ slots, widths, availableWidth: minRowWidth(3) })).toBe(1);
+    expect(
+      resolveVisibleOptionalCount({
+        slots,
+        widths,
+        availableWidth: minRowWidth(selectTopToolbarSlots(slots, 4)) - 1,
+      }),
+    ).toBe(3);
+    expect(
+      resolveVisibleOptionalCount({
+        slots,
+        widths,
+        availableWidth: minRowWidth(selectTopToolbarSlots(slots, 1)),
+      }),
+    ).toBe(1);
     expect(resolveVisibleOptionalCount({ slots, widths, availableWidth: 40 })).toBe(0);
   });
 
@@ -134,7 +159,7 @@ describe("resolveVisibleOptionalCount", () => {
       resolveVisibleOptionalCount({
         slots,
         widths: wideClipboard,
-        availableWidth: minRowWidth(6),
+        availableWidth: minRowWidth(selectTopToolbarSlots(slots, 4)),
       }),
     ).toBe(3);
   });
@@ -154,7 +179,7 @@ describe("resolveVisibleOptionalCount", () => {
       resolveVisibleOptionalCount({
         slots: withSeparator,
         widths: separatorWidths,
-        availableWidth: minRowWidth(1),
+        availableWidth: minRowWidth(selectTopToolbarSlots(withSeparator, 2)),
       }),
     ).toBe(2);
     expect(keysOf(selectTopToolbarSlots(withSeparator, 2))).toEqual(["back", "title", "search"]);
@@ -163,5 +188,39 @@ describe("resolveVisibleOptionalCount", () => {
   it("keeps the whole toolbar until it has been laid out", () => {
     expect(resolveVisibleOptionalCount({ slots, widths: new Map(), availableWidth: 300 })).toBe(4);
     expect(resolveVisibleOptionalCount({ slots, widths, availableWidth: 0 })).toBe(4);
+  });
+});
+
+describe("resolveToolbarCapsules", () => {
+  it("puts buttons side by side on one capsule, and leaves the title, search and view switch off", () => {
+    const row = resolveTopToolbarSlots([
+      "back",
+      "forward",
+      "title",
+      "clipboard",
+      "view",
+      "sort",
+      "search",
+      "viewOptions",
+      "infoPanel",
+    ]);
+    const edges = resolveToolbarCapsules(row);
+    expect(Object.fromEntries(edges)).toEqual({
+      back: { start: true, end: false },
+      forward: { start: false, end: true },
+      clipboard: { start: true, end: true },
+      sort: { start: true, end: true },
+      viewOptions: { start: true, end: false },
+      infoPanel: { start: false, end: true },
+    });
+  });
+
+  it("joins the buttons on either side of an item that is not shown", () => {
+    const row = resolveTopToolbarSlots(["sort", "clipboard", "viewOptions"]);
+    const edges = resolveToolbarCapsules(row, (slot) => slot.id !== "clipboard");
+    expect(Object.fromEntries(edges)).toEqual({
+      sort: { start: true, end: false },
+      viewOptions: { start: false, end: true },
+    });
   });
 });

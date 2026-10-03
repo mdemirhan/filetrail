@@ -18,7 +18,6 @@ import { type VisitedFolder, forgetVisitedFolder } from "../shared/visitedFolder
 import { AppDialogs } from "./components/AppDialogs";
 import { ClipboardButton } from "./components/ClipboardButton";
 import { ExplorerWorkspace } from "./components/ExplorerWorkspace";
-import { HelpView } from "./components/HelpView";
 import { InfoRow } from "./components/InfoRow";
 import type { SettingsTab } from "./components/SettingsView";
 import { TabStrip } from "./components/TabStrip";
@@ -91,7 +90,6 @@ import {
   canRunToolbarRendererCommand,
   resolveFavoriteTargetPath,
 } from "./lib/rendererCommandAvailability";
-import { resolveSinglePanelLayout } from "./lib/responsiveLayout";
 import { formatSearchStatus } from "./lib/searchResults";
 import { createShortcutDisplay } from "./lib/shortcutDisplay";
 import type { canHandleRendererCommand } from "./lib/shortcutPolicy";
@@ -119,12 +117,6 @@ export function App() {
   // The folders that have been opened, loaded each time the Go To or Move To box opens.
   const [visitedFolders, setVisitedFolders] = useState<VisitedFolder[]>([]);
   const [volumeAvailableBytes, setVolumeAvailableBytes] = useState<number | null>(null);
-  // The Help topic asked for last; `id` changes with each request so an open Help page
-  // moves to the topic.
-  const [helpRequest, setHelpRequest] = useState<{ topic: HelpTopicId; id: number }>({
-    topic: "navigation",
-    id: 0,
-  });
   // Modified date and size for search results, fetched for the rows on screen.
   const [searchMetadataByPath, setSearchMetadataByPath] = useState<
     Record<string, DirectoryEntryMetadata>
@@ -379,7 +371,6 @@ export function App() {
   } = writeOperations;
   const treePaneRef = useRef<HTMLElement | null>(null);
   const contentPaneRef = useRef<HTMLElement | null>(null);
-  const singlePanelRef = useRef<HTMLElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const searchShellRef = useRef<HTMLDivElement | null>(null);
   const typeaheadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -391,7 +382,6 @@ export function App() {
     inspectorVisible: infoPanelOpen,
     minContentWidth: EXPLORER_LAYOUT.minContentWidth,
   });
-  const { width: singlePanelWidth } = useElementSize(singlePanelRef);
   const services = useExplorerServices({
     client,
     panes,
@@ -992,18 +982,15 @@ export function App() {
       trashPath,
     ],
   );
-  // Help opens on the page asked for, or on the one it was left on. That page is remembered
-  // only while the app runs.
-  const lastHelpTopicRef = useRef<HelpTopicId>("navigation");
+  // Help is a window of its own, beside the files. It opens on the page asked for, or on
+  // the one it was left on (the main process remembers it while the app runs).
   const openHelp = useCallback(
     (topic?: HelpTopicId) => {
-      setHelpRequest((current) => ({
-        topic: topic ?? lastHelpTopicRef.current,
-        id: current.id + 1,
-      }));
-      setMainView("help");
+      void client.invoke("app:openHelpWindow", topic ? { topic } : {}).catch((error) => {
+        logger.error("open help window failed", error);
+      });
     },
-    [setMainView],
+    [client],
   );
 
   // The application menu lives in the main process; it is told which commands can run and
@@ -1387,6 +1374,8 @@ export function App() {
         const startupRootPath = startupTab.rootPath;
         const restoredFavoritePath = startupTab.favoritePath;
         setViewMode(startupTab.viewMode);
+        setIncludeHidden(startupTab.includeHidden);
+        setFoldersFirst(startupTab.foldersFirst);
         setSortBy(startupTab.sortBy);
         setSortDirection(startupTab.sortDirection);
         initializeTree(startupRootPath);
@@ -1401,20 +1390,15 @@ export function App() {
             : "tree",
         );
         if (restoredFavoritePath) {
-          await loadTreeChildren(
-            startupRootPath,
-            preferences.includeHidden,
-            false,
-            startupRootPath,
-          );
+          await loadTreeChildren(startupRootPath, startupTab.includeHidden, false, startupRootPath);
         }
         void navigateTo(
           startupPath,
           "replace",
-          preferences.includeHidden,
+          startupTab.includeHidden,
           startupTab.sortBy,
           startupTab.sortDirection,
-          preferences.foldersFirst,
+          startupTab.foldersFirst,
           restoredFavoritePath
             ? {
                 syncTree: false,
@@ -1432,10 +1416,10 @@ export function App() {
           void navigateTo(
             homeResponse.path,
             "replace",
-            preferences.includeHidden,
+            startupTab.includeHidden,
             startupTab.sortBy,
             startupTab.sortDirection,
-            preferences.foldersFirst,
+            startupTab.foldersFirst,
           ).finally(() => {
             if (!cancelled) {
               setPreferencesReady(true);
@@ -1486,10 +1470,6 @@ export function App() {
     };
   }, [searchPopoverOpen, setSearchPopoverOpen]);
 
-  const singlePanelLayout = useMemo(
-    () => (singlePanelWidth > 0 ? resolveSinglePanelLayout(singlePanelWidth) : "wide"),
-    [singlePanelWidth],
-  );
   const canGoBack = historyIndex > 0;
   const canGoForward = historyIndex >= 0 && historyIndex < historyPaths.length - 1;
   // What holding Back or Forward lists.
@@ -2171,41 +2151,12 @@ export function App() {
                     isSearching: searchStatus === "running",
                     shown: filteredSearchResults.length,
                     totalCount: allSearchResultEntries.length,
-                    elapsedMs: searchElapsedMs,
                     selectedCount: contentSelection.paths.length,
                   })
                 : ""
             }
           />
-        ) : (
-          <section className="workspace single-panel-layout">
-            <header className="single-panel-toolbar">
-              <button
-                type="button"
-                className="single-panel-back"
-                onClick={() => setMainView("explorer")}
-                title="Back to Files (Esc)"
-              >
-                <ToolbarIcon name="back" />
-                <span>Files</span>
-              </button>
-              <span className="single-panel-title">Help</span>
-            </header>
-            <section ref={singlePanelRef} className="pane single-panel-pane">
-              {mainView === "help" ? (
-                <HelpView
-                  key={helpRequest.id}
-                  layoutMode={singlePanelLayout}
-                  initialTopic={helpRequest.topic}
-                  onTopicChange={(topic) => {
-                    lastHelpTopicRef.current = topic;
-                  }}
-                  onCustomizeShortcuts={() => openSettingsView("shortcuts")}
-                />
-              ) : null}
-            </section>
-          </section>
-        )}
+        ) : null}
         <AppDialogs
           currentPath={currentPath}
           places={places}

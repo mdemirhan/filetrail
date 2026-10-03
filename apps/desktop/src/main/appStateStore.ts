@@ -329,7 +329,12 @@ function sanitizeViewMode(value: unknown): ExplorerViewMode {
 
 // Tabs saved by an older or damaged file are kept as far as they make sense; a tab that
 // does not is dropped rather than failing the whole list.
-function sanitizeOpenTabs(value: unknown): OpenTabPreference[] {
+// A tab saved before tabs kept their own hidden-files and Folders First settings takes the
+// window's, which is what it showed then.
+function sanitizeOpenTabs(
+  value: unknown,
+  fallback: Pick<OpenTabPreference, "includeHidden" | "foldersFirst">,
+): OpenTabPreference[] {
   if (!Array.isArray(value)) {
     return [];
   }
@@ -352,6 +357,14 @@ function sanitizeOpenTabs(value: unknown): OpenTabPreference[] {
           ? candidate.sortBy
           : "name",
       sortDirection: candidate.sortDirection === "desc" ? "desc" : "asc",
+      includeHidden:
+        typeof candidate.includeHidden === "boolean"
+          ? candidate.includeHidden
+          : fallback.includeHidden,
+      foldersFirst:
+        typeof candidate.foldersFirst === "boolean"
+          ? candidate.foldersFirst
+          : fallback.foldersFirst,
     });
     if (tabs.length === OPEN_TABS_LIMIT) {
       break;
@@ -548,7 +561,16 @@ function sanitizePreferences(value: unknown, defaultTheme: ThemePreference): App
       typeof record.restoreOpenTabsOnStartup === "boolean"
         ? record.restoreOpenTabsOnStartup
         : currentDefaults.restoreOpenTabsOnStartup,
-    openTabs: sanitizeOpenTabs(record.openTabs),
+    openTabs: sanitizeOpenTabs(record.openTabs, {
+      includeHidden:
+        typeof record.includeHidden === "boolean"
+          ? record.includeHidden
+          : currentDefaults.includeHidden,
+      foldersFirst:
+        typeof record.foldersFirst === "boolean"
+          ? record.foldersFirst
+          : currentDefaults.foldersFirst,
+    }),
     activeTabIndex:
       typeof record.activeTabIndex === "number" &&
       Number.isInteger(record.activeTabIndex) &&

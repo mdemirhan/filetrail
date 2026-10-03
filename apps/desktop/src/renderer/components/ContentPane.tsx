@@ -12,6 +12,7 @@ import {
   type ExplorerViewMode,
   clampDetailColumnWidth,
 } from "../../shared/appPreferences";
+import { useDelayedFlag } from "../hooks/useDelayedFlag";
 import { useElementSize } from "../hooks/useElementSize";
 import { usePathSuggestions } from "../hooks/usePathSuggestions";
 import { useRelativeDate } from "../hooks/useRelativeDate";
@@ -22,6 +23,7 @@ import {
 } from "../lib/clipboardMarks";
 import { isSelectionNarrowingClick } from "../lib/contentSelection";
 import {
+  DETAILS_LAYOUT,
   fitDetailColumns,
   getDetailsRowHeight,
   getDetailsTableWidth,
@@ -42,6 +44,7 @@ import { InlineRenameField } from "./InlineRenameField";
 import { ListFilterPill } from "./ListFilterPill";
 import { PathSuggestionDropdown } from "./PathSuggestionDropdown";
 import { type PathbarFolder, PathbarFolderMenu } from "./PathbarFolderMenu";
+import { SortIndicator } from "./SortIndicator";
 
 type DirectoryEntry = IpcResponse<"directory:getSnapshot">["entries"][number];
 type DirectoryEntryMetadata = IpcResponse<"directory:getMetadataBatch">["items"][number];
@@ -51,6 +54,8 @@ type PathbarDisplayItem =
       kind: "segment";
       segment: PathbarSegment;
       isActive: boolean;
+      /** Wider than the usual cap, when the row has room for more of a long name. */
+      maxWidth?: number;
     }
   | {
       kind: "collapsed";
@@ -58,12 +63,10 @@ type PathbarDisplayItem =
       hiddenCount: number;
     };
 
-const PATHBAR_WIDTH_SAFETY_MARGIN = 12;
-const PATHBAR_SEPARATOR_WIDTH = 16;
-const PATHBAR_COLLAPSED_WIDTH = 34;
+const PATHBAR_WIDTH_SAFETY_MARGIN = 8;
+// A separator (16 points) and the 2-point gaps on either side of it.
+const PATHBAR_SEPARATOR_WIDTH = 20;
 const PATHBAR_SEGMENT_HORIZONTAL_PADDING = 18;
-const PATHBAR_MAX_SEGMENT_WIDTH = 220;
-const PATHBAR_MAX_ACTIVE_SEGMENT_WIDTH = 320;
 const PATHBAR_SEGMENT_CLICK_DELAY_MS = 320;
 
 // Bars behind the sizes of the Details view, which turn the Size column into a picture of
@@ -137,7 +140,10 @@ export function ContentPane({
   inlineRename = null,
   onInlineRenameSubmit = () => undefined,
   onInlineRenameCancel = () => undefined,
+  infoRow = null,
 }: {
+  /** The Info Row, shown between the list and the path bar. */
+  infoRow?: React.ReactNode;
   paneRef?: React.RefObject<HTMLElement | null>;
   isFocused: boolean;
   currentPath: string;
@@ -421,7 +427,7 @@ export function ContentPane({
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={onSearchForFilter}
               >
-                Search subfolders
+                Search Subfolders
               </button>
             ) : null}
           </div>
@@ -536,6 +542,9 @@ export function ContentPane({
           />
         )}
       </div>
+      {/* The selection's details sit under the list they describe, above the path bar,
+          which stays at the window's bottom edge like Finder's status bar. */}
+      {infoRow}
       <div
         className={`pane-header content-header content-pathbar-row${isFocused ? " pane-header-focused" : ""}`}
       >
@@ -660,6 +669,7 @@ export function ContentPane({
                   <button
                     type="button"
                     className={`pathbar-segment${item.isActive ? " active" : ""}`}
+                    style={item.maxWidth ? { maxWidth: item.maxWidth } : undefined}
                     aria-disabled={item.segment.path.length === 0}
                     onClick={(event) => {
                       if (item.segment.path.length === 0) {
@@ -754,6 +764,47 @@ function resolveVisiblePathbarItems(
   availableWidth: number,
   expanded: boolean,
 ): PathbarDisplayItem[] {
+  const items = chooseVisiblePathbarItems(segments, availableWidth, expanded);
+  return expanded ? items : widenTrimmedSegments(items, availableWidth);
+}
+
+// A long folder name is cut at the usual width so it cannot crowd out the rest of the path.
+// The room the row still has left goes back to those names, from the current folder
+// backwards, so a name is not shortened while there is space beside it.
+function widenTrimmedSegments(
+  items: PathbarDisplayItem[],
+  availableWidth: number,
+): PathbarDisplayItem[] {
+  if (typeof document === "undefined") {
+    return items;
+  }
+  let room = availableWidth - PATHBAR_WIDTH_SAFETY_MARGIN - estimatePathbarWidth(items);
+  if (room <= 0) {
+    return items;
+  }
+  const widened = [...items];
+  for (let index = widened.length - 1; index >= 0 && room > 0; index -= 1) {
+    const item = widened[index];
+    if (item?.kind !== "segment") {
+      continue;
+    }
+    const capped = estimatePathbarSegmentWidth(item.segment.label, item.isActive);
+    const natural = estimatePathbarSegmentWidth(item.segment.label, item.isActive, false, true);
+    if (natural <= capped) {
+      continue;
+    }
+    const width = Math.min(natural, capped + room);
+    room -= width - capped;
+    widened[index] = { ...item, maxWidth: width };
+  }
+  return widened;
+}
+
+function chooseVisiblePathbarItems(
+  segments: PathbarSegment[],
+  availableWidth: number,
+  expanded: boolean,
+): PathbarDisplayItem[] {
   // Collapse logic prefers keeping the tail visible because those segments are usually the
   // most actionable part of the current location.
   const fullItems = segments.map<PathbarDisplayItem>((segment, index) => ({
@@ -844,7 +895,7 @@ function estimatePathbarWidth(items: PathbarDisplayItem[]): number {
   return items.reduce((width, item, index) => {
     const separatorWidth = index > 0 ? PATHBAR_SEPARATOR_WIDTH : 0;
     if (item.kind === "collapsed") {
-      return width + separatorWidth + PATHBAR_COLLAPSED_WIDTH;
+      return width + separatorWidth + estimatePathbarSegmentWidth("…", false, true);
     }
     return width + separatorWidth + estimatePathbarSegmentWidth(item.segment.label, item.isActive);
   }, 0);
@@ -852,7 +903,12 @@ function estimatePathbarWidth(items: PathbarDisplayItem[]): number {
 
 let pathbarMeasureHost: HTMLDivElement | null = null;
 
-function estimatePathbarSegmentWidth(label: string, isActive: boolean): number {
+function estimatePathbarSegmentWidth(
+  label: string,
+  isActive: boolean,
+  collapsed = false,
+  uncapped = false,
+): number {
   // Measure with real DOM styles so collapse decisions stay accurate across font/theme changes.
   if (typeof document === "undefined") {
     return PATHBAR_SEGMENT_HORIZONTAL_PADDING + label.length * 8;
@@ -860,6 +916,10 @@ function estimatePathbarSegmentWidth(label: string, isActive: boolean): number {
 
   if (!pathbarMeasureHost) {
     pathbarMeasureHost = document.createElement("div");
+    // Inside the path bar's row, a folder name has the row's smaller text and padding;
+    // measured outside it, every name came out about a third too wide, and folders were
+    // hidden behind "…" while the row still had room for them.
+    pathbarMeasureHost.className = "content-pathbar-row";
     pathbarMeasureHost.setAttribute("aria-hidden", "true");
     pathbarMeasureHost.style.position = "fixed";
     pathbarMeasureHost.style.left = "-10000px";
@@ -872,8 +932,13 @@ function estimatePathbarSegmentWidth(label: string, isActive: boolean): number {
 
   const button = document.createElement("button");
   button.type = "button";
-  button.className = `pathbar-segment${isActive ? " active" : ""}`;
+  button.className = `pathbar-segment${isActive ? " active" : ""}${
+    collapsed ? " pathbar-segment-collapsed" : ""
+  }`;
   button.textContent = label;
+  if (uncapped) {
+    button.style.maxWidth = "none";
+  }
   pathbarMeasureHost.appendChild(button);
   const width = Math.ceil(button.getBoundingClientRect().width);
   pathbarMeasureHost.removeChild(button);
@@ -1327,7 +1392,10 @@ function DetailsView({
       fitDetailColumns({
         columns: getVisibleDetailColumns(detailColumns),
         widths: detailColumnWidths,
-        availableWidth: Math.max(0, viewportWidth - DETAILS_SCROLLBAR_WIDTH),
+        availableWidth: Math.max(
+          0,
+          viewportWidth - DETAILS_SCROLLBAR_WIDTH - 2 * DETAILS_LAYOUT.rowInset,
+        ),
       }),
     [detailColumnWidths, detailColumns, viewportWidth],
   );
@@ -1556,7 +1624,7 @@ function DetailsView({
           role="rowgroup"
           className="details-table"
           style={{
-            width: `${tableWidth}px`,
+            width: `${tableWidth + 2 * DETAILS_LAYOUT.rowInset}px`,
             minWidth: "100%",
             // Virtualization pads the unmounted rows above and below the visible slice.
             paddingTop: `${range.startIndex * rowHeight}px`,
@@ -1840,9 +1908,18 @@ function DetailsCell({
             style={{ width: `${sizeBarFraction * 100}%` }}
           />
         ) : null}
-        <span className="details-size-text">
-          {folderSizeLabel ?? formatDetailSize(entry, metadata)}
-        </span>
+        {(() => {
+          const text = folderSizeLabel ?? formatDetailSize(entry, metadata);
+          return (
+            <span
+              className={`details-size-text${
+                text === FOLDER_SIZE_PLACEHOLDER ? " is-placeholder" : ""
+              }`}
+            >
+              {text}
+            </span>
+          );
+        })()}
       </span>
     );
   }
@@ -1899,9 +1976,7 @@ function SortButton({
       aria-label={label}
     >
       <span>{label}</span>
-      {active ? (
-        <span className="details-sort-indicator">{direction === "asc" ? "↑" : "↓"}</span>
-      ) : null}
+      {active ? <SortIndicator direction={direction} /> : null}
     </button>
   );
 }
@@ -1912,19 +1987,24 @@ function isFolderLikeEntry(entry: DirectoryEntry): boolean {
   );
 }
 
+const FOLDER_SIZE_PLACEHOLDER = "--";
+
 function formatDetailSize(
   entry: DirectoryEntry,
   metadata: DirectoryEntryMetadata | undefined,
 ): string {
-  // Directories and bundles show `-` by design. Empty string is reserved for metadata that is still loading.
+  // Folders and bundles show "--", as in Finder, until their size is calculated. An empty
+  // string is kept for metadata that is still loading.
   if (entry.kind === "directory" || entry.kind === "symlink_directory" || entry.kind === "bundle") {
-    return "-";
+    return FOLDER_SIZE_PLACEHOLDER;
   }
   if (!metadata || metadata.sizeStatus === "deferred") {
     return "";
   }
   return formatSize(metadata.sizeBytes, metadata.sizeStatus);
 }
+
+const FOLDER_LOADING_DELAY_MS = 400;
 
 function ContentState({
   loading,
@@ -1939,13 +2019,14 @@ function ContentState({
   entriesLength: number;
   includeHidden: boolean;
 }) {
+  const showLoading = useDelayedFlag(loading && entriesLength === 0, FOLDER_LOADING_DELAY_MS);
   if (loading && entriesLength === 0) {
-    return (
+    // Nothing for the moment most folders take to list; "Loading…" for one that is slow.
+    return showLoading ? (
       <div className="content-state content-loading">
-        <strong>Loading folder</strong>
-        <span>Fetching the visible directory snapshot…</span>
+        <strong>Loading…</strong>
       </div>
-    );
+    ) : null;
   }
   if (error) {
     return (

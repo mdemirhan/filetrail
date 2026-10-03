@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { CopyPasteProgressCard } from "./CopyPasteProgressCard";
 
 describe("CopyPasteProgressCard", () => {
-  it("renders the redesigned progress chrome with trimmed detail content", () => {
+  it("shows what is running, how far along it is and the item it is on", () => {
     render(
       <CopyPasteProgressCard
         title="Paste In Progress"
@@ -25,21 +25,21 @@ describe("CopyPasteProgressCard", () => {
     expect(screen.getByText("popup.qml")).toBeInTheDocument();
   });
 
-  it("wires the cancel action", () => {
+  it("stops the operation from its Stop button", () => {
     const onCancel = vi.fn();
     render(
       <CopyPasteProgressCard
         title="Paste In Progress"
         progressPercent={0}
         progressMetaStart="0 of 1 items"
-        progressMetaEnd="Preparing write plan"
+        progressMetaEnd="Preparing…"
         detailLabel="Current file"
         detailValue="source.txt"
         onCancel={onCancel}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 });

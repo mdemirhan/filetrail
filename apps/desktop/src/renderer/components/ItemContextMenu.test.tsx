@@ -44,6 +44,66 @@ describe("ItemContextMenu", () => {
     },
   ];
 
+  it("is worked with the keyboard: arrows, a letter, Return, and the submenu with → and ←", () => {
+    const onAction = vi.fn();
+    const onSubmenuAction = vi.fn();
+    render(
+      <ItemContextMenu
+        anchorX={0}
+        anchorY={0}
+        surface="content"
+        disabledActionIds={["edit"]}
+        hiddenActionIds={["openInNewTab", "showPackageContents", "rootTreeHere"]}
+        submenuItems={submenuItems}
+        shortcutContext={shortcutContext}
+        open
+        onAction={onAction}
+        onSubmenuAction={onSubmenuAction}
+      />,
+    );
+    const active = () =>
+      document.querySelector(".context-menu-item.active .context-menu-item-label");
+    const press = (key: string) => fireEvent.keyDown(window, { key });
+
+    // ↓ starts on the first item; keys taken by the menu are not seen by the window.
+    expect(press("ArrowDown")).toBe(false);
+    expect(active()).toHaveTextContent("Open");
+    press("ArrowDown");
+    expect(active()).toHaveTextContent("Open With");
+    // Edit can't be chosen, so ↓ goes past it.
+    press("ArrowDown");
+    expect(active()).toHaveTextContent("Show Info");
+    // ↑ from the first item wraps to the last.
+    press("Home");
+    press("ArrowUp");
+    expect(active()).toHaveTextContent("Move to Trash");
+
+    // A letter moves to the next item that starts with it.
+    press("d");
+    expect(active()).toHaveTextContent("Duplicate");
+    press("Enter");
+    expect(onAction).toHaveBeenCalledWith("duplicate");
+
+    // → goes into Open With, ↓ moves there, ← comes back out.
+    press("Home");
+    press("ArrowDown");
+    expect(active()).toHaveTextContent("Open With");
+    press("ArrowRight");
+    expect(document.querySelector(".context-submenu-item.active")).toHaveTextContent("Zed");
+    press("ArrowDown");
+    expect(document.querySelector(".context-submenu-item.active")).toHaveTextContent(
+      "Visual Studio Code",
+    );
+    press("Enter");
+    expect(onSubmenuAction).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "vscode", kind: "application" }),
+    );
+    press("ArrowLeft");
+    expect(document.querySelector(".context-submenu-item.active")).toBeNull();
+    // Escape is left to the window, which closes the menu.
+    expect(press("Escape")).toBe(true);
+  });
+
   it("opens without preselecting any menu item", () => {
     render(
       <ItemContextMenu
@@ -79,10 +139,10 @@ describe("ItemContextMenu", () => {
     expect(
       screen.getAllByRole("button").map((button) => button.textContent?.replace(/[⌘⇧⌥⌃].*$/u, "")),
     ).toEqual([
+      "New Folder",
       "Show Info",
       "Paste",
       "Copy Path",
-      "New Folder",
       "Open in Terminal",
       "Show in Finder",
     ]);

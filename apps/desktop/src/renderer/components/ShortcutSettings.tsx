@@ -24,7 +24,7 @@ import {
   toShortcutOverrides,
 } from "../../shared/shortcuts";
 import { formatShortcut } from "../lib/shortcutLabels";
-import { ActionButton, SectionCard, type SettingsControlTheme } from "./SettingsControls";
+import { ActionButton, SectionCard } from "./SettingsControls";
 
 type Slot = { id: ShortcutCommandId; index: number };
 
@@ -67,12 +67,10 @@ function withoutEllipsis(label: string): string {
 export function ShortcutSettings({
   overrides,
   returnKeyAction,
-  theme,
   onChange,
 }: {
   overrides: ShortcutOverrides;
   returnKeyAction: ReturnKeyAction;
-  theme: SettingsControlTheme;
   onChange: (overrides: ShortcutOverrides) => void;
 }) {
   const bindings = useMemo(() => resolveShortcuts(overrides).bindings, [overrides]);
@@ -166,26 +164,31 @@ export function ShortcutSettings({
   return (
     <div className="shortcut-settings">
       <div className="shortcut-settings-bar">
-        <input
-          type="text"
-          className="shortcut-settings-search"
-          value={query}
-          placeholder="Search by command or key"
-          aria-label="Search shortcuts"
-          spellCheck={false}
-          onChange={(event) => setQuery(event.currentTarget.value)}
-          onKeyDown={(event) => {
-            // Escape clears the search first; with nothing to clear it closes Settings.
-            if (event.key === "Escape" && query.length > 0) {
-              event.preventDefault();
-              setQuery("");
-            }
-          }}
-        />
+        <label className="shortcut-settings-search-field">
+          <svg className="help-filter-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="11" cy="11" r="6.5" />
+            <path d="m16 16 4.5 4.5" />
+          </svg>
+          <input
+            type="text"
+            className="shortcut-settings-search"
+            value={query}
+            placeholder="Search by command or key"
+            aria-label="Search shortcuts"
+            spellCheck={false}
+            onChange={(event) => setQuery(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              // Escape clears the search first; with nothing to clear it closes Settings.
+              if (event.key === "Escape" && query.length > 0) {
+                event.preventDefault();
+                setQuery("");
+              }
+            }}
+          />
+        </label>
         <ActionButton
           label="Reset All"
           ariaLabel="Reset All Shortcuts"
-          theme={theme}
           disabled={!anyCustomized}
           onClick={() => {
             onChange({});
@@ -201,7 +204,7 @@ export function ShortcutSettings({
         <p className="shortcut-settings-empty">No command or key matches “{query.trim()}”.</p>
       ) : null}
       {groups.map(({ group, commands }) => (
-        <SectionCard key={group} title={groupTitle(group)} theme={theme}>
+        <SectionCard key={group} title={groupTitle(group)}>
           {group === "standard" ? (
             <p className="shortcut-row-hint shortcut-group-note">{STANDARD_GROUP_NOTE}</p>
           ) : null}

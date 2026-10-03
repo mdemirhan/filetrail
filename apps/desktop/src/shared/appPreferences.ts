@@ -22,7 +22,7 @@ export type SearchPatternModePreference = "text" | "glob" | "regex";
 // How the search text is matched, in the order the menus list the choices.
 export const SEARCH_PATTERN_MODES = ["text", "glob", "regex"] as const;
 export const SEARCH_PATTERN_MODE_LABELS: Record<SearchPatternModePreference, string> = {
-  text: "Plain text",
+  text: "Plain Text",
   glob: "Glob",
   regex: "Regex",
 };
@@ -79,6 +79,9 @@ export type OpenTabPreference = {
   viewMode: ExplorerViewMode;
   sortBy: "name" | "modified" | "kind" | "size";
   sortDirection: "asc" | "desc";
+  // Each tab shows hidden files, and folders before files, or not, on its own.
+  includeHidden: boolean;
+  foldersFirst: boolean;
 };
 export const OPEN_TABS_LIMIT = 100;
 
@@ -413,7 +416,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   lastVisitedPath: null,
   lastVisitedFavoritePath: null,
   favorites: [],
-  favoritesPlacement: "separate",
+  favoritesPlacement: "integrated",
   favoritesExpanded: true,
   favoritesInitialized: false,
 };

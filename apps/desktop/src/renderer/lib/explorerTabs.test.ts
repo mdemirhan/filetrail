@@ -97,6 +97,7 @@ describe("explorerTabs", () => {
       leftPaneSubview: "tree",
       focusedPane: "tree",
       includeHidden: false,
+      foldersFirst: true,
       view: {
         treeNodes: {},
         currentEntries: [],

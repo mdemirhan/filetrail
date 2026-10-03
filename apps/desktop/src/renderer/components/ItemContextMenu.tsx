@@ -95,6 +95,115 @@ export function ItemContextMenu({
     activeItemId === "openWith" &&
     !disabledActionIdSet.has("openWith") &&
     items.some((item) => item.type !== "separator" && item.id === "openWith");
+  // The Open With row the keyboard is on, once → has gone into the submenu.
+  const [submenuActiveIndex, setSubmenuActiveIndex] = useState<number | null>(null);
+  const submenuActions = useMemo(
+    () => submenuItems.flatMap((item) => (item.type === "separator" ? [] : [item.action])),
+    [submenuItems],
+  );
+
+  useEffect(() => {
+    if (!submenuOpen) {
+      setSubmenuActiveIndex(null);
+    }
+  }, [submenuOpen]);
+
+  // The keyboard works the menu as it does a macOS menu: ↑ ↓ (and Home, End) move between
+  // the items that can be chosen, Return or Space chooses, → goes into Open With and ←
+  // back out, and a letter moves to the next item that starts with it. Escape is left to
+  // the window, which closes the menu. Keys are taken before the window's shortcuts see
+  // them, so they do not also move the selection behind the menu.
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const choosable = items.flatMap((item) =>
+      item.type === "separator" || disabledActionIdSet.has(item.id) ? [] : [item],
+    );
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+      const key = event.key;
+      const take = () => {
+        event.preventDefault();
+        event.stopPropagation();
+      };
+      if (submenuOpen && submenuActiveIndex !== null) {
+        const count = submenuActions.length;
+        if (key === "ArrowDown" || key === "ArrowUp") {
+          take();
+          if (count > 0) {
+            const step = key === "ArrowDown" ? 1 : -1;
+            setSubmenuActiveIndex((submenuActiveIndex + step + count) % count);
+          }
+        } else if (key === "ArrowLeft") {
+          take();
+          setSubmenuActiveIndex(null);
+        } else if (key === "Enter" || key === " ") {
+          take();
+          const action = submenuActions[submenuActiveIndex];
+          if (action) {
+            onSubmenuAction(action);
+          }
+        }
+        return;
+      }
+      const index = choosable.findIndex((item) => item.id === activeItemId);
+      const moveTo = (next: number) => {
+        const item = choosable[(next + choosable.length) % choosable.length];
+        if (item) {
+          setActiveItemId(item.id);
+        }
+      };
+      if (key === "ArrowDown") {
+        take();
+        moveTo(index < 0 ? 0 : index + 1);
+      } else if (key === "ArrowUp") {
+        take();
+        moveTo(index < 0 ? choosable.length - 1 : index - 1);
+      } else if (key === "Home") {
+        take();
+        moveTo(0);
+      } else if (key === "End") {
+        take();
+        moveTo(choosable.length - 1);
+      } else if (key === "ArrowRight" && submenuOpen) {
+        take();
+        setSubmenuActiveIndex(0);
+      } else if ((key === "Enter" || key === " ") && index >= 0) {
+        take();
+        const item = choosable[index];
+        if (item?.hasSubmenu) {
+          setSubmenuActiveIndex(0);
+        } else if (item) {
+          onAction(item.id);
+        }
+      } else if (key.length === 1 && key.trim().length === 1) {
+        take();
+        const letter = key.toLocaleLowerCase();
+        for (let offset = 1; offset <= choosable.length; offset += 1) {
+          const candidate = choosable[(Math.max(index, -1) + offset) % choosable.length];
+          if (candidate?.label.toLocaleLowerCase().startsWith(letter)) {
+            setActiveItemId(candidate.id);
+            break;
+          }
+        }
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [
+    activeItemId,
+    disabledActionIdSet,
+    items,
+    onAction,
+    onSubmenuAction,
+    open,
+    submenuActions,
+    submenuActiveIndex,
+    submenuOpen,
+  ]);
   const menuStyle = useMemo(
     () =>
       ({
@@ -198,11 +307,15 @@ export function ItemContextMenu({
             if (submenuItem.type === "separator") {
               return <div key={submenuItem.key} className="context-menu-separator" />;
             }
+            const submenuIndex = submenuActions.indexOf(submenuItem.action);
             return (
               <button
                 key={submenuItem.action.id}
                 type="button"
-                className="context-submenu-item"
+                className={`context-submenu-item${
+                  submenuIndex === submenuActiveIndex ? " active" : ""
+                }`}
+                onMouseEnter={() => setSubmenuActiveIndex(submenuIndex)}
                 onClick={() => onSubmenuAction(submenuItem.action)}
               >
                 {submenuItem.action.label}
@@ -290,8 +403,8 @@ function ContextMenuIcon({ name }: { name: ContextMenuIconName }) {
   if (name === "edit") {
     return (
       <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M12 20h9" />
-        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z" />
+        <path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" />
+        <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" />
       </svg>
     );
   }
@@ -330,7 +443,7 @@ function ContextMenuIcon({ name }: { name: ContextMenuIconName }) {
   if (name === "rename") {
     return (
       <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+        <path d="M5 5.5h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2zM8.5 9v6M7 9h3M7 15h3" />
       </svg>
     );
   }
@@ -339,6 +452,7 @@ function ContextMenuIcon({ name }: { name: ContextMenuIconName }) {
       <svg className="context-menu-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
         <rect x="8" y="8" width="13" height="13" rx="2" />
         <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+        <path d="M14.5 11.5v6M11.5 14.5h6" />
       </svg>
     );
   }

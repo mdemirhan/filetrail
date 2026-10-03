@@ -2,6 +2,8 @@ import {
   type ComponentProps,
   type MutableRefObject,
   type KeyboardEvent as ReactKeyboardEvent,
+  cloneElement,
+  isValidElement,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -30,6 +32,7 @@ import { PANE_LAYOUT_CHANGE_MS, PaneLayoutChangeContext } from "../lib/paneLayou
 import { formatTooltip, getToolbarItemTooltip } from "../lib/tooltips";
 import {
   type TopToolbarSlot,
+  resolveToolbarCapsules,
   resolveTopToolbarSlots,
   resolveVisibleOptionalCount,
   selectTopToolbarSlots,
@@ -37,6 +40,7 @@ import {
 import { useShortcutDisplay } from "../state/shortcutDisplayContext";
 import { InfoPanel } from "./GetInfoPanel";
 import { HistoryButton } from "./HistoryButton";
+import { MenuCheck } from "./MenuCheck";
 import { SearchOptionsMenu } from "./SearchOptionsMenu";
 import { SearchWorkspace } from "./SearchWorkspace";
 import { ThemeMenuButton } from "./ThemeMenuButton";
@@ -437,7 +441,7 @@ export function ExplorerWorkspace({
     {
       kind: "toggle",
       id: "hidden",
-      label: "Show Hidden Files",
+      label: "Hidden Files",
       command: "toggleHiddenFiles",
       checked: includeHidden,
       onSelect: onToggleHidden,
@@ -446,7 +450,7 @@ export function ExplorerWorkspace({
     {
       kind: "toggle",
       id: "infoPanel",
-      label: "Show Info Panel",
+      label: "Info Panel",
       command: "toggleInfoPanel",
       checked: infoPanelOpen,
       onSelect: onToggleInfoPanel,
@@ -454,7 +458,7 @@ export function ExplorerWorkspace({
     {
       kind: "toggle",
       id: "infoRow",
-      label: "Show Info Row",
+      label: "Info Row",
       command: "toggleInfoRow",
       checked: infoRowOpen,
       onSelect: onToggleInfoRow,
@@ -527,9 +531,7 @@ export function ExplorerWorkspace({
                         item.onSelect();
                       }}
                     >
-                      <span className="toolbar-menu-check" aria-hidden="true">
-                        {item.kind === "toggle" && item.checked ? "✓" : ""}
-                      </span>
+                      <MenuCheck checked={item.kind === "toggle" && item.checked} />
                       <span className="toolbar-menu-label">{item.label}</span>
                       {shortcut ? <span className="toolbar-menu-shortcut">{shortcut}</span> : null}
                     </button>
@@ -678,9 +680,7 @@ export function ExplorerWorkspace({
                     role="menuitemradio"
                     aria-checked={sortBy === value}
                   >
-                    <span className="toolbar-menu-check" aria-hidden="true">
-                      {sortBy === value ? "✓" : ""}
-                    </span>
+                    <MenuCheck checked={sortBy === value} />
                     <span className="toolbar-menu-label">{getSortByLabel(value)}</span>
                   </button>
                 ))}
@@ -699,9 +699,7 @@ export function ExplorerWorkspace({
                     role="menuitemradio"
                     aria-checked={sortDirection === direction}
                   >
-                    <span className="toolbar-menu-check" aria-hidden="true">
-                      {sortDirection === direction ? "✓" : ""}
-                    </span>
+                    <MenuCheck checked={sortDirection === direction} />
                     <span className="toolbar-menu-label">
                       {direction === "asc" ? "Ascending" : "Descending"}
                     </span>
@@ -910,7 +908,25 @@ export function ExplorerWorkspace({
     );
   }
 
+  // Buttons side by side share a capsule; each knows whether it starts or ends one.
+  const toolbarCapsules = resolveToolbarCapsules(
+    visibleTopToolbarSlots,
+    (slot) => slot.id !== "clipboard" || clipboardShown,
+  );
+
   function renderTopToolbarSlot(slot: TopToolbarSlot) {
+    const element = renderTopToolbarSlotContent(slot);
+    const edges = toolbarCapsules.get(slot.key);
+    if (!edges || !isValidElement<Record<string, unknown>>(element)) {
+      return element;
+    }
+    return cloneElement(element, {
+      "data-capsule":
+        edges.start && edges.end ? "single" : edges.start ? "start" : edges.end ? "end" : "middle",
+    });
+  }
+
+  function renderTopToolbarSlotContent(slot: TopToolbarSlot) {
     if (slot.id === "title") {
       return (
         <div key={slot.key} className="toolbar-title-block" data-top-toolbar-item={slot.id}>

@@ -2,6 +2,7 @@ import { createContext, useContext, useRef } from "react";
 
 import type {
   AppLogEntry,
+  HelpTopic,
   IpcChannel,
   IpcRequestInput,
   IpcResponse,
@@ -22,6 +23,7 @@ export type FiletrailClient = {
   ): () => void;
   // The Settings window being asked to show one of its tabs.
   onShowSettingsTab?(listener: (tab: SettingsTab) => void): () => void;
+  onShowHelpTopic?(listener: (topic: HelpTopic) => void): () => void;
 };
 
 const MISSING_PRELOAD_ERROR =

@@ -54,8 +54,6 @@ type PendingActivation = {
   treeScrollTop: number | null;
   focusedPane: "tree" | "content";
   treeRootPath: string;
-  // The tree was started again from its root and has to be filled in.
-  treeRebuilt: boolean;
   refreshExpandedTree: boolean;
   rerunSearch: boolean;
 };
@@ -87,7 +85,8 @@ export function useExplorerTabs(args: {
   selection: SelectionActions;
   searchSession: {
     detach: () => TabSearchSession;
-    attach: (session: TabSearchSession) => boolean;
+    // `includeHidden` is the setting of the tab the session belongs to, which it is shown with.
+    attach: (session: TabSearchSession, includeHidden: boolean) => boolean;
     createEmpty: () => TabSearchSession;
     rerun: () => void;
   };
@@ -240,6 +239,7 @@ export function useExplorerTabs(args: {
       focusedPane:
         navigation.focusedPane ?? navigation.lastExplorerFocusPaneRef.current ?? "content",
       includeHidden: preferences.includeHidden,
+      foldersFirst: preferences.foldersFirst,
       view: {
         treeNodes: navigation.treeNodesRef.current,
         currentEntries: navigation.currentEntries,
@@ -279,19 +279,16 @@ export function useExplorerTabs(args: {
     writeOperations.setRenameDialogState((current) => (current?.inline ? null : current));
 
     const view = snapshot.view;
-    // Hidden files were shown or hidden since the tab was left: its tree lists folders by
-    // the old setting, so it is started again from its root, as it is in the tab on screen
-    // when the setting changes.
-    const treeRebuilt = view !== null && snapshot.includeHidden !== preferences.includeHidden;
-    const treeNodes =
-      view && !treeRebuilt
-        ? settleTreeNodes(view.treeNodes)
-        : snapshot.treeRootPath.length > 0
-          ? { [snapshot.treeRootPath]: createTreeNode(snapshot.treeRootPath, true) }
-          : {};
+    const treeNodes = view
+      ? settleTreeNodes(view.treeNodes)
+      : snapshot.treeRootPath.length > 0
+        ? { [snapshot.treeRootPath]: createTreeNode(snapshot.treeRootPath, true) }
+        : {};
     const metadataByPath = view?.metadataByPath ?? {};
 
     preferences.setViewMode(snapshot.viewMode);
+    preferences.setIncludeHidden(snapshot.includeHidden);
+    preferences.setFoldersFirst(snapshot.foldersFirst);
     navigation.setSortBy(snapshot.sortBy);
     navigation.setSortDirection(snapshot.sortDirection);
     navigation.setHistoryPaths(snapshot.historyPaths);
@@ -319,7 +316,7 @@ export function useExplorerTabs(args: {
     navigation.setGetInfoLoading(false);
 
     const tabSearch = snapshot.search ?? searchSession.createEmpty();
-    const rerunSearch = searchSession.attach(tabSearch);
+    const rerunSearch = searchSession.attach(tabSearch, snapshot.includeHidden);
     const isSearchMode = tabSearch.resultsVisible && tabSearch.committedQuery.trim().length > 0;
     // In search mode the selection is among the results, which the list sorts out itself
     // once it has them; in a folder the entries are at hand.
@@ -341,7 +338,6 @@ export function useExplorerTabs(args: {
       treeScrollTop: view?.treeScrollTop ?? null,
       focusedPane: snapshot.focusedPane,
       treeRootPath: snapshot.treeRootPath,
-      treeRebuilt,
       refreshExpandedTree: options.refreshExpandedTree ?? false,
       rerunSearch,
     };
@@ -605,7 +601,8 @@ export function useExplorerTabs(args: {
           leftPaneSubview:
             startupTab.favoritePath && favoritesPlacement === "separate" ? "favorites" : "tree",
           focusedPane: "content",
-          includeHidden: false,
+          includeHidden: startupTab.includeHidden,
+          foldersFirst: startupTab.foldersFirst,
           view: null,
           search: null,
         },
@@ -684,9 +681,6 @@ export function useExplorerTabs(args: {
       return;
     }
     if (pending.mode === "reload") {
-      if (pending.treeRebuilt && pending.treeRootPath.length > 0) {
-        void navActions.loadTreeChildren(pending.treeRootPath);
-      }
       void navActions.reloadFolderInPlace({ refreshExpandedTree: pending.refreshExpandedTree });
       return;
     }
@@ -784,6 +778,8 @@ export function useExplorerTabs(args: {
     viewMode: preferences.viewMode,
     sortBy: navigation.sortBy,
     sortDirection: navigation.sortDirection,
+    includeHidden: preferences.includeHidden,
+    foldersFirst: preferences.foldersFirst,
   };
   // No more tabs are remembered than a saved list may hold; a longer list would be refused
   // as a whole, along with everything saved in the same write.
@@ -836,5 +832,7 @@ function toOpenTabPreference(snapshot: TabSnapshot): OpenTabPreference {
     viewMode: snapshot.viewMode,
     sortBy: snapshot.sortBy,
     sortDirection: snapshot.sortDirection,
+    includeHidden: snapshot.includeHidden,
+    foldersFirst: snapshot.foldersFirst,
   };
 }

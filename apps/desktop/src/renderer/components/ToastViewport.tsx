@@ -1,10 +1,8 @@
 import { useEffect, useRef } from "react";
 
+import { offsetAboveBarsAndCard, useBottomOffset } from "../lib/bottomStack";
 import type { ToastEntry, ToastKind } from "../lib/toasts";
 import { ClipboardItemsIcon } from "./ClipboardItemsIcon";
-
-// Just above the path bar, so the item count under it stays readable.
-const TOAST_REST_OFFSET_BOTTOM = 38;
 
 // Solid marks in the kind's color; the sign inside is cut out in the card's own color.
 function ToastIcon({ kind }: { kind: ToastKind }) {
@@ -43,13 +41,22 @@ function ToastIcon({ kind }: { kind: ToastKind }) {
 export function ToastViewport({
   toasts,
   onDismiss,
-  offsetBottom = TOAST_REST_OFFSET_BOTTOM,
+  progressCardShown = false,
 }: {
   toasts: ToastEntry[];
   onDismiss: (id: string) => void;
-  offsetBottom?: number | undefined;
+  /** A running operation's card comes and goes under the notifications. */
+  progressCardShown?: boolean;
 }) {
   const timersRef = useRef<Record<string, { expiresAt: number; timer: number }>>({});
+  const newestToastId = toasts[toasts.length - 1]?.id ?? null;
+  // Notifications rest above the path bar, the Info Row and a running operation's card, so
+  // the item count, the selection's details and the progress stay readable. Measured again
+  // when a notification arrives and when the card appears or goes.
+  const restBottom = useBottomOffset(
+    offsetAboveBarsAndCard,
+    newestToastId === null ? null : `${newestToastId}:${progressCardShown}`,
+  );
 
   useEffect(() => {
     const activeTimers = timersRef.current;
@@ -101,7 +108,7 @@ export function ToastViewport({
     <div
       className="toast-viewport"
       data-testid="toast-viewport"
-      style={{ bottom: `${offsetBottom}px` }}
+      style={{ bottom: `${restBottom}px` }}
     >
       {toasts.map((toast) => {
         const isAssertive = toast.kind === "warning";

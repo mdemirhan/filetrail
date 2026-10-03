@@ -158,6 +158,7 @@ export function ToolbarIcon({
       <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" role="presentation">
         <rect x="8" y="8" width="13" height="13" rx="2" />
         <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+        <path d="M14.5 11.5v6M11.5 14.5h6" />
       </svg>
     );
   }
@@ -208,11 +209,14 @@ export function ToolbarIcon({
     }
     if (name === "refresh") return "M1 4v6h6M3.51 15a9 9 0 1 0 2.13-9.36L1 10";
     /* Converged with context menu */
-    if (name === "edit") return "M12 20h9M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z";
+    // A square with a pencil: open in the text editor.
+    if (name === "edit")
+      return "M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z";
     if (name === "theme") {
       return "M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41M12 16a4 4 0 1 0 0-8a4 4 0 0 0 0 8";
     }
-    if (name === "chevron") return "M6 4l4 4-4 4";
+    // Centered in the box, so it turns in place when a disclosure rotates it.
+    if (name === "chevron") return "M9.5 7l5 5-5 5";
     if (name === "close") return "M6 6l12 12M18 6l-12 12";
     if (name === "sortAsc") return "M12 5v14M5 12l7-7 7 7";
     if (name === "sortDesc") return "M12 19V5M5 12l7 7 7-7";
@@ -238,9 +242,9 @@ export function ToolbarIcon({
     if (name === "terminal") {
       return "M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2m3 4l3 3-3 3m5 2h4";
     }
-    if (name === "rename") {
-      return "M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z";
-    }
+    // A text field with a cursor in it: change the name.
+    if (name === "rename")
+      return "M5 5.5h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2zM8.5 9v6M7 9h3M7 15h3";
     /* Converged: open — external open (box with arrow out) */
     return "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3";
   })();

@@ -12,7 +12,7 @@ import {
   shell,
 } from "electron";
 
-import type { SettingsTab } from "@filetrail/contracts";
+import { type HelpTopic, type SettingsTab, helpTopicSchema } from "@filetrail/contracts";
 
 import { type AppPreferences, isThemeInGroup } from "../shared/appPreferences";
 import {
@@ -51,6 +51,9 @@ let settingsWindowRef: BrowserWindow | null = null;
 // The Settings tab that was on screen last, so the window opens where it was left. It is
 // remembered only while the app runs: a fresh launch starts on General.
 let lastSettingsTab: SettingsTab | null = null;
+let helpWindowRef: BrowserWindow | null = null;
+// The Help page on screen last, so Help opens where it was left while the app runs.
+let lastHelpTopic: HelpTopic | null = null;
 let aboutWindowRef: BrowserWindow | null = null;
 let acknowledgementsWindowRef: BrowserWindow | null = null;
 let appStateStoreRef: AppStateStore | null = null;
@@ -178,6 +181,7 @@ if (hasSingleInstanceLock) {
           showStartupNotices: (notices) => {
             pendingStartupNotices.push(...notices);
           },
+          openHelpWindow,
           setApplicationMenuState: (state, senderId) => {
             if (senderId !== mainWindowRef?.webContents.id) {
               return;
@@ -468,6 +472,74 @@ function openSettingsWindow(tab?: SettingsTab): void {
   void settingsWindow.loadURL(settingsUrl);
 }
 
+// Help is a window of its own (⌘?), beside the files rather than in their place, like a
+// Mac app's help. It opens on the page asked for, or the one it was left on.
+function openHelpWindow(topic?: HelpTopic): void {
+  const appStateStore = appStateStoreRef;
+  if (!appStateStore) {
+    return;
+  }
+  if (helpWindowRef && !helpWindowRef.isDestroyed()) {
+    if (topic) {
+      helpWindowRef.webContents.send("filetrail:showHelpTopic", topic);
+    }
+    helpWindowRef.show();
+    helpWindowRef.focus();
+    return;
+  }
+  const helpWindow = new BrowserWindow({
+    show: false,
+    width: 900,
+    height: 680,
+    minWidth: 560,
+    minHeight: 420,
+    title: "File Trail Help",
+    backgroundColor: windowBackgroundColor(appStateStore.getPreferences().theme),
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 16, y: 18 },
+    webPreferences: {
+      preload: fileURLToPath(new URL("../preload/index.cjs", import.meta.url)),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      zoomFactor: appStateStore.getPreferences().zoomPercent / 100,
+    },
+  });
+  helpWindowRef = helpWindow;
+  keepWindowZoom(helpWindow, appStateStore);
+  const openOnTopic = topic ?? lastHelpTopic;
+  const helpUrl = `${resolveRendererEntryUrl()}#help${openOnTopic ? `/${openOnTopic}` : ""}`;
+  const rememberTopic = (url: string) => {
+    const hashIndex = url.indexOf("#");
+    const match = hashIndex === -1 ? null : /^#help\/([a-z]+)$/u.exec(url.slice(hashIndex));
+    const parsed = helpTopicSchema.safeParse(match?.[1]);
+    if (parsed.success) {
+      lastHelpTopic = parsed.data;
+    }
+  };
+  helpWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (isAllowedExternalUrl(url)) {
+      void shell.openExternal(url);
+    }
+    return { action: "deny" };
+  });
+  helpWindow.webContents.on("will-navigate", (event, navigationUrl) => {
+    if (navigationUrl !== helpUrl) {
+      event.preventDefault();
+    }
+  });
+  // The window keeps its address in step with the page on screen.
+  helpWindow.webContents.on("did-navigate-in-page", (_event, url) => rememberTopic(url));
+  helpWindow.on("close", () => rememberTopic(helpWindow.webContents.getURL()));
+  helpWindow.once("ready-to-show", () => helpWindow.show());
+  helpWindow.on("closed", () => {
+    if (helpWindowRef === helpWindow) {
+      helpWindowRef = null;
+    }
+  });
+  void helpWindow.loadURL(helpUrl);
+}
+
 const ABOUT_WINDOW_WIDTH = 460;
 const ABOUT_WINDOW_HEIGHT = 356;
 
@@ -628,6 +700,7 @@ function buildApplicationMenu(mainWindow: BrowserWindow): void {
       createApplicationMenuTemplate(mainWindow.webContents, {
         onOpenAbout: () => openAboutWindow(),
         onOpenSettings: () => openSettingsWindow(),
+        onOpenHelp: (topic) => openHelpWindow(topic),
         includeDeveloperTools: !app.isPackaged || process.env.FILETRAIL_OPEN_DEVTOOLS === "1",
         onCommandSent: () => syncApplicationMenuItems(mainWindow),
         shortcuts: resolveShortcuts(appStateStoreRef?.getPreferences().shortcutOverrides).bindings,

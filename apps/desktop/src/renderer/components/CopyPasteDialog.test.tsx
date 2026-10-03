@@ -18,8 +18,9 @@ describe("CopyPasteDialog", () => {
     expect(screen.getByRole("button", { name: "Cancel Operation" })).toHaveFocus();
   });
 
-  it("focuses the safe action and ignores Enter on the dialog for irreversible confirmations", async () => {
+  it("makes the safe action the default for irreversible confirmations", async () => {
     const onDelete = vi.fn();
+    const onCancel = vi.fn();
     render(
       <CopyPasteDialog
         title="Delete Immediately?"
@@ -30,17 +31,22 @@ describe("CopyPasteDialog", () => {
           destructive: true,
           irreversible: true,
         }}
-        secondaryAction={{ label: "Cancel", onClick: () => undefined }}
+        secondaryAction={{ label: "Cancel", onClick: onCancel }}
       />,
     );
 
     await act(async () => {});
-    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    expect(cancel).toHaveFocus();
+    // The default button is the one drawn in the accent, and the one Return presses.
+    expect(cancel).toHaveClass("is-default");
+    expect(screen.getByRole("button", { name: "Delete" })).toHaveClass("is-destructive");
 
     const dialog = screen.getByRole("dialog", { name: "Delete Immediately?" });
     dialog.focus();
     fireEvent.keyDown(dialog, { key: "Enter" });
     expect(onDelete).not.toHaveBeenCalled();
+    expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
   it("traps tab focus inside the dialog", async () => {

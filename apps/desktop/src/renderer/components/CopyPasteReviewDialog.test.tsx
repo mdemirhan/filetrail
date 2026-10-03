@@ -148,7 +148,7 @@ describe("CopyPasteReviewDialog", () => {
     expect(checkedForAll()).toBe("Skip");
     expect(screen.getByText("Existing items stay as they are.")).toBeInTheDocument();
     expect(screen.queryByText("brand new.txt")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Paste" })).toHaveClass("primary");
+    expect(screen.getByRole("button", { name: "Paste" })).toHaveClass("is-default");
     expect(screen.getByText("Adds 1 · Skips 2")).toBeInTheDocument();
     expect(screen.getByRole("dialog")).toHaveAccessibleDescription(
       "Nothing is replaced unless you choose Replace. The other item will be added.",
@@ -181,7 +181,7 @@ describe("CopyPasteReviewDialog", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("1 existing item will be moved to the Trash")).toBeInTheDocument();
     const start = screen.getByRole("button", { name: "Replace 1 and Paste" });
-    expect(start).toHaveClass("danger");
+    expect(start).toHaveClass("is-destructive");
     expect(checkedForAll()).toBeNull();
     expect(screen.getByText("Set separately for some items below.")).toBeInTheDocument();
 

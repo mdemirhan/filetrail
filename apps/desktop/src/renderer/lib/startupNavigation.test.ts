@@ -173,13 +173,21 @@ describe("startup navigation", () => {
       viewMode: "list" as const,
       sortBy: "name" as const,
       sortDirection: "asc" as const,
+      includeHidden: false,
+      foldersFirst: true,
       ...overrides,
     });
     const preferences = {
       restoreLastVisitedFolderOnStartup: true,
       restoreOpenTabsOnStartup: true,
       openTabs: [
-        tab("/Users/demo/work", { viewMode: "details", sortBy: "size", sortDirection: "desc" }),
+        tab("/Users/demo/work", {
+          viewMode: "details",
+          sortBy: "size",
+          sortDirection: "desc",
+          includeHidden: true,
+          foldersFirst: false,
+        }),
         tab("/Users/demo/Documents", { favoritePath: "/Users/demo/Documents" }),
         tab("/Volumes/Backup", { treeRootPath: "/" }),
       ],
@@ -190,6 +198,8 @@ describe("startup navigation", () => {
       viewMode: "list" as const,
       sortBy: "name" as const,
       sortDirection: "asc" as const,
+      includeHidden: false,
+      foldersFirst: true,
     };
 
     it("brings every tab back at its own folder, with its own view", () => {
@@ -203,6 +213,8 @@ describe("startup navigation", () => {
             viewMode: "details",
             sortBy: "size",
             sortDirection: "desc",
+            includeHidden: true,
+            foldersFirst: false,
           },
           {
             path: "/Users/demo/Documents",
@@ -211,6 +223,8 @@ describe("startup navigation", () => {
             viewMode: "list",
             sortBy: "name",
             sortDirection: "asc",
+            includeHidden: false,
+            foldersFirst: true,
           },
           {
             path: "/Volumes/Backup",
@@ -219,6 +233,8 @@ describe("startup navigation", () => {
             viewMode: "list",
             sortBy: "name",
             sortDirection: "asc",
+            includeHidden: false,
+            foldersFirst: true,
           },
         ],
       });
@@ -237,7 +253,12 @@ describe("startup navigation", () => {
       ]);
       expect(tabs.every((startupTab) => startupTab.rootPath === "/Users/demo")).toBe(true);
       // Each tab still shows its folder the way it did.
-      expect(tabs[0]).toMatchObject({ viewMode: "details", sortBy: "size" });
+      expect(tabs[0]).toMatchObject({
+        viewMode: "details",
+        sortBy: "size",
+        includeHidden: true,
+        foldersFirst: false,
+      });
     });
 
     it("opens a single view when tabs are not restored, at the last folder or at home", () => {
@@ -264,6 +285,8 @@ describe("startup navigation", () => {
           viewMode: "list",
           sortBy: "name",
           sortDirection: "asc",
+          includeHidden: false,
+          foldersFirst: true,
         },
       ]);
       // No tabs were saved yet (the first launch with tabs).

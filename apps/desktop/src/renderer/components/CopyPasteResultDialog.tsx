@@ -4,6 +4,7 @@ import type { WriteOperationProgressEvent } from "@filetrail/contracts";
 
 import { dirnameOf, formatCount, leafName, pluralize } from "../lib/copyPasteReview";
 import { collectRetrySourcePaths, selectTopLevelItems } from "../lib/explorerAppUtils";
+import { PushButton } from "./PushButton";
 import { useDialogFocus } from "./useDialogFocus";
 
 type OperationResult = NonNullable<WriteOperationProgressEvent["result"]>;
@@ -96,7 +97,7 @@ export function CopyPasteResultDialog({
     sentences.length > 0 ? sentences.join(" ") : (result?.error ?? "The operation has finished.");
 
   return (
-    <div className="action-notice-backdrop copy-paste-sheet-backdrop" role="presentation">
+    <div className="modal-scrim is-sheet" role="presentation">
       <dialog
         ref={dialogRef}
         className="copy-paste-sheet"
@@ -151,13 +152,11 @@ export function CopyPasteResultDialog({
         <footer className="copy-paste-sheet-footer">
           <span className="copy-paste-sheet-bar-spacer" />
           {retryCount > 0 ? (
-            <button type="button" className="tb-btn" onClick={onRetry}>
-              Retry {pluralize(retryCount, "Item")}
-            </button>
+            <PushButton onClick={onRetry}>Retry {pluralize(retryCount, "Item")}</PushButton>
           ) : null}
-          <button ref={doneButtonRef} type="button" className="tb-btn primary" onClick={onClose}>
+          <PushButton ref={doneButtonRef} variant="default" onClick={onClose}>
             Done
-          </button>
+          </PushButton>
         </footer>
       </dialog>
     </div>

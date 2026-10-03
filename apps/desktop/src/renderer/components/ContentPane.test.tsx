@@ -382,7 +382,7 @@ describe("ContentPane", () => {
       />,
     );
 
-    expect(screen.getByRole("row", { name: /Folder/ })).toHaveTextContent("-");
+    expect(screen.getByRole("row", { name: /Folder/ })).toHaveTextContent("--");
     expect(screen.getByRole("row", { name: /alpha\.txt/ })).toHaveTextContent("Unavailable");
     expect(screen.queryByText("Not yet available")).not.toBeInTheDocument();
     expect(screen.queryByText("Not available")).not.toBeInTheDocument();
@@ -446,13 +446,17 @@ describe("ContentPane", () => {
       />,
     );
 
-    expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
-      "Name↑",
+    const headers = screen.getAllByRole("columnheader");
+    expect(headers.map((header) => header.textContent)).toEqual([
+      "Name",
       "Date Modified",
       "Size",
       "Kind",
       "Date Created",
     ]);
+    // The sorted column shows its direction with a chevron, and only that column does.
+    expect(headers[0]?.querySelector(".sort-indicator")).toHaveAttribute("data-direction", "asc");
+    expect(document.querySelectorAll(".sort-indicator")).toHaveLength(1);
     const row = screen.getByRole("row", { name: /alpha\.txt/ });
     expect(row).toHaveTextContent("Plain Text Document");
     // Both dates are shown: created in March, modified in April.
@@ -1387,7 +1391,7 @@ describe("ContentPane", () => {
     expect(screen.getByText("No items match “doc”")).toBeInTheDocument();
     expect(screen.queryByText("This folder is empty")).toBeNull();
     expect(screen.getByText("0 of 12")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Search subfolders" }));
+    fireEvent.click(screen.getByRole("button", { name: "Search Subfolders" }));
     expect(handleSearch).toHaveBeenCalledTimes(1);
   });
 
