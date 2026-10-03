@@ -45,6 +45,7 @@ import {
   type InlineRenameState,
   OffscreenRenameField,
   findOffscreenRenameEntry,
+  isFolderKind,
   renameDraftKey,
 } from "./InlineRenameField";
 import { ListFilterPill } from "./ListFilterPill";
@@ -1217,6 +1218,7 @@ function FlowListView({
                     <InlineRenameField
                       name={entry.name}
                       extension={entry.extension}
+                      isFolder={isFolderKind(entry.kind)}
                       error={inlineRename.error}
                       refusalCount={inlineRename.refusalCount ?? 0}
                       draftKey={renameDraftKey(inlineRename)}
@@ -1702,6 +1704,7 @@ function DetailsView({
                         <InlineRenameField
                           name={entry.name}
                           extension={entry.extension}
+                          isFolder={isFolderKind(entry.kind)}
                           error={inlineRename.error}
                           refusalCount={inlineRename.refusalCount ?? 0}
                           draftKey={renameDraftKey(inlineRename)}

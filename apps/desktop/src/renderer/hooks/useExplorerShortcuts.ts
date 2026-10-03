@@ -162,6 +162,17 @@ type ExplorerShortcutActions = {
   customizeToolbar: () => void;
 };
 
+// Shortcuts that start a file operation (or its sheet), which a held key must not repeat.
+const WRITE_STARTING_SHORTCUTS = new Set<string>([
+  "pasteSelection",
+  "duplicateSelection",
+  "trashSelection",
+  "renameSelection",
+  "moveSelection",
+  "newFolder",
+  "emptyTrash",
+]);
+
 type UseExplorerShortcutsArgs = {
   services: ExplorerServices;
   navigation: NavigationStore;
@@ -1318,6 +1329,10 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      // Keys that compose text (Japanese, Chinese, Korean input) belong to the field.
+      if (event.isComposing || event.keyCode === 229) {
+        return;
+      }
       const current = latestArgsRef.current;
       const pressedShortcut = shortcutFromKeyboardEvent(event);
       lastKeyDownRef.current = pressedShortcut
@@ -1412,7 +1427,9 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       ) {
         if (canHandleRendererCommand(pressedCommand, current.shortcutContext)) {
           event.preventDefault();
-          runRendererCommand(pressedCommand);
+          if (!(event.repeat && WRITE_STARTING_SHORTCUTS.has(pressedCommand))) {
+            runRendererCommand(pressedCommand);
+          }
         }
         return;
       }
@@ -1428,6 +1445,12 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
           continue;
         }
         if (!canHandleRawExplorerShortcut(rawShortcutBinding.id, current.shortcutContext)) {
+          return;
+        }
+        // A key held down repeats: one paste (or duplicate, or trash) per press, never a
+        // second one refused as "couldn't start" while the first runs.
+        if (event.repeat && WRITE_STARTING_SHORTCUTS.has(rawShortcutBinding.id)) {
+          event.preventDefault();
           return;
         }
         rawShortcutBinding.run(event);

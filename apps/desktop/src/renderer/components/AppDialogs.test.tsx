@@ -139,7 +139,9 @@ describe("AppDialogs", () => {
     );
   });
 
-  it("keeps rename on the default prompt behavior", () => {
+  // The dialog renames the tree's folders: as in Finder, the whole name is selected, so
+  // typing replaces it.
+  it("selects the whole name when renaming in the dialog", () => {
     renderAppDialogs(
       {},
       {
@@ -156,7 +158,7 @@ describe("AppDialogs", () => {
 
     expect(screen.getByTestId("text-prompt-dialog-Rename “demo.txt”")).toHaveAttribute(
       "data-select-all-on-open",
-      "false",
+      "true",
     );
   });
 

@@ -238,6 +238,8 @@ export function AppDialogs({
         label="New name"
         value={renameDialogState?.currentName ?? ""}
         submitLabel="Rename"
+        // The tree's folders: the whole name is selected, as in Finder, so typing replaces it.
+        selectAllOnOpen
         error={renameDialogState?.error ?? null}
         onClose={() => setRenameDialogState(null)}
         onSubmit={(value) => onSubmitRenameDialog(value)}

@@ -12562,3 +12562,160 @@ describe("New Folder in the folder on screen", () => {
     expect(screen.queryByLabelText("Rename New Folder")).not.toBeInTheDocument();
   });
 });
+
+describe("file commands from the keyboard, in more states", () => {
+  it("pastes once for a held ⌘V, without a refusal for the repeats", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+    await selectItem("/Users/demo/source.txt");
+    await pressKey({ key: "c", metaKey: true });
+
+    await pressKey({ key: "v", metaKey: true });
+    await pressKey({ key: "v", metaKey: true, repeat: true });
+    await pressKey({ key: "v", metaKey: true, repeat: true });
+
+    await vi.waitFor(() => {
+      expect(analyzeRequests(harness)).toHaveLength(1);
+    });
+    expect(screen.queryByRole("dialog", { name: "Paste couldn't start" })).not.toBeInTheDocument();
+  });
+
+  it("says at once that Rename and Move To wait for a running operation", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+    await pasteSourceIntoFolder(harness, "c");
+    await screen.findByRole("region", { name: "Pasting…" });
+    await selectItem("/Users/demo/source.txt");
+
+    await pressKey({ key: "F2" });
+    let dialog = await screen.findByRole("dialog", { name: "Rename couldn't start" });
+    expect(screen.queryByLabelText("Rename source.txt")).not.toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole("button", { name: "OK" }));
+    });
+
+    await selectItem("/Users/demo/source.txt");
+    await pressKey({ key: "m", metaKey: true, shiftKey: true });
+    dialog = await screen.findByRole("dialog", { name: "Move couldn't start" });
+    expect(dialog).toBeInTheDocument();
+  });
+
+  it("names a new folder in its row while the list is filtered", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+    await selectItem("/Users/demo/source.txt");
+    await pressKey({ key: "s" });
+    await pressKey({ key: "o" });
+    await vi.waitFor(() => {
+      expect(screen.queryByTitle("/Users/demo/Folder")).not.toBeInTheDocument();
+    });
+
+    await pressKey({ key: "n", metaKey: true, shiftKey: true });
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.some((call) => call.channel === "writeOperation:createFolder"),
+      ).toBe(true);
+    });
+    harness.setDirectoryEntries("/Users/demo", [
+      createDirectoryEntry("/Users/demo/source.txt", "file"),
+      createDirectoryEntry("/Users/demo/Folder", "directory"),
+      createDirectoryEntry("/Users/demo/New Folder", "directory"),
+    ]);
+    await act(async () => {
+      harness.emitProgress({
+        operationId: "write-op-folder",
+        action: "new_folder",
+        status: "completed",
+        completedItemCount: 1,
+        totalItemCount: 1,
+        completedByteCount: 0,
+        totalBytes: null,
+        currentSourcePath: null,
+        currentDestinationPath: "/Users/demo/New Folder",
+        result: {
+          operationId: "write-op-folder",
+          action: "new_folder",
+          status: "completed",
+          targetPath: "/Users/demo/New Folder",
+          startedAt: "2026-10-03T10:00:00.000Z",
+          finishedAt: "2026-10-03T10:00:01.000Z",
+          summary: {
+            topLevelItemCount: 1,
+            totalItemCount: 1,
+            completedItemCount: 1,
+            failedItemCount: 0,
+            skippedItemCount: 0,
+            cancelledItemCount: 0,
+            completedByteCount: 0,
+            totalBytes: null,
+          },
+          items: [
+            {
+              sourcePath: null,
+              destinationPath: "/Users/demo/New Folder",
+              status: "completed",
+              error: null,
+            },
+          ],
+          error: null,
+        },
+      });
+    });
+
+    expect(await screen.findByLabelText("Rename New Folder")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Rename “New Folder”" })).not.toBeInTheDocument();
+  });
+
+  // Search results show no folder of their own: New Folder has nowhere to go.
+  it("offers no New Folder on a folder in the search results", async () => {
+    const harness = createAppHarness({
+      searchResultItems: [
+        {
+          path: "/Users/demo/Folder",
+          name: "Folder",
+          extension: "",
+          kind: "directory",
+          isHidden: false,
+          isSymlink: false,
+          parentPath: "/Users/demo",
+          relativeParentPath: ".",
+        },
+      ],
+    });
+    renderApp(harness);
+    await openSearchResults();
+
+    await act(async () => {
+      fireEvent.contextMenu(await screen.findByTitle("search:/Users/demo/Folder"));
+    });
+
+    expect(screen.getByRole("button", { name: /^Rename/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^New Folder/ })).not.toBeInTheDocument();
+  });
+
+  // A search tab shows results, not the folder behind them: like Paste there, a drop on
+  // it would put the items somewhere out of sight.
+  it("takes no drop on a tab showing search results", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+    await screen.findByTitle("/Users/demo/source.txt");
+    await pressKey({ key: "t", metaKey: true });
+    await vi.waitFor(() => {
+      expect(screen.getAllByRole("tab")).toHaveLength(2);
+    });
+    // The search runs in another folder than the item dragged, so a drop would move it.
+    await openDirectory("/Users/demo/Folder");
+    await openSearchResults();
+    const [folderTab, searchTab] = screen.getAllByRole("tab") as [HTMLElement, HTMLElement];
+    await act(async () => {
+      fireEvent.click(folderTab);
+    });
+    const source = await within(await screen.findByTestId("content-pane")).findByTitle(
+      "/Users/demo/source.txt",
+    );
+
+    await dragBetween(source, searchTab);
+
+    expect(harness.invocations.map((call) => call.channel)).not.toContain("copyPaste:analyzeStart");
+  });
+});

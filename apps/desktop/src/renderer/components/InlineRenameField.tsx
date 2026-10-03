@@ -41,6 +41,7 @@ export function InlineRenameField({
   refusalCount = 0,
   draftKey,
   hidden = false,
+  isFolder = false,
   onSubmit,
   onCancel,
 }: {
@@ -60,6 +61,8 @@ export function InlineRenameField({
    * name being edited; the row's own field takes over when it is back.
    */
   hidden?: boolean;
+  /** A folder's name is selected whole ("Photos 2026.10" has no extension to keep). */
+  isFolder?: boolean;
   onSubmit: (nextName: string) => void;
   onCancel: () => void;
 }) {
@@ -86,7 +89,10 @@ export function InlineRenameField({
       input.setSelectionRange(kept.selectionStart, kept.selectionEnd);
       return;
     }
-    input.setSelectionRange(0, splitDisplayName(name, extension).stem.length);
+    input.setSelectionRange(
+      0,
+      isFolder ? name.length : splitDisplayName(name, extension).stem.length,
+    );
   }, [extension, name]);
 
   function rememberDraft(input: HTMLInputElement) {
@@ -181,6 +187,11 @@ export function InlineRenameField({
         }}
         onSelect={(event) => rememberDraft(event.currentTarget)}
         onKeyDown={(event) => {
+          // Return and Escape while text is being composed (Japanese, Chinese, Korean input)
+          // confirm or cancel the composition, not the rename.
+          if (event.nativeEvent.isComposing || event.keyCode === 229) {
+            return;
+          }
           if (event.key === "Enter") {
             event.preventDefault();
             event.stopPropagation();
@@ -241,7 +252,7 @@ export function OffscreenRenameField({
   onSubmit,
   onCancel,
 }: {
-  entry: { name: string; extension: string };
+  entry: { name: string; extension: string; kind: string };
   inlineRename: InlineRenameState;
   onSubmit: (nextName: string) => void;
   onCancel: () => void;
@@ -251,6 +262,7 @@ export function OffscreenRenameField({
       hidden
       name={entry.name}
       extension={entry.extension}
+      isFolder={isFolderKind(entry.kind)}
       error={inlineRename.error}
       refusalCount={inlineRename.refusalCount ?? 0}
       draftKey={renameDraftKey(inlineRename)}
@@ -258,4 +270,10 @@ export function OffscreenRenameField({
       onCancel={onCancel}
     />
   );
+}
+
+// Folders, and links to them, whose names are selected whole when renamed. Packages (an
+// app) keep their extension outside the selection, as files do.
+export function isFolderKind(kind: string): boolean {
+  return kind === "directory" || kind === "symlink_directory";
 }

@@ -582,6 +582,8 @@ export function useExplorerActions(args: {
     }
     if (contextMenuState.surface === "search") {
       hidden.add("toggleFavorite");
+      // New Folder goes into the folder on screen, and search results show none.
+      hidden.add("newFolder");
     }
     // An item's New Folder makes the folder inside it, so it is there only for one folder;
     // the folder on screen has its own, in the menu of the background.
@@ -3195,6 +3197,12 @@ export function useExplorerActions(args: {
     if (paths.length === 0) {
       return;
     }
+    // Nothing could be moved until the running operation ends: said now, not after a
+    // destination was picked.
+    if (isWriteOperationInFlight()) {
+      showWriteOperationBusyNotice("move_to");
+      return;
+    }
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
@@ -3272,6 +3280,12 @@ export function useExplorerActions(args: {
     if (!sourcePath) {
       return;
     }
+    // Said now, before a name is typed that couldn't be used until the operation ends.
+    if (isWriteOperationInFlight()) {
+      closeContextMenu();
+      showWriteOperationBusyNotice("rename");
+      return;
+    }
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
@@ -3282,8 +3296,12 @@ export function useExplorerActions(args: {
       currentName: getPathLeafName(sourcePath),
       error: null,
       refusalCount: 0,
-      // In the list or the search results, the name is edited in its row.
-      inline: !options.fromTree && activeContentEntries.some((entry) => entry.path === sourcePath),
+      // In the list or the search results, the name is edited in its row. An item the list
+      // filter hides counts too: the filter is cleared to show a folder just made.
+      inline:
+        !options.fromTree &&
+        (activeContentEntries.some((entry) => entry.path === sourcePath) ||
+          (!isSearchModeRef.current && currentEntries.some((entry) => entry.path === sourcePath))),
       sessionId: nextRenameSessionId(),
     });
     closeContextMenu();

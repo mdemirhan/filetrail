@@ -169,4 +169,30 @@ describe("InlineRenameField", () => {
     expect(onRowClick).not.toHaveBeenCalled();
     expect(onRowPointerDown).not.toHaveBeenCalled();
   });
+
+  // The core reports "Photos 2026.10" as having the extension "10"; a folder has none.
+  it("selects the whole name of a folder with dots in it", () => {
+    const { input } = renderField({
+      name: "Photos 2026.10.03",
+      extension: "03",
+      isFolder: true,
+    });
+
+    expect([input.selectionStart, input.selectionEnd]).toEqual([0, "Photos 2026.10.03".length]);
+  });
+
+  // Return confirms the converted text, Escape cancels the conversion: neither is about
+  // the rename while Japanese, Chinese or Korean text is being composed.
+  it("leaves Return and Escape to text being composed", () => {
+    const { input, onSubmit, onCancel } = renderField();
+    fireEvent.change(input, { target: { value: "にほん.pdf" } });
+
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+    fireEvent.keyDown(input, { key: "Escape", keyCode: 229 });
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(onCancel).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onSubmit).toHaveBeenCalledWith("にほん.pdf");
+  });
 });
