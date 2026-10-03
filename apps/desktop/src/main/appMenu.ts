@@ -37,6 +37,9 @@ const COMMANDS_FOR_ANY_WINDOW = new Set<RendererCommandType>([
 // Add to Favorites and Remove from Favorites are two items; one shows at a time.
 const FAVORITE_ADD_ITEM_ID = "toggleFavorite:add";
 const FAVORITE_REMOVE_ITEM_ID = "toggleFavorite:remove";
+// Hide Folder Tree and Show Folder Tree too.
+const FOLDER_TREE_HIDE_ITEM_ID = "toggleFolderTree:hide";
+const FOLDER_TREE_SHOW_ITEM_ID = "toggleFolderTree:show";
 const ENTER_FULL_SCREEN_ITEM_ID = "fullScreen:enter";
 const EXIT_FULL_SCREEN_ITEM_ID = "fullScreen:exit";
 
@@ -218,6 +221,11 @@ export function createApplicationMenuTemplate(
         }),
         command("refreshOrApplySearchSort", "Refresh"),
         separator,
+        command("toggleFolderTree", "Hide Folder Tree", { id: FOLDER_TREE_HIDE_ITEM_ID }),
+        command("toggleFolderTree", "Show Folder Tree", {
+          id: FOLDER_TREE_SHOW_ITEM_ID,
+          visible: false,
+        }),
         command("toggleInfoPanel", "Info Panel", { type: "checkbox" }),
         command("toggleInfoRow", "Info Row", {
           type: "checkbox",
@@ -315,7 +323,7 @@ export function resolveApplicationMenuItemStates(
   };
 
   const items: ApplicationMenuItemState[] = RENDERER_COMMAND_TYPES.filter(
-    (type) => type !== "toggleFavorite",
+    (type) => type !== "toggleFavorite" && type !== "toggleFolderTree",
   ).map((type) => ({
     id: type,
     enabled: isEnabled(type),
@@ -331,6 +339,16 @@ export function resolveApplicationMenuItemStates(
       id: FAVORITE_REMOVE_ITEM_ID,
       enabled: isEnabled("toggleFavorite"),
       visible: state.favoriteIsSet,
+    },
+    {
+      id: FOLDER_TREE_HIDE_ITEM_ID,
+      enabled: isEnabled("toggleFolderTree"),
+      visible: state.folderTreeOpen,
+    },
+    {
+      id: FOLDER_TREE_SHOW_ITEM_ID,
+      enabled: isEnabled("toggleFolderTree"),
+      visible: !state.folderTreeOpen,
     },
     { id: ENTER_FULL_SCREEN_ITEM_ID, visible: !window.fullScreen },
     { id: EXIT_FULL_SCREEN_ITEM_ID, visible: window.fullScreen },

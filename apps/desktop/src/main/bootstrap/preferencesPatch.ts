@@ -58,6 +58,9 @@ export function toPreferencePatch(
   if (value.markClipboardItems !== undefined) {
     patch.markClipboardItems = value.markClipboardItems;
   }
+  if (value.folderTreeOpen !== undefined) {
+    patch.folderTreeOpen = value.folderTreeOpen;
+  }
   if (value.propertiesOpen !== undefined) {
     patch.propertiesOpen = value.propertiesOpen;
   }

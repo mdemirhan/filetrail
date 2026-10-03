@@ -313,9 +313,11 @@ describe("appStateStore", () => {
       },
       notificationsEnabled: true,
       markClipboardItems: true,
+      folderTreeOpen: true,
       propertiesOpen: false,
       detailRowOpen: false,
       topToolbarItems: [
+        "folderTree",
         "back",
         "forward",
         "title",
@@ -438,6 +440,7 @@ describe("appStateStore", () => {
       searchSkipGitIgnored: false,
       searchResultsSortBy: "name",
       searchResultsSortDirection: "desc",
+      folderTreeOpen: true,
       propertiesOpen: false,
       detailRowOpen: true,
       treeWidth: 312,
@@ -547,6 +550,7 @@ describe("appStateStore", () => {
       searchSkipGitIgnored: false,
       searchResultsSortBy: "name",
       searchResultsSortDirection: "desc",
+      folderTreeOpen: true,
       propertiesOpen: false,
       detailRowOpen: true,
       treeWidth: 312,
@@ -725,10 +729,22 @@ describe("appStateStore", () => {
         "viewOptions",
         "search",
       ],
+      [
+        "back",
+        "forward",
+        "title",
+        "clipboard",
+        "view",
+        "sort",
+        "search",
+        "viewOptions",
+        "infoPanel",
+      ],
     ];
     for (const topToolbarItems of earlierDefaults) {
       writeFileSync(filePath, JSON.stringify({ preferences: { topToolbarItems } }), "utf8");
       expect(createAppStateStore(filePath).getPreferences().topToolbarItems).toEqual([
+        "folderTree",
         "back",
         "forward",
         "title",

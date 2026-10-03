@@ -219,6 +219,8 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
     currentPath: navigation.currentPath,
     contentSelection: navigation.contentSelection,
     contentColumns: navigation.contentColumns,
+    folderTreeOpen: navigation.folderTreeOpen,
+    setFolderTreeOpen: navigation.setFolderTreeOpen,
     setInfoPanelOpen: navigation.setInfoPanelOpen,
     setInfoRowOpen: navigation.setInfoRowOpen,
     listFilterActive: navigation.listFilterQuery.length > 0,
@@ -279,8 +281,17 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
     [],
   );
 
+  // A hidden tree comes back to take the keyboard.
   const focusTreePane = useCallback(() => {
-    latestArgsRef.current.treePaneRef.current?.focus({ preventScroll: true });
+    const current = latestArgsRef.current;
+    if (!current.folderTreeOpen) {
+      current.setFolderTreeOpen(true);
+      window.requestAnimationFrame(() => {
+        latestArgsRef.current.treePaneRef.current?.focus({ preventScroll: true });
+      });
+      return;
+    }
+    current.treePaneRef.current?.focus({ preventScroll: true });
   }, []);
 
   const focusContentPaneRef = useCallback(() => {
@@ -325,7 +336,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
           const target = keyboardEvent.target;
           const treeFocusTarget = isTreeFocusTarget(target);
           keyboardEvent.preventDefault();
-          if (treeFocusTarget || current.focusedPane === "tree") {
+          if (treeFocusTarget || current.focusedPane === "tree" || !current.folderTreeOpen) {
             focusContentPaneRef();
             current.setFocusedPane("content");
             return;
@@ -675,6 +686,14 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         run: (keyboardEvent) => {
           keyboardEvent.preventDefault();
           latestArgsRef.current.setInfoRowOpen((value) => !value);
+        },
+      },
+      {
+        id: "toggleFolderTree",
+        command: "toggleFolderTree",
+        run: (keyboardEvent) => {
+          keyboardEvent.preventDefault();
+          latestArgsRef.current.setFolderTreeOpen((value) => !value);
         },
       },
       {
@@ -1160,6 +1179,10 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
           return;
         }
         void current.refreshDirectory();
+        return;
+      }
+      if (commandType === "toggleFolderTree") {
+        current.setFolderTreeOpen((value) => !value);
         return;
       }
       if (commandType === "toggleInfoPanel") {

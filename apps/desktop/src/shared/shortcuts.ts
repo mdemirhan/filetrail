@@ -328,6 +328,14 @@ export const SHORTCUT_COMMANDS = [
     menuPath: "View > Hidden Files",
   },
   {
+    id: "toggleFolderTree",
+    label: "Folder Tree",
+    group: "view",
+    // Finder's key for its sidebar.
+    defaults: ["Ctrl+Cmd+S"],
+    menuPath: "View > Hide Folder Tree",
+  },
+  {
     id: "toggleInfoPanel",
     label: "Info Panel",
     group: "view",

@@ -9,6 +9,7 @@ export type ApplicationMenuState = {
   sortBy: "name" | "modified" | "size" | "kind";
   foldersFirst: boolean;
   hiddenFilesShown: boolean;
+  folderTreeOpen: boolean;
   infoPanelOpen: boolean;
   infoRowOpen: boolean;
   /** Whether the folder the Favorites item acts on is a favorite already. */
@@ -22,6 +23,7 @@ export const INITIAL_APPLICATION_MENU_STATE: ApplicationMenuState = {
   sortBy: "name",
   foldersFirst: true,
   hiddenFilesShown: false,
+  folderTreeOpen: true,
   infoPanelOpen: false,
   infoRowOpen: false,
   favoriteIsSet: false,

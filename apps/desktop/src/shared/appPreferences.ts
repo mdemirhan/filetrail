@@ -278,6 +278,8 @@ export type AppPreferences = {
   notificationsEnabled: boolean;
   // Items that were copied or cut flash and keep a mark, in the folder tree and the file list.
   markClipboardItems: boolean;
+  // The folder tree on the left (View > Hide Folder Tree).
+  folderTreeOpen: boolean;
   propertiesOpen: boolean;
   detailRowOpen: boolean;
   topToolbarItems: ToolbarItemId[];
@@ -331,6 +333,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   detailColumnWidths: DEFAULT_DETAIL_COLUMN_WIDTHS,
   notificationsEnabled: true,
   markClipboardItems: true,
+  folderTreeOpen: true,
   propertiesOpen: false,
   detailRowOpen: false,
   topToolbarItems: [...DEFAULT_TOP_TOOLBAR_ITEMS],

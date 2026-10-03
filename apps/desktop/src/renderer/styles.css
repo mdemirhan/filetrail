@@ -295,6 +295,13 @@ select:focus-visible {
   -webkit-app-region: drag;
 }
 
+/* With the folder tree hidden the toolbar starts at the window's corner: its first item
+   sits clear of the traffic lights (placed at 14 points, three buttons wide), as in a
+   Finder window without its sidebar. */
+.window-toolbar[data-under-traffic-lights] {
+  padding-left: 76px;
+}
+
 /* The sizes the toolbar's row is laid out from. lib/topToolbarLayout.ts has the same
    numbers, to work out which items fit. */
 .window-toolbar {

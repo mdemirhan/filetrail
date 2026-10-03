@@ -119,17 +119,17 @@ describe("toolbarItems", () => {
 
   it("inserts, moves and removes items by their place in the order", () => {
     const items = DEFAULT_TOP_TOOLBAR_ITEMS;
-    expect(insertTopToolbarItem(items, "refresh", 2)).toEqual([
-      "back",
-      "forward",
+    expect(insertTopToolbarItem(items, "refresh", 3)).toEqual([
+      ...items.slice(0, 3),
       "refresh",
-      ...items.slice(2),
+      ...items.slice(3),
     ]);
     // Out of range lands at the nearer end.
     expect(insertTopToolbarItem(items, "refresh", -3)[0]).toBe("refresh");
     expect(insertTopToolbarItem(items, "refresh", 99).at(-1)).toBe("refresh");
     // Back moved after Sort: the index counts the items without Back.
-    expect(moveTopToolbarItem(items, 0, 5)).toEqual([
+    expect(moveTopToolbarItem(items, 1, 6)).toEqual([
+      "folderTree",
       "forward",
       "title",
       "clipboard",

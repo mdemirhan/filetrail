@@ -46,6 +46,7 @@ export function useExplorerNavigation() {
   const [typeaheadQuery, setTypeaheadQuery] = useState("");
   const [typeaheadPane, setTypeaheadPane] = useState<"tree" | "content" | null>(null);
   const [infoTargetPathOverride, setInfoTargetPathOverride] = useState<string | null>(null);
+  const [folderTreeOpen, setFolderTreeOpen] = useState(DEFAULT_APP_PREFERENCES.folderTreeOpen);
   const [infoPanelOpen, setInfoPanelOpen] = useState(DEFAULT_APP_PREFERENCES.propertiesOpen);
   const [infoRowOpen, setInfoRowOpen] = useState(DEFAULT_APP_PREFERENCES.detailRowOpen);
   const [restoredPaneWidths, setRestoredPaneWidths] = useState<{
@@ -131,6 +132,8 @@ export function useExplorerNavigation() {
     setTypeaheadPane,
     infoTargetPathOverride,
     setInfoTargetPathOverride,
+    folderTreeOpen,
+    setFolderTreeOpen,
     infoPanelOpen,
     setInfoPanelOpen,
     infoRowOpen,

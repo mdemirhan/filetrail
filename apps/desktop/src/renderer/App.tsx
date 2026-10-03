@@ -258,6 +258,8 @@ export function App() {
     setTypeaheadPane,
     infoTargetPathOverride,
     setInfoTargetPathOverride,
+    folderTreeOpen,
+    setFolderTreeOpen,
     infoPanelOpen,
     setInfoPanelOpen,
     infoRowOpen,
@@ -732,6 +734,12 @@ export function App() {
       explorerFocusSuppressed,
     },
   });
+  // Hiding the tree while it has the keyboard gives the keyboard to the list.
+  useEffect(() => {
+    if (!folderTreeOpen && focusedPane === "tree") {
+      focusContentPane();
+    }
+  }, [folderTreeOpen, focusedPane, focusContentPane]);
   const navigateFavoritePath = useCallback(
     (path: string, historyMode: "push" | "replace" | "skip") =>
       navigateTo(path, historyMode, undefined, undefined, undefined, undefined, {
@@ -1066,6 +1074,7 @@ export function App() {
         sortBy,
         foldersFirst,
         hiddenFilesShown: includeHidden,
+        folderTreeOpen,
         infoPanelOpen,
         infoRowOpen,
         favoriteIsSet: favoriteTargetPath !== null && isFavoritePath(favorites, favoriteTargetPath),
@@ -1076,6 +1085,7 @@ export function App() {
       sortBy,
       foldersFirst,
       includeHidden,
+      folderTreeOpen,
       infoPanelOpen,
       infoRowOpen,
       favoriteTargetPath,
@@ -1207,6 +1217,7 @@ export function App() {
     notificationsEnabled,
     markClipboardItems,
     topToolbarItems,
+    folderTreeOpen,
     propertiesOpen: infoPanelOpen,
     detailRowOpen: infoRowOpen,
     terminalApp,
@@ -1364,6 +1375,7 @@ export function App() {
         setNotificationsEnabled(preferences.notificationsEnabled);
         setMarkClipboardItems(preferences.markClipboardItems);
         setTopToolbarItems(preferences.topToolbarItems);
+        setFolderTreeOpen(preferences.folderTreeOpen);
         setInfoPanelOpen(preferences.propertiesOpen);
         setInfoRowOpen(preferences.detailRowOpen);
         setSortBy(preferences.sortBy);
@@ -1704,6 +1716,8 @@ export function App() {
             treeWidth={panes.treeWidth}
             inspectorWidth={panes.inspectorWidth}
             beginResize={panes.beginResize}
+            folderTreeOpen={folderTreeOpen}
+            onToggleFolderTree={() => setFolderTreeOpen((value) => !value)}
             infoPanelOpen={infoPanelOpen}
             treePaneProps={{
               paneRef: treePaneRef,

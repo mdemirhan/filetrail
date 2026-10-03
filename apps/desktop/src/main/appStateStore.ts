@@ -434,6 +434,10 @@ function sanitizePreferences(value: unknown, currentDefaults: AppPreferences): A
         ? record.notificationsEnabled
         : currentDefaults.notificationsEnabled,
     markClipboardItems: sanitizeMarkClipboardItems(record, currentDefaults.markClipboardItems),
+    folderTreeOpen:
+      typeof record.folderTreeOpen === "boolean"
+        ? record.folderTreeOpen
+        : currentDefaults.folderTreeOpen,
     propertiesOpen:
       typeof record.propertiesOpen === "boolean"
         ? record.propertiesOpen

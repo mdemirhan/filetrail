@@ -13,6 +13,7 @@ export type ToolbarIconName =
   | "list"
   | "details"
   | "drawer"
+  | "sidebar"
   | "edit"
   | "chevron"
   | "open"
@@ -63,6 +64,7 @@ export type ToolbarItemId =
   | "goToFolder"
   | "foldersFirst"
   | "hidden"
+  | "folderTree"
   | "infoPanel"
   | "infoRow"
   | "newTab"
@@ -200,6 +202,14 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     icon: "hidden",
     kind: "toggle",
     shortcutCommand: "toggleHiddenFiles",
+  },
+  {
+    id: "folderTree",
+    label: "Folder Tree",
+    icon: "sidebar",
+    kind: "toggle",
+    commandType: "toggleFolderTree",
+    shortcutCommand: "toggleFolderTree",
   },
   {
     id: "infoPanel",
@@ -365,7 +375,8 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
 
 export const TOOLBAR_ITEM_IDS = TOOLBAR_ITEM_DEFINITIONS.map((item) => item.id) as ToolbarItemId[];
 
-// The default: Back and Forward, the folder title, then (pushed to the far end by the
+// The default: the folder tree's button (where Finder has its sidebar's), Back and Forward,
+// the folder title, then (pushed to the far end by the
 // title, which takes the spare room) the controls for how the list is shown, the search
 // field, and the two that close the toolbar.
 // - The clipboard button comes and goes, so it is the first item after the title: there it
@@ -375,6 +386,7 @@ export const TOOLBAR_ITEM_IDS = TOOLBAR_ITEM_DEFINITIONS.map((item) => item.id) 
 //   (View Options has the same toggle).
 // Everything else can be added with View > Customize Toolbar.
 export const DEFAULT_TOP_TOOLBAR_ITEMS: ToolbarItemId[] = [
+  "folderTree",
   "back",
   "forward",
   "title",
@@ -405,6 +417,7 @@ export const PREVIOUS_DEFAULT_TOP_TOOLBARS: ReadonlyArray<readonly string[]> = [
   // Saved before the title, the clipboard button and View Options were in the list.
   ["back", "forward", "view", "sort", "infoPanel", "search"],
   ["back", "forward", "title", "view", "sort", "infoPanel", "clipboard", "viewOptions", "search"],
+  ["back", "forward", "title", "clipboard", "view", "sort", "search", "viewOptions", "infoPanel"],
 ];
 
 const TOOLBAR_ITEM_ID_SET = new Set<ToolbarItemId>(TOOLBAR_ITEM_IDS);

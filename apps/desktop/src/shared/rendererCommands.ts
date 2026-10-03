@@ -25,6 +25,7 @@ export const RENDERER_COMMAND_TYPES = [
   "showClipboard",
   "clearClipboard",
   "refreshOrApplySearchSort",
+  "toggleFolderTree",
   "toggleInfoPanel",
   "toggleInfoRow",
   "customizeToolbar",

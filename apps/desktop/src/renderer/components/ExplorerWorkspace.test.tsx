@@ -196,6 +196,41 @@ describe("ExplorerWorkspace", () => {
     vi.useRealTimers();
   });
 
+  it("hides the folder tree, giving its room to the list and the toolbar", () => {
+    const onToggleFolderTree = vi.fn();
+    const view = renderExplorerWorkspace({
+      folderTreeOpen: false,
+      onToggleFolderTree,
+      topToolbarItems: ["folderTree", "back", "title", "search"],
+    });
+
+    expect(view.container.querySelector(".workspace-sidebar-cell")).toBeNull();
+    expect(screen.queryByRole("separator", { name: "Resize folders pane" })).toBeNull();
+    const body = view.container.querySelector(".workspace-body") as HTMLElement;
+    expect(body.style.gridTemplateColumns.startsWith("0px 0px")).toBe(true);
+    // The toolbar reaches the window's corner, clear of the traffic lights.
+    expect(view.container.querySelector(".window-toolbar")).toHaveAttribute(
+      "data-under-traffic-lights",
+    );
+
+    const button = screen.getByRole("button", { name: "Folder Tree" });
+    expect(button).toHaveAttribute("aria-pressed", "false");
+    expect(button).toHaveAttribute("title", "Show Folder Tree (⌃⌘S)");
+    fireEvent.click(button);
+    expect(onToggleFolderTree).toHaveBeenCalledTimes(1);
+
+    view.rerender(
+      explorerWorkspaceElement({
+        folderTreeOpen: true,
+        topToolbarItems: ["folderTree", "back", "title", "search"],
+      }),
+    );
+    expect(view.container.querySelector(".workspace-sidebar-cell")).not.toBeNull();
+    expect(view.container.querySelector(".window-toolbar")).not.toHaveAttribute(
+      "data-under-traffic-lights",
+    );
+  });
+
   it("doesn't slide a panel that is open when the window is restored", () => {
     const view = renderExplorerWorkspace({ preferencesReady: false });
     view.rerender(explorerWorkspaceElement({ preferencesReady: false, infoPanelOpen: true }));
@@ -481,6 +516,7 @@ describe("ExplorerWorkspace", () => {
 
 describe("ExplorerWorkspace customizing the toolbar", () => {
   const DEFAULT_ITEMS = [
+    "folderTree",
     "back",
     "forward",
     "title",
@@ -546,6 +582,7 @@ describe("ExplorerWorkspace customizing the toolbar", () => {
 
     fireEvent.keyDown(handle("sort"), { key: "ArrowRight", altKey: true });
     expect(onTopToolbarItemsChange).toHaveBeenLastCalledWith([
+      "folderTree",
       "back",
       "forward",
       "title",

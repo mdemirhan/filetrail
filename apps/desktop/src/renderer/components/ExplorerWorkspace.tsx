@@ -131,6 +131,8 @@ export function ExplorerWorkspace({
   treeWidth,
   inspectorWidth,
   beginResize,
+  folderTreeOpen = true,
+  onToggleFolderTree = () => undefined,
   infoPanelOpen,
   treePaneProps,
   searchWorkspaceProps,
@@ -203,6 +205,9 @@ export function ExplorerWorkspace({
   treeWidth: number;
   inspectorWidth: number;
   beginResize: (pane: "tree" | "inspector") => (event: React.PointerEvent<HTMLDivElement>) => void;
+  /** The folder tree on the left; hidden, the list and the toolbar take its room. */
+  folderTreeOpen?: boolean;
+  onToggleFolderTree?: () => void;
   infoPanelOpen: boolean;
   treePaneProps: TreePaneProps;
   searchWorkspaceProps: SearchWorkspaceProps;
@@ -1105,6 +1110,7 @@ export function ExplorerWorkspace({
   const toolbarTooltipState: ToolbarTooltipState = {
     foldersFirst,
     hiddenFilesShown: includeHidden,
+    folderTreeOpen,
     infoPanelOpen,
     infoRowOpen,
     ...(textEditorName ? { textEditorName } : {}),
@@ -1412,6 +1418,21 @@ export function ExplorerWorkspace({
         </button>
       );
     }
+    if (itemId === "folderTree") {
+      return (
+        <button
+          key={itemId}
+          type="button"
+          className={folderTreeOpen ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
+          onClick={onToggleFolderTree}
+          title={getToolbarTooltip(itemId)}
+          aria-label="Folder Tree"
+          aria-pressed={folderTreeOpen}
+        >
+          <ToolbarIcon name="sidebar" />
+        </button>
+      );
+    }
     if (itemId === "infoPanel") {
       return (
         <button
@@ -1514,6 +1535,10 @@ export function ExplorerWorkspace({
         ];
       case "hidden":
         return [{ key, label: "Hidden Files", checked: includeHidden, onSelect: onToggleHidden }];
+      case "folderTree":
+        return [
+          { key, label: "Folder Tree", checked: folderTreeOpen, onSelect: onToggleFolderTree },
+        ];
       case "infoPanel":
         return [{ key, label: "Info Panel", checked: infoPanelOpen, onSelect: onToggleInfoPanel }];
       case "infoRow":
@@ -1623,6 +1648,8 @@ export function ExplorerWorkspace({
       ref={toolbarRef}
       className="window-toolbar"
       style={{ gridColumn: "3 / -1", gridRow: "1" }}
+      // With the tree hidden the toolbar reaches the window's corner, under the traffic lights.
+      data-under-traffic-lights={!folderTreeOpen || undefined}
       data-customizing={customizingToolbar || undefined}
       onContextMenu={handleToolbarContextMenu}
     >
@@ -1751,30 +1778,37 @@ export function ExplorerWorkspace({
         <section
           className="workspace-body"
           style={{
-            gridTemplateColumns: `${treeWidth}px ${EXPLORER_LAYOUT.resizerWidth}px minmax(0, 1fr)${
+            // A hidden tree keeps its columns, at no width, so the others keep their places.
+            gridTemplateColumns: `${folderTreeOpen ? treeWidth : 0}px ${
+              folderTreeOpen ? EXPLORER_LAYOUT.resizerWidth : 0
+            }px minmax(0, 1fr)${
               infoPanelOpen ? ` ${EXPLORER_LAYOUT.resizerWidth}px ${inspectorWidth}px` : ""
             }`,
             // Toolbar, tab strip (no height while there is a single view), panes.
             gridTemplateRows: "auto auto minmax(0, 1fr)",
           }}
         >
-          <div
-            className="workspace-sidebar-cell"
-            style={{ gridColumn: "1", gridRow: "1 / -1" }}
-            inert={customizingToolbar || undefined}
-          >
-            <TreePane {...treePaneProps} />
-          </div>
-          <div
-            className="pane-resizer pane-resizer-tree"
-            style={{ gridColumn: "2", gridRow: "1 / -1" }}
-            onPointerDown={beginResize("tree")}
-            role="separator"
-            tabIndex={0}
-            aria-orientation="vertical"
-            aria-label="Resize folders pane"
-            onKeyDown={(event) => onPaneResizeKey("tree", event)}
-          />
+          {folderTreeOpen ? (
+            <>
+              <div
+                className="workspace-sidebar-cell"
+                style={{ gridColumn: "1", gridRow: "1 / -1" }}
+                inert={customizingToolbar || undefined}
+              >
+                <TreePane {...treePaneProps} />
+              </div>
+              <div
+                className="pane-resizer pane-resizer-tree"
+                style={{ gridColumn: "2", gridRow: "1 / -1" }}
+                onPointerDown={beginResize("tree")}
+                role="separator"
+                tabIndex={0}
+                aria-orientation="vertical"
+                aria-label="Resize folders pane"
+                onKeyDown={(event) => onPaneResizeKey("tree", event)}
+              />
+            </>
+          ) : null}
           {/* While the toolbar is customized the rest of the window waits, under a veil. */}
           {customizingToolbar ? (
             <div

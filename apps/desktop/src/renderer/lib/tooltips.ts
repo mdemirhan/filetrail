@@ -21,6 +21,7 @@ export function formatTooltip(label: string, shortcut?: string): string {
 export type ToolbarTooltipState = {
   foldersFirst?: boolean;
   hiddenFilesShown?: boolean;
+  folderTreeOpen?: boolean;
   infoPanelOpen?: boolean;
   infoRowOpen?: boolean;
   textEditorName?: string;
@@ -45,6 +46,9 @@ export function getToolbarItemLabel(itemId: ToolbarItemId, state: ToolbarTooltip
   }
   if (itemId === "hidden") {
     return state.hiddenFilesShown ? "Hide Hidden Files" : "Show Hidden Files";
+  }
+  if (itemId === "folderTree") {
+    return state.folderTreeOpen === false ? "Show Folder Tree" : "Hide Folder Tree";
   }
   if (itemId === "infoPanel") {
     return state.infoPanelOpen ? "Hide Info Panel" : "Show Info Panel";

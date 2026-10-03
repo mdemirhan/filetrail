@@ -172,6 +172,15 @@ export function ToolbarIcon({
     );
   }
   /* --- Modernized: drawer — right-biased panel split --- */
+  if (name === "sidebar") {
+    // A window with its sidebar: the Info panel's drawer, mirrored.
+    return (
+      <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" role="presentation">
+        <rect x="3" y="4.5" width="18" height="15" rx="2.5" />
+        <path d="M9 4.5v15" />
+      </svg>
+    );
+  }
   if (name === "drawer") {
     return (
       <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" role="presentation">

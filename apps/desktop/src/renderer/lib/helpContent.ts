@@ -146,6 +146,7 @@ export const SHORTCUT_ITEMS: readonly ShortcutItem[] = [
   { group: "search", command: "refreshOrApplySearchSort", description: "Run the search again" },
   { group: "search", shortcut: "Esc", description: "Close the results" },
 
+  { group: "views", command: "toggleFolderTree", description: "Show or hide the folder tree" },
   { group: "views", command: "toggleInfoPanel", description: "Show or hide the Info panel" },
   { group: "views", command: "toggleInfoRow", description: "Show or hide the Info row" },
   { group: "views", command: "toggleHiddenFiles", description: "Show or hide hidden files" },

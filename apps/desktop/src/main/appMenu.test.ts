@@ -127,6 +127,8 @@ describe("createApplicationMenuTemplate", () => {
       "Hidden Files",
       "Refresh",
       "-",
+      "Hide Folder Tree",
+      "Show Folder Tree",
       "Info Panel",
       "Info Row",
       "-",
@@ -474,6 +476,15 @@ describe("resolveApplicationMenuItemStates", () => {
     expect(stateOf("toggleFavorite:remove", added).visible).toBe(true);
   });
 
+  it("offers Hide Folder Tree while the tree is shown, and Show Folder Tree while hidden", () => {
+    const hidden = { ...INITIAL_APPLICATION_MENU_STATE, folderTreeOpen: false };
+
+    expect(stateOf("toggleFolderTree:hide", INITIAL_APPLICATION_MENU_STATE).visible).toBe(true);
+    expect(stateOf("toggleFolderTree:show", INITIAL_APPLICATION_MENU_STATE).visible).toBe(false);
+    expect(stateOf("toggleFolderTree:hide", hidden).visible).toBe(false);
+    expect(stateOf("toggleFolderTree:show", hidden).visible).toBe(true);
+  });
+
   it("names the full screen item for what choosing it does", () => {
     const fullScreen = { explorerFocused: true, fullScreen: true };
 
@@ -492,6 +503,7 @@ describe("resolveApplicationMenuItemStates", () => {
     const enabled = RENDERER_COMMAND_TYPES.filter(
       (type) =>
         type !== "toggleFavorite" &&
+        type !== "toggleFolderTree" &&
         stateOf(type, INITIAL_APPLICATION_MENU_STATE, settingsFocused).enabled,
     );
 
