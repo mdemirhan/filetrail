@@ -35,6 +35,7 @@ import { useExplorerTabs } from "./hooks/useExplorerTabs";
 import { useFolderSizeCache } from "./hooks/useFolderSizeCache";
 import { usePreferencesSync } from "./hooks/usePreferencesSync";
 import { useSearchSession } from "./hooks/useSearchSession";
+import { useTrashState } from "./hooks/useTrashState";
 import { useWriteOperations } from "./hooks/useWriteOperations";
 import { buildApplicationMenuState } from "./lib/applicationMenuState";
 import {
@@ -111,6 +112,7 @@ export function App() {
 
   const client = useFiletrailClient();
   const folderSizeCache = useFolderSizeCache(client);
+  const { trashIsEmpty, refreshTrashState } = useTrashState(client);
   // The plain folder and document icons, asked for before the first folder is drawn.
   useEffect(() => {
     preloadGenericIcons(client);
@@ -813,6 +815,7 @@ export function App() {
       contextMenuTargetEntry,
       pasteDestinationPath,
       isSearchMode,
+      trashIsEmpty,
     },
     navActions: {
       restoreExplorerPaneFocus,
@@ -969,6 +972,7 @@ export function App() {
         tabCount,
         trashPath,
         homePath,
+        trashIsEmpty,
       }),
     [
       shortcutContext,
@@ -988,6 +992,7 @@ export function App() {
       tabCount,
       trashPath,
       homePath,
+      trashIsEmpty,
     ],
   );
   const openFullDiskAccessSettings = useCallback(() => {
@@ -2243,7 +2248,7 @@ export function App() {
             void startDeleteImmediatelyPaths(paths);
           }}
           onConfirmEmptyTrashDialog={() => {
-            void confirmEmptyTrash();
+            void confirmEmptyTrash().finally(refreshTrashState);
           }}
           onConfirmDotNameDialog={() => {
             void confirmDotNameDialog();

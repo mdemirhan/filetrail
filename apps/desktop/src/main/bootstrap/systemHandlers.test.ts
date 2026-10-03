@@ -6,7 +6,7 @@ vi.mock("electron", () => ({
   shell: {},
 }));
 
-import { emptyTrash } from "./systemHandlers";
+import { emptyTrash, getTrashState } from "./systemHandlers";
 
 describe("emptyTrash", () => {
   // AppleScript stops waiting for Finder after two minutes, which a large Trash takes
@@ -36,5 +36,48 @@ describe("emptyTrash", () => {
       ok: false,
       error: "0:46: execution error: Not authorized to send Apple events to Finder. (-1743)",
     });
+  });
+});
+
+describe("getTrashState", () => {
+  function reader(folders: Record<string, string[] | NodeJS.ErrnoException>) {
+    return vi.fn(async (path: string) => {
+      const found = folders[path];
+      if (found === undefined) {
+        throw Object.assign(new Error(`ENOENT: ${path}`), { code: "ENOENT" });
+      }
+      if (found instanceof Error) {
+        throw found;
+      }
+      return found;
+    });
+  }
+
+  it("is empty when no Trash holds anything but Finder's .DS_Store", async () => {
+    const read = reader({
+      "/Users/demo/.Trash": [".DS_Store"],
+      "/Volumes": ["Macintosh HD", "USB"],
+      "/Volumes/USB/.Trashes/501": [],
+    });
+    await expect(getTrashState("/Users/demo", 501, read)).resolves.toEqual({ empty: true });
+  });
+
+  // Finder's Empty Trash empties every disk's Trash, so one with items makes it worth it.
+  it("isn't empty when another disk's Trash holds something", async () => {
+    const read = reader({
+      "/Users/demo/.Trash": [],
+      "/Volumes": ["USB"],
+      "/Volumes/USB/.Trashes/501": ["old.txt"],
+    });
+    await expect(getTrashState("/Users/demo", 501, read)).resolves.toEqual({ empty: false });
+  });
+
+  // Without Full Disk Access macOS refuses to list the Trash: nothing says it is empty.
+  it("can't tell when the Trash can't be read", async () => {
+    const read = reader({
+      "/Users/demo/.Trash": Object.assign(new Error("EPERM"), { code: "EPERM" }),
+      "/Volumes": [],
+    });
+    await expect(getTrashState("/Users/demo", 501, read)).resolves.toEqual({ empty: null });
   });
 });

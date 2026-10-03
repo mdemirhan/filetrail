@@ -1187,6 +1187,14 @@ export const ipcContractSchemas = {
       error: z.string().nullable(),
     }),
   },
+  // Whether there is anything to empty: the home folder's Trash and other disks' Trashes.
+  // null when that can't be told (macOS keeps the Trash from apps without Full Disk Access).
+  "system:getTrashState": {
+    request: emptyRequestSchema,
+    response: z.object({
+      empty: z.boolean().nullable(),
+    }),
+  },
   // Opens Privacy & Security at Full Disk Access, which macOS requires before an app can
   // list the Trash.
   "system:openFullDiskAccessSettings": {

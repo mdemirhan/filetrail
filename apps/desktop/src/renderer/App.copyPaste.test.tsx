@@ -8663,6 +8663,8 @@ function createAppHarness(
     clearCachesError?: Error;
     // What a search that is not scripted finds, instead of the one source.txt.
     searchResultItems?: IpcResponse<"search:getUpdate">["items"];
+    // What the Trash holds, as far as the main process can tell (null: it can't).
+    trashEmpty?: boolean | null;
   } = {},
 ): {
   client: FiletrailClient;
@@ -8934,6 +8936,9 @@ function createAppHarness(
       }
       if (channel === "writeOperation:trash") {
         return { operationId: "write-op-trash", status: "queued" } as IpcResponse<C>;
+      }
+      if (channel === "system:getTrashState") {
+        return { empty: args.trashEmpty ?? null } as IpcResponse<C>;
       }
       if (channel === "writeOperation:deleteImmediately") {
         return { operationId: "write-op-delete", status: "queued" } as IpcResponse<C>;
@@ -12818,5 +12823,41 @@ describe("tabs on a folder that was renamed", () => {
     await vi.waitFor(() => {
       expect(screen.getAllByRole("tab")[1]).toHaveTextContent("Work");
     });
+  });
+});
+
+describe("Empty Trash with nothing in the Trash", () => {
+  // As in Finder, there is nothing to empty, so nothing to ask about.
+  it("is greyed out in the menus and the menu bar", async () => {
+    const harness = createAppHarness({ trashEmpty: true });
+    renderApp(harness);
+    await screen.findByTitle("/Users/demo/source.txt");
+
+    await act(async () => {
+      fireEvent.contextMenu(await screen.findByTitle("favorite:/Users/demo/.Trash"));
+    });
+
+    expect(screen.getByRole("button", { name: /^Empty Trash/ })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    await vi.waitFor(() => {
+      expect(harness.menuStates.at(-1)?.disabledCommands).toContain("emptyTrash");
+    });
+  });
+
+  it("stays available when what the Trash holds can't be told", async () => {
+    const harness = createAppHarness({ trashEmpty: null });
+    renderApp(harness);
+    await screen.findByTitle("/Users/demo/source.txt");
+
+    await act(async () => {
+      fireEvent.contextMenu(await screen.findByTitle("favorite:/Users/demo/.Trash"));
+    });
+
+    expect(screen.getByRole("button", { name: /^Empty Trash/ })).toHaveAttribute(
+      "aria-disabled",
+      "false",
+    );
   });
 });

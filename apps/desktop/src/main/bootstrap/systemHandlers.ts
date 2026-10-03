@@ -262,6 +262,41 @@ async function resolveTerminalTargetPath(path: string): Promise<string> {
   }
 }
 
+// Whether the Trashes hold anything Finder's Empty Trash would erase: the home folder's,
+// and each other disk's for this user. Finder's own .DS_Store doesn't count. null when a
+// Trash can't be read (without Full Disk Access, macOS refuses to list it): Empty Trash
+// then stays available, as nothing says it has nothing to do.
+export async function getTrashState(
+  home: string,
+  uid: number,
+  read: (path: string) => Promise<string[]> = readdir,
+): Promise<IpcResponse<"system:getTrashState">> {
+  const trashes = [join(home, ".Trash")];
+  const volumes = await read("/Volumes").catch(() => [] as string[]);
+  for (const volume of volumes) {
+    trashes.push(join("/Volumes", volume, ".Trashes", String(uid)));
+  }
+  let unknown = false;
+  for (const [index, trash] of trashes.entries()) {
+    let names: string[];
+    try {
+      names = await read(trash);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException | null)?.code;
+      // Another disk without a Trash of this user's has nothing to empty.
+      if (index > 0 && (code === "ENOENT" || code === "ENOTDIR")) {
+        continue;
+      }
+      unknown = true;
+      continue;
+    }
+    if (names.some((name) => name !== ".DS_Store")) {
+      return { empty: false };
+    }
+  }
+  return { empty: unknown ? null : true };
+}
+
 // Finder empties the Trash. AppleScript gives up waiting for an answer after two minutes,
 // which a large Trash takes longer than: Finder would carry on while File Trail said it
 // failed. A day is the limit instead. What is reported is osascript's own error line

@@ -324,6 +324,8 @@ export function useExplorerActions(args: {
     contextMenuTargetEntry: DirectoryEntry | null;
     pasteDestinationPath: string | null;
     isSearchMode: boolean;
+    // The Trash has nothing to empty (null: it can't be told).
+    trashIsEmpty?: boolean | null;
   };
   navActions: {
     restoreExplorerPaneFocus: (preferredPane?: "tree" | "content" | null) => void;
@@ -635,6 +637,10 @@ export function useExplorerActions(args: {
     if (!canPasteAtResolvedDestination) {
       disabled.add("paste");
     }
+    // As in Finder: nothing to empty, nothing to ask about.
+    if (args.derived.trashIsEmpty === true) {
+      disabled.add("emptyTrash");
+    }
     if (isWriteOperationLocked) {
       for (const actionId of WRITE_LOCKED_CONTEXT_ACTION_IDS) {
         disabled.add(actionId);
@@ -740,6 +746,7 @@ export function useExplorerActions(args: {
     }
     return Array.from(disabled);
   }, [
+    args.derived.trashIsEmpty,
     canPasteAtResolvedDestination,
     contextMenuFavoriteToggleLabel,
     contextMenuState,

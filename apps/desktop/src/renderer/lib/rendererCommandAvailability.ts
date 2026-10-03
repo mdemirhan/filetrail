@@ -46,6 +46,8 @@ export type RendererCommandAvailabilityContext = {
   trashPath?: string | null;
   /** Where the home folder is, to tell what is in the Trash. */
   homePath?: string;
+  /** The Trash has nothing to empty (null or left out: it can't be told). */
+  trashIsEmpty?: boolean | null;
 };
 
 type CommandTargetContext = Pick<
@@ -174,7 +176,7 @@ export function canRunToolbarRendererCommand(
     case "renameSelection":
       return selectedCount === 1;
     case "emptyTrash":
-      return true;
+      return context.trashIsEmpty !== true;
     case "newFolder":
       return (
         resolveNewFolderTargetPath({
