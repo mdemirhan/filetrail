@@ -231,27 +231,28 @@ function getCopyLikeActionLabel(action: CopyLikeAction): string {
 function getCopyLikePreStartFailureTitle(action: WriteStartAction): string {
   switch (action) {
     case "move_to":
-      return "Move couldn't start";
+      return "Move couldn’t start";
     case "copy_to":
-      return "Copy couldn't start";
+      return "Copy couldn’t start";
     case "duplicate":
-      return "Duplicate couldn't start";
+      return "Duplicate couldn’t start";
     case "trash":
-      return "Move to Trash couldn't start";
+      return "Move to Trash couldn’t start";
     case "delete_immediately":
-      return "Delete couldn't start";
+      return "Delete couldn’t start";
     case "empty_trash":
-      return "Empty Trash couldn't start";
+      return "Empty Trash couldn’t start";
     case "rename":
-      return "Rename couldn't start";
+      return "Rename couldn’t start";
     case "new_folder":
-      return "New Folder couldn't start";
+      return "New Folder couldn’t start";
     default:
-      return "Paste couldn't start";
+      return "Paste couldn’t start";
   }
 }
 
-const WRITE_OPERATION_BUSY_MESSAGE = "Wait for the current write to finish.";
+const WRITE_OPERATION_BUSY_MESSAGE =
+  "Another file operation is running. Wait for it to finish, or stop it.";
 
 function getCopyLikePreparationFailureMessage(action: CopyLikeAction): string {
   return `File Trail couldn't prepare the ${getCopyLikeActionLabel(action)} operation. No files were written.`;
@@ -2065,7 +2066,8 @@ export function useExplorerActions(args: {
       }
       return;
     }
-    const missingMessage = formatMissingClipboardItemsMessage(missingSourcePaths);
+    const verb = action === "move_to" ? "moved" : "pasted";
+    const missingMessage = formatMissingClipboardItemsMessage(missingSourcePaths, verb);
     if (outcome.status === "blocked" || outcome.status === "error") {
       surfaceCopyLikePreStartFailureNotice(action, {
         ...outcome,
@@ -2079,8 +2081,8 @@ export function useExplorerActions(args: {
       nothingPasted
         ? getCopyLikePreStartFailureTitle(action)
         : missingSourcePaths.length === 1
-          ? "An item couldn't be pasted"
-          : "Some items couldn't be pasted",
+          ? `An item couldn’t be ${verb}`
+          : `Some items couldn’t be ${verb}`,
       missingMessage,
     );
   }
@@ -3307,9 +3309,16 @@ export function useExplorerActions(args: {
     closeContextMenu();
   }
 
-  async function submitRenameDialog(nextName: string) {
+  async function submitRenameDialog(typedName: string) {
     const dialogState = renameDialogState;
     if (!dialogState) {
+      return;
+    }
+    // Spaces around a name are dropped (the main process drops them too), before anything
+    // is decided from it: " .env" would hide the item as ".env" does.
+    const nextName = typedName.trim();
+    if (nextName === dialogState.currentName) {
+      setRenameDialogState(null);
       return;
     }
     const nameError = getItemNameError(nextName);
@@ -3333,7 +3342,10 @@ export function useExplorerActions(args: {
       // the refusal gets a dialog of its own, and nothing waits on a field that is gone.
       if (dialogState.inline && !renameFieldItemShownRef.current(dialogState.sourcePath)) {
         setRenameDialogState(null);
-        showModalNotice(getCopyLikePreStartFailureTitle("rename"), message);
+        showModalNotice(
+          `“${getPathLeafName(dialogState.sourcePath)}” couldn’t be renamed`,
+          message,
+        );
         return;
       }
       refuseRenameName(message);
@@ -3563,7 +3575,7 @@ export function useExplorerActions(args: {
         },
         (message) => {
           pendingInlineRenamePathRef.current = null;
-          setActionNotice({ title: "Couldn’t Make the Folder", message });
+          setActionNotice({ title: "The folder couldn’t be made", message });
         },
       );
       return;

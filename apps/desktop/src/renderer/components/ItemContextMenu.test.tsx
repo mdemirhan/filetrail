@@ -388,7 +388,7 @@ describe("ItemContextMenu", () => {
       "Open in Terminal",
       "Show in Finder",
       "Move to Trash",
-      "Delete Immediately",
+      "Delete Immediately…",
     ]);
   });
 

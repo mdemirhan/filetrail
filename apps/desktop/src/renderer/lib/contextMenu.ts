@@ -123,7 +123,7 @@ export function getContextMenuItems(input: {
       ...getContextMenuItems({ surface: "content", favoriteToggleLabel }),
       {
         id: "deleteImmediately",
-        label: "Delete Immediately",
+        label: "Delete Immediately…",
         icon: "deleteImmediately",
         destructive: true,
       },
@@ -159,7 +159,7 @@ export function getContextMenuItems(input: {
       { id: "trash", label: "Move to Trash", icon: "trash", destructive: true },
       {
         id: "deleteImmediately",
-        label: "Delete Immediately",
+        label: "Delete Immediately…",
         icon: "deleteImmediately",
         destructive: true,
       },

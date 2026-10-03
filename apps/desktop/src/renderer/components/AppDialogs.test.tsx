@@ -232,4 +232,52 @@ describe("AppDialogs", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onCloseConfirmationDialog).toHaveBeenCalledTimes(2);
   });
+
+  // One item that failed: its reason, once, without "0 of 1 items completed".
+  it("tells a failed rename by its reason alone", async () => {
+    const error = "An item named “b.txt” already exists.";
+    renderAppDialogs(
+      { showCopyPasteResultDialog: true },
+      {
+        writeOperationProgressEvent: {
+          operationId: "write-op-1",
+          action: "rename",
+          status: "failed",
+          completedItemCount: 0,
+          totalItemCount: 1,
+          completedByteCount: 0,
+          totalBytes: null,
+          currentSourcePath: null,
+          currentDestinationPath: null,
+          result: {
+            operationId: "write-op-1",
+            action: "rename",
+            status: "failed",
+            targetPath: null,
+            startedAt: "2026-10-03T10:00:00.000Z",
+            finishedAt: "2026-10-03T10:00:01.000Z",
+            summary: {
+              topLevelItemCount: 1,
+              totalItemCount: 1,
+              completedItemCount: 0,
+              failedItemCount: 1,
+              skippedItemCount: 0,
+              cancelledItemCount: 0,
+              completedByteCount: 0,
+              totalBytes: null,
+            },
+            items: [
+              { sourcePath: "/tmp/a.txt", destinationPath: "/tmp/b.txt", status: "failed", error },
+            ],
+            error,
+          },
+        },
+      },
+    );
+
+    await act(async () => {});
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.textContent?.split(error)).toHaveLength(2);
+    expect(dialog).not.toHaveTextContent(/of 1 item/);
+  });
 });

@@ -6,6 +6,8 @@ describe("getItemNameError", () => {
     expect(getItemNameError(".env")).toBeNull();
     expect(getItemNameError("...")).toBeNull();
     expect(getItemNameError("a:b")).toBeNull();
+    // A Windows path kept as a name: "\\" is an ordinary character on macOS.
+    expect(getItemNameError("C:\\notes.txt")).toBeNull();
   });
 
   it("rejects empty and dot-segment names", () => {
@@ -16,8 +18,7 @@ describe("getItemNameError", () => {
 
   it("rejects names containing path separators or NUL", () => {
     expect(getItemNameError("../escape")).not.toBeNull();
-    expect(getItemNameError("sub/child")).not.toBeNull();
-    expect(getItemNameError("back\\slash")).not.toBeNull();
+    expect(getItemNameError("sub/child")).toBe("Names can’t contain “/”.");
     expect(getItemNameError("nul\0byte")).not.toBeNull();
   });
 

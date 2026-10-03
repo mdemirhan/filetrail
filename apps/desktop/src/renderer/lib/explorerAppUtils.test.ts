@@ -578,13 +578,13 @@ describe("sortEntriesBySize", () => {
 
   it("says which clipboard items could not be pasted because they are gone", () => {
     expect(formatMissingClipboardItemsMessage(["/Users/demo/report.pdf"])).toBe(
-      "“report.pdf” couldn't be pasted because it no longer exists.",
+      "“report.pdf” couldn’t be pasted because it no longer exists.",
     );
     expect(formatMissingClipboardItemsMessage(["/a/one", "/a/two"])).toBe(
-      "“one” and “two” couldn't be pasted because they no longer exist.",
+      "“one” and “two” couldn’t be pasted because they no longer exist.",
     );
     expect(formatMissingClipboardItemsMessage(["/a/1", "/a/2", "/a/3", "/a/4"])).toBe(
-      "4 items couldn't be pasted because they no longer exist: “1”, “2”, “3” and 1 more.",
+      "4 items couldn’t be pasted because they no longer exist: “1”, “2”, “3” and 1 more.",
     );
   });
   it("suggests a free New Folder name, ignoring case like the disk does", () => {

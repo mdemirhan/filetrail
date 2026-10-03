@@ -15,8 +15,9 @@ export function getItemNameError(name: string): string | null {
   if (trimmed === "." || trimmed === "..") {
     return `"${trimmed}" is not a valid name.`;
   }
-  if (/[/\\\0]/.test(trimmed)) {
-    return "Names cannot contain “/” or “\\”.";
+  // "\\" is an ordinary character on macOS (Finder allows it): only "/" separates folders.
+  if (/[/\0]/.test(trimmed)) {
+    return "Names can’t contain “/”.";
   }
   if (utf8Encoder.encode(trimmed).length > MAX_ITEM_NAME_BYTES) {
     return "The name is too long.";

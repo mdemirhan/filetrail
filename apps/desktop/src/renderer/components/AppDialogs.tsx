@@ -13,6 +13,7 @@ import {
   type CopyPastePolicy,
   leafName,
 } from "../lib/copyPasteReview";
+import { pluralize } from "../lib/copyPasteReview";
 import { formatSize } from "../lib/formatting";
 import type { InternalMoveSourceSurface } from "../lib/internalDragAndDrop";
 import type { Place } from "../lib/places";
@@ -306,8 +307,8 @@ export function AppDialogs({
           title={`Move ${quoteItems(copyPasteDialogState.itemLabel, copyPasteDialogState.paths.length)} to the Trash?`}
           message={
             copyPasteDialogState.paths.length === 1
-              ? "You can put it back from the Trash."
-              : "You can put them back from the Trash."
+              ? "It stays in the Trash until the Trash is emptied."
+              : "They stay in the Trash until the Trash is emptied."
           }
           primaryAction={{
             label: "Move to Trash",
@@ -408,7 +409,7 @@ export function AppDialogs({
         <CopyPasteProgressCard
           title={getWriteOperationTitle(writeOperationCardState.action, "progress")}
           progressPercent={getWriteOperationProgressPercent(writeOperationCardState)}
-          progressMetaStart={`${writeOperationCardState.completedItemCount.toLocaleString()} of ${Math.max(writeOperationCardState.totalItemCount, 0).toLocaleString()} items`}
+          progressMetaStart={`${writeOperationCardState.completedItemCount.toLocaleString()} of ${pluralize(Math.max(writeOperationCardState.totalItemCount, 0), "item")}`}
           progressMetaEnd={formatWriteOperationByteLabel(writeOperationCardState)}
           detailLabel={
             writeOperationCardState.action === "new_folder" ? "Destination" : "Current item"
@@ -493,27 +494,34 @@ function buildCopyPasteResultDetailLines(event: WriteOperationProgressEvent): st
   if (!result) {
     return [];
   }
-  const lines = [
-    `${result.summary.completedItemCount} of ${result.summary.totalItemCount} items completed`,
-  ];
-  if (result.summary.failedItemCount > 0) {
+  const { cancelledItemCount, completedItemCount, failedItemCount, skippedItemCount } =
+    result.summary;
+  const lines: string[] = [];
+  // Counts only say something for several items: "0 of 1 item done" under the reason it
+  // failed is noise.
+  if (result.summary.totalItemCount > 1) {
     lines.push(
-      `${result.summary.failedItemCount} item${result.summary.failedItemCount === 1 ? "" : "s"} failed`,
+      `${completedItemCount.toLocaleString()} of ${pluralize(result.summary.totalItemCount, "item")} done`,
     );
+    if (failedItemCount > 0) {
+      lines.push(`${pluralize(failedItemCount, "item")} failed`);
+    }
+    if (skippedItemCount > 0) {
+      lines.push(`${pluralize(skippedItemCount, "item")} skipped`);
+    }
+    if (cancelledItemCount > 0) {
+      lines.push(`${pluralize(cancelledItemCount, "item")} not done`);
+    }
   }
-  if (result.summary.skippedItemCount > 0) {
-    lines.push(
-      `${result.summary.skippedItemCount} item${result.summary.skippedItemCount === 1 ? "" : "s"} skipped`,
-    );
+  // The reasons, each once, and not again when the message above already gives it.
+  const message = buildCopyPasteResultMessage(event);
+  const reasons = new Set<string>();
+  for (const item of result.items) {
+    if (item.error && item.error !== message) {
+      reasons.add(item.error);
+    }
   }
-  if (result.summary.cancelledItemCount > 0) {
-    lines.push(
-      `${result.summary.cancelledItemCount} item${result.summary.cancelledItemCount === 1 ? "" : "s"} cancelled`,
-    );
-  }
-  for (const item of result.items.filter((entry) => entry.error).slice(0, 3)) {
-    lines.push(item.error ?? "");
-  }
+  lines.push(...[...reasons].slice(0, 3));
   return lines;
 }
 
