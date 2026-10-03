@@ -94,12 +94,36 @@
   /* Fallbacks until the Font preference is applied; they match its "System" default. */
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
   --font-mono: "SF Mono", "SFMono-Regular", ui-monospace, Menlo, monospace;
-  /* Base text sizes. Text is scaled with the zoom level, not by changing these. */
-  --ui-font-size: 13px;
+  /* The design scale. Everything sized in the app takes its value from here, so the
+     same kind of thing has the same size everywhere. Text is scaled with the zoom
+     level, not by changing these. */
+  /* Text, the macOS scale: mini, small, callout, body, and three titles. */
+  --font-size-mini: 10px;
+  --font-size-small: 11px;
+  --font-size-callout: 12px;
+  --font-size-body: 13px;
+  --font-size-title3: 15px;
+  --font-size-title2: 17px;
+  --font-size-title1: 20px;
   --mono-font-size: 12px;
-  --ui-font-size-xs: calc(var(--ui-font-size) - 3px);
-  --ui-font-size-sm: calc(var(--ui-font-size) - 1px);
-  --ui-font-size-md: var(--ui-font-size);
+  /* Corners: badges and small marks, controls and rows, menus and popovers, dialogs and
+     sheets, and the round ends of capsules. */
+  --radius-xs: 4px;
+  --radius-control: 6px;
+  --radius-menu: 10px;
+  --radius-dialog: 14px;
+  --radius-capsule: 999px;
+  /* Heights of push buttons, fields and toolbar items. */
+  --control-height-small: 22px;
+  --control-height: 24px;
+  --control-height-large: 28px;
+  /* Motion: color and hover changes, most transitions, panels that slide. */
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 220ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  /* Keyboard focus: a ring in the accent around the control, as on macOS. */
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--ft-accent-solid) 50%, transparent);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-lg: 0 12px 32px rgba(30, 32, 48, 0.18);
   --crumb-hover-bg: rgba(0, 0, 0, 0.035);
@@ -457,7 +481,7 @@ body,
 
 body {
   font-family: var(--font-sans);
-  font-size: var(--ui-font-size);
+  font-size: var(--font-size-body);
   font-weight: 400;
   background: var(--bg-base);
   color: var(--text-primary);
@@ -484,10 +508,11 @@ button:disabled {
 }
 
 button:focus-visible,
-input:focus-visible {
+input:focus-visible,
+select:focus-visible {
   outline: none;
-  border-color: var(--accent-blue);
-  box-shadow: 0 0 0 3px var(--accent-blue-dim);
+  border-color: var(--ft-accent-solid);
+  box-shadow: var(--focus-ring);
 }
 
 .app-shell {
@@ -577,13 +602,14 @@ input:focus-visible {
   align-items: center;
   gap: 6px;
   border: none;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-tertiary);
   padding: 6px 10px;
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   font-weight: 500;
-  transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+  transition: background var(--duration-base) ease, color var(--duration-base) ease, opacity
+    var(--duration-base) ease;
   -webkit-app-region: no-drag;
 }
 
@@ -630,7 +656,7 @@ input:focus-visible {
 }
 
 .window-toolbar .tb-btn {
-  border-radius: 5px;
+  border-radius: var(--radius-control);
   color: var(--toolbar-nav-icon-active);
 }
 
@@ -675,7 +701,7 @@ input:focus-visible {
   padding: 0;
   margin: 0;
   border: 1px solid var(--toolbar-border);
-  border-radius: 5px;
+  border-radius: var(--radius-control);
   overflow: hidden;
   background: transparent;
   -webkit-app-region: no-drag;
@@ -709,7 +735,7 @@ input:focus-visible {
   width: 38px;
   min-width: 38px;
   height: 36px;
-  border-radius: 10px;
+  border-radius: var(--radius-menu);
   color: var(--text-tertiary);
 }
 
@@ -745,12 +771,12 @@ input:focus-visible {
   width: 100%;
   min-width: 0;
   border: 1px solid var(--search-border);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: var(--search-surface);
   color: var(--search-text);
   box-shadow: var(--search-shadow);
-  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, border-radius
-    0.18s ease;
+  transition: border-color var(--duration-base) ease, box-shadow var(--duration-base) ease,
+    background var(--duration-base) ease, border-radius var(--duration-base) ease;
   -webkit-app-region: no-drag;
 }
 
@@ -773,7 +799,7 @@ input:focus-visible {
   justify-content: center;
   color: var(--search-icon);
   flex: 0 0 auto;
-  transition: color 0.18s ease;
+  transition: color var(--duration-base) ease;
 }
 
 .toolbar-search-shell.active .toolbar-search-icon {
@@ -793,7 +819,7 @@ input:focus-visible {
   margin: 0 -3px;
   padding: 0 3px;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: transparent;
   cursor: default;
   -webkit-app-region: no-drag;
@@ -807,7 +833,7 @@ input:focus-visible {
 
 .toolbar-search-options-button:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--search-border-active);
+  box-shadow: var(--focus-ring);
 }
 
 .toolbar-search-options-chevron {
@@ -828,7 +854,7 @@ input:focus-visible {
   box-shadow: none;
   background: transparent;
   color: var(--search-text);
-  font-size: 12.5px;
+  font-size: var(--font-size-body);
   font-weight: 500;
   font-family: var(--font-sans);
   letter-spacing: 0.01em;
@@ -855,11 +881,12 @@ input:focus-visible {
   height: 16px;
   margin-left: auto;
   border: 1px solid var(--search-pill-border);
-  border-radius: 999px;
+  border-radius: var(--radius-capsule);
   background: var(--search-pill-bg);
   color: var(--search-pill-fg);
   -webkit-app-region: no-drag;
-  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+  transition: border-color var(--duration-base) ease, background var(--duration-base) ease, color
+    var(--duration-base) ease;
 }
 
 .toolbar-search-clear:hover {
@@ -887,7 +914,7 @@ input:focus-visible {
   flex: 0 1 calc(var(--toolbar-search-width) + 2 * var(--toolbar-edged-item-inset));
   min-width: calc(var(--toolbar-search-min-width) + 2 * var(--toolbar-edged-item-inset));
   padding: 0 var(--toolbar-edged-item-inset);
-  transition: flex-basis 0.18s ease;
+  transition: flex-basis var(--duration-base) ease;
 }
 
 .toolbar-search-slot:focus-within {
@@ -907,7 +934,7 @@ input:focus-visible {
   min-width: 220px;
   padding: 5px;
   border: 0.5px solid var(--context-menu-border);
-  border-radius: 9px;
+  border-radius: var(--radius-menu);
   /* Opaque: a blurred, see-through menu does not blur what is in the sidebar, whose
      text then shows through it. */
   background: var(--context-menu-bg);
@@ -925,11 +952,11 @@ input:focus-visible {
   height: 24px;
   padding: 0 10px 0 4px;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--context-menu-text);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-body);
   font-weight: 400;
   text-align: left;
   white-space: nowrap;
@@ -952,7 +979,7 @@ input:focus-visible {
 .toolbar-menu-check {
   flex: none;
   width: 16px;
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   font-weight: 600;
   text-align: center;
 }
@@ -987,7 +1014,7 @@ input:focus-visible {
 .toolbar-menu-heading {
   padding: 3px 10px 2px;
   color: var(--context-menu-shortcut);
-  font-size: 11px;
+  font-size: var(--font-size-small);
   font-weight: 600;
 }
 
@@ -1107,7 +1134,7 @@ input:focus-visible {
   margin: 0;
   padding: 18px 18px 14px;
   border: 1px solid var(--border-active);
-  border-radius: 14px;
+  border-radius: var(--radius-dialog);
   background: var(--bg-elevated);
   box-shadow: var(--shadow-lg);
   outline: none;
@@ -1115,14 +1142,14 @@ input:focus-visible {
 
 .action-notice-title {
   color: var(--text-primary);
-  font-size: 15px;
-  font-weight: 650;
+  font-size: var(--font-size-title3);
+  font-weight: 600;
 }
 
 .action-notice-message {
   margin-top: 8px;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-body);
   line-height: 1.5;
 }
 
@@ -1153,10 +1180,10 @@ input:focus-visible {
   pointer-events: none;
   overflow: hidden;
   border: 0.5px solid var(--context-menu-border);
-  border-radius: 9px;
+  border-radius: var(--radius-menu);
   background: var(--context-menu-bg);
   box-shadow: var(--context-menu-shadow);
-  animation: toast-slide-in 160ms ease-out;
+  animation: toast-slide-in var(--duration-base) ease-out;
 }
 
 .toast-card-body {
@@ -1212,7 +1239,7 @@ input:focus-visible {
   height: 238px;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--ft-accent-border) 55%, var(--border));
-  border-radius: 18px;
+  border-radius: var(--radius-dialog);
   background: linear-gradient(
     180deg,
     color-mix(in srgb, var(--bg-elevated) 94%, var(--bg-base) 6%),
@@ -1235,7 +1262,7 @@ input:focus-visible {
     color-mix(in srgb, var(--ft-accent-solid) 88%, white 12%),
     color-mix(in srgb, var(--ft-accent-solid-dark) 84%, var(--ft-accent-solid) 16%)
   );
-  transition: width 180ms ease-out;
+  transition: width var(--duration-base) ease-out;
 }
 
 .copy-paste-progress-card-body {
@@ -1266,7 +1293,7 @@ input:focus-visible {
   justify-content: center;
   width: 32px;
   height: 32px;
-  border-radius: 9px;
+  border-radius: var(--radius-control);
   background: var(--ft-accent-soft-bg);
   color: var(--ft-accent-solid);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ft-accent-border) 54%, transparent);
@@ -1285,15 +1312,15 @@ input:focus-visible {
 
 .copy-paste-progress-card-title {
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: var(--font-size-body);
   font-weight: 700;
   line-height: 1.2;
 }
 
 .copy-paste-progress-card-percent {
   color: var(--ft-accent-solid);
-  font-size: 22px;
-  font-weight: 750;
+  font-size: var(--font-size-title1);
+  font-weight: 700;
   line-height: 1;
   font-variant-numeric: tabular-nums;
   flex: 0 0 auto;
@@ -1302,14 +1329,14 @@ input:focus-visible {
 .copy-paste-progress-card-percent-unit {
   margin-left: 2px;
   color: color-mix(in srgb, var(--ft-accent-solid) 60%, var(--text-tertiary));
-  font-size: 11px;
+  font-size: var(--font-size-small);
   font-weight: 600;
 }
 
 .copy-paste-progress-card-track {
   height: 7px;
   overflow: hidden;
-  border-radius: 999px;
+  border-radius: var(--radius-capsule);
   background: color-mix(in srgb, var(--bg-hover) 88%, var(--border));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 72%, transparent);
 }
@@ -1324,7 +1351,7 @@ input:focus-visible {
     color-mix(in srgb, var(--ft-accent-solid) 92%, white 8%),
     color-mix(in srgb, var(--ft-accent-solid-dark) 72%, var(--ft-accent-solid) 28%)
   );
-  transition: width 220ms ease-out;
+  transition: width var(--duration-slow) ease-out;
 }
 
 .copy-paste-progress-card-track-shimmer {
@@ -1343,7 +1370,7 @@ input:focus-visible {
   justify-content: space-between;
   gap: 10px;
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-small);
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
 }
@@ -1360,13 +1387,13 @@ input:focus-visible {
   min-height: 58px;
   padding: 10px 12px;
   border: 1px solid color-mix(in srgb, var(--border-active) 72%, var(--border));
-  border-radius: 12px;
+  border-radius: var(--radius-menu);
   background: color-mix(in srgb, var(--bg-base) 24%, var(--bg-elevated));
 }
 
 .copy-paste-progress-card-detail-label {
   color: var(--text-tertiary);
-  font-size: 10.5px;
+  font-size: var(--font-size-mini);
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
@@ -1375,7 +1402,7 @@ input:focus-visible {
 .copy-paste-progress-card-detail-value {
   margin-top: 8px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   line-height: 1.35;
   white-space: nowrap;
   overflow: hidden;
@@ -1396,16 +1423,16 @@ input:focus-visible {
   min-height: 38px;
   padding: 0 14px;
   border: 1px solid color-mix(in srgb, var(--danger) 52%, var(--border));
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   background: color-mix(in srgb, var(--danger) 12%, var(--bg-elevated));
   color: color-mix(in srgb, var(--danger) 88%, var(--text-primary));
   font: inherit;
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   font-weight: 700;
   letter-spacing: 0.01em;
   cursor: pointer;
-  transition: background 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out,
-    transform 120ms ease-out;
+  transition: background var(--duration-fast) ease-out, border-color var(--duration-fast) ease-out,
+    color var(--duration-fast) ease-out, transform var(--duration-fast) ease-out;
 }
 
 .copy-paste-progress-card-cancel:hover:not(:disabled) {
@@ -1442,7 +1469,7 @@ input:focus-visible {
 .toast-card-title {
   min-width: 0;
   color: var(--context-menu-text);
-  font-size: 13px;
+  font-size: var(--font-size-body);
   font-weight: 500;
   line-height: 1.35;
   overflow: hidden;
@@ -1453,7 +1480,7 @@ input:focus-visible {
 .toast-card-message {
   min-width: 0;
   color: var(--text-tertiary);
-  font-size: 13px;
+  font-size: var(--font-size-body);
   line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1495,7 +1522,7 @@ input:focus-visible {
 
 .text-prompt-label {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
 }
 
 .text-prompt-input {
@@ -1504,10 +1531,10 @@ input:focus-visible {
   height: 34px;
   padding: 0 10px;
   border: 1px solid var(--border-active);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: var(--bg-input);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--font-size-body);
   outline: none;
 }
 
@@ -1517,22 +1544,22 @@ input:focus-visible {
 
 .text-prompt-error {
   color: var(--danger-text);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   line-height: 1.4;
 }
 
 .copy-paste-progress {
   margin-top: 8px;
   color: var(--text-primary);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: var(--font-size-callout);
+  font-weight: 600;
 }
 
 .copy-paste-detail-list {
   margin: 10px 0 0;
   padding-left: 18px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   line-height: 1.5;
 }
 
@@ -1609,7 +1636,7 @@ input:focus-visible {
   max-width: calc(100% - 24px);
   padding: 6px 10px;
   border: 1px solid var(--accent-blue-border);
-  border-radius: 999px;
+  border-radius: var(--radius-capsule);
   background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
   box-shadow: var(--shadow-sm);
   color: var(--text-secondary);
@@ -1626,7 +1653,7 @@ input:focus-visible {
 }
 
 .pane-typeahead-label {
-  font-size: 10px;
+  font-size: var(--font-size-mini);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1640,7 +1667,7 @@ input:focus-visible {
   white-space: nowrap;
   color: var(--accent-text);
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
@@ -1657,17 +1684,17 @@ input:focus-visible {
   max-width: calc(100% - 32px);
   padding: 5px 6px 5px 12px;
   border: 1px solid var(--ft-accent-border);
-  border-radius: 999px;
+  border-radius: var(--radius-capsule);
   background: color-mix(in srgb, var(--bg-elevated) 94%, transparent);
   box-shadow: var(--shadow-sm);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   transform: translateX(-50%);
   backdrop-filter: blur(10px);
 }
 
 .list-filter-pill-label {
-  font-size: 10px;
+  font-size: var(--font-size-mini);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1699,7 +1726,7 @@ input:focus-visible {
   height: 18px;
   padding: 0;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radius-capsule);
   background: transparent;
   color: var(--text-tertiary);
   cursor: default;
@@ -1725,10 +1752,10 @@ input:focus-visible {
   margin-top: 4px;
   padding: 0 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: var(--bg-elevated);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   cursor: default;
 }
 
@@ -1758,7 +1785,7 @@ input:focus-visible {
   content: "";
   position: absolute;
   background: var(--border);
-  transition: background 0.15s ease;
+  transition: background var(--duration-base) ease;
 }
 
 .pane-resizer:hover::before {
@@ -1814,7 +1841,7 @@ body.resizing-panels * {
   padding: 0 20px;
   border-bottom: 1px solid var(--border-light);
   background: var(--bg-base);
-  font-size: var(--ui-font-size-xs);
+  font-size: var(--font-size-mini);
   font-weight: 600;
   color: var(--text-dim);
   overflow: visible;
@@ -1836,7 +1863,7 @@ body.resizing-panels * {
   height: var(--breadcrumb-row-height);
   min-height: var(--breadcrumb-row-height);
   padding: 0 20px;
-  font-size: var(--ui-font-size-xs);
+  font-size: var(--font-size-mini);
   font-weight: 500;
   letter-spacing: 0;
   text-transform: none;
@@ -1896,14 +1923,14 @@ body.resizing-panels * {
   min-width: 16px;
   padding: 0 3px;
   color: var(--fg-dim, var(--text-dim));
-  font-size: var(--ui-font-size-sm);
+  font-size: var(--font-size-callout);
 }
 
 /* A separator is a button: it lists the folders at that level of the path. */
 .pathbar-separator-button {
   height: 22px;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--radius-control);
   background: transparent;
   font-family: inherit;
   cursor: default;
@@ -1917,7 +1944,7 @@ body.resizing-panels * {
 
 .pathbar-separator-button:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--accent-blue-dim);
+  box-shadow: var(--focus-ring);
 }
 
 .pathbar-folder-menu {
@@ -1937,7 +1964,7 @@ body.resizing-panels * {
 .pathbar-folder-menu-note {
   padding: 5px 10px;
   color: var(--context-menu-shortcut, var(--text-tertiary));
-  font-size: 12px;
+  font-size: var(--font-size-callout);
 }
 
 .pathbar-segment {
@@ -1949,10 +1976,10 @@ body.resizing-panels * {
   min-width: 0;
   padding: 0 8px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-tertiary);
-  font-size: var(--ui-font-size-md);
+  font-size: var(--font-size-body);
   font-weight: 400;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1994,7 +2021,7 @@ body.resizing-panels * {
 
 .pathbar-segment:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--accent-blue-dim);
+  box-shadow: var(--focus-ring);
 }
 
 .pathbar-input {
@@ -2003,17 +2030,17 @@ body.resizing-panels * {
   height: 100%;
   padding: 0 10px;
   border: 1px solid var(--border-active);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: var(--bg-base);
   color: var(--text-primary);
-  font-size: var(--ui-font-size-md);
+  font-size: var(--font-size-body);
   font-weight: 500;
 }
 
 .pathbar-input:focus {
   outline: none;
-  border-color: var(--accent-blue);
-  box-shadow: 0 0 0 3px var(--accent-blue-dim);
+  border-color: var(--ft-accent-solid);
+  box-shadow: var(--focus-ring);
 }
 
 :root[data-theme="tomorrow-night"] .pathbar-input {
@@ -2028,7 +2055,7 @@ body.resizing-panels * {
   z-index: 12;
   max-height: min(360px, calc(100vh - 180px));
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-menu);
   background: var(--dropdown-bg);
   box-shadow: var(--shadow-lg);
   overflow: auto;
@@ -2060,7 +2087,7 @@ body.resizing-panels * {
 }
 
 .pathbar-suggestion-name {
-  font-size: var(--ui-font-size-sm);
+  font-size: var(--font-size-callout);
   font-weight: 500;
   color: var(--text-primary);
 }
@@ -2192,7 +2219,7 @@ body.resizing-panels * {
 .tree-scroll::-webkit-scrollbar-thumb,
 .content-scroll::-webkit-scrollbar-thumb {
   background: transparent;
-  border-radius: 999px;
+  border-radius: var(--radius-capsule);
 }
 
 .tree-scroll[data-scrollbars]::-webkit-scrollbar-thumb,
@@ -2218,7 +2245,7 @@ body.resizing-panels * {
   margin: 1px 6px;
   padding-right: 8px;
   border: 2px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   box-sizing: border-box;
 }
 
@@ -2273,7 +2300,7 @@ body.resizing-panels * {
   width: 16px;
   height: 16px;
   color: var(--text-tertiary);
-  transition: transform 0.12s ease;
+  transition: transform var(--duration-fast) ease;
 }
 
 .compact-tree-view .tree-expand {
@@ -2298,7 +2325,7 @@ body.resizing-panels * {
   overflow: hidden;
   padding: 4px 0;
   text-align: left;
-  font-size: 13px;
+  font-size: var(--font-size-body);
   font-weight: 500;
   font-family: var(--font-sans);
   color: var(--text-primary);
@@ -2314,7 +2341,7 @@ body.resizing-panels * {
 .compact-tree-view .tree-label {
   gap: 6px;
   padding: 2px 0;
-  font-size: 12px;
+  font-size: var(--font-size-callout);
 }
 
 .tree-label-text {
@@ -2326,10 +2353,10 @@ body.resizing-panels * {
 
 .tree-label-badge {
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-capsule);
   background: var(--bg-hover);
   color: var(--text-tertiary);
-  font-size: var(--ui-font-size-xs);
+  font-size: var(--font-size-mini);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -2337,7 +2364,7 @@ body.resizing-panels * {
 .tree-loading,
 .tree-error {
   padding: 4px 12px 8px;
-  font-size: var(--ui-font-size-sm);
+  font-size: var(--font-size-callout);
   color: var(--text-secondary);
 }
 
@@ -2376,7 +2403,7 @@ body.resizing-panels * {
   height: 28px;
   padding: 0 10px;
   border: 2px solid transparent;
-  border-radius: 5px;
+  border-radius: var(--radius-control);
   background: transparent;
   text-align: left;
   user-select: none;
@@ -2424,13 +2451,13 @@ body.resizing-panels * {
   max-width: 100%;
   gap: 0;
   font-family: var(--font-sans);
-  font-size: var(--ui-font-size-md);
+  font-size: var(--font-size-body);
   color: var(--text-primary);
   font-weight: 400;
 }
 
 .flow-list.compact .flow-item-label {
-  font-size: 12px;
+  font-size: var(--font-size-callout);
 }
 
 .truncated-name-stem {
@@ -2528,7 +2555,7 @@ body.resizing-panels * {
   top: 5px;
   bottom: 5px;
   width: 4px;
-  border-radius: 999px;
+  border-radius: var(--radius-capsule);
   background: color-mix(in srgb, var(--ft-accent-border) 88%, white 12%);
 }
 
@@ -2542,13 +2569,13 @@ body.resizing-panels * {
   align-items: center;
   margin-left: auto;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-capsule);
   background: var(--ft-accent-solid-button);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--ft-accent-on-solid) 18%, transparent), 0 6px 16px
     color-mix(in srgb, var(--ft-accent-border) 24%, transparent);
   color: var(--ft-accent-on-solid);
-  font-size: 11px;
-  font-weight: 800;
+  font-size: var(--font-size-small);
+  font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   pointer-events: none;
@@ -2574,7 +2601,7 @@ body.resizing-panels * {
   width: 12px;
   height: calc(100% + 12px);
   cursor: col-resize;
-  border-radius: 999px;
+  border-radius: var(--radius-capsule);
 }
 
 .details-column-resizer::before {
@@ -2611,7 +2638,7 @@ body.resizing-panels * {
 }
 
 .details-scroll.compact .details-row {
-  font-size: 12px;
+  font-size: var(--font-size-callout);
 }
 
 /* Size with a bar behind it (while the list is sorted by size). */
@@ -2634,7 +2661,7 @@ body.resizing-panels * {
   left: -4px;
   min-width: 2px;
   max-width: calc(100% + 4px);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--ft-accent-solid) 20%, transparent);
   pointer-events: none;
 }
@@ -2700,14 +2727,14 @@ body.resizing-panels * {
 
 .content-state strong {
   color: var(--text-primary);
-  font-size: var(--ui-font-size-md);
+  font-size: var(--font-size-body);
 }
 
 .content-loading,
 .content-error {
   margin: 0 6px 12px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-menu);
 }
 
 .content-error {
@@ -2741,7 +2768,7 @@ body.resizing-panels * {
   height: 10px;
   border: 1.5px solid var(--srbar-separator);
   border-top-color: var(--srbar-spinner);
-  border-radius: 999px;
+  border-radius: var(--radius-capsule);
   animation: search-results-spin 0.7s linear infinite;
 }
 
@@ -2766,10 +2793,10 @@ body.resizing-panels * {
   margin: 0 6px 12px;
   padding: 10px 12px;
   border: 1px solid color-mix(in srgb, var(--accent-blue) 22%, var(--border));
-  border-radius: 10px;
+  border-radius: var(--radius-menu);
   background: color-mix(in srgb, var(--accent-blue) 6%, transparent);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
 }
 
 .search-result-row {
@@ -2797,7 +2824,7 @@ body.resizing-panels * {
   min-width: 0;
   padding: 9px 12px;
   border: 1px solid color-mix(in srgb, var(--ft-accent-border) 68%, var(--border));
-  border-radius: 13px;
+  border-radius: var(--radius-menu);
   background: color-mix(in srgb, var(--bg-elevated) 92%, var(--bg-base));
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
   color: var(--text-primary);
@@ -2813,7 +2840,7 @@ body.resizing-panels * {
   width: 18px;
   height: 14px;
   border: 1px solid color-mix(in srgb, var(--ft-accent-border) 72%, transparent);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--ft-accent-soft-bg) 88%, var(--bg-hover));
 }
 
@@ -2826,7 +2853,7 @@ body.resizing-panels * {
   height: 6px;
   border: 1px solid color-mix(in srgb, var(--ft-accent-border) 72%, transparent);
   border-bottom: 0;
-  border-radius: 4px 4px 0 0;
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
   background: color-mix(in srgb, var(--ft-accent-soft-bg) 92%, var(--bg-hover));
 }
 
@@ -2834,7 +2861,7 @@ body.resizing-panels * {
   width: 14px;
   height: 18px;
   border: 1px solid color-mix(in srgb, var(--border-active) 82%, transparent);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: color-mix(in srgb, white 78%, var(--bg-elevated));
 }
 
@@ -2856,8 +2883,8 @@ body.resizing-panels * {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
-  font-weight: 650;
+  font-size: var(--font-size-callout);
+  font-weight: 600;
 }
 
 .internal-drag-preview-badge {
@@ -2867,10 +2894,10 @@ body.resizing-panels * {
   min-width: 20px;
   height: 20px;
   padding: 0 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-capsule);
   background: var(--ft-accent-solid-button);
   color: var(--ft-accent-on-solid);
-  font-size: 11px;
+  font-size: var(--font-size-small);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -2910,13 +2937,13 @@ body.resizing-panels * {
 
 .empty-state-title {
   color: var(--text-secondary);
-  font-size: 14px;
+  font-size: var(--font-size-title3);
   font-weight: 500;
 }
 
 .empty-state-message {
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
 }
 
 .file-icon {
@@ -3055,10 +3082,10 @@ body.resizing-panels * {
   height: 18px;
   padding: 0;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--get-info-close-icon);
-  transition: background 0.12s ease, color 0.12s ease;
+  transition: background var(--duration-fast) ease, color var(--duration-fast) ease;
 }
 
 .get-info-close:hover {
@@ -3119,7 +3146,7 @@ body.resizing-panels * {
   align-items: center;
   min-width: 0;
   border: 0;
-  transition: background 0.12s ease, color 0.12s ease;
+  transition: background var(--duration-fast) ease, color var(--duration-fast) ease;
 }
 
 .get-info-action:hover {
@@ -3127,14 +3154,14 @@ body.resizing-panels * {
 }
 
 .get-info-action-icon {
-  transition: color 0.12s ease;
+  transition: color var(--duration-fast) ease;
 }
 
 .get-info-action-label {
   font-family: var(--font-sans);
   line-height: 1.2;
   text-align: center;
-  transition: color 0.12s ease;
+  transition: color var(--duration-fast) ease;
   font-variant-numeric: tabular-nums;
 }
 
@@ -3197,7 +3224,7 @@ body.resizing-panels * {
   border-top: 1px solid var(--border);
   background: var(--bg-base);
   overflow: hidden;
-  transition: max-height 0.25s ease, opacity 0.2s ease;
+  transition: max-height var(--duration-slow) ease, opacity var(--duration-base) ease;
   max-height: 0;
   opacity: 0;
 }
@@ -3214,7 +3241,7 @@ body.resizing-panels * {
   gap: 8px;
   height: 30px;
   padding: 0 12px;
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   color: var(--text-secondary);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -3280,7 +3307,7 @@ body.resizing-panels * {
   font-weight: 600;
   cursor: pointer;
   text-decoration: none;
-  transition: color 0.12s ease;
+  transition: color var(--duration-fast) ease;
   font-variant-numeric: tabular-nums;
 }
 
@@ -3301,7 +3328,7 @@ body.resizing-panels * {
   height: 12px;
   border: 2px solid var(--text-dim);
   border-top-color: var(--accent);
-  border-radius: 50%;
+  border-radius: var(--radius-capsule);
   animation: folder-size-spin 0.6s linear infinite;
 }
 
@@ -3319,14 +3346,14 @@ body.resizing-panels * {
   height: 16px;
   padding: 0;
   border: 0;
-  border-radius: 50%;
+  border-radius: var(--radius-capsule);
   background: var(--text-dim);
   color: var(--bg-base);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   font-weight: 700;
   line-height: 1;
   cursor: pointer;
-  transition: background 0.12s ease;
+  transition: background var(--duration-fast) ease;
 }
 
 .folder-size-cancel-btn:hover {
@@ -3348,7 +3375,7 @@ body.resizing-panels * {
   background: transparent;
   color: var(--text-dim);
   cursor: pointer;
-  transition: color 0.12s ease;
+  transition: color var(--duration-fast) ease;
 }
 
 .folder-size-refresh-btn:hover {
@@ -3361,7 +3388,7 @@ body.resizing-panels * {
 
 .folder-size-items {
   color: var(--text-dim);
-  font-size: 10px;
+  font-size: var(--font-size-mini);
 }
 
 .folder-size-refresh-btn .get-info-icon,
@@ -3411,7 +3438,7 @@ body.resizing-panels * {
   padding: 0;
   transform: translate(-50%, -50%);
   border: 1px solid var(--border-active);
-  border-radius: 16px;
+  border-radius: var(--radius-dialog);
   background: var(--bg-elevated);
   color: var(--text-primary);
   box-shadow: var(--modal-shadow), inset 0 0 1px var(--border-light);
@@ -3438,7 +3465,7 @@ body.resizing-panels * {
 
 .go-to-folder-header h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: var(--font-size-title1);
   font-weight: 500;
   letter-spacing: -0.01em;
   color: var(--text-primary);
@@ -3448,13 +3475,13 @@ body.resizing-panels * {
   width: 34px;
   height: 34px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-secondary);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s;
+  transition: background var(--duration-base);
 }
 
 .go-to-folder-close:hover {
@@ -3481,9 +3508,9 @@ body.resizing-panels * {
   height: 42px;
   padding: 0 12px;
   border: 1px solid var(--border-active);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   background: var(--bg-input);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color var(--duration-base) ease, box-shadow var(--duration-base) ease;
 }
 
 .go-to-folder-input-shell.is-focused {
@@ -3498,7 +3525,7 @@ body.resizing-panels * {
   flex-shrink: 0;
   stroke: var(--text-tertiary);
   stroke-width: 1.5;
-  transition: stroke 0.2s ease;
+  transition: stroke var(--duration-base) ease;
 }
 
 .go-to-folder-input-shell.is-focused .go-to-folder-input-icon {
@@ -3519,7 +3546,7 @@ body.resizing-panels * {
   padding: 0;
   color: var(--text-primary);
   font-family: var(--font-mono);
-  font-size: 14px;
+  font-size: var(--font-size-body);
   font-weight: 400;
   letter-spacing: -0.01em;
 }
@@ -3540,14 +3567,14 @@ body.resizing-panels * {
   height: 18px;
   padding: 4px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: var(--bg-hover);
   color: var(--text-secondary);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: background 0.15s;
+  transition: background var(--duration-base);
 }
 
 .go-to-folder-clear:hover {
@@ -3564,7 +3591,7 @@ body.resizing-panels * {
 
 .go-to-folder-error {
   margin-top: 8px;
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   color: var(--danger-text);
 }
 
@@ -3582,7 +3609,7 @@ body.resizing-panels * {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--font-size-small);
   font-weight: 500;
   color: var(--text-tertiary);
 }
@@ -3609,7 +3636,7 @@ body.resizing-panels * {
   align-items: center;
   justify-content: center;
   min-height: 0;
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   color: var(--text-tertiary);
 }
 
@@ -3621,7 +3648,7 @@ body.resizing-panels * {
   min-height: 36px;
   padding: 8px 10px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: transparent;
   text-align: left;
   color: inherit;
@@ -3657,7 +3684,7 @@ body.resizing-panels * {
 
 .go-to-folder-suggestion-name {
   flex-shrink: 0;
-  font-size: 13px;
+  font-size: var(--font-size-body);
   font-weight: 500;
   white-space: nowrap;
   color: var(--text-secondary);
@@ -3691,7 +3718,7 @@ body.resizing-panels * {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-tertiary);
-  font-size: 11.5px;
+  font-size: var(--font-size-small);
 }
 
 .history-menu-item:hover .history-menu-detail,
@@ -3713,7 +3740,7 @@ body.resizing-panels * {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   color: var(--text-tertiary);
 }
 
@@ -3732,7 +3759,7 @@ body.resizing-panels * {
   align-items: center;
   gap: 6px;
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   color: var(--text-tertiary);
   white-space: nowrap;
   flex-shrink: 1;
@@ -3742,11 +3769,11 @@ body.resizing-panels * {
   min-width: 22px;
   padding: 2px 6px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: var(--bg-hover);
   color: var(--text-secondary);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-small);
   font-weight: 500;
   text-align: center;
 }
@@ -3765,8 +3792,8 @@ body.resizing-panels * {
   width: auto;
   height: 32px;
   min-height: 32px;
-  border-radius: 10px;
-  font-size: 12.5px;
+  border-radius: var(--radius-control);
+  font-size: var(--font-size-body);
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
@@ -3846,21 +3873,21 @@ body.platform-macos .settings-view {
 
 .settings-page-eyebrow {
   font-family: var(--font-sans);
-  font-size: 10px;
+  font-size: var(--font-size-mini);
   font-weight: 400;
   color: var(--help-accent);
   font-variant-numeric: tabular-nums;
 }
 
 .settings-page-header h2 {
-  font-size: 22px;
+  font-size: var(--font-size-title1);
   line-height: 1.12;
   letter-spacing: -0.02em;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .settings-page-header p {
-  font-size: 11px;
+  font-size: var(--font-size-small);
   color: var(--help-muted);
 }
 
@@ -3891,18 +3918,18 @@ body.platform-macos .settings-view[data-layout="compact"] {
 }
 
 .settings-view[data-layout="compact"] .settings-page-header h2 {
-  font-size: 20px;
+  font-size: var(--font-size-title1);
 }
 
 .settings-footer-note {
   text-align: center;
   padding: 6px 0 0;
-  font-size: 11px;
+  font-size: var(--font-size-small);
   color: var(--text-dim);
 }
 
 .empty-state {
-  font-size: 12.5px;
+  font-size: var(--font-size-callout);
   color: var(--fg-muted);
 }
 
@@ -3931,7 +3958,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
   }
 
   .settings-page-header h2 {
-    font-size: 20px;
+    font-size: var(--font-size-title1);
   }
 }
 
@@ -3978,11 +4005,11 @@ body.platform-macos .settings-view[data-layout="compact"] {
 }
 
 .workspace-inspector-cell.is-sliding-in > * {
-  animation: info-panel-slide-in 220ms cubic-bezier(0.2, 0, 0, 1);
+  animation: info-panel-slide-in var(--duration-slow) cubic-bezier(0.2, 0, 0, 1);
 }
 
 .workspace-inspector-cell.is-sliding-out > * {
-  animation: info-panel-slide-out 220ms cubic-bezier(0.2, 0, 0, 1) forwards;
+  animation: info-panel-slide-out var(--duration-slow) cubic-bezier(0.2, 0, 0, 1) forwards;
 }
 
 @keyframes info-panel-slide-in {
@@ -4032,7 +4059,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
 
 .sidebar-section-title,
 .sidebar-title {
-  font-size: 11px;
+  font-size: var(--font-size-small);
   font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
@@ -4092,7 +4119,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-primary);
-  font-size: 15px;
+  font-size: var(--font-size-title3);
   font-weight: 700;
 }
 
@@ -4101,7 +4128,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-small);
   font-variant-numeric: tabular-nums;
 }
 
@@ -4154,9 +4181,9 @@ body.platform-macos .settings-view[data-layout="compact"] {
   width: 200px;
   min-width: 96px;
   padding: 0 28px 0 12px;
-  border-radius: 8px 8px 0 0;
+  border-radius: var(--radius-control) var(--radius-control) 0 0;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   cursor: default;
   user-select: none;
 }
@@ -4177,7 +4204,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
   position: absolute;
   z-index: -1;
   inset: 3px 3px 4px;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   background: color-mix(in srgb, var(--neutral-ink) 8%, transparent);
 }
 
@@ -4249,7 +4276,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
   height: 16px;
   padding: 0;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--text-tertiary);
   opacity: 0;
@@ -4289,7 +4316,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
   margin: 0 0 3px 2px;
   padding: 0;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-secondary);
 }
@@ -4355,11 +4382,11 @@ body.platform-macos .settings-view[data-layout="compact"] {
   max-width: 420px;
   padding: 3px 7px;
   border: 0.5px solid var(--context-menu-border);
-  border-radius: 5px;
+  border-radius: var(--radius-control);
   background: var(--context-menu-bg);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
   color: var(--context-menu-text);
-  font-size: 11.5px;
+  font-size: var(--font-size-small);
   line-height: 1.35;
   overflow-wrap: anywhere;
   pointer-events: none;
@@ -4376,7 +4403,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
   background: var(--bg-base);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 
 .help-sidebar {
@@ -4397,14 +4424,14 @@ body.platform-macos .settings-view[data-layout="compact"] {
   height: 28px;
   padding: 0 8px;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   background: var(--bg-input);
   color: var(--text-tertiary);
 }
 
 .help-filter:focus-within {
   border-color: color-mix(in srgb, var(--ft-accent-solid) 70%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ft-accent-solid) 25%, transparent);
+  box-shadow: var(--focus-ring);
 }
 
 .help-filter-icon,
@@ -4427,7 +4454,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
   background: transparent;
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 
 .help-filter-input:focus,
@@ -4453,11 +4480,11 @@ body.platform-macos .settings-view[data-layout="compact"] {
   height: 28px;
   padding: 0 8px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-secondary);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--font-size-body);
   text-align: left;
   cursor: default;
 }
@@ -4491,7 +4518,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
 
 .help-page h1 {
   margin: 0 0 4px;
-  font-size: 20px;
+  font-size: var(--font-size-title1);
   font-weight: 700;
   letter-spacing: -0.01em;
 }
@@ -4506,10 +4533,10 @@ body.platform-macos .settings-view[data-layout="compact"] {
   margin: 10px 0 12px;
   padding: 0 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: var(--bg-elevated);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   cursor: default;
 }
 
@@ -4519,7 +4546,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
 
 .help-section h2 {
   margin: 22px 0 4px;
-  font-size: 13px;
+  font-size: var(--font-size-body);
   font-weight: 600;
 }
 
@@ -4552,20 +4579,20 @@ body.platform-macos .settings-view[data-layout="compact"] {
 .help-code {
   padding: 1px 6px;
   border: 1px solid var(--border-light);
-  border-radius: 5px;
+  border-radius: var(--radius-control);
   background: var(--bg-input);
   color: var(--text-primary);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
 }
 
 .help-note {
   margin: 8px 0 0;
   padding: 8px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-menu);
   background: var(--ft-accent-soft-bg);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
 }
 
 .help-shortcut-row {
@@ -4589,11 +4616,11 @@ body.platform-macos .settings-view[data-layout="compact"] {
   height: 21px;
   padding: 0 6px;
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: var(--radius-control);
   background: var(--bg-elevated);
   color: var(--text-secondary);
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   line-height: 1;
 }
 
@@ -4657,7 +4684,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
   padding: 0 10px;
   border-top: 1px solid var(--border);
   border-bottom: 0;
-  font-size: 11px;
+  font-size: var(--font-size-small);
   font-weight: 400;
   letter-spacing: 0;
   text-transform: none;
@@ -4667,7 +4694,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
 .content-pathbar-row .pathbar-segment {
   height: 20px;
   padding: 0 6px;
-  font-size: 11px;
+  font-size: var(--font-size-small);
   color: var(--text-secondary);
 }
 
@@ -4689,7 +4716,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
 
 .details-header {
   min-height: 28px;
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   font-weight: 400;
   letter-spacing: 0;
   text-transform: none;
@@ -4717,8 +4744,8 @@ body.platform-macos .settings-view[data-layout="compact"] {
   min-height: 28px;
   padding: 0 12px;
   border-bottom: 0;
-  border-radius: 5px;
-  font-size: 13px;
+  border-radius: var(--radius-control);
+  font-size: var(--font-size-body);
   font-variant-numeric: tabular-nums;
 }
 
@@ -4781,7 +4808,7 @@ body.window-inactive {
   align-items: center;
   gap: 6px;
   min-height: 36px;
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   letter-spacing: 0;
   text-transform: none;
   color: var(--text-secondary);
@@ -4796,10 +4823,10 @@ body.window-inactive {
   height: 22px;
   padding: 0 10px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   cursor: default;
 }
 
@@ -4821,10 +4848,10 @@ body.window-inactive {
   height: 22px;
   padding: 0 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: var(--bg-elevated);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   cursor: default;
 }
 
@@ -4848,7 +4875,7 @@ body.window-inactive {
   border: 0;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   text-align: left;
   cursor: default;
 }
@@ -4866,17 +4893,17 @@ body.window-inactive {
   min-height: 28px;
   margin: 0 6px;
   padding: 0 10px;
-  border-radius: 5px;
+  border-radius: var(--radius-control);
 }
 
 .search-result-name {
-  font-size: 13px;
+  font-size: var(--font-size-body);
   font-weight: 400;
 }
 
 .search-result-path {
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
 }
 
 /* Remaining uppercase letter-spaced labels read as web UI; macOS uses sentence case. */
@@ -4921,7 +4948,7 @@ body.window-inactive {
   height: 32px;
   min-height: 32px;
   border-bottom: 0;
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   font-weight: 600;
   color: var(--text-secondary);
 }
@@ -4954,7 +4981,7 @@ body.window-inactive {
 
 .get-info-name {
   color: var(--text-primary);
-  font-size: 15px;
+  font-size: var(--font-size-title3);
   font-weight: 600;
   letter-spacing: 0;
   word-break: break-word;
@@ -4962,7 +4989,7 @@ body.window-inactive {
 
 .get-info-subtitle {
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
@@ -4996,10 +5023,10 @@ body.window-inactive {
   width: 100%;
   height: 26px;
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: var(--get-info-button-bg);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--font-size-body);
   white-space: nowrap;
   cursor: default;
 }
@@ -5034,7 +5061,7 @@ body.window-inactive {
   justify-content: center;
   width: 16px;
   height: 16px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: var(--ft-accent-solid-button);
   color: var(--ft-accent-on-solid);
 }
@@ -5069,7 +5096,7 @@ body.window-inactive {
 .get-info-section-title {
   margin: 0 0 4px;
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-small);
   font-weight: 600;
 }
 
@@ -5083,13 +5110,13 @@ body.window-inactive {
 
 .get-info-meta-label {
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   font-weight: 400;
 }
 
 .get-info-meta-value {
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   font-weight: 400;
 }
 
@@ -5102,7 +5129,7 @@ body.window-inactive {
 .get-info-permissions-code {
   color: var(--text-tertiary);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-small);
 }
 
 .get-info-where {
@@ -5110,7 +5137,7 @@ body.window-inactive {
   border: 0;
   background: transparent;
   color: var(--ft-accent-solid);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   cursor: default;
 }
 
@@ -5131,7 +5158,7 @@ body.window-inactive {
   gap: 9px;
   height: 30px;
   padding: 0 4px;
-  border-radius: 5px;
+  border-radius: var(--radius-control);
   background: transparent;
 }
 
@@ -5142,7 +5169,7 @@ body.window-inactive {
 
 .get-info-action-label {
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   font-weight: 400;
   letter-spacing: 0;
 }
@@ -5150,7 +5177,7 @@ body.window-inactive {
 .get-info-action-shortcut {
   margin-left: auto;
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
 }
 
 /* ── Help: a toolbar with a way back to the files ─────────────── ────────── */
@@ -5177,10 +5204,10 @@ body.window-inactive {
   height: 28px;
   padding: 0 10px 0 6px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-body);
   cursor: default;
   -webkit-app-region: no-drag;
 }
@@ -5192,7 +5219,7 @@ body.window-inactive {
 
 .single-panel-title {
   color: var(--text-primary);
-  font-size: 15px;
+  font-size: var(--font-size-title3);
   font-weight: 700;
 }
 
@@ -5223,7 +5250,7 @@ body.settings-window-body {
 .settings-window-title {
   height: 18px;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--font-size-body);
   font-weight: 600;
 }
 
@@ -5241,10 +5268,10 @@ body.settings-window-body {
   width: 78px;
   height: 50px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--font-size-small);
   cursor: default;
   -webkit-app-region: no-drag;
 }
@@ -5280,7 +5307,7 @@ body.settings-window-body {
   padding: 8px 20px;
   background: color-mix(in srgb, var(--danger) 10%, transparent);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
 }
 
 .settings-window-body-scroll {
@@ -5311,10 +5338,10 @@ body.page-window-body {
   height: 26px;
   padding: 0 12px;
   border: 1px solid var(--border-active);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: var(--bg-surface);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   text-decoration: none;
   white-space: nowrap;
   cursor: default;
@@ -5326,7 +5353,7 @@ body.page-window-body {
 
 .page-window-link {
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--ft-accent-solid);
   font-size: inherit;
@@ -5341,7 +5368,7 @@ body.page-window-body {
 a.page-window-button:focus-visible,
 .page-window-link:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px var(--accent-blue-dim);
+  box-shadow: var(--focus-ring);
 }
 
 .about-window {
@@ -5368,7 +5395,7 @@ a.page-window-button:focus-visible,
 
 .about-name {
   color: var(--text-primary);
-  font-size: 20px;
+  font-size: var(--font-size-title1);
   font-weight: 600;
   line-height: 1.25;
 }
@@ -5376,7 +5403,7 @@ a.page-window-button:focus-visible,
 .about-tagline {
   margin-top: 3px;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 
 .about-details {
@@ -5391,7 +5418,7 @@ a.page-window-button:focus-visible,
   gap: 16px;
   padding: 7px 0;
   border-bottom: 1px solid var(--border);
-  font-size: 12.5px;
+  font-size: var(--font-size-callout);
 }
 
 .about-detail dt {
@@ -5414,7 +5441,7 @@ a.page-window-button:focus-visible,
   justify-content: space-between;
   margin-top: auto;
   color: var(--text-tertiary);
-  font-size: 11.5px;
+  font-size: var(--font-size-small);
 }
 
 .acknowledgements-window {
@@ -5431,7 +5458,7 @@ a.page-window-button:focus-visible,
   border-bottom: 1px solid var(--border);
   background: var(--toolbar-bg, var(--bg-base));
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--font-size-body);
   font-weight: 600;
 }
 
@@ -5445,7 +5472,7 @@ a.page-window-button:focus-visible,
 .acknowledgements-intro {
   margin-bottom: 10px;
   color: var(--text-secondary);
-  font-size: 12.5px;
+  font-size: var(--font-size-callout);
   line-height: 1.5;
 }
 
@@ -5456,7 +5483,7 @@ a.page-window-button:focus-visible,
 .acknowledgement summary {
   padding: 9px 0;
   color: var(--text-tertiary);
-  font-size: 13px;
+  font-size: var(--font-size-body);
   cursor: default;
 }
 
@@ -5482,7 +5509,7 @@ a.page-window-button:focus-visible,
 
 .acknowledgement-license {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
 }
 
 .acknowledgement-body {
@@ -5491,7 +5518,7 @@ a.page-window-button:focus-visible,
   align-items: flex-start;
   gap: 10px;
   padding: 0 0 14px 17px;
-  font-size: 12px;
+  font-size: var(--font-size-callout);
 }
 
 .acknowledgement-text {
@@ -5500,11 +5527,11 @@ a.page-window-button:focus-visible,
   overflow: auto;
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: var(--bg-input);
   color: var(--text-secondary);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-small);
   line-height: 1.5;
   white-space: pre-wrap;
   user-select: text;
@@ -5526,17 +5553,18 @@ a.page-window-button:focus-visible,
   padding: 0 10px;
   /* A hairline, like every other control in Settings. */
   border: 0.5px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: var(--bg-input);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 
 .shortcut-settings-search:focus,
 .shortcut-settings-search:focus-visible {
   outline: none;
   border-color: var(--ft-accent-solid);
+  box-shadow: var(--focus-ring);
 }
 
 .shortcut-settings-search::placeholder {
@@ -5564,7 +5592,7 @@ a.page-window-button:focus-visible,
    The tint is taken from the button's own text colour, so it darkens a light button and
    lightens a dark one. */
 .settings-button {
-  transition: transform 0.1s ease;
+  transition: transform var(--duration-fast) ease;
 }
 
 .settings-button:hover:not(:disabled) {
@@ -5583,8 +5611,8 @@ a.page-window-button:focus-visible,
 }
 
 .settings-button:focus-visible {
-  outline: 2px solid var(--ft-accent-solid);
-  outline-offset: 1px;
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .shortcut-settings-intro,
@@ -5592,12 +5620,12 @@ a.page-window-button:focus-visible,
   margin: 0 4px 14px;
   color: var(--text-tertiary);
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: var(--font-size-small);
 }
 
 .shortcut-settings-empty {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
 }
 
 .shortcut-row {
@@ -5626,13 +5654,13 @@ a.page-window-button:focus-visible,
 
 .shortcut-row-label {
   color: var(--text-secondary);
-  font-size: 12.5px;
+  font-size: var(--font-size-body);
   font-weight: 500;
 }
 
 .shortcut-row-hint {
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-small);
   line-height: 1.4;
 }
 
@@ -5661,11 +5689,11 @@ a.page-window-button:focus-visible,
   height: 24px;
   padding: 0 9px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: var(--bg-elevated);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   line-height: 1;
   cursor: default;
 }
@@ -5675,8 +5703,8 @@ button.shortcut-slot-key:hover {
 }
 
 button.shortcut-slot-key:focus-visible {
-  outline: 2px solid var(--ft-accent-ring-soft);
-  outline-offset: 1px;
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .shortcut-slot-key.empty {
@@ -5715,10 +5743,10 @@ button.shortcut-slot-key.recording:hover {
   height: 15px;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: 50%;
+  border-radius: var(--radius-capsule);
   background: var(--bg-base);
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--font-size-small);
   line-height: 1;
   cursor: default;
 }
@@ -5738,11 +5766,11 @@ button.shortcut-slot-key.recording:hover {
   height: 22px;
   padding: 0 8px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-secondary);
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: var(--font-size-small);
   cursor: default;
 }
 
@@ -5771,7 +5799,7 @@ button.shortcut-slot-key.recording:hover {
   gap: 10px;
   margin-top: 6px;
   color: var(--text-secondary);
-  font-size: 11.5px;
+  font-size: var(--font-size-small);
   line-height: 1.4;
   text-align: right;
 }
@@ -5814,7 +5842,7 @@ button.shortcut-slot-key.recording:hover {
 .content-pathbar-status {
   margin-left: 12px;
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-small);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -5842,7 +5870,7 @@ button.shortcut-slot-key.recording:hover {
 
 .get-info-meta-value .folder-size-items {
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-small);
 }
 
 /* ── macOS Light / macOS Dark: base tokens outside the variant set ─────── */
@@ -5871,7 +5899,7 @@ button.shortcut-slot-key.recording:hover {
   width: 28px;
   min-width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   color: var(--text-secondary);
 }
 
@@ -5906,7 +5934,7 @@ button.shortcut-slot-key.recording:hover {
 .toolbar-group-view .toolbar-segmented.toolbar-segmented-native {
   gap: 2px;
   padding: 2px;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   background: var(--toolbar-toggle-bg, var(--bg-hover));
 }
 
@@ -5915,7 +5943,7 @@ button.shortcut-slot-key.recording:hover {
   width: 34px;
   min-width: 34px;
   height: 24px;
-  border-radius: 5px;
+  border-radius: var(--radius-xs);
   color: var(--text-secondary);
 }
 
@@ -5941,13 +5969,13 @@ button.shortcut-slot-key.recording:hover {
 
 .window-toolbar .toolbar-search {
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   background: var(--search-surface);
 }
 
 .window-toolbar .toolbar-search-shell.active .toolbar-search {
   border-color: color-mix(in srgb, var(--ft-accent-solid) 70%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ft-accent-solid) 25%, transparent);
+  box-shadow: var(--focus-ring);
 }
 
 /* 26px inside its 1px border: 28px, the height of every control in the toolbar. */
@@ -5958,7 +5986,7 @@ button.shortcut-slot-key.recording:hover {
 }
 
 .window-toolbar .toolbar-search-input {
-  font-size: 13px;
+  font-size: var(--font-size-body);
 }
 
 /* ── Sidebar (Finder style) ───────────────────────────────────────────── */
@@ -6005,13 +6033,13 @@ button.shortcut-slot-key.recording:hover {
   margin: 0 10px;
   width: calc(100% - 20px);
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
 }
 
 .sidebar-main-native .tree-label {
   gap: 7px;
   padding: 0;
-  font-size: 13px;
+  font-size: var(--font-size-body);
   font-weight: 400;
 }
 
@@ -6031,12 +6059,12 @@ button.shortcut-slot-key.recording:hover {
 .compact-tree-view .sidebar-main-native .tree-row {
   min-height: 21px;
   height: 21px;
-  border-radius: 5px;
+  border-radius: var(--radius-control);
 }
 
 .compact-tree-view .sidebar-main-native .tree-label {
   gap: 5px;
-  font-size: 11.5px;
+  font-size: var(--font-size-small);
 }
 
 .compact-tree-view .sidebar-main-native .tree-expand {
@@ -6071,7 +6099,7 @@ button.shortcut-slot-key.recording:hover {
 }
 
 .sidebar-main-native .tree-label-badge {
-  font-size: 9px;
+  font-size: var(--font-size-mini);
   letter-spacing: 0.02em;
   text-transform: none;
 }
@@ -6086,12 +6114,13 @@ button.shortcut-slot-key.recording:hover {
   height: 22px;
   padding: 0 4px 0 7px;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: var(--bg-input);
 }
 
 .search-results-filter:focus-within {
   border-color: var(--ft-accent-border);
+  box-shadow: var(--focus-ring);
 }
 
 .search-results-filter-icon {
@@ -6112,7 +6141,7 @@ button.shortcut-slot-key.recording:hover {
   background: transparent;
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   user-select: text;
   -webkit-user-select: text;
 }
@@ -6136,7 +6165,7 @@ button.shortcut-slot-key.recording:hover {
   height: 16px;
   padding: 0;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-capsule);
   background: transparent;
   color: var(--text-tertiary);
   cursor: default;
@@ -6230,7 +6259,7 @@ button.shortcut-slot-key.recording:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   font-variant-numeric: tabular-nums;
 }
 
@@ -6243,7 +6272,7 @@ button.shortcut-slot-key.recording:hover {
 }
 
 .search-result-match {
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
   padding: 0 1px;
   background: rgba(255, 214, 10, 0.45);
   color: inherit;
@@ -6269,7 +6298,7 @@ button.shortcut-slot-key.recording:hover {
   margin: 6px 10px 0;
   padding: 0 6px 0 10px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-tertiary);
   text-align: left;
@@ -6285,7 +6314,7 @@ button.shortcut-slot-key.recording:hover {
   color: var(--text-tertiary);
   opacity: 0;
   transform: rotate(90deg);
-  transition: opacity 0.12s ease, transform 0.15s ease;
+  transition: opacity var(--duration-fast) ease, transform var(--duration-base) ease;
 }
 
 .sidebar-section-chevron .toolbar-icon {
@@ -6306,7 +6335,7 @@ button.shortcut-slot-key.recording:hover {
 
 .sidebar-section-header:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ft-accent-solid) 45%, transparent);
+  box-shadow: var(--focus-ring);
 }
 
 /* ── Copy/paste review sheet, conflict alert, result sheet ─────────────────── */
@@ -6357,11 +6386,11 @@ button.shortcut-slot-key.recording:hover {
   margin: 52px 0 0;
   padding: 0;
   border: 0;
-  border-radius: 0 0 12px 12px;
+  border-radius: 0 0 var(--radius-dialog) var(--radius-dialog);
   background: var(--bg-elevated);
   color: var(--text-primary);
   box-shadow: var(--copy-paste-shadow), 0 0 0 1px var(--border-light);
-  font-size: 13px;
+  font-size: var(--font-size-body);
   outline: none;
 }
 
@@ -6405,7 +6434,7 @@ button.shortcut-slot-key.recording:hover {
 
 .copy-paste-sheet-title {
   margin: 0;
-  font-size: 15px;
+  font-size: var(--font-size-title3);
   font-weight: 600;
   overflow-wrap: anywhere;
 }
@@ -6436,7 +6465,7 @@ button.shortcut-slot-key.recording:hover {
   flex: 1 0 100%;
   margin: 0;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
 }
 
 /* "For all conflicts": a segmented control with the selected segment raised, like the
@@ -6445,7 +6474,7 @@ button.shortcut-slot-key.recording:hover {
   display: inline-flex;
   gap: 2px;
   padding: 2px;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   background: var(--bg-hover);
 }
 
@@ -6455,7 +6484,7 @@ button.shortcut-slot-key.recording:hover {
   height: 22px;
   padding: 0 12px;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: var(--text-secondary);
   font: inherit;
@@ -6479,8 +6508,8 @@ button.shortcut-slot-key.recording:hover {
 }
 
 .copy-paste-segment:has(input:focus-visible) {
-  outline: 2px solid var(--ft-accent-solid);
-  outline-offset: 1px;
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .copy-paste-sheet-bar-spacer {
@@ -6502,7 +6531,7 @@ button.shortcut-slot-key.recording:hover {
   min-width: 112px;
   padding: 0 8px;
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: var(--bg-elevated);
   color: var(--text-primary);
   font: inherit;
@@ -6665,11 +6694,11 @@ button.shortcut-slot-key.recording:hover {
   margin: 0;
   padding: 22px 24px 20px;
   border: 0;
-  border-radius: 12px;
+  border-radius: var(--radius-dialog);
   background: var(--bg-elevated);
   color: var(--text-primary);
   box-shadow: var(--copy-paste-shadow), 0 0 0 1px var(--border-light);
-  font-size: 13px;
+  font-size: var(--font-size-body);
   outline: none;
 }
 
@@ -6692,12 +6721,12 @@ button.shortcut-slot-key.recording:hover {
   min-width: 0;
   padding: 12px;
   border: 1px solid var(--border-light);
-  border-radius: 10px;
+  border-radius: var(--radius-menu);
 }
 
 .copy-paste-conflict-card-label {
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--font-size-small);
   font-weight: 600;
   text-transform: uppercase;
 }
@@ -6739,7 +6768,7 @@ button.shortcut-slot-key.recording:hover {
   margin: 0;
   padding: 10px 24px 4px;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--font-size-small);
   font-weight: 600;
   text-transform: uppercase;
 }
@@ -6822,7 +6851,7 @@ button.shortcut-slot-key.recording:hover {
 
 .clipboard-button-count {
   color: var(--ft-accent-solid-button);
-  font-size: 11.5px;
+  font-size: var(--font-size-small);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -6843,7 +6872,7 @@ button.shortcut-slot-key.recording:hover {
   min-width: 0;
   overflow: hidden;
   color: var(--context-menu-text);
-  font-size: 13px;
+  font-size: var(--font-size-body);
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -6853,13 +6882,13 @@ button.shortcut-slot-key.recording:hover {
   flex: none;
   margin-left: auto;
   color: var(--context-menu-shortcut);
-  font-size: 11.5px;
+  font-size: var(--font-size-small);
 }
 
 .clipboard-menu-breakdown {
   padding: 0 10px 4px;
   color: var(--context-menu-shortcut);
-  font-size: 11.5px;
+  font-size: var(--font-size-small);
 }
 
 .clipboard-menu-list-shell {
@@ -6885,7 +6914,7 @@ button.shortcut-slot-key.recording:hover {
 /* Drawn from the menu's own text colour, so it shows on every palette's menu. */
 .clipboard-menu-list::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--radius-capsule);
   background: color-mix(in srgb, var(--context-menu-text) 30%, transparent);
   background-clip: content-box;
 }
@@ -6963,7 +6992,7 @@ button.shortcut-slot-key.recording:hover {
   height: 20px;
   padding: 0;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: transparent;
   color: inherit;
   visibility: hidden;
@@ -7096,7 +7125,7 @@ button.shortcut-slot-key.recording:hover {
   width: 18px;
   height: 18px;
   border: 1px solid color-mix(in srgb, var(--ft-accent-solid-button) 70%, transparent);
-  border-radius: 50%;
+  border-radius: var(--radius-capsule);
   background: var(--bg-base);
   color: var(--ft-accent-solid-button);
   pointer-events: none;
@@ -7205,13 +7234,13 @@ button.shortcut-slot-key.recording:hover {
   margin: 0 3px 0 -5px;
   padding: 0 4px;
   border: 1px solid var(--ft-accent-solid);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   outline: none;
   background: var(--bg-base);
   box-shadow: 0 0 0 3px var(--ft-accent-ring-soft);
   color: var(--text-primary);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-body);
   user-select: text;
   -webkit-user-select: text;
 }
@@ -7228,11 +7257,11 @@ button.shortcut-slot-key.recording:hover {
   max-width: 320px;
   padding: 4px 8px;
   border: 0.5px solid color-mix(in srgb, var(--danger) 50%, transparent);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   background: var(--context-menu-bg);
   box-shadow: var(--context-menu-shadow);
   color: var(--danger-text);
-  font-size: 11.5px;
+  font-size: var(--font-size-small);
   line-height: 1.35;
 }
 
@@ -7285,7 +7314,7 @@ button.shortcut-slot-key.recording:hover {
   box-sizing: border-box;
   padding: 5px 1px 0;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-primary);
   font: inherit;
@@ -7316,7 +7345,7 @@ button.shortcut-slot-key.recording:hover {
   justify-content: center;
   width: var(--icon-box);
   height: var(--icon-box);
-  border-radius: 7px;
+  border-radius: var(--radius-control);
 }
 
 .icon-grid .icon-item .file-icon {
@@ -7347,10 +7376,10 @@ button.shortcut-slot-key.recording:hover {
   box-sizing: border-box;
   padding: 1px 4px;
   overflow: hidden;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   line-height: 15px;
   text-align: center;
   overflow-wrap: anywhere;
@@ -7361,7 +7390,7 @@ button.shortcut-slot-key.recording:hover {
 .icon-grid.compact .icon-item-label,
 .icon-label-measurer.compact {
   padding: 1px 2px;
-  font-size: 11px;
+  font-size: var(--font-size-small);
   line-height: 14px;
 }
 
@@ -7414,13 +7443,13 @@ button.shortcut-slot-key.recording:hover {
   width: var(--icon-label-width);
   height: 19px;
   margin: 0;
-  font-size: 12px;
+  font-size: var(--font-size-callout);
   text-align: center;
 }
 
 .icon-grid.compact .icon-item.renaming .inline-rename-input {
   height: 18px;
-  font-size: 11px;
+  font-size: var(--font-size-small);
 }
 
 /* ── Translucent sidebar ──────────────────────────────────────────────── */
@@ -7503,4 +7532,18 @@ body.vibrant-window .explorer-workspace .content-pathbar-row {
 
 body.vibrant-window .explorer-workspace .info-row {
   padding-left: 4px;
+}
+
+/* Reduced motion: transitions take no time (they all use the duration tokens), and
+   nothing slides or shimmers. Spinners keep turning: they say that work goes on. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-base: 0ms;
+    --duration-slow: 0ms;
+  }
+
+  .copy-paste-progress-card-track-shimmer {
+    animation: none;
+  }
 }
