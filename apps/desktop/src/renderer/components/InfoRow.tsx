@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { useDelayedFlag } from "../hooks/useDelayedFlag";
 import type { FolderSizeEntry } from "../hooks/useFolderSizeCache";
 import { useRelativeDate } from "../hooks/useRelativeDate";
 import { isFolderSizeEligibleKind } from "../lib/explorerAppUtils";
@@ -138,6 +139,7 @@ function formatFolderSizeText(entry: Extract<FolderSizeEntry, { status: "ready" 
   return `${detail.size}${detail.disk ? ` (${detail.disk})` : ""} · ${detail.items}`;
 }
 
+const CALCULATING_DELAY_MS = 300;
 function InfoRowFolderSize({
   entry,
   onCalculate,
@@ -149,6 +151,8 @@ function InfoRowFolderSize({
   onRecalculate: () => void;
   onCancel: () => void;
 }) {
+  // A small folder is measured in a moment: the spinner shows only for one that takes longer.
+  const showCalculating = useDelayedFlag(entry.status === "calculating", CALCULATING_DELAY_MS);
   if (entry.status === "ready") {
     const detail = formatFolderSizeDetail(entry.sizeBytes, entry.diskBytes, entry.fileCount);
     return (
@@ -173,6 +177,9 @@ function InfoRowFolderSize({
     );
   }
   if (entry.status === "calculating") {
+    if (!showCalculating) {
+      return <span className="folder-size-calculating" />;
+    }
     return (
       <span className="folder-size-calculating">
         <span className="folder-size-spinner" />

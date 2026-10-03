@@ -5,6 +5,7 @@ import type {
   WriteOperationProgressEvent,
 } from "@filetrail/contracts";
 
+import { useDelayedFlag } from "../hooks/useDelayedFlag";
 import type { ContextMenuState, WriteOperationCardState } from "../hooks/useWriteOperations";
 import {
   type CopyPasteReport as CopyPasteAnalysisReport,
@@ -33,6 +34,8 @@ import {
 } from "./ItemContextMenu";
 import { TextPromptDialog } from "./TextPromptDialog";
 import { ToastViewport } from "./ToastViewport";
+
+const PROGRESS_CARD_DELAY_MS = 500;
 
 function resolveContextMenuShortcutContext(
   shortcutContext: ShortcutContext,
@@ -155,6 +158,12 @@ export function AppDialogs({
     writeOperationProgressEvent,
     toasts,
   } = useDialogStore();
+  // As in Finder, an operation over in a moment (a rename, one item to the Trash) shows no
+  // progress; the card comes once it has run long enough to be worth watching.
+  const progressCardVisible = useDelayedFlag(
+    showCopyPasteProgressCard && writeOperationCardState !== null,
+    PROGRESS_CARD_DELAY_MS,
+  );
   const contextMenuShortcutContext = resolveContextMenuShortcutContext(
     shortcutContext,
     contextMenuState,
@@ -346,7 +355,7 @@ export function AppDialogs({
           }}
         />
       ) : null}
-      {showCopyPasteProgressCard && writeOperationCardState ? (
+      {progressCardVisible && writeOperationCardState ? (
         <CopyPasteProgressCard
           title={getWriteOperationTitle(writeOperationCardState.action, "progress")}
           progressPercent={getWriteOperationProgressPercent(writeOperationCardState)}
@@ -401,7 +410,7 @@ export function AppDialogs({
       <ToastViewport
         toasts={toasts}
         onDismiss={onDismissToast}
-        progressCardShown={showCopyPasteProgressCard && writeOperationCardState !== null}
+        progressCardShown={progressCardVisible && writeOperationCardState !== null}
       />
     </>
   );

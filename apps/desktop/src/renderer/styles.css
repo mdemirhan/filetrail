@@ -556,6 +556,8 @@ select:focus-visible {
      are drawn to their edges, and without this would sit closer to the icons beside them
      than two icons sit to each other. */
   --toolbar-edged-item-inset: 5px;
+  /* How far a capsule of buttons reaches past its first and last button. */
+  --toolbar-capsule-padding: 3px;
   --toolbar-title-min-width: 96px;
   --toolbar-search-width: 200px;
   --toolbar-search-focused-width: 280px;
@@ -575,6 +577,61 @@ select:focus-visible {
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
+}
+
+/* Buttons side by side sit on one capsule, as in a macOS 26 toolbar, filled like the view
+   switch's track. The capsule is drawn behind the buttons, reaching
+   --toolbar-capsule-padding past the first and last (and across the gaps between them), so
+   the buttons keep their sizes; the first and last keep --toolbar-edged-item-inset clear
+   beyond it, as the search field and the view switch do. lib/topToolbarLayout.ts counts
+   the same room. */
+.toolbar-row > [data-capsule] {
+  position: relative;
+}
+
+.toolbar-row > [data-capsule]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--toolbar-item-gap) / -2);
+  right: calc(var(--toolbar-item-gap) / -2);
+  z-index: -1;
+  background: var(--toolbar-capsule-bg);
+  pointer-events: none;
+}
+
+.toolbar-row > [data-capsule="start"],
+.toolbar-row > [data-capsule="single"] {
+  margin-left: calc(var(--toolbar-capsule-padding) + var(--toolbar-edged-item-inset));
+}
+
+.toolbar-row > [data-capsule="end"],
+.toolbar-row > [data-capsule="single"] {
+  margin-right: calc(var(--toolbar-capsule-padding) + var(--toolbar-edged-item-inset));
+}
+
+.toolbar-row > [data-capsule="start"]::before,
+.toolbar-row > [data-capsule="single"]::before {
+  left: calc(-1 * var(--toolbar-capsule-padding));
+  border-top-left-radius: var(--radius-capsule);
+  border-bottom-left-radius: var(--radius-capsule);
+}
+
+.toolbar-row > [data-capsule="end"]::before,
+.toolbar-row > [data-capsule="single"]::before {
+  right: calc(-1 * var(--toolbar-capsule-padding));
+  border-top-right-radius: var(--radius-capsule);
+  border-bottom-right-radius: var(--radius-capsule);
+}
+
+/* On a capsule, a button's hover and "on" fills are round, inside the capsule's ends. */
+.toolbar-row > [data-capsule] .tb-btn.tb-btn-icon {
+  border-radius: var(--radius-capsule);
+}
+
+.window-toolbar {
+  --toolbar-capsule-bg: var(--toolbar-toggle-bg, var(--bg-hover));
 }
 
 /* A hidden copy of the removable items, to measure the ones the row has no room for. */
@@ -647,11 +704,10 @@ select:focus-visible {
   padding: 0;
 }
 
+/* A separator draws nothing: it ends one capsule and starts the next, and the space
+   between the two capsules divides the toolbar. */
 .titlebar-divider {
-  width: 1px;
-  height: 18px;
-  background: var(--toolbar-border);
-  margin: 0 5px;
+  width: 0;
   flex-shrink: 0;
 }
 
@@ -1565,19 +1621,6 @@ select:focus-visible {
 .workspace-loading {
   min-height: 0;
   background: var(--bg-base);
-}
-
-.single-panel-layout {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.single-panel-pane {
-  display: block;
-  min-height: 0;
-  min-width: 0;
-  border-right: 0;
-  background: var(--bg-base);
-  overflow: hidden;
 }
 
 .pane {
@@ -2663,6 +2706,15 @@ body.resizing-panels * {
   white-space: nowrap;
 }
 
+/* "--" for a folder whose size is not calculated: there, but quiet. */
+.details-size-text.is-placeholder {
+  color: var(--text-tertiary);
+}
+
+.details-row.active:not(.inactive) .details-size-text.is-placeholder {
+  color: var(--ft-accent-on-selection-soft);
+}
+
 .details-row.active:not(.inactive) .details-size-bar {
   background: color-mix(in srgb, var(--ft-accent-on-selection) 28%, transparent);
 }
@@ -3126,46 +3178,6 @@ body.resizing-panels * {
   text-align: center;
 }
 
-.get-info-actions {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.get-info-action {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  border: 0;
-  transition: background var(--duration-fast) ease, color var(--duration-fast) ease;
-}
-
-.get-info-action:hover {
-  background: var(--get-info-action-bg-hover);
-}
-
-.get-info-action-icon {
-  transition: color var(--duration-fast) ease;
-}
-
-.get-info-action-label {
-  font-family: var(--font-sans);
-  line-height: 1.2;
-  text-align: center;
-  transition: color var(--duration-fast) ease;
-  font-variant-numeric: tabular-nums;
-}
-
-.get-info-action:hover .get-info-action-label {
-  color: var(--get-info-action-text-hover);
-}
-
-.get-info-action:hover .get-info-action-icon {
-  color: var(--get-info-action-icon-hover);
-}
-
-.get-info-meta {
-  display: grid;
-}
-
 .get-info-meta-row {
   display: flex;
   align-items: baseline;
@@ -3223,7 +3235,7 @@ body.resizing-panels * {
   opacity: 1;
 }
 
-/* One line, like the path bar above it: icon, name, then the facts with dots between them. */
+/* One line, like the path bar under it: icon, name, then the facts with dots between them. */
 .info-row-line {
   display: flex;
   align-items: center;
@@ -4520,8 +4532,9 @@ body.platform-macos .settings-view[data-layout="compact"] {
 
 /* ── Path bar and status bar (Finder-style, below the list) ───────────── */
 
+/* The list, the Info Row (when open) and the path bar. */
 .content-pane {
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto auto;
 }
 
 .content-pathbar-row {
@@ -4690,19 +4703,22 @@ body.window-inactive {
   flex: 1 1 auto;
 }
 
+/* Options, Stop and Done: small push buttons, the same bezel as every dialog's. */
 .search-scope-action {
-  height: 22px;
+  height: var(--control-height-small);
   padding: 0 10px;
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-control);
-  background: var(--bg-elevated);
+  background: var(--push-button-bg);
+  box-shadow: 0 0 0 0.5px var(--push-button-edge), 0 0.5px 1.5px rgba(0, 0, 0, 0.1);
   color: var(--text-primary);
+  font-family: var(--font-sans);
   font-size: var(--font-size-callout);
   cursor: default;
 }
 
-.search-scope-action:hover {
-  background: var(--bg-hover);
+.search-scope-action:active {
+  filter: var(--push-button-pressed);
 }
 
 .search-results-columns {
@@ -4991,82 +5007,83 @@ body.window-inactive {
   text-decoration: underline;
 }
 
+/* The quick actions: a row of icon buttons, like a toolbar's, named by their tooltips. */
 .get-info-actions {
   display: flex;
-  flex-direction: column;
-  gap: 0;
-  margin-bottom: 0;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin: 2px -6px 0;
 }
 
 .get-info-action {
-  flex-direction: row;
-  justify-content: flex-start;
-  gap: 9px;
-  height: 30px;
-  padding: 0 4px;
-  border-radius: var(--radius-control);
-  background: transparent;
-}
-
-.get-info-action-icon {
-  display: inline-flex;
-  color: var(--ft-accent-solid);
-}
-
-.get-info-action-label {
-  color: var(--text-primary);
-  font-size: var(--font-size-callout);
-  font-weight: 400;
-  letter-spacing: 0;
-}
-
-.get-info-action-shortcut {
-  margin-left: auto;
-  color: var(--text-tertiary);
-  font-size: var(--font-size-callout);
-}
-
-/* ── Help: a toolbar with a way back to the files ─────────────── ────────── */
-
-.single-panel-layout {
-  grid-template-rows: auto minmax(0, 1fr);
-}
-
-.single-panel-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 52px;
-  padding: 0 16px 0 88px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-base);
-  -webkit-app-region: drag;
-}
-
-.single-panel-back {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  height: 28px;
-  padding: 0 10px 0 6px;
+  justify-content: center;
+  width: 32px;
+  height: var(--control-height-large);
+  padding: 0;
   border: 0;
   border-radius: var(--radius-control);
   background: transparent;
   color: var(--text-secondary);
-  font-size: var(--font-size-body);
-  cursor: default;
-  -webkit-app-region: no-drag;
 }
 
-.single-panel-back:hover {
-  background: var(--bg-hover);
+.get-info-action:hover:not(:disabled) {
+  background: var(--toolbar-button-hover-bg);
   color: var(--text-primary);
 }
 
-.single-panel-title {
-  color: var(--text-primary);
-  font-size: var(--font-size-title3);
-  font-weight: 700;
+.get-info-action:active:not(:disabled) {
+  background: var(--toolbar-toggle-on-bg);
+}
+
+.get-info-action:disabled {
+  opacity: 0.4;
+}
+
+.get-info-action-icon {
+  display: inline-flex;
+}
+
+.get-info-action .get-info-icon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.8;
+}
+
+/* ── The Help window ─────────────────────────────────────────────────────
+   Help's sidebar runs the window's full height, under the traffic lights, as a Mac app's
+   sidebar does; the strip across the top is where the window is dragged from. */
+
+body.help-window-body {
+  overflow: hidden;
+}
+
+.help-window {
+  position: relative;
+  height: 100vh;
+}
+
+.help-window-drag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  height: 52px;
+  -webkit-app-region: drag;
+}
+
+.help-window-body-content {
+  height: 100%;
+}
+
+.help-window .help-sidebar {
+  padding-top: 52px;
+}
+
+.help-window .help-content {
+  padding-top: 52px;
 }
 
 /* ── Settings window ──────────────────────────────────────────────────── */
@@ -5395,12 +5412,10 @@ a.page-window-button:focus-visible,
 .shortcut-settings-search {
   flex: 1;
   min-width: 0;
-  height: 28px;
-  padding: 0 10px;
-  /* A hairline, like every other control in Settings. */
-  border: 0.5px solid var(--border);
-  border-radius: var(--radius-control);
-  background: var(--bg-input);
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: var(--font-size-body);
@@ -5409,8 +5424,7 @@ a.page-window-button:focus-visible,
 .shortcut-settings-search:focus,
 .shortcut-settings-search:focus-visible {
   outline: none;
-  border-color: var(--ft-accent-solid);
-  box-shadow: var(--focus-ring);
+  box-shadow: none;
 }
 
 .shortcut-settings-search::placeholder {
@@ -5777,10 +5791,11 @@ button.shortcut-slot-key.recording:hover {
   padding: 0 var(--toolbar-edged-item-inset);
 }
 
+/* Round-ended like the capsules beside it; the raised segment is round-ended too. */
 .toolbar-group-view .toolbar-segmented.toolbar-segmented-native {
   gap: 2px;
   padding: 2px;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-capsule);
   background: var(--toolbar-toggle-bg, var(--bg-hover));
 }
 
@@ -5789,7 +5804,7 @@ button.shortcut-slot-key.recording:hover {
   width: 34px;
   min-width: 34px;
   height: 24px;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-capsule);
   color: var(--text-secondary);
 }
 
@@ -5815,7 +5830,7 @@ button.shortcut-slot-key.recording:hover {
 
 .window-toolbar .toolbar-search {
   border: 1px solid transparent;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-capsule);
   background: var(--search-surface);
 }
 
@@ -7310,4 +7325,41 @@ body.vibrant-window .explorer-workspace .info-row {
     --duration-base: 0ms;
     --duration-slow: 0ms;
   }
+}
+
+/* ── Search fields ───────────────────────────────────────────────────────
+   Help's search, the Shortcuts search and the filter over search results are one field:
+   a magnifier, a hairline edge, and the accent ring while it has the keyboard. (The
+   toolbar's search is a toolbar field, filled and without an edge, as in Finder.) */
+.help-filter,
+.shortcut-settings-search-field,
+.search-results-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+  box-shadow: inset 0 0 0 0.5px var(--border-active);
+  color: var(--text-tertiary);
+}
+
+.help-filter:focus-within,
+.shortcut-settings-search-field:focus-within,
+.search-results-filter:focus-within {
+  border-color: transparent;
+  box-shadow: inset 0 0 0 0.5px var(--border-active), var(--focus-ring);
+}
+
+.shortcut-settings-search-field {
+  flex: 1;
+  min-width: 0;
+  height: var(--control-height-large);
+  padding: 0 8px;
+}
+
+.search-results-filter .search-results-filter-icon,
+.search-results-filter svg:first-child {
+  color: var(--text-tertiary);
 }

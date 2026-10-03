@@ -1,5 +1,6 @@
 import type {
   AppLogEntry,
+  HelpTopic,
   IpcChannel,
   IpcRequestInput,
   IpcResponse,
@@ -23,6 +24,7 @@ declare global {
         listener: (patch: IpcRequestInput<"app:updatePreferences">["preferences"]) => void,
       ): () => void;
       onShowSettingsTab?(listener: (tab: SettingsTab) => void): () => void;
+      onShowHelpTopic?(listener: (topic: HelpTopic) => void): () => void;
     };
   }
 }

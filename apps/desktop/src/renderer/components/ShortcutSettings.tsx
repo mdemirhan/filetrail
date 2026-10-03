@@ -166,22 +166,28 @@ export function ShortcutSettings({
   return (
     <div className="shortcut-settings">
       <div className="shortcut-settings-bar">
-        <input
-          type="text"
-          className="shortcut-settings-search"
-          value={query}
-          placeholder="Search by command or key"
-          aria-label="Search shortcuts"
-          spellCheck={false}
-          onChange={(event) => setQuery(event.currentTarget.value)}
-          onKeyDown={(event) => {
-            // Escape clears the search first; with nothing to clear it closes Settings.
-            if (event.key === "Escape" && query.length > 0) {
-              event.preventDefault();
-              setQuery("");
-            }
-          }}
-        />
+        <label className="shortcut-settings-search-field">
+          <svg className="help-filter-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="11" cy="11" r="6.5" />
+            <path d="m16 16 4.5 4.5" />
+          </svg>
+          <input
+            type="text"
+            className="shortcut-settings-search"
+            value={query}
+            placeholder="Search by command or key"
+            aria-label="Search shortcuts"
+            spellCheck={false}
+            onChange={(event) => setQuery(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              // Escape clears the search first; with nothing to clear it closes Settings.
+              if (event.key === "Escape" && query.length > 0) {
+                event.preventDefault();
+                setQuery("");
+              }
+            }}
+          />
+        </label>
         <ActionButton
           label="Reset All"
           ariaLabel="Reset All Shortcuts"

@@ -21,6 +21,7 @@ import "@fontsource/lexend/700.css";
 import { AboutWindowApp } from "./AboutWindowApp";
 import { AcknowledgementsWindowApp } from "./AcknowledgementsWindowApp";
 import { App } from "./App";
+import { HelpWindowApp } from "./HelpWindowApp";
 import { SettingsWindowApp } from "./SettingsWindowApp";
 import { createRendererLogger, installGlobalRendererErrorHandlers } from "./lib/logging";
 import { installScrollbarVisibility } from "./lib/scrollbarVisibility";
@@ -49,7 +50,7 @@ logger.info("renderer boot", {
 
 // The same bundle serves every window; the address says which one this is: the explorer
 // (nothing), Settings (`#settings`, or `#settings/shortcuts` to open on a tab), About
-// (`#about`) or Acknowledgements (`#acknowledgements`).
+// (`#about`), Acknowledgements (`#acknowledgements`) or Help (`#help`, `#help/search`).
 const hash = window.location.hash;
 const page = /^#settings(\/|$)/.test(hash) ? (
   <SettingsWindowApp />
@@ -57,6 +58,8 @@ const page = /^#settings(\/|$)/.test(hash) ? (
   <AboutWindowApp />
 ) : hash === "#acknowledgements" ? (
   <AcknowledgementsWindowApp />
+) : /^#help(\/|$)/.test(hash) ? (
+  <HelpWindowApp />
 ) : null;
 // The explorer window is created with a translucent macOS material behind it (see
 // `createWindow` in main.ts); this class lets the sidebar show it through.

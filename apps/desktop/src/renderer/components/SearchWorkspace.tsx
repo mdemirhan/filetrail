@@ -17,14 +17,18 @@ export function SearchWorkspace({
   contentPaneProps: ContentPaneProps;
   infoRow: ReactNode;
 }) {
+  // In a folder the Info Row sits above the path bar (inside the pane); search results have
+  // no path bar, so there it is the bottom row.
   return (
     <section className="main-shell">
       {isSearchMode ? (
-        <SearchResultsPane {...searchResultsPaneProps} />
+        <>
+          <SearchResultsPane {...searchResultsPaneProps} />
+          {infoRow}
+        </>
       ) : (
-        <ContentPane {...contentPaneProps} />
+        <ContentPane {...contentPaneProps} infoRow={infoRow} />
       )}
-      {infoRow}
     </section>
   );
 }

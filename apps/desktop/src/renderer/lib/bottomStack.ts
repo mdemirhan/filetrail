@@ -18,14 +18,13 @@ function visible(selector: string): HTMLElement | null {
 
 /** The bottom offset of the card: just above the path bar and the Info Row. */
 export function offsetAboveBars(): number {
-  const bars = visible(".content-pathbar-row");
-  if (!bars) {
+  const tops = [visible(".content-pathbar-row"), visible(".info-row.open")]
+    .filter((bar): bar is HTMLElement => bar !== null)
+    .map((bar) => bar.getBoundingClientRect().top);
+  if (tops.length === 0) {
     return EDGE_OFFSET;
   }
-  return Math.max(
-    EDGE_OFFSET,
-    Math.round(window.innerHeight - bars.getBoundingClientRect().top + GAP_ABOVE),
-  );
+  return Math.max(EDGE_OFFSET, Math.round(window.innerHeight - Math.min(...tops) + GAP_ABOVE));
 }
 
 /** The bottom offset of notifications: above the bars, and above the card when it shows. */

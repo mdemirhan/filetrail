@@ -544,6 +544,31 @@ function parentDirectoryPath(path: string): string {
   return dirname(resolve(path));
 }
 
+// What macOS calls a kind of file, as Finder's Kind column does ("Markdown Document"):
+// set by the process that has the native addon. Files with the same extension share a
+// kind, so it is asked once per extension; a file without one is asked each time.
+type KindDescriber = (path: string) => string | null;
+let kindDescriber: KindDescriber | null = null;
+const kindByExtension = new Map<string, string | null>();
+
+export function setKindDescriber(describer: KindDescriber | null): void {
+  kindDescriber = describer;
+  kindByExtension.clear();
+}
+
+function describeFileKind(path: string, extension: string): string | null {
+  if (!kindDescriber) {
+    return null;
+  }
+  if (extension.length === 0) {
+    return kindDescriber(path);
+  }
+  if (!kindByExtension.has(extension)) {
+    kindByExtension.set(extension, kindDescriber(path));
+  }
+  return kindByExtension.get(extension) ?? null;
+}
+
 function getKindLabel(kind: EntryKind, path: string): string {
   // Human-readable labels are used directly in details/info UI and intentionally stay simple.
   if (kind === "directory") {
@@ -565,7 +590,10 @@ function getKindLabel(kind: EntryKind, path: string): string {
   }
   if (kind === "file") {
     const extension = extname(path).replace(/^\./, "").toLowerCase();
-    return extension.length > 0 ? `${extension.toUpperCase()} File` : "File";
+    return (
+      describeFileKind(path, extension) ??
+      (extension.length > 0 ? `${extension.toUpperCase()} File` : "File")
+    );
   }
   return "Item";
 }

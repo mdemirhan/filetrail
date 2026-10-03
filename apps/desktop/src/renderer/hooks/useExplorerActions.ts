@@ -53,7 +53,12 @@ import {
   removeClipboardItem,
   setCopyPasteClipboard,
 } from "../lib/copyPasteClipboard";
-import { type CopyPasteOverrides, SAFE_COPY_PASTE_POLICY, dirnameOf } from "../lib/copyPasteReview";
+import {
+  type CopyPasteOverrides,
+  SAFE_COPY_PASTE_POLICY,
+  dirnameOf,
+  pluralize,
+} from "../lib/copyPasteReview";
 import {
   collectRetrySourcePaths,
   createOpenItemLimitMessage,
@@ -1469,7 +1474,14 @@ export function useExplorerActions(args: {
     applyCopyPasteClipboardState(clipboard);
     const summary = describeClipboard(clipboard);
     if (notifyClipboardItems && summary) {
-      pushToast({ kind: "info", title: summary.label, icon: summary.icon });
+      // Worded like the other notifications: what happened, then what it happened to.
+      pushToast({
+        kind: "info",
+        title: summary.mode === "cut" ? "Cut" : "Copied",
+        message:
+          summary.count === 1 ? (summary.items[0]?.name ?? "") : pluralize(summary.count, "item"),
+        icon: summary.icon,
+      });
     }
     closeContextMenu();
   }

@@ -8,6 +8,7 @@ import type {
   SearchResultsSortDirectionPreference,
 } from "../../shared/appPreferences";
 
+import { useDelayedFlag } from "../hooks/useDelayedFlag";
 import { useElementSize } from "../hooks/useElementSize";
 import { useRelativeDate } from "../hooks/useRelativeDate";
 import {
@@ -38,6 +39,8 @@ type SelectionGestureModifiers = {
 export const SEARCH_RESULT_ROW_HEIGHT = 28;
 
 export type SearchScopeOption = { path: string; label: string };
+
+const SEARCH_STOP_DELAY_MS = 400;
 
 export function SearchResultsPane({
   paneRef,
@@ -209,6 +212,8 @@ export function SearchResultsPane({
   );
   const visibleResults = results.slice(range.startIndex, range.endIndex);
   const isSearching = status === "running";
+  // Most searches finish at once; Stop and its spinner come only for one that runs on.
+  const showStop = useDelayedFlag(isSearching, SEARCH_STOP_DELAY_MS);
   const visiblePathsKey = visibleResults.map((result) => result.path).join("\0");
   const highlightPattern = useMemo(
     () => buildHighlightPattern(query, patternMode, matchScope),
@@ -362,7 +367,7 @@ export function SearchResultsPane({
             skipGitIgnored={skipGitIgnored}
             onSkipGitIgnoredChange={onSkipGitIgnoredChange}
           />
-          {isSearching ? (
+          {showStop ? (
             <button
               type="button"
               className="search-scope-action"

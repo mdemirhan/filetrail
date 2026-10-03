@@ -130,7 +130,7 @@ describe("SearchResultsPane", () => {
     });
   });
 
-  it("shows a stop action while a search is running", () => {
+  it("shows a stop action while a search runs on", async () => {
     const handleStop = vi.fn();
 
     render(
@@ -153,7 +153,7 @@ describe("SearchResultsPane", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /stop/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /stop/i }));
     expect(handleStop).toHaveBeenCalledTimes(1);
   });
 

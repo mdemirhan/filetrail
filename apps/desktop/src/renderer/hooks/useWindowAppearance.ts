@@ -6,7 +6,7 @@ import { applyPreferencesPatch, useAppPreferences } from "./useAppPreferences";
 
 // For a window that has no settings of its own (About, Acknowledgements): it takes the
 // palette, accent and font chosen in Settings, and follows them while it is open.
-export function useWindowAppearance(client: FiletrailClient): void {
+export function useWindowAppearance(client: FiletrailClient): ReturnType<typeof useAppPreferences> {
   const preferences = useAppPreferences();
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: load the preferences once per client.
@@ -30,6 +30,7 @@ export function useWindowAppearance(client: FiletrailClient): void {
       unsubscribe?.();
     };
   }, [client]);
+  return preferences;
 }
 
 // Escape closes a window that is only read, like ⌘W.

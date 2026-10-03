@@ -11,6 +11,7 @@ import {
   listDirectorySnapshot,
   listTreeChildren,
   resolvePathTarget,
+  setKindDescriber,
 } from "../fs/explorerService";
 import { FdSearchRuntime } from "../search/fdSearch";
 import type { WorkerSupportedChannel } from "./explorerWorkerClient";
@@ -32,6 +33,27 @@ try {
   };
 } catch {
   // Not running inside Electron; functions will use default node:fs.
+}
+
+// Kinds as Finder shows them ("Markdown Document"), from the native addon when it is
+// there; without it, files are called "MD File" and the like.
+try {
+  const req = createRequire(import.meta.url);
+  const addon = req("@filetrail/native-fs") as {
+    nativeKindForPath?: (path: string) => string | null;
+  };
+  const kindForPath = addon.nativeKindForPath;
+  if (kindForPath) {
+    setKindDescriber((path) => {
+      try {
+        return kindForPath(path);
+      } catch {
+        return null;
+      }
+    });
+  }
+} catch {
+  // No addon (tests, other platforms).
 }
 
 type ExplorerWorkerData = {

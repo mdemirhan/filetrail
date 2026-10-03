@@ -565,6 +565,10 @@ export const appLogEntrySchema = z.object({
   context: z.record(z.string(), jsonValueSchema).default({}),
 });
 
+// The pages of Help, as lib/helpContent.ts names them.
+export const helpTopicSchema = z.enum(["navigation", "files", "search", "views", "shortcuts"]);
+export type HelpTopic = z.infer<typeof helpTopicSchema>;
+
 export const settingsTabSchema = z.enum([
   "general",
   "appearance",
@@ -667,6 +671,16 @@ export const ipcContractSchemas = {
   "app:openSettingsWindow": {
     request: z.object({
       tab: settingsTabSchema.optional(),
+    }),
+    response: z.object({
+      ok: z.boolean(),
+    }),
+  },
+  // Help lives in its own window; `topic` opens it on that page, or turns an open Help
+  // window to it.
+  "app:openHelpWindow": {
+    request: z.object({
+      topic: helpTopicSchema.optional(),
     }),
     response: z.object({
       ok: z.boolean(),

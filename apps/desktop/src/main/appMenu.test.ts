@@ -361,6 +361,20 @@ describe("createApplicationMenuTemplate", () => {
     expect(itemOf(submenuOf(template, "Edit"), "Copy").accelerator).toBe("Command+C");
   });
 
+  it("opens Help's window from any window, on the Keyboard Shortcuts page for that item", () => {
+    const send = vi.fn();
+    const onOpenHelp = vi.fn();
+    const template = createApplicationMenuTemplate({ send }, { onOpenHelp });
+    const help = submenuOf(template, "help");
+    const settingsWindow = { webContents: { copy: vi.fn() } };
+
+    choose(itemOf(help, "File Trail Help"), settingsWindow);
+    choose(itemOf(help, "Keyboard Shortcuts"));
+
+    expect(onOpenHelp.mock.calls).toEqual([[undefined], ["shortcuts"]]);
+    expect(send).not.toHaveBeenCalled();
+  });
+
   it("tells the host after each command, so it can put the checkmarks back", () => {
     const onCommandSent = vi.fn();
     const template = createApplicationMenuTemplate({ send: vi.fn() }, { onCommandSent });

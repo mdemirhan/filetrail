@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 
 import type {
   AppLogEntry,
+  HelpTopic,
   IpcChannel,
   IpcRequestInput,
   IpcResponse,
@@ -30,6 +31,7 @@ type InvokeApi = {
   onCopyPasteProgress(listener: (event: WriteOperationProgressEvent) => void): () => void;
   onPreferencesChanged(listener: (patch: PreferencesPatch) => void): () => void;
   onShowSettingsTab(listener: (tab: SettingsTab) => void): () => void;
+  onShowHelpTopic(listener: (topic: HelpTopic) => void): () => void;
 };
 
 const api: InvokeApi = {
@@ -69,6 +71,15 @@ const api: InvokeApi = {
     ipcRenderer.on("filetrail:preferencesChanged", handleChange);
     return () => {
       ipcRenderer.removeListener("filetrail:preferencesChanged", handleChange);
+    };
+  },
+  onShowHelpTopic: (listener) => {
+    const handleTopic = (_event: unknown, topic: HelpTopic) => {
+      listener(topic);
+    };
+    ipcRenderer.on("filetrail:showHelpTopic", handleTopic);
+    return () => {
+      ipcRenderer.removeListener("filetrail:showHelpTopic", handleTopic);
     };
   },
   onShowSettingsTab: (listener) => {

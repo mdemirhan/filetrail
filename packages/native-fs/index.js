@@ -66,11 +66,16 @@ async function getFileThumbnailFallback() {
   return null;
 }
 
+function kindForPathFallback() {
+  return null;
+}
+
 module.exports = {
   nativeCopyFile: binding.nativeCopyFile,
   nativeCopyMetadata: binding.nativeCopyMetadata ?? copyMetadataFallback,
   nativeGetFileIcon: binding.nativeGetFileIcon,
   nativeGetFileThumbnail: binding.nativeGetFileThumbnail ?? getFileThumbnailFallback,
+  nativeKindForPath: binding.nativeKindForPath ?? kindForPathFallback,
   nativeFolderSize,
   nativeFolderSizeCancel: binding.nativeFolderSizeCancel,
   nativeRenameExclusive: binding.nativeRenameExclusive ?? renameExclusiveFallback,

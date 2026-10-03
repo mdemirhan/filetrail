@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 import type { IpcResponse } from "@filetrail/contracts";
 
+import { useDelayedFlag } from "../hooks/useDelayedFlag";
 import type { FolderSizeEntry } from "../hooks/useFolderSizeCache";
 import { useKeepInViewport } from "../hooks/useKeepInViewport";
 import type { ContextMenuSubmenuAction, ContextMenuSubmenuItem } from "../lib/contextMenu";
@@ -243,7 +244,7 @@ function GetInfoPanelContent({
     );
     sizeMuted = folderSizeEntry.status === "idle" || folderSizeEntry.status === "error";
   } else if (showFolderSizeForItem) {
-    sizeValue = "-";
+    sizeValue = "--";
     sizeMuted = true;
   } else if (pending && item.sizeBytes === null) {
     sizeValue = PENDING_VALUE;
@@ -450,7 +451,7 @@ function GetInfoPanelContent({
             </GetInfoActionButton>
           ) : null}
           <GetInfoActionButton
-            label="Terminal"
+            label="Open in Terminal"
             shortcut={shortcutDisplay.label("openInTerminal")}
             onClick={onOpenInTerminal}
           >
@@ -491,20 +492,7 @@ const PENDING_VALUE = "—";
 // Details usually arrive well within this; a spinner only shows when they don't.
 const SPINNER_DELAY_MS = 300;
 
-// True once `active` has stayed true for `delayMs`.
-function useDelayedFlag(active: boolean, delayMs: number): boolean {
-  const [shown, setShown] = useState(false);
-  useEffect(() => {
-    if (!active) {
-      setShown(false);
-      return;
-    }
-    const timer = window.setTimeout(() => setShown(true), delayMs);
-    return () => window.clearTimeout(timer);
-  }, [active, delayMs]);
-  return shown;
-}
-
+// One of the quick actions: an icon in a row of them, named (with its key) by its tooltip.
 function GetInfoActionButton({
   children,
   label,
@@ -519,16 +507,17 @@ function GetInfoActionButton({
   onClick: () => void;
 }) {
   return (
-    <button type="button" className="get-info-action" onClick={onClick} disabled={disabled}>
+    <button
+      type="button"
+      className="get-info-action"
+      aria-label={label}
+      title={shortcut ? `${label} (${shortcut})` : label}
+      onClick={onClick}
+      disabled={disabled}
+    >
       <span className="get-info-action-icon" aria-hidden="true">
         {children}
       </span>
-      <span className="get-info-action-label">{label}</span>
-      {shortcut ? (
-        <span className="get-info-action-shortcut" aria-hidden="true">
-          {shortcut}
-        </span>
-      ) : null}
     </button>
   );
 }
@@ -563,6 +552,7 @@ function getFolderLabel(path: string): string {
   return path === "/" ? "Macintosh HD" : (path.split("/").filter(Boolean).at(-1) ?? path);
 }
 
+const CALCULATING_DELAY_MS = 300;
 function FolderSizeCell({
   entry,
   onCalculate,
@@ -574,6 +564,8 @@ function FolderSizeCell({
   onRecalculate: () => void;
   onCancel: () => void;
 }) {
+  // A small folder is measured in a moment: the spinner shows only for one that takes longer.
+  const showCalculating = useDelayedFlag(entry.status === "calculating", CALCULATING_DELAY_MS);
   if (entry.status === "ready") {
     const detail = formatFolderSizeDetail(entry.sizeBytes, entry.diskBytes, entry.fileCount);
     return (
@@ -598,6 +590,9 @@ function FolderSizeCell({
     );
   }
   if (entry.status === "calculating") {
+    if (!showCalculating) {
+      return <span className="folder-size-calculating" />;
+    }
     return (
       <span className="folder-size-calculating">
         <span className="folder-size-spinner" />
@@ -666,10 +661,11 @@ function InfoPanelGlyph({
     );
   }
   if (name === "edit") {
+    // The same square with a pencil as Edit in the menus and the toolbar.
     return (
       <svg className="get-info-icon" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M12 20h9" />
-        <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z" />
+        <path d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" />
+        <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" />
       </svg>
     );
   }
@@ -710,10 +706,11 @@ function InfoPanelGlyph({
     );
   }
   if (name === "copy") {
+    // Copy Path: the same link as in the menus.
     return (
       <svg className="get-info-icon" viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="9" y="9" width="11" height="11" rx="2" />
-        <path d="M6 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1" />
+        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
       </svg>
     );
   }

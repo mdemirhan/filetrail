@@ -355,11 +355,13 @@ describe("ExplorerWorkspace", () => {
 
   it("hides the removable items nearest the end when the row is too narrow for them all", () => {
     // Room for the title and the search field at their narrowest, View Options, and three
-    // of the five buttons.
+    // of the five buttons, with the ends of their two capsules (Back and Forward, and View
+    // Options on its own).
     toolbarRowWidth =
       TOP_TOOLBAR_LAYOUT.titleMinWidth +
       TOP_TOOLBAR_LAYOUT.searchMinWidth +
       2 * TOP_TOOLBAR_LAYOUT.edgedItemInset +
+      4 * (TOP_TOOLBAR_LAYOUT.capsulePadding + TOP_TOOLBAR_LAYOUT.edgedItemInset) +
       4 * TOOLBAR_ITEM_WIDTH +
       5 * TOP_TOOLBAR_LAYOUT.itemGap;
     const view = renderExplorerWorkspace({

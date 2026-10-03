@@ -95,6 +95,26 @@ vi.mock("./components/ContentPane", () => ({
           onFocus={() => onFocusChange(true)}
         />
       </label>
+      {/* Controls of each kind, for how the Edit menu treats the focused one. */}
+      <label>
+        Help notes
+        <input aria-label="Help notes" defaultValue="docs" />
+      </label>
+      <label>
+        Readonly value
+        <input aria-label="Readonly value" defaultValue="5" readOnly />
+      </label>
+      <label>
+        Help scope
+        <select aria-label="Help scope" defaultValue="name">
+          <option value="name">Name</option>
+          <option value="path">Path</option>
+        </select>
+      </label>
+      <label>
+        Help color
+        <input aria-label="Help color" type="color" defaultValue="#336699" />
+      </label>
       <button
         type="button"
         data-testid="content-pane-background"
@@ -679,31 +699,7 @@ vi.mock("./components/GoToFolderDialog", () => ({
     ) : null;
   },
 }));
-vi.mock("./components/HelpView", () => ({
-  HelpView: ({ initialTopic }: { initialTopic?: string }) => (
-    <div data-testid="help-view" data-topic={initialTopic}>
-      <label>
-        Help notes
-        <input aria-label="Help notes" defaultValue="docs" />
-      </label>
-      <label>
-        Readonly value
-        <input aria-label="Readonly value" defaultValue="5" readOnly />
-      </label>
-      <label>
-        Help scope
-        <select aria-label="Help scope" defaultValue="name">
-          <option value="name">Name</option>
-          <option value="path">Path</option>
-        </select>
-      </label>
-      <label>
-        Help color
-        <input aria-label="Help color" type="color" defaultValue="#336699" />
-      </label>
-    </div>
-  ),
-}));
+
 vi.mock("./components/ToolbarIcon", () => ({
   ToolbarIcon: () => null,
 }));
@@ -756,7 +752,8 @@ describe("App copy/paste integration", () => {
     });
 
     const initialToastViewport = await screen.findByTestId("toast-viewport");
-    expect(within(initialToastViewport).getByText("source.txt copied")).toBeInTheDocument();
+    expect(within(initialToastViewport).getByText("Copied")).toBeInTheDocument();
+    expect(within(initialToastViewport).getByText("source.txt")).toBeInTheDocument();
     expect(document.activeElement).toBe(activeElementBeforeCopy);
   });
 
@@ -946,7 +943,8 @@ describe("App copy/paste integration", () => {
     });
 
     const toastViewport = await screen.findByTestId("toast-viewport");
-    expect(within(toastViewport).getByText("source.txt cut")).toBeInTheDocument();
+    expect(within(toastViewport).getByText("Cut")).toBeInTheDocument();
+    expect(within(toastViewport).getByText("source.txt")).toBeInTheDocument();
     expect(document.activeElement).toBe(activeElementBeforeCut);
   });
 
@@ -983,29 +981,12 @@ describe("App copy/paste integration", () => {
     });
 
     const toastViewport = await screen.findByTestId("toast-viewport");
-    expect(within(toastViewport).getByText("2 items copied")).toBeInTheDocument();
-  });
-
-  it("ignores menu shortcut commands while help is open", async () => {
-    const harness = createAppHarness();
-
-    render(
-      <FiletrailClientProvider value={harness.client}>
-        <App />
-      </FiletrailClientProvider>,
-    );
-
-    await screen.findByTestId("content-pane");
-    await act(async () => {
-      fireEvent.keyDown(window, { key: "?" });
-    });
-    await screen.findByTestId("help-view");
-
-    await act(async () => {
-      harness.emitCommand({ type: "copyPath" });
-    });
-
-    expect(harness.invocations.some((call) => call.channel === "system:copyText")).toBe(false);
+    expect(
+      within(toastViewport).getByText("2 items", { selector: ".toast-card-message" }),
+    ).toBeInTheDocument();
+    expect(
+      within(toastViewport).getByText("Copied", { selector: ".toast-card-title" }),
+    ).toBeInTheDocument();
   });
 
   it("switches to icon view from the View menu and back to the list from the toolbar", async () => {
@@ -1085,17 +1066,17 @@ describe("App copy/paste integration", () => {
       });
     });
 
-    // Help has no file commands; its own menu still works.
+    // Keyboard Shortcuts opens Help in its own window, on that page; the files stay usable.
     await act(async () => {
       harness.emitCommand({ type: "openKeyboardShortcuts" });
     });
-    expect(await screen.findByTestId("help-view")).toHaveAttribute("data-topic", "shortcuts");
     await vi.waitFor(() => {
-      expect(menuState().disabledCommands).toEqual(
-        expect.arrayContaining(["renameSelection", "newTab", "viewAsDetails"]),
-      );
+      expect(
+        harness.invocations.find((call) => call.channel === "app:openHelpWindow")?.payload,
+      ).toEqual({ topic: "shortcuts" });
     });
     expect(menuState().disabledCommands).not.toContain("openHelp");
+    expect(menuState().disabledCommands).not.toContain("newTab");
   });
 
   it("asks the main process to open the Settings window on Command-comma", async () => {
@@ -1118,28 +1099,6 @@ describe("App copy/paste integration", () => {
       );
     });
     expect(screen.getByTestId("content-pane")).toBeInTheDocument();
-  });
-
-  it("ignores menu shortcut commands while help is open", async () => {
-    const harness = createAppHarness();
-
-    render(
-      <FiletrailClientProvider value={harness.client}>
-        <App />
-      </FiletrailClientProvider>,
-    );
-
-    await screen.findByTestId("content-pane");
-    await act(async () => {
-      fireEvent.keyDown(window, { key: "?" });
-    });
-    await screen.findByTestId("help-view");
-
-    await act(async () => {
-      harness.emitCommand({ type: "copyPath" });
-    });
-
-    expect(harness.invocations.some((call) => call.channel === "system:copyText")).toBe(false);
   });
 
   it("routes generic edit menu commands to native text editing for the toolbar search input", async () => {
@@ -1349,9 +1308,7 @@ describe("App copy/paste integration", () => {
       </FiletrailClientProvider>,
     );
 
-    await act(async () => {
-      fireEvent.keyDown(window, { key: "?" });
-    });
+    await screen.findByTestId("content-pane");
     const readonlyInput = await screen.findByLabelText("Readonly value");
     await act(async () => {
       readonlyInput.focus();
@@ -1374,9 +1331,7 @@ describe("App copy/paste integration", () => {
       </FiletrailClientProvider>,
     );
 
-    await act(async () => {
-      fireEvent.keyDown(window, { key: "?" });
-    });
+    await screen.findByTestId("content-pane");
     const searchScopeSelect = await screen.findByLabelText("Help scope");
     const accentColorInput = await screen.findByLabelText("Help color");
 
@@ -1387,11 +1342,12 @@ describe("App copy/paste integration", () => {
       harness.emitCommand({ type: "editPaste" });
     });
 
+    // A menu or a color well has no text to copy or paste into; in the file browser the
+    // commands are the files' own, so nothing is done natively.
     expectNativeEditActions(harness, []);
-    expectNoFileClipboardActions(harness);
   });
 
-  it("keeps generic edit commands working for text inputs in the help view", async () => {
+  it("keeps generic edit commands working for text inputs beside the file list", async () => {
     const harness = createAppHarness();
 
     render(
@@ -1400,9 +1356,7 @@ describe("App copy/paste integration", () => {
       </FiletrailClientProvider>,
     );
 
-    await act(async () => {
-      fireEvent.keyDown(window, { key: "?" });
-    });
+    await screen.findByTestId("content-pane");
     const helpInput = await screen.findByLabelText("Help notes");
     await act(async () => {
       helpInput.focus();
@@ -1415,30 +1369,6 @@ describe("App copy/paste integration", () => {
     });
 
     expectNativeEditActions(harness, ["copy", "paste"]);
-    expectNoFileClipboardActions(harness);
-  });
-
-  it("no-ops generic edit commands outside text inputs on non-explorer views", async () => {
-    const harness = createAppHarness();
-
-    render(
-      <FiletrailClientProvider value={harness.client}>
-        <App />
-      </FiletrailClientProvider>,
-    );
-
-    await act(async () => {
-      fireEvent.keyDown(window, { key: "?" });
-    });
-    await screen.findByTestId("help-view");
-
-    await act(async () => {
-      harness.emitCommand({ type: "editCopy" });
-      harness.emitCommand({ type: "editPaste" });
-      harness.emitCommand({ type: "editSelectAll" });
-    });
-
-    expectNativeEditActions(harness, []);
     expectNoFileClipboardActions(harness);
   });
 
@@ -1458,7 +1388,12 @@ describe("App copy/paste integration", () => {
     });
 
     const toastViewport = await screen.findByTestId("toast-viewport");
-    expect(within(toastViewport).getByText("source.txt copied")).toBeInTheDocument();
+    expect(
+      within(toastViewport).getByText("source.txt", { selector: ".toast-card-message" }),
+    ).toBeInTheDocument();
+    expect(
+      within(toastViewport).getByText("Copied", { selector: ".toast-card-title" }),
+    ).toBeInTheDocument();
     expect(screen.getByTitle("/Users/demo/source.txt")).toHaveAttribute("data-selected", "true");
     expect(screen.getByTitle("/Users/demo/Folder")).toHaveAttribute("data-selected", "true");
     expectNativeEditActions(harness, []);
@@ -4021,8 +3956,15 @@ describe("App copy/paste integration", () => {
 
     // The folder the tree is on, never the selection left behind in the list.
     const toastViewport = await screen.findByTestId("toast-viewport");
-    expect(within(toastViewport).getByText("demo copied")).toBeInTheDocument();
-    expect(screen.queryByText("source.txt copied")).not.toBeInTheDocument();
+    expect(
+      within(toastViewport).getByText("demo", { selector: ".toast-card-message" }),
+    ).toBeInTheDocument();
+    expect(
+      within(toastViewport).getByText("Copied", { selector: ".toast-card-title" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("source.txt", { selector: ".toast-card-message" }),
+    ).not.toBeInTheDocument();
     expect(clipboardButton()).toHaveAccessibleName("Clipboard: 1 item copied");
   });
 
@@ -4043,8 +3985,15 @@ describe("App copy/paste integration", () => {
 
     // The folder the tree is on, never the selection left behind in the list.
     const toastViewport = await screen.findByTestId("toast-viewport");
-    expect(within(toastViewport).getByText("demo cut")).toBeInTheDocument();
-    expect(screen.queryByText("source.txt cut")).not.toBeInTheDocument();
+    expect(
+      within(toastViewport).getByText("demo", { selector: ".toast-card-message" }),
+    ).toBeInTheDocument();
+    expect(
+      within(toastViewport).getByText("Cut", { selector: ".toast-card-title" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("source.txt", { selector: ".toast-card-message" }),
+    ).not.toBeInTheDocument();
     expect(clipboardButton()).toHaveAccessibleName("Clipboard: 1 item cut");
   });
 
@@ -4187,8 +4136,15 @@ describe("App copy/paste integration", () => {
 
     // The folder the tree is on, never the selection left behind in the list.
     const toastViewport = await screen.findByTestId("toast-viewport");
-    expect(within(toastViewport).getByText("demo copied")).toBeInTheDocument();
-    expect(screen.queryByText("source.txt copied")).not.toBeInTheDocument();
+    expect(
+      within(toastViewport).getByText("demo", { selector: ".toast-card-message" }),
+    ).toBeInTheDocument();
+    expect(
+      within(toastViewport).getByText("Copied", { selector: ".toast-card-title" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("source.txt", { selector: ".toast-card-message" }),
+    ).not.toBeInTheDocument();
     expect(clipboardButton()).toHaveAccessibleName("Clipboard: 1 item copied");
   });
 
@@ -4209,8 +4165,15 @@ describe("App copy/paste integration", () => {
 
     // The folder the tree is on, never the selection left behind in the list.
     const toastViewport = await screen.findByTestId("toast-viewport");
-    expect(within(toastViewport).getByText("demo cut")).toBeInTheDocument();
-    expect(screen.queryByText("source.txt cut")).not.toBeInTheDocument();
+    expect(
+      within(toastViewport).getByText("demo", { selector: ".toast-card-message" }),
+    ).toBeInTheDocument();
+    expect(
+      within(toastViewport).getByText("Cut", { selector: ".toast-card-title" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("source.txt", { selector: ".toast-card-message" }),
+    ).not.toBeInTheDocument();
     expect(clipboardButton()).toHaveAccessibleName("Clipboard: 1 item cut");
   });
 
@@ -5350,7 +5313,7 @@ describe("App copy/paste integration", () => {
     await act(async () => {
       fireEvent.keyDown(window, { key: "x", metaKey: true });
     });
-    expect(await screen.findByText(/ cut$/)).toBeInTheDocument();
+    expect(await screen.findByText("Cut", { selector: ".toast-card-title" })).toBeInTheDocument();
     expect(nonProbeInvocations()).toHaveLength(invocationCountBeforeBlockedPaste);
 
     await act(async () => {
@@ -5708,8 +5671,9 @@ describe("App copy/paste integration", () => {
       });
     });
 
+    const stopButton = await screen.findByRole("button", { name: "Stop" });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+      fireEvent.click(stopButton);
     });
 
     await vi.waitFor(() => {
@@ -6707,7 +6671,12 @@ describe("App copy/paste integration", () => {
     });
 
     const toastViewport = await screen.findByTestId("toast-viewport");
-    expect(within(toastViewport).getByText("source.txt copied")).toBeInTheDocument();
+    expect(
+      within(toastViewport).getByText("source.txt", { selector: ".toast-card-message" }),
+    ).toBeInTheDocument();
+    expect(
+      within(toastViewport).getByText("Copied", { selector: ".toast-card-title" }),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Pasting into Folder")).not.toBeInTheDocument();
     expect(document.querySelectorAll(".toast-card")).toHaveLength(1);
 
@@ -9606,7 +9575,7 @@ describe("App tabs", () => {
 
     expect(activeTabLabel()).toBe("Folder");
     expect(screen.getAllByRole("tab")[0]).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("region", { name: "Pasting…" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Pasting…" })).toBeInTheDocument();
 
     harness.setDirectoryEntries("/Users/demo/Folder", [
       createDirectoryEntry("/Users/demo/Folder/source.txt", "file"),
@@ -10116,11 +10085,13 @@ describe("App keyboard shortcuts", () => {
       fireEvent.click(screen.getByRole("button", { name: "source.txt" }));
     });
 
+    const helpOpened = () =>
+      harness.invocations.filter((call) => call.channel === "app:openHelpWindow").length;
     await pressKey({ key: "?", shiftKey: true });
-    expect(screen.queryByTestId("help-view")).toBeNull();
+    expect(helpOpened()).toBe(0);
 
     await pressKey({ key: "F1" });
-    expect(screen.getByTestId("help-view")).toBeInTheDocument();
+    expect(helpOpened()).toBe(1);
   });
 
   it("leaves a caret key to a text field when the menu hears it too", async () => {

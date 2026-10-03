@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { useDelayedFlag } from "../hooks/useDelayedFlag";
 import { useKeepInViewport } from "../hooks/useKeepInViewport";
 import { MenuCheck } from "./MenuCheck";
 
@@ -13,6 +14,8 @@ export const PATHBAR_FOLDER_MENU_LIMIT = 300;
 
 // A separator of the path bar. Clicking it lists the folders inside the folder to its left,
 // with the one the path goes through ticked, so a neighbouring folder is one click away.
+const MENU_LOADING_DELAY_MS = 300;
+
 export function PathbarFolderMenu({
   parentPath,
   parentLabel,
@@ -42,7 +45,12 @@ export function PathbarFolderMenu({
   const [activeIndex, setActiveIndex] = useState(-1);
   const open = menu !== null;
   const folders = menu?.folders ?? null;
-  useKeepInViewport(menuRef, open);
+  // The folders usually arrive at once: the menu then opens with them, rather than as a
+  // "Loading…" line that is replaced a moment later. A slow folder shows the line.
+  const waiting = open && folders === null && !menu?.failed;
+  const showLoading = useDelayedFlag(waiting, MENU_LOADING_DELAY_MS);
+  const menuShown = open && (!waiting || showLoading);
+  useKeepInViewport(menuRef, menuShown);
 
   function close() {
     requestRef.current += 1;
@@ -212,7 +220,7 @@ export function PathbarFolderMenu({
       >
         ›
       </button>
-      {menu
+      {menu && menuShown
         ? createPortal(
             <div
               ref={menuRef}

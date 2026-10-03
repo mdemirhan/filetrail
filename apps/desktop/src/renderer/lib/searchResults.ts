@@ -42,33 +42,25 @@ export function compareSearchResults(
   return left.path.localeCompare(right.path, undefined, { sensitivity: "base" });
 }
 
-// One line of search status: result count, elapsed time, and selection.
+// One line of search status: the result count and the selection. (How long the search
+// took is for the log, not the window.)
 export function formatSearchStatus({
   isSearching,
   shown,
   totalCount,
-  elapsedMs,
   selectedCount,
 }: {
   isSearching: boolean;
   shown: number;
   totalCount: number;
-  elapsedMs: number | null;
   selectedCount: number;
 }): string {
   const noun = totalCount === 1 ? "result" : "results";
   const count =
     shown === totalCount ? `${totalCount} ${noun}` : `${shown} of ${totalCount} ${noun}`;
   const parts = [isSearching ? `Searching… ${count}` : count];
-  if (!isSearching && elapsedMs !== null) {
-    parts.push(formatElapsed(elapsedMs));
-  }
   if (selectedCount > 0) {
     parts.push(`${selectedCount} selected`);
   }
   return parts.join(" · ");
-}
-
-function formatElapsed(elapsedMs: number): string {
-  return elapsedMs < 1000 ? `${elapsedMs} ms` : `${(elapsedMs / 1000).toFixed(1)} s`;
 }

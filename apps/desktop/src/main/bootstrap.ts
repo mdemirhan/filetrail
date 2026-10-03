@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { app, clipboard, ipcMain, shell } from "electron";
 
-import type { AppLogEntry, SettingsTab } from "@filetrail/contracts";
+import type { AppLogEntry, HelpTopic, SettingsTab } from "@filetrail/contracts";
 import { ExplorerWorkerClient, createWriteService, getPathSuggestions } from "@filetrail/core";
 import type { AppPreferences } from "../shared/appPreferences";
 import { type ApplicationMenuState, toApplicationMenuState } from "../shared/applicationMenuState";
@@ -60,6 +60,7 @@ export async function bootstrapMainProcess(
   windows: {
     openSettingsWindow?: (tab?: SettingsTab) => void;
     openAcknowledgementsWindow?: () => void;
+    openHelpWindow?: (topic?: HelpTopic) => void;
     // The explorer window reporting what the application menu should show.
     setApplicationMenuState?: (state: ApplicationMenuState, senderId: number | null) => void;
   } = {},
@@ -141,6 +142,10 @@ export async function bootstrapMainProcess(
         electronVersion: process.versions.electron,
         fdVersion: readBundledFdManifest().version,
       }),
+      "app:openHelpWindow": (payload) => {
+        windows.openHelpWindow?.(payload.topic);
+        return { ok: windows.openHelpWindow !== undefined };
+      },
       "app:openAcknowledgementsWindow": () => {
         windows.openAcknowledgementsWindow?.();
         return { ok: windows.openAcknowledgementsWindow !== undefined };

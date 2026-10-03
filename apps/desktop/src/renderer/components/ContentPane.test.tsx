@@ -382,7 +382,7 @@ describe("ContentPane", () => {
       />,
     );
 
-    expect(screen.getByRole("row", { name: /Folder/ })).toHaveTextContent("-");
+    expect(screen.getByRole("row", { name: /Folder/ })).toHaveTextContent("--");
     expect(screen.getByRole("row", { name: /alpha\.txt/ })).toHaveTextContent("Unavailable");
     expect(screen.queryByText("Not yet available")).not.toBeInTheDocument();
     expect(screen.queryByText("Not available")).not.toBeInTheDocument();

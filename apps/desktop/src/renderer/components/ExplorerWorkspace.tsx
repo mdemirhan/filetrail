@@ -2,6 +2,8 @@ import {
   type ComponentProps,
   type MutableRefObject,
   type KeyboardEvent as ReactKeyboardEvent,
+  cloneElement,
+  isValidElement,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -30,6 +32,7 @@ import { PANE_LAYOUT_CHANGE_MS, PaneLayoutChangeContext } from "../lib/paneLayou
 import { formatTooltip, getToolbarItemTooltip } from "../lib/tooltips";
 import {
   type TopToolbarSlot,
+  resolveToolbarCapsules,
   resolveTopToolbarSlots,
   resolveVisibleOptionalCount,
   selectTopToolbarSlots,
@@ -905,7 +908,25 @@ export function ExplorerWorkspace({
     );
   }
 
+  // Buttons side by side share a capsule; each knows whether it starts or ends one.
+  const toolbarCapsules = resolveToolbarCapsules(
+    visibleTopToolbarSlots,
+    (slot) => slot.id !== "clipboard" || clipboardShown,
+  );
+
   function renderTopToolbarSlot(slot: TopToolbarSlot) {
+    const element = renderTopToolbarSlotContent(slot);
+    const edges = toolbarCapsules.get(slot.key);
+    if (!edges || !isValidElement<Record<string, unknown>>(element)) {
+      return element;
+    }
+    return cloneElement(element, {
+      "data-capsule":
+        edges.start && edges.end ? "single" : edges.start ? "start" : edges.end ? "end" : "middle",
+    });
+  }
+
+  function renderTopToolbarSlotContent(slot: TopToolbarSlot) {
     if (slot.id === "title") {
       return (
         <div key={slot.key} className="toolbar-title-block" data-top-toolbar-item={slot.id}>

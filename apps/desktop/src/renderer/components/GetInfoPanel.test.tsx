@@ -132,7 +132,7 @@ describe("InfoPanel", () => {
     expect(screen.getByText("644")).toHaveAttribute("title", "rw-r--r--");
 
     fireEvent.click(screen.getByRole("button", { name: "Open" }));
-    fireEvent.click(screen.getByRole("button", { name: "Terminal" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open in Terminal" }));
     fireEvent.click(screen.getByRole("button", { name: "Show in Finder" }));
     fireEvent.click(screen.getByRole("button", { name: "Copy Path" }));
 
@@ -238,7 +238,7 @@ describe("InfoPanel", () => {
     );
 
     expect(screen.getAllByText("Folder").length).toBeGreaterThan(0);
-    expect(screen.getByText("-")).toBeInTheDocument();
+    expect(screen.getByText("--")).toBeInTheDocument();
     expect(screen.getAllByText("Not available")).toHaveLength(2);
     expect(screen.getByText("Unavailable")).toBeInTheDocument();
   });
@@ -298,7 +298,7 @@ describe("InfoPanel", () => {
     expect(screen.queryByText("Not yet available")).not.toBeInTheDocument();
   });
 
-  it("shows spinner when folder size is calculating", () => {
+  it("shows spinner when folder size is calculating, once it takes a moment", async () => {
     render(
       <InfoPanel
         loading={false}
@@ -329,7 +329,7 @@ describe("InfoPanel", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "Cancel folder size calculation" }),
+      await screen.findByRole("button", { name: "Cancel folder size calculation" }),
     ).toBeInTheDocument();
   });
 
@@ -440,7 +440,7 @@ describe("InfoPanel", () => {
     expect(onCalculate).toHaveBeenCalledTimes(1);
   });
 
-  it("Cancel button calls onCancelFolderSize", () => {
+  it("Cancel button calls onCancelFolderSize", async () => {
     const onCancel = vi.fn();
     render(
       <InfoPanel
@@ -471,7 +471,7 @@ describe("InfoPanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Cancel folder size calculation" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel folder size calculation" }));
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
