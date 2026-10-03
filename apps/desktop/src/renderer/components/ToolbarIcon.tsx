@@ -89,22 +89,21 @@ export function ToolbarIcon({
       </svg>
     );
   }
-  if (name === "hidden" || name === "hiddenShown") {
-    // A dashed "ghost" file: struck through while hidden files are left out. Not an eye,
-    // which is Quick Look's.
-    return (
-      <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" role="presentation">
-        <path d="M6 3h8l4 4v14H6z" strokeDasharray="2.4 2.4" />
-        <path d="M14 3v4h4" />
-        {name === "hidden" ? <path d="M3 3l18 18" /> : null}
-      </svg>
-    );
-  }
-  if (name === "quickLook") {
+  if (name === "hiddenShown") {
+    // An open eye while hidden files are shown; struck through ("hidden") while they aren't.
     return (
       <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" role="presentation">
         <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
         <circle cx="12" cy="12" r="3" />
+      </svg>
+    );
+  }
+  if (name === "quickLook") {
+    // A page with arrows pointing out: it opens big for a quick look. The eye is Hidden Files'.
+    return (
+      <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" role="presentation">
+        <rect x="4" y="4" width="16" height="16" rx="2" />
+        <path d="M14 7h3v3M10 17H7v-3M17 7l-4 4M7 17l4-4" />
       </svg>
     );
   }
@@ -204,6 +203,9 @@ export function ToolbarIcon({
     if (name === "up") return "M18 15l-6-6-6 6";
     if (name === "location")
       return "M12 20s6-5.2 6-10a6 6 0 1 0-12 0c0 4.8 6 10 6 10m0-8a2 2 0 1 1 0-4a2 2 0 0 1 0 4";
+    if (name === "hidden") {
+      return "M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M14.12 14.12A3 3 0 0 1 9.88 9.88M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19M1 1l22 22";
+    }
     if (name === "refresh") return "M1 4v6h6M3.51 15a9 9 0 1 0 2.13-9.36L1 10";
     /* Converged with context menu */
     if (name === "edit") return "M12 20h9M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z";

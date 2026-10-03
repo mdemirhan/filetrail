@@ -657,10 +657,11 @@ function InfoPanelGlyph({
     );
   }
   if (name === "quickLook") {
+    // A page with arrows pointing out: it opens big for a quick look. The eye is Hidden Files'.
     return (
       <svg className="get-info-icon" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />
-        <circle cx="12" cy="12" r="3" />
+        <rect x="4" y="4" width="16" height="16" rx="2" />
+        <path d="M14 7h3v3M10 17H7v-3M17 7l-4 4M7 17l4-4" />
       </svg>
     );
   }
