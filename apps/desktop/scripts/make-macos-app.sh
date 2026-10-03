@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
+set -Eeuo pipefail
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "This script only supports macOS." >&2
@@ -22,6 +22,9 @@ certificate.
   --notarize  Also have Apple notarize the app and the disk image, and staple the tickets.
               Other Macs open a downloaded app only once it is notarized.
   --adhoc     Sign ad hoc instead, for a build that only runs on this Mac.
+
+The output of the tools each step runs goes to out/make-macos-app.log; the end of it is
+shown when a step fails.
 
 Environment:
   MACOS_SIGN_CERT       The Developer ID Application certificate (.cer). Its private key
@@ -80,8 +83,10 @@ fi
 # The signing identity is settled before building, so a missing certificate fails in seconds.
 if [[ "${ADHOC}" == 1 ]]; then
   SIGN_IDENTITY="-"
+  echo "Signing ad hoc: the app runs on this Mac only."
 elif [[ -n "${MACOS_SIGN_IDENTITY:-}" ]]; then
   SIGN_IDENTITY="${MACOS_SIGN_IDENTITY}"
+  echo "Signing as: ${SIGN_IDENTITY}"
 else
   SIGN_CERT="${MACOS_SIGN_CERT:-${DEFAULT_SIGN_CERT}}"
   if [[ ! -f "${SIGN_CERT}" ]]; then
@@ -103,8 +108,8 @@ else
   # when the keychain holds others with the same name. The private key never leaves the
   # keychain: the .cer only says which identity to use.
   SIGN_IDENTITY="$(openssl x509 -inform der -in "${SIGN_CERT}" -noout -fingerprint -sha1 | sed 's/.*=//; s/://g')"
-  if ! security find-identity -v -p codesigning | grep -q "${SIGN_IDENTITY}"; then
-    if security find-identity -p codesigning | grep -q "${SIGN_IDENTITY}"; then
+  if [[ "$(security find-identity -v -p codesigning)" != *"${SIGN_IDENTITY}"* ]]; then
+    if [[ "$(security find-identity -p codesigning)" == *"${SIGN_IDENTITY}"* ]]; then
       echo "The keychain has the Developer ID identity, but macOS does not trust it yet." >&2
       echo "Install Apple's \"Developer ID - G2\" intermediate certificate from" >&2
       echo "https://www.apple.com/certificateauthority/ and run this again." >&2
@@ -116,24 +121,100 @@ else
     fi
     exit 1
   fi
-  echo "Signing as: ${SIGN_CERT_SUBJECT#subject=}"
+  SIGN_CERT_NAME="${SIGN_CERT_SUBJECT#*CN=}"
+  echo "Signing as: ${SIGN_CERT_NAME%%,*}"
 fi
 
-echo "[1/6] Building macOS icon assets..."
-bash ./scripts/build-app-icon.sh
+# Each step prints one line: its name, then how it went. The tools a step runs write to the
+# log instead, and a failure shows the end of the log.
+mkdir -p "${APP_DIR}/out"
+LOG_FILE="${APP_DIR}/out/make-macos-app.log"
+: >"${LOG_FILE}"
+STEP=0
+STEP_COUNT=6
+if [[ "${NOTARIZE}" == 1 ]]; then
+  STEP_COUNT=8
+fi
+STEP_OPEN=0
+STEP_START=0
+RUNNING=""
+RUN_LOG_START=0
 
-echo "[2/6] Building native-fs addon for ${ARCH}..."
-NATIVE_FS_DIR="${APP_DIR}/../../packages/native-fs"
-(cd "${NATIVE_FS_DIR}" && npx node-gyp rebuild --arch="${ARCH}")
-node -e "require('${NATIVE_FS_DIR}')" || {
-  echo "native-fs addon failed to load after build." >&2
+step() {
+  STEP=$((STEP + 1))
+  printf '[%d/%d] %s... ' "${STEP}" "${STEP_COUNT}" "$1"
+  echo "==> [${STEP}/${STEP_COUNT}] $1" >>"${LOG_FILE}"
+  STEP_OPEN=1
+  STEP_START=${SECONDS}
+}
+
+# step_done [<result>]: ends the step's line with its result and how long it took.
+step_done() {
+  local elapsed=$((SECONDS - STEP_START))
+  if ((elapsed >= 60)); then
+    elapsed="$((elapsed / 60))m $((elapsed % 60))s"
+  else
+    elapsed="${elapsed}s"
+  fi
+  echo "${1:-done} (${elapsed})"
+  STEP_OPEN=0
+}
+
+# fail <message> [<log>]: ends the step that is running as failed and stops the build. With
+# a second argument, the end of what the last command wrote to the log follows the message.
+fail() {
+  if [[ "${STEP_OPEN}" == 1 ]]; then
+    echo "failed"
+    STEP_OPEN=0
+  fi
+  echo "$1" >&2
+  if [[ -n "${2:-}" ]]; then
+    echo "Its output:" >&2
+    tail -c "+$((RUN_LOG_START + 1))" "${LOG_FILE}" | tail -n 25 | sed 's/^/  /' >&2
+  fi
+  echo "Full log: ${LOG_FILE}" >&2
   exit 1
 }
 
-echo "[3/6] Building app bundles..."
-bun run build
+# run <command...>: runs a command with its output in the log, and returns its status.
+run() {
+  RUNNING="$*"
+  RUN_LOG_START="$(stat -f %z "${LOG_FILE}")"
+  "$@" >>"${LOG_FILE}" 2>&1 || return
+  RUNNING=""
+}
 
-echo "[4/6] Packaging macOS app for ${ARCH}..."
+# Any command that fails stops the build here. A failure inside a command substitution is
+# reported once, by the shell that runs the script.
+on_error() {
+  local status=$?
+  if ((BASH_SUBSHELL > 0)); then
+    exit "${status}"
+  fi
+  if [[ -n "${RUNNING}" ]]; then
+    fail "This failed (exit ${status}): ${RUNNING}" log
+  fi
+  fail "Line ${BASH_LINENO[0]} failed (exit ${status})."
+}
+trap on_error ERR
+
+step "Building macOS icon assets"
+run bash ./scripts/build-app-icon.sh
+step_done
+
+step "Building the native-fs addon"
+NATIVE_FS_DIR="${APP_DIR}/../../packages/native-fs"
+run bash -c 'cd "$1" && npx node-gyp rebuild --arch="$2"' _ "${NATIVE_FS_DIR}" "${ARCH}"
+if ! run node -e "require('${NATIVE_FS_DIR}')"; then
+  fail "The native-fs addon does not load after the build." log
+fi
+step_done
+
+step "Building the app"
+run bun run build
+step_done
+
+step "Packaging File Trail.app"
 APP_NAME="File Trail"
 APP_SLUG="FileTrail"
 OUT_DIR="${APP_DIR}/out/${APP_SLUG}-darwin-${ARCH}"
@@ -183,8 +264,7 @@ fi
 # window opens them from here; the other licenses are in dist/assets/licenses.
 CHROMIUM_NOTICES="${APP_DIR}/node_modules/electron/dist/LICENSES.chromium.html"
 if [[ ! -f "${CHROMIUM_NOTICES}" ]]; then
-  echo "Missing Chromium license notices: ${CHROMIUM_NOTICES}" >&2
-  exit 1
+  fail "Missing Chromium license notices: ${CHROMIUM_NOTICES}"
 fi
 cp "${CHROMIUM_NOTICES}" "${APP_BUNDLE}/Contents/Resources/LICENSES.chromium.html"
 
@@ -206,8 +286,7 @@ elif [[ -d "${NATIVE_FS_SRC}/build/Release" ]]; then
   mkdir -p "${NATIVE_FS_DST}/build/Release"
   cp "${NATIVE_FS_SRC}/build/Release/native-fs.node" "${NATIVE_FS_DST}/build/Release/native-fs.node"
 else
-  echo "native-fs addon not found — prebuilds/ and build/Release/ both missing." >&2
-  exit 1
+  fail "native-fs addon not found — prebuilds/ and build/Release/ both missing."
 fi
 # node-gyp-build loader must be available at runtime
 if [[ -d "${NATIVE_FS_SRC}/node_modules/node-gyp-build" ]]; then
@@ -219,17 +298,17 @@ elif [[ -d "${APP_DIR}/node_modules/node-gyp-build" ]]; then
   ditto "${APP_DIR}/node_modules/node-gyp-build" \
         "${RESOURCES_APP}/node_modules/node-gyp-build"
 else
-  echo "node-gyp-build not found — required to load native-fs addon." >&2
-  exit 1
+  fail "node-gyp-build not found — required to load native-fs addon."
 fi
 
 # The template's files, and so the app itself, are dated 1 January 1980. macOS keeps an
 # app's icon by its path and date, so without a new date a rebuilt app that replaces an
 # older copy can go on showing the older copy's icon.
 touch "${APP_BUNDLE}"
+step_done
 
-echo "[5/6] Code signing..."
 if [[ "${SIGN_IDENTITY}" != "-" ]]; then
+  step "Signing with the Developer ID"
   # Real identity signing with the hardened runtime and a secure timestamp,
   # both of which are required for notarization. Signing is done inside-out
   # (Apple discourages --deep for distribution): standalone bundled binaries
@@ -238,11 +317,10 @@ if [[ "${SIGN_IDENTITY}" != "-" ]]; then
   # needs the allow-jit entitlement under the hardened runtime.
   ENTITLEMENTS_PLIST="${SCRIPT_DIR}/entitlements.mac.plist"
   if [[ ! -f "${ENTITLEMENTS_PLIST}" ]]; then
-    echo "Missing entitlements plist: ${ENTITLEMENTS_PLIST}" >&2
-    exit 1
+    fail "Missing entitlements plist: ${ENTITLEMENTS_PLIST}"
   fi
   sign() {
-    codesign --force --options runtime --timestamp --sign "${SIGN_IDENTITY}" "$@"
+    run codesign --force --options runtime --timestamp --sign "${SIGN_IDENTITY}" "$@"
   }
   # Standalone Mach-O binaries under Resources: the native-fs addon and the
   # vendored fd search binary. Notarization rejects unsigned executables.
@@ -260,48 +338,76 @@ if [[ "${SIGN_IDENTITY}" != "-" ]]; then
     sign --entitlements "${ENTITLEMENTS_PLIST}" "${helper}"
   done < <(find "${APP_BUNDLE}/Contents/Frameworks" -maxdepth 1 -name '*Helper*.app' -print0)
   sign --entitlements "${ENTITLEMENTS_PLIST}" "${APP_BUNDLE}"
-  codesign --verify --deep --strict "${APP_BUNDLE}"
+  run codesign --verify --deep --strict "${APP_BUNDLE}"
+  step_done "signed and verified"
 else
   # Ad-hoc signing gives the app a valid code signature so macOS does not block
   # filesystem access to protected paths (e.g. ~/.Trash) for unsigned apps.
-  echo "  Ad-hoc signing the app (runs on this Mac only)." >&2
-  codesign --force --deep --sign - "${APP_BUNDLE}"
+  step "Signing ad hoc"
+  run codesign --force --deep --sign - "${APP_BUNDLE}"
+  step_done
 fi
 
 # notarize <file> [<target>]: sends a signed zip or disk image to Apple, waits for the
 # result, and staples the ticket to <target> (the file itself when not given).
 notarize() {
-  xcrun notarytool submit "$1" --keychain-profile "${NOTARY_PROFILE}" --wait
-  xcrun stapler staple "${2:-$1}"
+  local result status id
+  RUNNING="notarytool submit $(basename "$1")"
+  RUN_LOG_START="$(stat -f %z "${LOG_FILE}")"
+  # notarytool's exit status does not say whether Apple accepted the file; the status does.
+  result="$(xcrun notarytool submit "$1" --keychain-profile "${NOTARY_PROFILE}" --wait \
+    --output-format json 2>>"${LOG_FILE}")" || true
+  RUNNING=""
+  echo "${result}" >>"${LOG_FILE}"
+  status="$(plutil -extract status raw -o - - <<<"${result}" 2>/dev/null)" || status=""
+  if [[ -z "${status}" ]]; then
+    fail "notarytool could not submit $(basename "$1") with keychain profile '${NOTARY_PROFILE}'." log
+  fi
+  if [[ "${status}" != "Accepted" ]]; then
+    id="$(plutil -extract id raw -o - - <<<"${result}")"
+    fail "Apple did not accept $(basename "$1"): ${status}. For the reasons, run:
+  xcrun notarytool log ${id} --keychain-profile ${NOTARY_PROFILE}"
+  fi
+  run xcrun stapler staple "${2:-$1}"
 }
 
 if [[ "${NOTARIZE}" == 1 ]]; then
-  echo "  Notarizing the app with keychain profile: ${NOTARY_PROFILE}"
+  step "Notarizing the app (a few minutes)"
   NOTARIZE_ZIP="${OUT_DIR}/${APP_SLUG}-${ARCH}-notarize.zip"
-  ditto -c -k --sequesterRsrc --keepParent "${APP_BUNDLE}" "${NOTARIZE_ZIP}"
+  run ditto -c -k --sequesterRsrc --keepParent "${APP_BUNDLE}" "${NOTARIZE_ZIP}"
   notarize "${NOTARIZE_ZIP}" "${APP_BUNDLE}"
   rm -f "${NOTARIZE_ZIP}"
+  run spctl --assess --type execute "${APP_BUNDLE}"
+  step_done "accepted and stapled"
 fi
 
-echo "[6/6] Building distributables..."
+step "Building the ZIP and the disk image"
 ZIP_PATH="${OUT_DIR}/${APP_SLUG}-${ARCH}.zip"
 DMG_PATH="${OUT_DIR}/${APP_SLUG}-${ARCH}.dmg"
-
-ditto -c -k --sequesterRsrc --keepParent "${APP_BUNDLE}" "${ZIP_PATH}"
-hdiutil create -volname "${APP_NAME}" -srcfolder "${APP_BUNDLE}" -ov -format UDZO "${DMG_PATH}" >/dev/null
+run ditto -c -k --sequesterRsrc --keepParent "${APP_BUNDLE}" "${ZIP_PATH}"
+run hdiutil create -volname "${APP_NAME}" -srcfolder "${APP_BUNDLE}" -ov -format UDZO "${DMG_PATH}"
 if [[ "${SIGN_IDENTITY}" != "-" ]]; then
   # Gatekeeper checks a downloaded disk image before it looks at the app inside.
-  codesign --force --timestamp --sign "${SIGN_IDENTITY}" "${DMG_PATH}"
-  if [[ "${NOTARIZE}" == 1 ]]; then
-    echo "  Notarizing the disk image..."
-    notarize "${DMG_PATH}"
-    spctl --assess --type execute "${APP_BUNDLE}"
-    spctl --assess --type open --context context:primary-signature "${DMG_PATH}"
-  else
-    echo "Signed but not notarized: other Macs will not open it from a download." >&2
-    echo "Use 'bun run desktop:make:mac:notarized' for a build to share." >&2
-  fi
+  run codesign --force --timestamp --sign "${SIGN_IDENTITY}" "${DMG_PATH}"
+fi
+step_done
+
+if [[ "${NOTARIZE}" == 1 ]]; then
+  step "Notarizing the disk image (a few minutes)"
+  notarize "${DMG_PATH}"
+  run spctl --assess --type open --context context:primary-signature "${DMG_PATH}"
+  step_done "accepted and stapled"
 fi
 
-echo "Done. Open artifacts in:"
-echo "  ${OUT_DIR}"
+echo
+if [[ "${NOTARIZE}" == 1 ]]; then
+  echo "Built, signed and notarized: ready to share."
+elif [[ "${SIGN_IDENTITY}" != "-" ]]; then
+  echo "Built and signed, not notarized: other Macs will not open it from a download."
+  echo "Use 'bun run desktop:make:mac:notarized' for a build to share."
+else
+  echo "Built and signed ad hoc: for this Mac only."
+fi
+echo "  ${APP_BUNDLE}"
+echo "  ${ZIP_PATH}"
+echo "  ${DMG_PATH}"
