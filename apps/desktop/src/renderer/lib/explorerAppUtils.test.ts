@@ -609,6 +609,21 @@ describe("sortEntriesBySize", () => {
       title: "The Trash couldn't be emptied.",
       message: "Finder got an error: The operation can't be completed.",
     });
+    // A large Trash takes Finder longer than AppleScript waited before (two minutes).
+    expect(
+      describeEmptyTrashFailure(
+        "execution error: Finder got an error: AppleEvent timed out. (-1712)",
+      ).message,
+    ).toBe("Finder took too long to answer. It may still be emptying the Trash.");
+    expect(describeEmptyTrashFailure("execution error: User canceled. (-128)").message).toBe(
+      "Emptying the Trash was stopped in Finder.",
+    );
+    // Only the reason: never the command that ran or the error number.
+    expect(
+      describeEmptyTrashFailure(
+        "0:46: execution error: Finder got an error: The operation can’t be completed. (-8003)",
+      ).message,
+    ).toBe("Finder got an error: The operation can’t be completed.");
     expect(describeEmptyTrashFailure("  ").message).toBe(
       "Finder didn't empty the Trash. Try again, or empty it in Finder.",
     );

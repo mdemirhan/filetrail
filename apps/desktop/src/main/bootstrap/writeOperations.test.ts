@@ -2325,3 +2325,62 @@ describe("the Trash", () => {
     }
   });
 });
+
+describe("New Folder and Trash, picked items and names", () => {
+  // The window suggests a free name from what it lists, which may be out of date.
+  it("takes the next free name when the one suggested was taken meanwhile", async () => {
+    const root = await mkdtemp(join(tmpdir(), "filetrail-new-folder-"));
+    try {
+      await mkdir(join(root, "New Folder"));
+      await mkdir(join(root, "New Folder 2"));
+      await mkdir(join(root, "Untitled 3"));
+      const coordinator = createWriteOperationCoordinator(
+        createWriteServiceStub(),
+        createRealWriteOperationFs(),
+      );
+      const sender = createSender();
+
+      await coordinator.handlers["writeOperation:createFolder"](
+        { parentDirectoryPath: root, folderName: "New Folder", nextFreeName: true },
+        { sender },
+      );
+      const made = await waitForTerminalEvent(sender, "write-op-1");
+      expect(made.result?.items[0]?.destinationPath).toBe(join(root, "New Folder 3"));
+
+      await coordinator.handlers["writeOperation:createFolder"](
+        { parentDirectoryPath: root, folderName: "Untitled 3", nextFreeName: true },
+        { sender },
+      );
+      const second = await waitForTerminalEvent(sender, "write-op-2");
+      expect(second.result?.items[0]?.destinationPath).toBe(join(root, "Untitled 4"));
+
+      // A name the person typed is never changed: it is refused.
+      await expect(
+        coordinator.handlers["writeOperation:createFolder"](
+          { parentDirectoryPath: root, folderName: "New Folder" },
+          { sender },
+        ),
+      ).rejects.toThrow("An item named “New Folder” already exists.");
+      coordinator.shutdown();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("moves a folder and an item inside it to the Trash as one item", async () => {
+    const trash = vi.fn(async () => undefined);
+    const fs = createWriteOperationFs({ trash });
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs);
+    const sender = createSender();
+
+    await coordinator.handlers["writeOperation:trash"](
+      { paths: ["/Users/demo/F/child.txt", "/Users/demo/F", "/Users/demo/F"] },
+      { sender },
+    );
+    const terminal = await waitForTerminalEvent(sender, "write-op-1");
+
+    expect(trash.mock.calls).toEqual([["/Users/demo/F"]]);
+    expect(terminal.result?.summary).toMatchObject({ totalItemCount: 1, completedItemCount: 1 });
+    coordinator.shutdown();
+  });
+});

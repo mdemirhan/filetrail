@@ -1026,6 +1026,9 @@ export const ipcContractSchemas = {
     request: z.object({
       parentDirectoryPath: absolutePathSchema,
       folderName: itemNameSchema,
+      // The name is only a suggestion ("New Folder"): when it is taken (by something the
+      // window hasn't listed yet), the next free one ("New Folder 2") is used.
+      nextFreeName: z.boolean().optional(),
     }),
     response: z.object({
       operationId: z.string().min(1),

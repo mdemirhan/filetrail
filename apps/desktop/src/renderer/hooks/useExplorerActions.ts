@@ -955,6 +955,12 @@ export function useExplorerActions(args: {
             applyCopyPasteClipboardState(followedClipboard);
           }
         }
+        // The folder made in its row may have been given the next free name.
+        if (event.action === "new_folder" && pendingInlineRenamePathRef.current !== null) {
+          const madePath = event.result?.items[0]?.destinationPath ?? null;
+          pendingInlineRenamePathRef.current =
+            event.status === "completed" && madePath ? madePath : null;
+        }
         activeWriteOperationIdRef.current = null;
         pendingPasteAttemptRef.current = null;
         applyWriteOperationCardState(null);
@@ -3357,6 +3363,8 @@ export function useExplorerActions(args: {
       showWriteOperationBusyNotice("rename");
       return;
     }
+    // The folder won't be made, so nothing is waiting to be renamed in its row.
+    pendingInlineRenamePathRef.current = null;
     setNewFolderDialogState(null);
     showWriteOperationBusyNotice("new_folder");
   }
@@ -3527,7 +3535,14 @@ export function useExplorerActions(args: {
       const name = resolveFreeNewFolderName(currentEntries.map((entry) => entry.name));
       pendingInlineRenamePathRef.current = buildChildPath(parentDirectoryPath, name);
       void startCreateFolder(
-        { kind: "newFolder", parentDirectoryPath, name, selectInTreeOnSuccess: false },
+        {
+          kind: "newFolder",
+          parentDirectoryPath,
+          name,
+          selectInTreeOnSuccess: false,
+          // The listing may not know of a "New Folder" made elsewhere meanwhile.
+          nextFreeName: true,
+        },
         (message) => {
           pendingInlineRenamePathRef.current = null;
           setActionNotice({ title: "Couldn’t Make the Folder", message });
@@ -3602,6 +3617,7 @@ export function useExplorerActions(args: {
       const response = await client.invoke("writeOperation:createFolder", {
         parentDirectoryPath: request.parentDirectoryPath,
         folderName: request.name,
+        ...(request.nextFreeName ? { nextFreeName: true } : {}),
       });
       rememberPendingTreeSelectionPath(
         request.selectInTreeOnSuccess

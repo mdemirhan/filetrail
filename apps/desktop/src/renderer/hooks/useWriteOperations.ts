@@ -93,6 +93,8 @@ type DotNameRequest =
       parentDirectoryPath: string;
       name: string;
       selectInTreeOnSuccess: boolean;
+      // A suggested name: the next free one is taken when it isn't free.
+      nextFreeName?: boolean;
     };
 
 type WriteOperationCardState = {

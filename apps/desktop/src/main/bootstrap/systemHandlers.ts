@@ -262,12 +262,26 @@ async function resolveTerminalTargetPath(path: string): Promise<string> {
   }
 }
 
-export async function emptyTrash(): Promise<IpcResponse<"system:emptyTrash">> {
+// Finder empties the Trash. AppleScript gives up waiting for an answer after two minutes,
+// which a large Trash takes longer than: Finder would carry on while File Trail said it
+// failed. A day is the limit instead. What is reported is osascript's own error line
+// ("execution error: …"), not the command that ran.
+export async function emptyTrash(
+  run: (file: string, args: string[]) => Promise<unknown> = execFileAsync,
+): Promise<IpcResponse<"system:emptyTrash">> {
   try {
-    await execFileAsync("osascript", ["-e", 'tell application "Finder" to empty trash']);
+    await run("osascript", [
+      "-e",
+      "with timeout of 86400 seconds",
+      "-e",
+      'tell application "Finder" to empty trash',
+      "-e",
+      "end timeout",
+    ]);
     return { ok: true, error: null };
   } catch (error) {
-    return { ok: false, error: toErrorMessage(error) };
+    const stderr = String((error as { stderr?: unknown } | null)?.stderr ?? "").trim();
+    return { ok: false, error: stderr || toErrorMessage(error) };
   }
 }
 

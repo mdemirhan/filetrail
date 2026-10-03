@@ -1,5 +1,7 @@
 import { basename, dirname, join, resolve } from "node:path";
 
+import { withoutNestedPaths } from "@filetrail/contracts";
+
 import { describeCopyPasteError } from "./copyPasteErrors";
 import {
   captureFingerprint,
@@ -43,25 +45,6 @@ export function normalizeCopyPasteAnalysisRequest(
     ),
     destinationDirectoryPath: resolve(request.destinationDirectoryPath),
   };
-}
-
-// A folder and an item inside it picked together (Select All in search results, say): the
-// item goes with its folder. Pasted on its own as well, it would be copied twice, or moved
-// out of the folder before (or after) the folder itself.
-function withoutNestedPaths(paths: string[]): string[] {
-  const picked = new Set(paths);
-  return paths.filter((path) => {
-    let child = path;
-    let parent = dirname(child);
-    while (parent !== child) {
-      if (picked.has(parent)) {
-        return false;
-      }
-      child = parent;
-      parent = dirname(child);
-    }
-    return true;
-  });
 }
 
 export async function buildCopyPasteAnalysisReport(args: {

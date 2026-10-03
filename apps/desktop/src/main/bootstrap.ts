@@ -16,7 +16,15 @@ import { type AppLogger, writeStructuredAppLogEntry } from "./appLog";
 import type { AppStateStore } from "./appStateStore";
 import { getDiskIds } from "./bootstrap/diskIds";
 import { toPreferencePatch } from "./bootstrap/preferencesPatch";
-import { openReplaceJournal, recoverReplaces } from "./bootstrap/replaceJournal";
+import {
+  openReplaceJournal,
+  recoverReplaces,
+  retryReplaceRecovery,
+} from "./bootstrap/replaceJournal";
+
+// How long a disk may take to answer while Replaces are recovered: a network share that
+// doesn't answer is tried again later instead of holding up the window.
+const RECOVERY_ANSWER_WITHIN_MS = 3_000;
 import {
   clearResponseCaches,
   createFolderSizeHandlers,
@@ -69,6 +77,8 @@ export async function bootstrapMainProcess(
     // Things found at start that the person must be told about (a Replace a crash left
     // unfinished that couldn't be put right), shown once the window is open.
     showStartupNotices?: (notices: string[]) => void;
+    // Items such a Replace left waiting for their disk, put in place later.
+    showRecoveryNotices?: (notices: string[]) => void;
   } = {},
 ): Promise<void> {
   // Main owns the worker client so the renderer only ever talks through the IPC contract.
@@ -97,15 +107,31 @@ export async function bootstrapMainProcess(
   const replaceJournal = await openReplaceJournal(
     join(app.getPath("userData"), "replace-journal.json"),
   );
-  const recoveryNotices = await recoverReplaces(replaceJournal, writeFileSystem, logger);
-  if (recoveryNotices.length > 0) {
-    windows.showStartupNotices?.(recoveryNotices);
+  const recovery = await recoverReplaces(replaceJournal, writeFileSystem, logger, {
+    answerWithinMs: RECOVERY_ANSWER_WITHIN_MS,
+  });
+  if (recovery.notices.length > 0) {
+    windows.showStartupNotices?.(recovery.notices);
   }
   const writeService = createWriteService({ fileSystem: writeFileSystem, replaceJournal });
   const writeCoordinator = createWriteOperationCoordinator(
     writeService,
     createOriginalWriteOperationFs(trashItem),
   );
+  // What couldn't be reached at start (its disk wasn't connected, or didn't answer) is
+  // tried again now and then, while nothing else is being written, until it is done.
+  retryReplaceRecovery({
+    leftoverIds: new Set(replaceJournal.entries().map((entry) => entry.id)),
+    recover: (entryIds) =>
+      recoverReplaces(replaceJournal, writeFileSystem, logger, {
+        entryIds,
+        answerWithinMs: RECOVERY_ANSWER_WITHIN_MS,
+        retry: true,
+      }),
+    remainingIds: () => new Set(replaceJournal.entries().map((entry) => entry.id)),
+    isBusy: () => writeCoordinator.getActiveOperation() !== null,
+    onFinished: (messages) => windows.showRecoveryNotices?.(messages),
+  });
   const folderSizeHandlers = createFolderSizeHandlers({ getFolderSize, cancelFolderSize });
   activeWorkerClient = workerClient;
   void activeWriteCoordinator?.shutdown();

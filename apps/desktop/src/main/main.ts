@@ -181,6 +181,21 @@ if (hasSingleInstanceLock) {
           showStartupNotices: (notices) => {
             pendingStartupNotices.push(...notices);
           },
+          showRecoveryNotices: (notices) => {
+            const window = mainWindowRef;
+            if (!window || window.isDestroyed()) {
+              return;
+            }
+            void dialog.showMessageBox(window, {
+              type: "info",
+              message:
+                notices.length === 1
+                  ? "An item waiting for its disk is in place now"
+                  : "Items waiting for their disk are in place now",
+              detail: notices.join("\n\n"),
+              buttons: ["OK"],
+            });
+          },
           openHelpWindow,
           setApplicationMenuState: (state, senderId) => {
             if (senderId !== mainWindowRef?.webContents.id) {
@@ -835,8 +850,8 @@ function showPendingStartupNotices(window: BrowserWindow): void {
       type: "warning",
       message:
         notices.length === 1
-          ? "An item replaced before File Trail last quit couldn't be put in place"
-          : "Some items replaced before File Trail last quit couldn't be put in place",
+          ? "An item replaced before File Trail last quit isn't in place yet"
+          : "Some items replaced before File Trail last quit aren't in place yet",
       detail: notices.join("\n\n"),
       buttons: ["OK"],
     });

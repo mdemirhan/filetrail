@@ -2455,7 +2455,11 @@ describe("App copy/paste integration", () => {
     await vi.waitFor(() => {
       expect(
         harness.invocations.find((call) => call.channel === "writeOperation:createFolder")?.payload,
-      ).toEqual({ parentDirectoryPath: "/Users/demo", folderName: "New Folder" });
+      ).toEqual({
+        parentDirectoryPath: "/Users/demo",
+        folderName: "New Folder",
+        nextFreeName: true,
+      });
     });
   });
 
@@ -2478,7 +2482,11 @@ describe("App copy/paste integration", () => {
     await vi.waitFor(() => {
       expect(
         harness.invocations.find((call) => call.channel === "writeOperation:createFolder")?.payload,
-      ).toEqual({ parentDirectoryPath: "/Users/demo", folderName: "New Folder" });
+      ).toEqual({
+        parentDirectoryPath: "/Users/demo",
+        folderName: "New Folder",
+        nextFreeName: true,
+      });
     });
 
     harness.setDirectoryEntries("/Users/demo", [
@@ -2643,7 +2651,11 @@ describe("App copy/paste integration", () => {
     await vi.waitFor(() => {
       expect(
         harness.invocations.find((call) => call.channel === "writeOperation:createFolder")?.payload,
-      ).toEqual({ parentDirectoryPath: "/Users/demo", folderName: "New Folder" });
+      ).toEqual({
+        parentDirectoryPath: "/Users/demo",
+        folderName: "New Folder",
+        nextFreeName: true,
+      });
     });
   });
 
@@ -2701,7 +2713,11 @@ describe("App copy/paste integration", () => {
     await vi.waitFor(() => {
       expect(
         harness.invocations.find((call) => call.channel === "writeOperation:createFolder")?.payload,
-      ).toEqual({ parentDirectoryPath: "/Users/demo", folderName: "New Folder" });
+      ).toEqual({
+        parentDirectoryPath: "/Users/demo",
+        folderName: "New Folder",
+        nextFreeName: true,
+      });
     });
   });
 
@@ -2829,7 +2845,11 @@ describe("App copy/paste integration", () => {
     await vi.waitFor(() => {
       expect(
         harness.invocations.find((call) => call.channel === "writeOperation:createFolder")?.payload,
-      ).toEqual({ parentDirectoryPath: "/Users/demo", folderName: "New Folder" });
+      ).toEqual({
+        parentDirectoryPath: "/Users/demo",
+        folderName: "New Folder",
+        nextFreeName: true,
+      });
     });
   });
 
@@ -2859,7 +2879,11 @@ describe("App copy/paste integration", () => {
     await vi.waitFor(() => {
       expect(
         harness.invocations.find((call) => call.channel === "writeOperation:createFolder")?.payload,
-      ).toEqual({ parentDirectoryPath: "/Users/demo", folderName: "New Folder" });
+      ).toEqual({
+        parentDirectoryPath: "/Users/demo",
+        folderName: "New Folder",
+        nextFreeName: true,
+      });
     });
   });
 
@@ -11033,7 +11057,11 @@ describe("App file operations like Finder", () => {
         expect(
           harness.invocations.find((call) => call.channel === "writeOperation:createFolder")
             ?.payload,
-        ).toEqual({ parentDirectoryPath: "/Users/demo", folderName: "New Folder 3" });
+        ).toEqual({
+          parentDirectoryPath: "/Users/demo",
+          folderName: "New Folder 3",
+          nextFreeName: true,
+        });
       });
     });
   });
@@ -12438,5 +12466,99 @@ describe("moving to the Trash on a disk without a Trash", () => {
     expect(await screen.findByRole("dialog")).toHaveTextContent(
       "You don't have permission to access this item.",
     );
+  });
+});
+
+describe("New Folder in the folder on screen", () => {
+  function folderMadeEvent(path: string): TestProgressEvent {
+    return {
+      operationId: "write-op-folder",
+      action: "new_folder",
+      status: "completed",
+      completedItemCount: 1,
+      totalItemCount: 1,
+      completedByteCount: 0,
+      totalBytes: null,
+      currentSourcePath: null,
+      currentDestinationPath: path,
+      result: {
+        operationId: "write-op-folder",
+        action: "new_folder",
+        status: "completed",
+        targetPath: path,
+        startedAt: "2026-10-03T10:00:00.000Z",
+        finishedAt: "2026-10-03T10:00:01.000Z",
+        summary: {
+          topLevelItemCount: 1,
+          totalItemCount: 1,
+          completedItemCount: 1,
+          failedItemCount: 0,
+          skippedItemCount: 0,
+          cancelledItemCount: 0,
+          completedByteCount: 0,
+          totalBytes: null,
+        },
+        items: [{ sourcePath: null, destinationPath: path, status: "completed", error: null }],
+        error: null,
+      },
+    };
+  }
+
+  // A "New Folder" made in Finder meanwhile isn't listed yet: the main process takes the
+  // next free name, and that is the folder whose name is edited.
+  it("edits the name of the folder actually made when it got the next free name", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+    await clearContentSelection();
+    await pressKey({ key: "n", metaKey: true, shiftKey: true });
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.some((call) => call.channel === "writeOperation:createFolder"),
+      ).toBe(true);
+    });
+
+    harness.setDirectoryEntries("/Users/demo", [
+      createDirectoryEntry("/Users/demo/source.txt", "file"),
+      createDirectoryEntry("/Users/demo/Folder", "directory"),
+      createDirectoryEntry("/Users/demo/New Folder", "directory"),
+      createDirectoryEntry("/Users/demo/New Folder 2", "directory"),
+    ]);
+    await act(async () => {
+      harness.emitProgress(folderMadeEvent("/Users/demo/New Folder 2"));
+    });
+
+    expect(await screen.findByLabelText("Rename New Folder 2")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Rename New Folder")).not.toBeInTheDocument();
+  });
+
+  // Refused while a paste runs, the folder isn't made: a "New Folder" that turns up later
+  // (renamed or pasted) mustn't open a rename field by surprise.
+  it("doesn't rename a later “New Folder” after one was refused while busy", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+    await pasteSourceIntoFolder(harness, "c");
+    await screen.findByRole("region", { name: "Pasting…" });
+    await clearContentSelection();
+    await pressKey({ key: "n", metaKey: true, shiftKey: true });
+    const busy = await screen.findByRole("dialog", { name: "New Folder couldn't start" });
+    await act(async () => {
+      fireEvent.click(within(busy).getByRole("button", { name: "OK" }));
+    });
+
+    harness.setDirectoryEntries("/Users/demo", [
+      createDirectoryEntry("/Users/demo/source.txt", "file"),
+      createDirectoryEntry("/Users/demo/Folder", "directory"),
+      createDirectoryEntry("/Users/demo/New Folder", "directory"),
+    ]);
+    await act(async () => {
+      harness.emitProgress(
+        finishedResultEvent("copy", "completed", [
+          { sourcePath: "/Users/demo/source.txt", status: "completed", error: null },
+        ]),
+      );
+    });
+
+    await screen.findByTitle("/Users/demo/New Folder");
+    expect(screen.queryByLabelText("Rename New Folder")).not.toBeInTheDocument();
   });
 });

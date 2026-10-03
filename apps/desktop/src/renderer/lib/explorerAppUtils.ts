@@ -56,12 +56,26 @@ export function describeEmptyTrashFailure(detail: string): { title: string; mess
         "File Trail needs permission to control Finder. Turn it on in System Settings > Privacy & Security > Automation, then try again.",
     };
   }
-  const trimmedDetail = detail.trim();
+  if (/-1712\b|timed out/iu.test(detail)) {
+    return {
+      title,
+      message: "Finder took too long to answer. It may still be emptying the Trash.",
+    };
+  }
+  if (/-128\b|user canceled/iu.test(detail)) {
+    return { title, message: "Emptying the Trash was stopped in Finder." };
+  }
+  // osascript's reason, without its command line or error number.
+  const reason = detail
+    .replace(/^[\s\S]*execution error:\s*/u, "")
+    .replace(/^Command failed:[^\n]*\n?/u, "")
+    .replace(/\s*\(-?\d+\)\s*$/u, "")
+    .trim();
   return {
     title,
     message:
-      trimmedDetail.length > 0
-        ? trimmedDetail
+      reason.length > 0
+        ? reason
         : "Finder didn't empty the Trash. Try again, or empty it in Finder.",
   };
 }

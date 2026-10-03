@@ -769,3 +769,49 @@ describe("smaller cases a Replace and a copy get right", () => {
     }
   });
 });
+
+describe("a file being copied", () => {
+  // Quitting or a crash part way must never leave a cut-short file under the real name.
+  it("is written under a hidden name and takes its own only once complete", async () => {
+    await writeFile(join(src, "report.pdf"), "contents");
+    const writtenAs: string[] = [];
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "report.pdf")],
+      destinationDirectoryPath: dst,
+      fileSystem: {
+        ...nativeFileSystem,
+        copyFile: async (from, to, signal) => {
+          writtenAs.push(to);
+          expect(await readdir(dst)).not.toContain("report.pdf");
+          await nativeFileSystem.copyFile?.(from, to, signal);
+        },
+      },
+    });
+
+    expect(result?.status).toBe("completed");
+    expect(writtenAs).toEqual([
+      expect.stringMatching(/\/dst\/\.report\.pdf\.filetrail-[0-9a-f]+$/u),
+    ]);
+    expect(await readdir(dst)).toEqual(["report.pdf"]);
+    expect(await readFile(join(dst, "report.pdf"), "utf8")).toBe("contents");
+  });
+
+  it("keeps a locked file's lock once it has its name", async () => {
+    await writeFile(join(src, "locked.txt"), "keep");
+    execFileSync("chflags", ["uchg", join(src, "locked.txt")]);
+    try {
+      const { result } = await runPaste({
+        mode: "copy",
+        sourcePaths: [join(src, "locked.txt")],
+        destinationDirectoryPath: dst,
+      });
+
+      expect(result?.status).toBe("completed");
+      expect(execFileSync("ls", ["-lO", join(dst, "locked.txt")]).toString()).toContain("uchg");
+    } finally {
+      execFileSync("chflags", ["-R", "nouchg", src, dst]);
+    }
+  });
+});

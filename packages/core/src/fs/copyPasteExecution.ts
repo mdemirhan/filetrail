@@ -1368,7 +1368,42 @@ const MISSING_FINGERPRINT: NodeFingerprint = {
   symlinkTarget: null,
 };
 
+// A file is written under a hidden name next to its place, and takes its name only once it
+// is complete: quitting, a crash or a disk that stops answering part way never leaves a
+// cut-short file under the real name, where it would pass for the whole one.
 async function copyFileContents(
+  context: ExecutionContext,
+  sourcePath: string,
+  targetPath: string,
+): Promise<void> {
+  const { fileSystem } = context;
+  if (!fileSystem.renameExclusive && !fileSystem.rename) {
+    await writeFileContents(context, sourcePath, targetPath);
+    return;
+  }
+  if ((await captureFingerprint(fileSystem, targetPath)).exists) {
+    throw new DestinationTakenError(
+      Object.assign(new Error(`EEXIST: ${targetPath}`), { code: "EEXIST", path: targetPath }),
+    );
+  }
+  const partialPath = await temporarySiblingPath(fileSystem, targetPath);
+  await writeFileContents(context, sourcePath, partialPath);
+  try {
+    // A copy of a locked file is locked too, and a locked file can't be renamed.
+    const flags = await unlockForMove(fileSystem, partialPath);
+    await moveExclusive(fileSystem, partialPath, targetPath);
+    if (flags !== null) {
+      await fileSystem.setFlags?.(targetPath, flags).catch(() => undefined);
+    }
+  } catch (error) {
+    await removeStagedItem(fileSystem, partialPath).catch(() => undefined);
+    throw errorCode(error) === "EEXIST"
+      ? new DestinationTakenError(error)
+      : await explainMissingFolder(fileSystem, targetPath, error);
+  }
+}
+
+async function writeFileContents(
   context: ExecutionContext,
   sourcePath: string,
   targetPath: string,

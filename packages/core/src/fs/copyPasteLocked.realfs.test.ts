@@ -2,7 +2,7 @@
 // file, and putting right a Replace a crash cut short, on the real disk with the native copy.
 
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -330,8 +330,9 @@ describe("stopping part way through a file", () => {
             // Stop once the file has begun to be written, not after a fixed time that a
             // fast disk can beat.
             beforeExecute: async () => {
+              // The file is written under a hidden name until it is whole.
               const stopOnceWriting = () => {
-                if (existsSync(destination)) {
+                if (readdirSync(volume.mountPath).some((name) => name.startsWith(".big.bin."))) {
                   controller.abort();
                 } else {
                   setTimeout(stopOnceWriting, 1);
@@ -344,9 +345,12 @@ describe("stopping part way through a file", () => {
         }
 
         expect(status).toBe("cancelled");
-        expect((await readdir(volume.mountPath)).filter((name) => !name.startsWith("."))).toEqual(
-          [],
-        );
+        // Neither the file nor the hidden one it was being written as is left.
+        expect(
+          (await readdir(volume.mountPath)).filter(
+            (name) => !name.startsWith(".") || name.startsWith(".big.bin."),
+          ),
+        ).toEqual([]);
       } finally {
         volume.detach();
       }
