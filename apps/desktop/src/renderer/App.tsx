@@ -919,8 +919,9 @@ export function App() {
     homePath,
     blocked: dragDropBlocked,
     onDropItems: async (sourcePaths, destinationDirectoryPath, { operation, ...options }) => {
-      // A copying drop is a copy and paste into the folder; a moving one, a cut and paste.
-      const action = operation === "copy" ? "paste" : "move_to";
+      // A copying drop copies into the folder the way a paste does; a moving one, the way a
+      // cut and paste does. Each is named for what it is, not for the paste it works like.
+      const action = operation === "copy" ? "copy_to" : "move_to";
       const outcome =
         operation === "copy"
           ? await startCopyToDestination(sourcePaths, destinationDirectoryPath, options)

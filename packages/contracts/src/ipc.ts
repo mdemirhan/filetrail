@@ -216,6 +216,8 @@ export const copyPasteConflictClassSchema = z.enum([
 export const copyPasteAnalysisNodeDispositionSchema = z.enum(["new", "conflict", "blocked"]);
 export const writeOperationActionSchema = z.enum([
   "paste",
+  // A copy made some other way than pasting: a drag that copies.
+  "copy_to",
   "move_to",
   "duplicate",
   "trash",
@@ -893,7 +895,7 @@ export const ipcContractSchemas = {
       sourcePaths: absolutePathListSchema,
       destinationDirectoryPath: absolutePathSchema,
       action: writeOperationActionSchema
-        .extract(["paste", "move_to", "duplicate"])
+        .extract(["paste", "copy_to", "move_to", "duplicate"])
         .default("paste"),
     }),
     response: z.object({
@@ -928,7 +930,7 @@ export const ipcContractSchemas = {
       destinationDirectoryPath: absolutePathSchema,
       conflictResolution: copyPasteConflictResolutionSchema.default("error"),
       action: writeOperationActionSchema
-        .extract(["paste", "move_to", "duplicate"])
+        .extract(["paste", "copy_to", "move_to", "duplicate"])
         .default("paste"),
     }),
     response: copyPastePlanSchema,
@@ -941,13 +943,13 @@ export const ipcContractSchemas = {
         destinationDirectoryPath: absolutePathSchema,
         conflictResolution: copyPasteConflictResolutionSchema.default("error"),
         action: writeOperationActionSchema
-          .extract(["paste", "move_to", "duplicate"])
+          .extract(["paste", "copy_to", "move_to", "duplicate"])
           .default("paste"),
       }),
       z.object({
         analysisId: z.string().min(1),
         action: writeOperationActionSchema
-          .extract(["paste", "move_to", "duplicate"])
+          .extract(["paste", "copy_to", "move_to", "duplicate"])
           .default("paste"),
         policy: copyPastePolicySchema,
         // Per-item choices from the review, overriding the policy for those items.

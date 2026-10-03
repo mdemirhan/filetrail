@@ -110,7 +110,7 @@ export function AppDialogs({
   onRequestCopyLikePlanStart: (
     report: CopyPasteAnalysisReport,
     policy: CopyPastePolicy,
-    action: "paste" | "move_to" | "duplicate",
+    action: "paste" | "copy_to" | "move_to" | "duplicate",
     options: {
       clearClipboardOnStart: boolean;
       sourceSurface?: InternalMoveSourceSurface | null;
@@ -248,9 +248,11 @@ export function AppDialogs({
           title={
             copyPasteDialogState.action === "move_to"
               ? "Analyzing Move"
-              : copyPasteDialogState.action === "duplicate"
-                ? "Analyzing Duplicate"
-                : "Analyzing Paste"
+              : copyPasteDialogState.action === "copy_to"
+                ? "Analyzing Copy"
+                : copyPasteDialogState.action === "duplicate"
+                  ? "Analyzing Duplicate"
+                  : "Analyzing Paste"
           }
           message="Scanning the destination and building a recursive conflict report."
           secondaryAction={{
@@ -472,6 +474,9 @@ function getWriteOperationTitle(
   if (action === "move_to") {
     return phase === "progress" ? "Move In Progress" : "Move Result";
   }
+  if (action === "copy_to") {
+    return phase === "progress" ? "Copy In Progress" : "Copy Result";
+  }
   if (action === "duplicate") {
     return phase === "progress" ? "Duplicate In Progress" : "Duplicate Result";
   }
@@ -491,9 +496,17 @@ function getWriteOperationTitle(
 }
 
 function isCopyLikeAction(action: WriteOperationAction): boolean {
-  return action === "paste" || action === "move_to" || action === "duplicate";
+  return (
+    action === "paste" || action === "copy_to" || action === "move_to" || action === "duplicate"
+  );
 }
 
-function getCopyLikeVerb(action: WriteOperationAction): "Paste" | "Move" | "Duplicate" {
-  return action === "move_to" ? "Move" : action === "duplicate" ? "Duplicate" : "Paste";
+function getCopyLikeVerb(action: WriteOperationAction): "Paste" | "Copy" | "Move" | "Duplicate" {
+  return action === "move_to"
+    ? "Move"
+    : action === "copy_to"
+      ? "Copy"
+      : action === "duplicate"
+        ? "Duplicate"
+        : "Paste";
 }

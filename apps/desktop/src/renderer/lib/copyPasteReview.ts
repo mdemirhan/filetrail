@@ -14,7 +14,7 @@ export type CopyPastePolicy = Extract<
 export type CopyPasteReport = NonNullable<IpcResponse<"copyPaste:analyzeGetUpdate">["report"]>;
 export type CopyPasteAnalysisNode = CopyPasteReport["nodes"][number];
 export type CopyPasteOverrides = Readonly<Record<string, CopyPasteChoice>>;
-export type CopyLikeAction = "paste" | "move_to" | "duplicate";
+export type CopyLikeAction = "paste" | "copy_to" | "move_to" | "duplicate";
 
 // Pressing the primary button without changing anything never loses data: whatever is
 // already at the destination is left alone.
@@ -66,7 +66,7 @@ export function getActionVerb(action: CopyLikeAction, mode: "copy" | "cut"): str
   if (mode === "cut" || action === "move_to") {
     return "Move";
   }
-  return action === "duplicate" ? "Duplicate" : "Paste";
+  return action === "duplicate" ? "Duplicate" : action === "copy_to" ? "Copy" : "Paste";
 }
 
 export function choicesForNode(node: CopyPasteAnalysisNode): CopyPasteChoice[] {

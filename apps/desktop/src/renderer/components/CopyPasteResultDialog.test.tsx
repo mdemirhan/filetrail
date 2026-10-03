@@ -8,7 +8,7 @@ import { CopyPasteResultDialog } from "./CopyPasteResultDialog";
 
 type Items = NonNullable<WriteOperationProgressEvent["result"]>["items"];
 
-function event(action: "paste" | "move_to", items: Items): WriteOperationProgressEvent {
+function event(action: "paste" | "copy_to" | "move_to", items: Items): WriteOperationProgressEvent {
   return {
     operationId: "copy-op-1",
     action,
@@ -101,6 +101,23 @@ describe("CopyPasteResultDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry 3 Items" }));
     expect(onRetry).toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Done" })).toHaveFocus();
+  });
+
+  it("says a copy made by dragging was copied, not pasted", () => {
+    render(
+      <CopyPasteResultDialog
+        event={event("copy_to", [
+          item("/src/a.txt", "completed"),
+          item("/src/b.txt", "failed", "You don't have permission to access this item."),
+        ])}
+        canRetry={false}
+        onRetry={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("dialog", { name: "Copied 1 of 2 items into “dest”" })).toBeVisible();
+    expect(screen.getByText(/1 item couldn't be copied\./)).toBeInTheDocument();
   });
 
   it("reminds that unmoved items are still where they were", () => {

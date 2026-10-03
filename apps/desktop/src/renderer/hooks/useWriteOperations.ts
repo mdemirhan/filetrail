@@ -43,7 +43,7 @@ type CopyPasteDialogState =
   | {
       type: "analysis";
       analysisId: string;
-      action: "paste" | "move_to" | "duplicate";
+      action: "paste" | "copy_to" | "move_to" | "duplicate";
       clearClipboardOnStart: boolean;
       sourceSurface?: InternalMoveSourceSurface | null;
       pendingTreeSelectionPath?: string | null;
@@ -54,7 +54,7 @@ type CopyPasteDialogState =
       policy: NonNullable<CopyPastePolicy>;
       // Per-item choices made in the review, by analysis node id.
       overrides: Readonly<Record<string, CopyPasteChoice>>;
-      action: "paste" | "move_to" | "duplicate";
+      action: "paste" | "copy_to" | "move_to" | "duplicate";
       clearClipboardOnStart: boolean;
       sourceSurface?: InternalMoveSourceSurface | null;
       pendingTreeSelectionPath?: string | null;

@@ -11,6 +11,7 @@ type ResultItem = OperationResult["items"][number];
 
 const PAST_TENSE: Record<string, string> = {
   paste: "Pasted",
+  copy_to: "Copied",
   move_to: "Moved",
   duplicate: "Duplicated",
 };

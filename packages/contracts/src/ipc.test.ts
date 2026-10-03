@@ -159,6 +159,24 @@ describe("ipc contracts", () => {
     expect(parsed.foldersFirst).toBe(true);
   });
 
+  it("names a copy made by dragging as a copy, not a paste", () => {
+    expect(
+      ipcContractSchemas["copyPaste:analyzeStart"].request.parse({
+        mode: "copy",
+        sourcePaths: ["/Users/demo/a.txt"],
+        destinationDirectoryPath: "/Volumes/Backup",
+        action: "copy_to",
+      }).action,
+    ).toBe("copy_to");
+    expect(
+      ipcContractSchemas["copyPaste:start"].request.parse({
+        analysisId: "analysis-1",
+        action: "copy_to",
+        policy: { file: "skip", directory: "skip", mismatch: "skip" },
+      }).action,
+    ).toBe("copy_to");
+  });
+
   it("accepts overwrite as a folder conflict policy", () => {
     expect(
       ipcContractSchemas["copyPaste:start"].request.parse({

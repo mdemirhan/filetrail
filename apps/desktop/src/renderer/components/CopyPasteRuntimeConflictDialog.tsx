@@ -12,10 +12,11 @@ import { useDialogFocus } from "./useDialogFocus";
 
 type RuntimeConflict = NonNullable<WriteOperationProgressEvent["runtimeConflict"]>;
 type Fingerprint = RuntimeConflict["currentSourceFingerprint"];
-type Verb = "Paste" | "Move" | "Duplicate";
+type Verb = "Paste" | "Copy" | "Move" | "Duplicate";
 
 const VERBING: Record<Verb, string> = {
   Paste: "pasting",
+  Copy: "copying",
   Move: "moving",
   Duplicate: "duplicating",
 };

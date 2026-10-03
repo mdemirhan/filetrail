@@ -140,7 +140,7 @@ function createOpenWithApplicationId(): string {
 
 type CopyPasteAnalysisReport = NonNullable<IpcResponse<"copyPaste:analyzeGetUpdate">["report"]>;
 type CopyPastePolicy = Extract<IpcRequest<"copyPaste:start">, { analysisId: string }>["policy"];
-type CopyLikeAction = "paste" | "move_to" | "duplicate";
+type CopyLikeAction = "paste" | "copy_to" | "move_to" | "duplicate";
 // Every write the app starts; each says the same thing when another one is still running.
 type WriteStartAction = CopyLikeAction | "trash" | "delete_immediately" | "rename" | "new_folder";
 type CopyLikePreStartOutcome =
@@ -178,13 +178,15 @@ function getCopyLikeActionLabel(action: CopyLikeAction): string {
   if (action === "duplicate") {
     return "duplicate";
   }
-  return "paste";
+  return action === "copy_to" ? "copy" : "paste";
 }
 
 function getCopyLikePreStartFailureTitle(action: WriteStartAction): string {
   switch (action) {
     case "move_to":
       return "Move couldn't start";
+    case "copy_to":
+      return "Copy couldn't start";
     case "duplicate":
       return "Duplicate couldn't start";
     case "trash":
@@ -1202,6 +1204,9 @@ export function useExplorerActions(args: {
         ? "Duplicate finished with skipped items"
         : "Nothing duplicated";
     }
+    if (action === "copy_to") {
+      return completedItemCount > 0 ? "Copy finished with skipped items" : "Nothing copied";
+    }
     return completedItemCount > 0 ? "Paste finished with skipped items" : "Nothing pasted";
   }
 
@@ -1280,19 +1285,23 @@ export function useExplorerActions(args: {
         ? result.targetPath
           ? `Moved to ${getPathLeafName(result.targetPath)}`
           : "Moved"
-        : event.action === "duplicate"
+        : event.action === "copy_to"
           ? result.targetPath
-            ? `Duplicated into ${getPathLeafName(result.targetPath)}`
-            : "Duplicated"
-          : event.action === "trash"
-            ? "Moved to Trash"
-            : event.action === "rename"
-              ? "Renamed"
-              : event.action === "new_folder"
-                ? "Created folder"
-                : result.targetPath
-                  ? `Pasted into ${getPathLeafName(result.targetPath)}`
-                  : "Pasted";
+            ? `Copied to ${getPathLeafName(result.targetPath)}`
+            : "Copied"
+          : event.action === "duplicate"
+            ? result.targetPath
+              ? `Duplicated into ${getPathLeafName(result.targetPath)}`
+              : "Duplicated"
+            : event.action === "trash"
+              ? "Moved to Trash"
+              : event.action === "rename"
+                ? "Renamed"
+                : event.action === "new_folder"
+                  ? "Created folder"
+                  : result.targetPath
+                    ? `Pasted into ${getPathLeafName(result.targetPath)}`
+                    : "Pasted";
     if (event.status === "completed") {
       pushToast({
         kind: "success",
@@ -1307,15 +1316,17 @@ export function useExplorerActions(args: {
         title:
           event.action === "move_to"
             ? "Move cancelled"
-            : event.action === "duplicate"
-              ? "Duplicate cancelled"
-              : event.action === "trash"
-                ? "Trash cancelled"
-                : event.action === "rename"
-                  ? "Rename cancelled"
-                  : event.action === "new_folder"
-                    ? "Create folder cancelled"
-                    : "Paste cancelled",
+            : event.action === "copy_to"
+              ? "Copy cancelled"
+              : event.action === "duplicate"
+                ? "Duplicate cancelled"
+                : event.action === "trash"
+                  ? "Trash cancelled"
+                  : event.action === "rename"
+                    ? "Rename cancelled"
+                    : event.action === "new_folder"
+                      ? "Create folder cancelled"
+                      : "Paste cancelled",
         ...(itemSummary ? { message: itemSummary } : {}),
       });
       return;
@@ -1333,7 +1344,7 @@ export function useExplorerActions(args: {
   }
 
   function beginPendingPasteAttempt(options: {
-    action: "paste" | "move_to" | "duplicate";
+    action: CopyLikeAction;
     targetPath: string;
     totalItemCount: number;
     totalBytes: number | null;
@@ -1958,7 +1969,12 @@ export function useExplorerActions(args: {
     if (!result) {
       return;
     }
-    if (event.action !== "paste" && event.action !== "move_to" && event.action !== "duplicate") {
+    if (
+      event.action !== "paste" &&
+      event.action !== "copy_to" &&
+      event.action !== "move_to" &&
+      event.action !== "duplicate"
+    ) {
       dismissCopyPasteDialog();
       return;
     }
@@ -2885,7 +2901,7 @@ export function useExplorerActions(args: {
       }
     }
     const pasteAttemptId = beginPendingPasteAttempt({
-      action: "paste",
+      action: "copy_to",
       targetPath: destinationDirectoryPath,
       totalItemCount: sourcePaths.length,
       totalBytes: null,
@@ -2895,7 +2911,7 @@ export function useExplorerActions(args: {
       mode: "copy",
       sourcePaths,
       destinationDirectoryPath,
-      action: "paste",
+      action: "copy_to",
       pasteAttemptId,
       clearClipboardOnStart: false,
       pendingTreeSelectionPath: options.pendingTreeSelectionPath ?? null,

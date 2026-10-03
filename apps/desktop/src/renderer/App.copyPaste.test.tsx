@@ -10416,7 +10416,7 @@ describe("App file operations like Finder", () => {
         expect(analyzeRequests(harness)).toEqual([
           expect.objectContaining({
             mode: "copy",
-            action: "paste",
+            action: "copy_to",
             sourcePaths: ["/Users/demo/source.txt"],
             destinationDirectoryPath: "/Volumes/Backup",
           }),
@@ -10425,6 +10425,52 @@ describe("App file operations like Finder", () => {
       await vi.waitFor(() => {
         expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(true);
       });
+
+      // Named for the copy it is, not for the paste it works like.
+      await act(async () => {
+        harness.emitProgress({
+          operationId: "copy-op-1",
+          action: "copy_to",
+          mode: "copy",
+          status: "completed",
+          completedItemCount: 1,
+          totalItemCount: 1,
+          completedByteCount: 5,
+          totalBytes: 5,
+          currentSourcePath: null,
+          currentDestinationPath: null,
+          result: {
+            operationId: "copy-op-1",
+            mode: "copy",
+            status: "completed",
+            destinationDirectoryPath: "/Volumes/Backup",
+            startedAt: "2026-03-09T00:00:00.000Z",
+            finishedAt: "2026-03-09T00:00:01.000Z",
+            summary: {
+              topLevelItemCount: 1,
+              totalItemCount: 1,
+              completedItemCount: 1,
+              failedItemCount: 0,
+              skippedItemCount: 0,
+              cancelledItemCount: 0,
+              completedByteCount: 5,
+              totalBytes: 5,
+            },
+            items: [
+              {
+                sourcePath: "/Users/demo/source.txt",
+                destinationPath: "/Volumes/Backup/source.txt",
+                status: "completed",
+                error: null,
+              },
+            ],
+            error: null,
+          },
+        });
+      });
+      const toasts = await screen.findByTestId("toast-viewport");
+      expect(within(toasts).getByText("Copied to Backup")).toBeInTheDocument();
+      expect(within(toasts).queryByText(/Pasted/)).not.toBeInTheDocument();
     });
 
     it("copies on the same disk with Option held", async () => {
@@ -10506,7 +10552,7 @@ describe("App file operations like Finder", () => {
         expect(analyzeRequests(harness)).toEqual([
           expect.objectContaining({
             mode: "copy",
-            action: "paste",
+            action: "copy_to",
             sourcePaths: ["/Users/demo/source.txt"],
             destinationDirectoryPath: "/Users/demo",
           }),
