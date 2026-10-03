@@ -1,3 +1,5 @@
+import { type IpcResponse, isMacOSPackageName } from "@filetrail/contracts";
+
 import { isPathWithinRoot } from "./pathUtils";
 
 // Returns the parent directory, treating `/` as the root sentinel with no parent.
@@ -70,17 +72,56 @@ export function getForcedVisibleHiddenChildPath(
   parentPath: string,
   activePath: string,
 ): string | null {
+  const childPath = getChildPathTowards(parentPath, activePath);
+  return childPath !== null && pathSegmentName(childPath).startsWith(".") ? childPath : null;
+}
+
+// The tree lists no packages (apps, frameworks…), so one that is open, or that the open
+// folder is inside (Show Package Contents), is added under `parentPath` to keep the path
+// to it in the tree.
+export function getForcedVisiblePackageChildPath(
+  parentPath: string,
+  activePath: string,
+): string | null {
+  const childPath = getChildPathTowards(parentPath, activePath);
+  return childPath !== null && isMacOSPackageName(pathSegmentName(childPath)) ? childPath : null;
+}
+
+type TreeChild = IpcResponse<"tree:getChildren">["children"][number];
+
+// `children` with the package at `packagePath` among them, in the order the tree lists names.
+export function withPackageChild(children: TreeChild[], packagePath: string): TreeChild[] {
+  if (children.some((child) => child.path === packagePath)) {
+    return children;
+  }
+  const name = pathSegmentName(packagePath);
+  const packageChild: TreeChild = {
+    path: packagePath,
+    name,
+    kind: "directory",
+    isHidden: name.startsWith("."),
+    isSymlink: false,
+  };
+  const index = children.findIndex(
+    (child) =>
+      child.name.localeCompare(name, undefined, { numeric: true, sensitivity: "base" }) > 0,
+  );
+  return index === -1
+    ? [...children, packageChild]
+    : [...children.slice(0, index), packageChild, ...children.slice(index)];
+}
+
+// The child of `parentPath` that `activePath` is, or is inside.
+function getChildPathTowards(parentPath: string, activePath: string): string | null {
   if (!isPathWithinRoot(activePath, parentPath) || activePath === parentPath) {
     return null;
   }
-
   const relativePath =
     parentPath === "/" ? activePath.slice(1) : activePath.slice(parentPath.length + 1);
   const [nextSegment] = relativePath.split("/").filter((segment) => segment.length > 0);
-  if (!nextSegment || !nextSegment.startsWith(".")) {
+  if (!nextSegment) {
     return null;
   }
-
   return parentPath === "/" ? `/${nextSegment}` : `${parentPath}/${nextSegment}`;
 }
 

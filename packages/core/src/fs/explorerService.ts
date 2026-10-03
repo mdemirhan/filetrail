@@ -1,7 +1,7 @@
 import { lstat, readdir, realpath, stat } from "node:fs/promises";
 import { basename, dirname, extname, resolve } from "node:path";
 
-import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
+import { type IpcRequest, type IpcResponse, isMacOSPackageName } from "@filetrail/contracts";
 
 export type FileSystemDirent = {
   name: string;
@@ -37,26 +37,6 @@ const DEFAULT_FILE_SYSTEM: ExplorerFileSystem = {
 };
 
 type EntryKind = IpcResponse<"directory:getSnapshot">["entries"][number]["kind"];
-
-// macOS treats directories with these extensions as opaque "packages" — they should behave
-// like files (double-click launches / opens) rather than browsable folders.
-const MACOS_PACKAGE_EXTENSIONS = new Set([
-  ".app",
-  ".framework",
-  ".bundle",
-  ".plugin",
-  ".kext",
-  ".xpc",
-  ".xcodeproj",
-  ".playground",
-  ".prefPane",
-  ".appex",
-]);
-
-export function isMacOSPackageName(name: string): boolean {
-  const dot = name.lastIndexOf(".");
-  return dot > 0 && MACOS_PACKAGE_EXTENSIONS.has(name.slice(dot).toLowerCase());
-}
 
 // Tree loading only returns navigable folders, not every entry in the directory.
 export async function listTreeChildren(

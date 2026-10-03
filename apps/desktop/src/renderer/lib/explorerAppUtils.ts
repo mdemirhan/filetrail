@@ -551,6 +551,7 @@ export function createTreeNode(path: string, expanded: boolean) {
     loaded: false,
     loadedIncludeHidden: false,
     forcedVisibleHiddenChildPath: null,
+    forcedVisiblePackageChildPath: null,
     error: null,
     childPaths: [],
   };

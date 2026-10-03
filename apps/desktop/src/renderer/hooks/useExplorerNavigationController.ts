@@ -24,12 +24,14 @@ import {
 import {
   getAncestorChain,
   getForcedVisibleHiddenChildPath,
+  getForcedVisiblePackageChildPath,
   getNextSelectionIndex,
   getPageStepItemCount,
   getPagedSelectionIndex,
   getTreeSeedChain,
   parentDirectoryPath,
   pathHasHiddenSegmentWithinRoot,
+  withPackageChild,
 } from "../lib/explorerNavigation";
 import { type ExplorerPane, resolveExplorerPaneRestoreTarget } from "../lib/explorerPaneFocus";
 import { getPathAndAncestors } from "../lib/explorerTabs";
@@ -1030,6 +1032,8 @@ export function useExplorerNavigationController(args: {
       includeHiddenOverride || rootPath.length === 0
         ? null
         : getForcedVisibleHiddenChildPath(path, activePath);
+    const forcedVisiblePackageChildPath =
+      rootPath.length === 0 ? null : getForcedVisiblePackageChildPath(path, activePath);
     if (currentNode?.loading && !forceReload) {
       return;
     }
@@ -1037,7 +1041,8 @@ export function useExplorerNavigationController(args: {
       !forceReload &&
       currentNode?.loaded &&
       currentNode.loadedIncludeHidden === includeHiddenOverride &&
-      (currentNode.forcedVisibleHiddenChildPath ?? null) === forcedVisibleHiddenChildPath
+      (currentNode.forcedVisibleHiddenChildPath ?? null) === forcedVisibleHiddenChildPath &&
+      (currentNode.forcedVisiblePackageChildPath ?? null) === forcedVisiblePackageChildPath
     ) {
       if (expandOnSuccess && !currentNode.expanded) {
         updateTreeNodes((current) => ({
@@ -1081,12 +1086,16 @@ export function useExplorerNavigationController(args: {
       updateTreeNodes((current) => {
         const next = { ...current };
         const existingNode = current[path] ?? createTreeNode(path, true);
-        const visibleChildren =
+        const listedChildren =
           forcedVisibleHiddenChildPath === null
             ? response.children.filter((child) => includeHiddenOverride || !child.isHidden)
             : response.children.filter(
                 (child) => !child.isHidden || child.path === forcedVisibleHiddenChildPath,
               );
+        const visibleChildren =
+          forcedVisiblePackageChildPath === null
+            ? listedChildren
+            : withPackageChild(listedChildren, forcedVisiblePackageChildPath);
         next[path] = {
           ...existingNode,
           expanded: existingNode.expanded || expandOnSuccess,
@@ -1094,6 +1103,7 @@ export function useExplorerNavigationController(args: {
           loaded: true,
           loadedIncludeHidden: includeHiddenOverride,
           forcedVisibleHiddenChildPath,
+          forcedVisiblePackageChildPath,
           childPaths: visibleChildren.map((child) => child.path),
         };
         for (const child of visibleChildren) {
@@ -1113,6 +1123,7 @@ export function useExplorerNavigationController(args: {
             loaded: existingChildNode?.loaded ?? false,
             loadedIncludeHidden: existingChildNode?.loadedIncludeHidden ?? false,
             forcedVisibleHiddenChildPath: existingChildNode?.forcedVisibleHiddenChildPath ?? null,
+            forcedVisiblePackageChildPath: existingChildNode?.forcedVisiblePackageChildPath ?? null,
             error: null,
             childPaths: existingChildNode?.childPaths ?? [],
           };

@@ -441,6 +441,7 @@ vi.mock("./components/TreePane", () => ({
             type="button"
             title={`tree:${node.path}`}
             data-expanded={node.expanded ? "true" : "false"}
+            data-children={(node.childPaths ?? []).join("\n")}
             data-drop-target-state={getItemDropIndicator?.(item, "tree") ?? "none"}
             onClick={() => {
               onLeftPaneSubviewChange("tree");
@@ -1585,6 +1586,61 @@ describe("App copy/paste integration", () => {
     );
     expect(screen.getByTitle("favorite:/Users/demo/Documents")).toBeInTheDocument();
     expect(screen.getByTitle("tree:/")).toBeInTheDocument();
+  });
+
+  it("keeps an app in the tree while its package contents are shown", async () => {
+    const harness = createAppHarness({
+      preferences: {
+        restoreSessionOnStartup: true,
+        treeRootPath: "/",
+        lastVisitedPath: "/Applications/Foo.app/Contents",
+      },
+      directorySnapshots: {
+        "/Applications/Foo.app/Contents": {
+          path: "/Applications/Foo.app/Contents",
+          parentPath: "/Applications/Foo.app",
+          entries: [],
+        },
+        "/Applications/Utilities": {
+          path: "/Applications/Utilities",
+          parentPath: "/Applications",
+          entries: [],
+        },
+      },
+      // As the tree lists folders: never a package.
+      treeChildrenByPath: {
+        "/": [createTreeChild("/Applications", "directory")],
+        "/Applications": [createTreeChild("/Applications/Utilities", "directory")],
+        "/Applications/Foo.app": [createTreeChild("/Applications/Foo.app/Contents", "directory")],
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    expect(await screen.findByTitle("tree:/Applications/Foo.app/Contents")).toBeInTheDocument();
+    expect(screen.getByTitle("tree:/Applications/Foo.app")).toHaveAttribute(
+      "data-expanded",
+      "true",
+    );
+    expect(screen.getByTestId("tree-selection")).toHaveTextContent(
+      "fs:/Applications/Foo.app/Contents",
+    );
+
+    const applicationsChildren = () =>
+      screen.getByTitle("tree:/Applications").getAttribute("data-children")?.split("\n");
+    expect(applicationsChildren()).toEqual(["/Applications/Foo.app", "/Applications/Utilities"]);
+
+    // Out of the package, the tree lists Applications as it is again.
+    await act(async () => {
+      fireEvent.click(screen.getByTitle("tree:/Applications/Utilities"));
+    });
+    await vi.waitFor(() => {
+      expect(applicationsChildren()).toEqual(["/Applications/Utilities"]);
+    });
   });
 
   it("reroots the tree at slash when tree navigation moves above home", async () => {

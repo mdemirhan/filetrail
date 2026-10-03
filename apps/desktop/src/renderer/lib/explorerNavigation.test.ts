@@ -2,12 +2,14 @@ import {
   flattenVisibleTreePaths,
   getAncestorChain,
   getForcedVisibleHiddenChildPath,
+  getForcedVisiblePackageChildPath,
   getNextSelectionIndex,
   getPageStepItemCount,
   getPagedSelectionIndex,
   getTreeSeedChain,
   parentDirectoryPath,
   pathHasHiddenSegmentWithinRoot,
+  withPackageChild,
 } from "./explorerNavigation";
 
 describe("explorerNavigation", () => {
@@ -43,6 +45,41 @@ describe("explorerNavigation", () => {
       getForcedVisibleHiddenChildPath("/Users/demo/dotfiles", "/Users/demo/dotfiles/.config"),
     ).toBe("/Users/demo/dotfiles/.config");
     expect(getForcedVisibleHiddenChildPath("/Users/demo", "/Users/demo/Documents")).toBeNull();
+  });
+
+  it("returns only the package on the active path chain", () => {
+    expect(
+      getForcedVisiblePackageChildPath("/Applications", "/Applications/Foo.app/Contents/MacOS"),
+    ).toBe("/Applications/Foo.app");
+    expect(getForcedVisiblePackageChildPath("/Applications", "/Applications/Foo.app")).toBe(
+      "/Applications/Foo.app",
+    );
+    expect(getForcedVisiblePackageChildPath("/", "/Library.bundle/x")).toBe("/Library.bundle");
+    expect(getForcedVisiblePackageChildPath("/Applications", "/Applications/Utilities")).toBeNull();
+    expect(getForcedVisiblePackageChildPath("/Applications", "/Applications")).toBeNull();
+  });
+
+  it("adds a package to a folder's children in name order, once", () => {
+    const child = (name: string) => ({
+      path: `/Applications/${name}`,
+      name,
+      kind: "directory" as const,
+      isHidden: false,
+      isSymlink: false,
+    });
+    const children = [child("Alpha"), child("Utilities")];
+
+    expect(withPackageChild(children, "/Applications/foo.app").map((c) => c.name)).toEqual([
+      "Alpha",
+      "foo.app",
+      "Utilities",
+    ]);
+    expect(withPackageChild(children, "/Applications/Zed.app").map((c) => c.name)).toEqual([
+      "Alpha",
+      "Utilities",
+      "Zed.app",
+    ]);
+    expect(withPackageChild([child("Foo.app")], "/Applications/Foo.app")).toHaveLength(1);
   });
 
   it("builds a seeded tree chain that keeps ancestors expanded to the focused path", () => {

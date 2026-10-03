@@ -36,6 +36,7 @@ export type TreeNodeState = {
   loaded: boolean;
   loadedIncludeHidden?: boolean;
   forcedVisibleHiddenChildPath?: string | null;
+  forcedVisiblePackageChildPath?: string | null;
   error: string | null;
   childPaths: string[];
 };

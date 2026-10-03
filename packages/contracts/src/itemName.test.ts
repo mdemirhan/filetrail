@@ -1,4 +1,4 @@
-import { getItemNameError } from "./itemName";
+import { getItemNameError, isMacOSPackageName } from "./itemName";
 
 describe("getItemNameError", () => {
   it("accepts ordinary names, including ones with dots and colons", () => {
@@ -33,5 +33,16 @@ describe("getItemNameError", () => {
     expect(getItemNameError("\u65e5".repeat(86))).toBe("The name is too long.");
     // Surrounding spaces are trimmed before counting.
     expect(getItemNameError(` ${"a".repeat(255)} `)).toBeNull();
+  });
+});
+
+describe("isMacOSPackageName", () => {
+  it("knows a package by its extension, in any case", () => {
+    expect(isMacOSPackageName("Safari.app")).toBe(true);
+    expect(isMacOSPackageName("Foo.FRAMEWORK")).toBe(true);
+    expect(isMacOSPackageName("Sound.prefPane")).toBe(true);
+    expect(isMacOSPackageName("Applications")).toBe(false);
+    expect(isMacOSPackageName(".app")).toBe(false);
+    expect(isMacOSPackageName("notes.txt")).toBe(false);
   });
 });

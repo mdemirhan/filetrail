@@ -24,3 +24,23 @@ export function getItemNameError(name: string): string | null {
   }
   return null;
 }
+
+// macOS treats folders with these extensions as opaque "packages": they behave like files
+// (opening one launches or opens it) rather than folders to browse.
+const MACOS_PACKAGE_EXTENSIONS = new Set([
+  ".app",
+  ".framework",
+  ".bundle",
+  ".plugin",
+  ".kext",
+  ".xpc",
+  ".xcodeproj",
+  ".playground",
+  ".prefpane",
+  ".appex",
+]);
+
+export function isMacOSPackageName(name: string): boolean {
+  const dot = name.lastIndexOf(".");
+  return dot > 0 && MACOS_PACKAGE_EXTENSIONS.has(name.slice(dot).toLowerCase());
+}
