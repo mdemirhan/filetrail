@@ -86,6 +86,7 @@ export const RENDERER_COMMAND_TREE_FOCUS_BUCKETS = {
   duplicateSelection: "contentOnly",
   newFolder: "contentOnly",
   trashSelection: "contentOnly",
+  emptyTrash: "globalExplorer",
   copySelection: "contentOnly",
   cutSelection: "contentOnly",
   pasteSelection: "contentOnly",

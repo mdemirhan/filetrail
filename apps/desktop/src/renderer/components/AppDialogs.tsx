@@ -84,6 +84,7 @@ export function AppDialogs({
   onCloseCopyPasteDialog,
   onConfirmTrashDialog,
   onConfirmDeleteImmediatelyDialog,
+  onConfirmEmptyTrashDialog,
   onConfirmDotNameDialog,
   showCopyPasteProgressCard,
   onCancelWriteOperation,
@@ -128,6 +129,7 @@ export function AppDialogs({
   onCloseCopyPasteDialog: () => void;
   onConfirmTrashDialog: (paths: string[]) => void;
   onConfirmDeleteImmediatelyDialog: (paths: string[]) => void;
+  onConfirmEmptyTrashDialog: () => void;
   onConfirmDotNameDialog: () => void;
   showCopyPasteProgressCard: boolean;
   onCancelWriteOperation: () => void;
@@ -329,6 +331,23 @@ export function AppDialogs({
           primaryAction={{
             label: "Delete",
             onClick: () => onConfirmDeleteImmediatelyDialog(copyPasteDialogState.paths),
+            destructive: true,
+            irreversible: true,
+          }}
+          secondaryAction={{
+            label: "Cancel",
+            onClick: onCloseCopyPasteDialog,
+          }}
+        />
+      ) : null}
+      {copyPasteDialogState?.type === "confirmEmptyTrash" ? (
+        <CopyPasteDialog
+          // Finder's question, word for word; Cancel is the default.
+          title="Are you sure you want to permanently erase the items in the Trash?"
+          message="You can’t undo this action."
+          primaryAction={{
+            label: "Empty Trash",
+            onClick: onConfirmEmptyTrashDialog,
             destructive: true,
             irreversible: true,
           }}

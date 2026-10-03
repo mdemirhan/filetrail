@@ -67,6 +67,8 @@ describe("createApplicationMenuTemplate", () => {
       "-",
       "Settings…",
       "-",
+      "Empty Trash…",
+      "-",
       "(services)",
       "-",
       "Hide File Trail",

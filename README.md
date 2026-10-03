@@ -121,23 +121,26 @@ Download the latest build from the [releases page](https://github.com/mdemirhan/
 2. Unzip it and move `File Trail.app` into your Applications folder.
 3. Open it.
 
-Releases are beta builds and can trail `main`. To run the newest version, or to build for an Intel Mac, build from source; it takes a few minutes.
+File Trail runs on Apple Silicon Macs only. Releases are beta builds and can trail `main`; to run the newest version, build from source. It takes a few minutes.
 
 ## Build from source
 
-You need macOS, [Bun](https://bun.sh/), and the Xcode Command Line Tools (`xcode-select --install`) for the native part.
+You need an Apple Silicon Mac, [Bun](https://bun.sh/), and the Xcode Command Line Tools (`xcode-select --install`) for the native part.
 
 ```bash
 bun install
 bun run desktop:start
 ```
 
-That builds the app and its native helpers and launches it. To make an app bundle and a ZIP under `apps/desktop/out`:
+That builds the app and its native helpers and launches it. To make an app bundle, a ZIP and a disk image under `apps/desktop/out`:
 
 ```bash
-bun run desktop:make:mac        # this Mac's architecture
-bun run desktop:make:mac:x64    # Intel
+bun run desktop:make:mac:notarized   # signed and notarized, to share with other Macs
+bun run desktop:make:mac             # signed with your Developer ID, not notarized
+bun run desktop:make:mac:adhoc       # signed ad hoc, for this Mac only
 ```
+
+Signing uses the Developer ID Application certificate in `~/Documents/Apple Developer Certificates/developerID_application.cer` (or the one `MACOS_SIGN_CERT` names), with its private key in your keychain. Notarizing uses the `notarytool` keychain profile `filetrail` (or the one `MACOS_NOTARY_PROFILE` names); create it once with `xcrun notarytool store-credentials filetrail --apple-id <email> --team-id <team ID>`. `apps/desktop/scripts/make-macos-app.sh --help` has the details.
 
 While working on the code:
 

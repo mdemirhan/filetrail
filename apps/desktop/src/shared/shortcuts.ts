@@ -209,6 +209,13 @@ export const SHORTCUT_COMMANDS = [
     menuPath: "File > Move to Trash",
   },
   {
+    id: "emptyTrash",
+    label: "Empty Trash…",
+    group: "files",
+    defaults: ["Cmd+Shift+Backspace"],
+    menuPath: "File Trail > Empty Trash…",
+  },
+  {
     id: "copyPath",
     label: "Copy Path",
     group: "files",

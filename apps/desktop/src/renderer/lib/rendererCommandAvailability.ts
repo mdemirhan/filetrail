@@ -20,6 +20,7 @@ const WRITE_LOCKED_RENDERER_COMMANDS = new Set<RendererCommandType>([
   "duplicateSelection",
   "newFolder",
   "trashSelection",
+  "emptyTrash",
 ]);
 
 export type RendererCommandAvailabilityContext = {
@@ -147,11 +148,21 @@ export function canRunToolbarRendererCommand(
       }
       return selectedCount > 0 || context.currentPath.length > 0;
     case "moveSelection":
-    case "duplicateSelection":
     case "trashSelection":
-      return !context.isSearchMode && selectedCount > 0;
+      return selectedCount > 0;
+    case "duplicateSelection":
+      // A duplicate goes next to its original: search results from several folders have
+      // no one folder for theirs.
+      return (
+        selectedCount > 0 &&
+        (!context.isSearchMode ||
+          new Set(context.selectedPathsInViewOrder.map((path) => parentDirectoryPath(path)))
+            .size === 1)
+      );
     case "renameSelection":
-      return !context.isSearchMode && selectedCount === 1;
+      return selectedCount === 1;
+    case "emptyTrash":
+      return true;
     case "newFolder":
       return (
         resolveNewFolderTargetPath({

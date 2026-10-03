@@ -5,10 +5,6 @@
     "arm64": {
       "archiveSha256": "b67e1836c468e42e411984b56e52fa7abec08c2bd22c867398e7cc134aac5e12",
       "relativeBinaryPath": "vendor/fd/darwin-arm64/fd"
-    },
-    "x64": {
-      "archiveSha256": "7e31028c62c6955877735d0406807aa484c2a5e6f86235a59e26c29c301da590",
-      "relativeBinaryPath": "vendor/fd/darwin-x64/fd"
     }
   }
 }

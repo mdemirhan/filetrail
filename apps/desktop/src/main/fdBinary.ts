@@ -12,10 +12,6 @@ type FdManifest = {
       archiveSha256: string;
       relativeBinaryPath: string;
     };
-    x64: {
-      archiveSha256: string;
-      relativeBinaryPath: string;
-    };
   };
 };
 
@@ -31,16 +27,11 @@ export function resolveBundledFdBinaryPath(
 ): string {
   const arch = options.arch ?? process.arch;
   const manifest = readBundledFdManifest();
-  const relativeBinaryPath =
-    arch === "arm64"
-      ? manifest.macos.arm64.relativeBinaryPath
-      : arch === "x64"
-        ? manifest.macos.x64.relativeBinaryPath
-        : null;
-
-  if (!relativeBinaryPath) {
+  // File Trail ships for Apple Silicon only.
+  if (arch !== "arm64") {
     throw new Error(`Unsupported macOS architecture for bundled fd: ${arch}`);
   }
+  const relativeBinaryPath = manifest.macos.arm64.relativeBinaryPath;
 
   const moduleDir = dirname(fileURLToPath(options.moduleUrl ?? import.meta.url));
   const candidates = [

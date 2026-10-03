@@ -24,6 +24,7 @@ import { formatSize, splitDisplayName } from "../lib/formatting";
 import { resolveSearchResultsColumnLayout } from "../lib/responsiveLayout";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
 import { getVirtualRange } from "../lib/virtualization";
+import { InlineRenameField } from "./InlineRenameField";
 import { SearchOptionsMenu } from "./SearchOptionsMenu";
 import { SortIndicator } from "./SortIndicator";
 type SearchResultItem = IpcResponse<"search:getUpdate">["items"][number];
@@ -84,6 +85,9 @@ export function SearchResultsPane({
   onItemContextMenu = () => undefined,
   onItemDragStart,
   onItemDragEnd,
+  inlineRename = null,
+  onInlineRenameSubmit = () => undefined,
+  onInlineRenameCancel = () => undefined,
   onFocusChange,
   onTypeaheadInput,
   filterQuery = "",
@@ -138,6 +142,10 @@ export function SearchResultsPane({
     | ((item: SearchResultItem, event: React.DragEvent<HTMLElement>) => void)
     | undefined;
   onItemDragEnd?: ((event: React.DragEvent<HTMLElement>) => void) | undefined;
+  /** The result whose name is being edited in its row, as in the file list. */
+  inlineRename?: { path: string; error: string | null; refusalCount?: number } | null;
+  onInlineRenameSubmit?: (nextName: string) => void;
+  onInlineRenameCancel?: () => void;
   onFocusChange: (focused: boolean) => void;
   onTypeaheadInput?: (key: string) => void;
   /**
@@ -491,89 +499,126 @@ export function SearchResultsPane({
                 paddingBottom: `${Math.max(0, results.length - range.endIndex) * SEARCH_RESULT_ROW_HEIGHT}px`,
               }}
             >
-              {visibleResults.map((result) => (
-                <button
-                  key={result.path}
-                  type="button"
-                  className={`search-result-row${selectedPathSet.has(result.path) ? " active" : ""}${
-                    selectedPathSet.has(result.path) && !isFocused ? " inactive" : ""
-                  }${clipboardMarkClassName(clipboardMarks, result.path)}`}
-                  data-selectable-entry-path={result.path}
-                  draggable={Boolean(onItemDragStart)}
-                  onPointerDown={(event) => {
-                    if (event.button !== 0) {
-                      return;
-                    }
-                    if (event.metaKey || event.shiftKey || !selectedPathSet.has(result.path)) {
-                      onSelectionGesture(result.path, {
-                        metaKey: event.metaKey,
-                        shiftKey: event.shiftKey,
-                      });
-                    }
-                    scrollRef.current?.focus();
-                  }}
-                  onClick={(event) => {
-                    if (
-                      isSelectionNarrowingClick(
-                        event,
-                        selectedPaths.length,
-                        selectedPathSet.has(result.path),
-                      )
-                    ) {
-                      onSelectionGesture(result.path, { metaKey: false, shiftKey: false });
-                    }
-                  }}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    scrollRef.current?.focus();
-                    onItemContextMenu(result.path, {
-                      x: event.clientX,
-                      y: event.clientY,
-                    });
-                  }}
-                  onDragStart={(event) => onItemDragStart?.(result, event)}
-                  onDragEnd={(event) => onItemDragEnd?.(event)}
-                  onDoubleClick={(event) => onActivateResult(result, event.metaKey)}
-                  title={result.path}
-                  aria-selected={selectedPathSet.has(result.path)}
-                >
-                  <FileIcon
-                    entry={{
-                      path: result.path,
-                      name: result.name,
-                      extension: result.extension,
-                      kind: result.kind,
-                      isHidden: result.isHidden,
-                      isSymlink: result.isSymlink,
+              {visibleResults.map((result) =>
+                inlineRename?.path === result.path ? (
+                  // While its name is edited the row is not a button: it would take the
+                  // field's clicks and key presses as its own.
+                  <div
+                    key={result.path}
+                    className="search-result-row active renaming"
+                    data-selectable-entry-path={result.path}
+                    title={result.path}
+                  >
+                    <FileIcon
+                      entry={{
+                        path: result.path,
+                        name: result.name,
+                        extension: result.extension,
+                        kind: result.kind,
+                        isHidden: result.isHidden,
+                        isSymlink: result.isSymlink,
+                      }}
+                    />
+                    <InlineRenameField
+                      name={result.name}
+                      extension={result.extension}
+                      error={inlineRename.error}
+                      refusalCount={inlineRename.refusalCount ?? 0}
+                      onSubmit={onInlineRenameSubmit}
+                      onCancel={onInlineRenameCancel}
+                    />
+                    <span className="search-result-path">
+                      {formatResultFolder(result.relativeParentPath, rootPath)}
+                    </span>
+                    <ResultModified value={metadataByPath[result.path]?.modifiedAt} />
+                    <span className="search-result-meta search-result-size">
+                      {formatResultSize(result, metadataByPath[result.path])}
+                    </span>
+                  </div>
+                ) : (
+                  <button
+                    key={result.path}
+                    type="button"
+                    className={`search-result-row${selectedPathSet.has(result.path) ? " active" : ""}${
+                      selectedPathSet.has(result.path) && !isFocused ? " inactive" : ""
+                    }${clipboardMarkClassName(clipboardMarks, result.path)}`}
+                    data-selectable-entry-path={result.path}
+                    draggable={Boolean(onItemDragStart)}
+                    onPointerDown={(event) => {
+                      if (event.button !== 0) {
+                        return;
+                      }
+                      if (event.metaKey || event.shiftKey || !selectedPathSet.has(result.path)) {
+                        onSelectionGesture(result.path, {
+                          metaKey: event.metaKey,
+                          shiftKey: event.shiftKey,
+                        });
+                      }
+                      scrollRef.current?.focus();
                     }}
-                  />
-                  {clipboardMarks?.paths.has(result.path) ? (
-                    <span className="clipboard-mark-name">
+                    onClick={(event) => {
+                      if (
+                        isSelectionNarrowingClick(
+                          event,
+                          selectedPaths.length,
+                          selectedPathSet.has(result.path),
+                        )
+                      ) {
+                        onSelectionGesture(result.path, { metaKey: false, shiftKey: false });
+                      }
+                    }}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      scrollRef.current?.focus();
+                      onItemContextMenu(result.path, {
+                        x: event.clientX,
+                        y: event.clientY,
+                      });
+                    }}
+                    onDragStart={(event) => onItemDragStart?.(result, event)}
+                    onDragEnd={(event) => onItemDragEnd?.(event)}
+                    onDoubleClick={(event) => onActivateResult(result, event.metaKey)}
+                    title={result.path}
+                    aria-selected={selectedPathSet.has(result.path)}
+                  >
+                    <FileIcon
+                      entry={{
+                        path: result.path,
+                        name: result.name,
+                        extension: result.extension,
+                        kind: result.kind,
+                        isHidden: result.isHidden,
+                        isSymlink: result.isSymlink,
+                      }}
+                    />
+                    {clipboardMarks?.paths.has(result.path) ? (
+                      <span className="clipboard-mark-name">
+                        <FileNameLabel
+                          className="search-result-name"
+                          name={result.name}
+                          extension={result.extension}
+                          highlightPattern={highlightPattern}
+                        />
+                        <ClipboardMarkIcon marks={clipboardMarks} path={result.path} />
+                      </span>
+                    ) : (
                       <FileNameLabel
                         className="search-result-name"
                         name={result.name}
                         extension={result.extension}
                         highlightPattern={highlightPattern}
                       />
-                      <ClipboardMarkIcon marks={clipboardMarks} path={result.path} />
+                    )}
+                    <span className="search-result-path">
+                      {formatResultFolder(result.relativeParentPath, rootPath)}
                     </span>
-                  ) : (
-                    <FileNameLabel
-                      className="search-result-name"
-                      name={result.name}
-                      extension={result.extension}
-                      highlightPattern={highlightPattern}
-                    />
-                  )}
-                  <span className="search-result-path">
-                    {formatResultFolder(result.relativeParentPath, rootPath)}
-                  </span>
-                  <ResultModified value={metadataByPath[result.path]?.modifiedAt} />
-                  <span className="search-result-meta search-result-size">
-                    {formatResultSize(result, metadataByPath[result.path])}
-                  </span>
-                </button>
-              ))}
+                    <ResultModified value={metadataByPath[result.path]?.modifiedAt} />
+                    <span className="search-result-meta search-result-size">
+                      {formatResultSize(result, metadataByPath[result.path])}
+                    </span>
+                  </button>
+                ),
+              )}
             </div>
           ) : null}
         </div>

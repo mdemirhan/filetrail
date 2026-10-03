@@ -775,6 +775,9 @@ export function App() {
     surfaceCopyLikePreStartFailureNotice,
     startCopyToDestination,
     startDuplicatePaths,
+    startDuplicateOfSelection,
+    requestEmptyTrash,
+    confirmEmptyTrash,
     startMoveToDestination,
     startPasteFromClipboard,
     startTrashPaths,
@@ -1080,8 +1083,9 @@ export function App() {
       clearClipboard,
       startPasteFromClipboard,
       resolveContentActionPaths,
-      startDuplicatePaths,
+      startDuplicateOfSelection,
       startTrashPaths,
+      requestEmptyTrash,
       openMoveDialog,
       openRenameDialog,
       openNewFolderDialog,
@@ -1791,6 +1795,15 @@ export function App() {
                 onItemContextMenu: (path, position) => {
                   openItemContextMenu(path, position, "search");
                 },
+                inlineRename: renameDialogState?.inline
+                  ? {
+                      path: renameDialogState.sourcePath,
+                      error: renameDialogState.error,
+                      refusalCount: renameDialogState.refusalCount,
+                    }
+                  : null,
+                onInlineRenameSubmit: (nextName) => void submitRenameDialog(nextName),
+                onInlineRenameCancel: () => setRenameDialogState(null),
                 onItemDragStart: (item, event) =>
                   handleSearchDragStart(toDirectoryEntryFromSearchResult(item), "search", event),
                 onItemDragEnd: handleDragEnd,
@@ -2203,6 +2216,9 @@ export function App() {
           }}
           onConfirmDeleteImmediatelyDialog={(paths) => {
             void startDeleteImmediatelyPaths(paths);
+          }}
+          onConfirmEmptyTrashDialog={() => {
+            void confirmEmptyTrash();
           }}
           onConfirmDotNameDialog={() => {
             void confirmDotNameDialog();

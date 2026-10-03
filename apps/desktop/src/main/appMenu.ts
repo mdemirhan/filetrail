@@ -133,6 +133,8 @@ export function createApplicationMenuTemplate(
             options.onOpenSettings ? options.onOpenSettings() : sendCommand("openSettings"),
         },
         separator,
+        command("emptyTrash", "Empty Trash…"),
+        separator,
         { role: "services" },
         separator,
         { role: "hide", label: `Hide ${APP_MENU_NAME}` },

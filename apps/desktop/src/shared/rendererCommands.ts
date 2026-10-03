@@ -17,6 +17,7 @@ export const RENDERER_COMMAND_TYPES = [
   "duplicateSelection",
   "newFolder",
   "trashSelection",
+  "emptyTrash",
   "copySelection",
   "cutSelection",
   "pasteSelection",

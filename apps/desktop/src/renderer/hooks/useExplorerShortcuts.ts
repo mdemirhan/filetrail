@@ -125,8 +125,9 @@ type ExplorerShortcutActions = {
   clearClipboard: () => void;
   startPasteFromClipboard: () => Promise<void>;
   resolveContentActionPaths: () => string[];
-  startDuplicatePaths: (paths: string[]) => Promise<void>;
+  startDuplicateOfSelection: (paths: string[]) => void;
   startTrashPaths: (paths: string[]) => Promise<void>;
+  requestEmptyTrash: () => void;
   openMoveDialog: (paths: string[]) => void;
   openRenameDialog: (paths: string[]) => void;
   openNewFolderDialog: (targetPath: string) => void;
@@ -370,7 +371,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
             return;
           }
           keyboardEvent.preventDefault();
-          void current.startDuplicatePaths(paths);
+          current.startDuplicateOfSelection(paths);
         },
       },
       {
@@ -1058,7 +1059,7 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       if (commandType === "duplicateSelection") {
         const paths = current.resolveContentActionPaths();
         if (paths.length > 0) {
-          void current.startDuplicatePaths(paths);
+          current.startDuplicateOfSelection(paths);
         }
         return;
       }
@@ -1079,6 +1080,10 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
         if (paths.length > 0) {
           void current.startTrashPaths(paths);
         }
+        return;
+      }
+      if (commandType === "emptyTrash") {
+        current.requestEmptyTrash();
         return;
       }
       if (commandType === "copySelection") {

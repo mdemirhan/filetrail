@@ -497,19 +497,24 @@ export function useExplorerActions(args: {
       return Array.from(hidden);
     }
     if (contextMenuState.surface === "favorite") {
+      if (contextMenuState.targetPath !== getTrashPath(homePath)) {
+        hidden.add("emptyTrash");
+      }
       return Array.from(hidden);
     }
     if (contextMenuState.surface === "background") {
-      // Nothing is pasted into or created in the Trash.
+      // Nothing is pasted into or created in the Trash; it can be emptied from there.
       if (isPathInsideTrash(currentPath, homePath)) {
         hidden.add("paste");
         hidden.add("newFolder");
+      } else {
+        hidden.add("emptyTrash");
       }
       return Array.from(hidden);
     }
     if (contextMenuState.surface === "treeFolder") {
       hidden.delete("calculateSize");
-      // "Delete Immediately" is only shown for tree items inside the Trash.
+      // Everything goes to the Trash; only what is already in it can be deleted for good.
       const targetPath = contextMenuState.targetPath;
       if (!targetPath || !isPathInsideTrash(targetPath, homePath)) {
         hidden.add("deleteImmediately");
@@ -546,9 +551,13 @@ export function useExplorerActions(args: {
       return [] as ContextMenuActionId[];
     }
     const disabled = new Set<ContextMenuActionId>();
+    // Search results take the same actions as the list (a duplicate goes next to its
+    // original), except that several results from different folders have no one folder
+    // for their duplicates.
     const isContentContext =
-      (contextMenuState.surface === "content" || contextMenuState.surface === "trash") &&
-      !isSearchMode;
+      contextMenuState.surface === "content" ||
+      contextMenuState.surface === "trash" ||
+      contextMenuState.surface === "search";
     const isTreeFolderContext = contextMenuState.surface === "treeFolder";
     const isFavoriteContext = contextMenuState.surface === "favorite";
     const hasOnlyEditableFiles =
@@ -634,6 +643,12 @@ export function useExplorerActions(args: {
         disabled.add("duplicate");
         disabled.add("trash");
       }
+      if (
+        contextMenuState.surface === "search" &&
+        resolveDuplicateFolder(contextMenuState.paths) === null
+      ) {
+        disabled.add("duplicate");
+      }
       if (!hasSingleSelectedFolder) {
         disabled.add("newFolder");
       }
@@ -659,7 +674,6 @@ export function useExplorerActions(args: {
     contextMenuFavoriteToggleLabel,
     contextMenuState,
     contextMenuTargetEntries,
-    isSearchMode,
     isWriteOperationLocked,
   ]);
 
@@ -2610,7 +2624,12 @@ export function useExplorerActions(args: {
       const destinationDirectoryPath =
         contextMenuSurface === "treeFolder" && targetPath
           ? (parentDirectoryPath(targetPath) ?? currentPathRef.current)
-          : currentPathRef.current;
+          : contextMenuSurface === "search"
+            ? resolveDuplicateFolder(paths)
+            : currentPathRef.current;
+      if (destinationDirectoryPath === null) {
+        return;
+      }
       await startDuplicatePaths(paths, destinationDirectoryPath, {
         selectInTreeOnSuccess: contextMenuSurface === "treeFolder",
       });
@@ -2655,17 +2674,11 @@ export function useExplorerActions(args: {
       return;
     }
     if (actionId === "deleteImmediately") {
-      if (paths.length > 0) {
-        setCopyPasteDialogState({
-          type: "confirmDeleteImmediately",
-          paths,
-          itemLabel: formatItemSummaryFromPathCount(paths[0] ?? "item", paths.length),
-        });
-      }
+      requestDeleteImmediately(paths);
       return;
     }
     if (actionId === "emptyTrash") {
-      await emptyTrash();
+      requestEmptyTrash();
       return;
     }
     if (actionId === "terminal") {
@@ -2685,9 +2698,36 @@ export function useExplorerActions(args: {
     showModalNotice("Unsupported action", `File Trail could not run the "${actionId}" action.`);
   }
 
+  // Delete Immediately is asked about first: it can't be undone.
+  function requestDeleteImmediately(paths: string[]) {
+    if (paths.length === 0) {
+      return;
+    }
+    setCopyPasteDialogState({
+      type: "confirmDeleteImmediately",
+      paths,
+      itemLabel: formatItemSummaryFromPathCount(paths[0] ?? "item", paths.length),
+    });
+  }
+
+  // So is emptying the Trash, with Finder's question.
+  function requestEmptyTrash() {
+    setCopyPasteDialogState({ type: "confirmEmptyTrash" });
+  }
+
+  async function confirmEmptyTrash() {
+    setCopyPasteDialogState(null);
+    if (await emptyTrash()) {
+      // The Trash, or a folder in it, may be on screen: it is read again.
+      if (isPathInsideTrash(currentPathRef.current, homePath)) {
+        void refreshDirectory({});
+      }
+    }
+  }
+
   // Finder empties the Trash (the main process asks it to). A failure is told in a dialog;
   // the usual one is that macOS has not let File Trail control Finder.
-  async function emptyTrash() {
+  async function emptyTrash(): Promise<boolean> {
     let failure: string | null = null;
     try {
       const response = await client.invoke("system:emptyTrash", {});
@@ -2698,11 +2738,12 @@ export function useExplorerActions(args: {
       failure = error instanceof Error ? error.message : String(error);
     }
     if (failure === null) {
-      return;
+      return true;
     }
     logger.error("empty trash failed", failure);
     const notice = describeEmptyTrashFailure(failure);
     showModalNotice(notice.title, notice.message);
+    return false;
   }
 
   async function runContextSubmenuAction(action: ContextMenuSubmenuAction, paths: string[]) {
@@ -2824,12 +2865,36 @@ export function useExplorerActions(args: {
     await openPathsWithApplication(paths, defaultTextEditor.appPath, defaultTextEditor.appName);
   }
 
+  // The selected items of the list or of the search results, when the list has the
+  // keyboard (or had it last).
   function canRunContentSelectionAction(): boolean {
-    if (mainView !== "explorer" || isSearchMode) {
+    if (mainView !== "explorer") {
       return false;
     }
     const activePane = focusedPane ?? lastExplorerFocusPaneRef.current;
     return activePane === "content";
+  }
+
+  // Where duplicates of these items go: next to them. In search results they may come from
+  // several folders, and then there is no one folder for them (null).
+  function resolveDuplicateFolder(paths: readonly string[]): string | null {
+    const folders = new Set(paths.map((path) => parentDirectoryPath(path) ?? path));
+    return folders.size === 1 ? ([...folders][0] ?? null) : null;
+  }
+
+  // Duplicate from the keyboard or the menu bar: next to the items, in the list or in the
+  // search results.
+  function startDuplicateOfSelection(paths: string[]) {
+    if (!isSearchModeRef.current) {
+      void startDuplicatePaths(paths);
+      return;
+    }
+    const folder = resolveDuplicateFolder(paths);
+    if (folder === null) {
+      pushToast({ kind: "info", title: "Duplicate items from one folder at a time" });
+      return;
+    }
+    void startDuplicatePaths(paths, folder);
   }
 
   function resolveContentActionPaths(): string[] {
@@ -3093,10 +3158,8 @@ export function useExplorerActions(args: {
       currentName: getPathLeafName(sourcePath),
       error: null,
       refusalCount: 0,
-      inline:
-        !options.fromTree &&
-        !isSearchMode &&
-        currentEntries.some((entry) => entry.path === sourcePath),
+      // In the list or the search results, the name is edited in its row.
+      inline: !options.fromTree && activeContentEntries.some((entry) => entry.path === sourcePath),
     });
     closeContextMenu();
   }
@@ -3137,10 +3200,10 @@ export function useExplorerActions(args: {
   // Whether the item a rename field is on is still in the list on screen, read when it is
   // asked rather than when the name was submitted.
   const renameFieldItemShownRef = useRef((path: string) =>
-    currentEntries.some((entry) => entry.path === path),
+    activeContentEntries.some((entry) => entry.path === path),
   );
   renameFieldItemShownRef.current = (path: string) =>
-    !isSearchModeRef.current && currentEntries.some((entry) => entry.path === path);
+    activeContentEntries.some((entry) => entry.path === path);
 
   // A rename field whose item has left the list (another folder was opened, the item was
   // removed) closes: it would otherwise hold the keyboard with nothing on screen to type in.
@@ -3149,7 +3212,7 @@ export function useExplorerActions(args: {
   useEffect(() => {
     if (
       !renameDialogState?.inline ||
-      (!isSearchMode && currentEntries.some((entry) => entry.path === renameDialogState.sourcePath))
+      activeContentEntries.some((entry) => entry.path === renameDialogState.sourcePath)
     ) {
       return;
     }
@@ -3157,7 +3220,7 @@ export function useExplorerActions(args: {
     if (renameDialogState.error !== null) {
       showModalNotice(getCopyLikePreStartFailureTitle("rename"), renameDialogState.error);
     }
-  }, [currentEntries, isSearchMode, renameDialogState, setRenameDialogState]);
+  }, [activeContentEntries, renameDialogState, setRenameDialogState]);
 
   // A refused name keeps the field (or dialog) open with the reason under it. The count lets
   // the field know it was refused again even when the reason reads the same as last time.
@@ -3559,6 +3622,9 @@ export function useExplorerActions(args: {
     dismissCopyPasteDialog,
     dismissToast,
     noticeDragRefusedWhileBusy,
+    startDuplicateOfSelection,
+    requestEmptyTrash,
+    confirmEmptyTrash,
     editPaths,
     executeCopyLikePlan,
     requestCopyLikePlanStart,

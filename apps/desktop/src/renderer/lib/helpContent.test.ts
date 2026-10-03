@@ -145,7 +145,10 @@ describe("helpContent", () => {
     expect(searchHelp("   ")).toEqual([]);
     const trash = searchHelp("TRASH");
     expect(trash.map((result) => result.topic.id)).toEqual(["files"]);
-    expect(trash[0]?.shortcuts.map((item) => item.shortcut)).toEqual(["Cmd+Backspace"]);
+    expect(trash[0]?.shortcuts.map((item) => item.shortcut)).toEqual([
+      "Cmd+Backspace",
+      "Cmd+Shift+Backspace",
+    ]);
     expect(searchHelp("cmd+k")[0]?.shortcuts[0]?.description).toBe(
       "Go to a folder by name or path (Cmd+Shift+G also works)",
     );
