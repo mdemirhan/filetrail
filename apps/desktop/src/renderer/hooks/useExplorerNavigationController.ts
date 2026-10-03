@@ -506,6 +506,10 @@ export function useExplorerNavigationController(args: {
     return didScroll;
   }
 
+  // The folder being opened, while it is (see navigateTo); a refresh after a write leaves it
+  // alone.
+  const pendingNavigationRef = useRef<{ requestId: number; path: string } | null>(null);
+
   // ── Typing in the file list filters it ────────────────────────────────────────────────
   const listFilterQueryRef = useRef(listFilterQuery);
   const lastListFilterInputAtRef = useRef(0);
@@ -872,6 +876,7 @@ export function useExplorerNavigationController(args: {
     } = {},
   ): Promise<boolean> {
     const requestId = ++directoryRequestRef.current;
+    pendingNavigationRef.current = { requestId, path };
     const isSameView = createViewGuard();
     setInfoTargetPathOverride(null);
     if (!options.quiet) {
@@ -956,6 +961,9 @@ export function useExplorerNavigationController(args: {
     } finally {
       if (directoryRequestRef.current === requestId) {
         setDirectoryLoading(false);
+      }
+      if (pendingNavigationRef.current?.requestId === requestId) {
+        pendingNavigationRef.current = null;
       }
     }
   }
@@ -1578,10 +1586,20 @@ export function useExplorerNavigationController(args: {
     if (!targetPath) {
       return;
     }
+    // A folder the person is opening right now wins: reading the old one again would take
+    // its place and send them back.
+    const pendingNavigation = pendingNavigationRef.current;
+    if (pendingNavigation !== null && pendingNavigation.path !== targetPath) {
+      return;
+    }
     const reloadOptions = getSelectedTreeReloadOptions(targetPath);
     await navigateTo(targetPath, "replace", undefined, undefined, undefined, undefined, {
       ...reloadOptions,
       forceTreeReload: true,
+      // Read again in place: what is selected stays selected (what the operation made is
+      // selected instead, when it asks for that), and search results stay on screen.
+      keepSelection: targetPath === currentPathRef.current,
+      keepSearchResults: true,
     });
     if (!isSameView()) {
       return;

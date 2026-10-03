@@ -788,6 +788,7 @@ export function App() {
     selection: selectionActions,
     derived: {
       activeContentEntries,
+      unfilteredContentEntries,
       selectedPathsInViewOrder,
       selectedPathSet,
       contextMenuTargetEntries,

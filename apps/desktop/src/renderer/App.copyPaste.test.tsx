@@ -8597,6 +8597,8 @@ function createAppHarness(
   ) => void;
   // The folder is gone from disk: reading it fails from now on.
   removeDirectory: (path: string) => void;
+  // Holds back the listings of `path` until the returned function is called.
+  holdDirectorySnapshot: (path: string) => () => void;
   releaseTreeChildren: () => void;
   releaseSearchUpdates: () => void;
   resolveCopyPastePlan: () => void;
@@ -8637,6 +8639,7 @@ function createAppHarness(
   const invocations: Array<{ channel: IpcChannel; payload: unknown }> = [];
   // What the window reports to the application menu; kept apart from the calls tests count.
   const menuStates: Array<IpcRequestInput<"app:setMenuState">["state"]> = [];
+  const heldSnapshots = new Map<string, Promise<void>>();
   let releaseTreeChildren: () => void = () => undefined;
   const heldTreeChildren = new Promise<void>((resolve) => {
     releaseTreeChildren = resolve;
@@ -8707,9 +8710,9 @@ function createAppHarness(
         } satisfies IpcResponse<"tree:getChildren"> as IpcResponse<C>;
       }
       if (channel === "directory:getSnapshot") {
-        return directorySnapshots[
-          (payload as IpcRequestInput<"directory:getSnapshot">).path
-        ] as IpcResponse<C>;
+        const snapshotPath = (payload as IpcRequestInput<"directory:getSnapshot">).path;
+        await heldSnapshots.get(snapshotPath);
+        return directorySnapshots[snapshotPath] as IpcResponse<C>;
       }
       if (channel === "directory:getMetadataBatch") {
         return {
@@ -9066,6 +9069,19 @@ function createAppHarness(
     },
     removeDirectory(path) {
       delete directorySnapshots[path];
+    },
+    holdDirectorySnapshot(path) {
+      let release: () => void = () => undefined;
+      heldSnapshots.set(
+        path,
+        new Promise<void>((resolve) => {
+          release = () => {
+            heldSnapshots.delete(path);
+            resolve();
+          };
+        }),
+      );
+      return () => release();
     },
     releaseTreeChildren() {
       releaseTreeChildren();
@@ -11304,5 +11320,218 @@ describe("App file operations like Finder", () => {
       expect(snapshotReads()).toBeGreaterThan(readsBefore);
     });
     expect(await screen.findByTitle("/Users/demo/new.txt")).toBeInTheDocument();
+  });
+});
+
+describe("what stays on screen when an operation finishes", () => {
+  const sourceCopied = [
+    { sourcePath: "/Users/demo/source.txt", status: "completed" as const, error: null },
+  ];
+
+  async function copySourceAndPasteHere(harness: ReturnType<typeof createAppHarness>) {
+    await selectItem("/Users/demo/source.txt");
+    await pressKey({ key: "c", metaKey: true });
+    await pressKey({ key: "v", metaKey: true });
+    await vi.waitFor(() => {
+      expect(harness.invocations.map((call) => call.channel)).toContain("copyPaste:start");
+    });
+  }
+
+  function finishPasteOfCopy(harness: ReturnType<typeof createAppHarness>) {
+    harness.setDirectoryEntries("/Users/demo", [
+      createDirectoryEntry("/Users/demo/source.txt", "file"),
+      createDirectoryEntry("/Users/demo/source copy.txt", "file"),
+      createDirectoryEntry("/Users/demo/Folder", "directory"),
+    ]);
+    return act(async () => {
+      harness.emitProgress(
+        finishedWriteEvent({
+          operationId: "copy-op-1",
+          action: "paste",
+          targetPath: "/Users/demo",
+          items: [
+            {
+              sourcePath: "/Users/demo/source.txt",
+              destinationPath: "/Users/demo/source copy.txt",
+            },
+          ],
+        }),
+      );
+    });
+  }
+
+  it("selects what a paste made when nothing else was picked meanwhile", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+
+    await copySourceAndPasteHere(harness);
+    await finishPasteOfCopy(harness);
+
+    await vi.waitFor(() => {
+      expect(screen.getByTitle("/Users/demo/source copy.txt")).toHaveAttribute(
+        "data-selected",
+        "true",
+      );
+    });
+  });
+
+  // Jumping to the copy would make the next ⌘⌫ trash an item the person never chose.
+  it("keeps what the person picked while the paste ran, and acts on that next", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+
+    await copySourceAndPasteHere(harness);
+    await selectItem("/Users/demo/Folder");
+    await finishPasteOfCopy(harness);
+    await screen.findByTitle("/Users/demo/source copy.txt");
+
+    expect(screen.getByTitle("/Users/demo/Folder")).toHaveAttribute("data-selected", "true");
+    expect(screen.getByTitle("/Users/demo/source copy.txt")).not.toHaveAttribute(
+      "data-selected",
+      "true",
+    );
+    await pressKey({ key: "Backspace", metaKey: true });
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.find((call) => call.channel === "writeOperation:trash")?.payload,
+      ).toEqual({ paths: ["/Users/demo/Folder"] });
+    });
+  });
+
+  it("keeps the selection when an operation into another folder finishes", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+
+    // Pasted into Folder from its own menu, while source.txt stays selected here.
+    await selectItem("/Users/demo/source.txt");
+    await pressKey({ key: "c", metaKey: true });
+    await act(async () => {
+      fireEvent.contextMenu(screen.getByTitle("/Users/demo/Folder"));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Paste/ }));
+    });
+    await vi.waitFor(() => {
+      expect(harness.invocations.map((call) => call.channel)).toContain("copyPaste:start");
+    });
+    await selectItem("/Users/demo/source.txt");
+    const readsBefore = harness.invocations.filter(
+      (call) => call.channel === "directory:getSnapshot",
+    ).length;
+
+    await act(async () => {
+      harness.emitProgress(finishedResultEvent("copy", "completed", sourceCopied));
+    });
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.filter((call) => call.channel === "directory:getSnapshot").length,
+      ).toBeGreaterThan(readsBefore);
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTitle("/Users/demo/source.txt")).toHaveAttribute("data-selected", "true");
+    });
+  });
+
+  it("keeps search results that were opened while a paste ran", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+
+    await copySourceAndPasteHere(harness);
+    await openSearchResults();
+    await act(async () => {
+      harness.emitProgress(finishedResultEvent("copy", "completed", sourceCopied));
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    expect(screen.getByTestId("search-results-pane")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Search")).toHaveValue("source");
+  });
+
+  it("keeps the search results a drag was made from", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+
+    await openSearchResults();
+    const searchResult = await screen.findByTitle("search:/Users/demo/source.txt");
+    const treeTarget = await screen.findByTitle("tree:/Users/demo/Folder");
+    await dragBetween(searchResult, treeTarget);
+    await vi.waitFor(() => {
+      expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(true);
+    });
+    await act(async () => {
+      harness.emitProgress(finishedResultEvent("cut", "completed", sourceCopied));
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    expect(screen.getByTestId("search-results-pane")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Search")).toHaveValue("source");
+  });
+
+  it("selects a renamed item while the list is filtered", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+    const contentPane = await screen.findByTestId("content-pane");
+    await act(async () => {
+      fireEvent.pointerDown(contentPane);
+    });
+    await pressKey({ key: "s" });
+    await pressKey({ key: "o" });
+    expect(screen.getByTitle("/Users/demo/source.txt")).toHaveAttribute("data-selected", "true");
+
+    await renameSelectionTo("source.txt", "zeta.txt");
+    await vi.waitFor(() => {
+      expect(harness.invocations.some((call) => call.channel === "writeOperation:rename")).toBe(
+        true,
+      );
+    });
+    harness.setDirectoryEntries("/Users/demo", [
+      createDirectoryEntry("/Users/demo/zeta.txt", "file"),
+      createDirectoryEntry("/Users/demo/Folder", "directory"),
+    ]);
+    await act(async () => {
+      harness.emitProgress(
+        finishedWriteEvent({
+          operationId: "write-op-rename",
+          action: "rename",
+          targetPath: "/Users/demo",
+          items: [
+            { sourcePath: "/Users/demo/source.txt", destinationPath: "/Users/demo/zeta.txt" },
+          ],
+        }),
+      );
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTitle("/Users/demo/zeta.txt")).toHaveAttribute("data-selected", "true");
+    });
+  });
+
+  // Reading the old folder again would replace the one being opened and send them back.
+  it("lets a folder the person is opening win over reading the folder again", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+
+    await copySourceAndPasteHere(harness);
+    const release = harness.holdDirectorySnapshot("/Users/demo/Folder");
+    await act(async () => {
+      fireEvent.doubleClick(screen.getByTitle("/Users/demo/Folder"));
+    });
+    await finishPasteOfCopy(harness);
+    await act(async () => {
+      release();
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.queryByTitle("/Users/demo/source.txt")).not.toBeInTheDocument();
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(screen.queryByTitle("/Users/demo/source.txt")).not.toBeInTheDocument();
   });
 });

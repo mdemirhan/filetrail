@@ -271,6 +271,8 @@ export function useExplorerActions(args: {
   selection: SelectionActions;
   derived: {
     activeContentEntries: DirectoryEntry[];
+    // The list before the type-to-filter text narrows it.
+    unfilteredContentEntries: DirectoryEntry[];
     selectedPathsInViewOrder: string[];
     selectedPathSet: Set<string>;
     contextMenuTargetEntries: DirectoryEntry[];
@@ -387,6 +389,7 @@ export function useExplorerActions(args: {
   const { clearTypeahead, focusContentPane } = selection;
   const {
     activeContentEntries,
+    unfilteredContentEntries,
     selectedPathsInViewOrder,
     selectedPathSet,
     contextMenuTargetEntries,
@@ -688,11 +691,20 @@ export function useExplorerActions(args: {
 
   useEffect(() => {
     setContentSelection((current) => {
+      // A renamed, pasted or new item outside the filter is selected on purpose: the
+      // filter is cleared to show it (useExplorerNavigationController), so it is kept here.
+      const leadHiddenByFilter =
+        current.leadPath !== null &&
+        !activeContentEntries.some((entry) => entry.path === current.leadPath) &&
+        unfilteredContentEntries.some((entry) => entry.path === current.leadPath);
+      if (leadHiddenByFilter) {
+        return current;
+      }
       const nextSelection = sanitizeContentSelection(current, activeContentEntries);
       syncContentSelectionRefs(nextSelection, activeContentEntries);
       return nextSelection;
     });
-  }, [activeContentEntries, setContentSelection]);
+  }, [activeContentEntries, setContentSelection, unfilteredContentEntries]);
 
   useEffect(() => {
     if (isSearchMode) {
@@ -770,6 +782,8 @@ export function useExplorerActions(args: {
   // Events for an operation this window hasn't heard the id of yet: one that finishes
   // before its start request returns. Kept until the id arrives (see adoptWriteOperation).
   const earlyWriteOperationEventsRef = useRef(new Map<string, WriteOperationProgressEvent[]>());
+  // What was selected, and in which folder, when the running operation started.
+  const selectionAtWriteStartRef = useRef<{ directoryPath: string; paths: string[] } | null>(null);
   const writeOperationProgressHandlerRef = useRef<
     ((event: WriteOperationProgressEvent) => void) | null
   >(null);
@@ -1098,6 +1112,10 @@ export function useExplorerActions(args: {
   function applyWriteOperationCardState(nextState: WriteOperationCardState | null) {
     if (nextState !== null && !writeOperationLockedRef.current) {
       writeOperationTabIdRef.current = activeTabIdRef.current;
+      selectionAtWriteStartRef.current = {
+        directoryPath: currentPathRef.current,
+        paths: [...selectedPathsInViewOrderRef.current],
+      };
     }
     writeOperationLockedRef.current = nextState !== null;
     setWriteOperationCardState(nextState);
@@ -2107,6 +2125,19 @@ export function useExplorerActions(args: {
     }
   }
 
+  // Whether the person picked something else while the operation ran: what they picked
+  // stays selected, rather than jumping to what the operation made (a ⌘⌫ right after would
+  // otherwise act on an item they never chose).
+  function selectionChangedSinceWriteStarted(): boolean {
+    const atStart = selectionAtWriteStartRef.current;
+    selectionAtWriteStartRef.current = null;
+    if (atStart === null || atStart.directoryPath !== currentPathRef.current) {
+      return false;
+    }
+    const now = selectedPathsInViewOrderRef.current;
+    return now.length !== atStart.paths.length || now.some((path) => !atStart.paths.includes(path));
+  }
+
   function queueWriteOperationSelection(
     result: NonNullable<WriteOperationProgressEvent["result"]>,
   ) {
@@ -2124,7 +2155,8 @@ export function useExplorerActions(args: {
     if (
       isSearchModeRef.current ||
       !selectionDirectoryPath ||
-      currentPathRef.current !== selectionDirectoryPath
+      currentPathRef.current !== selectionDirectoryPath ||
+      selectionChangedSinceWriteStarted()
     ) {
       pendingPasteSelectionRef.current = null;
       return;
