@@ -177,6 +177,17 @@ function mergeRanges(ranges: Array<[number, number]>): Array<[number, number]> {
 }
 
 // The path as shown next to a name: the home folder as "~", like Terminal.
+// Where a place is, as its row says it beside the name: the folder it is in, since the name
+// already says the rest ("~/Projects" for Lighthouse). A place named otherwise than its
+// folder (Home, Macintosh HD) shows its own path.
+export function describePlaceLocation(place: Pick<Place, "name" | "displayPath">): string {
+  const lastSlash = place.displayPath.lastIndexOf("/");
+  if (lastSlash < 0 || place.displayPath.slice(lastSlash + 1) !== place.name) {
+    return place.displayPath;
+  }
+  return lastSlash === 0 ? "/" : place.displayPath.slice(0, lastSlash);
+}
+
 export function abbreviatePlacePath(path: string, homePath: string): string {
   if (homePath.length > 1 && (path === homePath || path.startsWith(`${homePath}/`))) {
     return `~${path.slice(homePath.length)}`;

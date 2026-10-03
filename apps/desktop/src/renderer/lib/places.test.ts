@@ -1,4 +1,10 @@
-import { abbreviatePlacePath, buildPlaces, isPathQuery, rankPlaces } from "./places";
+import {
+  abbreviatePlacePath,
+  buildPlaces,
+  describePlaceLocation,
+  isPathQuery,
+  rankPlaces,
+} from "./places";
 
 const NOW = 1_800_000_000_000;
 const HOUR = 60 * 60 * 1000;
@@ -81,6 +87,16 @@ describe("places", () => {
     ]);
     expect(match("farm")?.nameRanges).toEqual([[7, 11]]);
     expect(match("apps desk")?.nameRanges).toEqual([[0, 4]]);
+  });
+
+  it("says where a place is: its folder, or its own path when it is named otherwise", () => {
+    expect(describePlaceLocation({ name: "filetrail", displayPath: "~/src/filetrail" })).toBe(
+      "~/src",
+    );
+    expect(describePlaceLocation({ name: "Desktop", displayPath: "~/Desktop" })).toBe("~");
+    expect(describePlaceLocation({ name: "Volumes", displayPath: "/Volumes" })).toBe("/");
+    expect(describePlaceLocation({ name: "Home", displayPath: "~" })).toBe("~");
+    expect(describePlaceLocation({ name: "Trash", displayPath: "~/.Trash" })).toBe("~/.Trash");
   });
 
   it("tells a path from a name, and shortens the home folder", () => {

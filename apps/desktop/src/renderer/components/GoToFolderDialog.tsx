@@ -4,7 +4,7 @@ import type { IpcResponse } from "@filetrail/contracts";
 
 import { usePathSuggestions } from "../hooks/usePathSuggestions";
 import { getFocusableElements } from "../lib/focusUtils";
-import { type Place, isPathQuery, rankPlaces } from "../lib/places";
+import { type Place, describePlaceLocation, isPathQuery, rankPlaces } from "../lib/places";
 import { PushButton } from "./PushButton";
 
 type PathSuggestion = IpcResponse<"path:getSuggestions">["suggestions"][number];
@@ -93,7 +93,7 @@ export function GoToFolderDialog({
     return rankPlaces(places, draftValue).map(({ place, nameRanges }) => ({
       path: place.path,
       name: place.name,
-      detail: place.displayPath,
+      detail: describePlaceLocation(place),
       nameRanges,
       isFavorite: place.isFavorite,
       canForget: place.isVisited,
@@ -432,7 +432,7 @@ export function GoToFolderDialog({
                 <span>
                   {pathMode || hasQuery
                     ? `${rows.length} match${rows.length === 1 ? "" : "es"}`
-                    : "Folders you use"}
+                    : "Recent and favorite folders"}
                 </span>
                 {/* The keys that are easy to miss: Tab completes a path, ⌘⌫ forgets a folder. */}
                 <span className="go-to-folder-hint" aria-hidden="true">
@@ -493,7 +493,7 @@ export function GoToFolderDialog({
                         <span className="go-to-folder-suggestion-name">
                           {renderHighlightedName(row.name, row.nameRanges)}
                         </span>
-                        {/* A long path is shortened at its start: its end says where it is. */}
+                        {/* Where it is. A long path is shortened at its start: its end says most. */}
                         <span className="go-to-folder-suggestion-path" dir="rtl">
                           <bdi dir="ltr">{row.detail}</bdi>
                         </span>

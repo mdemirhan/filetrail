@@ -59,11 +59,12 @@ describe("GoToFolderDialog", () => {
 
     expect(input()).toHaveFocus();
     expect(input().value).toBe("");
-    expect(screen.getByText("Folders you use")).toBeInTheDocument();
+    expect(screen.getByText("Recent and favorite folders")).toBeInTheDocument();
     expect(rowNames()).toEqual(["filetrail", "Downloads", "render-farm", "Desktop"]);
     expect(selectedName()).toBe("filetrail");
-    // The home folder is shown as "~".
-    expect(screen.getByText("~/src/filetrail")).toBeInTheDocument();
+    // Each row says where the folder is, with the home folder shown as "~".
+    expect(screen.getAllByText("~/src")).toHaveLength(2);
+    expect(screen.getAllByText("~")).toHaveLength(2);
 
     fireEvent.submit(document.getElementById("go-to-folder-form") as HTMLFormElement);
     expect(handleSubmit).toHaveBeenCalledWith("/Users/demo/src/filetrail");
