@@ -81,6 +81,7 @@ export function AppDialogs({
   onCloseCopyPasteDialog,
   onConfirmTrashDialog,
   onConfirmDeleteImmediatelyDialog,
+  onConfirmDotNameDialog,
   showCopyPasteProgressCard,
   onCancelWriteOperation,
   showCopyPasteResultDialog,
@@ -124,6 +125,7 @@ export function AppDialogs({
   onCloseCopyPasteDialog: () => void;
   onConfirmTrashDialog: (paths: string[]) => void;
   onConfirmDeleteImmediatelyDialog: (paths: string[]) => void;
+  onConfirmDotNameDialog: () => void;
   showCopyPasteProgressCard: boolean;
   onCancelWriteOperation: () => void;
   showCopyPasteResultDialog: boolean;
@@ -306,6 +308,23 @@ export function AppDialogs({
             onClick: () => onConfirmDeleteImmediatelyDialog(copyPasteDialogState.paths),
             destructive: true,
             irreversible: true,
+          }}
+          secondaryAction={{
+            label: "Cancel",
+            onClick: onCloseCopyPasteDialog,
+          }}
+        />
+      ) : null}
+      {copyPasteDialogState?.type === "confirmDotName" ? (
+        // Finder's question, word for word. Cancel is the default: Return keeps the name
+        // from hiding the item.
+        <CopyPasteDialog
+          title="Are you sure you want to use a name that begins with a dot (“.”)?"
+          message="These names are reserved for the system. If you continue, the item will be hidden."
+          primaryAction={{
+            label: "Use “.”",
+            onClick: onConfirmDotNameDialog,
+            isDefault: false,
           }}
           secondaryAction={{
             label: "Cancel",

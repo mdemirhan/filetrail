@@ -27,6 +27,8 @@ const BUNDLE_EXTENSIONS = new Set([
   ".xcodeproj",
   ".xcworkspace",
 ]);
+// "name copy" or "name copy N" (N from 2, as Finder numbers them).
+const COPY_SUFFIX_PATTERN = /^(.+?) copy(?: ([2-9]|[1-9]\d+))?$/u;
 const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
 export type DuplicateNameOptions = {
@@ -57,9 +59,13 @@ export async function resolveDuplicateName(
   reservedPaths?: ReadonlySet<string>,
   options: DuplicateNameOptions = {},
 ): Promise<string> {
-  const [baseName, extension] = splitNameExtension(sourceName, options.isDirectory ?? false);
+  const [fullBaseName, extension] = splitNameExtension(sourceName, options.isDirectory ?? false);
+  // Like Finder, a copy of "report copy" is "report copy 2", not "report copy copy".
+  const existingCopy = COPY_SUFFIX_PATTERN.exec(fullBaseName);
+  const baseName = existingCopy?.[1] ?? fullBaseName;
+  const firstIndex = existingCopy ? Number(existingCopy[2] ?? "1") + 1 : 1;
 
-  for (let index = 1; index <= MAX_DUPLICATE_NAME_ATTEMPTS; index += 1) {
+  for (let index = firstIndex; index < firstIndex + MAX_DUPLICATE_NAME_ATTEMPTS; index += 1) {
     const suffix = index === 1 ? " copy" : ` copy ${index}`;
     const candidatePath = join(destinationDirectoryPath, fitName(baseName, suffix, extension));
     if (reservedPaths?.has(destinationPathKey(candidatePath, options.caseSensitive))) {

@@ -749,6 +749,7 @@ export function App() {
     browseForDirectoryPath,
     cancelWriteOperation,
     clearContentSelection,
+    confirmDotNameDialog,
     contextMenuDisabledActionIds,
     contextMenuFavoriteToggleLabel,
     contextMenuHiddenActionIds,
@@ -789,6 +790,7 @@ export function App() {
     showCopyPasteProgressCard,
     showCopyPasteResultDialog,
     surfaceCopyLikePreStartFailureNotice,
+    startCopyToDestination,
     startDuplicatePaths,
     startMoveToDestination,
     startPasteFromClipboard,
@@ -916,10 +918,15 @@ export function App() {
     selectedPathsInViewOrder,
     homePath,
     blocked: dragDropBlocked,
-    onMoveToDestination: async (sourcePaths, destinationDirectoryPath, options) => {
-      const outcome = await startMoveToDestination(sourcePaths, destinationDirectoryPath, options);
+    onDropItems: async (sourcePaths, destinationDirectoryPath, { operation, ...options }) => {
+      // A copying drop is a copy and paste into the folder; a moving one, a cut and paste.
+      const action = operation === "copy" ? "paste" : "move_to";
+      const outcome =
+        operation === "copy"
+          ? await startCopyToDestination(sourcePaths, destinationDirectoryPath, options)
+          : await startMoveToDestination(sourcePaths, destinationDirectoryPath, options);
       if (outcome.status === "blocked" || outcome.status === "error") {
-        surfaceCopyLikePreStartFailureNotice("move_to", outcome);
+        surfaceCopyLikePreStartFailureNotice(action, outcome);
       }
       return outcome.status === "queued" || outcome.status === "review";
     },
@@ -1870,7 +1877,11 @@ export function App() {
                 detailColumnWidths,
                 onDetailColumnWidthsChange: setDetailColumnWidths,
                 inlineRename: renameDialogState?.inline
-                  ? { path: renameDialogState.sourcePath, error: renameDialogState.error }
+                  ? {
+                      path: renameDialogState.sourcePath,
+                      error: renameDialogState.error,
+                      refusalCount: renameDialogState.refusalCount,
+                    }
                   : null,
                 onInlineRenameSubmit: (nextName) => void submitRenameDialog(nextName),
                 onInlineRenameCancel: () => setRenameDialogState(null),
@@ -2232,6 +2243,9 @@ export function App() {
           }}
           onConfirmDeleteImmediatelyDialog={(paths) => {
             void startDeleteImmediatelyPaths(paths);
+          }}
+          onConfirmDotNameDialog={() => {
+            void confirmDotNameDialog();
           }}
           showCopyPasteProgressCard={showCopyPasteProgressCard}
           onCancelWriteOperation={() => {

@@ -34,7 +34,9 @@ export type CopyPastePlanIssueCode =
   | "source_missing"
   | "same_path"
   | "parent_into_child"
-  | "duplicate_destination_name";
+  | "duplicate_destination_name"
+  // A folder whose contents can't be read: it is reported as failed, the rest still pastes.
+  | "source_unreadable";
 export type CopyPastePlanWarningCode = "large_batch" | "cut_requires_delete";
 export type CopyPasteAnalysisJobStatus =
   | "queued"
@@ -81,9 +83,14 @@ export type WriteServiceFileSystem = {
    *  existing name is looked up with its case swapped. */
   isCaseSensitive?: (path: string) => Promise<boolean | null>;
   symlink: (target: string, path: string) => Promise<void>;
-  /** Copies a file preserving metadata (mode, timestamps, xattrs). When provided,
-   *  used instead of `copyFileStream` + `chmod` for file copies. */
+  /** Copies a file preserving metadata (mode, flags, timestamps, xattrs). When provided,
+   *  used instead of `copyFileStream`, and the copy's metadata is left as it made it. */
   copyFile?: (sourcePath: string, destinationPath: string) => Promise<void>;
+  /** Copies a folder's own metadata (mode, flags, dates, xattrs such as Finder tags, ACLs)
+   *  onto an existing folder, without its contents. Applied once the folder's items are
+   *  in, since a read-only or locked folder can't be written into afterwards. Without it,
+   *  only the mode and dates are carried over. */
+  copyMetadata?: (sourcePath: string, destinationPath: string) => Promise<void>;
   copyFileStream: (
     sourcePath: string,
     destinationPath: string,
@@ -359,6 +366,9 @@ export const ANALYSIS_BUSY_ERROR = "Another copy/paste analysis is already runni
 
 export type WriteServiceDependencies = {
   fileSystem?: WriteServiceFileSystem;
+  // Remembers Replaces in progress so an interrupted one can be finished or undone at the
+  // next start (see `recoverInterruptedReplaces`).
+  replaceJournal?: ReplaceJournal;
   now?: () => Date;
   createOperationId?: () => string;
   createAnalysisId?: () => string;
@@ -460,4 +470,27 @@ export const DEFAULT_WRITE_SERVICE_FILE_SYSTEM: WriteServiceFileSystem = {
   lutimes: async (path, atimeMs, mtimeMs) => {
     await lutimes(path, atimeMs / 1000, mtimeMs / 1000);
   },
+};
+
+/**
+ * A Replace in progress: the new item is built under `stagingPath`, a hidden name next to
+ * `finalPath`, then swapped in. `moved` means the source itself was moved there (a move on
+ * the same volume), so the staged item is the only copy of it. `staged` means the item at
+ * `stagingPath` is complete.
+ */
+export type ReplaceJournalEntry = {
+  id: string;
+  stagingPath: string;
+  finalPath: string;
+  sourcePath: string;
+  moved: boolean;
+  staged: boolean;
+};
+
+/** Where Replaces in progress are written down, so a crash can't strand an item under a
+ *  hidden name. `add` replaces an entry with the same id. Writes must be durable before
+ *  they resolve. */
+export type ReplaceJournal = {
+  add: (entry: ReplaceJournalEntry) => Promise<void>;
+  remove: (id: string) => Promise<void>;
 };

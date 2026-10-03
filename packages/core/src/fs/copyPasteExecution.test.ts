@@ -4,7 +4,11 @@ import { buildCopyPasteAnalysisReport } from "./copyPasteAnalysis";
 import { executeCopyPasteFromAnalysis } from "./copyPasteExecution";
 import { resolveAnalysisWithPolicy } from "./copyPastePolicy";
 import { MockWriteServiceFileSystem } from "./testUtils";
-import type { CopyPasteProgressEvent } from "./writeServiceTypes";
+import type {
+  CopyPasteOperationResult,
+  CopyPasteProgressEvent,
+  ReplaceJournalEntry,
+} from "./writeServiceTypes";
 
 function expectDefined<T>(value: T | null | undefined): NonNullable<T> {
   expect(value).toBeDefined();
@@ -1907,7 +1911,7 @@ describe("copyPasteExecution", () => {
       expect(events.at(-1)?.status).toBe("partial");
       const result = events.at(-1)?.result;
       expect(result?.items[0]?.status).toBe("failed");
-      expect(result?.items[0]?.error).toContain("Failed to remove empty source directory");
+      expect(result?.items[0]?.error).toContain("the original folder couldn't be removed");
       // Children were moved successfully
       expect(fileSystem.exists("/target/dir/a.txt")).toBe(true);
       expect(fileSystem.exists("/source/dir/a.txt")).toBe(false);
@@ -1959,7 +1963,7 @@ describe("copyPasteExecution", () => {
       expect(events.at(-1)?.status).toBe("partial");
       const result = events.at(-1)?.result;
       expect(result?.items[0]?.status).toBe("failed");
-      expect(result?.items[0]?.error).toContain("Failed to remove source");
+      expect(result?.items[0]?.error).toContain("the original couldn't be removed");
       expect(result?.items[1]?.status).toBe("completed");
       // Both files are at destination (copies succeeded)
       expect(fileSystem.exists("/target/a.txt")).toBe(true);
@@ -2203,7 +2207,7 @@ describe("copyPasteExecution", () => {
       expect(events.at(-1)?.status).toBe("failed");
       const result = events.at(-1)?.result;
       expect(result?.items[0]?.status).toBe("failed");
-      expect(result?.items[0]?.error).toContain("Source was modified after copy");
+      expect(result?.items[0]?.error).toContain("so the original was kept");
       // Filesystem correctness: both exist
       expect(fileSystem.exists("/source/a.txt")).toBe(true);
       expect(fileSystem.exists("/target/a.txt")).toBe(true);
@@ -3254,7 +3258,7 @@ describe("copyPasteExecution", () => {
   });
 
   describe("native copyFile and utimes", () => {
-    it("uses copyFile when available, skips copyFileStream, and re-applies mode", async () => {
+    it("uses copyFile when available, skips copyFileStream, and leaves the mode it copied", async () => {
       const fileSystem = new MockWriteServiceFileSystem({
         "/source": { kind: "directory" },
         "/source/a.txt": { kind: "file", size: 5, mode: 0o755 },
@@ -3289,8 +3293,9 @@ describe("copyPasteExecution", () => {
       });
 
       expect(copyFileStreamCalled).toBe(false);
-      // Mode preservation runs after the native copy too (same values, harmless).
-      expect(chmodCalls).toEqual([{ path: "/target/a.txt", mode: 0o755 }]);
+      // The native copy carried the mode, so it isn't set again (that would fail on a
+      // locked file).
+      expect(chmodCalls).toEqual([]);
       expect(expectNode(fileSystem, "/target/a.txt").size).toBe(5);
     });
 
@@ -4260,6 +4265,196 @@ describe("copyPasteExecution", () => {
       });
       expect(fileSystem.readNode("/target/a.txt")?.size).toBe(9);
       expect(fileSystem.readNode("/target/a copy.txt")?.size).toBe(5);
+    });
+  });
+
+  describe("folder metadata, unreadable folders and the Replace journal", () => {
+    async function run(args: {
+      fileSystem: MockWriteServiceFileSystem;
+      mode: "copy" | "cut";
+      sourcePaths: string[];
+      policy?: Parameters<typeof createResolvedOperation>[0]["policy"];
+      replaceJournal?: Parameters<typeof executeCopyPasteFromAnalysis>[0]["replaceJournal"];
+    }): Promise<CopyPasteOperationResult> {
+      const policy = args.policy ?? { file: "skip", directory: "merge", mismatch: "skip" };
+      const { report, resolvedNodes } = await createResolvedOperation({
+        fileSystem: args.fileSystem,
+        mode: args.mode,
+        sourcePaths: args.sourcePaths,
+        destinationDirectoryPath: "/target",
+        policy,
+      });
+      const events: CopyPasteProgressEvent[] = [];
+      await executeCopyPasteFromAnalysis({
+        operationId: "op-metadata",
+        report,
+        mode: args.mode,
+        policy,
+        fileSystem: args.fileSystem,
+        now: () => new Date("2026-10-03T00:00:00.000Z"),
+        signal: new AbortController().signal,
+        resolvedNodes,
+        emit: (event) => events.push(event),
+        requestResolution: async () => null,
+        ...(args.replaceJournal ? { replaceJournal: args.replaceJournal } : {}),
+      });
+      return expectDefined(expectLastEvent(events).result);
+    }
+
+    // A folder on another volume (dev 2), so a move copies it item by item.
+    function otherVolumeFolder() {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory", dev: 2 },
+        "/source/dir": { kind: "directory", dev: 2, mode: 0o40555, mtimeMs: 1234 },
+        "/source/dir/a.txt": { kind: "file", size: 1, dev: 2 },
+        "/target": { kind: "directory" },
+      });
+      fileSystem.enableRename();
+      fileSystem.enableUtimes();
+      return fileSystem;
+    }
+
+    it("puts a folder's own metadata on after its items, and its date back after a move", async () => {
+      const fileSystem = otherVolumeFolder();
+      const order: string[] = [];
+      fileSystem.copyFileStreamImpl = async (_source, destination) => {
+        order.push(`file ${destination}`);
+        fileSystem.addFile(destination, { size: 1 });
+      };
+      Object.assign(fileSystem, {
+        copyMetadata: async (source: string, destination: string) => {
+          order.push(`metadata ${source} -> ${destination}`);
+          // As copyfile(3) would: the source folder's date, which the move just changed.
+          expectNode(fileSystem, destination).mtimeMs = 9999;
+        },
+      });
+
+      const result = await run({ fileSystem, mode: "cut", sourcePaths: ["/source/dir"] });
+
+      expect(result.status).toBe("completed");
+      expect(order).toEqual(["file /target/dir/a.txt", "metadata /source/dir -> /target/dir"]);
+      expect(expectNode(fileSystem, "/target/dir").mtimeMs).toBe(1234);
+    });
+
+    it("falls back to the mode and date when a folder's metadata can't be copied", async () => {
+      const fileSystem = otherVolumeFolder();
+      const chmodCalls: Array<[string, number]> = [];
+      fileSystem.chmodImpl = async (path, mode) => {
+        chmodCalls.push([path, mode]);
+      };
+      Object.assign(fileSystem, {
+        copyMetadata: async () => {
+          throw Object.assign(new Error("ENOTSUP"), { code: "ENOTSUP" });
+        },
+      });
+
+      const result = await run({ fileSystem, mode: "copy", sourcePaths: ["/source/dir"] });
+
+      expect(result.status).toBe("completed");
+      expect(chmodCalls.filter(([path]) => path === "/target/dir")).toEqual([
+        ["/target/dir", 0o40555],
+      ]);
+      expect(expectNode(fileSystem, "/target/dir").mtimeMs).toBe(1234);
+    });
+
+    it("leaves an unreadable folder in place when moving, and says it wasn't moved", async () => {
+      const fileSystem = otherVolumeFolder();
+      fileSystem.readdirImpl = async (path) => {
+        if (path === "/source/dir") {
+          throw Object.assign(new Error("EACCES"), { code: "EACCES" });
+        }
+        return [];
+      };
+
+      const result = await run({ fileSystem, mode: "cut", sourcePaths: ["/source/dir"] });
+
+      expect(result.status).toBe("failed");
+      expect(result.items).toEqual([
+        expect.objectContaining({
+          sourcePath: "/source/dir",
+          status: "failed",
+          error:
+            "This folder couldn't be read, so it wasn't moved. You don't have permission to access this item.",
+        }),
+      ]);
+      expect(fileSystem.readNode("/source/dir/a.txt")).toBeDefined();
+      expect(fileSystem.readNode("/target/dir")).toBeNull();
+    });
+
+    function recordingJournal() {
+      const live = new Map<string, ReplaceJournalEntry>();
+      const added: ReplaceJournalEntry[] = [];
+      return {
+        live,
+        added,
+        journal: {
+          add: async (entry: ReplaceJournalEntry) => {
+            live.set(entry.id, entry);
+            added.push(entry);
+          },
+          remove: async (id: string) => {
+            live.delete(id);
+          },
+        },
+      };
+    }
+
+    it("clears a Replace from the journal when its staged copy fails and is undone", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+        "/target/a.txt": { kind: "file", size: 9 },
+      });
+      fileSystem.enableRename();
+      fileSystem.enableTrash();
+      fileSystem.copyFileStreamImpl = async () => {
+        throw Object.assign(new Error("EIO"), { code: "EIO" });
+      };
+      const { live, added, journal } = recordingJournal();
+
+      const result = await run({
+        fileSystem,
+        mode: "copy",
+        sourcePaths: ["/source/a.txt"],
+        policy: { file: "overwrite", directory: "overwrite", mismatch: "overwrite" },
+        replaceJournal: journal,
+      });
+
+      expect(result.status).toBe("failed");
+      expect(added).toHaveLength(1);
+      expect(live.size).toBe(0);
+      expect(expectNode(fileSystem, "/target/a.txt").size).toBe(9);
+      expect(temporaryLeftovers(fileSystem)).toEqual([]);
+    });
+
+    it("clears a moved Replace from the journal when the move to the hidden name fails", async () => {
+      const fileSystem = new MockWriteServiceFileSystem({
+        "/source": { kind: "directory" },
+        "/source/a.txt": { kind: "file", size: 5 },
+        "/target": { kind: "directory" },
+        "/target/a.txt": { kind: "file", size: 9 },
+      });
+      fileSystem.enableRename();
+      fileSystem.enableTrash();
+      fileSystem.renameImpl = async () => {
+        throw Object.assign(new Error("EACCES"), { code: "EACCES" });
+      };
+      const { live, added, journal } = recordingJournal();
+
+      const result = await run({
+        fileSystem,
+        mode: "cut",
+        sourcePaths: ["/source/a.txt"],
+        policy: { file: "overwrite", directory: "overwrite", mismatch: "overwrite" },
+        replaceJournal: journal,
+      });
+
+      expect(result.status).toBe("failed");
+      expect(added.map((entry) => entry.moved)).toEqual([true]);
+      expect(live.size).toBe(0);
+      expect(fileSystem.readNode("/source/a.txt")).toBeDefined();
+      expect(expectNode(fileSystem, "/target/a.txt").size).toBe(9);
     });
   });
 });

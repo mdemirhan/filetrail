@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type { ExplorerWorkerClient } from "@filetrail/core";
+
 import {
+  clearResponseCaches,
   createFolderSizeHandlers,
+  getCachedMetadataBatch,
   getCachedResponse,
   getResponseCacheSizes,
   resetResponseCacheState,
@@ -254,6 +258,64 @@ describe("getCachedResponse", () => {
     expect(await getCachedResponse("directory", { path: "/dir/199" }, load)).toBe(199);
     expect(await getCachedResponse("directory", { path: "/dir/0" }, load)).toBe(-1);
     expect(load).toHaveBeenCalledTimes(1);
+    resetResponseCacheState();
+  });
+
+  it("doesn't keep an answer that was loading when the caches were cleared", async () => {
+    resetResponseCacheState();
+    let finishLoad: ((value: string) => void) | null = null;
+    const pending = getCachedResponse(
+      "directory",
+      { path: "/dir" },
+      () =>
+        new Promise<string>((resolveLoad) => {
+          finishLoad = resolveLoad;
+        }),
+    );
+    // A write finishes while the folder is still being read: what the read returns may be
+    // from before the write.
+    clearResponseCaches();
+    (finishLoad as ((value: string) => void) | null)?.("before the write");
+    expect(await pending).toBe("before the write");
+
+    const load = vi.fn(async () => "after the write");
+    expect(await getCachedResponse("directory", { path: "/dir" }, load)).toBe("after the write");
+    expect(load).toHaveBeenCalledTimes(1);
+    // A load that started after the clear is kept as usual.
+    expect(await getCachedResponse("directory", { path: "/dir" }, load)).toBe("after the write");
+    expect(load).toHaveBeenCalledTimes(1);
+    resetResponseCacheState();
+  });
+
+  it("doesn't keep item details that were loading when the caches were cleared", async () => {
+    resetResponseCacheState();
+    let finishRequest: (() => void) | null = null;
+    const request = vi.fn(
+      (_channel: string, payload: { paths: string[] }) =>
+        new Promise((resolveRequest) => {
+          finishRequest = () =>
+            resolveRequest({
+              directoryPath: "/dir",
+              items: payload.paths.map((path) => ({ path, stale: true })),
+            });
+        }),
+    );
+    const workerClient = { request } as unknown as ExplorerWorkerClient;
+    const payload = { directoryPath: "/dir", paths: ["/dir/a.txt"] } as Parameters<
+      typeof getCachedMetadataBatch
+    >[1];
+
+    const pending = getCachedMetadataBatch(workerClient, payload);
+    clearResponseCaches();
+    (finishRequest as (() => void) | null)?.();
+    await pending;
+
+    expect(getResponseCacheSizes().directoryMetadata).toBe(0);
+    const next = getCachedMetadataBatch(workerClient, payload);
+    expect(request).toHaveBeenCalledTimes(2);
+    (finishRequest as (() => void) | null)?.();
+    await next;
+    expect(getResponseCacheSizes().directoryMetadata).toBe(1);
     resetResponseCacheState();
   });
 });

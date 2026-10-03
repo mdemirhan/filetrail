@@ -16,6 +16,19 @@
 export function nativeCopyFile(sourcePath: string, destinationPath: string): Promise<void>;
 
 /**
+ * Copies a folder's own metadata onto a folder that already exists, using `copyfile(3)`
+ * with `COPYFILE_METADATA`: mode, flags, dates, extended attributes (Finder tags, the
+ * custom-icon flag, quarantine) and ACLs. Nothing inside the folder is copied.
+ *
+ * `undefined` when the loaded binary predates it.
+ *
+ * @throws An error with a `code` property (the errno name) on failure.
+ */
+export const nativeCopyMetadata:
+  | ((sourcePath: string, destinationPath: string) => Promise<void>)
+  | undefined;
+
+/**
  * Returns the macOS file icon for the given path as a PNG buffer.
  *
  * Uses `NSWorkspace.iconForFile:` to retrieve the system icon (including custom

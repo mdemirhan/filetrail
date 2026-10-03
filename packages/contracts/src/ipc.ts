@@ -4,17 +4,26 @@ import { getItemNameError } from "./itemName";
 // These schemas are the single source of truth for renderer <-> main IPC payloads.
 // Keep the runtime validators and the inferred TypeScript types aligned here so the
 // transport contract cannot silently drift between processes.
+// The length limit is part of getItemNameError: it counts bytes, the way the disk does.
 const itemNameSchema = z
   .string()
   .trim()
   .min(1)
-  .max(255)
   .superRefine((name, context) => {
     const message = getItemNameError(name);
     if (message) {
       context.addIssue({ code: z.ZodIssueCode.custom, message });
     }
   });
+
+// A path the main process reads or writes for a copy, rename, or delete. A relative path
+// would be resolved against the main process's own working folder, not anything the window
+// shows, so only absolute paths are accepted.
+const absolutePathSchema = z
+  .string()
+  .min(1)
+  .refine((path) => path.startsWith("/"), { message: "Expected an absolute path." });
+const absolutePathListSchema = z.array(absolutePathSchema).min(1).max(500);
 
 export const explorerEntryKindSchema = z.enum([
   "directory",
@@ -195,6 +204,7 @@ export const copyPastePlanIssueCodeSchema = z.enum([
   "same_path",
   "parent_into_child",
   "duplicate_destination_name",
+  "source_unreadable",
 ]);
 export const copyPastePlanWarningCodeSchema = z.enum(["large_batch", "cut_requires_delete"]);
 export const copyPasteNodeKindSchema = z.enum(["missing", "file", "directory", "symlink"]);
@@ -880,8 +890,8 @@ export const ipcContractSchemas = {
   "copyPaste:analyzeStart": {
     request: z.object({
       mode: copyPasteModeSchema,
-      sourcePaths: z.array(z.string().min(1)).min(1).max(500),
-      destinationDirectoryPath: z.string().min(1),
+      sourcePaths: absolutePathListSchema,
+      destinationDirectoryPath: absolutePathSchema,
       action: writeOperationActionSchema
         .extract(["paste", "move_to", "duplicate"])
         .default("paste"),
@@ -914,8 +924,8 @@ export const ipcContractSchemas = {
   "copyPaste:plan": {
     request: z.object({
       mode: copyPasteModeSchema,
-      sourcePaths: z.array(z.string().min(1)).min(1).max(500),
-      destinationDirectoryPath: z.string().min(1),
+      sourcePaths: absolutePathListSchema,
+      destinationDirectoryPath: absolutePathSchema,
       conflictResolution: copyPasteConflictResolutionSchema.default("error"),
       action: writeOperationActionSchema
         .extract(["paste", "move_to", "duplicate"])
@@ -927,8 +937,8 @@ export const ipcContractSchemas = {
     request: z.union([
       z.object({
         mode: copyPasteModeSchema,
-        sourcePaths: z.array(z.string().min(1)).min(1).max(500),
-        destinationDirectoryPath: z.string().min(1),
+        sourcePaths: absolutePathListSchema,
+        destinationDirectoryPath: absolutePathSchema,
         conflictResolution: copyPasteConflictResolutionSchema.default("error"),
         action: writeOperationActionSchema
           .extract(["paste", "move_to", "duplicate"])
@@ -979,7 +989,7 @@ export const ipcContractSchemas = {
   },
   "writeOperation:rename": {
     request: z.object({
-      sourcePath: z.string().min(1),
+      sourcePath: absolutePathSchema,
       destinationName: itemNameSchema,
     }),
     response: z.object({
@@ -989,7 +999,7 @@ export const ipcContractSchemas = {
   },
   "writeOperation:createFolder": {
     request: z.object({
-      parentDirectoryPath: z.string().min(1),
+      parentDirectoryPath: absolutePathSchema,
       folderName: itemNameSchema,
     }),
     response: z.object({
@@ -999,7 +1009,7 @@ export const ipcContractSchemas = {
   },
   "writeOperation:trash": {
     request: z.object({
-      paths: z.array(z.string().min(1)).min(1).max(500),
+      paths: absolutePathListSchema,
     }),
     response: z.object({
       operationId: z.string().min(1),
@@ -1008,7 +1018,7 @@ export const ipcContractSchemas = {
   },
   "writeOperation:deleteImmediately": {
     request: z.object({
-      paths: z.array(z.string().min(1)).min(1).max(500),
+      paths: absolutePathListSchema,
     }),
     response: z.object({
       operationId: z.string().min(1),

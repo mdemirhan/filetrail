@@ -2,9 +2,13 @@ import type { WriteOperationProgressEvent } from "@filetrail/contracts";
 
 import {
   collectRetrySourcePaths,
+  describeEmptyTrashFailure,
+  formatMissingClipboardItemsMessage,
+  formatQuotedNames,
   isExpectedPlannedSkipResult,
   isFolderSizeEligibleKind,
   resolveExplorerTreeRootPath,
+  resolveFreeNewFolderName,
   resolveNewFolderTargetPath,
   resolvePasteDestinationPath,
   resolveWriteOperationRefreshPath,
@@ -161,6 +165,19 @@ describe("explorerAppUtils", () => {
           contextMenuTargetEntry: folder,
         }),
       ).toBe("/Users/demo/Folder");
+    });
+
+    it("pastes into the folder on screen when the folder picked is itself on the clipboard", () => {
+      const onClipboard = { ...base, clipboardSourcePaths: [folder.path] };
+      // The keyboard and the item's own menu agree.
+      expect(resolvePasteDestinationPath(onClipboard)).toBe("/Users/demo");
+      expect(
+        resolvePasteDestinationPath({
+          ...onClipboard,
+          contextMenuState: contentMenu([folder.path], folder.path),
+          contextMenuTargetEntry: folder,
+        }),
+      ).toBe("/Users/demo");
     });
 
     it("never pastes through a symlinked folder", () => {
@@ -528,5 +545,52 @@ describe("sortEntriesBySize", () => {
       "codetrail.sqlite",
       "Pending",
     ]);
+  });
+  it("names a few items and counts the rest", () => {
+    expect(formatQuotedNames([])).toBe("");
+    expect(formatQuotedNames(["/a/report.pdf"])).toBe("“report.pdf”");
+    expect(formatQuotedNames(["/a/one", "/a/two"])).toBe("“one” and “two”");
+    expect(formatQuotedNames(["/a/1", "/a/2", "/a/3"])).toBe("“1”, “2” and “3”");
+    expect(formatQuotedNames(["/a/1", "/a/2", "/a/3", "/a/4", "/a/5"])).toBe(
+      "“1”, “2”, “3” and 2 more",
+    );
+  });
+
+  it("says which clipboard items could not be pasted because they are gone", () => {
+    expect(formatMissingClipboardItemsMessage(["/Users/demo/report.pdf"])).toBe(
+      "“report.pdf” couldn't be pasted because it no longer exists.",
+    );
+    expect(formatMissingClipboardItemsMessage(["/a/one", "/a/two"])).toBe(
+      "“one” and “two” couldn't be pasted because they no longer exist.",
+    );
+    expect(formatMissingClipboardItemsMessage(["/a/1", "/a/2", "/a/3", "/a/4"])).toBe(
+      "4 items couldn't be pasted because they no longer exist: “1”, “2”, “3” and 1 more.",
+    );
+  });
+  it("suggests a free New Folder name, ignoring case like the disk does", () => {
+    expect(resolveFreeNewFolderName([])).toBe("New Folder");
+    expect(resolveFreeNewFolderName(["New Folder"])).toBe("New Folder 2");
+    expect(resolveFreeNewFolderName(["new folder", "NEW FOLDER 2"])).toBe("New Folder 3");
+    expect(resolveFreeNewFolderName(["New Folder", "New Folder 3"])).toBe("New Folder 2");
+  });
+  it("explains an Empty Trash failure, and how to allow File Trail to control Finder", () => {
+    expect(
+      describeEmptyTrashFailure(
+        "execution error: Not authorized to send Apple events to Finder. (-1743)",
+      ),
+    ).toEqual({
+      title: "The Trash couldn't be emptied.",
+      message:
+        "File Trail needs permission to control Finder. Turn it on in System Settings > Privacy & Security > Automation, then try again.",
+    });
+    expect(
+      describeEmptyTrashFailure("Finder got an error: The operation can't be completed."),
+    ).toEqual({
+      title: "The Trash couldn't be emptied.",
+      message: "Finder got an error: The operation can't be completed.",
+    });
+    expect(describeEmptyTrashFailure("  ").message).toBe(
+      "Finder didn't empty the Trash. Try again, or empty it in Finder.",
+    );
   });
 });

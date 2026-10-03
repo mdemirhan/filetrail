@@ -33,6 +33,45 @@ describe("copyPasteNames", () => {
     );
   });
 
+  it("numbers a copy of a copy instead of adding another “copy”, like Finder", async () => {
+    const fileSystem = new MockWriteServiceFileSystem({
+      "/target": { kind: "directory" },
+      "/target/notes copy.txt": { kind: "file", size: 1 },
+      "/target/notes copy 2.txt": { kind: "file", size: 1 },
+      "/target/plan copy 2.md": { kind: "file", size: 1 },
+    });
+
+    await expect(resolveDuplicateName("notes copy.txt", "/target", fileSystem)).resolves.toBe(
+      "/target/notes copy 3.txt",
+    );
+    await expect(resolveDuplicateName("plan copy 2.md", "/target", fileSystem)).resolves.toBe(
+      "/target/plan copy 3.md",
+    );
+    await expect(
+      resolveDuplicateName("Photos copy", "/target", fileSystem, undefined, { isDirectory: true }),
+    ).resolves.toBe("/target/Photos copy 2");
+    await expect(resolveDuplicateName("big copy 99999", "/target", fileSystem)).resolves.toBe(
+      "/target/big copy 100000",
+    );
+  });
+
+  it("keeps names that only look a little like copies", async () => {
+    const fileSystem = new MockWriteServiceFileSystem({
+      "/target": { kind: "directory" },
+    });
+
+    // A file called "copy", a "copy 1" (Finder never makes one) and "copycat".
+    await expect(resolveDuplicateName("copy.txt", "/target", fileSystem)).resolves.toBe(
+      "/target/copy copy.txt",
+    );
+    await expect(resolveDuplicateName("draft copy 1.txt", "/target", fileSystem)).resolves.toBe(
+      "/target/draft copy 1 copy.txt",
+    );
+    await expect(resolveDuplicateName("a copycat.txt", "/target", fileSystem)).resolves.toBe(
+      "/target/a copycat copy.txt",
+    );
+  });
+
   it("uses the first copy suffix when the destination is still free", async () => {
     const fileSystem = new MockWriteServiceFileSystem({
       "/target": { kind: "directory" },

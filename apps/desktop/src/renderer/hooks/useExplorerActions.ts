@@ -47,6 +47,8 @@ import {
   buildPasteRequest,
   clearCopyPasteClipboard,
   describeClipboard,
+  dropClipboardPaths,
+  followClipboardThroughWrite,
   hasClipboardItems,
   removeClipboardItem,
   setCopyPasteClipboard,
@@ -55,11 +57,15 @@ import { type CopyPasteOverrides, SAFE_COPY_PASTE_POLICY } from "../lib/copyPast
 import {
   collectRetrySourcePaths,
   createOpenItemLimitMessage,
+  describeEmptyTrashFailure,
+  formatMissingClipboardItemsMessage,
   formatPathForShell,
+  formatQuotedNames,
   getPathLeafName,
   isDirectoryLikeEntry,
   isEditableFileEntry,
   isExpectedPlannedSkipResult,
+  resolveFreeNewFolderName,
   resolveNewFolderTargetPath,
   resolveWriteOperationRefreshPath,
   resolveWriteOperationSelectionDirectoryPath,
@@ -92,6 +98,7 @@ import type {
 import type {
   ContextMenuState,
   CopyPasteDialogState,
+  DotNameRequest,
   WriteOperationCardState,
 } from "./useWriteOperations";
 
@@ -134,6 +141,8 @@ function createOpenWithApplicationId(): string {
 type CopyPasteAnalysisReport = NonNullable<IpcResponse<"copyPaste:analyzeGetUpdate">["report"]>;
 type CopyPastePolicy = Extract<IpcRequest<"copyPaste:start">, { analysisId: string }>["policy"];
 type CopyLikeAction = "paste" | "move_to" | "duplicate";
+// Every write the app starts; each says the same thing when another one is still running.
+type WriteStartAction = CopyLikeAction | "trash" | "delete_immediately" | "rename" | "new_folder";
 type CopyLikePreStartOutcome =
   | { status: "queued" }
   | { status: "review" }
@@ -172,15 +181,26 @@ function getCopyLikeActionLabel(action: CopyLikeAction): string {
   return "paste";
 }
 
-function getCopyLikePreStartFailureTitle(action: CopyLikeAction): string {
-  if (action === "move_to") {
-    return "Move couldn't start";
+function getCopyLikePreStartFailureTitle(action: WriteStartAction): string {
+  switch (action) {
+    case "move_to":
+      return "Move couldn't start";
+    case "duplicate":
+      return "Duplicate couldn't start";
+    case "trash":
+      return "Move to Trash couldn't start";
+    case "delete_immediately":
+      return "Delete couldn't start";
+    case "rename":
+      return "Rename couldn't start";
+    case "new_folder":
+      return "New Folder couldn't start";
+    default:
+      return "Paste couldn't start";
   }
-  if (action === "duplicate") {
-    return "Duplicate couldn't start";
-  }
-  return "Paste couldn't start";
 }
+
+const WRITE_OPERATION_BUSY_MESSAGE = "Wait for the current write to finish.";
 
 function getCopyLikePreparationFailureMessage(action: CopyLikeAction): string {
   return `File Trail couldn't prepare the ${getCopyLikeActionLabel(action)} operation. No files were written.`;
@@ -193,28 +213,43 @@ function getCopyLikeStartFailureMessage(action: CopyLikeAction): string {
 function getCopyLikeBusyOutcome(): Extract<CopyLikePreStartOutcome, { status: "blocked" }> {
   return {
     status: "blocked",
-    message: "Wait for the current write to finish.",
+    message: WRITE_OPERATION_BUSY_MESSAGE,
   };
 }
 
+// Why the analysis stopped, naming the items it is about. The issues of the first kind found
+// are told together ("“a.txt” and “b.txt” no longer exist.").
 function getCopyLikeIssueMessage(report: CopyPasteAnalysisReport): string {
   const issue = report.issues[0];
   if (!issue) {
     return "The operation couldn't continue.";
   }
+  const sourcePaths = report.issues
+    .filter((candidate) => candidate.code === issue.code)
+    .flatMap((candidate) => (candidate.sourcePath ? [candidate.sourcePath] : []));
+  const names = formatQuotedNames(sourcePaths);
+  const several = sourcePaths.length > 1;
+  const destinationName = `“${getPathLeafName(issue.destinationPath ?? report.destinationDirectoryPath)}”`;
+  const destinationFolderName = `“${getPathLeafName(report.destinationDirectoryPath)}”`;
   switch (issue.code) {
     case "destination_missing":
-      return "Destination folder does not exist.";
+      return `The folder ${destinationFolderName} no longer exists.`;
     case "destination_not_directory":
-      return "Destination must be an existing folder.";
+      return `${destinationFolderName} isn't a folder.`;
     case "source_missing":
-      return "A source item no longer exists.";
+      return names
+        ? `${names} no longer ${several ? "exist" : "exists"}.`
+        : "An item to copy no longer exists.";
     case "same_path":
-      return "Source and destination cannot be the same.";
+      return names
+        ? `${names} ${several ? "are" : "is"} already in ${destinationFolderName}.`
+        : "Source and destination cannot be the same.";
     case "parent_into_child":
-      return "You can't place a folder into its own descendant.";
+      return names
+        ? `${names} can't be ${report.mode === "cut" ? "moved" : "copied"} into a folder inside ${several ? "themselves" : "itself"}.`
+        : "You can't place a folder into its own descendant.";
     case "duplicate_destination_name":
-      return "Two of the selected items have the same name and would overwrite each other.";
+      return `Two of the items are named ${destinationName}, so one would replace the other.`;
     default:
       return issue.message;
   }
@@ -307,6 +342,7 @@ export function useExplorerActions(args: {
     setTerminalApp,
     openWithApplications,
     setOpenWithApplications,
+    includeHidden,
   } = preferences;
   const { setSearchPopoverOpen, browseSelectionRef, cachedSearchSelectionRef } = search;
   const {
@@ -362,6 +398,9 @@ export function useExplorerActions(args: {
   } = navActions;
   const { restartActiveSearch } = callbacks;
   const activeAnalysisIdRef = useRef<string | null>(null);
+  // Bumped by every New Folder, so a folder listing that comes back late is not used for a
+  // newer one.
+  const newFolderNameRequestRef = useRef(0);
   const reviewStartInFlightRef = useRef<string | null>(null);
   // A cut clipboard to clear when its move finishes having moved something.
   const clipboardClearAfterMoveRef = useRef<{ operationId: string; capturedAt: string } | null>(
@@ -711,10 +750,39 @@ export function useExplorerActions(args: {
     };
   }, [contextMenuState, setContextMenuState]);
 
+  // Events for an operation this window hasn't heard the id of yet: one that finishes
+  // before its start request returns. Kept until the id arrives (see adoptWriteOperation).
+  const earlyWriteOperationEventsRef = useRef(new Map<string, WriteOperationProgressEvent[]>());
+  const writeOperationProgressHandlerRef = useRef<
+    ((event: WriteOperationProgressEvent) => void) | null
+  >(null);
+  // Records the operation this window started, then plays back whatever it already said.
+  // The playback waits a moment so the caller's "queued" card goes up first.
+  const adoptWriteOperation = (operationId: string) => {
+    activeWriteOperationIdRef.current = operationId;
+    const early = earlyWriteOperationEventsRef.current.get(operationId) ?? [];
+    earlyWriteOperationEventsRef.current.clear();
+    if (early.length > 0) {
+      queueMicrotask(() => {
+        for (const event of early) {
+          writeOperationProgressHandlerRef.current?.(event);
+        }
+      });
+    }
+  };
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: write-operation progress should stay subscribed to stable refs without resubscribing on every ref.current mutation.
   useEffect(() => {
-    const unsubscribe = client.onWriteOperationProgress((event) => {
+    const handleProgress = (event: WriteOperationProgressEvent) => {
       if (event.operationId !== activeWriteOperationIdRef.current) {
+        if (activeWriteOperationIdRef.current === null) {
+          const early = earlyWriteOperationEventsRef.current;
+          early.set(event.operationId, [...(early.get(event.operationId) ?? []), event]);
+          // Only the latest few operations matter; anything older was someone else's.
+          while (early.size > 4) {
+            early.delete(early.keys().next().value as string);
+          }
+        }
         return;
       }
       if (
@@ -766,6 +834,15 @@ export function useExplorerActions(args: {
             applyCopyPasteClipboardState(clearCopyPasteClipboard());
           }
         }
+        // Items on the clipboard that this write renamed, moved or deleted are followed, so a
+        // later paste still finds them, or no longer offers what is gone.
+        if (event.result) {
+          const clipboard = copyPasteClipboardRef.current;
+          const followedClipboard = followClipboardThroughWrite(clipboard, event.result);
+          if (followedClipboard !== clipboard) {
+            applyCopyPasteClipboardState(followedClipboard);
+          }
+        }
         activeWriteOperationIdRef.current = null;
         pendingPasteAttemptRef.current = null;
         applyWriteOperationCardState(null);
@@ -805,8 +882,9 @@ export function useExplorerActions(args: {
           void restartActiveSearchRef.current?.();
         }
       }
-    });
-    return unsubscribe;
+    };
+    writeOperationProgressHandlerRef.current = handleProgress;
+    return client.onWriteOperationProgress(handleProgress);
   }, [client, refreshDirectory, setWriteOperationProgressEvent]);
 
   function closeContextMenu() {
@@ -1031,7 +1109,7 @@ export function useExplorerActions(args: {
   }
 
   function surfaceCopyLikePreStartFailureNotice(
-    action: CopyLikeAction,
+    action: WriteStartAction,
     outcome: Extract<CopyLikePreStartOutcome, { status: "blocked" | "error" }>,
   ) {
     showModalNotice(getCopyLikePreStartFailureTitle(action), outcome.message);
@@ -1046,10 +1124,36 @@ export function useExplorerActions(args: {
     return writeOperationLockedRef.current;
   }
 
-  function showWriteOperationBusyToast() {
-    pushToast({
-      kind: "warning",
-      title: "Wait for the current write to finish",
+  // One file operation runs at a time. Every write asked for meanwhile says so the same way,
+  // in a dialog, since nothing it asked for happened.
+  function showWriteOperationBusyNotice(action: WriteStartAction) {
+    surfaceCopyLikePreStartFailureNotice(action, getCopyLikeBusyOutcome());
+  }
+
+  function isWriteOperationBusyError(error: unknown): boolean {
+    return error instanceof Error && error.message.includes(WRITE_OPERATION_BUSY_ERROR);
+  }
+
+  // Trash, Delete Immediately, Rename and New Folder take the one-write lock before their
+  // request is sent, not when the main process answers: a second press that comes in between
+  // (a quick double Command-Delete) then finds the lock taken instead of sending again.
+  function takeWriteOperationLock(
+    action: Extract<WriteStartAction, "trash" | "delete_immediately" | "rename" | "new_folder">,
+    details: {
+      targetPath: string | null;
+      totalItemCount: number;
+      currentSourcePath: string | null;
+    },
+  ) {
+    applyWriteOperationCardState({
+      action,
+      stage: "starting",
+      targetPath: details.targetPath,
+      completedItemCount: 0,
+      totalItemCount: details.totalItemCount,
+      completedByteCount: 0,
+      totalBytes: null,
+      currentSourcePath: details.currentSourcePath,
     });
   }
 
@@ -1425,7 +1529,7 @@ export function useExplorerActions(args: {
       if (pendingAttempt && pendingAttempt.id === pasteAttemptId && pendingAttempt.cancelled) {
         pendingPasteAttemptRef.current = null;
         rememberPendingTreeSelectionPath(null);
-        activeWriteOperationIdRef.current = response.operationId;
+        adoptWriteOperation(response.operationId);
         setWriteOperationProgressEvent({
           operationId: response.operationId,
           action,
@@ -1443,7 +1547,7 @@ export function useExplorerActions(args: {
         return { status: "cancelled" };
       }
       pendingPasteAttemptRef.current = null;
-      activeWriteOperationIdRef.current = response.operationId;
+      adoptWriteOperation(response.operationId);
       applyWriteOperationCardState({
         action,
         stage: "queued",
@@ -1481,11 +1585,8 @@ export function useExplorerActions(args: {
       pendingPasteAttemptRef.current = null;
       applyWriteOperationCardState(null);
       logger.error("copy paste start failed", error);
-      if (error instanceof Error && error.message.includes(WRITE_OPERATION_BUSY_ERROR)) {
-        return {
-          status: "blocked",
-          message: "Wait for the current write to finish.",
-        };
+      if (isWriteOperationBusyError(error)) {
+        return getCopyLikeBusyOutcome();
       }
       return {
         status: "error",
@@ -1541,6 +1642,8 @@ export function useExplorerActions(args: {
     defaultPolicy?: CopyPastePolicy;
     shouldReviewReport?: (report: CopyPasteAnalysisReport) => boolean;
     initiator?: "clipboard" | "drag_drop" | "move_dialog" | null;
+    // Told which clipboard items were left out because they no longer exist.
+    onSourcesMissing?: ((paths: string[]) => void) | undefined;
   }): Promise<CopyLikePreStartOutcome> {
     const defaultPolicy = args.defaultPolicy ?? DEFAULT_COPY_PASTE_POLICY;
     try {
@@ -1613,15 +1716,20 @@ export function useExplorerActions(args: {
           };
         }
         if (update.report.issues.length > 0) {
-          // Cut and paste into the folder the items are already in leaves them there, like
-          // Finder. Issues are per item, so only those items stay; the rest still move.
-          const alreadyInPlacePaths =
-            args.initiator === "clipboard" && update.report.mode === "cut"
-              ? collectAlreadyInPlaceSourcePaths(update.report, args.sourcePaths)
-              : null;
-          if (alreadyInPlacePaths) {
+          // Issues are per item, so the items they are about can be left out and the rest
+          // still go. Moving items into the folder they are already in leaves them there, like
+          // Finder, whether by Paste, a drag (search results from several folders) or Move To.
+          // Clipboard items that were moved or deleted since they were copied are dropped.
+          const leftOut = collectLeftOutSourcePaths(update.report, args.sourcePaths, {
+            alreadyInPlace: args.initiator != null && update.report.mode === "cut",
+            missing: args.initiator === "clipboard",
+          });
+          if (leftOut) {
+            if (leftOut.missing.size > 0) {
+              args.onSourcesMissing?.([...leftOut.missing]);
+            }
             const remainingSourcePaths = args.sourcePaths.filter(
-              (path) => !alreadyInPlacePaths.has(path),
+              (path) => !leftOut.alreadyInPlace.has(path) && !leftOut.missing.has(path),
             );
             if (remainingSourcePaths.length > 0) {
               return await analyzeCopyLikeRequest({ ...args, sourcePaths: remainingSourcePaths });
@@ -1629,7 +1737,13 @@ export function useExplorerActions(args: {
             pendingPasteAttemptRef.current = null;
             applyWriteOperationCardState(null);
             setCopyPasteDialogState(null);
-            return { status: "cancelled" };
+            // Nothing is left to do. A paste into the folder the items are in quietly does
+            // nothing, like Finder, and missing items are reported by the paste; a drag or
+            // Move To that would move nothing says why.
+            if (args.initiator === "clipboard" || leftOut.missing.size > 0) {
+              return { status: "cancelled" };
+            }
+            return { status: "blocked", message: getCopyLikeIssueMessage(update.report) };
           }
           pendingPasteAttemptRef.current = null;
           applyWriteOperationCardState(null);
@@ -1687,25 +1801,29 @@ export function useExplorerActions(args: {
     }
   }
 
-  // The source paths a cut would leave where they already are, or null when the report has
-  // any other issue (those still need the blocking notice).
-  function collectAlreadyInPlaceSourcePaths(
+  // The source paths that can be left out of the operation: those a cut would leave where
+  // they already are, and (when allowed) those that no longer exist. Null when the report has
+  // any other issue; those still need the blocking notice.
+  function collectLeftOutSourcePaths(
     report: CopyPasteAnalysisReport,
     sourcePaths: readonly string[],
-  ): Set<string> | null {
+    allowed: { alreadyInPlace: boolean; missing: boolean },
+  ): { alreadyInPlace: Set<string>; missing: Set<string> } | null {
     const requestedPaths = new Set(sourcePaths);
-    const alreadyInPlacePaths = new Set<string>();
+    const leftOut = { alreadyInPlace: new Set<string>(), missing: new Set<string>() };
     for (const issue of report.issues) {
-      if (
-        issue.code !== "same_path" ||
-        issue.sourcePath === null ||
-        !requestedPaths.has(issue.sourcePath)
-      ) {
+      if (issue.sourcePath === null || !requestedPaths.has(issue.sourcePath)) {
         return null;
       }
-      alreadyInPlacePaths.add(issue.sourcePath);
+      if (issue.code === "same_path" && allowed.alreadyInPlace) {
+        leftOut.alreadyInPlace.add(issue.sourcePath);
+      } else if (issue.code === "source_missing" && allowed.missing) {
+        leftOut.missing.add(issue.sourcePath);
+      } else {
+        return null;
+      }
     }
-    return alreadyInPlacePaths;
+    return leftOut;
   }
 
   async function startPasteFromClipboard() {
@@ -1724,46 +1842,72 @@ export function useExplorerActions(args: {
       });
       return;
     }
+    const action = request.mode === "cut" ? "move_to" : "paste";
     if (isWriteOperationInFlight()) {
-      surfaceCopyLikePreStartFailureNotice(
-        request.mode === "cut" ? "move_to" : "paste",
-        getCopyLikeBusyOutcome(),
-      );
+      showWriteOperationBusyNotice(action);
       return;
     }
+    // Items moved or deleted outside the app since they were copied are taken off the
+    // clipboard and the rest are pasted. Which ones were left out is told afterwards.
+    const missingSourcePaths: string[] = [];
+    const onSourcesMissing = (paths: string[]) => {
+      missingSourcePaths.push(...paths);
+      applyCopyPasteClipboardState(dropClipboardPaths(copyPasteClipboardRef.current, paths));
+    };
+    let outcome: CopyLikePreStartOutcome;
     if (request.mode === "cut") {
-      const outcome = await startMoveToDestination(
+      outcome = await startMoveToDestination(
         request.sourcePaths,
         request.destinationDirectoryPath,
         {
           clearClipboardOnStart: true,
           initiator: "clipboard",
+          onSourcesMissing,
         },
       );
+    } else {
+      const pasteAttemptId = beginPendingPasteAttempt({
+        action: "paste",
+        targetPath: request.destinationDirectoryPath,
+        totalItemCount: request.sourcePaths.length,
+        totalBytes: null,
+        currentSourcePath: request.sourcePaths[0] ?? null,
+      });
+      outcome = await analyzeCopyLikeRequest({
+        mode: request.mode,
+        sourcePaths: request.sourcePaths,
+        destinationDirectoryPath: request.destinationDirectoryPath,
+        action: "paste",
+        pasteAttemptId,
+        clearClipboardOnStart: true,
+        initiator: "clipboard",
+        onSourcesMissing,
+      });
+    }
+    if (missingSourcePaths.length === 0) {
       if (outcome.status === "blocked" || outcome.status === "error") {
-        surfaceCopyLikePreStartFailureNotice("move_to", outcome);
+        surfaceCopyLikePreStartFailureNotice(action, outcome);
       }
       return;
     }
-    const pasteAttemptId = beginPendingPasteAttempt({
-      action: "paste",
-      targetPath: request.destinationDirectoryPath,
-      totalItemCount: request.sourcePaths.length,
-      totalBytes: null,
-      currentSourcePath: request.sourcePaths[0] ?? null,
-    });
-    const outcome = await analyzeCopyLikeRequest({
-      mode: request.mode,
-      sourcePaths: request.sourcePaths,
-      destinationDirectoryPath: request.destinationDirectoryPath,
-      action: "paste",
-      pasteAttemptId,
-      clearClipboardOnStart: true,
-      initiator: "clipboard",
-    });
+    const missingMessage = formatMissingClipboardItemsMessage(missingSourcePaths);
     if (outcome.status === "blocked" || outcome.status === "error") {
-      surfaceCopyLikePreStartFailureNotice("paste", outcome);
+      surfaceCopyLikePreStartFailureNotice(action, {
+        ...outcome,
+        message: `${missingMessage} ${outcome.message}`,
+      });
+      return;
     }
+    // The rest are already on their way (or in review); this only says what was left out.
+    const nothingPasted = missingSourcePaths.length === request.sourcePaths.length;
+    showModalNotice(
+      nothingPasted
+        ? getCopyLikePreStartFailureTitle(action)
+        : missingSourcePaths.length === 1
+          ? "An item couldn't be pasted"
+          : "Some items couldn't be pasted",
+      missingMessage,
+    );
   }
 
   async function cancelWriteOperation() {
@@ -1882,12 +2026,17 @@ export function useExplorerActions(args: {
     if (!operationId) {
       return;
     }
-    await client.invoke("copyPaste:resolveConflict", {
-      operationId,
-      conflictId,
-      resolution,
-      ...(applyToRemaining ? { applyToRemaining } : {}),
-    });
+    try {
+      await client.invoke("copyPaste:resolveConflict", {
+        operationId,
+        conflictId,
+        resolution,
+        ...(applyToRemaining ? { applyToRemaining } : {}),
+      });
+    } catch (error) {
+      // The question stays on screen, so it can be answered again or the operation stopped.
+      logger.error("copy paste conflict resolution failed", error);
+    }
   }
 
   function handleCopyPasteDialogEscape() {
@@ -2227,13 +2376,32 @@ export function useExplorerActions(args: {
     }
   }
 
+  function getContextMenuWriteAction(actionId: ContextMenuActionId): WriteStartAction {
+    switch (actionId) {
+      case "move":
+        return "move_to";
+      case "rename":
+        return "rename";
+      case "duplicate":
+        return "duplicate";
+      case "newFolder":
+        return "new_folder";
+      case "trash":
+        return "trash";
+      default: {
+        const clipboard = copyPasteClipboardRef.current;
+        return clipboard.type === "ready" && clipboard.mode === "cut" ? "move_to" : "paste";
+      }
+    }
+  }
+
   async function runContextMenuAction(actionId: ContextMenuActionId, paths: string[]) {
     const contextMenuSurface = contextMenuState?.surface ?? null;
     const contextMenuTargetPath = contextMenuState?.targetPath ?? null;
     const contextMenuScope = contextMenuState?.scope ?? "selection";
     closeContextMenu();
     if (WRITE_LOCKED_CONTEXT_ACTION_IDS.includes(actionId) && isWriteOperationInFlight()) {
-      showWriteOperationBusyToast();
+      showWriteOperationBusyNotice(getContextMenuWriteAction(actionId));
       return;
     }
     if (contextMenuSurface === "background" && BACKGROUND_FOLDER_ACTION_IDS.includes(actionId)) {
@@ -2402,7 +2570,7 @@ export function useExplorerActions(args: {
       return;
     }
     if (actionId === "emptyTrash") {
-      await client.invoke("system:emptyTrash", {});
+      await emptyTrash();
       return;
     }
     if (actionId === "terminal") {
@@ -2420,6 +2588,26 @@ export function useExplorerActions(args: {
     }
     logger.error("unhandled context menu action", { actionId, paths, surface: contextMenuSurface });
     showModalNotice("Unsupported action", `File Trail could not run the "${actionId}" action.`);
+  }
+
+  // Finder empties the Trash (the main process asks it to). A failure is told in a dialog;
+  // the usual one is that macOS has not let File Trail control Finder.
+  async function emptyTrash() {
+    let failure: string | null = null;
+    try {
+      const response = await client.invoke("system:emptyTrash", {});
+      if (!response.ok) {
+        failure = response.error ?? "";
+      }
+    } catch (error) {
+      failure = error instanceof Error ? error.message : String(error);
+    }
+    if (failure === null) {
+      return;
+    }
+    logger.error("empty trash failed", failure);
+    const notice = describeEmptyTrashFailure(failure);
+    showModalNotice(notice.title, notice.message);
   }
 
   async function runContextSubmenuAction(action: ContextMenuSubmenuAction, paths: string[]) {
@@ -2618,6 +2806,7 @@ export function useExplorerActions(args: {
       validateDestinationBeforeAnalyze?: boolean;
       clearClipboardOnStart?: boolean;
       initiator?: "clipboard" | "drag_drop" | "move_dialog" | null;
+      onSourcesMissing?: (paths: string[]) => void;
     } = {},
   ): Promise<CopyLikePreStartOutcome> {
     if (sourcePaths.length === 0 || destinationDirectoryPath.length === 0) {
@@ -2653,6 +2842,62 @@ export function useExplorerActions(args: {
       pasteAttemptId,
       clearClipboardOnStart: options.clearClipboardOnStart ?? false,
       sourceSurface: options.sourceSurface ?? null,
+      pendingTreeSelectionPath: options.pendingTreeSelectionPath ?? null,
+      initiator: options.initiator ?? null,
+      onSourcesMissing: options.onSourcesMissing,
+      defaultPolicy: DEFAULT_COPY_PASTE_POLICY,
+      shouldReviewReport: (report) =>
+        reportHasConflicts(report) ||
+        (options.reviewLargeBatchWarning === true && reportHasWarningCode(report, "large_batch")),
+    });
+  }
+
+  // Copies items into a folder the way a copy and paste does: a drag that copies (to another
+  // disk, or with Option held). Into the folder the items are in, it makes "name copy"
+  // duplicates, as an Option-drag does in Finder.
+  async function startCopyToDestination(
+    sourcePaths: string[],
+    destinationDirectoryPath: string,
+    options: {
+      pendingTreeSelectionPath?: string | null;
+      reviewLargeBatchWarning?: boolean;
+      sourceSurface?: InternalMoveSourceSurface | null;
+      validateDestinationBeforeAnalyze?: boolean;
+      initiator?: "clipboard" | "drag_drop" | "move_dialog" | null;
+    } = {},
+  ): Promise<CopyLikePreStartOutcome> {
+    if (sourcePaths.length === 0 || destinationDirectoryPath.length === 0) {
+      return {
+        status: "blocked",
+        message: "Choose a destination folder.",
+      };
+    }
+    if (isWriteOperationInFlight()) {
+      return getCopyLikeBusyOutcome();
+    }
+    if (options.validateDestinationBeforeAnalyze) {
+      const validationMessage = await validateMoveDestinationDirectory(destinationDirectoryPath);
+      if (validationMessage) {
+        return {
+          status: "blocked",
+          message: validationMessage,
+        };
+      }
+    }
+    const pasteAttemptId = beginPendingPasteAttempt({
+      action: "paste",
+      targetPath: destinationDirectoryPath,
+      totalItemCount: sourcePaths.length,
+      totalBytes: null,
+      currentSourcePath: sourcePaths[0] ?? null,
+    });
+    return analyzeCopyLikeRequest({
+      mode: "copy",
+      sourcePaths,
+      destinationDirectoryPath,
+      action: "paste",
+      pasteAttemptId,
+      clearClipboardOnStart: false,
       pendingTreeSelectionPath: options.pendingTreeSelectionPath ?? null,
       initiator: options.initiator ?? null,
       defaultPolicy: DEFAULT_COPY_PASTE_POLICY,
@@ -2752,6 +2997,7 @@ export function useExplorerActions(args: {
       sourcePath,
       currentName: getPathLeafName(sourcePath),
       error: null,
+      refusalCount: 0,
       inline:
         !options.fromTree &&
         !isSearchMode &&
@@ -2761,55 +3007,130 @@ export function useExplorerActions(args: {
   }
 
   async function submitRenameDialog(nextName: string) {
-    if (!renameDialogState) {
+    const dialogState = renameDialogState;
+    if (!dialogState) {
       return;
     }
     const nameError = getItemNameError(nextName);
     if (nameError) {
-      setRenameDialogState((current) => (current ? { ...current, error: nameError } : current));
+      refuseRenameName(nameError);
       return;
     }
+    const request = { kind: "rename", sourcePath: dialogState.sourcePath, name: nextName } as const;
+    if (isWriteOperationInFlight()) {
+      refuseWriteWhileBusy(request);
+      return;
+    }
+    if (needsDotNameConfirmation(nextName, dialogState.currentName)) {
+      setRenameDialogState(null);
+      setCopyPasteDialogState({ type: "confirmDotName", request });
+      return;
+    }
+    await startRename(request, refuseRenameName);
+  }
+
+  // A refused name keeps the field (or dialog) open with the reason under it. The count lets
+  // the field know it was refused again even when the reason reads the same as last time.
+  function refuseRenameName(message: string) {
+    setRenameDialogState((current) =>
+      current ? { ...current, error: message, refusalCount: current.refusalCount + 1 } : current,
+    );
+  }
+
+  // Nothing is renamed or created while another write runs. The name field or dialog closes,
+  // so it is not left waiting, and the same dialog as for every other write says why.
+  function refuseWriteWhileBusy(request: DotNameRequest) {
+    if (request.kind === "rename") {
+      setRenameDialogState(null);
+      showWriteOperationBusyNotice("rename");
+      return;
+    }
+    setNewFolderDialogState(null);
+    showWriteOperationBusyNotice("new_folder");
+  }
+
+  // Like Finder: a name that begins with a dot hides the item, so while hidden files are not
+  // shown it would vanish. That is asked first. A name that already began with one hides
+  // nothing new.
+  function needsDotNameConfirmation(name: string, currentName: string | null): boolean {
+    return name.startsWith(".") && !includeHidden && !(currentName ?? "").startsWith(".");
+  }
+
+  // "Use “.”" in the dot-name dialog: the rename or new folder goes ahead as asked. A refusal
+  // now has no field to go under, so it gets a dialog of its own.
+  async function confirmDotNameDialog() {
+    const dialogState = copyPasteDialogState;
+    if (dialogState?.type !== "confirmDotName") {
+      return;
+    }
+    setCopyPasteDialogState(null);
+    const { request } = dialogState;
+    const refuse = (message: string) =>
+      showModalNotice(
+        getCopyLikePreStartFailureTitle(request.kind === "rename" ? "rename" : "new_folder"),
+        message,
+      );
+    if (request.kind === "rename") {
+      await startRename(request, refuse);
+      return;
+    }
+    await startCreateFolder(request, refuse);
+  }
+
+  async function startRename(
+    request: Extract<DotNameRequest, { kind: "rename" }>,
+    onRefused: (message: string) => void,
+  ) {
+    if (isWriteOperationInFlight()) {
+      refuseWriteWhileBusy(request);
+      return;
+    }
+    takeWriteOperationLock("rename", {
+      targetPath: request.sourcePath,
+      totalItemCount: 1,
+      currentSourcePath: request.sourcePath,
+    });
     try {
       const response = await client.invoke("writeOperation:rename", {
-        sourcePath: renameDialogState.sourcePath,
-        destinationName: nextName,
+        sourcePath: request.sourcePath,
+        destinationName: request.name,
       });
-      activeWriteOperationIdRef.current = response.operationId;
+      adoptWriteOperation(response.operationId);
       applyWriteOperationCardState({
         action: "rename",
         stage: "queued",
-        targetPath: renameDialogState.sourcePath,
+        targetPath: request.sourcePath,
         completedItemCount: 0,
         totalItemCount: 1,
         completedByteCount: 0,
         totalBytes: null,
-        currentSourcePath: renameDialogState.sourcePath,
+        currentSourcePath: request.sourcePath,
       });
       setRenameDialogState(null);
     } catch (error) {
-      setRenameDialogState((current) =>
-        current
-          ? { ...current, error: error instanceof Error ? error.message : String(error) }
-          : current,
-      );
+      applyWriteOperationCardState(null);
+      if (isWriteOperationBusyError(error)) {
+        refuseWriteWhileBusy(request);
+        return;
+      }
+      onRefused(error instanceof Error ? error.message : String(error));
     }
   }
 
-  function resolveDefaultNewFolderName(parentPath: string): string {
-    if (parentPath !== currentPathRef.current) {
-      return "New Folder";
+  // A free name in a folder that is not the one on screen (a folder picked in the list or in
+  // the tree): the folder is read for the names it has.
+  async function readFreeNewFolderName(parentPath: string): Promise<string> {
+    try {
+      const response = await client.invoke("directory:getSnapshot", {
+        path: parentPath,
+        includeHidden: true,
+      });
+      return resolveFreeNewFolderName(response.entries.map((entry) => entry.name));
+    } catch (error) {
+      logger.error("new folder name lookup failed", error);
+      // The main process still refuses a name that is taken; it can be changed then.
+      return resolveFreeNewFolderName([]);
     }
-    const existingNames = new Set(currentEntries.map((entry) => entry.name));
-    if (!existingNames.has("New Folder")) {
-      return "New Folder";
-    }
-    for (let index = 2; index < 500; index += 1) {
-      const candidate = `New Folder ${index}`;
-      if (!existingNames.has(candidate)) {
-        return candidate;
-      }
-    }
-    return "New Folder";
   }
 
   function buildChildPath(parentPath: string, childName: string): string {
@@ -2826,14 +3147,25 @@ export function useExplorerActions(args: {
       return null;
     }
     const explicitTreeSelectionPath = pendingTreeSelectionPathRef.current;
-    if (
-      explicitTreeSelectionPath &&
-      (event.status === "completed" || event.status === "partial") &&
-      result.items.some(
-        (item) => item.status === "completed" && item.destinationPath === explicitTreeSelectionPath,
-      )
-    ) {
-      return explicitTreeSelectionPath;
+    if (explicitTreeSelectionPath && (event.status === "completed" || event.status === "partial")) {
+      if (
+        result.items.some(
+          (item) =>
+            item.status === "completed" && item.destinationPath === explicitTreeSelectionPath,
+        )
+      ) {
+        return explicitTreeSelectionPath;
+      }
+      // A duplicate's name ("Folder copy") is only known once it is made; it was asked for
+      // by the folder it goes into, and the copy is what is selected, as in Finder.
+      if (event.action === "duplicate" && explicitTreeSelectionPath === result.targetPath) {
+        const duplicatePath = result.items.find(
+          (item) => item.status === "completed" && item.destinationPath,
+        )?.destinationPath;
+        if (duplicatePath) {
+          return duplicatePath;
+        }
+      }
     }
     return resolveWriteOperationTreeSelectionPath(
       result,
@@ -2850,17 +3182,32 @@ export function useExplorerActions(args: {
     }
     setFocusedPane(null);
     clearTypeahead();
-    setNewFolderDialogState({
-      parentDirectoryPath,
-      initialName: resolveDefaultNewFolderName(parentDirectoryPath),
-      error: null,
-      selectInTreeOnSuccess: options.selectInTreeOnSuccess ?? false,
-    });
     closeContextMenu();
+    const requestId = newFolderNameRequestRef.current + 1;
+    newFolderNameRequestRef.current = requestId;
+    const showDialog = (initialName: string) => {
+      if (newFolderNameRequestRef.current !== requestId) {
+        return;
+      }
+      setNewFolderDialogState({
+        parentDirectoryPath,
+        initialName,
+        error: null,
+        selectInTreeOnSuccess: options.selectInTreeOnSuccess ?? false,
+      });
+    };
+    // The name suggested is free in the folder the new one goes into. The folder on screen
+    // has its items known, so its dialog opens without a wait.
+    if (parentDirectoryPath === currentPathRef.current) {
+      showDialog(resolveFreeNewFolderName(currentEntries.map((entry) => entry.name)));
+      return;
+    }
+    void readFreeNewFolderName(parentDirectoryPath).then(showDialog);
   }
 
   async function submitNewFolderDialog(folderName: string) {
-    if (!newFolderDialogState) {
+    const dialogState = newFolderDialogState;
+    if (!dialogState) {
       return;
     }
     const nameError = getItemNameError(folderName);
@@ -2868,21 +3215,54 @@ export function useExplorerActions(args: {
       setNewFolderDialogState((current) => (current ? { ...current, error: nameError } : current));
       return;
     }
+    const request = {
+      kind: "newFolder",
+      parentDirectoryPath: dialogState.parentDirectoryPath,
+      name: folderName,
+      selectInTreeOnSuccess: dialogState.selectInTreeOnSuccess,
+    } as const;
+    if (isWriteOperationInFlight()) {
+      refuseWriteWhileBusy(request);
+      return;
+    }
+    if (needsDotNameConfirmation(folderName, null)) {
+      setNewFolderDialogState(null);
+      setCopyPasteDialogState({ type: "confirmDotName", request });
+      return;
+    }
+    await startCreateFolder(request, (message) =>
+      setNewFolderDialogState((current) => (current ? { ...current, error: message } : current)),
+    );
+  }
+
+  async function startCreateFolder(
+    request: Extract<DotNameRequest, { kind: "newFolder" }>,
+    onRefused: (message: string) => void,
+  ) {
+    if (isWriteOperationInFlight()) {
+      refuseWriteWhileBusy(request);
+      return;
+    }
+    takeWriteOperationLock("new_folder", {
+      targetPath: request.parentDirectoryPath,
+      totalItemCount: 1,
+      currentSourcePath: null,
+    });
     try {
       const response = await client.invoke("writeOperation:createFolder", {
-        parentDirectoryPath: newFolderDialogState.parentDirectoryPath,
-        folderName,
+        parentDirectoryPath: request.parentDirectoryPath,
+        folderName: request.name,
       });
       rememberPendingTreeSelectionPath(
-        newFolderDialogState.selectInTreeOnSuccess
-          ? buildChildPath(newFolderDialogState.parentDirectoryPath, folderName)
+        request.selectInTreeOnSuccess
+          ? buildChildPath(request.parentDirectoryPath, request.name)
           : null,
       );
-      activeWriteOperationIdRef.current = response.operationId;
+      adoptWriteOperation(response.operationId);
       applyWriteOperationCardState({
         action: "new_folder",
         stage: "queued",
-        targetPath: newFolderDialogState.parentDirectoryPath,
+        targetPath: request.parentDirectoryPath,
         completedItemCount: 0,
         totalItemCount: 1,
         completedByteCount: 0,
@@ -2891,72 +3271,57 @@ export function useExplorerActions(args: {
       });
       setNewFolderDialogState(null);
     } catch (error) {
-      setNewFolderDialogState((current) =>
-        current
-          ? { ...current, error: error instanceof Error ? error.message : String(error) }
-          : current,
-      );
+      applyWriteOperationCardState(null);
+      if (isWriteOperationBusyError(error)) {
+        refuseWriteWhileBusy(request);
+        return;
+      }
+      onRefused(error instanceof Error ? error.message : String(error));
     }
+  }
+
+  // A confirmation that is still open when a write turns out to be busy is closed, so the
+  // busy dialog is not stacked on it.
+  function closeDeleteConfirmation() {
+    setCopyPasteDialogState((current) =>
+      current?.type === "confirmTrash" || current?.type === "confirmDeleteImmediately"
+        ? null
+        : current,
+    );
   }
 
   async function startTrashPaths(paths: string[]) {
-    if (paths.length === 0) {
-      return;
-    }
-    if (isWriteOperationInFlight()) {
-      showWriteOperationBusyToast();
-      return;
-    }
-    try {
-      setCopyPasteDialogState(null);
-      const response = await client.invoke("writeOperation:trash", {
-        paths,
-      });
-      rememberPendingTreeSelectionPath(null);
-      activeWriteOperationIdRef.current = response.operationId;
-      applyWriteOperationCardState({
-        action: "trash",
-        stage: "queued",
-        targetPath: null,
-        completedItemCount: 0,
-        totalItemCount: paths.length,
-        completedByteCount: 0,
-        totalBytes: null,
-        currentSourcePath: paths[0] ?? null,
-      });
-      closeContextMenu();
-    } catch (error) {
-      logger.error("trash start failed", error);
-      if (error instanceof Error && error.message.includes(WRITE_OPERATION_BUSY_ERROR)) {
-        showWriteOperationBusyToast();
-        return;
-      }
-      showModalNotice(
-        "Move to Trash",
-        error instanceof Error
-          ? error.message
-          : "File Trail could not move the selected items to Trash.",
-      );
-    }
+    await startRemovePaths(paths, "trash");
   }
 
   async function startDeleteImmediatelyPaths(paths: string[]) {
+    await startRemovePaths(paths, "delete_immediately");
+  }
+
+  async function startRemovePaths(paths: string[], action: "trash" | "delete_immediately") {
     if (paths.length === 0) {
       return;
     }
     if (isWriteOperationInFlight()) {
-      showWriteOperationBusyToast();
+      closeDeleteConfirmation();
+      showWriteOperationBusyNotice(action);
       return;
     }
+    setCopyPasteDialogState(null);
+    takeWriteOperationLock(action, {
+      targetPath: null,
+      totalItemCount: paths.length,
+      currentSourcePath: paths[0] ?? null,
+    });
     try {
-      setCopyPasteDialogState(null);
-      const response = await client.invoke("writeOperation:deleteImmediately", {
-        paths,
-      });
+      const response =
+        action === "trash"
+          ? await client.invoke("writeOperation:trash", { paths })
+          : await client.invoke("writeOperation:deleteImmediately", { paths });
       rememberPendingTreeSelectionPath(null);
-      activeWriteOperationIdRef.current = response.operationId;
+      adoptWriteOperation(response.operationId);
       applyWriteOperationCardState({
-        action: "delete_immediately",
+        action,
         stage: "queued",
         targetPath: null,
         completedItemCount: 0,
@@ -2967,16 +3332,19 @@ export function useExplorerActions(args: {
       });
       closeContextMenu();
     } catch (error) {
-      logger.error("delete immediately failed", error);
-      if (error instanceof Error && error.message.includes(WRITE_OPERATION_BUSY_ERROR)) {
-        showWriteOperationBusyToast();
+      applyWriteOperationCardState(null);
+      logger.error(action === "trash" ? "trash start failed" : "delete immediately failed", error);
+      if (isWriteOperationBusyError(error)) {
+        showWriteOperationBusyNotice(action);
         return;
       }
       showModalNotice(
-        "Delete Immediately",
+        action === "trash" ? "Move to Trash" : "Delete Immediately",
         error instanceof Error
           ? error.message
-          : "File Trail could not permanently delete the selected items.",
+          : action === "trash"
+            ? "File Trail could not move the selected items to Trash."
+            : "File Trail could not permanently delete the selected items.",
       );
     }
   }
@@ -3055,7 +3423,7 @@ export function useExplorerActions(args: {
     setSingleContentSelection,
     showCopyPasteProgressCard,
     showCopyPasteResultDialog,
-    showWriteOperationBusyToast,
+    startCopyToDestination,
     startDuplicatePaths,
     startMoveToDestination,
     startPasteFromClipboard,
@@ -3073,5 +3441,6 @@ export function useExplorerActions(args: {
     openFolderInNewTab,
     addOpenWithApplication,
     cancelWriteOperation,
+    confirmDotNameDialog,
   };
 }

@@ -69,7 +69,22 @@ type CopyPasteDialogState =
       paths: string[];
       itemLabel: string;
     }
+  | {
+      // Asked before a rename or new folder whose name begins with a dot would hide it.
+      type: "confirmDotName";
+      request: DotNameRequest;
+    }
   | null;
+
+// A rename or new folder waiting on the dot-name question, with all it needs to go ahead.
+type DotNameRequest =
+  | { kind: "rename"; sourcePath: string; name: string }
+  | {
+      kind: "newFolder";
+      parentDirectoryPath: string;
+      name: string;
+      selectInTreeOnSuccess: boolean;
+    };
 
 type WriteOperationCardState = {
   action: WriteOperationAction;
@@ -91,6 +106,9 @@ type RenameDialogState = {
   sourcePath: string;
   currentName: string;
   error: string | null;
+  // How many names were refused so far. The same reason given twice in a row is still a new
+  // refusal, and the name field needs to hear of it to take the keyboard back.
+  refusalCount: number;
   // Items in the file list are renamed in their row; anything else (a tree folder, a
   // search result) is renamed in a dialog.
   inline: boolean;
@@ -288,6 +306,7 @@ export function useWriteOperations() {
 export type {
   ContextMenuState,
   CopyPasteDialogState,
+  DotNameRequest,
   WriteOperationCardState,
   WriteOperationsState,
 };

@@ -10,7 +10,8 @@ function renderField(overrides: Partial<Parameters<typeof InlineRenameField>[0]>
   const props = {
     name: "report.final.pdf",
     extension: "pdf",
-    error: null,
+    error: null as string | null,
+    refusalCount: 0,
     onSubmit,
     onCancel,
     ...overrides,
@@ -104,6 +105,33 @@ describe("InlineRenameField", () => {
     expect(screen.queryByRole("alert")).toBeNull();
     fireEvent.keyDown(input, { key: "Enter" });
     expect(onSubmit).toHaveBeenLastCalledWith("free.pdf");
+  });
+
+  it("answers again after a second refusal that reads the same as the first", () => {
+    const { input, onSubmit, onCancel, rerender } = renderField();
+    const reason = "A name can't contain “/”.";
+
+    fireEvent.change(input, { target: { value: "a/b.pdf" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    rerender({ error: reason, refusalCount: 1 });
+
+    // Another name, refused for the same reason.
+    fireEvent.change(input, { target: { value: "c/d.pdf" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onSubmit).toHaveBeenLastCalledWith("c/d.pdf");
+    rerender({ error: reason, refusalCount: 2 });
+    expect(screen.getByRole("alert")).toHaveTextContent(reason);
+
+    // The field still takes a fixed name, and Return is not swallowed.
+    fireEvent.change(input, { target: { value: "fine.pdf" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onSubmit).toHaveBeenCalledTimes(3);
+    expect(onSubmit).toHaveBeenLastCalledWith("fine.pdf");
+
+    // And leaving it after the second refusal gives up rather than doing nothing.
+    rerender({ error: reason, refusalCount: 3 });
+    fireEvent.blur(input);
+    expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
   it("gives up when the field with a refused name loses the focus", () => {

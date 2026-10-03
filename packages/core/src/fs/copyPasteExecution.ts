@@ -3,6 +3,7 @@ import { basename, dirname, join } from "node:path";
 
 import { isAbortError } from "@filetrail/contracts";
 
+import { describeCopyPasteError, errorCode } from "./copyPasteErrors";
 import { captureFingerprint, findSourceRelation, fingerprintsEqual } from "./copyPasteFingerprint";
 import { fitName } from "./copyPasteNames";
 import {
@@ -24,6 +25,7 @@ import type {
   CopyPasteRuntimeConflict,
   CopyPasteRuntimeResolutionAction,
   NodeFingerprint,
+  ReplaceJournal,
   WriteServiceFileSystem,
 } from "./writeServiceTypes";
 
@@ -58,6 +60,7 @@ type ExecutionContext = {
   // Maps a path being written to the path people know it by: while a Replace builds its
   // new item under a hidden name, progress and questions still show the final name.
   displayPath?: (path: string) => string;
+  replaceJournal: ReplaceJournal | null;
 };
 
 // Something appeared at the destination while writing to it (EEXIST). Handled like a
@@ -97,6 +100,7 @@ export async function executeCopyPasteFromAnalysis(args: {
   ) => Promise<CopyPasteRuntimeResolutionAction | null>;
   // An answer already given for "the rest of this operation", used without asking again.
   autoResolve?: (conflict: CopyPasteRuntimeConflict) => CopyPasteRuntimeResolutionAction | null;
+  replaceJournal?: ReplaceJournal;
 }): Promise<void> {
   const startedAt = args.now().toISOString();
   const destinationFingerprint = await captureFingerprint(
@@ -121,6 +125,7 @@ export async function executeCopyPasteFromAnalysis(args: {
     totalItemCount: countExecutableSteps(args.resolvedNodes),
     totalBytes: args.report.summary.totalBytes,
     progress: { completedItemCount: 0, completedByteCount: 0 },
+    replaceJournal: args.replaceJournal ?? null,
   };
   const itemResults: CopyPasteItemResult[] = [];
   let encounteredError: Error | null = null;
@@ -415,9 +420,18 @@ async function performNode(
   }
 
   if (currentNode.node.sourceKind === "directory") {
+    // A folder whose contents couldn't be read is left where it is; the rest goes on.
+    if (currentNode.node.issueCode === "source_unreadable") {
+      throw new Error(unreadableFolderMessage(context.mode, currentNode.node.issueMessage));
+    }
     return executeDirectoryNode(context, currentNode);
   }
   return executeLeafNode(context, currentNode);
+}
+
+function unreadableFolderMessage(mode: CopyPasteMode, reason: string | null): string {
+  const done = mode === "cut" ? "moved" : "copied";
+  return `This folder couldn't be read, so it wasn't ${done}.${reason ? ` ${reason}` : ""}`;
 }
 
 function canRenameForCut(context: ExecutionContext, node: ResolvedCopyPasteNode): boolean {
@@ -483,14 +497,36 @@ async function writeLeaf(
     return;
   }
   await copyFileContents(context, node.node.sourcePath, targetPath);
-  // Applied after both copy paths. Native copyFile (copyfile(3) COPYFILE_ALL)
-  // already carries metadata, so chmod/utimes simply re-apply the same values.
+  if (context.fileSystem.copyFile) {
+    await restoreDroppedFileMetadata(context.fileSystem, targetPath, node.node.sourceFingerprint);
+    return;
+  }
   await preserveModeIfSupported(context.fileSystem, targetPath, node.node.sourceFingerprint.mode);
   await preserveTimestampsIfSupported(
     context.fileSystem,
     targetPath,
     node.node.sourceFingerprint.mtimeMs,
   );
+}
+
+// Native copyFile (copyfile(3) COPYFILE_ALL) carries the mode, flags and dates, but some
+// volumes drop them: only what didn't arrive is set again. Setting it when it did arrive
+// would fail on a locked file (its copy is locked too), and a copy that worked is never
+// reported as failed over its metadata.
+async function restoreDroppedFileMetadata(
+  fileSystem: WriteServiceFileSystem,
+  targetPath: string,
+  source: NodeFingerprint,
+): Promise<void> {
+  const copied = await captureFingerprint(fileSystem, targetPath);
+  if (source.mode !== null && copied.mode !== source.mode) {
+    await preserveModeIfSupported(fileSystem, targetPath, source.mode).catch(() => undefined);
+  }
+  if (source.mtimeMs !== null && copied.mtimeMs !== source.mtimeMs) {
+    await preserveTimestampsIfSupported(fileSystem, targetPath, source.mtimeMs).catch(
+      () => undefined,
+    );
+  }
 }
 
 async function executeDirectoryNode(
@@ -510,11 +546,8 @@ async function executeDirectoryNode(
     } catch (error) {
       throw errorCode(error) === "EEXIST" ? new DestinationTakenError(error) : error;
     }
-    await preserveModeIfSupported(
-      context.fileSystem,
-      currentNode.destinationPath,
-      currentNode.node.sourceFingerprint.mode,
-    );
+    // The folder's own mode and flags come last (see below): a read-only or locked folder
+    // couldn't be filled in otherwise.
     context.progress.completedItemCount += 1;
     emitProgress(context, "running", currentNode, null);
   }
@@ -557,14 +590,10 @@ async function executeDirectoryNode(
     }
     bubbledChildItems.push(...childResult.childItems);
   }
-  // Preserve directory timestamps AFTER children are processed, since writing
-  // children into the directory updates its mtime on the real filesystem.
+  // The folder's metadata goes on once its items are in: writing them changes its dates,
+  // and a read-only or locked folder can't take new items.
   if (createsDirectory) {
-    await preserveTimestampsIfSupported(
-      context.fileSystem,
-      currentNode.destinationPath,
-      currentNode.node.sourceFingerprint.mtimeMs,
-    );
+    await applyDirectoryMetadata(context, currentNode);
   }
   let dirDeleteError: string | null = null;
   if (context.mode === "cut") {
@@ -581,6 +610,34 @@ async function executeDirectoryNode(
     destinationPath: currentNode.destinationPath,
     childItems: bubbledChildItems,
   };
+}
+
+async function applyDirectoryMetadata(
+  context: ExecutionContext,
+  node: ResolvedCopyPasteNode,
+): Promise<void> {
+  const { fileSystem } = context;
+  const { sourcePath, sourceFingerprint } = node.node;
+  if (fileSystem.copyMetadata) {
+    try {
+      // Tags, the custom-icon flag, ACLs and flags along with the mode and dates.
+      await fileSystem.copyMetadata(sourcePath, node.destinationPath);
+      if (context.mode === "cut") {
+        // Moving the items out changed the source folder's dates; put back the ones it
+        // had before. Only the date is lost if this fails (a locked folder refuses it).
+        await preserveTimestampsIfSupported(
+          fileSystem,
+          node.destinationPath,
+          sourceFingerprint.mtimeMs,
+        ).catch(() => undefined);
+      }
+      return;
+    } catch {
+      // For example a volume that refuses some attribute: carry over what can be.
+    }
+  }
+  await preserveModeIfSupported(fileSystem, node.destinationPath, sourceFingerprint.mode);
+  await preserveTimestampsIfSupported(fileSystem, node.destinationPath, sourceFingerprint.mtimeMs);
 }
 
 // Replace, without ever leaving the person with neither item: the new item is first
@@ -605,24 +662,41 @@ async function executeReplace(
   }
 
   const temporaryPath = await temporarySiblingPath(fileSystem, finalPath);
+  // Written down before anything is staged, so a crash can't leave the item under the
+  // hidden name: the next start finishes or undoes the Replace.
+  const journal = context.replaceJournal;
+  const journalEntry = {
+    id: randomBytes(8).toString("hex"),
+    stagingPath: temporaryPath,
+    finalPath,
+    sourcePath: currentNode.node.sourcePath,
+    moved: false,
+    staged: false,
+  };
   let movedByRename = false;
   if (canRenameForCut(context, currentNode)) {
+    await journal?.add({ ...journalEntry, moved: true, staged: true });
     try {
       await moveExclusive(fileSystem, currentNode.node.sourcePath, temporaryPath);
       movedByRename = true;
     } catch (error) {
       if (errorCode(error) !== "EXDEV") {
+        await journal?.remove(journalEntry.id).catch(() => undefined);
         throw error;
       }
     }
+  }
+  if (!movedByRename) {
+    await journal?.add(journalEntry);
   }
   // Puts things back the way they were before this item started.
   const undoStaging = async () => {
     if (movedByRename) {
       await moveExclusive(fileSystem, temporaryPath, currentNode.node.sourcePath);
     } else {
-      await fileSystem.rm(temporaryPath, { recursive: true, force: true });
+      await removeStagedItem(fileSystem, temporaryPath);
     }
+    await journal?.remove(journalEntry.id);
   };
 
   let stagedChildItems: CopyPasteItemResult[] = [];
@@ -658,6 +732,10 @@ async function executeReplace(
       throw error instanceof DestinationTakenError ? error.original : error;
     }
     stagedChildItems = rebaseItemResults(stagedOutcome.childItems, temporaryPath, finalPath);
+    if (stagedOutcome.itemStatus !== "failed") {
+      // Complete now: once the old item is in the Trash, this copy is the one to keep.
+      await journal?.add({ ...journalEntry, staged: true });
+    }
     if (stagedOutcome.itemStatus === "failed") {
       await undoStaging().catch(() => undefined);
       return {
@@ -681,6 +759,7 @@ async function executeReplace(
     await undoStaging().catch(() => undefined);
     throw errorCode(error) === "EEXIST" ? new DestinationTakenError(error) : error;
   }
+  await journal?.remove(journalEntry.id).catch(() => undefined);
 
   let ownError: string | null = null;
   let childItems = stagedChildItems;
@@ -817,6 +896,37 @@ async function temporarySiblingPath(
   throw new Error(`Couldn't find a free temporary name next to “${basename(finalPath)}”.`);
 }
 
+// Removes a hidden copy built for a Replace. A read-only folder inside it can't have its
+// items removed, so folders are opened up first when that is what stopped it.
+export async function removeStagedItem(
+  fileSystem: WriteServiceFileSystem,
+  path: string,
+): Promise<void> {
+  try {
+    await fileSystem.rm(path, { recursive: true, force: true });
+    return;
+  } catch (error) {
+    const code = errorCode(error);
+    if ((code !== "EACCES" && code !== "EPERM") || !fileSystem.chmod) {
+      throw error;
+    }
+  }
+  await makeFoldersWritable(fileSystem, path);
+  await fileSystem.rm(path, { recursive: true, force: true });
+}
+
+async function makeFoldersWritable(fileSystem: WriteServiceFileSystem, path: string) {
+  const fingerprint = await captureFingerprint(fileSystem, path);
+  if (fingerprint.kind !== "directory") {
+    return;
+  }
+  await fileSystem.chmod?.(path, 0o700).catch(() => undefined);
+  const entries = await fileSystem.readdir(path).catch(() => [] as string[]);
+  for (const entry of entries) {
+    await makeFoldersWritable(fileSystem, join(path, entry));
+  }
+}
+
 function rebaseResolvedNode(
   node: ResolvedCopyPasteNode,
   fromPath: string,
@@ -931,7 +1041,7 @@ async function tryRenameForCut(
 }
 
 // rename(2) that never replaces anything at `to`: fails with EEXIST instead.
-async function moveExclusive(
+export async function moveExclusive(
   fileSystem: WriteServiceFileSystem,
   from: string,
   to: string,
@@ -948,11 +1058,6 @@ async function moveExclusive(
     throw Object.assign(new Error(`EEXIST: ${to}`), { code: "EEXIST", path: to });
   }
   await fileSystem.rename(from, to);
-}
-
-function errorCode(error: unknown): string | undefined {
-  const code = (error as NodeJS.ErrnoException | null)?.code;
-  return typeof code === "string" ? code : undefined;
 }
 
 function conflictClassFor(
@@ -1094,46 +1199,6 @@ async function assertDestinationDoesNotContainSource(
   }
 }
 
-const ERROR_CODE_MESSAGES: Record<string, string> = {
-  ENOSPC: "There isn't enough free space on the destination disk.",
-  EDQUOT: "The destination's storage quota is full.",
-  EACCES: "You don't have permission to access this item.",
-  EPERM: "You don't have permission to access this item.",
-  EROFS: "The destination is read-only.",
-  ENAMETOOLONG: "The name is too long.",
-  ENOENT: "The item no longer exists.",
-  EEXIST: "An item with this name already exists.",
-  ENOTEMPTY: "The folder isn't empty.",
-  EBUSY: "The item is in use.",
-  EIO: "A disk error occurred.",
-  EXDEV: "The item can't be moved directly to a different disk.",
-  EISDIR: "A folder is in the way where a file was expected.",
-  ENOTDIR: "Part of the path isn't a folder any more.",
-  ENOTSUP: "This volume doesn't support this operation.",
-  EOPNOTSUPP: "This volume doesn't support this operation.",
-  EINVAL: "This volume doesn't accept this name or operation.",
-  ELOOP: "The item's location loops back on itself through symbolic links.",
-  EFBIG: "The file is too large for this volume.",
-  EMFILE: "Too many files are open. Close some apps and try again.",
-  ENFILE: "Too many files are open. Close some apps and try again.",
-  ETIMEDOUT: "The volume took too long to respond.",
-  EINTR: "The operation was interrupted. Try again.",
-  EAGAIN: "The item is temporarily unavailable. Try again.",
-  ENXIO: "The disk isn't available.",
-  ENODEV: "The disk isn't available.",
-  ENOMEM: "There isn't enough memory to finish this.",
-  ESTALE: "The network volume went away. Reconnect it and try again.",
-};
-
-/** A readable, path-free reason for a failed item (the item itself is shown next to it). */
-export function describeCopyPasteError(error: unknown): string {
-  const code = errorCode(error);
-  if (code !== undefined && ERROR_CODE_MESSAGES[code]) {
-    return ERROR_CODE_MESSAGES[code];
-  }
-  return toErrorMessage(error);
-}
-
 /** Attempts to delete the source after a successful copy in cut mode.
  *  Returns null on success, or an error message if deletion failed. */
 async function tryDeleteMovedSource(
@@ -1148,13 +1213,13 @@ async function tryDeleteMovedSource(
   }
   if (!fingerprintsEqual(originalFingerprint, currentFingerprint)) {
     // Source was modified since analysis — preserve it.
-    return "Source was modified after copy — preserved at source.";
+    return "It changed while it was being moved, so the original was kept.";
   }
   try {
     await fileSystem.rm(sourcePath, { recursive: false, force: false });
     return null;
   } catch (error) {
-    return `Failed to remove source after copy: ${toErrorMessage(error)}`;
+    return `It was copied, but the original couldn't be removed. ${describeCopyPasteError(error)}`;
   }
 }
 
@@ -1182,7 +1247,7 @@ async function tryRemoveEmptySourceDirectory(
     if (code === "ENOTEMPTY" || code === "EEXIST" || code === "ENOENT") {
       return null;
     }
-    return `Failed to remove empty source directory: ${toErrorMessage(error)}`;
+    return `Its items were moved, but the original folder couldn't be removed. ${describeCopyPasteError(error)}`;
   }
 }
 
@@ -1296,10 +1361,6 @@ function resolveTerminalStatus(args: {
     return "partial";
   }
   return "completed";
-}
-
-function toErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 async function preserveModeIfSupported(

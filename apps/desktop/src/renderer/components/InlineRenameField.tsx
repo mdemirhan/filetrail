@@ -11,6 +11,7 @@ export function InlineRenameField({
   name,
   extension,
   error,
+  refusalCount = 0,
   onSubmit,
   onCancel,
 }: {
@@ -18,6 +19,11 @@ export function InlineRenameField({
   extension: string;
   /** Why the last attempt was refused; the field stays open so the name can be fixed. */
   error: string | null;
+  /**
+   * Goes up with every refusal. Two names can be refused for the same reason in a row (both
+   * with a "/", or while another write runs), and the field must hear of the second one too.
+   */
+  refusalCount?: number;
   onSubmit: (nextName: string) => void;
   onCancel: () => void;
 }) {
@@ -40,6 +46,7 @@ export function InlineRenameField({
   }, [extension, name]);
 
   // A refused name hands the keyboard back to the field, with the explanation under it.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refusalCount marks a new refusal that reads the same as the last one.
   useLayoutEffect(() => {
     const input = inputRef.current;
     if (!error || !input) {
@@ -51,7 +58,7 @@ export function InlineRenameField({
     input.focus({ preventScroll: true });
     const rect = input.getBoundingClientRect();
     setErrorPosition({ left: rect.left, top: rect.bottom + 4 });
-  }, [error]);
+  }, [error, refusalCount]);
   useKeepInViewport(errorRef, errorPosition !== null);
 
   // Scrolling moves the row away from the explanation, so it is dropped until the next try.

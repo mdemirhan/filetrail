@@ -23,10 +23,12 @@ export default defineConfig({
       provider: "v8",
       include: [
         "packages/core/src/fs/copyPasteAnalysis.ts",
+        "packages/core/src/fs/copyPasteErrors.ts",
         "packages/core/src/fs/copyPasteExecution.ts",
         "packages/core/src/fs/copyPasteFingerprint.ts",
         "packages/core/src/fs/copyPasteNames.ts",
         "packages/core/src/fs/copyPastePolicy.ts",
+        "packages/core/src/fs/copyPasteRecovery.ts",
         "packages/core/src/fs/writeService.ts",
       ],
       thresholds: {

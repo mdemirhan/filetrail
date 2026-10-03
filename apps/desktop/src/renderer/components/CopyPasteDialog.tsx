@@ -20,6 +20,8 @@ export function CopyPasteDialog({
         onClick: () => void;
         destructive?: boolean | undefined;
         irreversible?: boolean | undefined;
+        /** False when the other button is the default, as for a question best answered no. */
+        isDefault?: boolean | undefined;
       }
     | undefined;
   secondaryAction?:
@@ -33,13 +35,14 @@ export function CopyPasteDialog({
   const secondaryButtonRef = useRef<HTMLButtonElement | null>(null);
   const primaryButtonRef = useRef<HTMLButtonElement | null>(null);
 
-  const primaryIsIrreversible = primaryAction?.irreversible === true;
+  // Confirmations that cannot be undone (e.g. delete immediately), and questions whose
+  // default is no, start on the safe action so a stray Enter or Space cannot confirm them.
+  const primaryIsDefault =
+    primaryAction?.irreversible !== true && primaryAction?.isDefault !== false;
 
-  // Confirmations that cannot be undone (e.g. delete immediately) start on the
-  // safe action so a stray Enter or Space cannot confirm them.
   // biome-ignore lint/correctness/useExhaustiveDependencies: initial focus only runs on mount.
   useEffect(() => {
-    const target = primaryIsIrreversible
+    const target = !primaryIsDefault
       ? (secondaryButtonRef.current ?? dialogRef.current)
       : (primaryButtonRef.current ?? secondaryButtonRef.current ?? dialogRef.current);
     target?.focus();
@@ -59,7 +62,7 @@ export function CopyPasteDialog({
           if (event.defaultPrevented) {
             return;
           }
-          if (event.key === "Enter" && primaryAction && !primaryIsIrreversible) {
+          if (event.key === "Enter" && primaryAction && primaryIsDefault) {
             const target = event.target;
             if (!(target instanceof HTMLElement) || target === dialogRef.current) {
               event.preventDefault();

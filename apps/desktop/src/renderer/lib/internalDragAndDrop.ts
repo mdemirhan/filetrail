@@ -1,5 +1,6 @@
 import { parentDirectoryPath } from "./explorerNavigation";
 import type { DirectoryEntry } from "./explorerTypes";
+import { isOnSameVolume } from "./volumes";
 
 export type InternalMoveSourceSurface = "content" | "search";
 // "tab" is a tab in the strip: what is dropped on it goes into the folder the tab is on.
@@ -16,6 +17,9 @@ export type InternalDragSession = {
   leadPath: string;
   leadKind: DirectoryEntry["kind"];
 };
+
+// What a drop does with the dragged items, and the cursor the drag shows for it.
+export type InternalDropOperation = "move" | "copy";
 
 export type InternalDropValidationResult =
   | { ok: true }
@@ -73,6 +77,26 @@ export function buildInternalDragSession(args: {
   };
 }
 
+// Finder's rules: items dragged to a folder on the same disk move, and to another disk they
+// are copied. Option forces a copy and Command forces a move, whatever the disks. Finder
+// makes an alias for Option-Command; there are no aliases here, so that copies, which
+// never takes anything away from where it was.
+export function resolveInternalDropOperation(args: {
+  sourcePaths: readonly string[];
+  targetPath: string;
+  altKey: boolean;
+  metaKey: boolean;
+}): InternalDropOperation {
+  if (args.altKey) {
+    return "copy";
+  }
+  if (args.metaKey) {
+    return "move";
+  }
+  // Search results can come from several disks; they move only if all are on the target's.
+  return args.sourcePaths.every((path) => isOnSameVolume(path, args.targetPath)) ? "move" : "copy";
+}
+
 export function validateInternalDrop(args: {
   session: InternalDragSession | null;
   blocked: boolean;
@@ -80,6 +104,7 @@ export function validateInternalDrop(args: {
   targetPath: string | null;
   targetSupportsMove: boolean;
   targetIsSelected?: boolean | undefined;
+  operation?: InternalDropOperation | undefined;
 }): InternalDropValidationResult {
   const {
     session,
@@ -88,6 +113,7 @@ export function validateInternalDrop(args: {
     targetPath,
     targetSupportsMove,
     targetIsSelected = false,
+    operation = "move",
   } = args;
 
   if (blocked) {
@@ -111,7 +137,10 @@ export function validateInternalDrop(args: {
   if (session.sourceItems.some((item) => item.path === targetPath)) {
     return { ok: false, code: "same_path" };
   }
+  // Moving items into the folder they are in does nothing; copying them there makes
+  // duplicates ("name copy"), as an Option-drag does in Finder.
   if (
+    operation === "move" &&
     session.sourceItems.length > 0 &&
     session.sourceItems.every((item) => parentDirectoryPath(item.path) === targetPath)
   ) {

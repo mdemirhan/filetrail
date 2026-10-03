@@ -1,7 +1,8 @@
 /**
  * N-API async wrapper around macOS copyfile(3).
  *
- * Exposes nativeCopyFile(src, dst) → Promise<void>.
+ * Exposes nativeCopyFile(src, dst) → Promise<void>, and nativeCopyMetadata(src, dst)
+ * → Promise<void>, which copies a folder's own metadata onto an existing folder.
  *
  * Uses COPYFILE_ALL (preserve stat, xattrs, ACLs) | COPYFILE_CLONE (attempt
  * CoW clone on APFS, fall back to full copy) | COPYFILE_EXCL (never replace an
@@ -45,6 +46,17 @@ static void execute_copy(napi_env env, void *data) {
   w->errnum = (rc == 0) ? 0 : errno;
 }
 
+/* Copies only a folder's own metadata (mode, flags, dates, extended attributes such as
+   Finder tags and custom-icon flags, ACLs) onto a folder that already exists. Its contents
+   are copied item by item by the caller; COPYFILE_RECURSIVE is deliberately not used. */
+static void execute_copy_metadata(napi_env env, void *data) {
+  (void)env;
+  copy_work_t *w = (copy_work_t *)data;
+  int rc = copyfile(w->source, w->destination, NULL,
+                    COPYFILE_METADATA | COPYFILE_NOFOLLOW_SRC);
+  w->errnum = (rc == 0) ? 0 : errno;
+}
+
 /* ── Completion callback on main thread ──────────────────────────── */
 
 static void complete_copy(napi_env env, napi_status status, void *data) {
@@ -73,16 +85,29 @@ static void complete_copy(napi_env env, napi_status status, void *data) {
   free(w);
 }
 
-/* ── JS entry point: nativeCopyFile(src, dst) → Promise<void> ──── */
+/* ── JS entry points: nativeCopyFile / nativeCopyMetadata(src, dst) → Promise<void> ── */
+
+static napi_value queue_copy_work(napi_env env, napi_callback_info info,
+                                  const char *name, napi_async_execute_callback execute);
 
 static napi_value native_copy_file(napi_env env, napi_callback_info info) {
+  return queue_copy_work(env, info, "nativeCopyFile", execute_copy);
+}
+
+static napi_value native_copy_metadata(napi_env env, napi_callback_info info) {
+  return queue_copy_work(env, info, "nativeCopyMetadata", execute_copy_metadata);
+}
+
+static napi_value queue_copy_work(napi_env env, napi_callback_info info,
+                                  const char *name, napi_async_execute_callback execute) {
   size_t argc = 2;
   napi_value argv[2];
   napi_get_cb_info(env, info, &argc, argv, NULL, NULL);
 
   if (argc < 2) {
-    napi_throw_type_error(env, NULL,
-                          "nativeCopyFile requires 2 arguments: source, destination");
+    char message[96];
+    snprintf(message, sizeof(message), "%s requires 2 arguments: source, destination", name);
+    napi_throw_type_error(env, NULL, message);
     return NULL;
   }
 
@@ -125,10 +150,9 @@ static napi_value native_copy_file(napi_env env, napi_callback_info info) {
 
   /* Create and queue async work. */
   napi_value resource_name;
-  napi_create_string_utf8(env, "nativeCopyFile", NAPI_AUTO_LENGTH,
-                          &resource_name);
-  napi_create_async_work(env, NULL, resource_name, execute_copy, complete_copy,
-                         w, &w->work);
+  napi_create_string_utf8(env, name, NAPI_AUTO_LENGTH, &resource_name);
+  napi_create_async_work(env, NULL, resource_name, execute, complete_copy, w,
+                         &w->work);
   napi_queue_async_work(env, w->work);
 
   return promise;
@@ -153,6 +177,9 @@ static napi_value init(napi_env env, napi_value exports) {
   napi_create_function(env, "nativeCopyFile", NAPI_AUTO_LENGTH,
                        native_copy_file, NULL, &fn);
   napi_set_named_property(env, exports, "nativeCopyFile", fn);
+  napi_create_function(env, "nativeCopyMetadata", NAPI_AUTO_LENGTH,
+                       native_copy_metadata, NULL, &fn);
+  napi_set_named_property(env, exports, "nativeCopyMetadata", fn);
 
   register_file_icon(env, exports);
   register_file_thumbnail(env, exports);

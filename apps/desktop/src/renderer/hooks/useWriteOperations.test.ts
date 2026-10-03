@@ -38,7 +38,13 @@ describe("writeOperationsReducer", () => {
   it("returns the same state object when the value is unchanged", () => {
     const state: WriteOperationsState = {
       ...INITIAL_WRITE_OPERATIONS_STATE,
-      renameDialogState: { sourcePath: "/tmp/a", currentName: "a", error: null, inline: false },
+      renameDialogState: {
+        sourcePath: "/tmp/a",
+        currentName: "a",
+        error: null,
+        refusalCount: 0,
+        inline: false,
+      },
     };
     expect(
       writeOperationsReducer(state, {

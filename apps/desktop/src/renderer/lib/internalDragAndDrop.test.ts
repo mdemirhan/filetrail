@@ -1,6 +1,7 @@
 import {
   buildInternalDragSession,
   isRealDirectoryEntry,
+  resolveInternalDropOperation,
   validateInternalDrop,
 } from "./internalDragAndDrop";
 
@@ -154,5 +155,88 @@ describe("internalDragAndDrop", () => {
         targetSupportsMove: true,
       }),
     ).toEqual({ ok: false, code: "blocked" });
+  });
+  describe("what a drop does, as Finder decides it", () => {
+    const resolve = (
+      sourcePaths: string[],
+      targetPath: string,
+      modifiers: { altKey?: boolean; metaKey?: boolean } = {},
+    ) =>
+      resolveInternalDropOperation({
+        sourcePaths,
+        targetPath,
+        altKey: modifiers.altKey ?? false,
+        metaKey: modifiers.metaKey ?? false,
+      });
+
+    it("moves to a folder on the same volume and copies to another volume", () => {
+      expect(resolve(["/Users/demo/a.txt"], "/Users/demo/Folder")).toBe("move");
+      expect(resolve(["/Volumes/Backup/a.txt"], "/Volumes/Backup/Old")).toBe("move");
+      expect(resolve(["/Users/demo/a.txt"], "/Volumes/Backup")).toBe("copy");
+      expect(resolve(["/Volumes/Backup/a.txt"], "/Users/demo")).toBe("copy");
+      expect(resolve(["/Volumes/Backup/a.txt"], "/Volumes/Other")).toBe("copy");
+    });
+
+    it("copies with Option and moves with Command, whatever the volumes", () => {
+      expect(resolve(["/Users/demo/a.txt"], "/Users/demo/Folder", { altKey: true })).toBe("copy");
+      expect(resolve(["/Users/demo/a.txt"], "/Volumes/Backup", { altKey: true })).toBe("copy");
+      expect(resolve(["/Users/demo/a.txt"], "/Volumes/Backup", { metaKey: true })).toBe("move");
+      expect(resolve(["/Users/demo/a.txt"], "/Users/demo/Folder", { metaKey: true })).toBe("move");
+      // Option-Command makes an alias in Finder; here it copies.
+      expect(
+        resolve(["/Users/demo/a.txt"], "/Users/demo/Folder", { altKey: true, metaKey: true }),
+      ).toBe("copy");
+    });
+
+    it("copies items from several volumes unless all are on the target's", () => {
+      expect(resolve(["/Users/demo/a.txt", "/Volumes/Backup/b.txt"], "/Users/demo/Folder")).toBe(
+        "copy",
+      );
+      expect(resolve(["/Users/demo/a.txt", "/Users/other/b.txt"], "/Users/demo/Folder")).toBe(
+        "move",
+      );
+    });
+  });
+
+  it("lets a copy go into the folder the items are in, to duplicate them", () => {
+    const session = {
+      sourceSurface: "content" as const,
+      sourceItems: [{ path: "/Users/demo/source.txt", kind: "file" as const }],
+      leadPath: "/Users/demo/source.txt",
+      leadKind: "file" as const,
+    };
+    const drop = (operation: "move" | "copy") =>
+      validateInternalDrop({
+        session,
+        blocked: false,
+        targetSurface: "tree",
+        targetPath: "/Users/demo",
+        targetSupportsMove: true,
+        operation,
+      });
+
+    expect(drop("move")).toEqual({ ok: false, code: "already_in_target" });
+    expect(drop("copy")).toEqual({ ok: true });
+  });
+
+  it("still refuses to copy a folder onto itself or into its own descendant", () => {
+    const session = {
+      sourceSurface: "content" as const,
+      sourceItems: [{ path: "/Users/demo/Folder", kind: "directory" as const }],
+      leadPath: "/Users/demo/Folder",
+      leadKind: "directory" as const,
+    };
+    const drop = (targetPath: string) =>
+      validateInternalDrop({
+        session,
+        blocked: false,
+        targetSurface: "tree",
+        targetPath,
+        targetSupportsMove: true,
+        operation: "copy",
+      });
+
+    expect(drop("/Users/demo/Folder")).toEqual({ ok: false, code: "same_path" });
+    expect(drop("/Users/demo/Folder/Inner")).toEqual({ ok: false, code: "parent_into_child" });
   });
 });

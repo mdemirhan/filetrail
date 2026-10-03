@@ -37,7 +37,13 @@ type FolderSizeJob = {
 const folderSizeJobs = new Map<string, FolderSizeJob>();
 const debugTimingsEnabled = process.env.FILETRAIL_DEBUG_TIMINGS === "1";
 
+// Counts the clears. A load that started before a clear may have read a folder as it was
+// before a write changed it: its answer is still returned to whoever asked, but it is only
+// kept if no clear happened while it was loading.
+let cacheGeneration = 0;
+
 export function clearResponseCaches(): void {
+  cacheGeneration += 1;
   directorySnapshotCache.entries.clear();
   directoryMetadataCache.entries.clear();
   treeChildrenCache.entries.clear();
@@ -351,12 +357,15 @@ export async function getCachedMetadataBatch(
   }
 
   if (missingPaths.length > 0) {
+    const generation = cacheGeneration;
     const response = await workerClient.request("directory:getMetadataBatch", {
       ...payload,
       paths: missingPaths,
     });
     for (const item of response.items) {
-      storeCacheEntry(directoryMetadataCache, item.path, item, now);
+      if (generation === cacheGeneration) {
+        storeCacheEntry(directoryMetadataCache, item.path, item, now);
+      }
       cachedItemsByPath.set(item.path, item);
     }
   }
@@ -398,7 +407,10 @@ async function withCachedResponse<TPayload extends object, TResponse>(
   if (cached && cached.expiresAt > now) {
     return cached.value as TResponse;
   }
+  const generation = cacheGeneration;
   const value = await load();
-  storeCacheEntry(cache, cacheKey, value, now);
+  if (generation === cacheGeneration) {
+    storeCacheEntry(cache, cacheKey, value, now);
+  }
   return value;
 }

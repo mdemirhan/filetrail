@@ -1,5 +1,6 @@
 import { basename, dirname, join, resolve } from "node:path";
 
+import { describeCopyPasteError } from "./copyPasteErrors";
 import {
   captureFingerprint,
   detectKind,
@@ -245,9 +246,20 @@ async function analyzeNode(args: {
   const children: CopyPasteAnalysisNode[] = [];
   let totalNodeCount = 1;
   let conflictNodeCount = conflictClass === null ? 0 : 1;
+  let unreadableReason: string | null = null;
 
   if (sourceKind === "directory") {
-    const sourceChildren = (await args.fileSystem.readdir(args.sourcePath)).sort();
+    let sourceChildren: string[] = [];
+    try {
+      sourceChildren = (await args.fileSystem.readdir(args.sourcePath)).sort();
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
+      // One folder that can't be read (no permission, say) fails on its own when the
+      // paste runs; it must not stop everything else from being pasted.
+      unreadableReason = describeCopyPasteError(error);
+    }
     for (const childName of sourceChildren) {
       args.signal?.throwIfAborted();
       const childSourcePath = join(args.sourcePath, childName);
@@ -296,8 +308,8 @@ async function analyzeNode(args: {
     sourceFingerprint,
     destinationFingerprint,
     children,
-    issueCode: null,
-    issueMessage: null,
+    issueCode: unreadableReason === null ? null : "source_unreadable",
+    issueMessage: unreadableReason,
     totalNodeCount,
     conflictNodeCount,
     destinationTotalNodeCount,

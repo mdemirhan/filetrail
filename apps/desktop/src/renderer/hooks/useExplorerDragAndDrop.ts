@@ -5,10 +5,12 @@ import type { TreePresentationItem } from "../lib/favorites";
 import { getTrashPath } from "../lib/favorites";
 import {
   type InternalDragSession,
+  type InternalDropOperation,
   type InternalDropTargetSurface,
   type InternalMoveSourceSurface,
   buildInternalDragSession,
   isRealDirectoryEntry,
+  resolveInternalDropOperation,
   validateInternalDrop,
 } from "../lib/internalDragAndDrop";
 
@@ -22,6 +24,8 @@ type ActiveDropTarget = {
   path: string;
   validity: Exclude<DropIndicatorState, null>;
 };
+// The keys held during a drag, which choose between moving and copying.
+type DragModifiers = { altKey: boolean; metaKey: boolean };
 type ActiveTreeDropElement = {
   surface: InternalDropTargetSurface;
   path: string;
@@ -56,10 +60,12 @@ export function useExplorerDragAndDrop(args: {
   selectedPathsInViewOrder: string[];
   homePath: string;
   blocked: boolean;
-  onMoveToDestination: (
+  /** Moves or copies the dropped items into the folder, as the drag's cursor showed. */
+  onDropItems: (
     sourcePaths: string[],
     destinationDirectoryPath: string,
     options: {
+      operation: InternalDropOperation;
       initiator?: "clipboard" | "drag_drop" | "move_dialog" | null;
       pendingTreeSelectionPath?: string | null;
       reviewLargeBatchWarning?: boolean;
@@ -76,7 +82,7 @@ export function useExplorerDragAndDrop(args: {
     selectedPathsInViewOrder,
     homePath,
     blocked,
-    onMoveToDestination,
+    onDropItems,
     onToggleTreeNode,
     onActivateTab,
   } = args;
@@ -238,7 +244,8 @@ export function useExplorerDragAndDrop(args: {
     event.currentTarget.addEventListener("dragend", () => clearDragSession(), { once: true });
     const dragPreview = createDragPreviewElement(session);
     dragPreviewRef.current = dragPreview;
-    event.dataTransfer.effectAllowed = "move";
+    // Whether the drop moves or copies depends on where it lands and the keys held then.
+    event.dataTransfer.effectAllowed = "copyMove";
     event.dataTransfer.setData(
       "text/plain",
       session.sourceItems.map((item) => item.path).join("\n"),
@@ -256,11 +263,30 @@ export function useExplorerDragAndDrop(args: {
     clearDragSession();
   }
 
+  // Read again on every dragover, so the cursor changes as soon as Option or Command is
+  // pressed or let go, and on the drop itself, so the drop does what the cursor showed.
+  function resolveDropOperation(
+    path: string | null,
+    modifiers: DragModifiers,
+  ): InternalDropOperation {
+    const session = dragSessionRef.current;
+    if (!session || !path) {
+      return "move";
+    }
+    return resolveInternalDropOperation({
+      sourcePaths: session.sourceItems.map((item) => item.path),
+      targetPath: path,
+      altKey: modifiers.altKey,
+      metaKey: modifiers.metaKey,
+    });
+  }
+
   function resolveDropValidity(args: {
     surface: InternalDropTargetSurface;
     path: string | null;
     targetSupportsMove: boolean;
     targetIsSelected?: boolean | undefined;
+    operation: InternalDropOperation;
   }): Exclude<DropIndicatorState, null> {
     const validation = validateInternalDrop({
       session: dragSessionRef.current,
@@ -269,6 +295,7 @@ export function useExplorerDragAndDrop(args: {
       targetPath: args.path,
       targetSupportsMove: args.targetSupportsMove,
       targetIsSelected: args.targetIsSelected,
+      operation: args.operation,
     });
     return validation.ok ? "valid" : "invalid";
   }
@@ -276,13 +303,30 @@ export function useExplorerDragAndDrop(args: {
   function applyDropEffect(
     event: React.DragEvent<HTMLElement>,
     validity: Exclude<DropIndicatorState, null>,
+    operation: InternalDropOperation,
   ) {
     if (validity === "valid") {
       event.preventDefault();
-      event.dataTransfer.dropEffect = "move";
+      event.dataTransfer.dropEffect = operation;
       return;
     }
     event.dataTransfer.dropEffect = "none";
+  }
+
+  // Checks a target under the pointer and shows the cursor and highlight for it.
+  function evaluateDropTarget(
+    event: React.DragEvent<HTMLElement>,
+    args: {
+      surface: InternalDropTargetSurface;
+      path: string | null;
+      targetSupportsMove: boolean;
+      targetIsSelected?: boolean | undefined;
+    },
+  ): Exclude<DropIndicatorState, null> {
+    const operation = resolveDropOperation(args.path, event);
+    const validity = resolveDropValidity({ ...args, operation });
+    applyDropEffect(event, validity, operation);
+    return validity;
   }
 
   async function handleDrop(
@@ -297,23 +341,26 @@ export function useExplorerDragAndDrop(args: {
     },
   ) {
     const session = dragSessionRef.current;
+    const operation = resolveDropOperation(path, event);
     const validity = resolveDropValidity({
       surface,
       path,
       targetSupportsMove: options.targetSupportsMove,
       targetIsSelected: options.targetIsSelected,
+      operation,
     });
-    applyDropEffect(event, validity);
+    applyDropEffect(event, validity, operation);
     if (validity !== "valid" || !session || !path) {
       return;
     }
     event.preventDefault();
     clearTreeHoverExpand();
     clearDragSession();
-    await onMoveToDestination(
+    await onDropItems(
       session.sourceItems.map((item) => item.path),
       path,
       {
+        operation,
         initiator: "drag_drop",
         pendingTreeSelectionPath: options.selectTargetInTree ? path : null,
         sourceSurface: session.sourceSurface,
@@ -343,14 +390,13 @@ export function useExplorerDragAndDrop(args: {
     if (!dragSessionRef.current) {
       return;
     }
-    const validity = resolveDropValidity({
+    const validity = evaluateDropTarget(event, {
       surface: "content",
       path: entry.path,
       targetSupportsMove: isRealDirectoryEntry(entry),
       targetIsSelected: dragSessionRef.current.sourceItems.some((item) => item.path === entry.path),
     });
     setDropIndicator("content", entry.path, validity);
-    applyDropEffect(event, validity);
   }
 
   function handleContentDragOver(entry: DirectoryEntry, event: React.DragEvent<HTMLElement>) {
@@ -389,14 +435,13 @@ export function useExplorerDragAndDrop(args: {
         : item.kind === "favorite"
           ? item.path !== trashPath
           : false;
-    const validity = resolveDropValidity({
+    const validity = evaluateDropTarget(event, {
       surface: targetSurface,
       path: item.path,
       targetSupportsMove,
     });
     syncTreeDropElementIndicator(event, targetSurface, item.path, validity);
     setDropIndicator(targetSurface, item.path, validity);
-    applyDropEffect(event, validity);
     if (subview === "tree" && validity === "valid") {
       scheduleTreeHoverExpand(item);
     } else {
@@ -433,13 +478,6 @@ export function useExplorerDragAndDrop(args: {
   // ── Tabs ──────────────────────────────────────────────────────────────────────────────
   // A tab takes a drop for the folder it is on. Holding the drag over a tab that is not on
   // screen shows that tab, so the items can be dropped on a folder inside it.
-  function resolveTabDropValidity(tab: { path: string }) {
-    return resolveDropValidity({
-      surface: "tab",
-      path: tab.path.length > 0 ? tab.path : null,
-      targetSupportsMove: tab.path.length > 0 && tab.path !== trashPath,
-    });
-  }
 
   function handleTabDragOver(
     tab: { id: string; path: string; active: boolean },
@@ -448,9 +486,12 @@ export function useExplorerDragAndDrop(args: {
     if (!dragSessionRef.current) {
       return;
     }
-    const validity = resolveTabDropValidity(tab);
+    const validity = evaluateDropTarget(event, {
+      surface: "tab",
+      path: tab.path.length > 0 ? tab.path : null,
+      targetSupportsMove: tab.path.length > 0 && tab.path !== trashPath,
+    });
     setDropIndicator("tab", tab.id, validity);
-    applyDropEffect(event, validity);
     if (tab.active) {
       clearTabHoverSwitch();
       return;

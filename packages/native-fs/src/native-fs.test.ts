@@ -1,10 +1,15 @@
+import { execFileSync } from "node:child_process";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
+  statSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -232,6 +237,46 @@ describe("nativeCopyFile errors", () => {
     await expect(
       addon.nativeCopyFile(join(root, "a.txt"), join(root, "b.txt", "c.txt")),
     ).rejects.toMatchObject({ code: "ENOTDIR" });
+  });
+});
+
+describe("nativeCopyMetadata", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "native-fs-metadata-"));
+  });
+
+  afterEach(() => {
+    execFileSync("chmod", ["-R", "u+rwx", root]);
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("puts a folder's tags, mode and date on an existing folder without copying its items", async () => {
+    const source = join(root, "source");
+    const destination = join(root, "destination");
+    mkdirSync(source);
+    mkdirSync(destination);
+    writeFileSync(join(source, "inside.txt"), "x");
+    execFileSync("xattr", ["-w", "com.apple.metadata:_kMDItemUserTags", '("Red\n6")', source]);
+    utimesSync(source, new Date("2020-01-02T03:04:05Z"), new Date("2020-01-02T03:04:05Z"));
+    chmodSync(source, 0o555);
+
+    await expectDefined(addon.nativeCopyMetadata)(source, destination);
+
+    expect(execFileSync("xattr", [destination]).toString()).toContain(
+      "com.apple.metadata:_kMDItemUserTags",
+    );
+    expect(statSync(destination).mode & 0o777).toBe(0o555);
+    expect(statSync(destination).mtime.toISOString()).toBe("2020-01-02T03:04:05.000Z");
+    expect(readdirSync(destination)).toEqual([]);
+  });
+
+  it("names the errno when the source is missing", async () => {
+    mkdirSync(join(root, "destination"));
+    await expect(
+      expectDefined(addon.nativeCopyMetadata)(join(root, "missing"), join(root, "destination")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 });
 

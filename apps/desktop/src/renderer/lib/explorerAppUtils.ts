@@ -16,6 +16,52 @@ export function getPathLeafName(path: string): string {
   return trimmedPath.split("/").filter(Boolean).at(-1) ?? path;
 }
 
+// Names a few items for a message: “a.txt”, “a.txt” and “b.txt”, or “a.txt”, “b.txt”,
+// “c.txt” and 2 more.
+export function formatQuotedNames(paths: readonly string[], maxShown = 3): string {
+  const names = paths.map((path) => `“${getPathLeafName(path)}”`);
+  if (names.length <= 1) {
+    return names[0] ?? "";
+  }
+  if (names.length <= maxShown) {
+    return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+  }
+  return `${names.slice(0, maxShown).join(", ")} and ${names.length - maxShown} more`;
+}
+
+// Why items on the clipboard were left out of a paste: they were moved, renamed or deleted
+// outside the app since they were copied.
+export function formatMissingClipboardItemsMessage(paths: readonly string[]): string {
+  if (paths.length === 1) {
+    return `${formatQuotedNames(paths)} couldn't be pasted because it no longer exists.`;
+  }
+  if (paths.length <= 3) {
+    return `${formatQuotedNames(paths)} couldn't be pasted because they no longer exist.`;
+  }
+  return `${paths.length} items couldn't be pasted because they no longer exist: ${formatQuotedNames(paths)}.`;
+}
+
+// What to say when Finder did not empty the Trash. The usual reason is that macOS has not
+// let File Trail control Finder (Apple event error -1743), which only the user can allow.
+export function describeEmptyTrashFailure(detail: string): { title: string; message: string } {
+  const title = "The Trash couldn't be emptied.";
+  if (/not authori[sz]ed|-1743/iu.test(detail)) {
+    return {
+      title,
+      message:
+        "File Trail needs permission to control Finder. Turn it on in System Settings > Privacy & Security > Automation, then try again.",
+    };
+  }
+  const trimmedDetail = detail.trim();
+  return {
+    title,
+    message:
+      trimmedDetail.length > 0
+        ? trimmedDetail
+        : "Finder didn't empty the Trash. Try again, or empty it in Finder.",
+  };
+}
+
 export function shouldRenderCopyPasteResultDialog(
   event: WriteOperationProgressEvent | null,
 ): boolean {
@@ -133,8 +179,13 @@ export function resolvePasteDestinationPath(args: {
     ) {
       return contextMenuState.targetPath;
     }
-    // Like the keyboard, a folder is the target only when it is the one item picked.
+    // Like the keyboard, a folder is the target only when it is the one item picked, and
+    // not when it is itself on the clipboard: nothing goes into itself, so the paste goes
+    // into the folder on screen instead.
     if (contextMenuState.paths.length <= 1 && isPasteTargetFolderEntry(contextMenuTargetEntry)) {
+      if (clipboardSourcePaths.includes(contextMenuTargetEntry.path)) {
+        return currentFolder ?? contextMenuTargetEntry.path;
+      }
       return contextMenuTargetEntry.path;
     }
     return currentFolder;
@@ -187,6 +238,24 @@ export function resolveNewFolderTargetPath(args: {
     return args.selectedEntry.path;
   }
   return args.contextScope === "selection" ? null : folderOnScreen;
+}
+
+// The name New Folder suggests: "New Folder", else the first free "New Folder 2", "New
+// Folder 3"… The disk (APFS by default) treats names that differ only in case as the same,
+// so the names are compared that way.
+export function resolveFreeNewFolderName(existingNames: Iterable<string>): string {
+  const takenNames = new Set(Array.from(existingNames, (name) => name.toLocaleLowerCase()));
+  const baseName = "New Folder";
+  if (!takenNames.has(baseName.toLocaleLowerCase())) {
+    return baseName;
+  }
+  for (let index = 2; index < 10_000; index += 1) {
+    const candidate = `${baseName} ${index}`;
+    if (!takenNames.has(candidate.toLocaleLowerCase())) {
+      return candidate;
+    }
+  }
+  return baseName;
 }
 
 export function resolveWriteOperationSelectionDirectoryPath(

@@ -55,6 +55,9 @@ async function renameExclusiveFallback(from, to) {
   });
 }
 
+// Without it, callers fall back to setting the mode and dates themselves.
+const copyMetadataFallback = undefined;
+
 async function isCaseSensitiveFallback() {
   return null;
 }
@@ -65,6 +68,7 @@ async function getFileThumbnailFallback() {
 
 module.exports = {
   nativeCopyFile: binding.nativeCopyFile,
+  nativeCopyMetadata: binding.nativeCopyMetadata ?? copyMetadataFallback,
   nativeGetFileIcon: binding.nativeGetFileIcon,
   nativeGetFileThumbnail: binding.nativeGetFileThumbnail ?? getFileThumbnailFallback,
   nativeFolderSize,

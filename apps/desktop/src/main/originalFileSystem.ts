@@ -31,6 +31,7 @@ const originalFs = require("original-fs") as typeof import("node:fs");
 // on macOS — the build step compiles it, so a missing addon means a broken build.
 const addon = require("@filetrail/native-fs") as {
   nativeCopyFile: (src: string, dst: string) => Promise<void>;
+  nativeCopyMetadata?: (src: string, dst: string) => Promise<void>;
   nativeGetFileIcon: (path: string, size: number) => Promise<Buffer | null>;
   nativeGetFileThumbnail: (path: string, size: number) => Promise<Buffer | null>;
   nativeFolderSize: (folderPath: string) => Promise<string>;
@@ -40,6 +41,7 @@ const addon = require("@filetrail/native-fs") as {
 };
 const {
   nativeCopyFile,
+  nativeCopyMetadata,
   nativeGetFileIcon,
   nativeGetFileThumbnail,
   nativeFolderSize,
@@ -100,6 +102,8 @@ export const originalFileSystem: WriteServiceFileSystem = {
     await mkdir(dirname(destinationPath), { recursive: true });
     await nativeCopyFile(sourcePath, destinationPath);
   },
+  // A binary built before it existed leaves folders with their mode and dates only.
+  ...(nativeCopyMetadata ? { copyMetadata: nativeCopyMetadata } : {}),
   copyFileStream: async (sourcePath, destinationPath, signal) => {
     await mkdir(dirname(destinationPath), { recursive: true });
     // "wx": never truncate an item that appeared at the destination in the meantime.
@@ -126,9 +130,14 @@ export const originalExplorerFileSystem: ExplorerFileSystem = {
   realpath: (path: string) => realpath(path),
 };
 
-/** Rename backed by original-fs for write operations (rename, etc.). */
+/** Rename backed by original-fs for write operations (rename, etc.). Replaces an item
+ *  already at `newPath`, so it is used only where that item is the one being renamed. */
 export const originalRename = (oldPath: string, newPath: string): Promise<void> =>
   rename(oldPath, newPath);
+
+/** Rename that fails with EEXIST instead of replacing an item at `newPath`. */
+export const originalRenameExclusive = (oldPath: string, newPath: string): Promise<void> =>
+  nativeRenameExclusive(oldPath, newPath);
 
 /** Get macOS file icon as PNG buffer using NSWorkspace. */
 export const getFileIcon = nativeGetFileIcon;

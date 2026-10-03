@@ -65,6 +65,50 @@ describe("ipc contracts", () => {
     }
   });
 
+  it("refuses names longer than 255 bytes with a plain message", () => {
+    const rename = ipcContractSchemas["writeOperation:rename"].request;
+    // 100 characters, 300 bytes.
+    const result = rename.safeParse({
+      sourcePath: "/Users/demo/a.txt",
+      destinationName: "日".repeat(100),
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((issue) => issue.message)).toEqual(["The name is too long."]);
+    expect(
+      rename.safeParse({ sourcePath: "/Users/demo/a.txt", destinationName: "日".repeat(85) })
+        .success,
+    ).toBe(true);
+  });
+
+  it("only accepts absolute paths for copies, renames, new folders, and deletes", () => {
+    const relative = "Documents/a.txt";
+    const requests = [
+      [
+        "copyPaste:analyzeStart",
+        { mode: "copy", sourcePaths: [relative], destinationDirectoryPath: "/x" },
+      ],
+      [
+        "copyPaste:analyzeStart",
+        { mode: "copy", sourcePaths: ["/a"], destinationDirectoryPath: "x" },
+      ],
+      ["copyPaste:plan", { mode: "cut", sourcePaths: [relative], destinationDirectoryPath: "/x" }],
+      ["copyPaste:start", { mode: "copy", sourcePaths: ["/a"], destinationDirectoryPath: "x" }],
+      ["writeOperation:rename", { sourcePath: relative, destinationName: "b.txt" }],
+      ["writeOperation:createFolder", { parentDirectoryPath: "Documents", folderName: "New" }],
+      ["writeOperation:trash", { paths: ["/Users/demo/a.txt", relative] }],
+      ["writeOperation:deleteImmediately", { paths: [relative] }],
+    ] as const;
+
+    for (const [channel, payload] of requests) {
+      expect(ipcContractSchemas[channel].request.safeParse(payload).success, channel).toBe(false);
+      const absolute = JSON.parse(
+        JSON.stringify(payload).replaceAll('"Documents', '"/Documents').replaceAll('"x"', '"/x"'),
+      );
+      expect(ipcContractSchemas[channel].request.safeParse(absolute).success, channel).toBe(true);
+    }
+  });
+
   it("validates the folder size placeholder channels", () => {
     expect(
       ipcContractSchemas["folderSize:start"].response.parse({

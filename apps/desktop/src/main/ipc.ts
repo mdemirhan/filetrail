@@ -8,6 +8,7 @@ import {
   ipcChannels,
   ipcContractSchemas,
 } from "@filetrail/contracts";
+import { describeCopyPasteError } from "@filetrail/core";
 
 export type IpcHandlerMap = {
   [K in IpcChannel]: (
@@ -69,11 +70,18 @@ export function registerIpcHandlers(
         }
         return {
           ok: false,
-          error: toErrorMessage(error),
+          error: isWriteChannel(channel) ? describeCopyPasteError(error) : toErrorMessage(error),
         } satisfies IpcEnvelope;
       }
     });
   }
+}
+
+// A copy, rename, or delete that can't start is explained to the person in a dialog, so a
+// system error ("ENOENT: no such file or directory, lstat '/…'") becomes a plain sentence.
+// Other channels keep the raw text, which the window only logs.
+function isWriteChannel(channel: IpcChannel): boolean {
+  return channel.startsWith("copyPaste:") || channel.startsWith("writeOperation:");
 }
 
 function isExpectedAccessError(error: unknown): boolean {

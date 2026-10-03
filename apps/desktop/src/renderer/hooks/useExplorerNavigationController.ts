@@ -1567,7 +1567,10 @@ export function useExplorerNavigationController(args: {
     // another tab comes to the front while this waits, the refresh stops: that tab reads
     // its own folder again when it is shown.
     const isSameView = createViewGuard();
-    await client.invoke("app:clearCaches", {});
+    // Stale caches only cost a slower or older listing; the folder is still read again.
+    await client.invoke("app:clearCaches", {}).catch((error: unknown) => {
+      logger.error("clear caches failed", error);
+    });
     if (!isSameView()) {
       return;
     }

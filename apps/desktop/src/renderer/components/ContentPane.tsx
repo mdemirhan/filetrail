@@ -80,7 +80,7 @@ type SelectionGestureModifiers = {
   metaKey: boolean;
   shiftKey: boolean;
 };
-type InlineRenameState = { path: string; error: string | null };
+type InlineRenameState = { path: string; error: string | null; refusalCount?: number };
 
 // `ContentPane` is the shared shell for icon, list and details view. It owns path navigation,
 // path suggestions, pane focus, and typeahead forwarding, then delegates actual entry
@@ -1137,6 +1137,7 @@ function FlowListView({
                       name={entry.name}
                       extension={entry.extension}
                       error={inlineRename.error}
+                      refusalCount={inlineRename.refusalCount ?? 0}
                       onSubmit={onInlineRenameSubmit}
                       onCancel={onInlineRenameCancel}
                     />
@@ -1606,6 +1607,7 @@ function DetailsView({
                           name={entry.name}
                           extension={entry.extension}
                           error={inlineRename.error}
+                          refusalCount={inlineRename.refusalCount ?? 0}
                           onSubmit={onInlineRenameSubmit}
                           onCancel={onInlineRenameCancel}
                         />

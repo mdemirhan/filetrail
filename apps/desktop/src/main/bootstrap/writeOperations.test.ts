@@ -2,23 +2,18 @@ import { describe, expect, it, vi } from "vitest";
 
 import { EventEmitter } from "node:events";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, writeFile } from "node:fs/promises";
+import { link, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import type { WriteOperationProgressEvent } from "@filetrail/contracts";
+import {
+  type WriteOperationProgressEvent,
+  writeOperationProgressEventSchema,
+} from "@filetrail/contracts";
 import { type WriteService, createWriteService } from "@filetrail/core";
 
+import { originalFileSystem, originalRename, originalRenameExclusive } from "../originalFileSystem";
+import { getCachedResponse, getResponseCacheSizes, resetResponseCacheState } from "./responseCache";
 import { PROGRESS_UPDATE_INTERVAL_MS, createWriteOperationCoordinator } from "./writeOperations";
-
-const electronMock = vi.hoisted(() => ({
-  trashItem: vi.fn(),
-}));
-
-vi.mock("electron", () => ({
-  shell: {
-    trashItem: electronMock.trashItem,
-  },
-}));
 
 describe("createWriteOperationCoordinator", () => {
   it("renames a local item and emits progress", async () => {
@@ -44,7 +39,11 @@ describe("createWriteOperationCoordinator", () => {
     ).resolves.toEqual({ operationId: "write-op-1", status: "queued" });
     const terminal = await waitForTerminalEvent(sender, "write-op-1");
 
-    expect(fs.rename).toHaveBeenCalledWith("/Users/demo/source.txt", "/Users/demo/renamed.txt");
+    expect(fs.renameExclusive).toHaveBeenCalledWith(
+      "/Users/demo/source.txt",
+      "/Users/demo/renamed.txt",
+    );
+    expect(fs.rename).not.toHaveBeenCalled();
     expect(terminal).toEqual(
       expect.objectContaining({
         action: "rename",
@@ -90,16 +89,15 @@ describe("createWriteOperationCoordinator", () => {
     coordinator.shutdown();
   });
 
-  it("moves local paths to Trash through Electron shell and reports partial failures", async () => {
-    electronMock.trashItem.mockReset();
-    electronMock.trashItem
-      .mockResolvedValueOnce(undefined)
-      .mockRejectedValueOnce(new Error("Trash unavailable"));
+  it("moves items to the Trash, going on past an item that can't be moved", async () => {
+    const trash = vi.fn(async (path: string) => {
+      if (path.endsWith("b.txt")) {
+        throw new Error("Trash unavailable");
+      }
+    });
     const sender = createSender();
-    const coordinator = createWriteOperationCoordinator(
-      createWriteServiceStub(),
-      createWriteOperationFs(),
-    );
+    const fs = createWriteOperationFs({ trash });
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs);
 
     expect(
       coordinator.handlers["writeOperation:trash"](
@@ -111,19 +109,24 @@ describe("createWriteOperationCoordinator", () => {
     ).toEqual({ operationId: "write-op-1", status: "queued" });
     const terminal = await waitForTerminalEvent(sender, "write-op-1");
 
-    expect(electronMock.trashItem).toHaveBeenCalledWith("/Users/demo/a.txt");
-    expect(electronMock.trashItem).toHaveBeenCalledWith("/Users/demo/b.txt");
+    // c.txt still goes to the Trash after b.txt failed (it used to be marked as stopped).
+    expect(trash.mock.calls.map(([path]) => path)).toEqual([
+      "/Users/demo/a.txt",
+      "/Users/demo/b.txt",
+      "/Users/demo/c.txt",
+    ]);
     expect(terminal).toEqual(
       expect.objectContaining({
         action: "trash",
         status: "partial",
-        completedItemCount: 1,
+        completedItemCount: 2,
         result: expect.objectContaining({
-          error: "Trash unavailable",
+          error:
+            "Couldn't move “b.txt” to the Trash. This disk may not have a Trash; use Delete Immediately instead.",
           items: [
             expect.objectContaining({ sourcePath: "/Users/demo/a.txt", status: "completed" }),
             expect.objectContaining({ sourcePath: "/Users/demo/b.txt", status: "failed" }),
-            expect.objectContaining({ sourcePath: "/Users/demo/c.txt", status: "cancelled" }),
+            expect.objectContaining({ sourcePath: "/Users/demo/c.txt", status: "completed" }),
           ],
         }),
       }),
@@ -210,7 +213,7 @@ describe("createWriteOperationCoordinator", () => {
         }
         throw new Error("missing");
       }),
-      rename: vi.fn(
+      renameExclusive: vi.fn(
         () =>
           new Promise<void>((resolveRename) => {
             finishRename = resolveRename;
@@ -263,7 +266,7 @@ describe("createWriteOperationCoordinator", () => {
         }
         throw new Error("missing");
       }),
-      rename: vi.fn(
+      renameExclusive: vi.fn(
         () =>
           new Promise<void>((resolveRename) => {
             finishRename = resolveRename;
@@ -290,6 +293,7 @@ describe("createWriteOperationCoordinator", () => {
     (finishRename as (() => void) | null)?.();
     await waitForTerminalEvent(sender, "write-op-1");
 
+    analyze(coordinator, sender);
     coordinator.handlers["copyPaste:start"](
       {
         analysisId: "analysis-1",
@@ -312,6 +316,7 @@ describe("createWriteOperationCoordinator", () => {
     const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs());
     const sender = Object.assign(new EventEmitter(), { send: vi.fn() });
 
+    analyze(coordinator, sender);
     coordinator.handlers["copyPaste:start"](
       {
         analysisId: "analysis-1",
@@ -368,6 +373,7 @@ describe("createWriteOperationCoordinator", () => {
     const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs());
     const sender = createSender();
 
+    analyze(coordinator, sender);
     coordinator.handlers["copyPaste:start"](
       {
         analysisId: "analysis-1",
@@ -451,7 +457,10 @@ describe("createWriteOperationCoordinator", () => {
     (finishFirstDelete as (() => void) | null)?.();
     const terminal = await waitForTerminalEvent(sender, "write-op-1");
 
-    expect(terminal.status).toBe("cancelled");
+    // a.txt was deleted before the cancel took effect: that can't be undone, so the
+    // result is "partial" (as for Trash), not "cancelled".
+    expect(terminal.status).toBe("partial");
+    expect(terminal.completedItemCount).toBe(1);
     expect(fs.rm).toHaveBeenCalledTimes(1);
     await expect(
       coordinator.handlers["writeOperation:createFolder"](
@@ -474,7 +483,7 @@ describe("createWriteOperationCoordinator", () => {
           }
           throw new Error("missing");
         }),
-        rename: vi.fn(
+        renameExclusive: vi.fn(
           () =>
             new Promise<void>((resolveRename) => {
               finishRename = resolveRename;
@@ -567,7 +576,7 @@ describe("createWriteOperationCoordinator", () => {
         }
         throw new Error("missing");
       }),
-      rename: vi.fn(
+      renameExclusive: vi.fn(
         () =>
           new Promise<void>((resolveRename) => {
             finishRename = resolveRename;
@@ -616,14 +625,20 @@ describe("createWriteOperationCoordinator", () => {
     const writeService = createWriteService();
     const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs());
     const sender = createSender();
-    const { analysisId } = coordinator.handlers["copyPaste:analyzeStart"]({
-      mode: "copy",
-      sourcePaths: [join(source, "album"), join(source, "shared")],
-      destinationDirectoryPath: destination,
-      action: "paste",
-    });
+    const { analysisId } = coordinator.handlers["copyPaste:analyzeStart"](
+      {
+        mode: "copy",
+        sourcePaths: [join(source, "album"), join(source, "shared")],
+        destinationDirectoryPath: destination,
+        action: "paste",
+      },
+      { sender },
+    );
     const update = await waitFor(() => {
-      const current = coordinator.handlers["copyPaste:analyzeGetUpdate"]({ analysisId });
+      const current = coordinator.handlers["copyPaste:analyzeGetUpdate"](
+        { analysisId },
+        { sender },
+      );
       return current.done ? current : null;
     });
     const names = (nodes: Array<{ sourcePath: string }>) =>
@@ -775,7 +790,7 @@ describe("createWriteOperationCoordinator", () => {
         }
         throw new Error("missing");
       }),
-      rename: vi.fn(
+      renameExclusive: vi.fn(
         () =>
           new Promise<void>((resolveRename) => {
             finishRename = resolveRename;
@@ -834,6 +849,644 @@ describe("createWriteOperationCoordinator", () => {
   });
 });
 
+describe("renaming on a real disk", () => {
+  it("refuses to replace an item that took the new name after it was checked", async () => {
+    const root = await mkdtemp(join(tmpdir(), "filetrail-rename-race-"));
+    const source = join(root, "a.txt");
+    const destination = join(root, "b.txt");
+    await writeFile(source, "renamed item");
+    // Something else creates b.txt between the check and the rename itself.
+    const takeTheName = async () => {
+      await writeFile(destination, "someone else's file");
+    };
+    const fs = createRealWriteOperationFs({
+      rename: async (oldPath, newPath) => {
+        await takeTheName();
+        await originalRename(oldPath, newPath);
+      },
+      renameExclusive: async (oldPath, newPath) => {
+        await takeTheName();
+        await originalRenameExclusive(oldPath, newPath);
+      },
+    });
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs);
+    const sender = createSender();
+
+    await coordinator.handlers["writeOperation:rename"](
+      { sourcePath: source, destinationName: "b.txt" },
+      { sender },
+    );
+    const terminal = await waitForTerminalEvent(sender, "write-op-1");
+
+    expect(terminal.status).toBe("failed");
+    expect(terminal.result?.error).toBe("An item named “b.txt” already exists.");
+    expect(await readFile(destination, "utf8")).toBe("someone else's file");
+    expect(await readFile(source, "utf8")).toBe("renamed item");
+    await rm(root, { recursive: true, force: true });
+    coordinator.shutdown();
+  });
+
+  it("changes only the case of a name on a disk that ignores case", async () => {
+    const root = await mkdtemp(join(tmpdir(), "filetrail-rename-case-"));
+    await writeFile(join(root, "notes.txt"), "notes");
+    if (!existsSync(join(root, "NOTES.TXT"))) {
+      // This disk minds case; "notes.txt" and "Notes.txt" are different names there, and the
+      // test below covers that.
+      await rm(root, { recursive: true, force: true });
+      return;
+    }
+    const coordinator = createWriteOperationCoordinator(
+      createWriteServiceStub(),
+      createRealWriteOperationFs(),
+    );
+    const sender = createSender();
+
+    await coordinator.handlers["writeOperation:rename"](
+      { sourcePath: join(root, "notes.txt"), destinationName: "Notes.txt" },
+      { sender },
+    );
+    const terminal = await waitForTerminalEvent(sender, "write-op-1");
+
+    expect(terminal.status).toBe("completed");
+    expect(await readdir(root)).toEqual(["Notes.txt"]);
+    expect(await readFile(join(root, "Notes.txt"), "utf8")).toBe("notes");
+    await rm(root, { recursive: true, force: true });
+    coordinator.shutdown();
+  });
+
+  it("changes only how an accented letter is encoded on a disk that ignores that", async () => {
+    const root = await mkdtemp(join(tmpdir(), "filetrail-rename-nfc-"));
+    const decomposed = "café.txt";
+    const composed = "café.txt";
+    await writeFile(join(root, decomposed), "menu");
+    if (!existsSync(join(root, composed))) {
+      await rm(root, { recursive: true, force: true });
+      return;
+    }
+    const coordinator = createWriteOperationCoordinator(
+      createWriteServiceStub(),
+      createRealWriteOperationFs(),
+    );
+    const sender = createSender();
+
+    await coordinator.handlers["writeOperation:rename"](
+      { sourcePath: join(root, decomposed), destinationName: composed },
+      { sender },
+    );
+    const terminal = await waitForTerminalEvent(sender, "write-op-1");
+
+    expect(terminal.status).toBe("completed");
+    expect(await readdir(root)).toEqual([composed]);
+    await rm(root, { recursive: true, force: true });
+    coordinator.shutdown();
+  });
+
+  it("still refuses a name taken by a different item that differs only in case", async () => {
+    // On a disk that minds case, "Notes.txt" next to "notes.txt" is another file.
+    const lstat = vi.fn(async (path: string) => ({
+      isDirectory: () => false,
+      dev: 1,
+      ino: path.endsWith("notes.txt") ? 10 : 11,
+    }));
+    const fs = createWriteOperationFs({ lstat });
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs);
+
+    await expect(
+      coordinator.handlers["writeOperation:rename"](
+        { sourcePath: "/Users/demo/notes.txt", destinationName: "Notes.txt" },
+        { sender: createSender() },
+      ),
+    ).rejects.toThrow("An item named “Notes.txt” already exists.");
+    expect(fs.rename).not.toHaveBeenCalled();
+    expect(fs.renameExclusive).not.toHaveBeenCalled();
+    coordinator.shutdown();
+  });
+
+  it("refuses a name held by a hard link to the same file", async () => {
+    const root = await mkdtemp(join(tmpdir(), "filetrail-rename-link-"));
+    await writeFile(join(root, "a.txt"), "shared");
+    await link(join(root, "a.txt"), join(root, "b.txt"));
+    const coordinator = createWriteOperationCoordinator(
+      createWriteServiceStub(),
+      createRealWriteOperationFs(),
+    );
+
+    await expect(
+      coordinator.handlers["writeOperation:rename"](
+        { sourcePath: join(root, "a.txt"), destinationName: "b.txt" },
+        { sender: createSender() },
+      ),
+    ).rejects.toThrow("An item named “b.txt” already exists.");
+    expect((await readdir(root)).sort()).toEqual(["a.txt", "b.txt"]);
+    await rm(root, { recursive: true, force: true });
+    coordinator.shutdown();
+  });
+
+  it("says plainly that an item is gone instead of passing on the system's error", async () => {
+    const root = await mkdtemp(join(tmpdir(), "filetrail-rename-gone-"));
+    const coordinator = createWriteOperationCoordinator(
+      createWriteServiceStub(),
+      createRealWriteOperationFs(),
+    );
+
+    await expect(
+      coordinator.handlers["writeOperation:rename"](
+        { sourcePath: join(root, "gone.txt"), destinationName: "b.txt" },
+        { sender: createSender() },
+      ),
+    ).rejects.toThrow(/^“gone\.txt” no longer exists\.$/);
+    await expect(
+      coordinator.handlers["writeOperation:createFolder"](
+        { parentDirectoryPath: join(root, "Missing"), folderName: "New" },
+        { sender: createSender() },
+      ),
+    ).rejects.toThrow(/^“Missing” no longer exists\.$/);
+    await rm(root, { recursive: true, force: true });
+    coordinator.shutdown();
+  });
+
+  it("explains a rename that fails while running in plain words", async () => {
+    const fs = createWriteOperationFs({
+      lstat: vi.fn(async (path: string) => {
+        if (path === "/Users/demo/source.txt") {
+          return createStats(false);
+        }
+        throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+      }),
+      renameExclusive: vi.fn(async () => {
+        throw Object.assign(
+          new Error("EACCES: permission denied, rename '/Users/demo/source.txt'"),
+          { code: "EACCES" },
+        );
+      }),
+    });
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs);
+    const sender = createSender();
+
+    await coordinator.handlers["writeOperation:rename"](
+      { sourcePath: "/Users/demo/source.txt", destinationName: "renamed.txt" },
+      { sender },
+    );
+    const terminal = await waitForTerminalEvent(sender, "write-op-1");
+
+    expect(terminal.result?.error).toBe("You don't have permission to access this item.");
+    coordinator.shutdown();
+  });
+
+  it("doesn't report a finished rename as failed when reporting it goes wrong", async () => {
+    const fs = createWriteOperationFs({
+      lstat: vi.fn(async (path: string) => {
+        if (path === "/Users/demo/source.txt") {
+          return createStats(false);
+        }
+        throw new Error("missing");
+      }),
+    });
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs);
+    const sender = createSender();
+    const parse = writeOperationProgressEventSchema.parse.bind(writeOperationProgressEventSchema);
+    const parseSpy = vi
+      .spyOn(writeOperationProgressEventSchema, "parse")
+      .mockImplementation((event) => {
+        if ((event as WriteOperationProgressEvent).status === "completed") {
+          throw new Error("unexpected shape");
+        }
+        return parse(event);
+      });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      await coordinator.handlers["writeOperation:rename"](
+        { sourcePath: "/Users/demo/source.txt", destinationName: "renamed.txt" },
+        { sender },
+      );
+      await waitFor(() => (consoleError.mock.calls.length > 0 ? true : null));
+
+      expect(fs.renameExclusive).toHaveBeenCalled();
+      const statuses = sender.send.mock.calls.map(
+        ([, payload]) => (payload as WriteOperationProgressEvent).status,
+      );
+      expect(statuses).not.toContain("failed");
+      // The write slot is free again all the same.
+      await expect(
+        coordinator.handlers["writeOperation:createFolder"](
+          { parentDirectoryPath: "/Users/demo", folderName: "Next" },
+          { sender },
+        ),
+      ).resolves.toEqual({ operationId: "write-op-2", status: "queued" });
+    } finally {
+      parseSpy.mockRestore();
+      consoleError.mockRestore();
+    }
+    coordinator.shutdown();
+  });
+});
+
+describe("moving to the Trash and deleting", () => {
+  it("counts an item that is already gone as done, and names the item when the Trash refuses", async () => {
+    const trash = vi.fn(async (path: string) => {
+      if (path.endsWith("locked.txt")) {
+        throw Object.assign(new Error("EPERM: operation not permitted"), { code: "EPERM" });
+      }
+    });
+    const fs = createWriteOperationFs({
+      lstat: vi.fn(async (path: string) => {
+        if (path.endsWith("gone.txt")) {
+          throw Object.assign(new Error("ENOENT: no such file or directory"), { code: "ENOENT" });
+        }
+        return createStats(false);
+      }),
+      trash,
+    });
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs);
+    const sender = createSender();
+
+    coordinator.handlers["writeOperation:trash"](
+      { paths: ["/Users/demo/gone.txt", "/Users/demo/locked.txt", "/Users/demo/c.txt"] },
+      { sender },
+    );
+    const terminal = await waitForTerminalEvent(sender, "write-op-1");
+
+    expect(trash.mock.calls.map(([path]) => path)).toEqual([
+      "/Users/demo/locked.txt",
+      "/Users/demo/c.txt",
+    ]);
+    expect(terminal.status).toBe("partial");
+    expect(terminal.result?.items).toEqual([
+      expect.objectContaining({ sourcePath: "/Users/demo/gone.txt", status: "completed" }),
+      expect.objectContaining({
+        sourcePath: "/Users/demo/locked.txt",
+        status: "failed",
+        // A known system error keeps its own plain sentence.
+        error: "You don't have permission to access this item.",
+      }),
+      expect.objectContaining({ sourcePath: "/Users/demo/c.txt", status: "completed" }),
+    ]);
+    coordinator.shutdown();
+  });
+
+  it("stops moving items to the Trash when cancelled", async () => {
+    let finishFirst: (() => void) | null = null;
+    const trash = vi.fn(async (path: string) => {
+      if (path.endsWith("a.txt")) {
+        await new Promise<void>((resolveTrash) => {
+          finishFirst = resolveTrash;
+        });
+      }
+    });
+    const coordinator = createWriteOperationCoordinator(
+      createWriteServiceStub(),
+      createWriteOperationFs({ trash }),
+    );
+    const sender = createSender();
+
+    coordinator.handlers["writeOperation:trash"](
+      { paths: ["/Users/demo/a.txt", "/Users/demo/b.txt"] },
+      { sender },
+    );
+    await waitFor(() => (finishFirst ? true : null));
+    coordinator.handlers["writeOperation:cancel"]({ operationId: "write-op-1" }, { sender });
+    (finishFirst as (() => void) | null)?.();
+    const terminal = await waitForTerminalEvent(sender, "write-op-1");
+
+    expect(trash).toHaveBeenCalledTimes(1);
+    expect(terminal.status).toBe("partial");
+    coordinator.shutdown();
+  });
+
+  it("refuses to delete or trash the disk, the system folders, a volume, or the home folder", () => {
+    const fs = createWriteOperationFs();
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs);
+    const refused = [
+      "/",
+      "/Users",
+      "/users/",
+      "/Volumes",
+      "/Volumes/Backup",
+      "/volumes/Backup/",
+      "/System",
+      "/Applications",
+      "/Library",
+      homedir(),
+      homedir().toUpperCase(),
+      "/Users/demo/../../Library",
+      "Documents/report.txt",
+    ];
+
+    for (const path of refused) {
+      expect(
+        () =>
+          coordinator.handlers["writeOperation:deleteImmediately"](
+            { paths: ["/Users/demo/fine.txt", path] },
+            { sender: createSender() },
+          ),
+        path,
+      ).toThrow();
+      expect(
+        () =>
+          coordinator.handlers["writeOperation:trash"](
+            { paths: [path] },
+            { sender: createSender() },
+          ),
+        path,
+      ).toThrow();
+    }
+    expect(() =>
+      coordinator.handlers["writeOperation:deleteImmediately"](
+        { paths: ["/Volumes/Backup"] },
+        { sender: createSender() },
+      ),
+    ).toThrow("“Backup” can't be deleted.");
+    expect(fs.rm).not.toHaveBeenCalled();
+    expect(fs.trash).not.toHaveBeenCalled();
+
+    // What is inside them is fine.
+    expect(
+      coordinator.handlers["writeOperation:deleteImmediately"](
+        { paths: ["/Volumes/Backup/old.txt"] },
+        { sender: createSender() },
+      ),
+    ).toEqual({ operationId: "write-op-1", status: "queued" });
+    coordinator.shutdown();
+  });
+
+  it("protects the Trash folder however its name is written", () => {
+    const coordinator = createWriteOperationCoordinator(
+      createWriteServiceStub(),
+      createWriteOperationFs(),
+    );
+
+    expect(() =>
+      coordinator.handlers["writeOperation:deleteImmediately"](
+        { paths: [resolve(homedir(), ".trash")] },
+        { sender: createSender() },
+      ),
+    ).toThrow("protected system directory");
+    expect(() =>
+      coordinator.handlers["writeOperation:trash"](
+        { paths: [resolve(homedir(), ".TRASH")] },
+        { sender: createSender() },
+      ),
+    ).toThrow("protected system directory");
+    coordinator.shutdown();
+  });
+
+  it("explains a failed delete in plain words", async () => {
+    const fs = createWriteOperationFs({
+      rm: vi.fn(async () => {
+        throw Object.assign(new Error("EACCES: permission denied, rmdir '/Users/demo/a'"), {
+          code: "EACCES",
+        });
+      }),
+    });
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs);
+    const sender = createSender();
+
+    coordinator.handlers["writeOperation:deleteImmediately"](
+      { paths: ["/Users/demo/a"] },
+      { sender },
+    );
+    const terminal = await waitForTerminalEvent(sender, "write-op-1");
+
+    expect(terminal.status).toBe("failed");
+    expect(terminal.result?.error).toBe("You don't have permission to access this item.");
+    coordinator.shutdown();
+  });
+});
+
+describe("folder listings after a write", () => {
+  it("forgets cached listings before a local operation's end is sent", async () => {
+    resetResponseCacheState();
+    await getCachedResponse("directory", { path: "/Users/demo" }, async () => "old listing");
+    expect(getResponseCacheSizes().directorySnapshots).toBe(1);
+    const sizesAtEnd: number[] = [];
+    const sender = createSender();
+    sender.send.mockImplementation((_channel, payload) => {
+      if ((payload as WriteOperationProgressEvent).status === "completed") {
+        sizesAtEnd.push(getResponseCacheSizes().directorySnapshots);
+      }
+    });
+    const coordinator = createWriteOperationCoordinator(
+      createWriteServiceStub(),
+      createWriteOperationFs(),
+    );
+
+    coordinator.handlers["writeOperation:deleteImmediately"](
+      { paths: ["/Users/demo/a.txt"] },
+      { sender },
+    );
+    await waitForTerminalEvent(sender, "write-op-1");
+
+    expect(sizesAtEnd).toEqual([0]);
+    coordinator.shutdown();
+    resetResponseCacheState();
+  });
+
+  it("forgets cached listings before a paste's end is sent", async () => {
+    resetResponseCacheState();
+    const { writeService, emit } = createSubscribingWriteService();
+    const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs());
+    const sender = createLifecycleSender();
+    const sizesAtEnd: number[] = [];
+    sender.send.mockImplementation((_channel, payload) => {
+      if ((payload as WriteOperationProgressEvent).status === "completed") {
+        sizesAtEnd.push(getResponseCacheSizes().treeChildren);
+      }
+    });
+    startPaste(coordinator, sender);
+    await getCachedResponse("tree", { path: "/Users/demo/target" }, async () => "old children");
+
+    emit(createCopyPasteTerminalEvent("copy-op-1", "completed"));
+
+    expect(sizesAtEnd).toEqual([0]);
+    coordinator.shutdown();
+    resetResponseCacheState();
+  });
+});
+
+describe("quitting during an operation", () => {
+  it("stops a running delete and waits for it to finish before shutdown resolves", async () => {
+    let finishFirstDelete: (() => void) | null = null;
+    const fs = createWriteOperationFs({
+      rm: vi.fn(async (path: string) => {
+        if (path.endsWith("a.txt")) {
+          await new Promise<void>((resolveRm) => {
+            finishFirstDelete = resolveRm;
+          });
+        }
+      }),
+    });
+    const coordinator = createWriteOperationCoordinator(createWriteServiceStub(), fs);
+    const sender = createSender();
+
+    coordinator.handlers["writeOperation:deleteImmediately"](
+      { paths: ["/Users/demo/a.txt", "/Users/demo/b.txt"] },
+      { sender },
+    );
+    await waitFor(() => (finishFirstDelete ? true : null));
+    expect(coordinator.getActiveOperation()).toEqual({ operationId: "write-op-1", kind: "delete" });
+
+    let shutDown = false;
+    const shutdown = coordinator.shutdown().then(() => {
+      shutDown = true;
+    });
+    await new Promise((resolveWait) => setTimeout(resolveWait, 20));
+    // Still on the first item: quitting waits for it.
+    expect(shutDown).toBe(false);
+    // Nothing new starts while the app is quitting.
+    expect(() =>
+      coordinator.handlers["writeOperation:trash"]({ paths: ["/Users/demo/c.txt"] }, { sender }),
+    ).toThrow("File Trail is quitting.");
+
+    (finishFirstDelete as (() => void) | null)?.();
+    await shutdown;
+
+    // It stopped after the current item, and its end was sent before shutdown finished.
+    expect(fs.rm).toHaveBeenCalledTimes(1);
+    expect((await waitForTerminalEvent(sender, "write-op-1")).status).toBe("partial");
+    expect(coordinator.getActiveOperation()).toBeNull();
+  });
+
+  it("cancels a running move and waits for the write service to say it stopped", async () => {
+    const { writeService, emit } = createSubscribingWriteService();
+    const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs());
+    const sender = createLifecycleSender();
+    startPaste(coordinator, sender);
+    emit({ ...createCopyPasteTerminalEvent("copy-op-1", "running"), mode: "cut" });
+    expect(coordinator.getActiveOperation()).toEqual({ operationId: "copy-op-1", kind: "move" });
+
+    let shutDown = false;
+    const shutdown = coordinator.shutdown().then(() => {
+      shutDown = true;
+    });
+    expect(writeService.cancelOperation).toHaveBeenCalledWith("copy-op-1");
+    await new Promise((resolveWait) => setTimeout(resolveWait, 10));
+    expect(shutDown).toBe(false);
+
+    emit(createCopyPasteTerminalEvent("copy-op-1", "cancelled"));
+    await shutdown;
+    expect(shutDown).toBe(true);
+    expect(sender.send.mock.calls.at(-1)?.[1]).toEqual(
+      expect.objectContaining({ operationId: "copy-op-1", status: "cancelled" }),
+    );
+  });
+
+  it("names a copy as a copy and has nothing to wait for when idle", async () => {
+    const { writeService, emit } = createSubscribingWriteService();
+    const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs());
+    expect(coordinator.getActiveOperation()).toBeNull();
+    await coordinator.whenIdle();
+
+    startPaste(coordinator, createSender());
+    emit(createCopyPasteTerminalEvent("copy-op-1", "running"));
+    expect(coordinator.getActiveOperation()).toEqual({ operationId: "copy-op-1", kind: "copy" });
+    const idle = coordinator.whenIdle();
+    emit(createCopyPasteTerminalEvent("copy-op-1", "completed"));
+    await idle;
+    expect(coordinator.getActiveOperation()).toBeNull();
+    await coordinator.shutdown();
+  });
+});
+
+describe("starting a paste", () => {
+  it("doesn't hold the write slot for a paste that ended before its start returned", async () => {
+    const root = await mkdtemp(join(tmpdir(), "filetrail-early-end-"));
+    await writeFile(join(root, "a.txt"), "a");
+    await mkdir(join(root, "target"));
+    const writeService = createWriteService();
+    const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs());
+    const sender = createSender();
+    const { analysisId } = coordinator.handlers["copyPaste:analyzeStart"](
+      {
+        mode: "copy",
+        sourcePaths: [join(root, "a.txt")],
+        destinationDirectoryPath: join(root, "target"),
+        action: "paste",
+      },
+      { sender },
+    );
+    await waitFor(() => {
+      const update = coordinator.handlers["copyPaste:analyzeGetUpdate"]({ analysisId }, { sender });
+      return update.done ? update : null;
+    });
+    // The review was dismissed after the analysis finished, then pasted from anyway: the
+    // write service fails such a paste at once, inside startCopyPaste.
+    coordinator.handlers["copyPaste:analyzeCancel"]({ analysisId }, { sender });
+
+    const { operationId } = coordinator.handlers["copyPaste:start"](
+      {
+        analysisId,
+        action: "paste",
+        policy: { file: "skip", directory: "merge", mismatch: "skip" },
+      },
+      { sender },
+    );
+
+    // The window still hears how it ended, after it has the operation's id.
+    const terminal = await waitForTerminalEvent(sender, operationId);
+    expect(terminal.status).toBe("failed");
+    // And the next write is not refused with "Another write operation is already running."
+    expect(coordinator.getActiveOperation()).toBeNull();
+    expect(() => analyze(coordinator, sender)).not.toThrow("Another write operation");
+    await rm(root, { recursive: true, force: true });
+    coordinator.shutdown();
+  });
+
+  it("only lets the window that started an analysis read, cancel, or paste from it", () => {
+    const writeService = createWriteServiceStub();
+    const coordinator = createWriteOperationCoordinator(writeService, createWriteOperationFs());
+    const owner = createSender();
+    const otherWindow = createSender();
+    analyze(coordinator, owner);
+
+    expect(() =>
+      coordinator.handlers["copyPaste:analyzeGetUpdate"](
+        { analysisId: "analysis-1" },
+        { sender: otherWindow },
+      ),
+    ).toThrow();
+    expect(
+      coordinator.handlers["copyPaste:analyzeCancel"](
+        { analysisId: "analysis-1" },
+        { sender: otherWindow },
+      ),
+    ).toEqual({ ok: false });
+    expect(() =>
+      coordinator.handlers["copyPaste:start"](
+        {
+          analysisId: "analysis-1",
+          action: "paste",
+          policy: { file: "skip", directory: "merge", mismatch: "skip" },
+        },
+        { sender: otherWindow },
+      ),
+    ).toThrow();
+    expect(writeService.getCopyPasteAnalysisUpdate).not.toHaveBeenCalled();
+    expect(writeService.cancelCopyPasteAnalysis).not.toHaveBeenCalled();
+    expect(writeService.startCopyPaste).not.toHaveBeenCalled();
+
+    expect(
+      coordinator.handlers["copyPaste:analyzeCancel"](
+        { analysisId: "analysis-1" },
+        { sender: owner },
+      ),
+    ).toEqual({ ok: true });
+    coordinator.shutdown();
+  });
+});
+
+function createRealWriteOperationFs(overrides: Partial<WriteOperationFs> = {}): WriteOperationFs {
+  return {
+    lstat: originalFileSystem.lstat,
+    stat: originalFileSystem.stat,
+    mkdir: (path) => originalFileSystem.mkdir(path),
+    rename: originalRename,
+    renameExclusive: originalRenameExclusive,
+    rm: (path, options) => originalFileSystem.rm(path, options),
+    trash: vi.fn(async () => undefined),
+    ...overrides,
+  };
+}
+
 type Coordinator = ReturnType<typeof createWriteOperationCoordinator>;
 
 const LIFECYCLE_EVENTS = [
@@ -858,12 +1511,26 @@ function countLifecycleListeners(sender: EventEmitter): number {
   return LIFECYCLE_EVENTS.reduce((total, name) => total + sender.listenerCount(name), 0);
 }
 
+// Pastes from an analysis the same window started, as the app does.
 function startPaste(coordinator: Coordinator, sender: ReturnType<typeof createSender>) {
+  analyze(coordinator, sender);
   return coordinator.handlers["copyPaste:start"](
     {
       analysisId: "analysis-1",
       action: "paste",
       policy: { file: "skip", directory: "merge", mismatch: "skip" },
+    },
+    { sender },
+  );
+}
+
+function analyze(coordinator: Coordinator, sender: ReturnType<typeof createSender>) {
+  return coordinator.handlers["copyPaste:analyzeStart"](
+    {
+      mode: "copy",
+      sourcePaths: ["/Users/demo/a.txt"],
+      destinationDirectoryPath: "/Users/demo/b",
+      action: "paste",
     },
     { sender },
   );
@@ -995,7 +1662,9 @@ function createWriteOperationFs(overrides: Partial<WriteOperationFs> = {}): Writ
     stat: overrides.stat ?? vi.fn(async () => createStats(true)),
     mkdir: overrides.mkdir ?? vi.fn(async () => undefined),
     rename: overrides.rename ?? vi.fn(async () => undefined),
+    renameExclusive: overrides.renameExclusive ?? vi.fn(async () => undefined),
     rm: overrides.rm ?? vi.fn(async () => undefined),
+    trash: overrides.trash ?? vi.fn(async () => undefined),
   };
 }
 

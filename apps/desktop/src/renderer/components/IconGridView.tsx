@@ -85,7 +85,7 @@ export function IconGridView({
   getItemDropIndicator?: ((path: string) => "valid" | "invalid" | null) | undefined;
   compactIconView?: boolean;
   highlightHoveredItems?: boolean;
-  inlineRename: { path: string; error: string | null } | null;
+  inlineRename: { path: string; error: string | null; refusalCount?: number } | null;
   onInlineRenameSubmit: (nextName: string) => void;
   onInlineRenameCancel: () => void;
   /** The loading, error or empty-folder message, drawn in place of the grid. */
@@ -316,6 +316,7 @@ export function IconGridView({
                   name={entry.name}
                   extension={entry.extension}
                   error={inlineRename.error}
+                  refusalCount={inlineRename.refusalCount ?? 0}
                   onSubmit={onInlineRenameSubmit}
                   onCancel={onInlineRenameCancel}
                 />

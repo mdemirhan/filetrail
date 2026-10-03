@@ -1,6 +1,5 @@
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { shell } from "electron";
+import { basename, dirname, join, resolve } from "node:path";
 
 import {
   type IpcRequest,
@@ -10,19 +9,37 @@ import {
   isAbortError,
   writeOperationProgressEventSchema,
 } from "@filetrail/contracts";
-import { WRITE_OPERATION_BUSY_ERROR, type WriteService } from "@filetrail/core";
+import {
+  type CopyPasteProgressEvent,
+  WRITE_OPERATION_BUSY_ERROR,
+  type WriteService,
+  describeCopyPasteError,
+} from "@filetrail/core";
 import { toErrorMessage } from "../ipc";
+import { clearResponseCaches } from "./responseCache";
+
+type WriteOperationStats = { isDirectory(): boolean; dev?: number; ino?: number };
 
 // Filesystem operations used by write operations (rename, mkdir, path checks).
 // Callers inject an original-fs backed implementation to bypass Electron's ASAR
 // patching, which would otherwise misreport .asar files as directories.
 type WriteOperationFs = {
-  lstat: (path: string) => Promise<{ isDirectory(): boolean }>;
-  stat: (path: string) => Promise<{ isDirectory(): boolean }>;
+  lstat: (path: string) => Promise<WriteOperationStats>;
+  stat: (path: string) => Promise<WriteOperationStats>;
   mkdir: (path: string) => Promise<void>;
+  // Fails with EEXIST rather than replace an item already at the new path (renamex_np
+  // with RENAME_EXCL). Every rename goes through this one...
+  renameExclusive: (oldPath: string, newPath: string) => Promise<void>;
+  // ...except one that only changes the case of a name ("notes" to "Notes") on a disk that
+  // ignores case: there the new name already "exists", because it is the item itself.
   rename: (oldPath: string, newPath: string) => Promise<void>;
   rm: (path: string, options: { recursive: boolean; force: boolean }) => Promise<void>;
+  // Moves an item to the Trash (Electron's shell.trashItem in the app).
+  trash: (path: string) => Promise<void>;
 };
+
+// What kind of change the running operation is making, in the words a person would use.
+export type WriteOperationKind = "copy" | "move" | "trash" | "delete" | "rename" | "new_folder";
 
 type WriteOperationSender = {
   send: (channel: string, payload: unknown) => void;
@@ -57,6 +74,9 @@ const PREPARING_WRITE_OPERATION_ID = "preparing-write-operation";
 type PreparedRenameOperation = {
   sourcePath: string;
   destinationPath: string;
+  // The new name differs from the old one only in case (or in how an accented letter is
+  // encoded), and the disk treats both as the same name.
+  renamesItself: boolean;
 };
 
 type PreparedCreateFolderOperation = {
@@ -67,7 +87,12 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
   const writeOperationSenders = new Map<string, WriteOperationSender>();
   const senderDetachers = new Map<string, () => void>();
   const copyPasteRequests = new Map<string, IpcRequest<"copyPaste:start">>();
+  // Whether each running copy-paste copies or moves, from the write service's own events.
+  const copyPasteModes = new Map<string, CopyPasteProgressEvent["mode"]>();
   const localWriteOperationControllers = new Map<string, AbortController>();
+  const localWriteOperationActions = new Map<string, WriteOperationAction>();
+  // The window that started each copy analysis: only it may read, cancel, or start it.
+  const analysisOwners = new Map<string, WriteOperationSender>();
   const progressThrottles = new Map<
     string,
     {
@@ -76,16 +101,23 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
       timer: ReturnType<typeof setTimeout> | null;
     }
   >();
+  // Callers waiting for the write slot to be free (see whenIdle).
+  const idleWaiters: Array<() => void> = [];
+  // While a copy-paste is being started: the end of any operation that finished before
+  // the start request could record it (see "copyPaste:start").
+  let earlyTerminalEvents: Map<string, CopyPasteProgressEvent> | null = null;
   let activeWriteOperationId: string | null = null;
   let localWriteOperationSequence = 0;
+  // Set once the app starts quitting; no new operation may begin after that.
+  let closing = false;
 
   // ~/.Trash is a protected system directory — it must never be deleted, renamed,
   // moved, or trashed.  Items *inside* Trash are fine; this only guards the
-  // top-level Trash folder itself.
-  const trashPath = resolve(homedir(), ".Trash");
+  // top-level Trash folder itself. The comparison ignores case, as the disk does.
+  const trashPath = resolve(homedir(), ".Trash").toLowerCase();
   function assertNotProtectedPath(paths: readonly string[]): void {
     for (const path of paths) {
-      if (resolve(path) === trashPath) {
+      if (resolve(path).toLowerCase() === trashPath) {
         throw new Error("The Trash folder is a protected system directory and cannot be modified.");
       }
     }
@@ -94,11 +126,16 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
   const writeServiceUnsubscribe = writeService.subscribe((event) => {
     const request = copyPasteRequests.get(event.operationId);
     const action = request?.action ?? "paste";
+    copyPasteModes.set(event.operationId, event.mode);
     if (isTerminalStatus(event.status)) {
       copyPasteRequests.delete(event.operationId);
-      if (activeWriteOperationId === event.operationId) {
-        activeWriteOperationId = null;
+      copyPasteModes.delete(event.operationId);
+      // Folder listings read before the operation finished may show the old contents.
+      clearResponseCaches();
+      if (earlyTerminalEvents && !writeOperationSenders.has(event.operationId)) {
+        earlyTerminalEvents.set(event.operationId, event);
       }
+      freeWriteSlot(event.operationId);
     }
     const sender = writeOperationSenders.get(event.operationId);
     if (!sender) {
@@ -107,34 +144,7 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
     }
     try {
       deliverProgress(event.operationId, event.status, event.runtimeConflict != null, () =>
-        sendProgress(
-          sender,
-          writeOperationProgressEventSchema.parse({
-            operationId: event.operationId,
-            action,
-            status: event.status,
-            completedItemCount: event.completedItemCount,
-            totalItemCount: event.totalItemCount,
-            completedByteCount: event.completedByteCount,
-            totalBytes: event.totalBytes,
-            currentSourcePath: event.currentSourcePath,
-            currentDestinationPath: event.currentDestinationPath,
-            runtimeConflict: event.runtimeConflict,
-            result: event.result
-              ? {
-                  operationId: event.result.operationId,
-                  action,
-                  status: event.result.status,
-                  targetPath: event.result.destinationDirectoryPath,
-                  startedAt: event.result.startedAt,
-                  finishedAt: event.result.finishedAt,
-                  summary: event.result.summary,
-                  items: event.result.items,
-                  error: event.result.error,
-                }
-              : null,
-          }),
-        ),
+        sendProgress(sender, toProgressEvent(event, action)),
       );
     } finally {
       if (isTerminalStatus(event.status)) {
@@ -142,6 +152,40 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
       }
     }
   });
+
+  function freeWriteSlot(operationId: string): void {
+    if (activeWriteOperationId !== operationId) {
+      return;
+    }
+    activeWriteOperationId = null;
+    for (const resolveWaiter of idleWaiters.splice(0)) {
+      resolveWaiter();
+    }
+  }
+
+  // Resolves once no operation holds the write slot: at once if none does, otherwise when
+  // the running one has finished (it has sent its last event by then).
+  function whenIdle(): Promise<void> {
+    if (activeWriteOperationId === null) {
+      return Promise.resolve();
+    }
+    return new Promise((resolveIdle) => {
+      idleWaiters.push(resolveIdle);
+    });
+  }
+
+  function getActiveOperation(): { operationId: string; kind: WriteOperationKind } | null {
+    const operationId = activeWriteOperationId;
+    // A rename or new folder still being checked has changed nothing yet.
+    if (operationId === null || operationId === PREPARING_WRITE_OPERATION_ID) {
+      return null;
+    }
+    const localAction = localWriteOperationActions.get(operationId);
+    if (localAction !== undefined) {
+      return { operationId, kind: toWriteOperationKind(localAction) };
+    }
+    return { operationId, kind: copyPasteModes.get(operationId) === "cut" ? "move" : "copy" };
+  }
 
   // Sends a progress update now, or holds it back if one went out a moment ago (see
   // PROGRESS_UPDATE_INTERVAL_MS). Only plain "running" updates wait: a question for the
@@ -201,6 +245,9 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
   }
 
   function ensureNoWriteOperationInFlight(): void {
+    if (closing) {
+      throw new Error("File Trail is quitting.");
+    }
     if (activeWriteOperationId !== null) {
       throw new Error("Another write operation is already running.");
     }
@@ -214,9 +261,7 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
     try {
       return await prepare();
     } finally {
-      if (activeWriteOperationId === PREPARING_WRITE_OPERATION_ID) {
-        activeWriteOperationId = null;
-      }
+      freeWriteSlot(PREPARING_WRITE_OPERATION_ID);
     }
   }
 
@@ -281,10 +326,13 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
     sender: WriteOperationSender;
     execute: (operationId: string, controller: AbortController) => Promise<void>;
   }): { operationId: string; status: "queued" } {
+    // The app may have started quitting while a rename was being checked.
+    ensureNoWriteOperationInFlight();
     const operationId = createLocalWriteOperationId();
     const controller = new AbortController();
     activeWriteOperationId = operationId;
     localWriteOperationControllers.set(operationId, controller);
+    localWriteOperationActions.set(operationId, args.action);
     attachSender(operationId, args.sender);
     emitLocalWriteOperationEvent({
       operationId,
@@ -317,9 +365,8 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
   function releaseLocalWriteOperation(operationId: string): void {
     detachSender(operationId);
     localWriteOperationControllers.delete(operationId);
-    if (activeWriteOperationId === operationId) {
-      activeWriteOperationId = null;
-    }
+    localWriteOperationActions.delete(operationId);
+    freeWriteSlot(operationId);
   }
 
   function emitLocalWriteOperationEvent(event: WriteOperationProgressEvent): void {
@@ -327,6 +374,8 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
     // Release the operation before telling the window, so a failed send can't leave the
     // write slot held and a renderer reacting to the final event can start the next write.
     if (isTerminalStatus(event.status)) {
+      // Folder listings read before the operation finished may show the old contents.
+      clearResponseCaches();
       releaseLocalWriteOperation(event.operationId);
     }
     if (sender) {
@@ -386,12 +435,57 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
     return "completed";
   }
 
+  // Sends the end of a rename or new folder, which each change a single item.
+  function emitSingleItemResult(args: {
+    operationId: string;
+    action: "rename" | "new_folder";
+    startedAt: string;
+    sourcePath: string | null;
+    destinationPath: string;
+    status: "completed" | "failed" | "cancelled";
+    error: string | null;
+  }): void {
+    const completedItemCount = args.status === "completed" ? 1 : 0;
+    const result = createLocalWriteOperationResult({
+      operationId: args.operationId,
+      action: args.action,
+      targetPath: args.destinationPath,
+      startedAt: args.startedAt,
+      finishedAt: new Date().toISOString(),
+      totalItemCount: 1,
+      completedItemCount,
+      items: [
+        {
+          sourcePath: args.sourcePath,
+          destinationPath: args.destinationPath,
+          status: args.status,
+          error: args.error,
+          skipReason: null,
+        },
+      ],
+      status: args.status,
+      error: args.error,
+    });
+    emitLocalWriteOperationEvent({
+      operationId: args.operationId,
+      action: args.action,
+      status: args.status,
+      completedItemCount,
+      totalItemCount: 1,
+      completedByteCount: 0,
+      totalBytes: null,
+      currentSourcePath: args.sourcePath,
+      currentDestinationPath: args.destinationPath,
+      result,
+    });
+  }
+
   async function executeRenameOperation(
     operation: PreparedRenameOperation,
     operationId: string,
     controller: AbortController,
   ): Promise<void> {
-    const { sourcePath, destinationPath } = operation;
+    const { sourcePath, destinationPath, renamesItself } = operation;
     const startedAt = new Date().toISOString();
     try {
       controller.signal.throwIfAborted();
@@ -408,74 +502,42 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
         result: null,
       });
       controller.signal.throwIfAborted();
-      await fs.rename(sourcePath, destinationPath);
-      const result = createLocalWriteOperationResult({
-        operationId,
-        action: "rename",
-        targetPath: destinationPath,
-        startedAt,
-        finishedAt: new Date().toISOString(),
-        totalItemCount: 1,
-        completedItemCount: 1,
-        items: [
-          {
-            sourcePath,
-            destinationPath,
-            status: "completed",
-            error: null,
-            skipReason: null,
-          },
-        ],
-        status: "completed",
-        error: null,
-      });
-      emitLocalWriteOperationEvent({
-        operationId,
-        action: "rename",
-        status: "completed",
-        completedItemCount: 1,
-        totalItemCount: 1,
-        completedByteCount: 0,
-        totalBytes: null,
-        currentSourcePath: sourcePath,
-        currentDestinationPath: destinationPath,
-        result,
-      });
+      if (renamesItself) {
+        await fs.rename(sourcePath, destinationPath);
+      } else {
+        // The name was free when it was checked, but something may have taken it since:
+        // this fails then, instead of replacing that item.
+        await fs.renameExclusive(sourcePath, destinationPath);
+      }
     } catch (error) {
       const cancelled = isAbortError(error) || controller.signal.aborted;
-      const result = createLocalWriteOperationResult({
+      emitSingleItemResult({
         operationId,
         action: "rename",
-        targetPath: destinationPath,
         startedAt,
-        finishedAt: new Date().toISOString(),
-        totalItemCount: 1,
-        completedItemCount: 0,
-        items: [
-          {
-            sourcePath,
-            destinationPath,
-            status: cancelled ? "cancelled" : "failed",
-            error: cancelled ? "Operation cancelled." : toErrorMessage(error),
-            skipReason: null,
-          },
-        ],
+        sourcePath,
+        destinationPath,
         status: cancelled ? "cancelled" : "failed",
-        error: cancelled ? "Operation cancelled." : toErrorMessage(error),
+        error: cancelled
+          ? "Operation cancelled."
+          : describeWriteError(error, {
+              missing: basename(sourcePath),
+              existing: basename(destinationPath),
+            }),
       });
-      emitLocalWriteOperationEvent({
-        operationId,
-        action: "rename",
-        status: result.status,
-        completedItemCount: 0,
-        totalItemCount: 1,
-        completedByteCount: 0,
-        totalBytes: null,
-        currentSourcePath: sourcePath,
-        currentDestinationPath: destinationPath,
-        result,
-      });
+      return;
     }
+    // Outside the try: the item has been renamed, and nothing that goes wrong while
+    // reporting it may turn that into a failure.
+    emitSingleItemResult({
+      operationId,
+      action: "rename",
+      startedAt,
+      sourcePath,
+      destinationPath,
+      status: "completed",
+      error: null,
+    });
   }
 
   async function prepareRenameOperation(
@@ -483,18 +545,32 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
   ): Promise<PreparedRenameOperation> {
     const sourcePath = resolve(payload.sourcePath);
     assertNotProtectedPath([sourcePath]);
+    const sourceName = basename(sourcePath);
     const destinationName = payload.destinationName.trim();
     const destinationPath = join(dirname(sourcePath), destinationName);
-    await fs.lstat(sourcePath);
+    let sourceStats: WriteOperationStats;
+    try {
+      sourceStats = await fs.lstat(sourcePath);
+    } catch (error) {
+      throw new Error(describeWriteError(error, { missing: sourceName }));
+    }
     if (destinationPath === sourcePath) {
       throw new Error("Choose a different name.");
     }
-    if (await pathExists(destinationPath, fs.lstat)) {
-      throw new Error(`An item named "${destinationName}" already exists.`);
+    const destinationStats = await lstatOrNull(destinationPath, fs.lstat);
+    // On a disk that ignores case, "notes.txt" finds "Notes.txt": the item itself, not
+    // another one in the way. On a disk that minds case they are two different items.
+    const renamesItself =
+      destinationStats !== null &&
+      isSameItem(sourceStats, destinationStats) &&
+      namesMatchIgnoringCase(sourceName, destinationName);
+    if (destinationStats !== null && !renamesItself) {
+      throw new Error(`An item named “${destinationName}” already exists.`);
     }
     return {
       sourcePath,
       destinationPath,
+      renamesItself,
     };
   }
 
@@ -521,73 +597,34 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
       });
       controller.signal.throwIfAborted();
       await fs.mkdir(destinationPath);
-      const result = createLocalWriteOperationResult({
-        operationId,
-        action: "new_folder",
-        targetPath: destinationPath,
-        startedAt,
-        finishedAt: new Date().toISOString(),
-        totalItemCount: 1,
-        completedItemCount: 1,
-        items: [
-          {
-            sourcePath: null,
-            destinationPath,
-            status: "completed",
-            error: null,
-            skipReason: null,
-          },
-        ],
-        status: "completed",
-        error: null,
-      });
-      emitLocalWriteOperationEvent({
-        operationId,
-        action: "new_folder",
-        status: "completed",
-        completedItemCount: 1,
-        totalItemCount: 1,
-        completedByteCount: 0,
-        totalBytes: null,
-        currentSourcePath: null,
-        currentDestinationPath: destinationPath,
-        result,
-      });
     } catch (error) {
       const cancelled = isAbortError(error) || controller.signal.aborted;
-      const result = createLocalWriteOperationResult({
+      emitSingleItemResult({
         operationId,
         action: "new_folder",
-        targetPath: destinationPath,
         startedAt,
-        finishedAt: new Date().toISOString(),
-        totalItemCount: 1,
-        completedItemCount: 0,
-        items: [
-          {
-            sourcePath: null,
-            destinationPath,
-            status: cancelled ? "cancelled" : "failed",
-            error: cancelled ? "Operation cancelled." : toErrorMessage(error),
-            skipReason: null,
-          },
-        ],
+        sourcePath: null,
+        destinationPath,
         status: cancelled ? "cancelled" : "failed",
-        error: cancelled ? "Operation cancelled." : toErrorMessage(error),
+        error: cancelled
+          ? "Operation cancelled."
+          : describeWriteError(error, {
+              missing: basename(dirname(destinationPath)),
+              existing: basename(destinationPath),
+            }),
       });
-      emitLocalWriteOperationEvent({
-        operationId,
-        action: "new_folder",
-        status: result.status,
-        completedItemCount: 0,
-        totalItemCount: 1,
-        completedByteCount: 0,
-        totalBytes: null,
-        currentSourcePath: null,
-        currentDestinationPath: destinationPath,
-        result,
-      });
+      return;
     }
+    // Outside the try, for the same reason as a rename's.
+    emitSingleItemResult({
+      operationId,
+      action: "new_folder",
+      startedAt,
+      sourcePath: null,
+      destinationPath,
+      status: "completed",
+      error: null,
+    });
   }
 
   async function prepareCreateFolderOperation(
@@ -596,12 +633,17 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
     const parentDirectoryPath = resolve(payload.parentDirectoryPath);
     const folderName = payload.folderName.trim();
     const destinationPath = join(parentDirectoryPath, folderName);
-    const parentStats = await fs.stat(parentDirectoryPath);
+    let parentStats: WriteOperationStats;
+    try {
+      parentStats = await fs.stat(parentDirectoryPath);
+    } catch (error) {
+      throw new Error(describeWriteError(error, { missing: basename(parentDirectoryPath) }));
+    }
     if (!parentStats.isDirectory()) {
       throw new Error("Folder destination must be an existing directory.");
     }
-    if (await pathExists(destinationPath, fs.lstat)) {
-      throw new Error(`An item named "${folderName}" already exists.`);
+    if ((await lstatOrNull(destinationPath, fs.lstat)) !== null) {
+      throw new Error(`An item named “${folderName}” already exists.`);
     }
     return { destinationPath };
   }
@@ -616,7 +658,9 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
     const items: WriteOperationResult["items"] = [];
     let completedItemCount = 0;
     let cancelled = false;
-    for (const [index, path] of paths.entries()) {
+    // One item that can't go to the Trash doesn't keep the others from going; only
+    // cancelling stops the rest.
+    for (const path of paths) {
       if (controller.signal.aborted) {
         cancelled = true;
         items.push({
@@ -641,7 +685,11 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
         result: null,
       });
       try {
-        await shell.trashItem(path);
+        // An item that is already gone (deleted or moved since it was chosen) has
+        // nothing left to move: that counts as done, not as a failure.
+        if (!(await isMissing(path, fs.lstat))) {
+          await fs.trash(path);
+        }
         completedItemCount += 1;
         items.push({
           sourcePath: path,
@@ -651,35 +699,13 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
           skipReason: null,
         });
       } catch (error) {
-        const isCancelled = isAbortError(error) || controller.signal.aborted;
-        if (isCancelled) {
-          cancelled = true;
-          items.push({
-            sourcePath: path,
-            destinationPath: null,
-            status: "cancelled",
-            error: "Operation cancelled.",
-            skipReason: null,
-          });
-        } else {
-          items.push({
-            sourcePath: path,
-            destinationPath: null,
-            status: "failed",
-            error: toErrorMessage(error),
-            skipReason: null,
-          });
-        }
-        for (const remainingPath of paths.slice(index + 1)) {
-          items.push({
-            sourcePath: remainingPath,
-            destinationPath: null,
-            status: "cancelled",
-            error: "Operation stopped before this item was processed.",
-            skipReason: null,
-          });
-        }
-        break;
+        items.push({
+          sourcePath: path,
+          destinationPath: null,
+          status: "failed",
+          error: describeTrashError(error, path),
+          skipReason: null,
+        });
       }
     }
     const failedItemCount = items.filter((item) => item.status === "failed").length;
@@ -729,7 +755,7 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
     const items: WriteOperationResult["items"] = [];
     let completedItemCount = 0;
     let cancelled = false;
-    for (const [index, path] of paths.entries()) {
+    for (const path of paths) {
       if (controller.signal.aborted) {
         cancelled = true;
         items.push({
@@ -768,19 +794,18 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
           sourcePath: path,
           destinationPath: null,
           status: "failed",
-          error: error instanceof Error ? error.message : String(error),
+          error: describeCopyPasteError(error),
           skipReason: null,
         });
       }
     }
     const failedItemCount = items.filter((item) => item.status === "failed").length;
-    const status: WriteOperationResult["status"] = cancelled
-      ? "cancelled"
-      : failedItemCount === paths.length
-        ? "failed"
-        : failedItemCount > 0
-          ? "partial"
-          : "completed";
+    // Items deleted before a cancel are gone for good, so that is "partial", as for Trash.
+    const status = resolveLocalTerminalStatus({
+      cancelled,
+      completedItemCount,
+      failedItemCount,
+    });
     const result: WriteOperationResult = createLocalWriteOperationResult({
       operationId,
       action: "delete_immediately",
@@ -821,27 +846,81 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
     return writeService.cancelOperation(operationId);
   }
 
+  // An analysis is read, cancelled, and started only by the window that asked for it;
+  // another window (such as Settings) shares the same preload API.
+  function assertAnalysisOwner(analysisId: string, requester: unknown): void {
+    const owner = analysisOwners.get(analysisId);
+    if (owner === undefined || owner !== requester) {
+      throw new Error("This copy was set up in another window.");
+    }
+  }
+
+  // Stops the running operation, if any, and waits until it has finished: an operation
+  // stops after the item it is on and removes any partly copied file, which can take a
+  // moment for a large file. No new operation can start afterwards.
+  async function shutdown(): Promise<void> {
+    closing = true;
+    // The operation is being stopped anyway; a window closing now has nothing to add.
+    // Its final event is still sent to the window if it is open.
+    for (const detach of senderDetachers.values()) {
+      detach();
+    }
+    senderDetachers.clear();
+    const operationId = activeWriteOperationId;
+    if (operationId !== null && operationId !== PREPARING_WRITE_OPERATION_ID) {
+      cancelWriteOperation(operationId);
+    }
+    await whenIdle();
+    writeServiceUnsubscribe();
+    for (const progressOperationId of [...progressThrottles.keys()]) {
+      forgetProgress(progressOperationId);
+    }
+    writeOperationSenders.clear();
+    copyPasteRequests.clear();
+    copyPasteModes.clear();
+    analysisOwners.clear();
+    localWriteOperationControllers.clear();
+    localWriteOperationActions.clear();
+  }
+
   return {
     handlers: {
-      "copyPaste:analyzeStart": (payload: IpcRequest<"copyPaste:analyzeStart">) => {
+      "copyPaste:analyzeStart": (
+        payload: IpcRequest<"copyPaste:analyzeStart">,
+        event: { sender: WriteOperationSender },
+      ) => {
         if (payload.mode === "cut") {
           assertNotProtectedPath(payload.sourcePaths);
         }
         ensureNoWriteOperationInFlight();
-        return writeService.startCopyPasteAnalysis({
+        const handle = writeService.startCopyPasteAnalysis({
           mode: payload.mode,
           sourcePaths: payload.sourcePaths,
           destinationDirectoryPath: payload.destinationDirectoryPath,
         });
+        // Starting an analysis drops the write service's finished ones, so only this one
+        // can still be asked about.
+        analysisOwners.clear();
+        analysisOwners.set(handle.analysisId, event.sender);
+        return handle;
       },
-      "copyPaste:analyzeGetUpdate": (payload: IpcRequest<"copyPaste:analyzeGetUpdate">) => {
+      "copyPaste:analyzeGetUpdate": (
+        payload: IpcRequest<"copyPaste:analyzeGetUpdate">,
+        event: { sender: WriteOperationSender },
+      ) => {
+        assertAnalysisOwner(payload.analysisId, event.sender);
         const update = writeService.getCopyPasteAnalysisUpdate(payload.analysisId);
         return update.report
           ? { ...update, report: trimAnalysisReportForWindow(update.report) }
           : update;
       },
-      "copyPaste:analyzeCancel": (payload: IpcRequest<"copyPaste:analyzeCancel">) =>
-        writeService.cancelCopyPasteAnalysis(payload.analysisId),
+      "copyPaste:analyzeCancel": (
+        payload: IpcRequest<"copyPaste:analyzeCancel">,
+        event: { sender: WriteOperationSender },
+      ) =>
+        analysisOwners.get(payload.analysisId) === event.sender
+          ? writeService.cancelCopyPasteAnalysis(payload.analysisId)
+          : REJECTED_REQUEST,
       "copyPaste:plan": (payload: IpcRequest<"copyPaste:plan">) => {
         if (payload.mode === "cut") {
           assertNotProtectedPath(payload.sourcePaths);
@@ -861,19 +940,41 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
           assertNotProtectedPath(payload.sourcePaths);
         }
         ensureNoWriteOperationInFlight();
-        const handle =
-          "analysisId" in payload
-            ? writeService.startCopyPaste({
-                analysisId: payload.analysisId,
-                policy: payload.policy,
-                ...(payload.overrides ? { overrides: payload.overrides } : {}),
-              })
-            : writeService.startCopyPaste({
-                mode: payload.mode,
-                sourcePaths: payload.sourcePaths,
-                destinationDirectoryPath: payload.destinationDirectoryPath,
-                conflictResolution: payload.conflictResolution,
-              });
+        if ("analysisId" in payload) {
+          assertAnalysisOwner(payload.analysisId, event.sender);
+        }
+        // The write service can finish an operation before startCopyPaste returns (an
+        // analysis that is no longer usable fails at once). Its end is caught here, so the
+        // write slot isn't claimed for an operation that is already over.
+        earlyTerminalEvents = new Map();
+        let handle: ReturnType<WriteService["startCopyPaste"]>;
+        let finishedEarly: CopyPasteProgressEvent | undefined;
+        try {
+          handle =
+            "analysisId" in payload
+              ? writeService.startCopyPaste({
+                  analysisId: payload.analysisId,
+                  policy: payload.policy,
+                  ...(payload.overrides ? { overrides: payload.overrides } : {}),
+                })
+              : writeService.startCopyPaste({
+                  mode: payload.mode,
+                  sourcePaths: payload.sourcePaths,
+                  destinationDirectoryPath: payload.destinationDirectoryPath,
+                  conflictResolution: payload.conflictResolution,
+                });
+          finishedEarly = earlyTerminalEvents.get(handle.operationId);
+        } finally {
+          earlyTerminalEvents = null;
+        }
+        if (finishedEarly) {
+          // The window learns the operation id from this reply, so its end is sent just
+          // after it, when the window is listening for that id.
+          const sender = event.sender;
+          const progress = toProgressEvent(finishedEarly, payload.action);
+          setTimeout(() => sendProgress(sender, progress), 0);
+          return handle;
+        }
         activeWriteOperationId = handle.operationId;
         copyPasteRequests.set(handle.operationId, payload);
         attachSender(handle.operationId, event.sender);
@@ -931,6 +1032,7 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
         event: { sender: WriteOperationSender },
       ) => {
         assertNotProtectedPath(payload.paths);
+        assertNotSystemLocation(payload.paths, "moved to the Trash");
         ensureNoWriteOperationInFlight();
         return queueLocalWriteOperation({
           action: "trash",
@@ -944,6 +1046,7 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
         event: { sender: WriteOperationSender },
       ) => {
         assertNotProtectedPath(payload.paths);
+        assertNotSystemLocation(payload.paths, "deleted");
         ensureNoWriteOperationInFlight();
         return queueLocalWriteOperation({
           action: "delete_immediately",
@@ -960,21 +1063,51 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
           ? cancelWriteOperation(payload.operationId)
           : REJECTED_REQUEST,
     },
-    shutdown() {
-      writeServiceUnsubscribe();
-      for (const detach of senderDetachers.values()) {
-        detach();
-      }
-      senderDetachers.clear();
-      for (const operationId of [...progressThrottles.keys()]) {
-        forgetProgress(operationId);
-      }
-      writeOperationSenders.clear();
-      copyPasteRequests.clear();
-      localWriteOperationControllers.clear();
-      activeWriteOperationId = null;
-    },
+    getActiveOperation,
+    whenIdle,
+    shutdown,
   };
+}
+
+// Folders that hold the system, the apps, every user's files, or a whole disk. Deleting or
+// trashing one is never what was meant, so it is refused whatever the window asks.
+const SYSTEM_LOCATIONS = new Set(
+  [
+    "/",
+    "/Users",
+    "/Volumes",
+    "/System",
+    "/Applications",
+    "/Library",
+    "/private",
+    "/usr",
+    "/bin",
+    "/sbin",
+    "/etc",
+    "/var",
+    "/opt",
+  ].map((path) => path.toLowerCase()),
+);
+
+function assertNotSystemLocation(paths: readonly string[], verb: string): void {
+  const home = resolve(homedir()).toLowerCase();
+  for (const path of paths) {
+    if (!path.startsWith("/")) {
+      throw new Error("Expected an absolute path.");
+    }
+    // The disk ignores case, so "/users" is "/Users".
+    const normalized = resolve(path).toLowerCase();
+    if (normalized === "/") {
+      throw new Error(`The startup disk can't be ${verb}.`);
+    }
+    if (
+      SYSTEM_LOCATIONS.has(normalized) ||
+      normalized === home ||
+      /^\/volumes\/[^/]+$/.test(normalized)
+    ) {
+      throw new Error(`“${basename(resolve(path))}” can't be ${verb}.`);
+    }
+  }
 }
 
 type AnalysisReport = NonNullable<ReturnType<WriteService["getCopyPasteAnalysisUpdate"]>["report"]>;
@@ -1010,13 +1143,119 @@ function isSenderDestroyed(sender: WriteOperationSender): boolean {
   }
 }
 
-async function pathExists(path: string, lstatFn: WriteOperationFs["lstat"]): Promise<boolean> {
+async function lstatOrNull(
+  path: string,
+  lstatFn: WriteOperationFs["lstat"],
+): Promise<WriteOperationStats | null> {
+  try {
+    return await lstatFn(path);
+  } catch {
+    return null;
+  }
+}
+
+// True only when the item is certainly gone; any other trouble reading it is left for
+// the operation itself to report.
+async function isMissing(path: string, lstatFn: WriteOperationFs["lstat"]): Promise<boolean> {
   try {
     await lstatFn(path);
-    return true;
-  } catch {
     return false;
+  } catch (error) {
+    return errorCode(error) === "ENOENT";
   }
+}
+
+function isSameItem(left: WriteOperationStats, right: WriteOperationStats): boolean {
+  return (
+    left.dev !== undefined &&
+    left.ino !== undefined &&
+    left.dev === right.dev &&
+    left.ino === right.ino
+  );
+}
+
+// Two names that differ only in case or in how an accented letter is encoded. Together with
+// the same file id this tells a rename of the item to itself from two hard links to one file.
+function namesMatchIgnoringCase(left: string, right: string): boolean {
+  return left.normalize("NFC").toLowerCase() === right.normalize("NFC").toLowerCase();
+}
+
+function errorCode(error: unknown): string | undefined {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === "string" ? code : undefined;
+}
+
+// A plain sentence for a failed rename, new folder, or the checks before them. Where the
+// error is about a particular item, it is named.
+function describeWriteError(
+  error: unknown,
+  names: { missing?: string; existing?: string } = {},
+): string {
+  const code = errorCode(error);
+  if (code === "ENOENT" && names.missing) {
+    return `“${names.missing}” no longer exists.`;
+  }
+  if (code === "EEXIST" && names.existing) {
+    return `An item named “${names.existing}” already exists.`;
+  }
+  return describeCopyPasteError(error);
+}
+
+// The Trash reports most failures in its own words, with no error code. The usual cause is
+// a disk without a Trash (a network share, some USB drives), where only deleting works.
+function describeTrashError(error: unknown, path: string): string {
+  const described = describeCopyPasteError(error);
+  if (described !== toErrorMessage(error)) {
+    return described;
+  }
+  return `Couldn't move “${basename(path)}” to the Trash. This disk may not have a Trash; use Delete Immediately instead.`;
+}
+
+function toWriteOperationKind(action: WriteOperationAction): WriteOperationKind {
+  switch (action) {
+    case "trash":
+      return "trash";
+    case "delete_immediately":
+      return "delete";
+    case "rename":
+      return "rename";
+    case "new_folder":
+      return "new_folder";
+    default:
+      return "copy";
+  }
+}
+
+// The window's view of a write service event.
+function toProgressEvent(
+  event: CopyPasteProgressEvent,
+  action: WriteOperationAction,
+): WriteOperationProgressEvent {
+  return writeOperationProgressEventSchema.parse({
+    operationId: event.operationId,
+    action,
+    status: event.status,
+    completedItemCount: event.completedItemCount,
+    totalItemCount: event.totalItemCount,
+    completedByteCount: event.completedByteCount,
+    totalBytes: event.totalBytes,
+    currentSourcePath: event.currentSourcePath,
+    currentDestinationPath: event.currentDestinationPath,
+    runtimeConflict: event.runtimeConflict,
+    result: event.result
+      ? {
+          operationId: event.result.operationId,
+          action,
+          status: event.result.status,
+          targetPath: event.result.destinationDirectoryPath,
+          startedAt: event.result.startedAt,
+          finishedAt: event.result.finishedAt,
+          summary: event.result.summary,
+          items: event.result.items,
+          error: event.result.error,
+        }
+      : null,
+  });
 }
 
 function isTerminalStatus(

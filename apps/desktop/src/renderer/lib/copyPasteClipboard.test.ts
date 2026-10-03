@@ -4,12 +4,51 @@ import {
   clearClipboardAfterSuccessfulPaste,
   clearCopyPasteClipboard,
   describeClipboard,
+  dropClipboardPaths,
+  followClipboardThroughWrite,
   groupClipboardItemsByFolder,
   hasClipboardItems,
   listClipboardItems,
+  remapClipboardPaths,
   removeClipboardItem,
   setCopyPasteClipboard,
 } from "./copyPasteClipboard";
+import type { WriteOperationResult } from "./explorerTypes";
+
+function writeResult(
+  action: WriteOperationResult["action"],
+  items: Array<{
+    sourcePath: string | null;
+    destinationPath: string | null;
+    status?: WriteOperationResult["items"][number]["status"];
+  }>,
+): WriteOperationResult {
+  return {
+    operationId: "op-1",
+    action,
+    status: "completed",
+    targetPath: null,
+    startedAt: NOW,
+    finishedAt: NOW,
+    summary: {
+      topLevelItemCount: items.length,
+      totalItemCount: items.length,
+      completedItemCount: items.length,
+      failedItemCount: 0,
+      skippedItemCount: 0,
+      cancelledItemCount: 0,
+      completedByteCount: 0,
+      totalBytes: null,
+    },
+    items: items.map((item) => ({
+      sourcePath: item.sourcePath,
+      destinationPath: item.destinationPath,
+      status: item.status ?? "completed",
+      error: null,
+    })),
+    error: null,
+  };
+}
 
 const NOW = "2026-03-09T00:00:00.000Z";
 
@@ -167,5 +206,114 @@ describe("copyPasteClipboard", () => {
     expect(
       hasClipboardItems(setCopyPasteClipboard("copy", ["/tmp/a"], "2026-03-09T00:00:00.000Z")),
     ).toBe(true);
+  });
+  describe("following items the app renames, moves and deletes", () => {
+    const clipboard = setCopyPasteClipboard(
+      "copy",
+      ["/Users/demo/report.pdf", "/Users/demo/Folder/inner.txt", "/Users/demo/other.txt"],
+      NOW,
+      {
+        "/Users/demo/report.pdf": { kind: "file", isSymlink: false },
+        "/Users/demo/Folder/inner.txt": { kind: "file", isSymlink: false },
+      },
+    );
+
+    it("renames an item, and the items inside a renamed folder", () => {
+      const next = remapClipboardPaths(clipboard, [
+        { from: "/Users/demo/report.pdf", to: "/Users/demo/final.pdf" },
+        { from: "/Users/demo/Folder", to: "/Users/demo/Archive" },
+      ]);
+      expect(next).toEqual({
+        type: "ready",
+        mode: "copy",
+        sourcePaths: [
+          "/Users/demo/final.pdf",
+          "/Users/demo/Archive/inner.txt",
+          "/Users/demo/other.txt",
+        ],
+        sourceEntries: {
+          "/Users/demo/final.pdf": { kind: "file", isSymlink: false },
+          "/Users/demo/Archive/inner.txt": { kind: "file", isSymlink: false },
+        },
+        capturedAt: NOW,
+      });
+      // A path that only starts with the same letters is another item.
+      expect(
+        remapClipboardPaths(clipboard, [{ from: "/Users/demo/Fold", to: "/Users/demo/X" }]),
+      ).toBe(clipboard);
+    });
+
+    it("drops trashed items and anything inside them", () => {
+      expect(
+        dropClipboardPaths(clipboard, ["/Users/demo/Folder", "/Users/demo/report.pdf"]),
+      ).toEqual({
+        type: "ready",
+        mode: "copy",
+        sourcePaths: ["/Users/demo/other.txt"],
+        sourceEntries: {},
+        capturedAt: NOW,
+      });
+      expect(dropClipboardPaths(clipboard, ["/Users/demo"])).toEqual(EMPTY_COPY_PASTE_CLIPBOARD);
+      expect(dropClipboardPaths(clipboard, ["/Users/demo/Fold"])).toBe(clipboard);
+    });
+
+    it("follows a finished write, counting only the items it completed", () => {
+      expect(
+        followClipboardThroughWrite(
+          clipboard,
+          writeResult("rename", [
+            { sourcePath: "/Users/demo/report.pdf", destinationPath: "/Users/demo/final.pdf" },
+          ]),
+        ),
+      ).toMatchObject({
+        sourcePaths: [
+          "/Users/demo/final.pdf",
+          "/Users/demo/Folder/inner.txt",
+          "/Users/demo/other.txt",
+        ],
+      });
+      expect(
+        followClipboardThroughWrite(
+          clipboard,
+          writeResult("move_to", [
+            { sourcePath: "/Users/demo/other.txt", destinationPath: "/Volumes/Backup/other.txt" },
+            {
+              sourcePath: "/Users/demo/report.pdf",
+              destinationPath: "/Volumes/Backup/report.pdf",
+              status: "failed",
+            },
+          ]),
+        ),
+      ).toMatchObject({
+        sourcePaths: [
+          "/Users/demo/report.pdf",
+          "/Users/demo/Folder/inner.txt",
+          "/Volumes/Backup/other.txt",
+        ],
+      });
+      expect(
+        followClipboardThroughWrite(
+          clipboard,
+          writeResult("trash", [{ sourcePath: "/Users/demo/Folder", destinationPath: null }]),
+        ),
+      ).toMatchObject({ sourcePaths: ["/Users/demo/report.pdf", "/Users/demo/other.txt"] });
+      expect(
+        followClipboardThroughWrite(
+          clipboard,
+          writeResult("delete_immediately", [
+            { sourcePath: "/Users/demo/other.txt", destinationPath: null },
+          ]),
+        ),
+      ).toMatchObject({ sourcePaths: ["/Users/demo/report.pdf", "/Users/demo/Folder/inner.txt"] });
+      // Copies leave the originals where they were.
+      expect(
+        followClipboardThroughWrite(
+          clipboard,
+          writeResult("paste", [
+            { sourcePath: "/Users/demo/report.pdf", destinationPath: "/tmp/report.pdf" },
+          ]),
+        ),
+      ).toBe(clipboard);
+    });
   });
 });

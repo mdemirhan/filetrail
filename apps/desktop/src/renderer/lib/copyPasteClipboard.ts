@@ -1,7 +1,7 @@
 import type { IpcRequest } from "@filetrail/contracts";
 
-import { getPathLeafName } from "./explorerAppUtils";
-import type { DirectoryEntry } from "./explorerTypes";
+import { getPathLeafName, replacePathPrefix } from "./explorerAppUtils";
+import type { DirectoryEntry, WriteOperationResult } from "./explorerTypes";
 
 export type ClipboardMode = IpcRequest<"copyPaste:plan">["mode"];
 
@@ -66,6 +66,98 @@ export function removeClipboardItem(
   }
   const { [path]: _removed, ...sourceEntries } = clipboard.sourceEntries;
   return { ...clipboard, sourcePaths, sourceEntries };
+}
+
+// Takes items off the clipboard, with anything on it from inside them (a file copied from a
+// folder that was then put in the Trash goes with the folder).
+export function dropClipboardPaths(
+  clipboard: CopyPasteClipboardState,
+  removedPaths: readonly string[],
+): CopyPasteClipboardState {
+  if (clipboard.type !== "ready" || removedPaths.length === 0) {
+    return clipboard;
+  }
+  const isRemoved = (path: string) =>
+    removedPaths.some((removed) => path === removed || path.startsWith(`${removed}/`));
+  const sourcePaths = clipboard.sourcePaths.filter((path) => !isRemoved(path));
+  if (sourcePaths.length === clipboard.sourcePaths.length) {
+    return clipboard;
+  }
+  if (sourcePaths.length === 0) {
+    return EMPTY_COPY_PASTE_CLIPBOARD;
+  }
+  const sourceEntries: Record<string, ClipboardSourceEntry> = {};
+  for (const path of sourcePaths) {
+    const entry = clipboard.sourceEntries[path];
+    if (entry) {
+      sourceEntries[path] = entry;
+    }
+  }
+  return { ...clipboard, sourcePaths, sourceEntries };
+}
+
+// Follows items the app itself renamed or moved: an item on the clipboard, or the folder it
+// is in, now has a new path, and a paste should still find it. `capturedAt` stays, so the
+// clipboard is still the one that was copied.
+export function remapClipboardPaths(
+  clipboard: CopyPasteClipboardState,
+  moves: ReadonlyArray<{ from: string; to: string }>,
+): CopyPasteClipboardState {
+  if (clipboard.type !== "ready" || moves.length === 0) {
+    return clipboard;
+  }
+  const remap = (path: string) => {
+    // The deepest move that holds the path decides, in case a folder and an item inside it
+    // were both moved.
+    const move = moves
+      .filter(({ from }) => path === from || path.startsWith(`${from}/`))
+      .sort((left, right) => right.from.length - left.from.length)[0];
+    return move ? replacePathPrefix(path, move.from, move.to) : path;
+  };
+  let changed = false;
+  const sourcePaths: string[] = [];
+  const sourceEntries: Record<string, ClipboardSourceEntry> = {};
+  for (const path of clipboard.sourcePaths) {
+    const nextPath = remap(path);
+    changed ||= nextPath !== path;
+    if (sourcePaths.includes(nextPath)) {
+      continue;
+    }
+    sourcePaths.push(nextPath);
+    const entry = clipboard.sourceEntries[path];
+    if (entry) {
+      sourceEntries[nextPath] = entry;
+    }
+  }
+  return changed ? { ...clipboard, sourcePaths, sourceEntries } : clipboard;
+}
+
+// What a finished write did to the items on the clipboard: renamed and moved items are
+// followed to where they are now, and items put in the Trash or deleted are taken off.
+// Only what actually happened counts; an item that failed is still where it was.
+export function followClipboardThroughWrite(
+  clipboard: CopyPasteClipboardState,
+  result: WriteOperationResult,
+): CopyPasteClipboardState {
+  if (clipboard.type !== "ready") {
+    return clipboard;
+  }
+  const completedItems = result.items.filter((item) => item.status === "completed");
+  if (result.action === "rename" || result.action === "move_to") {
+    const moves = completedItems.flatMap((item) =>
+      item.sourcePath && item.destinationPath
+        ? [{ from: item.sourcePath, to: item.destinationPath }]
+        : [],
+    );
+    return remapClipboardPaths(clipboard, moves);
+  }
+  if (result.action === "trash" || result.action === "delete_immediately") {
+    return dropClipboardPaths(
+      clipboard,
+      completedItems.flatMap((item) => (item.sourcePath ? [item.sourcePath] : [])),
+    );
+  }
+  return clipboard;
 }
 
 export function clearCopyPasteClipboard(): CopyPasteClipboardState {

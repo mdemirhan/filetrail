@@ -152,11 +152,16 @@ describe("writeService analysis and runtime coordination", () => {
   it("reports analysis errors and rejects execution for unknown analysis ids", async () => {
     const fileSystem = new MockWriteServiceFileSystem({
       "/source": { kind: "directory" },
-      "/source/folder": { kind: "directory" },
+      "/source/file.txt": { kind: "file", size: 1 },
       "/target": { kind: "directory" },
+      "/target/file.txt": { kind: "file", size: 1 },
     });
-    fileSystem.readdirImpl = async () => {
-      throw new Error("readdir failed");
+    // No name for "Keep Both" can be checked, so none can be offered.
+    fileSystem.lstatImpl = async (path) => {
+      if (path.startsWith("/target/file copy")) {
+        throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+      }
+      return fileSystem.stat(path);
     };
     const service = createWriteService({
       createAnalysisId: () => "analysis-1",
@@ -165,7 +170,7 @@ describe("writeService analysis and runtime coordination", () => {
 
     service.startCopyPasteAnalysis({
       mode: "copy",
-      sourcePaths: ["/source/folder"],
+      sourcePaths: ["/source/file.txt"],
       destinationDirectoryPath: "/target",
     });
 
@@ -173,7 +178,7 @@ describe("writeService analysis and runtime coordination", () => {
       expect(service.getCopyPasteAnalysisUpdate("analysis-1")).toMatchObject({
         status: "error",
         done: true,
-        error: "readdir failed",
+        error: "Couldn't find a free name for “file.txt”.",
       });
     });
 

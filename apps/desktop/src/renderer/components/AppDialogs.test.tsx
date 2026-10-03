@@ -105,6 +105,7 @@ describe("AppDialogs", () => {
           onCloseCopyPasteDialog={() => undefined}
           onConfirmTrashDialog={() => undefined}
           onConfirmDeleteImmediatelyDialog={() => undefined}
+          onConfirmDotNameDialog={() => undefined}
           showCopyPasteProgressCard={false}
           onCancelWriteOperation={() => undefined}
           showCopyPasteResultDialog={false}
@@ -144,6 +145,7 @@ describe("AppDialogs", () => {
           sourcePath: "/tmp/demo.txt",
           currentName: "demo.txt",
           error: null,
+          refusalCount: 0,
           inline: false,
         },
       },
@@ -190,5 +192,35 @@ describe("AppDialogs", () => {
 
     await act(async () => {});
     expect(screen.getByRole("button", { name: "Move to Trash" })).toHaveFocus();
+  });
+  it("asks before a name that begins with a dot, with Cancel as the default", async () => {
+    const onConfirmDotNameDialog = vi.fn();
+    const onCloseCopyPasteDialog = vi.fn();
+    renderAppDialogs(
+      { onConfirmDotNameDialog, onCloseCopyPasteDialog },
+      {
+        copyPasteDialogState: {
+          type: "confirmDotName",
+          request: { kind: "rename", sourcePath: "/tmp/foo", name: ".foo" },
+        },
+      },
+    );
+
+    await act(async () => {});
+    const dialog = screen.getByRole("dialog", {
+      name: "Are you sure you want to use a name that begins with a dot (“.”)?",
+    });
+    expect(dialog).toHaveTextContent(
+      "These names are reserved for the system. If you continue, the item will be hidden.",
+    );
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+    // Return on the dialog itself does not take the dot name.
+    fireEvent.keyDown(dialog, { key: "Enter" });
+    expect(onConfirmDotNameDialog).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Use “.”" }));
+    expect(onConfirmDotNameDialog).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onCloseCopyPasteDialog).toHaveBeenCalledTimes(1);
   });
 });

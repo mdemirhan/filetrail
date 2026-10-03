@@ -348,4 +348,47 @@ describe("registerIpcHandlers", () => {
     });
     expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
+
+  it("turns system errors from copies, renames, and deletes into plain sentences", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const handle = vi.fn();
+    const { registerIpcHandlers } = await import("./ipc");
+    const missing = () => {
+      const error = new Error(
+        "ENOENT: no such file or directory, lstat '/Users/demo/gone.txt'",
+      ) as NodeJS.ErrnoException;
+      error.code = "ENOENT";
+      return error;
+    };
+
+    registerIpcHandlers({ handle }, {
+      ...createHandlersThatFailOnSnapshot(),
+      "writeOperation:trash": async () => {
+        throw missing();
+      },
+      "copyPaste:plan": async () => {
+        throw missing();
+      },
+      "writeOperation:rename": async () => {
+        throw new Error("Choose a different name.");
+      },
+    } as unknown as IpcHandlerMap);
+    const call = (channel: string, payload: unknown) =>
+      handle.mock.calls.find((entry) => entry[0] === channel)?.[1]?.({}, payload);
+
+    await expect(
+      call("writeOperation:trash", { paths: ["/Users/demo/gone.txt"] }),
+    ).resolves.toEqual({ ok: false, error: "The item no longer exists." });
+    await expect(
+      call("copyPaste:plan", {
+        mode: "copy",
+        sourcePaths: ["/Users/demo/gone.txt"],
+        destinationDirectoryPath: "/Users/demo/target",
+      }),
+    ).resolves.toEqual({ ok: false, error: "The item no longer exists." });
+    // A sentence of the app's own is passed on as it is.
+    await expect(
+      call("writeOperation:rename", { sourcePath: "/Users/demo/a.txt", destinationName: "a.txt" }),
+    ).resolves.toEqual({ ok: false, error: "Choose a different name." });
+  });
 });

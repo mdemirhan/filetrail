@@ -6,6 +6,7 @@ import {
   type BrowserWindowConstructorOptions,
   Menu,
   app,
+  dialog,
   nativeImage,
   nativeTheme,
   shell,
@@ -27,10 +28,21 @@ import {
   resolveApplicationMenuItemStates,
 } from "./appMenu";
 import { type AppStateStore, createAppStateStore, resolveAppStatePath } from "./appStateStore";
-import { bootstrapMainProcess, getMainProcessStatus, shutdownMainProcess } from "./bootstrap";
+import {
+  bootstrapMainProcess,
+  getActiveWriteOperation,
+  getMainProcessStatus,
+  shutdownMainProcess,
+} from "./bootstrap";
 import { resolveBundledFdBinaryPath } from "./fdBinary";
 import { resolveStartupFolderPath } from "./launchContext";
 import { removeRetiredActionLogFiles } from "./logRotation";
+import {
+  KEEP_WORKING_BUTTON_INDEX,
+  QUIT_WHILE_BUSY_BUTTONS,
+  STOP_AND_QUIT_BUTTON_INDEX,
+  describeQuitWhileBusy,
+} from "./quitWhileBusy";
 import { readSettingsTabFromUrl } from "./settingsWindowTab";
 let mainWindowRef: BrowserWindow | null = null;
 let settingsWindowRef: BrowserWindow | null = null;
@@ -48,6 +60,8 @@ let applicationMenuState: ApplicationMenuState = INITIAL_APPLICATION_MENU_STATE;
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 const WINDOW_STATE_SAVE_DELAY_MS = 160;
 let shutdownInProgress = false;
+// True while the "a copy is still in progress" question is on screen.
+let quitQuestionOpen = false;
 let processLoggingHandlersInstalled = false;
 
 if (!hasSingleInstanceLock) {
@@ -180,13 +194,14 @@ if (hasSingleInstanceLock) {
       app.exit(1);
     });
 
+  // The app always ends through finalizeShutdown's app.exit, which doesn't come back here.
+  // A second quit while it waits for an operation to stop must not cut that wait short.
   app.on("before-quit", (event) => {
-    if (shutdownInProgress) {
+    event.preventDefault();
+    if (shutdownInProgress || quitQuestionOpen) {
       return;
     }
-    shutdownInProgress = true;
-    event.preventDefault();
-    void finalizeShutdown();
+    void confirmQuit();
   });
 
   app.on("window-all-closed", () => {
@@ -642,6 +657,45 @@ function installProcessLoggingHandlers(logger: ReturnType<typeof createAppLogger
   });
 }
 
+// Quitting stops a running copy, move, or delete after the item it is on. While a window
+// is open the person is asked first, and may keep working instead. With every window
+// closed the operation was already told to stop; quitting waits for it either way.
+async function confirmQuit(): Promise<void> {
+  const operation = getActiveWriteOperation();
+  const question = operation ? describeQuitWhileBusy(operation.kind) : null;
+  if (question && BrowserWindow.getAllWindows().length > 0) {
+    quitQuestionOpen = true;
+    let response: number;
+    try {
+      const options = {
+        type: "warning" as const,
+        message: question.message,
+        detail: question.detail,
+        buttons: [...QUIT_WHILE_BUSY_BUTTONS],
+        defaultId: KEEP_WORKING_BUTTON_INDEX,
+        cancelId: KEEP_WORKING_BUTTON_INDEX,
+      };
+      const window = mainWindowRef && !mainWindowRef.isDestroyed() ? mainWindowRef : null;
+      ({ response } = window
+        ? await dialog.showMessageBox(window, options)
+        : await dialog.showMessageBox(options));
+    } finally {
+      quitQuestionOpen = false;
+    }
+    if (response !== STOP_AND_QUIT_BUTTON_INDEX) {
+      appLoggerRef?.info("[filetrail] quit cancelled to keep an operation running", {
+        kind: operation?.kind ?? null,
+      });
+      return;
+    }
+  }
+  if (shutdownInProgress) {
+    return;
+  }
+  shutdownInProgress = true;
+  await finalizeShutdown();
+}
+
 async function finalizeShutdown(): Promise<void> {
   const logger = appLoggerRef;
   const state = getMainProcessStatus();
@@ -655,6 +709,7 @@ async function finalizeShutdown(): Promise<void> {
   recordMainWindowState?.();
   appStateStoreRef?.flush();
   try {
+    // Stops a running operation and waits until it has cleaned up after itself.
     await shutdownMainProcess();
   } catch (error) {
     logger?.error("[filetrail] shutdown failed", error);

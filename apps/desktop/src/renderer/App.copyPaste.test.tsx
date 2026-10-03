@@ -37,7 +37,7 @@ vi.mock("./components/ContentPane", () => ({
     isFocused?: boolean;
     currentPath: string;
     entries: Array<{ path: string; name: string; kind: string; isSymlink?: boolean }>;
-    inlineRename?: { path: string; error: string | null } | null;
+    inlineRename?: { path: string; error: string | null; refusalCount?: number } | null;
     onInlineRenameSubmit?: (nextName: string) => void;
     onInlineRenameCancel?: () => void;
     onFocusChange: (focused: boolean) => void;
@@ -112,6 +112,11 @@ vi.mock("./components/ContentPane", () => ({
         Background
       </button>
       {/* Stands in for the name field a list row shows while its item is renamed. */}
+      {inlineRename ? (
+        <output data-testid="inline-rename-refusal" data-refusal-count={inlineRename.refusalCount}>
+          {inlineRename.error}
+        </output>
+      ) : null}
       {inlineRename ? (
         <input
           aria-label={`Rename ${inlineRename.path.slice(inlineRename.path.lastIndexOf("/") + 1)}`}
@@ -2113,9 +2118,8 @@ describe("App copy/paste integration", () => {
       fireEvent.click(screen.getByText("Move"));
     });
 
-    expect(
-      await screen.findByText("Source and destination cannot be the same."),
-    ).toBeInTheDocument();
+    // Issues name the items they are about.
+    expect(await screen.findByText("“source.txt” is already in “demo”.")).toBeInTheDocument();
     expect(screen.getByLabelText("Move To")).toBeInTheDocument();
     expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
   });
@@ -2173,7 +2177,7 @@ describe("App copy/paste integration", () => {
       fireEvent.click(screen.getByText("Move"));
     });
 
-    expect(await screen.findByText("A source item no longer exists.")).toBeInTheDocument();
+    expect(await screen.findByText("“source.txt” no longer exists.")).toBeInTheDocument();
     expect(screen.getByLabelText("Move To")).toBeInTheDocument();
     expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
   });
@@ -2242,7 +2246,7 @@ describe("App copy/paste integration", () => {
     });
 
     expect(
-      await screen.findByText("You can't place a folder into its own descendant."),
+      await screen.findByText("“testParent” can't be moved into a folder inside itself."),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Move To")).toBeInTheDocument();
     expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
@@ -2589,6 +2593,93 @@ describe("App copy/paste integration", () => {
     await vi.waitFor(() => {
       expect(screen.getByTitle("/Users/demo/Notes")).toHaveAttribute("data-selected", "true");
     });
+  });
+
+  it("finishes a new folder whose completion arrives before its start request returns", async () => {
+    const harness = createAppHarness();
+    const invoke = harness.client.invoke.bind(harness.client);
+    harness.client.invoke = (async (channel: string, payload: unknown) => {
+      if (channel === "writeOperation:createFolder") {
+        // The folder is made and announced before the reply to the request arrives.
+        harness.setDirectoryEntries("/Users/demo", [
+          createDirectoryEntry("/Users/demo/source.txt", "file"),
+          createDirectoryEntry("/Users/demo/Folder", "directory"),
+          createDirectoryEntry("/Users/demo/Notes", "directory"),
+        ]);
+        harness.emitProgress({
+          operationId: "write-op-folder",
+          action: "new_folder",
+          status: "completed",
+          completedItemCount: 1,
+          totalItemCount: 1,
+          completedByteCount: 0,
+          totalBytes: null,
+          currentSourcePath: null,
+          currentDestinationPath: "/Users/demo/Notes",
+          result: {
+            operationId: "write-op-folder",
+            action: "new_folder",
+            status: "completed",
+            targetPath: "/Users/demo/Notes",
+            startedAt: "2026-03-09T10:00:00.000Z",
+            finishedAt: "2026-03-09T10:00:01.000Z",
+            summary: {
+              topLevelItemCount: 1,
+              totalItemCount: 1,
+              completedItemCount: 1,
+              failedItemCount: 0,
+              skippedItemCount: 0,
+              cancelledItemCount: 0,
+              completedByteCount: 0,
+              totalBytes: null,
+            },
+            items: [
+              {
+                sourcePath: null,
+                destinationPath: "/Users/demo/Notes",
+                status: "completed",
+                error: null,
+              },
+            ],
+            error: null,
+          },
+        });
+      }
+      return invoke(channel as never, payload as never);
+    }) as typeof harness.client.invoke;
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    const backgroundButton = await screen.findByTestId("content-pane-background");
+    await act(async () => {
+      fireEvent.click(backgroundButton);
+    });
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "n", metaKey: true, shiftKey: true });
+    });
+    await screen.findByRole("dialog", { name: "New Folder" });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("Folder name"), {
+        target: { value: "Notes" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Create Folder" }));
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTitle("/Users/demo/Notes")).toHaveAttribute("data-selected", "true");
+    });
+    // The operation is over, so the next one isn't refused as busy.
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("content-pane-background"));
+    });
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "n", metaKey: true, shiftKey: true });
+    });
+    expect(await screen.findByRole("dialog", { name: "New Folder" })).toBeInTheDocument();
   });
 
   it("creates a new folder inside the selected folder with Cmd+Shift+N", async () => {
@@ -4766,7 +4857,7 @@ describe("App copy/paste integration", () => {
     });
 
     expect(await screen.findByText("Paste couldn't start")).toBeInTheDocument();
-    expect(screen.getByText("Source and destination cannot be the same.")).toBeInTheDocument();
+    expect(screen.getByText("“source.txt” is already in “Folder”.")).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Paste Requires Review" })).not.toBeInTheDocument();
   });
 
@@ -5460,7 +5551,7 @@ describe("App copy/paste integration", () => {
     });
 
     expect(await screen.findByText("Paste couldn't start")).toBeInTheDocument();
-    expect(screen.getByText("Destination folder does not exist.")).toBeInTheDocument();
+    expect(screen.getByText("The folder “Folder” no longer exists.")).toBeInTheDocument();
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "OK" }));
     });
@@ -6781,7 +6872,7 @@ describe("App copy/paste integration", () => {
     await dragBetween(sourceButton, treeTarget);
 
     expect(await screen.findByText("Move couldn't start")).toBeInTheDocument();
-    expect(screen.getByText("A source item no longer exists.")).toBeInTheDocument();
+    expect(screen.getByText("“source.txt” no longer exists.")).toBeInTheDocument();
     expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
   });
 
@@ -8474,6 +8565,13 @@ function createAppHarness(
     deferCopyPasteStart?: boolean;
     copyPasteStartError?: Error;
     openPathsWithApplicationError?: Error;
+    // Thrown by the next rename requests, one each, as the main process would refuse them.
+    renameErrors?: Error[];
+    createFolderError?: Error;
+    resolveConflictError?: Error;
+    clearCachesError?: Error;
+    // What a search that is not scripted finds, instead of the one source.txt.
+    searchResultItems?: IpcResponse<"search:getUpdate">["items"];
   } = {},
 ): {
   client: FiletrailClient;
@@ -8718,19 +8816,32 @@ function createAppHarness(
         return { ok: true } as IpcResponse<C>;
       }
       if (channel === "copyPaste:resolveConflict") {
+        if (args.resolveConflictError) {
+          throw args.resolveConflictError;
+        }
         return { ok: true } as IpcResponse<C>;
       }
       if (channel === "writeOperation:cancel") {
         return { ok: true } as IpcResponse<C>;
       }
       if (channel === "writeOperation:createFolder") {
+        if (args.createFolderError) {
+          throw args.createFolderError;
+        }
         return { operationId: "write-op-folder", status: "queued" } as IpcResponse<C>;
       }
       if (channel === "writeOperation:rename") {
+        const renameError = args.renameErrors?.shift();
+        if (renameError) {
+          throw renameError;
+        }
         return { operationId: "write-op-rename", status: "queued" } as IpcResponse<C>;
       }
       if (channel === "writeOperation:trash") {
         return { operationId: "write-op-trash", status: "queued" } as IpcResponse<C>;
+      }
+      if (channel === "writeOperation:deleteImmediately") {
+        return { operationId: "write-op-delete", status: "queued" } as IpcResponse<C>;
       }
       if (channel === "path:resolve") {
         return {
@@ -8779,7 +8890,7 @@ function createAppHarness(
         return {
           jobId: "search-job-1",
           status: "complete",
-          items: [
+          items: args.searchResultItems ?? [
             {
               path: "/Users/demo/source.txt",
               name: "source.txt",
@@ -8791,7 +8902,7 @@ function createAppHarness(
               relativeParentPath: ".",
             },
           ],
-          nextCursor: 1,
+          nextCursor: args.searchResultItems?.length ?? 1,
           done: true,
           truncated: false,
           error: null,
@@ -8835,6 +8946,9 @@ function createAppHarness(
         return { ok: true } as IpcResponse<C>;
       }
       if (channel === "app:clearCaches") {
+        if (args.clearCachesError) {
+          throw args.clearCachesError;
+        }
         return { ok: true } as IpcResponse<C>;
       }
       if (channel === "places:list") {
@@ -10109,3 +10223,959 @@ function mergePreferences(
     stripUndefined(patch),
   ) as IpcResponse<"app:getPreferences">["preferences"];
 }
+
+// jsdom has no DragEvent, so drag events would carry no modifier keys. This one is a mouse
+// event, which keeps Option and Command; the data transfer is added by Testing Library.
+function installDragEventWithModifiers(): () => void {
+  const descriptor = Object.getOwnPropertyDescriptor(window, "DragEvent");
+  class TestDragEvent extends MouseEvent {}
+  Object.defineProperty(window, "DragEvent", {
+    configurable: true,
+    writable: true,
+    value: TestDragEvent,
+  });
+  return () => {
+    if (descriptor) {
+      Object.defineProperty(window, "DragEvent", descriptor);
+    } else {
+      Reflect.deleteProperty(window, "DragEvent");
+    }
+  };
+}
+
+type DragKeys = { altKey?: boolean; metaKey?: boolean };
+
+// Drags `source` over `target`, once per entry of `hovers` (the keys held at that moment),
+// and drops it with the keys of `drop`. Returns the cursor shown after each hover.
+async function dragWithKeys(
+  source: HTMLElement,
+  target: HTMLElement,
+  hovers: DragKeys[],
+  drop: DragKeys | null = hovers.at(-1) ?? {},
+): Promise<{ dataTransfer: DataTransfer; cursors: string[] }> {
+  const dataTransfer = createMockDataTransfer();
+  const cursors: string[] = [];
+  await act(async () => {
+    fireEvent.dragStart(source, { dataTransfer });
+    fireEvent.dragEnter(target, { dataTransfer, ...hovers[0] });
+    for (const keys of hovers) {
+      fireEvent.dragOver(target, { dataTransfer, ...keys });
+      cursors.push(dataTransfer.dropEffect);
+    }
+    if (drop) {
+      fireEvent.drop(target, { dataTransfer, ...drop });
+    }
+    fireEvent.dragEnd(source, { dataTransfer });
+  });
+  return { dataTransfer, cursors };
+}
+
+function analyzeRequests(
+  harness: ReturnType<typeof createAppHarness>,
+): Array<IpcRequestInput<"copyPaste:analyzeStart">> {
+  return harness.invocations
+    .filter((call) => call.channel === "copyPaste:analyzeStart")
+    .map((call) => call.payload as IpcRequestInput<"copyPaste:analyzeStart">);
+}
+
+function missingSourceIssue(sourcePath: string): IpcResponse<"copyPaste:plan">["issues"][number] {
+  return {
+    code: "source_missing",
+    message: `Source does not exist: ${sourcePath}`,
+    sourcePath,
+    destinationPath: null,
+  };
+}
+
+// A plan for the request, with `issuesFor` saying which of its items have a problem.
+function planForRequest(
+  request: IpcRequestInput<"copyPaste:analyzeStart">,
+  issuesFor: (sourcePath: string) => IpcResponse<"copyPaste:plan">["issues"][number] | null,
+): NonNullable<IpcResponse<"copyPaste:analyzeGetUpdate">["report"]> {
+  const issues = request.sourcePaths.flatMap((path) => {
+    const issue = issuesFor(path);
+    return issue ? [issue] : [];
+  });
+  const plan = cutPlan(request.sourcePaths, request.destinationDirectoryPath, issues);
+  return toAnalysisReport({ ...plan, mode: request.mode });
+}
+
+function finishedWriteEvent(args: {
+  operationId: string;
+  action: WriteOperationProgressEvent["action"];
+  targetPath: string | null;
+  items: Array<{ sourcePath: string | null; destinationPath: string | null }>;
+}): WriteOperationProgressEvent {
+  const count = args.items.length;
+  return {
+    operationId: args.operationId,
+    action: args.action,
+    status: "completed",
+    completedItemCount: count,
+    totalItemCount: count,
+    completedByteCount: 0,
+    totalBytes: null,
+    currentSourcePath: null,
+    currentDestinationPath: null,
+    runtimeConflict: null,
+    result: {
+      operationId: args.operationId,
+      action: args.action,
+      status: "completed",
+      targetPath: args.targetPath,
+      startedAt: "2026-10-03T10:00:00.000Z",
+      finishedAt: "2026-10-03T10:00:01.000Z",
+      summary: {
+        topLevelItemCount: count,
+        totalItemCount: count,
+        completedItemCount: count,
+        failedItemCount: 0,
+        skippedItemCount: 0,
+        cancelledItemCount: 0,
+        completedByteCount: 0,
+        totalBytes: null,
+      },
+      items: args.items.map((item) => ({ ...item, status: "completed" as const, error: null })),
+      error: null,
+    },
+  };
+}
+
+function renderApp(harness: ReturnType<typeof createAppHarness>): void {
+  render(
+    <FiletrailClientProvider value={harness.client}>
+      <App />
+    </FiletrailClientProvider>,
+  );
+}
+
+async function pressKey(init: KeyboardEventInit & { key: string }): Promise<void> {
+  await act(async () => {
+    fireEvent.keyDown(window, init);
+  });
+}
+
+async function renameSelectionTo(currentName: string, nextName: string): Promise<void> {
+  await pressKey({ key: "F2" });
+  const renameInput = await screen.findByLabelText(`Rename ${currentName}`);
+  await act(async () => {
+    fireEvent.change(renameInput, { target: { value: nextName } });
+    fireEvent.keyDown(renameInput, { key: "Enter" });
+  });
+}
+
+describe("App file operations like Finder", () => {
+  describe("drag and drop moves on the same disk and copies to another", () => {
+    let restoreDragEvent: () => void = () => undefined;
+    beforeEach(() => {
+      restoreDragEvent = installDragEventWithModifiers();
+    });
+    afterEach(() => {
+      restoreDragEvent();
+    });
+
+    const backupFavorite: Parameters<typeof createAppHarness>[0] = {
+      preferences: {
+        favoritesInitialized: true,
+        favorites: [{ path: "/Volumes/Backup", icon: "drive" }],
+      },
+    };
+
+    it("moves to a folder on the same disk, showing the move cursor", async () => {
+      const harness = createAppHarness();
+      renderApp(harness);
+
+      const source = await screen.findByTitle("/Users/demo/source.txt");
+      const target = await screen.findByTitle("tree:/Users/demo/Folder");
+      const { dataTransfer, cursors } = await dragWithKeys(source, target, [{}]);
+
+      expect(dataTransfer.effectAllowed).toBe("copyMove");
+      expect(cursors).toEqual(["move"]);
+      await vi.waitFor(() => {
+        expect(analyzeRequests(harness)).toEqual([
+          expect.objectContaining({
+            mode: "cut",
+            action: "move_to",
+            sourcePaths: ["/Users/demo/source.txt"],
+            destinationDirectoryPath: "/Users/demo/Folder",
+          }),
+        ]);
+      });
+    });
+
+    it("copies to a folder on another disk, showing the copy cursor", async () => {
+      const harness = createAppHarness(backupFavorite);
+      renderApp(harness);
+
+      const source = await screen.findByTitle("/Users/demo/source.txt");
+      const target = await screen.findByTitle("favorite:/Volumes/Backup");
+      const { cursors } = await dragWithKeys(source, target, [{}]);
+
+      expect(cursors).toEqual(["copy"]);
+      await vi.waitFor(() => {
+        expect(analyzeRequests(harness)).toEqual([
+          expect.objectContaining({
+            mode: "copy",
+            action: "paste",
+            sourcePaths: ["/Users/demo/source.txt"],
+            destinationDirectoryPath: "/Volumes/Backup",
+          }),
+        ]);
+      });
+      await vi.waitFor(() => {
+        expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(true);
+      });
+    });
+
+    it("copies on the same disk with Option held", async () => {
+      const harness = createAppHarness();
+      renderApp(harness);
+
+      const source = await screen.findByTitle("/Users/demo/source.txt");
+      const target = await screen.findByTitle("tree:/Users/demo/Folder");
+      const { cursors } = await dragWithKeys(source, target, [{ altKey: true }]);
+
+      expect(cursors).toEqual(["copy"]);
+      await vi.waitFor(() => {
+        expect(analyzeRequests(harness)).toEqual([
+          expect.objectContaining({ mode: "copy", destinationDirectoryPath: "/Users/demo/Folder" }),
+        ]);
+      });
+    });
+
+    it("moves to another disk with Command held", async () => {
+      const harness = createAppHarness(backupFavorite);
+      renderApp(harness);
+
+      const source = await screen.findByTitle("/Users/demo/source.txt");
+      const target = await screen.findByTitle("favorite:/Volumes/Backup");
+      const { cursors } = await dragWithKeys(source, target, [{ metaKey: true }]);
+
+      expect(cursors).toEqual(["move"]);
+      await vi.waitFor(() => {
+        expect(analyzeRequests(harness)).toEqual([
+          expect.objectContaining({
+            mode: "cut",
+            action: "move_to",
+            destinationDirectoryPath: "/Volumes/Backup",
+          }),
+        ]);
+      });
+    });
+
+    it("changes the cursor as Option is pressed and let go, and drops as it shows", async () => {
+      const harness = createAppHarness();
+      renderApp(harness);
+
+      const source = await screen.findByTitle("/Users/demo/source.txt");
+      const target = await screen.findByTitle("tree:/Users/demo/Folder");
+      const { cursors } = await dragWithKeys(source, target, [
+        {},
+        { altKey: true },
+        {},
+        {
+          altKey: true,
+        },
+      ]);
+
+      expect(cursors).toEqual(["move", "copy", "move", "copy"]);
+      await vi.waitFor(() => {
+        expect(analyzeRequests(harness)).toEqual([expect.objectContaining({ mode: "copy" })]);
+      });
+    });
+
+    it("duplicates with Option onto the items' own folder, and does nothing without it", async () => {
+      const harness = createAppHarness({
+        preferences: {
+          favoritesInitialized: true,
+          favorites: [{ path: "/Users/demo", icon: "home" }],
+        },
+      });
+      renderApp(harness);
+
+      const source = await screen.findByTitle("/Users/demo/source.txt");
+      const ownFolder = await screen.findByTitle("favorite:/Users/demo");
+
+      const plain = await dragWithKeys(source, ownFolder, [{}]);
+      expect(plain.cursors).toEqual(["none"]);
+      expect(analyzeRequests(harness)).toEqual([]);
+
+      const withOption = await dragWithKeys(source, ownFolder, [{ altKey: true }]);
+      expect(withOption.cursors).toEqual(["copy"]);
+      await vi.waitFor(() => {
+        expect(analyzeRequests(harness)).toEqual([
+          expect.objectContaining({
+            mode: "copy",
+            action: "paste",
+            sourcePaths: ["/Users/demo/source.txt"],
+            destinationDirectoryPath: "/Users/demo",
+          }),
+        ]);
+      });
+      expect(screen.queryByText(/couldn't start/)).not.toBeInTheDocument();
+    });
+  });
+
+  it("moves the rest of a search selection when some items are already in the folder", async () => {
+    const searchItem = (path: string, parentPath: string) => ({
+      path,
+      name: path.split("/").at(-1) ?? path,
+      extension: "txt",
+      kind: "file" as const,
+      isHidden: false,
+      isSymlink: false,
+      parentPath,
+      relativeParentPath: parentPath === "/Users/demo" ? "." : "Folder",
+    });
+    const harness = createAppHarness({
+      searchResultItems: [
+        searchItem("/Users/demo/source.txt", "/Users/demo"),
+        searchItem("/Users/demo/Folder/source-inside.txt", "/Users/demo/Folder"),
+      ],
+      analysisReportForRequest: (request) =>
+        planForRequest(request, (path) =>
+          path.startsWith(`${request.destinationDirectoryPath}/`) ? sameFolderIssue(path) : null,
+        ),
+    });
+    renderApp(harness);
+
+    await openSearchResults();
+    const first = await screen.findByTitle("search:/Users/demo/source.txt");
+    const second = await screen.findByTitle("search:/Users/demo/Folder/source-inside.txt");
+    await act(async () => {
+      fireEvent.click(first);
+      fireEvent.click(second, { metaKey: true });
+    });
+    await dragBetween(first, await screen.findByTitle("tree:/Users/demo/Folder"));
+
+    await vi.waitFor(() => {
+      expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(true);
+    });
+    expect(analyzeRequests(harness).map((request) => [...request.sourcePaths].sort())).toEqual([
+      ["/Users/demo/Folder/source-inside.txt", "/Users/demo/source.txt"],
+      ["/Users/demo/source.txt"],
+    ]);
+    expect(screen.queryByText("Move couldn't start")).not.toBeInTheDocument();
+  });
+
+  describe("the clipboard follows what the app does to its items", () => {
+    it("follows a renamed item", async () => {
+      const harness = createAppHarness();
+      renderApp(harness);
+
+      await selectItem("/Users/demo/source.txt");
+      await pressKey({ key: "c", metaKey: true });
+      await renameSelectionTo("source.txt", "renamed.txt");
+      await vi.waitFor(() => {
+        expect(harness.invocations.some((call) => call.channel === "writeOperation:rename")).toBe(
+          true,
+        );
+      });
+      harness.setDirectoryEntries("/Users/demo", [
+        createDirectoryEntry("/Users/demo/renamed.txt", "file"),
+        createDirectoryEntry("/Users/demo/Folder", "directory"),
+      ]);
+      await act(async () => {
+        harness.emitProgress(
+          finishedWriteEvent({
+            operationId: "write-op-rename",
+            action: "rename",
+            targetPath: "/Users/demo/renamed.txt",
+            items: [
+              { sourcePath: "/Users/demo/source.txt", destinationPath: "/Users/demo/renamed.txt" },
+            ],
+          }),
+        );
+      });
+      await screen.findByTitle("/Users/demo/renamed.txt");
+
+      await selectItem("/Users/demo/Folder");
+      await pressKey({ key: "v", metaKey: true });
+
+      await vi.waitFor(() => {
+        expect(analyzeRequests(harness).at(-1)?.sourcePaths).toEqual(["/Users/demo/renamed.txt"]);
+      });
+    });
+
+    it("follows an item moved by a drag", async () => {
+      const harness = createAppHarness();
+      renderApp(harness);
+
+      await selectItem("/Users/demo/source.txt");
+      await pressKey({ key: "c", metaKey: true });
+      await dragBetween(
+        await screen.findByTitle("/Users/demo/source.txt"),
+        await screen.findByTitle("tree:/Users/demo/Folder"),
+      );
+      await vi.waitFor(() => {
+        expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(true);
+      });
+      harness.setDirectoryEntries("/Users/demo", [
+        createDirectoryEntry("/Users/demo/Folder", "directory"),
+      ]);
+      await act(async () => {
+        harness.emitProgress(
+          finishedWriteEvent({
+            operationId: "copy-op-1",
+            action: "move_to",
+            targetPath: "/Users/demo/Folder",
+            items: [
+              {
+                sourcePath: "/Users/demo/source.txt",
+                destinationPath: "/Users/demo/Folder/source.txt",
+              },
+            ],
+          }),
+        );
+      });
+      await vi.waitFor(() => {
+        expect(screen.queryByTitle("/Users/demo/source.txt")).not.toBeInTheDocument();
+      });
+
+      await clearContentSelection();
+      await pressKey({ key: "v", metaKey: true });
+
+      await vi.waitFor(() => {
+        expect(analyzeRequests(harness).at(-1)).toMatchObject({
+          sourcePaths: ["/Users/demo/Folder/source.txt"],
+          destinationDirectoryPath: "/Users/demo",
+        });
+      });
+    });
+
+    it("drops an item put in the Trash", async () => {
+      const harness = createAppHarness();
+      renderApp(harness);
+
+      await selectItem("/Users/demo/source.txt");
+      await act(async () => {
+        fireEvent.click(screen.getByTitle("/Users/demo/Folder"), { metaKey: true });
+      });
+      await pressKey({ key: "c", metaKey: true });
+      expect(clipboardButton()).toHaveAccessibleName("Clipboard: 2 items copied");
+
+      await selectItem("/Users/demo/source.txt");
+      await pressKey({ key: "Backspace", metaKey: true });
+      await vi.waitFor(() => {
+        expect(harness.invocations.some((call) => call.channel === "writeOperation:trash")).toBe(
+          true,
+        );
+      });
+      await act(async () => {
+        harness.emitProgress(
+          finishedWriteEvent({
+            operationId: "write-op-trash",
+            action: "trash",
+            targetPath: null,
+            items: [{ sourcePath: "/Users/demo/source.txt", destinationPath: null }],
+          }),
+        );
+      });
+
+      await vi.waitFor(() => {
+        expect(clipboardButton()).toHaveAccessibleName("Clipboard: 1 item copied");
+      });
+    });
+  });
+
+  describe("pasting items that no longer exist", () => {
+    const withGoneFile = {
+      directorySnapshots: {
+        "/Users/demo": {
+          path: "/Users/demo",
+          parentPath: "/Users",
+          entries: [
+            createDirectoryEntry("/Users/demo/source.txt", "file"),
+            createDirectoryEntry("/Users/demo/gone.txt", "file"),
+            createDirectoryEntry("/Users/demo/Folder", "directory"),
+          ],
+        },
+      },
+      analysisReportForRequest: (request: IpcRequestInput<"copyPaste:analyzeStart">) =>
+        planForRequest(request, (path) =>
+          path === "/Users/demo/gone.txt" ? missingSourceIssue(path) : null,
+        ),
+    };
+
+    async function copyThenPaste(paths: string[], key: "c" | "x"): Promise<void> {
+      await selectItem(paths[0] as string);
+      for (const path of paths.slice(1)) {
+        await act(async () => {
+          fireEvent.click(screen.getByTitle(path), { metaKey: true });
+        });
+      }
+      await pressKey({ key, metaKey: true });
+      await selectItem("/Users/demo/Folder");
+      await pressKey({ key: "v", metaKey: true });
+    }
+
+    it.each([
+      ["copied", "c"],
+      ["cut", "x"],
+    ] as const)("pastes the rest of %s items and names the one that is gone", async (_, key) => {
+      const harness = createAppHarness(withGoneFile);
+      renderApp(harness);
+
+      await copyThenPaste(["/Users/demo/source.txt", "/Users/demo/gone.txt"], key);
+
+      await vi.waitFor(() => {
+        expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(true);
+      });
+      expect(analyzeRequests(harness).map((request) => request.sourcePaths)).toEqual([
+        ["/Users/demo/source.txt", "/Users/demo/gone.txt"],
+        ["/Users/demo/source.txt"],
+      ]);
+      const notice = await screen.findByRole("dialog", { name: "An item couldn't be pasted" });
+      expect(notice).toHaveTextContent(
+        "“gone.txt” couldn't be pasted because it no longer exists.",
+      );
+      if (key === "c") {
+        // What is gone is taken off the clipboard; the rest stays for more pastes.
+        expect(clipboardButton()).toHaveAccessibleName("Clipboard: 1 item copied");
+      }
+    });
+
+    it("pastes nothing when every item is gone, and says so", async () => {
+      const harness = createAppHarness(withGoneFile);
+      renderApp(harness);
+
+      await copyThenPaste(["/Users/demo/gone.txt"], "c");
+
+      const notice = await screen.findByRole("dialog", { name: "Paste couldn't start" });
+      expect(notice).toHaveTextContent(
+        "“gone.txt” couldn't be pasted because it no longer exists.",
+      );
+      expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(false);
+      expect(clipboardButton()).toBeNull();
+    });
+  });
+
+  describe("New Folder suggests a free name", () => {
+    it("in a selected subfolder, not only the folder on screen", async () => {
+      const harness = createAppHarness({
+        directorySnapshots: {
+          "/Users/demo/Folder": {
+            path: "/Users/demo/Folder",
+            parentPath: "/Users/demo",
+            entries: [createDirectoryEntry("/Users/demo/Folder/New Folder", "directory")],
+          },
+        },
+      });
+      renderApp(harness);
+
+      await selectItem("/Users/demo/Folder");
+      await pressKey({ key: "n", metaKey: true, shiftKey: true });
+
+      expect(await screen.findByRole("dialog", { name: "New Folder" })).toHaveTextContent(
+        "Create in /Users/demo/Folder",
+      );
+      expect(screen.getByLabelText("Folder name")).toHaveValue("New Folder 2");
+    });
+
+    it("comparing names without regard to case, as the disk does", async () => {
+      const harness = createAppHarness({
+        directorySnapshots: {
+          "/Users/demo": {
+            path: "/Users/demo",
+            parentPath: "/Users",
+            entries: [
+              createDirectoryEntry("/Users/demo/new folder", "directory"),
+              createDirectoryEntry("/Users/demo/NEW FOLDER 2", "directory"),
+            ],
+          },
+        },
+      });
+      renderApp(harness);
+
+      await clearContentSelection();
+      await pressKey({ key: "n", metaKey: true, shiftKey: true });
+
+      await screen.findByRole("dialog", { name: "New Folder" });
+      expect(screen.getByLabelText("Folder name")).toHaveValue("New Folder 3");
+    });
+  });
+
+  describe("another write running", () => {
+    const busyError = () => new Error("Another write operation is already running.");
+
+    async function startPasteThatKeepsRunning(
+      harness: ReturnType<typeof createAppHarness>,
+    ): Promise<void> {
+      await pasteSourceIntoFolder(harness, "c");
+      await screen.findByRole("region", { name: "Paste In Progress" });
+    }
+
+    async function expectBusyDialog(title: string): Promise<void> {
+      const dialog = await screen.findByRole("dialog", { name: title });
+      expect(dialog).toHaveTextContent("Wait for the current write to finish.");
+      await act(async () => {
+        fireEvent.click(within(dialog).getByRole("button", { name: "OK" }));
+      });
+    }
+
+    it("says the same thing in a dialog for Trash, Duplicate and Paste", async () => {
+      const harness = createAppHarness();
+      renderApp(harness);
+      await startPasteThatKeepsRunning(harness);
+
+      await selectItem("/Users/demo/source.txt");
+      await pressKey({ key: "Backspace", metaKey: true });
+      await expectBusyDialog("Move to Trash couldn't start");
+      expect(harness.invocations.some((call) => call.channel === "writeOperation:trash")).toBe(
+        false,
+      );
+
+      await selectItem("/Users/demo/source.txt");
+      await pressKey({ key: "d", metaKey: true });
+      await expectBusyDialog("Duplicate couldn't start");
+
+      await pressKey({ key: "v", metaKey: true });
+      await expectBusyDialog("Paste couldn't start");
+      expect(screen.queryByTestId("toast-viewport")?.textContent ?? "").not.toContain(
+        "Wait for the current write",
+      );
+    });
+
+    it("says it in a dialog when the main process refuses a rename", async () => {
+      const harness = createAppHarness({ renameErrors: [busyError()] });
+      renderApp(harness);
+
+      await selectItem("/Users/demo/source.txt");
+      await renameSelectionTo("source.txt", "renamed.txt");
+
+      await expectBusyDialog("Rename couldn't start");
+      // The name field does not stay open waiting.
+      expect(screen.queryByLabelText("Rename source.txt")).not.toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: "Rename In Progress" })).not.toBeInTheDocument();
+    });
+
+    it("says it in a dialog when the main process refuses a new folder", async () => {
+      const harness = createAppHarness({ createFolderError: busyError() });
+      renderApp(harness);
+
+      await clearContentSelection();
+      await pressKey({ key: "n", metaKey: true, shiftKey: true });
+      await screen.findByRole("dialog", { name: "New Folder" });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Create Folder" }));
+      });
+
+      await expectBusyDialog("New Folder couldn't start");
+      expect(screen.queryByRole("dialog", { name: "New Folder" })).not.toBeInTheDocument();
+    });
+
+    it("sends one Trash request for a quick double Command-Delete", async () => {
+      const harness = createAppHarness();
+      renderApp(harness);
+
+      await selectItem("/Users/demo/source.txt");
+      await act(async () => {
+        fireEvent.keyDown(window, { key: "Backspace", metaKey: true });
+        fireEvent.keyDown(window, { key: "Backspace", metaKey: true });
+      });
+
+      await expectBusyDialog("Move to Trash couldn't start");
+      expect(
+        harness.invocations.filter((call) => call.channel === "writeOperation:trash"),
+      ).toHaveLength(1);
+    });
+  });
+
+  it("gives the rename field each refusal, even one that reads the same as the last", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+
+    await selectItem("/Users/demo/source.txt");
+    await renameSelectionTo("source.txt", "a/b.txt");
+    const refusal = await screen.findByTestId("inline-rename-refusal");
+    const firstReason = refusal.textContent;
+    expect(refusal).toHaveAttribute("data-refusal-count", "1");
+
+    const renameInput = screen.getByLabelText("Rename source.txt");
+    await act(async () => {
+      fireEvent.change(renameInput, { target: { value: "c/d.txt" } });
+      fireEvent.keyDown(renameInput, { key: "Enter" });
+    });
+
+    expect(screen.getByTestId("inline-rename-refusal")).toHaveTextContent(firstReason ?? "");
+    expect(screen.getByTestId("inline-rename-refusal")).toHaveAttribute("data-refusal-count", "2");
+    expect(harness.invocations.some((call) => call.channel === "writeOperation:rename")).toBe(
+      false,
+    );
+  });
+
+  it("pastes into the folder on screen from the menu of a folder that is on the clipboard", async () => {
+    const harness = createAppHarness();
+    renderApp(harness);
+
+    await selectItem("/Users/demo/Folder");
+    await pressKey({ key: "c", metaKey: true });
+    await act(async () => {
+      fireEvent.contextMenu(screen.getByTitle("/Users/demo/Folder"));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Paste/ }));
+    });
+
+    await vi.waitFor(() => {
+      expect(analyzeRequests(harness).at(-1)).toMatchObject({
+        sourcePaths: ["/Users/demo/Folder"],
+        destinationDirectoryPath: "/Users/demo",
+      });
+    });
+    expect(screen.queryByText(/couldn't start/)).not.toBeInTheDocument();
+  });
+
+  describe("names that begin with a dot", () => {
+    const question = "Are you sure you want to use a name that begins with a dot (“.”)?";
+
+    it("asks before a rename would hide the item, and renames on Use “.”", async () => {
+      const harness = createAppHarness();
+      renderApp(harness);
+
+      await selectItem("/Users/demo/source.txt");
+      await renameSelectionTo("source.txt", ".source.txt");
+
+      const dialog = await screen.findByRole("dialog", { name: question });
+      expect(dialog).toHaveTextContent(
+        "These names are reserved for the system. If you continue, the item will be hidden.",
+      );
+      expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
+      expect(harness.invocations.some((call) => call.channel === "writeOperation:rename")).toBe(
+        false,
+      );
+
+      await act(async () => {
+        fireEvent.click(within(dialog).getByRole("button", { name: "Use “.”" }));
+      });
+      await vi.waitFor(() => {
+        expect(
+          harness.invocations.find((call) => call.channel === "writeOperation:rename")?.payload,
+        ).toEqual({ sourcePath: "/Users/demo/source.txt", destinationName: ".source.txt" });
+      });
+      expect(screen.queryByRole("dialog", { name: question })).not.toBeInTheDocument();
+    });
+
+    it("leaves the name as it was on Cancel", async () => {
+      const harness = createAppHarness();
+      renderApp(harness);
+
+      await selectItem("/Users/demo/source.txt");
+      await renameSelectionTo("source.txt", ".source.txt");
+      const dialog = await screen.findByRole("dialog", { name: question });
+      await act(async () => {
+        fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+      });
+
+      expect(screen.queryByRole("dialog", { name: question })).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Rename source.txt")).not.toBeInTheDocument();
+      expect(harness.invocations.some((call) => call.channel === "writeOperation:rename")).toBe(
+        false,
+      );
+    });
+
+    it("asks before a new folder would be hidden", async () => {
+      const harness = createAppHarness();
+      renderApp(harness);
+
+      await clearContentSelection();
+      await pressKey({ key: "n", metaKey: true, shiftKey: true });
+      await screen.findByRole("dialog", { name: "New Folder" });
+      await act(async () => {
+        fireEvent.change(screen.getByLabelText("Folder name"), { target: { value: ".config" } });
+        fireEvent.click(screen.getByRole("button", { name: "Create Folder" }));
+      });
+
+      const dialog = await screen.findByRole("dialog", { name: question });
+      expect(
+        harness.invocations.some((call) => call.channel === "writeOperation:createFolder"),
+      ).toBe(false);
+      await act(async () => {
+        fireEvent.click(within(dialog).getByRole("button", { name: "Use “.”" }));
+      });
+      await vi.waitFor(() => {
+        expect(
+          harness.invocations.find((call) => call.channel === "writeOperation:createFolder")
+            ?.payload,
+        ).toEqual({ parentDirectoryPath: "/Users/demo", folderName: ".config" });
+      });
+    });
+
+    it("does not ask while hidden files are shown", async () => {
+      const harness = createAppHarness({ preferences: { includeHidden: true } });
+      renderApp(harness);
+
+      await selectItem("/Users/demo/source.txt");
+      await renameSelectionTo("source.txt", ".source.txt");
+
+      await vi.waitFor(() => {
+        expect(
+          harness.invocations.find((call) => call.channel === "writeOperation:rename")?.payload,
+        ).toEqual({ sourcePath: "/Users/demo/source.txt", destinationName: ".source.txt" });
+      });
+      expect(screen.queryByRole("dialog", { name: question })).not.toBeInTheDocument();
+    });
+  });
+
+  describe("selecting what Duplicate made", () => {
+    it("selects the copy in the file list", async () => {
+      const harness = createAppHarness();
+      renderApp(harness);
+
+      await selectItem("/Users/demo/source.txt");
+      await pressKey({ key: "d", metaKey: true });
+      await vi.waitFor(() => {
+        expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(true);
+      });
+      harness.setDirectoryEntries("/Users/demo", [
+        createDirectoryEntry("/Users/demo/source.txt", "file"),
+        createDirectoryEntry("/Users/demo/source copy.txt", "file"),
+        createDirectoryEntry("/Users/demo/Folder", "directory"),
+      ]);
+      await act(async () => {
+        harness.emitProgress(
+          finishedWriteEvent({
+            operationId: "copy-op-1",
+            action: "duplicate",
+            targetPath: "/Users/demo",
+            items: [
+              {
+                sourcePath: "/Users/demo/source.txt",
+                destinationPath: "/Users/demo/source copy.txt",
+              },
+            ],
+          }),
+        );
+      });
+
+      await vi.waitFor(() => {
+        expect(screen.getByTitle("/Users/demo/source copy.txt")).toHaveAttribute(
+          "data-selected",
+          "true",
+        );
+      });
+      expect(screen.getByTitle("/Users/demo/source.txt")).toHaveAttribute("data-selected", "false");
+    });
+
+    it("selects the copy in the tree when a tree folder is duplicated", async () => {
+      const harness = createAppHarness();
+      renderApp(harness);
+
+      const treeFolder = await screen.findByTitle("tree:/Users/demo/Folder");
+      await act(async () => {
+        fireEvent.contextMenu(treeFolder);
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: /^Duplicate/ }));
+      });
+      await vi.waitFor(() => {
+        expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(true);
+      });
+      harness.setDirectoryEntries("/Users/demo", [
+        createDirectoryEntry("/Users/demo/source.txt", "file"),
+        createDirectoryEntry("/Users/demo/Folder", "directory"),
+        createDirectoryEntry("/Users/demo/Folder copy", "directory"),
+      ]);
+      await act(async () => {
+        harness.emitProgress(
+          finishedWriteEvent({
+            operationId: "copy-op-1",
+            action: "duplicate",
+            targetPath: "/Users/demo",
+            items: [
+              { sourcePath: "/Users/demo/Folder", destinationPath: "/Users/demo/Folder copy" },
+            ],
+          }),
+        );
+      });
+
+      await vi.waitFor(() => {
+        expect(screen.getByTestId("tree-selection")).toHaveTextContent(
+          "fs:/Users/demo/Folder copy",
+        );
+      });
+    });
+  });
+
+  it("keeps the conflict question when its answer cannot be sent", async () => {
+    const harness = createAppHarness({ resolveConflictError: new Error("IPC closed") });
+    renderApp(harness);
+
+    await pasteSourceIntoFolder(harness, "c");
+    await act(async () => {
+      harness.emitProgress({
+        operationId: "copy-op-1",
+        action: "paste",
+        status: "awaiting_resolution",
+        completedItemCount: 0,
+        totalItemCount: 1,
+        completedByteCount: 0,
+        totalBytes: null,
+        currentSourcePath: "/Users/demo/source.txt",
+        currentDestinationPath: "/Users/demo/Folder/source.txt",
+        runtimeConflict: {
+          conflictId: "runtime-1",
+          analysisId: "analysis-1",
+          sourcePath: "/Users/demo/source.txt",
+          destinationPath: "/Users/demo/Folder/source.txt",
+          sourceKind: "file",
+          destinationKind: "file",
+          conflictClass: "file_conflict",
+          reason: "destination_changed",
+          sourceFingerprint: createNodeFingerprint("file"),
+          destinationFingerprint: createNodeFingerprint("file"),
+          currentSourceFingerprint: createNodeFingerprint("file"),
+          currentDestinationFingerprint: createNodeFingerprint("file"),
+        },
+        result: null,
+      });
+    });
+    const replaceButton = await screen.findByRole("button", { name: "Replace" });
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    try {
+      await act(async () => {
+        fireEvent.click(replaceButton);
+      });
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+    } finally {
+      process.off("unhandledRejection", unhandled);
+    }
+
+    expect(unhandled).not.toHaveBeenCalled();
+    expect(harness.invocations.some((call) => call.channel === "copyPaste:resolveConflict")).toBe(
+      true,
+    );
+    expect(screen.getByRole("button", { name: "Replace" })).toBeInTheDocument();
+  });
+
+  it("still reads the folder again when the caches cannot be cleared", async () => {
+    const harness = createAppHarness({ clearCachesError: new Error("IPC closed") });
+    renderApp(harness);
+
+    await screen.findByTitle("/Users/demo/source.txt");
+    const snapshotReads = () =>
+      harness.invocations.filter(
+        (call) =>
+          call.channel === "directory:getSnapshot" &&
+          (call.payload as IpcRequestInput<"directory:getSnapshot">).path === "/Users/demo",
+      ).length;
+    const readsBefore = snapshotReads();
+    harness.setDirectoryEntries("/Users/demo", [
+      createDirectoryEntry("/Users/demo/source.txt", "file"),
+      createDirectoryEntry("/Users/demo/Folder", "directory"),
+      createDirectoryEntry("/Users/demo/new.txt", "file"),
+    ]);
+
+    await act(async () => {
+      harness.emitCommand({ type: "refreshOrApplySearchSort" });
+    });
+
+    await vi.waitFor(() => {
+      expect(snapshotReads()).toBeGreaterThan(readsBefore);
+    });
+    expect(await screen.findByTitle("/Users/demo/new.txt")).toBeInTheDocument();
+  });
+});

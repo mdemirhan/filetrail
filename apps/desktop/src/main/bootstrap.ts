@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { app, clipboard, ipcMain, shell } from "electron";
 
 import type { AppLogEntry, SettingsTab } from "@filetrail/contracts";
@@ -14,6 +15,7 @@ import {
 import { type AppLogger, writeStructuredAppLogEntry } from "./appLog";
 import type { AppStateStore } from "./appStateStore";
 import { toPreferencePatch } from "./bootstrap/preferencesPatch";
+import { openReplaceJournal, recoverReplaces } from "./bootstrap/replaceJournal";
 import {
   clearResponseCaches,
   createFolderSizeHandlers,
@@ -37,12 +39,15 @@ import {
   resolveApplicationDisplayName,
   resolveTerminalApplicationName,
 } from "./bootstrap/systemHandlers";
-import { createWriteOperationCoordinator } from "./bootstrap/writeOperations";
+import {
+  type WriteOperationKind,
+  createWriteOperationCoordinator,
+} from "./bootstrap/writeOperations";
 import { readBundledFdManifest, resolveBundledFdBinaryPath } from "./fdBinary";
 import { registerIpcHandlers } from "./ipc";
 
 let activeWorkerClient: ExplorerWorkerClient | null = null;
-let disposeWriteCoordinator: (() => void) | null = null;
+let activeWriteCoordinator: ReturnType<typeof createWriteOperationCoordinator> | null = null;
 
 export async function bootstrapMainProcess(
   appStateStore: AppStateStore,
@@ -71,26 +76,31 @@ export async function bootstrapMainProcess(
     originalExplorerFileSystem,
     originalFileSystem,
     originalRename,
+    originalRenameExclusive,
     getFolderSize,
     cancelFolderSize,
   } = await import("./originalFileSystem");
-  const writeService = createWriteService({
-    // Items replaced by a paste go to the Trash, so a replace can always be undone.
-    fileSystem: { ...originalFileSystem, trash: (path) => shell.trashItem(path) },
-  });
+  // Items replaced by a paste go to the Trash, so a replace can always be undone.
+  const writeFileSystem = { ...originalFileSystem, trash: (path: string) => shell.trashItem(path) };
+  // A Replace cut short by a crash is finished or undone before anything else is written.
+  const replaceJournal = await openReplaceJournal(
+    join(app.getPath("userData"), "replace-journal.json"),
+  );
+  await recoverReplaces(replaceJournal, writeFileSystem, logger);
+  const writeService = createWriteService({ fileSystem: writeFileSystem, replaceJournal });
   const writeCoordinator = createWriteOperationCoordinator(writeService, {
     lstat: originalFileSystem.lstat,
     stat: originalFileSystem.stat,
     mkdir: (path) => originalFileSystem.mkdir(path),
     rename: originalRename,
+    renameExclusive: originalRenameExclusive,
     rm: (path, options) => originalFileSystem.rm(path, options),
+    trash: (path) => shell.trashItem(path),
   });
   const folderSizeHandlers = createFolderSizeHandlers({ getFolderSize, cancelFolderSize });
   activeWorkerClient = workerClient;
-  disposeWriteCoordinator?.();
-  disposeWriteCoordinator = () => {
-    writeCoordinator.shutdown();
-  };
+  void activeWriteCoordinator?.shutdown();
+  activeWriteCoordinator = writeCoordinator;
 
   registerIpcHandlers(
     ipcMain,
@@ -255,8 +265,10 @@ export async function shutdownMainProcess(): Promise<void> {
   }
   const workerClient = activeWorkerClient;
   activeWorkerClient = null;
-  disposeWriteCoordinator?.();
-  disposeWriteCoordinator = null;
+  // Waits for a running copy or delete to stop cleanly before anything else closes.
+  const writeCoordinator = activeWriteCoordinator;
+  activeWriteCoordinator = null;
+  await writeCoordinator?.shutdown();
   resetResponseCacheState();
   await workerClient.close();
 }
@@ -267,8 +279,16 @@ export function getMainProcessStatus(): {
 } {
   return {
     workerActive: activeWorkerClient !== null,
-    writeCoordinatorActive: disposeWriteCoordinator !== null,
+    writeCoordinatorActive: activeWriteCoordinator !== null,
   };
+}
+
+/** The copy, move, rename, or delete that is running now, if any. */
+export function getActiveWriteOperation(): {
+  operationId: string;
+  kind: WriteOperationKind;
+} | null {
+  return activeWriteCoordinator?.getActiveOperation() ?? null;
 }
 
 function resolveExplorerWorkerUrl(): URL {
