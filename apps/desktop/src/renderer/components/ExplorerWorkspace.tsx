@@ -816,7 +816,7 @@ export function ExplorerWorkspace({
           aria-label="Toggle hidden files"
           aria-pressed={includeHidden}
         >
-          <ToolbarIcon name="hidden" />
+          <ToolbarIcon name={includeHidden ? "hiddenShown" : "hidden"} />
         </button>
       );
     }

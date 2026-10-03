@@ -5932,15 +5932,27 @@ button.shortcut-slot-key.recording:hover {
   color: var(--text-secondary);
 }
 
-.window-toolbar .tb-btn.tb-btn-icon:hover:not(:disabled),
-.window-toolbar .tb-btn.tb-btn-icon.active {
-  background: var(--bg-hover);
+/* Toolbar toggles (and menu buttons while their menu is open) are "on": a fill clearly
+   darker than the toolbar and than the hover fill, so on and off are told apart in every
+   theme. Mixed from the theme's text color, so light and dark themes both get it right. */
+:root {
+  --toolbar-button-hover-bg: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  --toolbar-toggle-on-bg: color-mix(in srgb, var(--text-primary) 16%, transparent);
+  --toolbar-toggle-on-hover-bg: color-mix(in srgb, var(--text-primary) 21%, transparent);
+}
+
+.window-toolbar .tb-btn.tb-btn-icon:hover:not(:disabled) {
+  background: var(--toolbar-button-hover-bg);
   color: var(--text-primary);
 }
 
 .window-toolbar .tb-btn.tb-btn-icon.active {
-  background: var(--toolbar-toggle-active-bg, var(--bg-active-inactive));
-  color: var(--toolbar-toggle-icon-active, var(--text-primary));
+  background: var(--toolbar-toggle-on-bg);
+  color: var(--text-primary);
+}
+
+.window-toolbar .tb-btn.tb-btn-icon.active:hover:not(:disabled) {
+  background: var(--toolbar-toggle-on-hover-bg);
 }
 
 /* View switch: a segmented control with the selected segment raised. */

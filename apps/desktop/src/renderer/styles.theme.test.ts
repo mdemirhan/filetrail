@@ -3,8 +3,13 @@ import { join, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import type { ThemeMode } from "../shared/appPreferences";
 import { accentTokensToCssVariables, generateAccentTokens } from "./lib/accent";
-import { THEME_VARIANT_OVERRIDE_KEYS } from "./lib/themeVariants";
+import {
+  THEME_VARIANT_OVERRIDE_KEYS,
+  getThemeVariantCssOverrides,
+  resolveThemeCssBase,
+} from "./lib/themeVariants";
 
 const styles = readFileSync(resolve(import.meta.dirname, "./styles.css"), "utf8");
 
@@ -236,4 +241,61 @@ describe("theme styles", () => {
       ]).map((d) => d.value),
     ).toEqual(["var(--ft-accent-solid-button)"]);
   });
+
+  it("shows a toolbar toggle that is on, in every theme, apart from off and from hover", () => {
+    const all = parseDeclarations(styles);
+    const percentOf = (property: string) => {
+      const value = all.find((d) => d.selector === ":root" && d.property === property)?.value;
+      const match = value?.match(
+        /^color-mix\(in srgb, var\(--text-primary\) (\d+)%, transparent\)$/,
+      );
+      expect(match, property).not.toBeNull();
+      return Number(match?.[1]) / 100;
+    };
+    const hover = percentOf("--toolbar-button-hover-bg");
+    const on = percentOf("--toolbar-toggle-on-bg");
+    const onHover = percentOf("--toolbar-toggle-on-hover-bg");
+    const themes: ThemeMode[] = [
+      "macos-light",
+      "warm-paper",
+      "sand",
+      "macos-dark",
+      "catppuccin-mocha",
+      "tomorrow-night",
+    ];
+    for (const theme of themes) {
+      const base = resolveThemeCssBase(theme);
+      const block = base === "light" ? ":root" : `:root[data-theme="${base}"]`;
+      const token = (name: string) =>
+        getThemeVariantCssOverrides(theme)[name] ??
+        all.find((d) => d.selector === block && d.property === name)?.value ??
+        "";
+      const toolbar = hexToRgb(token("--toolbar-bg"));
+      const text = hexToRgb(token("--text-primary"));
+      const fill = (amount: number) =>
+        toolbar.map((channel, i) => channel + ((text[i] ?? 0) - channel) * amount);
+      expect(contrast(fill(on), toolbar), `${theme}: on vs toolbar`).toBeGreaterThanOrEqual(1.25);
+      expect(contrast(fill(on), fill(hover)), `${theme}: on vs hover`).toBeGreaterThanOrEqual(1.2);
+      expect(contrast(fill(onHover), fill(on)), `${theme}: on hover vs on`).toBeGreaterThan(1.05);
+    }
+  });
 });
+
+function hexToRgb(hex: string): number[] {
+  const match = hex.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+  expect(match, hex).not.toBeNull();
+  return [1, 2, 3].map((index) => Number.parseInt(match?.[index] ?? "0", 16));
+}
+
+// WCAG contrast ratio between two sRGB colors.
+function contrast(left: number[], right: number[]): number {
+  const luminance = (rgb: number[]) => {
+    const [r = 0, g = 0, b = 0] = rgb.map((channel) => {
+      const value = channel / 255;
+      return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const [lighter, darker] = [luminance(left), luminance(right)].sort((a, b) => b - a);
+  return ((lighter ?? 0) + 0.05) / ((darker ?? 0) + 0.05);
+}

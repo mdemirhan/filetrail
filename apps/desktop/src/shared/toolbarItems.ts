@@ -7,6 +7,7 @@ export type ToolbarIconName =
   | "up"
   | "location"
   | "hidden"
+  | "hiddenShown"
   | "refresh"
   | "icons"
   | "list"
