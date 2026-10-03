@@ -11461,6 +11461,9 @@ describe("what stays on screen when an operation finishes", () => {
     await vi.waitFor(() => {
       expect(harness.invocations.some((call) => call.channel === "copyPaste:start")).toBe(true);
     });
+    const searchesBefore = harness.invocations.filter(
+      (call) => call.channel === "search:start",
+    ).length;
     await act(async () => {
       harness.emitProgress(finishedResultEvent("cut", "completed", sourceCopied));
     });
@@ -11470,6 +11473,10 @@ describe("what stays on screen when an operation finishes", () => {
 
     expect(screen.getByTestId("search-results-pane")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Search")).toHaveValue("source");
+    // Found again, so the moved item shows where it is now.
+    expect(harness.invocations.filter((call) => call.channel === "search:start").length).toBe(
+      searchesBefore + 1,
+    );
   });
 
   it("selects a renamed item while the list is filtered", async () => {

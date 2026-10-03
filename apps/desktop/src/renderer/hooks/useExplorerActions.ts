@@ -903,10 +903,11 @@ export function useExplorerActions(args: {
           treeSelectionPath: nextTreeSelectionPath,
           extraTreeReloadPaths: nextTreeReloadPaths,
         });
+        // Search results on screen stay there; anything this write changed (moved,
+        // trashed, renamed, duplicated) is found again, so they show what is on disk.
         if (
           startedInTabOnScreen &&
-          sourceSurface === "search" &&
-          event.action === "move_to" &&
+          (sourceSurface === "search" || isSearchModeRef.current) &&
           event.result &&
           event.result.summary.completedItemCount > 0
         ) {
