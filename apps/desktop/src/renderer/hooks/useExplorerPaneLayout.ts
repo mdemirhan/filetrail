@@ -120,6 +120,7 @@ export function useExplorerPaneLayout(args: {
     };
   }, [inspectorVisible, minContentWidth]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the widths are read from refs; a new chosen width (preferredTreeWidth, preferredInspectorWidth) must still fit the window again.
   useEffect(() => {
     const syncToViewport = () => {
       // Window resizes and inspector toggles can make previously valid widths illegal.
