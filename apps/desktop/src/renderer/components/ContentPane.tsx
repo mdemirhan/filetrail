@@ -432,14 +432,13 @@ export function ContentPane({
               Nothing in this folder has that in its name.
             </span>
             {onSearchForFilter ? (
-              <button
-                type="button"
+              <PushButton
                 className="empty-state-action"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={onSearchForFilter}
               >
                 Search Subfolders
-              </button>
+              </PushButton>
             ) : null}
           </div>
         ) : viewMode === "icons" ? (

@@ -5,6 +5,7 @@ import type { IpcResponse } from "@filetrail/contracts";
 import { usePathSuggestions } from "../hooks/usePathSuggestions";
 import { getFocusableElements } from "../lib/focusUtils";
 import { type Place, describePlaceLocation, isPathQuery, rankPlaces } from "../lib/places";
+import { ClearButton } from "./ClearButton";
 import { PushButton } from "./PushButton";
 
 type PathSuggestion = IpcResponse<"path:getSuggestions">["suggestions"][number];
@@ -405,9 +406,7 @@ export function GoToFolderDialog({
               }}
             />
             {draftValue.length > 0 ? (
-              <button
-                type="button"
-                className="go-to-folder-clear"
+              <ClearButton
                 title="Clear"
                 aria-label="Clear"
                 onClick={() => {
@@ -415,11 +414,7 @@ export function GoToFolderDialog({
                   clearSuggestions();
                   window.requestAnimationFrame(() => inputRef.current?.focus());
                 }}
-              >
-                <svg viewBox="0 0 10 10" fill="none" aria-hidden="true">
-                  <path d="M1 1l8 8M9 1l-8 8" />
-                </svg>
-              </button>
+              />
             ) : null}
           </div>
           {error ? <div className="go-to-folder-error">{error}</div> : null}

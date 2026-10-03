@@ -8,6 +8,7 @@ import type { DirectoryEntry, DirectoryEntryMetadata, ItemProperties } from "../
 import { FileIcon } from "../lib/fileIcons";
 import { formatFolderSizeDetail, formatSize } from "../lib/formatting";
 import { fallbackKindLabel, folderEntryForPath } from "../lib/infoPreview";
+import { ClearButton } from "./ClearButton";
 
 // One quiet line under the path bar: the item's icon and name, then what it is, its size and
 // when it changed, separated by dots and without labels. Facts not known yet are left out
@@ -182,16 +183,12 @@ function InfoRowFolderSize({
     }
     return (
       <span className="folder-size-calculating">
-        <span className="folder-size-spinner" />
-        <button
-          type="button"
-          className="folder-size-cancel-btn"
+        <span className="spinner" />
+        <ClearButton
           onClick={onCancel}
           title="Stop Calculating"
           aria-label="Cancel folder size calculation"
-        >
-          ×
-        </button>
+        />
       </span>
     );
   }

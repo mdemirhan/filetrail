@@ -15,6 +15,8 @@ import {
 import type { ShortcutDisplay } from "../lib/shortcutDisplay";
 import { shortcutParts } from "../lib/shortcutLabels";
 import { useShortcutDisplay } from "../state/shortcutDisplayContext";
+import { ClearButton } from "./ClearButton";
+import { PushButton } from "./PushButton";
 
 // Help is a list of topics beside one readable column, like the sidebar and Settings. Each
 // topic explains an area and ends with its shortcuts; "Keyboard shortcuts" lists them all,
@@ -54,15 +56,15 @@ export function HelpView({
 
   return (
     <div className="help-view" data-layout={layoutMode}>
-      <nav className="help-sidebar" aria-label="Help topics">
-        <label className="help-filter">
-          <svg className="help-filter-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <nav className="help-sidebar overlay-scroll" aria-label="Help topics">
+        <label className="search-field help-filter">
+          <svg className="search-field-icon" viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="11" cy="11" r="6.5" />
             <path d="m16 16 4.5 4.5" />
           </svg>
           <input
             type="text"
-            className="help-filter-input"
+            className="search-field-input"
             value={query}
             placeholder="Search help"
             aria-label="Search help"
@@ -77,6 +79,15 @@ export function HelpView({
               }
             }}
           />
+          {query.length > 0 ? (
+            <ClearButton
+              aria-label="Clear search"
+              title="Clear Search (Esc)"
+              // The field keeps the keyboard, so typing can continue after a click here.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => setQuery("")}
+            />
+          ) : null}
         </label>
         <div className="help-topics">
           {HELP_TOPICS.map((topic) => (
@@ -96,7 +107,7 @@ export function HelpView({
           ))}
         </div>
       </nav>
-      <div ref={contentRef} className="help-content">
+      <div ref={contentRef} className="help-content overlay-scroll">
         <article className="help-page">
           {searching ? (
             <SearchResultsPage query={query.trim()} shortcuts={shortcuts} />
@@ -154,9 +165,9 @@ function ShortcutsPage({
       <h1>{topic.title}</h1>
       <p className="help-intro">{topic.intro}</p>
       {onCustomize ? (
-        <button type="button" className="help-action" onClick={onCustomize}>
+        <PushButton className="help-action" onClick={onCustomize}>
           Customize…
-        </button>
+        </PushButton>
       ) : null}
       <div className="help-shortcut-columns">
         {HELP_SHORTCUT_GROUPS.map((group) => (

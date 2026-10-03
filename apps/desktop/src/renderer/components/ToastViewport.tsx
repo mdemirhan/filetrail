@@ -96,23 +96,24 @@ export function ToastViewport({
     >
       {toasts.map((toast) => {
         return (
-          <section
+          // An <output> is a status that is read out politely; its parts are spans, as an
+          // output holds only text-level content.
+          <output
             key={toast.id}
             className={`toast-card toast-card-${toast.kind}`}
-            role="status"
             aria-live="polite"
             aria-atomic="true"
           >
-            <div className="toast-card-body">
-              <div className="toast-card-icon-wrap" aria-hidden="true">
+            <span className="toast-card-body">
+              <span className="toast-card-icon-wrap" aria-hidden="true">
                 <ToastIcon kind={toast.kind} />
-              </div>
-              <div className="toast-card-copy">
-                <div className="toast-card-title">{toast.title}</div>
-                {toast.message ? <div className="toast-card-message">{toast.message}</div> : null}
-              </div>
-            </div>
-          </section>
+              </span>
+              <span className="toast-card-copy">
+                <span className="toast-card-title">{toast.title}</span>
+                {toast.message ? <span className="toast-card-message">{toast.message}</span> : null}
+              </span>
+            </span>
+          </output>
         );
       })}
     </div>

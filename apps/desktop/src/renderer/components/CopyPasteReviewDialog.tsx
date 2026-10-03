@@ -358,7 +358,7 @@ function AllConflictsButtons({
   const name = useId();
   return (
     <div
-      className="copy-paste-segmented"
+      className="segmented copy-paste-segmented"
       role="radiogroup"
       aria-labelledby={labelledBy}
       aria-describedby={describedBy}
@@ -366,7 +366,7 @@ function AllConflictsButtons({
       {choices.map((choice) => (
         <label
           key={choice}
-          className={`copy-paste-segment${value === choice ? " is-selected" : ""}${
+          className={`segmented-item copy-paste-segment${value === choice ? " is-selected" : ""}${
             choice === "overwrite" ? " is-danger" : ""
           }`}
         >

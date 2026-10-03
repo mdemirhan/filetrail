@@ -24,6 +24,8 @@ import {
   toShortcutOverrides,
 } from "../../shared/shortcuts";
 import { formatShortcut } from "../lib/shortcutLabels";
+import { ClearButton } from "./ClearButton";
+import { PushButton } from "./PushButton";
 import { ActionButton, SectionCard } from "./SettingsControls";
 
 type Slot = { id: ShortcutCommandId; index: number };
@@ -164,14 +166,14 @@ export function ShortcutSettings({
   return (
     <div className="shortcut-settings">
       <div className="shortcut-settings-bar">
-        <label className="shortcut-settings-search-field">
-          <svg className="help-filter-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <label className="search-field shortcut-settings-search-field">
+          <svg className="search-field-icon" viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="11" cy="11" r="6.5" />
             <path d="m16 16 4.5 4.5" />
           </svg>
           <input
             type="text"
-            className="shortcut-settings-search"
+            className="search-field-input"
             value={query}
             placeholder="Search by command or key"
             aria-label="Search shortcuts"
@@ -185,6 +187,15 @@ export function ShortcutSettings({
               }
             }}
           />
+          {query.length > 0 ? (
+            <ClearButton
+              aria-label="Clear search"
+              title="Clear Search (Esc)"
+              // The field keeps the keyboard, so typing can continue after a click here.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => setQuery("")}
+            />
+          ) : null}
         </label>
         <ActionButton
           label="Restore Defaults"
@@ -300,14 +311,13 @@ function ShortcutRow({
         </span>
         <span className="shortcut-row-keys">
           {customized ? (
-            <button
-              type="button"
-              className="shortcut-row-reset"
+            <PushButton
+              className="is-small"
               aria-label={`Restore Default for ${label}`}
               onClick={onReset}
             >
               Restore Default
-            </button>
+            </PushButton>
           ) : null}
           {Array.from({ length: slotCount }, (_, index) => {
             const shortcut = shortcuts[index];
@@ -374,15 +384,12 @@ function ShortcutRow({
                   {recording ? "Press keys…" : shortcut ? formatShortcut(shortcut) : "+"}
                 </button>
                 {shortcut && !recording ? (
-                  <button
-                    type="button"
+                  <ClearButton
                     className="shortcut-slot-clear"
                     aria-label={`Remove ${formatShortcut(shortcut)} from ${label}`}
                     tabIndex={-1}
                     onClick={() => onRemove(index)}
-                  >
-                    ×
-                  </button>
+                  />
                 ) : null}
               </span>
             );
@@ -397,16 +404,16 @@ function ShortcutRow({
                 {formatShortcut(note.shortcut)} is used by {note.other}.
               </span>
               <span className="shortcut-row-note-actions">
-                <button
-                  type="button"
-                  className="shortcut-note-button primary"
+                <PushButton
+                  variant="default"
+                  className="is-small"
                   onClick={() => onReassign(note.index, note.shortcut)}
                 >
                   Reassign
-                </button>
-                <button type="button" className="shortcut-note-button" onClick={onDismissNote}>
+                </PushButton>
+                <PushButton className="is-small" onClick={onDismissNote}>
                   Cancel
-                </button>
+                </PushButton>
               </span>
             </>
           ) : (

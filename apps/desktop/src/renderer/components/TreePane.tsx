@@ -448,7 +448,7 @@ export function TreePane({
           {/* Finder layout: a labeled Favorites list above the folder tree, or Favorites as
               a root row inside the tree. */}
           {favoritesPlacement === "separate" && favoriteItems.length > 0 ? (
-            <div className="sidebar-sections">
+            <div className="sidebar-sections overlay-scroll">
               <section
                 className={`sidebar-favorites favorites-pane-section${
                   activeLeftPaneSubview === "favorites" ? " active" : ""
@@ -1042,7 +1042,7 @@ function TreeItemRow({
         </button>
         {dropIndicator === "valid" ? (
           <span className="tree-drop-target-badge" aria-hidden="true">
-            Drop Here
+            Drop here
           </span>
         ) : null}
       </div>

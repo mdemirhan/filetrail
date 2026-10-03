@@ -293,7 +293,7 @@ describe("theme styles", () => {
       expect(match, property).not.toBeNull();
       return Number(match?.[1]) / 100;
     };
-    const hover = percentOf("--toolbar-button-hover-bg");
+    const hover = percentOf("--bg-hover");
     const on = percentOf("--toolbar-toggle-on-bg");
     const onHover = percentOf("--toolbar-toggle-on-hover-bg");
     const themes: ThemeMode[] = ["light", "dark"];

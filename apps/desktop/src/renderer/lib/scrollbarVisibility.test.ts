@@ -10,6 +10,7 @@ describe("scrollbarVisibility", () => {
     document.body.innerHTML = `
       <div id="tree" class="tree-scroll"></div>
       <div id="list" class="content-scroll"></div>
+      <div id="help" class="help-content overlay-scroll"></div>
       <div id="other" style="overflow: auto"></div>
     `;
     uninstall = installScrollbarVisibility();
@@ -57,6 +58,14 @@ describe("scrollbarVisibility", () => {
     vi.advanceTimersByTime(400);
     expect(element("tree")).not.toHaveAttribute("data-scrollbars");
     expect(element("list")).toHaveAttribute("data-scrollbars");
+  });
+
+  it("does the same for Help, Settings, the Info panel and Favorites", () => {
+    scroll("help");
+    expect(element("help")).toHaveAttribute("data-scrollbars");
+
+    vi.advanceTimersByTime(1000);
+    expect(element("help")).not.toHaveAttribute("data-scrollbars");
   });
 
   it("leaves other scrolling elements alone", () => {

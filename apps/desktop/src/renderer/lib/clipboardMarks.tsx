@@ -19,7 +19,8 @@ export type ClipboardMarksBySurface = {
   content: ClipboardMarks | null;
 };
 
-// How long the flash lasts; the `clipboard-flash` animation in styles.css runs this long.
+// How long the flash lasts; the `clipboard-flash` animation in styles.css runs this long
+// (`--duration-flash`).
 export const CLIPBOARD_FLASH_MS = 700;
 
 const NO_CLIPBOARD_MARKS: ClipboardMarksBySurface = { tree: null, content: null };

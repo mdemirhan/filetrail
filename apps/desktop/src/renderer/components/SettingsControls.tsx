@@ -1,9 +1,12 @@
 import type { ReactNode } from "react";
 
+import { PushButton } from "./PushButton";
+
 // The building blocks every Settings tab shares: a titled group of rows and a small button.
 // They are drawn by `.settings-*` rules in styles.css.
 
-// Every button in Settings is this one, so they all look alike and all answer the pointer.
+// Every button in Settings is this one: the push button of the dialogs, so a button looks
+// and answers the pointer the same in every window.
 export function ActionButton({
   label,
   ariaLabel,
@@ -16,15 +19,9 @@ export function ActionButton({
   disabled?: boolean;
 }) {
   return (
-    <button
-      type="button"
-      className="settings-button"
-      aria-label={ariaLabel ?? label}
-      disabled={disabled}
-      onClick={onClick}
-    >
+    <PushButton aria-label={ariaLabel ?? label} disabled={disabled} onClick={onClick}>
       {label}
-    </button>
+    </PushButton>
   );
 }
 

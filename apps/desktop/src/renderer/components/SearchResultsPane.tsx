@@ -24,6 +24,7 @@ import { formatSize, splitDisplayName } from "../lib/formatting";
 import { resolveSearchResultsColumnLayout } from "../lib/responsiveLayout";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
 import { getVirtualRange } from "../lib/virtualization";
+import { ClearButton } from "./ClearButton";
 import {
   InlineRenameField,
   type InlineRenameState,
@@ -32,6 +33,7 @@ import {
   isFolderKind,
   renameDraftKey,
 } from "./InlineRenameField";
+import { PushButton } from "./PushButton";
 import { SortIndicator } from "./SortIndicator";
 type SearchResultItem = IpcResponse<"search:getUpdate">["items"][number];
 type SearchStatus = IpcResponse<"search:getUpdate">["status"] | "idle";
@@ -296,31 +298,36 @@ export function SearchResultsPane({
       >
         <div className="search-scope-bar" role="toolbar" aria-label="Search scope">
           <span className="search-scope-label">Search:</span>
-          {scopeOptions.map((option) => (
-            <button
-              key={option.path}
-              type="button"
-              className={`search-scope-button${option.path === rootPath ? " active" : ""}`}
-              aria-pressed={option.path === rootPath}
-              title={option.path}
-              onClick={() => {
-                if (option.path !== rootPath) {
-                  onScopeChange(option.path);
-                }
-              }}
-            >
-              {option.label}
-            </button>
-          ))}
+          {/* The places to search in, as a segmented control: one of them is always on. */}
+          <div className="segmented search-scope-segmented">
+            {scopeOptions.map((option) => (
+              <button
+                key={option.path}
+                type="button"
+                className={`segmented-item search-scope-button${
+                  option.path === rootPath ? " is-selected" : ""
+                }`}
+                aria-pressed={option.path === rootPath}
+                title={option.path}
+                onClick={() => {
+                  if (option.path !== rootPath) {
+                    onScopeChange(option.path);
+                  }
+                }}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
           <span className="search-scope-spacer" />
           {/* Narrows what the search found, without searching again. */}
-          <div className="search-results-filter">
-            <svg viewBox="0 0 24 24" aria-hidden="true" className="search-results-filter-icon">
+          <div className="search-field search-results-filter">
+            <svg viewBox="0 0 24 24" aria-hidden="true" className="search-field-icon">
               <path d="M4 6h16M7 12h10M10 18h4" />
             </svg>
             <input
               type="text"
-              className="search-results-filter-input"
+              className="search-field-input"
               value={filterQuery}
               onChange={(event) => onFilterQueryChange(event.currentTarget.value)}
               onKeyDown={(event) => {
@@ -346,41 +353,33 @@ export function SearchResultsPane({
               aria-label="Filter results"
             />
             {filterQuery.length > 0 ? (
-              <button
-                type="button"
-                className="search-results-filter-clear"
+              <ClearButton
                 aria-label="Clear filter"
                 title="Clear Filter (Esc)"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => onFilterQueryChange("")}
-              >
-                <svg viewBox="0 0 12 12" aria-hidden="true">
-                  <path d="M3 3l6 6M9 3l-6 6" />
-                </svg>
-              </button>
+              />
             ) : null}
           </div>
           {showStop ? (
-            <button
-              type="button"
-              className="search-scope-action"
+            <PushButton
+              className="is-small"
               onClick={onStopSearch}
               aria-label="Stop search"
               title="Stop Search"
             >
-              <span className="search-results-spinner" aria-hidden="true" />
+              <span className="spinner" aria-hidden="true" />
               Stop
-            </button>
+            </PushButton>
           ) : null}
-          <button
-            type="button"
-            className="search-scope-action"
+          <PushButton
+            className="is-small"
             onClick={onCloseResults}
             aria-label="Close search results"
             title="Close Search Results (Esc)"
           >
             Done
-          </button>
+          </PushButton>
         </div>
         <div className="search-results-columns">
           {(["name", "path"] as const).map((column) => {

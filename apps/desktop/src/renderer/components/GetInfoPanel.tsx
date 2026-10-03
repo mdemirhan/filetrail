@@ -16,7 +16,9 @@ import {
 } from "../lib/formatting";
 import { formatTooltip } from "../lib/tooltips";
 import { useShortcutDisplay } from "../state/shortcutDisplayContext";
+import { ClearButton } from "./ClearButton";
 import { ClipboardItemsIcon } from "./ClipboardItemsIcon";
+import { PushButton } from "./PushButton";
 
 type ItemProperties = IpcResponse<"item:getProperties">["item"];
 
@@ -121,7 +123,7 @@ export function InfoPanel({
         <strong>Info</strong>
         {showSpinner ? (
           <output className="get-info-pending" aria-label="Loading info">
-            <span className="folder-size-spinner" />
+            <span className="spinner" />
           </output>
         ) : null}
         <button
@@ -163,7 +165,9 @@ export function InfoPanel({
           onOpenWith={onOpenWith}
         />
       ) : loading ? null : (
-        <div className="get-info-empty">Select a file or folder to show its info.</div>
+        <div className="get-info-empty overlay-scroll">
+          Select a file or folder to show its info.
+        </div>
       )}
     </aside>
   );
@@ -192,7 +196,7 @@ function InfoPanelSelectionContent({
   const size = selection.totalBytes === null ? null : formatSize(selection.totalBytes, "ready");
   const { parentPath } = selection;
   return (
-    <div className="get-info-content">
+    <div className="get-info-content overlay-scroll">
       <div className="get-info-hero">
         <div className="get-info-hero-icon get-info-hero-items">
           <ClipboardItemsIcon icon={{ type: "items", contains }} />
@@ -411,7 +415,7 @@ function GetInfoPanelContent({
   }
 
   return (
-    <div className="get-info-content">
+    <div className="get-info-content overlay-scroll">
       <div className="get-info-hero">
         <div className="get-info-hero-icon">
           <FileIcon
@@ -435,13 +439,12 @@ function GetInfoPanelContent({
       </div>
 
       <div className="get-info-buttons">
-        <button type="button" className="get-info-button primary" onClick={onOpen}>
+        <PushButton variant="default" className="get-info-button" onClick={onOpen}>
           Open
-        </button>
+        </PushButton>
         {onOpenWith && openWithItems.length > 0 ? (
           <div ref={openWithRef} className="get-info-open-with">
-            <button
-              type="button"
+            <PushButton
               className="get-info-button pull-down"
               aria-haspopup="menu"
               aria-expanded={openWithMenuOpen}
@@ -453,7 +456,7 @@ function GetInfoPanelContent({
                   <path d="M1.5 3 4 5.5 6.5 3" />
                 </svg>
               </span>
-            </button>
+            </PushButton>
             {openWithMenuOpen ? (
               // Same markup and styles as the right-click menu's Open With submenu.
               <div
@@ -683,16 +686,12 @@ function FolderSizeCell({
     }
     return (
       <span className="folder-size-calculating">
-        <span className="folder-size-spinner" />
-        <button
-          type="button"
-          className="folder-size-cancel-btn"
+        <span className="spinner" />
+        <ClearButton
           onClick={onCancel}
           title="Stop Calculating"
           aria-label="Cancel folder size calculation"
-        >
-          ×
-        </button>
+        />
       </span>
     );
   }

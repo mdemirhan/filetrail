@@ -178,11 +178,11 @@ describe("SettingsView", () => {
     expect(onAccentChange).toHaveBeenCalledWith("#123456");
   });
 
-  it("uses the one Settings button for every Reset, so each answers the pointer", () => {
+  it("uses the dialogs' push button for every Reset, so each answers the pointer", () => {
     renderSettingsView();
 
     expect(screen.getByRole("button", { name: "Restore the default appearance" })).toHaveClass(
-      "settings-button",
+      "push-button",
     );
   });
 
@@ -208,10 +208,11 @@ describe("SettingsView", () => {
     }
   });
 
-  it("gives every control one height and a hairline outline", () => {
+  it("gives every control one height and a hairline edge", () => {
     const view = renderSettingsView();
 
-    // Every pop-up, field and button is drawn by the one rule for Settings controls.
+    // Buttons are the push button, pop-ups wear its bezel, and fields are inset, as every
+    // text field is; all of them are one height.
     for (const select of Array.from(view.container.querySelectorAll("select"))) {
       expect(select.parentElement).toHaveClass("settings-popup");
     }
@@ -220,8 +221,16 @@ describe("SettingsView", () => {
     }
     const styles = readFileSync("apps/desktop/src/renderer/styles.css", "utf8");
     expect(styles).toMatch(
-      /\.settings-button,\s*\.settings-popup select,\s*\.settings-app-popup,\s*\.settings-field \{[^}]*height: var\(--control-height\);[^}]*inset 0 0 0 0\.5px/u,
+      /\.push-button \{[^}]*height: var\(--control-height\);[^}]*box-shadow: var\(--push-button-bezel\);/u,
     );
+    expect(styles).toMatch(
+      /\.settings-popup select,\s*\.settings-app-popup \{[^}]*height: var\(--control-height\);[^}]*box-shadow: var\(--push-button-bezel\);/u,
+    );
+    expect(styles).toMatch(
+      /\.settings-field \{[^}]*height: var\(--control-height\);[^}]*box-shadow: var\(--field-edge\);/u,
+    );
+    expect(styles).toMatch(/--push-button-bezel: 0 0 0 0\.5px/u);
+    expect(styles).toMatch(/--field-edge: inset 0 0 0 0\.5px/u);
   });
 
   it("sets every view's density at once, and shows a mix as Custom", () => {

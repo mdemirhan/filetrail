@@ -59,6 +59,7 @@ import {
   selectTopToolbarSlots,
 } from "../lib/topToolbarLayout";
 import { useShortcutDisplay } from "../state/shortcutDisplayContext";
+import { ClearButton } from "./ClearButton";
 import { InfoPanel } from "./GetInfoPanel";
 import { HistoryButton } from "./HistoryButton";
 import { MenuCheck } from "./MenuCheck";
@@ -103,6 +104,12 @@ type ViewOptionsMenuItem =
   | { kind: "action"; id: string; label: string; command?: ShortcutCommandId; onSelect: () => void }
   | { kind: "separator"; id: string };
 
+// A segment of the view switch: a toolbar button drawn as the shared segmented control's
+// segment. `active` stays for the toolbar's own rules and the tests.
+function viewSegmentClass(selected: boolean) {
+  return `tb-btn tb-btn-icon segmented-item${selected ? " active is-selected" : ""}`;
+}
+
 // An item being dragged while the toolbar is customized.
 type ToolbarDrag = {
   itemId: ToolbarItemId;
@@ -118,6 +125,7 @@ type ToolbarDrag = {
 const TOOLBAR_DRAG_THRESHOLD = 4;
 // How far below the toolbar a dragged item still counts as over it.
 const TOOLBAR_DROP_REACH_BELOW = 28;
+// The same as --duration-base and --duration-flash-slow in styles.css.
 const TOOLBAR_REORDER_MS = 180;
 const TOOLBAR_FLASH_MS = 900;
 
@@ -1178,14 +1186,14 @@ export function ExplorerWorkspace({
       return (
         <div key={itemId} className="toolbar-group toolbar-group-view">
           <fieldset
-            className="toolbar-segmented toolbar-segmented-native"
+            className="segmented toolbar-segmented toolbar-segmented-native"
             // Search results are one table, whatever the folder's view.
             disabled={!canRunRendererCommand("viewAsIcons")}
           >
             <legend className="sr-only">View</legend>
             <button
               type="button"
-              className={viewMode === "icons" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
+              className={viewSegmentClass(viewMode === "icons")}
               onClick={() => onViewModeChange("icons")}
               title={formatTooltip("View as Icons", shortcutDisplay.written("viewAsIcons"))}
               aria-label="View as Icons"
@@ -1195,9 +1203,7 @@ export function ExplorerWorkspace({
             </button>
             <button
               type="button"
-              className={
-                viewMode === "details" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"
-              }
+              className={viewSegmentClass(viewMode === "details")}
               onClick={() => onViewModeChange("details")}
               title={formatTooltip("View as List", shortcutDisplay.written("viewAsDetails"))}
               aria-label="View as List"
@@ -1207,7 +1213,7 @@ export function ExplorerWorkspace({
             </button>
             <button
               type="button"
-              className={viewMode === "list" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
+              className={viewSegmentClass(viewMode === "list")}
               onClick={() => onViewModeChange("list")}
               title={formatTooltip("View as Compact List", shortcutDisplay.written("viewAsList"))}
               aria-label="View as Compact List"
@@ -1368,8 +1374,7 @@ export function ExplorerWorkspace({
                   spellCheck={false}
                 />
                 {searchDraftQuery.trim().length > 0 ? (
-                  <button
-                    type="button"
+                  <ClearButton
                     className="toolbar-search-clear"
                     title="Clear Search"
                     aria-label="Clear file search"
@@ -1377,9 +1382,7 @@ export function ExplorerWorkspace({
                       event.preventDefault();
                     }}
                     onClick={onClearSearchDraft}
-                  >
-                    <ToolbarIcon name="close" />
-                  </button>
+                  />
                 ) : null}
               </div>
             </form>

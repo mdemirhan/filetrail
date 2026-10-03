@@ -111,7 +111,8 @@ function Checkbox({
 }
 
 // A pop-up button: the system's own menu, so it reads and works like every other pop-up on
-// the Mac. Every pop-up in Settings is one width, so the column of them lines up.
+// the Mac. It is as wide as its longest choice, as a Mac pop-up is, and never narrower than
+// the others' least width, so a column of short ones still lines up.
 function SelectControl({
   value,
   options,
@@ -1158,7 +1159,7 @@ export function SettingsView({
   };
   const trashPath = getTrashPath(homePath);
   return (
-    <div className="settings-view" data-layout={layoutMode}>
+    <div className="settings-view overlay-scroll" data-layout={layoutMode}>
       <div className="settings-page">
         {activeTab ? null : (
           <header className="settings-page-header">
@@ -1371,7 +1372,7 @@ export function SettingsView({
 
         {searchDefaults && showSection("search") ? (
           <SectionCard
-            title={activeTab ? undefined : "Search"}
+            title={activeTab ? "New Searches" : "Search"}
             note="Every new search starts with these. The search field's menu changes them for the search you are making."
           >
             <SettingRow

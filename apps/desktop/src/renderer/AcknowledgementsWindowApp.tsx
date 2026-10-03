@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type { IpcResponse } from "@filetrail/contracts";
 
 import { APP_NAME } from "../shared/aboutInfo";
+import { PushButton } from "./components/PushButton";
 import { useCloseOnEscape, useWindowAppearance } from "./hooks/useWindowAppearance";
 import { useFiletrailClient } from "./lib/filetrailClient";
 
@@ -45,7 +46,7 @@ export function AcknowledgementsWindowApp() {
   return (
     <main className="acknowledgements-window">
       <header className="page-window-titlebar acknowledgements-titlebar">Acknowledgements</header>
-      <div className="acknowledgements-scroll">
+      <div className="acknowledgements-scroll overlay-scroll">
         <p className="acknowledgements-intro">
           {APP_NAME} is built with the open-source software below. Each one is used under its own
           license.
@@ -69,9 +70,7 @@ export function AcknowledgementsWindowApp() {
                 {component.url.replace(/^https:\/\/(www\.)?/, "")}
               </a>
               {component.text === null ? (
-                <button
-                  type="button"
-                  className="page-window-button"
+                <PushButton
                   onClick={() =>
                     void client
                       .invoke("app:openAcknowledgementNotices", { id: component.id })
@@ -79,7 +78,7 @@ export function AcknowledgementsWindowApp() {
                   }
                 >
                   Open License Notices
-                </button>
+                </PushButton>
               ) : (
                 <pre className="acknowledgement-text">{component.text}</pre>
               )}

@@ -7,6 +7,7 @@ import {
   DEFAULT_TEXT_EDITOR,
   type FavoritePreference,
 } from "../shared/appPreferences";
+import { PushButton } from "./components/PushButton";
 import { type SearchDefaults, type SettingsTab, SettingsView } from "./components/SettingsView";
 import { applyPreferencesPatch, useAppPreferences } from "./hooks/useAppPreferences";
 import { type PreferencesPatch, usePreferencesSync } from "./hooks/usePreferencesSync";
@@ -286,12 +287,12 @@ export function SettingsWindowApp() {
       {notice ? (
         <output className="settings-window-notice">
           <span>{notice}</span>
-          <button type="button" onClick={() => setNotice(null)}>
+          <PushButton className="is-small" onClick={() => setNotice(null)}>
             Dismiss
-          </button>
+          </PushButton>
         </output>
       ) : null}
-      <div className="settings-window-body-scroll">
+      <div className="settings-window-body-scroll overlay-scroll">
         {preferencesReady ? (
           <SettingsView
             activeTab={activeTab}

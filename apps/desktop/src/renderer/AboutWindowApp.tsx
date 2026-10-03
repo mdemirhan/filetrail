@@ -10,6 +10,7 @@ import {
   formatAboutDetails,
   formatAppVersion,
 } from "../shared/aboutInfo";
+import { PushButton } from "./components/PushButton";
 import { useCloseOnEscape, useWindowAppearance } from "./hooks/useWindowAppearance";
 import { useFiletrailClient } from "./lib/filetrailClient";
 
@@ -98,23 +99,14 @@ export function AboutWindowApp() {
         ))}
       </dl>
       <div className="about-actions">
-        <button
-          type="button"
-          className="page-window-button"
-          disabled={!info}
-          onClick={() => void copyDetails()}
-        >
+        <PushButton disabled={!info} onClick={() => void copyDetails()}>
           {copied ? "Copied" : "Copy Details"}
-        </button>
-        <a
-          className="page-window-button"
-          href={APP_REPOSITORY_URL}
-          target="_blank"
-          rel="noreferrer"
-        >
+        </PushButton>
+        {/* Links that look like the push button beside them. */}
+        <a className="push-button" href={APP_REPOSITORY_URL} target="_blank" rel="noreferrer">
           GitHub
         </a>
-        <a className="page-window-button" href={APP_ISSUES_URL} target="_blank" rel="noreferrer">
+        <a className="push-button" href={APP_ISSUES_URL} target="_blank" rel="noreferrer">
           Report an Issue
         </a>
       </div>

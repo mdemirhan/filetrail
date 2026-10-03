@@ -7,7 +7,9 @@
   --bg-base: #ffffff;
   --bg-surface: #ececf0;
   --bg-elevated: #ffffff;
-  --bg-hover: rgba(0, 0, 0, 0.035);
+  /* The one fill under the pointer, for every row, button and tab that has one: a tint of
+     the text colour, so it darkens a light surface and lightens a dark one. */
+  --bg-hover: color-mix(in srgb, var(--text-primary) 5%, transparent);
   --bg-input: rgba(0, 0, 0, 0.03);
   --bg-active: rgba(124, 58, 237, 0.08);
   --bg-active-inactive: rgba(60, 63, 86, 0.08);
@@ -46,7 +48,6 @@
   --get-info-header-text: #a1a1a6;
   --get-info-close-icon: #b0b0b5;
   --get-info-close-icon-hover: #4a4a50;
-  --get-info-close-bg-hover: rgba(0, 0, 0, 0.06);
   --get-info-hero-icon-bg: var(--ft-accent-hero-icon-bg);
   --get-info-hero-name: #1d1d1f;
   --get-info-action-bg: rgba(0, 0, 0, 0.03);
@@ -97,16 +98,45 @@
   --control-height-small: 22px;
   --control-height: 24px;
   --control-height-large: 28px;
-  /* Motion: color and hover changes, most transitions, panels that slide. */
+  /* Spacing: paddings, margins and gaps come from 2, 4, 6, 8, 10, 12, 14, 16, 20, 24 and
+     28 pixels (hairline nudges and the toolbar's mirrored sizes aside). */
+  /* Motion: color and hover changes, most transitions, panels that slide; the flashes that
+     mark where something landed (CLIPBOARD_FLASH_MS and TOOLBAR_FLASH_MS in the code match
+     them); and one turn of a spinner. */
   --duration-fast: 120ms;
   --duration-base: 180ms;
   --duration-slow: 220ms;
+  --duration-flash: 700ms;
+  --duration-flash-slow: 900ms;
+  --duration-spin: 700ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   /* Keyboard focus: a ring in the accent around the control, as on macOS. */
   --focus-ring: 0 0 0 3px color-mix(in srgb, var(--ft-accent-solid) 50%, transparent);
+  /* A control that can't be used now is drawn at this strength, once: a disabled control
+     inside a disabled group is not dimmed twice. */
+  --disabled-opacity: 0.4;
+  /* Text fields are inset: a faint fill with a hairline edge drawn inside it, and the focus
+     ring while they have the keyboard. Their placeholders share one grey. */
+  --field-bg: var(--bg-input);
+  --field-edge: inset 0 0 0 0.5px var(--border-active);
+  --field-focus: var(--field-edge), var(--focus-ring);
+  --text-placeholder: var(--text-tertiary);
+  /* What lies over what, from the bottom: a part tucked under its control, a part raised
+     over its neighbours, headers that stay put, the toolbar, things floating over a list,
+     notifications, menus and popovers, dialogs and their dimmed window, an item being
+     dragged, and tooltips. */
+  --z-below: -1;
+  --z-raised: 1;
+  --z-sticky: 4;
+  --z-toolbar: 10;
+  --z-float: 14;
+  --z-notification: 44;
+  --z-menu: 100;
+  --z-modal: 170;
+  --z-drag: 200;
+  --z-tooltip: 1000;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-lg: 0 12px 32px rgba(30, 32, 48, 0.18);
-  --crumb-hover-bg: rgba(0, 0, 0, 0.035);
   --crumb-active-bg: rgba(124, 58, 237, 0.08);
   --scroll-thumb: rgba(110, 110, 115, 0.22);
   --scroll-thumb-hover: rgba(110, 110, 115, 0.34);
@@ -118,17 +148,7 @@
   --search-text: #4a4a50;
   --search-icon: #86868b;
   --search-icon-active: var(--ft-accent-solid);
-  --search-placeholder: #a1a1a6;
   --search-caret: var(--ft-accent-solid);
-  --search-pill-bg: transparent;
-  --search-pill-border: rgba(0, 0, 0, 0.12);
-  --search-pill-fg: #6e6e73;
-  --search-pill-hover-bg: rgba(0, 0, 0, 0.015);
-  --search-pill-hover-border: transparent;
-  --search-pill-hover-fg: #4a4a50;
-  --search-pill-active-border: var(--ft-accent-search-pill-border);
-  --srbar-separator: rgba(0, 0, 0, 0.07);
-  --srbar-spinner: var(--ft-accent-solid);
 }
 
 :root[data-theme="dark"] {
@@ -137,7 +157,6 @@
   --bg-base: #1e1e20;
   --bg-surface: #29292c;
   --bg-elevated: #2a2a2d;
-  --bg-hover: #33363f;
   --bg-input: #33363f;
   --bg-active: #3a3e4a;
   --bg-active-inactive: #2a2d36;
@@ -163,7 +182,6 @@
   --get-info-header-text: #6e6e73;
   --get-info-close-icon: #5f5f64;
   --get-info-close-icon-hover: #c7c7cc;
-  --get-info-close-bg-hover: rgba(255, 255, 255, 0.06);
   --get-info-hero-icon-bg: var(--ft-accent-hero-icon-bg);
   --get-info-hero-name: #f2f2f5;
   --get-info-action-bg: rgba(255, 255, 255, 0.03);
@@ -190,7 +208,6 @@
   --help-muted: #98989d;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
   --shadow-lg: 0 18px 44px rgba(0, 0, 0, 0.34);
-  --crumb-hover-bg: var(--bg-hover);
   --crumb-active-bg: rgba(109, 160, 247, 0.14);
   --scroll-thumb: rgba(161, 161, 166, 0.3);
   --scroll-thumb-hover: rgba(161, 161, 166, 0.42);
@@ -202,17 +219,7 @@
   --search-text: #c7c7cc;
   --search-icon: #98989d;
   --search-icon-active: var(--ft-accent-solid);
-  --search-placeholder: #6e6e73;
   --search-caret: var(--ft-accent-solid);
-  --search-pill-bg: transparent;
-  --search-pill-border: rgba(255, 255, 255, 0.1);
-  --search-pill-fg: #a1a1a6;
-  --search-pill-hover-bg: rgba(255, 255, 255, 0.025);
-  --search-pill-hover-border: transparent;
-  --search-pill-hover-fg: #c7c7cc;
-  --search-pill-active-border: var(--ft-accent-search-pill-border);
-  --srbar-separator: rgba(255, 255, 255, 0.07);
-  --srbar-spinner: var(--ft-accent-solid);
 }
 
 * {
@@ -251,8 +258,12 @@ button {
 }
 
 button:disabled {
-  opacity: 0.45;
+  opacity: var(--disabled-opacity);
   cursor: default;
+}
+
+input::placeholder {
+  color: var(--text-placeholder);
 }
 
 button:focus-visible,
@@ -291,7 +302,7 @@ select:focus-visible {
   align-items: center;
   box-shadow: none;
   position: relative;
-  z-index: 10;
+  z-index: var(--z-toolbar);
   -webkit-app-region: drag;
 }
 
@@ -351,7 +362,7 @@ select:focus-visible {
   bottom: 0;
   left: calc(var(--toolbar-item-gap) / -2);
   right: calc(var(--toolbar-item-gap) / -2);
-  z-index: -1;
+  z-index: var(--z-below);
   background: var(--toolbar-capsule-bg);
   pointer-events: none;
 }
@@ -415,7 +426,7 @@ select:focus-visible {
 
 /* The clipboard button, drawn while nothing is copied only so that it can be moved. */
 .toolbar-clipboard-stand-in {
-  opacity: 0.45;
+  opacity: var(--disabled-opacity);
 }
 
 /* Buttons the window has no room for: they are hidden while the toolbar is used. */
@@ -447,7 +458,7 @@ select:focus-visible {
   background: color-mix(in srgb, var(--ft-accent-solid) 14%, transparent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--ft-accent-solid) 55%, transparent);
   pointer-events: none;
-  animation: toolbar-item-flash 900ms ease-out forwards;
+  animation: toolbar-item-flash var(--duration-flash-slow) ease-out forwards;
 }
 
 @keyframes toolbar-item-flash {
@@ -501,7 +512,7 @@ select:focus-visible {
   top: calc(100% + 8px);
   right: auto;
   left: 50%;
-  z-index: 1;
+  z-index: var(--z-raised);
   box-sizing: border-box;
   width: min(760px, calc(100% - 32px));
   max-width: none;
@@ -555,7 +566,7 @@ select:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   margin: 0;
   padding: 4px 2px;
   border: 0;
@@ -608,7 +619,8 @@ select:focus-visible {
 
 .toolbar-customize-scrim {
   position: relative;
-  z-index: 9;
+  /* Just under the toolbar, which is customized above it. */
+  z-index: calc(var(--z-toolbar) - 1);
   background: color-mix(in srgb, var(--scrim) 35%, transparent);
   -webkit-app-region: no-drag;
 }
@@ -618,7 +630,7 @@ select:focus-visible {
   position: fixed;
   top: 0;
   left: 0;
-  z-index: 200;
+  z-index: var(--z-drag);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -626,7 +638,7 @@ select:focus-visible {
   box-sizing: border-box;
   min-width: 34px;
   height: 30px;
-  padding: 0 9px;
+  padding: 0 8px;
   border-radius: var(--radius-capsule);
   background: var(--bg-elevated);
   box-shadow: var(--elevation-dialog);
@@ -748,8 +760,7 @@ select:focus-visible {
 }
 
 .window-toolbar .tb-btn:disabled {
-  color: var(--toolbar-nav-icon);
-  opacity: 0.55;
+  opacity: var(--disabled-opacity);
 }
 
 .window-toolbar .tb-btn.toolbar-btn-muted {
@@ -771,16 +782,11 @@ select:focus-visible {
   overflow: visible;
 }
 
+/* The view switch's fieldset; it is drawn as a segmented control (.segmented). */
 .toolbar-segmented {
-  display: inline-flex;
-  align-items: stretch;
   min-width: 0;
-  padding: 0;
   margin: 0;
-  border: 1px solid var(--toolbar-border);
-  border-radius: var(--radius-control);
-  overflow: hidden;
-  background: transparent;
+  border: 0;
   -webkit-app-region: no-drag;
 }
 
@@ -796,44 +802,6 @@ select:focus-visible {
   border: 0;
 }
 
-.toolbar-segmented .tb-btn {
-  border-radius: 0;
-}
-
-.toolbar-group-view .toolbar-segmented {
-  gap: 4px;
-  border: 0;
-  border-radius: 0;
-  overflow: visible;
-  background: transparent;
-}
-
-.toolbar-group-view .toolbar-segmented .tb-btn {
-  width: 38px;
-  min-width: 38px;
-  height: 36px;
-  border-radius: var(--radius-menu);
-  color: var(--text-tertiary);
-}
-
-.toolbar-group-view .toolbar-segmented .tb-btn:hover:not(:disabled) {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.toolbar-group-view .toolbar-segmented .tb-btn.active {
-  background: var(--bg-active-inactive);
-  color: var(--text-primary);
-}
-
-.toolbar-group-view .toolbar-segmented .tb-btn + .tb-btn {
-  border-left: 0;
-}
-
-.toolbar-segmented .tb-btn + .tb-btn {
-  border-left: 1px solid var(--border);
-}
-
 .toolbar-search-shell {
   position: relative;
   width: 100%;
@@ -841,7 +809,7 @@ select:focus-visible {
 }
 
 .toolbar-search-shell.active {
-  z-index: 55;
+  z-index: var(--z-float);
 }
 
 .toolbar-search {
@@ -865,7 +833,7 @@ select:focus-visible {
 .toolbar-search-row {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   min-height: 28px;
   padding: 0 10px;
 }
@@ -932,7 +900,7 @@ select:focus-visible {
   background: transparent;
   color: var(--search-text);
   font-size: var(--font-size-body);
-  font-weight: 500;
+  font-weight: 400;
   font-family: var(--font-sans);
   letter-spacing: 0.01em;
   caret-color: var(--search-caret);
@@ -946,42 +914,8 @@ select:focus-visible {
   border: 0;
 }
 
-.toolbar-search-input::placeholder {
-  color: var(--search-placeholder);
-}
-
 .toolbar-search-clear {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
   margin-left: auto;
-  border: 1px solid var(--search-pill-border);
-  border-radius: var(--radius-capsule);
-  background: var(--search-pill-bg);
-  color: var(--search-pill-fg);
-  -webkit-app-region: no-drag;
-  transition: border-color var(--duration-base) ease, background var(--duration-base) ease, color
-    var(--duration-base) ease;
-}
-
-.toolbar-search-clear:hover {
-  border-color: var(--search-pill-hover-border);
-  background: var(--search-pill-hover-bg);
-  color: var(--search-pill-hover-fg);
-}
-
-.toolbar-search-clear:focus-visible {
-  box-shadow: none;
-  outline: none;
-  border-color: var(--search-pill-active-border);
-}
-
-.toolbar-search-clear .toolbar-icon {
-  width: 9px;
-  height: 9px;
-  stroke-width: 2.2;
 }
 
 /* The search field has a width of its own, the same in use or not, so nothing in the
@@ -1003,7 +937,7 @@ select:focus-visible {
 .toolbar-menu,
 .context-menu,
 .context-submenu {
-  z-index: 100;
+  z-index: var(--z-menu);
   min-width: 220px;
   padding: 5px;
   border: 0.5px solid var(--context-menu-border);
@@ -1128,7 +1062,7 @@ select:focus-visible {
 
 .context-menu-layer {
   position: fixed;
-  z-index: 150;
+  z-index: var(--z-menu);
 }
 
 .context-menu {
@@ -1209,7 +1143,8 @@ select:focus-visible {
 
 /* ── Alerts, sheets and push buttons ─────────────────────────────────────
    One alert (components/Alert.tsx), one sheet frame and one push button for every
-   dialog. The window behind is dimmed, not blurred. */
+   dialog, and for Settings, About, the Info panel, Help and the search results bar too.
+   The window behind a dialog is dimmed, not blurred. */
 :root {
   --scrim: rgba(0, 0, 0, 0.12);
   --dialog-edge: rgba(0, 0, 0, 0.12);
@@ -1217,6 +1152,8 @@ select:focus-visible {
     rgba(0, 0, 0, 0.06);
   --push-button-bg: color-mix(in srgb, #ffffff 90%, var(--bg-elevated));
   --push-button-edge: rgba(0, 0, 0, 0.14);
+  /* The bezel: a hairline edge and a faint lift. Pop-up buttons wear it too. */
+  --push-button-bezel: 0 0 0 0.5px var(--push-button-edge), 0 0.5px 1.5px rgba(0, 0, 0, 0.1);
   --push-button-pressed: brightness(0.94);
 }
 
@@ -1226,13 +1163,14 @@ select:focus-visible {
   --elevation-dialog: 0 0 0 0.5px var(--dialog-edge), 0 20px 50px rgba(0, 0, 0, 0.5);
   --push-button-bg: color-mix(in srgb, var(--text-primary) 17%, transparent);
   --push-button-edge: rgba(255, 255, 255, 0.04);
+  --push-button-bezel: 0 0 0 0.5px var(--push-button-edge), 0 0.5px 1.5px rgba(0, 0, 0, 0.1);
   --push-button-pressed: brightness(1.25);
 }
 
 .modal-scrim {
   position: fixed;
   inset: 0;
-  z-index: 170;
+  z-index: var(--z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1259,27 +1197,32 @@ select:focus-visible {
   border-radius: var(--radius-control);
   background: var(--push-button-bg);
   color: var(--text-primary);
-  box-shadow: 0 0 0 0.5px var(--push-button-edge), 0 0.5px 1.5px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--push-button-bezel);
   font-family: var(--font-sans);
   font-size: var(--font-size-body);
   font-weight: 400;
   line-height: 1;
+  text-decoration: none;
   white-space: nowrap;
   cursor: default;
 }
 
-.push-button:active:not(:disabled) {
+/* The pointer's answers, the same on every push button: a faint tint under the pointer, and
+   a shade while it is pressed or while the menu it opens is open. */
+.push-button:hover:not(:disabled) {
+  background-image: linear-gradient(var(--bg-hover), var(--bg-hover));
+}
+
+.push-button:active:not(:disabled),
+.push-button[aria-expanded="true"] {
   filter: var(--push-button-pressed);
 }
 
 .push-button.is-default {
+  --push-button-pressed: brightness(0.92);
   background: var(--ft-accent-solid-button);
   color: var(--ft-accent-on-solid);
   box-shadow: 0 0.5px 1.5px rgba(0, 0, 0, 0.18);
-}
-
-.push-button.is-default:active:not(:disabled) {
-  filter: brightness(0.92);
 }
 
 /* Destructive: red text on the plain bezel, never the accent, so it is never mistaken
@@ -1297,10 +1240,161 @@ select:focus-visible {
 }
 
 .push-button:disabled {
-  opacity: 0.4;
+  opacity: var(--disabled-opacity);
 }
 
 .push-button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* ── The clear button ─────────────────────────────────────────────────────
+   The × that empties a field (components/ClearButton.tsx): a grey disc with the cross cut
+   out of it, as in a macOS search field. The Go To box, the toolbar's search, the search
+   filters, the filter typed into a list, a shortcut's key and a size being calculated all
+   use it. */
+.clear-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-capsule);
+  background: color-mix(in srgb, var(--text-primary) 28%, transparent);
+  color: var(--bg-elevated);
+  cursor: default;
+  transition: background var(--duration-fast) ease;
+  -webkit-app-region: no-drag;
+}
+
+.clear-button:hover {
+  background: color-mix(in srgb, var(--text-primary) 42%, transparent);
+}
+
+.clear-button:active {
+  background: color-mix(in srgb, var(--text-primary) 55%, transparent);
+}
+
+.clear-button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.clear-button svg {
+  width: 7px;
+  height: 7px;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+/* ── Search fields ───────────────────────────────────────────────────────
+   Two shapes only: the toolbar's capsule (filled and without an edge, as in Finder), and
+   this rounded field, which Help's search, the Shortcuts search and the filter over search
+   results share: an icon, the field, and the clear button once something is typed. */
+.search-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  height: var(--control-height);
+  padding: 0 4px 0 8px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--field-bg);
+  box-shadow: var(--field-edge);
+  color: var(--text-tertiary);
+}
+
+.search-field:focus-within {
+  box-shadow: var(--field-focus);
+}
+
+.search-field-icon {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.search-field-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-body);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.search-field-input:focus,
+.search-field-input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/* ── Segmented controls ──────────────────────────────────────────────────
+   One look for the toolbar's view switch, the conflict sheet's choice for every conflict
+   and the search results' scope: segments on a round-ended track, the selected one raised,
+   as in macOS 26. */
+:root {
+  --segmented-track-bg: var(--toolbar-toggle-bg);
+  --segmented-selected-bg: var(--toolbar-toggle-active-bg);
+  --segmented-selected-text: var(--toolbar-toggle-icon-active);
+  --segmented-selected-shadow: 0 0.5px 1.5px rgba(0, 0, 0, 0.2);
+}
+
+:root[data-theme="dark"] {
+  --segmented-selected-shadow: 0 0.5px 1.5px rgba(0, 0, 0, 0.2);
+}
+
+.segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-capsule);
+  background: var(--segmented-track-bg);
+}
+
+.segmented-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--control-height);
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-capsule);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.segmented-item:hover {
+  color: var(--text-primary);
+}
+
+.segmented-item.is-selected {
+  background: var(--segmented-selected-bg);
+  color: var(--segmented-selected-text);
+  box-shadow: var(--segmented-selected-shadow);
+}
+
+.segmented-item:focus-visible,
+.segmented-item:has(input:focus-visible) {
   outline: none;
   box-shadow: var(--focus-ring);
 }
@@ -1412,7 +1506,7 @@ select:focus-visible {
   position: fixed;
   right: 12px;
   bottom: 38px;
-  z-index: 44;
+  z-index: var(--z-notification);
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -1422,6 +1516,7 @@ select:focus-visible {
 }
 
 .toast-card {
+  display: block;
   max-width: 100%;
   pointer-events: none;
   overflow: hidden;
@@ -1435,8 +1530,8 @@ select:focus-visible {
 .toast-card-body {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 7px 14px 7px 10px;
+  gap: 8px;
+  padding: 6px 14px 6px 10px;
 }
 
 .toast-card-icon-wrap {
@@ -1481,7 +1576,8 @@ select:focus-visible {
   position: fixed;
   right: 12px;
   bottom: 38px;
-  z-index: 36;
+  /* Under a notification that comes up where it is. */
+  z-index: calc(var(--z-notification) - 1);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1593,19 +1689,19 @@ select:focus-visible {
   box-sizing: border-box;
   width: 100%;
   height: var(--control-height);
-  padding: 0 7px;
+  padding: 0 8px;
   border: 0;
   border-radius: var(--radius-control);
-  background: var(--bg-input);
-  box-shadow: inset 0 0 0 0.5px var(--border-active);
+  background: var(--field-bg);
+  box-shadow: var(--field-edge);
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: var(--font-size-body);
   outline: none;
 }
 
-.text-prompt-input::placeholder {
-  color: var(--text-tertiary);
+.text-prompt-input:focus {
+  box-shadow: var(--field-focus);
 }
 
 .text-prompt-error {
@@ -1706,15 +1802,12 @@ select:focus-visible {
   position: absolute;
   top: 50%;
   left: 50%;
-  z-index: 14;
+  z-index: var(--z-float);
   transform: translate(-50%, -50%);
 }
 
 .pane-typeahead-label {
-  font-size: var(--font-size-mini);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: var(--font-size-callout);
   color: var(--text-tertiary);
 }
 
@@ -1735,12 +1828,12 @@ select:focus-visible {
   position: absolute;
   bottom: 14px;
   left: 50%;
-  z-index: 14;
+  z-index: var(--z-float);
   display: inline-flex;
   align-items: center;
   gap: 8px;
   max-width: calc(100% - 32px);
-  padding: 5px 6px 5px 12px;
+  padding: 4px 6px 4px 12px;
   border: 1px solid var(--ft-accent-border);
   border-radius: var(--radius-capsule);
   background: color-mix(in srgb, var(--bg-elevated) 94%, transparent);
@@ -1752,10 +1845,6 @@ select:focus-visible {
 }
 
 .list-filter-pill-label {
-  font-size: var(--font-size-mini);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--text-tertiary);
 }
 
@@ -1775,50 +1864,9 @@ select:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
-.list-filter-pill-clear {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: none;
-  border-radius: var(--radius-capsule);
-  background: transparent;
-  color: var(--text-tertiary);
-  cursor: default;
-}
-
-.list-filter-pill-clear:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.list-filter-pill-clear svg {
-  width: 10px;
-  height: 10px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.6;
-  stroke-linecap: round;
-}
-
 .empty-state-action {
   justify-self: start;
-  height: 24px;
   margin-top: 4px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  font-size: var(--font-size-callout);
-  cursor: default;
-}
-
-.empty-state-action:hover {
-  background: var(--bg-hover);
 }
 
 .tree-expand:focus-visible,
@@ -1890,7 +1938,7 @@ body.resizing-panels * {
 
 .pane-header {
   position: relative;
-  z-index: 4;
+  z-index: var(--z-sticky);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1925,7 +1973,6 @@ body.resizing-panels * {
   font-weight: 500;
   letter-spacing: 0;
   text-transform: none;
-  z-index: 6;
 }
 
 .pathbar,
@@ -1996,7 +2043,7 @@ body.resizing-panels * {
 
 .pathbar-separator-button:hover,
 .pathbar-separator-button.active {
-  background: var(--crumb-hover-bg);
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
@@ -2060,7 +2107,7 @@ body.resizing-panels * {
 }
 
 .pathbar-segment:hover {
-  background: var(--crumb-hover-bg);
+  background: var(--bg-hover);
   color: var(--accent-text, color-mix(in srgb, var(--ft-accent-solid) 42%, var(--text-primary)));
 }
 
@@ -2088,18 +2135,18 @@ body.resizing-panels * {
   min-width: 0;
   height: 100%;
   padding: 0 10px;
-  border: 1px solid var(--border-active);
+  border: 0;
   border-radius: var(--radius-control);
-  background: var(--bg-base);
+  background: var(--field-bg);
+  box-shadow: var(--field-edge);
   color: var(--text-primary);
   font-size: var(--font-size-body);
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .pathbar-input:focus {
   outline: none;
-  border-color: var(--ft-accent-solid);
-  box-shadow: var(--focus-ring);
+  box-shadow: var(--field-focus);
 }
 
 .pathbar-suggestions {
@@ -2107,8 +2154,9 @@ body.resizing-panels * {
   top: calc(100% + 4px);
   left: 0;
   right: 0;
-  z-index: 12;
+  z-index: var(--z-float);
   max-height: min(360px, calc(100vh - 180px));
+  padding: 4px;
   border: 1px solid var(--border);
   border-radius: var(--radius-menu);
   background: var(--dropdown-bg);
@@ -2116,21 +2164,18 @@ body.resizing-panels * {
   overflow: auto;
 }
 
+/* Rows are menu rows, as in the Go To box: the chosen one is filled with the accent. */
 .pathbar-suggestion {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(160px, 1.3fr);
   align-items: center;
   gap: 14px;
   width: 100%;
-  padding: 8px 12px;
+  padding: 6px 10px;
   border: 0;
-  border-bottom: 1px solid var(--border-light);
+  border-radius: var(--radius-control);
   background: transparent;
   text-align: left;
-}
-
-.pathbar-suggestion:last-child {
-  border-bottom: none;
 }
 
 .pathbar-suggestion:hover {
@@ -2138,7 +2183,13 @@ body.resizing-panels * {
 }
 
 .pathbar-suggestion.active {
-  background: var(--bg-active);
+  background: var(--ft-accent-solid-button);
+  color: var(--ft-accent-on-solid);
+}
+
+.pathbar-suggestion.active .pathbar-suggestion-name,
+.pathbar-suggestion.active .pathbar-suggestion-path {
+  color: inherit;
 }
 
 .pathbar-suggestion-name {
@@ -2254,7 +2305,8 @@ body.resizing-panels * {
 }
 
 .tree-scroll::-webkit-scrollbar,
-.content-scroll::-webkit-scrollbar {
+.content-scroll::-webkit-scrollbar,
+.overlay-scroll::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
@@ -2264,28 +2316,34 @@ body.resizing-panels * {
 }
 
 .tree-scroll::-webkit-scrollbar-corner,
-.content-scroll::-webkit-scrollbar-corner {
+.content-scroll::-webkit-scrollbar-corner,
+.overlay-scroll::-webkit-scrollbar-corner {
   background: transparent;
 }
 
 /* A pane's scrollbars show only while they are in use, as on macOS: while the pane
    scrolls and for a moment after (lib/scrollbarVisibility.ts marks it meanwhile), and
-   while the pointer is on one or drags it. */
+   while the pointer is on one or drags it. Help, Settings, the Info panel and Favorites
+   (`.overlay-scroll`) have the same thin ones. */
 .tree-scroll::-webkit-scrollbar-thumb,
-.content-scroll::-webkit-scrollbar-thumb {
+.content-scroll::-webkit-scrollbar-thumb,
+.overlay-scroll::-webkit-scrollbar-thumb {
   background: transparent;
   border-radius: var(--radius-capsule);
 }
 
 .tree-scroll[data-scrollbars]::-webkit-scrollbar-thumb,
-.content-scroll[data-scrollbars]::-webkit-scrollbar-thumb {
+.content-scroll[data-scrollbars]::-webkit-scrollbar-thumb,
+.overlay-scroll[data-scrollbars]::-webkit-scrollbar-thumb {
   background: var(--scroll-thumb);
 }
 
 .tree-scroll::-webkit-scrollbar-thumb:hover,
 .content-scroll::-webkit-scrollbar-thumb:hover,
+.overlay-scroll::-webkit-scrollbar-thumb:hover,
 .tree-scroll::-webkit-scrollbar-thumb:active,
-.content-scroll::-webkit-scrollbar-thumb:active {
+.content-scroll::-webkit-scrollbar-thumb:active,
+.overlay-scroll::-webkit-scrollbar-thumb:active {
   background: var(--scroll-thumb-hover, var(--scroll-thumb));
 }
 
@@ -2625,9 +2683,7 @@ body.resizing-panels * {
     color-mix(in srgb, var(--ft-accent-border) 24%, transparent);
   color: var(--ft-accent-on-solid);
   font-size: var(--font-size-small);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-weight: 600;
   pointer-events: none;
   white-space: nowrap;
 }
@@ -2827,15 +2883,6 @@ body.resizing-panels * {
   overflow: hidden;
 }
 
-.search-results-spinner {
-  width: 10px;
-  height: 10px;
-  border: 1.5px solid var(--srbar-separator);
-  border-top-color: var(--srbar-spinner);
-  border-radius: var(--radius-capsule);
-  animation: search-results-spin 0.7s linear infinite;
-}
-
 /* With the row's 6px margin, rows sit 10px in from the pane's edges, as in Details. */
 .search-results-scroll {
   padding: 10px 4px 12px;
@@ -2845,12 +2892,6 @@ body.resizing-panels * {
 .search-results-scroll:focus-visible {
   outline: none;
   box-shadow: none;
-}
-
-@keyframes search-results-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 .search-results-banner {
@@ -2882,7 +2923,7 @@ body.resizing-panels * {
   align-items: center;
   gap: 10px;
   min-width: 0;
-  padding: 9px 12px;
+  padding: 8px 12px;
   border: 1px solid color-mix(in srgb, var(--ft-accent-border) 68%, var(--border));
   border-radius: var(--radius-menu);
   background: color-mix(in srgb, var(--bg-elevated) 92%, var(--bg-base));
@@ -3070,12 +3111,18 @@ body.resizing-panels * {
   border-right: 0;
 }
 
+/* The header, the details and the empty panel share one inset, so the title stands over
+   the column it heads. */
+.get-info-panel {
+  --get-info-inset: 16px;
+}
+
 .get-info-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 0 12px;
+  padding: 0 var(--get-info-inset);
   font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
 }
@@ -3086,7 +3133,7 @@ body.resizing-panels * {
   margin-left: auto;
 }
 
-.get-info-pending .folder-size-spinner {
+.get-info-pending .spinner {
   width: 10px;
   height: 10px;
   border-width: 1.5px;
@@ -3107,7 +3154,7 @@ body.resizing-panels * {
 }
 
 .get-info-close:hover {
-  background: var(--get-info-close-bg-hover);
+  background: var(--bg-hover);
   color: var(--get-info-close-icon-hover);
 }
 
@@ -3120,7 +3167,7 @@ body.resizing-panels * {
 .get-info-content,
 .get-info-empty {
   min-width: 0;
-  padding: 0 12px 16px;
+  padding: 0 var(--get-info-inset) 18px;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -3160,7 +3207,7 @@ body.resizing-panels * {
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  padding: 7px 0;
+  padding: 8px 0;
 }
 
 .get-info-meta-row.last {
@@ -3265,7 +3312,7 @@ body.resizing-panels * {
 
 .info-row-fact + .info-row-fact::before {
   content: "·";
-  margin: 0 7px;
+  margin: 0 6px;
   color: var(--text-dim);
 }
 
@@ -3300,42 +3347,29 @@ body.resizing-panels * {
   gap: 6px;
 }
 
-.folder-size-spinner {
+/* The one spinner: a ring with its head in the accent, turning at one speed everywhere. */
+.spinner {
   display: inline-block;
+  flex: none;
   width: 12px;
   height: 12px;
-  border: 2px solid var(--text-dim);
+  border: 2px solid color-mix(in srgb, var(--text-primary) 15%, transparent);
   border-top-color: var(--ft-accent-solid);
   border-radius: var(--radius-capsule);
-  animation: folder-size-spin 0.6s linear infinite;
+  animation: spinner-turn var(--duration-spin) linear infinite;
 }
 
-@keyframes folder-size-spin {
+/* In a small push button (Stop, while a search runs). */
+.push-button .spinner {
+  width: 10px;
+  height: 10px;
+  border-width: 1.5px;
+}
+
+@keyframes spinner-turn {
   to {
     transform: rotate(360deg);
   }
-}
-
-.folder-size-cancel-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-capsule);
-  background: var(--text-dim);
-  color: var(--bg-base);
-  font-size: var(--font-size-callout);
-  font-weight: 700;
-  line-height: 1;
-  cursor: pointer;
-  transition: background var(--duration-fast) ease;
-}
-
-.folder-size-cancel-btn:hover {
-  background: var(--text-secondary);
 }
 
 .folder-size-value {
@@ -3386,7 +3420,7 @@ body.resizing-panels * {
 .go-to-folder-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 140;
+  z-index: var(--z-modal);
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -3432,12 +3466,12 @@ body.resizing-panels * {
   height: var(--control-height-large);
   padding: 0 8px;
   border-radius: var(--radius-control);
-  background: var(--bg-input);
-  box-shadow: inset 0 0 0 0.5px var(--border-active);
+  background: var(--field-bg);
+  box-shadow: var(--field-edge);
 }
 
 .go-to-folder-input-shell.is-focused {
-  box-shadow: inset 0 0 0 0.5px var(--border-active), var(--focus-ring);
+  box-shadow: var(--field-focus);
 }
 
 .go-to-folder-input-icon {
@@ -3470,37 +3504,10 @@ body.resizing-panels * {
   box-shadow: none;
 }
 
-.go-to-folder-input::placeholder {
-  color: var(--text-tertiary);
-}
-
 .go-to-folder-input::-webkit-contacts-auto-fill-button,
 .go-to-folder-input::-webkit-credentials-auto-fill-button,
 .go-to-folder-input::-webkit-textfield-decoration-container {
   display: none;
-}
-
-/* The same clear button as the toolbar's search field. */
-.go-to-folder-clear {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-capsule);
-  background: color-mix(in srgb, var(--text-primary) 28%, transparent);
-  color: var(--bg-elevated);
-}
-
-.go-to-folder-clear svg {
-  width: 7px;
-  height: 7px;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
 }
 
 .go-to-folder-error {
@@ -3828,11 +3835,11 @@ body.platform-macos .settings-view[data-layout="compact"] {
 }
 
 .workspace-inspector-cell.is-sliding-in > * {
-  animation: info-panel-slide-in var(--duration-slow) cubic-bezier(0.2, 0, 0, 1);
+  animation: info-panel-slide-in var(--duration-slow) var(--ease-standard);
 }
 
 .workspace-inspector-cell.is-sliding-out > * {
-  animation: info-panel-slide-out var(--duration-slow) cubic-bezier(0.2, 0, 0, 1) forwards;
+  animation: info-panel-slide-out var(--duration-slow) var(--ease-standard) forwards;
 }
 
 @keyframes info-panel-slide-in {
@@ -4001,7 +4008,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
 }
 
 .tab-strip-tab:not(.active):hover {
-  background: color-mix(in srgb, var(--neutral-ink) 6%, transparent);
+  background: var(--bg-hover);
 }
 
 .tab-strip-tab.active {
@@ -4064,7 +4071,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
 }
 
 .tab-strip-close:hover {
-  background: color-mix(in srgb, var(--neutral-ink) 10%, transparent);
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
@@ -4093,16 +4100,16 @@ body.platform-macos .settings-view[data-layout="compact"] {
 }
 
 .tab-strip-new:hover {
-  background: color-mix(in srgb, var(--neutral-ink) 6%, transparent);
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
 /* Tooltips drawn by the app for icon-only buttons (see lib/titleTooltips.ts). */
 .app-tooltip {
   position: fixed;
-  z-index: 10000;
+  z-index: var(--z-tooltip);
   max-width: 420px;
-  padding: 3px 7px;
+  padding: 3px 8px;
   border: 0.5px solid var(--context-menu-border);
   border-radius: var(--radius-control);
   background: var(--context-menu-bg);
@@ -4140,23 +4147,9 @@ body.platform-macos .settings-view[data-layout="compact"] {
 }
 
 .help-filter {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 8px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-control);
-  background: var(--bg-input);
-  color: var(--text-tertiary);
+  flex: none;
 }
 
-.help-filter:focus-within {
-  border-color: color-mix(in srgb, var(--ft-accent-solid) 70%, transparent);
-  box-shadow: var(--focus-ring);
-}
-
-.help-filter-icon,
 .help-topic-icon {
   flex: 0 0 auto;
   width: 15px;
@@ -4166,27 +4159,6 @@ body.platform-macos .settings-view[data-layout="compact"] {
   stroke-width: 1.7;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-
-.help-filter-input {
-  flex: 1 1 auto;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--text-primary);
-  font-family: var(--font-sans);
-  font-size: var(--font-size-body);
-}
-
-.help-filter-input:focus,
-.help-filter-input:focus-visible {
-  outline: none;
-  box-shadow: none;
-}
-
-.help-filter-input::placeholder {
-  color: var(--text-tertiary);
 }
 
 .help-topics {
@@ -4251,19 +4223,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
 }
 
 .help-action {
-  height: 24px;
   margin: 10px 0 12px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  font-size: var(--font-size-callout);
-  cursor: default;
-}
-
-.help-action:hover {
-  background: var(--bg-hover);
 }
 
 .help-section h2 {
@@ -4274,7 +4234,7 @@ body.platform-macos .settings-view[data-layout="compact"] {
 
 .help-row,
 .help-shortcut-row {
-  padding: 7px 0;
+  padding: 8px 0;
   border-top: 1px solid var(--border-light);
 }
 
@@ -4542,47 +4502,8 @@ body.window-inactive {
   color: var(--text-tertiary);
 }
 
-.search-scope-button {
-  height: 22px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: var(--font-size-callout);
-  cursor: default;
-}
-
-.search-scope-button:hover {
-  background: var(--bg-hover);
-}
-
-.search-scope-button.active {
-  background: var(--bg-active-inactive);
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
 .search-scope-spacer {
   flex: 1 1 auto;
-}
-
-/* Options, Stop and Done: small push buttons, the same bezel as every dialog's. */
-.search-scope-action {
-  height: var(--control-height-small);
-  padding: 0 10px;
-  border: 0;
-  border-radius: var(--radius-control);
-  background: var(--push-button-bg);
-  box-shadow: 0 0 0 0.5px var(--push-button-edge), 0 0.5px 1.5px rgba(0, 0, 0, 0.1);
-  color: var(--text-primary);
-  font-family: var(--font-sans);
-  font-size: var(--font-size-callout);
-  cursor: default;
-}
-
-.search-scope-action:active {
-  filter: var(--push-button-pressed);
 }
 
 .search-results-columns {
@@ -4684,10 +4605,6 @@ body.window-inactive {
   font-weight: inherit;
 }
 
-.get-info-content {
-  padding: 0 16px 18px;
-}
-
 .get-info-hero {
   gap: 6px;
   padding: 8px 8px 14px;
@@ -4740,48 +4657,13 @@ body.window-inactive {
 
 .get-info-buttons > * {
   flex: 1 1 0;
+  min-width: 0;
 }
 
-/* The bezel of a push button: lighter than the panel behind it in every theme. */
-:root {
-  --get-info-button-bg: #ffffff;
-}
-
-:root[data-theme="dark"] {
-  --get-info-button-bg: rgba(255, 255, 255, 0.1);
-}
-
+/* Open and Open With are push buttons that share the panel's width. */
 .get-info-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
   width: 100%;
-  height: 26px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-control);
-  background: var(--get-info-button-bg);
-  color: var(--text-primary);
-  font-size: var(--font-size-body);
-  white-space: nowrap;
-  cursor: default;
-}
-
-.get-info-button:hover,
-.get-info-button[aria-expanded="true"] {
-  background: color-mix(in srgb, var(--text-primary) 6%, var(--get-info-button-bg));
-}
-
-.get-info-button.primary {
-  border-color: transparent;
-  background: var(--ft-accent-solid-button);
-  color: var(--ft-accent-on-solid);
-  font-weight: 500;
-}
-
-.get-info-button.primary:hover {
-  background: var(--ft-accent-solid-button);
-  filter: brightness(0.94);
+  min-width: 0;
 }
 
 /* A pull-down button: the label on the left, the chevron in an accent cap on the right. */
@@ -4822,7 +4704,7 @@ body.window-inactive {
   left: auto;
   right: 0;
   /* Over everything, as the other menus are: a notification never covers it. */
-  z-index: 100;
+  z-index: var(--z-menu);
   min-width: 200px;
 }
 
@@ -4882,12 +4764,13 @@ body.window-inactive {
   text-decoration: underline;
 }
 
-/* The quick actions: a row of icon buttons, like a toolbar's, named by their tooltips. */
+/* The quick actions: a row of icon buttons, like a toolbar's, named by their tooltips. The
+   row reaches out by the room around an icon, so the first icon lines up with the heading. */
 .get-info-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 2px;
-  margin: 2px -6px 0;
+  margin: 2px -8px 0;
 }
 
 .get-info-action {
@@ -4904,16 +4787,12 @@ body.window-inactive {
 }
 
 .get-info-action:hover:not(:disabled) {
-  background: var(--toolbar-button-hover-bg);
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
 .get-info-action:active:not(:disabled) {
   background: var(--toolbar-toggle-on-bg);
-}
-
-.get-info-action:disabled {
-  opacity: 0.4;
 }
 
 .get-info-action-icon {
@@ -4944,7 +4823,7 @@ body.help-window-body {
   top: 0;
   left: 0;
   right: 0;
-  z-index: 2;
+  z-index: var(--z-raised);
   height: 52px;
   -webkit-app-region: drag;
 }
@@ -5061,25 +4940,6 @@ body.page-window-body {
   -webkit-app-region: drag;
 }
 
-.page-window-button {
-  display: inline-flex;
-  align-items: center;
-  height: 26px;
-  padding: 0 12px;
-  border: 1px solid var(--border-active);
-  border-radius: var(--radius-control);
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  font-size: var(--font-size-callout);
-  text-decoration: none;
-  white-space: nowrap;
-  cursor: default;
-}
-
-.page-window-button:hover:not(:disabled) {
-  background: var(--bg-hover);
-}
-
 .page-window-link {
   border: 0;
   border-radius: var(--radius-xs);
@@ -5094,7 +4954,6 @@ body.page-window-body {
   text-decoration: underline;
 }
 
-a.page-window-button:focus-visible,
 .page-window-link:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
@@ -5145,7 +5004,7 @@ a.page-window-button:focus-visible,
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  padding: 7px 0;
+  padding: 8px 0;
   border-bottom: 1px solid var(--border);
   font-size: var(--font-size-callout);
 }
@@ -5210,7 +5069,7 @@ a.page-window-button:focus-visible,
 }
 
 .acknowledgement summary {
-  padding: 9px 0;
+  padding: 8px 0;
   color: var(--text-tertiary);
   font-size: var(--font-size-body);
   cursor: default;
@@ -5246,7 +5105,7 @@ a.page-window-button:focus-visible,
   flex-direction: column;
   align-items: flex-start;
   gap: 10px;
-  padding: 0 0 14px 17px;
+  padding: 0 0 14px 16px;
   font-size: var(--font-size-callout);
 }
 
@@ -5275,26 +5134,9 @@ a.page-window-button:focus-visible,
   margin-bottom: 8px;
 }
 
-.shortcut-settings-search {
+.shortcut-settings-search-field {
   flex: 1;
   min-width: 0;
-  height: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text-primary);
-  font-family: var(--font-sans);
-  font-size: var(--font-size-body);
-}
-
-.shortcut-settings-search:focus,
-.shortcut-settings-search:focus-visible {
-  outline: none;
-  box-shadow: none;
-}
-
-.shortcut-settings-search::placeholder {
-  color: var(--text-tertiary);
 }
 
 /* ── Settings ─────────────────────────────────────────────────────────────
@@ -5306,9 +5148,9 @@ a.page-window-button:focus-visible,
   --settings-card-border: rgba(0, 0, 0, 0.08);
   --settings-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   --settings-separator: rgba(0, 0, 0, 0.07);
-  --settings-control-bg: #ffffff;
-  --settings-control-border: rgba(0, 0, 0, 0.12);
   --settings-label-secondary: var(--text-tertiary);
+  /* A pop-up is as wide as its longest choice, and never narrower than this. */
+  --settings-popup-min-width: 120px;
   --settings-switch-off: #e3e3e8;
   --settings-check-off: #ffffff;
   --settings-check-border: rgba(0, 0, 0, 0.18);
@@ -5320,8 +5162,6 @@ a.page-window-button:focus-visible,
   --settings-card-border: rgba(255, 255, 255, 0.08);
   --settings-card-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
   --settings-separator: rgba(255, 255, 255, 0.07);
-  --settings-control-bg: rgba(255, 255, 255, 0.06);
-  --settings-control-border: rgba(255, 255, 255, 0.1);
   --settings-switch-off: #3a3a3d;
   --settings-check-off: rgba(255, 255, 255, 0.06);
   --settings-check-border: rgba(255, 255, 255, 0.16);
@@ -5437,76 +5277,72 @@ body .settings-window .settings-view[data-layout] {
   padding: 0;
 }
 
-/* Buttons, pop-ups and fields: one height, a hairline edge and a faint lift, as macOS draws
-   its controls. */
-.settings-button,
+/* Buttons are the push button (components/PushButton.tsx). Pop-ups wear the push button's
+   bezel, and answer the pointer as it does; fields are inset, as every text field is. */
 .settings-popup select,
-.settings-app-popup,
-.settings-field {
+.settings-app-popup {
   box-sizing: border-box;
   height: var(--control-height);
   border: 0;
   border-radius: var(--radius-control);
-  background-color: var(--settings-control-bg);
-  box-shadow: inset 0 0 0 0.5px var(--settings-control-border), 0 0.5px 1.5px rgba(0, 0, 0, 0.12);
+  background-color: var(--push-button-bg);
+  box-shadow: var(--push-button-bezel);
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: var(--font-size-body);
   outline: none;
 }
 
-.settings-button {
-  padding: 0 12px;
-  transition: transform var(--duration-fast) ease;
-}
-
-/* The pointer's answers: a tint under the pointer and a deeper one, with a small dip, while
-   pressed. The tint is taken from the button's own text colour, so it darkens a light
-   button and lightens a dark one. */
-.settings-button:hover:not(:disabled),
+.settings-popup select:hover:not(:disabled),
 .settings-app-popup:hover {
-  background-image: linear-gradient(
-    color-mix(in srgb, currentColor 7%, transparent),
-    color-mix(in srgb, currentColor 7%, transparent)
-  );
+  background-image: linear-gradient(var(--bg-hover), var(--bg-hover));
 }
 
-.settings-button:active:not(:disabled) {
-  background-image: linear-gradient(
-    color-mix(in srgb, currentColor 18%, transparent),
-    color-mix(in srgb, currentColor 18%, transparent)
-  );
-  transform: scale(0.97);
+.settings-popup select:active:not(:disabled),
+.settings-app-popup:active,
+.settings-app-popup[aria-expanded="true"] {
+  filter: var(--push-button-pressed);
 }
 
-.settings-button:disabled {
-  color: var(--text-tertiary);
+.settings-field {
+  box-sizing: border-box;
+  height: var(--control-height);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--field-bg);
+  box-shadow: var(--field-edge);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-body);
+  outline: none;
 }
 
-.settings-button:focus-visible,
 .settings-popup select:focus-visible,
 .settings-app-popup:focus-visible,
-.settings-field:focus,
 .settings-switch:focus-visible {
-  box-shadow: inset 0 0 0 0.5px var(--settings-control-border), var(--focus-ring);
+  box-shadow: var(--focus-ring);
 }
 
-/* Every pop-up is one width, so a column of them lines up. */
+.settings-field:focus {
+  box-shadow: var(--field-focus);
+}
+
+/* A pop-up is as wide as its longest choice, as on the Mac; the least width keeps a column
+   of short ones in line. */
 .settings-popup {
   position: relative;
   display: inline-flex;
-  width: 180px;
 }
 
 .settings-popup select {
-  width: 100%;
-  padding: 0 26px 0 9px;
+  min-width: var(--settings-popup-min-width);
+  padding: 0 26px 0 8px;
   appearance: none;
   cursor: default;
 }
 
-.settings-popup select:disabled {
-  color: var(--text-tertiary);
+.settings-popup:has(select:disabled) {
+  opacity: var(--disabled-opacity);
 }
 
 .settings-popup-chevron {
@@ -5576,10 +5412,6 @@ body .settings-window .settings-view[data-layout] {
   transform: translateX(14px);
 }
 
-.settings-switch:disabled {
-  opacity: 0.5;
-}
-
 .settings-checkboxes {
   display: flex;
   flex-wrap: wrap;
@@ -5627,7 +5459,7 @@ body .settings-window .settings-view[data-layout] {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -5726,7 +5558,7 @@ body .settings-window .settings-view[data-layout] {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 5px;
+  gap: 4px;
 }
 
 .settings-accent-swatches {
@@ -5787,7 +5619,7 @@ body .settings-window .settings-view[data-layout] {
   gap: 8px;
   min-height: 36px;
   padding: 0 6px;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-control);
   outline: none;
   cursor: default;
 }
@@ -5801,9 +5633,10 @@ body .settings-window .settings-view[data-layout] {
   background: var(--bg-active-inactive);
 }
 
+/* Selected in a list that has the keyboard: the accent fill of every list's selection. */
 .settings-list-rows:focus-within .settings-list-row[aria-selected="true"] {
-  background: var(--ft-accent-solid);
-  color: var(--ft-accent-on-solid);
+  background: var(--ft-accent-selection-bg);
+  color: var(--ft-accent-on-selection);
 }
 
 .settings-list-rows:focus-within .settings-list-row[aria-selected="true"] .settings-list-name,
@@ -5892,11 +5725,6 @@ body .settings-window .settings-view[data-layout] {
   color: var(--text-primary);
 }
 
-.settings-list-bar-button:disabled,
-.settings-list-bar-text-button:disabled {
-  color: var(--text-dim);
-}
-
 .settings-list-bar-button:focus-visible,
 .settings-list-bar-text-button:focus-visible {
   outline: none;
@@ -5934,7 +5762,7 @@ body .settings-window .settings-view[data-layout] {
 
 .settings-favorite-icon-button:hover,
 .settings-favorite-icon-button[aria-expanded="true"] {
-  background: color-mix(in srgb, currentColor 12%, transparent);
+  background: var(--bg-hover);
 }
 
 .settings-favorite-icon-button:focus-visible {
@@ -5944,7 +5772,7 @@ body .settings-window .settings-view[data-layout] {
 
 .settings-icon-grid {
   position: fixed;
-  z-index: 1000;
+  z-index: var(--z-menu);
   display: grid;
   grid-auto-rows: 30px;
   gap: 4px;
@@ -5989,7 +5817,8 @@ body .settings-window .settings-view[data-layout] {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  width: 180px;
+  min-width: var(--settings-popup-min-width);
+  max-width: 240px;
   padding: 0 26px 0 6px;
   cursor: default;
 }
@@ -6015,10 +5844,11 @@ body .settings-window .settings-view[data-layout] {
 }
 
 /* A combo box: a field with a menu button at its end, the two drawn as one control. */
+/* As wide as the narrowest pop-up: a percentage and its arrow. */
 .settings-combo {
   position: relative;
   display: inline-flex;
-  width: 180px;
+  width: var(--settings-popup-min-width);
 }
 
 .settings-combo-field {
@@ -6072,7 +5902,7 @@ body .settings-window .settings-view[data-layout] {
 }
 
 .shortcut-row {
-  padding: 7px 0;
+  padding: 8px 0;
   border-top: 1px solid var(--border-light);
   font-family: var(--font-sans);
 }
@@ -6130,7 +5960,7 @@ body .settings-window .settings-view[data-layout] {
   justify-content: center;
   min-width: 58px;
   height: 24px;
-  padding: 0 9px;
+  padding: 0 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
   background: var(--bg-elevated);
@@ -6184,65 +6014,17 @@ button.shortcut-slot-key.recording:hover {
   color: var(--text-tertiary);
 }
 
-/* The × sits on the corner of a key and shows while the pointer is on the row. */
+/* The clear button sits on the corner of a key and shows while the pointer is on the row. */
 .shortcut-slot-clear {
   position: absolute;
   top: -6px;
   right: -6px;
   display: none;
-  align-items: center;
-  justify-content: center;
-  width: 15px;
-  height: 15px;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-capsule);
-  background: var(--bg-base);
-  color: var(--text-secondary);
-  font-size: var(--font-size-small);
-  line-height: 1;
-  cursor: default;
 }
 
 .shortcut-row:hover .shortcut-slot-clear,
 .shortcut-slot:focus-within .shortcut-slot-clear {
   display: inline-flex;
-}
-
-.shortcut-slot-clear:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.shortcut-row-reset,
-.shortcut-note-button {
-  height: 22px;
-  padding: 0 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--text-secondary);
-  font-family: var(--font-sans);
-  font-size: var(--font-size-small);
-  cursor: default;
-}
-
-.shortcut-row-reset:hover,
-.shortcut-note-button:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.shortcut-note-button.primary {
-  border-color: var(--ft-accent-solid);
-  background: var(--ft-accent-solid);
-  color: var(--ft-accent-on-solid);
-}
-
-.shortcut-note-button.primary:hover {
-  background: var(--ft-accent-solid);
-  color: var(--ft-accent-on-solid);
-  filter: brightness(1.06);
 }
 
 .shortcut-row-note {
@@ -6329,13 +6111,11 @@ button.shortcut-slot-key.recording:hover {
 /* ── macOS Light / macOS Dark: base tokens outside the variant set ─────── */
 
 :root[data-theme="light"] {
-  --bg-hover: rgba(0, 0, 0, 0.045);
   --bg-input: rgba(0, 0, 0, 0.04);
   --bg-active-inactive: #dcdce1;
 }
 
 :root[data-theme="dark"] {
-  --bg-hover: rgba(255, 255, 255, 0.06);
   --bg-input: rgba(255, 255, 255, 0.06);
   --bg-active-inactive: #3a3a3e;
 }
@@ -6360,13 +6140,12 @@ button.shortcut-slot-key.recording:hover {
    darker than the toolbar and than the hover fill, so on and off are told apart in every
    theme. Mixed from the theme's text color, so light and dark themes both get it right. */
 :root {
-  --toolbar-button-hover-bg: color-mix(in srgb, var(--text-primary) 5%, transparent);
   --toolbar-toggle-on-bg: color-mix(in srgb, var(--text-primary) 16%, transparent);
   --toolbar-toggle-on-hover-bg: color-mix(in srgb, var(--text-primary) 21%, transparent);
 }
 
 .window-toolbar .tb-btn.tb-btn-icon:hover:not(:disabled) {
-  background: var(--toolbar-button-hover-bg);
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
@@ -6384,32 +6163,31 @@ button.shortcut-slot-key.recording:hover {
   padding: 0 var(--toolbar-edged-item-inset);
 }
 
-/* Round-ended like the capsules beside it; the raised segment is round-ended too. */
-.toolbar-group-view .toolbar-segmented.toolbar-segmented-native {
-  gap: 2px;
-  padding: 2px;
-  border-radius: var(--radius-capsule);
-  background: var(--toolbar-toggle-bg, var(--bg-hover));
-}
-
-/* 24px segments in the 2px track: 28px, the height of every control in the toolbar. */
-.toolbar-group-view .toolbar-segmented.toolbar-segmented-native .tb-btn {
+/* The segments are toolbar buttons too, so the segmented control's look is restated here,
+   from its own tokens, over the toolbar button's fills. 24px segments in the 2px track make
+   28px, the height of every control in the toolbar. */
+.toolbar-group-view .toolbar-segmented-native .tb-btn.segmented-item {
   width: 34px;
   min-width: 34px;
-  height: 24px;
+  height: var(--control-height);
+  padding: 0;
   border-radius: var(--radius-capsule);
+  background: transparent;
   color: var(--text-secondary);
 }
 
-.toolbar-group-view .toolbar-segmented.toolbar-segmented-native .tb-btn:hover:not(:disabled) {
+.toolbar-group-view .toolbar-segmented-native .tb-btn.segmented-item:hover:not(:disabled) {
   background: transparent;
   color: var(--text-primary);
 }
 
-.toolbar-group-view .toolbar-segmented.toolbar-segmented-native .tb-btn.active {
-  background: var(--toolbar-toggle-active-bg, var(--bg-elevated));
-  color: var(--toolbar-toggle-icon-active, var(--text-primary));
-  box-shadow: 0 0.5px 1.5px rgba(0, 0, 0, 0.2);
+.toolbar-group-view .toolbar-segmented-native .tb-btn.segmented-item.is-selected,
+.toolbar-group-view
+  .toolbar-segmented-native
+  .tb-btn.segmented-item.is-selected:hover:not(:disabled) {
+  background: var(--segmented-selected-bg);
+  color: var(--segmented-selected-text);
+  box-shadow: var(--segmented-selected-shadow);
 }
 
 .toolbar-group-view .toolbar-segmented.toolbar-segmented-native .toolbar-icon {
@@ -6491,7 +6269,7 @@ button.shortcut-slot-key.recording:hover {
 }
 
 .sidebar-main-native .tree-label {
-  gap: 7px;
+  gap: 6px;
   padding: 0;
   font-size: var(--font-size-body);
   font-weight: 400;
@@ -6517,7 +6295,7 @@ button.shortcut-slot-key.recording:hover {
 }
 
 .compact-tree-view .sidebar-main-native .tree-label {
-  gap: 5px;
+  gap: 4px;
   font-size: var(--font-size-small);
 }
 
@@ -6558,85 +6336,10 @@ button.shortcut-slot-key.recording:hover {
   text-transform: none;
 }
 
-/* The filter of the results bar: narrows what the search found. */
+/* The filter of the results bar (a search field): narrows what the search found. */
 .search-results-filter {
-  display: flex;
-  align-items: center;
   flex: 0 1 200px;
-  gap: 6px;
   min-width: 90px;
-  height: 22px;
-  padding: 0 4px 0 7px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-control);
-  background: var(--bg-input);
-}
-
-.search-results-filter:focus-within {
-  border-color: var(--ft-accent-border);
-  box-shadow: var(--focus-ring);
-}
-
-.search-results-filter-icon {
-  flex: none;
-  width: 12px;
-  height: 12px;
-  fill: none;
-  stroke: var(--text-tertiary);
-  stroke-width: 2.2;
-  stroke-linecap: round;
-}
-
-.search-results-filter-input {
-  flex: 1 1 auto;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--text-primary);
-  font-family: var(--font-sans);
-  font-size: var(--font-size-callout);
-  user-select: text;
-  -webkit-user-select: text;
-}
-
-.search-results-filter-input:focus,
-.search-results-filter-input:focus-visible {
-  outline: none;
-  box-shadow: none;
-}
-
-.search-results-filter-input::placeholder {
-  color: var(--text-tertiary);
-}
-
-.search-results-filter-clear {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-capsule);
-  background: transparent;
-  color: var(--text-tertiary);
-  cursor: default;
-}
-
-.search-results-filter-clear:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.search-results-filter-clear svg {
-  width: 9px;
-  height: 9px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.6;
-  stroke-linecap: round;
 }
 
 /* ── Search: one scope bar and Finder-style result columns ── */
@@ -6647,19 +6350,18 @@ button.shortcut-slot-key.recording:hover {
   padding: 6px 12px;
 }
 
-.search-scope-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
+/* A long folder name must not push the rest of the bar onto a second line. */
+.search-scope-segmented {
+  min-width: 0;
 }
 
-/* A long folder name must not push the rest of the bar onto a second line. */
 .search-scope-button {
+  display: block;
   max-width: 220px;
   overflow: hidden;
+  line-height: var(--control-height);
+  text-align: center;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* Rows scrolling up under the "Folders" label fade out instead of being cut off mid-letter
@@ -6884,48 +6586,10 @@ button.shortcut-slot-key.recording:hover {
   font-size: var(--font-size-callout);
 }
 
-/* "For all conflicts": a segmented control with the selected segment raised, like the
-   view switch in the toolbar. */
-.copy-paste-segmented {
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  border-radius: var(--radius-control);
-  background: var(--bg-hover);
-}
-
-.copy-paste-segment {
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--text-secondary);
-  font: inherit;
-  cursor: default;
-  white-space: nowrap;
-}
-
-.copy-paste-segment:hover {
-  color: var(--text-primary);
-}
-
-.copy-paste-segment.is-selected {
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  font-weight: 500;
-  box-shadow: 0 0.5px 1.5px rgba(0, 0, 0, 0.2);
-}
-
+/* "For all conflicts" is the shared segmented control (.segmented); Replace, once chosen,
+   says in red that it overwrites. */
 .copy-paste-segment.is-danger.is-selected {
   color: var(--danger);
-}
-
-.copy-paste-segment:has(input:focus-visible) {
-  outline: none;
-  box-shadow: var(--focus-ring);
 }
 
 .copy-paste-sheet-bar-spacer {
@@ -6941,14 +6605,16 @@ button.shortcut-slot-key.recording:hover {
   cursor: pointer;
 }
 
-/* A native popup button: the platform menu opens on click. */
+/* A native popup button: the platform menu opens on click. It wears the push button's
+   bezel, as the pop-ups in Settings do. */
 .copy-paste-choice {
-  height: 24px;
+  height: var(--control-height);
   min-width: 112px;
   padding: 0 8px;
-  border: 1px solid var(--border-strong);
+  border: 0;
   border-radius: var(--radius-control);
-  background: var(--bg-elevated);
+  background: var(--push-button-bg);
+  box-shadow: var(--push-button-bezel);
   color: var(--text-primary);
   font: inherit;
 }
@@ -7190,8 +6856,8 @@ button.shortcut-slot-key.recording:hover {
 
 .tb-btn.tb-btn-icon.clipboard-button {
   width: auto;
-  gap: 5px;
-  padding: 0 8px 0 7px;
+  gap: 4px;
+  padding: 0 8px;
 }
 
 .clipboard-button-count {
@@ -7210,7 +6876,7 @@ button.shortcut-slot-key.recording:hover {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  padding: 5px 10px 3px;
+  padding: 4px 10px;
 }
 
 .clipboard-menu-title {
@@ -7276,11 +6942,11 @@ button.shortcut-slot-key.recording:hover {
   height: 24px;
 }
 
+/* The folder's name starts where its items' icons do, not at a menu's check column. */
 .clipboard-menu-heading {
   display: flex;
   align-items: center;
-  padding-top: 0;
-  padding-bottom: 0;
+  padding: 0 10px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -7309,7 +6975,7 @@ button.shortcut-slot-key.recording:hover {
   display: flex;
   flex: 1 1 auto;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   min-width: 0;
   height: 100%;
   padding: 0;
@@ -7485,7 +7151,7 @@ button.shortcut-slot-key.recording:hover {
   background: var(--ft-accent-solid-button);
   opacity: 0;
   pointer-events: none;
-  animation: clipboard-flash 700ms ease-out;
+  animation: clipboard-flash var(--duration-flash) ease-out;
 }
 
 /* A selected row is already filled with the accent color: its flash is the color of the
@@ -7565,12 +7231,14 @@ button.shortcut-slot-key.recording:hover {
   height: 20px;
   /* Lines the text up with the label it replaces; the right edge stays inside the cell. */
   margin: 0 3px 0 -5px;
-  padding: 0 4px;
-  border: 1px solid var(--ft-accent-solid);
+  padding: 0 5px;
+  border: 0;
   border-radius: var(--radius-xs);
   outline: none;
+  /* Opaque, so the name reads over a selected row; it has the keyboard while it shows, so
+     it wears the focus ring of every text field. */
   background: var(--bg-base);
-  box-shadow: 0 0 0 3px var(--ft-accent-ring-soft);
+  box-shadow: var(--field-focus);
   color: var(--text-primary);
   font: inherit;
   font-size: var(--font-size-body);
@@ -7587,14 +7255,14 @@ button.shortcut-slot-key.recording:hover {
 }
 
 .inline-rename-input.invalid {
-  border-color: var(--danger);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 22%, transparent);
+  box-shadow: inset 0 0 0 0.5px var(--danger), 0 0 0 3px
+    color-mix(in srgb, var(--danger) 40%, transparent);
 }
 
 /* Why a name was refused, shown under the field (see InlineRenameField). */
 .inline-rename-error {
   position: fixed;
-  z-index: 160;
+  z-index: var(--z-menu);
   max-width: 320px;
   padding: 4px 8px;
   border: 0.5px solid color-mix(in srgb, var(--danger) 50%, transparent);
@@ -7820,7 +7488,7 @@ body.vibrant-window .explorer-workspace .pane-resizer {
    the hairline. */
 body.vibrant-window .explorer-workspace .pane-resizer-tree {
   /* Over the tab on screen, which is raised and may start at the hairline. */
-  z-index: 2;
+  z-index: calc(var(--z-raised) + 1);
   background: linear-gradient(
     to right,
     color-mix(in srgb, var(--sidebar-bg) 62%, transparent) 50%,
@@ -7851,7 +7519,7 @@ body.vibrant-window .explorer-workspace .workspace-body:not(.workspace-loading):
 body.vibrant-window .explorer-workspace .content-pathbar-row,
 body.vibrant-window .explorer-workspace .info-row {
   position: relative;
-  z-index: 1;
+  z-index: var(--z-raised);
   margin-left: -4px;
 }
 
@@ -7871,41 +7539,4 @@ body.vibrant-window .explorer-workspace .info-row {
     --duration-base: 0ms;
     --duration-slow: 0ms;
   }
-}
-
-/* ── Search fields ───────────────────────────────────────────────────────
-   Help's search, the Shortcuts search and the filter over search results are one field:
-   a magnifier, a hairline edge, and the accent ring while it has the keyboard. (The
-   toolbar's search is a toolbar field, filled and without an edge, as in Finder.) */
-.help-filter,
-.shortcut-settings-search-field,
-.search-results-filter {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  box-sizing: border-box;
-  border: 0;
-  border-radius: var(--radius-control);
-  background: var(--bg-input);
-  box-shadow: inset 0 0 0 0.5px var(--border-active);
-  color: var(--text-tertiary);
-}
-
-.help-filter:focus-within,
-.shortcut-settings-search-field:focus-within,
-.search-results-filter:focus-within {
-  border-color: transparent;
-  box-shadow: inset 0 0 0 0.5px var(--border-active), var(--focus-ring);
-}
-
-.shortcut-settings-search-field {
-  flex: 1;
-  min-width: 0;
-  height: var(--control-height-large);
-  padding: 0 8px;
-}
-
-.search-results-filter .search-results-filter-icon,
-.search-results-filter svg:first-child {
-  color: var(--text-tertiary);
 }
