@@ -72,6 +72,7 @@ import {
   isDirectoryLikeEntry,
   isEditableFileEntry,
   isExpectedPlannedSkipResult,
+  isFolderSizeEligibleKind,
   resolveFreeNewFolderName,
   resolveNewFolderTargetPath,
   resolveWriteOperationRefreshPath,
@@ -346,6 +347,7 @@ export function useExplorerActions(args: {
   callbacks: {
     restartActiveSearch?: (() => Promise<void>) | null;
     openPathInNewTab: (path: string) => void;
+    calculateFolderSize: (path: string) => void;
   };
 }) {
   const {
@@ -394,6 +396,8 @@ export function useExplorerActions(args: {
     openWithApplications,
     setOpenWithApplications,
     includeHidden,
+    viewMode,
+    detailColumns,
   } = preferences;
   const { setSearchPopoverOpen, browseSelectionRef, cachedSearchSelectionRef } = search;
   const {
@@ -551,6 +555,12 @@ export function useExplorerActions(args: {
       if (!hasBundle) {
         hidden.add("showPackageContents");
       }
+      if (
+        contextMenuTargetEntries.length !== 1 ||
+        !isFolderSizeEligibleKind(contextMenuTargetEntries[0]?.kind)
+      ) {
+        hidden.add("calculateSize");
+      }
       // In the Trash things are only taken out or deleted for good: nothing is pasted,
       // made or duplicated there, and what is there is in the Trash already.
       for (const actionId of TRASH_HIDDEN_ACTION_IDS) {
@@ -607,6 +617,13 @@ export function useExplorerActions(args: {
     if (!hasBundle) {
       hidden.add("showPackageContents");
     }
+    // A folder size is calculated one at a time, so the item is for one folder or package.
+    if (
+      contextMenuTargetEntries.length !== 1 ||
+      !isFolderSizeEligibleKind(contextMenuTargetEntries[0]?.kind)
+    ) {
+      hidden.add("calculateSize");
+    }
     return Array.from(hidden);
   }, [
     contextMenuFavoriteToggleLabel,
@@ -660,6 +677,7 @@ export function useExplorerActions(args: {
       if (!contextMenuState.targetPath) {
         disabled.add("openInNewTab");
         disabled.add("showInfo");
+        disabled.add("calculateSize");
         disabled.add("toggleFavorite");
         disabled.add("rootTreeHere");
         disabled.add("terminal");
@@ -680,6 +698,7 @@ export function useExplorerActions(args: {
         disabled.add("openInNewTab");
         disabled.add("revealInTree");
         disabled.add("showInfo");
+        disabled.add("calculateSize");
         disabled.add("toggleFavorite");
         disabled.add("rootTreeHere");
         disabled.add("terminal");
@@ -2636,6 +2655,23 @@ export function useExplorerActions(args: {
       const firstPath = paths[0];
       if (firstPath) {
         await showInfoForPath(firstPath);
+      }
+      return;
+    }
+    if (actionId === "calculateSize") {
+      const targetPath = contextMenuTargetPath ?? paths[0];
+      if (!targetPath) {
+        return;
+      }
+      callbacks.calculateFolderSize(targetPath);
+      // The list's Size column shows the size as it comes in, in the Details view; anywhere
+      // else (another view, the column hidden, search results, the tree) the Info panel does.
+      const sizeColumnShowsIt =
+        (contextMenuSurface === "content" || contextMenuSurface === "trash") &&
+        viewMode === "details" &&
+        detailColumns.size;
+      if (!sizeColumnShowsIt) {
+        await showInfoForPath(targetPath);
       }
       return;
     }

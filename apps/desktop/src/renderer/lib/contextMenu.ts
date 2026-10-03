@@ -24,6 +24,7 @@ export type ContextMenuActionId =
   | "showPackageContents"
   | "edit"
   | "showInfo"
+  | "calculateSize"
   | "cut"
   | "copy"
   | "paste"
@@ -97,6 +98,7 @@ export type ContextMenuIconName =
   | "showPackageContents"
   | "edit"
   | "showInfo"
+  | "calculateSize"
   | "cut"
   | "copy"
   | "paste"
@@ -175,6 +177,7 @@ export function getContextMenuItems(
       { id: "rootTreeHere", label: "Use as Tree Root", icon: "rootTreeHere" },
       { type: "separator", key: "separator-tree-open" },
       { id: "showInfo", label: "Show Info", icon: "showInfo" },
+      { id: "calculateSize", label: "Calculate Size", icon: "calculateSize" },
       { type: "separator", key: "separator-tree-info" },
       { id: "cut", label: "Cut", icon: "cut" },
       { id: "copy", label: "Copy", icon: "copy" },
@@ -231,6 +234,7 @@ export function getContextMenuItems(
       { id: "rootTreeHere", label: "Use as Tree Root", icon: "rootTreeHere" },
       { type: "separator", key: "separator-favorite-open" },
       { id: "showInfo", label: "Show Info", icon: "showInfo" },
+      { id: "calculateSize", label: "Calculate Size", icon: "calculateSize" },
       { type: "separator", key: "separator-favorite-info" },
       { id: "paste", label: "Paste into Folder", icon: "paste" },
       { id: "copyPath", label: "Copy Path", icon: "copyPath" },
@@ -254,6 +258,8 @@ export function getContextMenuItems(
     { id: "showPackageContents", label: "Show Package Contents", icon: "showPackageContents" },
     { type: "separator", key: "separator-open" },
     { id: "showInfo", label: "Show Info", icon: "showInfo" },
+    // For one folder only: hidden by the caller otherwise.
+    { id: "calculateSize", label: "Calculate Size", icon: "calculateSize" },
     { type: "separator", key: "separator-info" },
     { id: "cut", label: "Cut", icon: "cut" },
     { id: "copy", label: "Copy", icon: "copy" },

@@ -349,6 +349,7 @@ describe("ItemContextMenu", () => {
       "Open in New Tab",
       "Use as Tree Root",
       "Show Info",
+      "Calculate Size",
       "Cut",
       "Copy",
       "Paste into Folder",

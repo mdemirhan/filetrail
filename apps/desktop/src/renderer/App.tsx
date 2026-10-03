@@ -847,6 +847,7 @@ export function App() {
     },
     callbacks: {
       openPathInNewTab: (path) => openPathInNewTabRef.current(path),
+      calculateFolderSize: (path) => folderSizeCache.recalculateFolderSize(path),
       restartActiveSearch: async () => {
         if (searchCommittedQuery.trim().length === 0) {
           return;

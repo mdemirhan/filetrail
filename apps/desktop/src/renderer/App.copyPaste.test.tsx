@@ -3416,6 +3416,63 @@ describe("App copy/paste integration", () => {
     });
   });
 
+  describe("Calculate Size from a folder's menu", () => {
+    async function calculateSizeFromMenu(
+      preferences?: Partial<IpcResponse<"app:getPreferences">["preferences"]>,
+    ) {
+      const harness = createAppHarness(preferences ? { preferences } : {});
+      render(
+        <FiletrailClientProvider value={harness.client}>
+          <App />
+        </FiletrailClientProvider>,
+      );
+      const folder = await screen.findByTitle("/Users/demo/Folder");
+      await act(async () => {
+        fireEvent.contextMenu(folder);
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Calculate Size" }));
+      });
+      await vi.waitFor(() => {
+        expect(
+          harness.invocations.find(
+            (call) =>
+              call.channel === "folderSize:start" &&
+              (call.payload as { path: string }).path === "/Users/demo/Folder" &&
+              !(call.payload as { probeOnly?: boolean }).probeOnly,
+          )?.payload,
+        ).toMatchObject({ recalculate: true });
+      });
+    }
+
+    it("shows the folder's Info in the icon view, which has no Size column", async () => {
+      await calculateSizeFromMenu({ viewMode: "icons" });
+
+      await waitFor(() => expect(screen.getByTestId("info-panel")).toHaveTextContent("Folder"));
+    });
+
+    it("leaves the Info panel closed in the Details view, whose Size column shows it", async () => {
+      await calculateSizeFromMenu({ viewMode: "details" });
+
+      expect(screen.queryByTestId("info-panel")).toBeNull();
+    });
+
+    it("shows the folder's Info in the Details view when its Size column is hidden", async () => {
+      await calculateSizeFromMenu({
+        viewMode: "details",
+        detailColumns: {
+          modified: true,
+          size: false,
+          kind: true,
+          created: false,
+          permissions: false,
+        },
+      });
+
+      await waitFor(() => expect(screen.getByTestId("info-panel")).toHaveTextContent("Folder"));
+    });
+  });
+
   it("pastes immediately after copy without reading an empty clipboard state", async () => {
     const harness = createAppHarness();
 
