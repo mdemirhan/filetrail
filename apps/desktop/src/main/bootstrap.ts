@@ -82,8 +82,7 @@ export async function bootstrapMainProcess(
   const {
     originalExplorerFileSystem,
     originalFileSystem,
-    originalRename,
-    originalRenameExclusive,
+    createOriginalWriteOperationFs,
     getFolderSize,
     cancelFolderSize,
   } = await import("./originalFileSystem");
@@ -103,16 +102,10 @@ export async function bootstrapMainProcess(
     windows.showStartupNotices?.(recoveryNotices);
   }
   const writeService = createWriteService({ fileSystem: writeFileSystem, replaceJournal });
-  const writeCoordinator = createWriteOperationCoordinator(writeService, {
-    lstat: originalFileSystem.lstat,
-    stat: originalFileSystem.stat,
-    mkdir: (path) => originalFileSystem.mkdir(path),
-    rename: originalRename,
-    renameExclusive: originalRenameExclusive,
-    rm: (path, options) => originalFileSystem.rm(path, options),
-    trash: trashItem,
-    ...(originalFileSystem.getFlags ? { getFlags: originalFileSystem.getFlags } : {}),
-  });
+  const writeCoordinator = createWriteOperationCoordinator(
+    writeService,
+    createOriginalWriteOperationFs(trashItem),
+  );
   const folderSizeHandlers = createFolderSizeHandlers({ getFolderSize, cancelFolderSize });
   activeWorkerClient = workerClient;
   void activeWriteCoordinator?.shutdown();

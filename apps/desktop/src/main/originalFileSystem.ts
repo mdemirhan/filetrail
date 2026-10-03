@@ -21,6 +21,7 @@ import { pipeline } from "node:stream/promises";
 import { createStoppableCopyFile } from "@filetrail/core";
 import type { ExplorerFileSystem } from "@filetrail/core";
 import type { WriteServiceFileSystem, WriteServiceStats } from "@filetrail/core";
+import type { WriteOperationFs } from "./bootstrap/writeOperations";
 
 // Electron patches `node:fs` at startup. The unpatched version is available as
 // `original-fs` but only through `require()`, not ESM `import`.
@@ -151,6 +152,24 @@ export const originalRename = (oldPath: string, newPath: string): Promise<void> 
 /** Rename that fails with EEXIST instead of replacing an item at `newPath`. */
 export const originalRenameExclusive = (oldPath: string, newPath: string): Promise<void> =>
   nativeRenameExclusive(oldPath, newPath);
+
+/** What rename, New Folder, Trash and Delete Immediately work with, backed by original-fs.
+ *  `trash` moves an item to the Trash (Electron's shell.trashItem, see createTrashItem). */
+export function createOriginalWriteOperationFs(
+  trash: (path: string) => Promise<void>,
+): WriteOperationFs {
+  return {
+    lstat: originalFileSystem.lstat,
+    stat: originalFileSystem.stat,
+    mkdir: (path) => originalFileSystem.mkdir(path),
+    readdir: originalFileSystem.readdir,
+    rename: originalRename,
+    renameExclusive: originalRenameExclusive,
+    rm: (path, options) => originalFileSystem.rm(path, options),
+    trash,
+    getFlags: (path) => nativeGetFlags(path),
+  };
+}
 
 /** Get macOS file icon as PNG buffer using NSWorkspace. */
 export const getFileIcon = nativeGetFileIcon;

@@ -1,5 +1,6 @@
 import { basename, dirname, extname, join } from "node:path";
 
+import { fileIdOf } from "./copyPasteFingerprint";
 import type { WriteServiceFileSystem } from "./writeServiceTypes";
 
 // APFS and HFS+ limit a single path component to 255 UTF-8 bytes.
@@ -247,7 +248,7 @@ async function probeCaseSensitivity(
   }
   try {
     const swapped = await fileSystem.lstat(swappedPath);
-    if (original.ino === undefined || swapped.ino === undefined) {
+    if (fileIdOf(original.ino) === null || fileIdOf(swapped.ino) === null) {
       return null;
     }
     // Two different items whose names differ only by case can exist only when case counts.

@@ -15,6 +15,7 @@ import {
   WRITE_OPERATION_BUSY_ERROR,
   type WriteService,
   describeCopyPasteError,
+  fileIdOf,
   findLockedRefusal,
 } from "@filetrail/core";
 import { clearResponseCaches } from "./responseCache";
@@ -24,10 +25,13 @@ type WriteOperationStats = { isDirectory(): boolean; dev?: number; ino?: number 
 // Filesystem operations used by write operations (rename, mkdir, path checks).
 // Callers inject an original-fs backed implementation to bypass Electron's ASAR
 // patching, which would otherwise misreport .asar files as directories.
-type WriteOperationFs = {
+export type WriteOperationFs = {
   lstat: (path: string) => Promise<WriteOperationStats>;
   stat: (path: string) => Promise<WriteOperationStats>;
   mkdir: (path: string) => Promise<void>;
+  // A folder's entry names as stored, to tell one item found under two spellings of a name
+  // from two items whose names differ only in case.
+  readdir?: (path: string) => Promise<string[]>;
   // Fails with EEXIST rather than replace an item already at the new path (renamex_np
   // with RENAME_EXCL). Every rename goes through this one...
   renameExclusive: (oldPath: string, newPath: string) => Promise<void>;
@@ -602,11 +606,15 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
     }
     const destinationStats = await lstatOrNull(destinationPath, fs.lstat);
     // On a disk that ignores case, "notes.txt" finds "Notes.txt": the item itself, not
-    // another one in the way. On a disk that minds case they are two different items.
+    // another one in the way. On a disk that minds case they are two different items, even
+    // two hard links to one file (renaming one onto the other would do nothing at all).
     const renamesItself =
       destinationStats !== null &&
-      isSameItem(sourceStats, destinationStats) &&
-      namesMatchIgnoringCase(sourceName, destinationName);
+      namesMatchIgnoringCase(sourceName, destinationName) &&
+      (isSameItem(sourceStats, destinationStats) ||
+        !hasFileId(sourceStats) ||
+        !hasFileId(destinationStats)) &&
+      !(await listsSeparateEntry(dirname(sourcePath), destinationName));
     if (destinationStats !== null && !renamesItself) {
       throw new Error(`An item named “${destinationName}” already exists.`);
     }
@@ -615,6 +623,16 @@ export function createWriteOperationCoordinator(writeService: WriteService, fs: 
       destinationPath,
       renamesItself,
     };
+  }
+
+  // Whether the folder holds an entry spelled exactly like `name` (another item, since the
+  // item being renamed is spelled differently). Unknown when the folder can't be read.
+  async function listsSeparateEntry(folder: string, name: string): Promise<boolean> {
+    if (!fs.readdir) {
+      return false;
+    }
+    const entries = await fs.readdir(folder).catch(() => null);
+    return entries?.includes(name) ?? false;
   }
 
   async function executeCreateFolderOperation(
@@ -1158,6 +1176,9 @@ const SYSTEM_LOCATIONS = new Set(
     "/Users",
     "/Volumes",
     "/System",
+    // The startup disk's data volume, where /Users and /Applications really are. Its id,
+    // like those of the system's own folders, is too large to compare (see fileIdOf).
+    "/System/Volumes/Data",
     "/Applications",
     "/Library",
     "/private",
@@ -1247,7 +1268,7 @@ async function identitiesOf(
 }
 
 function identityOf(stats: WriteOperationStats): string | null {
-  return stats.dev === undefined || stats.ino === undefined ? null : `${stats.dev}:${stats.ino}`;
+  return stats.dev === undefined || !hasFileId(stats) ? null : `${stats.dev}:${stats.ino}`;
 }
 
 type AnalysisReport = NonNullable<ReturnType<WriteService["getCopyPasteAnalysisUpdate"]>["report"]>;
@@ -1326,11 +1347,13 @@ async function isMissing(path: string, lstatFn: WriteOperationFs["lstat"]): Prom
 
 function isSameItem(left: WriteOperationStats, right: WriteOperationStats): boolean {
   return (
-    left.dev !== undefined &&
-    left.ino !== undefined &&
-    left.dev === right.dev &&
-    left.ino === right.ino
+    left.dev !== undefined && hasFileId(left) && left.dev === right.dev && left.ino === right.ino
   );
+}
+
+// FAT and exFAT give empty files ids too large to compare (see fileIdOf).
+function hasFileId(stats: WriteOperationStats): boolean {
+  return fileIdOf(stats.ino) !== null;
 }
 
 // Two names that differ only in case or in how an accented letter is encoded. Together with

@@ -7,6 +7,7 @@ export {
   isLocked,
   lockedMessage,
 } from "./fs/copyPasteErrors";
+export { fileIdOf } from "./fs/copyPasteFingerprint";
 export { type ReplaceRecoveryOutcome, recoverInterruptedReplaces } from "./fs/copyPasteRecovery";
 export { createStoppableCopyFile, type NativeCopyFile } from "./fs/stoppableCopy";
 export * from "./search/fdSearch";

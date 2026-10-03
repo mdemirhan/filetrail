@@ -1,6 +1,7 @@
 import {
   captureFingerprint,
   detectKind,
+  fileIdOf,
   fingerprintsEqual,
   pathExists,
 } from "./copyPasteFingerprint";
@@ -157,5 +158,20 @@ describe("copyPasteFingerprint", () => {
     });
 
     await expect(pathExists(fileSystem, "/workspace")).resolves.toBe(true);
+  });
+});
+
+describe("fileIdOf", () => {
+  it("keeps a file id a number can hold exactly", () => {
+    expect(fileIdOf(447403)).toBe(447403);
+    expect(fileIdOf(Number.MAX_SAFE_INTEGER)).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
+  // FAT and exFAT empty files, and the system volume's folders, have ids near 2^64 that
+  // round to the same number.
+  it("treats an id too large to compare as unknown", () => {
+    expect(fileIdOf(Number("18446744073709551602"))).toBeNull();
+    expect(fileIdOf(Number("1152921500311879682"))).toBeNull();
+    expect(fileIdOf(undefined)).toBeNull();
   });
 });

@@ -20,7 +20,7 @@ export async function captureFingerprint(
       size: kind === "file" ? stats.size : null,
       mtimeMs: typeof stats.mtimeMs === "number" ? stats.mtimeMs : null,
       mode: typeof stats.mode === "number" ? stats.mode : null,
-      ino: typeof stats.ino === "number" ? stats.ino : null,
+      ino: fileIdOf(stats.ino),
       dev: typeof stats.dev === "number" ? stats.dev : null,
       symlinkTarget: kind === "symlink" ? await readlinkSafe(fileSystem, path) : null,
     };
@@ -60,7 +60,7 @@ export async function captureFolderFingerprint(
       size: null,
       mtimeMs: typeof stats.mtimeMs === "number" ? stats.mtimeMs : null,
       mode: typeof stats.mode === "number" ? stats.mode : null,
-      ino: typeof stats.ino === "number" ? stats.ino : null,
+      ino: fileIdOf(stats.ino),
       dev: typeof stats.dev === "number" ? stats.dev : null,
       symlinkTarget: null,
     };
@@ -210,4 +210,11 @@ async function readlinkSafe(
   } catch {
     return null;
   }
+}
+
+// A file id usable to tell items apart, or null. FAT and exFAT give empty files ids near
+// 2^64, which a JS number can't hold exactly: they all round to the same value, so every
+// empty file would look like the same item. Such an id is treated as unknown.
+export function fileIdOf(ino: unknown): number | null {
+  return typeof ino === "number" && Number.isSafeInteger(ino) ? ino : null;
 }

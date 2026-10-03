@@ -243,3 +243,89 @@ describe.runIf(canMountDiskImages)("pasting onto a disk that fills up", () => {
     expect(await visible(small.mountPath)).toEqual([]);
   }, 30_000);
 });
+
+// FAT32 and exFAT give empty files ids near 2^64, which all round to one JS number: every
+// empty file looked like the same item, so pastes were refused as "already there".
+describe.each(["MS-DOS FAT32", "ExFAT"] as const)("empty files on %s", (format) => {
+  let stick: TestDiskImage;
+
+  beforeAll(() => {
+    if (canMountDiskImages) {
+      stick = mountTestDiskImage({ sizeMb: 64, format, name: "FTSTICK" });
+    }
+  });
+
+  afterAll(() => {
+    stick?.detach();
+  });
+
+  beforeEach(async () => {
+    if (canMountDiskImages) {
+      await mkdir(join(stick.mountPath, ".test-trash"), { recursive: true });
+    }
+  });
+
+  afterEach(async () => {
+    if (!canMountDiskImages) {
+      return;
+    }
+    for (const name of [...(await visible(stick.mountPath)), ".test-trash"]) {
+      await rm(join(stick.mountPath, name), { recursive: true, force: true });
+    }
+  });
+
+  it.runIf(canMountDiskImages)(
+    "asks about an empty file of the same name instead of refusing",
+    async () => {
+      await mkdir(join(stick.mountPath, "d1"));
+      await mkdir(join(stick.mountPath, "d2"));
+      await writeFile(join(stick.mountPath, "d1", "empty.txt"), "");
+      await writeFile(join(stick.mountPath, "d2", "empty.txt"), "");
+
+      const { report } = await runPaste({
+        mode: "copy",
+        sourcePaths: [join(stick.mountPath, "d1", "empty.txt")],
+        destinationDirectoryPath: join(stick.mountPath, "d2"),
+      });
+
+      expect(report.issues).toEqual([]);
+      expect(report.nodes[0]?.conflictClass).toBe("file_conflict");
+    },
+  );
+
+  it.runIf(canMountDiskImages)(
+    "moves an empty file into a folder holding other empty files",
+    async () => {
+      await mkdir(join(stick.mountPath, "d1"));
+      await mkdir(join(stick.mountPath, "d2"));
+      await writeFile(join(stick.mountPath, "d1", "a.txt"), "");
+      await writeFile(join(stick.mountPath, "d2", "b.txt"), "");
+
+      const { result } = await runPaste({
+        mode: "cut",
+        sourcePaths: [join(stick.mountPath, "d1", "a.txt")],
+        destinationDirectoryPath: join(stick.mountPath, "d2"),
+      });
+
+      expect(result?.status).toBe("completed");
+      expect(await visible(join(stick.mountPath, "d2"))).toEqual(["a.txt", "b.txt"]);
+    },
+  );
+
+  it.runIf(canMountDiskImages)("replaces empty files inside a merged folder", async () => {
+    await mkdir(join(stick.mountPath, "src", "pkg"), { recursive: true });
+    await mkdir(join(stick.mountPath, "dst", "pkg"), { recursive: true });
+    await writeFile(join(stick.mountPath, "src", "pkg", "__init__.py"), "");
+    await writeFile(join(stick.mountPath, "dst", "pkg", "__init__.py"), "");
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(stick.mountPath, "src", "pkg")],
+      destinationDirectoryPath: join(stick.mountPath, "dst"),
+      policy: { file: "overwrite", directory: "merge", mismatch: "skip" },
+      fileSystem: nativeFileSystemWithTrash(join(stick.mountPath, ".test-trash")),
+    });
+
+    expect(result?.status).toBe("completed");
+  });
+});

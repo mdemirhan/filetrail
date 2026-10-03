@@ -13,7 +13,11 @@ import {
 import { NO_TRASH_ERROR_CODE, type WriteService, createWriteService } from "@filetrail/core";
 
 import { canMountDiskImages, mountTestDiskImage } from "@filetrail/core/fs/testDiskImage";
-import { originalFileSystem, originalRename, originalRenameExclusive } from "../originalFileSystem";
+import {
+  createOriginalWriteOperationFs,
+  originalRename,
+  originalRenameExclusive,
+} from "../originalFileSystem";
 import { getCachedResponse, getResponseCacheSizes, resetResponseCacheState } from "./responseCache";
 import {
   PROGRESS_UPDATE_INTERVAL_MS,
@@ -989,6 +993,104 @@ describe("renaming on a real disk", () => {
     coordinator.shutdown();
   });
 
+  // Two hard links to one file whose names differ only in case can exist on a disk that
+  // minds case; renaming one onto the other would do nothing, yet report success.
+  it.runIf(canMountDiskImages)(
+    "refuses a name held by a hard link that differs only in case, on a disk that minds case",
+    async () => {
+      const volume = mountTestDiskImage({ caseSensitive: true, name: "FileTrailLinks" });
+      const coordinator = createWriteOperationCoordinator(
+        createWriteServiceStub(),
+        createRealWriteOperationFs(),
+      );
+      try {
+        await writeFile(join(volume.mountPath, "h.txt"), "shared");
+        await link(join(volume.mountPath, "h.txt"), join(volume.mountPath, "H.txt"));
+
+        await expect(
+          coordinator.handlers["writeOperation:rename"](
+            { sourcePath: join(volume.mountPath, "h.txt"), destinationName: "H.txt" },
+            { sender: createSender() },
+          ),
+        ).rejects.toThrow("An item named “H.txt” already exists.");
+      } finally {
+        coordinator.shutdown();
+        volume.detach();
+      }
+    },
+    30_000,
+  );
+
+  it.runIf(canMountDiskImages)(
+    "changes only the case of a name on a disk that minds case",
+    async () => {
+      const volume = mountTestDiskImage({ caseSensitive: true, name: "FileTrailCaseRename" });
+      const coordinator = createWriteOperationCoordinator(
+        createWriteServiceStub(),
+        createRealWriteOperationFs(),
+      );
+      try {
+        await writeFile(join(volume.mountPath, "notes.txt"), "notes");
+        const sender = createSender();
+
+        await coordinator.handlers["writeOperation:rename"](
+          { sourcePath: join(volume.mountPath, "notes.txt"), destinationName: "Notes.txt" },
+          { sender },
+        );
+        const terminal = await waitForTerminalEvent(sender, "write-op-1");
+
+        expect(terminal.status).toBe("completed");
+        expect((await readdir(volume.mountPath)).filter((name) => !name.startsWith("."))).toEqual([
+          "Notes.txt",
+        ]);
+      } finally {
+        coordinator.shutdown();
+        volume.detach();
+      }
+    },
+    30_000,
+  );
+
+  // FAT and exFAT give empty files ids too large to compare: an empty file must still be
+  // recognized as itself when only the case of its name changes.
+  it.runIf(canMountDiskImages)(
+    "changes only the case of an empty file's name on a FAT32 disk",
+    async () => {
+      const volume = mountTestDiskImage({ format: "MS-DOS FAT32", name: "FTRENAME" });
+      const coordinator = createWriteOperationCoordinator(
+        createWriteServiceStub(),
+        createRealWriteOperationFs(),
+      );
+      try {
+        await writeFile(join(volume.mountPath, "empty.txt"), "");
+        await writeFile(join(volume.mountPath, "other.txt"), "");
+        const sender = createSender();
+
+        await coordinator.handlers["writeOperation:rename"](
+          { sourcePath: join(volume.mountPath, "empty.txt"), destinationName: "Empty.txt" },
+          { sender },
+        );
+        const terminal = await waitForTerminalEvent(sender, "write-op-1");
+
+        expect(terminal.status).toBe("completed");
+        expect(
+          (await readdir(volume.mountPath)).filter((name) => !name.startsWith(".")).sort(),
+        ).toEqual(["Empty.txt", "other.txt"]);
+        // Another empty file isn't mistaken for the item itself.
+        await expect(
+          coordinator.handlers["writeOperation:rename"](
+            { sourcePath: join(volume.mountPath, "Empty.txt"), destinationName: "other.txt" },
+            { sender: createSender() },
+          ),
+        ).rejects.toThrow("An item named “other.txt” already exists.");
+      } finally {
+        coordinator.shutdown();
+        volume.detach();
+      }
+    },
+    30_000,
+  );
+
   it("says plainly that an item is gone instead of passing on the system's error", async () => {
     const root = await mkdtemp(join(tmpdir(), "filetrail-rename-gone-"));
     const coordinator = createWriteOperationCoordinator(
@@ -1800,16 +1902,10 @@ describe("questions during a paste", () => {
   });
 });
 
+// The app's own wiring (see bootstrap), with a Trash that does nothing.
 function createRealWriteOperationFs(overrides: Partial<WriteOperationFs> = {}): WriteOperationFs {
   return {
-    lstat: originalFileSystem.lstat,
-    stat: originalFileSystem.stat,
-    mkdir: (path) => originalFileSystem.mkdir(path),
-    rename: originalRename,
-    renameExclusive: originalRenameExclusive,
-    rm: (path, options) => originalFileSystem.rm(path, options),
-    trash: vi.fn(async () => undefined),
-    ...(originalFileSystem.getFlags ? { getFlags: originalFileSystem.getFlags } : {}),
+    ...createOriginalWriteOperationFs(vi.fn(async () => undefined)),
     ...overrides,
   };
 }
