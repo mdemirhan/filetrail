@@ -85,6 +85,50 @@ describe("SearchResultsPane", () => {
     );
   });
 
+  it("edits a result's name in its row, as the file list does", () => {
+    const handleSubmit = vi.fn();
+    render(
+      <SearchResultsPane
+        isFocused
+        rootPath="/Users/demo/project"
+        query="*.tsx"
+        status="complete"
+        results={[
+          {
+            path: "/Users/demo/project/src/App.tsx",
+            name: "App.tsx",
+            extension: "tsx",
+            kind: "file",
+            isHidden: false,
+            isSymlink: false,
+            parentPath: "/Users/demo/project/src",
+            relativeParentPath: "src",
+          },
+        ]}
+        error={null}
+        truncated={false}
+        {...defaultFilterProps}
+        {...defaultSortProps}
+        onStopSearch={() => undefined}
+        onClearResults={() => undefined}
+        onCloseResults={() => undefined}
+        onSelectPath={() => undefined}
+        onActivateResult={() => undefined}
+        onFocusChange={() => undefined}
+        inlineRename={{ path: "/Users/demo/project/src/App.tsx", error: null }}
+        onInlineRenameSubmit={handleSubmit}
+      />,
+    );
+
+    // While its name is edited the row is not a button that would take the field's keys.
+    expect(screen.queryByRole("button", { name: /App\.tsx/i })).not.toBeInTheDocument();
+    const field = screen.getByLabelText("Rename App.tsx");
+    fireEvent.change(field, { target: { value: "Main.tsx" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+
+    expect(handleSubmit).toHaveBeenCalledWith("Main.tsx");
+  });
+
   it("narrows a multi-selection to the clicked result", () => {
     const handleSelectionGesture = vi.fn();
     const results = ["App.tsx", "main.tsx"].map((name) => ({

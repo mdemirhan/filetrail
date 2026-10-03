@@ -255,19 +255,36 @@ describe("canRunToolbarRendererCommand", () => {
     ).toBe(true);
   });
 
-  it("disables move, rename, duplicate, trash, and paste on search results when invalid there", () => {
+  // Finding files, then moving, renaming, duplicating or trashing them, is a Finder flow.
+  it("lets search results be moved, renamed, duplicated and trashed, but not pasted into", () => {
     const searchContext = availabilityContext({
       isSearchMode: true,
       selectedPathsInViewOrder: ["/Users/demo/file.txt"],
       pasteDestinationPath: null,
     });
 
-    expect(canRunToolbarRendererCommand("moveSelection", searchContext)).toBe(false);
-    expect(canRunToolbarRendererCommand("renameSelection", searchContext)).toBe(false);
-    expect(canRunToolbarRendererCommand("duplicateSelection", searchContext)).toBe(false);
+    expect(canRunToolbarRendererCommand("moveSelection", searchContext)).toBe(true);
+    expect(canRunToolbarRendererCommand("renameSelection", searchContext)).toBe(true);
+    expect(canRunToolbarRendererCommand("duplicateSelection", searchContext)).toBe(true);
+    expect(canRunToolbarRendererCommand("trashSelection", searchContext)).toBe(true);
     expect(canRunToolbarRendererCommand("newFolder", searchContext)).toBe(false);
-    expect(canRunToolbarRendererCommand("trashSelection", searchContext)).toBe(false);
     expect(canRunToolbarRendererCommand("pasteSelection", searchContext)).toBe(false);
+  });
+
+  // A duplicate goes next to its original: results from two folders have no one folder.
+  it("duplicates search results only when they share a folder", () => {
+    const fromTwoFolders = availabilityContext({
+      isSearchMode: true,
+      selectedPathsInViewOrder: ["/Users/demo/a.txt", "/Users/demo/Folder/b.txt"],
+    });
+    const fromOneFolder = availabilityContext({
+      isSearchMode: true,
+      selectedPathsInViewOrder: ["/Users/demo/a.txt", "/Users/demo/b.txt"],
+    });
+
+    expect(canRunToolbarRendererCommand("duplicateSelection", fromTwoFolders)).toBe(false);
+    expect(canRunToolbarRendererCommand("duplicateSelection", fromOneFolder)).toBe(true);
+    expect(canRunToolbarRendererCommand("renameSelection", fromOneFolder)).toBe(false);
   });
 
   it("allows new folder whenever there is a folder to make it in", () => {

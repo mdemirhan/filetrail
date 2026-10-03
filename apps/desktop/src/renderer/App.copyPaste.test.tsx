@@ -474,7 +474,13 @@ vi.mock("./components/SearchResultsPane", () => ({
     onItemContextMenu,
     onItemDragStart,
     onItemDragEnd,
+    inlineRename,
+    onInlineRenameSubmit,
+    onInlineRenameCancel,
   }: {
+    inlineRename?: { path: string; error: string | null; refusalCount?: number } | null;
+    onInlineRenameSubmit?: (nextName: string) => void;
+    onInlineRenameCancel?: () => void;
     results: Array<{
       path: string;
       name: string;
@@ -510,6 +516,21 @@ vi.mock("./components/SearchResultsPane", () => ({
     onItemDragEnd?: (event: React.DragEvent<HTMLElement>) => void;
   }) => (
     <div data-testid="search-results-pane">
+      {/* Stands in for the name field a result row shows while its item is renamed. */}
+      {inlineRename ? (
+        <input
+          aria-label={`Rename result ${inlineRename.path.slice(inlineRename.path.lastIndexOf("/") + 1)}`}
+          defaultValue={inlineRename.path.slice(inlineRename.path.lastIndexOf("/") + 1)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              onInlineRenameSubmit?.(event.currentTarget.value);
+            }
+            if (event.key === "Escape") {
+              onInlineRenameCancel?.();
+            }
+          }}
+        />
+      ) : null}
       {results.map((result) => (
         <button
           key={result.path}
@@ -11863,5 +11884,129 @@ describe("dragging while an operation runs", () => {
       expect(viewport).toHaveTextContent(/Can't drag while .* being copied/);
     });
     expect(analyzeRequests(harness)).toHaveLength(1);
+  });
+});
+
+describe("acting on search results", () => {
+  const result = (path: string) => {
+    const slash = path.lastIndexOf("/");
+    const name = path.slice(slash + 1);
+    return {
+      path,
+      name,
+      extension: name.includes(".") ? name.slice(name.lastIndexOf(".") + 1) : "",
+      kind: "file" as const,
+      isHidden: false,
+      isSymlink: false,
+      parentPath: path.slice(0, slash),
+      relativeParentPath: path.slice("/Users/demo/".length, slash) || ".",
+    };
+  };
+
+  async function selectResult(path: string, init: { metaKey?: boolean } = {}) {
+    await act(async () => {
+      fireEvent.click(await screen.findByTitle(`search:${path}`), init);
+    });
+  }
+
+  function duplicateRequests(harness: ReturnType<typeof createAppHarness>) {
+    return harness.invocations
+      .filter(
+        (call) => call.channel === "copyPaste:plan" || call.channel === "copyPaste:analyzeStart",
+      )
+      .map((call) => call.payload as { action?: string; destinationDirectoryPath?: string })
+      .filter((payload) => payload.action === "duplicate");
+  }
+
+  it("moves a result to the Trash with Command-Delete", async () => {
+    const harness = createAppHarness({
+      searchResultItems: [result("/Users/demo/Folder/deep.txt")],
+    });
+    renderApp(harness);
+    await openSearchResults();
+    await selectResult("/Users/demo/Folder/deep.txt");
+
+    await pressKey({ key: "Backspace", metaKey: true });
+
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.find((call) => call.channel === "writeOperation:trash")?.payload,
+      ).toEqual({ paths: ["/Users/demo/Folder/deep.txt"] });
+    });
+  });
+
+  it("duplicates a result next to it, in its own folder", async () => {
+    const harness = createAppHarness({
+      searchResultItems: [result("/Users/demo/Folder/deep.txt")],
+    });
+    renderApp(harness);
+    await openSearchResults();
+    await selectResult("/Users/demo/Folder/deep.txt");
+
+    await pressKey({ key: "d", metaKey: true });
+
+    await vi.waitFor(() => {
+      expect(duplicateRequests(harness).length).toBeGreaterThan(0);
+    });
+    for (const request of duplicateRequests(harness)) {
+      expect(request.destinationDirectoryPath).toBe("/Users/demo/Folder");
+    }
+  });
+
+  it("doesn't duplicate results from different folders at once, and says why", async () => {
+    const harness = createAppHarness({
+      searchResultItems: [result("/Users/demo/source.txt"), result("/Users/demo/Folder/deep.txt")],
+    });
+    renderApp(harness);
+    await openSearchResults();
+    await selectResult("/Users/demo/source.txt");
+    await selectResult("/Users/demo/Folder/deep.txt", { metaKey: true });
+
+    await pressKey({ key: "d", metaKey: true });
+
+    const viewport = await screen.findByTestId("toast-viewport");
+    await vi.waitFor(() => {
+      expect(viewport).toHaveTextContent("Duplicate items from one folder at a time");
+    });
+    expect(duplicateRequests(harness)).toEqual([]);
+  });
+
+  it("renames a result in its row", async () => {
+    const harness = createAppHarness({
+      searchResultItems: [result("/Users/demo/Folder/deep.txt")],
+    });
+    renderApp(harness);
+    await openSearchResults();
+    await selectResult("/Users/demo/Folder/deep.txt");
+
+    await pressKey({ key: "F2" });
+    const field = await screen.findByLabelText("Rename result deep.txt");
+    await act(async () => {
+      fireEvent.change(field, { target: { value: "deeper.txt" } });
+      fireEvent.keyDown(field, { key: "Enter" });
+    });
+
+    await vi.waitFor(() => {
+      expect(
+        harness.invocations.find((call) => call.channel === "writeOperation:rename")?.payload,
+      ).toEqual({ sourcePath: "/Users/demo/Folder/deep.txt", destinationName: "deeper.txt" });
+    });
+    expect(screen.queryByRole("dialog", { name: /Rename/ })).not.toBeInTheDocument();
+  });
+
+  it("offers Move to Trash, Rename and Duplicate in a result's menu", async () => {
+    const harness = createAppHarness({
+      searchResultItems: [result("/Users/demo/Folder/deep.txt")],
+    });
+    renderApp(harness);
+    await openSearchResults();
+    await act(async () => {
+      fireEvent.contextMenu(await screen.findByTitle("search:/Users/demo/Folder/deep.txt"));
+    });
+
+    for (const name of [/^Move to Trash/, /^Rename/, /^Duplicate/, /^Move To…/]) {
+      expect(screen.getByRole("button", { name })).toHaveAttribute("aria-disabled", "false");
+    }
+    expect(screen.queryByRole("button", { name: /^Delete Immediately/ })).not.toBeInTheDocument();
   });
 });

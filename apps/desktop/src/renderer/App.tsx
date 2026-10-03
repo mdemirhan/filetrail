@@ -771,6 +771,7 @@ export function App() {
     surfaceCopyLikePreStartFailureNotice,
     startCopyToDestination,
     startDuplicatePaths,
+    startDuplicateOfSelection,
     startMoveToDestination,
     startPasteFromClipboard,
     startTrashPaths,
@@ -1082,7 +1083,7 @@ export function App() {
       clearClipboard,
       startPasteFromClipboard,
       resolveContentActionPaths,
-      startDuplicatePaths,
+      startDuplicateOfSelection,
       startTrashPaths,
       openMoveDialog,
       openRenameDialog,
@@ -1785,6 +1786,15 @@ export function App() {
                 onItemContextMenu: (path, position) => {
                   openItemContextMenu(path, position, "search");
                 },
+                inlineRename: renameDialogState?.inline
+                  ? {
+                      path: renameDialogState.sourcePath,
+                      error: renameDialogState.error,
+                      refusalCount: renameDialogState.refusalCount,
+                    }
+                  : null,
+                onInlineRenameSubmit: (nextName) => void submitRenameDialog(nextName),
+                onInlineRenameCancel: () => setRenameDialogState(null),
                 onItemDragStart: (item, event) =>
                   handleSearchDragStart(toDirectoryEntryFromSearchResult(item), "search", event),
                 onItemDragEnd: handleDragEnd,
