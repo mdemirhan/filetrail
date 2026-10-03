@@ -242,7 +242,7 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
     if (this.nodes.has(this.existingKey(path))) {
       throw createFsError("EEXIST", path);
     }
-    this.nodes.set(this.newKey(path), this.createNode({ kind: "symlink", target }));
+    this.nodes.set(this.newKey(path), this.createNode({ kind: "symlink", target, at: path }));
   }
 
   /** Enables the `rename` method, opting this mock into same-filesystem rename support. */
@@ -319,6 +319,7 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
       this.nodes.set(
         this.newKey(destinationPath),
         this.createNode({
+          at: destinationPath,
           kind: "file",
           size: source.size,
           mode: source.mode,
@@ -388,6 +389,7 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
     this.nodes.set(
       this.newKey(destinationPath),
       this.createNode({
+        at: destinationPath,
         kind: "file",
         size: source.size,
         mode: source.mode,
@@ -404,7 +406,7 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
 
   addFile(path: string, options: Omit<Extract<SeedNode, { kind: "file" }>, "kind"> = {}): void {
     this.ensureDirectory(dirname(path), true);
-    this.nodes.set(this.newKey(path), this.createNode({ kind: "file", ...options }));
+    this.nodes.set(this.newKey(path), this.createNode({ kind: "file", at: path, ...options }));
   }
 
   addSymlink(
@@ -413,7 +415,10 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
     options: Omit<Extract<SeedNode, { kind: "symlink" }>, "kind" | "target"> = {},
   ): void {
     this.ensureDirectory(dirname(path), true);
-    this.nodes.set(this.newKey(path), this.createNode({ kind: "symlink", target, ...options }));
+    this.nodes.set(
+      this.newKey(path),
+      this.createNode({ kind: "symlink", target, at: path, ...options }),
+    );
   }
 
   mutateNode(path: string, updater: (node: MockNode) => MockNode | undefined): void {
@@ -465,7 +470,10 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
       }
       return;
     }
-    this.nodes.set(this.newKey(normalized), this.createNode({ kind: "directory", ...options }));
+    this.nodes.set(
+      this.newKey(normalized),
+      this.createNode({ kind: "directory", at: normalized, ...options }),
+    );
   }
 
   private listChildren(path: string): string[] {
@@ -486,6 +494,8 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
   }
 
   private createNode(input: {
+    // Where the item goes: without a `dev` of its own it is on its folder's disk.
+    at?: string;
     kind: MockNode["kind"];
     size?: number;
     mode?: number;
@@ -501,7 +511,7 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
         input.mode ?? (input.kind === "directory" ? 0o755 : input.kind === "file" ? 0o644 : 0o777),
       mtimeMs: input.mtimeMs ?? this.bumpMtime(),
       ino: input.ino ?? this.nextIno++,
-      dev: input.dev ?? 1,
+      dev: input.dev ?? this.folderDev(input.at) ?? 1,
       target: input.target ?? null,
     };
   }
@@ -546,6 +556,13 @@ export class MockWriteServiceFileSystem implements WriteServiceFileSystem {
       throw createFsError("ENOENT", normalized);
     }
     return node;
+  }
+
+  private folderDev(path: string | undefined): number | undefined {
+    if (path === undefined || normalizePath(path) === "/") {
+      return undefined;
+    }
+    return this.nodes.get(this.existingKey(dirname(normalizePath(path))))?.dev;
   }
 
   private bumpMtime(): number {

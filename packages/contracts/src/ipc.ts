@@ -1089,6 +1089,16 @@ export const ipcContractSchemas = {
       availableBytes: z.number().nonnegative().nullable(),
     }),
   },
+  // Which disk each path is on (its device number, symlinks followed; null when unreadable),
+  // in the order asked: a drag moves on one disk and copies to another.
+  "system:getDiskIds": {
+    request: z.object({
+      paths: absolutePathListSchema,
+    }),
+    response: z.object({
+      ids: z.array(z.number().int().nonnegative().nullable()),
+    }),
+  },
   "system:quickLook": {
     request: z.object({
       path: z.string().min(1),

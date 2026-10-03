@@ -14,6 +14,7 @@ import {
 } from "./aboutInfo";
 import { type AppLogger, writeStructuredAppLogEntry } from "./appLog";
 import type { AppStateStore } from "./appStateStore";
+import { getDiskIds } from "./bootstrap/diskIds";
 import { toPreferencePatch } from "./bootstrap/preferencesPatch";
 import { openReplaceJournal, recoverReplaces } from "./bootstrap/replaceJournal";
 import {
@@ -249,6 +250,7 @@ export async function bootstrapMainProcess(
       "system:openPath": (payload) => openPath(payload),
       "system:quickLook": (payload, event) => quickLookPath(payload, event),
       "system:getVolumeInfo": (payload) => getVolumeInfo(payload),
+      "system:getDiskIds": (payload) => getDiskIds(payload),
       "system:pickApplication": (_payload, event) => pickApplication(event),
       "system:pickDirectory": (payload, event) => pickDirectory(payload, event),
       "system:openPathsWithApplication": (payload) => openPathsWithApplication(payload),
