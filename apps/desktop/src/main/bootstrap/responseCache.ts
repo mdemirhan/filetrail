@@ -1,4 +1,4 @@
-import type { IpcRequest, IpcResponse } from "@filetrail/contracts";
+import { type IpcRequest, type IpcResponse, isAffectedByChange } from "@filetrail/contracts";
 import type { ExplorerWorkerClient } from "@filetrail/core";
 
 const CACHE_TTL_MS = 3_000;
@@ -42,11 +42,21 @@ const debugTimingsEnabled = process.env.FILETRAIL_DEBUG_TIMINGS === "1";
 // kept if no clear happened while it was loading.
 let cacheGeneration = 0;
 
-export function clearResponseCaches(): void {
+// Each folder-size cache, told what a write changed.
+const folderSizeForgetters = new Set<(changedPaths: readonly string[]) => void>();
+
+// After a write: listings are read again, and the sizes of the folders it touched (what
+// holds them, and what is inside them) are measured again when next asked for.
+export function clearResponseCaches(changedPaths: readonly string[] = []): void {
   cacheGeneration += 1;
   directorySnapshotCache.entries.clear();
   directoryMetadataCache.entries.clear();
   treeChildrenCache.entries.clear();
+  if (changedPaths.length > 0) {
+    for (const forget of folderSizeForgetters) {
+      forget(changedPaths);
+    }
+  }
 }
 
 export function getResponseCacheSizes(): {
@@ -125,6 +135,13 @@ export function createFolderSizeHandlers(native: {
     string,
     { sizeBytes: number; diskBytes: number; fileCount: number }
   >();
+  folderSizeForgetters.add((changedPaths) => {
+    for (const path of [...folderSizeCache.keys()]) {
+      if (isAffectedByChange(path, changedPaths)) {
+        folderSizeCache.delete(path);
+      }
+    }
+  });
   let activeJobId: string | null = null;
   let queuedJobId: string | null = null;
 

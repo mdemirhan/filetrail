@@ -8,6 +8,7 @@ import {
   type WriteOperationResult,
   isAbortError,
   isInsideTrash,
+  pathsChangedByWrite,
   writeOperationProgressEventSchema,
 } from "@filetrail/contracts";
 import {
@@ -199,7 +200,7 @@ export function createWriteOperationCoordinator(
       copyPasteRequests.delete(event.operationId);
       copyPasteModes.delete(event.operationId);
       // Folder listings read before the operation finished may show the old contents.
-      clearResponseCaches();
+      clearResponseCaches(event.result ? pathsChangedByWrite(event.result) : []);
       if (earlyTerminalEvents && !writeOperationSenders.has(event.operationId)) {
         earlyTerminalEvents.set(event.operationId, event);
       }
@@ -475,7 +476,7 @@ export function createWriteOperationCoordinator(
     // write slot held and a renderer reacting to the final event can start the next write.
     if (isTerminalStatus(event.status)) {
       // Folder listings read before the operation finished may show the old contents.
-      clearResponseCaches();
+      clearResponseCaches(event.result ? pathsChangedByWrite(event.result) : []);
       releaseLocalWriteOperation(event.operationId);
     }
     if (sender) {
@@ -995,7 +996,7 @@ export function createWriteOperationCoordinator(
       return await prepareWithReservedSlot(empty);
     } finally {
       // The Trash's listing (and anything shown from it) is out of date now.
-      clearResponseCaches();
+      clearResponseCaches([resolve(homePath, ".Trash")]);
     }
   }
 

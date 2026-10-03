@@ -8676,7 +8676,8 @@ function createAppHarness(
   // Like the worker, a search that has reported its end keeps no results to hand out again.
   const finishedSearchJobs = new Set<string>();
   let commandListener: ((command: RendererCommand) => void) | null = null;
-  let writeOperationProgressListener: ((event: WriteOperationProgressEvent) => void) | null = null;
+  // Several parts of the window listen (the operation itself, folder sizes), as in the app.
+  const writeOperationProgressListeners = new Set<(event: WriteOperationProgressEvent) => void>();
   let copyPasteProgressListener: ((event: WriteOperationProgressEvent) => void) | null = null;
   const resolveCopyPastePlanPromises: Array<() => void> = [];
   let copyPastePlanCallCount = 0;
@@ -9040,11 +9041,9 @@ function createAppHarness(
       };
     },
     onWriteOperationProgress(listener) {
-      writeOperationProgressListener = listener;
+      writeOperationProgressListeners.add(listener);
       return () => {
-        if (writeOperationProgressListener === listener) {
-          writeOperationProgressListener = null;
-        }
+        writeOperationProgressListeners.delete(listener);
       };
     },
     onCopyPasteProgress(listener) {
@@ -9091,11 +9090,15 @@ function createAppHarness(
               }
             : null,
         };
-        writeOperationProgressListener?.(normalizedEvent);
+        for (const listener of writeOperationProgressListeners) {
+          listener(normalizedEvent);
+        }
         copyPasteProgressListener?.(normalizedEvent);
         return;
       }
-      writeOperationProgressListener?.(event);
+      for (const listener of writeOperationProgressListeners) {
+        listener(event);
+      }
     },
     setDirectoryEntries(path, entries) {
       const snapshot = directorySnapshots[path];
