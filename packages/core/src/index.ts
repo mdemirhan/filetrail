@@ -8,6 +8,7 @@ export {
   lockedMessage,
 } from "./fs/copyPasteErrors";
 export { fileIdOf } from "./fs/copyPasteFingerprint";
+export { startsWithAppleDoubleMagic } from "./fs/writeServiceTypes";
 export { type ReplaceRecoveryOutcome, recoverInterruptedReplaces } from "./fs/copyPasteRecovery";
 export { createStoppableCopyFile, type NativeCopyFile } from "./fs/stoppableCopy";
 export * from "./search/fdSearch";

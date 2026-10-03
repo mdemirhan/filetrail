@@ -25,6 +25,7 @@ import {
 import {
   destinationPathKey,
   fitName,
+  isAppleDoubleCompanionName,
   isFolderViewFile,
   resolveDuplicateName,
 } from "./copyPasteNames";
@@ -1662,10 +1663,14 @@ async function describeLeftInMovedFolder(
 ): Promise<string | null> {
   const plannedNames = new Set(node.children.map((child) => basename(child.node.sourcePath)));
   const entries = await fileSystem.readdir(node.node.sourcePath).catch(() => [] as string[]);
-  const added = entries.filter((entry) => !plannedNames.has(entry));
-  if (added.length > 0 && added.every(isFolderViewFile)) {
-    // Only what Finder wrote to show the folder: it goes with the folder.
-    for (const entry of added) {
+  // Nobody's items: what Finder wrote to show the folder, and the AppleDouble files of
+  // items that were moved (FAT, exFAT, SMB).
+  const isLeftover = (entry: string) =>
+    isFolderViewFile(entry) || isAppleDoubleCompanionName(entry, plannedNames);
+  if (entries.length > 0 && entries.every(isLeftover)) {
+    // They go with the folder. Only when nothing else keeps it: a folder that stays
+    // (skipped or failed items in it) keeps its view settings too.
+    for (const entry of entries) {
       await fileSystem
         .rm(join(node.node.sourcePath, entry), { force: true })
         .catch(() => undefined);
@@ -1673,7 +1678,7 @@ async function describeLeftInMovedFolder(
     await fileSystem.rmdir(node.node.sourcePath).catch(() => undefined);
     return null;
   }
-  const newItems = added.filter((entry) => !isFolderViewFile(entry));
+  const newItems = entries.filter((entry) => !plannedNames.has(entry) && !isLeftover(entry));
   if (newItems.length === 0) {
     return null;
   }
@@ -1707,7 +1712,12 @@ async function findItemsAddedSinceReview(
   }
   const plannedNames = new Set(node.children.map((child) => basename(child.node.sourcePath)));
   const entries = await fileSystem.readdir(node.node.sourcePath).catch(() => [] as string[]);
-  return entries.filter((entry) => !plannedNames.has(entry) && !isFolderViewFile(entry));
+  return entries.filter(
+    (entry) =>
+      !plannedNames.has(entry) &&
+      !isFolderViewFile(entry) &&
+      !isAppleDoubleCompanionName(entry, plannedNames),
+  );
 }
 
 function canRemoveMovedSourceDirectory(

@@ -554,3 +554,43 @@ describe("the folder pasted into goes away during the paste", () => {
     expect(await readdir(testDir)).not.toContain("dst");
   });
 });
+
+describe("files that look like AppleDouble files", () => {
+  // On APFS a "._name" file is an ordinary file unless it really is AppleDouble data.
+  it("copies a ._ file that isn't AppleDouble data, and one without its item", async () => {
+    await mkdir(join(src, "F"));
+    await writeFile(join(src, "F", "a.txt"), "a");
+    await writeFile(join(src, "F", "._a.txt"), "just a file");
+    await writeFile(join(src, "F", "._alone"), Buffer.from([0x00, 0x05, 0x16, 0x07, 0x00]));
+
+    const { result } = await runPaste({
+      mode: "copy",
+      sourcePaths: [join(src, "F")],
+      destinationDirectoryPath: dst,
+    });
+
+    expect(result?.status).toBe("completed");
+    expect((await readdir(join(dst, "F"))).sort()).toEqual(["._a.txt", "._alone", "a.txt"]);
+  });
+});
+
+describe("a moved folder that stays because something in it stayed", () => {
+  it("keeps Finder's view settings in it", async () => {
+    await mkdir(join(src, "F"));
+    await writeFile(join(src, "F", "a.txt"), "new");
+    await mkdir(join(dst, "F"));
+    await writeFile(join(dst, "F", "a.txt"), "old");
+
+    await runPaste({
+      mode: "cut",
+      sourcePaths: [join(src, "F")],
+      destinationDirectoryPath: dst,
+      fileSystem: { ...nativeFileSystem, rename: undefined as never },
+      policy: { file: "skip", directory: "merge", mismatch: "skip" },
+      // Finder writes it while the folder is on screen.
+      beforeExecute: () => writeFile(join(src, "F", ".DS_Store"), "view"),
+    });
+
+    expect((await readdir(join(src, "F"))).sort()).toEqual([".DS_Store", "a.txt"]);
+  });
+});

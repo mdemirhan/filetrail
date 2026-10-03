@@ -13,6 +13,7 @@ import {
 import {
   destinationPathKey,
   detectCaseSensitivity,
+  isAppleDoubleCompanionName,
   isFolderViewFile,
   isPackageFolder,
   resolveDuplicateName,
@@ -354,7 +355,11 @@ async function analyzeNode(args: {
   if (sourceKind === "directory") {
     let sourceChildren: string[] = [];
     try {
-      sourceChildren = (await args.fileSystem.readdir(args.sourcePath)).sort();
+      sourceChildren = await withoutAppleDoubleFiles(
+        args.fileSystem,
+        args.sourcePath,
+        (await args.fileSystem.readdir(args.sourcePath)).sort(),
+      );
     } catch (error) {
       if (isAbortError(error)) {
         throw error;
@@ -439,6 +444,31 @@ async function analyzeNode(args: {
     destinationOnly,
     replaceBlockedReason: null,
   };
+}
+
+// A folder's items without the AppleDouble files kept beside them on FAT, exFAT and SMB
+// disks: the copy of "name" carries its attributes, and "._name" copied as a file of its
+// own would only be clutter (and counted as an item).
+async function withoutAppleDoubleFiles(
+  fileSystem: WriteServiceFileSystem,
+  folderPath: string,
+  names: string[],
+): Promise<string[]> {
+  if (!fileSystem.isAppleDouble) {
+    return names;
+  }
+  const siblings = new Set(names);
+  const kept: string[] = [];
+  for (const name of names) {
+    if (
+      isAppleDoubleCompanionName(name, siblings) &&
+      (await fileSystem.isAppleDouble(join(folderPath, name)))
+    ) {
+      continue;
+    }
+    kept.push(name);
+  }
+  return kept;
 }
 
 const DESTINATION_ONLY_SAMPLE_LIMIT = 5;
