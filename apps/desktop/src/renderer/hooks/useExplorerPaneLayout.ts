@@ -7,6 +7,8 @@ import { EXPLORER_LAYOUT } from "../lib/layoutTokens";
 type Pane = "tree" | "inspector";
 
 // Coordinates the draggable tree/info panel widths while respecting a minimum center content area.
+// A pane keeps the width it was given (by dragging, or from the saved state): a window made
+// too narrow for it shows it narrower, and it comes back when the window is widened again.
 export function useExplorerPaneLayout(args: {
   initialTreeWidth: number;
   initialInspectorWidth: number;
@@ -16,8 +18,13 @@ export function useExplorerPaneLayout(args: {
   const { initialTreeWidth, initialInspectorWidth, inspectorVisible, minContentWidth } = args;
   const [treeWidth, setTreeWidth] = useState(initialTreeWidth);
   const [inspectorWidth, setInspectorWidth] = useState(initialInspectorWidth);
+  // The widths chosen for the panes, which the ones on screen follow as far as they fit.
+  const [preferredTreeWidth, setPreferredTreeWidth] = useState(initialTreeWidth);
+  const [preferredInspectorWidth, setPreferredInspectorWidth] = useState(initialInspectorWidth);
   const treeWidthRef = useRef(treeWidth);
   const inspectorWidthRef = useRef(inspectorWidth);
+  const preferredTreeWidthRef = useRef(preferredTreeWidth);
+  const preferredInspectorWidthRef = useRef(preferredInspectorWidth);
   const resizeState = useRef<{
     pane: Pane;
     startX: number;
@@ -42,10 +49,14 @@ export function useExplorerPaneLayout(args: {
 
   useEffect(() => {
     setTreeWidth(initialTreeWidth);
+    setPreferredTreeWidth(initialTreeWidth);
+    preferredTreeWidthRef.current = initialTreeWidth;
   }, [initialTreeWidth]);
 
   useEffect(() => {
     setInspectorWidth(initialInspectorWidth);
+    setPreferredInspectorWidth(initialInspectorWidth);
+    preferredInspectorWidthRef.current = initialInspectorWidth;
   }, [initialInspectorWidth]);
 
   useEffect(() => {
@@ -72,26 +83,28 @@ export function useExplorerPaneLayout(args: {
         const maxTreeWidth = inspectorVisible
           ? Math.max(EXPLORER_LAYOUT.treeMinWidth, availableSideWidth - inspectorWidthRef.current)
           : Math.max(EXPLORER_LAYOUT.treeMinWidth, availableSideWidth);
-        setTreeWidth(
-          clampPaneWidth(
-            active.treeWidth + delta,
-            EXPLORER_LAYOUT.treeMinWidth,
-            Math.min(EXPLORER_LAYOUT.treeMaxWidth, maxTreeWidth),
-          ),
+        const nextTreeWidth = clampPaneWidth(
+          active.treeWidth + delta,
+          EXPLORER_LAYOUT.treeMinWidth,
+          Math.min(EXPLORER_LAYOUT.treeMaxWidth, maxTreeWidth),
         );
+        setTreeWidth(nextTreeWidth);
+        setPreferredTreeWidth(nextTreeWidth);
+        preferredTreeWidthRef.current = nextTreeWidth;
         return;
       }
       const maxInspectorWidth = Math.max(
         EXPLORER_LAYOUT.inspectorMinWidth,
         availableSideWidth - treeWidthRef.current,
       );
-      setInspectorWidth(
-        clampPaneWidth(
-          active.inspectorWidth - delta,
-          EXPLORER_LAYOUT.inspectorMinWidth,
-          Math.min(EXPLORER_LAYOUT.inspectorMaxWidth, maxInspectorWidth),
-        ),
+      const nextInspectorWidth = clampPaneWidth(
+        active.inspectorWidth - delta,
+        EXPLORER_LAYOUT.inspectorMinWidth,
+        Math.min(EXPLORER_LAYOUT.inspectorMaxWidth, maxInspectorWidth),
       );
+      setInspectorWidth(nextInspectorWidth);
+      setPreferredInspectorWidth(nextInspectorWidth);
+      preferredInspectorWidthRef.current = nextInspectorWidth;
     };
 
     const onPointerUp = () => {
@@ -116,12 +129,12 @@ export function useExplorerPaneLayout(args: {
       });
 
       let nextTreeWidth = clampPaneWidth(
-        treeWidthRef.current,
+        preferredTreeWidthRef.current,
         EXPLORER_LAYOUT.treeMinWidth,
         EXPLORER_LAYOUT.treeMaxWidth,
       );
       let nextInspectorWidth = clampPaneWidth(
-        inspectorWidthRef.current,
+        preferredInspectorWidthRef.current,
         EXPLORER_LAYOUT.inspectorMinWidth,
         EXPLORER_LAYOUT.inspectorMaxWidth,
       );
@@ -157,13 +170,49 @@ export function useExplorerPaneLayout(args: {
     return () => {
       window.removeEventListener("resize", syncToViewport);
     };
-  }, [inspectorVisible, minContentWidth]);
+  }, [inspectorVisible, minContentWidth, preferredTreeWidth, preferredInspectorWidth]);
+
+  // Widths given from outside (the saved ones) are chosen widths too.
+  const restoreWidths = useCallback((widths: { treeWidth: number; inspectorWidth: number }) => {
+    preferredTreeWidthRef.current = widths.treeWidth;
+    preferredInspectorWidthRef.current = widths.inspectorWidth;
+    setPreferredTreeWidth(widths.treeWidth);
+    setPreferredInspectorWidth(widths.inspectorWidth);
+    setTreeWidth(widths.treeWidth);
+    setInspectorWidth(widths.inspectorWidth);
+  }, []);
+
+  // A pane widened or narrowed from the keyboard, by a step, within its limits.
+  const nudgeWidth = useCallback((pane: Pane, delta: number) => {
+    if (pane === "tree") {
+      const next = clampPaneWidth(
+        treeWidthRef.current + delta,
+        EXPLORER_LAYOUT.treeMinWidth,
+        EXPLORER_LAYOUT.treeMaxWidth,
+      );
+      preferredTreeWidthRef.current = next;
+      setPreferredTreeWidth(next);
+      setTreeWidth(next);
+      return;
+    }
+    const next = clampPaneWidth(
+      inspectorWidthRef.current + delta,
+      EXPLORER_LAYOUT.inspectorMinWidth,
+      EXPLORER_LAYOUT.inspectorMaxWidth,
+    );
+    preferredInspectorWidthRef.current = next;
+    setPreferredInspectorWidth(next);
+    setInspectorWidth(next);
+  }, []);
 
   return {
     treeWidth,
-    setTreeWidth,
     inspectorWidth,
-    setInspectorWidth,
+    restoreWidths,
+    nudgeWidth,
+    // What is saved: the widths chosen, not the ones a narrow window squeezed them to.
+    preferredTreeWidth,
+    preferredInspectorWidth,
     beginResize,
   };
 }

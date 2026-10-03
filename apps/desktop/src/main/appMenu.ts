@@ -61,6 +61,8 @@ export function createApplicationMenuTemplate(
     onCommandSent?: () => void;
     // The keys of every command, as chosen in Settings → Shortcuts.
     shortcuts?: ShortcutBindings;
+    // The text editor chosen in Settings → Files, which Edit names.
+    textEditorName?: string | undefined;
   } = {},
 ): MenuItemConstructorOptions[] {
   const sendCommand = (type: RendererCommandType, focusedWindow?: unknown) => {
@@ -152,12 +154,12 @@ export function createApplicationMenuTemplate(
         separator,
         command("openSelection", "Open"),
         command("openSelectionInNewTab", "Open in New Tab"),
-        command("editSelection", "Edit in Text Editor"),
+        command("editSelection", `Edit in ${options.textEditorName ?? "Text Editor"}`),
         command("quickLookSelection", "Quick Look"),
         separator,
         command("renameSelection", "Rename"),
         command("duplicateSelection", "Duplicate"),
-        command("moveSelection", "Move To…"),
+        command("moveSelection", "Move to…"),
         command("toggleFavorite", "Add to Favorites", { id: FAVORITE_ADD_ITEM_ID }),
         command("toggleFavorite", "Remove from Favorites", {
           id: FAVORITE_REMOVE_ITEM_ID,
@@ -191,29 +193,30 @@ export function createApplicationMenuTemplate(
         command("clearClipboard", "Clear Clipboard"),
         separator,
         command("focusFileSearch", "Find Files…"),
-        command("showLastSearchResults", "Show Last Results"),
+        command("showLastSearchResults", "Show Last Search Results"),
       ],
     },
     {
       label: "View",
       submenu: [
         command("viewAsIcons", "as Icons", { type: "radio" }),
-        command("viewAsList", "as List", { type: "radio" }),
-        command("viewAsDetails", "as Details", { type: "radio" }),
+        command("viewAsDetails", "as List", { type: "radio" }),
+        command("viewAsList", "as Compact List", { type: "radio" }),
         separator,
         {
           label: "Sort By",
           submenu: [
             command("sortByName", "Name", { type: "radio" }),
+            command("sortByKind", "Kind", { type: "radio" }),
             command("sortByModified", "Date Modified", { type: "radio" }),
             command("sortBySize", "Size", { type: "radio" }),
-            command("sortByKind", "Kind", { type: "radio" }),
           ],
         },
         command("toggleFoldersFirst", "Folders First", { type: "checkbox" }),
         command("toggleHiddenFiles", "Hidden Files", {
           type: "checkbox",
         }),
+        command("refreshOrApplySearchSort", "Refresh"),
         separator,
         command("toggleInfoPanel", "Info Panel", { type: "checkbox" }),
         command("toggleInfoRow", "Info Row", {
@@ -221,8 +224,6 @@ export function createApplicationMenuTemplate(
         }),
         separator,
         command("customizeToolbar", "Customize Toolbar…"),
-        separator,
-        command("refreshOrApplySearchSort", "Refresh"),
         separator,
         command("zoomIn", "Zoom In"),
         command("zoomOut", "Zoom Out"),
@@ -250,9 +251,9 @@ export function createApplicationMenuTemplate(
         command("goEnclosingFolder", "Enclosing Folder"),
         separator,
         command("goHomeRootTree", "Home"),
-        command("openLocationSheet", "Go To…"),
+        command("openLocationSheet", "Go to Folder…"),
         separator,
-        command("rootTreeAtSelection", "Root Tree at Selected Folder"),
+        command("rootTreeAtSelection", "Use as Tree Root"),
       ],
     },
     {
@@ -265,9 +266,6 @@ export function createApplicationMenuTemplate(
         separator,
         command("selectPreviousTab", "Show Previous Tab"),
         command("selectNextTab", "Show Next Tab"),
-        separator,
-        command("focusTreePane", "Focus Folder Tree"),
-        command("focusContentPane", "Focus File List"),
         separator,
         { role: "front" },
       ],

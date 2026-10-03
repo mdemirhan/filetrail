@@ -4743,6 +4743,18 @@ body.window-inactive {
   height: 88px;
 }
 
+/* Several items: two icons, one behind the other, as the clipboard draws them. */
+.get-info-hero-items .clipboard-items-icon {
+  width: 96px;
+  height: 96px;
+}
+
+.get-info-hero-items .clipboard-items-icon > .file-icon,
+.get-info-hero-items .clipboard-items-icon > .file-icon.native-file-icon {
+  width: 72px;
+  height: 72px;
+}
+
 .get-info-name {
   color: var(--text-primary);
   font-size: var(--font-size-title3);

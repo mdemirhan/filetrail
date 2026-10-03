@@ -32,6 +32,57 @@ const bundleItem = {
 };
 
 describe("InfoPanel", () => {
+  it("sums up several selected items instead of describing the first", () => {
+    const onNavigateToPath = vi.fn();
+    const props = {
+      loading: false,
+      item: baseItem,
+      onClose: () => undefined,
+      onNavigateToPath,
+      onOpen: () => undefined,
+      onOpenInTerminal: () => undefined,
+      onShowInFinder: () => undefined,
+      onCopyPath: () => true,
+    };
+    const { rerender } = render(
+      <InfoPanel
+        {...props}
+        selection={{
+          count: 3,
+          folderCount: 1,
+          fileCount: 2,
+          totalBytes: null,
+          parentPath: "/Users/demo/projects",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("3 items")).toBeInTheDocument();
+    expect(screen.getByText("1 folder and 2 files")).toBeInTheDocument();
+    expect(screen.queryByText("README.md")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "projects" }));
+    expect(onNavigateToPath).toHaveBeenCalledWith("/Users/demo/projects");
+
+    rerender(
+      <InfoPanel
+        {...props}
+        selection={{ count: 2, folderCount: 0, fileCount: 2, totalBytes: 4096, parentPath: null }}
+      />,
+    );
+    expect(screen.getByText("2 files · 4.0 KB")).toBeInTheDocument();
+    expect(screen.getByText("Several folders")).toBeInTheDocument();
+
+    // One item selected: the item itself.
+    rerender(
+      <InfoPanel
+        {...props}
+        selection={{ count: 1, folderCount: 0, fileCount: 1, totalBytes: 2048, parentPath: null }}
+      />,
+    );
+    expect(screen.getByText("README.md")).toBeInTheDocument();
+  });
+
   it("shows nothing while the first item loads, a spinner only if it takes a while", () => {
     vi.useFakeTimers();
     const { rerender } = render(

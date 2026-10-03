@@ -1153,18 +1153,9 @@ export function ExplorerWorkspace({
               className={viewMode === "icons" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
               onClick={() => onViewModeChange("icons")}
               title={formatTooltip("View as Icons", shortcutDisplay.written("viewAsIcons"))}
-              aria-label="Icon view"
+              aria-label="View as Icons"
             >
               <ToolbarIcon name="icons" />
-            </button>
-            <button
-              type="button"
-              className={viewMode === "list" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
-              onClick={() => onViewModeChange("list")}
-              title={formatTooltip("View as List", shortcutDisplay.written("viewAsList"))}
-              aria-label="List view"
-            >
-              <ToolbarIcon name="list" />
             </button>
             <button
               type="button"
@@ -1172,10 +1163,19 @@ export function ExplorerWorkspace({
                 viewMode === "details" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"
               }
               onClick={() => onViewModeChange("details")}
-              title={formatTooltip("View as Details", shortcutDisplay.written("viewAsDetails"))}
-              aria-label="Details view"
+              title={formatTooltip("View as List", shortcutDisplay.written("viewAsDetails"))}
+              aria-label="View as List"
             >
               <ToolbarIcon name="details" />
+            </button>
+            <button
+              type="button"
+              className={viewMode === "list" ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
+              onClick={() => onViewModeChange("list")}
+              title={formatTooltip("View as Compact List", shortcutDisplay.written("viewAsList"))}
+              aria-label="View as Compact List"
+            >
+              <ToolbarIcon name="list" />
             </button>
           </fieldset>
         </div>
@@ -1356,7 +1356,7 @@ export function ExplorerWorkspace({
           className={foldersFirst ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
           onClick={onToggleFoldersFirst}
           title={getToolbarTooltip(itemId)}
-          aria-label="Toggle folders first"
+          aria-label="Folders First"
           aria-pressed={foldersFirst}
         >
           <ToolbarIcon name="foldersFirst" />
@@ -1371,7 +1371,7 @@ export function ExplorerWorkspace({
           className={includeHidden ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
           onClick={onToggleHidden}
           title={getToolbarTooltip(itemId)}
-          aria-label="Toggle hidden files"
+          aria-label="Hidden Files"
           aria-pressed={includeHidden}
         >
           <ToolbarIcon name={includeHidden ? "hiddenShown" : "hidden"} />
@@ -1386,7 +1386,7 @@ export function ExplorerWorkspace({
           className={infoPanelOpen ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
           onClick={onToggleInfoPanel}
           title={getToolbarTooltip(itemId)}
-          aria-label="Toggle Info Panel"
+          aria-label="Info Panel"
           aria-pressed={infoPanelOpen}
         >
           <ToolbarIcon name="drawer" />
@@ -1401,7 +1401,7 @@ export function ExplorerWorkspace({
           className={infoRowOpen ? "tb-btn tb-btn-icon active" : "tb-btn tb-btn-icon"}
           onClick={onToggleInfoRow}
           title={getToolbarTooltip(itemId)}
-          aria-label="Toggle Info Row"
+          aria-label="Info Row"
           aria-pressed={infoRowOpen}
         >
           <ToolbarIcon name="infoRow" />

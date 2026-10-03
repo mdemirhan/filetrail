@@ -69,17 +69,17 @@ export const SHORTCUT_COMMANDS = [
   },
   {
     id: "openLocationSheet",
-    label: "Go To…",
+    label: "Go to Folder…",
     group: "navigation",
     defaults: ["Cmd+K", "Cmd+Shift+G"],
-    menuPath: "Go > Go To…",
+    menuPath: "Go > Go to Folder…",
   },
   {
     id: "rootTreeAtSelection",
-    label: "Root Tree at Selected Folder",
+    label: "Use as Tree Root",
     group: "navigation",
     defaults: ["Cmd+Shift+R"],
-    menuPath: "Go > Root Tree at Selected Folder",
+    menuPath: "Go > Use as Tree Root",
   },
   {
     id: "refreshOrApplySearchSort",
@@ -88,20 +88,9 @@ export const SHORTCUT_COMMANDS = [
     defaults: ["Cmd+R"],
     menuPath: "View > Refresh",
   },
-  {
-    id: "focusTreePane",
-    label: "Focus Folder Tree",
-    group: "navigation",
-    defaults: ["Cmd+1"],
-    menuPath: "Window > Focus Folder Tree",
-  },
-  {
-    id: "focusContentPane",
-    label: "Focus File List",
-    group: "navigation",
-    defaults: ["Cmd+2"],
-    menuPath: "Window > Focus File List",
-  },
+  // Tab moves between the folder tree and the file list; these are there to be given keys.
+  { id: "focusTreePane", label: "Focus Folder Tree", group: "navigation", defaults: [] },
+  { id: "focusContentPane", label: "Focus File List", group: "navigation", defaults: [] },
   { id: "pageUp", label: "Scroll One Page Up", group: "navigation", defaults: ["Ctrl+U"] },
   { id: "pageDown", label: "Scroll One Page Down", group: "navigation", defaults: ["Ctrl+D"] },
 
@@ -189,10 +178,10 @@ export const SHORTCUT_COMMANDS = [
   },
   {
     id: "moveSelection",
-    label: "Move To…",
+    label: "Move to…",
     group: "files",
     defaults: ["Cmd+Shift+M"],
-    menuPath: "File > Move To…",
+    menuPath: "File > Move to…",
   },
   {
     id: "newFolder",
@@ -267,32 +256,34 @@ export const SHORTCUT_COMMANDS = [
   },
   {
     id: "showLastSearchResults",
-    label: "Show Last Results",
+    label: "Show Last Search Results",
     group: "search",
     defaults: ["Cmd+Shift+F"],
-    menuPath: "Edit > Show Last Results",
+    menuPath: "Edit > Show Last Search Results",
   },
 
+  // The views in Finder's order and on Finder's keys. "List" is the table with columns, as
+  // in Finder; the names-only view is the compact list (its id is older than its name).
   {
     id: "viewAsIcons",
     label: "View as Icons",
     group: "view",
-    defaults: [],
+    defaults: ["Cmd+1"],
     menuPath: "View > as Icons",
   },
   {
-    id: "viewAsList",
+    id: "viewAsDetails",
     label: "View as List",
     group: "view",
-    defaults: [],
+    defaults: ["Cmd+2"],
     menuPath: "View > as List",
   },
   {
-    id: "viewAsDetails",
-    label: "View as Details",
+    id: "viewAsList",
+    label: "View as Compact List",
     group: "view",
-    defaults: [],
-    menuPath: "View > as Details",
+    defaults: ["Cmd+3"],
+    menuPath: "View > as Compact List",
   },
   {
     id: "sortByName",
@@ -300,6 +291,13 @@ export const SHORTCUT_COMMANDS = [
     group: "view",
     defaults: [],
     menuPath: "View > Sort By > Name",
+  },
+  {
+    id: "sortByKind",
+    label: "Sort by Kind",
+    group: "view",
+    defaults: [],
+    menuPath: "View > Sort By > Kind",
   },
   {
     id: "sortByModified",
@@ -316,13 +314,6 @@ export const SHORTCUT_COMMANDS = [
     menuPath: "View > Sort By > Size",
   },
   {
-    id: "sortByKind",
-    label: "Sort by Kind",
-    group: "view",
-    defaults: [],
-    menuPath: "View > Sort By > Kind",
-  },
-  {
     id: "toggleFoldersFirst",
     label: "Folders First",
     group: "view",
@@ -331,21 +322,21 @@ export const SHORTCUT_COMMANDS = [
   },
   {
     id: "toggleHiddenFiles",
-    label: "Show Hidden Files",
+    label: "Hidden Files",
     group: "view",
     defaults: ["Cmd+Shift+."],
     menuPath: "View > Hidden Files",
   },
   {
     id: "toggleInfoPanel",
-    label: "Show Info Panel",
+    label: "Info Panel",
     group: "view",
     defaults: ["Cmd+I"],
     menuPath: "View > Info Panel",
   },
   {
     id: "toggleInfoRow",
-    label: "Show Info Row",
+    label: "Info Row",
     group: "view",
     defaults: ["Cmd+Shift+I"],
     menuPath: "View > Info Row",

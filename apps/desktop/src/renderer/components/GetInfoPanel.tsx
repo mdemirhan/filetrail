@@ -16,14 +16,27 @@ import {
 } from "../lib/formatting";
 import { formatTooltip } from "../lib/tooltips";
 import { useShortcutDisplay } from "../state/shortcutDisplayContext";
+import { ClipboardItemsIcon } from "./ClipboardItemsIcon";
 
 type ItemProperties = IpcResponse<"item:getProperties">["item"];
+
+// Several selected items, which the panel sums up as Finder's inspector does.
+export type InfoPanelSelection = {
+  count: number;
+  folderCount: number;
+  fileCount: number;
+  // Known when every item is a file whose size the list has.
+  totalBytes: number | null;
+  // The folder they are all in, or null when they are in different folders.
+  parentPath: string | null;
+};
 
 // The info panel is display-only. It reflects the selected item and exposes a small action
 // set, but it does not own filesystem state itself.
 export function InfoPanel({
   loading,
   item,
+  selection = null,
   pending = false,
   onClose,
   onNavigateToPath,
@@ -47,6 +60,8 @@ export function InfoPanel({
 }: {
   loading: boolean;
   item: ItemProperties | null;
+  // Given while more than one item is selected: the panel then describes them together.
+  selection?: InfoPanelSelection | null;
   // `item` is a preview from the file list; the rest of its details are still loading.
   pending?: boolean;
   onClose: () => void;
@@ -116,7 +131,9 @@ export function InfoPanel({
           <InfoPanelGlyph name="close" />
         </button>
       </div>
-      {item ? (
+      {selection && selection.count > 1 ? (
+        <InfoPanelSelectionContent selection={selection} onNavigateToPath={onNavigateToPath} />
+      ) : item ? (
         <GetInfoPanelContent
           copied={copied}
           item={item}
@@ -145,6 +162,71 @@ export function InfoPanel({
         <div className="get-info-empty">Select a file or folder to show its info.</div>
       )}
     </aside>
+  );
+}
+
+// "3 folders and 2 files", "4 files".
+function describeSelectionKinds(selection: InfoPanelSelection): string {
+  const count = (value: number, one: string, many: string) =>
+    `${value.toLocaleString()} ${value === 1 ? one : many}`;
+  const parts = [
+    selection.folderCount > 0 ? count(selection.folderCount, "folder", "folders") : null,
+    selection.fileCount > 0 ? count(selection.fileCount, "file", "files") : null,
+  ].filter((part): part is string => part !== null);
+  return parts.join(" and ");
+}
+
+function InfoPanelSelectionContent({
+  selection,
+  onNavigateToPath,
+}: {
+  selection: InfoPanelSelection;
+  onNavigateToPath: (path: string) => void;
+}) {
+  const contains =
+    selection.fileCount === 0 ? "folders" : selection.folderCount === 0 ? "files" : "mixed";
+  const size = selection.totalBytes === null ? null : formatSize(selection.totalBytes, "ready");
+  const { parentPath } = selection;
+  return (
+    <div className="get-info-content">
+      <div className="get-info-hero">
+        <div className="get-info-hero-icon get-info-hero-items">
+          <ClipboardItemsIcon icon={{ type: "items", contains }} />
+        </div>
+        <div className="get-info-name">{`${selection.count.toLocaleString()} items`}</div>
+        <div className="get-info-subtitle">
+          {size
+            ? `${describeSelectionKinds(selection)} · ${size}`
+            : describeSelectionKinds(selection)}
+        </div>
+      </div>
+      <section className="get-info-section">
+        <h3 className="get-info-section-title">Information</h3>
+        <dl className="get-info-meta">
+          <div className="get-info-meta-row">
+            <dt className="get-info-meta-label">Size</dt>
+            <dd className={`get-info-meta-value${size ? "" : " muted"}`}>{size ?? "--"}</dd>
+          </div>
+          <div className="get-info-meta-row last">
+            <dt className="get-info-meta-label">Where</dt>
+            <dd className={`get-info-meta-value${parentPath ? "" : " muted"}`}>
+              {parentPath ? (
+                <button
+                  type="button"
+                  className="get-info-where"
+                  title={parentPath}
+                  onClick={() => onNavigateToPath(parentPath)}
+                >
+                  {getFolderLabel(parentPath)}
+                </button>
+              ) : (
+                "Several folders"
+              )}
+            </dd>
+          </div>
+        </dl>
+      </section>
+    </div>
   );
 }
 

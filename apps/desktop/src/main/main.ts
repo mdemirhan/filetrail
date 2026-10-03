@@ -170,8 +170,12 @@ if (hasSingleInstanceLock) {
           if (change.patch.theme !== undefined) {
             applyNativeAppearance(preferences.theme);
           }
-          // The menu's keys can not be changed in place: it is built again with the new ones.
-          if (change.patch.shortcutOverrides !== undefined && mainWindowRef) {
+          // The menu's keys and labels can not be changed in place: it is built again.
+          if (
+            (change.patch.shortcutOverrides !== undefined ||
+              change.patch.defaultTextEditor !== undefined) &&
+            mainWindowRef
+          ) {
             buildApplicationMenu(mainWindowRef);
           }
         },
@@ -693,7 +697,8 @@ function applyApplicationMenu(mainWindow: BrowserWindow): void {
   buildApplicationMenu(mainWindow);
 }
 
-// Builds the menu with the shortcuts chosen in Settings; called again when they change.
+// Builds the menu with the shortcuts and the text editor chosen in Settings; called again
+// when they change.
 function buildApplicationMenu(mainWindow: BrowserWindow): void {
   Menu.setApplicationMenu(
     Menu.buildFromTemplate(
@@ -704,6 +709,7 @@ function buildApplicationMenu(mainWindow: BrowserWindow): void {
         includeDeveloperTools: !app.isPackaged || process.env.FILETRAIL_OPEN_DEVTOOLS === "1",
         onCommandSent: () => syncApplicationMenuItems(mainWindow),
         shortcuts: resolveShortcuts(appStateStoreRef?.getPreferences().shortcutOverrides).bindings,
+        textEditorName: appStateStoreRef?.getPreferences().defaultTextEditor.appName,
       }),
     ),
   );

@@ -17,6 +17,7 @@ import { type VisitedFolder, forgetVisitedFolder } from "../shared/visitedFolder
 import { AppDialogs } from "./components/AppDialogs";
 import { ClipboardButton } from "./components/ClipboardButton";
 import { ExplorerWorkspace } from "./components/ExplorerWorkspace";
+import type { InfoPanelSelection } from "./components/GetInfoPanel";
 import { InfoRow } from "./components/InfoRow";
 import type { SettingsTab } from "./components/SettingsView";
 import { TabStrip } from "./components/TabStrip";
@@ -515,6 +516,33 @@ export function App() {
     }
     return total;
   }, [activeContentEntries, metadataByPath, selectedPathSet]);
+  // Several selected items, summed up in the Info panel.
+  const infoPanelSelection = useMemo<InfoPanelSelection | null>(() => {
+    if (selectedPathSet.size < 2) {
+      return null;
+    }
+    let folderCount = 0;
+    let fileCount = 0;
+    const parents = new Set<string>();
+    for (const entry of activeContentEntries) {
+      if (!selectedPathSet.has(entry.path)) {
+        continue;
+      }
+      if (entry.kind === "directory") {
+        folderCount += 1;
+      } else {
+        fileCount += 1;
+      }
+      parents.add(entry.path.slice(0, Math.max(1, entry.path.lastIndexOf("/"))));
+    }
+    return {
+      count: folderCount + fileCount,
+      folderCount,
+      fileCount,
+      totalBytes: selectionTotalBytes,
+      parentPath: parents.size === 1 ? ([...parents][0] ?? null) : null,
+    };
+  }, [activeContentEntries, selectedPathSet, selectionTotalBytes]);
   const selectedEntry = useMemo(
     () =>
       activeContentEntries.find((entry) => entry.path === contentSelection.leadPath) ??
@@ -1154,8 +1182,8 @@ export function App() {
     // only. Settings owns the saved defaults, which each launch starts from.
     searchResultsSortBy,
     searchResultsSortDirection,
-    treeWidth: panes.treeWidth,
-    inspectorWidth: panes.inspectorWidth,
+    treeWidth: panes.preferredTreeWidth,
+    inspectorWidth: panes.preferredInspectorWidth,
     restoreSessionOnStartup,
     openTabs,
     activeTabIndex,
@@ -1313,8 +1341,10 @@ export function App() {
         setOpenItemLimit(preferences.openItemLimit);
         setReturnKeyAction(preferences.returnKeyAction);
         setShortcutOverrides(preferences.shortcutOverrides);
-        panes.setTreeWidth(preferences.treeWidth);
-        panes.setInspectorWidth(preferences.inspectorWidth);
+        panes.restoreWidths({
+          treeWidth: preferences.treeWidth,
+          inspectorWidth: preferences.inspectorWidth,
+        });
         setRestoredPaneWidths({
           treeWidth: preferences.treeWidth,
           inspectorWidth: preferences.inspectorWidth,
@@ -1411,7 +1441,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [client, panes.setInspectorWidth, panes.setTreeWidth]);
+  }, [client, panes.restoreWidths]);
 
   useEffect(() => {
     if (
@@ -1930,6 +1960,7 @@ export function App() {
             infoPanelProps={{
               loading: getInfoLoading,
               item: infoPanelItem,
+              selection: infoPanelSelection,
               pending: infoPanelView?.pending ?? false,
               onClose: () => setInfoPanelOpen(false),
               onNavigateToPath: (path) => {

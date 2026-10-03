@@ -88,7 +88,7 @@ describe("createApplicationMenuTemplate", () => {
       "-",
       "Rename",
       "Duplicate",
-      "Move To…",
+      "Move to…",
       "Add to Favorites",
       "Remove from Favorites",
       "-",
@@ -115,23 +115,22 @@ describe("createApplicationMenuTemplate", () => {
       "Clear Clipboard",
       "-",
       "Find Files…",
-      "Show Last Results",
+      "Show Last Search Results",
     ]);
     expect(labels(submenuOf(template, "View"))).toEqual([
       "as Icons",
       "as List",
-      "as Details",
+      "as Compact List",
       "-",
       "Sort By",
       "Folders First",
       "Hidden Files",
+      "Refresh",
       "-",
       "Info Panel",
       "Info Row",
       "-",
       "Customize Toolbar…",
-      "-",
-      "Refresh",
       "-",
       "Zoom In",
       "Zoom Out",
@@ -146,9 +145,9 @@ describe("createApplicationMenuTemplate", () => {
       "Enclosing Folder",
       "-",
       "Home",
-      "Go To…",
+      "Go to Folder…",
       "-",
-      "Root Tree at Selected Folder",
+      "Use as Tree Root",
     ]);
     expect(labels(submenuOf(template, "windowMenu"))).toEqual([
       "(minimize)",
@@ -157,12 +156,18 @@ describe("createApplicationMenuTemplate", () => {
       "Show Previous Tab",
       "Show Next Tab",
       "-",
-      "Focus Folder Tree",
-      "Focus File List",
-      "-",
       "(front)",
     ]);
     expect(labels(submenuOf(template, "help"))).toEqual(["File Trail Help", "Keyboard Shortcuts"]);
+  });
+
+  it("names the chosen text editor in Edit", () => {
+    const file = (textEditorName?: string) =>
+      labels(
+        submenuOf(createApplicationMenuTemplate({ send: vi.fn() }, { textEditorName }), "File"),
+      );
+    expect(file("Zed")).toContain("Edit in Zed");
+    expect(file()).toContain("Edit in Text Editor");
   });
 
   it("names the app itself rather than its package", () => {
@@ -200,7 +205,7 @@ describe("createApplicationMenuTemplate", () => {
       // from text fields and dialogs.
       ["File", "Rename", undefined, "renameSelection"],
       ["File", "Duplicate", "Command+D", "duplicateSelection"],
-      ["File", "Move To…", "Command+Shift+M", "moveSelection"],
+      ["File", "Move to…", "Command+Shift+M", "moveSelection"],
       ["File", "Add to Favorites", undefined, "toggleFavorite"],
       ["File", "Remove from Favorites", undefined, "toggleFavorite"],
       ["File", "Open in Terminal", "Command+Alt+T", "openInTerminal"],
@@ -214,10 +219,10 @@ describe("createApplicationMenuTemplate", () => {
       ["Edit", "Copy Path", "Command+Alt+C", "copyPath"],
       ["Edit", "Select All", "Command+A", "editSelectAll"],
       ["Edit", "Find Files…", "Command+F", "focusFileSearch"],
-      ["Edit", "Show Last Results", "Command+Shift+F", "showLastSearchResults"],
-      ["View", "as Icons", undefined, "viewAsIcons"],
-      ["View", "as List", undefined, "viewAsList"],
-      ["View", "as Details", undefined, "viewAsDetails"],
+      ["Edit", "Show Last Search Results", "Command+Shift+F", "showLastSearchResults"],
+      ["View", "as Icons", "Command+1", "viewAsIcons"],
+      ["View", "as List", "Command+2", "viewAsDetails"],
+      ["View", "as Compact List", "Command+3", "viewAsList"],
       ["View", "Folders First", undefined, "toggleFoldersFirst"],
       ["View", "Hidden Files", "Command+Shift+.", "toggleHiddenFiles"],
       ["View", "Info Panel", "Command+I", "toggleInfoPanel"],
@@ -230,12 +235,10 @@ describe("createApplicationMenuTemplate", () => {
       ["Go", "Forward", "Command+]", "goForward"],
       ["Go", "Enclosing Folder", "Command+Up", "goEnclosingFolder"],
       ["Go", "Home", "Command+Shift+H", "goHomeRootTree"],
-      ["Go", "Go To…", "Command+K", "openLocationSheet"],
-      ["Go", "Root Tree at Selected Folder", "Command+Shift+R", "rootTreeAtSelection"],
+      ["Go", "Go to Folder…", "Command+K", "openLocationSheet"],
+      ["Go", "Use as Tree Root", "Command+Shift+R", "rootTreeAtSelection"],
       ["windowMenu", "Show Previous Tab", "Control+Shift+Tab", "selectPreviousTab"],
       ["windowMenu", "Show Next Tab", "Control+Tab", "selectNextTab"],
-      ["windowMenu", "Focus Folder Tree", "Command+1", "focusTreePane"],
-      ["windowMenu", "Focus File List", "Command+2", "focusContentPane"],
       ["help", "File Trail Help", undefined, "openHelp"],
       ["help", "Keyboard Shortcuts", undefined, "openKeyboardShortcuts"],
     ] as const;
@@ -260,9 +263,9 @@ describe("createApplicationMenuTemplate", () => {
     }
     const expected = [
       ["Name", "sortByName"],
+      ["Kind", "sortByKind"],
       ["Date Modified", "sortByModified"],
       ["Size", "sortBySize"],
-      ["Kind", "sortByKind"],
     ] as const;
 
     expect(labels(sortBy)).toEqual(expected.map(([label]) => label));

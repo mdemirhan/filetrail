@@ -25,6 +25,10 @@ function Harness({
     <div>
       <div data-testid="tree-width">{panes.treeWidth}</div>
       <div data-testid="inspector-width">{panes.inspectorWidth}</div>
+      <div data-testid="saved-tree-width">{panes.preferredTreeWidth}</div>
+      <button type="button" onClick={() => panes.nudgeWidth("tree", 16)}>
+        Widen tree
+      </button>
       <div data-testid="tree-handle" onPointerDown={panes.beginResize("tree")} />
       <div data-testid="inspector-handle" onPointerDown={panes.beginResize("inspector")} />
     </div>
@@ -84,5 +88,32 @@ describe("useExplorerPaneLayout", () => {
     });
 
     expect(screen.getByTestId("tree-width").textContent).toBe("332");
+  });
+
+  it("gives a pane back its width when the window is widened again", () => {
+    render(<Harness initialTreeWidth={300} inspectorVisible={false} />);
+
+    act(() => {
+      window.innerWidth = 640;
+      window.dispatchEvent(new Event("resize"));
+    });
+    expect(Number(screen.getByTestId("tree-width").textContent)).toBeLessThan(300);
+    // What is saved is the width chosen, not the squeezed one.
+    expect(screen.getByTestId("saved-tree-width").textContent).toBe("300");
+
+    act(() => {
+      window.innerWidth = 1440;
+      window.dispatchEvent(new Event("resize"));
+    });
+    expect(screen.getByTestId("tree-width").textContent).toBe("300");
+  });
+
+  it("widens a pane from the keyboard, and keeps that width", () => {
+    render(<Harness initialTreeWidth={300} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Widen tree" }));
+
+    expect(screen.getByTestId("tree-width").textContent).toBe("316");
+    expect(screen.getByTestId("saved-tree-width").textContent).toBe("316");
   });
 });

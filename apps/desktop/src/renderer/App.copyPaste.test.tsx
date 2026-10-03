@@ -730,9 +730,11 @@ vi.mock("./hooks/useElementSize", () => ({
 const paneLayoutMock = {
   treeWidth: 280,
   inspectorWidth: 320,
+  preferredTreeWidth: 280,
+  preferredInspectorWidth: 320,
   beginResize: () => () => undefined,
-  setTreeWidth: () => undefined,
-  setInspectorWidth: () => undefined,
+  restoreWidths: () => undefined,
+  nudgeWidth: () => undefined,
 };
 vi.mock("./hooks/useExplorerPaneLayout", () => ({
   useExplorerPaneLayout: () => paneLayoutMock,
@@ -788,7 +790,7 @@ describe("App copy/paste integration", () => {
 
     await screen.findByRole("button", { name: "source.txt" });
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Toggle Info Panel" }));
+      fireEvent.click(screen.getByRole("button", { name: "Info Panel" }));
     });
     await waitFor(() => expect(screen.getByTestId("info-panel")).toHaveTextContent("demo"));
     const propertyRequests = () =>
@@ -1011,21 +1013,21 @@ describe("App copy/paste integration", () => {
       </FiletrailClientProvider>,
     );
     await screen.findByRole("button", { name: "source.txt" });
-    expect(screen.getByRole("button", { name: "Icon view" })).not.toHaveClass("active");
+    expect(screen.getByRole("button", { name: "View as Icons" })).not.toHaveClass("active");
 
     await act(async () => {
       harness.emitCommand({ type: "viewAsIcons" });
     });
-    expect(screen.getByRole("button", { name: "Icon view" })).toHaveClass("active");
-    expect(screen.getByRole("button", { name: "Details view" })).not.toHaveClass("active");
+    expect(screen.getByRole("button", { name: "View as Icons" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "View as List" })).not.toHaveClass("active");
     await vi.waitFor(() => {
       expect(harness.menuStates.at(-1)).toMatchObject({ viewMode: "icons" });
     });
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "List view" }));
+      fireEvent.click(screen.getByRole("button", { name: "View as Compact List" }));
     });
-    expect(screen.getByRole("button", { name: "Icon view" })).not.toHaveClass("active");
+    expect(screen.getByRole("button", { name: "View as Icons" })).not.toHaveClass("active");
     await vi.waitFor(() => {
       expect(harness.menuStates.at(-1)).toMatchObject({ viewMode: "list" });
     });
@@ -4535,8 +4537,11 @@ describe("App copy/paste integration", () => {
     ).toEqual({ text: "/Users/demo/Documents" });
   });
 
-  it("keeps tree pane switching shortcuts working", async () => {
-    const harness = createAppHarness();
+  it("moves to the file list on a key given to Focus File List", async () => {
+    // Tab is the way between the panes; the focus commands have no key until one is given.
+    const harness = createAppHarness({
+      preferences: { shortcutOverrides: { focusContentPane: ["Cmd+Option+2"] } },
+    });
 
     render(
       <FiletrailClientProvider value={harness.client}>
@@ -4547,7 +4552,7 @@ describe("App copy/paste integration", () => {
     await selectItem("/Users/demo/source.txt");
     await focusTreePane();
     await act(async () => {
-      fireEvent.keyDown(window, { key: "2", metaKey: true });
+      fireEvent.keyDown(window, { key: "2", code: "Digit2", metaKey: true, altKey: true });
     });
     await act(async () => {
       fireEvent.keyDown(window, { key: "a", metaKey: true });
@@ -10143,25 +10148,25 @@ describe("App keyboard shortcuts", () => {
     expect(screen.getAllByTitle("Close Tab (⌘W)").length).toBe(2);
   });
 
-  it("runs a command that had no key, and one on its alternate key", async () => {
+  it("runs a command on a key given in Settings, and one on its alternate key", async () => {
     const harness = createAppHarness({
       preferences: {
-        shortcutOverrides: { viewAsIcons: ["Cmd+3"], viewAsList: ["Cmd+J", "F6"] },
+        shortcutOverrides: { viewAsIcons: ["Cmd+4"], viewAsList: ["Cmd+J", "F6"] },
       },
     });
     await renderApp(harness);
-    expect(screen.getByRole("button", { name: "Icon view" })).not.toHaveClass("active");
+    expect(screen.getByRole("button", { name: "View as Icons" })).not.toHaveClass("active");
 
-    await pressKey({ key: "3", metaKey: true });
-    expect(screen.getByRole("button", { name: "Icon view" })).toHaveClass("active");
-    expect(screen.getByRole("button", { name: "Icon view" })).toHaveAttribute(
+    await pressKey({ key: "4", metaKey: true });
+    expect(screen.getByRole("button", { name: "View as Icons" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "View as Icons" })).toHaveAttribute(
       "title",
-      "View as Icons (⌘3)",
+      "View as Icons (⌘4)",
     );
 
     await pressKey({ key: "F6" });
-    expect(screen.getByRole("button", { name: "List view" })).toHaveClass("active");
-    expect(screen.getByRole("button", { name: "Icon view" })).not.toHaveClass("active");
+    expect(screen.getByRole("button", { name: "View as Compact List" })).toHaveClass("active");
+    expect(screen.getByRole("button", { name: "View as Icons" })).not.toHaveClass("active");
   });
 
   it("gives a reassigned key to its new command only", async () => {

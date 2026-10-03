@@ -1755,27 +1755,9 @@ export function useExplorerNavigationController(args: {
       return;
     }
     event.preventDefault();
-    if (pane === "tree") {
-      panes.setTreeWidth((current) =>
-        Math.max(
-          EXPLORER_LAYOUT.treeMinWidth,
-          Math.min(
-            EXPLORER_LAYOUT.treeMaxWidth,
-            current + (event.key === "ArrowRight" ? step : -step),
-          ),
-        ),
-      );
-      return;
-    }
-    panes.setInspectorWidth((current) =>
-      Math.max(
-        EXPLORER_LAYOUT.inspectorMinWidth,
-        Math.min(
-          EXPLORER_LAYOUT.inspectorMaxWidth,
-          current + (event.key === "ArrowLeft" ? step : -step),
-        ),
-      ),
-    );
+    // The tree grows to the right, the Info panel to the left.
+    const towardPane = pane === "tree" ? event.key === "ArrowRight" : event.key === "ArrowLeft";
+    panes.nudgeWidth(pane, towardPane ? step : -step);
   }
 
   useEffect(() => {
