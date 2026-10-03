@@ -266,9 +266,6 @@ export function SettingsWindowApp() {
   return (
     <main className="settings-window">
       <header className="settings-window-toolbar">
-        <div className="settings-window-title">
-          {SETTINGS_TABS.find((tab) => tab.id === activeTab)?.label}
-        </div>
         <nav className="settings-window-tabs" aria-label="Settings sections">
           {SETTINGS_TABS.map((tab) => (
             <button

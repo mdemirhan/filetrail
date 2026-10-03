@@ -4999,22 +4999,17 @@ body.settings-window-body {
   background: var(--settings-page-bg);
 }
 
+/* One row, as tall as the explorer's toolbar: the window's buttons at the left and the tabs
+   in the middle. The tab on screen is the window's title, so no line repeats it. */
 .settings-window-toolbar {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 10px 16px 8px;
+  justify-content: center;
+  height: 52px;
+  padding: 0 88px;
   border-bottom: 1px solid var(--border);
   background: var(--toolbar-bg, var(--bg-base));
   -webkit-app-region: drag;
-}
-
-.settings-window-title {
-  height: 18px;
-  color: var(--text-primary);
-  font-size: var(--font-size-body);
-  font-weight: 600;
 }
 
 .settings-window-tabs {
@@ -5027,9 +5022,9 @@ body.settings-window-body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  width: 78px;
-  height: 50px;
+  gap: 2px;
+  width: 72px;
+  height: 42px;
   border: 0;
   border-radius: var(--radius-control);
   background: transparent;
@@ -5049,8 +5044,8 @@ body.settings-window-body {
 }
 
 .settings-window-tab-icon {
-  width: 20px;
-  height: 20px;
+  width: 17px;
+  height: 17px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.7;

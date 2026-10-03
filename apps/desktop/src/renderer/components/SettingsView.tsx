@@ -1181,7 +1181,7 @@ export function SettingsView({
             }
           >
             <SettingRow
-              title="Appearance"
+              title="Theme"
               right={<AppearanceModePicker theme={theme} onChange={onThemeChange} />}
             />
             <SettingRow

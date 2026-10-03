@@ -421,14 +421,15 @@ function openSettingsWindow(tab?: SettingsTab): void {
   }
   const settingsWindow = new BrowserWindow({
     show: false,
-    width: 780,
-    height: 760,
+    width: 760,
+    height: 620,
     minWidth: 640,
-    minHeight: 560,
+    minHeight: 440,
     title: "Settings",
     backgroundColor: windowBackgroundColor(appStateStore.getPreferences().theme),
     titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 16, y: 18 },
+    // Placed as in the explorer window, whose toolbar is as tall.
+    trafficLightPosition: { x: 14, y: 16 },
     fullscreenable: false,
     webPreferences: {
       preload: fileURLToPath(new URL("../preload/index.cjs", import.meta.url)),
