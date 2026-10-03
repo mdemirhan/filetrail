@@ -25,6 +25,7 @@ import { SettingsWindowApp } from "./SettingsWindowApp";
 import { createRendererLogger, installGlobalRendererErrorHandlers } from "./lib/logging";
 import { installScrollbarVisibility } from "./lib/scrollbarVisibility";
 import { installTitleTooltips } from "./lib/titleTooltips";
+import { installWindowActivity } from "./lib/windowActivity";
 import "./styles.css";
 
 const logger = createRendererLogger("filetrail.renderer");
@@ -40,6 +41,7 @@ if (!rootElement) {
 document.body.classList.add("platform-macos");
 installTitleTooltips();
 installScrollbarVisibility();
+installWindowActivity();
 logger.info("renderer boot", {
   strictMode: true,
   platform: navigator.platform,

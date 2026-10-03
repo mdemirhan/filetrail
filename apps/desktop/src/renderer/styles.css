@@ -4823,6 +4823,14 @@ body.platform-macos .settings-view[data-layout="compact"] {
   gap: 8px;
 }
 
+/* While the window is in the background every selection is drawn as an unfocused one
+   (lib/windowActivity.ts), as on macOS: the selection tokens take the grey colors. */
+body.window-inactive {
+  --ft-accent-selection-bg: var(--bg-active-inactive);
+  --ft-accent-on-selection: var(--text-primary);
+  --ft-accent-on-selection-soft: var(--text-secondary);
+}
+
 /* Focused selection is the accent as a fill with white text (see `selectionColors`);
    unfocused selection turns gray. */
 .flow-item.active:not(.inactive),
