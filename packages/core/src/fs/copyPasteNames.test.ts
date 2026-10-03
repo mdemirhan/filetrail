@@ -98,6 +98,20 @@ describe("copyPasteNames", () => {
     );
   });
 
+  // Finder's own copies of document packages: "Talk copy.key", not "Talk.key copy".
+  it("keeps the extension at the end for document packages too", async () => {
+    const fileSystem = new MockWriteServiceFileSystem({ "/target": { kind: "directory" } });
+
+    await expect(
+      resolveDuplicateName("Talk.key", "/target", fileSystem, undefined, { isDirectory: true }),
+    ).resolves.toBe("/target/Talk copy.key");
+    await expect(
+      resolveDuplicateName("Trip.photoslibrary", "/target", fileSystem, undefined, {
+        isDirectory: true,
+      }),
+    ).resolves.toBe("/target/Trip copy.photoslibrary");
+  });
+
   it("treats compressed tar archives as having one extension", async () => {
     const fileSystem = new MockWriteServiceFileSystem({ "/target": { kind: "directory" } });
 

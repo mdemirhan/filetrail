@@ -96,6 +96,18 @@ export function nativeGetFileThumbnail(path: string, size: number): Promise<Buff
 export function nativeKindForPath(path: string): string | null;
 
 /**
+ * Whether macOS shows the folder as a single item, a package (`NSURLIsPackageKey`): apps,
+ * Keynote and Pages documents, photo libraries, any type an installed app declares as a
+ * package, and folders with the package bit set.
+ *
+ * Runs on a libuv thread pool thread. `null` when it can't be told (the item is gone),
+ * and when the loaded binary predates this function.
+ *
+ * @param path - Absolute path to the folder.
+ */
+export function nativeIsPackage(path: string): Promise<boolean | null>;
+
+/**
  * Recursively calculates the total size of a folder using `getattrlistbulk(2)`.
  *
  * Returns a JSON string:

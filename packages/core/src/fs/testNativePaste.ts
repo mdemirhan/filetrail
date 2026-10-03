@@ -30,6 +30,7 @@ export const nativeFileSystem: WriteServiceFileSystem = {
   ...DEFAULT_WRITE_SERVICE_FILE_SYSTEM,
   renameExclusive: native.nativeRenameExclusive,
   isCaseSensitive: native.nativeIsCaseSensitive,
+  isPackage: native.nativeIsPackage,
   getFlags: native.nativeGetFlags,
   setFlags: native.nativeSetFlags,
   copyFile: async (sourcePath, destinationPath, signal) => {

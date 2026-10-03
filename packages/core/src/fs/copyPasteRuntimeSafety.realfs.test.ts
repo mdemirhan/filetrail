@@ -410,22 +410,22 @@ describe("going on after the item being pasted changed", () => {
   // An item the review saw at the destination and that changed there since is still
   // asked about, even inside a folder that was read again.
   it("still asks before replacing an item inside it that changed at the destination", async () => {
-    await mkdir(join(src, "Pkg.app"));
-    await writeFile(join(src, "Pkg.app", "a.txt"), "new a");
-    await mkdir(join(dst, "Pkg.app"));
-    await writeFile(join(dst, "Pkg.app", "a.txt"), "old a");
+    await mkdir(join(src, "Project"));
+    await writeFile(join(src, "Project", "a.txt"), "new a");
+    await mkdir(join(dst, "Project"));
+    await writeFile(join(dst, "Project", "a.txt"), "old a");
 
     const { conflicts } = await runPaste({
       mode: "copy",
-      sourcePaths: [join(src, "Pkg.app")],
+      sourcePaths: [join(src, "Project")],
       destinationDirectoryPath: dst,
       policy: { file: "overwrite", directory: "merge", mismatch: "skip" },
       beforeExecute: async () => {
         await mkdir(join(src, "saving"));
         await writeFile(join(src, "saving", "a.txt"), "newer a");
-        await rm(join(src, "Pkg.app"), { recursive: true });
-        await rename(join(src, "saving"), join(src, "Pkg.app"));
-        await writeFile(join(dst, "Pkg.app", "a.txt"), "edited at the destination");
+        await rm(join(src, "Project"), { recursive: true });
+        await rename(join(src, "saving"), join(src, "Project"));
+        await writeFile(join(dst, "Project", "a.txt"), "edited at the destination");
       },
       resolve: (conflict) => (conflict.reason === "source_changed" ? "merge" : "skip"),
     });
@@ -434,7 +434,7 @@ describe("going on after the item being pasted changed", () => {
       "source_changed",
       "destination_changed",
     ]);
-    expect(await readFile(join(dst, "Pkg.app", "a.txt"), "utf8")).toBe("edited at the destination");
+    expect(await readFile(join(dst, "Project", "a.txt"), "utf8")).toBe("edited at the destination");
   });
 });
 

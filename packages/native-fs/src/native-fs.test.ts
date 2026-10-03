@@ -517,3 +517,23 @@ describe("nativeGetFlags / nativeSetFlags", () => {
     });
   });
 });
+
+describe("nativeIsPackage", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "native-fs-package-"));
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("tells a package from a plain folder, and says null for a missing item", async () => {
+    mkdirSync(join(root, "Tool.app"));
+    mkdirSync(join(root, "plain"));
+    expect(await wrapper.nativeIsPackage(join(root, "Tool.app"))).toBe(true);
+    expect(await wrapper.nativeIsPackage(join(root, "plain"))).toBe(false);
+    expect(await wrapper.nativeIsPackage(join(root, "missing.app"))).toBeNull();
+  });
+});

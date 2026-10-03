@@ -14,6 +14,7 @@ import {
   destinationPathKey,
   detectCaseSensitivity,
   isFolderViewFile,
+  isPackageFolder,
   resolveDuplicateName,
 } from "./copyPasteNames";
 import type {
@@ -26,6 +27,7 @@ import type {
   CopyPasteConflictClass,
   CopyPasteDestinationOnlySummary,
   CopyPasteNodeKind,
+  NodeFingerprint,
   RequiredCopyPasteAnalysisRequest,
   WriteServiceFileSystem,
 } from "./writeServiceTypes";
@@ -297,15 +299,29 @@ async function analyzeNode(args: {
   destinationPath: string;
   fileSystem: WriteServiceFileSystem;
   destinationScanCache: DestinationScanCache;
+  // Inside a package that replaces or sits beside another: everything in it is written
+  // anew, so nothing at the destination is looked at.
+  insideWholePackage?: boolean;
   signal?: AbortSignal;
 }): Promise<CopyPasteAnalysisNode> {
   args.signal?.throwIfAborted();
   const sourceFingerprint = await captureFingerprint(args.fileSystem, args.sourcePath);
-  const destinationFingerprint = await captureFingerprint(args.fileSystem, args.destinationPath);
+  const destinationFingerprint = args.insideWholePackage
+    ? MISSING_FINGERPRINT
+    : await captureFingerprint(args.fileSystem, args.destinationPath);
   const sourceKind = sourceFingerprint.kind as Exclude<CopyPasteNodeKind, "missing">;
   const destinationKind = destinationFingerprint.kind;
-  const conflictClass = resolveConflictClass(sourceKind, destinationKind);
+  const conflictClass = await classifyConflict(
+    args.fileSystem,
+    { path: args.sourcePath, kind: sourceKind },
+    { path: args.destinationPath, kind: destinationKind },
+  );
   const disposition = conflictClass === null ? "new" : "conflict";
+  const wholePackage =
+    args.insideWholePackage === true ||
+    (sourceKind === "directory" &&
+      conflictClass !== null &&
+      conflictClass !== "directory_conflict");
 
   const children: CopyPasteAnalysisNode[] = [];
   let totalNodeCount = 1;
@@ -348,6 +364,7 @@ async function analyzeNode(args: {
         destinationPath: childDestinationPath,
         fileSystem: args.fileSystem,
         destinationScanCache: args.destinationScanCache,
+        ...(wholePackage ? { insideWholePackage: true } : {}),
         ...(args.signal ? { signal: args.signal } : {}),
       });
       children.push(childNode);
@@ -366,13 +383,17 @@ async function analyzeNode(args: {
       args.destinationScanCache,
       args.signal,
     );
-    destinationOnly = await summarizeDestinationOnly({
-      fileSystem: args.fileSystem,
-      destinationPath: args.destinationPath,
-      sourceChildren: conflictClass === "directory_conflict" ? children : [],
-      cache: args.destinationScanCache,
-      ...(args.signal ? { signal: args.signal } : {}),
-    });
+    // A package is replaced as one item: what is inside it isn't anyone's to list.
+    destinationOnly =
+      conflictClass === "file_conflict"
+        ? null
+        : await summarizeDestinationOnly({
+            fileSystem: args.fileSystem,
+            destinationPath: args.destinationPath,
+            sourceChildren: conflictClass === "directory_conflict" ? children : [],
+            cache: args.destinationScanCache,
+            ...(args.signal ? { signal: args.signal } : {}),
+          });
   }
 
   return {
@@ -639,21 +660,35 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
 }
 
-function resolveConflictClass(
-  sourceKind: Exclude<CopyPasteNodeKind, "missing">,
-  destinationKind: CopyPasteNodeKind,
-): CopyPasteConflictClass | null {
-  if (destinationKind === "missing") {
+const MISSING_FINGERPRINT: NodeFingerprint = {
+  exists: false,
+  kind: "missing",
+  size: null,
+  mtimeMs: null,
+  mode: null,
+  ino: null,
+  dev: null,
+  symlinkTarget: null,
+};
+
+// What kind of clash an item has with what is at its destination. Two folders can be
+// merged, unless either is a package (an app, a Keynote document): those are replaced or
+// kept beside each other whole, like files, since mixing two versions breaks them.
+export async function classifyConflict(
+  fileSystem: WriteServiceFileSystem,
+  source: { path: string; kind: Exclude<CopyPasteNodeKind, "missing"> },
+  destination: { path: string; kind: CopyPasteNodeKind },
+): Promise<CopyPasteConflictClass | null> {
+  if (destination.kind === "missing") {
     return null;
   }
-  if (sourceKind === "directory" && destinationKind === "directory") {
-    return "directory_conflict";
+  if (source.kind === "directory" && destination.kind === "directory") {
+    const packaged =
+      (await isPackageFolder(fileSystem, source.path)) ||
+      (await isPackageFolder(fileSystem, destination.path));
+    return packaged ? "file_conflict" : "directory_conflict";
   }
-  if (
-    sourceKind !== "directory" &&
-    destinationKind !== "directory" &&
-    sourceKind === destinationKind
-  ) {
+  if (source.kind !== "directory" && destination.kind === source.kind) {
     return "file_conflict";
   }
   return "type_mismatch";

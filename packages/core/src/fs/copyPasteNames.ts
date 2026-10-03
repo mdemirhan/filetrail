@@ -9,30 +9,44 @@ const MAX_NAME_BYTES = 255;
 const MAX_DUPLICATE_NAME_ATTEMPTS = 10_000;
 // Extensions made of two parts: "backup.tar.gz" becomes "backup copy.tar.gz".
 const MULTI_PART_EXTENSIONS = [".tar.gz", ".tar.bz2", ".tar.xz", ".tar.zst"];
-// Folders macOS shows as a single item. Like Finder, their copies keep the extension at
-// the end ("Tool copy.app"); any other folder gets " copy" after its whole name.
-const BUNDLE_EXTENSIONS = new Set([
+// Folders macOS shows as a single item (packages), as far as their extension tells: used
+// when macOS can't be asked (`isPackageFolder`). Like Finder, their copies keep the
+// extension at the end ("Tool copy.app"); any other folder gets " copy" after its whole name.
+const PACKAGE_EXTENSIONS = new Set([
   ".app",
   ".appex",
+  ".band",
   ".bundle",
+  ".docset",
+  ".fcpbundle",
   ".framework",
+  ".imovielibrary",
   ".kext",
+  ".key",
+  ".logicx",
   ".mpkg",
+  ".musiclibrary",
+  ".numbers",
+  ".pages",
   ".photoslibrary",
   ".pkg",
   ".playground",
   ".plugin",
   ".prefpane",
   ".rtfd",
+  ".scriv",
+  ".textbundle",
+  ".xcarchive",
   ".xcodeproj",
   ".xcworkspace",
+  ".xpc",
 ]);
 // "name copy" or "name copy N" (N from 2, as Finder numbers them).
 const COPY_SUFFIX_PATTERN = /^(.+?) copy(?: ([2-9]|[1-9]\d+))?$/u;
 const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
 export type DuplicateNameOptions = {
-  // Folders don't have an extension to keep at the end (bundles aside).
+  // Folders don't have an extension to keep at the end (packages aside).
   isDirectory?: boolean;
   // Whether the destination volume tells "a" and "A" apart (see `destinationPathKey`).
   caseSensitive?: boolean;
@@ -78,6 +92,24 @@ export async function resolveDuplicateName(
   throw new Error(`Couldn't find a free name for “${sourceName}”.`);
 }
 
+// Whether a name has the extension of a package (see `PACKAGE_EXTENSIONS`).
+export function isPackageName(name: string): boolean {
+  const extension = extname(name);
+  return extension.length > 1 && PACKAGE_EXTENSIONS.has(extension.toLowerCase());
+}
+
+// Whether a folder is a package, which is pasted whole: never merged with another, as
+// mixing two versions of an app or a document breaks it. macOS is asked when it can be
+// (it knows document packages of installed apps and the package bit); otherwise the
+// extension tells.
+export async function isPackageFolder(
+  fileSystem: WriteServiceFileSystem,
+  path: string,
+): Promise<boolean> {
+  const answer = fileSystem.isPackage ? await fileSystem.isPackage(path).catch(() => null) : null;
+  return answer ?? isPackageName(basename(path));
+}
+
 // Finder writes ".DS_Store" into a folder just by showing it. It is nobody's item: it isn't
 // counted as one, and its appearing doesn't make a folder "changed".
 export function isFolderViewFile(name: string): boolean {
@@ -92,7 +124,7 @@ export function destinationPathKey(path: string, caseSensitive = false): string 
 }
 
 // Splits "name.ext" into ["name", ".ext"], keeping multi-part extensions together and
-// leaving folder names (other than bundles) whole.
+// leaving folder names (other than packages) whole.
 export function splitNameExtension(name: string, isDirectory: boolean): [string, string] {
   if (!isDirectory) {
     const lowerName = name.toLowerCase();
@@ -106,7 +138,7 @@ export function splitNameExtension(name: string, isDirectory: boolean): [string,
   if (extension.length <= 1) {
     return [name, ""];
   }
-  if (isDirectory && !BUNDLE_EXTENSIONS.has(extension.toLowerCase())) {
+  if (isDirectory && !PACKAGE_EXTENSIONS.has(extension.toLowerCase())) {
     return [name, ""];
   }
   return [name.slice(0, -extension.length), extension];

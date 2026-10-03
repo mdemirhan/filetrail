@@ -41,6 +41,7 @@ const addon = require("@filetrail/native-fs") as {
   nativeFolderSizeCancel: () => void;
   nativeRenameExclusive: (from: string, to: string) => Promise<void>;
   nativeIsCaseSensitive: (path: string) => Promise<boolean | null>;
+  nativeIsPackage: (path: string) => Promise<boolean | null>;
 };
 const {
   nativeCopyFile,
@@ -51,6 +52,7 @@ const {
   nativeFolderSizeCancel,
   nativeRenameExclusive,
   nativeIsCaseSensitive,
+  nativeIsPackage,
   nativeGetFlags,
   nativeSetFlags,
 } = addon;
@@ -103,6 +105,7 @@ export const originalFileSystem: WriteServiceFileSystem = {
     await rmdir(path);
   },
   isCaseSensitive: (path) => nativeIsCaseSensitive(path),
+  isPackage: (path) => nativeIsPackage(path),
   symlink: async (target, path) => {
     await symlink(target, path);
   },

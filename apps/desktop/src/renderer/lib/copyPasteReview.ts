@@ -380,6 +380,9 @@ function describeChoice(
   if (node.conflictClass === "type_mismatch") {
     return { text: describeMismatch(node), tone: "normal" };
   }
+  if (isPackageConflict(node)) {
+    return { text: `The existing “${leafName(node.destinationPath)}” stays`, tone: "normal" };
+  }
   if (isFolder) {
     return {
       text: `Folder · ${pluralize(node.totalNodeCount - 1, "item")} · the existing folder stays`,
@@ -389,7 +392,18 @@ function describeChoice(
   return { text: compareFiles(node, now), tone: "normal" };
 }
 
+// Two packages (apps, Keynote documents) clash like two files: one replaces the other or
+// both are kept, never merged.
+function isPackageConflict(node: CopyPasteAnalysisNode): boolean {
+  return node.sourceKind === "directory" && node.conflictClass === "file_conflict";
+}
+
 function describeReplacement(node: CopyPasteAnalysisNode, now: number): string {
+  if (isPackageConflict(node)) {
+    const modified = node.destinationFingerprint.mtimeMs;
+    const date = modified === null ? "" : ` from ${formatReviewDate(modified, now)}`;
+    return `Replaces the existing “${leafName(node.destinationPath)}”${date}`;
+  }
   if (node.destinationKind === "directory") {
     const lost = describeDeletedDestinationOnly(node);
     if (lost) {

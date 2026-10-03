@@ -77,6 +77,11 @@ function kindForPathFallback() {
   return null;
 }
 
+// Without it, callers go by the folder's extension.
+async function isPackageFallback() {
+  return null;
+}
+
 module.exports = {
   nativeCopyFile: binding.nativeCopyFile,
   nativeCopyMetadata: binding.nativeCopyMetadata ?? copyMetadataFallback,
@@ -87,6 +92,7 @@ module.exports = {
   nativeFolderSizeCancel: binding.nativeFolderSizeCancel,
   nativeRenameExclusive: binding.nativeRenameExclusive ?? renameExclusiveFallback,
   nativeIsCaseSensitive: binding.nativeIsCaseSensitive ?? isCaseSensitiveFallback,
+  nativeIsPackage: binding.nativeIsPackage ?? isPackageFallback,
   nativeGetFlags: binding.nativeGetFlags ?? getFlagsFallback,
   nativeSetFlags: binding.nativeSetFlags ?? setFlagsFallback,
 };

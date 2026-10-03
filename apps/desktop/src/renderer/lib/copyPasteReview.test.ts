@@ -233,6 +233,36 @@ describe("copy/paste review model", () => {
     ]);
   });
 
+  it("describes a package as one item, never as a folder to merge", () => {
+    const app = node({
+      id: "item-app",
+      sourcePath: "/src/Foo.app",
+      sourceKind: "directory",
+      destinationKind: "directory",
+      conflictClass: "file_conflict",
+      sourceFingerprint: fingerprint("directory", null, NOW - 60_000),
+      destinationFingerprint: fingerprint("directory", null, JAN_1),
+      keepBothDestinationPath: "/dest/Foo copy.app",
+    });
+    const rowsFor = (choice: "overwrite" | "keep_all") =>
+      buildReviewRows({
+        report: report([app]),
+        policy: policyForAllConflicts(choice),
+        overrides: {},
+        showNewItems: false,
+        now: NOW,
+      });
+
+    expect(rowsFor("overwrite")[0]).toMatchObject({
+      choices: ["keep_both", "overwrite", "skip"],
+      detail: "Replaces the existing “Foo.app” from Jan 1",
+    });
+    expect(rowsFor("keep_all")[0]).toMatchObject({
+      keepBothName: "Foo copy.app",
+      detail: "The existing “Foo.app” stays",
+    });
+  });
+
   it("gets singular, plural and unnamed items right in what Replace deletes", () => {
     const describe = (destinationOnly: CopyPasteAnalysisNode["destinationOnly"]) =>
       buildReviewRows({

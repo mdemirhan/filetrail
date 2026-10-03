@@ -3,7 +3,7 @@ import { basename, dirname, join } from "node:path";
 
 import { isAbortError } from "@filetrail/contracts";
 
-import { analyzeItemAgain } from "./copyPasteAnalysis";
+import { analyzeItemAgain, classifyConflict } from "./copyPasteAnalysis";
 import {
   LOCK_FLAGS,
   NO_TRASH_ERROR_CODE,
@@ -475,7 +475,11 @@ async function resolveWithRuntimeAnswer(
             : node.node.sourceFingerprint,
         };
   const conflictClass = currentDestination.exists
-    ? conflictClassFor(source.sourceKind, currentDestination.kind)
+    ? await conflictClassFor(
+        context.fileSystem,
+        { path: source.sourcePath, kind: source.sourceKind },
+        { path: node.destinationPath, kind: currentDestination.kind },
+      )
     : null;
   if (resolution === "merge" && conflictClass !== "directory_conflict") {
     throw new Error(
@@ -520,7 +524,7 @@ async function readChangedSourceAgain(
     caseSensitive: context.caseSensitive,
     signal: context.signal,
   });
-  const withPlannedDestinations = keepPlannedDestinations(fresh, planned);
+  const withPlannedDestinations = await keepPlannedDestinations(context, fresh, planned);
   context.totalItemCount += Math.max(0, fresh.totalNodeCount - planned.totalNodeCount);
   return {
     ...withPlannedDestinations,
@@ -531,13 +535,21 @@ async function readChangedSourceAgain(
 
 // Items inside a re-read folder that the review also saw keep the destination it saw:
 // one that changed there since is then still asked about, never replaced unseen.
-function keepPlannedDestinations(
+async function keepPlannedDestinations(
+  context: ExecutionContext,
   fresh: CopyPasteAnalysisNode,
   planned: CopyPasteAnalysisNode,
-): CopyPasteAnalysisNode {
+): Promise<CopyPasteAnalysisNode> {
   const plannedChildren = new Map(
     planned.children.map((child) => [basename(child.sourcePath), child]),
   );
+  const children: CopyPasteAnalysisNode[] = [];
+  for (const child of fresh.children) {
+    const plannedChild = plannedChildren.get(basename(child.sourcePath));
+    children.push(
+      plannedChild ? await keepPlannedDestinations(context, child, plannedChild) : child,
+    );
+  }
   return {
     ...fresh,
     destinationFingerprint: planned.destinationFingerprint,
@@ -545,13 +557,14 @@ function keepPlannedDestinations(
     destinationTotalNodeCount: planned.destinationTotalNodeCount,
     destinationOnly: planned.destinationOnly,
     conflictClass: planned.destinationFingerprint.exists
-      ? conflictClassFor(fresh.sourceKind, planned.destinationKind)
+      ? await conflictClassFor(
+          context.fileSystem,
+          { path: fresh.sourcePath, kind: fresh.sourceKind },
+          { path: fresh.destinationPath, kind: planned.destinationKind },
+        )
       : null,
     disposition: planned.destinationFingerprint.exists ? "conflict" : "new",
-    children: fresh.children.map((child) => {
-      const plannedChild = plannedChildren.get(basename(child.sourcePath));
-      return plannedChild ? keepPlannedDestinations(child, plannedChild) : child;
-    }),
+    children,
   };
 }
 
@@ -1083,7 +1096,11 @@ async function removeReplacedItem(
     destinationPath: node.destinationPath,
     sourceKind: node.node.sourceKind,
     destinationKind: destination.kind,
-    conflictClass: conflictClassFor(node.node.sourceKind, destination.kind),
+    conflictClass: await conflictClassFor(
+      fileSystem,
+      { path: node.node.sourcePath, kind: node.node.sourceKind },
+      { path: node.destinationPath, kind: destination.kind },
+    ),
     reason: "trash_unavailable",
     sourceFingerprint: node.node.sourceFingerprint,
     destinationFingerprint: node.node.destinationFingerprint,
@@ -1310,17 +1327,14 @@ export async function moveExclusive(
   await fileSystem.rename(from, to);
 }
 
-function conflictClassFor(
-  sourceKind: Exclude<CopyPasteNodeKind, "missing">,
-  destinationKind: CopyPasteNodeKind,
-): CopyPasteConflictClass {
-  if (sourceKind === "directory" && destinationKind === "directory") {
-    return "directory_conflict";
-  }
-  if (sourceKind !== "directory" && destinationKind === sourceKind) {
-    return "file_conflict";
-  }
-  return "type_mismatch";
+// The clash an item has with what is at its destination, as the review would classify
+// it (two packages are replaced whole, never merged).
+async function conflictClassFor(
+  fileSystem: WriteServiceFileSystem,
+  source: { path: string; kind: Exclude<CopyPasteNodeKind, "missing"> },
+  destination: { path: string; kind: CopyPasteNodeKind },
+): Promise<CopyPasteConflictClass> {
+  return (await classifyConflict(fileSystem, source, destination)) ?? "type_mismatch";
 }
 
 async function detectRuntimeConflict(
@@ -1379,7 +1393,11 @@ async function detectRuntimeConflict(
       return destinationExists
         ? conflict(
             "destination_created",
-            conflictClassFor(resolvedNode.node.sourceKind, currentDestinationFingerprint.kind),
+            await conflictClassFor(
+              fileSystem,
+              { path: resolvedNode.node.sourcePath, kind: resolvedNode.node.sourceKind },
+              { path: resolvedNode.destinationPath, kind: currentDestinationFingerprint.kind },
+            ),
             "destination",
           )
         : null;
@@ -1403,7 +1421,11 @@ async function detectRuntimeConflict(
         ? null
         : conflict(
             planned.exists ? "destination_changed" : "destination_created",
-            conflictClassFor(resolvedNode.node.sourceKind, currentDestinationFingerprint.kind),
+            await conflictClassFor(
+              fileSystem,
+              { path: resolvedNode.node.sourcePath, kind: resolvedNode.node.sourceKind },
+              { path: resolvedNode.destinationPath, kind: currentDestinationFingerprint.kind },
+            ),
             "destination",
           );
     }

@@ -98,6 +98,9 @@ export type WriteServiceFileSystem = {
    *  in, since a read-only or locked folder can't be written into afterwards. Without it,
    *  only the mode and dates are carried over. */
   copyMetadata?: (sourcePath: string, destinationPath: string) => Promise<void>;
+  /** Whether macOS shows the folder as one item, a package (`NSURLIsPackageKey`); null
+   *  when it can't tell. Without it, the folder's extension decides. */
+  isPackage?: (path: string) => Promise<boolean | null>;
   copyFileStream: (
     sourcePath: string,
     destinationPath: string,
