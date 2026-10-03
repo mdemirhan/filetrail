@@ -216,7 +216,7 @@ export function IconGridView({
         aria-multiselectable="true"
         className="icon-grid-items"
         style={{
-          gridTemplateColumns: `repeat(${columns}, ${layout.cellWidth}px)`,
+          gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
           // Virtualization pads the unmounted rows above and below the visible slice.
           paddingTop: `${range.startIndex * layout.rowHeight}px`,
           paddingBottom: `${Math.max(0, rowCount - range.endIndex) * layout.rowHeight}px`,

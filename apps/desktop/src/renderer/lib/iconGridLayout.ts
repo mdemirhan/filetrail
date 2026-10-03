@@ -4,10 +4,8 @@
 export type IconGridLayout = {
   // Side of the square the icon or preview is drawn in.
   iconSize: number;
-  // Every column is this wide. Space left over stays at the right edge, as in Finder, so
-  // items don't move sideways when the pane gets wider or narrower (opening the Info
-  // panel, resizing the window); they only reflow when a column is added or removed.
-  cellWidth: number;
+  // Columns are at least this wide; they stretch to share the pane's width.
+  cellMinWidth: number;
   // Row pitch: icon, name on up to two lines, and the spacing around them.
   rowHeight: number;
   paddingTop: number;
@@ -18,7 +16,7 @@ export type IconGridLayout = {
 
 export const ICON_GRID_LAYOUT: IconGridLayout = {
   iconSize: 64,
-  cellWidth: 104,
+  cellMinWidth: 104,
   rowHeight: 116,
   paddingTop: 10,
   paddingBottom: 10,
@@ -27,7 +25,7 @@ export const ICON_GRID_LAYOUT: IconGridLayout = {
 
 export const COMPACT_ICON_GRID_LAYOUT: IconGridLayout = {
   iconSize: 48,
-  cellWidth: 88,
+  cellMinWidth: 88,
   rowHeight: 94,
   paddingTop: 8,
   paddingBottom: 8,
@@ -42,7 +40,7 @@ export function getIconGridLayout(compact: boolean): IconGridLayout {
 // yet; one column keeps the math valid until it is.
 export function computeIconGridColumns(containerWidth: number, layout: IconGridLayout): number {
   const availableWidth = containerWidth - layout.paddingInline * 2;
-  return Math.max(1, Math.floor(availableWidth / layout.cellWidth));
+  return Math.max(1, Math.floor(availableWidth / layout.cellMinWidth));
 }
 
 // Vertical scroll offset that brings the row holding `itemIndex` fully into view, moving
