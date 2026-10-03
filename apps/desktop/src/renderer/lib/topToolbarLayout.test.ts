@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import {
   TOP_TOOLBAR_LAYOUT,
   resolveToolbarCapsules,
+  resolveToolbarDropIndex,
   resolveTopToolbarSlots,
   resolveVisibleOptionalCount,
   selectTopToolbarSlots,
@@ -222,5 +223,15 @@ describe("resolveToolbarCapsules", () => {
       sort: { start: true, end: false },
       viewOptions: { start: false, end: true },
     });
+  });
+});
+
+describe("resolveToolbarDropIndex", () => {
+  it("lands a dragged item after every item whose middle is left of the pointer", () => {
+    const centers = [20, 60, 300, 520];
+    expect(resolveToolbarDropIndex(centers, 5)).toBe(0);
+    expect(resolveToolbarDropIndex(centers, 61)).toBe(2);
+    expect(resolveToolbarDropIndex(centers, 900)).toBe(4);
+    expect(resolveToolbarDropIndex([], 100)).toBe(0);
   });
 });

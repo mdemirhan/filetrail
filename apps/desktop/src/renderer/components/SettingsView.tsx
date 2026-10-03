@@ -1,6 +1,5 @@
 import {
   type CSSProperties,
-  type DragEvent as ReactDragEvent,
   type ReactNode,
   type RefObject,
   useCallback,
@@ -27,7 +26,6 @@ import type {
   TabStyle,
   ThemeMode,
   ThemePreference,
-  ToolbarItemId,
   UiFontFamily,
 } from "../../shared/appPreferences";
 import {
@@ -50,14 +48,6 @@ import {
   normalizeAccentColor,
 } from "../../shared/appPreferences";
 import { type ShortcutOverrides, resolveShortcuts } from "../../shared/shortcuts";
-import {
-  DEFAULT_TOP_TOOLBAR_ITEMS,
-  TOOLBAR_ITEM_IDS,
-  addTopToolbarItem,
-  getToolbarItemDefinition,
-  isRequiredTopToolbarItem,
-  sanitizeTopToolbarItems,
-} from "../../shared/toolbarItems";
 import { generateAccentTokens } from "../lib/accent";
 import { getFavoriteLabel, getTrashPath } from "../lib/favorites";
 import { AppIcon, FavoriteItemIcon } from "../lib/fileIcons";
@@ -67,7 +57,6 @@ import { VIEW_TEXT } from "../lib/viewColors";
 import { MenuCheck } from "./MenuCheck";
 import { ActionButton, SectionCard } from "./SettingsControls";
 import { ShortcutSettings } from "./ShortcutSettings";
-import { ToolbarIcon } from "./ToolbarIcon";
 
 // Settings follows the Font preference.
 
@@ -226,47 +215,6 @@ const settingsBaseThemes = {
 
 type ResolvedSettingsTheme = ReturnType<typeof resolveSettingsTheme>;
 
-const NO_REQUIRED_TOOLBAR_ITEMS: ReadonlySet<ToolbarItemId> = new Set();
-// The four items every toolbar has (the title, the clipboard button, View Options and search).
-const REQUIRED_TOP_TOOLBAR_ITEMS: ReadonlySet<ToolbarItemId> = new Set(
-  TOOLBAR_ITEM_IDS.filter(isRequiredTopToolbarItem),
-);
-
-// The order of the items that can be added: moving about, how the list is shown, what can
-// be done with the selection, and the app itself.
-const TOP_TOOLBAR_AVAILABLE_ITEM_ORDER: ToolbarItemId[] = [
-  "topSeparator",
-  "back",
-  "forward",
-  "up",
-  "goToFolder",
-  "refresh",
-  "newTab",
-  "view",
-  "sort",
-  "foldersFirst",
-  "hidden",
-  "infoPanel",
-  "infoRow",
-  "openSelection",
-  "quickLook",
-  "editSelection",
-  "copySelection",
-  "cutSelection",
-  "pasteSelection",
-  "renameSelection",
-  "moveSelection",
-  "duplicateSelection",
-  "newFolder",
-  "trashSelection",
-  "openInTerminal",
-  "showInFinder",
-  "copyPath",
-  "theme",
-  "settings",
-  "help",
-];
-
 // The keys a sentence names, or nothing when none of them is set: " (⌘+, ⌘−, ⌘0)".
 function describeKeys(
   labels: ReadonlyArray<string | null>,
@@ -276,20 +224,6 @@ function describeKeys(
 ): string {
   const keys = labels.filter((label): label is string => label !== null);
   return keys.length > 0 ? `${before}${keys.join(separator)}${after}` : "";
-}
-
-function sortToolbarAvailableItems(items: ToolbarItemId[], order: readonly ToolbarItemId[]) {
-  const orderMap = new Map(order.map((itemId, index) => [itemId, index]));
-  return [...items].sort((left, right) => {
-    const leftIndex = orderMap.get(left) ?? Number.MAX_SAFE_INTEGER;
-    const rightIndex = orderMap.get(right) ?? Number.MAX_SAFE_INTEGER;
-    if (leftIndex !== rightIndex) {
-      return leftIndex - rightIndex;
-    }
-    return getToolbarItemDefinition(left).label.localeCompare(
-      getToolbarItemDefinition(right).label,
-    );
-  });
 }
 
 function resolveSettingsTheme(theme: ThemeMode, accent: AccentMode) {
@@ -1365,322 +1299,6 @@ function resolveDensity(flags: ReadonlyArray<boolean>): Density {
   return flags.some(Boolean) ? "custom" : "comfortable";
 }
 
-// A toolbar item in the Toolbar editor: an icon tile with its name under it, so the item
-// can be told apart without hovering. The title and the search field are not buttons, and
-// their tiles say so: each is two tiles wide and drawn as what it is. Like every tile they
-// have one size wherever they are put: the strip shows the order of the items, not how wide
-// the toolbar will draw them.
-type ToolbarTileShape = "icon" | "title" | "search";
-
-function getToolbarTileShape(itemId: ToolbarItemId): ToolbarTileShape {
-  return itemId === "title" || itemId === "search" ? itemId : "icon";
-}
-
-function ToolbarTileLabel({ label }: { label: string }) {
-  // The button carries the name; this copy is for the eye.
-  return (
-    <span className="settings-toolbar-tile-label" aria-hidden="true">
-      {label}
-    </span>
-  );
-}
-
-// The mark on an item that is always in the toolbar.
-function ToolbarTileRequiredBadge() {
-  return (
-    <span className="settings-toolbar-lock" aria-hidden="true">
-      <svg viewBox="0 0 16 16" aria-hidden="true">
-        <rect x="3.5" y="7.5" width="9" height="6" rx="1.4" />
-        <path d="M5.6 7.5V5.4a2.4 2.4 0 0 1 4.8 0v2.1" />
-      </svg>
-    </span>
-  );
-}
-
-function ToolbarEditor({
-  title,
-  items,
-  availableItems,
-  requiredItems = NO_REQUIRED_TOOLBAR_ITEMS,
-  itemNotes = {},
-  onReorderItem,
-  onRemoveItem,
-  onAddItem,
-  onReset,
-  resetDisabled = false,
-}: {
-  title: string;
-  items: ToolbarItemId[];
-  availableItems: ToolbarItemId[];
-  // Items that are always in the toolbar: they can be dragged to a new place, not removed.
-  requiredItems?: ReadonlySet<ToolbarItemId>;
-  // What to say about an item when the pointer rests on its tile.
-  itemNotes?: Partial<Record<ToolbarItemId, string>>;
-  onReorderItem: (sourceIndex: number, targetIndex: number) => void;
-  onRemoveItem: (index: number) => void;
-  onAddItem: (itemId: ToolbarItemId) => void;
-  onReset?: () => void;
-  // True while the toolbar is the default one, which Reset would leave as it is.
-  resetDisabled?: boolean;
-}) {
-  const rootRef = useRef<HTMLFieldSetElement | null>(null);
-  const activeStripRef = useRef<HTMLDivElement | null>(null);
-  const dragCounterRef = useRef<Record<number, number>>({});
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-  const [hoveredActiveIndex, setHoveredActiveIndex] = useState<number | null>(null);
-  const [hoveredAvailableId, setHoveredAvailableId] = useState<ToolbarItemId | null>(null);
-
-  const itemDefinitions = items.map((itemId, index) => ({
-    definition: getToolbarItemDefinition(itemId),
-    index,
-  }));
-  const availableDefinitions = availableItems.map((itemId) => getToolbarItemDefinition(itemId));
-
-  const getInsertSide = useCallback(
-    (index: number) => {
-      if (draggedIndex === null || dragOverIndex !== index || draggedIndex === index) {
-        return null;
-      }
-      return draggedIndex < index ? "right" : "left";
-    },
-    [draggedIndex, dragOverIndex],
-  );
-
-  const handleDragStart = useCallback(
-    (event: ReactDragEvent<HTMLButtonElement>, index: number) => {
-      if (!items[index]) {
-        event.preventDefault();
-        return;
-      }
-      setDraggedIndex(index);
-      event.dataTransfer.effectAllowed = "move";
-      // Inside the editor, so the stand-in takes the Settings colours.
-      const ghost = document.createElement("div");
-      ghost.className = "settings-toolbar-drag-ghost";
-      (rootRef.current ?? document.body).appendChild(ghost);
-      event.dataTransfer.setDragImage(ghost, 20, 19);
-      window.setTimeout(() => ghost.remove(), 0);
-    },
-    [items],
-  );
-
-  const handleDrop = useCallback(
-    (event: ReactDragEvent<HTMLButtonElement>, targetIndex: number) => {
-      event.preventDefault();
-      event.stopPropagation();
-      dragCounterRef.current = {};
-      if (draggedIndex === null || draggedIndex === targetIndex) {
-        setDraggedIndex(null);
-        setDragOverIndex(null);
-        return;
-      }
-      onReorderItem(draggedIndex, targetIndex);
-      setDraggedIndex(null);
-      setDragOverIndex(null);
-    },
-    [draggedIndex, onReorderItem],
-  );
-
-  return (
-    <fieldset
-      aria-label={title}
-      ref={rootRef}
-      className="settings-toolbar-editor"
-      onDragOver={(event) => {
-        if (draggedIndex === null) {
-          return;
-        }
-        event.preventDefault();
-        event.dataTransfer.dropEffect = "move";
-      }}
-      onDrop={(event) => {
-        if (draggedIndex === null) {
-          return;
-        }
-        event.preventDefault();
-        dragCounterRef.current = {};
-        if (
-          activeStripRef.current &&
-          event.target instanceof Node &&
-          activeStripRef.current.contains(event.target)
-        ) {
-          return;
-        }
-        // Dropped outside the strip: the item comes off, unless it is one that always stays.
-        const itemId = items[draggedIndex];
-        if (itemId && !requiredItems.has(itemId)) {
-          onRemoveItem(draggedIndex);
-        }
-        setDraggedIndex(null);
-        setDragOverIndex(null);
-      }}
-    >
-      <SectionCard
-        title="In the Toolbar"
-        note="Drag to reorder"
-        resetButton={
-          onReset ? (
-            <ActionButton
-              label="Reset"
-              ariaLabel={`Reset ${title}`}
-              disabled={resetDisabled}
-              onClick={onReset}
-            />
-          ) : undefined
-        }
-      >
-        <div ref={activeStripRef} className="settings-toolbar-area">
-          <div className="settings-toolbar-tiles">
-            {itemDefinitions.map(({ definition, index }) => {
-              const itemId = definition.id;
-              const required = requiredItems.has(itemId);
-              const shape = getToolbarTileShape(itemId);
-              const isHovered = hoveredActiveIndex === index && draggedIndex === null;
-              const insertSide = getInsertSide(index);
-              return (
-                <div
-                  key={`${title}-${itemId}-${index}`}
-                  className="settings-toolbar-tile"
-                  data-toolbar-tile={itemId}
-                  data-shape={shape}
-                  onMouseEnter={() => setHoveredActiveIndex(index)}
-                  onMouseLeave={() =>
-                    setHoveredActiveIndex((current) => (current === index ? null : current))
-                  }
-                >
-                  {insertSide === "left" ? <span className="settings-toolbar-insert" /> : null}
-                  <div className="settings-toolbar-tile-slot">
-                    <button
-                      type="button"
-                      className="settings-toolbar-tile-button"
-                      draggable
-                      aria-label={definition.label}
-                      title={itemNotes[itemId]}
-                      data-dragged={draggedIndex === index || undefined}
-                      onDragStart={(event) => handleDragStart(event, index)}
-                      onDragOver={(event) => {
-                        event.preventDefault();
-                        event.dataTransfer.dropEffect = "move";
-                        if (draggedIndex !== null && draggedIndex !== index) {
-                          setDragOverIndex(index);
-                        }
-                      }}
-                      onDragEnter={() => {
-                        dragCounterRef.current[index] = (dragCounterRef.current[index] ?? 0) + 1;
-                        if (draggedIndex !== null && draggedIndex !== index) {
-                          setDragOverIndex(index);
-                        }
-                      }}
-                      onDragLeave={() => {
-                        dragCounterRef.current[index] = Math.max(
-                          0,
-                          (dragCounterRef.current[index] ?? 1) - 1,
-                        );
-                        if (dragCounterRef.current[index] === 0 && dragOverIndex === index) {
-                          setDragOverIndex(null);
-                        }
-                      }}
-                      onDrop={(event) => handleDrop(event, index)}
-                      onDragEnd={() => {
-                        setDraggedIndex(null);
-                        setDragOverIndex(null);
-                        dragCounterRef.current = {};
-                        setHoveredActiveIndex(null);
-                      }}
-                    >
-                      <span
-                        className="settings-toolbar-swatch"
-                        data-shape={shape}
-                        data-hovered={isHovered || undefined}
-                      >
-                        {shape === "title" ? (
-                          // A stand-in for the folder's name and the line under it.
-                          <>
-                            <span className="settings-toolbar-title-name" aria-hidden="true">
-                              Folder Name
-                            </span>
-                            <span className="settings-toolbar-title-count" aria-hidden="true">
-                              12 items
-                            </span>
-                          </>
-                        ) : (
-                          <ToolbarIcon name={definition.icon} />
-                        )}
-                        {required ? <ToolbarTileRequiredBadge /> : null}
-                      </span>
-                      <ToolbarTileLabel label={definition.label} />
-                    </button>
-                    {isHovered && !required ? (
-                      <button
-                        type="button"
-                        className="settings-toolbar-remove"
-                        title="Remove"
-                        aria-label={`Remove ${definition.label} from ${title}`}
-                        onClick={() => onRemoveItem(index)}
-                      >
-                        <svg viewBox="0 0 16 16" aria-hidden="true">
-                          <path d="M5 5l6 6M11 5l-6 6" />
-                        </svg>
-                      </button>
-                    ) : null}
-                  </div>
-                  {insertSide === "right" ? <span className="settings-toolbar-insert" /> : null}
-                </div>
-              );
-            })}
-            {itemDefinitions.length === 0 ? (
-              <div className="settings-toolbar-empty">No items configured.</div>
-            ) : null}
-          </div>
-        </div>
-      </SectionCard>
-
-      <SectionCard title="Available Items" note="Click to add">
-        <div className="settings-toolbar-area">
-          {availableDefinitions.length === 0 ? (
-            <div className="settings-toolbar-empty">Every item is in the toolbar.</div>
-          ) : (
-            <div className="settings-toolbar-available">
-              {availableDefinitions.map((definition) => {
-                const isHovered = hoveredAvailableId === definition.id;
-                return (
-                  <button
-                    key={`${title}-add-${definition.id}`}
-                    type="button"
-                    className="settings-toolbar-tile-button is-available"
-                    aria-label={`Add ${definition.label} to ${title}`}
-                    onClick={() => onAddItem(definition.id)}
-                    onMouseEnter={() => setHoveredAvailableId(definition.id)}
-                    onMouseLeave={() => setHoveredAvailableId(null)}
-                  >
-                    <span
-                      className="settings-toolbar-swatch"
-                      data-shape="icon"
-                      data-available
-                      data-hovered={isHovered || undefined}
-                    >
-                      <ToolbarIcon name={definition.icon} />
-                    </span>
-                    <ToolbarTileLabel label={definition.label} />
-                    {isHovered ? (
-                      <span className="settings-toolbar-add-mark" aria-hidden="true">
-                        <svg viewBox="0 0 16 16" aria-hidden="true">
-                          <path d="M8 4.5v7M4.5 8h7" />
-                        </svg>
-                      </span>
-                    ) : null}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </SectionCard>
-    </fieldset>
-  );
-}
-
 export function SettingsView({
   activeTab,
   searchDefaults,
@@ -1707,7 +1325,6 @@ export function SettingsView({
   highlightClipboardItemsInTree = true,
   highlightClipboardItemsInContent = true,
   notifyClipboardItems = true,
-  topToolbarItems,
   restoreLastVisitedFolderOnStartup,
   restoreOpenTabsOnStartup,
   homePath,
@@ -1744,8 +1361,6 @@ export function SettingsView({
   onHighlightClipboardItemsInContentChange = () => undefined,
   onNotifyClipboardItemsChange = () => undefined,
   onNotificationDurationSecondsChange,
-  onTopToolbarItemsChange,
-  onResetTopToolbar,
   onRestoreLastVisitedFolderOnStartupChange,
   onRestoreOpenTabsOnStartupChange,
   onBrowseTerminalApp,
@@ -1794,7 +1409,6 @@ export function SettingsView({
   highlightClipboardItemsInTree?: boolean;
   highlightClipboardItemsInContent?: boolean;
   notifyClipboardItems?: boolean;
-  topToolbarItems: ToolbarItemId[];
   restoreLastVisitedFolderOnStartup: boolean;
   restoreOpenTabsOnStartup: boolean;
   homePath: string;
@@ -1832,8 +1446,6 @@ export function SettingsView({
   onHighlightClipboardItemsInContentChange?: (value: boolean) => void;
   onNotifyClipboardItemsChange?: (value: boolean) => void;
   onNotificationDurationSecondsChange: (value: number) => void;
-  onTopToolbarItemsChange: (value: ToolbarItemId[]) => void;
-  onResetTopToolbar: () => void;
   onRestoreLastVisitedFolderOnStartupChange: (value: boolean) => void;
   onRestoreOpenTabsOnStartupChange: (value: boolean) => void;
   onBrowseTerminalApp: () => void;
@@ -1880,75 +1492,6 @@ export function SettingsView({
     onCompactIconViewChange(compact);
     onCompactTreeViewChange(compact);
   };
-  // The whole toolbar in order, the items that always stay included.
-  const orderedTopToolbarItems = useMemo(
-    () => sanitizeTopToolbarItems(topToolbarItems),
-    [topToolbarItems],
-  );
-  const isDefaultTopToolbar =
-    orderedTopToolbarItems.length === DEFAULT_TOP_TOOLBAR_ITEMS.length &&
-    orderedTopToolbarItems.every((itemId, index) => itemId === DEFAULT_TOP_TOOLBAR_ITEMS[index]);
-  const sortedTopToolbarAvailableItems = sortToolbarAvailableItems(
-    TOOLBAR_ITEM_IDS.filter(
-      (itemId) =>
-        !isRequiredTopToolbarItem(itemId) &&
-        (getToolbarItemDefinition(itemId).allowDuplicates ||
-          !orderedTopToolbarItems.includes(itemId)),
-    ),
-    TOP_TOOLBAR_AVAILABLE_ITEM_ORDER,
-  );
-
-  const reorderToolbarItems = useCallback(
-    (items: ToolbarItemId[], sourceIndex: number, targetIndex: number) => {
-      if (
-        sourceIndex < 0 ||
-        sourceIndex >= items.length ||
-        targetIndex < 0 ||
-        targetIndex >= items.length ||
-        sourceIndex === targetIndex
-      ) {
-        return items;
-      }
-      const nextItems = [...items];
-      const [movedItem] = nextItems.splice(sourceIndex, 1);
-      if (!movedItem) {
-        return items;
-      }
-      nextItems.splice(targetIndex, 0, movedItem);
-      return nextItems;
-    },
-    [],
-  );
-  const handleTopToolbarMove = useCallback(
-    (sourceIndex: number, targetIndex: number) => {
-      onTopToolbarItemsChange(
-        reorderToolbarItems(orderedTopToolbarItems, sourceIndex, targetIndex),
-      );
-    },
-    [orderedTopToolbarItems, onTopToolbarItemsChange, reorderToolbarItems],
-  );
-  const handleTopToolbarRemove = useCallback(
-    (index: number) => {
-      const itemId = orderedTopToolbarItems[index];
-      if (itemId === undefined || isRequiredTopToolbarItem(itemId)) {
-        return;
-      }
-      onTopToolbarItemsChange(
-        orderedTopToolbarItems.filter((_, candidateIndex) => candidateIndex !== index),
-      );
-    },
-    [orderedTopToolbarItems, onTopToolbarItemsChange],
-  );
-  const handleTopToolbarAdd = useCallback(
-    (itemId: ToolbarItemId) => {
-      const definition = getToolbarItemDefinition(itemId);
-      if (!definition.allowDuplicates && orderedTopToolbarItems.includes(itemId)) {
-        return;
-      }
-      onTopToolbarItemsChange(addTopToolbarItem(orderedTopToolbarItems, itemId));
-    },
-    [orderedTopToolbarItems, onTopToolbarItemsChange],
-  );
   const trashPath = getTrashPath(homePath);
   return (
     <div className="settings-view" data-layout={layoutMode} style={settingsPaletteStyle(palette)}>
@@ -2481,28 +2024,6 @@ export function SettingsView({
               />
             </div>
           </SectionCard>
-        ) : null}
-
-        {showSection("toolbars") ? (
-          <ToolbarEditor
-            title="Toolbar"
-            items={orderedTopToolbarItems}
-            availableItems={sortedTopToolbarAvailableItems}
-            requiredItems={REQUIRED_TOP_TOOLBAR_ITEMS}
-            itemNotes={{
-              title:
-                "The name of the folder on screen. It stretches to fill the room the other items leave.",
-              clipboard: "Appears while files or folders are waiting to be pasted, and lists them.",
-              viewOptions:
-                "A menu of how the list and the panels are shown, and the way back here.",
-              search: "The search field. It is wider while you type in it.",
-            }}
-            onReorderItem={handleTopToolbarMove}
-            onRemoveItem={handleTopToolbarRemove}
-            onAddItem={handleTopToolbarAdd}
-            onReset={onResetTopToolbar}
-            resetDisabled={isDefaultTopToolbar}
-          />
         ) : null}
 
         {showSection("shortcuts") ? (

@@ -11,7 +11,6 @@ import {
   THEME_OPTIONS,
   UI_FONT_OPTIONS,
 } from "../shared/appPreferences";
-import { DEFAULT_TOP_TOOLBAR_ITEMS } from "../shared/toolbarItems";
 import { type SearchDefaults, type SettingsTab, SettingsView } from "./components/SettingsView";
 import { applyPreferencesPatch, useAppPreferences } from "./hooks/useAppPreferences";
 import { type PreferencesPatch, usePreferencesSync } from "./hooks/usePreferencesSync";
@@ -43,11 +42,6 @@ const SETTINGS_TABS: ReadonlyArray<{ id: SettingsTab; label: string; icon: strin
     id: "files",
     label: "Files",
     icon: "M8 3h7l5 5v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM15 3v5h5",
-  },
-  {
-    id: "toolbars",
-    label: "Toolbar",
-    icon: "M3 5h18M3 12h18M3 19h18M7 3v4M15 10v4M11 17v4",
   },
   {
     id: "shortcuts",
@@ -111,7 +105,6 @@ export function SettingsWindowApp() {
     highlightClipboardItemsInTree: preferences.highlightClipboardItemsInTree,
     highlightClipboardItemsInContent: preferences.highlightClipboardItemsInContent,
     notifyClipboardItems: preferences.notifyClipboardItems,
-    topToolbarItems: preferences.topToolbarItems,
     restoreLastVisitedFolderOnStartup: preferences.restoreLastVisitedFolderOnStartup,
     restoreOpenTabsOnStartup: preferences.restoreOpenTabsOnStartup,
     favorites: preferences.favorites,
@@ -350,7 +343,6 @@ export function SettingsWindowApp() {
             highlightClipboardItemsInTree={preferences.highlightClipboardItemsInTree}
             highlightClipboardItemsInContent={preferences.highlightClipboardItemsInContent}
             notifyClipboardItems={preferences.notifyClipboardItems}
-            topToolbarItems={preferences.topToolbarItems}
             restoreLastVisitedFolderOnStartup={preferences.restoreLastVisitedFolderOnStartup}
             restoreOpenTabsOnStartup={preferences.restoreOpenTabsOnStartup}
             onRestoreOpenTabsOnStartupChange={preferences.setRestoreOpenTabsOnStartup}
@@ -389,8 +381,6 @@ export function SettingsWindowApp() {
               preferences.setHighlightClipboardItemsInContent
             }
             onNotifyClipboardItemsChange={preferences.setNotifyClipboardItems}
-            onTopToolbarItemsChange={preferences.setTopToolbarItems}
-            onResetTopToolbar={() => preferences.setTopToolbarItems([...DEFAULT_TOP_TOOLBAR_ITEMS])}
             onRestoreLastVisitedFolderOnStartupChange={
               preferences.setRestoreLastVisitedFolderOnStartup
             }

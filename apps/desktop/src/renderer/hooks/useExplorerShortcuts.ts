@@ -158,6 +158,7 @@ type ExplorerShortcutActions = {
   handleSortChange: (sortBy: "name" | "modified" | "size" | "kind") => void;
   toggleFoldersFirst: () => void;
   openHelp: (topic?: HelpTopicId) => void;
+  customizeToolbar: () => void;
 };
 
 type UseExplorerShortcutsArgs = {
@@ -1268,6 +1269,10 @@ export function useExplorerShortcuts(args: UseExplorerShortcutsArgs) {
       if (commandType === "focusContentPane") {
         focusContentPaneRef();
         current.setFocusedPane("content");
+        return;
+      }
+      if (commandType === "customizeToolbar") {
+        current.customizeToolbar();
         return;
       }
       if (commandType === "openHelp" || commandType === "openKeyboardShortcuts") {

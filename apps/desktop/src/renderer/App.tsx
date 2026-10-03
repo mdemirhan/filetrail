@@ -647,6 +647,10 @@ export function App() {
   );
   const isWriteOperationLocked = writeOperationCardState !== null;
   const locationDialogOpen = locationSheetOpen || moveDialogState !== null;
+  // While the toolbar is customized, in place, the rest of the window waits as it does
+  // under a sheet: no shortcuts, menu commands, drags or focus for the panes.
+  const [toolbarCustomizing, setToolbarCustomizing] = useState(false);
+  const sheetOpen = locationDialogOpen || toolbarCustomizing;
   const explorerFocusSuppressed =
     copyPasteDialogState !== null ||
     writeOperationProgressEvent !== null ||
@@ -701,7 +705,7 @@ export function App() {
       unfilteredContentEntries,
       filterContentEntries: (query) =>
         isSearchMode ? filterSearchResultEntries(query) : filterEntriesByName(browseEntries, query),
-      locationDialogOpen,
+      locationDialogOpen: sheetOpen,
       explorerFocusSuppressed,
     },
   });
@@ -865,14 +869,14 @@ export function App() {
     },
     derived: {
       isSearchMode,
-      blocked: copyPasteModalOpen || locationDialogOpen || actionNotice !== null,
+      blocked: copyPasteModalOpen || sheetOpen || actionNotice !== null,
     },
   });
   openPathInNewTabRef.current = openPathInNewTab;
   const dragDropBlocked =
     mainView !== "explorer" ||
     actionNotice !== null ||
-    locationDialogOpen ||
+    sheetOpen ||
     copyPasteModalOpen ||
     isWriteOperationLocked;
   const {
@@ -926,18 +930,11 @@ export function App() {
       actionNoticeOpen: actionNotice !== null,
       copyPasteModalOpen,
       focusedPane,
-      locationSheetOpen: locationDialogOpen,
+      locationSheetOpen: sheetOpen,
       mainView,
       selectedTreeTargetKind,
     }),
-    [
-      actionNotice,
-      copyPasteModalOpen,
-      focusedPane,
-      locationDialogOpen,
-      mainView,
-      selectedTreeTargetKind,
-    ],
+    [actionNotice, copyPasteModalOpen, focusedPane, sheetOpen, mainView, selectedTreeTargetKind],
   );
   const canRunRendererCommand = useCallback(
     (commandType: Parameters<typeof canHandleRendererCommand>[0]) =>
@@ -1047,7 +1044,7 @@ export function App() {
       // "Preparing to Paste…" leaves the window working (Copy, Cut, menus), but Escape is
       // its Cancel, never a key for the list behind it.
       preparingSheetOpen: copyPasteDialogState?.type === "analysis",
-      locationDialogOpen,
+      locationDialogOpen: sheetOpen,
       selectedTreeTargetPath,
       selectedPathsInViewOrder,
       selectedEntry,
@@ -1060,6 +1057,7 @@ export function App() {
       dismissActionNotice,
       handleCopyPasteDialogEscape,
       openSettingsView: () => openSettingsView(),
+      customizeToolbar: startCustomizingToolbar,
       openLocationSheet,
       focusFileSearch,
       clearTypeahead,
@@ -1540,6 +1538,14 @@ export function App() {
       }
       searchPointerIntentRef.current = false;
     });
+  }
+
+  // Customize Toolbar… (in the View menu, View Options and the toolbar's right-click menu):
+  // the toolbar is edited where it is, with a panel of the items to add under it.
+  function startCustomizingToolbar() {
+    setSearchPopoverOpen(false);
+    setFocusedPane(null);
+    setToolbarCustomizing(true);
   }
 
   function openLocationSheet() {
@@ -2105,7 +2111,10 @@ export function App() {
             onSearchSkipGitIgnoredChange={updateSearchSkipGitIgnored}
             canRunRendererCommand={canRunRendererCommand}
             onRendererCommand={runRendererCommand}
-            onCustomizeToolbar={() => openSettingsView("toolbars")}
+            onCustomizeToolbar={startCustomizingToolbar}
+            customizingToolbar={toolbarCustomizing}
+            onFinishCustomizingToolbar={() => setToolbarCustomizing(false)}
+            onTopToolbarItemsChange={setTopToolbarItems}
             onPaneResizeKey={handlePaneResizeKey}
             clipboardButton={
               clipboardSummary ? (

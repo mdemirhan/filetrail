@@ -168,3 +168,11 @@ export function resolveVisibleOptionalCount({
   }
   return 0;
 }
+
+// Where an item dragged along the toolbar lands: its index among the other items, which is
+// how many of them have their middle left of the pointer. Counting from the items as they
+// stand (the gap for the dragged item open among them) gives one answer per pointer
+// position: opening the gap moves the item past it further from the pointer, never across.
+export function resolveToolbarDropIndex(centers: readonly number[], pointerX: number): number {
+  return centers.filter((center) => center < pointerX).length;
+}

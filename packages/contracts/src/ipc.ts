@@ -580,7 +580,6 @@ export const settingsTabSchema = z.enum([
   "explorer",
   "search",
   "files",
-  "toolbars",
   "shortcuts",
 ]);
 

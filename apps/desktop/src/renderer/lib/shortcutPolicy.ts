@@ -95,6 +95,7 @@ export const RENDERER_COMMAND_TREE_FOCUS_BUCKETS = {
   refreshOrApplySearchSort: "globalExplorer",
   toggleInfoPanel: "globalExplorer",
   toggleInfoRow: "globalExplorer",
+  customizeToolbar: "globalExplorer",
   goHomeRootTree: "globalExplorer",
   rootTreeAtSelection: "globalExplorer",
   newTab: "globalExplorer",

@@ -26,6 +26,7 @@ export const RENDERER_COMMAND_TYPES = [
   "refreshOrApplySearchSort",
   "toggleInfoPanel",
   "toggleInfoRow",
+  "customizeToolbar",
   "goHomeRootTree",
   "rootTreeAtSelection",
   "newTab",

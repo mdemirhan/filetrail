@@ -218,6 +218,8 @@ export function createApplicationMenuTemplate(
           type: "checkbox",
         }),
         separator,
+        command("customizeToolbar", "Customize Toolbar…"),
+        separator,
         command("refreshOrApplySearchSort", "Refresh"),
         separator,
         command("zoomIn", "Zoom In"),

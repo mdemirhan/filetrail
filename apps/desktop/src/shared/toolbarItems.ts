@@ -131,8 +131,9 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
     shortcutCommand: "refreshOrApplySearchSort",
   },
   {
+    // A space between two runs of buttons: each run sits on a capsule of its own.
     id: "topSeparator",
-    label: "Separator",
+    label: "Space",
     icon: "separatorVertical",
     kind: "separator",
     allowDuplicates: true,
@@ -371,7 +372,7 @@ export const TOOLBAR_ITEM_IDS = TOOLBAR_ITEM_DEFINITIONS.map((item) => item.id) 
 // - View Options is a menu rather than a control of its own, so it sits past the search field.
 // - Info Panel is last, over the panel it opens, and so the first to go in a narrow window
 //   (View Options has the same toggle).
-// Everything else can be added in Settings.
+// Everything else can be added with View > Customize Toolbar.
 export const DEFAULT_TOP_TOOLBAR_ITEMS: ToolbarItemId[] = [
   "back",
   "forward",
@@ -477,21 +478,93 @@ export function sanitizeTopToolbarItems(value: unknown): ToolbarItemId[] {
   return next;
 }
 
-// Where an item added in Settings goes: with the buttons ahead of the search field (in the
-// default toolbar, after Sort), and ahead of a clipboard button or View Options that sits
-// right before the field. In a toolbar that starts with the search field it goes last.
+// The items offered while the toolbar is customized, in this order: moving about, how the
+// list is shown, what can be done with the selection, and the app itself. The four that are
+// always in the toolbar are never offered.
+const TOP_TOOLBAR_PALETTE_ORDER: readonly ToolbarItemId[] = [
+  "topSeparator",
+  "back",
+  "forward",
+  "up",
+  "goToFolder",
+  "refresh",
+  "newTab",
+  "view",
+  "sort",
+  "foldersFirst",
+  "hidden",
+  "infoPanel",
+  "infoRow",
+  "openSelection",
+  "quickLook",
+  "editSelection",
+  "copySelection",
+  "cutSelection",
+  "pasteSelection",
+  "renameSelection",
+  "moveSelection",
+  "duplicateSelection",
+  "newFolder",
+  "trashSelection",
+  "openInTerminal",
+  "showInFinder",
+  "copyPath",
+  "theme",
+  "settings",
+  "help",
+];
+
+// What can still be put in the toolbar: every item it does not hold yet, and the space,
+// which it can hold any number of times.
+export function getTopToolbarPaletteItems(items: readonly ToolbarItemId[]): ToolbarItemId[] {
+  return TOP_TOOLBAR_PALETTE_ORDER.filter(
+    (itemId) => getToolbarItemDefinition(itemId).allowDuplicates || !items.includes(itemId),
+  );
+}
+
+// An item clicked in the palette goes at the far right, where it is easy to find.
 export function addTopToolbarItem(
   items: readonly ToolbarItemId[],
   itemId: ToolbarItemId,
 ): ToolbarItemId[] {
-  const searchIndex = items.indexOf("search");
-  let insertIndex = searchIndex > 0 ? searchIndex : items.length;
-  while (insertIndex > 0) {
-    const previous = items[insertIndex - 1];
-    if (previous === undefined || previous === "title" || !isRequiredTopToolbarItem(previous)) {
-      break;
-    }
-    insertIndex -= 1;
+  return insertTopToolbarItem(items, itemId, items.length);
+}
+
+// An item dropped into the toolbar, at `index` in its order (clamped to the ends).
+export function insertTopToolbarItem(
+  items: readonly ToolbarItemId[],
+  itemId: ToolbarItemId,
+  index: number,
+): ToolbarItemId[] {
+  const at = Math.max(0, Math.min(index, items.length));
+  return [...items.slice(0, at), itemId, ...items.slice(at)];
+}
+
+// The item at `from` taken out and put back at `to`, an index in the order without it.
+export function moveTopToolbarItem(
+  items: readonly ToolbarItemId[],
+  from: number,
+  to: number,
+): ToolbarItemId[] {
+  const itemId = items[from];
+  if (itemId === undefined) {
+    return [...items];
   }
-  return [...items.slice(0, insertIndex), itemId, ...items.slice(insertIndex)];
+  return insertTopToolbarItem(
+    items.filter((_, index) => index !== from),
+    itemId,
+    to,
+  );
+}
+
+// The item at `index` taken off the toolbar, unless it is one that always stays.
+export function removeTopToolbarItem(
+  items: readonly ToolbarItemId[],
+  index: number,
+): ToolbarItemId[] {
+  const itemId = items[index];
+  if (itemId === undefined || isRequiredTopToolbarItem(itemId)) {
+    return [...items];
+  }
+  return items.filter((_, candidate) => candidate !== index);
 }

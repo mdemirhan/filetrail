@@ -2,8 +2,10 @@ import {
   type ComponentProps,
   type MutableRefObject,
   type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
   cloneElement,
   isValidElement,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -18,9 +20,15 @@ import type { ExplorerViewMode, ThemePreference } from "../../shared/appPreferen
 import type { RendererCommandType } from "../../shared/rendererCommands";
 import type { ShortcutCommandId } from "../../shared/shortcuts";
 import {
+  DEFAULT_TOP_TOOLBAR_ITEMS,
   type ToolbarItemId,
+  addTopToolbarItem,
   getToolbarItemDefinition,
+  getTopToolbarPaletteItems,
+  insertTopToolbarItem,
   isRequiredTopToolbarItem,
+  moveTopToolbarItem,
+  removeTopToolbarItem,
   sanitizeTopToolbarItems,
 } from "../../shared/toolbarItems";
 import { useKeepInViewport } from "../hooks/useKeepInViewport";
@@ -33,6 +41,7 @@ import { formatTooltip, getToolbarItemTooltip } from "../lib/tooltips";
 import {
   type TopToolbarSlot,
   resolveToolbarCapsules,
+  resolveToolbarDropIndex,
   resolveTopToolbarSlots,
   resolveVisibleOptionalCount,
   selectTopToolbarSlots,
@@ -44,6 +53,7 @@ import { MenuCheck } from "./MenuCheck";
 import { SearchOptionsMenu } from "./SearchOptionsMenu";
 import { SearchWorkspace } from "./SearchWorkspace";
 import { ThemeMenuButton } from "./ThemeMenuButton";
+import { ToolbarCustomizePanel } from "./ToolbarCustomizePanel";
 import { ToolbarIcon } from "./ToolbarIcon";
 import { TreePane } from "./TreePane";
 
@@ -79,6 +89,28 @@ type ViewOptionsMenuItem =
     }
   | { kind: "action"; id: string; label: string; command?: ShortcutCommandId; onSelect: () => void }
   | { kind: "separator"; id: string };
+
+// An item being dragged while the toolbar is customized.
+type ToolbarDrag = {
+  itemId: ToolbarItemId;
+  // Its place in the saved order, or null for an item dragged in from the palette.
+  fromIndex: number | null;
+  // Where it would land among the other items, or null while it is away from the toolbar
+  // (letting go then takes it off, or leaves a palette item out). An item that always stays
+  // keeps the last place it had.
+  targetIndex: number | null;
+};
+
+// How far the pointer moves before a press on an item becomes a drag.
+const TOOLBAR_DRAG_THRESHOLD = 4;
+// How far below the toolbar a dragged item still counts as over it.
+const TOOLBAR_DROP_REACH_BELOW = 28;
+const TOOLBAR_REORDER_MS = 180;
+const TOOLBAR_FLASH_MS = 900;
+
+// The edges of each item on screen while the toolbar is customized, from the toolbar's
+// top left corner: where its handle goes.
+type ToolbarHandleRect = { key: string; left: number; top: number; width: number; height: number };
 
 export function ExplorerWorkspace({
   preferencesReady,
@@ -143,6 +175,9 @@ export function ExplorerWorkspace({
   canRunRendererCommand,
   onRendererCommand,
   onCustomizeToolbar,
+  customizingToolbar = false,
+  onFinishCustomizingToolbar = () => undefined,
+  onTopToolbarItemsChange = () => undefined,
   onPaneResizeKey,
   toolbarTitle = "",
   toolbarSubtitle = "",
@@ -215,8 +250,12 @@ export function ExplorerWorkspace({
   onSearchSkipGitIgnoredChange: (value: boolean) => void;
   canRunRendererCommand: (command: RendererCommandType) => boolean;
   onRendererCommand: (command: RendererCommandType) => void;
-  /** Opens Settings where the toolbar is arranged. */
+  /** Starts customizing the toolbar, in place. */
   onCustomizeToolbar: () => void;
+  /** True while the toolbar is customized: its items are moved, not used. */
+  customizingToolbar?: boolean;
+  onFinishCustomizingToolbar?: () => void;
+  onTopToolbarItemsChange?: (items: ToolbarItemId[]) => void;
   onPaneResizeKey: (pane: "tree" | "inspector", event: ReactKeyboardEvent<HTMLDivElement>) => void;
   toolbarTitle?: string;
   toolbarSubtitle?: string;
@@ -226,14 +265,19 @@ export function ExplorerWorkspace({
   const sortMenuButtonRef = useRef<HTMLButtonElement | null>(null);
   const sortMenuRef = useRef<HTMLDivElement | null>(null);
   const clipboardShown = clipboardButton !== null && clipboardButton !== undefined;
+  const savedToolbarItems = useMemo(
+    () => sanitizeTopToolbarItems(topToolbarItems),
+    [topToolbarItems],
+  );
   // The toolbar's items in their saved order. One of the required ones is not always there:
-  // the clipboard button, which shows only while something waits to be pasted.
+  // the clipboard button, which shows only while something waits to be pasted (and while
+  // the toolbar is customized, so that it can be moved).
   const topToolbarSlots = useMemo(
     () =>
-      resolveTopToolbarSlots(sanitizeTopToolbarItems(topToolbarItems)).filter(
-        (slot) => slot.id !== "clipboard" || clipboardShown,
+      resolveTopToolbarSlots(savedToolbarItems).filter(
+        (slot) => slot.id !== "clipboard" || clipboardShown || customizingToolbar,
       ),
-    [clipboardShown, topToolbarItems],
+    [clipboardShown, customizingToolbar, savedToolbarItems],
   );
   const optionalTopToolbarSlots = useMemo(
     () => topToolbarSlots.filter((slot) => !isRequiredTopToolbarItem(slot.id)),
@@ -294,6 +338,7 @@ export function ExplorerWorkspace({
   // would otherwise stay cut to the number of buttons in the default one.
   useLayoutEffect(() => {
     void workspaceReady;
+    void customizingToolbar;
     const toolbar = toolbarRef.current;
     const row = toolbarRowRef.current;
     if (!toolbar || !row) {
@@ -331,7 +376,7 @@ export function ExplorerWorkspace({
     return () => {
       observer.disconnect();
     };
-  }, [topToolbarSlots, workspaceReady]);
+  }, [topToolbarSlots, workspaceReady, customizingToolbar]);
 
   useLayoutEffect(() => {
     if (!sortMenuOpen) {
@@ -425,6 +470,492 @@ export function ExplorerWorkspace({
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [viewOptionsMenuStyle]);
+
+  // ── Customizing the toolbar ────────────────────────────────────────────────────────────
+  // The toolbar is edited where it is, as in Finder: its items are drawn as always but do
+  // nothing (the row is inert), and a handle over each one moves it. An item dragged along
+  // the row opens a gap where it will land and the items around it slide aside; one dragged
+  // away from the toolbar is taken off when let go. The panel under the toolbar holds what
+  // can be added. Every change is saved at once; Done (or Escape) ends customizing.
+  const toolbarPanelRef = useRef<HTMLDialogElement | null>(null);
+  const toolbarGhostRef = useRef<HTMLDivElement | null>(null);
+  const [toolbarDrag, setToolbarDragState] = useState<ToolbarDrag | null>(null);
+  // The drag as of the last change, for the window's pointer listeners.
+  const toolbarDragRef = useRef<ToolbarDrag | null>(null);
+  const setToolbarDrag = useCallback((next: ToolbarDrag | null) => {
+    toolbarDragRef.current = next;
+    setToolbarDragState(next);
+  }, []);
+  // A press on an item that becomes a drag once the pointer has moved far enough.
+  const pendingToolbarDragRef = useRef<{
+    itemId: ToolbarItemId;
+    fromIndex: number | null;
+    startX: number;
+    startY: number;
+  } | null>(null);
+  // The pointer, kept out of state so that following it redraws only the dragged item.
+  const toolbarPointerRef = useRef({ x: 0, y: 0 });
+  // The item pressed in the toolbar, until its gap is drawn: it is not one of the others.
+  const pressedToolbarSlotRef = useRef<string | null>(null);
+  // A drag from the palette ends in a click on the item when let go over it; that click
+  // must not add the item.
+  const suppressPaletteClickRef = useRef(false);
+  const [toolbarHandleRects, setToolbarHandleRects] = useState<ToolbarHandleRect[]>([]);
+  const toolbarSlotLeftsRef = useRef(new Map<string, number>());
+  const focusToolbarHandleRef = useRef<string | null>(null);
+  const [flashedToolbarSlot, setFlashedToolbarSlot] = useState<{
+    key: string;
+    count: number;
+  } | null>(null);
+
+  // The order on screen: the saved one, with the dragged item where it would land.
+  const previewToolbarItems = useMemo(() => {
+    if (!toolbarDrag) {
+      return savedToolbarItems;
+    }
+    const others =
+      toolbarDrag.fromIndex === null
+        ? savedToolbarItems
+        : savedToolbarItems.filter((_, index) => index !== toolbarDrag.fromIndex);
+    return toolbarDrag.targetIndex === null
+      ? others
+      : insertTopToolbarItem(others, toolbarDrag.itemId, toolbarDrag.targetIndex);
+  }, [savedToolbarItems, toolbarDrag]);
+  const editToolbarSlots = useMemo(
+    () => resolveTopToolbarSlots(previewToolbarItems),
+    [previewToolbarItems],
+  );
+  const placeholderToolbarIndex = toolbarDrag?.targetIndex ?? null;
+  const removingToolbarItem =
+    toolbarDrag !== null && toolbarDrag.fromIndex !== null && toolbarDrag.targetIndex === null;
+  // The buttons the window has no room for are hidden while it is used: here they are
+  // drawn faint, the last ones first, as they would go.
+  const hiddenOptionalCount = Math.max(0, optionalTopToolbarSlots.length - visibleOptionalCount);
+  const overflowToolbarKeys = useMemo(() => {
+    const optional = editToolbarSlots.filter((slot) => !isRequiredTopToolbarItem(slot.id));
+    return new Set(optional.slice(optional.length - hiddenOptionalCount).map((slot) => slot.key));
+  }, [editToolbarSlots, hiddenOptionalCount]);
+  const paletteToolbarItems = useMemo(
+    () => getTopToolbarPaletteItems(savedToolbarItems),
+    [savedToolbarItems],
+  );
+  const isDefaultToolbar =
+    savedToolbarItems.length === DEFAULT_TOP_TOOLBAR_ITEMS.length &&
+    savedToolbarItems.every((itemId, index) => itemId === DEFAULT_TOP_TOOLBAR_ITEMS[index]);
+
+  const commitToolbarItems = useCallback(
+    (next: ToolbarItemId[]) => {
+      if (
+        next.length === savedToolbarItems.length &&
+        next.every((itemId, index) => itemId === savedToolbarItems[index])
+      ) {
+        return;
+      }
+      onTopToolbarItemsChange(next);
+    },
+    [savedToolbarItems, onTopToolbarItemsChange],
+  );
+  // What the window's listeners need of this render.
+  const toolbarEditingRef = useRef({
+    savedToolbarItems,
+    commitToolbarItems,
+    onFinishCustomizingToolbar,
+  });
+  toolbarEditingRef.current = { savedToolbarItems, commitToolbarItems, onFinishCustomizingToolbar };
+
+  // Where the dragged item would land for a pointer at (x, y): its index among the other
+  // items while the pointer is over the toolbar (or just below it), otherwise nowhere. An
+  // item that always stays keeps its last place instead.
+  const resolveToolbarTarget = useCallback((drag: ToolbarDrag, x: number, y: number) => {
+    const toolbar = toolbarRef.current;
+    const row = toolbarRowRef.current;
+    if (!toolbar || !row) {
+      return drag.targetIndex;
+    }
+    const bounds = toolbar.getBoundingClientRect();
+    const overToolbar =
+      y >= bounds.top &&
+      y <= bounds.bottom + TOOLBAR_DROP_REACH_BELOW &&
+      x >= bounds.left &&
+      x <= bounds.right;
+    if (!overToolbar) {
+      return drag.fromIndex !== null && isRequiredTopToolbarItem(drag.itemId)
+        ? drag.targetIndex
+        : null;
+    }
+    const centers = Array.from(row.querySelectorAll<HTMLElement>(":scope > [data-toolbar-slot]"))
+      .filter(
+        (element) =>
+          !element.hasAttribute("data-toolbar-placeholder") &&
+          element.dataset.toolbarSlot !== pressedToolbarSlotRef.current,
+      )
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.left + rect.width / 2;
+      });
+    return resolveToolbarDropIndex(centers, x);
+  }, []);
+
+  const placeToolbarGhost = useCallback(() => {
+    const ghost = toolbarGhostRef.current;
+    if (ghost) {
+      const { x, y } = toolbarPointerRef.current;
+      ghost.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+    }
+  }, []);
+
+  // A drag runs on the window's pointer events, so that it goes on wherever the pointer
+  // goes, including over the item's own place after its handle has moved.
+  useEffect(() => {
+    if (!customizingToolbar) {
+      return;
+    }
+    const endDrag = (commit: boolean) => {
+      const drag = toolbarDragRef.current;
+      pendingToolbarDragRef.current = null;
+      pressedToolbarSlotRef.current = null;
+      if (!drag) {
+        return;
+      }
+      if (commit) {
+        const { savedToolbarItems: saved, commitToolbarItems: save } = toolbarEditingRef.current;
+        if (drag.fromIndex === null) {
+          if (drag.targetIndex !== null) {
+            save(insertTopToolbarItem(saved, drag.itemId, drag.targetIndex));
+          }
+        } else if (drag.targetIndex === null) {
+          save(removeTopToolbarItem(saved, drag.fromIndex));
+        } else {
+          save(moveTopToolbarItem(saved, drag.fromIndex, drag.targetIndex));
+        }
+      }
+      setToolbarDrag(null);
+      // The click that may follow a palette drag comes right after the pointer is let go.
+      window.setTimeout(() => {
+        suppressPaletteClickRef.current = false;
+      }, 0);
+    };
+    const handlePointerMove = (event: PointerEvent) => {
+      toolbarPointerRef.current = { x: event.clientX, y: event.clientY };
+      let drag = toolbarDragRef.current;
+      if (!drag) {
+        const pending = pendingToolbarDragRef.current;
+        if (
+          !pending ||
+          Math.hypot(event.clientX - pending.startX, event.clientY - pending.startY) <
+            TOOLBAR_DRAG_THRESHOLD
+        ) {
+          return;
+        }
+        drag = {
+          itemId: pending.itemId,
+          fromIndex: pending.fromIndex,
+          targetIndex: pending.fromIndex,
+        };
+        if (pending.fromIndex === null) {
+          suppressPaletteClickRef.current = true;
+        }
+      }
+      const targetIndex = resolveToolbarTarget(drag, event.clientX, event.clientY);
+      if (drag !== toolbarDragRef.current || targetIndex !== drag.targetIndex) {
+        setToolbarDrag({ ...drag, targetIndex });
+      }
+      placeToolbarGhost();
+    };
+    const handlePointerUp = () => endDrag(true);
+    const handleCancel = () => endDrag(false);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      event.preventDefault();
+      if (toolbarDragRef.current) {
+        endDrag(false);
+        return;
+      }
+      toolbarEditingRef.current.onFinishCustomizingToolbar();
+    };
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handleCancel);
+    window.addEventListener("blur", handleCancel);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handleCancel);
+      window.removeEventListener("blur", handleCancel);
+      window.removeEventListener("keydown", handleKeyDown);
+      endDrag(false);
+    };
+  }, [customizingToolbar, placeToolbarGhost, resolveToolbarTarget, setToolbarDrag]);
+
+  // Puts a handle over each item, and slides the items that a change of order moved from
+  // where they were to their new places.
+  const measureToolbarHandles = useCallback((animate: boolean) => {
+    const toolbar = toolbarRef.current;
+    const row = toolbarRowRef.current;
+    if (!toolbar || !row) {
+      return;
+    }
+    const origin = toolbar.getBoundingClientRect();
+    const reduceMotion =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const lefts = new Map<string, number>();
+    const rects: ToolbarHandleRect[] = [];
+    for (const element of Array.from(
+      row.querySelectorAll<HTMLElement>(":scope > [data-toolbar-slot]"),
+    )) {
+      const key = element.dataset.toolbarSlot ?? "";
+      // Where the item is drawn now (part way through an earlier slide, perhaps), and where
+      // it is laid out.
+      const shownLeft = element.getBoundingClientRect().left;
+      for (const animation of element.getAnimations?.() ?? []) {
+        animation.cancel();
+      }
+      const rect = element.getBoundingClientRect();
+      lefts.set(key, rect.left);
+      rects.push({
+        key,
+        left: rect.left - origin.left,
+        top: rect.top - origin.top,
+        width: rect.width,
+        height: rect.height,
+      });
+      const previousLeft = toolbarSlotLeftsRef.current.get(key);
+      if (!animate || reduceMotion || previousLeft === undefined) {
+        continue;
+      }
+      // Its old place, moved by the part of the earlier slide still to run.
+      const offset = previousLeft + (shownLeft - rect.left) - rect.left;
+      if (Math.abs(offset) > 0.5) {
+        element.animate?.(
+          [{ transform: `translateX(${offset}px)` }, { transform: "translateX(0)" }],
+          { duration: TOOLBAR_REORDER_MS, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" },
+        );
+      }
+    }
+    toolbarSlotLeftsRef.current = lefts;
+    setToolbarHandleRects(rects);
+  }, []);
+
+  const editOrderKey = customizingToolbar ? editToolbarSlots.map((slot) => slot.key).join(" ") : "";
+  useLayoutEffect(() => {
+    void editOrderKey;
+    if (!customizingToolbar) {
+      toolbarSlotLeftsRef.current = new Map();
+      setToolbarHandleRects((current) => (current.length === 0 ? current : []));
+      return;
+    }
+    measureToolbarHandles(true);
+  }, [customizingToolbar, editOrderKey, measureToolbarHandles]);
+
+  // Once the dragged item's gap is drawn, the gap stands for it.
+  useLayoutEffect(() => {
+    if (toolbarDrag) {
+      pressedToolbarSlotRef.current = null;
+    }
+  }, [toolbarDrag]);
+
+  useEffect(() => {
+    if (!customizingToolbar) {
+      return;
+    }
+    const row = toolbarRowRef.current;
+    if (!row) {
+      return;
+    }
+    const observer = new ResizeObserver(() => measureToolbarHandles(false));
+    observer.observe(row);
+    return () => observer.disconnect();
+  }, [customizingToolbar, measureToolbarHandles]);
+
+  // An item moved or removed from the keyboard keeps the focus on the toolbar.
+  useLayoutEffect(() => {
+    const key = focusToolbarHandleRef.current;
+    if (!key || toolbarHandleRects.length === 0) {
+      return;
+    }
+    focusToolbarHandleRef.current = null;
+    findByData(toolbarRef.current, "toolbarHandle", key)?.focus();
+  }, [toolbarHandleRects]);
+
+  // The panel takes the focus, so that Escape and Tab start there.
+  useEffect(() => {
+    if (customizingToolbar) {
+      toolbarPanelRef.current?.focus();
+    }
+  }, [customizingToolbar]);
+
+  // An item added with a click flashes where it landed.
+  useEffect(() => {
+    if (!flashedToolbarSlot) {
+      return;
+    }
+    const element = findByData(toolbarRowRef.current, "toolbarSlot", flashedToolbarSlot.key);
+    if (!element) {
+      return;
+    }
+    element.removeAttribute("data-toolbar-flash");
+    void element.offsetWidth;
+    element.setAttribute("data-toolbar-flash", "");
+    const timer = window.setTimeout(
+      () => element.removeAttribute("data-toolbar-flash"),
+      TOOLBAR_FLASH_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [flashedToolbarSlot]);
+
+  function handleToolbarHandlePointerDown(
+    event: ReactPointerEvent<HTMLButtonElement>,
+    slotKey: string,
+  ) {
+    if (event.button !== 0 || toolbarDragRef.current) {
+      return;
+    }
+    const index = editToolbarSlots.findIndex((slot) => slot.key === slotKey);
+    const slot = editToolbarSlots[index];
+    if (!slot) {
+      return;
+    }
+    toolbarPointerRef.current = { x: event.clientX, y: event.clientY };
+    pendingToolbarDragRef.current = {
+      itemId: slot.id,
+      fromIndex: index,
+      startX: event.clientX,
+      startY: event.clientY,
+    };
+    pressedToolbarSlotRef.current = slotKey;
+  }
+
+  function handlePalettePointerDown(
+    itemId: ToolbarItemId,
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) {
+    if (event.button !== 0 || toolbarDragRef.current) {
+      return;
+    }
+    toolbarPointerRef.current = { x: event.clientX, y: event.clientY };
+    pendingToolbarDragRef.current = {
+      itemId,
+      fromIndex: null,
+      startX: event.clientX,
+      startY: event.clientY,
+    };
+    pressedToolbarSlotRef.current = null;
+  }
+
+  function handlePaletteAdd(itemId: ToolbarItemId) {
+    if (suppressPaletteClickRef.current) {
+      suppressPaletteClickRef.current = false;
+      return;
+    }
+    const next = addTopToolbarItem(savedToolbarItems, itemId);
+    commitToolbarItems(next);
+    const key = resolveTopToolbarSlots(next).at(-1)?.key;
+    if (key) {
+      setFlashedToolbarSlot((current) => ({ key, count: (current?.count ?? 0) + 1 }));
+    }
+  }
+
+  // ←/→ go from item to item; ⌥←/⌥→ move the item; Delete takes it off.
+  function handleToolbarHandleKeyDown(
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+    slotKey: string,
+  ) {
+    const index = editToolbarSlots.findIndex((slot) => slot.key === slotKey);
+    const slot = editToolbarSlots[index];
+    if (!slot || toolbarDragRef.current) {
+      return;
+    }
+    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      event.preventDefault();
+      const step = event.key === "ArrowLeft" ? -1 : 1;
+      if (event.altKey) {
+        const to = index + step;
+        if (to < 0 || to >= savedToolbarItems.length) {
+          return;
+        }
+        const next = moveTopToolbarItem(savedToolbarItems, index, to);
+        focusToolbarHandleRef.current = resolveTopToolbarSlots(next)[to]?.key ?? null;
+        commitToolbarItems(next);
+        return;
+      }
+      const neighbour = editToolbarSlots[index + step];
+      if (neighbour) {
+        findByData(toolbarRef.current, "toolbarHandle", neighbour.key)?.focus();
+      }
+      return;
+    }
+    if (
+      (event.key === "Backspace" || event.key === "Delete") &&
+      !isRequiredTopToolbarItem(slot.id)
+    ) {
+      event.preventDefault();
+      const next = removeTopToolbarItem(savedToolbarItems, index);
+      const nextSlots = resolveTopToolbarSlots(next);
+      focusToolbarHandleRef.current = nextSlots[Math.min(index, nextSlots.length - 1)]?.key ?? null;
+      commitToolbarItems(next);
+    }
+  }
+
+  // A right-click on the toolbar's empty room or its title offers Customize Toolbar…; the
+  // items keep their own right-clicks.
+  const [toolbarMenuPosition, setToolbarMenuPosition] = useState<{ x: number; y: number } | null>(
+    null,
+  );
+  const toolbarMenuRef = useRef<HTMLDivElement | null>(null);
+  useKeepInViewport(toolbarMenuRef, toolbarMenuPosition !== null);
+  useEffect(() => {
+    if (!toolbarMenuPosition) {
+      return;
+    }
+    const close = () => setToolbarMenuPosition(null);
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && toolbarMenuRef.current?.contains(event.target)) {
+        return;
+      }
+      close();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close();
+      }
+    };
+    window.addEventListener("pointerdown", handlePointerDown, true);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("blur", close);
+    toolbarMenuRef.current?.querySelector<HTMLElement>("[role='menuitem']")?.focus();
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown, true);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("blur", close);
+    };
+  }, [toolbarMenuPosition]);
+  useEffect(() => {
+    if (customizingToolbar) {
+      setToolbarMenuPosition(null);
+    }
+  }, [customizingToolbar]);
+
+  function handleToolbarContextMenu(event: React.MouseEvent<HTMLElement>) {
+    if (customizingToolbar) {
+      event.preventDefault();
+      return;
+    }
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    const slot = target.closest<HTMLElement>("[data-toolbar-slot]");
+    if (slot && slot.dataset.toolbarSlot !== "title") {
+      return;
+    }
+    event.preventDefault();
+    setToolbarMenuPosition({ x: event.clientX, y: event.clientY });
+  }
 
   const shortcutDisplay = useShortcutDisplay();
   // How the list and the panels are shown, worded and ordered as in the View menu, and the
@@ -908,21 +1439,36 @@ export function ExplorerWorkspace({
     );
   }
 
+  // While customizing, every item is in the row (those without room drawn faint), the
+  // dragged one where it would land.
+  const rowToolbarSlots = customizingToolbar ? editToolbarSlots : visibleTopToolbarSlots;
   // Buttons side by side share a capsule; each knows whether it starts or ends one.
   const toolbarCapsules = resolveToolbarCapsules(
-    visibleTopToolbarSlots,
-    (slot) => slot.id !== "clipboard" || clipboardShown,
+    rowToolbarSlots,
+    (slot) => customizingToolbar || slot.id !== "clipboard" || clipboardShown,
   );
 
-  function renderTopToolbarSlot(slot: TopToolbarSlot) {
+  function renderTopToolbarSlot(slot: TopToolbarSlot, index: number) {
     const element = renderTopToolbarSlotContent(slot);
-    const edges = toolbarCapsules.get(slot.key);
-    if (!edges || !isValidElement<Record<string, unknown>>(element)) {
+    if (!isValidElement<Record<string, unknown>>(element)) {
       return element;
     }
+    const edges = toolbarCapsules.get(slot.key);
     return cloneElement(element, {
-      "data-capsule":
-        edges.start && edges.end ? "single" : edges.start ? "start" : edges.end ? "end" : "middle",
+      "data-toolbar-slot": slot.key,
+      "data-capsule": edges
+        ? edges.start && edges.end
+          ? "single"
+          : edges.start
+            ? "start"
+            : edges.end
+              ? "end"
+              : "middle"
+        : undefined,
+      "data-toolbar-placeholder":
+        (customizingToolbar && index === placeholderToolbarIndex) || undefined,
+      "data-toolbar-overflow":
+        (customizingToolbar && overflowToolbarKeys.has(slot.key)) || undefined,
     });
   }
 
@@ -948,7 +1494,13 @@ export function ExplorerWorkspace({
           data-top-toolbar-item={slot.id}
           data-top-toolbar-measure={slot.key}
         >
-          {clipboardButton}
+          {clipboardButton ??
+            // While customizing, a stand-in for the button, so that it can be moved.
+            (customizingToolbar ? (
+              <span className="tb-btn tb-btn-icon toolbar-clipboard-stand-in" aria-hidden="true">
+                <ToolbarIcon name="clipboard" />
+              </span>
+            ) : null)}
         </div>
       );
     }
@@ -967,9 +1519,11 @@ export function ExplorerWorkspace({
       ref={toolbarRef}
       className="window-toolbar"
       style={{ gridColumn: "3 / -1", gridRow: "1" }}
+      data-customizing={customizingToolbar || undefined}
+      onContextMenu={handleToolbarContextMenu}
     >
-      <div ref={toolbarRowRef} className="toolbar-row">
-        {visibleTopToolbarSlots.map(renderTopToolbarSlot)}
+      <div ref={toolbarRowRef} className="toolbar-row" inert={customizingToolbar || undefined}>
+        {rowToolbarSlots.map(renderTopToolbarSlot)}
       </div>
       <div className="toolbar-row-measure" aria-hidden="true">
         {optionalTopToolbarSlots.map((slot) => (
@@ -978,6 +1532,100 @@ export function ExplorerWorkspace({
           </div>
         ))}
       </div>
+      {customizingToolbar ? (
+        <div className="toolbar-edit-layer" data-dragging={toolbarDrag !== null || undefined}>
+          {toolbarHandleRects.map((rect) => {
+            const slot = editToolbarSlots.find((candidate) => candidate.key === rect.key);
+            if (!slot) {
+              return null;
+            }
+            const { label } = getToolbarItemDefinition(slot.id);
+            const overflow = overflowToolbarKeys.has(slot.key);
+            return (
+              <button
+                key={rect.key}
+                type="button"
+                className="toolbar-edit-handle"
+                data-toolbar-handle={rect.key}
+                style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
+                aria-label={label}
+                title={`${label}: ${
+                  isRequiredTopToolbarItem(slot.id)
+                    ? "drag to move. It is always in the toolbar."
+                    : "drag to move, or out of the toolbar to remove."
+                }${overflow ? " Hidden while the window is too narrow for it." : ""}`}
+                onPointerDown={(event) => handleToolbarHandlePointerDown(event, rect.key)}
+                onKeyDown={(event) => handleToolbarHandleKeyDown(event, rect.key)}
+              />
+            );
+          })}
+        </div>
+      ) : null}
+      {customizingToolbar ? (
+        <ToolbarCustomizePanel
+          panelRef={toolbarPanelRef}
+          items={paletteToolbarItems}
+          draggedItemId={toolbarDrag?.fromIndex === null ? toolbarDrag.itemId : null}
+          removing={removingToolbarItem}
+          onItemPointerDown={handlePalettePointerDown}
+          onAddItem={handlePaletteAdd}
+          onRestoreDefaults={() => commitToolbarItems([...DEFAULT_TOP_TOOLBAR_ITEMS])}
+          restoreDisabled={isDefaultToolbar}
+          onDone={onFinishCustomizingToolbar}
+        />
+      ) : null}
+      {customizingToolbar && toolbarDrag
+        ? createPortal(
+            <div
+              ref={toolbarGhostRef}
+              className="toolbar-drag-ghost"
+              data-wide={
+                toolbarDrag.itemId === "title" ||
+                toolbarDrag.itemId === "search" ||
+                toolbarDrag.itemId === "view" ||
+                undefined
+              }
+              data-removing={removingToolbarItem || undefined}
+              style={{
+                transform: `translate(${toolbarPointerRef.current.x}px, ${toolbarPointerRef.current.y}px) translate(-50%, -50%)`,
+              }}
+              aria-hidden="true"
+            >
+              <ToolbarDragGhostContent itemId={toolbarDrag.itemId} title={toolbarTitle} />
+              {removingToolbarItem ? <span className="toolbar-drag-ghost-remove" /> : null}
+            </div>,
+            document.body,
+          )
+        : null}
+      {toolbarMenuPosition
+        ? createPortal(
+            <div
+              ref={toolbarMenuRef}
+              className="toolbar-menu"
+              role="menu"
+              aria-label="Toolbar"
+              style={{
+                position: "fixed",
+                left: `${toolbarMenuPosition.x}px`,
+                top: `${toolbarMenuPosition.y}px`,
+              }}
+            >
+              <button
+                type="button"
+                className="toolbar-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  setToolbarMenuPosition(null);
+                  onCustomizeToolbar();
+                }}
+              >
+                <MenuCheck checked={false} />
+                <span className="toolbar-menu-label">Customize Toolbar…</span>
+              </button>
+            </div>,
+            document.body,
+          )
+        : null}
     </header>
   );
 
@@ -996,7 +1644,11 @@ export function ExplorerWorkspace({
             gridTemplateRows: "auto auto minmax(0, 1fr)",
           }}
         >
-          <div className="workspace-sidebar-cell" style={{ gridColumn: "1", gridRow: "1 / -1" }}>
+          <div
+            className="workspace-sidebar-cell"
+            style={{ gridColumn: "1", gridRow: "1 / -1" }}
+            inert={customizingToolbar || undefined}
+          >
             <TreePane {...treePaneProps} />
           </div>
           <div
@@ -1009,9 +1661,21 @@ export function ExplorerWorkspace({
             aria-label="Resize folders pane"
             onKeyDown={(event) => onPaneResizeKey("tree", event)}
           />
+          {/* While the toolbar is customized the rest of the window waits, under a veil. */}
+          {customizingToolbar ? (
+            <div
+              className="toolbar-customize-scrim"
+              style={{ gridColumn: "1 / -1", gridRow: "1 / -1" }}
+              aria-hidden="true"
+            />
+          ) : null}
           {toolbar}
           {tabStrip}
-          <div className="workspace-main-cell" style={{ gridColumn: "3", gridRow: "3" }}>
+          <div
+            className="workspace-main-cell"
+            style={{ gridColumn: "3", gridRow: "3" }}
+            inert={customizingToolbar || undefined}
+          >
             <PaneLayoutChangeContext.Provider value={infoPanelChange.count}>
               <SearchWorkspace {...searchWorkspaceProps} />
             </PaneLayoutChangeContext.Provider>
@@ -1033,6 +1697,7 @@ export function ExplorerWorkspace({
                   infoPanelChange.slide === "in" ? " is-sliding-in" : ""
                 }`}
                 style={{ gridColumn: "5", gridRow: "3" }}
+                inert={customizingToolbar || undefined}
               >
                 <InfoPanel {...infoPanelProps} />
               </div>
@@ -1050,5 +1715,44 @@ export function ExplorerWorkspace({
         </section>
       )}
     </section>
+  );
+}
+
+// What follows the pointer while an item is dragged: the item's icon, and the title and the
+// search field as small stand-ins for themselves.
+function ToolbarDragGhostContent({ itemId, title }: { itemId: ToolbarItemId; title: string }) {
+  if (itemId === "title") {
+    return <span className="toolbar-drag-ghost-title">{title || "Title"}</span>;
+  }
+  if (itemId === "search") {
+    return (
+      <>
+        <ToolbarIcon name="search" />
+        <span className="toolbar-drag-ghost-label">Search</span>
+      </>
+    );
+  }
+  if (itemId === "view") {
+    return (
+      <>
+        <ToolbarIcon name="icons" />
+        <ToolbarIcon name="list" />
+        <ToolbarIcon name="details" />
+      </>
+    );
+  }
+  return <ToolbarIcon name={getToolbarItemDefinition(itemId).icon} />;
+}
+
+// The element under `root` whose `data-*` value (`name` in its dataset spelling) is `value`.
+function findByData(root: HTMLElement | null, name: string, value: string): HTMLElement | null {
+  if (!root) {
+    return null;
+  }
+  const attribute = `data-${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`;
+  return (
+    Array.from(root.querySelectorAll<HTMLElement>(`[${attribute}]`)).find(
+      (element) => element.dataset[name] === value,
+    ) ?? null
   );
 }

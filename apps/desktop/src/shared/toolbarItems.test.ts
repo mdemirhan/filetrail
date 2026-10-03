@@ -3,6 +3,10 @@ import {
   TOOLBAR_ITEM_IDS,
   addTopToolbarItem,
   getToolbarItemDefinition,
+  getTopToolbarPaletteItems,
+  insertTopToolbarItem,
+  moveTopToolbarItem,
+  removeTopToolbarItem,
   sanitizeTopToolbarItems,
 } from "./toolbarItems";
 
@@ -106,35 +110,51 @@ describe("toolbarItems", () => {
     ]);
   });
 
-  it("adds an item with the buttons ahead of the search field", () => {
+  it("adds a clicked item at the far right", () => {
     expect(addTopToolbarItem(DEFAULT_TOP_TOOLBAR_ITEMS, "copyPath")).toEqual([
+      ...DEFAULT_TOP_TOOLBAR_ITEMS,
+      "copyPath",
+    ]);
+  });
+
+  it("inserts, moves and removes items by their place in the order", () => {
+    const items = DEFAULT_TOP_TOOLBAR_ITEMS;
+    expect(insertTopToolbarItem(items, "refresh", 2)).toEqual([
       "back",
+      "forward",
+      "refresh",
+      ...items.slice(2),
+    ]);
+    // Out of range lands at the nearer end.
+    expect(insertTopToolbarItem(items, "refresh", -3)[0]).toBe("refresh");
+    expect(insertTopToolbarItem(items, "refresh", 99).at(-1)).toBe("refresh");
+    // Back moved after Sort: the index counts the items without Back.
+    expect(moveTopToolbarItem(items, 0, 5)).toEqual([
       "forward",
       "title",
       "clipboard",
       "view",
       "sort",
-      "copyPath",
+      "back",
       "search",
       "viewOptions",
       "infoPanel",
     ]);
-    // Ahead of a clipboard button and View Options that sit right before the field, and
-    // straight after the title when nothing else is between them.
-    expect(
-      addTopToolbarItem(["back", "title", "view", "clipboard", "viewOptions", "search"], "sort"),
-    ).toEqual(["back", "title", "view", "sort", "clipboard", "viewOptions", "search"]);
-    expect(
-      addTopToolbarItem(["back", "title", "clipboard", "viewOptions", "search"], "sort"),
-    ).toEqual(["back", "title", "sort", "clipboard", "viewOptions", "search"]);
-    // Last when the search field opens the toolbar.
-    expect(addTopToolbarItem(["search", "clipboard", "viewOptions", "title"], "sort")).toEqual([
-      "search",
-      "clipboard",
-      "viewOptions",
-      "title",
-      "sort",
-    ]);
+    expect(removeTopToolbarItem(items, items.indexOf("sort"))).not.toContain("sort");
+    // The four that always stay are not taken off.
+    expect(removeTopToolbarItem(items, items.indexOf("search"))).toEqual(items);
+  });
+
+  it("offers every item the toolbar does not hold, and the space always", () => {
+    const palette = getTopToolbarPaletteItems(DEFAULT_TOP_TOOLBAR_ITEMS);
+    expect(palette[0]).toBe("topSeparator");
+    expect(palette).toContain("refresh");
+    for (const itemId of DEFAULT_TOP_TOOLBAR_ITEMS) {
+      expect(palette).not.toContain(itemId);
+    }
+    expect(getTopToolbarPaletteItems([...DEFAULT_TOP_TOOLBAR_ITEMS, "topSeparator"])).toContain(
+      "topSeparator",
+    );
   });
 
   it("drops the items that went with the rails and the old Open Selected Item button", () => {

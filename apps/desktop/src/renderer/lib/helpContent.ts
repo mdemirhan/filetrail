@@ -617,6 +617,11 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
             label: "Theme, accent, font",
             description: "Settings → Appearance. Help follows them too.",
           },
+          {
+            label: "Toolbar",
+            description:
+              "View > Customize Toolbar…, or right-click the toolbar. Drag items in from the panel, along the toolbar to move them, or out of it to remove them; a click adds an item at the far right. Done or Escape when finished.",
+          },
         ],
       },
     ],

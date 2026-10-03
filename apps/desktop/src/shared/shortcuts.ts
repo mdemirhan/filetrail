@@ -344,6 +344,13 @@ export const SHORTCUT_COMMANDS = [
     menuPath: "View > Info Row",
   },
   {
+    id: "customizeToolbar",
+    label: "Customize Toolbar…",
+    group: "view",
+    defaults: [],
+    menuPath: "View > Customize Toolbar…",
+  },
+  {
     id: "zoomIn",
     label: "Zoom In",
     group: "view",

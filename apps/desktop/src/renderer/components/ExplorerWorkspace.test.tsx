@@ -458,3 +458,124 @@ describe("ExplorerWorkspace", () => {
     expect(handleSortChange).toHaveBeenCalledWith("size");
   });
 });
+
+describe("ExplorerWorkspace customizing the toolbar", () => {
+  const DEFAULT_ITEMS = [
+    "back",
+    "forward",
+    "title",
+    "clipboard",
+    "view",
+    "sort",
+    "search",
+    "viewOptions",
+    "infoPanel",
+  ] as const;
+
+  function renderCustomizing(overrides: Partial<ComponentProps<typeof ExplorerWorkspace>> = {}) {
+    const onTopToolbarItemsChange = vi.fn();
+    const onFinishCustomizingToolbar = vi.fn();
+    const view = renderExplorerWorkspace({
+      topToolbarItems: [...DEFAULT_ITEMS],
+      customizingToolbar: true,
+      onTopToolbarItemsChange,
+      onFinishCustomizingToolbar,
+      ...overrides,
+    });
+    return { ...view, onTopToolbarItemsChange, onFinishCustomizingToolbar };
+  }
+
+  it("edits the toolbar in place: the row does nothing, the rest of the window waits", () => {
+    const { container } = renderCustomizing();
+
+    expect(container.querySelector(".toolbar-row")).toHaveAttribute("inert");
+    expect(container.querySelector(".workspace-main-cell")).toHaveAttribute("inert");
+    expect(container.querySelector(".toolbar-customize-scrim")).not.toBeNull();
+    expect(screen.getByRole("dialog", { name: "Drag items into the toolbar" })).toBeVisible();
+    // The clipboard button shows, faint, so that it can be moved with nothing copied.
+    expect(container.querySelector(".toolbar-clipboard-stand-in")).not.toBeNull();
+    // A handle over every item, the four that always stay included.
+    expect(
+      Array.from(container.querySelectorAll<HTMLElement>("[data-toolbar-handle]"), (handle) =>
+        handle.getAttribute("data-toolbar-handle"),
+      ),
+    ).toEqual([...DEFAULT_ITEMS]);
+  });
+
+  it("offers what the toolbar does not hold, and the space", () => {
+    renderCustomizing();
+
+    expect(screen.getByRole("button", { name: "Add Space to the toolbar" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add Refresh to the toolbar" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add Sort to the toolbar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add Search to the toolbar" })).toBeNull();
+  });
+
+  it("adds a clicked item at the far right", () => {
+    const { onTopToolbarItemsChange } = renderCustomizing();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add New Folder to the toolbar" }));
+
+    expect(onTopToolbarItemsChange).toHaveBeenCalledWith([...DEFAULT_ITEMS, "newFolder"]);
+  });
+
+  it("moves an item with ⌥← and ⌥→, and takes it off with Delete, from the keyboard", () => {
+    const { container, onTopToolbarItemsChange } = renderCustomizing();
+    const handle = (key: string) =>
+      container.querySelector<HTMLElement>(`[data-toolbar-handle="${key}"]`) as HTMLElement;
+
+    fireEvent.keyDown(handle("sort"), { key: "ArrowRight", altKey: true });
+    expect(onTopToolbarItemsChange).toHaveBeenLastCalledWith([
+      "back",
+      "forward",
+      "title",
+      "clipboard",
+      "view",
+      "search",
+      "sort",
+      "viewOptions",
+      "infoPanel",
+    ]);
+
+    fireEvent.keyDown(handle("sort"), { key: "Delete" });
+    expect(onTopToolbarItemsChange).toHaveBeenLastCalledWith(
+      DEFAULT_ITEMS.filter((itemId) => itemId !== "sort"),
+    );
+
+    // The four that always stay are not taken off.
+    onTopToolbarItemsChange.mockClear();
+    fireEvent.keyDown(handle("search"), { key: "Backspace" });
+    expect(onTopToolbarItemsChange).not.toHaveBeenCalled();
+  });
+
+  it("puts back the default toolbar, and ends with Done or Escape", () => {
+    const { onFinishCustomizingToolbar, unmount } = renderCustomizing();
+    expect(screen.getByRole("button", { name: "Restore Defaults" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onFinishCustomizingToolbar).toHaveBeenCalledTimes(2);
+    unmount();
+
+    const { onTopToolbarItemsChange } = renderCustomizing({
+      topToolbarItems: ["title", "clipboard", "search", "viewOptions"],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Restore Defaults" }));
+    expect(onTopToolbarItemsChange).toHaveBeenCalledWith([...DEFAULT_ITEMS]);
+  });
+
+  it("offers Customize Toolbar… on a right-click of the title, not of a button", () => {
+    const onCustomizeToolbar = vi.fn();
+    const { container } = renderExplorerWorkspace({
+      topToolbarItems: [...DEFAULT_ITEMS],
+      onCustomizeToolbar,
+    });
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Sort by" }));
+    expect(screen.queryByRole("menu", { name: "Toolbar" })).toBeNull();
+
+    fireEvent.contextMenu(container.querySelector(".toolbar-title") as HTMLElement);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Customize Toolbar…" }));
+    expect(onCustomizeToolbar).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("menu", { name: "Toolbar" })).toBeNull();
+  });
+});

@@ -127,6 +127,8 @@ describe("createApplicationMenuTemplate", () => {
       "Info Panel",
       "Info Row",
       "-",
+      "Customize Toolbar…",
+      "-",
       "Refresh",
       "-",
       "Zoom In",

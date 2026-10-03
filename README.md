@@ -98,7 +98,7 @@ Beyond colour, you choose the accent, the font and the zoom level, and the parts
 
 <table>
   <tr>
-    <td align="center" width="50%"><img src="docs/screenshots/settings-toolbar.png" alt="The Toolbar tab of Settings" width="420"><br><b>The toolbar.</b> Add, remove and reorder its buttons.</td>
+    <td align="center" width="50%"><img src="docs/screenshots/customize-toolbar.png" alt="Customizing the toolbar, with New Folder being dragged into it from the panel below" width="420"><br><b>The toolbar.</b> Arranged where it is: drag buttons in, along or out, and watch it make room.</td>
     <td align="center" width="50%"><img src="docs/screenshots/settings-shortcuts.png" alt="The Shortcuts tab of Settings" width="420"><br><b>The keyboard.</b> Two keys per command, with a warning before one is taken from another command.</td>
   </tr>
 </table>

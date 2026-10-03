@@ -634,6 +634,292 @@ select:focus-visible {
   --toolbar-capsule-bg: var(--toolbar-toggle-bg, var(--bg-hover));
 }
 
+/* ── Customizing the toolbar ──────────────────────────────────────────────────────────
+   View > Customize Toolbar edits the toolbar where it is, as in Finder: the items stay as
+   they are drawn, a handle over each one moves it, and a panel of the items to add hangs
+   under the toolbar. The rest of the window waits under a light veil. */
+.window-toolbar[data-customizing] .toolbar-row > [data-toolbar-slot] {
+  position: relative;
+}
+
+/* A space has no width of its own; while customizing it shows as a narrow dashed slot, so
+   that it can be seen and moved. */
+.window-toolbar[data-customizing] .titlebar-divider {
+  box-sizing: border-box;
+  width: 10px;
+  height: 22px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 4px;
+}
+
+/* Every item is in the row while customizing, and one more while it is dragged in: the
+   title gives up more of its room than it does in use, before anything is pushed out. */
+.window-toolbar[data-customizing] .toolbar-title-block {
+  min-width: 40px;
+}
+
+/* The clipboard button, drawn while nothing is copied only so that it can be moved. */
+.toolbar-clipboard-stand-in {
+  opacity: 0.45;
+}
+
+/* Buttons the window has no room for: they are hidden while the toolbar is used. */
+.window-toolbar[data-customizing] .toolbar-row > [data-toolbar-overflow] {
+  opacity: 0.35;
+}
+
+/* Where the dragged item will land: its own room, empty, with a dashed edge. */
+.window-toolbar[data-customizing] .toolbar-row > [data-toolbar-placeholder] > * {
+  visibility: hidden;
+}
+
+.window-toolbar[data-customizing] .toolbar-row > [data-toolbar-placeholder]::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border: 1.5px dashed var(--ft-accent-solid);
+  border-radius: var(--radius-capsule);
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+/* An item added with a click flashes where it landed. */
+.window-toolbar .toolbar-row > [data-toolbar-flash]::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: var(--radius-capsule);
+  background: color-mix(in srgb, var(--ft-accent-solid) 14%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ft-accent-solid) 55%, transparent);
+  pointer-events: none;
+  animation: toolbar-item-flash 900ms ease-out forwards;
+}
+
+@keyframes toolbar-item-flash {
+  0%,
+  45% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+/* The handles: one over each item, the same size, to press and drag. */
+.toolbar-edit-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.toolbar-edit-handle {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-capsule);
+  background: transparent;
+  cursor: default;
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+  -webkit-app-region: no-drag;
+}
+
+.toolbar-edit-handle:hover {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ft-accent-solid) 45%, transparent);
+}
+
+.toolbar-edit-layer[data-dragging] .toolbar-edit-handle {
+  box-shadow: none;
+}
+
+.toolbar-edit-handle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* The panel of items to add, under the toolbar and over the files. */
+.toolbar-customize-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: auto;
+  left: 50%;
+  z-index: 1;
+  box-sizing: border-box;
+  width: min(760px, calc(100% - 32px));
+  max-width: none;
+  max-height: calc(100vh - 140px);
+  margin: 0;
+  padding: 16px 18px 14px;
+  border: 0;
+  overflow-y: auto;
+  border-radius: var(--radius-dialog);
+  background: var(--bg-elevated);
+  box-shadow: var(--elevation-dialog);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  cursor: default;
+  outline: none;
+  transform: translateX(-50%);
+  user-select: none;
+  -webkit-app-region: no-drag;
+}
+
+/* Letting go of an item dragged out of the toolbar would take it off. */
+.toolbar-customize-panel[data-removing]::after {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border: 1.5px dashed color-mix(in srgb, var(--danger) 50%, transparent);
+  border-radius: calc(var(--radius-dialog) - 4px);
+  background: color-mix(in srgb, var(--danger) 5%, transparent);
+  pointer-events: none;
+}
+
+.toolbar-customize-title {
+  margin: 0;
+  font-size: var(--font-size-body);
+  font-weight: 600;
+}
+
+.toolbar-customize-note {
+  margin: 2px 0 12px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-small);
+}
+
+.toolbar-customize-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 8px 4px;
+}
+
+.toolbar-customize-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  padding: 4px 2px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  cursor: default;
+  touch-action: none;
+}
+
+.toolbar-customize-item:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.toolbar-customize-item[data-dragged] {
+  opacity: 0.35;
+}
+
+/* Each item on a capsule of its own, as the toolbar draws its buttons. */
+.toolbar-customize-chip {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 30px;
+  border-radius: var(--radius-capsule);
+  background: var(--toolbar-capsule-bg);
+  color: var(--toolbar-nav-icon-active);
+}
+
+.toolbar-customize-item:active .toolbar-customize-chip {
+  filter: var(--push-button-pressed);
+}
+
+.toolbar-customize-label {
+  color: var(--text-secondary);
+  font-size: var(--font-size-small);
+  line-height: 1.2;
+  text-align: center;
+}
+
+.toolbar-customize-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 0.5px solid var(--dialog-edge);
+}
+
+.toolbar-customize-scrim {
+  position: relative;
+  z-index: 9;
+  background: color-mix(in srgb, var(--scrim) 35%, transparent);
+  -webkit-app-region: no-drag;
+}
+
+/* What follows the pointer while an item is dragged. */
+.toolbar-drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  box-sizing: border-box;
+  min-width: 34px;
+  height: 30px;
+  padding: 0 9px;
+  border-radius: var(--radius-capsule);
+  background: var(--bg-elevated);
+  box-shadow: var(--elevation-dialog);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-body);
+  pointer-events: none;
+}
+
+.toolbar-drag-ghost[data-removing] {
+  opacity: 0.6;
+}
+
+.toolbar-drag-ghost-title {
+  max-width: 180px;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolbar-drag-ghost-label {
+  color: var(--text-secondary);
+}
+
+/* The red minus of an item that letting go would take off. */
+.toolbar-drag-ghost-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.toolbar-drag-ghost-remove::before {
+  content: "";
+  position: absolute;
+  top: 7px;
+  right: 4px;
+  left: 4px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--ft-accent-on-solid);
+}
+
 /* A hidden copy of the removable items, to measure the ones the row has no room for. */
 .toolbar-row-measure {
   position: absolute;
@@ -6174,247 +6460,6 @@ body .settings-window .settings-view[data-layout] {
   stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-
-/* Settings → Toolbar: the items in the toolbar, in order, and the ones that can be added.
-   A tile is wider than the box its icon is in, to leave room for the name: the tiles are
-   pulled out by that difference, so the first box of a row starts where the text of every
-   other group starts. */
-.settings-toolbar-editor {
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.settings-toolbar-area {
-  margin: 0 -13px;
-  padding: 20px 0 10px;
-}
-
-.settings-toolbar-tiles {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 2px;
-  min-height: 58px;
-}
-
-.settings-toolbar-available {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, 66px);
-  justify-content: start;
-  gap: 8px 2px;
-}
-
-.settings-toolbar-tile {
-  position: relative;
-  display: flex;
-  flex: 0 0 auto;
-  align-items: flex-start;
-}
-
-.settings-toolbar-tile-slot {
-  position: relative;
-  flex-shrink: 0;
-  width: 66px;
-}
-
-.settings-toolbar-tile[data-shape="title"] .settings-toolbar-tile-slot,
-.settings-toolbar-tile[data-shape="search"] .settings-toolbar-tile-slot {
-  width: 134px;
-}
-
-.settings-toolbar-tile-button {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: grab;
-  transition: opacity var(--duration-fast) ease;
-}
-
-.settings-toolbar-tile-button.is-available {
-  width: 66px;
-  cursor: default;
-}
-
-.settings-toolbar-tile-button[data-dragged] {
-  opacity: 0.22;
-}
-
-.settings-toolbar-swatch {
-  position: relative;
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 38px;
-  border: 1px solid var(--settings-separator);
-  border-radius: 8px;
-  background: var(--settings-page-bg);
-  color: var(--ft-accent-solid);
-  transition: background var(--duration-fast) ease, border-color var(--duration-fast) ease;
-}
-
-.settings-toolbar-swatch[data-available] {
-  background: var(--settings-control-bg);
-  color: var(--settings-label-secondary);
-}
-
-.settings-toolbar-swatch[data-hovered] {
-  border-color: var(--ft-accent-soft-bg);
-  background: var(--ft-accent-soft-bg);
-  color: var(--ft-accent-solid);
-}
-
-/* As far in from the tile's edges as an icon's box is, so the boxes line up. */
-.settings-toolbar-swatch[data-shape="title"],
-.settings-toolbar-swatch[data-shape="search"] {
-  justify-content: flex-start;
-  width: calc(100% - 26px);
-  padding: 0 10px;
-}
-
-.settings-toolbar-swatch[data-shape="search"] {
-  background: var(--settings-control-bg);
-}
-
-.settings-toolbar-swatch[data-shape="title"] {
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 1px;
-  border-style: dashed;
-  border-color: var(--settings-label-secondary);
-  line-height: 1.2;
-  white-space: nowrap;
-}
-
-.settings-toolbar-swatch[data-shape="title"][data-hovered] {
-  border-color: var(--ft-accent-border);
-}
-
-.settings-toolbar-title-name {
-  color: var(--text-primary);
-  font-size: var(--font-size-small);
-  font-weight: 700;
-}
-
-.settings-toolbar-title-count {
-  color: var(--settings-label-secondary);
-  font-size: var(--font-size-mini);
-}
-
-.settings-toolbar-tile-label {
-  display: -webkit-box;
-  max-width: 100%;
-  min-height: 24px;
-  overflow: hidden;
-  color: var(--settings-label-secondary);
-  font-family: var(--font-sans);
-  font-size: var(--font-size-mini);
-  line-height: 1.2;
-  text-align: center;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-/* The mark on an item that is always in the toolbar: a small lock, in the corner. */
-.settings-toolbar-lock {
-  position: absolute;
-  right: -4px;
-  bottom: -4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-  background: var(--settings-card-bg);
-  box-shadow: 0 0 0 0.5px var(--settings-control-border);
-  color: var(--text-tertiary);
-}
-
-.settings-toolbar-lock svg {
-  width: 8px;
-  height: 8px;
-  fill: currentColor;
-  stroke: currentColor;
-  stroke-width: 1.4;
-  stroke-linecap: round;
-}
-
-.settings-toolbar-lock svg path {
-  fill: none;
-}
-
-.settings-toolbar-remove,
-.settings-toolbar-add-mark {
-  position: absolute;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-}
-
-.settings-toolbar-remove {
-  top: -6px;
-  right: 8px;
-  background: var(--text-secondary);
-  color: var(--settings-card-bg);
-}
-
-.settings-toolbar-add-mark {
-  top: -5px;
-  right: 10px;
-  background: var(--ft-accent-solid);
-  color: var(--ft-accent-on-solid);
-}
-
-.settings-toolbar-remove svg,
-.settings-toolbar-add-mark svg {
-  width: 10px;
-  height: 10px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-}
-
-.settings-toolbar-insert {
-  width: 3px;
-  height: 26px;
-  margin: 6px -1px 0;
-  border-radius: var(--radius-capsule);
-  background: var(--ft-accent-solid);
-}
-
-.settings-toolbar-empty {
-  padding: 8px 13px;
-  color: var(--settings-label-secondary);
-  font-size: var(--font-size-small);
-}
-
-.settings-toolbar-drag-ghost {
-  position: absolute;
-  top: -1000px;
-  width: 40px;
-  height: 38px;
-  border: 1px solid var(--settings-control-border);
-  border-radius: 8px;
-  background: var(--settings-control-bg);
 }
 
 .shortcut-settings-intro,

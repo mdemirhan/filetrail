@@ -95,10 +95,10 @@ describe("SettingsWindowApp", () => {
   });
 
   it("opens on the tab named in its address", async () => {
-    window.history.replaceState(null, "", "#settings/toolbars");
+    window.history.replaceState(null, "", "#settings/shortcuts");
     renderSettings();
 
-    expect(await screen.findByRole("group", { name: "Toolbar" })).toBeInTheDocument();
+    expect(await screen.findByRole("textbox", { name: "Search shortcuts" })).toBeInTheDocument();
     window.history.replaceState(null, "", "#settings");
   });
 });
