@@ -587,4 +587,53 @@ describe("InfoPanel", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
+  it("highlights the Open With item under the pointer, as the right-click menu does", () => {
+    render(
+      <InfoPanel
+        loading={false}
+        item={baseItem}
+        onClose={() => undefined}
+        onNavigateToPath={() => undefined}
+        onOpen={() => undefined}
+        onOpenInTerminal={() => undefined}
+        onShowInFinder={() => undefined}
+        onCopyPath={() => true}
+        openWithItems={[
+          {
+            action: {
+              kind: "application",
+              id: "zed",
+              label: "Zed",
+              appPath: "/Applications/Zed.app",
+              appName: "Zed",
+            },
+          },
+          {
+            action: {
+              kind: "application",
+              id: "textedit",
+              label: "TextEdit",
+              appPath: "/System/Applications/TextEdit.app",
+              appName: "TextEdit",
+            },
+          },
+        ]}
+        onOpenWith={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Open With/ }));
+    const zed = screen.getByRole("menuitem", { name: "Zed" });
+    const textEdit = screen.getByRole("menuitem", { name: "TextEdit" });
+    expect(zed).not.toHaveClass("active");
+
+    fireEvent.mouseEnter(zed);
+    expect(zed).toHaveClass("active");
+    fireEvent.mouseEnter(textEdit);
+    expect(zed).not.toHaveClass("active");
+    expect(textEdit).toHaveClass("active");
+
+    fireEvent.mouseLeave(screen.getByRole("menu"));
+    expect(textEdit).not.toHaveClass("active");
+  });
 });

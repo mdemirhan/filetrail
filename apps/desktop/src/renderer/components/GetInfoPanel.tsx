@@ -289,6 +289,8 @@ function GetInfoPanelContent({
 }) {
   const shortcutDisplay = useShortcutDisplay();
   const [openWithMenuOpen, setOpenWithMenuOpen] = useState(false);
+  // The item under the pointer, highlighted through `.active` as in the right-click menu.
+  const [openWithActiveId, setOpenWithActiveId] = useState<string | null>(null);
   const openWithRef = useRef<HTMLDivElement | null>(null);
   const openWithMenuRef = useRef<HTMLDivElement | null>(null);
   useKeepInViewport(openWithMenuRef, openWithMenuOpen);
@@ -297,6 +299,7 @@ function GetInfoPanelContent({
   // empty panel space, so blur alone is not enough) and on Escape.
   useEffect(() => {
     if (!openWithMenuOpen) {
+      setOpenWithActiveId(null);
       return;
     }
     const handlePointerDown = (event: PointerEvent) => {
@@ -463,6 +466,7 @@ function GetInfoPanelContent({
                 ref={openWithMenuRef}
                 className="context-submenu get-info-open-with-menu"
                 role="menu"
+                onMouseLeave={() => setOpenWithActiveId(null)}
               >
                 {openWithItems.map((entry) =>
                   entry.type === "separator" ? (
@@ -472,7 +476,10 @@ function GetInfoPanelContent({
                       key={entry.action.id}
                       type="button"
                       role="menuitem"
-                      className="context-submenu-item"
+                      className={`context-submenu-item${
+                        entry.action.id === openWithActiveId ? " active" : ""
+                      }`}
+                      onMouseEnter={() => setOpenWithActiveId(entry.action.id)}
                       onClick={() => {
                         setOpenWithMenuOpen(false);
                         onOpenWith(entry.action);
