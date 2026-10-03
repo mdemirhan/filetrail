@@ -12,7 +12,7 @@ describe("iconGridLayout", () => {
     expect(getIconGridLayout(true)).toBe(COMPACT_ICON_GRID_LAYOUT);
     expect(COMPACT_ICON_GRID_LAYOUT.iconSize).toBeLessThan(ICON_GRID_LAYOUT.iconSize);
     expect(COMPACT_ICON_GRID_LAYOUT.rowHeight).toBeLessThan(ICON_GRID_LAYOUT.rowHeight);
-    expect(COMPACT_ICON_GRID_LAYOUT.cellMinWidth).toBeLessThan(ICON_GRID_LAYOUT.cellMinWidth);
+    expect(COMPACT_ICON_GRID_LAYOUT.cellWidth).toBeLessThan(ICON_GRID_LAYOUT.cellWidth);
   });
 
   it("fits as many columns as the pane holds, and more of them when compact", () => {

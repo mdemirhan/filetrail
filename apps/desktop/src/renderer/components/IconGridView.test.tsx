@@ -58,13 +58,15 @@ describe("IconGridView", () => {
     expect(screen.getByRole("option", { name: "alpha.txt" })).toHaveAttribute("title", "alpha.txt");
   });
 
-  it("fits as many columns as the pane holds and reports them for keyboard movement", () => {
+  it("fits as many fixed-width columns as the pane holds and reports them for keyboard movement", () => {
     const handleColumns = vi.fn();
     const { container } = renderGrid({ onLayoutColumnsChange: handleColumns });
 
     expect(handleColumns).toHaveBeenLastCalledWith(4);
+    // Fixed widths, the rest of the row left empty: items don't shift when the pane's width
+    // changes without changing the number of columns.
     expect(screen.getByRole("listbox")).toHaveStyle({
-      gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+      gridTemplateColumns: "repeat(4, 104px)",
     });
     expect(container.querySelector(".icon-grid")).not.toHaveClass("compact");
   });

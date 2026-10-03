@@ -7311,8 +7311,10 @@ button.shortcut-slot-key.recording:hover {
   padding: 8px 8px 8px 16px;
 }
 
-/* Columns share the pane's width; each item keeps its own width in the middle of its
-   column, so the space between items is empty and clicking it clears the selection. */
+/* Columns have a fixed width (set inline from iconGridLayout.ts) and what is left over stays
+   at the right, so items don't shift when the pane's width changes. Each item keeps its own
+   width in the middle of its column, so the space between items is empty and clicking it
+   clears the selection. */
 .icon-grid-items {
   display: grid;
   grid-auto-rows: var(--icon-row-height);
