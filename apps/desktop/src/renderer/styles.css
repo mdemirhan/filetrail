@@ -307,6 +307,7 @@ select:focus-visible {
   /* How far a capsule of buttons reaches past its first and last button. */
   --toolbar-capsule-padding: 3px;
   --toolbar-title-min-width: 96px;
+  --toolbar-overflow-button-width: 28px;
   --toolbar-search-width: 200px;
   --toolbar-search-focused-width: 280px;
   --toolbar-search-min-width: 110px;

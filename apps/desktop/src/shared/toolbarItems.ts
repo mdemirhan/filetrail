@@ -39,9 +39,9 @@ export type ToolbarIconName =
   | "rename"
   | "separatorVertical"
   | "more"
+  | "overflow"
   | "sort"
   | "title"
-  | "clipboard"
   | "newTab"
   | "quickLook"
   | "showInFinder";
@@ -160,7 +160,8 @@ export const TOOLBAR_ITEM_DEFINITIONS = [
   {
     id: "clipboard",
     label: "Clipboard",
-    icon: "clipboard",
+    // The button's own look while items are copied, so it is the same wherever it is shown.
+    icon: "copy",
     kind: "menu",
     topRequired: true,
   },

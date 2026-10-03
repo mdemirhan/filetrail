@@ -16,6 +16,8 @@ export const TOP_TOOLBAR_LAYOUT = {
   // past the first and last button, and keeps `edgedItemInset` clear beyond that.
   capsulePadding: 3,
   titleMinWidth: 96,
+  // The » button that lists the items there is no room for, a button of its own capsule.
+  overflowButtonWidth: 28,
   searchWidth: 200,
   searchFocusedWidth: 280,
   searchMinWidth: 110,
@@ -161,8 +163,14 @@ export function resolveVisibleOptionalCount({
   if (!laidOut) {
     return optionalCount;
   }
+  // Once any item is left out, the » button that lists them takes room of its own.
+  const overflowWidth =
+    TOP_TOOLBAR_LAYOUT.itemGap +
+    TOP_TOOLBAR_LAYOUT.overflowButtonWidth +
+    2 * (TOP_TOOLBAR_LAYOUT.capsulePadding + TOP_TOOLBAR_LAYOUT.edgedItemInset);
   for (let count = optionalCount; count > 0; count -= 1) {
-    if (getRowMinWidth(selectTopToolbarSlots(slots, count), widths) <= availableWidth) {
+    const reserved = count < optionalCount ? overflowWidth : 0;
+    if (getRowMinWidth(selectTopToolbarSlots(slots, count), widths) + reserved <= availableWidth) {
       return count;
     }
   }

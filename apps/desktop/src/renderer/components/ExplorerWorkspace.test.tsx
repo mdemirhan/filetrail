@@ -361,14 +361,17 @@ describe("ExplorerWorkspace", () => {
   it("hides the removable items nearest the end when the row is too narrow for them all", () => {
     // Room for the title and the search field at their narrowest, View Options, and three
     // of the five buttons, with the ends of their two capsules (Back and Forward, and View
-    // Options on its own).
+    // Options on its own), and the » button that lists the rest, on a capsule of its own.
     toolbarRowWidth =
       TOP_TOOLBAR_LAYOUT.titleMinWidth +
       TOP_TOOLBAR_LAYOUT.searchMinWidth +
       2 * TOP_TOOLBAR_LAYOUT.edgedItemInset +
       4 * (TOP_TOOLBAR_LAYOUT.capsulePadding + TOP_TOOLBAR_LAYOUT.edgedItemInset) +
       4 * TOOLBAR_ITEM_WIDTH +
-      5 * TOP_TOOLBAR_LAYOUT.itemGap;
+      5 * TOP_TOOLBAR_LAYOUT.itemGap +
+      TOP_TOOLBAR_LAYOUT.itemGap +
+      TOP_TOOLBAR_LAYOUT.overflowButtonWidth +
+      2 * (TOP_TOOLBAR_LAYOUT.capsulePadding + TOP_TOOLBAR_LAYOUT.edgedItemInset);
     const view = renderExplorerWorkspace({
       topToolbarItems: [
         "back",
@@ -390,6 +393,18 @@ describe("ExplorerWorkspace", () => {
       "view",
       "viewOptions",
       "search",
+    ]);
+    // The » lists what is left out, worded as in the menu bar.
+    fireEvent.click(screen.getByRole("button", { name: "More Toolbar Items" }));
+    const menu = screen.getByRole("menu", { name: "More Toolbar Items" });
+    expect(
+      Array.from(menu.querySelectorAll(".toolbar-menu-label")).map((label) => label.textContent),
+    ).toEqual([
+      "Sort by Name",
+      "Sort by Kind",
+      "Sort by Date Modified",
+      "Sort by Size",
+      "Info Panel",
     ]);
   });
 

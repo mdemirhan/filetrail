@@ -16,7 +16,11 @@ import { createPortal } from "react-dom";
 
 import type { IpcRequest } from "@filetrail/contracts";
 
-import type { ExplorerViewMode, ThemePreference } from "../../shared/appPreferences";
+import {
+  type ExplorerViewMode,
+  THEME_OPTIONS,
+  type ThemePreference,
+} from "../../shared/appPreferences";
 import type { RendererCommandType } from "../../shared/rendererCommands";
 import type { ShortcutCommandId } from "../../shared/shortcuts";
 import {
@@ -55,6 +59,7 @@ import { SearchWorkspace } from "./SearchWorkspace";
 import { ThemeMenuButton } from "./ThemeMenuButton";
 import { ToolbarCustomizePanel } from "./ToolbarCustomizePanel";
 import { ToolbarIcon } from "./ToolbarIcon";
+import { ToolbarOverflowButton, type ToolbarOverflowEntry } from "./ToolbarOverflowButton";
 import { TreePane } from "./TreePane";
 
 type SortBy = IpcRequest<"directory:getSnapshot">["sortBy"];
@@ -435,6 +440,17 @@ export function ExplorerWorkspace({
     () => selectTopToolbarSlots(topToolbarSlots, visibleOptionalCount),
     [topToolbarSlots, visibleOptionalCount],
   );
+
+  // The items there is no room for, which the » at the end of the row lists.
+  const overflowTopToolbarSlots = useMemo(() => {
+    const visibleKeys = new Set(visibleTopToolbarSlots.map((slot) => slot.key));
+    return topToolbarSlots.filter(
+      (slot) =>
+        !visibleKeys.has(slot.key) &&
+        slot.id !== "topSeparator" &&
+        !isRequiredTopToolbarItem(slot.id),
+    );
+  }, [topToolbarSlots, visibleTopToolbarSlots]);
 
   // When the row changes the sort button may have moved or gone; its menu does not stay behind.
   const sortMenuResetKey = visibleTopToolbarSlots.map((slot) => slot.key).join(" ");
@@ -1439,6 +1455,82 @@ export function ExplorerWorkspace({
     );
   }
 
+  // An item there is no room for, as the » menu lists it: worded as in the menu bar.
+  function getOverflowEntries(slot: TopToolbarSlot): ToolbarOverflowEntry[] {
+    const key = slot.key;
+    switch (slot.id) {
+      case "back":
+        return [{ key, label: "Back", disabled: !canGoBack, onSelect: goBack }];
+      case "forward":
+        return [{ key, label: "Forward", disabled: !canGoForward, onSelect: goForward }];
+      case "up":
+        return [
+          {
+            key,
+            label: "Enclosing Folder",
+            disabled: !parentDirectoryPath(currentPath),
+            onSelect: navigateToParentFolder,
+          },
+        ];
+      case "view":
+        return (
+          [
+            ["icons", "as Icons"],
+            ["details", "as List"],
+            ["list", "as Compact List"],
+          ] as const
+        ).map(([mode, label]) => ({
+          key: `${key}:${mode}`,
+          label,
+          checked: viewMode === mode,
+          onSelect: () => onViewModeChange(mode),
+        }));
+      case "sort":
+        return (["name", "kind", "modified", "size"] as const).map((value) => ({
+          key: `${key}:${value}`,
+          label: `Sort by ${getSortByLabel(value)}`,
+          checked: sortBy === value,
+          onSelect: () => {
+            if (value !== sortBy) {
+              onSortChange(value);
+            }
+          },
+        }));
+      case "foldersFirst":
+        return [
+          { key, label: "Folders First", checked: foldersFirst, onSelect: onToggleFoldersFirst },
+        ];
+      case "hidden":
+        return [{ key, label: "Hidden Files", checked: includeHidden, onSelect: onToggleHidden }];
+      case "infoPanel":
+        return [{ key, label: "Info Panel", checked: infoPanelOpen, onSelect: onToggleInfoPanel }];
+      case "infoRow":
+        return [{ key, label: "Info Row", checked: infoRowOpen, onSelect: onToggleInfoRow }];
+      case "theme":
+        return THEME_OPTIONS.map((option) => ({
+          key: `${key}:${option.value}`,
+          label: option.label,
+          checked: theme === option.value,
+          onSelect: () => onSelectTheme(option.value),
+        }));
+      default: {
+        const definition = getToolbarItemDefinition(slot.id);
+        const commandType = definition.commandType;
+        if (!commandType) {
+          return [];
+        }
+        return [
+          {
+            key,
+            label: definition.tooltipLabel ?? definition.label,
+            disabled: !canRunRendererCommand(commandType),
+            onSelect: () => onRendererCommand(commandType),
+          },
+        ];
+      }
+    }
+  }
+
   // While customizing, every item is in the row (those without room drawn faint), the
   // dragged one where it would land.
   const rowToolbarSlots = customizingToolbar ? editToolbarSlots : visibleTopToolbarSlots;
@@ -1498,7 +1590,7 @@ export function ExplorerWorkspace({
             // While customizing, a stand-in for the button, so that it can be moved.
             (customizingToolbar ? (
               <span className="tb-btn tb-btn-icon toolbar-clipboard-stand-in" aria-hidden="true">
-                <ToolbarIcon name="clipboard" />
+                <ToolbarIcon name="copy" />
               </span>
             ) : null)}
         </div>
@@ -1524,6 +1616,16 @@ export function ExplorerWorkspace({
     >
       <div ref={toolbarRowRef} className="toolbar-row" inert={customizingToolbar || undefined}>
         {rowToolbarSlots.map(renderTopToolbarSlot)}
+        {!customizingToolbar && overflowTopToolbarSlots.length > 0 ? (
+          <div className="toolbar-item toolbar-overflow" data-capsule="single">
+            <ToolbarOverflowButton
+              groups={overflowTopToolbarSlots.map((slot) => ({
+                key: slot.key,
+                entries: getOverflowEntries(slot),
+              }))}
+            />
+          </div>
+        ) : null}
       </div>
       <div className="toolbar-row-measure" aria-hidden="true">
         {optionalTopToolbarSlots.map((slot) => (

@@ -34,6 +34,12 @@ function minRowWidth(row: ReturnType<typeof resolveTopToolbarSlots>) {
   );
 }
 
+// The room the » button takes once any item is left out: a button on a capsule of its own.
+const OVERFLOW_ROOM =
+  TOP_TOOLBAR_LAYOUT.itemGap +
+  TOP_TOOLBAR_LAYOUT.overflowButtonWidth +
+  2 * (TOP_TOOLBAR_LAYOUT.capsulePadding + TOP_TOOLBAR_LAYOUT.edgedItemInset);
+
 describe("TOP_TOOLBAR_LAYOUT", () => {
   it("has the sizes the stylesheet lays the toolbar out from", () => {
     const styles = readFileSync("apps/desktop/src/renderer/styles.css", "utf8");
@@ -44,6 +50,7 @@ describe("TOP_TOOLBAR_LAYOUT", () => {
       edgedItemInset: sizeOf("--toolbar-edged-item-inset"),
       capsulePadding: sizeOf("--toolbar-capsule-padding"),
       titleMinWidth: sizeOf("--toolbar-title-min-width"),
+      overflowButtonWidth: sizeOf("--toolbar-overflow-button-width"),
       searchWidth: sizeOf("--toolbar-search-width"),
       searchFocusedWidth: sizeOf("--toolbar-search-focused-width"),
       searchMinWidth: sizeOf("--toolbar-search-min-width"),
@@ -137,20 +144,21 @@ describe("resolveVisibleOptionalCount", () => {
   });
 
   it("hides the removable items nearest the end first, and never a required one", () => {
-    expect(
-      resolveVisibleOptionalCount({
-        slots,
-        widths,
-        availableWidth: minRowWidth(selectTopToolbarSlots(slots, 4)) - 1,
-      }),
-    ).toBe(3);
-    expect(
-      resolveVisibleOptionalCount({
-        slots,
-        widths,
-        availableWidth: minRowWidth(selectTopToolbarSlots(slots, 1)),
-      }),
-    ).toBe(1);
+    const fit = (availableWidth: number) =>
+      resolveVisibleOptionalCount({ slots, widths, availableWidth });
+    // What a row of `count` removable items needs: once one is left out, the » button that
+    // lists it needs room too.
+    const needs = (count: number) =>
+      minRowWidth(selectTopToolbarSlots(slots, count)) + (count < 4 ? OVERFLOW_ROOM : 0);
+    expect(fit(needs(4) - 1)).toBeLessThan(4);
+    for (let width = needs(0); width <= needs(4); width += 3) {
+      const count = fit(width);
+      // As many as fit, and no more.
+      expect(needs(count), `${width}`).toBeLessThanOrEqual(width);
+      if (count < 4) {
+        expect(needs(count + 1), `${width}`).toBeGreaterThan(width);
+      }
+    }
     expect(resolveVisibleOptionalCount({ slots, widths, availableWidth: 40 })).toBe(0);
   });
 
@@ -162,7 +170,7 @@ describe("resolveVisibleOptionalCount", () => {
         widths: wideClipboard,
         availableWidth: minRowWidth(selectTopToolbarSlots(slots, 4)),
       }),
-    ).toBe(3);
+    ).toBeLessThan(4);
   });
 
   it("does not count a separator that would be dropped", () => {
@@ -180,7 +188,7 @@ describe("resolveVisibleOptionalCount", () => {
       resolveVisibleOptionalCount({
         slots: withSeparator,
         widths: separatorWidths,
-        availableWidth: minRowWidth(selectTopToolbarSlots(withSeparator, 2)),
+        availableWidth: minRowWidth(selectTopToolbarSlots(withSeparator, 2)) + OVERFLOW_ROOM,
       }),
     ).toBe(2);
     expect(keysOf(selectTopToolbarSlots(withSeparator, 2))).toEqual(["back", "title", "search"]);

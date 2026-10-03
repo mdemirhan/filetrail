@@ -49,7 +49,7 @@ const ICON_NAMES = [
   "clear",
   "stop",
   "title",
-  "clipboard",
+  "overflow",
   "newTab",
   "quickLook",
   "showInFinder",

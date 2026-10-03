@@ -126,14 +126,6 @@ export function ToolbarIcon({
       </svg>
     );
   }
-  if (name === "clipboard") {
-    return (
-      <svg className="toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" role="presentation">
-        <path d="M10 2h4a1 1 0 0 1 1 1v2H9V3a1 1 0 0 1 1-1" />
-        <path d="M9 4H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2" />
-      </svg>
-    );
-  }
   /* Icons below are converged with context menu (same SVG in both surfaces) */
   if (name === "copy") {
     return (
@@ -217,6 +209,7 @@ export function ToolbarIcon({
     }
     // Centered in the box, so it turns in place when a disclosure rotates it.
     if (name === "chevron") return "M9.5 7l5 5-5 5";
+    if (name === "overflow") return "M6.5 7l5 5-5 5M12.5 7l5 5-5 5";
     if (name === "close") return "M6 6l12 12M18 6l-12 12";
     if (name === "sortAsc") return "M12 5v14M5 12l7-7 7 7";
     if (name === "sortDesc") return "M12 19V5M5 12l7 7 7-7";
