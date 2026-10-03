@@ -135,11 +135,12 @@ bun run desktop:start
 That builds the app and its native helpers and launches it. To make an app bundle, a ZIP and a disk image under `apps/desktop/out`:
 
 ```bash
-bun run desktop:make:mac          # signed with your Developer ID, for other Macs
-bun run desktop:make:mac:adhoc    # signed ad hoc, for this Mac only
+bun run desktop:make:mac:notarized   # signed and notarized, to share with other Macs
+bun run desktop:make:mac             # signed with your Developer ID, not notarized
+bun run desktop:make:mac:adhoc       # signed ad hoc, for this Mac only
 ```
 
-The signed build uses the Developer ID Application certificate in `~/Documents/Apple Developer Certificates/developerID_application.cer` (or the one `MACOS_SIGN_CERT` names), with its private key in your keychain. Set `MACOS_NOTARY_PROFILE` to a `notarytool` keychain profile to notarize the build too, which other Macs need before they open a downloaded app. `apps/desktop/scripts/make-macos-app.sh --help` has the details.
+Signing uses the Developer ID Application certificate in `~/Documents/Apple Developer Certificates/developerID_application.cer` (or the one `MACOS_SIGN_CERT` names), with its private key in your keychain. Notarizing uses the `notarytool` keychain profile `filetrail` (or the one `MACOS_NOTARY_PROFILE` names); create it once with `xcrun notarytool store-credentials filetrail --apple-id <email> --team-id <team ID>`. `apps/desktop/scripts/make-macos-app.sh --help` has the details.
 
 While working on the code:
 

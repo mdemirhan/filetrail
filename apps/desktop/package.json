@@ -13,6 +13,7 @@
     "start:verbose": "electron . --verbose",
     "test:smoke": "playwright test --config ./e2e/playwright.config.ts",
     "make:mac": "bash ./scripts/make-macos-app.sh",
+    "make:mac:notarized": "bash ./scripts/make-macos-app.sh --notarize",
     "make:mac:adhoc": "bash ./scripts/make-macos-app.sh --adhoc"
   },
   "dependencies": {

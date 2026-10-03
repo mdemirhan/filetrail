@@ -17,6 +17,7 @@
     "desktop:start:verbose": "bun run --cwd apps/desktop start:verbose",
     "desktop:dev": "bun run --cwd apps/desktop start",
     "desktop:make:mac": "bun run --cwd apps/desktop make:mac",
+    "desktop:make:mac:notarized": "bun run --cwd apps/desktop make:mac:notarized",
     "desktop:make:mac:adhoc": "bun run --cwd apps/desktop make:mac:adhoc",
     "ci": "bun run lint && bun run typecheck && bun run test:coverage"
   },

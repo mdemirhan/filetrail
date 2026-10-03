@@ -14,12 +14,14 @@ fi
 
 usage() {
   cat <<EOF
-Usage: make-macos-app.sh [--adhoc]
+Usage: make-macos-app.sh [--notarize | --adhoc]
 
 Builds File Trail for Apple Silicon and signs it with the Developer ID Application
-certificate, so the app opens on other Macs.
+certificate.
 
-  --adhoc   Sign ad hoc instead, for a build that only runs on this Mac.
+  --notarize  Also have Apple notarize the app and the disk image, and staple the tickets.
+              Other Macs open a downloaded app only once it is notarized.
+  --adhoc     Sign ad hoc instead, for a build that only runs on this Mac.
 
 Environment:
   MACOS_SIGN_CERT       The Developer ID Application certificate (.cer). Its private key
@@ -27,22 +29,30 @@ Environment:
                         ${DEFAULT_SIGN_CERT}
   MACOS_SIGN_IDENTITY   A keychain identity (name or SHA-1) to sign with instead of the
                         certificate file.
-  MACOS_NOTARY_PROFILE  A notarytool keychain profile. When set, the app and the disk image
-                        are notarized and stapled. Create one once with:
-                        xcrun notarytool store-credentials <profile> --apple-id <email>
+  MACOS_NOTARY_PROFILE  The notarytool keychain profile --notarize uses. Default:
+                        ${DEFAULT_NOTARY_PROFILE}. Create it once with:
+                        xcrun notarytool store-credentials ${DEFAULT_NOTARY_PROFILE} --apple-id <email>
                           --team-id <team ID> (it asks for an app-specific password)
 EOF
 }
 
 DEFAULT_SIGN_CERT="${HOME}/Documents/Apple Developer Certificates/developerID_application.cer"
+DEFAULT_NOTARY_PROFILE="filetrail"
 ADHOC=0
+NOTARIZE=0
 for arg in "$@"; do
   case "${arg}" in
     --adhoc) ADHOC=1 ;;
+    --notarize) NOTARIZE=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument '${arg}'." >&2; usage >&2; exit 1 ;;
   esac
 done
+if [[ "${ADHOC}" == 1 && "${NOTARIZE}" == 1 ]]; then
+  echo "--adhoc and --notarize do not go together: ad-hoc signed apps cannot be notarized." >&2
+  exit 1
+fi
+NOTARY_PROFILE="${MACOS_NOTARY_PROFILE:-${DEFAULT_NOTARY_PROFILE}}"
 
 # File Trail ships for Apple Silicon only. Electron's app template, the native-fs addon and
 # the check that the addon loads all come from the build machine, so the build runs on one.
@@ -261,16 +271,12 @@ fi
 # notarize <file> [<target>]: sends a signed zip or disk image to Apple, waits for the
 # result, and staples the ticket to <target> (the file itself when not given).
 notarize() {
-  xcrun notarytool submit "$1" --keychain-profile "${MACOS_NOTARY_PROFILE}" --wait
+  xcrun notarytool submit "$1" --keychain-profile "${NOTARY_PROFILE}" --wait
   xcrun stapler staple "${2:-$1}"
 }
 
-if [[ -n "${MACOS_NOTARY_PROFILE:-}" ]]; then
-  if [[ "${SIGN_IDENTITY}" == "-" ]]; then
-    echo "MACOS_NOTARY_PROFILE is set but the build is ad-hoc signed; ad-hoc signed apps cannot be notarized." >&2
-    exit 1
-  fi
-  echo "  Notarizing the app with keychain profile: ${MACOS_NOTARY_PROFILE}"
+if [[ "${NOTARIZE}" == 1 ]]; then
+  echo "  Notarizing the app with keychain profile: ${NOTARY_PROFILE}"
   NOTARIZE_ZIP="${OUT_DIR}/${APP_SLUG}-${ARCH}-notarize.zip"
   ditto -c -k --sequesterRsrc --keepParent "${APP_BUNDLE}" "${NOTARIZE_ZIP}"
   notarize "${NOTARIZE_ZIP}" "${APP_BUNDLE}"
@@ -286,14 +292,14 @@ hdiutil create -volname "${APP_NAME}" -srcfolder "${APP_BUNDLE}" -ov -format UDZ
 if [[ "${SIGN_IDENTITY}" != "-" ]]; then
   # Gatekeeper checks a downloaded disk image before it looks at the app inside.
   codesign --force --timestamp --sign "${SIGN_IDENTITY}" "${DMG_PATH}"
-  if [[ -n "${MACOS_NOTARY_PROFILE:-}" ]]; then
+  if [[ "${NOTARIZE}" == 1 ]]; then
     echo "  Notarizing the disk image..."
     notarize "${DMG_PATH}"
     spctl --assess --type execute "${APP_BUNDLE}"
     spctl --assess --type open --context context:primary-signature "${DMG_PATH}"
   else
-    echo "MACOS_NOTARY_PROFILE not set — the app is signed but not notarized. Other Macs" >&2
-    echo "will not open it from a download until it is. See 'make-macos-app.sh --help'." >&2
+    echo "Signed but not notarized: other Macs will not open it from a download." >&2
+    echo "Use 'bun run desktop:make:mac:notarized' for a build to share." >&2
   fi
 fi
 
