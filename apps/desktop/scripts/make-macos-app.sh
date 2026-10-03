@@ -12,22 +12,46 @@ if ! command -v bun >/dev/null 2>&1; then
   exit 1
 fi
 
-ARCH_INPUT="${1:-$(uname -m)}"
-case "${ARCH_INPUT}" in
-  x64|arm64)
-    ARCH="${ARCH_INPUT}"
-    ;;
-  x86_64)
-    ARCH="x64"
-    ;;
-  aarch64)
-    ARCH="arm64"
-    ;;
-  *)
-    echo "Unsupported arch '${ARCH_INPUT}'. Use x64 or arm64." >&2
-    exit 1
-    ;;
-esac
+usage() {
+  cat <<EOF
+Usage: make-macos-app.sh [--adhoc]
+
+Builds File Trail for Apple Silicon and signs it with the Developer ID Application
+certificate, so the app opens on other Macs.
+
+  --adhoc   Sign ad hoc instead, for a build that only runs on this Mac.
+
+Environment:
+  MACOS_SIGN_CERT       The Developer ID Application certificate (.cer). Its private key
+                        must be in the keychain. Default:
+                        ${DEFAULT_SIGN_CERT}
+  MACOS_SIGN_IDENTITY   A keychain identity (name or SHA-1) to sign with instead of the
+                        certificate file.
+  MACOS_NOTARY_PROFILE  A notarytool keychain profile. When set, the app and the disk image
+                        are notarized and stapled. Create one once with:
+                        xcrun notarytool store-credentials <profile> --apple-id <email>
+                          --team-id <team ID> (it asks for an app-specific password)
+EOF
+}
+
+DEFAULT_SIGN_CERT="${HOME}/Documents/Apple Developer Certificates/developerID_application.cer"
+ADHOC=0
+for arg in "$@"; do
+  case "${arg}" in
+    --adhoc) ADHOC=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown argument '${arg}'." >&2; usage >&2; exit 1 ;;
+  esac
+done
+
+# File Trail ships for Apple Silicon only. Electron's app template, the native-fs addon and
+# the check that the addon loads all come from the build machine, so the build runs on one.
+# A shell under Rosetta reports x86_64 here as well.
+ARCH="arm64"
+if [[ "$(uname -m)" != "${ARCH}" ]]; then
+  echo "File Trail builds for Apple Silicon only. Build on an Apple Silicon Mac, outside Rosetta." >&2
+  exit 1
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -38,6 +62,52 @@ if [[ ! -d "./node_modules/electron/dist/Electron.app" ]]; then
   echo "Missing Electron app template. Run 'bun install' in repository root first." >&2
   exit 1
 fi
+if [[ "$(lipo -archs ./node_modules/electron/dist/Electron.app/Contents/MacOS/Electron)" != "${ARCH}" ]]; then
+  echo "The Electron app template is not an ${ARCH} build. Reinstall Electron on this Mac." >&2
+  exit 1
+fi
+
+# The signing identity is settled before building, so a missing certificate fails in seconds.
+if [[ "${ADHOC}" == 1 ]]; then
+  SIGN_IDENTITY="-"
+elif [[ -n "${MACOS_SIGN_IDENTITY:-}" ]]; then
+  SIGN_IDENTITY="${MACOS_SIGN_IDENTITY}"
+else
+  SIGN_CERT="${MACOS_SIGN_CERT:-${DEFAULT_SIGN_CERT}}"
+  if [[ ! -f "${SIGN_CERT}" ]]; then
+    echo "Signing certificate not found: ${SIGN_CERT}" >&2
+    echo "Set MACOS_SIGN_CERT to the Developer ID Application .cer, or pass --adhoc for a build for this Mac only." >&2
+    exit 1
+  fi
+  SIGN_CERT_SUBJECT="$(openssl x509 -inform der -in "${SIGN_CERT}" -noout -subject)"
+  if [[ "${SIGN_CERT_SUBJECT}" != *"Developer ID Application:"* ]]; then
+    echo "${SIGN_CERT} is not a Developer ID Application certificate:" >&2
+    echo "  ${SIGN_CERT_SUBJECT}" >&2
+    exit 1
+  fi
+  if ! openssl x509 -inform der -in "${SIGN_CERT}" -noout -checkend 0 >/dev/null; then
+    echo "The certificate in ${SIGN_CERT} has expired." >&2
+    exit 1
+  fi
+  # codesign takes the certificate's SHA-1 as the identity, which picks this certificate even
+  # when the keychain holds others with the same name. The private key never leaves the
+  # keychain: the .cer only says which identity to use.
+  SIGN_IDENTITY="$(openssl x509 -inform der -in "${SIGN_CERT}" -noout -fingerprint -sha1 | sed 's/.*=//; s/://g')"
+  if ! security find-identity -v -p codesigning | grep -q "${SIGN_IDENTITY}"; then
+    if security find-identity -p codesigning | grep -q "${SIGN_IDENTITY}"; then
+      echo "The keychain has the Developer ID identity, but macOS does not trust it yet." >&2
+      echo "Install Apple's \"Developer ID - G2\" intermediate certificate from" >&2
+      echo "https://www.apple.com/certificateauthority/ and run this again." >&2
+    else
+      echo "The Developer ID identity is not in the keychain." >&2
+      echo "Double-click ${SIGN_CERT} to add it to the login keychain. Its private key must be" >&2
+      echo "there too: it is made on the Mac that created the certificate signing request." >&2
+      echo "On another Mac, import a .p12 exported from that Mac's keychain instead." >&2
+    fi
+    exit 1
+  fi
+  echo "Signing as: ${SIGN_CERT_SUBJECT#subject=}"
+fi
 
 echo "[1/6] Building macOS icon assets..."
 bash ./scripts/build-app-icon.sh
@@ -45,18 +115,10 @@ bash ./scripts/build-app-icon.sh
 echo "[2/6] Building native-fs addon for ${ARCH}..."
 NATIVE_FS_DIR="${APP_DIR}/../../packages/native-fs"
 (cd "${NATIVE_FS_DIR}" && npx node-gyp rebuild --arch="${ARCH}")
-# Verify the addon loads correctly — only when building for the host arch,
-# since the running node process cannot dlopen a cross-arch .node binary.
-HOST_ARCH="$(uname -m)"
-case "${HOST_ARCH}" in x86_64) HOST_ARCH="x64" ;; aarch64) HOST_ARCH="arm64" ;; esac
-if [[ "${ARCH}" == "${HOST_ARCH}" ]]; then
-  node -e "require('${NATIVE_FS_DIR}')" || {
-    echo "native-fs addon failed to load after build." >&2
-    exit 1
-  }
-else
-  echo "  Skipping runtime verification (cross-arch build: host=${HOST_ARCH}, target=${ARCH})"
-fi
+node -e "require('${NATIVE_FS_DIR}')" || {
+  echo "native-fs addon failed to load after build." >&2
+  exit 1
+}
 
 echo "[3/6] Building app bundles..."
 bun run build
@@ -84,6 +146,10 @@ if [[ -f "${PLIST}" ]]; then
   APP_VERSION="$(node -p "require('./package.json').version")"
   /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${APP_VERSION}" "${PLIST}" >/dev/null 2>&1 || true
   /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${APP_VERSION}" "${PLIST}" >/dev/null 2>&1 || true
+  # Empty Trash asks Finder through osascript. macOS shows this text when it asks the user
+  # to allow that; without it, a signed app is refused without being asked.
+  /usr/libexec/PlistBuddy -c "Add :NSAppleEventsUsageDescription string File Trail asks Finder to empty the Trash." "${PLIST}" >/dev/null 2>&1 || \
+    /usr/libexec/PlistBuddy -c "Set :NSAppleEventsUsageDescription File Trail asks Finder to empty the Trash." "${PLIST}"
 fi
 
 # Electron takes an app whose executable is still named "Electron" for a development run:
@@ -153,24 +219,23 @@ fi
 touch "${APP_BUNDLE}"
 
 echo "[5/6] Code signing..."
-if [[ -n "${MACOS_SIGN_IDENTITY:-}" ]]; then
+if [[ "${SIGN_IDENTITY}" != "-" ]]; then
   # Real identity signing with the hardened runtime and a secure timestamp,
   # both of which are required for notarization. Signing is done inside-out
   # (Apple discourages --deep for distribution): standalone bundled binaries
   # first, then framework internals, frameworks, helper apps, and finally the
   # outer bundle. The helper apps and the main executable run V8, whose JIT
   # needs the allow-jit entitlement under the hardened runtime.
-  echo "  Signing with identity: ${MACOS_SIGN_IDENTITY}"
   ENTITLEMENTS_PLIST="${SCRIPT_DIR}/entitlements.mac.plist"
   if [[ ! -f "${ENTITLEMENTS_PLIST}" ]]; then
     echo "Missing entitlements plist: ${ENTITLEMENTS_PLIST}" >&2
     exit 1
   fi
   sign() {
-    codesign --force --options runtime --timestamp --sign "${MACOS_SIGN_IDENTITY}" "$@"
+    codesign --force --options runtime --timestamp --sign "${SIGN_IDENTITY}" "$@"
   }
   # Standalone Mach-O binaries under Resources: the native-fs addon and the
-  # vendored fd search binaries. Notarization rejects unsigned executables.
+  # vendored fd search binary. Notarization rejects unsigned executables.
   while IFS= read -r -d '' binary; do
     sign "${binary}"
   done < <(find "${APP_BUNDLE}/Contents/Resources" -type f \( -name '*.node' -o -name 'fd' \) -print0)
@@ -185,23 +250,30 @@ if [[ -n "${MACOS_SIGN_IDENTITY:-}" ]]; then
     sign --entitlements "${ENTITLEMENTS_PLIST}" "${helper}"
   done < <(find "${APP_BUNDLE}/Contents/Frameworks" -maxdepth 1 -name '*Helper*.app' -print0)
   sign --entitlements "${ENTITLEMENTS_PLIST}" "${APP_BUNDLE}"
+  codesign --verify --deep --strict "${APP_BUNDLE}"
 else
   # Ad-hoc signing gives the app a valid code signature so macOS does not block
   # filesystem access to protected paths (e.g. ~/.Trash) for unsigned apps.
-  echo "MACOS_SIGN_IDENTITY not set — ad-hoc signing the app (not distributable)." >&2
+  echo "  Ad-hoc signing the app (runs on this Mac only)." >&2
   codesign --force --deep --sign - "${APP_BUNDLE}"
 fi
 
+# notarize <file> [<target>]: sends a signed zip or disk image to Apple, waits for the
+# result, and staples the ticket to <target> (the file itself when not given).
+notarize() {
+  xcrun notarytool submit "$1" --keychain-profile "${MACOS_NOTARY_PROFILE}" --wait
+  xcrun stapler staple "${2:-$1}"
+}
+
 if [[ -n "${MACOS_NOTARY_PROFILE:-}" ]]; then
-  if [[ -z "${MACOS_SIGN_IDENTITY:-}" ]]; then
-    echo "MACOS_NOTARY_PROFILE is set but MACOS_SIGN_IDENTITY is not; ad-hoc signed apps cannot be notarized." >&2
+  if [[ "${SIGN_IDENTITY}" == "-" ]]; then
+    echo "MACOS_NOTARY_PROFILE is set but the build is ad-hoc signed; ad-hoc signed apps cannot be notarized." >&2
     exit 1
   fi
-  echo "  Notarizing with keychain profile: ${MACOS_NOTARY_PROFILE}"
+  echo "  Notarizing the app with keychain profile: ${MACOS_NOTARY_PROFILE}"
   NOTARIZE_ZIP="${OUT_DIR}/${APP_SLUG}-${ARCH}-notarize.zip"
   ditto -c -k --sequesterRsrc --keepParent "${APP_BUNDLE}" "${NOTARIZE_ZIP}"
-  xcrun notarytool submit "${NOTARIZE_ZIP}" --keychain-profile "${MACOS_NOTARY_PROFILE}" --wait
-  xcrun stapler staple "${APP_BUNDLE}"
+  notarize "${NOTARIZE_ZIP}" "${APP_BUNDLE}"
   rm -f "${NOTARIZE_ZIP}"
 fi
 
@@ -211,6 +283,19 @@ DMG_PATH="${OUT_DIR}/${APP_SLUG}-${ARCH}.dmg"
 
 ditto -c -k --sequesterRsrc --keepParent "${APP_BUNDLE}" "${ZIP_PATH}"
 hdiutil create -volname "${APP_NAME}" -srcfolder "${APP_BUNDLE}" -ov -format UDZO "${DMG_PATH}" >/dev/null
+if [[ "${SIGN_IDENTITY}" != "-" ]]; then
+  # Gatekeeper checks a downloaded disk image before it looks at the app inside.
+  codesign --force --timestamp --sign "${SIGN_IDENTITY}" "${DMG_PATH}"
+  if [[ -n "${MACOS_NOTARY_PROFILE:-}" ]]; then
+    echo "  Notarizing the disk image..."
+    notarize "${DMG_PATH}"
+    spctl --assess --type execute "${APP_BUNDLE}"
+    spctl --assess --type open --context context:primary-signature "${DMG_PATH}"
+  else
+    echo "MACOS_NOTARY_PROFILE not set — the app is signed but not notarized. Other Macs" >&2
+    echo "will not open it from a download until it is. See 'make-macos-app.sh --help'." >&2
+  fi
+fi
 
 echo "Done. Open artifacts in:"
-echo "  ${APP_DIR}/out"
+echo "  ${OUT_DIR}"

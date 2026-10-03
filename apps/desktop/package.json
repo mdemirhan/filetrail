@@ -13,8 +13,7 @@
     "start:verbose": "electron . --verbose",
     "test:smoke": "playwright test --config ./e2e/playwright.config.ts",
     "make:mac": "bash ./scripts/make-macos-app.sh",
-    "make:mac:x64": "bash ./scripts/make-macos-app.sh x64",
-    "make:mac:arm64": "bash ./scripts/make-macos-app.sh arm64"
+    "make:mac:adhoc": "bash ./scripts/make-macos-app.sh --adhoc"
   },
   "dependencies": {
     "@filetrail/contracts": "workspace:*",

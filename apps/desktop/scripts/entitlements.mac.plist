@@ -7,5 +7,9 @@
 	     Electron >= 12 needs only allow-jit (no unsigned-executable-memory). -->
 	<key>com.apple.security.cs.allow-jit</key>
 	<true/>
+	<!-- Empty Trash asks Finder through osascript; the hardened runtime blocks
+	     Apple Events from the app and its child processes without this. -->
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
 </dict>
 </plist>
