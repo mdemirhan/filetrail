@@ -94,8 +94,10 @@ test("makes a new folder in the folder on screen and names it in its row", async
   await item("a.txt").click();
   await window.keyboard.press("Meta+Shift+n");
 
-  await expect.poll(namesOnDisk, { timeout: 15_000 }).toEqual(["New Folder", "a.txt", "b.txt"]);
-  const field = window.getByLabel("Rename New Folder");
+  await expect
+    .poll(namesOnDisk, { timeout: 15_000 })
+    .toEqual(["a.txt", "b.txt", "untitled folder"]);
+  const field = window.getByLabel("Rename untitled folder");
   await expect(field).toBeVisible({ timeout: 15_000 });
   await field.fill("Made");
   await field.press("Enter");

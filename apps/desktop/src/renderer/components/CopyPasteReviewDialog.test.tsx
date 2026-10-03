@@ -88,6 +88,8 @@ const photos = node({
   totalNodeCount: 1,
 });
 const brandNew = node({ id: "item-3", sourcePath: "/src/brand new.txt" });
+// A second conflict: with two the sheet shows, with one a plain alert.
+const memo = node({ id: "item-4", sourcePath: "/src/memo.txt", conflictClass: "file_conflict" });
 
 function chooseForAll(label: string) {
   fireEvent.click(screen.getByRole("radio", { name: label }));
@@ -110,7 +112,10 @@ function Harness({
 }: {
   report: CopyPasteReport;
   policy?: CopyPastePolicy;
-  onStart?: () => Promise<boolean>;
+  onStart?: (choices?: {
+    policy: CopyPastePolicy;
+    overrides: CopyPasteOverrides;
+  }) => Promise<boolean>;
   onClose?: () => void;
   action?: "paste" | "move_to" | "duplicate";
 }) {
@@ -149,7 +154,7 @@ describe("CopyPasteReviewDialog", () => {
     expect(screen.getByText("Existing items stay as they are.")).toBeInTheDocument();
     expect(screen.queryByText("brand new.txt")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Paste" })).toHaveClass("is-default");
-    expect(screen.getByText("Adds 1 · Skips 2")).toBeInTheDocument();
+    expect(screen.getByText("1 item will be added, 2 skipped")).toBeInTheDocument();
     expect(screen.getByRole("dialog")).toHaveAccessibleDescription(
       "Nothing is replaced unless you choose Replace. The other item will be added.",
     );
@@ -211,7 +216,7 @@ describe("CopyPasteReviewDialog", () => {
     expect(
       screen.getByText("Folders merge. Files that exist are added with a “copy” name."),
     ).toBeInTheDocument();
-    expect(screen.getByText("Keeps both for 1 · Merges 1 folder")).toBeInTheDocument();
+    expect(screen.getByText("1 item will be kept as a copy, 1 folder merged")).toBeInTheDocument();
 
     chooseForAll("Add Missing");
     expect(screen.getByLabelText("Choice for notes.txt")).toHaveValue("skip");
@@ -241,21 +246,77 @@ describe("CopyPasteReviewDialog", () => {
       sourcePath: "/dest/photos/photos",
       replaceBlockedReason: "It contains the item being pasted.",
     });
-    render(<Harness report={createReport([outer])} />);
+    const { unmount } = render(<Harness report={createReport([outer, notes])} />);
 
     expect(
       screen.getByRole("option", { name: "Replace (It contains the item being pasted.)" }),
     ).toBeDisabled();
+    unmount();
+
+    // On its own, in the alert: no Replace button at all.
+    render(<Harness report={createReport([outer])} />);
+    expect(screen.queryByRole("button", { name: "Replace" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Keep Both" })).toBeInTheDocument();
   });
 
-  it("uses move wording for moves", () => {
-    render(<Harness report={createReport([notes], "cut")} action="move_to" />);
+  it("asks about one item that already exists in a plain alert, as Finder does", () => {
+    const onStart = vi.fn(() => Promise.resolve(true));
+    const onClose = vi.fn();
+    const { unmount } = render(
+      <Harness report={createReport([notes])} onStart={onStart} onClose={onClose} />,
+    );
 
     expect(
       screen.getByRole("heading", { name: "“notes.txt” already exists in “dest”" }),
     ).toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "Cancel",
+      "Replace",
+      "Keep Both",
+    ]);
+    // Keep Both is the default: Return chooses it.
+    expect(screen.getByRole("button", { name: "Keep Both" })).toHaveFocus();
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Enter" });
+    expect(onStart).toHaveBeenLastCalledWith({
+      policy: SAFE_COPY_PASTE_POLICY,
+      overrides: { "item-1": "keep_both" },
+    });
+    unmount();
+
+    render(<Harness report={createReport([notes])} onStart={onStart} onClose={onClose} />);
+    fireEvent.click(screen.getByRole("button", { name: "Replace" }));
+    expect(onStart).toHaveBeenLastCalledWith({
+      policy: SAFE_COPY_PASTE_POLICY,
+      overrides: { "item-1": "overwrite" },
+    });
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("offers Add Missing for one folder being copied, not moved", () => {
+    const onStart = vi.fn(() => Promise.resolve(true));
+    const { unmount } = render(<Harness report={createReport([photos])} onStart={onStart} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add Missing" }));
+    expect(onStart).toHaveBeenLastCalledWith({
+      policy: SAFE_COPY_PASTE_POLICY,
+      overrides: { "item-2": "merge" },
+    });
+    unmount();
+
+    render(<Harness report={createReport([photos], "cut")} action="move_to" />);
+    expect(screen.queryByRole("button", { name: "Add Missing" })).not.toBeInTheDocument();
+  });
+
+  it("uses move wording for moves", () => {
+    render(<Harness report={createReport([notes, memo], "cut")} action="move_to" />);
+
+    expect(
+      screen.getByRole("heading", { name: "2 of 2 items already exist in “dest”" }),
+    ).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Choice for notes.txt"), { target: { value: "skip" } });
-    expect(screen.getByText("Stays in “src”")).toBeInTheDocument();
+    expect(screen.getAllByText("Stays in “src”")).toHaveLength(2);
     expect(screen.getByRole("button", { name: "Move" })).toBeInTheDocument();
   });
 
@@ -271,7 +332,7 @@ describe("CopyPasteReviewDialog", () => {
 
   it("starts with Return on the focused start button", () => {
     const onStart = vi.fn();
-    render(<Harness report={createReport([notes])} onStart={onStart} />);
+    render(<Harness report={createReport([notes, memo])} onStart={onStart} />);
     const start = screen.getByRole("button", { name: "Paste" });
     expect(start).toHaveFocus();
 
@@ -282,7 +343,7 @@ describe("CopyPasteReviewDialog", () => {
   it("starts with Return from a non-control inside the sheet, but not from other buttons", () => {
     const onStart = vi.fn();
     const onClose = vi.fn();
-    render(<Harness report={createReport([notes])} onStart={onStart} onClose={onClose} />);
+    render(<Harness report={createReport([notes, memo])} onStart={onStart} onClose={onClose} />);
 
     fireEvent.keyDown(screen.getByText("notes.txt"), { key: "Enter" });
     expect(onStart).toHaveBeenCalledTimes(1);
@@ -296,7 +357,7 @@ describe("CopyPasteReviewDialog", () => {
 
   it("does not start with Return when replacing, even on the focused red button", () => {
     const onStart = vi.fn();
-    render(<Harness report={createReport([notes])} onStart={onStart} />);
+    render(<Harness report={createReport([notes, memo])} onStart={onStart} />);
     const start = screen.getByRole("button", { name: "Paste" });
     fireEvent.change(screen.getByLabelText("Choice for notes.txt"), {
       target: { value: "overwrite" },
@@ -321,7 +382,7 @@ describe("CopyPasteReviewDialog", () => {
           finish = resolve;
         }),
     );
-    render(<Harness report={createReport([notes])} onStart={onStart} />);
+    render(<Harness report={createReport([notes, memo])} onStart={onStart} />);
     const start = screen.getByRole("button", { name: "Paste" });
 
     fireEvent.click(start);
@@ -339,7 +400,7 @@ describe("CopyPasteReviewDialog", () => {
 
   it("lets the start button work again when starting throws", async () => {
     const onStart = vi.fn(() => Promise.reject(new Error("IPC failed")));
-    render(<Harness report={createReport([notes])} onStart={onStart} />);
+    render(<Harness report={createReport([notes, memo])} onStart={onStart} />);
     const start = screen.getByRole("button", { name: "Paste" });
 
     await act(async () => fireEvent.click(start));
@@ -348,7 +409,7 @@ describe("CopyPasteReviewDialog", () => {
 
   it("stays busy once the operation has started", async () => {
     const onStart = vi.fn(() => Promise.resolve(true));
-    render(<Harness report={createReport([notes])} onStart={onStart} />);
+    render(<Harness report={createReport([notes, memo])} onStart={onStart} />);
     const start = screen.getByRole("button", { name: "Paste" });
 
     await act(async () => fireEvent.click(start));
@@ -440,7 +501,7 @@ describe("CopyPasteReviewDialog", () => {
         "Nothing is replaced unless you choose Replace. The other 2 items will be moved.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText("Moves 2 · Skips 1")).toBeInTheDocument();
+    expect(screen.getByText("2 items will be moved, 1 skipped")).toBeInTheDocument();
     second.unmount();
 
     render(<Harness report={createReport(many)} />);
@@ -505,7 +566,9 @@ describe("CopyPasteReviewDialog", () => {
         conflictNodeCount: 2 + index,
       });
     }
-    render(<Harness report={createReport([child])} policy={policyForAllConflicts("keep_all")} />);
+    render(
+      <Harness report={createReport([child, notes])} policy={policyForAllConflicts("keep_all")} />,
+    );
 
     const deep = screen.getByLabelText("Choice for a/b/c/d/e/f/g/h/IMG.jpg");
     const row = deep.closest("li") as HTMLElement;

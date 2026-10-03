@@ -588,10 +588,14 @@ describe("sortEntriesBySize", () => {
     );
   });
   it("suggests a free New Folder name, ignoring case like the disk does", () => {
-    expect(resolveFreeNewFolderName([])).toBe("New Folder");
-    expect(resolveFreeNewFolderName(["New Folder"])).toBe("New Folder 2");
-    expect(resolveFreeNewFolderName(["new folder", "NEW FOLDER 2"])).toBe("New Folder 3");
-    expect(resolveFreeNewFolderName(["New Folder", "New Folder 3"])).toBe("New Folder 2");
+    expect(resolveFreeNewFolderName([])).toBe("untitled folder");
+    expect(resolveFreeNewFolderName(["untitled folder"])).toBe("untitled folder 2");
+    expect(resolveFreeNewFolderName(["Untitled Folder", "UNTITLED FOLDER 2"])).toBe(
+      "untitled folder 3",
+    );
+    expect(resolveFreeNewFolderName(["untitled folder", "untitled folder 3"])).toBe(
+      "untitled folder 2",
+    );
   });
   it("explains an Empty Trash failure, and how to allow File Trail to control Finder", () => {
     expect(

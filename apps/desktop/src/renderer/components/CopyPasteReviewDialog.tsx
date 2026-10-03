@@ -25,6 +25,7 @@ import {
   policyForAllConflicts,
   summarizeReview,
 } from "../lib/copyPasteReview";
+import { Alert } from "./Alert";
 import { PushButton } from "./PushButton";
 import { useDialogFocus } from "./useDialogFocus";
 
@@ -37,7 +38,8 @@ const INDENT_PX = 20;
 
 // The sheet shown before a copy, move or duplicate that needs a decision: items that
 // already exist at the destination (or a very large operation). Nothing is replaced
-// unless the person picks Replace, and the start button says so when they do.
+// unless the person picks Replace, and the start button says so when they do. One item
+// that already exists gets a plain alert instead, as in Finder.
 export function CopyPasteReviewDialog({
   action = "paste",
   report,
@@ -53,8 +55,14 @@ export function CopyPasteReviewDialog({
   overrides: CopyPasteOverrides;
   onChoicesChange: (choices: { policy: CopyPastePolicy; overrides: CopyPasteOverrides }) => void;
   onClose: () => void;
-  /** Resolving to false (or rejecting) means it didn't start, and the button works again. */
-  onStart: () => Promise<boolean>;
+  /**
+   * Starts with the choices on screen, or with the ones given (the alert's answer).
+   * Resolving to false (or rejecting) means it didn't start, and the button works again.
+   */
+  onStart: (choices?: {
+    policy: CopyPastePolicy;
+    overrides: CopyPasteOverrides;
+  }) => Promise<boolean>;
 }) {
   const [showNewItems, setShowNewItems] = useState(false);
   const [showAllRows, setShowAllRows] = useState(false);
@@ -105,7 +113,7 @@ export function CopyPasteReviewDialog({
     }
   }, [starting]);
 
-  async function start() {
+  async function start(choices?: { policy: CopyPastePolicy; overrides: CopyPasteOverrides }) {
     if (startingRef.current) {
       return;
     }
@@ -113,7 +121,7 @@ export function CopyPasteReviewDialog({
     setStarting(true);
     let started = true;
     try {
-      started = (await onStart()) !== false;
+      started = (await onStart(choices)) !== false;
     } catch {
       started = false;
     }
@@ -160,6 +168,57 @@ export function CopyPasteReviewDialog({
     : `This is a large operation (${pluralize(report.summary.totalNodeCount, "item")} in total).`;
   const primaryLabel = replacing ? `Replace ${formatCount(summary.replaced)} and ${verb}` : verb;
 
+  const singleConflict = summary.topLevelCount === 1 ? report.nodes[0] : undefined;
+  if (hasConflicts && singleConflict && singleConflict.conflictClass !== null) {
+    const node = singleConflict;
+    const isFolder = node.conflictClass === "directory_conflict";
+    const choose = (choice: CopyPasteChoice) =>
+      void start({ policy, overrides: { [node.id]: choice } });
+    return (
+      <Alert
+        title={title}
+        message={
+          node.replaceBlockedReason === null
+            ? `Replace moves the ${isFolder ? "folder" : "item"} there to the Trash.`
+            : undefined
+        }
+        initialFocusRef={primaryButtonRef}
+        onReturn={() => choose("keep_both")}
+        onEscape={onClose}
+        buttons={
+          <>
+            <PushButton className="alert-button-aside" disabled={starting} onClick={onClose}>
+              Cancel
+            </PushButton>
+            {isFolder && report.mode !== "cut" ? (
+              <PushButton disabled={starting} onClick={() => choose("merge")}>
+                Add Missing
+              </PushButton>
+            ) : null}
+            {node.replaceBlockedReason === null ? (
+              <PushButton
+                variant="destructive"
+                disabled={starting}
+                onClick={() => choose("overwrite")}
+              >
+                {CHOICE_LABELS.overwrite}
+              </PushButton>
+            ) : null}
+            <PushButton
+              ref={primaryButtonRef}
+              variant="default"
+              disabled={starting}
+              aria-busy={starting}
+              onClick={() => choose("keep_both")}
+            >
+              {CHOICE_LABELS.keep_both}
+            </PushButton>
+          </>
+        }
+      />
+    );
+  }
+
   return (
     <div className="modal-scrim is-sheet" role="presentation">
       <dialog
@@ -194,7 +253,6 @@ export function CopyPasteReviewDialog({
         }}
       >
         <header className="copy-paste-sheet-header">
-          <StackGlyph />
           <div className="copy-paste-sheet-heading">
             <h2 id={titleId} className="copy-paste-sheet-title">
               {title}
@@ -398,16 +456,6 @@ const ReviewRowItem = memo(
     previous.row.tone === next.row.tone &&
     previous.row.keepBothName === next.row.keepBothName,
 );
-
-function StackGlyph() {
-  return (
-    <svg className="copy-paste-sheet-glyph" viewBox="0 0 40 40" aria-hidden="true">
-      <rect x="9" y="4" width="22" height="28" rx="3" className="copy-paste-glyph-sheet" />
-      <rect x="4" y="9" width="22" height="28" rx="3" className="copy-paste-glyph-sheet-back" />
-      <path d="M29 22l6 6-6 6" className="copy-paste-glyph-arrow" />
-    </svg>
-  );
-}
 
 function FolderGlyph() {
   return (

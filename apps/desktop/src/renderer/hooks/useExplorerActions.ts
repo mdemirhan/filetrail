@@ -1422,12 +1422,22 @@ export function useExplorerActions(args: {
     }
     const itemCount =
       result?.summary.topLevelItemCount ?? (event.totalItemCount > 0 ? event.totalItemCount : 1);
-    return formatItemSummaryFromPathCount(representativePath, itemCount);
+    // Quoted as macOS quotes names: “notes.md”, or “notes.md” and 2 more.
+    const name = `“${getPathLeafName(representativePath)}”`;
+    return itemCount <= 1 ? name : `${name} and ${itemCount - 1} more`;
   }
 
   function pushTerminalCopyPasteToast(event: WriteOperationProgressEvent) {
     const result = event.result;
     if (!result) {
+      return;
+    }
+    // What is made or renamed in the folder on screen is already in sight there.
+    if (
+      event.action === "new_folder" ||
+      event.action === "rename" ||
+      event.action === "duplicate"
+    ) {
       return;
     }
     const itemSummary = formatWriteOperationItemSummary(event);
@@ -1440,21 +1450,13 @@ export function useExplorerActions(args: {
           ? result.targetPath
             ? `Copied to ${getPathLeafName(result.targetPath)}`
             : "Copied"
-          : event.action === "duplicate"
-            ? result.targetPath
-              ? `Duplicated into ${getPathLeafName(result.targetPath)}`
-              : "Duplicated"
-            : event.action === "trash"
-              ? "Moved to Trash"
-              : event.action === "delete_immediately"
-                ? "Deleted"
-                : event.action === "rename"
-                  ? "Renamed"
-                  : event.action === "new_folder"
-                    ? "Created folder"
-                    : result.targetPath
-                      ? `Pasted into ${getPathLeafName(result.targetPath)}`
-                      : "Pasted";
+          : event.action === "trash"
+            ? "Moved to Trash"
+            : event.action === "delete_immediately"
+              ? "Deleted"
+              : result.targetPath
+                ? `Pasted into ${getPathLeafName(result.targetPath)}`
+                : "Pasted";
     if (event.status === "completed") {
       pushToast({
         kind: "success",
@@ -1471,17 +1473,11 @@ export function useExplorerActions(args: {
             ? "Move cancelled"
             : event.action === "copy_to"
               ? "Copy cancelled"
-              : event.action === "duplicate"
-                ? "Duplicate cancelled"
-                : event.action === "trash"
-                  ? "Trash cancelled"
-                  : event.action === "delete_immediately"
-                    ? "Delete cancelled"
-                    : event.action === "rename"
-                      ? "Rename cancelled"
-                      : event.action === "new_folder"
-                        ? "Create folder cancelled"
-                        : "Paste cancelled",
+              : event.action === "trash"
+                ? "Move to Trash cancelled"
+                : event.action === "delete_immediately"
+                  ? "Delete cancelled"
+                  : "Paste cancelled",
         ...(itemSummary ? { message: itemSummary } : {}),
       });
       return;

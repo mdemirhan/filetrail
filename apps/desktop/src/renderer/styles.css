@@ -1298,6 +1298,13 @@ select:focus-visible {
   box-shadow: var(--focus-ring);
 }
 
+/* An alert opens with its default button focused, so Return presses it; that button is
+   already marked by its accent fill, and gets a focus ring only once Tab is used, as in a
+   macOS alert. */
+.alert:not([data-keyboard]) .push-button.is-default:focus-visible {
+  box-shadow: 0 0.5px 1.5px rgba(0, 0, 0, 0.18);
+}
+
 /* The alert: title and message centered on a compact panel. */
 .alert {
   position: relative;
@@ -6866,30 +6873,6 @@ button.shortcut-slot-key.recording:hover {
   align-items: center;
   gap: 12px;
   padding: 20px 20px 14px;
-}
-
-.copy-paste-sheet-glyph {
-  flex: none;
-  width: 40px;
-  height: 40px;
-}
-
-.copy-paste-glyph-sheet,
-.copy-paste-glyph-sheet-back {
-  fill: var(--bg-elevated);
-  stroke: var(--text-tertiary);
-}
-
-.copy-paste-glyph-sheet-back {
-  fill: var(--bg-hover);
-}
-
-.copy-paste-glyph-arrow {
-  fill: none;
-  stroke: var(--ft-accent-solid);
-  stroke-width: 2.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 .copy-paste-sheet-heading {

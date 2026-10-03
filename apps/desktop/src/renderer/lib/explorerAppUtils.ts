@@ -259,9 +259,6 @@ export function resolveNewFolderTargetPath(args: {
   return target !== null && isInsideTrash(target, args.homePath) ? null : target;
 }
 
-// The name New Folder suggests: "New Folder", else the first free "New Folder 2", "New
-// Folder 3"… The disk (APFS by default) treats names that differ only in case as the same,
-// so the names are compared that way.
 // Why a drag doesn't start while an operation runs, said in one line: one operation runs at
 // a time, and a drag would start another.
 export function describeDragRefusedWhileBusy(
@@ -285,9 +282,14 @@ export function describeDragRefusedWhileBusy(
   }
 }
 
+// The name New Folder suggests, as Finder's: "untitled folder", else the first free
+// "untitled folder 2", "untitled folder 3"… The disk (APFS by default) treats names that
+// differ only in case as the same, so the names are compared that way.
+export const NEW_FOLDER_NAME = "untitled folder";
+
 export function resolveFreeNewFolderName(existingNames: Iterable<string>): string {
   const takenNames = new Set(Array.from(existingNames, (name) => name.toLocaleLowerCase()));
-  const baseName = "New Folder";
+  const baseName = NEW_FOLDER_NAME;
   if (!takenNames.has(baseName.toLocaleLowerCase())) {
     return baseName;
   }

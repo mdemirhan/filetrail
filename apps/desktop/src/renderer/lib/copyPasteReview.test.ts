@@ -403,14 +403,24 @@ describe("copy/paste review model", () => {
       skipped: 0,
     });
     expect(formatReviewSummary(summary)).toBe(
-      "Adds 2 · Keeps both for 2 · Merges 1 folder · Replaces 1",
+      "2 items will be added, 2 kept as copies, 1 folder merged, 1 replaced",
     );
     expect(formatReviewSummary(summary, "Move")).toBe(
-      "Moves 2 · Keeps both for 2 · Merges 1 folder · Replaces 1",
+      "2 items will be moved, 2 kept as copies, 1 folder merged, 1 replaced",
     );
     expect(
       formatReviewSummary({ ...summary, added: 12_000, keptBoth: 0, merged: 0, replaced: 0 }),
-    ).toBe("Adds 12,000");
+    ).toBe("12,000 items will be added");
+    expect(
+      formatReviewSummary({
+        ...summary,
+        added: 0,
+        keptBoth: 0,
+        merged: 0,
+        replaced: 0,
+        skipped: 1,
+      }),
+    ).toBe("1 item will be skipped");
   });
 
   it("reports the 'For all conflicts' choice, or mixed", () => {

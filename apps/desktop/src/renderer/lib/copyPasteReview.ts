@@ -272,17 +272,33 @@ export function summarizeReview(args: {
 }
 
 // "Adds 2 · Keeps both for 1 · Merges 1 folder"; a move says "Moves" for what it adds.
+// What the start button will do, as a sentence: "3 items will be added, 1 skipped".
 export function formatReviewSummary(summary: ReviewSummary, verb = "Paste"): string {
   const parts = [
-    summary.added > 0
-      ? `${verb === "Move" ? "Moves" : "Adds"} ${formatCount(summary.added)}`
+    summary.added > 0 ? { count: summary.added, done: verb === "Move" ? "moved" : "added" } : null,
+    summary.keptBoth > 0
+      ? {
+          count: summary.keptBoth,
+          done: summary.keptBoth === 1 ? "kept as a copy" : "kept as copies",
+        }
       : null,
-    summary.keptBoth > 0 ? `Keeps both for ${formatCount(summary.keptBoth)}` : null,
-    summary.merged > 0 ? `Merges ${pluralize(summary.merged, "folder")}` : null,
-    summary.replaced > 0 ? `Replaces ${formatCount(summary.replaced)}` : null,
-    summary.skipped > 0 ? `Skips ${formatCount(summary.skipped)}` : null,
-  ].filter((part): part is string => part !== null);
-  return parts.join(" · ");
+    summary.merged > 0 ? { count: summary.merged, done: "merged", noun: "folder" } : null,
+    summary.replaced > 0 ? { count: summary.replaced, done: "replaced" } : null,
+    summary.skipped > 0 ? { count: summary.skipped, done: "skipped" } : null,
+  ].filter((part): part is { count: number; done: string; noun?: string } => part !== null);
+  const [first, ...rest] = parts;
+  if (!first) {
+    return "";
+  }
+  const lead = `${pluralize(first.count, first.noun ?? "item")} will be ${first.done}`;
+  return [
+    lead,
+    ...rest.map((part) =>
+      part.noun
+        ? `${pluralize(part.count, part.noun)} ${part.done}`
+        : `${formatCount(part.count)} ${part.done}`,
+    ),
+  ].join(", ");
 }
 
 function buildRow(

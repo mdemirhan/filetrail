@@ -773,7 +773,8 @@ export function createWriteOperationCoordinator(
     return { destinationPath };
   }
 
-  // "New Folder" taken: "New Folder 2", "New Folder 3"… (from "New Folder 3", the next).
+  // "untitled folder" taken: "untitled folder 2", "untitled folder 3"… (from
+  // "untitled folder 3", the next).
   async function nextFreeFolderPath(parentDirectoryPath: string, name: string): Promise<string> {
     const match = /^(.*?) (\d+)$/u.exec(name);
     const base = match?.[1] ?? name;

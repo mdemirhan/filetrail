@@ -1,4 +1,4 @@
-import { type ReactNode, type RefObject, useId, useRef } from "react";
+import { type ReactNode, type RefObject, useId, useRef, useState } from "react";
 
 import { useDialogFocus } from "./useDialogFocus";
 
@@ -40,6 +40,8 @@ export function Alert({
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const titleId = useId();
   const messageId = useId();
+  // Whether Tab has moved the focus: until then the default button shows no focus ring.
+  const [keyboardMoved, setKeyboardMoved] = useState(false);
   useDialogFocus(dialogRef, initialFocusRef);
 
   return (
@@ -51,12 +53,17 @@ export function Alert({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={message ? messageId : undefined}
+        data-keyboard={keyboardMoved || undefined}
         tabIndex={-1}
         onCancel={(event) => {
           event.preventDefault();
           onEscape?.();
         }}
         onKeyDown={(event) => {
+          // Seen even when the focus trap has already moved the focus.
+          if (event.key === "Tab") {
+            setKeyboardMoved(true);
+          }
           if (event.defaultPrevented) {
             return;
           }

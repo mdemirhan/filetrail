@@ -14,6 +14,7 @@ import {
   leafName,
 } from "../lib/copyPasteReview";
 import { pluralize } from "../lib/copyPasteReview";
+import { NEW_FOLDER_NAME } from "../lib/explorerAppUtils";
 import { formatSize } from "../lib/formatting";
 import type { InternalMoveSourceSurface } from "../lib/internalDragAndDrop";
 import type { Place } from "../lib/places";
@@ -252,7 +253,7 @@ export function AppDialogs({
           ? { message: `In “${leafName(newFolderDialogState.parentDirectoryPath)}”` }
           : {})}
         label="Folder name"
-        value={newFolderDialogState?.initialName ?? "New Folder"}
+        value={newFolderDialogState?.initialName ?? NEW_FOLDER_NAME}
         submitLabel="Create Folder"
         selectAllOnOpen
         error={newFolderDialogState?.error ?? null}
@@ -287,16 +288,16 @@ export function AppDialogs({
           overrides={copyPasteDialogState.overrides}
           onChoicesChange={onUpdateCopyPasteChoices}
           onClose={onCloseCopyPasteDialog}
-          onStart={() =>
+          onStart={(choices) =>
             onRequestCopyLikePlanStart(
               copyPasteDialogState.report,
-              copyPasteDialogState.policy,
+              choices?.policy ?? copyPasteDialogState.policy,
               copyPasteDialogState.action,
               {
                 clearClipboardOnStart: copyPasteDialogState.clearClipboardOnStart,
                 sourceSurface: copyPasteDialogState.sourceSurface ?? null,
                 pendingTreeSelectionPath: copyPasteDialogState.pendingTreeSelectionPath ?? null,
-                overrides: copyPasteDialogState.overrides,
+                overrides: choices?.overrides ?? copyPasteDialogState.overrides,
               },
             )
           }

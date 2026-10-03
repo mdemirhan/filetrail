@@ -44,6 +44,24 @@ export function CopyPasteDialog({
     primaryAction.irreversible !== true &&
     primaryAction.isDefault !== false;
   const defaultAction = primaryIsDefault ? primaryAction : secondaryAction;
+  const secondaryButton = secondaryAction ? (
+    <PushButton
+      ref={secondaryButtonRef}
+      variant={primaryIsDefault ? "plain" : "default"}
+      onClick={secondaryAction.onClick}
+    >
+      {secondaryAction.label}
+    </PushButton>
+  ) : null;
+  const primaryButton = primaryAction ? (
+    <PushButton
+      ref={primaryButtonRef}
+      variant={primaryIsDefault ? "default" : primaryAction.destructive ? "destructive" : "plain"}
+      onClick={primaryAction.onClick}
+    >
+      {primaryAction.label}
+    </PushButton>
+  ) : null;
 
   return (
     <Alert
@@ -51,29 +69,19 @@ export function CopyPasteDialog({
       message={message}
       initialFocusRef={primaryIsDefault ? primaryButtonRef : secondaryButtonRef}
       onReturn={defaultAction ? () => defaultAction.onClick() : undefined}
+      // The default button is always the one on the right, as in a macOS alert.
       buttons={
-        <>
-          {secondaryAction ? (
-            <PushButton
-              ref={secondaryButtonRef}
-              variant={primaryIsDefault ? "plain" : "default"}
-              onClick={secondaryAction.onClick}
-            >
-              {secondaryAction.label}
-            </PushButton>
-          ) : null}
-          {primaryAction ? (
-            <PushButton
-              ref={primaryButtonRef}
-              variant={
-                primaryIsDefault ? "default" : primaryAction.destructive ? "destructive" : "plain"
-              }
-              onClick={primaryAction.onClick}
-            >
-              {primaryAction.label}
-            </PushButton>
-          ) : null}
-        </>
+        primaryIsDefault ? (
+          <>
+            {secondaryButton}
+            {primaryButton}
+          </>
+        ) : (
+          <>
+            {primaryButton}
+            {secondaryButton}
+          </>
+        )
       }
     >
       {progressLabel || detailLines.length > 0 ? (
