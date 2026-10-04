@@ -348,7 +348,6 @@ function ReplaceOptions({
         id="batch-rename-find"
         inputRef={firstFieldRef}
         value={settings.find}
-        mono={settings.useRegex}
         invalid={findError !== null}
         describedBy={findError !== null ? errorId : undefined}
         onChange={(value) => set("find", value)}
@@ -359,7 +358,6 @@ function ReplaceOptions({
       <TextField
         id="batch-rename-replace"
         value={settings.replaceWith}
-        mono={settings.useRegex}
         onChange={(value) => set("replaceWith", value)}
       />
       {/* Under each field, what is to be said of it: the pattern's fault under Find, how to

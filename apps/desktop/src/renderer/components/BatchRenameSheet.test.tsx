@@ -245,7 +245,9 @@ describe("the Rename sheet", () => {
       screen.getByText("Use $1, $2… or $<name> for groups, $& for the whole match"),
     ).toBeInTheDocument();
     const find = screen.getByLabelText("Find");
-    expect(find).toHaveClass("is-mono");
+    // The fields keep the system font: the preview below shows what the names become.
+    expect(find).not.toHaveClass("is-mono");
+    expect(screen.getByLabelText("Replace with")).not.toHaveClass("is-mono");
     expect(find).not.toHaveAttribute("aria-invalid");
     type("Find", "(");
     expect(find).toHaveAttribute("aria-invalid", "true");
