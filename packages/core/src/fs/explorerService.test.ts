@@ -220,6 +220,37 @@ describe("explorerService", () => {
     expect(snapshot.entries.map((entry) => entry.name)).toEqual(["large.txt", "small.txt"]);
   });
 
+  it("sorts a link to a folder by the size of the link itself", async () => {
+    const fakeFileSystem = {
+      readdir: vi.fn(async () => [
+        fakeDirent("Alias", { symbolicLink: true }),
+        fakeDirent("Folder", { directory: true }),
+        fakeDirent("note.txt", { file: true }),
+      ]),
+      stat: vi.fn(async (path: string) =>
+        fakeStats(!path.endsWith(".txt"), path.endsWith(".txt"), path.endsWith(".txt") ? 40 : 96),
+      ),
+      lstat: vi.fn(async (path: string) =>
+        path.endsWith("Alias") ? fakeStats(false, false, 16, true) : fakeStats(false, true, 40),
+      ),
+      realpath: vi.fn(async (path: string) => path),
+    };
+
+    const snapshot = await listDirectorySnapshot(
+      "/workspace",
+      false,
+      "size",
+      "desc",
+      false,
+      fakeFileSystem,
+    );
+    expect(snapshot.entries.map((entry) => [entry.name, entry.kind, entry.sizeBytes])).toEqual([
+      ["note.txt", "file", 40],
+      ["Alias", "symlink_directory", 16],
+      ["Folder", "directory", null],
+    ]);
+  });
+
   it("reports file sizes and keeps items without a size last when sorting by size", async () => {
     const fakeFileSystem = {
       readdir: vi.fn(async () => [
@@ -585,7 +616,7 @@ describe("explorerService", () => {
         birthtime: invalidDate,
         mtime: invalidDate,
       })),
-      lstat: vi.fn(async () => fakeStats(false, false, 0, true)),
+      lstat: vi.fn(async () => fakeStats(false, false, 16, true)),
       realpath: vi.fn(async (path: string) => path),
     };
 
@@ -601,8 +632,9 @@ describe("explorerService", () => {
       isSymlink: true,
       createdAt: null,
       modifiedAt: null,
-      sizeBytes: null,
-      sizeStatus: "deferred",
+      // The link itself, as measuring the folder it is in counts it.
+      sizeBytes: 16,
+      sizeStatus: "ready",
       permissionMode: 0o755,
     });
   });
@@ -700,6 +732,38 @@ describe("explorerService", () => {
         kindLabel: "TXT File",
         sizeBytes: 2,
         sizeStatus: "ready",
+      }),
+    ]);
+  });
+
+  it("sizes a link to a folder as the link itself, while folders wait to be calculated", async () => {
+    const fakeFileSystem = {
+      readdir: vi.fn(),
+      stat: vi.fn(async () => fakeStats(true, false, 96)),
+      lstat: vi.fn(async (path: string) =>
+        path.endsWith("Alias") ? fakeStats(false, false, 16, true) : fakeStats(true, false, 96),
+      ),
+      realpath: vi.fn(async (path: string) => path),
+    };
+
+    const response = await getDirectoryMetadataBatch(
+      "/workspace",
+      ["/workspace/Alias", "/workspace/Folder"],
+      fakeFileSystem,
+    );
+
+    expect(response.items).toEqual([
+      expect.objectContaining({
+        path: "/workspace/Alias",
+        kindLabel: "Alias Folder",
+        sizeBytes: 16,
+        sizeStatus: "ready",
+      }),
+      expect.objectContaining({
+        path: "/workspace/Folder",
+        kindLabel: "Folder",
+        sizeBytes: null,
+        sizeStatus: "deferred",
       }),
     ]);
   });

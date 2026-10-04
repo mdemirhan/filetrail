@@ -45,6 +45,7 @@ import {
   getVisibleDetailColumns,
 } from "../lib/detailsLayout";
 import { getDetailsItemsInBox, getFlowListItemsInBox } from "../lib/dragSelection";
+import { isFolderSizeEligibleKind } from "../lib/explorerAppUtils";
 import { FileIcon } from "../lib/fileIcons";
 import {
   COMPACT_FLOW_LIST_LAYOUT,
@@ -2219,9 +2220,7 @@ function SortButton({
 }
 
 function isFolderLikeEntry(entry: DirectoryEntry): boolean {
-  return (
-    entry.kind === "directory" || entry.kind === "symlink_directory" || entry.kind === "bundle"
-  );
+  return isFolderSizeEligibleKind(entry.kind);
 }
 
 const FOLDER_SIZE_PLACEHOLDER = "--";
@@ -2232,7 +2231,7 @@ function formatDetailSize(
 ): string {
   // Folders and bundles show "--", as in Finder, until their size is calculated. An empty
   // string is kept for metadata that is still loading.
-  if (entry.kind === "directory" || entry.kind === "symlink_directory" || entry.kind === "bundle") {
+  if (isFolderLikeEntry(entry)) {
     return FOLDER_SIZE_PLACEHOLDER;
   }
   if (!metadata || metadata.sizeStatus === "deferred") {
