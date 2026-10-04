@@ -10,14 +10,22 @@ const NOW = 1_800_000_000_000;
 const HOUR = 60 * 60 * 1000;
 const HOME = "/Users/demo";
 
+// A folder opened `count` times an hour ago.
+function visited(path: string, count: number) {
+  return {
+    path,
+    visits: Array.from({ length: count }, () => ({ at: NOW - HOUR, kind: "stay" as const })),
+  };
+}
+
 function places(currentPath = "/somewhere/else") {
   return buildPlaces({
     visitedFolders: [
-      { path: "/Users/demo/src/filetrail/apps/desktop", visitCount: 1, lastVisitedAt: NOW - HOUR },
-      { path: "/Users/demo/src/filetrail", visitCount: 9, lastVisitedAt: NOW - HOUR },
-      { path: "/Users/demo/Downloads", visitCount: 4, lastVisitedAt: NOW - HOUR },
-      { path: "/Users/demo/Music/Old Downloads", visitCount: 30, lastVisitedAt: NOW - HOUR },
-      { path: "/Users/demo/src/render-farm", visitCount: 2, lastVisitedAt: NOW - HOUR },
+      visited("/Users/demo/src/filetrail/apps/desktop", 1),
+      visited("/Users/demo/src/filetrail", 9),
+      visited("/Users/demo/Downloads", 4),
+      visited("/Users/demo/Music/Old Downloads", 10),
+      visited("/Users/demo/src/render-farm", 2),
     ],
     favoritePaths: [HOME, "/Users/demo/Desktop", "/Users/demo/Downloads", "/Users/demo/.Trash"],
     currentPath,

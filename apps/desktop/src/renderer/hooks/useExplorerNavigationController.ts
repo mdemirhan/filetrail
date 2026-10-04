@@ -50,6 +50,7 @@ import {
 } from "../lib/favorites";
 import { getFlowListColumnStep } from "../lib/flowListLayout";
 import { resolveFocusedEditTarget } from "../lib/focusedEditTarget";
+import { type FolderVisitTracker, createFolderVisitTracker } from "../lib/folderVisitTracker";
 import { getIconGridLayout } from "../lib/iconGridLayout";
 import { EXPLORER_LAYOUT, getTreeRowHeight } from "../lib/layoutTokens";
 import { LIST_FILTER_SPACE_WINDOW_MS, findListFilterSelection } from "../lib/listFilter";
@@ -868,6 +869,20 @@ export function useExplorerNavigationController(args: {
     setInfoRefreshKey((key) => key + 1);
   }
 
+  // Decides how much each folder opened counts for the Go To box.
+  const folderVisitTrackerRef = useRef<FolderVisitTracker | null>(null);
+  if (folderVisitTrackerRef.current === null) {
+    folderVisitTrackerRef.current = createFolderVisitTracker((path, kind) => {
+      void client.invoke("places:recordVisit", { path, kind }).catch(() => undefined);
+    });
+  }
+  useEffect(() => () => folderVisitTrackerRef.current?.dispose(), []);
+
+  // Something was done in the folder on screen, so opening it counts as a visit.
+  function noteFolderUsed() {
+    folderVisitTrackerRef.current?.use();
+  }
+
   async function navigateTo(
     path: string,
     historyMode: "push" | "replace" | "skip",
@@ -888,6 +903,8 @@ export function useExplorerNavigationController(args: {
       keepSearchResults?: boolean;
       /** The folder is already on screen and is only checked for changes: no "Loading…". */
       quiet?: boolean;
+      /** The folder was picked in the Go To box, which counts most for it there. */
+      viaGoTo?: boolean;
     } = {},
   ): Promise<boolean> {
     const requestId = ++directoryRequestRef.current;
@@ -921,9 +938,9 @@ export function useExplorerNavigationController(args: {
       // follows waits for the tree, and the tab may be left before the tree has answered.
       applyHistoryUpdate(response.path, historyMode);
       if (historyMode === "push") {
-        // Going somewhere counts as a visit for the Go To box; Back, Forward and reloads
-        // do not.
-        void client.invoke("places:recordVisit", { path: response.path }).catch(() => undefined);
+        // Going somewhere can count as a visit for the Go To box; Back, Forward and
+        // reloads do not.
+        folderVisitTrackerRef.current?.arrive(response.path, options.viaGoTo ?? false);
       }
       if (options.rerootTree) {
         initializeTree(response.path);
@@ -1758,7 +1775,15 @@ export function useExplorerNavigationController(args: {
     try {
       const trimmedPath = path.trim();
       const expandedPath = expandHomeShortcut(trimmedPath, homePath);
-      const didNavigate = await navigateTo(expandedPath, "push");
+      const didNavigate = await navigateTo(
+        expandedPath,
+        "push",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        { viaGoTo: true },
+      );
       if (didNavigate) {
         setLocationSheetOpen(false);
       }
@@ -1794,6 +1819,7 @@ export function useExplorerNavigationController(args: {
 
   useLayoutEffect(() => {
     currentPathRef.current = currentPath;
+    folderVisitTrackerRef.current?.showing(currentPath);
   }, [currentPath, currentPathRef]);
 
   useLayoutEffect(() => {
@@ -2057,6 +2083,7 @@ export function useExplorerNavigationController(args: {
     handleSortChange,
     toggleFoldersFirst,
     submitLocationPath,
+    noteFolderUsed,
     handlePaneResizeKey,
   };
 }

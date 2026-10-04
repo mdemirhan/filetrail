@@ -343,6 +343,8 @@ export function useExplorerActions(args: {
       treeSelectionPath?: string | null;
       extraTreeReloadPaths?: string[];
     }) => Promise<void>;
+    /** Something was done here: opening the folder on screen counts for the Go To box. */
+    noteFolderUsed: () => void;
   };
   callbacks: {
     restartActiveSearch?: (() => Promise<void>) | null;
@@ -450,6 +452,7 @@ export function useExplorerActions(args: {
     rootTreeAtPath,
     toggleTreeNode,
     refreshDirectory,
+    noteFolderUsed,
   } = navActions;
   const { restartActiveSearch } = callbacks;
   const activeAnalysisIdRef = useRef<string | null>(null);
@@ -1299,6 +1302,7 @@ export function useExplorerActions(args: {
       currentSourcePath: string | null;
     },
   ) {
+    noteFolderUsed();
     applyWriteOperationCardState({
       action,
       stage: "starting",
@@ -1663,6 +1667,7 @@ export function useExplorerActions(args: {
         nodeId,
         action: choice,
       }));
+      noteFolderUsed();
       const response = await client.invoke("copyPaste:start", {
         analysisId: report.analysisId,
         action,
@@ -2345,6 +2350,7 @@ export function useExplorerActions(args: {
   }
 
   async function openPathInTerminal(path: string) {
+    noteFolderUsed();
     try {
       const response = await client.invoke("system:openInTerminal", {
         path,
@@ -2389,6 +2395,7 @@ export function useExplorerActions(args: {
     applicationPath: string,
     applicationName: string,
   ) {
+    noteFolderUsed();
     try {
       const response = await client.invoke("system:openPathsWithApplication", {
         applicationPath,
@@ -2929,6 +2936,7 @@ export function useExplorerActions(args: {
   }
 
   async function openPathExternally(path: string) {
+    noteFolderUsed();
     try {
       const response = await client.invoke("system:openPath", { path });
       if (!response.ok) {

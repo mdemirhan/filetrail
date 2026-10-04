@@ -1,8 +1,13 @@
 import { existsSync, mkdtempSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
-import { type StoredWindowState, createAppStateStore, resolveAppStatePath } from "./appStateStore";
+import {
+  type StoredWindowState,
+  createAppStateStore,
+  resolveAppStatePath,
+  resolveVisitedFoldersPath,
+} from "./appStateStore";
 
 // The real file system, except that only the named applications are installed.
 function fileSystemWithApplications(installed: string[]) {
@@ -52,12 +57,12 @@ describe("appStateStore", () => {
   });
 
   // A store whose timers only run when the test says so, counting the writes it makes.
-  function createTimedStore() {
-    const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
-    const filePath = resolveAppStatePath(userDataPath);
+  function createTimedStore(
+    filePath = resolveAppStatePath(mkdtempSync(join(tmpdir(), "filetrail-app-state-"))),
+  ) {
     const timers = new Map<number, { callback: () => void; delayMs: number }>();
     let nextTimerId = 1;
-    let writes = 0;
+    const written: string[] = [];
     const store = createAppStateStore(filePath, {
       defaultTheme: "dark",
       timer: {
@@ -74,7 +79,7 @@ describe("appStateStore", () => {
         mkdirSync: () => undefined,
         readFileSync: (path, encoding) => readFileSync(path, encoding),
         writeFileSync: (path, data, encoding) => {
-          writes += 1;
+          written.push(basename(path, ".tmp"));
           writeFileSync(path, data, encoding);
         },
         renameSync: (from, to) => renameSync(from, to),
@@ -83,7 +88,9 @@ describe("appStateStore", () => {
     return {
       store,
       filePath,
-      writes: () => writes,
+      writes: () => written.length,
+      /** The files written, by name, in order. */
+      written: () => [...written],
       pendingDelays: () => [...timers.values()].map((timer) => timer.delayMs),
       runTimers: () => {
         for (const [id, timer] of [...timers]) {
@@ -108,18 +115,22 @@ describe("appStateStore", () => {
     expect(writes()).toBe(1);
     expect(JSON.parse(readFileSync(filePath, "utf8")).preferences.foldersFirst).toBe(false);
 
+    // Forgetting a folder Go To does not list changes nothing.
+    store.forgetVisitedFolder("/Users/demo/gone");
+    expect(pendingDelays()).toEqual([]);
+    store.recordFolderVisit("/Users/demo/gone", "stay", 1_000);
     store.forgetVisitedFolder("/Users/demo/gone");
     expect(pendingDelays()).toEqual([150]);
   });
 
   it("keeps where the user is for the quit-time write", () => {
-    const { store, filePath, writes, pendingDelays, runTimers } = createTimedStore();
+    const { store, filePath, writes, written, pendingDelays, runTimers } = createTimedStore();
 
     store.updatePreferences({ lastVisitedPath: "/Users/demo/work", treeRootPath: "/Users/demo" });
-    store.recordFolderVisit("/Users/demo/work", 1_000);
+    store.recordFolderVisit("/Users/demo/work", "goTo", 1_000);
     store.setWindowState({ x: 10, y: 20, width: 900, height: 600, maximized: false });
     store.updatePreferences({ lastVisitedPath: "/Users/demo/music" });
-    store.recordFolderVisit("/Users/demo/music", 2_000);
+    store.recordFolderVisit("/Users/demo/music", "stay", 2_000);
 
     // Nothing is written while browsing; one long timer bounds what a crash can lose, and
     // later navigation does not push it back.
@@ -127,21 +138,55 @@ describe("appStateStore", () => {
     expect(pendingDelays()).toEqual([5 * 60 * 1000]);
 
     store.flush();
-    expect(writes()).toBe(1);
+    expect(written()).toEqual(["visited-folders.json", "app-state.json"]);
     expect(pendingDelays()).toEqual([]);
     const saved = JSON.parse(readFileSync(filePath, "utf8"));
     expect(saved.preferences.lastVisitedPath).toBe("/Users/demo/music");
     expect(saved.window).toMatchObject({ x: 10, width: 900 });
-    expect(saved.visitedFolders).toHaveLength(2);
+    expect(saved.visitedFolders).toBeUndefined();
+    const visits = JSON.parse(readFileSync(resolveVisitedFoldersPath(filePath), "utf8"));
+    expect(visits.folders).toHaveLength(2);
 
     // Nothing has changed since: quitting again writes nothing.
     store.flush();
-    expect(writes()).toBe(1);
-
-    // The long timer does write, for a session that stays open.
-    store.recordFolderVisit("/Users/demo/work", 3_000);
-    runTimers();
     expect(writes()).toBe(2);
+    // Nor does passing through a folder already known.
+    store.recordFolderVisit("/Users/demo/work", "passThrough", 2_500);
+    expect(pendingDelays()).toEqual([]);
+
+    // The long timer does write, for a session that stays open, and only what changed.
+    store.recordFolderVisit("/Users/demo/work", "stay", 3_000);
+    runTimers();
+    expect(written().slice(2)).toEqual(["visited-folders.json"]);
+  });
+
+  it("moves the opened folders out of the state file into their own", () => {
+    const filePath = resolveAppStatePath(mkdtempSync(join(tmpdir(), "filetrail-app-state-")));
+    writeFileSync(
+      filePath,
+      JSON.stringify({
+        preferences: { viewMode: "details" },
+        visitedFolders: [{ path: "/Users/demo/work", visitCount: 2, lastVisitedAt: 1_000 }],
+      }),
+      "utf8",
+    );
+    const { written, runTimers } = createTimedStore(filePath);
+    runTimers();
+
+    // The new file is written before the old one loses the list.
+    expect(written()).toEqual(["visited-folders.json", "app-state.json"]);
+    expect(JSON.parse(readFileSync(filePath, "utf8")).visitedFolders).toBeUndefined();
+    const reloaded = createAppStateStore(filePath);
+    expect(reloaded.getVisitedFolders()).toEqual([
+      {
+        path: "/Users/demo/work",
+        visits: [
+          { at: 1_000, kind: "stay" },
+          { at: 1_000, kind: "stay" },
+        ],
+      },
+    ]);
+    expect(reloaded.getPreferences().viewMode).toBe("details");
   });
 
   it("keeps the open tabs for the quit-time write, but writes the setting at once", () => {
@@ -633,20 +678,26 @@ describe("appStateStore", () => {
     const store = createAppStateStore(filePath);
     expect(store.getVisitedFolders()).toEqual([]);
 
-    store.recordFolderVisit("/Users/demo/work", 1_000);
-    store.recordFolderVisit("/Users/demo/music", 2_000);
-    store.recordFolderVisit("/Users/demo/work", 3_000);
+    store.recordFolderVisit("/Users/demo/work", "stay", 1_000);
+    store.recordFolderVisit("/Users/demo/music", "goTo", 2_000);
+    store.recordFolderVisit("/Users/demo/work", "goTo", 3_000);
     store.flush();
 
     const reloaded = createAppStateStore(filePath);
     expect(reloaded.getVisitedFolders()).toEqual([
-      { path: "/Users/demo/work", visitCount: 2, lastVisitedAt: 3_000 },
-      { path: "/Users/demo/music", visitCount: 1, lastVisitedAt: 2_000 },
+      {
+        path: "/Users/demo/work",
+        visits: [
+          { at: 3_000, kind: "goTo" },
+          { at: 1_000, kind: "stay" },
+        ],
+      },
+      { path: "/Users/demo/music", visits: [{ at: 2_000, kind: "goTo" }] },
     ]);
-    // Preferences and visits live in the same file without disturbing each other.
+    // Preferences and visits are saved together without disturbing each other.
     reloaded.updatePreferences({ viewMode: "details" });
     expect(reloaded.forgetVisitedFolder("/Users/demo/work")).toEqual([
-      { path: "/Users/demo/music", visitCount: 1, lastVisitedAt: 2_000 },
+      { path: "/Users/demo/music", visits: [{ at: 2_000, kind: "goTo" }] },
     ]);
     reloaded.flush();
     const again = createAppStateStore(filePath);

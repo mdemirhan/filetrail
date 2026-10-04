@@ -13,6 +13,7 @@ import {
 } from "@filetrail/contracts";
 
 import { DEFAULT_APP_PREFERENCES } from "../shared/appPreferences";
+import { recordFolderVisit } from "../shared/visitedFolders";
 vi.mock("./components/ContentPane", () => ({
   ContentPane: ({
     currentPath,
@@ -4557,12 +4558,12 @@ describe("App copy/paste integration", () => {
           entries: [],
         },
       },
-      visitedFolders: [{ path: "/Users/demo/Old", visitCount: 3, lastVisitedAt: 1 }],
+      visitedFolders: [{ path: "/Users/demo/Old", visits: [{ at: 1, kind: "stay" }] }],
     });
     const visits = () =>
       harness.invocations
         .filter((call) => call.channel === "places:recordVisit")
-        .map((call) => (call.payload as IpcRequestInput<"places:recordVisit">).path);
+        .map((call) => call.payload as IpcRequestInput<"places:recordVisit">);
 
     render(
       <FiletrailClientProvider value={harness.client}>
@@ -4583,8 +4584,8 @@ describe("App copy/paste integration", () => {
     await vi.waitFor(() => {
       expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/Folder");
     });
-    // Going there counted as a visit.
-    expect(visits()).toContain("/Users/demo/Folder");
+    // Going there through the box counted at once, as the strongest kind of visit.
+    expect(visits()).toContainEqual({ path: "/Users/demo/Folder", kind: "goTo" });
     const visitsAfterGoing = visits().length;
 
     // Back does not count, and neither does the folder shown at launch.
@@ -4618,7 +4619,7 @@ describe("App copy/paste integration", () => {
 
   it("drops a remembered folder that can no longer be opened", async () => {
     const harness = createAppHarness({
-      visitedFolders: [{ path: "/Users/demo/Gone", visitCount: 3, lastVisitedAt: 1 }],
+      visitedFolders: [{ path: "/Users/demo/Gone", visits: [{ at: 1, kind: "stay" }] }],
       itemPropertiesByPath: { "/Users/demo/Gone": "missing" },
     });
 
@@ -9232,12 +9233,8 @@ function createAppHarness(
         return { folders: visitedFolders } as IpcResponse<C>;
       }
       if (channel === "places:recordVisit") {
-        const { path } = payload as IpcRequestInput<"places:recordVisit">;
-        const existing = visitedFolders.find((folder) => folder.path === path);
-        visitedFolders = [
-          { path, visitCount: (existing?.visitCount ?? 0) + 1, lastVisitedAt: Date.now() },
-          ...visitedFolders.filter((folder) => folder.path !== path),
-        ];
+        const { path, kind } = payload as IpcRequestInput<"places:recordVisit">;
+        visitedFolders = recordFolderVisit(visitedFolders, path, kind, Date.now());
         return { ok: true } as IpcResponse<C>;
       }
       if (channel === "places:forget") {
@@ -10287,13 +10284,14 @@ describe("App tabs", () => {
     );
     expect(tabLabels()).toEqual(["demo", "Folder"]);
     expect(activeTabLabel()).toBe("Folder");
-    // Opening a folder in a new tab is a visit, like opening it in place.
-    expect(
-      harness.invocations.findLast((call) => call.channel === "places:recordVisit")?.payload,
-    ).toEqual({ path: "/Users/demo/Folder" });
 
     // Back in the first tab, the folder's menu offers the same; a file's menu does not.
     await pressKey({ key: "Tab", ctrlKey: true });
+    // A folder opened in a new tab is a visit like one opened in place: left again at
+    // once, it was only passed through.
+    expect(
+      harness.invocations.findLast((call) => call.channel === "places:recordVisit")?.payload,
+    ).toEqual({ path: "/Users/demo/Folder", kind: "passThrough" });
     await screen.findByTitle("/Users/demo/source.txt");
     await act(async () => {
       fireEvent.contextMenu(listItem("/Users/demo/source.txt"));

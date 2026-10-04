@@ -159,7 +159,7 @@ export async function bootstrapMainProcess(
         folders: appStateStore.getVisitedFolders(),
       }),
       "places:recordVisit": (payload) => {
-        appStateStore.recordFolderVisit(payload.path);
+        appStateStore.recordFolderVisit(payload.path, payload.kind);
         return { ok: true };
       },
       "places:forget": (payload) => ({

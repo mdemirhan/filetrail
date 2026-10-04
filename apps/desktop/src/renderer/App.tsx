@@ -717,6 +717,7 @@ export function App() {
     handleSortChange,
     toggleFoldersFirst,
     submitLocationPath,
+    noteFolderUsed,
     handlePaneResizeKey,
   } = useExplorerNavigationController({
     services,
@@ -844,6 +845,7 @@ export function App() {
       rootTreeAtPath,
       toggleTreeNode,
       refreshDirectory,
+      noteFolderUsed,
     },
     callbacks: {
       openPathInNewTab: (path) => openPathInNewTabRef.current(path),

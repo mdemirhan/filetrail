@@ -304,8 +304,13 @@ export const searchResultItemSchema = z.object({
 
 export const visitedFolderSchema = z.object({
   path: z.string().min(1),
-  visitCount: z.number().int().positive(),
-  lastVisitedAt: z.number().nonnegative(),
+  // Newest first; empty for a folder only passed through.
+  visits: z.array(
+    z.object({
+      at: z.number().nonnegative(),
+      kind: z.enum(["goTo", "stay"]),
+    }),
+  ),
 });
 
 export const resolvedPathSchema = z.object({
@@ -760,6 +765,8 @@ export const ipcContractSchemas = {
   "places:recordVisit": {
     request: z.object({
       path: z.string().min(1),
+      // How the folder was come to, which says how much the visit counts.
+      kind: z.enum(["goTo", "stay", "passThrough"]),
     }),
     response: z.object({
       ok: z.literal(true),

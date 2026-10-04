@@ -27,10 +27,12 @@ import {
 import { sanitizeShortcutOverrides } from "../shared/shortcuts";
 import { sanitizeTopToolbarItems } from "../shared/toolbarItems";
 import {
+  type FolderVisitKind,
   type VisitedFolder,
   forgetVisitedFolder,
   recordFolderVisit,
   sanitizeVisitedFolders,
+  serializeVisitedFolders,
 } from "../shared/visitedFolders";
 
 export type StoredWindowState = {
@@ -44,8 +46,10 @@ export type StoredWindowState = {
 type AppState = {
   preferences?: AppPreferences;
   window?: StoredWindowState;
-  visitedFolders?: VisitedFolder[];
 };
+
+// The two files the store keeps, so that a change to one does not rewrite the other.
+type StoreFile = "state" | "visits";
 
 type AppStateStoreFileSystem = {
   existsSync: (path: string) => boolean;
@@ -121,7 +125,10 @@ export class AppStateStore {
   private readonly timer: AppStateStoreTimer;
   private readonly onReadError: (error: unknown) => void;
   private readonly onPersistError: (error: unknown) => void;
+  private readonly visitsFilePath: string;
   private state: AppState;
+  private visitedFolders: VisitedFolder[];
+  private readonly unsavedFiles = new Set<StoreFile>();
   private promptSaveTimer: ReturnType<typeof setTimeout> | null = null;
   private deferredSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -143,7 +150,28 @@ export class AppStateStore {
       ((error) => {
         console.error("[filetrail] failed persisting app state", error);
       });
-    this.state = readState(filePath, this.fileSystem, this.defaults, this.onReadError);
+    this.visitsFilePath = resolveVisitedFoldersPath(filePath);
+    const { state, legacyVisitedFolders } = readState(
+      filePath,
+      this.fileSystem,
+      this.defaults,
+      this.onReadError,
+    );
+    this.state = state;
+    if (this.fileSystem.existsSync(this.visitsFilePath) || legacyVisitedFolders === undefined) {
+      this.visitedFolders = readVisitedFolders(
+        this.visitsFilePath,
+        this.fileSystem,
+        this.onReadError,
+      );
+    } else {
+      // Visits used to be kept in the state file: they move to their own, which is written
+      // before the state file loses them.
+      this.visitedFolders = legacyVisitedFolders;
+      this.markUnsaved("visits");
+      this.markUnsaved("state");
+      this.saveSoon();
+    }
   }
 
   getFilePath(): string {
@@ -170,6 +198,9 @@ export class AppStateStore {
       ...this.state,
       preferences: next,
     };
+    if (changedKeys.length > 0) {
+      this.markUnsaved("state");
+    }
     if (changedKeys.some((key) => !NAVIGATION_PREFERENCE_KEYS.has(key))) {
       this.saveSoon();
     } else if (changedKeys.length > 0) {
@@ -179,22 +210,29 @@ export class AppStateStore {
   }
 
   getVisitedFolders(): VisitedFolder[] {
-    return this.state.visitedFolders ?? [];
+    return this.visitedFolders;
   }
 
-  recordFolderVisit(path: string, now: number = Date.now()): void {
-    this.state = {
-      ...this.state,
-      visitedFolders: recordFolderVisit(this.getVisitedFolders(), path, now),
-    };
+  // Visits follow where the user goes, so they wait like the window state does: a crash
+  // loses at most a few minutes of them.
+  recordFolderVisit(path: string, kind: FolderVisitKind, now: number = Date.now()): void {
+    const visitedFolders = recordFolderVisit(this.visitedFolders, path, kind, now);
+    if (visitedFolders === this.visitedFolders) {
+      return;
+    }
+    this.visitedFolders = visitedFolders;
+    this.markUnsaved("visits");
     this.saveLater();
   }
 
   // Removing a folder from Go To is something the user did on purpose.
   forgetVisitedFolder(path: string): VisitedFolder[] {
-    const visitedFolders = forgetVisitedFolder(this.getVisitedFolders(), path);
-    this.state = { ...this.state, visitedFolders };
-    this.saveSoon();
+    const visitedFolders = forgetVisitedFolder(this.visitedFolders, path);
+    if (visitedFolders.length !== this.visitedFolders.length) {
+      this.markUnsaved("visits");
+      this.saveSoon();
+    }
+    this.visitedFolders = visitedFolders;
     return visitedFolders;
   }
 
@@ -211,17 +249,20 @@ export class AppStateStore {
       ...this.state,
       window,
     };
+    this.markUnsaved("state");
     this.saveLater();
   }
 
   /** Writes whatever has not been written yet. Called when the app quits. */
   flush(): void {
-    if (this.promptSaveTimer === null && this.deferredSaveTimer === null) {
+    if (this.unsavedFiles.size === 0) {
       return;
     }
     this.save();
   }
 
+  // Writes only the files that changed since they were last written; visits first, so a
+  // move of them out of the state file never loses them.
   private save(): void {
     if (this.promptSaveTimer !== null) {
       this.timer.clearTimeout(this.promptSaveTimer);
@@ -231,7 +272,27 @@ export class AppStateStore {
       this.timer.clearTimeout(this.deferredSaveTimer);
       this.deferredSaveTimer = null;
     }
-    persistState(this.filePath, this.state, this.fileSystem, this.onPersistError);
+    if (this.unsavedFiles.has("visits")) {
+      writeFileAtomically(
+        this.visitsFilePath,
+        serializeVisitedFolders(this.visitedFolders),
+        this.fileSystem,
+        this.onPersistError,
+      );
+    }
+    if (this.unsavedFiles.has("state")) {
+      writeFileAtomically(
+        this.filePath,
+        `${JSON.stringify(this.state, null, 2)}\n`,
+        this.fileSystem,
+        this.onPersistError,
+      );
+    }
+    this.unsavedFiles.clear();
+  }
+
+  private markUnsaved(file: StoreFile): void {
+    this.unsavedFiles.add(file);
   }
 
   private saveSoon(): void {
@@ -265,53 +326,80 @@ export function resolveAppStatePath(userDataPath: string): string {
   return join(userDataPath, "app-state.json");
 }
 
+// The opened folders for the Go To box, next to the state file.
+export function resolveVisitedFoldersPath(appStatePath: string): string {
+  return join(dirname(appStatePath), "visited-folders.json");
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
 // Loading is best-effort. Corrupt state should never block startup.
+// `legacyVisitedFolders` is the list of opened folders from a state file written before
+// they had a file of their own; undefined when there is none.
 function readState(
   filePath: string,
   fileSystem: AppStateStoreFileSystem,
   defaults: AppPreferences,
   onReadError: (error: unknown) => void,
-): AppState {
+): { state: AppState; legacyVisitedFolders: VisitedFolder[] | undefined } {
+  const empty = { state: {}, legacyVisitedFolders: undefined };
   if (!fileSystem.existsSync(filePath)) {
-    return {};
+    return empty;
   }
   try {
     const raw = fileSystem.readFileSync(filePath, "utf8");
     const parsed = JSON.parse(raw) as unknown;
     if (!isPlainObject(parsed)) {
-      return {};
+      return empty;
     }
     const record = parsed;
     const preferences = sanitizePreferences(record.preferences, defaults);
     const window = sanitizeWindowState(record.window);
     return {
-      preferences,
-      window,
-      visitedFolders: sanitizeVisitedFolders(record.visitedFolders),
+      state: { preferences, window },
+      legacyVisitedFolders:
+        record.visitedFolders === undefined
+          ? undefined
+          : sanitizeVisitedFolders(record.visitedFolders),
     };
   } catch (error) {
     onReadError(error);
-    return {};
+    return empty;
   }
 }
 
-function persistState(
+function readVisitedFolders(
   filePath: string,
-  state: AppState,
+  fileSystem: AppStateStoreFileSystem,
+  onReadError: (error: unknown) => void,
+): VisitedFolder[] {
+  if (!fileSystem.existsSync(filePath)) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(fileSystem.readFileSync(filePath, "utf8")) as unknown;
+    return isPlainObject(parsed) ? sanitizeVisitedFolders(parsed.folders) : [];
+  } catch (error) {
+    onReadError(error);
+    return [];
+  }
+}
+
+// JSON rewrite is good enough here and keeps the persisted format easy to inspect manually.
+// Write a sibling temp file and rename it over the target so a crash mid-write
+// leaves the previous state intact instead of a truncated file.
+function writeFileAtomically(
+  filePath: string,
+  contents: string,
   fileSystem: AppStateStoreFileSystem,
   onPersistError: (error: unknown) => void,
 ): void {
-  // JSON rewrite is good enough here and keeps the persisted format easy to inspect manually.
-  // Write a sibling temp file and rename it over the target so a crash mid-write
-  // leaves the previous state intact instead of a truncated file.
   const tempPath = `${filePath}.tmp`;
   try {
     fileSystem.mkdirSync(dirname(filePath), { recursive: true });
-    fileSystem.writeFileSync(tempPath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+    fileSystem.writeFileSync(tempPath, contents, "utf8");
     fileSystem.renameSync(tempPath, filePath);
   } catch (error) {
     onPersistError(error);
