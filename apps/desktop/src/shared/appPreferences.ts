@@ -345,6 +345,8 @@ export type AppPreferences = {
   favorites: FavoritePreference[];
   favoritesPlacement: FavoritesPlacement;
   favoritesExpanded: boolean;
+  // The sidebar's Locations (the disks), shown or folded.
+  locationsExpanded: boolean;
   favoritesInitialized: boolean;
   // The Rename sheet for several items: its settings as last used, and the ones saved by name.
   batchRenameSettings: BatchRenameSettings;
@@ -403,6 +405,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   favorites: [],
   favoritesPlacement: "integrated",
   favoritesExpanded: true,
+  locationsExpanded: true,
   favoritesInitialized: false,
   batchRenameSettings: DEFAULT_BATCH_RENAME_SETTINGS,
   batchRenamePresets: [],

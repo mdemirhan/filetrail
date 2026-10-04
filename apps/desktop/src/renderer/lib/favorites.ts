@@ -5,13 +5,33 @@ import type { TreeNodeState } from "../components/TreePane";
 
 const FAVORITES_ROOT_ID = "favorites-root";
 const FAVORITE_ID_PREFIX = "favorite:";
+const LOCATIONS_ROOT_ID = "locations-root";
+const LOCATION_ID_PREFIX = "location:";
 const FILE_SYSTEM_ID_PREFIX = "fs:";
 
-export type TreeItemId = typeof FAVORITES_ROOT_ID | `favorite:${string}` | `fs:${string}`;
+export type TreeItemId =
+  | typeof FAVORITES_ROOT_ID
+  | `favorite:${string}`
+  | typeof LOCATIONS_ROOT_ID
+  | `location:${string}`
+  | `fs:${string}`;
+
+// A disk in the sidebar's Locations: Macintosh HD, then the other disks mounted. Like a
+// favorite, it is a place to go to, not a folder to expand.
+export type SidebarLocation = { path: string; label: string };
+
+export function buildSidebarLocations(
+  volumes: ReadonlyArray<{ path: string; name: string }>,
+): SidebarLocation[] {
+  return [
+    { path: "/", label: "Macintosh HD" },
+    ...volumes.map((volume) => ({ path: volume.path, label: volume.name })),
+  ];
+}
 
 export type TreePresentationItem = {
   id: TreeItemId;
-  kind: "favorites-root" | "favorite" | "filesystem";
+  kind: "favorites-root" | "favorite" | "locations-root" | "location" | "filesystem";
   label: string;
   depth: number;
   path: string | null;
@@ -43,12 +63,10 @@ export function isTrashListingRefused(
 }
 
 // Finder's sidebar places, all ordinary favorites the user can remove or reorder.
+// Macintosh HD is under Locations, with the other disks.
 export function getDefaultFavorites(homePath: string): FavoritePreference[] {
   if (homePath.length === 0) {
-    return [
-      { path: "/Applications", icon: "applications" },
-      { path: "/", icon: "drive" },
-    ];
+    return [{ path: "/Applications", icon: "applications" }];
   }
   return [
     { path: homePath, icon: "home" },
@@ -56,7 +74,6 @@ export function getDefaultFavorites(homePath: string): FavoritePreference[] {
     { path: `${homePath}/Desktop`, icon: "desktop" },
     { path: `${homePath}/Documents`, icon: "documents" },
     { path: `${homePath}/Downloads`, icon: "downloads" },
-    { path: "/", icon: "drive" },
     { path: getTrashPath(homePath), icon: "trash" },
   ];
 }
@@ -118,6 +135,31 @@ export function createFileSystemItemId(path: string): TreeItemId {
   return `${FILE_SYSTEM_ID_PREFIX}${path}`;
 }
 
+export function createLocationItemId(path: string): TreeItemId {
+  return `${LOCATION_ID_PREFIX}${path}`;
+}
+
+export function isLocationItemId(id: TreeItemId | string | null): id is `location:${string}` {
+  return typeof id === "string" && id.startsWith(LOCATION_ID_PREFIX);
+}
+
+export function getLocationItemPath(id: TreeItemId | string | null): string | null {
+  return isLocationItemId(id) ? id.slice(LOCATION_ID_PREFIX.length) : null;
+}
+
+export function getLocationsRootItemId(): TreeItemId {
+  return LOCATIONS_ROOT_ID;
+}
+
+export function isLocationsRootItemId(id: TreeItemId | string | null): boolean {
+  return id === LOCATIONS_ROOT_ID;
+}
+
+// A favorite or a location: a sidebar row that goes to its folder.
+export function getShortcutItemPath(id: TreeItemId | string | null): string | null {
+  return getFavoriteItemPath(id) ?? getLocationItemPath(id);
+}
+
 export function isFavoriteItemId(id: TreeItemId | string | null): id is `favorite:${string}` {
   return typeof id === "string" && id.startsWith(FAVORITE_ID_PREFIX);
 }
@@ -168,6 +210,29 @@ export function isPathInsideTrash(path: string, homePath: string): boolean {
   return isInsideTrash(path, homePath);
 }
 
+// Rows for the Locations: under the Locations row in the tree, or in their own section.
+export function buildLocationItems(
+  locations: SidebarLocation[],
+  parentId: TreeItemId | null,
+  depth: number,
+): TreePresentationItem[] {
+  return locations.map((location) => ({
+    id: createLocationItemId(location.path),
+    kind: "location",
+    label: location.label,
+    depth,
+    path: location.path,
+    parentId,
+    expanded: false,
+    canExpand: false,
+    loading: false,
+    error: null,
+    isSymlink: false,
+    childIds: [],
+    icon: null,
+  }));
+}
+
 export function buildTreePresentation(args: {
   favorites: FavoritePreference[];
   favoritesExpanded: boolean;
@@ -175,11 +240,23 @@ export function buildTreePresentation(args: {
   rootPath: string;
   nodes: Record<string, TreeNodeState>;
   includeFavorites?: boolean;
+  /** Shown as a Locations row after Favorites when `includeFavorites` is set. */
+  locations?: SidebarLocation[];
+  locationsExpanded?: boolean;
 }): {
   items: Record<TreeItemId, TreePresentationItem>;
   visibleItemIds: TreeItemId[];
 } {
-  const { favorites, favoritesExpanded, homePath, rootPath, nodes, includeFavorites = true } = args;
+  const {
+    favorites,
+    favoritesExpanded,
+    homePath,
+    rootPath,
+    nodes,
+    includeFavorites = true,
+    locations = [],
+    locationsExpanded = true,
+  } = args;
   const items = {} as Record<TreeItemId, TreePresentationItem>;
   const visibleItemIds: TreeItemId[] = [];
 
@@ -222,6 +299,32 @@ export function buildTreePresentation(args: {
           icon: favorite.icon,
         };
         visibleItemIds.push(itemId);
+      }
+    }
+  }
+
+  if (includeFavorites && locations.length > 0) {
+    const locationsRootId = getLocationsRootItemId();
+    items[locationsRootId] = {
+      id: locationsRootId,
+      kind: "locations-root",
+      label: "Locations",
+      depth: 0,
+      path: null,
+      parentId: null,
+      expanded: locationsExpanded,
+      canExpand: true,
+      loading: false,
+      error: null,
+      isSymlink: false,
+      childIds: locations.map((location) => createLocationItemId(location.path)),
+      icon: "drive",
+    };
+    visibleItemIds.push(locationsRootId);
+    if (locationsExpanded) {
+      for (const item of buildLocationItems(locations, locationsRootId, 1)) {
+        items[item.id] = item;
+        visibleItemIds.push(item.id);
       }
     }
   }

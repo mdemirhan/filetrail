@@ -9,6 +9,7 @@ import {
   formatQuotedNames,
   isExpectedPlannedSkipResult,
   isFolderSizeEligibleKind,
+  isPathWithinTreeRoot,
   resolveExplorerTreeRootPath,
   resolveFreeNewFolderName,
   resolveNewFolderTargetPath,
@@ -77,6 +78,25 @@ describe("explorerAppUtils", () => {
   it("roots the tree at slash for paths above home", () => {
     expect(resolveExplorerTreeRootPath("/Users", "/Users/demo")).toBe("/");
     expect(resolveExplorerTreeRootPath("/Applications", "/Users/demo")).toBe("/");
+  });
+
+  it("roots the tree at the disk for a folder on another disk", () => {
+    expect(resolveExplorerTreeRootPath("/Volumes/Backup/Photos", "/Users/demo")).toBe(
+      "/Volumes/Backup",
+    );
+    expect(resolveExplorerTreeRootPath("/Volumes/Backup", "/Users/demo")).toBe("/Volumes/Backup");
+    // /Volumes itself is a folder of Macintosh HD.
+    expect(resolveExplorerTreeRootPath("/Volumes", "/Users/demo")).toBe("/");
+  });
+
+  it("keeps other disks out of a tree rooted at Macintosh HD", () => {
+    expect(isPathWithinTreeRoot("/Applications/Utilities", "/")).toBe(true);
+    expect(isPathWithinTreeRoot("/Volumes", "/")).toBe(true);
+    expect(isPathWithinTreeRoot("/Volumes/Backup/Photos", "/")).toBe(false);
+    // A tree rooted on a disk, or at /Volumes by hand, holds what is inside it.
+    expect(isPathWithinTreeRoot("/Volumes/Backup/Photos", "/Volumes/Backup")).toBe(true);
+    expect(isPathWithinTreeRoot("/Volumes/Backup/Photos", "/Volumes")).toBe(true);
+    expect(isPathWithinTreeRoot("/Volumes/Backup 2", "/Volumes/Backup")).toBe(false);
   });
 
   it("treats bundles as eligible for folder size controls without making them navigable folders", () => {

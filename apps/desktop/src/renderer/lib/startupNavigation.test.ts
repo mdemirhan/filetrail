@@ -229,9 +229,10 @@ describe("startup navigation", () => {
             includeHidden: false,
             foldersFirst: true,
           },
+          // Saved with the tree at Macintosh HD: another disk is shown from its own top.
           {
             path: "/Volumes/Backup",
-            rootPath: "/",
+            rootPath: "/Volumes/Backup",
             favoritePath: null,
             viewMode: "list",
             searchViewMode: "details",

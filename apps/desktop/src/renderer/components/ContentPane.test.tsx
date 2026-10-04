@@ -1455,6 +1455,42 @@ describe("ContentPane", () => {
     expect(screen.getByText("Empty folder · 3 hidden items")).toBeInTheDocument();
   });
 
+  it("starts the path of a folder on another disk at that disk", () => {
+    render(
+      <ContentPane
+        isFocused
+        currentPath="/Volumes/Backup/Photos"
+        entries={[]}
+        viewMode="list"
+        loading={false}
+        error={null}
+        hiddenItemCount={0}
+        metadataByPath={{}}
+        sortBy="name"
+        sortDirection="asc"
+        onSelectPath={() => undefined}
+        onActivateEntry={() => undefined}
+        onSortChange={() => undefined}
+        onLayoutColumnsChange={() => undefined}
+        onVisiblePathsChange={() => undefined}
+        onNavigatePath={() => undefined}
+        onRequestPathSuggestions={async () => ({
+          inputPath: "",
+          basePath: null,
+          suggestions: [],
+        })}
+        onRequestFolderChildren={async () => []}
+        onFocusChange={() => undefined}
+      />,
+    );
+
+    // Backup › Photos, not Macintosh HD › Volumes › Backup › Photos.
+    expect(
+      screen.getAllByRole("button", { name: /^Folders in / }).map((button) => button.title),
+    ).toEqual(["Folders in Backup"]);
+    expect(screen.queryByText("Volumes")).toBeNull();
+  });
+
   it("lists the folders at a level of the path from the separator before it", async () => {
     const handleNavigate = vi.fn();
     const handleRequestFolders = vi.fn().mockResolvedValue([

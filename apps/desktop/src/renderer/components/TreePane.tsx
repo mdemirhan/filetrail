@@ -16,8 +16,10 @@ import {
   useClipboardMarks,
 } from "../lib/clipboardMarks";
 import {
+  type SidebarLocation,
   type TreeItemId,
   type TreePresentationItem,
+  buildLocationItems,
   buildTreePresentation,
   createFavoriteItemId,
   getFavoriteLabel,
@@ -79,6 +81,10 @@ export function TreePane({
   onItemDrop,
   getItemDropIndicator,
   onToggleFavoritesExpanded,
+  locations = [],
+  locationsExpanded = true,
+  onToggleLocationsExpanded = () => undefined,
+  onSelectItem,
   typeaheadQuery,
 }: {
   paneRef?: React.RefObject<HTMLElement | null>;
@@ -137,6 +143,12 @@ export function TreePane({
     | ((item: TreePresentationItem, subview: "favorites" | "tree") => "valid" | "invalid" | null)
     | undefined;
   onToggleFavoritesExpanded: () => void;
+  /** The disks: Macintosh HD and those mounted, under Locations after the favorites. */
+  locations?: SidebarLocation[];
+  locationsExpanded?: boolean;
+  onToggleLocationsExpanded?: () => void;
+  /** Selects a row that is neither a folder nor a favorite: a disk, or the Locations row. */
+  onSelectItem?: ((itemId: TreeItemId) => Promise<unknown> | undefined) | undefined;
   typeaheadQuery?: string;
 }) {
   const integratedPresentation = useMemo(
@@ -148,8 +160,19 @@ export function TreePane({
         rootPath,
         nodes,
         includeFavorites: favoritesPlacement === "integrated",
+        locations,
+        locationsExpanded,
       }),
-    [favorites, favoritesExpanded, homePath, rootPath, nodes, favoritesPlacement],
+    [
+      favorites,
+      favoritesExpanded,
+      homePath,
+      rootPath,
+      nodes,
+      favoritesPlacement,
+      locations,
+      locationsExpanded,
+    ],
   );
   const filesystemPresentation = useMemo(
     () =>
@@ -185,6 +208,12 @@ export function TreePane({
   const favoriteItemsById = useMemo(
     () => new Map(favoriteItems.map((item) => [item.id, item])),
     [favoriteItems],
+  );
+  // The separate layout's Locations section, below the Favorites list.
+  const locationItems = useMemo(() => buildLocationItems(locations, null, 0), [locations]);
+  const locationItemsById = useMemo(
+    () => new Map(locationItems.map((item) => [item.id, item])),
+    [locationItems],
   );
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const clickTimeoutRef = useRef<number | null>(null);
@@ -322,7 +351,7 @@ export function TreePane({
   ) {
     return (event: React.DragEvent<HTMLDivElement>) => {
       const item = resolveDragTargetItem(event, items);
-      if (!item || item.kind === "favorites-root") {
+      if (!item || item.kind === "favorites-root" || item.kind === "locations-root") {
         return;
       }
       onItemDragEnter?.(item, event, subview);
@@ -335,7 +364,7 @@ export function TreePane({
   ) {
     return (event: React.DragEvent<HTMLDivElement>) => {
       const item = resolveDragTargetItem(event, items);
-      if (!item || item.kind === "favorites-root") {
+      if (!item || item.kind === "favorites-root" || item.kind === "locations-root") {
         return;
       }
       onItemDragOver?.(item, event, subview);
@@ -348,7 +377,7 @@ export function TreePane({
   ) {
     return (event: React.DragEvent<HTMLDivElement>) => {
       const item = resolveDragTargetItem(event, items);
-      if (!item || item.kind === "favorites-root") {
+      if (!item || item.kind === "favorites-root" || item.kind === "locations-root") {
         return;
       }
       onItemDrop?.(item, event, subview);
@@ -380,6 +409,40 @@ export function TreePane({
     );
   }
 
+  // A row of the separate layout's Favorites or Locations list.
+  function renderSidebarListRow(item: TreePresentationItem) {
+    return (
+      <TreeItemRow
+        key={item.id}
+        item={item}
+        isPaneFocused={isFocused}
+        selectedTreeItemId={selectedTreeItemId}
+        clickTimeoutRef={clickTimeoutRef}
+        optimisticSelectedItemId={optimisticSelectedItemId}
+        setOptimisticSelectedItemId={setOptimisticSelectedItemId}
+        onToggleExpand={onToggleExpand}
+        onToggleFavoritesExpanded={onToggleFavoritesExpanded}
+        onToggleLocationsExpanded={onToggleLocationsExpanded}
+        onSelectItem={onSelectItem}
+        singleClickExpandTreeItems={singleClickExpandTreeItems}
+        onClearSelection={onClearSelection}
+        onNavigate={onNavigate}
+        onNavigateFavorite={onNavigateFavorite}
+        onOpenInNewTab={onOpenInNewTab}
+        onSelectFavoritesRoot={onSelectFavoritesRoot}
+        onItemContextMenu={onItemContextMenu}
+        contextMenuTarget={contextMenuTarget}
+        onItemDragEnter={onItemDragEnter}
+        onItemDragOver={onItemDragOver}
+        onItemDrop={onItemDrop}
+        getItemDropIndicator={getItemDropIndicator}
+        subview="favorites"
+        onSubviewFocus={() => onLeftPaneSubviewChange("favorites")}
+        registerRowRef={registerTreeRowRef}
+      />
+    );
+  }
+
   // Favorites as a collapsible root row in the folder tree, scrolling with it.
   function renderIntegratedTree() {
     return (
@@ -402,6 +465,8 @@ export function TreePane({
           setOptimisticSelectedItemId={setOptimisticSelectedItemId}
           onToggleExpand={onToggleExpand}
           onToggleFavoritesExpanded={onToggleFavoritesExpanded}
+          onToggleLocationsExpanded={onToggleLocationsExpanded}
+          onSelectItem={onSelectItem}
           singleClickExpandTreeItems={singleClickExpandTreeItems}
           onClearSelection={onClearSelection}
           onNavigate={onNavigate}
@@ -448,70 +513,75 @@ export function TreePane({
         <div className="sidebar-main sidebar-main-native">
           {/* Finder layout: a labeled Favorites list above the folder tree, or Favorites as
               a root row inside the tree. */}
-          {favoritesPlacement === "separate" && favoriteItems.length > 0 ? (
+          {favoritesPlacement === "separate" &&
+          (favoriteItems.length > 0 || locationItems.length > 0) ? (
             <div className="sidebar-sections overlay-scroll">
-              <section
-                className={`sidebar-favorites favorites-pane-section${
-                  activeLeftPaneSubview === "favorites" ? " active" : ""
-                }`}
-                aria-label="Favorites"
-                data-drag-active={dragActive ? "true" : "false"}
-                data-left-subview="favorites"
-                onMouseDownCapture={handlePaneMouseDownCapture("favorites")}
-                onDragEnterCapture={handlePaneDragEnterCapture(favoriteItemsById, "favorites")}
-                onDragOverCapture={handlePaneDragOverCapture(favoriteItemsById, "favorites")}
-                onDropCapture={handlePaneDropCapture(favoriteItemsById, "favorites")}
-              >
-                {renderSectionHeader(
-                  "Favorites",
-                  favoritesExpanded,
-                  () => {
-                    // Keyboard navigation cannot stay in a hidden list.
-                    if (favoritesExpanded && activeLeftPaneSubview === "favorites") {
-                      onLeftPaneSubviewChange("tree");
-                    }
-                    onToggleFavoritesExpanded();
-                  },
-                  "sidebar-favorites-list",
-                )}
-                {favoritesExpanded ? (
-                  <div
-                    id="sidebar-favorites-list"
-                    className="tree-list favorites-list"
-                    role="tree"
-                    aria-label="Favorites"
-                  >
-                    {favoriteItems.map((item) => (
-                      <TreeItemRow
-                        key={item.id}
-                        item={item}
-                        isPaneFocused={isFocused}
-                        selectedTreeItemId={selectedTreeItemId}
-                        clickTimeoutRef={clickTimeoutRef}
-                        optimisticSelectedItemId={optimisticSelectedItemId}
-                        setOptimisticSelectedItemId={setOptimisticSelectedItemId}
-                        onToggleExpand={onToggleExpand}
-                        onToggleFavoritesExpanded={onToggleFavoritesExpanded}
-                        singleClickExpandTreeItems={singleClickExpandTreeItems}
-                        onClearSelection={onClearSelection}
-                        onNavigate={onNavigate}
-                        onNavigateFavorite={onNavigateFavorite}
-                        onOpenInNewTab={onOpenInNewTab}
-                        onSelectFavoritesRoot={onSelectFavoritesRoot}
-                        onItemContextMenu={onItemContextMenu}
-                        contextMenuTarget={contextMenuTarget}
-                        onItemDragEnter={onItemDragEnter}
-                        onItemDragOver={onItemDragOver}
-                        onItemDrop={onItemDrop}
-                        getItemDropIndicator={getItemDropIndicator}
-                        subview="favorites"
-                        onSubviewFocus={() => onLeftPaneSubviewChange("favorites")}
-                        registerRowRef={registerTreeRowRef}
-                      />
-                    ))}
-                  </div>
-                ) : null}
-              </section>
+              {favoriteItems.length > 0 ? (
+                <section
+                  className={`sidebar-favorites favorites-pane-section${
+                    activeLeftPaneSubview === "favorites" ? " active" : ""
+                  }`}
+                  aria-label="Favorites"
+                  data-drag-active={dragActive ? "true" : "false"}
+                  data-left-subview="favorites"
+                  onMouseDownCapture={handlePaneMouseDownCapture("favorites")}
+                  onDragEnterCapture={handlePaneDragEnterCapture(favoriteItemsById, "favorites")}
+                  onDragOverCapture={handlePaneDragOverCapture(favoriteItemsById, "favorites")}
+                  onDropCapture={handlePaneDropCapture(favoriteItemsById, "favorites")}
+                >
+                  {renderSectionHeader(
+                    "Favorites",
+                    favoritesExpanded,
+                    () => {
+                      // Keyboard navigation cannot stay in a hidden list.
+                      if (favoritesExpanded && activeLeftPaneSubview === "favorites") {
+                        onLeftPaneSubviewChange("tree");
+                      }
+                      onToggleFavoritesExpanded();
+                    },
+                    "sidebar-favorites-list",
+                  )}
+                  {favoritesExpanded ? (
+                    <div
+                      id="sidebar-favorites-list"
+                      className="tree-list favorites-list"
+                      role="tree"
+                      aria-label="Favorites"
+                    >
+                      {favoriteItems.map(renderSidebarListRow)}
+                    </div>
+                  ) : null}
+                </section>
+              ) : null}
+              {locationItems.length > 0 ? (
+                <section
+                  className="sidebar-locations favorites-pane-section"
+                  aria-label="Locations"
+                  data-drag-active={dragActive ? "true" : "false"}
+                  data-left-subview="favorites"
+                  onMouseDownCapture={handlePaneMouseDownCapture("favorites")}
+                  onDragEnterCapture={handlePaneDragEnterCapture(locationItemsById, "favorites")}
+                  onDragOverCapture={handlePaneDragOverCapture(locationItemsById, "favorites")}
+                  onDropCapture={handlePaneDropCapture(locationItemsById, "favorites")}
+                >
+                  {renderSectionHeader(
+                    "Locations",
+                    locationsExpanded,
+                    onToggleLocationsExpanded,
+                    "sidebar-locations-list",
+                  )}
+                  {locationsExpanded ? (
+                    <div
+                      id="sidebar-locations-list"
+                      className="tree-list favorites-list"
+                      role="tree"
+                      aria-label="Locations"
+                    >
+                      {locationItems.map(renderSidebarListRow)}
+                    </div>
+                  ) : null}
+                </section>
+              ) : null}
             </div>
           ) : null}
           {favoritesPlacement === "separate" ? (
@@ -547,6 +617,8 @@ export function TreePane({
                 setOptimisticSelectedItemId={setOptimisticSelectedItemId}
                 onToggleExpand={onToggleExpand}
                 onToggleFavoritesExpanded={onToggleFavoritesExpanded}
+                onToggleLocationsExpanded={onToggleLocationsExpanded}
+                onSelectItem={onSelectItem}
                 singleClickExpandTreeItems={singleClickExpandTreeItems}
                 onClearSelection={onClearSelection}
                 onNavigate={onNavigate}
@@ -603,6 +675,8 @@ function TreeList({
   setOptimisticSelectedItemId,
   onToggleExpand,
   onToggleFavoritesExpanded,
+  onToggleLocationsExpanded,
+  onSelectItem,
   singleClickExpandTreeItems,
   onClearSelection,
   onNavigate,
@@ -628,6 +702,8 @@ function TreeList({
   setOptimisticSelectedItemId: Dispatch<SetStateAction<TreeItemId | null>>;
   onToggleExpand: (path: string) => void;
   onToggleFavoritesExpanded: () => void;
+  onToggleLocationsExpanded: () => void;
+  onSelectItem: ((itemId: TreeItemId) => Promise<unknown> | undefined) | undefined;
   singleClickExpandTreeItems: boolean;
   onClearSelection: () => void;
   onNavigate: (path: string) => Promise<boolean | undefined> | undefined;
@@ -690,6 +766,8 @@ function TreeList({
               setOptimisticSelectedItemId={setOptimisticSelectedItemId}
               onToggleExpand={onToggleExpand}
               onToggleFavoritesExpanded={onToggleFavoritesExpanded}
+              onToggleLocationsExpanded={onToggleLocationsExpanded}
+              onSelectItem={onSelectItem}
               singleClickExpandTreeItems={singleClickExpandTreeItems}
               onClearSelection={onClearSelection}
               onNavigate={onNavigate}
@@ -725,6 +803,8 @@ function TreeItemRow({
   setOptimisticSelectedItemId,
   onToggleExpand,
   onToggleFavoritesExpanded,
+  onToggleLocationsExpanded,
+  onSelectItem,
   singleClickExpandTreeItems,
   onClearSelection,
   onNavigate,
@@ -749,6 +829,8 @@ function TreeItemRow({
   setOptimisticSelectedItemId: Dispatch<SetStateAction<TreeItemId | null>>;
   onToggleExpand: (path: string) => void;
   onToggleFavoritesExpanded: () => void;
+  onToggleLocationsExpanded: () => void;
+  onSelectItem: ((itemId: TreeItemId) => Promise<unknown> | undefined) | undefined;
   singleClickExpandTreeItems: boolean;
   onClearSelection: () => void;
   onNavigate: (path: string) => Promise<boolean | undefined> | undefined;
@@ -802,13 +884,17 @@ function TreeItemRow({
     contextMenuTarget.subview === subview &&
     contextMenuTarget.kind === (item.kind === "favorite" ? "favorite" : "treeFolder");
   const canExpand =
-    item.kind === "favorites-root"
+    item.kind === "favorites-root" || item.kind === "locations-root"
       ? item.canExpand
       : item.kind === "filesystem"
         ? !item.isSymlink
         : false;
   const isFavorite = item.kind === "favorite";
-  const isFavoritesRoot = item.kind === "favorites-root";
+  const isLocation = item.kind === "location";
+  const isLocationsRoot = item.kind === "locations-root";
+  // The Favorites and Locations rows: section heads, not places.
+  const isFavoritesRoot = item.kind === "favorites-root" || isLocationsRoot;
+  const toggleSection = isLocationsRoot ? onToggleLocationsExpanded : onToggleFavoritesExpanded;
   const isFileSystem = item.kind === "filesystem";
   const itemPath = item.path;
   const dropIndicator = getItemDropIndicator?.(item, subview) ?? null;
@@ -851,6 +937,10 @@ function TreeItemRow({
       onOpenInNewTab?.(itemPath);
       return;
     }
+    if (isLocationsRoot) {
+      onSelectItem?.(item.id);
+      return;
+    }
     if (isFavoritesRoot) {
       onSelectFavoritesRoot?.();
       return;
@@ -867,7 +957,7 @@ function TreeItemRow({
   function handleActivateDoubleClick() {
     onSubviewFocus();
     if (isFavoritesRoot) {
-      onToggleFavoritesExpanded();
+      toggleSection();
       return;
     }
     if (clickTimeoutRef.current !== null) {
@@ -885,7 +975,11 @@ function TreeItemRow({
     if (expandBeforeNavigate && isFileSystem && canExpand) {
       onToggleExpand(itemPath);
     }
-    const navigationResult = isFavorite ? onNavigateFavorite(itemPath) : onNavigate(itemPath);
+    const navigationResult = isLocation
+      ? (onSelectItem?.(item.id) as Promise<boolean | undefined> | undefined)
+      : isFavorite
+        ? onNavigateFavorite(itemPath)
+        : onNavigate(itemPath);
     if (!navigationResult || typeof navigationResult.then !== "function") {
       return;
     }
@@ -981,7 +1075,7 @@ function TreeItemRow({
           onClick={() => {
             onSubviewFocus();
             if (isFavoritesRoot) {
-              onToggleFavoritesExpanded();
+              toggleSection();
               return;
             }
             if (isFileSystem && itemPath) {
@@ -991,9 +1085,7 @@ function TreeItemRow({
           disabled={!canExpand || item.loading}
           aria-label={
             isFavoritesRoot
-              ? item.expanded
-                ? "Collapse Favorites"
-                : "Expand Favorites"
+              ? `${item.expanded ? "Collapse" : "Expand"} ${item.label}`
               : item.expanded
                 ? "Collapse Folder"
                 : "Expand Folder"
@@ -1004,9 +1096,7 @@ function TreeItemRow({
                 ? "No favorites"
                 : "No subfolders"
               : isFavoritesRoot
-                ? item.expanded
-                  ? "Collapse Favorites"
-                  : "Expand Favorites"
+                ? `${item.expanded ? "Collapse" : "Expand"} ${item.label}`
                 : item.expanded
                   ? "Collapse Folder"
                   : "Expand Folder"
@@ -1030,8 +1120,9 @@ function TreeItemRow({
             event.preventDefault();
             handleActivateContextMenu(event.clientX, event.clientY);
           }}
-          title={itemPath ?? item.label}
+          title={isLocation ? item.label : (itemPath ?? item.label)}
         >
+          {/* A disk is drawn as macOS draws it: a drive, a disk image, a network share. */}
           {isFavorite || isFavoritesRoot ? (
             <FavoriteItemIcon icon={item.icon ?? "folder"} />
           ) : (

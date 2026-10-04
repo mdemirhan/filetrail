@@ -15,6 +15,7 @@ import {
   describeTabSnapshot,
   disambiguateTabLabels,
   followMovedItems,
+  leaveUnmountedDisks,
   moveTabInList,
   resolveAdjacentTab,
   resolveTabAfterClose,
@@ -753,6 +754,28 @@ export function useExplorerTabs(args: {
     [client],
   );
 
+  // Background tabs on disks just unmounted go Home (see leaveUnmountedDisks).
+  function leaveUnmountedDisksInBackgroundTabs(unmountedDiskPaths: ReadonlySet<string>) {
+    const current = stateRef.current;
+    let changed = false;
+    const tabs = current.tabs.map((tab) => {
+      if (tab.id === current.activeTabId || !tab.snapshot) {
+        return tab;
+      }
+      const snapshot = leaveUnmountedDisks(tab.snapshot, unmountedDiskPaths, navigation.homePath);
+      if (snapshot === tab.snapshot) {
+        return tab;
+      }
+      changed = true;
+      return { ...tab, snapshot };
+    });
+    if (changed) {
+      const next = { ...current, tabs };
+      stateRef.current = next;
+      setState(next);
+    }
+  }
+
   // A file operation that ends may have changed folders that background tabs show. Their
   // folder is read again when they are shown anyway; this makes that read cover the tree.
   const operationRunning = writeOperations.writeOperationCardState !== null;
@@ -862,6 +885,7 @@ export function useExplorerTabs(args: {
     duplicateTab,
     reopenClosedTab,
     moveTab,
+    leaveUnmountedDisksInBackgroundTabs,
   };
 }
 

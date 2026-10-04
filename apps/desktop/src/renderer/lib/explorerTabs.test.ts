@@ -7,6 +7,7 @@ import {
   disambiguateTabLabels,
   followMovedItems,
   getPathAndAncestors,
+  leaveUnmountedDisks,
   moveTabInList,
   resolveAdjacentTab,
   resolveTabAfterClose,
@@ -249,5 +250,50 @@ describe("followMovedItems", () => {
     expect(followMovedItems(tab, [{ from: "/Users/demo/Projects", to: "/Users/demo/Work" }])).toBe(
       tab,
     );
+  });
+});
+
+describe("leaveUnmountedDisks", () => {
+  const snapshot = (currentPath: string, historyPaths: string[]) =>
+    ({
+      currentPath,
+      historyPaths,
+      historyIndex: historyPaths.length - 1,
+      treeRootPath: "/Volumes/Backup",
+      selectedTreeItemId: "location:/Volumes/Backup",
+      leftPaneSubview: "favorites",
+      view: { entries: [] },
+    }) as unknown as TabSnapshot;
+  const unmounted = new Set(["/Volumes/Backup"]);
+
+  it("sends a tab on an unmounted disk Home, keeping its history elsewhere", () => {
+    const left = leaveUnmountedDisks(
+      snapshot("/Volumes/Backup/Photos", ["/Users/demo/Desktop", "/Volumes/Backup/Photos"]),
+      unmounted,
+      "/Users/demo",
+    );
+
+    expect(left).toMatchObject({
+      currentPath: "/Users/demo",
+      historyPaths: ["/Users/demo/Desktop", "/Users/demo"],
+      historyIndex: 1,
+      treeRootPath: "/Users/demo",
+      selectedTreeItemId: "fs:/Users/demo",
+      leftPaneSubview: "tree",
+      view: null,
+    });
+  });
+
+  it("leaves a tab on another disk, or on a folder named alike, as it is", () => {
+    const onArchive = {
+      ...snapshot("/Volumes/Archive/2025", ["/Volumes/Archive/2025"]),
+      treeRootPath: "/Volumes/Archive",
+    };
+    expect(leaveUnmountedDisks(onArchive, unmounted, "/Users/demo")).toBe(onArchive);
+    const onBackup2 = {
+      ...snapshot("/Volumes/Backup 2", ["/Volumes/Backup 2"]),
+      treeRootPath: "/Volumes/Backup 2",
+    };
+    expect(leaveUnmountedDisks(onBackup2, unmounted, "/Users/demo")).toBe(onBackup2);
   });
 });

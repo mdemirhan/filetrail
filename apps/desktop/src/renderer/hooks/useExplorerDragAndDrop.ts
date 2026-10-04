@@ -517,14 +517,11 @@ export function useExplorerDragAndDrop(args: {
     if (!dragSessionRef.current || !item.path) {
       return;
     }
-    const isFavorite = item.kind === "favorite";
-    const targetSurface = isFavorite ? "favorite" : "tree";
+    // A disk under Locations takes a drop as a favorite does.
+    const isShortcut = item.kind === "favorite" || item.kind === "location";
+    const targetSurface = isShortcut ? "favorite" : "tree";
     const targetSupportsMove =
-      item.kind === "filesystem"
-        ? !item.isSymlink
-        : item.kind === "favorite"
-          ? item.path !== trashPath
-          : false;
+      item.kind === "filesystem" ? !item.isSymlink : isShortcut ? item.path !== trashPath : false;
     const validity = evaluateDropTarget(event, {
       surface: targetSurface,
       path: item.path,
@@ -555,12 +552,12 @@ export function useExplorerDragAndDrop(args: {
     if (!item.path) {
       return;
     }
-    await handleDrop(item.kind === "favorite" ? "favorite" : "tree", item.path, event, {
+    const isShortcut = item.kind === "favorite" || item.kind === "location";
+    await handleDrop(isShortcut ? "favorite" : "tree", item.path, event, {
       targetSupportsMove:
-        item.kind === "filesystem"
-          ? !item.isSymlink
-          : item.kind === "favorite" && item.path !== trashPath,
-      selectTargetInTree: subview === "tree" || item.kind === "favorite",
+        item.kind === "filesystem" ? !item.isSymlink : isShortcut && item.path !== trashPath,
+      selectTargetInTree:
+        item.kind !== "location" && (subview === "tree" || item.kind === "favorite"),
       validateWithItemProperties: true,
     });
   }

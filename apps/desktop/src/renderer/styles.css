@@ -3106,7 +3106,8 @@ body.resizing-panels * {
 
 /* Favorite icons take the accent color, as in Finder's sidebar. */
 .tree-row[data-tree-kind="favorite"] .file-icon.favorite .file-icon-favorite,
-.tree-row[data-tree-kind="favorites-root"] .file-icon.favorite .file-icon-favorite {
+.tree-row[data-tree-kind="favorites-root"] .file-icon.favorite .file-icon-favorite,
+.tree-row[data-tree-kind="locations-root"] .file-icon.favorite .file-icon-favorite {
   color: var(--ft-accent-solid);
 }
 
@@ -6412,11 +6413,13 @@ button.shortcut-slot-key.recording:hover {
   margin-top: 4px;
 }
 
-.sidebar-main-native .tree-row[data-tree-kind="favorites-root"] .tree-label {
+.sidebar-main-native .tree-row[data-tree-kind="favorites-root"] .tree-label,
+.sidebar-main-native .tree-row[data-tree-kind="locations-root"] .tree-label {
   color: var(--text-secondary);
 }
 
-.sidebar-main-native .tree-row[data-tree-kind="favorites-root"] .tree-label-text {
+.sidebar-main-native .tree-row[data-tree-kind="favorites-root"] .tree-label-text,
+.sidebar-main-native .tree-row[data-tree-kind="locations-root"] .tree-label-text {
   font-size: var(--font-size-small);
   font-weight: 600;
 }

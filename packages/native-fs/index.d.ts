@@ -164,3 +164,23 @@ export function nativeRenameExclusive(from: string, to: string): Promise<void>;
  * @throws An error with a `code` property when `path` can't be reached (e.g. `"ENOENT"`).
  */
 export function nativeIsCaseSensitive(path: string): Promise<boolean | null>;
+
+/** A disk mounted under /Volumes (see `nativeListVolumes`). */
+export type NativeVolume = {
+  /** Where it is mounted: `/Volumes/<name>`. */
+  path: string;
+  name: string;
+  /** False for a network share. */
+  isLocal: boolean;
+  isReadOnly: boolean;
+  /** The file system's name, such as `apfs`, `smbfs` or `exfat`. */
+  fileSystem: string;
+};
+
+/**
+ * The disks mounted besides the startup disk, as Finder's sidebar lists them: those under
+ * /Volumes, without Time Machine's snapshots or the system's own volumes. Read from the
+ * mount table with `getmntinfo(3)` without asking the disks themselves, so it returns at
+ * once even when a network share has stopped answering.
+ */
+export function nativeListVolumes(): NativeVolume[];

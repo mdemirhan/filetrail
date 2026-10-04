@@ -85,6 +85,9 @@ export function useAppPreferences() {
   const [favoritesExpanded, setFavoritesExpanded] = useState(
     DEFAULT_APP_PREFERENCES.favoritesExpanded,
   );
+  const [locationsExpanded, setLocationsExpanded] = useState(
+    DEFAULT_APP_PREFERENCES.locationsExpanded,
+  );
   const [favoritesInitialized, setFavoritesInitialized] = useState(
     DEFAULT_APP_PREFERENCES.favoritesInitialized,
   );
@@ -172,6 +175,8 @@ export function useAppPreferences() {
     setFavoritesPlacement,
     favoritesExpanded,
     setFavoritesExpanded,
+    locationsExpanded,
+    setLocationsExpanded,
     favoritesInitialized,
     setFavoritesInitialized,
     terminalApp,

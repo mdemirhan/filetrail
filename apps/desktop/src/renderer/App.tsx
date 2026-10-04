@@ -47,6 +47,7 @@ import { useHiddenItemCount } from "./hooks/useHiddenItemCount";
 import { usePreferencesSync } from "./hooks/usePreferencesSync";
 import { useSearchSession } from "./hooks/useSearchSession";
 import { useTrashState } from "./hooks/useTrashState";
+import { useVolumes } from "./hooks/useVolumes";
 import { useWriteOperations } from "./hooks/useWriteOperations";
 import { buildApplicationMenuState } from "./lib/applicationMenuState";
 import {
@@ -78,12 +79,15 @@ import { parentDirectoryPath } from "./lib/explorerNavigation";
 import { getFolderDisplayName } from "./lib/explorerTabs";
 import type { DirectoryEntry, DirectoryEntryMetadata } from "./lib/explorerTypes";
 import {
+  buildSidebarLocations,
   createFavoriteItemId,
   createFileSystemItemId,
+  createLocationItemId,
   getDefaultFavorites,
   getFavoriteItemPath,
   getFavoritesRootItemId,
   getFileSystemItemPath,
+  getLocationsRootItemId,
   getTrashPath,
   isFavoritePath,
   isFavoritesRootItemId,
@@ -115,7 +119,7 @@ import type { canHandleRendererCommand } from "./lib/shortcutPolicy";
 import { resolveStartupTabs } from "./lib/startupNavigation";
 import { buildContentStatusSummary } from "./lib/statusSummary";
 import { type ToastEntry, type ToastKind, createToastEntry, enqueueToast } from "./lib/toasts";
-import { isVolumeRootPath } from "./lib/volumes";
+import { getVolumeRootPath, isVolumeRootPath } from "./lib/volumes";
 import { ExplorerStoreProvider } from "./state/explorerStoreContext";
 import { useExplorerServices, useSelectionActions } from "./state/explorerStores";
 import { ShortcutDisplayProvider } from "./state/shortcutDisplayContext";
@@ -133,6 +137,10 @@ export function App() {
   // The Rename sheet for several items.
   const batchRename = useBatchRename(client);
   const { trashIsEmpty, refreshTrashState } = useTrashState(client);
+  // The sidebar's Locations: Macintosh HD and the other disks, kept up to date as disks are
+  // mounted and unmounted.
+  const volumes = useVolumes(client);
+  const sidebarLocations = useMemo(() => buildSidebarLocations(volumes), [volumes]);
   // The plain folder and document icons, asked for before the first folder is drawn.
   useEffect(() => {
     preloadGenericIcons(client);
@@ -209,6 +217,8 @@ export function App() {
     setFavoritesPlacement,
     favoritesExpanded,
     setFavoritesExpanded,
+    locationsExpanded,
+    setLocationsExpanded,
     favoritesInitialized,
     setFavoritesInitialized,
     terminalApp,
@@ -803,6 +813,9 @@ export function App() {
         isSearchMode ? filterSearchResultEntries(query) : filterEntriesByName(browseEntries, query),
       locationDialogOpen: sheetOpen,
       explorerFocusSuppressed,
+      locations: sidebarLocations,
+      locationsExpanded,
+      setLocationsExpanded,
     },
   });
   // Hiding the tree while it has the keyboard gives the keyboard to the list.
@@ -814,7 +827,7 @@ export function App() {
   const navigateFavoritePath = useCallback(
     (path: string, historyMode: "push" | "replace" | "skip") =>
       navigateTo(path, historyMode, undefined, undefined, undefined, undefined, {
-        syncTree: false,
+        sidebarJump: true,
         treeSelectionMode: "favorite",
         favoritePath: path,
         persistOnError: true,
@@ -984,6 +997,7 @@ export function App() {
     duplicateTab,
     reopenClosedTab,
     moveTab,
+    leaveUnmountedDisksInBackgroundTabs,
   } = useExplorerTabs({
     services,
     navigation,
@@ -1010,6 +1024,22 @@ export function App() {
     },
   });
   openPathInNewTabRef.current = openPathInNewTab;
+  // A disk unmounted takes its folders with it: tabs showing one go Home.
+  const mountedDiskPathsRef = useRef<ReadonlySet<string>>(new Set());
+  useEffect(() => {
+    const mounted = new Set(volumes.map((volume) => volume.path));
+    const unmounted = new Set(
+      [...mountedDiskPathsRef.current].filter((path) => !mounted.has(path)),
+    );
+    mountedDiskPathsRef.current = mounted;
+    if (unmounted.size === 0) {
+      return;
+    }
+    leaveUnmountedDisksInBackgroundTabs(unmounted);
+    if (unmounted.has(getVolumeRootPath(currentPath)) && homePath.length > 0) {
+      void navigateTo(homePath, "push");
+    }
+  }, [volumes, leaveUnmountedDisksInBackgroundTabs, navigateTo, homePath, currentPath]);
   const dragDropBlocked =
     mainView !== "explorer" ||
     actionNotice !== null ||
@@ -1331,6 +1361,7 @@ export function App() {
     favorites,
     favoritesPlacement,
     favoritesExpanded,
+    locationsExpanded,
     favoritesInitialized,
   };
   // A new search (query or root) starts with fresh result metadata.
@@ -1480,6 +1511,7 @@ export function App() {
         setFavorites(preferences.favorites);
         setFavoritesPlacement(preferences.favoritesPlacement);
         setFavoritesExpanded(preferences.favoritesExpanded);
+        setLocationsExpanded(preferences.locationsExpanded);
         setFavoritesInitialized(preferences.favoritesInitialized);
         setTerminalApp(preferences.terminalApp);
         setDefaultTextEditor(preferences.defaultTextEditor);
@@ -1851,7 +1883,7 @@ export function App() {
               },
               onNavigateFavorite: (path) =>
                 navigateTo(path, "push", undefined, undefined, undefined, undefined, {
-                  syncTree: false,
+                  sidebarJump: true,
                   treeSelectionMode: "favorite",
                   favoritePath: path,
                   persistOnError: true,
@@ -1861,6 +1893,14 @@ export function App() {
               onSelectFavoritesRoot: async () => {
                 await selectTreeItem(getFavoritesRootItemId(), "skip");
                 return undefined;
+              },
+              locations: sidebarLocations,
+              locationsExpanded,
+              onToggleLocationsExpanded: () => setLocationsExpanded((value) => !value),
+              // A disk under Locations, or the Locations row itself.
+              onSelectItem: async (itemId) => {
+                await selectTreeItem(itemId, itemId === getLocationsRootItemId() ? "skip" : "push");
+                return true;
               },
               contextMenuTarget:
                 contextMenuState?.targetPath &&
@@ -1894,7 +1934,10 @@ export function App() {
               onItemDragOver: handleTreeDragOver,
               onItemDrop: handleTreeDrop,
               getItemDropIndicator: (item, subview) =>
-                getTreeItemDropIndicator(item.path, item.kind === "favorite" ? "favorite" : "tree"),
+                getTreeItemDropIndicator(
+                  item.path,
+                  item.kind === "favorite" || item.kind === "location" ? "favorite" : "tree",
+                ),
               onToggleExpand: toggleTreeNode,
               onToggleFavoritesExpanded: () => setFavoritesExpanded((value) => !value),
               typeaheadQuery: focusedPane === "tree" ? typeaheadQuery : "",
@@ -2438,15 +2481,20 @@ export function App() {
   );
 }
 
-// Search scopes: the folder being browsed, Home, and the whole disk (deduplicated).
+// Search scopes: the folder being browsed, Home, the disk it is on when that is another
+// disk, and Macintosh HD (deduplicated).
 function buildSearchScopeOptions(
   currentPath: string,
   homePath: string,
 ): Array<{ path: string; label: string }> {
   const options: Array<{ path: string; label: string }> = [];
+  const volumeRootPath = getVolumeRootPath(currentPath);
   for (const [path, label] of [
     [currentPath, `“${getFolderDisplayName(currentPath)}”`],
     [homePath, "Home"],
+    ...(volumeRootPath === "/"
+      ? []
+      : [[volumeRootPath, getFolderDisplayName(volumeRootPath)] as const]),
     ["/", "Macintosh HD"],
   ] as const) {
     if (path.length > 0 && !options.some((option) => option.path === path)) {

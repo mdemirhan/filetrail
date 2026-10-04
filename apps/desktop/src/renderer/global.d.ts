@@ -5,6 +5,7 @@ import type {
   IpcRequestInput,
   IpcResponse,
   SettingsTab,
+  Volume,
   WriteOperationProgressEvent,
 } from "@filetrail/contracts";
 import type { RendererCommand } from "../shared/rendererCommands";
@@ -25,6 +26,8 @@ declare global {
       ): () => void;
       onShowSettingsTab?(listener: (tab: SettingsTab) => void): () => void;
       onShowHelpTopic?(listener: (topic: HelpTopic) => void): () => void;
+      // The disks mounted besides the startup disk, sent again whenever one comes or goes.
+      onVolumesChanged?(listener: (volumes: Volume[]) => void): () => void;
     };
   }
 }

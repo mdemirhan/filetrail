@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type { IpcResponse } from "@filetrail/contracts";
 import type { FavoriteIconId } from "../../shared/appPreferences";
 import { type FiletrailClient, useFiletrailClient } from "./filetrailClient";
+import { isVolumeRootPath } from "./volumes";
 
 type Entry = IpcResponse<"directory:getSnapshot">["entries"][number];
 
@@ -205,7 +206,8 @@ function nativeIconCacheKey(entry: Entry): string {
   }
   if (entry.kind === "directory") {
     const name = entry.name || entry.path.split("/").filter(Boolean).at(-1) || "";
-    return entry.path === "/" || SPECIAL_FOLDER_NAMES.has(name)
+    // A disk's top folder is drawn as the disk: a drive, a disk image, a network share.
+    return isVolumeRootPath(entry.path) || SPECIAL_FOLDER_NAMES.has(name)
       ? `path:${entry.path}`
       : "kind:directory";
   }

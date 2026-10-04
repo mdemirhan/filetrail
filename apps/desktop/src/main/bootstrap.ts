@@ -1,5 +1,6 @@
+import { watch } from "node:fs";
 import { join } from "node:path";
-import { app, clipboard, ipcMain, shell } from "electron";
+import { BrowserWindow, app, clipboard, ipcMain, shell } from "electron";
 
 import type { AppLogEntry, HelpTopic, SettingsTab } from "@filetrail/contracts";
 import { ExplorerWorkerClient, createWriteService, getPathSuggestions } from "@filetrail/core";
@@ -59,9 +60,11 @@ import {
 } from "./bootstrap/writeOperations";
 import { readBundledFdManifest, resolveBundledFdBinaryPath } from "./fdBinary";
 import { registerIpcHandlers } from "./ipc";
+import { type VolumeWatcher, createVolumeWatcher } from "./volumes";
 
 let activeWorkerClient: ExplorerWorkerClient | null = null;
 let activeWriteCoordinator: ReturnType<typeof createWriteOperationCoordinator> | null = null;
+let activeVolumeWatcher: VolumeWatcher | null = null;
 
 export async function bootstrapMainProcess(
   appStateStore: AppStateStore,
@@ -99,7 +102,33 @@ export async function bootstrapMainProcess(
     createOriginalBatchRenameInspectDeps,
     getFolderSize,
     cancelFolderSize,
+    listVolumes,
   } = await import("./originalFileSystem");
+  // The disks mounted besides the startup disk; every window hears of each change.
+  const volumeWatcher = createVolumeWatcher({
+    listVolumes,
+    watchVolumesFolder: (onChange) => {
+      try {
+        const watcher = watch("/Volumes", onChange);
+        watcher.on("error", () => undefined);
+        return () => watcher.close();
+      } catch {
+        return () => undefined;
+      }
+    },
+    onVolumesChanged: (volumes) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed()) {
+          window.webContents.send("filetrail:volumesChanged", volumes);
+        }
+      }
+    },
+  });
+  activeVolumeWatcher?.stop();
+  activeVolumeWatcher = volumeWatcher;
+  // A disk mounted while the watch was not looking (it can miss one while the Mac sleeps)
+  // shows up when the window comes back to the front.
+  app.on("browser-window-focus", () => volumeWatcher.refresh());
   // What the Rename sheet checks for several items: the same folders are refused as for a
   // rename of one.
   const batchRenameInspectDeps = createOriginalBatchRenameInspectDeps({
@@ -304,6 +333,7 @@ export async function bootstrapMainProcess(
       },
       "system:performEditAction": (payload, event) => performEditAction(payload, event.sender),
       "system:emptyTrash": () => writeCoordinator.emptyTrash(emptyTrash),
+      "system:listVolumes": () => ({ volumes: volumeWatcher.getVolumes() }),
       "system:getTrashState": () => getTrashState(app.getPath("home"), process.getuid?.() ?? 0),
       "system:openFullDiskAccessSettings": () => openFullDiskAccessSettings(),
       "system:getFileIcon": (payload) => getFileIconHandler(payload),
@@ -314,6 +344,8 @@ export async function bootstrapMainProcess(
 }
 
 export async function shutdownMainProcess(): Promise<void> {
+  activeVolumeWatcher?.stop();
+  activeVolumeWatcher = null;
   if (!activeWorkerClient) {
     return;
   }

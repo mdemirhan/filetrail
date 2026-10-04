@@ -7,6 +7,7 @@ import type {
   IpcRequestInput,
   IpcResponse,
   SettingsTab,
+  Volume,
   WriteOperationProgressEvent,
 } from "@filetrail/contracts";
 import type { RendererCommand } from "../shared/rendererCommands";
@@ -32,6 +33,7 @@ type InvokeApi = {
   onPreferencesChanged(listener: (patch: PreferencesPatch) => void): () => void;
   onShowSettingsTab(listener: (tab: SettingsTab) => void): () => void;
   onShowHelpTopic(listener: (topic: HelpTopic) => void): () => void;
+  onVolumesChanged(listener: (volumes: Volume[]) => void): () => void;
 };
 
 const api: InvokeApi = {
@@ -80,6 +82,15 @@ const api: InvokeApi = {
     ipcRenderer.on("filetrail:showHelpTopic", handleTopic);
     return () => {
       ipcRenderer.removeListener("filetrail:showHelpTopic", handleTopic);
+    };
+  },
+  onVolumesChanged: (listener) => {
+    const handleChange = (_event: unknown, volumes: Volume[]) => {
+      listener(volumes);
+    };
+    ipcRenderer.on("filetrail:volumesChanged", handleChange);
+    return () => {
+      ipcRenderer.removeListener("filetrail:volumesChanged", handleChange);
     };
   },
   onShowSettingsTab: (listener) => {

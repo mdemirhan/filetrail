@@ -7,6 +7,7 @@ import type {
   IpcRequestInput,
   IpcResponse,
   SettingsTab,
+  Volume,
   WriteOperationProgressEvent,
 } from "@filetrail/contracts";
 import type { RendererCommand } from "../../shared/rendererCommands";
@@ -24,6 +25,8 @@ export type FiletrailClient = {
   // The Settings window being asked to show one of its tabs.
   onShowSettingsTab?(listener: (tab: SettingsTab) => void): () => void;
   onShowHelpTopic?(listener: (topic: HelpTopic) => void): () => void;
+  // The disks mounted besides the startup disk, sent again whenever one comes or goes.
+  onVolumesChanged?(listener: (volumes: Volume[]) => void): () => void;
 };
 
 const MISSING_PRELOAD_ERROR =

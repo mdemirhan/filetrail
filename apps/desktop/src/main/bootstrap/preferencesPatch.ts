@@ -157,6 +157,9 @@ export function toPreferencePatch(
   if (value.favoritesExpanded !== undefined) {
     patch.favoritesExpanded = value.favoritesExpanded;
   }
+  if (value.locationsExpanded !== undefined) {
+    patch.locationsExpanded = value.locationsExpanded;
+  }
   if (value.favoritesInitialized !== undefined) {
     patch.favoritesInitialized = value.favoritesInitialized;
   }

@@ -43,10 +43,12 @@ describe("appStateStore", () => {
     const userDataPath = mkdtempSync(join(tmpdir(), "filetrail-app-state-"));
     const filePath = resolveAppStatePath(userDataPath);
     const store = createAppStateStore(filePath, { defaultTheme: "dark" });
-    store.updatePreferences({ favoritesExpanded: false });
+    store.updatePreferences({ favoritesExpanded: false, locationsExpanded: false });
     store.flush();
     const persisted = readFileSync(filePath, "utf8");
     expect(JSON.parse(persisted).preferences.favoritesExpanded).toBe(false);
+    expect(JSON.parse(persisted).preferences.locationsExpanded).toBe(false);
+    expect(createAppStateStore(filePath).getPreferences().locationsExpanded).toBe(false);
     expect(existsSync(`${filePath}.tmp`)).toBe(false);
 
     const onPersistError = vi.fn();
@@ -446,6 +448,7 @@ describe("appStateStore", () => {
       favorites: [],
       favoritesPlacement: "integrated",
       favoritesExpanded: true,
+      locationsExpanded: true,
       favoritesInitialized: false,
       ...BATCH_RENAME_DEFAULTS,
     });
@@ -586,6 +589,7 @@ describe("appStateStore", () => {
       ],
       favoritesPlacement: "separate",
       favoritesExpanded: false,
+      locationsExpanded: true,
       favoritesInitialized: true,
       ...BATCH_RENAME_DEFAULTS,
     });
@@ -719,6 +723,7 @@ describe("appStateStore", () => {
       ],
       favoritesPlacement: "separate",
       favoritesExpanded: false,
+      locationsExpanded: true,
       favoritesInitialized: true,
       ...BATCH_RENAME_DEFAULTS,
     });

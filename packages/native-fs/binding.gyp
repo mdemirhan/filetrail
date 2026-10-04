@@ -11,7 +11,8 @@
         "src/native_foldersize.c",
         "src/native_package.m",
         "src/native_rename.c",
-        "src/native_thumbnail.m"
+        "src/native_thumbnail.m",
+        "src/native_volumes.c"
       ],
       "cflags": ["-Wall", "-Wextra", "-O2"],
       "xcode_settings": {

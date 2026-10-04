@@ -1,19 +1,30 @@
 import type { AppPreferences } from "../../shared/appPreferences";
 import { isPathWithinRoot } from "./pathUtils";
+import { getVolumeRootPath } from "./volumes";
 
 function resolvePersistedStartupRoot(
   persistedRootPath: string | null,
   homePath: string,
   startupPath: string,
 ): string {
-  if (persistedRootPath === "/" || persistedRootPath === homePath) {
+  const startupVolumeRootPath = getVolumeRootPath(startupPath);
+  // Macintosh HD holds its own folders only: a folder on another disk is shown from that
+  // disk's top.
+  if (
+    persistedRootPath === homePath ||
+    (persistedRootPath === "/" && startupVolumeRootPath === "/")
+  ) {
     return persistedRootPath;
   }
   // A folder the tree was rooted at by hand is kept while the startup folder is inside it.
-  if (persistedRootPath && isPathWithinRoot(startupPath, persistedRootPath)) {
+  if (
+    persistedRootPath &&
+    persistedRootPath !== "/" &&
+    isPathWithinRoot(startupPath, persistedRootPath)
+  ) {
     return persistedRootPath;
   }
-  return isPathWithinRoot(startupPath, homePath) ? homePath : "/";
+  return isPathWithinRoot(startupPath, homePath) ? homePath : startupVolumeRootPath;
 }
 
 // Startup navigation merges explicit launch context, persisted preferences, and home-folder

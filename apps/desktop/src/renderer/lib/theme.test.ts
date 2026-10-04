@@ -45,7 +45,7 @@ describe("theme helpers", () => {
     const styles = readFileSync("apps/desktop/src/renderer/styles.css", "utf8");
 
     expect(styles).toContain(
-      '.tree-row[data-tree-kind="favorite"] .file-icon.favorite .file-icon-favorite,\n.tree-row[data-tree-kind="favorites-root"] .file-icon.favorite .file-icon-favorite {\n  color: var(--ft-accent-solid);',
+      '.tree-row[data-tree-kind="favorite"] .file-icon.favorite .file-icon-favorite,\n.tree-row[data-tree-kind="favorites-root"] .file-icon.favorite .file-icon-favorite,\n.tree-row[data-tree-kind="locations-root"] .file-icon.favorite .file-icon-favorite {\n  color: var(--ft-accent-solid);',
     );
     // The separate favorite and toolbar accents are gone.
     expect(styles).not.toMatch(/--favorite-accent-|data-accent-favorite/u);

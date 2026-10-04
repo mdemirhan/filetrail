@@ -7,6 +7,7 @@ import {
 import type { ContextMenuState } from "../hooks/useWriteOperations";
 import { parentDirectoryPath } from "./explorerNavigation";
 import type { DirectoryEntry, SearchResultItem, WriteOperationResult } from "./explorerTypes";
+import { getVolumeRootPath } from "./volumes";
 
 export function formatPathForShell(path: string): string {
   if (!/\s/.test(path)) {
@@ -576,7 +577,7 @@ export function toDirectoryEntryFromSearchResult(result: SearchResultItem): Dire
 export function createTreeNode(path: string, expanded: boolean) {
   return {
     path,
-    name: path === "/" ? "/" : (path.split("/").filter(Boolean).at(-1) ?? path),
+    name: path === "/" ? "Macintosh HD" : (path.split("/").filter(Boolean).at(-1) ?? path),
     kind: "directory" as const,
     isHidden: false,
     isSymlink: false,
@@ -598,9 +599,21 @@ export function isPathWithinRoot(path: string, rootPath: string): boolean {
   return path === rootPath || path.startsWith(`${rootPath}/`);
 }
 
+// Whether the folder tree rooted at `rootPath` holds `path`. Rooted at Macintosh HD ("/"),
+// it holds the startup disk's own folders only: another disk, though mounted inside it at
+// /Volumes, is shown from its own top.
+export function isPathWithinTreeRoot(path: string, rootPath: string): boolean {
+  if (rootPath === "/") {
+    return getVolumeRootPath(path) === "/";
+  }
+  return isPathWithinRoot(path, rootPath);
+}
+
+// The top the folder tree takes for `path` when it is not rooted somewhere holding it:
+// Home for what is in Home, the disk for what is on another disk, otherwise Macintosh HD.
 export function resolveExplorerTreeRootPath(path: string, homePath: string): string {
   if (homePath.length > 0 && isPathWithinRoot(path, homePath)) {
     return homePath;
   }
-  return "/";
+  return getVolumeRootPath(path);
 }

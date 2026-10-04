@@ -1562,8 +1562,9 @@ describe("App copy/paste integration", () => {
     );
 
     await openDirectory("/Volumes/Shared/Project");
+    // A folder on another disk is shown from that disk's top.
     await vi.waitFor(() => {
-      expect(screen.getByTestId("tree-root")).toHaveTextContent("/");
+      expect(screen.getByTestId("tree-root").textContent).toBe("/Volumes/Shared");
     });
 
     await act(async () => {
@@ -1575,6 +1576,62 @@ describe("App copy/paste integration", () => {
       expect(screen.getByTestId("tree-selection")).toHaveTextContent("fs:/Users/demo");
       expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo");
       expect(screen.getByTitle("/Users/demo/source.txt")).toBeInTheDocument();
+    });
+  });
+
+  it("takes the tree back to Home's top when a favorite in Home is clicked", async () => {
+    const harness = createAppHarness({
+      preferences: {
+        favorites: [{ path: "/Users/demo/Documents", icon: "documents" }],
+        favoritesInitialized: true,
+      },
+      directorySnapshots: {
+        "/Users/demo": {
+          path: "/Users/demo",
+          parentPath: "/Users",
+          entries: [
+            createDirectoryEntry("/Users/demo/source.txt", "file"),
+            createDirectoryEntry("/Applications", "directory"),
+          ],
+        },
+        "/Applications": { path: "/Applications", parentPath: "/", entries: [] },
+        "/Users/demo/Documents": {
+          path: "/Users/demo/Documents",
+          parentPath: "/Users/demo",
+          entries: [],
+        },
+      },
+      treeChildrenByPath: {
+        "/": [
+          createTreeChild("/Applications", "directory"),
+          createTreeChild("/Users", "directory"),
+        ],
+        "/Users/demo": [createTreeChild("/Users/demo/Documents", "directory")],
+      },
+    });
+
+    render(
+      <FiletrailClientProvider value={harness.client}>
+        <App />
+      </FiletrailClientProvider>,
+    );
+
+    // Browsing outside Home roots the tree at Macintosh HD, which holds Home too.
+    await openDirectory("/Applications");
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("tree-root").textContent).toBe("/");
+    });
+
+    await act(async () => {
+      fireEvent.click(await screen.findByTitle("favorite:/Users/demo/Documents"));
+    });
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("tree-root").textContent).toBe("/Users/demo");
+      expect(screen.getByTestId("tree-selection")).toHaveTextContent(
+        "favorite:/Users/demo/Documents",
+      );
+      expect(screen.getByTestId("content-current-path")).toHaveTextContent("/Users/demo/Documents");
     });
   });
 

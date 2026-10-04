@@ -18,6 +18,7 @@ import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { pipeline } from "node:stream/promises";
 
+import type { Volume } from "@filetrail/contracts";
 import { createStoppableCopyFile, startsWithAppleDoubleMagic } from "@filetrail/core";
 import type { ExplorerFileSystem } from "@filetrail/core";
 import type { WriteServiceFileSystem, WriteServiceStats } from "@filetrail/core";
@@ -45,6 +46,7 @@ const addon = require("@filetrail/native-fs") as {
   nativeIsCaseSensitive: (path: string) => Promise<boolean | null>;
   nativeIsPackage: (path: string) => Promise<boolean | null>;
   nativeDatesTaken: (paths: string[]) => Promise<Array<string | null>>;
+  nativeListVolumes: () => Volume[];
 };
 const {
   nativeCopyFile,
@@ -59,6 +61,7 @@ const {
   nativeGetFlags,
   nativeSetFlags,
   nativeDatesTaken,
+  nativeListVolumes,
 } = addon;
 
 // Stop takes effect part way through a large file.
@@ -214,3 +217,6 @@ export const getFolderSize = nativeFolderSize;
 
 /** Cancel the active folder size calculation. */
 export const cancelFolderSize = nativeFolderSizeCancel;
+
+/** The disks mounted under /Volumes, from the mount table (getmntinfo). */
+export const listVolumes = nativeListVolumes;

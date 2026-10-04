@@ -662,6 +662,10 @@ function sanitizePreferences(value: unknown, currentDefaults: AppPreferences): A
       typeof record.favoritesExpanded === "boolean"
         ? record.favoritesExpanded
         : currentDefaults.favoritesExpanded,
+    locationsExpanded:
+      typeof record.locationsExpanded === "boolean"
+        ? record.locationsExpanded
+        : currentDefaults.locationsExpanded,
     favoritesInitialized:
       typeof record.favoritesInitialized === "boolean"
         ? record.favoritesInitialized

@@ -73,6 +73,13 @@ export function buildFdSearchArgs(request: SearchStartRequest): string[] {
     args.push("--exclude", ".git");
   }
 
+  // Macintosh HD is the startup disk alone, as in Finder: other disks, mounted at /Volumes,
+  // are searched from their own top. (A leading "/" matches only at the search's top, and
+  // --one-file-system would also leave out /Users and /Applications, on another APFS volume.)
+  if (request.rootPath === "/") {
+    args.push("--exclude", "/Volumes");
+  }
+
   if (request.patternMode === "glob") {
     args.push("--glob");
   } else if (request.patternMode === "text") {

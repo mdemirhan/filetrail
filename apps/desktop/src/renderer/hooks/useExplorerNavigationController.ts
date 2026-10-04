@@ -18,7 +18,7 @@ import { getDetailsRowHeight } from "../lib/detailsLayout";
 import {
   createTreeNode,
   isFolderSizeEligibleKind,
-  isPathWithinRoot,
+  isPathWithinTreeRoot,
   resolveExplorerTreeRootPath,
 } from "../lib/explorerAppUtils";
 import {
@@ -37,16 +37,23 @@ import { type ExplorerPane, resolveExplorerPaneRestoreTarget } from "../lib/expl
 import { getPathAndAncestors } from "../lib/explorerTabs";
 import type { DirectoryEntry, DirectoryEntryMetadata } from "../lib/explorerTypes";
 import {
+  type SidebarLocation,
   type TreeItemId,
   buildTreePresentation,
   createFavoriteItemId,
   createFileSystemItemId,
+  createLocationItemId,
   getFavoriteItemPath,
   getFavoriteLabel,
   getFavoritesRootItemId,
   getFileSystemItemPath,
+  getLocationItemPath,
+  getLocationsRootItemId,
+  getShortcutItemPath,
   isFavoriteItemId,
   isFavoritesRootItemId,
+  isLocationItemId,
+  isLocationsRootItemId,
 } from "../lib/favorites";
 import { getFlowListColumnStep } from "../lib/flowListLayout";
 import { resolveFocusedEditTarget } from "../lib/focusedEditTarget";
@@ -57,6 +64,7 @@ import { LIST_FILTER_SPACE_WINDOW_MS, findListFilterSelection } from "../lib/lis
 import { createRendererLogger } from "../lib/logging";
 import { pageScrollElement, scrollElementByAmount } from "../lib/pagedScroll";
 import { expandHomeShortcut } from "../lib/pathUtils";
+import { isVolumeRootPath } from "../lib/volumes";
 import type {
   ExplorerServices,
   NavigationStore,
@@ -83,6 +91,10 @@ export function useExplorerNavigationController(args: {
     filterContentEntries: (query: string) => DirectoryEntry[];
     locationDialogOpen: boolean;
     explorerFocusSuppressed: boolean;
+    /** The sidebar's Locations: Macintosh HD and the other disks mounted. */
+    locations: SidebarLocation[];
+    locationsExpanded: boolean;
+    setLocationsExpanded: (expanded: boolean) => void;
   };
 }) {
   type SortBy = IpcRequest<"directory:getSnapshot">["sortBy"];
@@ -273,6 +285,8 @@ export function useExplorerNavigationController(args: {
       rootPath: treeRootPathRef.current,
       nodes: treeNodesRef.current,
       includeFavorites: favoritesPlacement === "integrated",
+      locations: derived.locations,
+      locationsExpanded: derived.locationsExpanded,
     });
   }
 
@@ -313,18 +327,30 @@ export function useExplorerNavigationController(args: {
     return presentation.items[itemId]?.label ?? "";
   }
 
+  // The rows of the separate Favorites list, then those of the Locations below it: arrow
+  // keys move through both as one list.
   function getFavoriteItemIds(): TreeItemId[] {
-    return favorites.map((favorite) => createFavoriteItemId(favorite.path));
+    return [
+      ...favorites.map((favorite) => createFavoriteItemId(favorite.path)),
+      ...(derived.locationsExpanded
+        ? derived.locations.map((location) => createLocationItemId(location.path))
+        : []),
+    ];
   }
 
   function getFavoriteLabelById(itemId: TreeItemId): string {
+    const locationPath = getLocationItemPath(itemId);
+    if (locationPath !== null) {
+      return derived.locations.find((location) => location.path === locationPath)?.label ?? "";
+    }
     const favoritePath = getFavoriteItemPath(itemId);
     return favoritePath ? getFavoriteLabel(favoritePath, homePath) : "";
   }
 
   function getSelectedTreeReloadOptions(path: string) {
-    const favoritePath = getFavoriteItemPath(selectedTreeItemIdRef.current);
-    if (!favoritePath || favoritePath !== path) {
+    const shortcutItemId = selectedTreeItemIdRef.current;
+    const favoritePath = getShortcutItemPath(shortcutItemId);
+    if (!shortcutItemId || !favoritePath || favoritePath !== path) {
       const selectedTreePath = getFileSystemItemPath(selectedTreeItemIdRef.current);
       if (!selectedTreePath) {
         return undefined;
@@ -343,6 +369,7 @@ export function useExplorerNavigationController(args: {
       syncTree: false,
       treeSelectionMode: "favorite" as const,
       favoritePath,
+      shortcutItemId,
       persistOnError: true,
     };
   }
@@ -878,6 +905,20 @@ export function useExplorerNavigationController(args: {
     folderVisitTrackerRef.current?.use();
   }
 
+  // A jump from a favorite or a location: the tree goes back to the place's own top (Home,
+  // the disk, or Macintosh HD), keeping it as it is when it is there already. Returns the
+  // folder to open the tree down to: the place itself, or the top for a hidden one (the
+  // Trash), which is not brought out in the tree.
+  function resetTreeForSidebarJump(path: string, includeHiddenOverride: boolean): string {
+    const treeTopPath = resolveExplorerTreeRootPath(path, homePath);
+    if (treeTopPath !== treeRootPathRef.current) {
+      initializeTree(treeTopPath);
+    }
+    return !includeHiddenOverride && pathHasHiddenSegmentWithinRoot(path, treeTopPath)
+      ? treeTopPath
+      : path;
+  }
+
   async function navigateTo(
     path: string,
     historyMode: "push" | "replace" | "skip",
@@ -889,9 +930,14 @@ export function useExplorerNavigationController(args: {
       syncTree?: boolean;
       treeSelectionMode?: "filesystem" | "favorite" | "preserve";
       favoritePath?: string;
+      /** The sidebar row to select with "favorite": a location's, when not a favorite's. */
+      shortcutItemId?: TreeItemId;
       persistOnError?: boolean;
       forceTreeReload?: boolean;
       rerootTree?: boolean;
+      /** Gone to from a favorite or a location: the tree goes back to the place's own top
+       *  (Home, the disk, or Macintosh HD) and opens down to it. */
+      sidebarJump?: boolean;
       /** The folder is read again where it stands: the selection is kept. */
       keepSelection?: boolean;
       /** Search results on screen stay there; only the folder underneath is read again. */
@@ -940,8 +986,11 @@ export function useExplorerNavigationController(args: {
       if (options.rerootTree) {
         initializeTree(response.path);
       }
+      const treeRevealPath = options.sidebarJump
+        ? resetTreeForSidebarJump(response.path, includeHiddenOverride)
+        : response.path;
       if (options.syncTree !== false) {
-        await syncTreeToPath(response.path, includeHiddenOverride, {
+        await syncTreeToPath(treeRevealPath, includeHiddenOverride, {
           forceReload: options.forceTreeReload ?? false,
           isCurrent: isSameView,
         });
@@ -952,7 +1001,9 @@ export function useExplorerNavigationController(args: {
         }
       }
       if (options.treeSelectionMode === "favorite") {
-        setTreeSelection(createFavoriteItemId(options.favoritePath ?? response.path));
+        setTreeSelection(
+          options.shortcutItemId ?? createFavoriteItemId(options.favoritePath ?? response.path),
+        );
         if (favoritesPlacement === "separate") {
           setLeftPaneSubview("favorites");
         }
@@ -970,8 +1021,17 @@ export function useExplorerNavigationController(args: {
       setLocationError(message);
       if (options.persistOnError) {
         applyDirectorySnapshot(path, [], {}, options);
+        // A folder that can't be listed (the Trash, without Full Disk Access) still takes
+        // the tree back to its top.
+        if (options.sidebarJump) {
+          const treeTopPath = resolveExplorerTreeRootPath(path, homePath);
+          resetTreeForSidebarJump(path, includeHiddenOverride);
+          void syncTreeToPath(treeTopPath, includeHiddenOverride, { isCurrent: isSameView });
+        }
         if (options.treeSelectionMode === "favorite") {
-          setTreeSelection(createFavoriteItemId(options.favoritePath ?? path));
+          setTreeSelection(
+            options.shortcutItemId ?? createFavoriteItemId(options.favoritePath ?? path),
+          );
           if (favoritesPlacement === "separate") {
             setLeftPaneSubview("favorites");
           }
@@ -1098,10 +1158,15 @@ export function useExplorerNavigationController(args: {
       updateTreeNodes((current) => {
         const next = { ...current };
         const existingNode = current[path] ?? createTreeNode(path, true);
+        // Macintosh HD's Volumes folder, where the other disks are mounted, is left out as
+        // Finder leaves it out: those disks are under Locations.
+        const children = response.children.filter(
+          (child) => includeHiddenOverride || child.path !== "/Volumes",
+        );
         const listedChildren =
           forcedVisibleHiddenChildPath === null
-            ? response.children.filter((child) => includeHiddenOverride || !child.isHidden)
-            : response.children.filter(
+            ? children.filter((child) => includeHiddenOverride || !child.isHidden)
+            : children.filter(
                 (child) => !child.isHidden || child.path === forcedVisibleHiddenChildPath,
               );
         const visibleChildren =
@@ -1167,7 +1232,7 @@ export function useExplorerNavigationController(args: {
     const isCurrent = options.isCurrent ?? createViewGuard();
     const currentRootPath = treeRootPathRef.current;
     const nextRootPath =
-      currentRootPath.length === 0 || !isPathWithinRoot(path, currentRootPath)
+      currentRootPath.length === 0 || !isPathWithinTreeRoot(path, currentRootPath)
         ? resolveExplorerTreeRootPath(path, homePath)
         : currentRootPath;
 
@@ -1244,10 +1309,25 @@ export function useExplorerNavigationController(args: {
   }
 
   async function selectTreeItem(itemId: TreeItemId, historyMode: "push" | "replace" | "skip") {
-    if (isFavoritesRootItemId(itemId)) {
+    if (isFavoritesRootItemId(itemId) || isLocationsRootItemId(itemId)) {
       setTreeSelection(itemId);
       setLeftPaneSubview(favoritesPlacement === "separate" ? "favorites" : "tree");
       applyEmptyDirectorySnapshot();
+      return;
+    }
+    // A disk: its row stays selected, and the folder tree shows the disk from its top.
+    const locationPath = getLocationItemPath(itemId);
+    if (locationPath) {
+      setTreeSelection(itemId);
+      if (favoritesPlacement === "separate") {
+        setLeftPaneSubview("favorites");
+      }
+      await navigateTo(locationPath, historyMode, undefined, undefined, undefined, undefined, {
+        sidebarJump: true,
+        treeSelectionMode: "favorite",
+        shortcutItemId: itemId,
+        persistOnError: true,
+      });
       return;
     }
     const favoritePath = getFavoriteItemPath(itemId);
@@ -1257,7 +1337,7 @@ export function useExplorerNavigationController(args: {
         setLeftPaneSubview("favorites");
       }
       await navigateTo(favoritePath, historyMode, undefined, undefined, undefined, undefined, {
-        syncTree: false,
+        sidebarJump: true,
         treeSelectionMode: "favorite",
         favoritePath,
         persistOnError: true,
@@ -1275,16 +1355,16 @@ export function useExplorerNavigationController(args: {
   async function openTreeNode() {
     const currentItemId = selectedTreeItemIdRef.current;
     if (favoritesPlacement === "separate" && leftPaneSubviewRef.current === "favorites") {
-      const favoritePath = getFavoriteItemPath(currentItemId);
+      const favoritePath = getShortcutItemPath(currentItemId);
       if (currentItemId && favoritePath) {
         await selectTreeItem(currentItemId, "push");
       }
       return;
     }
-    if (isFavoritesRootItemId(currentItemId)) {
+    if (isFavoritesRootItemId(currentItemId) || isLocationsRootItemId(currentItemId)) {
       return;
     }
-    const favoritePath = getFavoriteItemPath(currentItemId);
+    const favoritePath = getShortcutItemPath(currentItemId);
     if (currentItemId && favoritePath) {
       await selectTreeItem(currentItemId, "push");
       return;
@@ -1317,8 +1397,12 @@ export function useExplorerNavigationController(args: {
       await selectTreeItem(getFavoritesRootItemId(), "skip");
       return;
     }
+    if (isLocationItemId(currentItemId)) {
+      await selectTreeItem(getLocationsRootItemId(), "skip");
+      return;
+    }
     const path = getFileSystemItemPath(currentItemId);
-    if (!path) {
+    if (!path || isVolumeRootPath(path)) {
       return;
     }
     const nextPath = parentDirectoryPath(path);
@@ -1466,7 +1550,19 @@ export function useExplorerNavigationController(args: {
         }
         return false;
       }
-      if (isFavoriteItemId(safeCurrentId)) {
+      if (isLocationsRootItemId(safeCurrentId)) {
+        if (!derived.locationsExpanded) {
+          derived.setLocationsExpanded(true);
+          return true;
+        }
+        const firstLocation = derived.locations[0];
+        if (firstLocation) {
+          await selectTreeItem(createLocationItemId(firstLocation.path), "push");
+          return true;
+        }
+        return false;
+      }
+      if (isFavoriteItemId(safeCurrentId) || isLocationItemId(safeCurrentId)) {
         return false;
       }
       const path = getFileSystemItemPath(safeCurrentId);
@@ -1503,6 +1599,17 @@ export function useExplorerNavigationController(args: {
       await selectTreeItem(getFavoritesRootItemId(), "skip");
       return true;
     }
+    if (isLocationsRootItemId(safeCurrentId)) {
+      if (derived.locationsExpanded) {
+        derived.setLocationsExpanded(false);
+        return true;
+      }
+      return false;
+    }
+    if (isLocationItemId(safeCurrentId)) {
+      await selectTreeItem(getLocationsRootItemId(), "skip");
+      return true;
+    }
     const path = getFileSystemItemPath(safeCurrentId);
     const node = path ? treeNodesRef.current[path] : null;
     if (!path || !node) {
@@ -1512,7 +1619,8 @@ export function useExplorerNavigationController(args: {
       toggleTreeNode(path);
       return true;
     }
-    if (path === treeRootPathRef.current) {
+    // The top of the tree, or of a disk: there is nothing above it to go to.
+    if (path === treeRootPathRef.current || isVolumeRootPath(path)) {
       return false;
     }
     const parentPath = parentDirectoryPath(path);
@@ -1569,7 +1677,7 @@ export function useExplorerNavigationController(args: {
     }
     visitedPaths.add(path);
     const treeRootPath = treeRootPathRef.current;
-    if (path.length === 0 || !isPathWithinRoot(path, treeRootPath)) {
+    if (path.length === 0 || !isPathWithinTreeRoot(path, treeRootPath)) {
       return;
     }
     const node = treeNodesRef.current[path];

@@ -17,6 +17,7 @@ import type {
   SearchResultItem,
 } from "./explorerTypes";
 import type { TreeItemId } from "./favorites";
+import { getVolumeRootPath } from "./volumes";
 
 type SortBy = IpcRequest<"directory:getSnapshot">["sortBy"];
 type SortDirection = IpcRequest<"directory:getSnapshot">["sortDirection"];
@@ -300,6 +301,31 @@ export function disambiguateTabLabels<T extends { label: string; kind: string; p
       ? { ...item, label: `${item.label} — ${getFolderDisplayName(parentPath)}` }
       : item;
   });
+}
+
+// A background tab on a disk that was unmounted goes Home, as the tab on screen does: its
+// folder, its tree and the places in its history on that disk went with the disk.
+export function leaveUnmountedDisks(
+  snapshot: TabSnapshot,
+  unmountedDiskPaths: ReadonlySet<string>,
+  homePath: string,
+): TabSnapshot {
+  const isGone = (path: string) =>
+    path.length > 0 && unmountedDiskPaths.has(getVolumeRootPath(path));
+  if (!isGone(snapshot.currentPath) && !isGone(snapshot.treeRootPath)) {
+    return snapshot;
+  }
+  const historyPaths = [...snapshot.historyPaths.filter((path) => !isGone(path)), homePath];
+  return {
+    ...snapshot,
+    currentPath: homePath,
+    historyPaths,
+    historyIndex: historyPaths.length - 1,
+    treeRootPath: homePath,
+    selectedTreeItemId: `fs:${homePath}`,
+    leftPaneSubview: "tree",
+    view: null,
+  };
 }
 
 // A background tab shows a folder that was renamed or moved (by this window): it follows

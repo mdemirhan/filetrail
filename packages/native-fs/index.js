@@ -87,6 +87,25 @@ async function datesTakenFallback(paths) {
   return paths.map(() => null);
 }
 
+// Without it, the disks are told from /Volumes alone (see listVolumesFallback).
+function listVolumesFallback() {
+  let names;
+  try {
+    names = fs.readdirSync("/Volumes", { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return names
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+    .map((entry) => ({
+      path: `/Volumes/${entry.name}`,
+      name: entry.name,
+      isLocal: true,
+      isReadOnly: false,
+      fileSystem: "",
+    }));
+}
+
 module.exports = {
   nativeDatesTaken: binding.nativeDatesTaken ?? datesTakenFallback,
   nativeCopyFile: binding.nativeCopyFile,
@@ -101,4 +120,5 @@ module.exports = {
   nativeIsPackage: binding.nativeIsPackage ?? isPackageFallback,
   nativeGetFlags: binding.nativeGetFlags ?? getFlagsFallback,
   nativeSetFlags: binding.nativeSetFlags ?? setFlagsFallback,
+  nativeListVolumes: binding.nativeListVolumes ?? listVolumesFallback,
 };

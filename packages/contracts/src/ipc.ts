@@ -117,6 +117,17 @@ export const favoritePreferenceSchema = z.object({
   icon: favoriteIconIdSchema,
 });
 export const favoritesPlacementSchema = z.enum(["integrated", "separate"]);
+// A disk mounted besides the startup disk: a drive, a disk image or a network share.
+export const volumeSchema = z.object({
+  // Where it is mounted: /Volumes/<name>.
+  path: z.string().min(1),
+  name: z.string().min(1),
+  // False for a network share.
+  isLocal: z.boolean(),
+  isReadOnly: z.boolean(),
+  // apfs, hfs, exfat, smbfs…; empty when not known.
+  fileSystem: z.string(),
+});
 export const applicationSelectionSchema = z.object({
   appPath: z.string().trim().min(1),
   appName: z.string().trim().min(1),
@@ -691,6 +702,8 @@ export const appPreferencesSchema = z.object({
   favorites: z.array(favoritePreferenceSchema),
   favoritesPlacement: favoritesPlacementSchema,
   favoritesExpanded: z.boolean(),
+  // The sidebar's Locations (the disks), shown or folded.
+  locationsExpanded: z.boolean(),
   favoritesInitialized: z.boolean(),
   batchRenameSettings: batchRenameSettingsSchema,
   batchRenamePresets: z
@@ -1287,6 +1300,14 @@ export const ipcContractSchemas = {
       error: z.string().nullable(),
     }),
   },
+  // The disks mounted besides the startup disk, by name. They are sent again to every window
+  // as `filetrail:volumesChanged` whenever one is mounted or unmounted.
+  "system:listVolumes": {
+    request: emptyRequestSchema,
+    response: z.object({
+      volumes: z.array(volumeSchema),
+    }),
+  },
   // Whether there is anything to empty: the home folder's Trash and other disks' Trashes.
   // null when that can't be told (macOS keeps the Trash from apps without Full Disk Access).
   "system:getTrashState": {
@@ -1350,6 +1371,7 @@ export type WriteOperationAction = z.output<typeof writeOperationActionSchema>;
 export type WriteOperationResult = z.output<typeof writeOperationResultSchema>;
 export type WriteOperationProgressEvent = z.output<typeof writeOperationProgressEventSchema>;
 export type SettingsTab = z.output<typeof settingsTabSchema>;
+export type Volume = z.output<typeof volumeSchema>;
 export type AppLogLevel = z.output<typeof appLogLevelSchema>;
 export type AppLogEntry = z.output<typeof appLogEntrySchema>;
 

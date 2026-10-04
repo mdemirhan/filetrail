@@ -84,6 +84,25 @@ describe("fdSearch", () => {
     ]);
   });
 
+  it("searches Macintosh HD without the other disks mounted at /Volumes", () => {
+    const args = (rootPath: string) =>
+      buildFdSearchArgs({
+        rootPath,
+        query: "report",
+        patternMode: "text",
+        matchScope: "name",
+        recursive: true,
+        includeHidden: false,
+        skipGitFolders: false,
+        skipGitIgnored: false,
+      }).join(" ");
+
+    expect(args("/")).toContain("--exclude /Volumes");
+    // A disk, or a folder named Volumes deeper down, is searched as usual.
+    expect(args("/Volumes/Backup")).not.toContain("--exclude");
+    expect(args("/Users/demo")).not.toContain("--exclude");
+  });
+
   it("matches the query literally in plain-text mode and as a pattern otherwise", () => {
     const args = (patternMode: "text" | "glob" | "regex") =>
       buildFdSearchArgs({

@@ -62,6 +62,7 @@ import { NameHighlightContext, findNameMatch, renderMarkedText } from "../lib/na
 import { getRelativeNow } from "../lib/relativeClock";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
 import { buildColumnMajorRows, computeRowsPerColumn, getVirtualRange } from "../lib/virtualization";
+import { getVolumeRootPath } from "../lib/volumes";
 import { IconGridView } from "./IconGridView";
 import {
   InlineRenameField,
@@ -846,13 +847,18 @@ function buildPathSegments(path: string): Array<PathbarSegment> {
     return [{ label: "No folder selected", path: "" }];
   }
   // The UI presents `/` as "Macintosh HD" to match the rest of the macOS-facing chrome,
-  // but navigation still uses real absolute paths underneath.
+  // but navigation still uses real absolute paths underneath. A folder on another disk
+  // starts at that disk, as in Finder, not at Macintosh HD › Volumes.
   if (path === "/") {
     return [{ label: "Macintosh HD", path: "/" }];
   }
-  const parts = path.split("/").filter(Boolean);
-  const segments = [{ label: "Macintosh HD", path: "/" }];
-  let current = "";
+  const volumeRoot = getVolumeRootPath(path);
+  const parts = path
+    .slice(volumeRoot === "/" ? 0 : volumeRoot.length)
+    .split("/")
+    .filter(Boolean);
+  const segments = [{ label: getPathSegmentLabel(volumeRoot), path: volumeRoot }];
+  let current = volumeRoot === "/" ? "" : volumeRoot;
   for (const part of parts) {
     current = `${current}/${part}`;
     segments.push({

@@ -1,21 +1,86 @@
 import {
+  buildSidebarLocations,
   buildTreePresentation,
   createFavorite,
   getDefaultFavorites,
+  getShortcutItemPath,
   isTrashListingRefused,
 } from "./favorites";
 
 describe("favorites", () => {
-  it("builds default favorites in the requested order", () => {
+  it("builds default favorites in the requested order, leaving Macintosh HD to Locations", () => {
     expect(getDefaultFavorites("/Users/demo")).toEqual([
       { path: "/Users/demo", icon: "home" },
       { path: "/Applications", icon: "applications" },
       { path: "/Users/demo/Desktop", icon: "desktop" },
       { path: "/Users/demo/Documents", icon: "documents" },
       { path: "/Users/demo/Downloads", icon: "downloads" },
-      { path: "/", icon: "drive" },
       { path: "/Users/demo/.Trash", icon: "trash" },
     ]);
+  });
+
+  it("lists Macintosh HD first under Locations, then the disks mounted", () => {
+    expect(
+      buildSidebarLocations([
+        { path: "/Volumes/Backup", name: "Backup" },
+        { path: "/Volumes/Install Xcode", name: "Install Xcode" },
+      ]),
+    ).toEqual([
+      { path: "/", label: "Macintosh HD" },
+      { path: "/Volumes/Backup", label: "Backup" },
+      { path: "/Volumes/Install Xcode", label: "Install Xcode" },
+    ]);
+  });
+
+  it("shows Locations after Favorites in the tree, its disks as places without folders", () => {
+    const { items, visibleItemIds } = buildTreePresentation({
+      favorites: [{ path: "/Users/demo", icon: "home" }],
+      favoritesExpanded: true,
+      homePath: "/Users/demo",
+      rootPath: "/Users/demo",
+      nodes: {},
+      locations: buildSidebarLocations([{ path: "/Volumes/Backup", name: "Backup" }]),
+      locationsExpanded: true,
+    });
+    expect(visibleItemIds).toEqual([
+      "favorites-root",
+      "favorite:/Users/demo",
+      "locations-root",
+      "location:/",
+      "location:/Volumes/Backup",
+    ]);
+    expect(items["location:/Volumes/Backup"]).toMatchObject({
+      kind: "location",
+      label: "Backup",
+      path: "/Volumes/Backup",
+      canExpand: false,
+    });
+    expect(getShortcutItemPath("location:/Volumes/Backup")).toBe("/Volumes/Backup");
+    expect(getShortcutItemPath("favorite:/Users/demo")).toBe("/Users/demo");
+
+    // Folded, only its row is left; with favorites in their own list, it is not in the tree.
+    expect(
+      buildTreePresentation({
+        favorites: [],
+        favoritesExpanded: true,
+        homePath: "/Users/demo",
+        rootPath: "",
+        nodes: {},
+        locations: buildSidebarLocations([]),
+        locationsExpanded: false,
+      }).visibleItemIds,
+    ).toEqual(["favorites-root", "locations-root"]);
+    expect(
+      buildTreePresentation({
+        favorites: [],
+        favoritesExpanded: true,
+        homePath: "/Users/demo",
+        rootPath: "",
+        nodes: {},
+        includeFavorites: false,
+        locations: buildSidebarLocations([]),
+      }).visibleItemIds,
+    ).toEqual([]);
   });
 
   it("recognizes macOS refusing to list the Trash", () => {
