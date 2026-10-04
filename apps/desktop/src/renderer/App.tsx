@@ -60,7 +60,7 @@ import {
   setSingleContentSelection as createSingleContentSelection,
 } from "./lib/contentSelection";
 import type { ContextMenuSubmenus } from "./lib/contextMenu";
-import { buildPasteRequest, describeClipboard } from "./lib/copyPasteClipboard";
+import { describeClipboard } from "./lib/copyPasteClipboard";
 import {
   createOpenItemLimitMessage,
   formatPathForShell,
@@ -117,7 +117,11 @@ import { summarizeSelectionSize } from "./lib/selectionSize";
 import { createShortcutDisplay } from "./lib/shortcutDisplay";
 import type { canHandleRendererCommand } from "./lib/shortcutPolicy";
 import { resolveStartupTabs } from "./lib/startupNavigation";
-import { buildContentStatusSummary } from "./lib/statusSummary";
+import {
+  buildContentStatusSummary,
+  folderStatusSize,
+  selectionStatusSize,
+} from "./lib/statusSummary";
 import { type ToastEntry, type ToastKind, createToastEntry, enqueueToast } from "./lib/toasts";
 import { getVolumeRootPath, isVolumeRootPath } from "./lib/volumes";
 import { ExplorerStoreProvider } from "./state/explorerStoreContext";
@@ -610,6 +614,35 @@ export function App() {
     selectedPathSet,
   ]);
   const selectionTotalBytes = selectionSize?.totalBytes ?? null;
+  // The size in the status bar: the selection's, or the folder on screen's with nothing
+  // selected (search results have no folder of their own).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: folderSizeVersion changes whenever a cached folder size does; getEntry reads that cache.
+  const statusSize = useMemo(() => {
+    if (selectedPathSet.size === 0) {
+      return isSearchMode || currentPath.length === 0
+        ? null
+        : folderStatusSize(getFolderSizeEntry(currentPath));
+    }
+    return selectionStatusSize(
+      summarizeSelectionSize(
+        unfilteredContentEntries.filter((entry) => selectedPathSet.has(entry.path)),
+        (path) => {
+          const metadata = (isSearchMode ? searchMetadataByPath : metadataByPath)[path];
+          return metadata?.sizeStatus === "ready" ? metadata.sizeBytes : null;
+        },
+        getFolderSizeEntry,
+      ),
+    );
+  }, [
+    currentPath,
+    folderSizeVersion,
+    getFolderSizeEntry,
+    isSearchMode,
+    metadataByPath,
+    searchMetadataByPath,
+    selectedPathSet,
+    unfilteredContentEntries,
+  ]);
   // Several selected items, summed up in the Info panel.
   const infoPanelSelection = useMemo<InfoPanelSelection | null>(() => {
     if (selectedPathSet.size < 2) {
@@ -2041,30 +2074,13 @@ export function App() {
                       shown: filteredSearchResults.length,
                       totalCount: allSearchResultEntries.length,
                       selectedCount: contentSelection.paths.length,
+                      selectionSize: statusSize,
                     })
                   : buildContentStatusSummary({
                       itemCount: currentEntries.length,
                       shownCount: visibleBrowseEntries.length,
-                      selectedPaths: contentSelection.paths,
-                      getKnownSizeBytes: (path) => {
-                        const entry = currentEntries.find((candidate) => candidate.path === path);
-                        if (!entry) {
-                          return null;
-                        }
-                        // Only folders have a calculated size to look up; asking for a file's
-                        // would send a request that can never find one.
-                        if (isFolderSizeEligibleKind(entry.kind)) {
-                          const folderSize = folderSizeCache.getEntry(path);
-                          if (folderSize.status === "ready") {
-                            return folderSize.sizeBytes;
-                          }
-                        }
-                        if (entry.kind === "directory" || entry.kind === "bundle") {
-                          return null;
-                        }
-                        const metadata = metadataByPath[path];
-                        return metadata?.sizeStatus === "ready" ? metadata.sizeBytes : null;
-                      },
+                      selectedCount: contentSelection.paths.length,
+                      size: statusSize,
                     }),
                 sizeBars: isSearchMode ? null : sizeBars,
                 ...(isSearchMode

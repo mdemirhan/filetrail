@@ -110,9 +110,7 @@ export function serializeVisitedFolders(folders: readonly VisitedFolder[]): stri
   return lines.length === 0 ? '{"folders":[]}\n' : `{"folders":[\n${lines.join(",\n")}\n]}\n`;
 }
 
-// Saved visits are read leniently: anything that is not a visit record is skipped. The
-// list kept before visits were stored one by one (a count and the latest time) is read
-// too, as that many visits at that time.
+// Saved visits are read leniently: anything that is not a visit record is skipped.
 export function sanitizeVisitedFolders(value: unknown): VisitedFolder[] {
   if (!Array.isArray(value)) {
     return [];
@@ -128,12 +126,10 @@ export function sanitizeVisitedFolders(value: unknown): VisitedFolder[] {
     if (typeof path !== "string" || !path.startsWith("/") || seen.has(path)) {
       continue;
     }
-    const visits = Array.isArray(record.visits)
-      ? sanitizeVisits(record.visits)
-      : sanitizeLegacyVisits(record.visitCount, record.lastVisitedAt);
-    if (!visits) {
+    if (!Array.isArray(record.visits)) {
       continue;
     }
+    const visits = sanitizeVisits(record.visits);
     seen.add(path);
     folders.push({ path, visits });
     if (folders.length === MAX_VISITED_FOLDERS) {
@@ -155,19 +151,6 @@ function sanitizeVisits(value: unknown[]): FolderVisit[] {
     }
   }
   return visits.sort((left, right) => right.at - left.at).slice(0, MAX_VISITS_PER_FOLDER);
-}
-
-function sanitizeLegacyVisits(visitCount: unknown, lastVisitedAt: unknown): FolderVisit[] | null {
-  if (
-    typeof visitCount !== "number" ||
-    !Number.isFinite(visitCount) ||
-    visitCount < 1 ||
-    !isValidTime(lastVisitedAt)
-  ) {
-    return null;
-  }
-  const count = Math.min(Math.floor(visitCount), MAX_VISITS_PER_FOLDER);
-  return Array.from({ length: count }, () => ({ at: lastVisitedAt, kind: "stay" as const }));
 }
 
 function isValidTime(value: unknown): value is number {

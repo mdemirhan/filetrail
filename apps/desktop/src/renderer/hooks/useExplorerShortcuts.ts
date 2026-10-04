@@ -44,8 +44,8 @@ import type {
   WriteOperationsStore,
 } from "../state/explorerStores";
 
-// Every modal marks itself with aria-modal; the class names cover older dialogs.
-const MODAL_KEYBOARD_OWNER_SELECTOR = '[aria-modal="true"], .copy-paste-dialog';
+// Every modal marks itself with aria-modal.
+const MODAL_KEYBOARD_OWNER_SELECTOR = '[aria-modal="true"]';
 
 // Cmd+. is the macOS "cancel" shortcut and closes a dialog just like Escape.
 function isModalCancelKey(event: KeyboardEvent): boolean {

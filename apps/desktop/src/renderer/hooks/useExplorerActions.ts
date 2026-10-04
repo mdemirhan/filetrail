@@ -143,6 +143,7 @@ const TRASH_HIDDEN_ACTION_IDS: ContextMenuActionId[] = ["paste", "newFolder", "d
 // Background-menu actions that act on the folder on screen rather than on a selection.
 const BACKGROUND_FOLDER_ACTION_IDS: ContextMenuActionId[] = [
   "showInfo",
+  "calculateSize",
   "copyPath",
   "terminal",
   "showInFinder",
@@ -376,7 +377,6 @@ export function useExplorerActions(args: {
     focusedPane,
     setFocusedPane,
     setInfoPanelOpen,
-    infoRowOpen,
     setInfoTargetPathOverride,
     setGetInfoItem,
     setGetInfoLoading,
@@ -1956,7 +1956,7 @@ export function useExplorerActions(args: {
     if (pasteDestinationPath === null) {
       return;
     }
-    const request = buildPasteRequest(copyPasteClipboardRef.current, pasteDestinationPath, "error");
+    const request = buildPasteRequest(copyPasteClipboardRef.current, pasteDestinationPath);
     if (!request) {
       return;
     }
@@ -2572,6 +2572,9 @@ export function useExplorerActions(args: {
       }
       if (actionId === "showInfo") {
         await showInfoForPath(folderPath);
+      } else if (actionId === "calculateSize") {
+        // With nothing selected the status bar shows the folder on screen's size.
+        callbacks.calculateFolderSize(folderPath);
       } else if (actionId === "copyPath") {
         await runCopyPathAction([folderPath]);
       } else if (actionId === "terminal") {
@@ -2629,24 +2632,14 @@ export function useExplorerActions(args: {
       return;
     }
     if (actionId === "calculateSize") {
-      // The Info Row, when it is shown, or the list's Size column in the Details view shows
-      // the size as it comes in; otherwise (another view, the column hidden, search results,
-      // the tree) the Info panel opens to show it.
-      const sizeAlreadyShown =
-        infoRowOpen ||
-        ((contextMenuSurface === "content" || contextMenuSurface === "trash") &&
-          viewMode === "details" &&
-          detailColumns.size);
+      // The status bar shows the size as it comes in: the selection's, which a right-clicked
+      // item is part of, or the folder on screen's with nothing selected.
       if (contextMenuTargetEntries.length > 1) {
-        // Several items: the folders among them, and the Info panel sums up the selection.
         callbacks.calculateFolderSizes(
           contextMenuTargetEntries
             .filter((entry) => isFolderSizeEligibleKind(entry.kind))
             .map((entry) => entry.path),
         );
-        if (!sizeAlreadyShown) {
-          setInfoPanelOpen(true);
-        }
         return;
       }
       const targetPath = contextMenuTargetPath ?? paths[0];
@@ -2654,7 +2647,17 @@ export function useExplorerActions(args: {
         return;
       }
       callbacks.calculateFolderSize(targetPath);
-      if (!sizeAlreadyShown) {
+      // A folder in the sidebar is not selected in the list, so the status bar shows it only
+      // when it is the folder on screen, and the Size column only when it is a row there in
+      // the Details view. Anywhere else only the Info panel can show its size.
+      const isSidebarFolder =
+        contextMenuSurface === "treeFolder" || contextMenuSurface === "favorite";
+      const shownInSizeColumn =
+        !isSearchMode &&
+        viewMode === "details" &&
+        detailColumns.size &&
+        activeContentEntries.some((entry) => entry.path === targetPath);
+      if (isSidebarFolder && targetPath !== currentPathRef.current && !shownInSizeColumn) {
         await showInfoForPath(targetPath);
       }
       return;

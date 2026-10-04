@@ -229,6 +229,7 @@ describe("writeService analysis and runtime coordination", () => {
 
   it("rejects starting analysis while a write operation is active", async () => {
     const service = createWriteService({
+      createAnalysisId: () => "analysis-1",
       createOperationId: () => "copy-op-1",
       fileSystem: new MockWriteServiceFileSystem({
         "/source": { kind: "directory" },
@@ -237,11 +238,15 @@ describe("writeService analysis and runtime coordination", () => {
       }),
     });
 
-    service.startCopyPaste({
+    service.startCopyPasteAnalysis({
       mode: "copy",
       sourcePaths: ["/source/file.txt"],
       destinationDirectoryPath: "/target",
     });
+    await vi.waitFor(() => {
+      expect(service.getCopyPasteAnalysisUpdate("analysis-1").status).toBe("complete");
+    });
+    service.startCopyPaste({ analysisId: "analysis-1", policy: DEFAULT_COPY_PASTE_POLICY });
 
     expect(() =>
       service.startCopyPasteAnalysis({
@@ -288,7 +293,7 @@ describe("writeService analysis and runtime coordination", () => {
     );
   });
 
-  it("cancels operations that are paused on a runtime conflict and supports legacy skip requests", async () => {
+  it("cancels operations that are paused on a runtime conflict", async () => {
     const fileSystem = new MockWriteServiceFileSystem({
       "/source": { kind: "directory" },
       "/source/file.txt": { kind: "file", size: 5 },
@@ -327,183 +332,11 @@ describe("writeService analysis and runtime coordination", () => {
     await vi.waitFor(() => {
       expect(statuses).toContain("cancelled");
     });
-
-    const legacyService = createWriteService({
-      createOperationId: () => "legacy-op-1",
-      fileSystem: new MockWriteServiceFileSystem({
-        "/source": { kind: "directory" },
-        "/source/file.txt": { kind: "file", size: 5 },
-        "/target": { kind: "directory" },
-        "/target/file.txt": { kind: "file", size: 1 },
-      }),
-    });
-    const legacyEvents: string[] = [];
-    legacyService.subscribe((event) => {
-      legacyEvents.push(event.status);
-    });
-
-    legacyService.startCopyPaste({
-      mode: "copy",
-      sourcePaths: ["/source/file.txt"],
-      destinationDirectoryPath: "/target",
-      conflictResolution: "skip",
-    });
-
-    await vi.waitFor(() => {
-      expect(legacyEvents).toContain("partial");
-    });
-  });
-
-  it("fails legacy error requests instead of silently skipping analysis-time conflicts", async () => {
-    const service = createWriteService({
-      createOperationId: () => "legacy-error-op",
-      fileSystem: new MockWriteServiceFileSystem({
-        "/source": { kind: "directory" },
-        "/source/file.txt": { kind: "file", size: 5 },
-        "/target": { kind: "directory" },
-        "/target/file.txt": { kind: "file", size: 1 },
-      }),
-    });
-    const statuses: string[] = [];
-    service.subscribe((event) => {
-      statuses.push(event.status);
-    });
-
-    service.startCopyPaste({
-      mode: "copy",
-      sourcePaths: ["/source/file.txt"],
-      destinationDirectoryPath: "/target",
-      conflictResolution: "error",
-    });
-
-    await vi.waitFor(() => {
-      expect(statuses).toContain("failed");
-    });
-  });
-
-  it("reports the correct failed item count for pre-execution legacy failures", async () => {
-    const events: CopyPasteProgressEvent[] = [];
-    const service = createWriteService({
-      createOperationId: () => "legacy-error-op",
-      fileSystem: new MockWriteServiceFileSystem({
-        "/source": { kind: "directory" },
-        "/source/one.txt": { kind: "file", size: 5 },
-        "/source/two.txt": { kind: "file", size: 7 },
-        "/target": { kind: "directory" },
-        "/target/one.txt": { kind: "file", size: 1 },
-        "/target/two.txt": { kind: "file", size: 1 },
-      }),
-    });
-    service.subscribe((event) => {
-      events.push(event);
-    });
-
-    service.startCopyPaste({
-      mode: "copy",
-      sourcePaths: ["/source/one.txt", "/source/two.txt"],
-      destinationDirectoryPath: "/target",
-      conflictResolution: "error",
-    });
-
-    await vi.waitFor(() => {
-      const terminal = events.find((event) => event.status === "failed");
-      expect(terminal?.result?.summary.failedItemCount).toBe(2);
-      expect(terminal?.result?.items).toHaveLength(2);
-    });
-  });
-
-  it("fails legacy error requests when a runtime conflict appears after analysis", async () => {
-    const fileSystem = new MockWriteServiceFileSystem({
-      "/source": { kind: "directory" },
-      "/source/file.txt": { kind: "file", size: 5 },
-      "/target": { kind: "directory" },
-    });
-    const service = createWriteService({
-      createAnalysisId: () => "analysis-1",
-      createOperationId: () => "legacy-runtime-op",
-      fileSystem,
-    });
-    const terminalStatuses: string[] = [];
-    service.subscribe((event) => {
-      if (event.operationId === "legacy-runtime-op") {
-        terminalStatuses.push(event.status);
-      }
-    });
-
-    let destinationSeenMissing = false;
-    const callThroughLstat = async (path: string) => {
-      const currentOverride = fileSystem.lstatImpl;
-      fileSystem.lstatImpl = null;
-      try {
-        return await fileSystem.lstat(path);
-      } finally {
-        fileSystem.lstatImpl = currentOverride;
-      }
-    };
-    fileSystem.lstatImpl = async (path) => {
-      if (path === "/target/file.txt" && !destinationSeenMissing) {
-        destinationSeenMissing = true;
-        const error = new Error(
-          `ENOENT: no such file or directory, lstat '${path}'`,
-        ) as NodeJS.ErrnoException;
-        error.code = "ENOENT";
-        throw error;
-      }
-      if (path === "/target/file.txt" && !fileSystem.exists(path)) {
-        fileSystem.addFile(path, { size: 99 });
-      }
-      return callThroughLstat(path);
-    };
-
-    service.startCopyPaste({
-      mode: "copy",
-      sourcePaths: ["/source/file.txt"],
-      destinationDirectoryPath: "/target",
-      conflictResolution: "error",
-    });
-
-    await vi.waitFor(() => {
-      expect(terminalStatuses).toContain("failed");
-    });
-  });
-
-  it("emits a terminal cancelled event when legacy inline analysis is aborted", async () => {
-    const fileSystem = new MockWriteServiceFileSystem({
-      "/source": { kind: "directory" },
-      "/source/folder": { kind: "directory" },
-      "/source/folder/file.txt": { kind: "file", size: 5 },
-      "/target": { kind: "directory" },
-    });
-    fileSystem.readdirImpl = async (path) => {
-      await new Promise((resolve) => setTimeout(resolve, 40));
-      return path === "/source/folder" ? ["file.txt"] : ["folder"];
-    };
-    const service = createWriteService({
-      createOperationId: () => "legacy-cancel-op",
-      fileSystem,
-    });
-    const statuses: string[] = [];
-    service.subscribe((event) => {
-      if (event.operationId === "legacy-cancel-op") {
-        statuses.push(event.status);
-      }
-    });
-
-    service.startCopyPaste({
-      mode: "copy",
-      sourcePaths: ["/source/folder"],
-      destinationDirectoryPath: "/target",
-      conflictResolution: "skip",
-    });
-    expect(service.cancelOperation("legacy-cancel-op")).toEqual({ ok: true });
-
-    await vi.waitFor(() => {
-      expect(statuses).toContain("cancelled");
-    });
   });
 
   it("isolates listener failures so later subscribers still receive terminal events", async () => {
     const service = createWriteService({
+      createAnalysisId: () => "analysis-1",
       createOperationId: () => "listener-op",
       fileSystem: new MockWriteServiceFileSystem({
         "/source": { kind: "directory" },
@@ -521,12 +354,15 @@ describe("writeService analysis and runtime coordination", () => {
       observedStatuses.push(event.status);
     });
 
-    service.startCopyPaste({
+    service.startCopyPasteAnalysis({
       mode: "copy",
       sourcePaths: ["/source/file.txt"],
       destinationDirectoryPath: "/target",
-      conflictResolution: "skip",
     });
+    await vi.waitFor(() => {
+      expect(service.getCopyPasteAnalysisUpdate("analysis-1").status).toBe("complete");
+    });
+    service.startCopyPaste({ analysisId: "analysis-1", policy: DEFAULT_COPY_PASTE_POLICY });
 
     await vi.waitFor(() => {
       expect(observedStatuses).toContain("completed");

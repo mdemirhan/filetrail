@@ -289,7 +289,9 @@ describe("App copy/paste integration", () => {
     });
 
     await vi.waitFor(() => {
-      const planCall = harness.invocations.find((call) => call.channel === "copyPaste:plan");
+      const planCall = harness.invocations.find(
+        (call) => call.channel === "copyPaste:analyzeStart",
+      );
       expect(planCall?.payload).toMatchObject({
         destinationDirectoryPath: "/Users/demo/Folder",
       });
@@ -317,7 +319,9 @@ describe("App copy/paste integration", () => {
     });
 
     await vi.waitFor(() => {
-      const planCall = harness.invocations.find((call) => call.channel === "copyPaste:plan");
+      const planCall = harness.invocations.find(
+        (call) => call.channel === "copyPaste:analyzeStart",
+      );
       expect(planCall?.payload).toMatchObject({
         destinationDirectoryPath: "/Users/demo",
       });
@@ -345,73 +349,97 @@ describe("App copy/paste integration", () => {
     });
 
     await vi.waitFor(() => {
-      const planCall = harness.invocations.find((call) => call.channel === "copyPaste:plan");
+      const planCall = harness.invocations.find(
+        (call) => call.channel === "copyPaste:analyzeStart",
+      );
       expect(planCall?.payload).toMatchObject({
         destinationDirectoryPath: "/Users/demo/Folder",
       });
     });
   });
 
-  describe("Calculate Size from a folder's menu", () => {
-    async function calculateSizeFromMenu(
-      preferences?: Partial<IpcResponse<"app:getPreferences">["preferences"]>,
+  // The status bar shows a size as it comes in: the selection's, which a right-clicked item
+  // is part of, or the folder on screen's. The Info panel opens only for a folder in the
+  // sidebar that nothing else on screen shows.
+  describe("Calculate Size", () => {
+    const folderSizes = { "/Users/demo": 9_000_000, "/Users/demo/Folder": 4_000 };
+
+    async function renderApp(
+      preferences: Partial<IpcResponse<"app:getPreferences">["preferences"]> = {},
     ) {
-      const harness = createAppHarness(preferences ? { preferences } : {});
+      const harness = createAppHarness({ preferences, folderSizes });
       render(
         <FiletrailClientProvider value={harness.client}>
           <App />
         </FiletrailClientProvider>,
       );
-      const folder = await screen.findByTitle("/Users/demo/Folder");
+      await screen.findByTitle("/Users/demo/Folder");
+      return harness;
+    }
+    async function chooseCalculateSize(target: HTMLElement) {
       await act(async () => {
-        fireEvent.contextMenu(folder);
+        fireEvent.contextMenu(target);
       });
       await act(async () => {
         fireEvent.click(screen.getByRole("button", { name: "Calculate Size" }));
       });
-      await vi.waitFor(() => {
-        expect(
-          harness.invocations.find(
-            (call) =>
-              call.channel === "folderSize:start" &&
-              (call.payload as { path: string }).path === "/Users/demo/Folder" &&
-              !(call.payload as { probeOnly?: boolean }).probeOnly,
-          )?.payload,
-        ).toMatchObject({ recalculate: true });
-      });
     }
+    const calculated = (harness: ReturnType<typeof createAppHarness>) =>
+      harness.invocations
+        .filter(
+          (call) =>
+            call.channel === "folderSize:start" &&
+            !(call.payload as { probeOnly?: boolean }).probeOnly,
+        )
+        .map((call) => call.payload);
 
-    it("shows the folder's Info in the icon view, which has no Size column", async () => {
-      await calculateSizeFromMenu({ viewMode: "icons" });
+    it("shows a folder's size in the status bar, in a view without a Size column", async () => {
+      const harness = await renderApp({ viewMode: "icons" });
+      await chooseCalculateSize(screen.getByTitle("/Users/demo/Folder"));
 
-      await waitFor(() => expect(screen.getByTestId("info-panel")).toHaveTextContent("Folder"));
-    });
-
-    it("leaves the Info panel closed in the Details view, whose Size column shows it", async () => {
-      await calculateSizeFromMenu({ viewMode: "details" });
-
+      await waitFor(() =>
+        expect(screen.getByTestId("content-status")).toHaveTextContent(/selected · 4\.0 KB$/),
+      );
+      expect(calculated(harness)).toEqual([{ path: "/Users/demo/Folder", recalculate: true }]);
       expect(screen.queryByTestId("info-panel")).toBeNull();
     });
 
-    it("shows the folder's Info in the Details view when its Size column is hidden", async () => {
-      await calculateSizeFromMenu({
-        viewMode: "details",
-        detailColumns: {
-          modified: true,
-          size: false,
-          kind: true,
-          created: false,
-          permissions: false,
-        },
-      });
+    it("shows the size of the folder on screen in the status bar, from empty space", async () => {
+      const harness = await renderApp({ viewMode: "icons" });
+      await chooseCalculateSize(screen.getByTestId("content-pane-background"));
 
-      await waitFor(() => expect(screen.getByTestId("info-panel")).toHaveTextContent("Folder"));
+      await waitFor(() =>
+        expect(screen.getByTestId("content-status")).toHaveTextContent(/items · 9\.0 MB$/),
+      );
+      expect(calculated(harness)).toEqual([{ path: "/Users/demo", recalculate: true }]);
+      expect(screen.queryByTestId("info-panel")).toBeNull();
     });
 
-    it("leaves the Info panel closed when the Info Row is shown", async () => {
-      await calculateSizeFromMenu({ viewMode: "icons", detailRowOpen: true });
+    it("leaves the Info panel closed for the sidebar's folder on screen", async () => {
+      await renderApp({ viewMode: "icons" });
+      await chooseCalculateSize(await screen.findByTitle("tree:/Users/demo"));
 
+      await waitFor(() =>
+        expect(screen.getByTestId("content-status")).toHaveTextContent(/9\.0 MB$/),
+      );
       expect(screen.queryByTestId("info-panel")).toBeNull();
+    });
+
+    it("leaves the Info panel closed for a sidebar folder in the Details view's Size column", async () => {
+      const harness = await renderApp({ viewMode: "details" });
+      await chooseCalculateSize(await screen.findByTitle("tree:/Users/demo/Folder"));
+
+      await vi.waitFor(() =>
+        expect(calculated(harness)).toEqual([{ path: "/Users/demo/Folder", recalculate: true }]),
+      );
+      expect(screen.queryByTestId("info-panel")).toBeNull();
+    });
+
+    it("shows the Info of a sidebar folder that nothing else on screen shows", async () => {
+      await renderApp({ viewMode: "icons" });
+      await chooseCalculateSize(await screen.findByTitle("tree:/Users/demo/Folder"));
+
+      await waitFor(() => expect(screen.getByTestId("info-panel")).toHaveTextContent("Folder"));
     });
   });
 
@@ -450,7 +478,7 @@ describe("App copy/paste integration", () => {
         )
         .map((call) => (call.payload as { path: string }).path);
 
-    it("measures the folders among them and opens the Info panel, which sums them up", async () => {
+    it("measures the folders among them, for the status bar to sum up", async () => {
       const harness = await rightClickSelection([
         "/Users/demo/source.txt",
         "/Users/demo/Folder",
@@ -463,8 +491,7 @@ describe("App copy/paste integration", () => {
       await vi.waitFor(() =>
         expect(measured(harness)).toEqual(["/Users/demo/Folder", "/Users/demo/Other"]),
       );
-      // The panel is a stand-in here; its summary of a selection is tested with it.
-      await waitFor(() => expect(screen.getByTestId("info-panel")).toBeInTheDocument());
+      expect(screen.queryByTestId("info-panel")).toBeNull();
     });
 
     it("asks for the sizes of selected files in a view that doesn't show them", async () => {
@@ -997,7 +1024,9 @@ describe("App copy/paste integration", () => {
     });
 
     await vi.waitFor(() => {
-      const planCall = harness.invocations.find((call) => call.channel === "copyPaste:plan");
+      const planCall = harness.invocations.find(
+        (call) => call.channel === "copyPaste:analyzeStart",
+      );
       expect(planCall?.payload).toMatchObject({
         sourcePaths: ["/Users/demo/source.txt"],
       });
@@ -1031,7 +1060,9 @@ describe("App copy/paste integration", () => {
     });
 
     await vi.waitFor(() => {
-      const planCall = harness.invocations.findLast((call) => call.channel === "copyPaste:plan");
+      const planCall = harness.invocations.findLast(
+        (call) => call.channel === "copyPaste:analyzeStart",
+      );
       expect(planCall?.payload).toMatchObject({
         destinationDirectoryPath: "/Users/demo/Folder",
       });
@@ -1044,7 +1075,6 @@ describe("App copy/paste integration", () => {
         mode: "copy",
         sourcePaths: ["/Users/demo/Folder"],
         destinationDirectoryPath: "/Users/demo",
-        conflictResolution: "error",
         items: [
           {
             sourcePath: "/Users/demo/Folder",
@@ -1054,20 +1084,13 @@ describe("App copy/paste integration", () => {
             sizeBytes: null,
           },
         ],
-        conflicts: [],
         issues: [],
         warnings: [],
-        requiresConfirmation: {
-          largeBatch: false,
-          cutDelete: false,
-        },
         summary: {
           topLevelItemCount: 1,
           totalItemCount: 1,
           totalBytes: null,
-          skippedConflictCount: 0,
         },
-        canExecute: true,
       },
     });
 
@@ -1086,7 +1109,9 @@ describe("App copy/paste integration", () => {
     });
 
     await vi.waitFor(() => {
-      const planCall = harness.invocations.findLast((call) => call.channel === "copyPaste:plan");
+      const planCall = harness.invocations.findLast(
+        (call) => call.channel === "copyPaste:analyzeStart",
+      );
       expect(planCall?.payload).toMatchObject({
         sourcePaths: ["/Users/demo/Folder"],
         destinationDirectoryPath: "/Users/demo",
@@ -1129,7 +1154,9 @@ describe("App copy/paste integration", () => {
       });
 
       await vi.waitFor(() => {
-        const planCall = harness.invocations.findLast((call) => call.channel === "copyPaste:plan");
+        const planCall = harness.invocations.findLast(
+          (call) => call.channel === "copyPaste:analyzeStart",
+        );
         expect(planCall?.payload).toMatchObject({
           destinationDirectoryPath: "/Users/demo/Documents",
         });
@@ -1816,7 +1843,7 @@ describe("App copy/paste integration", () => {
 
     await vi.waitFor(() => {
       expect(
-        harness.invocations.findLast((call) => call.channel === "copyPaste:plan")?.payload,
+        harness.invocations.findLast((call) => call.channel === "copyPaste:analyzeStart")?.payload,
       ).toMatchObject({
         sourcePaths: ["/Users/demo/source.txt"],
         destinationDirectoryPath: "/Users/demo/Folder",
@@ -1846,7 +1873,9 @@ describe("App copy/paste integration", () => {
       harness.emitCommand({ type: "editPaste" });
     });
 
-    expect(harness.invocations.some((call) => call.channel === "copyPaste:plan")).toBe(false);
+    expect(harness.invocations.some((call) => call.channel === "copyPaste:analyzeStart")).toBe(
+      false,
+    );
   });
 
   it("pastes into the folder on screen when no pane has focus, even with a folder selected", async () => {
@@ -1873,7 +1902,7 @@ describe("App copy/paste integration", () => {
 
     await vi.waitFor(() => {
       expect(
-        harness.invocations.findLast((call) => call.channel === "copyPaste:plan")?.payload,
+        harness.invocations.findLast((call) => call.channel === "copyPaste:analyzeStart")?.payload,
       ).toMatchObject({ destinationDirectoryPath: "/Users/demo" });
     });
   });
@@ -1977,7 +2006,7 @@ describe("App copy/paste integration", () => {
 
     await vi.waitFor(() => {
       expect(
-        harness.invocations.findLast((call) => call.channel === "copyPaste:plan")?.payload,
+        harness.invocations.findLast((call) => call.channel === "copyPaste:analyzeStart")?.payload,
       ).toMatchObject({ destinationDirectoryPath: "/Users/demo/Folder" });
     });
     expectNativeEditActions(harness, []);
@@ -2060,7 +2089,9 @@ describe("App copy/paste integration", () => {
       {
         command: "duplicateSelection",
         assertNoSideEffect: () => {
-          expect(harness.invocations.some((call) => call.channel === "copyPaste:plan")).toBe(false);
+          expect(
+            harness.invocations.some((call) => call.channel === "copyPaste:analyzeStart"),
+          ).toBe(false);
         },
       },
       {
@@ -2360,7 +2391,6 @@ describe("App copy/paste integration", () => {
         mode: "cut",
         sourcePaths: ["/Users/demo/source.txt"],
         destinationDirectoryPath: "/Users/demo/Folder",
-        conflictResolution: "error",
         items: [
           {
             sourcePath: "/Users/demo/source.txt",
@@ -2370,20 +2400,13 @@ describe("App copy/paste integration", () => {
             sizeBytes: 5,
           },
         ],
-        conflicts: [],
         issues: [],
         warnings: [{ code: "cut_requires_delete", message: "Cut will remove the source item." }],
-        requiresConfirmation: {
-          largeBatch: false,
-          cutDelete: true,
-        },
         summary: {
           topLevelItemCount: 1,
           totalItemCount: 1,
           totalBytes: 5,
-          skippedConflictCount: 0,
         },
-        canExecute: true,
       },
     });
 
@@ -2415,7 +2438,6 @@ describe("App copy/paste integration", () => {
         mode: "cut",
         sourcePaths: ["/Users/demo/Source Folder"],
         destinationDirectoryPath: "/Users/demo/Target",
-        conflictResolution: "error",
         items: [
           {
             sourcePath: "/Users/demo/Source Folder",
@@ -2432,20 +2454,13 @@ describe("App copy/paste integration", () => {
             sizeBytes: 5,
           },
         ],
-        conflicts: [],
         issues: [],
         warnings: [{ code: "cut_requires_delete", message: "Cut will remove the source item." }],
-        requiresConfirmation: {
-          largeBatch: false,
-          cutDelete: true,
-        },
         summary: {
           topLevelItemCount: 1,
           totalItemCount: 2,
           totalBytes: 5,
-          skippedConflictCount: 0,
         },
-        canExecute: true,
       },
       directorySnapshots: {
         "/Users/demo": {
@@ -2561,9 +2576,7 @@ describe("App copy/paste integration", () => {
         mode: "copy",
         sourcePaths: ["/Users/demo/source.txt"],
         destinationDirectoryPath: "/Users/demo/Folder",
-        conflictResolution: "error",
         items: [],
-        conflicts: [],
         issues: [
           {
             code: "same_path",
@@ -2573,17 +2586,11 @@ describe("App copy/paste integration", () => {
           },
         ],
         warnings: [],
-        requiresConfirmation: {
-          largeBatch: false,
-          cutDelete: false,
-        },
         summary: {
           topLevelItemCount: 1,
           totalItemCount: 0,
           totalBytes: 0,
-          skippedConflictCount: 0,
         },
-        canExecute: false,
       },
     });
 

@@ -1215,34 +1215,12 @@ export function createWriteOperationCoordinator(
         analysisOwners.get(payload.analysisId) === event.sender
           ? writeService.cancelCopyPasteAnalysis(payload.analysisId)
           : REJECTED_REQUEST,
-      "copyPaste:plan": async (payload: IpcRequest<"copyPaste:plan">) => {
-        assertNotIntoTrash(payload.destinationDirectoryPath, "pasted into");
-        if (payload.mode === "cut") {
-          assertNotProtectedPath(payload.sourcePaths);
-          await assertNotSystemLocation(payload.sourcePaths, "moved", fs);
-        }
-        return writeService.planCopyPaste({
-          mode: payload.mode,
-          sourcePaths: payload.sourcePaths,
-          destinationDirectoryPath: payload.destinationDirectoryPath,
-          conflictResolution: payload.conflictResolution,
-        });
-      },
       "copyPaste:start": async (
         payload: IpcRequest<"copyPaste:start">,
         event: { sender: WriteOperationSender },
       ) => {
-        if ("sourcePaths" in payload) {
-          assertNotIntoTrash(payload.destinationDirectoryPath, "pasted into");
-          if (payload.mode === "cut") {
-            assertNotProtectedPath(payload.sourcePaths);
-            await assertNotSystemLocation(payload.sourcePaths, "moved", fs);
-          }
-        }
         ensureNoWriteOperationInFlight();
-        if ("analysisId" in payload) {
-          assertAnalysisOwner(payload.analysisId, event.sender);
-        }
+        assertAnalysisOwner(payload.analysisId, event.sender);
         // The write service can finish an operation before startCopyPaste returns (an
         // analysis that is no longer usable fails at once). Its end is caught here, so the
         // write slot isn't claimed for an operation that is already over.
@@ -1250,19 +1228,11 @@ export function createWriteOperationCoordinator(
         let handle: ReturnType<WriteService["startCopyPaste"]>;
         let finishedEarly: CopyPasteProgressEvent | undefined;
         try {
-          handle =
-            "analysisId" in payload
-              ? writeService.startCopyPaste({
-                  analysisId: payload.analysisId,
-                  policy: payload.policy,
-                  ...(payload.overrides ? { overrides: payload.overrides } : {}),
-                })
-              : writeService.startCopyPaste({
-                  mode: payload.mode,
-                  sourcePaths: payload.sourcePaths,
-                  destinationDirectoryPath: payload.destinationDirectoryPath,
-                  conflictResolution: payload.conflictResolution,
-                });
+          handle = writeService.startCopyPaste({
+            analysisId: payload.analysisId,
+            policy: payload.policy,
+            ...(payload.overrides ? { overrides: payload.overrides } : {}),
+          });
           finishedEarly = earlyTerminalEvents.get(handle.operationId);
         } finally {
           earlyTerminalEvents = null;

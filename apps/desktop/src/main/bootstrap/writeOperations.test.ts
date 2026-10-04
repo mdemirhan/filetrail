@@ -2093,7 +2093,6 @@ function createWriteServiceStub(): WriteService {
     cancelOperation: vi.fn(() => ({ ok: true })),
     startCopyPasteAnalysis: vi.fn(() => ({ analysisId: "analysis-1", status: "queued" as const })),
     cancelCopyPasteAnalysis: vi.fn(() => ({ ok: true })),
-    planCopyPaste: vi.fn(),
   } as unknown as WriteService;
 }
 
@@ -2187,18 +2186,6 @@ describe("the Trash", () => {
       await expect(
         coordinator.handlers["copyPaste:analyzeStart"](into(destination), {
           sender: createSender(),
-        }),
-      ).rejects.toThrow("Nothing can be pasted into the Trash.");
-      await expect(
-        coordinator.handlers["copyPaste:start"](
-          { ...into(destination), conflictResolution: "error" },
-          { sender: createSender() },
-        ),
-      ).rejects.toThrow("Nothing can be pasted into the Trash.");
-      await expect(
-        coordinator.handlers["copyPaste:plan"]({
-          ...into(destination),
-          conflictResolution: "error",
         }),
       ).rejects.toThrow("Nothing can be pasted into the Trash.");
       await expect(

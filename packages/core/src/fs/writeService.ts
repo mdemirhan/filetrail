@@ -16,12 +16,9 @@ import {
   type CopyPasteAnalysisRequest,
   type CopyPasteAnalysisStartHandle,
   type CopyPasteAnalysisUpdate,
-  type CopyPasteConflictResolution,
   type CopyPasteExecutionRequest,
   type CopyPasteOperationHandle,
-  type CopyPastePlan,
   type CopyPasteProgressEvent,
-  type CopyPasteRequest,
   type CopyPasteRuntimeConflict,
   type CopyPasteRuntimeResolutionAction,
   DEFAULT_COPY_PASTE_POLICY,
@@ -45,7 +42,6 @@ export {
   type CopyPasteAnalysisSummary,
   type CopyPasteAnalysisUpdate,
   type CopyPasteConflictClass,
-  type CopyPasteConflictResolution,
   type CopyPasteExecutionRequest,
   type CopyPasteItemResult,
   type CopyPasteMode,
@@ -53,17 +49,12 @@ export {
   type CopyPasteOperationHandle,
   type CopyPasteOperationResult,
   type CopyPasteOperationStatus,
-  type CopyPastePlan,
-  type CopyPastePlanConflict,
   type CopyPastePlanIssue,
   type CopyPastePlanIssueCode,
-  type CopyPastePlanItem,
-  type CopyPastePlanItemStatus,
   type CopyPastePlanWarning,
   type CopyPastePlanWarningCode,
   type CopyPastePolicy,
   type CopyPasteProgressEvent,
-  type CopyPasteRequest,
   type CopyPasteRuntimeConflict,
   type CopyPasteRuntimeResolutionAction,
   type NodeFingerprint,
@@ -81,7 +72,6 @@ type AnalysisJob = {
   status: CopyPasteAnalysisUpdate["status"];
   report: CopyPasteAnalysisReport | null;
   error: string | null;
-  legacyConflictResolution: CopyPasteConflictResolution | null;
 };
 
 type PendingResolution = {
@@ -157,19 +147,6 @@ export class WriteService {
     };
   }
 
-  async planCopyPaste(request: CopyPasteRequest): Promise<CopyPastePlan> {
-    const report = await buildCopyPasteAnalysisReport({
-      analysisId: this.createAnalysisId(),
-      request: normalizeCopyPasteAnalysisRequest(request),
-      fileSystem: this.fileSystem,
-      thresholds: {
-        largeBatchItemThreshold: this.largeBatchItemThreshold,
-        largeBatchByteThreshold: this.largeBatchByteThreshold,
-      },
-    });
-    return toLegacyPlan(report, request.conflictResolution ?? "error");
-  }
-
   startCopyPasteAnalysis(request: CopyPasteAnalysisRequest): CopyPasteAnalysisStartHandle {
     this.pruneTerminalAnalysisJobs();
     if (this.activeOperationId !== null) {
@@ -188,7 +165,6 @@ export class WriteService {
       status: "queued",
       report: null,
       error: null,
-      legacyConflictResolution: null,
     };
     this.analysisJobs.set(analysisId, job);
     void this.executeAnalysisJob(job);
@@ -222,14 +198,13 @@ export class WriteService {
     return { ok: true };
   }
 
-  startCopyPaste(request: CopyPasteRequest | CopyPasteExecutionRequest): CopyPasteOperationHandle {
+  startCopyPaste(start: CopyPasteExecutionRequest): CopyPasteOperationHandle {
     if (this.activeOperationId !== null) {
       throw new Error(WRITE_OPERATION_BUSY_ERROR);
     }
-    this.pruneTerminalAnalysisJobs("analysisId" in request ? request.analysisId : null);
+    this.pruneTerminalAnalysisJobs(start.analysisId);
 
     // Validate before claiming the busy slot so a bad request can't leave it held.
-    const start = "analysisId" in request ? request : this.createLegacyExecutionRequest(request);
     const mode = this.getAnalysisJobOrThrow(start.analysisId).request.mode;
 
     const operationId = this.createOperationId();
@@ -331,28 +306,8 @@ export class WriteService {
   ): Promise<void> {
     try {
       const analysisJob = this.getAnalysisJobOrThrow(request.analysisId);
-      if (analysisJob.report === null) {
-        analysisJob.status = "analyzing";
-        analysisJob.report = await buildCopyPasteAnalysisReport({
-          analysisId: analysisJob.analysisId,
-          request: analysisJob.request,
-          fileSystem: this.fileSystem,
-          thresholds: {
-            largeBatchItemThreshold: this.largeBatchItemThreshold,
-            largeBatchByteThreshold: this.largeBatchByteThreshold,
-          },
-          signal: controller.signal,
-        });
-        analysisJob.status = "complete";
-      }
       if (analysisJob.status !== "complete" || analysisJob.report === null) {
         throw new Error("Copy/paste analysis is not ready.");
-      }
-      if (
-        analysisJob.legacyConflictResolution === "error" &&
-        analysisJob.report.nodes.some((node) => node.conflictClass !== null)
-      ) {
-        throw new Error("Copy/paste analysis contains unresolved conflicts.");
       }
       const resolvedNodes = await resolveAnalysisWithPolicy({
         report: analysisJob.report,
@@ -385,11 +340,9 @@ export class WriteService {
         // Registers the question synchronously, before the progress event announcing it
         // goes out, so an answer given from that event is not lost.
         requestResolution: (conflict) =>
-          analysisJob.legacyConflictResolution === "error"
-            ? Promise.resolve(null)
-            : new Promise<CopyPasteRuntimeResolutionAction | null>((resolve) => {
-                this.pendingResolutions.set(operationId, { conflict, resolve });
-              }),
+          new Promise<CopyPasteRuntimeResolutionAction | null>((resolve) => {
+            this.pendingResolutions.set(operationId, { conflict, resolve });
+          }),
       });
     } catch (error) {
       const analysisJob = this.analysisJobs.get(request.analysisId) ?? null;
@@ -488,72 +441,8 @@ export class WriteService {
       }
     }
   }
-
-  private createLegacyExecutionRequest(request: CopyPasteRequest): CopyPasteExecutionRequest {
-    const analysisId = this.createAnalysisId();
-    const normalizedRequest = normalizeCopyPasteAnalysisRequest(request);
-    const job: AnalysisJob = {
-      analysisId,
-      request: normalizedRequest,
-      controller: new AbortController(),
-      status: "queued",
-      report: null,
-      error: null,
-      legacyConflictResolution: request.conflictResolution ?? "error",
-    };
-    this.analysisJobs.set(analysisId, job);
-    return {
-      analysisId,
-      policy: DEFAULT_COPY_PASTE_POLICY,
-    };
-  }
 }
 
 export function createWriteService(dependencies: WriteServiceDependencies = {}): WriteService {
   return new WriteService(dependencies);
-}
-
-function toLegacyPlan(
-  report: CopyPasteAnalysisReport,
-  conflictResolution: CopyPasteConflictResolution,
-): CopyPastePlan {
-  const conflicts = report.nodes
-    .filter((node) => node.conflictClass !== null)
-    .map((node) => ({
-      sourcePath: node.sourcePath,
-      destinationPath: node.destinationPath,
-      reason: "destination_exists" as const,
-    }));
-  return {
-    mode: report.mode,
-    sourcePaths: report.sourcePaths,
-    destinationDirectoryPath: report.destinationDirectoryPath,
-    conflictResolution,
-    items: report.nodes.map((node) => ({
-      sourcePath: node.sourcePath,
-      destinationPath: node.destinationPath,
-      kind: node.sourceKind,
-      status: node.conflictClass === null ? "ready" : "conflict",
-      sizeBytes: node.sourceFingerprint.size,
-    })),
-    conflicts,
-    issues: report.issues,
-    warnings: report.warnings,
-    requiresConfirmation: {
-      largeBatch: report.warnings.some((warning) => warning.code === "large_batch"),
-      cutDelete: report.mode === "cut",
-    },
-    summary: {
-      topLevelItemCount: report.summary.topLevelItemCount,
-      totalItemCount: report.summary.totalNodeCount,
-      totalBytes: report.summary.totalBytes,
-      skippedConflictCount: conflictResolution === "skip" ? conflicts.length : 0,
-    },
-    canExecute:
-      report.issues.length === 0 &&
-      (conflictResolution === "skip" || conflicts.length === 0) &&
-      report.nodes.some((node) =>
-        conflictResolution === "skip" ? node.conflictClass === null : true,
-      ),
-  };
 }

@@ -37,7 +37,7 @@ const addon = require("@filetrail/native-fs") as {
   nativeCopyFile: (src: string, dst: string, stopFlag?: Int32Array) => Promise<void>;
   nativeGetFlags: (path: string) => Promise<number>;
   nativeSetFlags: (path: string, flags: number) => Promise<void>;
-  nativeCopyMetadata?: (src: string, dst: string) => Promise<void>;
+  nativeCopyMetadata: (src: string, dst: string) => Promise<void>;
   nativeGetFileIcon: (path: string, size: number) => Promise<Buffer | null>;
   nativeGetFileThumbnail: (path: string, size: number) => Promise<Buffer | null>;
   nativeFolderSize: (folderPath: string) => Promise<string>;
@@ -124,8 +124,7 @@ export const originalFileSystem: WriteServiceFileSystem = {
   },
   getFlags: (path) => nativeGetFlags(path),
   setFlags: (path, flags) => nativeSetFlags(path, flags),
-  // A binary built before it existed leaves folders with their mode and dates only.
-  ...(nativeCopyMetadata ? { copyMetadata: nativeCopyMetadata } : {}),
+  copyMetadata: nativeCopyMetadata,
   copyFileStream: async (sourcePath, destinationPath, signal) => {
     // "wx": never truncate an item that appeared at the destination in the meantime.
     await pipeline(

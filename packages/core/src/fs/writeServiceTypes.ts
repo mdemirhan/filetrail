@@ -20,7 +20,6 @@ import { dirname } from "node:path";
 import { pipeline } from "node:stream/promises";
 
 export type CopyPasteMode = "copy" | "cut";
-export type CopyPasteConflictResolution = "error" | "skip";
 export type CopyPasteOperationStatus =
   | "queued"
   | "running"
@@ -29,7 +28,6 @@ export type CopyPasteOperationStatus =
   | "failed"
   | "cancelled"
   | "partial";
-export type CopyPastePlanItemStatus = "ready" | "conflict" | "blocked";
 export type CopyPastePlanIssueCode =
   | "destination_missing"
   | "destination_not_directory"
@@ -128,20 +126,11 @@ export type WriteServiceFileSystem = {
   isAppleDouble?: (path: string) => Promise<boolean>;
 };
 
-export type CopyPasteRequest = {
-  mode: CopyPasteMode;
-  sourcePaths: string[];
-  destinationDirectoryPath: string;
-  conflictResolution?: CopyPasteConflictResolution;
-};
-
 export type CopyPastePolicy = {
   file: CopyPastePolicyFileAction;
   directory: CopyPastePolicyDirectoryAction;
   mismatch: CopyPastePolicyMismatchAction;
 };
-
-export type RequiredCopyPasteRequest = Required<CopyPasteRequest>;
 
 export type CopyPasteAnalysisRequest = {
   mode: CopyPasteMode;
@@ -257,20 +246,6 @@ export type CopyPasteAnalysisUpdate = {
   error: string | null;
 };
 
-export type CopyPastePlanItem = {
-  sourcePath: string;
-  destinationPath: string;
-  kind: "file" | "directory" | "symlink";
-  status: CopyPastePlanItemStatus;
-  sizeBytes: number | null;
-};
-
-export type CopyPastePlanConflict = {
-  sourcePath: string;
-  destinationPath: string;
-  reason: "destination_exists";
-};
-
 export type CopyPastePlanIssue = {
   code: CopyPastePlanIssueCode;
   message: string;
@@ -281,28 +256,6 @@ export type CopyPastePlanIssue = {
 export type CopyPastePlanWarning = {
   code: CopyPastePlanWarningCode;
   message: string;
-};
-
-export type CopyPastePlan = {
-  mode: CopyPasteMode;
-  sourcePaths: string[];
-  destinationDirectoryPath: string;
-  conflictResolution: CopyPasteConflictResolution;
-  items: CopyPastePlanItem[];
-  conflicts: CopyPastePlanConflict[];
-  issues: CopyPastePlanIssue[];
-  warnings: CopyPastePlanWarning[];
-  requiresConfirmation: {
-    largeBatch: boolean;
-    cutDelete: boolean;
-  };
-  summary: {
-    topLevelItemCount: number;
-    totalItemCount: number;
-    totalBytes: number | null;
-    skippedConflictCount: number;
-  };
-  canExecute: boolean;
 };
 
 export type CopyPasteRuntimeConflict = {
@@ -394,51 +347,6 @@ export type WriteServiceDependencies = {
   createAnalysisId?: () => string;
   largeBatchItemThreshold?: number;
   largeBatchByteThreshold?: number;
-};
-
-export type PlannedTopLevelItem = CopyPastePlanItem & {
-  sourceRealPath: string | null;
-  destinationExists: boolean;
-  steps: ExecutionStep[];
-  itemCount: number;
-};
-
-export type ExecutionStep =
-  | {
-      type: "mkdir";
-      sourcePath: string;
-      destinationPath: string;
-      sizeBytes: 0;
-      mode: number;
-    }
-  | {
-      type: "copy_file";
-      sourcePath: string;
-      destinationPath: string;
-      sizeBytes: number;
-      mode: number;
-    }
-  | {
-      type: "copy_symlink";
-      sourcePath: string;
-      destinationPath: string;
-      sizeBytes: 0;
-      linkTarget: string;
-    };
-
-export type QueuedOperation = {
-  operationId: string;
-  request: RequiredCopyPasteRequest;
-  controller: AbortController;
-};
-
-export type InternalCopyPastePlan = {
-  items: PlannedTopLevelItem[];
-  conflicts: CopyPastePlanConflict[];
-  issues: CopyPastePlanIssue[];
-  warnings: CopyPastePlanWarning[];
-  totalItemCount: number;
-  totalBytes: number | null;
 };
 
 export const DEFAULT_COPY_PASTE_POLICY: CopyPastePolicy = {

@@ -39,7 +39,7 @@ export const nativeFileSystem: WriteServiceFileSystem = {
   copyFile: async (sourcePath, destinationPath, signal) => {
     await nativeCopy(sourcePath, destinationPath, signal);
   },
-  ...(native.nativeCopyMetadata ? { copyMetadata: native.nativeCopyMetadata } : {}),
+  copyMetadata: native.nativeCopyMetadata,
 };
 
 // The native file system with a Trash: a folder items are moved into (with a number when

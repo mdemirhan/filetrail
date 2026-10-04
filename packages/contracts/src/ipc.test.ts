@@ -122,8 +122,6 @@ describe("ipc contracts", () => {
         "copyPaste:analyzeStart",
         { mode: "copy", sourcePaths: ["/a"], destinationDirectoryPath: "x" },
       ],
-      ["copyPaste:plan", { mode: "cut", sourcePaths: [relative], destinationDirectoryPath: "/x" }],
-      ["copyPaste:start", { mode: "copy", sourcePaths: ["/a"], destinationDirectoryPath: "x" }],
       ["writeOperation:rename", { sourcePath: relative, destinationName: "b.txt" }],
       ["writeOperation:createFolder", { parentDirectoryPath: "Documents", folderName: "New" }],
       ["writeOperation:trash", { paths: ["/Users/demo/a.txt", relative] }],
@@ -982,44 +980,7 @@ describe("ipc contracts", () => {
     ).toThrow();
   });
 
-  it("validates copy/paste planning and progress payloads", () => {
-    expect(
-      ipcContractSchemas["copyPaste:plan"].response.parse({
-        mode: "copy",
-        sourcePaths: ["/Users/demo/source.txt"],
-        destinationDirectoryPath: "/Users/demo/target",
-        conflictResolution: "error",
-        items: [
-          {
-            sourcePath: "/Users/demo/source.txt",
-            destinationPath: "/Users/demo/target/source.txt",
-            kind: "file",
-            status: "ready",
-            sizeBytes: 42,
-          },
-        ],
-        conflicts: [],
-        issues: [],
-        warnings: [],
-        requiresConfirmation: {
-          largeBatch: false,
-          cutDelete: false,
-        },
-        summary: {
-          topLevelItemCount: 1,
-          totalItemCount: 1,
-          totalBytes: 42,
-          skippedConflictCount: 0,
-        },
-        canExecute: true,
-      }),
-    ).toEqual(
-      expect.objectContaining({
-        mode: "copy",
-        canExecute: true,
-      }),
-    );
-
+  it("validates copy/paste progress payloads", () => {
     expect(
       copyPasteProgressEventSchema.parse({
         operationId: "copy-op-1",

@@ -4,6 +4,7 @@ import {
   appendSearchResults,
   buildSearchHighlightPattern,
   formatSearchResultFolder,
+  formatSearchStatus,
   sortSearchResults,
 } from "./searchResults";
 
@@ -126,5 +127,29 @@ describe("sorting search results by kind", () => {
       "a.md",
       "zeta",
     ]);
+  });
+});
+
+describe("formatSearchStatus", () => {
+  const status = { isSearching: false, shown: 12, totalCount: 12 };
+
+  it("adds the selection's size once it is known", () => {
+    expect(
+      formatSearchStatus({
+        ...status,
+        selectedCount: 2,
+        selectionSize: { status: "ready", sizeBytes: 3000 },
+      }),
+    ).toBe("12 results · 2 selected · 3.0 KB");
+    expect(
+      formatSearchStatus({ ...status, selectedCount: 2, selectionSize: { status: "calculating" } }),
+    ).toBe("12 results · 2 selected · Calculating…");
+    expect(formatSearchStatus({ ...status, selectedCount: 2, selectionSize: null })).toBe(
+      "12 results · 2 selected",
+    );
+  });
+
+  it("has no size with nothing selected", () => {
+    expect(formatSearchStatus({ ...status, selectedCount: 0 })).toBe("12 results");
   });
 });

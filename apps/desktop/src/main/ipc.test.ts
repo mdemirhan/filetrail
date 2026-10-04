@@ -94,27 +94,6 @@ function createHandlersThatFailOnSnapshot(): IpcHandlerMap {
       error: null,
     }),
     "search:cancel": async () => ({ ok: true }),
-    "copyPaste:plan": async () => ({
-      mode: "copy" as const,
-      sourcePaths: ["/Users/demo/source.txt"],
-      destinationDirectoryPath: "/Users/demo/target",
-      conflictResolution: "error" as const,
-      items: [],
-      conflicts: [],
-      issues: [],
-      warnings: [],
-      requiresConfirmation: {
-        largeBatch: false,
-        cutDelete: false,
-      },
-      summary: {
-        topLevelItemCount: 1,
-        totalItemCount: 1,
-        totalBytes: 42,
-        skippedConflictCount: 0,
-      },
-      canExecute: true,
-    }),
     "copyPaste:start": async () => ({ operationId: "copy-op-1", status: "queued" as const }),
     "copyPaste:cancel": async () => ({ ok: true }),
     "writeOperation:rename": async () => ({ operationId: "write-op-1", status: "queued" as const }),
@@ -366,7 +345,7 @@ describe("registerIpcHandlers", () => {
       "writeOperation:trash": async () => {
         throw missing();
       },
-      "copyPaste:plan": async () => {
+      "copyPaste:analyzeStart": async () => {
         throw missing();
       },
       "writeOperation:rename": async () => {
@@ -380,7 +359,7 @@ describe("registerIpcHandlers", () => {
       call("writeOperation:trash", { paths: ["/Users/demo/gone.txt"] }),
     ).resolves.toEqual({ ok: false, error: "The item no longer exists." });
     await expect(
-      call("copyPaste:plan", {
+      call("copyPaste:analyzeStart", {
         mode: "copy",
         sourcePaths: ["/Users/demo/gone.txt"],
         destinationDirectoryPath: "/Users/demo/target",

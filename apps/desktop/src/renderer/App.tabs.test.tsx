@@ -871,8 +871,8 @@ describe("App keyboard shortcuts", () => {
     expect(
       harness.invocations.some(
         (call) =>
-          call.channel === "copyPaste:plan" &&
-          (call.payload as IpcRequestInput<"copyPaste:plan">).action === "duplicate",
+          call.channel === "copyPaste:analyzeStart" &&
+          (call.payload as IpcRequestInput<"copyPaste:analyzeStart">).action === "duplicate",
       ),
     ).toBe(false);
   });

@@ -39,21 +39,18 @@ try {
 // there; without it, files are called "MD File" and the like.
 try {
   const req = createRequire(import.meta.url);
-  const addon = req("@filetrail/native-fs") as {
-    nativeKindForPath?: (path: string) => string | null;
+  const { nativeKindForPath } = req("@filetrail/native-fs") as {
+    nativeKindForPath: (path: string) => string | null;
   };
-  const kindForPath = addon.nativeKindForPath;
-  if (kindForPath) {
-    setKindDescriber((path) => {
-      try {
-        return kindForPath(path);
-      } catch {
-        return null;
-      }
-    });
-  }
+  setKindDescriber((path) => {
+    try {
+      return nativeKindForPath(path);
+    } catch {
+      return null;
+    }
+  });
 } catch {
-  // No addon (tests, other platforms).
+  // No addon: the tests run this file from packages/core, which doesn't depend on it.
 }
 
 type ExplorerWorkerData = {

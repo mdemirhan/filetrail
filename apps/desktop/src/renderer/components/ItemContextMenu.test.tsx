@@ -142,6 +142,7 @@ describe("ItemContextMenu", () => {
     ).toEqual([
       "New Folder",
       "Show Info",
+      "Calculate Size",
       "Paste",
       "Copy Path",
       "View As",
