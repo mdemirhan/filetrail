@@ -1,15 +1,14 @@
 /**
- * N-API async wrapper reading when photos and videos were taken, for renaming by date.
+ * N-API async wrapper reading when photos were taken, for renaming by date.
  *
  *   nativeDatesTaken(paths: string[]) → Promise<Array<string | null>>
  *     One answer per path, in order: "2026-05-14T18:02:11" on the clock of this Mac, or
- *     null when the item has no such date (it isn't a photo or video, has no metadata, or
- *     can't be read).
+ *     null when the item has no such date (it isn't a photo, has no metadata, or can't be
+ *     read).
  *
  *   Photos: ImageIO reads the date the camera wrote into the file (EXIF DateTimeOriginal,
  *   else DateTimeDigitized). It is a local time without a zone, and is passed on as it is.
- *   Videos: AVFoundation reads the movie's creation date, a moment, shown on this Mac's
- *   clock.
+ *   Only the file's header is read, not its picture.
  *
  * Runs on a libuv thread pool thread: reading many files takes a while.
  */
@@ -18,13 +17,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#import <AVFoundation/AVFoundation.h>
 #import <Foundation/Foundation.h>
 #import <ImageIO/ImageIO.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
-
-/* How long a video's metadata may take to load before it counts as having none. */
-static const int64_t VIDEO_LOAD_TIMEOUT_SECONDS = 5;
 
 typedef struct {
   napi_async_work work;
@@ -58,21 +53,6 @@ static NSString *local_date_from_exif(NSString *value) {
                                     text + 11, text + 14, text + 17];
 }
 
-static NSString *local_date_from_moment(NSDate *date) {
-  if (!date) {
-    return nil;
-  }
-  /* Built without ARC, as the module's other files are: what is made here is released here. */
-  NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
-  formatter.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
-  formatter.calendar = [NSCalendar calendarWithIdentifier:NSCalendarIdentifierGregorian];
-  formatter.timeZone = [NSTimeZone localTimeZone];
-  formatter.dateFormat = @"yyyy-MM-dd'T'HH:mm:ss";
-  NSString *text = [formatter stringFromDate:date];
-  [formatter release];
-  return text;
-}
-
 static NSString *photo_date(NSURL *url) {
   NSDictionary *options = @{(__bridge id)kCGImageSourceShouldCache : @NO};
   CGImageSourceRef source =
@@ -98,32 +78,6 @@ static NSString *photo_date(NSURL *url) {
   return local_date_from_exif(exif[(__bridge id)kCGImagePropertyExifDateTimeDigitized]);
 }
 
-static NSString *video_date(NSURL *url) {
-  AVURLAsset *asset = [AVURLAsset URLAssetWithURL:url options:nil];
-  if (!asset) {
-    return nil;
-  }
-  dispatch_semaphore_t loaded = dispatch_semaphore_create(0);
-  /* The handler, copied by AVFoundation, keeps the semaphore while it may still signal it,
-     so it can be let go here even when the wait gives up first. */
-  [asset loadValuesAsynchronouslyForKeys:@[ @"creationDate" ]
-                       completionHandler:^{
-                         dispatch_semaphore_signal(loaded);
-                       }];
-  long timedOut = dispatch_semaphore_wait(
-      loaded, dispatch_time(DISPATCH_TIME_NOW, VIDEO_LOAD_TIMEOUT_SECONDS * NSEC_PER_SEC));
-  dispatch_release(loaded);
-  if (timedOut != 0) {
-    [asset cancelLoading];
-    return nil;
-  }
-  NSError *error = nil;
-  if ([asset statusOfValueForKey:@"creationDate" error:&error] != AVKeyValueStatusLoaded) {
-    return nil;
-  }
-  return local_date_from_moment(asset.creationDate.dateValue);
-}
-
 static NSString *date_taken(const char *rawPath) {
   NSString *path = [NSString stringWithUTF8String:rawPath];
   if (!path) {
@@ -135,13 +89,7 @@ static NSString *date_taken(const char *rawPath) {
   if (!type) {
     return nil;
   }
-  if ([type conformsToType:UTTypeImage]) {
-    return photo_date(url);
-  }
-  if ([type conformsToType:UTTypeAudiovisualContent]) {
-    return video_date(url);
-  }
-  return nil;
+  return [type conformsToType:UTTypeImage] ? photo_date(url) : nil;
 }
 
 static void execute_dates_taken(napi_env env, void *data) {

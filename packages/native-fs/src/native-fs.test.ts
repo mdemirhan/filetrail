@@ -577,16 +577,10 @@ describe("nativeIsPackage", () => {
 describe("nativeDatesTaken", () => {
   const fixtures = join(__dirname, "..", "test-fixtures");
   // The movie was made at this moment; it is shown on this Mac's clock.
-  const clipMoment = new Date(Date.UTC(2020, 1, 3, 4, 5, 6));
-  const pad = (value: number) => String(value).padStart(2, "0");
-  const clipLocal = `${clipMoment.getFullYear()}-${pad(clipMoment.getMonth() + 1)}-${pad(
-    clipMoment.getDate(),
-  )}T${pad(clipMoment.getHours())}:${pad(clipMoment.getMinutes())}:${pad(clipMoment.getSeconds())}`;
-
   it.each([
     ["addon", addon],
     ["wrapper", wrapper],
-  ])("reads the date a photo or video was taken, one answer per path (%s)", async (_name, api) => {
+  ])("reads the date a photo was taken, one answer per path (%s)", async (_name, api) => {
     const root = mkdtempSync(join(tmpdir(), "filetrail-dates-taken-"));
     writeFileSync(join(root, "notes.txt"), "not a photo");
     // A photo's extension with something else in it.
@@ -595,6 +589,7 @@ describe("nativeDatesTaken", () => {
       join(fixtures, "taken.jpg"),
       join(fixtures, "digitized.jpg"),
       join(fixtures, "undated.jpg"),
+      // Only photos: a video has no date taken here, though it has a creation date.
       join(fixtures, "clip.mov"),
       join(root, "notes.txt"),
       join(root, "broken.jpg"),
@@ -605,7 +600,7 @@ describe("nativeDatesTaken", () => {
       "2021-07-04T09:15:30",
       "2019-12-31T23:59:58",
       null,
-      clipLocal,
+      null,
       null,
       null,
       null,
@@ -669,15 +664,5 @@ describe("nativeDatesTaken", () => {
       ];
       expect(await wrapper.nativeDatesTaken(paths)).toEqual([null, null]);
     });
-
-    // AVFoundation turns down a movie it can't parse at once; waiting out the 5 s limit for
-    // each one would make renaming a folder of broken movies crawl.
-    it("finds no date in a broken movie, without waiting out the time limit", async () => {
-      const path = join(root, "broken.mov");
-      writeFileSync(path, Buffer.from([0x13, 0x37, 0xde, 0xad, 0xbe, 0xef, 0x00, 0x42, 0x99]));
-      const startedAt = Date.now();
-      expect(await wrapper.nativeDatesTaken([path])).toEqual([null]);
-      expect(Date.now() - startedAt).toBeLessThan(2_000);
-    }, 10_000);
   });
 });

@@ -20,8 +20,6 @@
           "-framework",
           "AppKit",
           "-framework",
-          "AVFoundation",
-          "-framework",
           "CoreServices",
           "-framework",
           "Foundation",
@@ -37,7 +35,6 @@
       "link_settings": {
         "libraries": [
           "-framework AppKit",
-          "-framework AVFoundation",
           "-framework CoreServices",
           "-framework Foundation",
           "-framework ImageIO",

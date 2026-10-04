@@ -131,7 +131,7 @@ export type BatchRenameItem = {
   isFolder: boolean;
   createdAt: LocalDateTime | null;
   modifiedAt: LocalDateTime | null;
-  /** When the photo or video was taken, from its own metadata; null when it has none. */
+  /** When the photo was taken, from its own metadata; null when it has none. */
   takenAt: LocalDateTime | null;
 };
 

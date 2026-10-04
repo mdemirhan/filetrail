@@ -108,9 +108,9 @@ export function nativeKindForPath(path: string): string | null;
 export function nativeIsPackage(path: string): Promise<boolean | null>;
 
 /**
- * When each photo or video was taken, read from its own metadata: one answer per path, in
- * order, as "2026-05-14T18:02:11" on the clock of this Mac, or null when there is none.
- * Photos give the date the camera recorded (EXIF), videos their creation date.
+ * When each photo was taken, read from its own metadata (the date the camera recorded, in
+ * EXIF): one answer per path, in order, as "2026-05-14T18:02:11" on the clock of this Mac,
+ * or null when there is none, or the item isn't a photo.
  *
  * @param paths - Absolute paths to the items.
  */

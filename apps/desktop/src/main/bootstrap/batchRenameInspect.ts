@@ -23,7 +23,7 @@ export type BatchRenameInspectDeps = {
   getFlags?: (path: string) => Promise<number>;
   /** Whether items in the folder can be renamed: it can be written to. */
   canWriteFolder: (path: string) => Promise<boolean>;
-  /** When each photo or video was taken, from its own metadata, on this Mac's clock. */
+  /** When each photo was taken, from its own metadata, on this Mac's clock. */
   readDatesTaken: (paths: string[]) => Promise<Array<string | null>>;
   /** Refuses the folders that are never renamed (the startup disk, the home folder…). */
   assertRenamable: (path: string) => Promise<void>;
