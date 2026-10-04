@@ -6345,8 +6345,15 @@ button.shortcut-slot-key.recording:hover {
 
 /* On a selected row the match is underlined: a tinted box there turns into a dark or
    washed-out block, depending on the accent, and costs the name its contrast. */
+/* Under an icon the name was fitted to its two lines as plain text, so the mark takes no
+   room of its own there. */
+.icon-item-label .search-result-match {
+  padding: 0;
+}
+
 .details-row.active:not(.inactive) .search-result-match,
-.flow-item.active:not(.inactive) .search-result-match {
+.flow-item.active:not(.inactive) .search-result-match,
+.icon-item.active:not(.inactive) .search-result-match {
   background: transparent;
   text-decoration: underline;
   text-decoration-thickness: 1.5px;

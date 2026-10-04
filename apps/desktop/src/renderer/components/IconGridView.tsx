@@ -1,4 +1,12 @@
-import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import type { IpcResponse } from "@filetrail/contracts";
 
@@ -16,6 +24,12 @@ import {
   getIconGridRevealScrollTop,
 } from "../lib/iconGridLayout";
 import { fitIconLabel } from "../lib/iconLabel";
+import {
+  NameHighlightContext,
+  findNameMatch,
+  mapMatchToLabel,
+  renderMarkedText,
+} from "../lib/nameHighlight";
 import { PANE_LAYOUT_CHANGE_MS, usePaneLayoutChange } from "../lib/paneLayoutChange";
 import { getVirtualRange } from "../lib/virtualization";
 import {
@@ -97,6 +111,7 @@ export function IconGridView({
   children?: ReactNode;
 }) {
   const clipboardMarks = useClipboardMarks("content");
+  const highlight = useContext(NameHighlightContext);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const { width: containerWidth, height: containerHeight } = useElementSize(containerRef);
   // Scroll position lives in a ref so scrolling never re-renders by itself; a rAF
@@ -397,9 +412,12 @@ export function IconGridView({
                 <FileThumbnail entry={entry} listing={listing} />
                 <ClipboardMarkIcon marks={clipboardMarks} path={entry.path} variant="badge" />
               </span>
-              <span className="icon-item-label">
-                {fitIconLabel(entry.name, entry.extension, compactIconView)}
-              </span>
+              <IconLabel
+                name={entry.name}
+                extension={entry.extension}
+                compact={compactIconView}
+                highlight={highlight}
+              />
             </button>
           );
         })}
@@ -418,4 +436,26 @@ export function IconGridView({
 
 function prefersReducedMotion(): boolean {
   return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+}
+
+// The name under an icon, on up to two lines and shortened in the middle when longer; what a
+// search matched is marked in what is left of it.
+function IconLabel({
+  name,
+  extension,
+  compact,
+  highlight,
+}: {
+  name: string;
+  extension: string;
+  compact: boolean;
+  highlight: RegExp | null;
+}) {
+  const label = fitIconLabel(name, extension, compact);
+  const match = findNameMatch(highlight, name);
+  return (
+    <span className="icon-item-label">
+      {match ? renderMarkedText(label, mapMatchToLabel(name, label, match)) : label}
+    </span>
+  );
 }

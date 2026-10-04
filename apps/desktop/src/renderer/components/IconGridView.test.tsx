@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
 
 import { ICON_GRID_LAYOUT } from "../lib/iconGridLayout";
+import { NameHighlightContext } from "../lib/nameHighlight";
 import { PaneLayoutChangeContext } from "../lib/paneLayoutChange";
 import { IconGridView } from "./IconGridView";
 
@@ -47,6 +48,32 @@ function renderGrid(overrides: Partial<ComponentProps<typeof IconGridView>> = {}
 }
 
 describe("IconGridView", () => {
+  it("marks what a search matched in the names", () => {
+    render(
+      <NameHighlightContext.Provider value={/ph/i}>
+        <IconGridView
+          entries={[file("alpha.txt"), file("beta.txt")]}
+          isFocused
+          selectedPaths={[]}
+          selectionLeadPath={null}
+          viewportWidth={500}
+          viewportHeight={400}
+          onSelectionGesture={() => undefined}
+          onClearSelection={() => undefined}
+          onActivateEntry={() => undefined}
+          onLayoutColumnsChange={() => undefined}
+          onVisiblePathsChange={() => undefined}
+          inlineRename={null}
+          onInlineRenameSubmit={() => undefined}
+          onInlineRenameCancel={() => undefined}
+        />
+      </NameHighlightContext.Provider>,
+    );
+    const marks = document.querySelectorAll(".icon-item-label mark");
+    expect(Array.from(marks, (mark) => mark.textContent)).toEqual(["ph"]);
+    expect(screen.getByRole("option", { name: "alpha.txt" })).toHaveTextContent("alpha.txt");
+  });
+
   it("shows every item as an option with its name under its icon", () => {
     renderGrid();
 

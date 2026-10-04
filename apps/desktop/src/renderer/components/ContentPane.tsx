@@ -56,6 +56,7 @@ import {
   splitDisplayName,
   splitPermissionMode,
 } from "../lib/formatting";
+import { NameHighlightContext, findNameMatch, renderMarkedText } from "../lib/nameHighlight";
 import { getRelativeNow } from "../lib/relativeClock";
 import { isTypeaheadCharacterKey } from "../lib/typeahead";
 import { buildColumnMajorRows, computeRowsPerColumn, getVirtualRange } from "../lib/virtualization";
@@ -132,8 +133,6 @@ export type ListColumnSet = {
 // empty, could not open): search results say how the search went instead. Undefined
 // leaves the folder's messages.
 const ContentStateOverrideContext = createContext<ReactNode | undefined>(undefined);
-// What a search matched in names, marked in the List and Compact List views.
-const NameHighlightContext = createContext<RegExp | null>(null);
 
 // `ContentPane` is the shared shell for icon, list and details view. It owns path navigation,
 // path suggestions, pane focus, and typeahead forwarding, then delegates actual entry
@@ -2306,30 +2305,6 @@ function ContentState({
   return null;
 }
 
-// Part of a name with the stretch a search matched marked; `offset` is where the part
-// starts in the whole name.
-function renderHighlighted(
-  text: string,
-  offset: number,
-  range: { start: number; end: number } | null,
-): ReactNode {
-  if (!range) {
-    return text;
-  }
-  const start = Math.max(0, range.start - offset);
-  const end = Math.min(text.length, range.end - offset);
-  if (start >= end) {
-    return text;
-  }
-  return (
-    <>
-      {text.slice(0, start)}
-      <mark className="search-result-match">{text.slice(start, end)}</mark>
-      {text.slice(end)}
-    </>
-  );
-}
-
 function showHiddenFoldersLabel(hiddenCount: number): string {
   return `Show ${hiddenCount} More ${hiddenCount === 1 ? "Folder" : "Folders"}`;
 }
@@ -2345,18 +2320,14 @@ function FileNameLabel({
 }) {
   const { stem, extensionSuffix } = splitDisplayName(name, extension);
   // A search's match is found in the whole name, then marked across stem and extension.
-  const highlight = useContext(NameHighlightContext);
-  const match = highlight ? highlight.exec(`${stem}${extensionSuffix}`) : null;
-  const range =
-    match && match[0].length > 0
-      ? { start: match.index, end: match.index + match[0].length }
-      : null;
+  const match = findNameMatch(useContext(NameHighlightContext), `${stem}${extensionSuffix}`);
+  const ranges = match ? [match] : [];
   return (
     <span className={className}>
-      <span className="truncated-name-stem">{renderHighlighted(stem, 0, range)}</span>
+      <span className="truncated-name-stem">{renderMarkedText(stem, ranges)}</span>
       {extensionSuffix ? (
         <span className="truncated-name-extension">
-          {renderHighlighted(extensionSuffix, stem.length, range)}
+          {renderMarkedText(extensionSuffix, ranges, stem.length)}
         </span>
       ) : null}
     </span>
